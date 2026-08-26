@@ -94,7 +94,9 @@ SQLite 表 `account_chart_drawings` 在 `accounts.db`，WAL、外键、账户删
 
 量价确认可以改 `displayPriority`，不能改几何。Strength 最终分从不进入 `shapeQuality`。
 
-前端只在 `barFingerprint` + `range` + `adjustment` + `dataThrough` 与当前图一致时渲染。指纹是同一段原始串 `n|first|last|lastClose|lastHigh|lastLow|acc` 的 FNV-1a 64 位 hex16，由可见已收盘 K 线在前端重算，对不上就不画。SPY RS 只在能按日期对齐 SPY 收盘时下发，否则省略空副图。Strength 快照不一致时只显示快照日期，不生成价格几何。未收盘末根不进日线指标与形态。保留 `series_break_at`：断裂之后的一致段才分析。每条自动形态保留自己的 `volumeConfirmation`；量价模块只增加自己的 overlay。摆动点 HH/HL/LH/LL 由相邻已确认高低点比较得出，不是整段结构一个标签。
+自动形态画在图上的是 Theil–Sen 拟合轨（`fitAnchors` / `supportRail` / `resistanceRail`），触点 `touchAnchors` 只作解释，不决定画线。
+
+前端只在 `barFingerprint` + `ticker` + `range` + `adjustment` + `dataThrough` 与当前图一致时渲染。指纹是每根分析 K 线 `timestamp|open|high|low|close|volume|ext|quote_only` 的 SHA-256，由可见已收盘 K 线在前端重算，对不上就不画。待同步绘图队列按 `主体+ticker+range+adjustment` 持久化在 `option-pro:chart-drawing-outbox:v1`，与手绘文档和图层设置分开。SPY RS 只在能按日期对齐 SPY 收盘时下发，否则省略空副图。Strength 快照不一致时只显示快照日期，不生成价格几何。未收盘末根不进日线指标与形态。保留 `series_break_at`：断裂之后的一致段才分析。每条自动形态保留自己的 `volumeConfirmation`；量价模块只增加自己的 overlay。摆动点 HH/HL/LH/LL 由相邻已确认高低点比较得出，不是整段结构一个标签。
 
 「算法与图层」菜单由 Layer Registry 生成（不是在 `KlineChart.tsx` 里为每个算法写死开关）。预设：极简 / 结构分析 / 突破交易 / 动量 / 量价 / 全部。极简最多 3 个自动形态、6 个文字标签。设置键 `option-pro:chart-layers:v1:{principal}`，与手绘 `option-pro:chart-drawings:v1:…` 分开；登录主体持久化，访客用 localStorage。RSI/MACD/OBV/CLV/Range Persistence/SPY RS 走独立副图；Strength 标量走侧栏。手绘永远叠在自动层之上。自动层淡色虚线；测试/突破可强调。移动端菜单是底部抽屉。
 

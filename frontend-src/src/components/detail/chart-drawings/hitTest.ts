@@ -9,6 +9,12 @@ export const TOUCH_ANCHOR_TOLERANCE_PX = 18;
 
 export type PointerKind = 'mouse' | 'touch' | 'pen';
 
+/** 文字标签的渲染度量（renderer 的 markPoint label：11px，position:'right'）。 */
+export const TEXT_LABEL_FONT_PX = 11;
+export const TEXT_LABEL_CHAR_PX = 6.2;
+export const TEXT_LABEL_OFFSET_PX = 8;
+export const TEXT_LABEL_PAD_PX = 3;
+
 export interface ProjectedDrawing {
   id: string;
   zOrder: number;
@@ -17,6 +23,8 @@ export interface ProjectedDrawing {
   anchors: Point[];
   segments: Segment[];
   fills: Point[][];
+  /** 文字图形的可见标签；命中区靠它撑开，不然只剩 6px 的锚点圆。 */
+  label?: { text: string } | null;
 }
 
 export interface HitResult {
@@ -33,6 +41,32 @@ export function lineTolerancePx(pointer: PointerKind): number {
 
 export function anchorTolerancePx(pointer: PointerKind): number {
   return pointer === 'touch' ? TOUCH_ANCHOR_TOLERANCE_PX : DESKTOP_ANCHOR_TOLERANCE_PX;
+}
+
+/**
+ * 文字标签在像素空间的包围盒（左上/右下）。渲染把空白折叠成单空格并截到 240
+ * 字，命中区必须按同一份文本算，否则点在字上会落进取消选中分支。
+ */
+export function textLabelBox(
+  anchor: Point,
+  text: string,
+): { x0: number; y0: number; x1: number; y1: number } {
+  const clean = text.replace(/\s+/g, ' ').slice(0, 240);
+  const width = Math.max(TEXT_LABEL_CHAR_PX, clean.length * TEXT_LABEL_CHAR_PX);
+  const half = TEXT_LABEL_FONT_PX / 2 + TEXT_LABEL_PAD_PX;
+  const x0 = anchor.x + TEXT_LABEL_OFFSET_PX - TEXT_LABEL_PAD_PX;
+  return { x0, y0: anchor.y - half, x1: x0 + width + TEXT_LABEL_PAD_PX * 2, y1: anchor.y + half };
+}
+
+function boxContains(
+  box: { x0: number; y0: number; x1: number; y1: number },
+  point: Point,
+  tolerance: number,
+): boolean {
+  return point.x >= box.x0 - tolerance
+    && point.x <= box.x1 + tolerance
+    && point.y >= box.y0 - tolerance
+    && point.y <= box.y1 + tolerance;
 }
 
 export function pointInPolygon(point: Point, polygon: Point[]): boolean {
@@ -91,6 +125,18 @@ export function hitTestProjected(
   }
   for (const fill of drawing.fills) {
     if (fill.length >= 3 && pointInPolygon(pointer, fill)) {
+      return {
+        id: drawing.id,
+        kind: 'body',
+        anchorIndex: -1,
+        distance: 0,
+        zOrder: drawing.zOrder,
+      };
+    }
+  }
+  if (drawing.label?.text && drawing.anchors[0]) {
+    const box = textLabelBox(drawing.anchors[0], drawing.label.text);
+    if (boxContains(box, pointer, pointerKind === 'touch' ? TEXT_LABEL_PAD_PX : 0)) {
       return {
         id: drawing.id,
         kind: 'body',

@@ -1,6 +1,12 @@
 import { useRef, useState, type ReactNode } from 'react';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { cn } from '@/lib/utils';
+import {
+  overlayClassName,
+  overlayVisible,
+  readRootDurationMs,
+  useOverlayPhase,
+} from '@/lib/transitions';
 import ConfirmDialog from '@/components/catalysts/ConfirmDialog';
 import { t } from '../../../i18n/core.ts';
 import DrawingInspector from './DrawingInspector.tsx';
@@ -29,8 +35,14 @@ export default function DrawingWorkspace({
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const [confirmClear, setConfirmClear] = useState(false);
+  // 房规做法（Drawer / CommandPalette / ConfirmDialog 同一套）：先挂到 DOM 再
+  // 下一帧加 is-open，关闭时留到 close 时钟走完——写死 `is-open` 首帧就到位，
+  // 进出场两个动画一个都放不出来。reducedMotion 直接不上 t-modal，也就没有时钟。
+  const closeMs = readRootDurationMs('--modal-close-dur', 150);
+  const phase = useOverlayPhase(open, reducedMotion ? 0 : closeMs);
+  const mounted = overlayVisible(open, phase);
   useFocusTrap(panelRef, open);
-  if (!open) return <>{children}</>;
+  if (!mounted) return <>{children}</>;
   return (
     <div
       ref={panelRef}
@@ -39,7 +51,8 @@ export default function DrawingWorkspace({
       aria-label={t('绘图工作区')}
       className={cn(
         'fixed inset-0 z-[70] flex flex-col bg-page p-3 md:p-4',
-        reducedMotion ? '' : 't-modal is-open',
+        !reducedMotion && 't-modal',
+        !reducedMotion && overlayClassName(phase),
       )}
     >
       <DrawingToolbar

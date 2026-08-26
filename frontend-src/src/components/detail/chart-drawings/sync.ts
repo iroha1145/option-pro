@@ -1,5 +1,7 @@
 /** Per-id serial outbox, scope tokens, and full-field undo diffs. */
 import type { ChartAdjustment, ChartDrawing, ChartRange } from './types.ts';
+import { parseDrawing } from './schema.ts';
+import { outboxStorageKey, type StorageLike } from './storage.ts';
 
 export const SCOPE_JOB_ID = '__scope__';
 
@@ -20,6 +22,8 @@ export interface PersistJob {
   type: PersistOpType;
   drawing?: ChartDrawing;
   drawings?: ChartDrawing[];
+  /** 全局单调序号：范围级任务与单条任务靠它保持先后，不然清空会追上后画的线。 */
+  seq?: number;
 }
 
 export function scopeEquals(a: ScopeKey | null, b: ScopeKey | null): boolean {
@@ -74,8 +78,42 @@ export function resolveListApply(outboxEmpty: boolean, tokenMatch: boolean): boo
   return outboxEmpty && tokenMatch;
 }
 
-export function resolveRetryAction(outboxEmpty: boolean): 'replay' | 'idle' {
+export type SyncFailure = 'load_failed' | 'write_failed' | 'conflict' | null;
+
+export function resolveRetryAction(
+  failure: SyncFailure,
+  outboxEmpty: boolean,
+): 'reload' | 'replay' | 'idle' | 'conflict' {
+  if (failure === 'conflict') return 'conflict';
+  if (failure === 'load_failed') return 'reload';
+  if (failure === 'write_failed') return outboxEmpty ? 'idle' : 'replay';
   return outboxEmpty ? 'idle' : 'replay';
+}
+
+export type RegeneratedOp =
+  | { type: 'create'; drawingId: string; drawing: ChartDrawing }
+  | { type: 'update'; drawingId: string; drawing: ChartDrawing }
+  | { type: 'delete'; drawingId: string };
+
+export function regeneratePersistOps(
+  local: ChartDrawing[],
+  server: ChartDrawing[],
+): RegeneratedOp[] {
+  const localMap = new Map(local.map((item) => [item.id, item]));
+  const serverMap = new Map(server.map((item) => [item.id, item]));
+  const ops: RegeneratedOp[] = [];
+  for (const [id, drawing] of localMap) {
+    const remote = serverMap.get(id);
+    if (!remote) {
+      ops.push({ type: 'create', drawingId: id, drawing: { ...drawing, revision: 1 } });
+    } else {
+      ops.push({ type: 'update', drawingId: id, drawing: { ...drawing, revision: remote.revision } });
+    }
+  }
+  for (const [id] of serverMap) {
+    if (!localMap.has(id)) ops.push({ type: 'delete', drawingId: id });
+  }
+  return ops;
 }
 
 export type ApplyAction =
@@ -89,15 +127,60 @@ export function applyPersistResponse(args: {
   currentScopeGeneration: number;
   latestGenerationForId: number;
   responseDrawing: ChartDrawing | null;
+  /** 本地还有没入队的编辑（防抖窗口里）：回声只能吃 revision，不能整条盖回。 */
+  localDirty?: boolean;
 }): ApplyAction {
   const { job } = args;
   if (!scopeEquals(job.scope, args.currentScope)) return { action: 'ignore' };
   if (job.scopeGeneration !== args.currentScopeGeneration) return { action: 'ignore' };
   if (!args.responseDrawing) return { action: 'ignore' };
-  if (job.generation === args.latestGenerationForId) {
+  if (job.generation === args.latestGenerationForId && !args.localDirty) {
     return { action: 'replace', drawing: args.responseDrawing };
   }
   return { action: 'revision', id: args.responseDrawing.id, revision: args.responseDrawing.revision };
+}
+
+/** revision 是服务器记账，不是用户可撤销的状态：发出前一律换成最新已知值。 */
+export function applyKnownRevisions(
+  drawings: ChartDrawing[],
+  revisions: Map<string, number>,
+): ChartDrawing[] {
+  return drawings.map((item) => {
+    const known = revisions.get(item.id);
+    return known == null || known === item.revision ? item : { ...item, revision: known };
+  });
+}
+
+export function latestKnownRevision(
+  revisions: Map<string, number>,
+  id: string,
+  fallback: number,
+): number {
+  return revisions.get(id) ?? fallback;
+}
+
+export type SyncFailureAction = 'conflict' | 'quota' | 'drop' | 'retry';
+
+/**
+ * 失败分诊按业务码走，不按 HTTP 状态：409 里只有 revision_conflict 是真冲突，
+ * 配额满弹冲突框会让「保留本地」永远重放必败的创建；后端已幂等，重放同一条
+ * 创建会成功，删除已经不存在的行也算成功，所以这两类直接丢任务。
+ */
+export function resolveSyncFailure(
+  jobType: PersistOpType,
+  code: string | null,
+  status: number | null,
+): SyncFailureAction {
+  if (code === 'revision_conflict') return 'conflict';
+  if (code === 'drawings_range_full' || code === 'drawings_full') return 'quota';
+  if (code === 'drawing_exists') return jobType === 'create' ? 'drop' : 'retry';
+  if (code === 'drawing_not_found' || (status === 404 && code === null)) {
+    return jobType === 'delete' || jobType === 'update' ? 'drop' : 'retry';
+  }
+  // 400 是请求本身不合法（invalid_price / invalid_payload / scope_mismatch），
+  // 重放多少次都是同一个 400，留在队列里只会把出口堵死。
+  if (status === 400) return 'drop';
+  return 'retry';
 }
 
 type Chain = {
@@ -105,6 +188,53 @@ type Chain = {
   pending: PersistJob[];
   inflight: PersistJob | null;
 };
+
+const JOB_TYPES = new Set<PersistOpType>(['create', 'update', 'delete', 'clear', 'replace']);
+
+/**
+ * localStorage 里的 outbox 同样是不可信输入：逐条按 schema 校验，坏行丢掉，
+ * 免得把一条读不出来的负载重新 PUT 回服务器或写进本地状态。
+ */
+export function parsePersistJobs(
+  raw: unknown,
+  scope: ScopeKey,
+  scopeGeneration: number,
+): PersistJob[] {
+  const row = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  const list = Array.isArray(row.jobs) ? row.jobs : [];
+  const jobs: PersistJob[] = [];
+  for (const item of list) {
+    if (!item || typeof item !== 'object') continue;
+    const job = item as Record<string, unknown>;
+    const type = job.type as PersistOpType;
+    if (!JOB_TYPES.has(type)) continue;
+    const drawingId = typeof job.drawingId === 'string' ? job.drawingId : '';
+    if (!drawingId) continue;
+    const generation = Number(job.generation);
+    if (!Number.isInteger(generation) || generation < 1) continue;
+    const drawing = job.drawing === undefined ? undefined : parseDrawing(job.drawing);
+    if ((type === 'create' || type === 'update') && !drawing) continue;
+    let drawings: ChartDrawing[] | undefined;
+    if (type === 'replace') {
+      if (!Array.isArray(job.drawings)) continue;
+      const parsed = job.drawings.map(parseDrawing);
+      if (parsed.some((entry) => entry === null)) continue;
+      drawings = parsed as ChartDrawing[];
+    }
+    const seq = Number(job.seq);
+    jobs.push({
+      drawingId,
+      generation,
+      scopeGeneration,
+      scope,
+      type,
+      ...(drawing ? { drawing } : {}),
+      ...(drawings ? { drawings } : {}),
+      seq: Number.isFinite(seq) ? seq : generation,
+    });
+  }
+  return jobs.sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0));
+}
 
 /** Keep local mutable fields and adopt the server revision so a retry can PUT. */
 export function keepLocalWithServerRevisions(
@@ -122,6 +252,15 @@ export class DrawingOutbox {
   private scopeGeneration = 0;
   private currentScope: ScopeKey | null = null;
   private chains = new Map<string, Chain>();
+  private seqCounter = 0;
+  private readonly store: StorageLike | null;
+
+  // 参数属性在 erasableSyntaxOnly 下不允许，字段要显式赋值。
+  constructor(store?: StorageLike | null) {
+    this.store = store === undefined
+      ? (typeof localStorage === 'undefined' ? null : localStorage)
+      : store;
+  }
 
   getScope(): ScopeKey | null {
     return this.currentScope;
@@ -132,15 +271,27 @@ export class DrawingOutbox {
   }
 
   setScope(scope: ScopeKey): number {
+    if (this.currentScope) this.persistCurrent();
     this.currentScope = scope;
     this.scopeGeneration += 1;
     this.chains.clear();
+    this.hydrateCurrent();
     return this.scopeGeneration;
   }
 
   isEmpty(): boolean {
     for (const chain of this.chains.values()) {
       if (chain.inflight || chain.pending.length) return false;
+    }
+    return true;
+  }
+
+  /** 除了这一条（通常是正在飞的自己）以外还有没有别的活；replace 回包要按它决定能否覆盖本地。 */
+  isEmptyExcept(drawingId: string, generation: number): boolean {
+    for (const [id, chain] of this.chains) {
+      const skipInflight = id === drawingId && chain.inflight?.generation === generation;
+      if (chain.inflight && !skipInflight) return false;
+      if (chain.pending.length) return false;
     }
     return true;
   }
@@ -161,6 +312,7 @@ export class DrawingOutbox {
   enqueue(partial: Omit<PersistJob, 'generation' | 'scopeGeneration' | 'scope'>): PersistJob | null {
     if (!this.currentScope) return null;
     if (partial.type === 'replace' || partial.type === 'clear') {
+      this.scopeGeneration += 1;
       for (const [id, chain] of this.chains) {
         if (id === SCOPE_JOB_ID) continue;
         chain.pending = [];
@@ -175,32 +327,61 @@ export class DrawingOutbox {
       const last = row.pending[row.pending.length - 1];
       if (last?.type === 'update') {
         row.generation += 1;
+        this.seqCounter += 1;
         const job: PersistJob = {
           ...partial,
           drawingId: id,
           generation: row.generation,
           scopeGeneration: this.scopeGeneration,
           scope: this.currentScope,
+          seq: this.seqCounter,
         };
         row.pending[row.pending.length - 1] = job;
+        this.persistCurrent();
         return job;
       }
     }
     row.generation += 1;
+    this.seqCounter += 1;
     const job: PersistJob = {
       ...partial,
       drawingId: id,
       generation: row.generation,
       scopeGeneration: this.scopeGeneration,
       scope: this.currentScope,
+      seq: this.seqCounter,
     };
     row.pending.push(job);
+    this.persistCurrent();
     return job;
+  }
+
+  hasInflight(): boolean {
+    for (const chain of this.chains.values()) {
+      if (chain.inflight) return true;
+    }
+    return false;
+  }
+
+  /**
+   * 范围级任务（clear / replace）与单条任务分属两侧，跨侧必须按入队顺序串行：
+   * 对侧有在飞的就等，对侧排在更前面的也要等。同侧互不阻塞，所以不会死锁。
+   */
+  private blockedHead(drawingId: string, head: PersistJob): boolean {
+    const scopeSide = drawingId === SCOPE_JOB_ID;
+    for (const [id, chain] of this.chains) {
+      if ((id === SCOPE_JOB_ID) === scopeSide) continue;
+      if (chain.inflight) return true;
+      const first = chain.pending[0];
+      if (first && (first.seq ?? 0) < (head.seq ?? 0)) return true;
+    }
+    return false;
   }
 
   takeNext(drawingId: string): PersistJob | null {
     const row = this.chains.get(drawingId);
     if (!row || row.inflight || !row.pending.length) return null;
+    if (this.blockedHead(drawingId, row.pending[0])) return null;
     const next = row.pending.shift();
     if (!next) return null;
     row.inflight = next;
@@ -210,9 +391,19 @@ export class DrawingOutbox {
   readyIds(): string[] {
     const ids: string[] = [];
     for (const [id, chain] of this.chains) {
-      if (!chain.inflight && chain.pending.length) ids.push(id);
+      if (chain.inflight || !chain.pending.length) continue;
+      if (this.blockedHead(id, chain.pending[0])) continue;
+      ids.push(id);
     }
     return ids;
+  }
+
+  /** 丢掉在飞任务而不重排（配额满 / 400 这类重放必败的错）。 */
+  dropInflight(drawingId: string): void {
+    const row = this.chains.get(drawingId);
+    if (!row?.inflight) return;
+    row.inflight = null;
+    this.persistCurrent();
   }
 
   complete(drawingId: string, generation: number): void {
@@ -220,6 +411,7 @@ export class DrawingOutbox {
     if (row?.inflight?.generation === generation) {
       row.inflight = null;
     }
+    this.persistCurrent();
   }
 
   /**
@@ -234,8 +426,8 @@ export class DrawingOutbox {
     row.inflight = null;
     const newerSameUpdate = failed.type === 'update'
       && row.pending.some((job) => job.type === 'update' && job.generation > failed.generation);
-    if (newerSameUpdate) return;
-    row.pending.unshift(failed);
+    if (!newerSameUpdate) row.pending.unshift(failed);
+    this.persistCurrent();
   }
 
   snapshot(): PersistJob[] {
@@ -267,6 +459,8 @@ export class DrawingOutbox {
       const row = this.chain(job.drawingId);
       row.pending.push(job);
       row.generation = Math.max(row.generation, job.generation);
+      // 恢复回来的 seq 要顶住全局计数器，之后新入队的任务才排在它们后面。
+      this.seqCounter = Math.max(this.seqCounter, job.seq ?? 0);
       mark(job.drawingId, job.generation);
     }
     for (const chain of this.chains.values()) {
@@ -286,16 +480,74 @@ export class DrawingOutbox {
       if (chain.inflight) chain.inflight = patch(chain.inflight);
       chain.pending = chain.pending.map(patch);
     }
+    this.persistCurrent();
+  }
+
+  replacePending(ops: RegeneratedOp[]): void {
+    for (const [id, chain] of this.chains) {
+      if (id === SCOPE_JOB_ID) continue;
+      chain.pending = [];
+    }
+    for (const op of ops) {
+      if (op.type === 'delete') this.enqueue({ drawingId: op.drawingId, type: 'delete' });
+      else this.enqueue({ drawingId: op.drawingId, type: op.type, drawing: op.drawing });
+    }
+  }
+
+  persist(): void {
+    this.persistCurrent();
+  }
+
+  private persistKey(): string | null {
+    if (!this.currentScope) return null;
+    return outboxStorageKey(
+      this.currentScope.identity,
+      this.currentScope.ticker,
+      this.currentScope.range,
+      this.currentScope.adjustment,
+    );
+  }
+
+  private persistCurrent(): void {
+    const key = this.persistKey();
+    if (!this.store || !key) return;
+    try {
+      this.store.setItem(key, JSON.stringify({ jobs: this.snapshot() }));
+    } catch {
+      /* private mode / quota */
+    }
+  }
+
+  private hydrateCurrent(): void {
+    const key = this.persistKey();
+    if (!this.store || !key || !this.currentScope) return;
+    let raw: string | null;
+    try {
+      raw = this.store.getItem(key);
+    } catch {
+      return;
+    }
+    if (!raw) return;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return; /* corrupt outbox payload */
+    }
+    const restored = parsePersistJobs(parsed, this.currentScope, this.scopeGeneration);
+    if (restored.length) this.restoreForRetry(restored);
   }
 
   cancelAll(): void {
     this.chains.clear();
+    this.persistCurrent();
   }
 
   cancelId(drawingId: string): void {
     const row = this.chains.get(drawingId);
     if (!row) return;
     row.pending = [];
+    this.persistCurrent();
   }
 }
 

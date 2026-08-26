@@ -7,12 +7,14 @@ series, not Radar ranks or market-fit.
 
 from __future__ import annotations
 
+import hashlib
 from datetime import datetime, timezone
 from typing import Any, Mapping, Sequence
 from zoneinfo import ZoneInfo
 
 import pandas as pd
 
+from app.services.strength.features import _feature_row as build_feature_row
 from app.services.strength.scoring import score_intrinsic
 from app.services.technical.auto_patterns import (
     ALGORITHM_VERSION as AUTO_PATTERNS_VERSION,
@@ -30,49 +32,66 @@ from app.services.technical.indicators import (
 from app.services.technical.layer_registry import LAYER_REGISTRY_VERSION
 
 BUNDLE_VERSION = "optix-chart-analysis-v1"
+# 指纹口径的名字：换算法/换字段就要改这个版本，两端各钉一个字面 digest 向量。
+FINGERPRINT_ALGORITHM = "sha256-bar-ohlcv-v1"
 _NY = ZoneInfo("America/New_York")
 _INTRADAY_RANGES = {"5m", "15m", "1h"}
 
 
-def fingerprint_raw(
-    dates: Sequence[str],
-    closes: Sequence[float],
-    highs: Sequence[float] | None = None,
-    lows: Sequence[float] | None = None,
-) -> str:
-    """Shared payload the frontend hashes with the same FNV-1a 64-bit digest."""
+def _fmt6(value: Any) -> str:
+    scaled = int(float(value) * 1_000_000 + (0.5 if float(value) >= 0 else -0.5))
+    return f"{scaled / 1_000_000:.6f}"
 
+
+def canonical_bar_payload(series: Mapping[str, list]) -> str:
+    """One line per analysis bar: timestamp|open|high|low|close|volume|ext|quote_only."""
+
+    closes = list(series.get("closes") or [])
     n = len(closes)
-    acc = 0
-    for close in closes:
-        acc = (acc * 1_000_003 + int(round(float(close) * 10_000))) % (2**64)
-    first = dates[0] if dates else ""
-    last = dates[-1] if dates else ""
-    last_close = f"{closes[-1]:.6f}" if n else "0"
-    last_high = f"{highs[-1]:.6f}" if highs and n else "0"
-    last_low = f"{lows[-1]:.6f}" if lows and n else "0"
-    return f"{n}|{first}|{last}|{last_close}|{last_high}|{last_low}|{acc:x}"
+    times = list(series.get("times") or [0] * n)
+    opens = list(series.get("opens") or closes)
+    highs = list(series.get("highs") or closes)
+    lows = list(series.get("lows") or closes)
+    volumes = list(series.get("volumes") or [0.0] * n)
+    exts = list(series.get("ext") or [False] * n)
+    quotes = list(series.get("quote_only") or [False] * n)
+    lines: list[str] = []
+    for i in range(n):
+        lines.append(
+            f"{int(times[i] if i < len(times) else 0)}|"
+            f"{_fmt6(opens[i] if i < len(opens) else closes[i])}|"
+            f"{_fmt6(highs[i] if i < len(highs) else closes[i])}|"
+            f"{_fmt6(lows[i] if i < len(lows) else closes[i])}|"
+            f"{_fmt6(closes[i])}|"
+            f"{_fmt6(volumes[i] if i < len(volumes) else 0.0)}|"
+            f"{1 if i < len(exts) and exts[i] else 0}|"
+            f"{1 if i < len(quotes) and quotes[i] else 0}"
+        )
+    return "\n".join(lines)
 
 
-def fnv1a64_hex16(raw: str) -> str:
-    """FNV-1a 64-bit, hex16 — identical to the frontend `barFingerprint` digest."""
+def bar_fingerprint(series: Mapping[str, list]) -> str:
+    """SHA-256 of every analysis bar's OHLCV and flags. Frontend must match before painting."""
 
-    h = 0xCBF29CE484222325
-    for char in raw:
-        h ^= ord(char)
-        h = (h * 0x100000001B3) & 0xFFFFFFFFFFFFFFFF
-    return f"{h:016x}"
+    return hashlib.sha256(canonical_bar_payload(series).encode("utf-8")).hexdigest()
 
 
-def bar_fingerprint(
-    dates: Sequence[str],
-    closes: Sequence[float],
-    highs: Sequence[float] | None = None,
-    lows: Sequence[float] | None = None,
-) -> str:
-    """Stable id for the analysis series. Frontend must match before painting."""
+def fingerprint_meta(series: Mapping[str, list]) -> dict[str, Any]:
+    """描述「到底哈了哪些 bar」，让不匹配可修复而不是整张图默默消失。
 
-    return fnv1a64_hex16(fingerprint_raw(dates, closes, highs, lows))
+    后端会丢掉 OHLC 自相矛盾/非有限的坏 bar，前端只镜像 ext/quote_only 过滤：
+    一根坏 bar 就让指纹永久对不上。带上根数与首尾 barKey，客户端能把自己的
+    窗口对齐回来重算，对不上也知道该报什么。
+    """
+
+    dates = list(series.get("dates") or [])
+    return {
+        "fingerprintAlgorithm": FINGERPRINT_ALGORITHM,
+        "barFingerprint": bar_fingerprint(series),
+        "barCount": len(series.get("closes") or []),
+        "firstBarDate": dates[0] if dates else None,
+        "lastBarDate": dates[-1] if dates else None,
+    }
 
 
 def _anchor_from_index(
@@ -134,6 +153,10 @@ def _pattern_overlays(patterns: Sequence[Mapping[str, Any]], data_through: str) 
         if row.get("kind") == "box":
             continue
         evidence = dict(row.get("evidence") or {})
+        # 「触碰 n 次」这枚 chip 读的是 evidence.touches，而 touches 原本只在
+        # 顶层 pattern 行上——不带进来这枚 chip 永远渲染不出。
+        if row.get("touches") is not None:
+            evidence["touches"] = int(row["touches"])
         overlays.append(
             _overlay(
                 overlay_id=str(row["id"]),
@@ -143,7 +166,17 @@ def _pattern_overlays(patterns: Sequence[Mapping[str, Any]], data_through: str) 
                 kind=str(row["kind"]),
                 geometry={
                     "type": "rails",
-                    "anchors": list(row.get("anchors") or []),
+                    "anchors": list(row.get("fitAnchors") or row.get("anchors") or []),
+                    "fitAnchors": list(row.get("fitAnchors") or row.get("anchors") or []),
+                    "touchAnchors": list(row.get("touchAnchors") or []),
+                    "supportRail": row.get("supportRail"),
+                    "resistanceRail": row.get("resistanceRail"),
+                    "slope": row.get("slope"),
+                    "intercept": row.get("intercept"),
+                    "supportSlope": row.get("supportSlope"),
+                    "supportIntercept": row.get("supportIntercept"),
+                    "resistanceSlope": row.get("resistanceSlope"),
+                    "resistanceIntercept": row.get("resistanceIntercept"),
                     "subtype": row.get("subtype"),
                     "styleHint": "auto-pale",
                 },
@@ -553,6 +586,9 @@ def _breakout_overlays(
 
 
 def _volume_series(series: Mapping[str, list]) -> dict[str, list[float | None]]:
+    # 这里只算注册表里真有图层的两条线。dollarVolume 曾经也在下发，但既不在
+    # layer_registry 也不在前端注册表里，前端 VALID_IDS 一律丢掉——要上必须
+    # 连同注册表条目和 i18n 文案一起有意加。
     closes = list(series.get("closes") or [])
     highs = list(series.get("highs") or [])
     lows = list(series.get("lows") or [])
@@ -560,11 +596,9 @@ def _volume_series(series: Mapping[str, list]) -> dict[str, list[float | None]]:
     n = len(closes)
     obv: list[float | None] = [None] * n
     clv: list[float | None] = [None] * n
-    dollar: list[float | None] = [None] * n
     running = 0.0
     for i in range(n):
         vol = float(volumes[i] if i < len(volumes) else 0.0)
-        dollar[i] = round(closes[i] * vol, 4) if vol > 0 else None
         if i > 0:
             if closes[i] > closes[i - 1]:
                 running += vol
@@ -574,7 +608,48 @@ def _volume_series(series: Mapping[str, list]) -> dict[str, list[float | None]]:
         span = highs[i] - lows[i] if i < len(highs) and i < len(lows) else 0.0
         if span > 0:
             clv[i] = round((2 * closes[i] - highs[i] - lows[i]) / span, 4)
-    return {"obv": obv, "clv": clv, "dollarVolume": dollar}
+    return {"obv": obv, "clv": clv}
+
+
+def _warmup_len(values: Sequence[float | None]) -> int:
+    """Leading Nones — the warmup a series legitimately cannot fill."""
+
+    count = 0
+    for value in values:
+        if value is not None:
+            break
+        count += 1
+    return count
+
+
+def _offset_series(values: Sequence[float | None]) -> tuple[int, list[float | None]]:
+    """暖机段的 None 换成一个索引偏移；日期整包只发一份，不随每条线复制。"""
+
+    start = _warmup_len(values)
+    if start >= len(values):
+        return 0, []
+    return start, list(values[start:])
+
+
+def _pane(
+    pane_id: str,
+    label: str,
+    kind: str,
+    values: Mapping[str, Sequence[float | None]],
+) -> dict[str, Any]:
+    arrays = {key: list(series) for key, series in values.items()}
+    length = max((len(series) for series in arrays.values()), default=0)
+    # 同一副图里几条线共用一个 startIndex，取最短的暖机长度，索引才对得齐。
+    start = min((_warmup_len(series) for series in arrays.values()), default=0)
+    if start >= length:
+        start = 0
+    return {
+        "id": pane_id,
+        "label": label,
+        "kind": kind,
+        "startIndex": start,
+        "values": {key: series[start:] for key, series in arrays.items()},
+    }
 
 
 def _indicator_panes(
@@ -595,30 +670,19 @@ def _indicator_panes(
             if spy is not None and spy > 0 and price is not None:
                 rs[i] = round(float(price) / float(spy), 6)
     panes = [
-        {"id": "rsi", "label": "RSI", "kind": "rsi", "values": {"rsi": rsi_series(closes)}, "dates": list(dates)},
-        {"id": "macd", "label": "MACD", "kind": "macd", "values": macd, "dates": list(dates)},
-        {"id": "obv", "label": "OBV", "kind": "obv", "values": {"obv": vol["obv"]}, "dates": list(dates)},
-        {"id": "clv", "label": "CLV", "kind": "clv", "values": {"clv": vol["clv"]}, "dates": list(dates)},
-        {
-            "id": "range_persistence",
-            "label": "Range Persistence",
-            "kind": "range",
-            "values": {"position": range_position_series(closes, highs, lows)},
-            "dates": list(dates),
-        },
-        {
-            "id": "dollar_volume",
-            "label": "Dollar volume",
-            "kind": "dollar",
-            "values": {"dollarVolume": vol["dollarVolume"]},
-            "dates": list(dates),
-        },
+        _pane("rsi", "RSI", "rsi", {"rsi": rsi_series(closes)}),
+        _pane("macd", "MACD", "macd", macd),
+        _pane("obv", "OBV", "obv", {"obv": vol["obv"]}),
+        _pane("clv", "CLV", "clv", {"clv": vol["clv"]}),
+        _pane(
+            "range_persistence",
+            "Range Persistence",
+            "range",
+            {"position": range_position_series(closes, highs, lows)},
+        ),
     ]
     if any(value is not None for value in rs):
-        panes.insert(
-            5,
-            {"id": "spy_rs", "label": "SPY Relative Strength", "kind": "rs", "values": {"rs": rs}, "dates": list(dates)},
-        )
+        panes.append(_pane("spy_rs", "SPY Relative Strength", "rs", {"rs": rs}))
     return panes
 
 
@@ -657,7 +721,7 @@ def _ma_overlays(series: Mapping[str, list], data_through: str) -> list[dict[str
     dates = list(series.get("dates") or [])
     overlays = []
     for window, layer_id in ((20, "ma20"), (50, "ma50"), (200, "ma200")):
-        values = sma_series(closes, window)
+        start, values = _offset_series(sma_series(closes, window))
         overlays.append(
             _overlay(
                 overlay_id=layer_id,
@@ -665,7 +729,13 @@ def _ma_overlays(series: Mapping[str, list], data_through: str) -> list[dict[str
                 algorithm_version=TECHNICALS_VERSION,
                 group="price",
                 kind="ma",
-                geometry={"type": "series", "window": window, "values": values, "dates": dates, "styleHint": "auto-pale"},
+                geometry={
+                    "type": "series",
+                    "window": window,
+                    "values": values,
+                    "startIndex": start,
+                    "styleHint": "auto-pale",
+                },
                 status="forming",
                 direction="neutral",
                 shape_quality=1.0,
@@ -681,68 +751,30 @@ def _ma_overlays(series: Mapping[str, list], data_through: str) -> list[dict[str
     return overlays
 
 
-def _pct_return(closes: Sequence[float], bars: int) -> float | None:
-    if len(closes) <= bars or closes[-1 - bars] <= 0:
-        return None
-    return float(closes[-1] / closes[-1 - bars] - 1.0)
-
-
-def _sma(closes: Sequence[float], window: int) -> float | None:
-    if len(closes) < window or window <= 0:
-        return None
-    return sum(closes[-window:]) / window
-
-
 def _intrinsic_row(
     *,
     series: Mapping[str, list],
-    technicals: Mapping[str, Any],
-    price_action: Mapping[str, Any],
-    vol_price: Mapping[str, Any],
+    hist: pd.DataFrame,
+    ticker: str,
     spy_closes: Sequence[float | None] | Mapping[str, float] | None,
-) -> dict[str, Any]:
-    closes = list(series.get("closes") or [])
-    volumes = list(series.get("volumes") or [])
-    price = closes[-1] if closes else None
-    sma20 = _sma(closes, 20)
-    sma50 = _sma(closes, 50)
-    sma200 = _sma(closes, 200)
-    avg_vol20 = _sma(volumes, 20) if volumes else None
-    rel_volume = None
-    if volumes and avg_vol20 and avg_vol20 > 0:
-        rel_volume = volumes[-1] / avg_vol20
-    high_52w = max(closes[-252:]) if len(closes) >= 240 else None
-    high_3m = max(closes[-63:]) if len(closes) >= 63 else None
+) -> dict[str, Any] | None:
+    """雷达与详情图共用的那一份特征行（strength/features），不是各抄一份。
+
+    抄过一次就漂了：follow_through 用 closes[-3] 而雷达用最近三根的最小值，
+    atr_pct 与 avg_dollar_volume_20d 干脆没给——score_intrinsic 会读它们，
+    缺了就被静默重归一；补齐字段的第二份抄写连雷达对每个因子的定点舍入都
+    跟不上，同一支票同一天两个界面仍差几分。features 是中立模块（不含全市场
+    扫描/排名/market-fit），个股图路径 import 它不违反「不跑 Strength Scanner」。
+    缺 SPY 就给空表，与扫描器缺基准时同一条路径。
+    """
+
     aligned = _align_spy_closes(list(series.get("dates") or []), spy_closes)
-    spy_ret_63 = None
-    if aligned is not None and len(aligned) > 63:
-        spy_now = aligned[-1]
-        spy_then = aligned[-1 - 63]
-        if spy_now and spy_then and spy_then > 0:
-            spy_ret_63 = float(spy_now / spy_then - 1.0)
-    stock_ret_63 = _pct_return(closes, 63)
-    ma_states = [price > average for average in (sma20, sma50, sma200) if price and average]
-    macd = technicals.get("macd") if isinstance(technicals.get("macd"), Mapping) else {}
-    return {
-        "return_5d": _pct_return(closes, 5),
-        "return_20d": _pct_return(closes, 20),
-        "return_63d": stock_ret_63,
-        "return_126d": _pct_return(closes, 126),
-        "return_252d": _pct_return(closes, 252),
-        "rs_spy_63d": (stock_ret_63 - spy_ret_63) if stock_ret_63 is not None and spy_ret_63 is not None else None,
-        "dist_sma20": (price / sma20 - 1.0) if price and sma20 else None,
-        "dist_sma50": (price / sma50 - 1.0) if price and sma50 else None,
-        "dist_sma200": (price / sma200 - 1.0) if price and sma200 else None,
-        "ma_alignment": (sum(1 for state in ma_states if state) / len(ma_states) * 100.0) if ma_states else None,
-        "rsi14": technicals.get("rsi14"),
-        "macd_direction": macd.get("direction_pct"),
-        "rel_volume": rel_volume,
-        "ath_proximity": (price / high_52w * 100.0) if price and high_52w else None,
-        "price_action": price_action,
-        "vol_price_match": vol_price,
-        "follow_through": bool(len(closes) >= 5 and closes[-3] >= sum(closes[-20:]) / 20.0) if len(closes) >= 20 else False,
-        "breakout_confirmed": bool(high_3m and price and price >= high_3m * 0.995 and (rel_volume or 0) >= 1.15),
-    }
+    spy = (
+        pd.DataFrame({"Close": aligned}, index=hist.index)
+        if aligned is not None and len(aligned) == len(hist.index)
+        else pd.DataFrame()
+    )
+    return build_feature_row(ticker or "", hist, spy, {})
 
 
 def _hist_frame(series: Mapping[str, list]) -> pd.DataFrame:
@@ -775,28 +807,30 @@ def _family_from_intrinsic(name: str, score: float | None, detail: Mapping[str, 
 def _strength_context(
     *,
     technicals: Mapping[str, Any],
-    price_action: Mapping[str, Any],
-    vol_price: Mapping[str, Any],
     series: Mapping[str, list],
     data_through: str,
+    ticker: str = "",
     spy_closes: Sequence[float | None] | Mapping[str, float] | None = None,
     hist: pd.DataFrame | None = None,
 ) -> dict[str, Any]:
-    """Family scores as context only. Final Strength Score never enters shapeQuality."""
+    """Family scores as context only. Final Strength Score never enters shapeQuality.
+
+    price_action / vol_price 不再从外面传：共用的特征行从同一份 hist 现算，
+    外面那两份副本反而是漂移源。
+    """
 
     rsi = technicals.get("rsi_score")
     macd = (technicals.get("macd") or {}).get("direction_pct")
     trend_eff = technicals.get("trend_efficiency_63d")
     ma_slope = technicals.get("ma50_slope_pct_21d")
-    row = _intrinsic_row(
-        series=series,
-        technicals=technicals,
-        price_action=price_action,
-        vol_price=vol_price,
-        spy_closes=spy_closes,
-    )
     frame = hist if hist is not None else _hist_frame(series)
-    intrinsic = score_intrinsic(row, frame if not frame.empty else None, range_mode="disabled")
+    row = (
+        _intrinsic_row(series=series, hist=frame, ticker=ticker, spy_closes=spy_closes)
+        if not frame.empty
+        else None
+    )
+    # 样本不足 63 根时雷达同样构造不出特征行：families 全 None，不编。
+    intrinsic = score_intrinsic(row, frame, range_mode="disabled") if row is not None else {}
     families_raw = (intrinsic.get("factor_breakdown") or {}).get("factor_families") or {}
     details = (intrinsic.get("factor_breakdown") or {}).get("family_details") or {}
     note = "Family scores are context, not a win probability, and never enter shapeQuality."
@@ -887,7 +921,8 @@ def _intraday_overlays(series: Mapping[str, list], data_through: str, chart_rang
     last_vwap = next((value for value in reversed(vwap_values) if value is not None), None)
     hold_vwap = 0
     for i in range(n - 1, session_start - 1, -1):
-        if last_vwap is None or closes[i] < last_vwap:
+        vwap_i = vwap_values[i]
+        if vwap_i is None or closes[i] < vwap_i:
             break
         hold_vwap += 1
     hold_or = 0
@@ -898,19 +933,33 @@ def _intraday_overlays(series: Mapping[str, list], data_through: str, chart_rang
             hold_or += 1
     last_span = highs[-1] - lows[-1] if n else 0.0
     last_clv = ((2 * closes[-1] - highs[-1] - lows[-1]) / last_span) if last_span > 0 else None
-    prior_days = []
-    seen = []
-    for day in sessions:
-        if day not in seen:
-            seen.append(day)
-    for day in seen[:-1]:
-        prior_days.append(sum(float(volumes[i]) for i, session in enumerate(sessions) if session == day))
-    today_volume = sum(float(volumes[i]) for i, session in enumerate(sessions) if session == last_day)
     tod_rvol = None
-    if prior_days:
-        median = sorted(prior_days)[len(prior_days) // 2]
-        if median > 0:
-            tod_rvol = round(today_volume / median, 4)
+    from app.services.breakouts.feature_engine import compute_time_of_day_rvol
+    from app.services.breakouts.models import MarketSession, TemporalCutoff
+
+    index = pd.DatetimeIndex([datetime.fromtimestamp(int(t), tz=timezone.utc) for t in times])
+    frame = pd.DataFrame(
+        {
+            "Open": opens if len(opens) == n else closes,
+            "High": highs,
+            "Low": lows,
+            "Close": closes,
+            "Volume": volumes if len(volumes) == n else [0.0] * n,
+        },
+        index=index,
+    )
+    event_at = index[-1].to_pydatetime()
+    if event_at.tzinfo is None:
+        event_at = event_at.replace(tzinfo=timezone.utc)
+    cutoff = TemporalCutoff(
+        event_at=event_at,
+        include_current_bar=True,
+        session=MarketSession.REGULAR,
+    )
+    rvol = compute_time_of_day_rvol(frame, cutoff)
+    raw_rvol = rvol.get("rvol_time_of_day")
+    if raw_rvol is not None:
+        tod_rvol = round(float(raw_rvol), 4)
     start = dates[session_start] if dates else data_through
     overlays = [
         _overlay(
@@ -919,7 +968,12 @@ def _intraday_overlays(series: Mapping[str, list], data_through: str, chart_rang
             algorithm_version="intraday-vwap",
             group="price",
             kind="vwap",
-            geometry={"type": "series", "values": vwap_values, "dates": dates, "styleHint": "auto-pale"},
+            geometry={
+                "type": "series",
+                "values": vwap_values,
+                "startIndex": 0,
+                "styleHint": "auto-pale",
+            },
             status="forming",
             direction="neutral",
             shape_quality=1.0,
@@ -1118,9 +1172,6 @@ def assemble_chart_analysis(
 ) -> dict[str, Any]:
     dates = list(series.get("dates") or [])
     closes = list(series.get("closes") or [])
-    highs = list(series.get("highs") or [])
-    lows = list(series.get("lows") or [])
-    fingerprint = bar_fingerprint(dates, closes, highs, lows)
     price_action = price_action or {}
     vol_price = vol_price or {}
     technicals = technicals or {}
@@ -1143,34 +1194,37 @@ def assemble_chart_analysis(
         "range": chart_range,
         "adjustment": adjustment,
         "dataThrough": data_through,
-        "barFingerprint": fingerprint,
-        "barCount": len(closes),
+        # 指纹 + 「到底哈了哪一段」的元数据（根数/首末 bar），见 fingerprint_meta。
+        **fingerprint_meta(series),
         "lastClose": round(float(closes[-1]), 6) if closes else None,
         "seriesBreakAt": series_break_at,
+        # 日期整包只发这一份；overlay 几何与副图各自带 startIndex 索引进来，
+        # 而不是每条线复制一遍这 ~500 个日期。
+        "dates": dates,
         "overlays": overlays,
         "indicatorPanes": [] if chart_range in _INTRADAY_RANGES else _indicator_panes(series, spy_closes=spy_closes, dates=dates),
         "strengthContext": None
         if chart_range in _INTRADAY_RANGES
         else _strength_context(
             technicals=technicals,
-            price_action=price_action,
-            vol_price=vol_price,
             series=series,
             data_through=data_through,
+            ticker=ticker,
             spy_closes=spy_closes,
             hist=hist,
         ),
-        "autoPatterns": list(auto_patterns),
+        # 形态只以 overlays 一种形态下发；autoPatterns 曾在这里再发一份，无人读。
     }
 
 
 __all__ = [
     "BUNDLE_VERSION",
+    "FINGERPRINT_ALGORITHM",
     "assemble_chart_analysis",
     "assemble_intraday_analysis",
     "bar_fingerprint",
+    "canonical_bar_payload",
     "consecutive_swing_labels",
-    "fingerprint_raw",
-    "fnv1a64_hex16",
+    "fingerprint_meta",
     "series_from_chart_bars",
 ]

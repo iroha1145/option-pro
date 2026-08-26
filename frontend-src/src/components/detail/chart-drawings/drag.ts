@@ -1,6 +1,7 @@
 /** Pointer-down drag preview and pixel-space Shift constraint. Committed drawings stay still. */
 import { constrainByShift, moveChannelAnchor, moveChannelWhole } from './geometry.ts';
 import { barKeyOf, resolveAnchor, snapBarIndex } from './projection.ts';
+import { PRICE_MAX, PRICE_MIN } from './schema.ts';
 import type { ChartDrawing, ChartRange, DrawingAnchor, Point } from './types.ts';
 
 export interface TimedOhlc {
@@ -14,6 +15,41 @@ export interface DragOrigin {
   origin: ChartDrawing;
   startPixel: Point;
   startData: { barIndex: number; price: number };
+  /** 指针真的走出阈值才算拖动；纯选中点击不该提交任何东西。 */
+  moved: boolean;
+}
+
+export const DRAG_THRESHOLD_MOUSE_PX = 3;
+export const DRAG_THRESHOLD_TOUCH_PX = 8;
+
+export function dragThresholdPx(pointer: 'mouse' | 'touch' | 'pen'): number {
+  return pointer === 'touch' ? DRAG_THRESHOLD_TOUCH_PX : DRAG_THRESHOLD_MOUSE_PX;
+}
+
+export function dragExceedsThreshold(
+  start: Point,
+  current: Point,
+  pointer: 'mouse' | 'touch' | 'pen',
+): boolean {
+  return Math.hypot(current.x - start.x, current.y - start.y) > dragThresholdPx(pointer);
+}
+
+/**
+ * 把转换出来的数据点夹回网格与合法价格区间。不夹的话拖到图外会算出
+ * price<=0：前端 schema 拒收，后端 invalid_price 回 400（不是冲突），
+ * 已登录用户会拿到一条永远重放的坏任务，匿名用户直接把坏值写进 localStorage。
+ */
+export function clampDragPoint(
+  point: { barIndex: number; price: number },
+  barCount: number,
+): { barIndex: number; price: number } {
+  const maxIndex = Math.max(0, barCount - 1);
+  const rawIndex = Number.isFinite(point.barIndex) ? Math.round(point.barIndex) : 0;
+  const rawPrice = Number.isFinite(point.price) ? point.price : PRICE_MIN;
+  return {
+    barIndex: Math.max(0, Math.min(maxIndex, rawIndex)),
+    price: Math.max(PRICE_MIN, Math.min(PRICE_MAX, rawPrice)),
+  };
 }
 
 export function drawingFromPreview(origin: ChartDrawing, anchors: DrawingAnchor[]): ChartDrawing {

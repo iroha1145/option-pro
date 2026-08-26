@@ -2,12 +2,24 @@
 // as the other visual specs: real gateway when set, otherwise the static
 // frontend build. Stock pages need live/fixture data from the backend; without
 // it this file skips rather than asserting a blank chart.
+//
+// This runs as an OWNER session against the real backend, so everything it
+// draws is written to a persistent account. Two rules follow:
+//   1. afterEach deletes the scopes this file touches — leftovers pile up
+//      inside one run (later `.first()` lookups land on stale objects) and
+//      across runs toward the 500-per-scope cap.
+//   2. chartFilled() only counts painted alpha in a 200x200 corner of the
+//      price canvas — candles alone satisfy it. It proves the chart rendered,
+//      never that a drawing exists. Object-level facts are asserted against
+//      the Inspector's 「绘图对象 …」 rows, which carry stable a11y names.
 import { expect, test } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
 const SCREENSHOT_DIR = join(process.cwd(), "test-results", "visual-evidence");
 const HAS_REAL_BACKEND = Boolean(process.env.OPTIX_VISUAL_BASE_URL);
+const TOUCHED_TICKERS = ["AAPL", "MSFT"];
+const TOUCHED_RANGES = ["1d", "1w", "1h", "15m", "5m"];
 
 async function screenshot(page, name) {
   await mkdir(SCREENSHOT_DIR, { recursive: true });
@@ -23,12 +35,43 @@ function chartTab(page, name) {
   return page.getByRole("tab", { name, exact: true });
 }
 
+/** Inspector 的对象行：aria-label 是「绘图对象 {kind}」，跨刷新稳定。 */
+function drawingRows(page) {
+  return page.getByRole("button", { name: /^绘图对象 / });
+}
+
 async function openStock(page, ticker = "AAPL") {
   const errors = [];
   page.on("pageerror", (error) => errors.push(String(error)));
   await page.goto(`/stock/${ticker}`, { waitUntil: "domcontentloaded" });
   await expect(toolButton(page, "选择")).toBeVisible({ timeout: 15_000 });
   return errors;
+}
+
+/** 对象列表只活在展开的绘图工作区里，所以断言前先展开。 */
+async function expandChart(page) {
+  const expand = toolButton(page, "展开图表");
+  if (await expand.count()) await expand.click();
+  await expect(page.getByRole("dialog", { name: "绘图工作区" })).toBeVisible();
+}
+
+/** 展开工作区，断言当前标的/周期下**恰好** n 个绘图对象（n=0 就是缺席断言）。 */
+async function expectDrawingCount(page, n) {
+  await expandChart(page);
+  if (n === 0) {
+    await expect(page.getByText("当前没有手绘图形").first()).toBeVisible();
+  }
+  await expect(drawingRows(page)).toHaveCount(n);
+}
+
+/** 在价格区落一笔水平线（工具按钮 → 画布点击）。 */
+async function placeHorizontal(page, xRatio = 0.5, yRatio = 0.4) {
+  await toolButton(page, "水平线").click();
+  const canvas = page.locator("canvas").first();
+  const box = await canvas.boundingBox();
+  expect(box).toBeTruthy();
+  await page.mouse.click(box.x + box.width * xRatio, box.y + box.height * yRatio);
+  return box;
 }
 
 async function paintedPixels(page) {
@@ -58,11 +101,32 @@ async function paintedPixels(page) {
   });
 }
 
+/** 只证明「画布上有东西」——绝不能拿它当「绘图存在」的证据。 */
 async function chartFilled(page) {
   await expect.poll(() => paintedPixels(page), { timeout: 20_000 }).toBeGreaterThan(40);
 }
 
 test.use({ viewport: { width: 1440, height: 900 } });
+
+test.afterEach(async ({ page }) => {
+  if (!HAS_REAL_BACKEND) return;
+  // 「失败重试」用例把非 GET 全 abort 掉了，先撤路由再清扫。
+  await page.unrouteAll({ behavior: "ignoreErrors" }).catch(() => {});
+  for (const ticker of TOUCHED_TICKERS) {
+    for (const range of TOUCHED_RANGES) {
+      await page.request
+        .delete(`/api/account/chart-drawings?ticker=${ticker}&range=${range}&adjustment=raw`)
+        .catch(() => {});
+    }
+  }
+  await page.evaluate(() => {
+    try {
+      localStorage.clear();
+    } catch {
+      /* private mode / detached document */
+    }
+  }).catch(() => {});
+});
 
 test("chart drawings toolbar is present on a stock page when data loads", async ({ page }) => {
   test.skip(!HAS_REAL_BACKEND, "stock drawings visual path needs OPTIX_VISUAL_BASE_URL");
@@ -97,80 +161,83 @@ test("seven drawing tools are present and selectable", async ({ page }) => {
 test("drag endpoint and whole-object after selecting a drawing", async ({ page }) => {
   test.skip(!HAS_REAL_BACKEND, "stock drawings visual path needs OPTIX_VISUAL_BASE_URL");
   await openStock(page);
-  await toolButton(page, "水平线").click();
-  const canvas = page.locator("canvas").first();
-  const box = await canvas.boundingBox();
-  expect(box).toBeTruthy();
-  await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.4);
+  const box = await placeHorizontal(page, 0.5, 0.4);
   await toolButton(page, "选择").click();
   await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.4);
   await page.mouse.down();
   await page.mouse.move(box.x + box.width * 0.55, box.y + box.height * 0.3, { steps: 6 });
   await page.mouse.up();
-  await chartFilled(page);
+  // 拖拽提交不该复制出第二个对象，也不该把它弄丢。
+  await expectDrawingCount(page, 1);
 });
 
 test("zoom keeps drawing time and price identity", async ({ page }) => {
   test.skip(!HAS_REAL_BACKEND, "stock drawings visual path needs OPTIX_VISUAL_BASE_URL");
   await openStock(page);
-  await toolButton(page, "水平线").click();
+  await placeHorizontal(page, 0.4, 0.35);
   const canvas = page.locator("canvas").first();
-  const box = await canvas.boundingBox();
-  await page.mouse.click(box.x + box.width * 0.4, box.y + box.height * 0.35);
   await canvas.hover();
   await page.mouse.wheel(0, -400);
   await chartFilled(page);
+  // 缩放只换视窗，不换对象身份。
+  await expectDrawingCount(page, 1);
 });
 
 test("resize reprojects selection anchors", async ({ page }) => {
   test.skip(!HAS_REAL_BACKEND, "stock drawings visual path needs OPTIX_VISUAL_BASE_URL");
   await openStock(page);
-  await toolButton(page, "展开图表").click();
+  await placeHorizontal(page, 0.5, 0.4);
+  await expandChart(page);
   await page.setViewportSize({ width: 1100, height: 800 });
   await page.waitForTimeout(200);
+  await expect(drawingRows(page)).toHaveCount(1);
   await chartFilled(page);
 });
 
 test("candle and area modes share drawings", async ({ page }) => {
   test.skip(!HAS_REAL_BACKEND, "stock drawings visual path needs OPTIX_VISUAL_BASE_URL");
   await openStock(page);
-  await toolButton(page, "水平线").click();
-  const canvas = page.locator("canvas").first();
-  const box = await canvas.boundingBox();
-  await page.mouse.click(box.x + box.width * 0.45, box.y + box.height * 0.4);
+  await placeHorizontal(page, 0.45, 0.4);
+  await expandChart(page);
+  await expect(drawingRows(page)).toHaveCount(1);
   await chartTab(page, "面积").click();
   await expect(chartTab(page, "面积")).toHaveAttribute("aria-selected", "true");
-  await chartFilled(page);
+  // 显示模式不在 ticker|range|adjustment 作用域里：切模式对象必须还在。
+  await expect(drawingRows(page)).toHaveCount(1);
   await chartTab(page, "K 线").click();
   await expect(chartTab(page, "K 线")).toHaveAttribute("aria-selected", "true");
+  await expect(drawingRows(page)).toHaveCount(1);
   await chartFilled(page);
 });
 
 test("ticker and range switch isolates drawings", async ({ page }) => {
   test.skip(!HAS_REAL_BACKEND, "stock drawings visual path needs OPTIX_VISUAL_BASE_URL");
   await openStock(page, "AAPL");
-  await toolButton(page, "水平线").click();
-  const canvas = page.locator("canvas").first();
-  const box = await canvas.boundingBox();
-  await page.mouse.click(box.x + box.width * 0.45, box.y + box.height * 0.4);
+  await placeHorizontal(page, 0.45, 0.4);
+  await expandChart(page);
+  await expect(drawingRows(page)).toHaveCount(1);
+  // 换周期 = 换作用域：这里必须是缺席断言，否则「绘图串周期」也能过。
+  await chartTab(page, "周线").click();
+  await expect(chartTab(page, "周线")).toHaveAttribute("aria-selected", "true");
+  await expect(drawingRows(page)).toHaveCount(0);
   await chartTab(page, "日线").click();
   await expect(chartTab(page, "日线")).toHaveAttribute("aria-selected", "true");
+  await expect(drawingRows(page)).toHaveCount(1);
   await page.goto("/stock/MSFT", { waitUntil: "domcontentloaded" });
   await expect(toolButton(page, "选择")).toBeVisible({ timeout: 15_000 });
-  await chartFilled(page);
+  await expectDrawingCount(page, 0);
 });
 
-test("refresh persistence keeps guest drawings", async ({ page }) => {
+test("refresh persistence keeps the account drawing", async ({ page }) => {
   test.skip(!HAS_REAL_BACKEND, "stock drawings visual path needs OPTIX_VISUAL_BASE_URL");
   await openStock(page);
-  await toolButton(page, "水平线").click();
-  const canvas = page.locator("canvas").first();
-  const box = await canvas.boundingBox();
-  await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.4);
+  await placeHorizontal(page, 0.5, 0.4);
+  await expectDrawingCount(page, 1);
   await page.reload({ waitUntil: "domcontentloaded" });
   await expect(toolButton(page, "选择")).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole("img", { name: /K 线图$|面积图$/ })).toBeVisible({ timeout: 15_000 });
-  await chartFilled(page);
+  // 刷新后对象要真的回来——chartFilled 只要有蜡烛就绿，全丢也照样过。
+  await expectDrawingCount(page, 1);
 });
 
 test("failed save then retry keeps the local edit", async ({ page }) => {
@@ -180,57 +247,77 @@ test("failed save then retry keeps the local edit", async ({ page }) => {
     if (route.request().method() === "GET") return route.continue();
     return route.abort();
   });
-  await toolButton(page, "水平线").click();
-  const canvas = page.locator("canvas").first();
-  const box = await canvas.boundingBox();
-  await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.4);
-  const retry = page.getByRole("button", { name: "重试同步" });
-  if (await retry.count()) await retry.click();
-  await chartFilled(page);
+  await placeHorizontal(page, 0.5, 0.4);
+  // 服务器写失败时本地那笔必须留着，并且要给得出重试入口。
+  await expectDrawingCount(page, 1);
+  const retry = toolButton(page, "重试同步").first();
+  await expect(retry).toBeVisible({ timeout: 15_000 });
+  await retry.click();
+  await expect(drawingRows(page)).toHaveCount(1);
+  await expect(page.getByText("当前没有手绘图形").first()).toBeHidden();
 });
 
 test("rapid same-id revision stays serial from the inspector", async ({ page }) => {
   test.skip(!HAS_REAL_BACKEND, "stock drawings visual path needs OPTIX_VISUAL_BASE_URL");
-  await openStock(page);
-  await toolButton(page, "展开图表").click();
-  await toolButton(page, "水平线").click();
-  const canvas = page.locator("canvas").first();
-  const box = await canvas.boundingBox();
-  await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.4);
-  const widths = page.getByRole("button", { name: /线宽/ });
+  const errors = await openStock(page);
+  await placeHorizontal(page, 0.5, 0.4);
+  await expandChart(page);
+  await expect(drawingRows(page)).toHaveCount(1);
+  const widths = page.getByRole("button", { name: /^线宽 \d$/ });
   const count = await widths.count();
   for (let i = 0; i < count; i += 1) await widths.nth(i).click();
-  await chartFilled(page);
+  // 连打同一个 id 的修订：不能分裂出第二个对象，也不能掉进冲突态。
+  await expect(drawingRows(page)).toHaveCount(1);
+  await expect(widths.nth(count - 1)).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByText(/绘图冲突/)).toHaveCount(0);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(toolButton(page, "选择")).toBeVisible({ timeout: 15_000 });
+  await expectDrawingCount(page, 1);
+  expect(errors, errors.join("\n")).toEqual([]);
 });
 
 test("hide then restore from the object list", async ({ page }) => {
   test.skip(!HAS_REAL_BACKEND, "stock drawings visual path needs OPTIX_VISUAL_BASE_URL");
   await openStock(page);
-  await toolButton(page, "展开图表").click();
-  await toolButton(page, "水平线").click();
-  const canvas = page.locator("canvas").first();
-  const box = await canvas.boundingBox();
-  await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.4);
-  const hide = page.getByRole("button", { name: "隐藏" }).first();
-  await hide.click();
-  const show = page.getByRole("button", { name: "显示" }).first();
-  await expect(show).toBeVisible();
-  await show.click();
+  await placeHorizontal(page, 0.5, 0.4);
+  await expandChart(page);
+  const row = drawingRows(page).first();
+  await expect(row).toHaveCount(1);
+  await expect(row).not.toContainText("已隐藏");
+  await page.getByRole("button", { name: "隐藏" }).first().click();
+  await expect(row).toContainText("已隐藏");
+  await page.getByRole("button", { name: "显示" }).first().click();
+  await expect(row).not.toContainText("已隐藏");
   await chartFilled(page);
 });
 
 test("undo color text lock delete then refresh", async ({ page }) => {
   test.skip(!HAS_REAL_BACKEND, "stock drawings visual path needs OPTIX_VISUAL_BASE_URL");
   await openStock(page);
-  await toolButton(page, "展开图表").click();
-  await toolButton(page, "水平线").click();
-  const canvas = page.locator("canvas").first();
-  const box = await canvas.boundingBox();
-  await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.4);
-  await page.getByRole("button", { name: "锁定", exact: true }).click();
-  await toolButton(page, "撤销").click();
+  await placeHorizontal(page, 0.5, 0.4);
+  await expandChart(page);
+  const row = drawingRows(page).first();
+  await toolButton(page, "锁定").first().click();
+  await expect(row).toContainText("已锁定");
+  await toolButton(page, "撤销").first().click();
+  await expect(row).not.toContainText("已锁定");
   await page.reload({ waitUntil: "domcontentloaded" });
   await expect(toolButton(page, "选择")).toBeVisible({ timeout: 15_000 });
+  await expectDrawingCount(page, 1);
+  await expect(drawingRows(page).first()).not.toContainText("已锁定");
+});
+
+test("clear all removes every drawing in the scope", async ({ page }) => {
+  test.skip(!HAS_REAL_BACKEND, "stock drawings visual path needs OPTIX_VISUAL_BASE_URL");
+  await openStock(page);
+  await placeHorizontal(page, 0.42, 0.35);
+  await placeHorizontal(page, 0.58, 0.55);
+  await expandChart(page);
+  await expect(drawingRows(page)).toHaveCount(2);
+  await toolButton(page, "清除全部手绘").first().click();
+  await toolButton(page, "确认清除").first().click();
+  await expect(drawingRows(page)).toHaveCount(0);
+  await expect(page.getByText("当前没有手绘图形").first()).toBeVisible();
 });
 
 test("auto patterns render from a real technical payload", async ({ page }) => {
@@ -239,6 +326,12 @@ test("auto patterns render from a real technical payload", async ({ page }) => {
   await toolButton(page, "算法与图层").click();
   await expect(page.getByRole("dialog", { name: "算法与图层" })).toBeVisible();
   await page.getByRole("button", { name: "极简", exact: true }).click();
+  await page.keyboard.press("Escape");
+  // 形态标签条只许打真形态。ma/vwap/breakout 这些 kind 落进来就成了
+  // 「形态 · ma · 置信度 100」，正好戳穿产品反复强调的「几何质量不是胜率」。
+  await expect(
+    page.getByText(/形态 · (ma|vwap|breakout|swing|level|pivot|candle|trap|volume_setup|opening_range|box) ·/),
+  ).toHaveCount(0);
   await chartFilled(page);
 });
 
@@ -254,6 +347,13 @@ test("layer presets switch algorithm and pattern groups", async ({ page }) => {
   }
   await expect(dialog.getByRole("checkbox", { name: "RSI", exact: true }).first()).toBeVisible();
   await expect(dialog.getByRole("checkbox", { name: "自动趋势线/通道/三角形/楔形", exact: true }).first()).toBeVisible();
+  // strength_* 那族图层勾了什么都不画，已整族移除：菜单里不该再有它们的开关。
+  for (const dead of ["short", "mid", "long", "trend", "breakout", "price_action"]) {
+    await expect(dialog.getByRole("checkbox", { name: dead, exact: true })).toHaveCount(0);
+  }
+  // 「最低几何质量」和标签条上的「置信度 87」同一把尺（0–100），不是 0–1。
+  await dialog.getByRole("button", { name: "极简", exact: true }).click();
+  await expect(dialog.getByRole("spinbutton", { name: "最低几何质量" })).toHaveValue("70");
   await page.keyboard.press("Escape");
   await chartFilled(page);
 });

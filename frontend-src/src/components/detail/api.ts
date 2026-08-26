@@ -23,7 +23,6 @@ import { postAiJob } from '@/api/modules/ai-jobs';
 import * as fx from '@/mocks/fixtures';
 import * as fx2 from '@/mocks/fixtures2';
 import type { AiJob, StockChart, StockDetail, TechBaseStatus, TechnicalStructure, TechSwingPoint } from '@/api/types';
-import { mapTechnicalAutoFields } from './chart-drawings/autoPatterns.ts';
 import type {
   ChartBarEx,
   StockChartEx,
@@ -657,7 +656,12 @@ function mapTechnicalStructure(body: unknown): TechnicalStructure {
     });
   const lastBarRaw = asRec(r.last_bar);
   const lastBarPoint = mapSwingPoint(lastBarRaw);
-  const auto = mapTechnicalAutoFields(body);
+  // 形态列表只从 chart_analysis.overlays 走一条路；负载里的 auto_patterns 顶层
+  // 副本没有任何组件读，后端已停发。带 option/graphic 的负载一律当不可信丢弃。
+  const analysisRaw = asRec(r.chart_analysis ?? r.chartAnalysis);
+  const chartAnalysis = Object.keys(analysisRaw).length && analysisRaw.option == null && analysisRaw.graphic == null
+    ? analysisRaw
+    : null;
   return {
     base,
     base_state,
@@ -735,9 +739,7 @@ function mapTechnicalStructure(body: unknown): TechnicalStructure {
         },
     series_break_at: pickS(r, 'series_break_at'),
     as_of: pickS(r, 'as_of', 'asOf'),
-    auto_patterns: auto.auto_patterns,
-    auto_patterns_version: auto.auto_patterns_version,
-    chart_analysis: auto.chart_analysis,
+    chart_analysis: chartAnalysis,
   };
 }
 
@@ -746,7 +748,13 @@ export function getTechnicalStructure(ticker: string, force = false): Promise<Te
   return mockOr(
     () => {
       if (!fx.hasTicker(symbol)) throw new ApiError(404, __t('代码 {ticker} 不存在', { ticker: symbol }));
-      return fx2.getTechnicalStructure(symbol);
+      const row = fx2.getTechnicalStructure(symbol);
+      // 日线分析包线上挂在 /technical 上（分钟包挂 /chart）。data_through 跟着
+      // 分析包的纽约交易日走：闸门要求两者逐字相等，用 UTC 切片会差一天。
+      const analysis = fx.buildChartAnalysis(symbol, fx.getStockChartEx(symbol, '1d').bars, '1d');
+      return analysis
+        ? { ...row, data_through: String(analysis.dataThrough), chart_analysis: analysis }
+        : row;
     },
     () =>
       marketGet(`/stocks/${encodeURIComponent(symbol)}/technical`, {

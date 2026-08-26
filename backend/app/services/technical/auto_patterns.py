@@ -26,6 +26,11 @@ _KEEP_QUALITY = 0.55
 _MAX_RESULTS = 12
 _TOUCH_GAP = 3
 _SWING_SPANS = (2, 3, 5)
+# consensus = 有多少条独立候选线落在同一几何上。孤证起步 0.55，每多一条
+# 被 NMS 合并进来的候选 +0.15，封顶 1.0——佐证只能抬 displayPriority，
+# 不能像旧写法那样把合并后的行压到孤证之下。
+_CONSENSUS_BASE = 0.55
+_CONSENSUS_STEP = 0.15
 
 # Audit-tunable mix of independent evidence. Not a probability or trade signal.
 DISPLAY_PRIORITY_WEIGHTS = {
@@ -388,7 +393,7 @@ def _evaluate_line(
         trend_alignment = 0.7 if net <= 0 else 0.3
         if slope < 0:
             trend_alignment = min(1.0, trend_alignment + 0.15)
-    consensus = 1.0
+    consensus = _CONSENSUS_BASE
     return {
         "touches": touches,
         "residual": residual,
@@ -438,7 +443,12 @@ def _collapse(candidates: list[dict[str, Any]], atr: float) -> list[dict[str, An
             if same_kind and close_geom:
                 sources = list(dict.fromkeys([*(other.get("sources") or []), *(item.get("sources") or [])]))
                 other["sources"] = sources
-                other["consensus"] = round(_clamp01(0.55 + 0.15 * len(sources)), 4)
+                # sources 是出处（永远只有 auto_patterns），佐证数要数被合并掉的候选线。
+                merged = int(other.get("mergedCount") or 1) + 1
+                other["mergedCount"] = merged
+                other["consensus"] = round(
+                    _clamp01(_CONSENSUS_BASE + _CONSENSUS_STEP * (merged - 1)), 4
+                )
                 evidence = dict(other.get("evidence") or {})
                 evidence["consensus"] = other["consensus"]
                 evidence["sources"] = sources
@@ -467,6 +477,49 @@ def _collapse(candidates: list[dict[str, Any]], atr: float) -> list[dict[str, An
     return kept
 
 
+def _strip_anchor(item: Mapping[str, Any]) -> dict[str, Any]:
+    row = {
+        "time": item["time"],
+        "barKey": item["barKey"],
+        "price": round(float(item["price"]), 4),
+    }
+    if item.get("index") is not None:
+        row["index"] = int(item["index"])
+    return row
+
+
+def _fit_rail_anchors(
+    times: Sequence[int],
+    dates: Sequence[str],
+    start: int,
+    end: int,
+    slope: float,
+    intercept: float,
+) -> list[dict[str, Any]]:
+    """Painted endpoints lie on the scored Theil–Sen line, not the candidate swings."""
+
+    return [
+        _anchor(times, dates, start, _y(slope, intercept, start)),
+        _anchor(times, dates, end, _y(slope, intercept, end)),
+    ]
+
+
+def _touch_anchors(
+    times: Sequence[int],
+    dates: Sequence[str],
+    points: Sequence[tuple[int, float]],
+    indexes: Sequence[int],
+) -> list[dict[str, Any]]:
+    by_index = {int(index): float(price) for index, price in points}
+    anchors: list[dict[str, Any]] = []
+    for index in indexes:
+        price = by_index.get(int(index))
+        if price is None:
+            continue
+        anchors.append(_anchor(times, dates, int(index), price))
+    return anchors
+
+
 def _pack(
     *,
     kind: str,
@@ -476,16 +529,16 @@ def _pack(
     data_through: str,
     extra_rationale: Sequence[str] = (),
     sources: Sequence[str] = ("auto_patterns",),
+    touch_anchors: Sequence[Mapping[str, Any]] | None = None,
+    support_rail: Sequence[Mapping[str, Any]] | None = None,
+    resistance_rail: Sequence[Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    public_anchors = [
-        {"time": item["time"], "barKey": item["barKey"], "price": item["price"]}
-        for item in anchors
-    ]
+    public_anchors = [_strip_anchor(item) for item in anchors]
     shape_quality = float(eval_row.get("shapeQuality") or (eval_row.get("confidence") or 0) / 100.0)
     volume_confirmation = float(eval_row.get("volumeConfirmation") or 0.5)
     trend_alignment = float(eval_row.get("trendAlignment") or 0.5)
     recency = float(eval_row.get("recency") or 0.5)
-    consensus = float(eval_row.get("consensus") or 1.0)
+    consensus = float(eval_row.get("consensus") or _CONSENSUS_BASE)
     display_priority = compute_display_priority(
         shape_quality, volume_confirmation, trend_alignment, recency, consensus
     )
@@ -527,6 +580,7 @@ def _pack(
         "consensus": round(consensus, 4),
         "displayPriority": display_priority,
         "sources": list(sources),
+        "mergedCount": 1,
         "evidence": {
             "shapeQuality": round(shape_quality, 4),
             "volumeConfirmation": round(volume_confirmation, 4),
@@ -543,6 +597,14 @@ def _pack(
         "p0": eval_row.get("p0"),
         "p1": eval_row.get("p1"),
         "touch_indexes": eval_row.get("touch_indexes"),
+        "fitAnchors": [_strip_anchor(item) for item in anchors],
+        "touchAnchors": [_strip_anchor(item) for item in (touch_anchors or [])],
+        "supportRail": [_strip_anchor(item) for item in support_rail] if support_rail else None,
+        "resistanceRail": [_strip_anchor(item) for item in resistance_rail] if resistance_rail else None,
+        "supportSlope": eval_row.get("supportSlope"),
+        "supportIntercept": eval_row.get("supportIntercept"),
+        "resistanceSlope": eval_row.get("resistanceSlope"),
+        "resistanceIntercept": eval_row.get("resistanceIntercept"),
     }
 
 
@@ -638,50 +700,6 @@ def detect_auto_patterns(
     data_through = window_dates[-1]
     candidates: list[dict[str, Any]] = []
 
-    def consider_trend(points: list[tuple[int, float]], side: str, want_sign: int) -> None:
-        for i in range(len(points)):
-            for j in range(i + 1, len(points)):
-                fitted = _line(points[i], points[j])
-                if fitted is None:
-                    continue
-                slope, intercept = fitted
-                if want_sign > 0 and slope <= 1e-6:
-                    continue
-                if want_sign < 0 and slope >= -1e-6:
-                    continue
-                start_i = points[i][0]
-                end_i = points[j][0]
-                evaluated = _evaluate_line(
-                    slope=slope,
-                    intercept=intercept,
-                    points=points,
-                    opens=window_opens,
-                    closes=window_closes,
-                    volumes=window_volumes,
-                    local_atr=local_atr,
-                    side=side,
-                    start=start_i,
-                    end=end_i,
-                )
-                if evaluated is None:
-                    continue
-                kind = "support_trend" if side == "support" else "resistance_trend"
-                subtype = "rising" if slope > 0 else "falling"
-                a0 = _anchor(window_times, window_dates, points[i][0], points[i][1])
-                a1 = _anchor(window_times, window_dates, points[j][0], points[j][1])
-                packed = _pack(
-                    kind=kind,
-                    subtype=subtype,
-                    eval_row=evaluated,
-                    anchors=[a0, a1],
-                    data_through=data_through,
-                    extra_rationale=("swing_line",),
-                )
-                candidates.append(packed)
-
-    consider_trend(swing_lows, "support", +1)
-    consider_trend(swing_highs, "resistance", -1)
-
     def fit_all(points: list[tuple[int, float]], side: str) -> list[dict[str, Any]]:
         found: list[dict[str, Any]] = []
         for i in range(len(points)):
@@ -705,11 +723,52 @@ def detect_auto_patterns(
                 )
                 if evaluated is None:
                     continue
-                found.append({**evaluated, "p0": points[i], "p1": points[j]})
+                # raw_slope 是两点候选线的斜率（拟合前），单线趋势按它的符号取舍。
+                found.append({**evaluated, "p0": points[i], "p1": points[j], "raw_slope": slope})
         return found
 
+    # 单线趋势与通道/三角形/楔形吃的是同一份 O(k²) 摆动配对评估：算一次，
+    # 单线那边按候选斜率符号挑，别把每对再评一遍。
     extra_supports = fit_all(swing_lows, "support")
     extra_resists = fit_all(swing_highs, "resistance")
+
+    def consider_trend(
+        evaluated_rows: list[dict[str, Any]],
+        points: list[tuple[int, float]],
+        side: str,
+        want_sign: int,
+    ) -> None:
+        for evaluated in evaluated_rows:
+            slope = float(evaluated["raw_slope"])
+            if want_sign > 0 and slope <= 1e-6:
+                continue
+            if want_sign < 0 and slope >= -1e-6:
+                continue
+            kind = "support_trend" if side == "support" else "resistance_trend"
+            subtype = "rising" if evaluated["slope"] > 0 else "falling"
+            fit = _fit_rail_anchors(
+                window_times,
+                window_dates,
+                int(evaluated["start"]),
+                int(evaluated["end"]),
+                float(evaluated["slope"]),
+                float(evaluated["intercept"]),
+            )
+            packed = _pack(
+                kind=kind,
+                subtype=subtype,
+                eval_row=evaluated,
+                anchors=fit,
+                data_through=data_through,
+                extra_rationale=("swing_line",),
+                touch_anchors=_touch_anchors(
+                    window_times, window_dates, points, evaluated.get("touch_indexes") or []
+                ),
+            )
+            candidates.append(packed)
+
+    consider_trend(extra_supports, swing_lows, "support", +1)
+    consider_trend(extra_resists, swing_highs, "resistance", -1)
 
     for support in extra_supports:
         for resist in extra_resists:
@@ -838,7 +897,7 @@ def detect_auto_patterns(
                     0.5 * (support["trendAlignment"] + resist["trendAlignment"]), 4
                 ),
                 "recency": recency,
-                "consensus": 1.0,
+                "consensus": _CONSENSUS_BASE,
                 "touches": touches,
                 "status": status,
                 "direction": direction,
@@ -853,20 +912,32 @@ def detect_auto_patterns(
                 "residual": residual,
                 "p0": support["p0"],
                 "p1": support["p1"],
+                "supportSlope": support["slope"],
+                "supportIntercept": support["intercept"],
+                "resistanceSlope": resist["slope"],
+                "resistanceIntercept": resist["intercept"],
             }
-            anchors = [
-                _anchor(window_times, window_dates, support["p0"][0], support["p0"][1]),
-                _anchor(window_times, window_dates, support["p1"][0], support["p1"][1]),
-                _anchor(window_times, window_dates, resist["p0"][0], resist["p0"][1]),
-                _anchor(window_times, window_dates, resist["p1"][0], resist["p1"][1]),
-            ]
+            support_rail = _fit_rail_anchors(
+                window_times, window_dates, overlap_start, overlap_end, support["slope"], support["intercept"]
+            )
+            resistance_rail = _fit_rail_anchors(
+                window_times, window_dates, overlap_start, overlap_end, resist["slope"], resist["intercept"]
+            )
             packed = _pack(
                 kind=kind,
                 subtype=subtype,
                 eval_row=eval_row,
-                anchors=anchors,
+                anchors=[*support_rail, *resistance_rail],
                 data_through=data_through,
                 extra_rationale=extra,
+                touch_anchors=_touch_anchors(
+                    window_times,
+                    window_dates,
+                    swing_lows + swing_highs,
+                    list(support.get("touch_indexes") or []) + list(resist.get("touch_indexes") or []),
+                ),
+                support_rail=support_rail,
+                resistance_rail=resistance_rail,
             )
             packed["widthRatio"] = round(width_ratio, 4)
             candidates.append(packed)
@@ -880,7 +951,7 @@ def detect_auto_patterns(
         cleaned.append(row)
     collapsed = _collapse(cleaned, atr)
     public = []
-    drop = {"slope", "intercept", "start", "end", "span", "p0", "p1", "touch_indexes", "widthRatio"}
+    drop = {"p0", "p1", "touch_indexes", "widthRatio", "mergedCount"}
     for row in collapsed:
         public.append({key: value for key, value in row.items() if key not in drop})
     public.sort(

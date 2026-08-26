@@ -95,6 +95,27 @@ export function isAuthError(error: unknown): boolean {
   return error instanceof ApiError && error.code === 401;
 }
 
+/** 后端业务码；没有 body 或不是 ApiError 时为 null。 */
+export function drawingErrorCode(error: unknown): string | null {
+  return error instanceof ApiError && error.bizCode ? error.bizCode : null;
+}
+
+export function drawingErrorStatus(error: unknown): number | null {
+  return error instanceof ApiError ? error.code : null;
+}
+
+/**
+ * 409 不等于版本冲突：配额满（drawings_range_full / drawings_full）和重放
+ * （drawing_exists）也走 409，按冲突处理会弹「另一台设备改过」并让必然失败的
+ * 任务无限重放。只有 revision_conflict 是真冲突。
+ */
 export function isConflictError(error: unknown): boolean {
-  return error instanceof ApiError && (error.code === 409 || error.bizCode === 'revision_conflict');
+  return drawingErrorCode(error) === 'revision_conflict';
+}
+
+export const QUOTA_ERROR_CODES = new Set(['drawings_range_full', 'drawings_full']);
+
+export function isQuotaError(error: unknown): boolean {
+  const code = drawingErrorCode(error);
+  return code !== null && QUOTA_ERROR_CODES.has(code);
 }

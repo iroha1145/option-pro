@@ -131,7 +131,7 @@ CREATE TABLE IF NOT EXISTS account_watchlist (
 CREATE INDEX IF NOT EXISTS idx_account_watchlist_order
     ON account_watchlist(user_id, position);
 CREATE TABLE IF NOT EXISTS account_chart_drawings (
-    drawing_id TEXT PRIMARY KEY,
+    drawing_id TEXT NOT NULL,
     user_id TEXT NOT NULL
         REFERENCES accounts(user_id) ON DELETE CASCADE,
     ticker TEXT NOT NULL,
@@ -141,7 +141,11 @@ CREATE TABLE IF NOT EXISTS account_chart_drawings (
     payload_json TEXT NOT NULL,
     revision INTEGER NOT NULL,
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    -- 主键带上 user_id：编号空间按账户隔离。全局唯一的话，别人占用的编号会
+    -- 返回 404 而空闲编号返回 201，等于给外部账户的编号做了存在性探针；而且
+    -- 同账户重放创建只能报 409，客户端 outbox 会卡死在这一条上。
+    PRIMARY KEY (user_id, drawing_id)
 );
 CREATE INDEX IF NOT EXISTS idx_account_chart_drawings_scope
     ON account_chart_drawings(user_id, ticker, chart_range, adjustment);
@@ -295,13 +299,15 @@ def _parse_iso_time(value: str) -> str:
     if not text:
         raise AccountError("invalid_time")
     normalized = text[:-1] + "+00:00" if text.endswith("Z") else text
+    # 换算也得包进来：0001-01-01T00:00:00+00:01 这种格式合法但换到 UTC 会越过
+    # datetime.min，astimezone 抛的是 OverflowError，漏在外面就是一个 500。
     try:
         parsed = datetime.fromisoformat(normalized)
-    except ValueError as exc:
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc).isoformat()
+    except (ValueError, OverflowError, OSError) as exc:
         raise AccountError("invalid_time") from exc
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc).isoformat()
 
 
 def _require_bool(value: Any, code: str) -> bool:
@@ -488,8 +494,26 @@ class AccountStore:
                 return
             with self._connect() as connection:
                 connection.executescript(_SCHEMA)
+                self._rebuild_legacy_drawings_table(connection)
                 connection.commit()
             self._initialized = True
+
+    def _rebuild_legacy_drawings_table(self, connection: sqlite3.Connection) -> None:
+        """把开发库里旧的全局 drawing_id 主键换成 (user_id, drawing_id)。
+
+        绘图功能还没上线，任何带旧主键的表都只可能是开发机上的临时数据，所以
+        直接丢掉重建；等有了线上数据，这里必须换成搬数据的正经迁移。
+        """
+
+        pk_columns = [
+            str(row["name"])
+            for row in connection.execute("PRAGMA table_info(account_chart_drawings)")
+            if int(row["pk"]) > 0
+        ]
+        if pk_columns != ["drawing_id"]:
+            return
+        connection.execute("DROP TABLE account_chart_drawings")
+        connection.executescript(_SCHEMA)
 
     # ---------------- accounts ----------------
 
@@ -764,6 +788,39 @@ class AccountStore:
             "updatedAt": str(row["updated_at"]),
         }
 
+    def _parsed_to_drawing(
+        self,
+        parsed: Mapping[str, Any],
+        *,
+        revision: int,
+        created_at: str,
+        updated_at: str,
+    ) -> dict[str, Any]:
+        """用手上的解析结果拼响应。
+
+        提交后再开第二条连接回读，并发删除会让回读落空；旧代码用裸 assert 兜着，
+        既可能变成 500，在 ``python -O`` 下又会直接返回 null 正文。
+        """
+
+        payload = parsed["payload"]
+        return {
+            "schemaVersion": DRAWING_SCHEMA_VERSION,
+            "id": str(parsed["id"]),
+            "ticker": str(parsed["ticker"]),
+            "range": str(parsed["range"]),
+            "adjustment": str(parsed["adjustment"]),
+            "kind": str(parsed["kind"]),
+            "anchors": payload["anchors"],
+            "style": payload["style"],
+            "text": payload["text"],
+            "locked": bool(payload["locked"]),
+            "hidden": bool(payload["hidden"]),
+            "zOrder": int(payload["zOrder"]),
+            "revision": int(revision),
+            "createdAt": created_at,
+            "updatedAt": updated_at,
+        }
+
     def list_drawings(
         self,
         user_id: str,
@@ -807,14 +864,17 @@ class AccountStore:
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             existing = connection.execute(
-                "SELECT user_id FROM account_chart_drawings WHERE drawing_id=?",
-                (drawing_id,),
+                """SELECT drawing_id, user_id, ticker, chart_range, adjustment,
+                          kind, payload_json, revision, created_at, updated_at
+                     FROM account_chart_drawings
+                    WHERE user_id=? AND drawing_id=?""",
+                (user_id, drawing_id),
             ).fetchone()
             if existing is not None:
+                # 重放同一个编号按成功处理，原样返回已存的行：客户端 outbox 丢了
+                # 响应就会重发，报 409 只会让它在这一条上无限重试。
                 connection.rollback()
-                if str(existing["user_id"]) != user_id:
-                    raise AccountError("drawing_forbidden")
-                raise AccountError("drawing_exists")
+                return self._row_to_drawing(existing)
             range_count = int(
                 connection.execute(
                     """SELECT COUNT(*) FROM account_chart_drawings
@@ -853,9 +913,12 @@ class AccountStore:
                 ),
             )
             connection.commit()
-        created = self.get_drawing(user_id, drawing_id)
-        assert created is not None
-        return created
+        return self._parsed_to_drawing(
+            parsed,
+            revision=1,
+            created_at=now_iso,
+            updated_at=now_iso,
+        )
 
     def update_drawing(
         self,
@@ -867,7 +930,9 @@ class AccountStore:
     ) -> dict[str, Any]:
         drawing_id = normalize_drawing_id(drawing_id)
         if not isinstance(expected_revision, int) or expected_revision < 1:
-            raise AccountError("revision_conflict")
+            # 版本号本身不合法是请求写错了，不是版本冲突：只有 revision_conflict
+            # 这一个码代表「别处改过了」，客户端要靠它决定是否弹重载对话框。
+            raise AccountError("invalid_payload")
         parsed = validate_drawing_payload(
             {**body, "id": drawing_id},
             require_id=True,
@@ -877,16 +942,16 @@ class AccountStore:
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
-                """SELECT user_id, ticker, chart_range, adjustment, revision
-                     FROM account_chart_drawings WHERE drawing_id=?""",
-                (drawing_id,),
+                """SELECT ticker, chart_range, adjustment, revision, created_at
+                     FROM account_chart_drawings
+                    WHERE user_id=? AND drawing_id=?""",
+                (user_id, drawing_id),
             ).fetchone()
             if row is None:
+                # 别人的编号在本账户下就是不存在，和自己删掉的行同一个码，客户端
+                # 拿到 drawing_not_found 就该丢掉这个任务而不是无限重试。
                 connection.rollback()
                 raise AccountError("drawing_not_found")
-            if str(row["user_id"]) != user_id:
-                connection.rollback()
-                raise AccountError("drawing_forbidden")
             if (
                 str(row["ticker"]) != parsed["ticker"]
                 or str(row["chart_range"]) != parsed["range"]
@@ -913,28 +978,26 @@ class AccountStore:
                 ),
             )
             connection.commit()
-        updated = self.get_drawing(user_id, drawing_id)
-        assert updated is not None
-        return updated
+        return self._parsed_to_drawing(
+            parsed,
+            revision=current_revision + 1,
+            created_at=str(row["created_at"]),
+            updated_at=now_iso,
+        )
 
     def delete_drawing(self, user_id: str, drawing_id: str) -> None:
+        """删除是幂等的：行本来就不在，也算删成功。
+
+        没有墓碑表，重放的删除和多设备重复删除永远找不到行；报 404 的话客户端
+        的 outbox 就再也丢不掉这个任务。别人的行照样删不到——user_id 是条件之一。
+        """
+
         drawing_id = normalize_drawing_id(drawing_id)
         self.initialize()
         with self._connect() as connection:
-            connection.execute("BEGIN IMMEDIATE")
-            row = connection.execute(
-                "SELECT user_id FROM account_chart_drawings WHERE drawing_id=?",
-                (drawing_id,),
-            ).fetchone()
-            if row is None:
-                connection.rollback()
-                raise AccountError("drawing_not_found")
-            if str(row["user_id"]) != user_id:
-                connection.rollback()
-                raise AccountError("drawing_forbidden")
             connection.execute(
-                "DELETE FROM account_chart_drawings WHERE drawing_id=? AND user_id=?",
-                (drawing_id, user_id),
+                "DELETE FROM account_chart_drawings WHERE user_id=? AND drawing_id=?",
+                (user_id, drawing_id),
             )
             connection.commit()
 
@@ -984,12 +1047,22 @@ class AccountStore:
                     WHERE user_id=? AND ticker=? AND chart_range=? AND adjustment=?""",
                 (user_id, symbol, range_key, adj),
             )
-            taken = {
-                str(row[0])
-                for row in connection.execute(
-                    "SELECT drawing_id FROM account_chart_drawings"
-                )
-            }
+            # 只探这一批候选编号，而且限定在本账户内：原来是全表扫 drawing_id，
+            # 在 BEGIN IMMEDIATE 里握着唯一的写锁做 O(全表) 的工作，登录/会话/
+            # 自选的写入都得排队等它。本作用域的行刚被删掉，命中的只可能是本账户
+            # 其他周期占着的编号，仍旧改发新编号。
+            candidate_ids = [str(parsed["id"]) for parsed in parsed_rows]
+            taken: set[str] = set()
+            if candidate_ids:
+                placeholders = ",".join("?" * len(candidate_ids))
+                taken = {
+                    str(row[0])
+                    for row in connection.execute(
+                        f"""SELECT drawing_id FROM account_chart_drawings
+                             WHERE user_id=? AND drawing_id IN ({placeholders})""",
+                        (user_id, *candidate_ids),
+                    )
+                }
             for parsed in parsed_rows:
                 drawing_id = parsed["id"]
                 if drawing_id in taken:
@@ -1039,8 +1112,14 @@ class AccountStore:
         return deleted
 
     def delete_account(self, user_id: str) -> None:
-        """Test/admin helper: deleting the account row cascades drawings."""
+        """Hard-delete one customer account; the FK cascade takes its rows too.
 
+        没有 HTTP 入口，只给测试和人工运维用。owner 那一行是 owner 全部个人数据
+        （自选、绘图）的外键锚点，删掉就等于清空，所以直接挡住。
+        """
+
+        if str(user_id) == OWNER_USER_ID:
+            raise AccountError("account_delete_forbidden")
         self.initialize()
         with self._connect() as connection:
             connection.execute("DELETE FROM accounts WHERE user_id=?", (user_id,))

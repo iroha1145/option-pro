@@ -144,6 +144,10 @@ export function geometryFromPoints(
       })),
     };
   }
+  // 新增 DrawingKind 必须在上面补一个分支：漏掉就在这里编译不过，而不是
+  // 静默什么都不画、顺带连命中测试也没有几何可用。
+  const unsupported: never = kind;
+  void unsupported;
   return empty;
 }
 
@@ -182,6 +186,8 @@ export function toProjectedDrawing(
     anchors: points,
     segments,
     fills: geom.fill ? [geom.fill] : [],
+    // 文字没有线段也没有填充：把可见标签交给命中测试撑出一个矩形命中区。
+    label: drawing.kind === 'text' && drawing.text ? { text: drawing.text } : null,
   };
 }
 

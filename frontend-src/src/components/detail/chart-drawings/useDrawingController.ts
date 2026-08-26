@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { EChartsInstance } from '@/lib/chart';
 import { barKeyOf, nudgeAnchors, snapBarIndex } from './projection.ts';
-import { drawingsApi, isAuthError, isConflictError } from './api.ts';
+import { drawingErrorCode, drawingErrorStatus, drawingsApi, isAuthError } from './api.ts';
 import {
   draftOverlay,
   drawingsToMarks,
@@ -13,8 +13,14 @@ import {
   type OverlayGeometry,
   type RenderContext,
 } from './renderer.ts';
-import { loadDrawings, saveDrawings, anonymousStorageKey, drawingsStorageKey } from './storage.ts';
-import { exportDrawings, validateImport, whitelistStyle, whitelistText } from './schema.ts';
+import {
+  loadDrawings,
+  quarantineDrawings,
+  saveDrawings,
+  anonymousStorageKey,
+  drawingsStorageKey,
+} from './storage.ts';
+import { exportDrawings, parseDrawing, validateImport, whitelistStyle, whitelistText } from './schema.ts';
 import {
   canRedo,
   canUndo,
@@ -25,27 +31,39 @@ import {
   historyUndo,
   type HistoryState,
 } from './history.ts';
-import { hitTestDrawings, type ProjectedDrawing } from './hitTest.ts';
+import { hitTestDrawings, isLockedDragBlocked, type PointerKind, type ProjectedDrawing } from './hitTest.ts';
 import { ohlcCandidates, snapPointer } from './snap.ts';
-import { addDraftPoint, isTextInputTarget, type DrawingTool, type InProgressDraw } from './tools.ts';
+import {
+  addDraftPoint,
+  escapeHandledByOverlay,
+  isTextInputTarget,
+  pointerKindFromEvent,
+  type DrawingTool,
+  type InProgressDraw,
+} from './tools.ts';
 import type { ChartAdjustment, ChartDrawing, ChartRange, DrawingKind, DrawingStyle, Point } from './types.ts';
 import {
   DrawingOutbox,
   SCOPE_JOB_ID,
+  applyKnownRevisions,
   applyPersistResponse,
   diffPersistOps,
   keepLocalWithServerRevisions,
+  latestKnownRevision,
+  mutableFieldsDiffer,
   patchRevision,
+  regeneratePersistOps,
   replaceDrawing,
   resolveListApply,
   resolveRetryAction,
+  resolveSyncFailure,
   type PersistJob,
   type ScopeKey,
 } from './sync.ts';
-import { applyPixelShiftConstraint, dragMove, type DragOrigin } from './drag.ts';
+import { clampDragPoint, dragExceedsThreshold, applyPixelShiftConstraint, dragMove, type DragOrigin } from './drag.ts';
 import { resolvePaintColor } from './schema.ts';
 
-export type SyncStatus = 'guest' | 'idle' | 'saving' | 'unsynced' | 'conflict';
+export type SyncStatus = 'guest' | 'idle' | 'saving' | 'unsynced' | 'load_failed' | 'write_failed' | 'conflict';
 
 export interface DrawingIdentity {
   signedIn: boolean;
@@ -62,6 +80,29 @@ function newId(): string {
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+/** 同一图形在这个窗口内的连续编辑合成一条历史记录（略大于 400ms 的写防抖）。 */
+const COALESCE_WINDOW_MS = 700;
+
+/** Escape 让路时要数的覆盖层（工作区自身也是其中之一）。 */
+const MODAL_SELECTOR = '[role="dialog"],[role="alertdialog"],[aria-modal="true"]';
+
+function openModalCount(): number {
+  if (typeof document === 'undefined') return 0;
+  return document.querySelectorAll(MODAL_SELECTOR).length;
+}
+
+/** 拖动期间关掉 inside dataZoom 的漫游；图上没有 dataZoom 就什么都别加。 */
+function setChartRoam(chart: EChartsInstance, enabled: boolean): void {
+  if (chart.isDisposed()) return;
+  const option = chart.getOption() as { dataZoom?: unknown[] } | null | undefined;
+  const zooms = Array.isArray(option?.dataZoom) ? option.dataZoom : [];
+  if (!zooms.length) return;
+  chart.setOption(
+    { dataZoom: zooms.map(() => ({ moveOnMouseMove: enabled })) } as Parameters<EChartsInstance['setOption']>[0],
+    { lazyUpdate: true },
+  );
 }
 
 export function useDrawingController(args: {
@@ -93,8 +134,15 @@ export function useDrawingController(args: {
   const [focusAnchor, setFocusAnchor] = useState<number | null>(null);
   const dragRef = useRef<DragOrigin | null>(null);
   const dragPreviewRef = useRef<ChartDrawing | null>(null);
+  const pointerKindRef = useRef<PointerKind>('mouse');
   const rafRef = useRef(0);
   const styleTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  /** 防抖窗口里还没入队的编辑：服务器回声不许盖掉它们。 */
+  const pendingEdits = useRef(new Map<string, ChartDrawing>());
+  /** 服务器确认过的 revision；历史快照里的旧号一律不发。 */
+  const revisionsRef = useRef(new Map<string, number>());
+  const localSaveRef = useRef<{ key: string; list: ChartDrawing[]; timer: ReturnType<typeof setTimeout> } | null>(null);
+  const coalesceRef = useRef<{ id: string; at: number } | null>(null);
   const drawingsRef = useRef(drawings);
   const outboxRef = useRef(new DrawingOutbox());
   const conflictServerRef = useRef<ChartDrawing[] | null>(null);
@@ -114,15 +162,48 @@ export function useDrawingController(args: {
     adjustment,
   }), [adjustment, args.identity.key, args.range, args.ticker]);
 
-  const writeLocal = useCallback((next: ChartDrawing[], recordHistory: boolean) => {
+  /** 落盘待写的稿子（切 scope / 卸载前必须调用，键随 scope 变）。 */
+  const flushLocalSave = useCallback(() => {
+    const pending = localSaveRef.current;
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    localSaveRef.current = null;
+    saveDrawings(pending.key, pending.list);
+  }, []);
+
+  const writeLocal = useCallback((
+    next: ChartDrawing[],
+    recordHistory: boolean,
+    options?: { persist?: 'now' | 'debounced' | 'skip' },
+  ) => {
     drawingsRef.current = next;
     setDrawings(next);
     setHistory((prev) => (recordHistory ? historyPush(prev, next) : historyReplace(prev, next)));
-    saveDrawings(storageKey, next);
+    const mode = options?.persist ?? 'now';
+    const pending = localSaveRef.current;
+    if (pending && (mode !== 'debounced' || pending.key !== storageKey)) {
+      clearTimeout(pending.timer);
+      localSaveRef.current = null;
+      // 只有「同一个键马上要写更新的一份」才可以丢掉待写稿子，其余一律落盘。
+      if (!(mode === 'now' && pending.key === storageKey)) saveDrawings(pending.key, pending.list);
+    }
+    if (mode === 'now') saveDrawings(storageKey, next);
+    else if (mode === 'debounced') {
+      // 逐字编辑不该每一键都把整张表 stringify 进 localStorage。
+      const timer = setTimeout(() => {
+        localSaveRef.current = null;
+        saveDrawings(storageKey, next);
+      }, 250);
+      localSaveRef.current = { key: storageKey, list: next, timer };
+    }
   }, [storageKey]);
 
-  const commitLocal = useCallback((next: ChartDrawing[], recordHistory: boolean) => {
-    writeLocal(next, recordHistory);
+  const commitLocal = useCallback((
+    next: ChartDrawing[],
+    recordHistory: boolean,
+    options?: { persist?: 'now' | 'debounced' | 'skip' },
+  ) => {
+    writeLocal(next, recordHistory, options);
   }, [writeLocal]);
 
   const applyJobResult = useCallback((job: PersistJob, saved: ChartDrawing | null) => {
@@ -133,22 +214,18 @@ export function useDrawingController(args: {
       currentScopeGeneration: outbox.getScopeGeneration(),
       latestGenerationForId: outbox.latestGeneration(job.drawingId),
       responseDrawing: saved,
+      // 防抖窗口里的编辑还没入队，任何 generation 都反映不了它：回声只能吃 revision。
+      localDirty: pendingEdits.current.has(job.drawingId),
     });
     if (action.action === 'ignore') return;
     if (action.action === 'replace') {
-      const next = replaceDrawing(drawingsRef.current, action.drawing);
-      drawingsRef.current = next;
-      setDrawings(next);
-      setHistory((hist) => historyReplace(hist, next));
-      saveDrawings(storageKey, next);
+      revisionsRef.current.set(action.drawing.id, action.drawing.revision);
+      writeLocal(replaceDrawing(drawingsRef.current, action.drawing), false);
       return;
     }
-    const next = patchRevision(drawingsRef.current, action.id, action.revision);
-    drawingsRef.current = next;
-    setDrawings(next);
-    setHistory((hist) => historyReplace(hist, next));
-    saveDrawings(storageKey, next);
-  }, [storageKey]);
+    revisionsRef.current.set(action.id, action.revision);
+    writeLocal(patchRevision(drawingsRef.current, action.id, action.revision), false);
+  }, [writeLocal]);
 
   const drain = useCallback(async (drawingId: string) => {
     if (!signedIn) return;
@@ -163,12 +240,16 @@ export function useDrawingController(args: {
           applyJobResult(job, saved);
         } else if (job.type === 'update' && job.drawing) {
           const local = drawingsRef.current.find((item) => item.id === job.drawing?.id) ?? job.drawing;
-          const saved = await drawingsApi.update({ ...job.drawing, revision: local.revision });
+          // revision 是服务器记账：撤销恢复出来的旧号会被后端判成冲突，永远发最新的那个。
+          const revision = latestKnownRevision(revisionsRef.current, job.drawing.id, local.revision);
+          const saved = await drawingsApi.update({ ...job.drawing, revision });
           applyJobResult(job, saved);
         } else if (job.type === 'delete') {
           await drawingsApi.remove(job.drawingId);
+          revisionsRef.current.delete(job.drawingId);
         } else if (job.type === 'clear') {
           await drawingsApi.clearScope(job.scope.ticker, job.scope.range, job.scope.adjustment);
+          revisionsRef.current.clear();
         } else if (job.type === 'replace' && job.drawings) {
           const listed = await drawingsApi.replaceScope(
             job.scope.ticker,
@@ -176,10 +257,13 @@ export function useDrawingController(args: {
             job.drawings,
             job.scope.adjustment,
           );
-          if (
-            outbox.getScopeGeneration() === job.scopeGeneration
-            && resolveListApply(true, true)
-          ) {
+          for (const item of listed.drawings) revisionsRef.current.set(item.id, item.revision);
+          // 只有「除了这条 replace 自己以外队列是空的」才敢覆盖本地：
+          // replace 在飞的时候排进来的单条编辑不能被回包抹掉。
+          if (resolveListApply(
+            outbox.isEmptyExcept(job.drawingId, job.generation),
+            outbox.getScopeGeneration() === job.scopeGeneration,
+          )) {
             writeLocal(listed.drawings, false);
           }
         }
@@ -187,27 +271,53 @@ export function useDrawingController(args: {
         if (outbox.isEmpty()) {
           setSyncStatus('idle');
           setSyncHint(null);
+        } else {
+          // 范围级任务落地后要放行被它挡住的单条任务（反之亦然）。
+          for (const other of outbox.readyIds()) {
+            if (other !== drawingId) void drainRef.current(other);
+          }
         }
       } catch (error) {
+        const failure = resolveSyncFailure(job.type, drawingErrorCode(error), drawingErrorStatus(error));
+        if (failure === 'drop') {
+          // 后端已幂等：重放的创建会成功，删掉早就没有的行也算成功。留着只会永远重放。
+          outbox.dropInflight(drawingId);
+          if (outbox.isEmpty()) {
+            setSyncStatus('idle');
+            setSyncHint(null);
+          }
+          continue;
+        }
+        if (failure === 'quota') {
+          // 配额满不是版本冲突：弹「另一台设备改过」只会让必败的创建无限重放。
+          outbox.dropInflight(drawingId);
+          setSyncStatus('unsynced');
+          setSyncHint('quota');
+          return;
+        }
         outbox.failKeep(drawingId);
-        if (isConflictError(error)) {
+        if (failure === 'conflict') {
           setSyncStatus('conflict');
           setSyncHint('conflict');
           try {
             const remote = await drawingsApi.list(job.scope.ticker, job.scope.range, job.scope.adjustment);
             if (outbox.getScopeGeneration() !== job.scopeGeneration) return;
             conflictServerRef.current = remote.drawings;
+            for (const item of remote.drawings) revisionsRef.current.set(item.id, item.revision);
           } catch {
             conflictServerRef.current = conflictServerRef.current ?? null;
           }
           return;
         }
-        setSyncStatus('unsynced');
+        setSyncStatus('write_failed');
         setSyncHint('unsynced');
         return;
       }
     }
   }, [applyJobResult, signedIn, writeLocal]);
+
+  const drainRef = useRef(drain);
+  drainRef.current = drain;
 
   const enqueue = useCallback((job: Omit<PersistJob, 'generation' | 'scopeGeneration' | 'scope'>) => {
     if (!signedIn) return;
@@ -223,18 +333,33 @@ export function useDrawingController(args: {
     conflictServerRef.current = null;
     if (!signedIn) {
       const loaded = loadDrawings(storageKey);
-      const list = loaded.ok ? loaded.drawings : [];
-      writeLocal(list, false);
+      // 一行坏掉只丢那一行；解析全灭时先把原文留一份，再决定要不要改写。
+      if (!loaded.ok) quarantineDrawings(storageKey);
+      const list = loaded.drawings;
+      writeLocal(list, false, { persist: loaded.ok || list.length ? 'now' : 'skip' });
       setHistory(createHistory(list));
       setSyncStatus('guest');
       setSyncHint(loaded.ok ? null : 'local_corrupt');
       return;
     }
     const cached = loadDrawings(storageKey);
+    if (!cached.ok) quarantineDrawings(storageKey);
     try {
       const remote = await drawingsApi.list(args.ticker, args.range, adjustment);
       const outbox = outboxRef.current;
       if (outbox.getScopeGeneration() !== generation) return;
+      for (const item of remote.drawings) revisionsRef.current.set(item.id, item.revision);
+      if (!outbox.isEmpty()) {
+        // 还有没发出去的改动：本地副本才是最新的，服务器旧列表不许覆盖内存与磁盘。
+        const list = cached.drawings.length ? cached.drawings : drawingsRef.current;
+        writeLocal(list, false, { persist: 'skip' });
+        setHistory(createHistory(list));
+        outbox.stampRevisions(remote.drawings);
+        setSyncStatus('saving');
+        setSyncHint(null);
+        for (const id of outbox.readyIds()) void drainRef.current(id);
+        return;
+      }
       if (!resolveListApply(outbox.isEmpty(), true)) return;
       writeLocal(remote.drawings, false);
       setHistory(createHistory(remote.drawings));
@@ -242,22 +367,43 @@ export function useDrawingController(args: {
       setSyncHint(null);
     } catch (error) {
       if (outboxRef.current.getScopeGeneration() !== generation) return;
-      const list = cached.ok ? cached.drawings : [];
-      writeLocal(list, false);
+      const list = cached.drawings;
+      writeLocal(list, false, { persist: cached.ok || list.length ? 'now' : 'skip' });
       setHistory(createHistory(list));
       if (isAuthError(error)) {
         setSyncStatus('guest');
         return;
       }
-      setSyncStatus('unsynced');
+      setSyncStatus(outboxRef.current.isEmpty() ? 'load_failed' : 'write_failed');
       setSyncHint('unsynced');
     }
   }, [adjustment, args.range, args.ticker, signedIn, storageKey, writeLocal]);
 
-  useEffect(() => {
-    let cancelled = false;
+  /** 把防抖窗口里的编辑立刻入队（只入队不发送），再清空计时器。 */
+  const flushPendingEdits = useCallback(() => {
     for (const timer of styleTimers.current.values()) clearTimeout(timer);
     styleTimers.current.clear();
+    const edits = [...pendingEdits.current.values()];
+    pendingEdits.current.clear();
+    if (!signedIn) return;
+    for (const drawing of edits) {
+      outboxRef.current.enqueue({ drawingId: drawing.id, type: 'update', drawing });
+    }
+  }, [signedIn]);
+
+  /** 丢弃防抖窗口里的编辑（用户选了「用服务器版本」）。 */
+  const discardPendingEdits = useCallback(() => {
+    for (const timer of styleTimers.current.values()) clearTimeout(timer);
+    styleTimers.current.clear();
+    pendingEdits.current.clear();
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    // 切 scope 前先把未发出的活收好：直接清计时器 + 清队列等于把离线改动删掉。
+    flushPendingEdits();
+    flushLocalSave();
+    revisionsRef.current.clear();
     const generation = outboxRef.current.setScope(currentScope());
     const run = async () => {
       await Promise.resolve();
@@ -268,14 +414,14 @@ export function useDrawingController(args: {
     return () => {
       cancelled = true;
     };
-  }, [currentScope, loadScope]);
+  }, [currentScope, flushLocalSave, flushPendingEdits, loadScope]);
 
   useEffect(() => () => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    for (const timer of styleTimers.current.values()) clearTimeout(timer);
-    styleTimers.current.clear();
-    outboxRef.current.cancelAll();
-  }, []);
+    flushPendingEdits();
+    flushLocalSave();
+    outboxRef.current.persist();
+  }, [flushLocalSave, flushPendingEdits]);
 
   const persistOne = useCallback((drawing: ChartDrawing, mode: 'create' | 'update') => {
     enqueue({ drawingId: drawing.id, type: mode, drawing });
@@ -285,8 +431,10 @@ export function useDrawingController(args: {
     if (!signedIn) return;
     const prev = styleTimers.current.get(drawing.id);
     if (prev) clearTimeout(prev);
+    pendingEdits.current.set(drawing.id, drawing);
     styleTimers.current.set(drawing.id, setTimeout(() => {
       styleTimers.current.delete(drawing.id);
+      pendingEdits.current.delete(drawing.id);
       persistOne(drawing, 'update');
     }, 400));
   }, [persistOne, signedIn]);
@@ -303,6 +451,8 @@ export function useDrawingController(args: {
   const selected = drawings.find((item) => item.id === selectedId) ?? null;
 
   const pushDrawings = useCallback((next: ChartDrawing[]) => {
+    // 结构性改动开一条新的历史记录，不再与上一串逐字编辑合并。
+    coalesceRef.current = null;
     commitLocal(next, true);
   }, [commitLocal]);
 
@@ -378,6 +528,7 @@ export function useDrawingController(args: {
       clearTimeout(timer);
       styleTimers.current.delete(id);
     }
+    pendingEdits.current.delete(id);
     outboxRef.current.cancelId(id);
     const next = drawingsRef.current.filter((item) => item.id !== id);
     pushDrawings(next);
@@ -394,14 +545,12 @@ export function useDrawingController(args: {
   }, [deleteDrawing, selectedId]);
 
   const clearAll = useCallback(() => {
-    for (const timer of styleTimers.current.values()) clearTimeout(timer);
-    styleTimers.current.clear();
-    outboxRef.current.cancelAll();
+    discardPendingEdits();
     pushDrawings([]);
     setSelectedId(null);
     setFocusAnchor(null);
     enqueue({ drawingId: SCOPE_JOB_ID, type: 'clear' });
-  }, [enqueue, pushDrawings]);
+  }, [discardPendingEdits, enqueue, pushDrawings]);
 
   const syncHistoryDiff = useCallback((prev: ChartDrawing[], next: ChartDrawing[]) => {
     if (!signedIn) return;
@@ -412,36 +561,68 @@ export function useDrawingController(args: {
     }
   }, [enqueue, signedIn]);
 
+  /**
+   * 历史快照里连 revision 一起克隆，撤销会把很旧的版本号一起搬回来。版本号是
+   * 服务器记账，不是用户可撤销的状态：恢复时一律换成最新已知值。
+   */
+  const restoreHistory = useCallback((list: ChartDrawing[]): ChartDrawing[] => (
+    applyKnownRevisions(list, revisionsRef.current)
+  ), []);
+
   const undo = useCallback(() => {
     setHistory((prev) => {
       if (!canUndo(prev)) return prev;
-      const next = historyUndo(prev);
-      drawingsRef.current = next.present;
-      setDrawings(next.present);
-      saveDrawings(storageKey, next.present);
-      syncHistoryDiff(prev.present, next.present);
+      const stepped = historyUndo(prev);
+      const present = restoreHistory(stepped.present);
+      const next = { ...stepped, present };
+      coalesceRef.current = null;
+      drawingsRef.current = present;
+      setDrawings(present);
+      flushLocalSave();
+      saveDrawings(storageKey, present);
+      syncHistoryDiff(prev.present, present);
       return next;
     });
-  }, [storageKey, syncHistoryDiff]);
+  }, [flushLocalSave, restoreHistory, storageKey, syncHistoryDiff]);
 
   const redo = useCallback(() => {
     setHistory((prev) => {
       if (!canRedo(prev)) return prev;
-      const next = historyRedo(prev);
-      drawingsRef.current = next.present;
-      setDrawings(next.present);
-      saveDrawings(storageKey, next.present);
-      syncHistoryDiff(prev.present, next.present);
+      const stepped = historyRedo(prev);
+      const present = restoreHistory(stepped.present);
+      const next = { ...stepped, present };
+      coalesceRef.current = null;
+      drawingsRef.current = present;
+      setDrawings(present);
+      flushLocalSave();
+      saveDrawings(storageKey, present);
+      syncHistoryDiff(prev.present, present);
       return next;
     });
-  }, [storageKey, syncHistoryDiff]);
+  }, [flushLocalSave, restoreHistory, storageKey, syncHistoryDiff]);
 
-  const patchDrawing = useCallback((id: string, patch: Partial<ChartDrawing>, persist: boolean) => {
+  /**
+   * 逐字编辑合并成一条历史记录：不合并的话每一键都深拷两份图形表、整表写一次
+   * localStorage，撤销还得一个字符一个字符往回走、每步发一次 PUT。
+   */
+  const patchDrawing = useCallback((
+    id: string,
+    patch: Partial<ChartDrawing>,
+    persist: boolean,
+    options?: { coalesce?: boolean },
+  ) => {
     const next = drawingsRef.current.map((item) => {
       if (item.id !== id) return item;
       return { ...item, ...patch, updatedAt: nowIso() };
     });
-    commitLocal(next, true);
+    const now = Date.now();
+    const last = coalesceRef.current;
+    const canCoalesce = (options?.coalesce ?? persist)
+      && last !== null
+      && last.id === id
+      && now - last.at <= COALESCE_WINDOW_MS;
+    coalesceRef.current = (options?.coalesce ?? persist) ? { id, at: now } : null;
+    commitLocal(next, !canCoalesce, { persist: canCoalesce ? 'debounced' : 'now' });
     const updated = next.find((item) => item.id === id);
     if (persist && updated) scheduleUpdate(updated);
   }, [commitLocal, scheduleUpdate]);
@@ -477,13 +658,6 @@ export function useDrawingController(args: {
     [drawings, inProgress, selectedId, visibleCtx],
   );
 
-  const projected: ProjectedDrawing[] = useMemo(() => {
-    if (!visibleCtx) return [];
-    return drawings
-      .map((drawing) => toProjectedDrawing(drawing, visibleCtx))
-      .filter((item): item is ProjectedDrawing => item !== null);
-  }, [drawings, visibleCtx]);
-
   const refreshGraphic = useCallback((chart: EChartsInstance, ctx: RenderContext | null) => {
     if (!chart || chart.isDisposed() || !ctx) return;
     const preview = dragPreviewRef.current;
@@ -514,6 +688,15 @@ export function useDrawingController(args: {
     const bars = args.bars;
     if (!chart || chart.isDisposed() || !bars?.length) return;
     const zr = chart.getZr();
+    // 视窗极值只算一次：指针路径不再每个事件 flatMap + 展开求 min/max。
+    const ctx: RenderContext = visibleCtx ?? {
+      bars,
+      range: args.range,
+      xMin: 0,
+      xMax: bars.length - 1,
+      yMin: Math.min(...bars.map((bar) => bar.l)),
+      yMax: Math.max(...bars.map((bar) => bar.h)),
+    };
 
     const readPoint = (offsetX: number, offsetY: number, alt: boolean, shift: boolean) => {
       const inGrid = chart.containPixel({ gridIndex: 0 }, [offsetX, offsetY]);
@@ -574,7 +757,12 @@ export function useDrawingController(args: {
       return next;
     };
 
-    const onDown = (event: { offsetX: number; offsetY: number; pointerType?: string; event?: { altKey?: boolean; shiftKey?: boolean; button?: number } }) => {
+    const onDown = (event: {
+      offsetX: number;
+      offsetY: number;
+      zrByTouch?: boolean;
+      event?: { altKey?: boolean; shiftKey?: boolean; button?: number; pointerType?: string; type?: string };
+    }) => {
       if (args.measureActive) return;
       const alt = Boolean(event.event?.altKey);
       const shift = Boolean(event.event?.shiftKey);
@@ -591,15 +779,6 @@ export function useDrawingController(args: {
         }
         return;
       }
-      const prices = bars.flatMap((bar) => [bar.h, bar.l]);
-      const ctx: RenderContext = {
-        bars,
-        range: args.range,
-        xMin: 0,
-        xMax: bars.length - 1,
-        yMin: Math.min(...prices),
-        yMax: Math.max(...prices),
-      };
       const toPixel = (pt: Point): Point | null => {
         const px = chart.convertToPixel({ gridIndex: 0 }, [pt.x, pt.y]) as number[] | null;
         if (!px || !Number.isFinite(px[0]) || !Number.isFinite(px[1])) return null;
@@ -609,10 +788,11 @@ export function useDrawingController(args: {
         .map((drawing) => toProjectedDrawing(drawing, ctx))
         .filter((item): item is ProjectedDrawing => item !== null)
         .map((item) => projectToPixels(item, toPixel));
+      const pointerKind = pointerKindFromEvent(event);
       const hit = hitTestDrawings(
         hits,
         { x: event.offsetX, y: event.offsetY },
-        event.pointerType === 'touch' ? 'touch' : 'mouse',
+        pointerKind,
         selectedId,
       );
       if (!hit) {
@@ -623,9 +803,10 @@ export function useDrawingController(args: {
       setSelectedId(hit.id);
       setFocusAnchor(hit.kind === 'anchor' ? hit.anchorIndex : null);
       const target = drawingsRef.current.find((item) => item.id === hit.id);
-      if (!target || target.locked) return;
+      if (!target || isLockedDragBlocked(target)) return;
       const startConverted = chart.convertFromPixel({ gridIndex: 0 }, [event.offsetX, event.offsetY]) as number[] | null;
       const startIdx = startConverted ? snapBarIndex(startConverted[0], bars.length) : null;
+      pointerKindRef.current = pointerKind;
       dragRef.current = {
         id: hit.id,
         mode: hit.kind === 'anchor' ? 'anchor' : 'whole',
@@ -636,40 +817,43 @@ export function useDrawingController(args: {
           barIndex: startIdx ?? 0,
           price: startConverted?.[1] ?? target.anchors[0]?.price ?? 0,
         },
+        moved: false,
       };
       dragPreviewRef.current = target;
+      // 拖图形时先关掉 inside dataZoom 的拖动漫游，否则图会在手底下平移，
+      // 松手提交的是平移之后落在光标下的那根 K 线。
+      setChartRoam(chart, false);
     };
 
     const onMove = (event: { offsetX: number; offsetY: number }) => {
       const drag = dragRef.current;
       if (!drag) return;
+      if (dragExceedsThreshold(drag.startPixel, { x: event.offsetX, y: event.offsetY }, pointerKindRef.current)) {
+        drag.moved = true;
+      }
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       rafRef.current = requestAnimationFrame(() => {
         rafRef.current = 0;
         if (!dragRef.current) return;
         const converted = chart.convertFromPixel({ gridIndex: 0 }, [event.offsetX, event.offsetY]) as number[] | null;
         if (!converted) return;
-        const idx = snapBarIndex(converted[0], bars.length);
-        if (idx === null) return;
+        // 夹回网格与合法价区：不夹的话拖出图外会算出 price<=0，
+        // 前端 schema 拒收、后端 400，队列里留下一条永远重放的坏任务。
+        const pointer = clampDragPoint(
+          { barIndex: snapBarIndex(converted[0], bars.length) ?? converted[0], price: converted[1] },
+          bars.length,
+        );
         const snapshot = drawingsRef.current;
         const moved = dragMove({
           drawings: snapshot,
           drag,
-          pointer: { barIndex: idx, price: converted[1] },
+          pointer,
           bars,
           range: args.range,
         });
         if (moved.drawings !== snapshot) return;
         dragPreviewRef.current = moved.preview;
-        const prices = bars.flatMap((bar) => [bar.h, bar.l]);
-        refreshGraphic(chart, {
-          bars,
-          range: args.range,
-          xMin: 0,
-          xMax: bars.length - 1,
-          yMin: Math.min(...prices),
-          yMax: Math.max(...prices),
-        });
+        refreshGraphic(chart, ctx);
       });
     };
 
@@ -678,12 +862,26 @@ export function useDrawingController(args: {
       const preview = dragPreviewRef.current;
       dragRef.current = null;
       dragPreviewRef.current = null;
-      if (!drag || !preview) return;
+      if (!drag) return;
+      setChartRoam(chart, true);
+      // 纯选中的一次点击不该提交任何东西：不然会多一条只差 updatedAt 的历史记录
+      // （撤销看不出变化也不发任何操作），还会白白 PUT 一次把 revision 顶上去。
+      const changed = Boolean(preview) && drag.moved && mutableFieldsDiffer(drag.origin, preview as ChartDrawing);
+      if (!preview || !changed) {
+        refreshGraphic(chart, ctx);
+        return;
+      }
+      const committed = { ...preview, updatedAt: nowIso() };
+      if (!parseDrawing(committed)) {
+        // 提交前再过一遍 schema：非法锚点既不该进本地存档，也不该进出队列。
+        refreshGraphic(chart, ctx);
+        return;
+      }
       const next = drawingsRef.current.map((item) => (
-        item.id === preview.id ? { ...preview, updatedAt: nowIso() } : item
+        item.id === committed.id ? committed : item
       ));
       pushDrawings(next);
-      const updated = next.find((item) => item.id === preview.id);
+      const updated = next.find((item) => item.id === committed.id);
       if (updated) persistOne(updated, 'update');
     };
 
@@ -698,12 +896,19 @@ export function useDrawingController(args: {
       zr.off('mouseup', onUp);
       zr.off('globalout', onUp);
     };
-  }, [args.bars, args.chart, args.levelPrices, args.ma20, args.measureActive, args.range, args.swingPrices, completeDrawing, inProgress, persistOne, pushDrawings, refreshGraphic, selectedId, tool]);
+  }, [args.bars, args.chart, args.levelPrices, args.ma20, args.measureActive, args.range, args.swingPrices, completeDrawing, inProgress, persistOne, pushDrawings, refreshGraphic, selectedId, tool, visibleCtx]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (isTextInputTarget(event.target)) return;
       if (event.key === 'Escape') {
+        // 覆盖层先吃这次 Escape：Drawer / ConfirmDialog 挂在 document 上且不阻止冒泡，
+        // 不让路的话一次 Escape 会同时关弹层和重置工具、收起全屏工作区。
+        if (escapeHandledByOverlay({
+          defaultPrevented: event.defaultPrevented,
+          openModals: openModalCount(),
+          workspaceExpanded: expanded,
+        })) return;
         if (inProgress) {
           setInProgress(null);
           event.preventDefault();
@@ -784,12 +989,23 @@ export function useDrawingController(args: {
   const retry = useCallback(() => {
     if (!signedIn) return;
     const outbox = outboxRef.current;
-    if (syncStatus === 'conflict') return;
-    if (resolveRetryAction(outbox.isEmpty()) === 'replay') {
+    const failure = syncStatus === 'load_failed'
+      ? 'load_failed'
+      : syncStatus === 'conflict'
+        ? 'conflict'
+        : syncStatus === 'write_failed' || syncStatus === 'unsynced'
+          ? 'write_failed'
+          : null;
+    const action = resolveRetryAction(failure, outbox.isEmpty());
+    if (action === 'reload') {
+      void loadScope(outbox.getScopeGeneration());
+      return;
+    }
+    if (action === 'replay') {
       outbox.restoreForRetry(outbox.snapshot());
       for (const id of outbox.readyIds()) void drain(id);
     }
-  }, [drain, signedIn, syncStatus]);
+  }, [drain, loadScope, signedIn, syncStatus]);
 
   const keepLocalConflict = useCallback(async () => {
     if (!signedIn) return;
@@ -807,9 +1023,11 @@ export function useDrawingController(args: {
         return;
       }
     }
+    // 服务器版本号是权威记账：先记账再重建操作，重放才不会又撞一次冲突。
+    for (const item of server) revisionsRef.current.set(item.id, item.revision);
     const next = keepLocalWithServerRevisions(drawingsRef.current, server);
     writeLocal(next, false);
-    outbox.stampRevisions(server);
+    outbox.replacePending(regeneratePersistOps(next, server));
     setSyncStatus('saving');
     setSyncHint(null);
     for (const id of outbox.readyIds()) void drain(id);
@@ -829,12 +1047,17 @@ export function useDrawingController(args: {
       }
     }
     outbox.cancelAll();
+    // 「用服务器版本」也要停掉防抖里的样式/文字改动：否则 400ms 后它照样发出去，
+    // 而且拿的是刚刷新的 revision，PUT 会成功——用户丢弃的编辑又被写了回去。
+    discardPendingEdits();
     conflictServerRef.current = null;
+    revisionsRef.current.clear();
+    for (const item of server) revisionsRef.current.set(item.id, item.revision);
     writeLocal(server, false);
     setHistory(createHistory(server));
     setSyncStatus('idle');
     setSyncHint(null);
-  }, [adjustment, args.range, args.ticker, signedIn, writeLocal]);
+  }, [adjustment, args.range, args.ticker, discardPendingEdits, signedIn, writeLocal]);
 
   const importJson = useCallback((raw: unknown) => {
     const parsed = validateImport(raw);
@@ -869,7 +1092,8 @@ export function useDrawingController(args: {
 
   const importAnonymous = useCallback(() => {
     const loaded = loadDrawings(anonymousStorageKey(args.ticker, args.range, adjustment));
-    if (!loaded.ok) {
+    // 坏行已经在读取时丢掉：还有能用的图形就照常导入，只在一条都不剩时报错。
+    if (!loaded.ok && !loaded.drawings.length) {
       setImportError(loaded.error);
       return loaded.error;
     }
@@ -913,7 +1137,6 @@ export function useDrawingController(args: {
     importJson,
     importFromText,
     importAnonymous,
-    projected,
   };
 }
 

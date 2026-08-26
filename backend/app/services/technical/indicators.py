@@ -230,6 +230,11 @@ def rsi_series(closes: Sequence[float], period: int = 14) -> list[float | None]:
     return out
 
 
+# 三条 EMA 都以第 0 根为种子：慢线要 26 根才摆脱种子，信号线再叠 9 根。
+# 这段头部的值只是种子的影子，和任何看盘软件都对不上，按 sma/rsi 的规矩留 None。
+MACD_WARMUP = 26 + 9
+
+
 def macd_series(closes: Sequence[float]) -> dict[str, list[float | None]]:
     n = len(closes)
     empty = [None] * n
@@ -240,10 +245,14 @@ def macd_series(closes: Sequence[float]) -> dict[str, list[float | None]]:
     macd_line = [f - s for f, s in zip(fast, slow)]
     signal = _ema_series(macd_line, 9)
     histogram = [m - s for m, s in zip(macd_line, signal)]
+
+    def masked(values: Sequence[float]) -> list[float | None]:
+        return [None if i < MACD_WARMUP else _safe(value) for i, value in enumerate(values)]
+
     return {
-        "macd": [_safe(v) for v in macd_line],
-        "signal": [_safe(v) for v in signal],
-        "histogram": [_safe(v) for v in histogram],
+        "macd": masked(macd_line),
+        "signal": masked(signal),
+        "histogram": masked(histogram),
     }
 
 
@@ -283,6 +292,7 @@ def compute_technicals(series: dict[str, list]) -> dict[str, Any]:
 
 
 __all__ = [
+    "MACD_WARMUP",
     "TECHNICALS_VERSION",
     "compute_technicals",
     "ma_slope",

@@ -53,6 +53,23 @@ CREATE TABLE IF NOT EXISTS account_watchlist (
 );
 """
 
+# 绘图功能上线前，开发库里 drawing_id 是全局主键；初始化时要能就地换掉。
+_OLD_DRAWINGS_TABLE = """
+CREATE TABLE IF NOT EXISTS account_chart_drawings (
+    drawing_id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL
+        REFERENCES accounts(user_id) ON DELETE CASCADE,
+    ticker TEXT NOT NULL,
+    chart_range TEXT NOT NULL,
+    adjustment TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    revision INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+"""
+
 
 @pytest.fixture()
 def store(tmp_path) -> AccountStore:
@@ -183,6 +200,30 @@ def test_old_database_gains_drawings_table_in_place(tmp_path) -> None:
         count = connection.execute("SELECT COUNT(*) FROM accounts").fetchone()[0]
     assert "account_chart_drawings" in names
     assert count == 1
+
+
+def test_legacy_global_drawing_id_primary_key_is_rebuilt(tmp_path) -> None:
+    path = tmp_path / "legacy-pk.db"
+    with sqlite3.connect(path) as connection:
+        connection.executescript(_OLD_SCHEMA)
+        connection.executescript(_OLD_DRAWINGS_TABLE)
+        connection.execute(
+            """INSERT INTO accounts
+                   (user_id, username, username_key, password_hash, created_at)
+               VALUES ('usr_legacy', 'legacy', 'legacy', 'x', '2026-01-01T00:00:00+00:00')"""
+        )
+        connection.commit()
+    upgraded = AccountStore(path)
+    upgraded.initialize()
+    with sqlite3.connect(path) as connection:
+        key_columns = sorted(
+            (int(row[5]), str(row[1]))
+            for row in connection.execute("PRAGMA table_info(account_chart_drawings)")
+            if int(row[5]) > 0
+        )
+        accounts_left = connection.execute("SELECT COUNT(*) FROM accounts").fetchone()[0]
+    assert [name for _, name in key_columns] == ["user_id", "drawing_id"]
+    assert accounts_left == 1
 
 
 def test_guest_cannot_read_or_write_drawings(client: TestClient) -> None:
@@ -332,11 +373,14 @@ def test_customer_drawings_are_isolated(client: TestClient, store: AccountStore)
         headers=HEADERS,
     )
     assert stolen.status_code == 404
+    assert stolen.json()["detail"]["code"] == "drawing_not_found"
+    # 删除是幂等的，所以这里是 200；但 DELETE 带着 user_id 条件，删掉的是「自己
+    # 名下这个编号」（不存在），原主人的行必须一动不动。
     removed = client.delete(
         f"/api/account/chart-drawings/{first['id']}",
         headers=HEADERS,
     )
-    assert removed.status_code == 404
+    assert removed.status_code == 200
     # Original owner still has the row.
     erin = store.authenticate("erin", "pw")
     assert store.get_drawing(erin.account.user_id, first["id"]) is not None
@@ -502,6 +546,96 @@ def test_payload_size_cap(monkeypatch: pytest.MonkeyPatch, store: AccountStore) 
     assert excinfo.value.code == "payload_too_large"
 
 
+def test_account_cap_on_create(
+    monkeypatch: pytest.MonkeyPatch, store: AccountStore
+) -> None:
+    monkeypatch.setattr(accounts_mod, "DRAWINGS_PER_ACCOUNT_MAX", 3)
+    session = store.register("nate", "pw")
+    for _ in range(3):
+        store.create_drawing(session.account.user_id, _drawing())
+    with pytest.raises(AccountError) as excinfo:
+        store.create_drawing(session.account.user_id, _drawing())
+    assert excinfo.value.code == "drawings_full"
+
+
+def test_create_replay_returns_the_stored_row(client: TestClient) -> None:
+    """重放创建必须是成功：报 409 的话客户端 outbox 就永远卡在这一条上。"""
+
+    _register(client, "xena", "pw")
+    body = _drawing()
+    first = _create(client, body)
+    assert first.status_code == 201
+    replay = _create(client, body)
+    assert replay.status_code == 201, replay.text
+    assert replay.json() == first.json()
+    # 重放不是隐式更新：正文变了也只返回已存的那一版。
+    changed = _create(client, {**body, "locked": True})
+    assert changed.status_code == 201
+    assert changed.json()["locked"] is False
+    assert changed.json()["revision"] == 1
+    listed = client.get(
+        "/api/account/chart-drawings",
+        params={"ticker": "NVDA", "range": "1d", "adjustment": "raw"},
+    )
+    assert len(listed.json()["drawings"]) == 1
+
+
+def test_delete_is_idempotent(client: TestClient) -> None:
+    """没有墓碑表，重放的删除和多设备重复删除都得算成功。"""
+
+    _register(client, "yuri", "pw")
+    body = _drawing()
+    assert _create(client, body).status_code == 201
+    for _ in range(3):
+        removed = client.delete(
+            f"/api/account/chart-drawings/{body['id']}",
+            headers=HEADERS,
+        )
+        assert removed.status_code == 200
+        assert removed.json() == {"ok": True}
+    never_existed = client.delete(
+        f"/api/account/chart-drawings/{uuid.uuid4()}",
+        headers=HEADERS,
+    )
+    assert never_existed.status_code == 200
+
+
+def test_moving_a_drawing_to_another_scope_is_rejected(client: TestClient) -> None:
+    _register(client, "wade", "pw")
+    body = _drawing()
+    assert _create(client, body).status_code == 201
+    for moved in ({"ticker": "AAPL"}, {"range": "1w"}):
+        response = client.put(
+            f"/api/account/chart-drawings/{body['id']}",
+            json={**body, **moved, "revision": 1},
+            headers=HEADERS,
+        )
+        assert response.status_code == 400, response.text
+        assert response.json()["detail"]["code"] == "scope_mismatch"
+    listed = client.get(
+        "/api/account/chart-drawings",
+        params={"ticker": "NVDA", "range": "1d", "adjustment": "raw"},
+    )
+    assert listed.json()["drawings"][0]["revision"] == 1
+
+
+def test_extreme_offset_time_is_invalid_not_a_crash(client: TestClient) -> None:
+    """格式合法但换算到 UTC 会越界的时间：astimezone 抛 OverflowError，不能漏成 500。"""
+
+    _register(client, "vera", "pw")
+    for stamp in ("0001-01-01T00:00:00+00:01", "9999-12-31T23:59:59-00:01"):
+        response = _create(
+            client,
+            _drawing(
+                anchors=[
+                    {"time": stamp, "barKey": "bar-0", "price": 120.5},
+                ]
+            ),
+        )
+        assert response.status_code == 400, (stamp, response.text)
+        assert response.json()["detail"]["code"] == "invalid_time"
+
+
 def test_account_delete_cascades_drawings(store: AccountStore) -> None:
     session = store.register("nina", "pw")
     created = store.create_drawing(session.account.user_id, _drawing())
@@ -514,14 +648,45 @@ def test_account_delete_cascades_drawings(store: AccountStore) -> None:
     assert leftover == 0
 
 
-def test_cannot_reuse_another_users_id(store: AccountStore) -> None:
+def test_owner_account_cannot_be_deleted(store: AccountStore) -> None:
+    """owner 那行是 owner 全部个人数据的外键锚点，删掉等于清空。"""
+
+    owner = store.ensure_owner_account()
+    store.create_drawing(owner.user_id, _drawing(ticker="MSFT"))
+    with pytest.raises(AccountError) as excinfo:
+        store.delete_account(OWNER_USER_ID)
+    assert excinfo.value.code == "account_delete_forbidden"
+    assert len(store.list_drawings(OWNER_USER_ID, "MSFT", "1d")) == 1
+
+
+def test_same_id_in_two_accounts_stays_isolated(store: AccountStore) -> None:
+    """编号空间按账户隔离：同一个 id 两边各存一份，谁也读不到、改不到、删不掉对方。"""
+
     first = store.register("omar", "pw")
     second = store.register("pia", "pw")
     body = _drawing()
-    store.create_drawing(first.account.user_id, body)
-    with pytest.raises(AccountError) as excinfo:
-        store.create_drawing(second.account.user_id, body)
-    assert excinfo.value.code == "drawing_forbidden"
+    mine = store.create_drawing(first.account.user_id, body)
+    theirs = store.create_drawing(
+        second.account.user_id, {**body, "ticker": "AAPL"}
+    )
+    assert mine["id"] == theirs["id"] == body["id"]
+    assert store.get_drawing(first.account.user_id, body["id"])["ticker"] == "NVDA"
+    assert store.get_drawing(second.account.user_id, body["id"])["ticker"] == "AAPL"
+
+    # B 的更新只落在 B 自己那条上。
+    store.update_drawing(
+        second.account.user_id,
+        body["id"],
+        {**body, "ticker": "AAPL", "locked": True},
+        expected_revision=1,
+    )
+    assert store.get_drawing(first.account.user_id, body["id"])["locked"] is False
+    assert store.get_drawing(first.account.user_id, body["id"])["revision"] == 1
+
+    # B 的删除同样只删掉 B 自己那条。
+    store.delete_drawing(second.account.user_id, body["id"])
+    assert store.get_drawing(second.account.user_id, body["id"]) is None
+    assert store.get_drawing(first.account.user_id, body["id"]) is not None
 
 
 def test_create_then_get_body_twice(client: TestClient) -> None:
@@ -609,17 +774,82 @@ def test_replace_partial_invalid_leaves_previous_set(client: TestClient) -> None
     assert listed.json()["drawings"][0]["id"] == original["id"]
 
 
-def test_replace_mints_id_when_another_account_holds_it(
+def test_replace_keeps_id_another_account_already_holds(
     store: AccountStore, client: TestClient
 ) -> None:
+    """别人占着同一个编号不再是冲突：主键带 user_id，两条行本来就不同。"""
+
     other = store.register("other-owner", "pw")
-    stolen = _drawing()
-    store.create_drawing(other.account.user_id, stolen)
+    shared = _drawing()
+    store.create_drawing(other.account.user_id, shared)
     _register(client, "uma", "pw")
-    response = _replace(client, [stolen])
+    response = _replace(client, [shared])
+    assert response.status_code == 200, response.text
+    saved = response.json()["drawings"]
+    assert len(saved) == 1
+    assert saved[0]["id"] == shared["id"]
+    leftover = store.get_drawing(other.account.user_id, shared["id"])
+    assert leftover is not None
+
+
+def test_replace_mints_id_when_the_same_account_holds_it_elsewhere(
+    client: TestClient,
+) -> None:
+    """本账户在别的周期占着这个编号才需要改发新号，否则插入会撞主键。"""
+
+    _register(client, "vince", "pw")
+    weekly = _drawing(range="1w")
+    assert _create(client, weekly).status_code == 201
+    response = _replace(client, [{**weekly, "range": "1d"}])
     assert response.status_code == 200, response.text
     minted = response.json()["drawings"]
     assert len(minted) == 1
-    assert minted[0]["id"] != stolen["id"]
-    leftover = store.get_drawing(other.account.user_id, stolen["id"])
-    assert leftover is not None
+    assert minted[0]["id"] != weekly["id"]
+    still_weekly = client.get(
+        "/api/account/chart-drawings",
+        params={"ticker": "NVDA", "range": "1w", "adjustment": "raw"},
+    )
+    assert still_weekly.json()["drawings"][0]["id"] == weekly["id"]
+
+
+def test_account_cap_counts_other_scopes_on_replace(
+    monkeypatch: pytest.MonkeyPatch, store: AccountStore
+) -> None:
+    """``other_count + len(batch)`` 是这条路径上最绕的配额算式，钉住它的边界。"""
+
+    monkeypatch.setattr(accounts_mod, "DRAWINGS_PER_ACCOUNT_MAX", 3)
+    session = store.register("abe", "pw")
+    user_id = session.account.user_id
+    for _ in range(2):
+        store.create_drawing(user_id, _drawing(ticker="AAPL"))
+    kept = store.create_drawing(user_id, _drawing())
+    with pytest.raises(AccountError) as excinfo:
+        store.replace_drawings_in_scope(
+            user_id, "NVDA", "1d", "raw", [_drawing(), _drawing()]
+        )
+    assert excinfo.value.code == "drawings_full"
+    # 配额检查在 DELETE 之前，本作用域原有的行不能被这次失败吞掉。
+    survivors = [row["id"] for row in store.list_drawings(user_id, "NVDA", "1d")]
+    assert survivors == [kept["id"]]
+    # 边界：2（其他作用域）+ 1 == 3，正好放得下。
+    replaced = store.replace_drawings_in_scope(
+        user_id, "NVDA", "1d", "raw", [_drawing()]
+    )
+    assert len(replaced) == 1
+    assert replaced[0]["id"] != kept["id"]
+
+
+def test_quota_409_carries_its_own_code(
+    monkeypatch: pytest.MonkeyPatch, client: TestClient
+) -> None:
+    """配额满和版本冲突都是 409，客户端只能靠 code 区分——绝不能都当成冲突。"""
+
+    monkeypatch.setattr(accounts_mod, "DRAWINGS_PER_ACCOUNT_MAX", 1)
+    _register(client, "bree", "pw")
+    assert _create(client).status_code == 201
+    full = _create(client)
+    assert full.status_code == 409
+    assert full.json()["detail"]["code"] == "drawings_full"
+    batch = _replace(client, [_drawing(), _drawing()])
+    assert batch.status_code == 409
+    assert batch.json()["detail"]["code"] == "drawings_full"

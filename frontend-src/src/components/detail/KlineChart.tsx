@@ -23,11 +23,18 @@ import { useDrawingController } from './chart-drawings/useDrawingController.ts';
 import DrawingToolbar from './chart-drawings/DrawingToolbar.tsx';
 import DrawingWorkspace from './chart-drawings/DrawingWorkspace.tsx';
 import LayerMenu from './chart-drawings/LayerMenu.tsx';
-import { mapChartAnalysis, analysisMatchesChart, filterOverlays, filterPanes, labelBudget, barFingerprintFromBars } from './chart-drawings/analysis/mapBundle.ts';
-import { overlaysToMarks, overlaysToSeries, analysisLayout } from './chart-drawings/analysis/overlaysToMarks.ts';
+import {
+  mapChartAnalysis,
+  analysisGate,
+  filterOverlays,
+  filterPanes,
+  labelBudget,
+  fingerprintForBundle,
+  fingerprintDiagnosis,
+} from './chart-drawings/analysis/mapBundle.ts';
+import { overlaysToMarks, overlaysToSeries, analysisLayout, alignSeriesToBars } from './chart-drawings/analysis/overlaysToMarks.ts';
 import { loadLayerSettings, saveLayerSettings } from './chart-drawings/analysis/settings.ts';
 import type { LayerSettings } from './chart-drawings/analysis/settings.ts';
-import ConfirmDialog from '@/components/catalysts/ConfirmDialog';
 import {
   barTimeMs,
   measureRange,
@@ -198,18 +205,52 @@ function barTooltipTitle(iso: string, range: ChartRange): string {
  */
 const DEFAULT_ZOOM_BARS: Partial<Record<ChartRange, number>> = { '1d': 126, '1w': 104 };
 
-function insideZoom(range: ChartRange, barCount: number, axes: number[]) {
+/**
+ * 用户当前的缩放视窗（bar 索引）。ReactECharts 用 notMerge:true 提交 option，
+ * 每次 option 重建都会按 startValue/endValue 重造 inside 缩放——落笔、点选、
+ * 拖拽提交、切图层都在重建 option，于是每一次交互都把用户滚到的窗口弹回默认。
+ * pinnedEnd：视窗原本贴着最后一根，静默刷新多出一根时继续贴着，而不是原地留一根缝。
+ */
+export interface ZoomWindow {
+  start: number;
+  end: number;
+  pinnedEnd: boolean;
+}
+
+function insideZoom(range: ChartRange, barCount: number, axes: number[], saved?: ZoomWindow | null) {
   const window = DEFAULT_ZOOM_BARS[range];
   if (!window || barCount <= window) return undefined;
+  const last = barCount - 1;
+  let startValue = barCount - window;
+  let endValue = last;
+  if (saved) {
+    const span = Math.max(1, saved.end - saved.start);
+    endValue = saved.pinnedEnd ? last : Math.min(last, Math.max(1, saved.end));
+    startValue = Math.max(0, Math.min(endValue - 1, saved.pinnedEnd ? endValue - span : saved.start));
+  }
   return [
     {
       type: 'inside' as const,
       xAxisIndex: axes,
-      startValue: barCount - window,
-      endValue: barCount - 1,
+      startValue,
+      endValue,
       minValueSpan: 15,
     },
   ];
+}
+
+/** 读回 ECharts 实例当前的 inside 缩放窗口（索引口径）。 */
+function readZoomWindow(chart: EChartsInstance, barCount: number): ZoomWindow | null {
+  const option = chart.getOption() as { dataZoom?: { startValue?: unknown; endValue?: unknown }[] } | null;
+  const row = option?.dataZoom?.[0];
+  const start = Number(row?.startValue);
+  const end = Number(row?.endValue);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
+  return {
+    start: Math.max(0, Math.round(start)),
+    end: Math.round(end),
+    pinnedEnd: Math.round(end) >= barCount - 1,
+  };
 }
 
 /** 回撤尺覆盖层：pending = 已选起点待终点；done = 测量完成 */
@@ -284,6 +325,7 @@ function buildOption(
   tech?: ReturnType<typeof technicalMarks> | null,
   extra?: { lines: object[]; points: object[]; areas: object[]; polygons?: { vertices: { x: number; y: number }[]; color: string; opacity: number }[] } | null,
   analysis?: { showMa20?: boolean; extraMa?: { name: string; data: (number | null)[] }[]; panes?: { id: string; label: string; data: (number | null)[] }[] } | null,
+  zoom?: ZoomWindow | null,
 ): ChartOption {
   const labels = bars.map((b) => fmtAxisLabel(b.t, range));
   const upFill = CH.up600;
@@ -350,7 +392,7 @@ function buildOption(
     return {
       ...common,
       grid: baseGridArea(),
-      dataZoom: insideZoom(range, bars.length, [0]),
+      dataZoom: insideZoom(range, bars.length, [0], zoom),
       xAxis: {
         type: 'category' as const,
         data: labels,
@@ -428,7 +470,7 @@ function buildOption(
   return {
     ...common,
     grid: grids,
-    dataZoom: insideZoom(range, bars.length, axisIndexes),
+    dataZoom: insideZoom(range, bars.length, axisIndexes, zoom),
     xAxis: grids.map((_, index) => ({
       type: 'category' as const,
       gridIndex: index,
@@ -637,7 +679,6 @@ export default function KlineChart({
   const [basis, setBasis] = useState<MeasureBasis>('wick');
   const [chartInst, setChartInst] = useState<EChartsInstance | null>(null);
   const [showLevels, setShowLevels] = useState(true);
-  const [clearConfirm, setClearConfirm] = useState(false);
   const measureActive = measure.phase !== 'idle';
   const { username, isOwner, isCustomer, canManageWatchlist } = useAccess();
   const reducedMotion = Boolean(useReducedMotion());
@@ -656,10 +697,28 @@ export default function KlineChart({
   // 锚点属于旧价格序列：切标的 / 周期 / 显示模式一律清除，不跨序列迁移
   const measureScope = `${ticker}|${range}|${mode}`;
   const [armedScope, setArmedScope] = useState(measureScope);
+  const zoomRef = useRef<ZoomWindow | null>(null);
   if (armedScope !== measureScope) {
     setArmedScope(measureScope);
     setMeasure({ phase: 'idle' });
+    zoomRef.current = null; // 换序列＝换 bar 索引，旧视窗没有意义
   }
+
+  // 用户滚过的视窗记在 ref 里：option 每次重建（落笔、点选、拖拽提交、切图层）
+  // 都从这里读回，缩放才不会被 notMerge 弹回默认的最后 126 根。
+  useEffect(() => {
+    const chart = chartInst;
+    if (!chart || chart.isDisposed()) return;
+    const handler = () => {
+      if (chart.isDisposed()) return;
+      const next = readZoomWindow(chart, bars?.length ?? 0);
+      if (next) zoomRef.current = next;
+    };
+    chart.on('dataZoom', handler);
+    return () => {
+      if (!chart.isDisposed()) chart.off('dataZoom', handler);
+    };
+  }, [chartInst, bars]);
 
   useEffect(() => {
     if (!measureActive) return;
@@ -719,11 +778,21 @@ export default function KlineChart({
     [levelsAvailable, showLevels, overlays, data],
   );
 
+  // 图层设置按身份分桶。useAccess 是异步落定的（AccessProvider 先渲染子树再等
+  // /access/status），登录/登出也换 key 而不重挂载——只在初始化时读一次，就会拿
+  // 匿名桶的默认值，之后第一次勾选又以「默认 + 单个改动」写进账号桶，把用户存的
+  // 预设悄悄抹掉。这里跟 useDrawingController 一样按 identity 重新装载，
+  // 并且只往「装载时那把 key」上落盘。
+  const [layersIdentity, setLayersIdentity] = useState(identityKey);
   const [layerSettings, setLayerSettings] = useState<LayerSettings>(() => loadLayerSettings(identityKey));
+  if (layersIdentity !== identityKey) {
+    setLayersIdentity(identityKey);
+    setLayerSettings(loadLayerSettings(identityKey));
+  }
   const [layersOpen, setLayersOpen] = useState(false);
   const persistLayers = (next: LayerSettings) => {
     setLayerSettings(next);
-    saveLayerSettings(identityKey, next);
+    saveLayerSettings(layersIdentity, next);
   };
   const analysisBundle = useMemo(
     () => mapChartAnalysis(
@@ -733,20 +802,32 @@ export default function KlineChart({
     ),
     [technical, data, range],
   );
-  const visibleFingerprint = useMemo(() => {
-    if (!data?.bars?.length || !analysisBundle) return null;
-    const dropLast = range === '1d' && technical?.last_bar?.closed === false;
-    return barFingerprintFromBars(data.bars, range, {
-      dropLast,
-      fromDate: range === '1d' ? (technical?.series_break_at ?? null) : null,
-    });
-  }, [data, range, analysisBundle, technical]);
-  const analysisOk = analysisMatchesChart(analysisBundle, {
+  // 指纹用 bundle 自带的元数据（首/末 bar 日期）来切窗口，而不是拿
+  // series_break_at 猜后端到底哈希了哪一段；闸门是 fail-closed 的，猜错就是
+  // 整块分析静默消失。
+  const fingerprintOpts = useMemo(() => ({
+    dropLast: range === '1d' && technical?.last_bar?.closed === false,
+    fromDate: range === '1d' ? (technical?.series_break_at ?? null) : null,
+  }), [range, technical]);
+  const visibleFingerprint = useMemo(
+    () => (data?.bars?.length ? fingerprintForBundle(analysisBundle, data.bars, range, fingerprintOpts) : null),
+    [data, range, analysisBundle, fingerprintOpts],
+  );
+  const gateReason = analysisGate(analysisBundle, {
     range,
     adjustment: 'raw',
+    ticker,
     dataThrough: range === '1d' ? technical?.data_through : analysisBundle?.dataThrough,
     fingerprint: visibleFingerprint,
-  }) && (range !== '1d' || overlaysConsistent);
+  });
+  const analysisOk = gateReason === 'ok' && (range !== '1d' || overlaysConsistent);
+  // 指纹对不上时说出来：整套图层不画，但用户至少知道是版本错位而不是「没形态」。
+  const analysisDrift = useMemo(() => {
+    if (!analysisBundle || !data?.bars?.length) return null;
+    if (gateReason !== 'fingerprint' && gateReason !== 'bar_count') return null;
+    if (levelsInconsistent) return null; // 图例那条「版本不一致」已经说过同一件事
+    return fingerprintDiagnosis(analysisBundle, data.bars, range, fingerprintOpts);
+  }, [analysisBundle, data, gateReason, levelsInconsistent, range, fingerprintOpts]);
   const visibleOverlays = useMemo(() => {
     if (!analysisOk || !analysisBundle) return [];
     return filterOverlays(analysisBundle.overlays, layerSettings);
@@ -806,17 +887,25 @@ export default function KlineChart({
     )
       .filter((line) => line.id !== 'ma20')
       .map((line) => ({ name: line.name, data: line.data }));
-    const panes = analysisOk
+    // 副图必须和 MA 走同一条按日期对齐的路：分析序列可能只覆盖 series_break_at
+    // 之后的一段（长度 M < 图上 N 根），直接当成从索引 0 开始的裸数组，
+    // 会把最近的动量值画到 N−M 根之前的老蜡烛底下。
+    const panes = analysisOk && data
       ? visiblePanes.map((pane) => {
         const series = pane.values.rsi ?? pane.values.macd ?? pane.values.histogram ?? pane.values.obv ?? pane.values.clv ?? pane.values.position ?? pane.values.rs ?? [];
-        return { id: pane.id, label: pane.label, data: series };
+        // pane.dates 按同一副图里最长的一条铺开；本条更短就截到自己的长度，
+        // 否则 alignSeriesToBars 会因长度不等退回到「猜」的分支。
+        const dates = pane.dates.length > series.length ? pane.dates.slice(0, series.length) : pane.dates;
+        return { id: pane.id, label: pane.label, data: alignSeriesToBars(series, dates, data.bars, range) };
       })
       : [];
     return { showMa20, extraMa, panes };
   }, [analysisOk, data, range, visibleOverlays, visiblePanes, layerSettings]);
 
   const option = useMemo(
-    () => (data ? buildOption(data.bars, data.ma20, range, mode, prevClose, overlay, techMarks, extraMarks, analysisOption) : null),
+    // zoomRef 是有意不进依赖的：滚轮缩放不该触发 option 重建，但每次真的重建时
+    // 都要带上用户当前的视窗，否则 notMerge 会把 inside 缩放重置回默认窗口。
+    () => (data ? buildOption(data.bars, data.ma20, range, mode, prevClose, overlay, techMarks, extraMarks, analysisOption, zoomRef.current) : null),
     [data, range, mode, prevClose, overlay, techMarks, extraMarks, analysisOption],
   );
 
@@ -1075,17 +1164,30 @@ export default function KlineChart({
           showMa20={layerSettings.enabled.includes('ma20')}
         />
       )}
+      {analysisDrift && (
+        <p className="mt-1 text-micro text-warn-600" role="status">
+          {t('分析图层与当前 K 线不同版本（图上 {n} 根 / 分析 {m} 根），已暂隐，刷新后恢复', {
+            n: analysisDrift.bars,
+            m: analysisDrift.expected ?? analysisDrift.bars,
+          })}
+        </p>
+      )}
       {analysisOk && visibleLabels.length > 0 && (
         <p className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-micro text-ink-400">
-          {visibleLabels.map((overlayRow) => (
-            <span key={overlayRow.id} title={t('几何质量不是胜率')}>
-              {t('形态 · {name} · 置信度 {n}', {
-                name: autoPatternName(overlayRow.kind, typeof overlayRow.geometry.subtype === 'string' ? overlayRow.geometry.subtype : overlayRow.label),
-                n: Math.round(overlayRow.shapeQuality * 100),
-              })}
-              {typeof overlayRow.evidence.touches === 'number' ? ` · ${t('触碰 {n} 次', { n: overlayRow.evidence.touches })}` : ''}
-            </span>
-          ))}
+          {visibleLabels.map((overlayRow) => {
+            const name = autoPatternName(
+              overlayRow.kind,
+              typeof overlayRow.geometry.subtype === 'string' ? overlayRow.geometry.subtype : null,
+            );
+            if (!name) return null;
+            const touches = overlayRow.evidence.touches;
+            return (
+              <span key={overlayRow.id} title={t('几何质量不是胜率')}>
+                {t('形态 · {name} · 置信度 {n}', { name, n: Math.round(overlayRow.shapeQuality * 100) })}
+                {typeof touches === 'number' && touches > 0 ? ` · ${t('触碰 {n} 次', { n: touches })}` : ''}
+              </span>
+            );
+          })}
         </p>
       )}
       <LayerMenu
@@ -1110,18 +1212,6 @@ export default function KlineChart({
           {data ? t('读取于 {at}', { at: new Date(data.as_of).toLocaleString('zh-CN', { hour12: false }) }) : ''}
         </span>
       </p>
-      <ConfirmDialog
-        open={clearConfirm}
-        title={t('清除全部手绘')}
-        description={t('确认清除当前标的与周期的全部手绘图形？此操作可撤销。')}
-        confirmLabel={t('确认清除')}
-        danger
-        onConfirm={() => {
-          drawing.clearAll();
-          setClearConfirm(false);
-        }}
-        onCancel={() => setClearConfirm(false)}
-      />
     </section>
   );
 
@@ -1159,12 +1249,8 @@ function lastBarText(data: { bars: ChartBarEx[]; last_bar_at?: string | null }, 
     : ymd;
 }
 
-/**
- * 可扫读的图上标记图例：色块/符号 + 名称，按当前模式与数据状态变化——
- * 检出失效基底时点明状态、结构与图表错版本时说明为何暂隐，
- * 而不是永远同一句「按日线结构自动标注」。
- */
-function autoPatternName(kind: string, subtype?: string | null): string {
+/** 只认已命名的形态；认不出就返回 null，绝不把 kind 原样打成「形态 · ma」。 */
+function autoPatternName(kind: string, subtype?: string | null): string | null {
   if (kind === 'support_trend') return t('上升支撑');
   if (kind === 'resistance_trend') return t('下降阻力');
   if (kind === 'channel') return subtype === 'falling' ? t('下降通道') : t('上升通道');
@@ -1175,9 +1261,14 @@ function autoPatternName(kind: string, subtype?: string | null): string {
   }
   if (kind === 'wedge') return subtype === 'falling' ? t('下降楔形') : t('上升楔形');
   if (kind === 'box') return t('水平箱体');
-  return kind;
+  return null;
 }
 
+/**
+ * 可扫读的图上标记图例：色块/符号 + 名称，按当前模式与数据状态变化——
+ * 检出失效基底时点明状态、结构与图表错版本时说明为何暂隐，
+ * 而不是永远同一句「按日线结构自动标注」。
+ */
 function OverlayLegend({
   mode,
   shown,

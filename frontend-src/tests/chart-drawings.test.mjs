@@ -26,13 +26,13 @@ async function loadDrawings(t) {
     storage: path.join(drawingsDir, 'storage.ts'),
     tools: path.join(drawingsDir, 'tools.ts'),
     renderer: path.join(drawingsDir, 'renderer.ts'),
-    autoPatterns: path.join(drawingsDir, 'autoPatterns.ts'),
     sync: path.join(drawingsDir, 'sync.ts'),
     drag: path.join(drawingsDir, 'drag.ts'),
     registry: path.join(drawingsDir, 'analysis/registry.ts'),
     settings: path.join(drawingsDir, 'analysis/settings.ts'),
     mapBundle: path.join(drawingsDir, 'analysis/mapBundle.ts'),
     overlaysToMarks: path.join(drawingsDir, 'analysis/overlaysToMarks.ts'),
+    sha256: path.join(drawingsDir, 'analysis/sha256.ts'),
   };
   await writeFile(
     entry,
@@ -46,23 +46,36 @@ export {
   barKeyOf, resolveBarKey, resolveAnchor, snapBarIndex, drawingScopeKey, drawingsInScope, nudgeAnchors,
 } from ${JSON.stringify(files.projection)};
 export {
-  hitTestProjected, pickTopHit, hitTestDrawings, DESKTOP_LINE_TOLERANCE_PX, TOUCH_LINE_TOLERANCE_PX,
+  hitTestProjected, pickTopHit, hitTestDrawings, isLockedDragBlocked, textLabelBox,
+  DESKTOP_LINE_TOLERANCE_PX, TOUCH_LINE_TOLERANCE_PX, DESKTOP_ANCHOR_TOLERANCE_PX, TOUCH_ANCHOR_TOLERANCE_PX,
 } from ${JSON.stringify(files.hitTest)};
 export { snapPointer, nearestPrice } from ${JSON.stringify(files.snap)};
-export { parseDrawing, parseDrawingDetailed, validateImport, migrateStoredPayload, whitelistText, whitelistStyle, exportDrawings, resolvePaintColor } from ${JSON.stringify(files.schema)};
-export { createHistory, historyPush, historyUndo, historyRedo, historyReplace, canUndo, canRedo } from ${JSON.stringify(files.history)};
-export { loadDrawings, saveDrawings, anonymousStorageKey, drawingsStorageKey } from ${JSON.stringify(files.storage)};
-export { addDraftPoint, applyShiftToDraft, exclusiveTool, isTextInputTarget } from ${JSON.stringify(files.tools)};
 export {
-  drawingsToMarks, drawingSegments, toProjectedDrawing, overlayMarks, selectionOverlay,
+  parseDrawing, parseDrawingDetailed, validateImport, migrateStoredPayload, collectStoredDrawings,
+  whitelistText, whitelistStyle, exportDrawings, resolvePaintColor, PRICE_MAX, PRICE_MIN,
+} from ${JSON.stringify(files.schema)};
+export { createHistory, historyPush, historyUndo, historyRedo, historyReplace, canUndo, canRedo } from ${JSON.stringify(files.history)};
+export {
+  loadDrawings, saveDrawings, anonymousStorageKey, drawingsStorageKey, outboxStorageKey,
+  quarantineDrawings, quarantineKey,
+} from ${JSON.stringify(files.storage)};
+export {
+  addDraftPoint, applyShiftToDraft, exclusiveTool, isTextInputTarget,
+  pointerKindFromEvent, escapeHandledByOverlay,
+} from ${JSON.stringify(files.tools)};
+export {
+  drawingsToMarks, drawingSegments, toProjectedDrawing, overlayMarks, selectionOverlay, projectToPixels,
   draftOverlay, graphicFromOverlay, autoPatternGeometry, autoPatternsToMarks, fillIsAxisAligned,
 } from ${JSON.stringify(files.renderer)};
-export { mapAutoPatterns, mapAutoPatternItem, mapTechnicalAutoFields } from ${JSON.stringify(files.autoPatterns)};
 export {
   DrawingOutbox, diffPersistOps, mutableFieldsDiffer, applyPersistResponse,
   resolveListApply, resolveRetryAction, SCOPE_JOB_ID, keepLocalWithServerRevisions,
+  regeneratePersistOps, resolveSyncFailure, applyKnownRevisions, latestKnownRevision, parsePersistJobs,
 } from ${JSON.stringify(files.sync)};
-export { dragMove, previewDragAnchors, applyPixelShiftConstraint } from ${JSON.stringify(files.drag)};
+export {
+  dragMove, previewDragAnchors, applyPixelShiftConstraint, clampDragPoint, dragExceedsThreshold,
+  DRAG_THRESHOLD_MOUSE_PX, DRAG_THRESHOLD_TOUCH_PX,
+} from ${JSON.stringify(files.drag)};
 export { LAYERS, PRESETS, layersStorageKey, GROUPS } from ${JSON.stringify(files.registry)};
 export {
   DEFAULT_LAYER_SETTINGS, settingsFromPreset, parseLayerSettings, loadLayerSettings,
@@ -70,7 +83,7 @@ export {
 } from ${JSON.stringify(files.settings)};
 export {
   mapChartAnalysis, analysisMatchesChart, filterOverlays, filterPanes, labelBudget, barFingerprint,
-  barFingerprintFromBars, closedBarsForFingerprint,
+  barFingerprintFromBars, closedBarsForFingerprint, canonicalBarPayload, sha256Hex,
 } from ${JSON.stringify(files.mapBundle)};
 export { overlaysToMarks, overlaysToSeries, analysisLayout, alignSeriesToBars } from ${JSON.stringify(files.overlaysToMarks)};
 `,
@@ -178,9 +191,13 @@ test('fibonacci prices both directions include required ratios', async (t) => {
   const up = fibonacciPrices(100, 200);
   const down = fibonacciPrices(200, 100);
   const ratios = up.map((item) => item.ratio);
-  for (const required of [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1]) {
-    assert.ok(ratios.includes(required));
+  // FIB_RATIOS 出厂就带 1.272 / 1.618 两条扩展位，只钉基础七条等于没盯住。
+  for (const required of [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1, 1.272, 1.618]) {
+    assert.ok(ratios.includes(required), `missing ratio ${required}`);
   }
+  assert.deepEqual(JSON.parse(JSON.stringify(ratios)), [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1, 1.272, 1.618]);
+  assert.equal(up.find((item) => item.ratio === 1.272).price, 100 + 100 * 1.272);
+  assert.equal(down.find((item) => item.ratio === 1.618).price, 200 - 100 * 1.618);
   assert.equal(up.find((item) => item.ratio === 0).price, 100);
   assert.equal(up.find((item) => item.ratio === 1).price, 200);
   assert.equal(up.find((item) => item.ratio === 0.5).price, 150);
@@ -208,9 +225,28 @@ test('hit-test distance uses CSS px tolerances for desktop and touch', async (t)
   assert.equal(far, null);
   const touch = hitTestProjected(drawing, { x: 50, y: 18 }, 'touch');
   assert.equal(touch?.kind, 'body');
-  // High DPR does not shrink CSS-pixel tolerance: 7 CSS px still hits.
-  const hidpi = hitTestProjected(drawing, { x: 50, y: 7 }, 'mouse');
-  assert.ok(hidpi);
+});
+
+test('tolerances are CSS px: the device-pixel offset the caller would pass still hits', async (t) => {
+  const { hitTestProjected, toProjectedDrawing, projectToPixels } = await loadDrawings(t);
+  // hitTestProjected 不吃 DPR：真正会缩放的是调用方的像素换算。这里就按 DPR=2
+  // 的画布做一次换算，再像控制器那样把 offsetX/offsetY（CSS px）喂进来。
+  const bars = barsFor(6);
+  const ctx = ctxFor(bars);
+  const drawing = drawingOf('segment', [
+    { time: bars[0].t, barKey: '2026-07-06', price: 10 },
+    { time: bars[4].t, barKey: '2026-07-10', price: 10 },
+  ]);
+  const dpr = 2;
+  const toDevicePixel = (point) => ({ x: point.x * 40 * dpr, y: (30 - point.y) * 10 * dpr });
+  const projected = projectToPixels(toProjectedDrawing(drawing, ctx), toDevicePixel);
+  const onLine = { x: 2 * 40 * dpr, y: (30 - 10) * 10 * dpr };
+  assert.equal(hitTestProjected(projected, onLine, 'mouse')?.kind, 'body');
+  // 设备像素里偏 7px（= 3.5 CSS px）仍在 8 CSS px 容差内；偏 20 设备像素则不在。
+  assert.ok(hitTestProjected(projected, { ...onLine, y: onLine.y + 7 }, 'mouse'));
+  assert.equal(hitTestProjected(projected, { ...onLine, y: onLine.y + 20 }, 'mouse'), null);
+  // 同一个偏移在触摸容差下要命中，证明容差确实随指针类型走。
+  assert.ok(hitTestProjected(projected, { ...onLine, y: onLine.y + 20 }, 'touch'));
 });
 
 test('hit-test prefers anchor over selection over zOrder', async (t) => {
@@ -227,8 +263,8 @@ test('hit-test prefers anchor over selection over zOrder', async (t) => {
   assert.equal(pickTopHit(withoutAnchor, null).id, 'high');
 });
 
-test('hidden drawings are not hittable; locked drawings are not dragged', async (t) => {
-  const { hitTestProjected } = await loadDrawings(t);
+test('hidden drawings are not hittable; locked drawings select but never drag', async (t) => {
+  const { hitTestProjected, isLockedDragBlocked, dragMove } = await loadDrawings(t);
   const hidden = {
     id: 'h',
     zOrder: 9,
@@ -239,6 +275,43 @@ test('hidden drawings are not hittable; locked drawings are not dragged', async 
     fills: [],
   };
   assert.equal(hitTestProjected(hidden, { x: 0, y: 0 }, 'mouse'), null);
+
+  // 锁定的图形照样可以命中（要能选中改属性），但控制器必须在这一步掉头不建拖动。
+  const locked = { ...hidden, id: 'l', hidden: false, locked: true };
+  const hit = hitTestProjected(locked, { x: 9.5, y: 0 }, 'mouse');
+  assert.equal(hit?.kind, 'body');
+  assert.equal(isLockedDragBlocked({ locked: true }), true);
+  assert.equal(isLockedDragBlocked({ locked: false }), false);
+
+  // 真按控制器的顺序走一遍：命中 → 锁定就不建 drag → 没有 drag 就没有 preview。
+  const bars = barsFor(12);
+  const origin = drawingOf('segment', [
+    { time: bars[1].t, barKey: '2026-07-07', price: 10 },
+    { time: bars[4].t, barKey: '2026-07-10', price: 16 },
+  ], { locked: true });
+  const startDrag = () => (isLockedDragBlocked(origin) ? null : {
+    id: origin.id,
+    mode: 'anchor',
+    anchorIndex: 1,
+    origin,
+    startPixel: { x: 0, y: 0 },
+    startData: { barIndex: 4, price: 16 },
+    moved: false,
+  });
+  assert.equal(startDrag(), null);
+  const unlocked = { ...origin, locked: false };
+  const drag = isLockedDragBlocked(unlocked) ? null : {
+    id: unlocked.id,
+    mode: 'anchor',
+    anchorIndex: 1,
+    origin: unlocked,
+    startPixel: { x: 0, y: 0 },
+    startData: { barIndex: 4, price: 16 },
+    moved: false,
+  };
+  assert.ok(drag);
+  const moved = dragMove({ drawings: [unlocked], drag, pointer: { barIndex: 7, price: 22 }, bars, range: '1d' });
+  assert.equal(moved.preview.anchors[1].price, 22);
 });
 
 test('barKey resolves exactly and unresolvable anchors do not migrate', async (t) => {
@@ -635,52 +708,6 @@ test('autoPatternsToMarks maps a 4-anchor triangle to two rails and a box to a r
   assert.equal(boxMarks.lines.length, 4);
 });
 
-function validPattern(overrides = {}) {
-  return {
-    id: 'pat-1',
-    algorithmVersion: 'optix-auto-patterns-v1',
-    kind: 'support_trend',
-    subtype: 'rising',
-    direction: 'bullish',
-    anchors: [
-      { time: '2026-07-06T00:00:00+00:00', barKey: '2026-07-06', price: 10 },
-      { time: '2026-07-16T00:00:00+00:00', barKey: '2026-07-16', price: 14 },
-    ],
-    confidence: 82,
-    touches: 3,
-    formationStart: '2026-07-06',
-    formationEnd: '2026-07-16',
-    dataThrough: '2026-07-16',
-    status: 'forming',
-    breakoutPrice: null,
-    invalidationPrice: 9.2,
-    measuredTarget: null,
-    rationaleCodes: ['touches'],
-    ...overrides,
-  };
-}
-
-test('mapTechnicalStructure copies validated auto_patterns and drops invalid items', async (t) => {
-  const { mapTechnicalAutoFields, mapAutoPatterns } = await loadDrawings(t);
-  const body = {
-    as_of: '2026-07-16T20:00:00+00:00',
-    auto_patterns_version: 'optix-auto-patterns-v1',
-    auto_patterns: [
-      validPattern(),
-      validPattern({ id: 'bad-kind', kind: 'pitchfork' }),
-      validPattern({ id: 'bad-price', anchors: [{ time: 't', barKey: 'k', price: Number.NaN }, { time: 't2', barKey: 'k2', price: 4 }] }),
-      'not-an-object',
-    ],
-  };
-  const mapped = mapTechnicalAutoFields(body);
-  assert.equal(mapped.auto_patterns_version, 'optix-auto-patterns-v1');
-  assert.equal(mapped.auto_patterns.length, 1);
-  assert.equal(mapped.auto_patterns[0].id, 'pat-1');
-  assert.equal(mapped.auto_patterns[0].kind, 'support_trend');
-  assert.equal(mapAutoPatterns(body.auto_patterns).length, 1);
-  assert.notEqual(mapped.auto_patterns.length, 0);
-});
-
 test('named palette color down paints a non-brand hex', async (t) => {
   const { drawingsToMarks, resolvePaintColor } = await loadDrawings(t);
   assert.notEqual(resolvePaintColor('down'), '#2E46E0');
@@ -796,10 +823,12 @@ test('outbox retry replays pending ops and ignores stale list tokens', async (t)
   const second = box.takeNext(drawing.id);
   assert.equal(second.drawing.style.color, '#E5484D');
   assert.equal(second.drawing.locked, true);
-  assert.equal(resolveRetryAction(box.isEmpty()), 'replay');
+  assert.equal(resolveRetryAction('write_failed', box.isEmpty()), 'replay');
   box.failKeep(drawing.id);
   assert.equal(resolveListApply(box.isEmpty(), true), false);
-  assert.equal(resolveRetryAction(false), 'replay');
+  assert.equal(resolveRetryAction('write_failed', false), 'replay');
+  assert.equal(resolveRetryAction('load_failed', true), 'reload');
+  assert.equal(resolveRetryAction(null, true), 'idle');
   const other = { ...scope, ticker: 'AAPL' };
   assert.equal(resolveListApply(true, false), false);
   const stale = applyPersistResponse({
@@ -976,11 +1005,12 @@ test('fingerprint and dataThrough mismatch yields no auto marks', async (t) => {
   });
   assert.ok(bundle);
   assert.equal(analysisMatchesChart(bundle, { range: '1d', adjustment: 'raw', dataThrough: '2026-07-16' }), false);
-  assert.equal(analysisMatchesChart(bundle, { range: '1d', adjustment: 'raw', dataThrough: '2026-07-16', fingerprint: 'abc' }), true);
-  assert.equal(analysisMatchesChart(bundle, { range: '1d', adjustment: 'raw', dataThrough: '2026-07-15', fingerprint: 'abc' }), false);
-  assert.equal(analysisMatchesChart(bundle, { range: '1w', adjustment: 'raw', dataThrough: '2026-07-16', fingerprint: 'abc' }), false);
-  assert.equal(analysisMatchesChart(bundle, { range: '1d', adjustment: 'raw', dataThrough: '2026-07-16', fingerprint: 'other' }), false);
-  const none = analysisMatchesChart(bundle, { range: '1d', adjustment: 'raw', dataThrough: '2026-07-15', fingerprint: 'abc' })
+  assert.equal(analysisMatchesChart(bundle, { range: '1d', adjustment: 'raw', ticker: 'AAPL', dataThrough: '2026-07-16', fingerprint: 'abc' }), true);
+  assert.equal(analysisMatchesChart(bundle, { range: '1d', adjustment: 'raw', ticker: 'MSFT', dataThrough: '2026-07-16', fingerprint: 'abc' }), false);
+  assert.equal(analysisMatchesChart(bundle, { range: '1d', adjustment: 'raw', ticker: 'AAPL', dataThrough: '2026-07-15', fingerprint: 'abc' }), false);
+  assert.equal(analysisMatchesChart(bundle, { range: '1w', adjustment: 'raw', ticker: 'AAPL', dataThrough: '2026-07-16', fingerprint: 'abc' }), false);
+  assert.equal(analysisMatchesChart(bundle, { range: '1d', adjustment: 'raw', ticker: 'AAPL', dataThrough: '2026-07-16', fingerprint: 'other' }), false);
+  const none = analysisMatchesChart(bundle, { range: '1d', adjustment: 'raw', ticker: 'AAPL', dataThrough: '2026-07-15', fingerprint: 'abc' })
     ? filterOverlays(bundle.overlays, settingsFromPreset('minimal'))
     : [];
   assert.equal(none.length, 0);
@@ -990,7 +1020,7 @@ test('fingerprint and dataThrough mismatch yields no auto marks', async (t) => {
 test('layer toggles change real marks and MA series, not only filterOverlays', async (t) => {
   const {
     overlaysToMarks, overlaysToSeries, filterOverlays, settingsFromPreset, toggleLayer, analysisLayout,
-    analysisMatchesChart, barFingerprint, barFingerprintFromBars,
+    analysisMatchesChart, barFingerprint, barFingerprintFromBars, canonicalBarPayload, sha256Hex,
   } = await loadDrawings(t);
   const bars = [
     { t: '2026-07-06T13:30:00Z', o: 10, h: 12, l: 9, c: 11 },
@@ -1051,18 +1081,498 @@ test('layer toggles change real marks and MA series, not only filterOverlays', a
     assert.ok(top + height <= 100 + 1e-6, `overflow ${grid.top}+${grid.height}`);
   }
 
-  const fp = barFingerprint(
-    ['2026-07-06', '2026-07-07', '2026-07-08'],
-    [11, 12, 13],
-    [12, 13, 14],
-    [9, 10, 11],
-  );
+  const fp = barFingerprint(bars);
   const fromBars = barFingerprintFromBars(bars, '1d');
   assert.equal(fromBars, fp);
+  const payload = canonicalBarPayload(bars);
+  assert.equal(sha256Hex(payload), fp);
+  assert.match(payload, /\|0\|0$/);
+  const mutated = bars.map((bar, index) => (index === 0 ? { ...bar, h: bar.h + 4 } : bar));
+  assert.notEqual(barFingerprint(mutated), fp);
   const bundle = {
     ticker: 'AAPL', range: '1d', adjustment: 'raw', dataThrough: '2026-07-08',
     barFingerprint: fp, overlays: [], indicatorPanes: [], strengthContext: null, barCount: 3, lastClose: 13,
   };
-  assert.equal(analysisMatchesChart(bundle, { range: '1d', adjustment: 'raw', dataThrough: '2026-07-08', fingerprint: fp }), true);
-  assert.equal(analysisMatchesChart(bundle, { range: '1d', adjustment: 'raw', dataThrough: '2026-07-08', fingerprint: 'nope' }), false);
+  assert.equal(analysisMatchesChart(bundle, { range: '1d', adjustment: 'raw', ticker: 'AAPL', dataThrough: '2026-07-08', fingerprint: fp }), true);
+  assert.equal(analysisMatchesChart(bundle, { range: '1d', adjustment: 'raw', ticker: 'AAPL', dataThrough: '2026-07-08', fingerprint: 'nope' }), false);
+  assert.equal(analysisMatchesChart(bundle, { range: '1d', adjustment: 'raw', ticker: 'MSFT', dataThrough: '2026-07-08', fingerprint: fp }), false);
+  const vector = canonicalBarPayload([
+    { t: 1700000000, o: 10, h: 11, l: 9, c: 10.5, v: 1000 },
+    { t: 1700086400, o: 10.5, h: 12, l: 10, c: 11, v: 1100 },
+  ]);
+  assert.equal(
+    vector,
+    '1700000000|10.000000|11.000000|9.000000|10.500000|1000.000000|0|0\n1700086400|10.500000|12.000000|10.000000|11.000000|1100.000000|0|0',
+  );
+  assert.equal(sha256Hex(''), 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
+  // 跨语言钉死：同一条向量在 tests/test_chart_analysis_layers.py 里 pin 同一个
+  // 字面 digest。闸门是 fail-closed 的——两边漂开只会让分析图层整块静默消失，
+  // 所以必须先挂测试，而不是先挂产品。
+  assert.equal(
+    sha256Hex(vector),
+    '656393794b6b8d7ac710ac4f37f7a1b950ab6b673f5118d5b16416db114f6f39',
+  );
+});
+
+function memStore() {
+  const mem = new Map();
+  return {
+    getItem: (key) => mem.get(key) ?? null,
+    setItem: (key, value) => { mem.set(key, value); },
+    removeItem: (key) => { mem.delete(key); },
+  };
+}
+
+test('outbox persists across setScope and restores before a later GET would apply', async (t) => {
+  const { DrawingOutbox, outboxStorageKey, SCOPE_JOB_ID, applyPersistResponse, regeneratePersistOps } = await loadDrawings(t);
+  const store = memStore();
+  const nvda = { identity: 'acct', ticker: 'NVDA', range: '1d', adjustment: 'raw' };
+  const aapl = { identity: 'acct', ticker: 'AAPL', range: '1d', adjustment: 'raw' };
+  const drawing = drawingOf('horizontal', [{ time: '2026-07-06T13:30:00Z', barKey: '2026-07-06', price: 10 }]);
+  const box = new DrawingOutbox(store);
+  box.setScope(nvda);
+  box.enqueue({ drawingId: drawing.id, type: 'update', drawing });
+  assert.equal(box.isEmpty(), false);
+  box.setScope(aapl);
+  assert.equal(box.isEmpty(), true);
+  box.setScope(nvda);
+  assert.equal(box.isEmpty(), false);
+  const restored = box.takeNext(drawing.id);
+  assert.equal(restored.type, 'update');
+  assert.equal(restored.drawing.id, drawing.id);
+  assert.ok(store.getItem(outboxStorageKey('acct', 'NVDA', '1d', 'raw')));
+
+  box.complete(drawing.id, restored.generation);
+  box.enqueue({ drawingId: drawing.id, type: 'create', drawing });
+  const inflight = box.takeNext(drawing.id);
+  const genBeforeClear = inflight.scopeGeneration;
+  box.enqueue({ drawingId: SCOPE_JOB_ID, type: 'clear' });
+  assert.equal(box.takeNext(SCOPE_JOB_ID), null, 'barrier waits for inflight per-id');
+  box.complete(drawing.id, inflight.generation);
+  const ignored = applyPersistResponse({
+    job: inflight,
+    currentScope: box.getScope(),
+    currentScopeGeneration: box.getScopeGeneration(),
+    latestGenerationForId: box.latestGeneration(drawing.id),
+    responseDrawing: { ...drawing, revision: 9 },
+  });
+  assert.equal(ignored.action, 'ignore');
+  assert.notEqual(box.getScopeGeneration(), genBeforeClear);
+  const barrier = box.takeNext(SCOPE_JOB_ID);
+  assert.equal(barrier.type, 'clear');
+
+  const local = [
+    { ...drawing, revision: 2 },
+    drawingOf('segment', [
+      { time: '2026-07-06T13:30:00Z', barKey: '2026-07-06', price: 10 },
+      { time: '2026-07-07T13:30:00Z', barKey: '2026-07-07', price: 12 },
+    ], { id: '22222222-2222-4222-8222-222222222222' }),
+  ];
+  const server = [
+    { ...drawing, revision: 5, style: { ...drawing.style, color: '#E5484D' } },
+    drawingOf('horizontal', [{ time: '2026-07-08T13:30:00Z', barKey: '2026-07-08', price: 11 }], { id: '33333333-3333-4333-8333-333333333333' }),
+  ];
+  const ops = regeneratePersistOps(local, server);
+  const byType = Object.fromEntries(ops.map((op) => [op.drawingId, op.type]));
+  assert.equal(byType[drawing.id], 'update');
+  assert.equal(ops.find((op) => op.drawingId === drawing.id).drawing.revision, 5);
+  assert.equal(byType['22222222-2222-4222-8222-222222222222'], 'create');
+  assert.equal(byType['33333333-3333-4333-8333-333333333333'], 'delete');
+});
+
+const ANCHOR_ONE = { time: '2026-07-06T13:30:00Z', barKey: '2026-07-06', price: 10 };
+const SCOPE_NVDA = { identity: 'acct', ticker: 'NVDA', range: '1d', adjustment: 'raw' };
+
+test('unsent work survives a scope switch: the queue comes back and blocks the stale server list', async (t) => {
+  const { DrawingOutbox, resolveListApply, parsePersistJobs, outboxStorageKey } = await loadDrawings(t);
+  const store = memStore();
+  const edited = drawingOf('horizontal', [ANCHOR_ONE], {
+    style: { color: '#E5484D', width: 3, dash: 'dashed' },
+    revision: 4,
+  });
+  const box = new DrawingOutbox(store);
+  box.setScope(SCOPE_NVDA);
+  box.enqueue({ drawingId: edited.id, type: 'update', drawing: edited });
+  const inflight = box.takeNext(edited.id);
+  box.failKeep(edited.id); // 离线：任务留在队列里，状态是 unsynced
+  assert.equal(inflight.type, 'update');
+
+  // 换标的再换回来：队列必须还在，而且非空就不许用服务器列表覆盖本地。
+  box.setScope({ ...SCOPE_NVDA, ticker: 'AAPL' });
+  assert.equal(box.isEmpty(), true);
+  box.setScope(SCOPE_NVDA);
+  assert.equal(box.isEmpty(), false);
+  assert.equal(resolveListApply(box.isEmpty(), true), false);
+  const back = box.takeNext(edited.id);
+  assert.equal(back.type, 'update');
+  assert.equal(back.drawing.style.color, '#E5484D');
+  assert.equal(back.drawing.style.width, 3);
+
+  // 落盘的是不可信输入：逐条按 schema 过一遍，坏行丢掉。
+  const raw = JSON.parse(store.getItem(outboxStorageKey('acct', 'NVDA', '1d', 'raw')));
+  assert.ok(Array.isArray(raw.jobs));
+  const dirty = {
+    jobs: [
+      { ...raw.jobs[0], drawing: { ...edited, anchors: [{ ...ANCHOR_ONE, price: -1 }] } },
+      { drawingId: edited.id, generation: 9, type: 'nonsense' },
+      { ...raw.jobs[0], generation: 7 },
+    ],
+  };
+  const parsed = parsePersistJobs(dirty, SCOPE_NVDA, 3);
+  assert.equal(parsed.length, 1);
+  assert.equal(parsed[0].generation, 7);
+  assert.equal(parsed[0].scopeGeneration, 3);
+});
+
+test('undo replays the latest server revision, not the one frozen in the history snapshot', async (t) => {
+  const {
+    createHistory, historyPush, historyUndo, applyKnownRevisions, latestKnownRevision,
+  } = await loadDrawings(t);
+  const base = drawingOf('horizontal', [ANCHOR_ONE], { revision: 1 });
+  let state = createHistory([base]);
+  const edited = { ...base, style: { ...base.style, color: '#E5484D' }, revision: 1 };
+  state = historyPush(state, [edited]);
+  // 服务器确认了这次编辑：revision 变成 5，只有 present 会被回声改写。
+  const revisions = new Map([[base.id, 5]]);
+  state = historyUndo(state);
+  assert.equal(state.present[0].revision, 1, 'history snapshot still carries the stale revision');
+
+  const restored = applyKnownRevisions(state.present, revisions);
+  assert.equal(restored[0].revision, 5);
+  assert.equal(restored[0].style.color, base.style.color, 'only the revision is rewritten');
+  assert.equal(latestKnownRevision(revisions, base.id, state.present[0].revision), 5);
+  assert.equal(latestKnownRevision(new Map(), base.id, 2), 2, 'no ack yet falls back to the local revision');
+});
+
+test('a server echo may not clobber edits still sitting in the debounce window', async (t) => {
+  const { DrawingOutbox, applyPersistResponse } = await loadDrawings(t);
+  const box = new DrawingOutbox(memStore());
+  box.setScope(SCOPE_NVDA);
+  const typed = drawingOf('text', [ANCHOR_ONE], { kind: 'text', text: 'note ab' });
+  box.enqueue({ drawingId: typed.id, type: 'update', drawing: typed });
+  const job = box.takeNext(typed.id);
+  const server = { ...typed, text: 'note a', revision: 3 };
+  const common = {
+    job,
+    currentScope: box.getScope(),
+    currentScopeGeneration: box.getScopeGeneration(),
+    latestGenerationForId: box.latestGeneration(typed.id),
+    responseDrawing: server,
+  };
+  // 干净时回声可以整条替换。
+  assert.equal(applyPersistResponse(common).action, 'replace');
+  // 防抖窗口里还有没入队的键入：只允许吃 revision，文本必须留在本地。
+  const dirty = applyPersistResponse({ ...common, localDirty: true });
+  assert.equal(dirty.action, 'revision');
+  assert.equal(dirty.revision, 3);
+  assert.equal(dirty.id, typed.id);
+});
+
+test('one bad stored row drops only that row and never rewrites the scope empty', async (t) => {
+  const { loadDrawings: load, collectStoredDrawings, saveDrawings, quarantineDrawings, quarantineKey } = await loadDrawings(t);
+  const store = memStore();
+  const good = drawingOf('horizontal', [ANCHOR_ONE]);
+  const other = drawingOf('segment', [
+    ANCHOR_ONE,
+    { time: '2026-07-07T13:30:00Z', barKey: '2026-07-07', price: 12 },
+  ], { id: '22222222-2222-4222-8222-222222222222' });
+  const bad = { ...good, id: '33333333-3333-4333-8333-333333333333', anchors: [{ ...ANCHOR_ONE, price: 0 }] };
+  const rawPayload = JSON.stringify({ schemaVersion: 1, drawings: [good, bad, other] });
+  store.setItem('k', rawPayload);
+
+  const collected = collectStoredDrawings(JSON.parse(rawPayload));
+  assert.equal(collected.drawings.length, 2);
+  assert.equal(collected.dropped, 1);
+  assert.equal(collected.fatal, null);
+
+  const loaded = load('k', store);
+  assert.equal(loaded.ok, false, 'the drop is still reported to the UI');
+  assert.equal(loaded.recoverable, true);
+  assert.equal(loaded.drawings.length, 2);
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(loaded.drawings.map((item) => item.id))),
+    [good.id, other.id],
+  );
+
+  // 控制器的策略：先留底，再只写回能解析的行。
+  assert.equal(quarantineDrawings('k', store), true);
+  assert.equal(store.getItem(quarantineKey('k')), rawPayload);
+  saveDrawings('k', loaded.drawings, store);
+  assert.equal(load('k', store).drawings.length, 2);
+
+  // 整份解析不出来时一行都不许写回去，原文必须留在原地。
+  store.setItem('dead', '{"schemaVersion":2,"drawings":[]}');
+  const dead = load('dead', store);
+  assert.equal(dead.ok, false);
+  assert.equal(dead.drawings.length, 0);
+  assert.equal(dead.recoverable, false);
+  const persist = dead.ok || dead.drawings.length ? 'now' : 'skip';
+  assert.equal(persist, 'skip');
+  assert.equal(quarantineDrawings('dead', store), true);
+  assert.equal(store.getItem('dead'), '{"schemaVersion":2,"drawings":[]}');
+});
+
+test('sync failures branch on the body code: only revision_conflict is a conflict', async (t) => {
+  const { resolveSyncFailure } = await loadDrawings(t);
+  assert.equal(resolveSyncFailure('update', 'revision_conflict', 409), 'conflict');
+  // 409 的其它三个码都不是冲突，弹重载对话框就等于让必败的任务无限重放。
+  assert.equal(resolveSyncFailure('create', 'drawings_range_full', 409), 'quota');
+  assert.equal(resolveSyncFailure('create', 'drawings_full', 409), 'quota');
+  assert.equal(resolveSyncFailure('create', 'drawing_exists', 409), 'drop');
+  // 后端已幂等：删掉早就没有的行算成功，任务直接丢掉而不是永远重试。
+  assert.equal(resolveSyncFailure('delete', 'drawing_not_found', 404), 'drop');
+  assert.equal(resolveSyncFailure('update', 'drawing_not_found', 404), 'drop');
+  assert.equal(resolveSyncFailure('delete', null, 404), 'drop');
+  // 400 是请求本身不合法，重放多少次都是同一个 400。
+  assert.equal(resolveSyncFailure('update', 'invalid_price', 400), 'drop');
+  // 网络/5xx 才该留在队列里等重试。
+  assert.equal(resolveSyncFailure('update', null, 503), 'retry');
+  assert.equal(resolveSyncFailure('create', null, null), 'retry');
+});
+
+test('a selection click commits nothing: no history entry and no PUT without real movement', async (t) => {
+  const {
+    dragMove, dragExceedsThreshold, mutableFieldsDiffer, DRAG_THRESHOLD_MOUSE_PX, DRAG_THRESHOLD_TOUCH_PX,
+  } = await loadDrawings(t);
+  const bars = barsFor(12);
+  const origin = drawingOf('segment', [
+    { time: bars[1].t, barKey: '2026-07-07', price: 10 },
+    { time: bars[4].t, barKey: '2026-07-10', price: 16 },
+  ]);
+  const start = { x: 100, y: 50 };
+  assert.equal(dragExceedsThreshold(start, { x: 101, y: 51 }, 'mouse'), false);
+  assert.equal(dragExceedsThreshold(start, { x: 100 + DRAG_THRESHOLD_MOUSE_PX + 1, y: 50 }, 'mouse'), true);
+  // 手指抖得比鼠标厉害，阈值必须更宽。
+  assert.ok(DRAG_THRESHOLD_TOUCH_PX > DRAG_THRESHOLD_MOUSE_PX);
+  assert.equal(dragExceedsThreshold(start, { x: 100 + DRAG_THRESHOLD_MOUSE_PX + 1, y: 50 }, 'touch'), false);
+
+  const drag = {
+    id: origin.id,
+    mode: 'anchor',
+    anchorIndex: 1,
+    origin,
+    startPixel: start,
+    startData: { barIndex: 4, price: 16 },
+    moved: dragExceedsThreshold(start, { x: 101, y: 51 }, 'mouse'),
+  };
+  const still = dragMove({ drawings: [origin], drag, pointer: { barIndex: 4, price: 16 }, bars, range: '1d' });
+  const commit = drag.moved && mutableFieldsDiffer(drag.origin, still.preview);
+  assert.equal(commit, false, 'no movement, no commit');
+  assert.equal(mutableFieldsDiffer(origin, still.preview), false, 'preview is field-identical to the origin');
+
+  const dragged = { ...drag, moved: true };
+  const moved = dragMove({ drawings: [origin], drag: dragged, pointer: { barIndex: 7, price: 22 }, bars, range: '1d' });
+  assert.equal(dragged.moved && mutableFieldsDiffer(dragged.origin, moved.preview), true);
+});
+
+test('touch is detected from the zrender signal and really widens the tolerance', async (t) => {
+  const { pointerKindFromEvent, hitTestProjected, TOUCH_LINE_TOLERANCE_PX, DESKTOP_LINE_TOLERANCE_PX } = await loadDrawings(t);
+  // zrender 5.x 的包裹上没有 pointerType，只有 zrByTouch；原生 touchstart 同理。
+  assert.equal(pointerKindFromEvent({ zrByTouch: true, event: { type: 'touchstart' } }), 'touch');
+  assert.equal(pointerKindFromEvent({ event: { type: 'touchmove' } }), 'touch');
+  assert.equal(pointerKindFromEvent({ event: { pointerType: 'touch', type: 'pointerdown' } }), 'touch');
+  assert.equal(pointerKindFromEvent({ event: { pointerType: 'pen', type: 'pointerdown' } }), 'pen');
+  assert.equal(pointerKindFromEvent({ event: { type: 'mousedown' } }), 'mouse');
+  assert.equal(pointerKindFromEvent({}), 'mouse');
+
+  const line = {
+    id: 'a',
+    zOrder: 1,
+    locked: false,
+    hidden: false,
+    anchors: [{ x: 0, y: 0 }, { x: 200, y: 0 }],
+    segments: [{ a: { x: 0, y: 0 }, b: { x: 200, y: 0 } }],
+    fills: [],
+  };
+  const finger = { x: 100, y: (DESKTOP_LINE_TOLERANCE_PX + TOUCH_LINE_TOLERANCE_PX) / 2 };
+  const touchEvent = { zrByTouch: true, event: { type: 'touchstart' } };
+  const mouseEvent = { event: { type: 'mousedown' } };
+  assert.ok(hitTestProjected(line, finger, pointerKindFromEvent(touchEvent)), 'finger hits');
+  assert.equal(hitTestProjected(line, finger, pointerKindFromEvent(mouseEvent)), null, 'mouse would miss');
+});
+
+test('drag commits are clamped into the grid and re-validated before they reach the queue', async (t) => {
+  const { clampDragPoint, dragMove, parseDrawing, PRICE_MAX, PRICE_MIN } = await loadDrawings(t);
+  const bars = barsFor(12);
+  const origin = drawingOf('segment', [
+    { time: bars[1].t, barKey: '2026-07-07', price: 10 },
+    { time: bars[4].t, barKey: '2026-07-10', price: 16 },
+  ]);
+  // 拖到图外：价格为负、索引越界，夹回来之后仍然是一条合法负载。
+  const clamped = clampDragPoint({ barIndex: 99, price: -4 }, bars.length);
+  assert.equal(clamped.barIndex, bars.length - 1);
+  assert.ok(clamped.price >= PRICE_MIN);
+  assert.equal(clampDragPoint({ barIndex: -7, price: PRICE_MAX * 10 }, bars.length).barIndex, 0);
+  assert.equal(clampDragPoint({ barIndex: -7, price: PRICE_MAX * 10 }, bars.length).price, PRICE_MAX);
+
+  const drag = {
+    id: origin.id,
+    mode: 'anchor',
+    anchorIndex: 1,
+    origin,
+    startPixel: { x: 0, y: 0 },
+    startData: { barIndex: 4, price: 16 },
+    moved: true,
+  };
+  const good = dragMove({ drawings: [origin], drag, pointer: clamped, bars, range: '1d' });
+  assert.ok(parseDrawing({ ...good.preview, updatedAt: '2026-07-16T00:00:00Z' }), 'clamped commit parses');
+
+  // 不夹的话就是 schema 直接拒收的负载（后端同样按 invalid_price 回 400）。
+  const bad = dragMove({ drawings: [origin], drag, pointer: { barIndex: 5, price: -4 }, bars, range: '1d' });
+  assert.equal(parseDrawing({ ...bad.preview, updatedAt: '2026-07-16T00:00:00Z' }), null);
+});
+
+test('clicking rendered text selects it instead of falling through to deselect', async (t) => {
+  const { toProjectedDrawing, projectToPixels, hitTestProjected, textLabelBox } = await loadDrawings(t);
+  const bars = barsFor(6);
+  const ctx = ctxFor(bars);
+  const note = drawingOf('text', [{ time: bars[2].t, barKey: '2026-07-08', price: 18 }], {
+    kind: 'text',
+    text: 'earnings gap fills here',
+    style: { color: '#3D4A68', width: 1, dash: 'solid' },
+  });
+  const projected = toProjectedDrawing(note, ctx);
+  assert.ok(projected);
+  assert.equal(projected.segments.length, 0, 'text has no segments to hit');
+  assert.equal(projected.fills.length, 0);
+  assert.equal(projected.label.text, note.text);
+
+  const toPixel = (point) => ({ x: 60 + point.x * 40, y: 400 - point.y * 10 });
+  const pixels = projectToPixels(projected, toPixel);
+  const anchor = pixels.anchors[0];
+  const box = textLabelBox(anchor, note.text);
+  assert.ok(box.x1 - box.x0 > 40, 'the label box spans the rendered string');
+  const onLabel = { x: (box.x0 + box.x1) / 2, y: (box.y0 + box.y1) / 2 };
+  assert.ok(Math.hypot(onLabel.x - anchor.x, onLabel.y - anchor.y) > 20, 'sample sits well past the 6px dot');
+  assert.equal(hitTestProjected(pixels, onLabel, 'mouse')?.kind, 'body');
+  // 标签右边的空白仍然是取消选中。
+  assert.equal(hitTestProjected(pixels, { x: box.x1 + 40, y: onLabel.y }, 'mouse'), null);
+  // 没有文字的图形不会凭空长出命中区。
+  const line = drawingOf('segment', [
+    { time: bars[0].t, barKey: '2026-07-06', price: 10 },
+    { time: bars[2].t, barKey: '2026-07-08', price: 18 },
+  ]);
+  assert.equal(toProjectedDrawing(line, ctx).label, null);
+});
+
+test('Escape defers to any overlay above the workspace but still collapses the workspace', async (t) => {
+  const { escapeHandledByOverlay } = await loadDrawings(t);
+  // 已经被别人处理过（preventDefault）就让路。
+  assert.equal(escapeHandledByOverlay({ defaultPrevented: true, openModals: 0, workspaceExpanded: false }), true);
+  // 工作区自己那一层不算覆盖层，否则全屏永远收不起来。
+  assert.equal(escapeHandledByOverlay({ defaultPrevented: false, openModals: 1, workspaceExpanded: true }), false);
+  // 工作区之上还开着确认框：这次 Escape 归确认框。
+  assert.equal(escapeHandledByOverlay({ defaultPrevented: false, openModals: 2, workspaceExpanded: true }), true);
+  // 非全屏时任何对话框都优先。
+  assert.equal(escapeHandledByOverlay({ defaultPrevented: false, openModals: 1, workspaceExpanded: false }), true);
+  assert.equal(escapeHandledByOverlay({ defaultPrevented: false, openModals: 0, workspaceExpanded: false }), false);
+});
+
+test('scope-level ops and per-id ops drain in the order they were queued', async (t) => {
+  const { DrawingOutbox, SCOPE_JOB_ID, resolveListApply } = await loadDrawings(t);
+  const drawn = drawingOf('horizontal', [ANCHOR_ONE]);
+  const box = new DrawingOutbox(memStore());
+  box.setScope(SCOPE_NVDA);
+
+  // 先清空再画：新画的那条绝不能抢在 DELETE 前面到达服务器。
+  box.enqueue({ drawingId: SCOPE_JOB_ID, type: 'clear' });
+  box.enqueue({ drawingId: drawn.id, type: 'create', drawing: drawn });
+  assert.equal(box.takeNext(drawn.id), null, 'create waits for the clear');
+  assert.deepEqual(JSON.parse(JSON.stringify(box.readyIds())), [SCOPE_JOB_ID]);
+  const clear = box.takeNext(SCOPE_JOB_ID);
+  assert.equal(clear.type, 'clear');
+  assert.equal(box.takeNext(drawn.id), null, 'still waiting while the clear is in flight');
+  box.complete(SCOPE_JOB_ID, clear.generation);
+  const create = box.takeNext(drawn.id);
+  assert.equal(create.type, 'create');
+
+  // 反向也一样：单条在飞时范围级任务必须等。
+  const later = new DrawingOutbox(memStore());
+  later.setScope(SCOPE_NVDA);
+  later.enqueue({ drawingId: drawn.id, type: 'create', drawing: drawn });
+  const flying = later.takeNext(drawn.id);
+  later.enqueue({ drawingId: SCOPE_JOB_ID, type: 'clear' });
+  assert.equal(later.takeNext(SCOPE_JOB_ID), null, 'clear waits for the in-flight create');
+  assert.deepEqual(JSON.parse(JSON.stringify(later.readyIds())), []);
+  later.complete(drawn.id, flying.generation);
+  assert.equal(later.takeNext(SCOPE_JOB_ID).type, 'clear');
+
+  // replace 回包只在「除了自己以外队列是空的」时才敢覆盖本地。
+  const box3 = new DrawingOutbox(memStore());
+  box3.setScope(SCOPE_NVDA);
+  box3.enqueue({ drawingId: SCOPE_JOB_ID, type: 'replace', drawings: [drawn] });
+  const replace = box3.takeNext(SCOPE_JOB_ID);
+  assert.equal(box3.isEmptyExcept(replace.drawingId, replace.generation), true);
+  assert.equal(resolveListApply(box3.isEmptyExcept(replace.drawingId, replace.generation), true), true);
+  box3.enqueue({ drawingId: drawn.id, type: 'update', drawing: { ...drawn, hidden: true } });
+  assert.equal(box3.isEmptyExcept(replace.drawingId, replace.generation), false);
+  assert.equal(resolveListApply(box3.isEmptyExcept(replace.drawingId, replace.generation), true), false);
+});
+
+test('outbox delete path, update coalescing, stale-update drop and retry dedupe', async (t) => {
+  const { DrawingOutbox } = await loadDrawings(t);
+  const drawing = drawingOf('horizontal', [ANCHOR_ONE]);
+  const box = new DrawingOutbox(memStore());
+  box.setScope(SCOPE_NVDA);
+
+  // 画完立刻删：创建还没发出去就被折叠掉，只剩一条 DELETE（服务器从没见过这个编号）。
+  box.enqueue({ drawingId: drawing.id, type: 'create', drawing });
+  box.enqueue({ drawingId: drawing.id, type: 'delete' });
+  const queued = box.snapshot();
+  assert.deepEqual(JSON.parse(JSON.stringify(queued.map((job) => job.type))), ['delete']);
+  const del = box.takeNext(drawing.id);
+  assert.equal(del.type, 'delete');
+  box.complete(drawing.id, del.generation);
+  assert.equal(box.isEmpty(), true);
+
+  // 连续两次样式改动合并成一条 pending update，不是排两条。
+  box.enqueue({ drawingId: drawing.id, type: 'update', drawing: { ...drawing, style: { ...drawing.style, color: '#0E9F6E' } } });
+  box.enqueue({ drawingId: drawing.id, type: 'update', drawing: { ...drawing, style: { ...drawing.style, color: '#E8930C' } } });
+  const coalesced = box.snapshot();
+  assert.equal(coalesced.length, 1);
+  assert.equal(coalesced[0].drawing.style.color, '#E8930C');
+
+  // 失败的旧 update 后面已经排了更新的一条：旧的直接丢，不要发两遍。
+  const flying = box.takeNext(drawing.id);
+  box.enqueue({ drawingId: drawing.id, type: 'update', drawing: { ...drawing, style: { ...drawing.style, color: '#0B7285' } } });
+  box.failKeep(drawing.id);
+  const afterFail = box.snapshot();
+  assert.deepEqual(JSON.parse(JSON.stringify(afterFail.map((job) => job.type))), ['update']);
+  assert.equal(afterFail[0].drawing.style.color, '#0B7285');
+  assert.ok(afterFail[0].generation > flying.generation);
+
+  // restoreForRetry 不许把已经在队列里的任务再排一遍，且按 generation 排好序。
+  const snapshot = box.snapshot();
+  box.restoreForRetry(snapshot);
+  assert.equal(box.snapshot().length, snapshot.length, 'replaying the same snapshot is a no-op');
+  const older = { ...snapshot[0], generation: snapshot[0].generation - 1, seq: (snapshot[0].seq ?? 1) - 1 };
+  box.restoreForRetry([older]);
+  const sorted = box.snapshot().map((job) => job.generation);
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(sorted)),
+    JSON.parse(JSON.stringify([...sorted].sort((a, b) => a - b))),
+  );
+  assert.equal(sorted.length, snapshot.length + 1);
+});
+
+test('every drawing kind projects something hittable', async (t) => {
+  const { toProjectedDrawing } = await loadDrawings(t);
+  const bars = barsFor(12);
+  const ctx = ctxFor(bars);
+  const anchorAt = (index, price) => ({ time: bars[index].t, barKey: `2026-07-${String(6 + index).padStart(2, '0')}`, price });
+  const samples = {
+    horizontal: drawingOf('horizontal', [anchorAt(2, 18)]),
+    segment: drawingOf('segment', [anchorAt(1, 10), anchorAt(5, 20)]),
+    ray: drawingOf('ray', [anchorAt(1, 10), anchorAt(3, 14)]),
+    channel: drawingOf('channel', [anchorAt(0, 10), anchorAt(8, 20), anchorAt(2, 6)]),
+    rectangle: drawingOf('rectangle', [anchorAt(1, 8), anchorAt(6, 24)]),
+    fibonacci: drawingOf('fibonacci', [anchorAt(0, 10), anchorAt(9, 20)]),
+    text: drawingOf('text', [anchorAt(3, 15)], { kind: 'text', text: 'note' }),
+  };
+  for (const [kind, drawing] of Object.entries(samples)) {
+    const projected = toProjectedDrawing(drawing, ctx);
+    assert.ok(projected, `${kind} projects`);
+    const hittable = projected.segments.length > 0 || projected.fills.length > 0 || Boolean(projected.label);
+    assert.equal(hittable, true, `${kind} has a hit region`);
+  }
 });

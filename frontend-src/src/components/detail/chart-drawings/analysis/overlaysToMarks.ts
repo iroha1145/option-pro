@@ -2,9 +2,7 @@
 
 import { autoPatternsToMarks, type DrawingMarks, type RenderContext } from '../renderer.ts';
 import { resolveAnchor } from '../projection.ts';
-import { nyDateFromEpoch, type AnalysisOverlay } from './mapBundle.ts';
-
-const PATTERN_KINDS = new Set(['support_trend', 'resistance_trend', 'channel', 'triangle', 'wedge', 'box']);
+import { barStampForRange, isPatternKind, type AnalysisOverlay } from './mapBundle.ts';
 
 export interface OverlaySeriesLine {
   id: string;
@@ -25,20 +23,6 @@ export interface LayoutGrid {
   containLabel: boolean;
 }
 
-function epochOf(value: string): number {
-  if (/^\d+$/.test(value)) {
-    const n = Number(value);
-    return n > 100_000_000_000 ? Math.floor(n / 1000) : n;
-  }
-  const ms = Date.parse(value);
-  return Number.isFinite(ms) ? Math.floor(ms / 1000) : 0;
-}
-
-function barStamp(iso: string, range: string): string {
-  if (range === '5m' || range === '15m' || range === '1h') return String(epochOf(iso));
-  return nyDateFromEpoch(epochOf(iso));
-}
-
 export function alignSeriesToBars(
   values: Array<number | null | undefined>,
   dates: string[] | undefined,
@@ -57,7 +41,7 @@ export function alignSeriesToBars(
   dates.forEach((day, index) => {
     byDate.set(day, finite(values[index]));
   });
-  return bars.map((bar) => byDate.get(barStamp(bar.t, range)) ?? null);
+  return bars.map((bar) => byDate.get(barStampForRange(bar.t, range)) ?? null);
 }
 
 function paleLine(color = '#8A94B0', width = 1) {
@@ -112,8 +96,23 @@ export function overlaysToMarks(
   const points: object[] = [];
   const areas: object[] = [];
   const polygons: DrawingMarks['polygons'] = [];
-  const patterns = overlays.filter((overlay) => PATTERN_KINDS.has(overlay.kind)).map((overlay) => {
-    let anchors = overlayAnchors(overlay);
+  const patterns = overlays.filter((overlay) => isPatternKind(overlay.kind)).map((overlay) => {
+    const supportRail = Array.isArray(overlay.geometry.supportRail) ? overlay.geometry.supportRail : null;
+    const resistanceRail = Array.isArray(overlay.geometry.resistanceRail) ? overlay.geometry.resistanceRail : null;
+    const fitAnchors = Array.isArray(overlay.geometry.fitAnchors) ? overlay.geometry.fitAnchors : null;
+    let anchors = overlayAnchors({
+      ...overlay,
+      geometry: {
+        ...overlay.geometry,
+        anchors: (
+          supportRail && resistanceRail && supportRail.length >= 2 && resistanceRail.length >= 2
+            ? [...supportRail, ...resistanceRail]
+            : fitAnchors && fitAnchors.length >= 2
+              ? fitAnchors
+              : overlay.geometry.anchors
+        ),
+      },
+    });
     if (overlay.kind === 'box' && anchors.length < 2) {
       const lo = asNumber(overlay.geometry.supportLow);
       const hi = asNumber(overlay.geometry.resistanceHigh);
@@ -149,7 +148,7 @@ export function overlaysToMarks(
   };
 
   for (const overlay of overlays) {
-    if (PATTERN_KINDS.has(overlay.kind) || overlay.kind === 'ma' || overlay.kind === 'vwap') continue;
+    if (isPatternKind(overlay.kind) || overlay.kind === 'ma' || overlay.kind === 'vwap') continue;
     if (overlay.kind === 'swing' || overlay.kind === 'candle' || overlay.kind === 'trap') {
       const anchors = overlayAnchors(overlay);
       for (const anchor of anchors) {

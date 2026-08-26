@@ -19,6 +19,13 @@ import type {
   WatchlistItem,
 } from '@/api/types';
 import { t as __t } from '../i18n/core.ts';
+// 指纹/日期口径与运行时同一份实现：mock 自己再写一遍，闸门就会在本地静默关掉
+import {
+  FINGERPRINT_ALGORITHM,
+  barFingerprint,
+  barStampForRange,
+  closedBarsForFingerprint,
+} from '@/components/detail/chart-drawings/analysis/mapBundle';
 
 const rng = new Rng(20240521);
 
@@ -368,7 +375,8 @@ export function getStockChartEx(ticker: string, range: StockChart['range']): Sto
   const { candles, ma20 } = buildCandles(t, range);
   const bars: ChartBarEx[] = candles.map((c) => ({ ...c }));
   // 盘中末根为「仅报价」实时 bar（quote_only）
-  if ((range === '5m' || range === '15m' || range === '1h') && bars.length > 0) {
+  const intraday = range === '5m' || range === '15m' || range === '1h';
+  if (intraday && bars.length > 0) {
     bars[bars.length - 1].quote_only = true;
   }
   return {
@@ -378,6 +386,308 @@ export function getStockChartEx(ticker: string, range: StockChart['range']): Sto
     ma20,
     as_of: new Date(Date.now() - 15 * 60_000).toISOString(), // 延迟 15 分钟
     ...(t === 'SMCI' ? { _stale: true } : {}), // 演示 _stale 横幅
+    // 与线上一致：分钟图的分析包挂在 /chart 上，日线的挂在 /technical 上
+    ...(intraday ? { chart_analysis: buildChartAnalysis(t, bars, range) } : {}),
+  };
+}
+
+/* ---------------- 分析图层包（chart_analysis）---------------- */
+
+function smaSeries(values: number[], window: number): (number | null)[] {
+  return values.map((_, index) => {
+    if (index + 1 < window) return null;
+    let sum = 0;
+    for (let k = index + 1 - window; k <= index; k += 1) sum += values[k];
+    return round2(sum / window);
+  });
+}
+
+function rsiSeries(closes: number[], period = 14): (number | null)[] {
+  const out: (number | null)[] = closes.map(() => null);
+  if (closes.length <= period) return out;
+  let gain = 0;
+  let loss = 0;
+  for (let k = 1; k <= period; k += 1) {
+    const delta = closes[k] - closes[k - 1];
+    if (delta > 0) gain += delta; else loss -= delta;
+  }
+  let avgGain = gain / period;
+  let avgLoss = loss / period;
+  out[period] = round2(avgLoss <= 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss));
+  for (let k = period + 1; k < closes.length; k += 1) {
+    const delta = closes[k] - closes[k - 1];
+    avgGain = (avgGain * (period - 1) + Math.max(delta, 0)) / period;
+    avgLoss = (avgLoss * (period - 1) + Math.max(-delta, 0)) / period;
+    out[k] = round2(avgLoss <= 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss));
+  }
+  return out;
+}
+
+function emaSeries(values: number[], span: number): number[] {
+  const k = 2 / (span + 1);
+  let prev = values[0] ?? 0;
+  return values.map((value, index) => {
+    if (index === 0) return prev;
+    prev = value * k + prev * (1 - k);
+    return prev;
+  });
+}
+
+/** 只有真正被图层菜单勾得到的副图才发；id 必须和 analysis/registry.ts 对得上。 */
+function analysisPanes(bars: ChartBarEx[]): Record<string, unknown>[] {
+  const closes = bars.map((bar) => bar.c);
+  const fast = emaSeries(closes, 12);
+  const slow = emaSeries(closes, 26);
+  const macd = fast.map((value, index) => round4(value - slow[index]));
+  const signal = emaSeries(macd, 9).map(round4);
+  let running = 0;
+  const obv: number[] = [];
+  const clv: (number | null)[] = [];
+  const position: (number | null)[] = [];
+  bars.forEach((bar, index) => {
+    if (index > 0) running += bar.c > closes[index - 1] ? bar.v : (bar.c < closes[index - 1] ? -bar.v : 0);
+    obv.push(running);
+    const span = bar.h - bar.l;
+    clv.push(span > 0 ? round4((2 * bar.c - bar.h - bar.l) / span) : null);
+    const window = bars.slice(Math.max(0, index - 59), index + 1);
+    const hi = Math.max(...window.map((item) => item.h));
+    const lo = Math.min(...window.map((item) => item.l));
+    position.push(hi > lo ? round4((bar.c - lo) / (hi - lo)) : null);
+  });
+  return [
+    { id: 'rsi', label: 'RSI', kind: 'rsi', startIndex: 0, values: { rsi: rsiSeries(closes) } },
+    { id: 'macd', label: 'MACD', kind: 'macd', startIndex: 0, values: { macd, signal, histogram: macd.map((value, index) => round4(value - signal[index])) } },
+    { id: 'obv', label: 'OBV', kind: 'obv', startIndex: 0, values: { obv } },
+    { id: 'clv', label: 'CLV', kind: 'clv', startIndex: 0, values: { clv } },
+    { id: 'range_persistence', label: 'Range Persistence', kind: 'range', startIndex: 0, values: { position } },
+    { id: 'spy_rs', label: 'SPY Relative Strength', kind: 'rs', startIndex: 0, values: { rs: closes.map((c, index) => round4(c / (closes[0] || 1) / (1 + index * 0.0004))) } },
+  ];
+}
+
+/**
+ * mock 的 chart_analysis：形状与 /technical 的真包一致，本地静态预览才画得出
+ * overlay/副图/形态标签，fixture 与接口的形状漂移也才有人发现。
+ *
+ * 分析窗口故意只覆盖尾部 120 根（线上 series_break_at 就是这个形态）：
+ * 副图与 MA 必须按日期对齐，否则最近的动量会画到几年前的蜡烛底下。
+ */
+export function buildChartAnalysis(
+  ticker: string,
+  bars: ChartBarEx[],
+  range: StockChart['range'],
+): Record<string, unknown> | null {
+  const closed = closedBarsForFingerprint(bars, range);
+  const intraday = range === '5m' || range === '15m' || range === '1h';
+  const window = intraday ? closed : closed.slice(-120);
+  if (window.length < 30) return null;
+  const dates = window.map((bar) => barStampForRange(bar.t, range));
+  const closes = window.map((bar) => bar.c);
+  const keyOf = (index: number) => ({
+    time: window[index].t,
+    barKey: range === '1d' || range === '1w' ? dates[index] : window[index].t,
+    price: 0,
+  });
+  const anchor = (index: number, price: number) => ({ ...keyOf(index), price: round2(price) });
+  const dataThrough = dates[dates.length - 1];
+  const last = closes[closes.length - 1];
+  const hi = Math.max(...window.map((bar) => bar.h));
+  const lo = Math.min(...window.map((bar) => bar.l));
+  const evidence = (quality: number, touches?: number) => ({
+    shapeQuality: quality,
+    volumeConfirmation: 0.6,
+    trendAlignment: 0.55,
+    recency: 0.8,
+    consensus: 1,
+    sources: ['fixtures'],
+    ...(touches === undefined ? {} : { touches }),
+  });
+  const overlay = (row: Record<string, unknown>) => ({
+    sourceId: 'fixtures',
+    algorithmVersion: 'fixtures-v1',
+    status: 'forming',
+    direction: 'neutral',
+    displayPriority: 0.4,
+    formationStart: dates[0],
+    formationEnd: dataThrough,
+    dataThrough,
+    detail: 'shapeQuality is geometry, not a probability',
+    ...row,
+  });
+  const overlays: Record<string, unknown>[] = [];
+  if (intraday) {
+    let dollar = 0;
+    let volume = 0;
+    const vwap = window.map((bar) => {
+      dollar += ((bar.h + bar.l + bar.c) / 3) * bar.v;
+      volume += bar.v;
+      return volume > 0 ? round2(dollar / volume) : null;
+    });
+    overlays.push(overlay({
+      id: 'vwap',
+      group: 'price',
+      kind: 'vwap',
+      label: 'VWAP',
+      shapeQuality: 1,
+      evidence: evidence(1),
+      geometry: { type: 'series', values: vwap, startIndex: 0, styleHint: 'auto-pale' },
+    }));
+  } else {
+    for (const [span, id] of [[20, 'ma20'], [50, 'ma50'], [200, 'ma200']] as const) {
+      overlays.push(overlay({
+        id,
+        group: 'price',
+        kind: 'ma',
+        label: `MA${span}`,
+        shapeQuality: 1,
+        displayPriority: 0.2,
+        evidence: evidence(1),
+        // 只发 values + offset：dates 整包共用一份，overlay 不再各带一份
+        geometry: { type: 'series', window: span, values: smaSeries(closes, span), startIndex: 0, styleHint: 'auto-pale' },
+      }));
+    }
+    const swingHigh = closes.indexOf(Math.max(...closes.slice(0, -5)));
+    const swingLow = closes.indexOf(Math.min(...closes.slice(0, -5)));
+    overlays.push(overlay({
+      id: `swing-h:${dates[swingHigh]}`,
+      group: 'price',
+      kind: 'swing',
+      label: 'HH',
+      shapeQuality: 0.6,
+      direction: 'bearish',
+      evidence: evidence(0.6),
+      geometry: { type: 'point', role: 'high', anchors: [anchor(swingHigh, window[swingHigh].h)], styleHint: 'auto-pale' },
+    }));
+    overlays.push(overlay({
+      id: `swing-l:${dates[swingLow]}`,
+      group: 'price',
+      kind: 'swing',
+      label: 'HL',
+      shapeQuality: 0.6,
+      direction: 'bullish',
+      evidence: evidence(0.6),
+      geometry: { type: 'point', role: 'low', anchors: [anchor(swingLow, window[swingLow].l)], styleHint: 'auto-pale' },
+    }));
+    overlays.push(overlay({
+      id: 'sr:resistance',
+      group: 'price',
+      kind: 'level',
+      label: '最近阻力',
+      shapeQuality: 0.55,
+      direction: 'bearish',
+      evidence: evidence(0.55),
+      geometry: { type: 'level', price: round2(hi * 0.995), role: 'resistance', styleHint: 'auto-pale' },
+    }));
+    overlays.push(overlay({
+      id: 'sr:support',
+      group: 'price',
+      kind: 'level',
+      label: '最近支撑',
+      shapeQuality: 0.55,
+      direction: 'bullish',
+      evidence: evidence(0.55),
+      geometry: { type: 'level', price: round2(lo * 1.005), role: 'support', styleHint: 'auto-pale' },
+    }));
+    const baseStart = Math.max(0, window.length - 60);
+    const baseEnd = window.length - 6;
+    overlays.push(overlay({
+      id: 'base:fixture',
+      group: 'price',
+      kind: 'box',
+      label: '整理区',
+      shapeQuality: 0.68,
+      formationStart: dates[baseStart],
+      formationEnd: dates[baseEnd],
+      evidence: evidence(0.68),
+      geometry: {
+        type: 'band',
+        resistanceHigh: round2(hi * 0.99),
+        resistanceLow: round2(hi * 0.965),
+        supportLow: round2(lo * 1.01),
+        supportHigh: round2(lo * 1.035),
+        pivot: round2(hi * 0.9775),
+        invalidation: round2(lo * 0.99),
+        styleHint: 'auto-pale',
+      },
+    }));
+    overlays.push(overlay({
+      id: 'pivot:fixture',
+      group: 'price',
+      kind: 'pivot',
+      label: 'pivot/invalidation',
+      shapeQuality: 0.68,
+      evidence: evidence(0.68),
+      geometry: { type: 'levels', pivot: round2(hi * 0.9775), invalidation: round2(lo * 0.99), styleHint: 'auto-pale' },
+    }));
+    const railStart = Math.max(0, window.length - 70);
+    const railMid = Math.max(0, window.length - 40);
+    const railEnd = window.length - 3;
+    overlays.push(overlay({
+      id: 'auto:support_trend:fixture',
+      group: 'price',
+      kind: 'support_trend',
+      label: 'support_trend',
+      status: 'testing',
+      direction: 'bullish',
+      shapeQuality: 0.74,
+      displayPriority: 0.82,
+      formationStart: dates[railStart],
+      evidence: evidence(0.74, 3),
+      geometry: {
+        type: 'rails',
+        subtype: 'rising',
+        fitAnchors: [
+          anchor(railStart, window[railStart].l),
+          anchor(railMid, window[railMid].l * 1.01),
+          anchor(railEnd, window[railEnd].l * 1.02),
+        ],
+        touchAnchors: [anchor(railStart, window[railStart].l), anchor(railMid, window[railMid].l * 1.01)],
+        styleHint: 'auto-pale',
+      },
+    }));
+    overlays.push(overlay({
+      id: 'breakout:fixture',
+      group: 'event',
+      kind: 'breakout',
+      label: 'breakout:testing',
+      status: 'testing',
+      shapeQuality: 0.6,
+      displayPriority: 0.5,
+      evidence: evidence(0.6),
+      geometry: { type: 'levels', pivot: round2(hi * 0.9775), invalidation: round2(lo * 0.99), styleHint: 'auto-pale' },
+    }));
+  }
+  const score = (seed: number) => round2(40 + ((seed * 37) % 55));
+  return {
+    version: 'optix-chart-analysis-v1',
+    ticker,
+    range,
+    adjustment: 'raw',
+    dataThrough,
+    fingerprintAlgorithm: FINGERPRINT_ALGORITHM,
+    barFingerprint: barFingerprint(window),
+    barCount: window.length,
+    lastClose: round2(last),
+    // 整包只发一份 dates；overlay/pane 用 offset 索引进来
+    dates,
+    firstBarDate: dates[0],
+    lastBarDate: dataThrough,
+    overlays,
+    indicatorPanes: intraday ? [] : analysisPanes(window),
+    strengthContext: intraday ? null : {
+      snapshotDate: dataThrough,
+      note: 'Family scores are context, not a win probability, and never enter shapeQuality.',
+      finalScore: null,
+      globalPercentile: null,
+      sectorPercentile: null,
+      families: {
+        short: { id: 'short', score: score(ticker.length + 1), activeWeights: {}, contributions: {} },
+        mid: { id: 'mid', score: score(ticker.length + 2), activeWeights: {}, contributions: {} },
+        long: { id: 'long', score: score(ticker.length + 3), activeWeights: {}, contributions: {} },
+        trend: { id: 'trend', score: score(ticker.length + 4), activeWeights: {}, contributions: {} },
+        breakout: { id: 'breakout', score: score(ticker.length + 5), activeWeights: {}, contributions: {} },
+        price_action: { id: 'price_action', score: score(ticker.length + 6), activeWeights: {}, contributions: {} },
+      },
+    },
   };
 }
 

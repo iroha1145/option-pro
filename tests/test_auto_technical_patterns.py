@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+import math
 from datetime import datetime, timedelta, timezone
 
-from app.services.technical.auto_patterns import ALGORITHM_VERSION, detect_auto_patterns
+from app.services.technical.auto_patterns import (
+    ALGORITHM_VERSION,
+    _pack,
+    detect_auto_patterns,
+)
 from app.services.technical.structure import clean_series, compute_technical_structure
 
 _DAY = 24 * 60 * 60
@@ -360,13 +365,154 @@ def test_single_trend_status_and_no_measured_target() -> None:
         assert row["kind"] in {"channel", "triangle", "wedge"}
 
 
-def test_structure_payload_includes_auto_patterns() -> None:
+def test_structure_payload_ships_patterns_only_as_overlays() -> None:
+    """顶层 auto_patterns / bundle.autoPatterns 都不再下发（无人读的第二、三份）。"""
+
     bars = _zigzag(180, lambda i: 50 + 0.18 * i, lambda i: 62 + 0.18 * i)
     now = datetime(2027, 1, 4, 12, 0, tzinfo=timezone.utc)
     result = compute_technical_structure(bars, now=now)
     assert result is not None
-    assert result["auto_patterns_version"] == ALGORITHM_VERSION
-    assert isinstance(result["auto_patterns"], list)
-    for row in result["auto_patterns"]:
+    assert "auto_patterns" not in result
+    assert "auto_patterns_version" not in result
+    bundle = result["chart_analysis"]
+    assert "autoPatterns" not in bundle
+    patterns = [row for row in bundle["overlays"] if row["sourceId"] == "auto_patterns"]
+    assert patterns
+    for row in patterns:
+        assert row["algorithmVersion"] == ALGORITHM_VERSION
         assert row["dataThrough"] <= result["data_through"]
         assert datetime.fromisoformat(row["dataThrough"]) <= datetime.fromisoformat(result["data_through"])
+
+
+def test_non_finite_bar_is_dropped_and_never_reaches_the_fingerprint() -> None:
+    """NaN 能穿过所有大小比较（与 NaN 比恒 False），必须先按非有限值丢掉。"""
+
+    bars = _zigzag(120, lambda i: 50 + 0.1 * i, lambda i: 60 + 0.1 * i)
+    poisoned = [dict(row) for row in bars]
+    poisoned[60] = {**poisoned[60], "c": float("nan")}
+    cleaned = clean_series(poisoned)
+    assert cleaned is not None
+    assert len(cleaned["closes"]) == len(bars) - 1
+    assert all(math.isfinite(value) for value in cleaned["closes"])
+    result = compute_technical_structure(poisoned, last_bar_closed=True)
+    assert result is not None
+    assert result["technicals"]["version"]
+    assert result["chart_analysis"] is not None
+    assert result["chart_analysis"]["barFingerprint"]
+
+
+def test_broken_analysis_bundle_cannot_take_down_the_payload(monkeypatch) -> None:
+    """图层包是装饰层：它炸了，base/指标/摆动这些核心字段必须照常返回。"""
+
+    from app.services.technical import structure as structure_mod
+
+    def explode(**_kwargs):
+        raise ValueError("decorative overlay bundle blew up")
+
+    monkeypatch.setattr(structure_mod, "assemble_chart_analysis", explode)
+    bars = _zigzag(120, lambda i: 50 + 0.1 * i, lambda i: 60 + 0.1 * i)
+    result = compute_technical_structure(bars, last_bar_closed=True)
+    assert result is not None
+    assert result["chart_analysis"] is None
+    assert result["technicals"]["version"]
+    assert result["price_action"]
+    assert result["data_through"]
+
+
+def test_consensus_rises_with_corroboration_never_falls() -> None:
+    """合并进来的候选线越多 consensus 越高——旧口径把佐证行压到孤证之下。"""
+
+    from app.services.technical.auto_patterns import _CONSENSUS_BASE, _collapse
+
+    def row(offset: float) -> dict:
+        eval_row = {
+            "shapeQuality": 0.8,
+            "volumeConfirmation": 0.5,
+            "trendAlignment": 0.5,
+            "recency": 0.6,
+            "consensus": _CONSENSUS_BASE,
+            "touches": 3,
+            "status": "forming",
+            "direction": "bullish",
+            "breakout_price": None,
+            "invalidation_price": None,
+            "measured_target": None,
+            "slope": 0.1,
+            "intercept": 10.0 + offset,
+            "start": 0,
+            "end": 60,
+            "span": 60,
+        }
+        anchors = [
+            {"time": "2025-01-02T00:00:00+00:00", "barKey": "2025-01-02", "price": 10.0 + offset, "index": 0},
+            {"time": "2025-03-31T00:00:00+00:00", "barKey": "2025-03-31", "price": 16.0 + offset, "index": 60},
+        ]
+        return _pack(
+            kind="support_trend",
+            subtype="rising",
+            eval_row=eval_row,
+            anchors=anchors,
+            data_through="2025-03-31",
+        )
+
+    atr = 1.0
+    alone = _collapse([row(0.0)], atr)
+    assert len(alone) == 1
+    assert alone[0]["consensus"] == _CONSENSUS_BASE
+
+    pair = _collapse([row(0.0), row(0.01)], atr)
+    assert len(pair) == 1
+    trio = _collapse([row(0.0), row(0.01), row(0.02)], atr)
+    assert len(trio) == 1
+    assert alone[0]["consensus"] < pair[0]["consensus"] < trio[0]["consensus"] <= 1.0
+    assert alone[0]["displayPriority"] < pair[0]["displayPriority"] < trio[0]["displayPriority"]
+    assert pair[0]["evidence"]["consensus"] == pair[0]["consensus"]
+    # sources 只是出处（永远是 auto_patterns），不再当佐证计数用。
+    assert pair[0]["sources"] == ["auto_patterns"]
+
+
+def test_detected_rows_start_at_the_consensus_base() -> None:
+    from app.services.technical.auto_patterns import _CONSENSUS_BASE
+
+    rows = _detect(_zigzag(180, lambda i: 50 + 0.18 * i, lambda i: 62 + 0.18 * i))
+    assert rows
+    for row in rows:
+        assert _CONSENSUS_BASE <= row["consensus"] <= 1.0
+        assert "mergedCount" not in row
+
+
+def test_subtype_and_direction_come_from_the_same_certified_line() -> None:
+    """subtype 取原始两点斜率、direction 取拟合后斜率时，会出现 rising+bearish。"""
+
+    for bars in (
+        _zigzag(180, lambda i: 50 + 0.18 * i, lambda i: 62 + 0.18 * i),
+        _zigzag(180, lambda i: 70 - 0.16 * i, lambda i: 84 - 0.16 * i),
+    ):
+        rows = [row for row in _detect(bars) if row["kind"].endswith("_trend")]
+        assert rows
+        for row in rows:
+            slope = float(row["slope"])
+            assert row["subtype"] == ("rising" if slope > 0 else "falling")
+            if row["kind"] == "support_trend":
+                assert row["direction"] == ("bullish" if slope > 0 else "bearish")
+            else:
+                assert row["direction"] == ("bearish" if slope < 0 else "bullish")
+
+
+def test_each_swing_pair_is_evaluated_once(monkeypatch) -> None:
+    """单线趋势和通道/三角形吃同一份 O(k²) 配对评估，别把每对评两遍。"""
+
+    from app.services.technical import auto_patterns as mod
+
+    seen: list[tuple[str, int, int]] = []
+    original = mod._evaluate_line
+
+    def counting(*args, **kwargs):
+        seen.append((kwargs["side"], kwargs["start"], kwargs["end"]))
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(mod, "_evaluate_line", counting)
+    rows = _detect(_zigzag(180, lambda i: 50 + 0.18 * i, lambda i: 62 + 0.18 * i))
+    assert rows
+    assert seen
+    assert len(seen) == len(set(seen))

@@ -13,6 +13,18 @@ const PRESET_ORDER: Exclude<PresetId, 'custom'>[] = [
   'all',
 ];
 
+/**
+ * 数字输入的即时钳制：清空（Number('') === 0）和越界都不该被持久化。
+ * 「最低几何质量」按 0–100 收，和标签条上的「置信度 87」同一把尺——
+ * 以前控件是 0–1 而 UI 显 0–100，看到 87 填 60 就把全部形态滤没了。
+ */
+function clampInput(raw: string, min: number, max: number, fallback: number): number {
+  if (raw.trim() === '') return fallback;
+  const value = Number(raw);
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, value));
+}
+
 export default function LayerMenu({
   open,
   onClose,
@@ -79,17 +91,23 @@ export default function LayerMenu({
           <h3 className="mb-2 font-medium text-ink-600">{t('高级')}</h3>
           <label className="mb-1 flex items-center justify-between gap-2">
             <span>{t('最低几何质量')}</span>
-            <input
-              type="number"
-              min={0}
-              max={1}
-              step={0.05}
-              aria-label={t('最低几何质量')}
-              value={settings.minShapeQuality}
-              onChange={(event) =>
-                onChange({ ...settings, preset: 'custom', minShapeQuality: Number(event.target.value) })}
-              className="w-20 rounded-xs border border-line px-1 py-0.5 font-mono"
-            />
+            <span className="flex items-center gap-1">
+              <input
+                type="number"
+                min={0}
+                max={100}
+                step={5}
+                aria-label={t('最低几何质量')}
+                value={Math.round(settings.minShapeQuality * 100)}
+                onChange={(event) => onChange({
+                  ...settings,
+                  preset: 'custom',
+                  minShapeQuality: clampInput(event.target.value, 0, 100, Math.round(settings.minShapeQuality * 100)) / 100,
+                })}
+                className="w-20 rounded-xs border border-line px-1 py-0.5 font-mono"
+              />
+              <span className="text-ink-400">%</span>
+            </span>
           </label>
           <label className="mb-1 flex items-center gap-2">
             <input
@@ -117,8 +135,11 @@ export default function LayerMenu({
               max={24}
               aria-label={t('最大形态数')}
               value={settings.maxPatterns}
-              onChange={(event) =>
-                onChange({ ...settings, preset: 'custom', maxPatterns: Number(event.target.value) })}
+              onChange={(event) => onChange({
+                ...settings,
+                preset: 'custom',
+                maxPatterns: Math.round(clampInput(event.target.value, 0, 24, settings.maxPatterns)),
+              })}
               className="w-20 rounded-xs border border-line px-1 py-0.5 font-mono"
             />
           </label>
@@ -131,8 +152,11 @@ export default function LayerMenu({
               step={0.1}
               aria-label={t('标签密度')}
               value={settings.labelDensity}
-              onChange={(event) =>
-                onChange({ ...settings, preset: 'custom', labelDensity: Number(event.target.value) })}
+              onChange={(event) => onChange({
+                ...settings,
+                preset: 'custom',
+                labelDensity: clampInput(event.target.value, 0, 1, settings.labelDensity),
+              })}
               className="w-20 rounded-xs border border-line px-1 py-0.5 font-mono"
             />
           </label>

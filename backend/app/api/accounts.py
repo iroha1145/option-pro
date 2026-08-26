@@ -199,17 +199,19 @@ class WatchlistRequest(BaseModel):
     tickers: list[str] = Field(default_factory=list, max_length=WATCHLIST_MAX_TICKERS)
 
 
+# 绘图相关的码全部落在这里：客户端按 code 分支，不按状态码。409 上挤着配额和
+# 版本冲突两类语义，只有 revision_conflict 才是「别的设备改过了」，配额满不能走
+# 重载对话框那条路——那条路会重放注定失败的创建。
 _ERROR_STATUS = {
     "username_taken": status.HTTP_409_CONFLICT,
     "registration_closed": status.HTTP_503_SERVICE_UNAVAILABLE,
     "invalid_credentials": status.HTTP_401_UNAUTHORIZED,
     "watchlist_full": status.HTTP_409_CONFLICT,
-    "drawing_exists": status.HTTP_409_CONFLICT,
     "revision_conflict": status.HTTP_409_CONFLICT,
     "drawings_range_full": status.HTTP_409_CONFLICT,
     "drawings_full": status.HTTP_409_CONFLICT,
     "drawing_not_found": status.HTTP_404_NOT_FOUND,
-    "drawing_forbidden": status.HTTP_404_NOT_FOUND,
+    "scope_mismatch": status.HTTP_400_BAD_REQUEST,
 }
 
 _ERROR_MESSAGE = {
@@ -238,9 +240,7 @@ _ERROR_MESSAGE = {
     "text_too_long": f"文字最多 {DRAWING_TEXT_MAX} 个字符",
     "invalid_payload": "绘图数据格式无效",
     "payload_too_large": "绘图数据过大",
-    "drawing_exists": "该绘图已存在",
     "drawing_not_found": "绘图不存在",
-    "drawing_forbidden": "绘图不存在",
     "revision_conflict": "绘图已被其他设备更新，请重新加载",
     "drawings_range_full": f"当前范围最多 {DRAWINGS_PER_RANGE_MAX} 个绘图",
     "drawings_full": "账户绘图数量已达上限",
@@ -551,9 +551,12 @@ def list_chart_drawings(
 ) -> Response:
     account = require_personal_account(request)
     symbol, range_key, adj = _scope_query(ticker, range, adjustment)
-    drawings = get_account_store().list_drawings(
-        account.user_id, symbol, range_key, adj
-    )
+    try:
+        drawings = get_account_store().list_drawings(
+            account.user_id, symbol, range_key, adj
+        )
+    except AccountError as exc:
+        raise account_http_error(exc) from exc
     return JSONResponse(
         {
             "drawings": drawings,
@@ -676,9 +679,12 @@ def delete_chart_drawings_in_scope(
 ) -> Response:
     account = require_personal_account(request)
     symbol, range_key, adj = _scope_query(ticker, range, adjustment)
-    deleted = get_account_store().delete_drawings_in_scope(
-        account.user_id, symbol, range_key, adj
-    )
+    try:
+        deleted = get_account_store().delete_drawings_in_scope(
+            account.user_id, symbol, range_key, adj
+        )
+    except AccountError as exc:
+        raise account_http_error(exc) from exc
     return JSONResponse(
         {"deleted": deleted},
         headers={"Cache-Control": "no-store"},

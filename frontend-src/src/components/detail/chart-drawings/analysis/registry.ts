@@ -1,9 +1,12 @@
-/** Data-only layer catalog mirrored from backend layer_registry.py. */
+/** Data-only layer catalog mirrored from backend layer_registry.py.
+ *  只登记「勾上就真的会画」的图层：strength_* 家族既没有 overlay kind 也没有
+ *  副图 id，勾选只会把预设翻成 custom 而画面不变，所以整族移除；选股上下文
+ *  仍在菜单里以只读形式展示 strengthContext，不再伪装成开关。 */
 import { t } from '../../../../i18n/core.ts';
 
 export const LAYER_STORAGE_PREFIX = 'option-pro:chart-layers:v1';
 
-export type LayerGroup = 'price' | 'event' | 'pane' | 'strength';
+export type LayerGroup = 'price' | 'event' | 'pane';
 export type PresetId = 'minimal' | 'structure' | 'breakout' | 'momentum' | 'volume' | 'all' | 'custom';
 
 export interface LayerDef {
@@ -31,21 +34,12 @@ export const LAYERS: LayerDef[] = [
   { id: 'clv', group: 'pane', kind: 'clv', label: t('CLV') },
   { id: 'range_persistence', group: 'pane', kind: 'range', label: t('Range Persistence') },
   { id: 'spy_rs', group: 'pane', kind: 'rs', label: t('SPY Relative Strength') },
-  { id: 'strength_short', group: 'strength', kind: 'score', label: t('short') },
-  { id: 'strength_mid', group: 'strength', kind: 'score', label: t('mid') },
-  { id: 'strength_long', group: 'strength', kind: 'score', label: t('long') },
-  { id: 'strength_trend', group: 'strength', kind: 'score', label: t('trend') },
-  { id: 'strength_breakout', group: 'strength', kind: 'score', label: t('breakout') },
-  { id: 'strength_price_action', group: 'strength', kind: 'score', label: t('price_action') },
-  { id: 'strength_percentiles', group: 'strength', kind: 'score', label: t('global/sector percentile') },
-  { id: 'strength_contributions', group: 'strength', kind: 'score', label: t('factor contributions') },
 ];
 
 export const GROUPS: { id: LayerGroup; label: string }[] = [
   { id: 'price', label: t('价格图层') },
   { id: 'event', label: t('事件') },
   { id: 'pane', label: t('副图') },
-  { id: 'strength', label: t('选股上下文') },
 ];
 
 export interface PresetDef {
@@ -92,7 +86,7 @@ export const PRESETS: Record<Exclude<PresetId, 'custom'>, PresetDef> = {
   },
   momentum: {
     label: t('动量'),
-    enabled: ['ma20', 'ma50', 'ma200', 'rsi', 'macd', 'spy_rs', 'strength_trend'],
+    enabled: ['ma20', 'ma50', 'ma200', 'rsi', 'macd', 'spy_rs'],
     maxPatterns: 0,
     maxLabels: 4,
     minShapeQuality: 0.7,

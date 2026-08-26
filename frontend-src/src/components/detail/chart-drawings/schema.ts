@@ -41,7 +41,9 @@ export function resolvePaintColor(value: string): string {
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const WIDTHS = new Set([1, 2, 3, 4]);
 const DASHES = new Set(['solid', 'dashed', 'dotted']);
-const PRICE_MAX = 10_000_000;
+/** 价格上下界：前后端同一套（price<=0 后端也判 invalid_price → 400）。 */
+export const PRICE_MAX = 10_000_000;
+export const PRICE_MIN = 1e-6;
 
 export type SchemaError = { ok: false; error: string };
 export type SchemaOk<T> = { ok: true; value: T };
@@ -202,6 +204,58 @@ export function migrateStoredPayload(raw: unknown): SchemaOk<ChartDrawing[]> | S
     drawings.push(parsed.value);
   }
   return { ok: true, value: drawings };
+}
+
+export interface CollectResult {
+  drawings: ChartDrawing[];
+  dropped: number;
+  /** 整份 payload 都读不出来（不是记录/版本不认/drawings 不是数组）。 */
+  fatal: string | null;
+  error: string | null;
+}
+
+/**
+ * 逐条校验的本地读取口径：一行坏掉只丢那一行，其余照常还给调用方。
+ * migrateStoredPayload 的全量拒绝口径留给导入（导入必须整份对或整份错），
+ * 本地存档用它会把仍能解析的图形一起判死，然后被空列表覆盖写回。
+ */
+export function collectStoredDrawings(raw: unknown): CollectResult {
+  if (raw == null) return { drawings: [], dropped: 0, fatal: null, error: null };
+  let list: unknown[];
+  if (Array.isArray(raw)) {
+    list = raw;
+  } else if (!isRecord(raw)) {
+    return { drawings: [], dropped: 0, fatal: 'corrupt', error: 'corrupt' };
+  } else {
+    const version = raw.schemaVersion ?? raw.version;
+    if (version !== 1 && version !== undefined) {
+      return { drawings: [], dropped: 0, fatal: 'unsupported_version', error: 'unsupported_version' };
+    }
+    if (!Array.isArray(raw.drawings)) {
+      return { drawings: [], dropped: 0, fatal: 'corrupt', error: 'corrupt' };
+    }
+    list = raw.drawings;
+  }
+  const drawings: ChartDrawing[] = [];
+  const seen = new Set<string>();
+  let dropped = 0;
+  let error: string | null = null;
+  for (const item of list) {
+    const parsed = parseDrawingDetailed(item);
+    if (!parsed.ok) {
+      dropped += 1;
+      error = error ?? parsed.error;
+      continue;
+    }
+    if (seen.has(parsed.value.id)) {
+      dropped += 1;
+      error = error ?? 'id_conflict';
+      continue;
+    }
+    seen.add(parsed.value.id);
+    drawings.push(parsed.value);
+  }
+  return { drawings, dropped, fatal: null, error };
 }
 
 export function validateImport(raw: unknown): SchemaOk<ChartDrawing[]> | SchemaError {

@@ -27,14 +27,8 @@ LAYERS: list[dict[str, Any]] = [
     {"id": "clv", "group": "pane", "kind": "clv", "label": "CLV"},
     {"id": "range_persistence", "group": "pane", "kind": "range", "label": "Range Persistence"},
     {"id": "spy_rs", "group": "pane", "kind": "rs", "label": "SPY Relative Strength"},
-    {"id": "strength_short", "group": "strength", "kind": "score", "label": "short"},
-    {"id": "strength_mid", "group": "strength", "kind": "score", "label": "mid"},
-    {"id": "strength_long", "group": "strength", "kind": "score", "label": "long"},
-    {"id": "strength_trend", "group": "strength", "kind": "score", "label": "trend"},
-    {"id": "strength_breakout", "group": "strength", "kind": "score", "label": "breakout"},
-    {"id": "strength_price_action", "group": "strength", "kind": "score", "label": "price_action"},
-    {"id": "strength_percentiles", "group": "strength", "kind": "score", "label": "global/sector percentile"},
-    {"id": "strength_contributions", "group": "strength", "kind": "score", "label": "factor contributions"},
+    # strength_* 图层曾列在这里，但既没有后端 pane 也没有绘制路径，勾了什么都不会发生，
+    # 已随前端 registry 一起删除。要恢复请连同 pane/绘制一起加，parity 测试会盯住两边。
 ]
 
 PRESETS: dict[str, dict[str, Any]] = {
@@ -78,7 +72,7 @@ PRESETS: dict[str, dict[str, Any]] = {
     },
     "momentum": {
         "label": "动量",
-        "enabled": ["ma20", "ma50", "ma200", "rsi", "macd", "spy_rs", "strength_trend"],
+        "enabled": ["ma20", "ma50", "ma200", "rsi", "macd", "spy_rs"],
         "maxPatterns": 0,
         "maxLabels": 4,
         "minShapeQuality": 0.70,

@@ -17,6 +17,7 @@ Input bars are the chart contract shape: {t: epoch-seconds, o, h, l, c, v}.
 
 from __future__ import annotations
 
+import math
 from datetime import datetime, timezone
 from typing import Any, Mapping, Sequence
 from zoneinfo import ZoneInfo
@@ -29,10 +30,7 @@ from app.services.strength.price_action import (
     compute_price_action,
 )
 from app.services.strength.vol_price_match import compute_vol_price_match
-from app.services.technical.auto_patterns import (
-    ALGORITHM_VERSION as AUTO_PATTERNS_VERSION,
-    detect_auto_patterns,
-)
+from app.services.technical.auto_patterns import detect_auto_patterns
 from app.services.technical.base_structure import detect_base_structure
 from app.services.technical.chart_analysis import assemble_chart_analysis
 from app.services.technical.indicators import compute_technicals
@@ -73,12 +71,16 @@ def clean_series(bars: Sequence[Mapping[str, Any]]) -> dict[str, list] | None:
             low = float(bar.get("l") or close)
         except (KeyError, TypeError, ValueError):
             continue
-        if close <= 0 or high < low or close > high * 1.0001 or close < low * 0.9999:
-            continue
         try:
             volume = max(0.0, float(bar.get("v") or 0))
         except (TypeError, ValueError):
             volume = 0.0
+        # NaN/Inf 会穿过下面所有比较（与 NaN 比大小恒为 False），一路活到
+        # 指纹与指标里再炸；非有限值一律当坏 bar 丢掉，先于任何筛选。
+        if not all(math.isfinite(v) for v in (open_, high, low, close, volume)):
+            continue
+        if close <= 0 or high < low or close > high * 1.0001 or close < low * 0.9999:
+            continue
         times.append(t)
         # Daily bars stamp the New York session; render dates in that zone so
         # a UTC+8 viewer's overlay matches the axis label, not the next day.
@@ -332,22 +334,27 @@ def compute_technical_structure(
         by_index = list(spy_closes)
         if len(by_index) == len(series["dates"]) and len(analysis["dates"]) != len(series["dates"]):
             aligned_spy = by_index[: len(analysis["dates"])]
-    chart_analysis = assemble_chart_analysis(
-        series=analysis,
-        data_through=analysis["dates"][-1],
-        ticker=ticker,
-        chart_range=chart_range,
-        adjustment="raw",
-        price_action=price_action,
-        vol_price=vol_price,
-        base=base,
-        base_state=base_state,
-        technicals=technicals,
-        auto_patterns=auto_patterns,
-        spy_closes=aligned_spy,
-        series_break_at=series_break_at,
-        hist=frame,
-    )
+    # 图层包是装饰层：它整包失败也不该带走 base/指标/摆动这些核心字段，
+    # 与上面 detect_auto_patterns 同一待遇（客户端拿到 None 就什么都不画）。
+    try:
+        chart_analysis = assemble_chart_analysis(
+            series=analysis,
+            data_through=analysis["dates"][-1],
+            ticker=ticker,
+            chart_range=chart_range,
+            adjustment="raw",
+            price_action=price_action,
+            vol_price=vol_price,
+            base=base,
+            base_state=base_state,
+            technicals=technicals,
+            auto_patterns=auto_patterns,
+            spy_closes=aligned_spy,
+            series_break_at=series_break_at,
+            hist=frame,
+        )
+    except Exception:
+        chart_analysis = None
 
     return {
         "version": STRUCTURE_VERSION,
@@ -357,8 +364,8 @@ def compute_technical_structure(
         "vol_price": vol_price,
         "technicals": technicals,
         "chart_overlays": overlays,
-        "auto_patterns": auto_patterns,
-        "auto_patterns_version": AUTO_PATTERNS_VERSION,
+        # 形态只以 chart_analysis.overlays 一种形态下发：顶层再发一份没有任何
+        # 消费者，只是把同一份 JSON 在响应里重复三次。
         "chart_analysis": chart_analysis,
         "bar_count": len(analysis["closes"]),
         # data_through = 指标/结构实际吃到的最后一根收盘 K；last_bar 描述

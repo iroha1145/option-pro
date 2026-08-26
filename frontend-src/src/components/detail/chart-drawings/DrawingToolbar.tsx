@@ -67,7 +67,7 @@ export default function DrawingToolbar({
   const syncLabel =
     syncStatus === 'conflict'
       ? t('绘图冲突：已保留本地版本，请选择')
-      : syncStatus === 'unsynced'
+      : syncStatus === 'unsynced' || syncStatus === 'load_failed' || syncStatus === 'write_failed'
         ? t('未同步')
         : syncStatus === 'saving'
           ? t('保存中')
@@ -118,13 +118,13 @@ export default function DrawingToolbar({
       <span
         className={cn(
           'ml-1 inline-flex items-center gap-1 text-micro',
-          syncStatus === 'unsynced' || syncStatus === 'conflict' ? 'text-warn-600' : 'text-ink-400',
+          syncStatus === 'unsynced' || syncStatus === 'load_failed' || syncStatus === 'write_failed' || syncStatus === 'conflict' ? 'text-warn-600' : 'text-ink-400',
         )}
         aria-live="polite"
       >
-        <span className={cn('size-1.5 rounded-full', syncStatus === 'unsynced' || syncStatus === 'conflict' ? 'bg-warn-600' : syncStatus === 'saving' ? 'bg-brand-400' : 'bg-up-600')} aria-hidden />
+        <span className={cn('size-1.5 rounded-full', syncStatus === 'unsynced' || syncStatus === 'load_failed' || syncStatus === 'write_failed' || syncStatus === 'conflict' ? 'bg-warn-600' : syncStatus === 'saving' ? 'bg-brand-400' : 'bg-up-600')} aria-hidden />
         <span>{syncStatus === 'guest' && compact ? t('未同步') : syncLabel}</span>
-        {syncStatus === 'unsynced' && (
+        {(syncStatus === 'unsynced' || syncStatus === 'load_failed' || syncStatus === 'write_failed') && (
           <button type="button" className="underline-offset-2 hover:underline" onClick={onRetry} aria-label={t('重试同步')}>
             {t('重试同步')}
           </button>
