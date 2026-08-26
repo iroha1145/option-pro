@@ -37,7 +37,10 @@ export default function DrawingToolbar({
   expanded,
   onToggleExpanded,
   syncStatus,
+  syncHint = null,
   onRetry,
+  onKeepLocal,
+  onTakeServer,
   compact = false,
 }: {
   tool: DrawingTool;
@@ -51,17 +54,22 @@ export default function DrawingToolbar({
   expanded: boolean;
   onToggleExpanded: () => void;
   syncStatus: SyncStatus;
+  syncHint?: string | null;
   onRetry: () => void;
+  onKeepLocal?: () => void;
+  onTakeServer?: () => void;
   compact?: boolean;
 }) {
   const syncLabel =
-    syncStatus === 'unsynced' || syncStatus === 'conflict'
-      ? t('未同步')
-      : syncStatus === 'saving'
-        ? t('保存中')
-        : syncStatus === 'guest'
-          ? t('访客绘图只保存在本机，登录后不会自动合并')
-          : t('已同步');
+    syncStatus === 'conflict'
+      ? t('绘图冲突：已保留本地版本，请选择')
+      : syncStatus === 'unsynced'
+        ? t('未同步')
+        : syncStatus === 'saving'
+          ? t('保存中')
+          : syncStatus === 'guest'
+            ? t('访客绘图只保存在本机，登录后不会自动合并')
+            : t('已同步');
   return (
     <div className={cn('flex flex-wrap items-center gap-1.5', compact && 'gap-1')}>
       <span className="mr-1 text-micro font-medium text-ink-500">{t('绘图')}</span>
@@ -112,10 +120,21 @@ export default function DrawingToolbar({
       >
         <span className={cn('size-1.5 rounded-full', syncStatus === 'unsynced' || syncStatus === 'conflict' ? 'bg-warn-600' : syncStatus === 'saving' ? 'bg-brand-400' : 'bg-up-600')} aria-hidden />
         <span>{syncStatus === 'guest' && compact ? t('未同步') : syncLabel}</span>
-        {(syncStatus === 'unsynced' || syncStatus === 'conflict') && (
+        {syncStatus === 'unsynced' && (
           <button type="button" className="underline-offset-2 hover:underline" onClick={onRetry} aria-label={t('重试同步')}>
             {t('重试同步')}
           </button>
+        )}
+        {syncStatus === 'conflict' && (
+          <>
+            {syncHint === 'conflict' ? <span className="sr-only">{t('绘图冲突：已保留本地版本，请选择')}</span> : null}
+            <button type="button" className="underline-offset-2 hover:underline" onClick={onKeepLocal} aria-label={t('保留本地并重试')}>
+              {t('保留本地并重试')}
+            </button>
+            <button type="button" className="underline-offset-2 hover:underline" onClick={onTakeServer} aria-label={t('使用服务器版本')}>
+              {t('使用服务器版本')}
+            </button>
+          </>
         )}
       </span>
     </div>

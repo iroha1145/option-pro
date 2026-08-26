@@ -102,9 +102,21 @@ export function applyPersistResponse(args: {
 
 type Chain = {
   generation: number;
-  queued: PersistJob | null;
+  pending: PersistJob[];
   inflight: PersistJob | null;
 };
+
+/** Keep local mutable fields and adopt the server revision so a retry can PUT. */
+export function keepLocalWithServerRevisions(
+  local: ChartDrawing[],
+  server: ChartDrawing[],
+): ChartDrawing[] {
+  const remote = new Map(server.map((item) => [item.id, item]));
+  return local.map((item) => {
+    const other = remote.get(item.id);
+    return other ? { ...item, revision: other.revision } : item;
+  });
+}
 
 export class DrawingOutbox {
   private scopeGeneration = 0;
@@ -128,7 +140,7 @@ export class DrawingOutbox {
 
   isEmpty(): boolean {
     for (const chain of this.chains.values()) {
-      if (chain.queued || chain.inflight) return false;
+      if (chain.inflight || chain.pending.length) return false;
     }
     return true;
   }
@@ -140,7 +152,7 @@ export class DrawingOutbox {
   private chain(drawingId: string): Chain {
     let row = this.chains.get(drawingId);
     if (!row) {
-      row = { generation: 0, queued: null, inflight: null };
+      row = { generation: 0, pending: [], inflight: null };
       this.chains.set(drawingId, row);
     }
     return row;
@@ -151,26 +163,28 @@ export class DrawingOutbox {
     if (partial.type === 'replace' || partial.type === 'clear') {
       for (const [id, chain] of this.chains) {
         if (id === SCOPE_JOB_ID) continue;
-        chain.queued = null;
+        chain.pending = [];
       }
-    }
-    if (partial.type === 'delete') {
-      const row = this.chain(partial.drawingId);
-      if (row.queued && row.queued.type !== 'delete') row.queued = null;
     }
     const id = partial.type === 'clear' || partial.type === 'replace' ? SCOPE_JOB_ID : partial.drawingId;
     const row = this.chain(id);
-    if (partial.type === 'update' && row.queued?.type === 'update') {
-      row.generation += 1;
-      const job: PersistJob = {
-        ...partial,
-        drawingId: id,
-        generation: row.generation,
-        scopeGeneration: this.scopeGeneration,
-        scope: this.currentScope,
-      };
-      row.queued = job;
-      return job;
+    if (partial.type === 'delete') {
+      row.pending = row.pending.filter((job) => job.type === 'delete');
+    }
+    if (partial.type === 'update') {
+      const last = row.pending[row.pending.length - 1];
+      if (last?.type === 'update') {
+        row.generation += 1;
+        const job: PersistJob = {
+          ...partial,
+          drawingId: id,
+          generation: row.generation,
+          scopeGeneration: this.scopeGeneration,
+          scope: this.currentScope,
+        };
+        row.pending[row.pending.length - 1] = job;
+        return job;
+      }
     }
     row.generation += 1;
     const job: PersistJob = {
@@ -180,22 +194,23 @@ export class DrawingOutbox {
       scopeGeneration: this.scopeGeneration,
       scope: this.currentScope,
     };
-    row.queued = job;
+    row.pending.push(job);
     return job;
   }
 
   takeNext(drawingId: string): PersistJob | null {
     const row = this.chains.get(drawingId);
-    if (!row || row.inflight || !row.queued) return null;
-    row.inflight = row.queued;
-    row.queued = null;
+    if (!row || row.inflight || !row.pending.length) return null;
+    const next = row.pending.shift();
+    if (!next) return null;
+    row.inflight = next;
     return row.inflight;
   }
 
   readyIds(): string[] {
     const ids: string[] = [];
     for (const [id, chain] of this.chains) {
-      if (!chain.inflight && chain.queued) ids.push(id);
+      if (!chain.inflight && chain.pending.length) ids.push(id);
     }
     return ids;
   }
@@ -207,35 +222,69 @@ export class DrawingOutbox {
     }
   }
 
-  /** Keep a failed inflight job so retry can replay it. */
+  /**
+   * Keep a failed inflight job so retry can replay it.
+   * A later different-type op stays behind the failed one (create then update).
+   * A later same-type update may replace a stale failed update.
+   */
   failKeep(drawingId: string): void {
     const row = this.chains.get(drawingId);
     if (!row?.inflight) return;
-    if (!row.queued) row.queued = row.inflight;
-    else if (row.queued.type === 'update' && row.inflight.type === 'update') {
-      // queued is newer; drop the failed body but keep it only if nothing newer
-    }
+    const failed = row.inflight;
     row.inflight = null;
+    const newerSameUpdate = failed.type === 'update'
+      && row.pending.some((job) => job.type === 'update' && job.generation > failed.generation);
+    if (newerSameUpdate) return;
+    row.pending.unshift(failed);
   }
 
   snapshot(): PersistJob[] {
     const jobs: PersistJob[] = [];
     for (const chain of this.chains.values()) {
       if (chain.inflight) jobs.push(chain.inflight);
-      if (chain.queued) jobs.push(chain.queued);
+      jobs.push(...chain.pending);
     }
     return jobs;
   }
 
   /** Re-queue snapshot jobs that are not currently in flight (retry). */
   restoreForRetry(jobs: PersistJob[]): void {
-    for (const job of jobs) {
-      const row = this.chain(job.drawingId);
-      if (row.inflight?.generation === job.generation) continue;
-      if (!row.queued || row.queued.generation < job.generation) {
-        row.queued = job;
-        row.generation = Math.max(row.generation, job.generation);
+    const seen = new Map<string, Set<number>>();
+    const mark = (id: string, generation: number) => {
+      let set = seen.get(id);
+      if (!set) {
+        set = new Set();
+        seen.set(id, set);
       }
+      set.add(generation);
+    };
+    for (const [id, chain] of this.chains) {
+      if (chain.inflight) mark(id, chain.inflight.generation);
+      for (const job of chain.pending) mark(id, job.generation);
+    }
+    for (const job of jobs) {
+      if (seen.get(job.drawingId)?.has(job.generation)) continue;
+      const row = this.chain(job.drawingId);
+      row.pending.push(job);
+      row.generation = Math.max(row.generation, job.generation);
+      mark(job.drawingId, job.generation);
+    }
+    for (const chain of this.chains.values()) {
+      chain.pending.sort((a, b) => a.generation - b.generation);
+    }
+  }
+
+  stampRevisions(server: ChartDrawing[]): void {
+    const remote = new Map(server.map((item) => [item.id, item.revision]));
+    const patch = (job: PersistJob): PersistJob => {
+      if (!job.drawing) return job;
+      const revision = remote.get(job.drawing.id);
+      if (revision == null) return job;
+      return { ...job, drawing: { ...job.drawing, revision } };
+    };
+    for (const chain of this.chains.values()) {
+      if (chain.inflight) chain.inflight = patch(chain.inflight);
+      chain.pending = chain.pending.map(patch);
     }
   }
 
@@ -246,7 +295,7 @@ export class DrawingOutbox {
   cancelId(drawingId: string): void {
     const row = this.chains.get(drawingId);
     if (!row) return;
-    row.queued = null;
+    row.pending = [];
   }
 }
 

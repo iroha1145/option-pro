@@ -46,7 +46,10 @@ export default function DrawingWorkspace({
         expanded={controller.expanded}
         onToggleExpanded={() => controller.setExpanded(false)}
         syncStatus={controller.syncStatus}
+        syncHint={controller.syncHint}
         onRetry={controller.retry}
+        onKeepLocal={() => void controller.keepLocalConflict()}
+        onTakeServer={() => void controller.takeServerConflict()}
       />
       <div className="mt-3 flex min-h-0 flex-1 flex-col gap-3 md:flex-row">
         <div className="min-h-0 min-w-0 flex-1 overflow-hidden rounded-md border border-line bg-card">

@@ -23,6 +23,12 @@ export const DRAWINGS: Dict = {
     'Drawing conflict: kept the local copy. Retry to save again.',
     '描画の衝突：ローカル版を保持しました。再試行してください。',
   ],
+  '绘图冲突：已保留本地版本，请选择': [
+    'Drawing conflict: kept the local copy. Choose keep-local or take-server.',
+    '描画の衝突：ローカル版を保持しました。残すかサーバー版にするか選んでください。',
+  ],
+  '保留本地并重试': ['Keep local and retry', 'ローカルを残して再試行'],
+  '使用服务器版本': ['Use server version', 'サーバー版を使う'],
   '导入失败：JSON 无效': ['Import failed: invalid JSON', '取り込み失敗：JSON が無効です'],
   '导入失败：数量过多': ['Import failed: too many drawings', '取り込み失敗：件数が多すぎます'],
   '导入失败：文字不合法': ['Import failed: illegal text', '取り込み失敗：文字が不正です'],
@@ -59,6 +65,7 @@ export const DRAWINGS: Dict = {
   '下移一层': ['Send backward', '背面へ'],
   '绘图工作区': ['Chart workspace', 'チャート作業スペース'],
   '对象': ['Objects', 'オブジェクト'],
+  '绘图对象 {name}': ['Drawing object {name}', '描画オブジェクト {name}'],
   '当前没有手绘图形': ['No hand drawings yet', '手描きはまだありません'],
   '锚点无法解析（数据已更新）': ['Anchor could not be resolved (data updated)', 'アンカーを解決できません（データ更新）'],
   '访客绘图只保存在本机，登录后不会自动合并': [

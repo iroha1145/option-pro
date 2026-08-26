@@ -88,6 +88,7 @@ export default function DrawingInspector({
               <li key={item.id} className="flex items-center gap-1">
                 <button
                   type="button"
+                  aria-label={t('绘图对象 {name}', { name: KIND_LABEL[item.kind] })}
                   aria-pressed={drawing?.id === item.id}
                   onClick={() => onSelect?.(item.id)}
                   className={cn(

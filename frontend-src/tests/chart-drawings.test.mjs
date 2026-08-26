@@ -56,7 +56,7 @@ export {
 export { mapAutoPatterns, mapAutoPatternItem, mapTechnicalAutoFields } from ${JSON.stringify(files.autoPatterns)};
 export {
   DrawingOutbox, diffPersistOps, mutableFieldsDiffer, applyPersistResponse,
-  resolveListApply, resolveRetryAction, SCOPE_JOB_ID,
+  resolveListApply, resolveRetryAction, SCOPE_JOB_ID, keepLocalWithServerRevisions,
 } from ${JSON.stringify(files.sync)};
 export { dragMove, previewDragAnchors, applyPixelShiftConstraint } from ${JSON.stringify(files.drag)};
 `,
@@ -802,6 +802,57 @@ test('outbox retry replays pending ops and ignores stale list tokens', async (t)
   );
   assert.equal(ops.length, 1);
   assert.equal(ops[0].type, 'update');
+});
+
+test('failed inflight create is replayed before a later update', async (t) => {
+  const { DrawingOutbox } = await loadDrawings(t);
+  const box = new DrawingOutbox();
+  box.setScope({ identity: 'acct', ticker: 'NVDA', range: '1d', adjustment: 'raw' });
+  const created = drawingOf('horizontal', [{ time: '2026-07-06T13:30:00Z', barKey: '2026-07-06', price: 10 }]);
+  const edited = { ...created, style: { ...created.style, color: '#E5484D' }, revision: 1 };
+  box.enqueue({ drawingId: created.id, type: 'create', drawing: created });
+  const inflight = box.takeNext(created.id);
+  assert.equal(inflight.type, 'create');
+  box.enqueue({ drawingId: created.id, type: 'update', drawing: edited });
+  box.failKeep(created.id);
+  const replay = box.snapshot();
+  assert.deepEqual(replay.map((job) => job.type), ['create', 'update']);
+  assert.equal(replay[0].drawing.id, created.id);
+  assert.equal(replay[1].drawing.style.color, '#E5484D');
+  const first = box.takeNext(created.id);
+  assert.equal(first.type, 'create');
+  box.complete(created.id, first.generation);
+  const second = box.takeNext(created.id);
+  assert.equal(second.type, 'update');
+  assert.equal(second.drawing.style.color, '#E5484D');
+});
+
+test('keep-local conflict adopts the server revision and leaves local fields', async (t) => {
+  const { DrawingOutbox, keepLocalWithServerRevisions } = await loadDrawings(t);
+  const local = drawingOf('horizontal', [{ time: '2026-07-06T13:30:00Z', barKey: '2026-07-06', price: 10 }], {
+    style: { color: '#E5484D', width: 3, dash: 'dashed' },
+    revision: 2,
+  });
+  const server = drawingOf('horizontal', [{ time: '2026-07-06T13:30:00Z', barKey: '2026-07-06', price: 99 }], {
+    style: { color: '#2E46E0', width: 1, dash: 'solid' },
+    revision: 5,
+  });
+  const kept = keepLocalWithServerRevisions([local], [server]);
+  assert.equal(kept[0].revision, 5);
+  assert.equal(kept[0].style.color, '#E5484D');
+  assert.equal(kept[0].style.width, 3);
+  assert.equal(kept[0].anchors[0].price, 10);
+  const box = new DrawingOutbox();
+  box.setScope({ identity: 'acct', ticker: 'NVDA', range: '1d', adjustment: 'raw' });
+  box.enqueue({ drawingId: local.id, type: 'update', drawing: local });
+  const job = box.takeNext(local.id);
+  box.failKeep(local.id);
+  box.stampRevisions(kept);
+  const replay = box.takeNext(local.id);
+  assert.equal(replay.type, 'update');
+  assert.equal(replay.drawing.revision, 5);
+  assert.equal(replay.drawing.style.color, '#E5484D');
+  assert.notEqual(job.drawing.revision, replay.drawing.revision);
 });
 
 test('replace import policy helper treats empty and swapped sets as the new list', async (t) => {

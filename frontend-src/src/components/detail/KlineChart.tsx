@@ -832,7 +832,10 @@ export default function KlineChart({
           expanded={drawing.expanded}
           onToggleExpanded={() => drawing.setExpanded((prev) => !prev)}
           syncStatus={drawing.syncStatus}
+          syncHint={drawing.syncHint}
           onRetry={drawing.retry}
+          onKeepLocal={() => void drawing.keepLocalConflict()}
+          onTakeServer={() => void drawing.takeServerConflict()}
           compact
         />
       </div>

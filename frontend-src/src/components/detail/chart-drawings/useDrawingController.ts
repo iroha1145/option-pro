@@ -34,6 +34,7 @@ import {
   SCOPE_JOB_ID,
   applyPersistResponse,
   diffPersistOps,
+  keepLocalWithServerRevisions,
   patchRevision,
   replaceDrawing,
   resolveListApply,
@@ -96,6 +97,7 @@ export function useDrawingController(args: {
   const styleTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const drawingsRef = useRef(drawings);
   const outboxRef = useRef(new DrawingOutbox());
+  const conflictServerRef = useRef<ChartDrawing[] | null>(null);
   const signedIn = args.identity.signedIn;
   const storageKey = signedIn
     ? drawingsStorageKey(args.identity.key, args.ticker, args.range, adjustment)
@@ -191,6 +193,13 @@ export function useDrawingController(args: {
         if (isConflictError(error)) {
           setSyncStatus('conflict');
           setSyncHint('conflict');
+          try {
+            const remote = await drawingsApi.list(job.scope.ticker, job.scope.range, job.scope.adjustment);
+            if (outbox.getScopeGeneration() !== job.scopeGeneration) return;
+            conflictServerRef.current = remote.drawings;
+          } catch {
+            conflictServerRef.current = conflictServerRef.current ?? null;
+          }
           return;
         }
         setSyncStatus('unsynced');
@@ -211,6 +220,7 @@ export function useDrawingController(args: {
     setSelectedId(null);
     setInProgress(null);
     dragPreviewRef.current = null;
+    conflictServerRef.current = null;
     if (!signedIn) {
       const loaded = loadDrawings(storageKey);
       const list = loaded.ok ? loaded.drawings : [];
@@ -774,12 +784,57 @@ export function useDrawingController(args: {
   const retry = useCallback(() => {
     if (!signedIn) return;
     const outbox = outboxRef.current;
+    if (syncStatus === 'conflict') return;
     if (resolveRetryAction(outbox.isEmpty()) === 'replay') {
       outbox.restoreForRetry(outbox.snapshot());
       for (const id of outbox.readyIds()) void drain(id);
-      return;
     }
-  }, [drain, signedIn]);
+  }, [drain, signedIn, syncStatus]);
+
+  const keepLocalConflict = useCallback(async () => {
+    if (!signedIn) return;
+    const outbox = outboxRef.current;
+    let server = conflictServerRef.current;
+    if (!server) {
+      const generation = outbox.getScopeGeneration();
+      try {
+        const remote = await drawingsApi.list(args.ticker, args.range, adjustment);
+        if (outbox.getScopeGeneration() !== generation) return;
+        server = remote.drawings;
+        conflictServerRef.current = server;
+      } catch {
+        setSyncHint('conflict');
+        return;
+      }
+    }
+    const next = keepLocalWithServerRevisions(drawingsRef.current, server);
+    writeLocal(next, false);
+    outbox.stampRevisions(server);
+    setSyncStatus('saving');
+    setSyncHint(null);
+    for (const id of outbox.readyIds()) void drain(id);
+  }, [adjustment, args.range, args.ticker, drain, signedIn, writeLocal]);
+
+  const takeServerConflict = useCallback(async () => {
+    if (!signedIn) return;
+    const outbox = outboxRef.current;
+    let server = conflictServerRef.current;
+    if (!server) {
+      try {
+        const remote = await drawingsApi.list(args.ticker, args.range, adjustment);
+        server = remote.drawings;
+      } catch {
+        setSyncHint('conflict');
+        return;
+      }
+    }
+    outbox.cancelAll();
+    conflictServerRef.current = null;
+    writeLocal(server, false);
+    setHistory(createHistory(server));
+    setSyncStatus('idle');
+    setSyncHint(null);
+  }, [adjustment, args.range, args.ticker, signedIn, writeLocal]);
 
   const importJson = useCallback((raw: unknown) => {
     const parsed = validateImport(raw);
@@ -836,6 +891,8 @@ export function useDrawingController(args: {
     syncHint,
     importError,
     retry,
+    keepLocalConflict,
+    takeServerConflict,
     autoPatternsEnabled,
     setAutoPatternsEnabled,
     expanded,
