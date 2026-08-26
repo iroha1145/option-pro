@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { EChartsInstance } from '@/lib/chart';
 import { barKeyOf, nudgeAnchors, snapBarIndex } from './projection.ts';
 import { drawingErrorCode, drawingErrorStatus, drawingsApi, isAuthError } from './api.ts';
+import { drainPersistJob } from './drain.ts';
 import {
   draftOverlay,
   drawingsToMarks,
@@ -49,17 +50,14 @@ import {
   applyKnownRevisions,
   applyPersistResponse,
   diffPersistOps,
-  jobIsCurrent,
   keepLocalWithServerRevisions,
-  scopeEquals,
-  latestKnownRevision,
+  conflictSnapshotUsable,
   mutableFieldsDiffer,
   patchRevision,
   regeneratePersistOps,
   replaceDrawing,
   resolveListApply,
   resolveRetryAction,
-  resolveSyncFailure,
   type PersistJob,
   type ScopeKey,
 } from './sync.ts';
@@ -240,141 +238,51 @@ export function useDrawingController(args: {
   const drain = useCallback(async (drawingId: string) => {
     if (!signedIn) return;
     const outbox = outboxRef.current;
-    const settle = (job: PersistJob, kind: 'success' | 'drop' | 'quota' | 'cancel' | 'conflict') => {
-      if (!jobIsCurrent(job, outbox.getScope(), outbox.getScopeGeneration())) return;
-      outbox.persist();
-      if (kind === 'quota') {
-        setSyncStatus('unsynced');
-        setSyncHint('quota');
-        for (const other of outbox.readyIds()) {
-          if (other !== job.drawingId) void drainRef.current(other);
-        }
-        return;
-      }
-      if (kind === 'conflict') {
-        setSyncStatus('conflict');
-        setSyncHint('conflict');
-        return;
-      }
-      if (kind === 'cancel') return;
-      if (outbox.isEmpty()) {
-        setSyncStatus('idle');
-        setSyncHint(null);
-        return;
-      }
-      for (const other of outbox.readyIds()) {
-        if (other !== job.drawingId) void drainRef.current(other);
-      }
-    };
     while (true) {
       const job = outbox.takeNext(drawingId);
       if (!job) return;
-      const expected = job.expectedScopeRevision ?? outbox.getScopeRevision();
       setSyncStatus('saving');
-      try {
-        if (job.type === 'create' && job.drawing) {
-          const saved = await drawingsApi.create(job.drawing, expected);
-          if (!jobIsCurrent(job, outbox.getScope(), outbox.getScopeGeneration())) return;
-          outbox.setScopeRevision(saved.scopeRevision);
-          applyJobResult(job, saved.drawing);
-        } else if (job.type === 'update' && job.drawing) {
-          const local = drawingsRef.current.find((item) => item.id === job.drawing?.id) ?? job.drawing;
-          // revision 是服务器记账：撤销恢复出来的旧号会被后端判成冲突，永远发最新的那个。
-          const revision = latestKnownRevision(revisionsRef.current, job.drawing.id, local.revision);
-          const saved = await drawingsApi.update({ ...job.drawing, revision }, expected);
-          if (!jobIsCurrent(job, outbox.getScope(), outbox.getScopeGeneration())) return;
-          outbox.setScopeRevision(saved.scopeRevision);
-          applyJobResult(job, saved.drawing);
-        } else if (job.type === 'delete') {
-          await drawingsApi.remove(job.drawingId, expected);
-          if (!jobIsCurrent(job, outbox.getScope(), outbox.getScopeGeneration())) return;
-          outbox.setScopeRevision(expected + 1);
-          revisionsRef.current.delete(job.drawingId);
-        } else if (job.type === 'clear') {
-          await drawingsApi.clearScope(job.scope.ticker, job.scope.range, expected, job.scope.adjustment);
-          if (!jobIsCurrent(job, outbox.getScope(), outbox.getScopeGeneration())) return;
-          outbox.setScopeRevision(expected + 1);
-          revisionsRef.current.clear();
-          lastServerRef.current = [];
-        } else if (job.type === 'replace' && job.drawings) {
-          const listed = await drawingsApi.replaceScope(
-            job.scope.ticker,
-            job.scope.range,
-            job.drawings,
-            expected,
-            job.scope.adjustment,
-          );
-          if (!jobIsCurrent(job, outbox.getScope(), outbox.getScopeGeneration())) return;
-          outbox.setScopeRevision(listed.scopeRevision);
-          lastServerRef.current = listed.drawings;
-          for (const item of listed.drawings) revisionsRef.current.set(item.id, item.revision);
-          // 只有「除了这条 replace 自己以外队列是空的」才敢覆盖本地：
-          // replace 在飞的时候排进来的单条编辑不能被回包抹掉。
-          if (resolveListApply(
-            outbox.isEmptyExcept(job.drawingId, job.generation),
-            outbox.getScopeGeneration() === job.scopeGeneration,
-          )) {
-            writeLocal(listed.drawings, false);
-          }
-        }
-        if (!jobIsCurrent(job, outbox.getScope(), outbox.getScopeGeneration())) return;
-        outbox.complete(drawingId, job.generation);
-        settle(job, 'success');
-      } catch (error) {
-        if (!jobIsCurrent(job, outbox.getScope(), outbox.getScopeGeneration())) return;
-        const code = drawingErrorCode(error);
-        const failure = resolveSyncFailure(job.type, code, drawingErrorStatus(error));
-        if (job.type === 'update' && (code === 'drawing_not_found' || drawingErrorStatus(error) === 404)) {
-          const stillLocal = drawingsRef.current.some((item) => item.id === job.drawingId);
-          outbox.dropInflight(drawingId);
-          if (stillLocal && job.drawing) {
-            outbox.enqueue({ drawingId: job.drawingId, type: 'create', drawing: { ...job.drawing, revision: 1 } });
-            settle(job, 'success');
-            continue;
-          }
-          settle(job, 'drop');
-          continue;
-        }
-        if (failure === 'drop') {
-          // 后端已幂等：重放的创建会成功，删掉早就没有的行也算成功。留着只会永远重放。
-          outbox.dropInflight(drawingId);
-          settle(job, 'drop');
-          continue;
-        }
-        if (failure === 'quota') {
-          outbox.dropInflight(drawingId);
-          const restored = lastServerRef.current;
-          writeLocal(restored, false);
-          setHistory(createHistory(restored));
-          revisionsRef.current.clear();
-          for (const item of restored) revisionsRef.current.set(item.id, item.revision);
-          settle(job, 'quota');
-          return;
-        }
-        outbox.failKeep(drawingId);
-        if (failure === 'conflict') {
-          try {
-            const remote = await drawingsApi.list(job.scope.ticker, job.scope.range, job.scope.adjustment);
-            if (!jobIsCurrent(job, outbox.getScope(), outbox.getScopeGeneration())) return;
-            conflictServerRef.current = {
-              scope: job.scope,
-              scopeGeneration: job.scopeGeneration,
-              scopeRevision: remote.scopeRevision,
-              drawings: remote.drawings,
-            };
-            lastServerRef.current = remote.drawings;
-            outbox.setScopeRevision(remote.scopeRevision);
-            for (const item of remote.drawings) revisionsRef.current.set(item.id, item.revision);
-          } catch {
-            if (!jobIsCurrent(job, outbox.getScope(), outbox.getScopeGeneration())) return;
-          }
-          settle(job, 'conflict');
-          return;
-        }
-        setSyncStatus('write_failed');
-        setSyncHint('unsynced');
-        return;
+      const outcome = await drainPersistJob({
+        outbox,
+        job,
+        api: drawingsApi,
+        drawings: drawingsRef.current,
+        lastServer: lastServerRef.current,
+        revisions: revisionsRef.current,
+        localDirty: pendingEdits.current.has(job.drawingId),
+        errorInfo: (error) => ({ code: drawingErrorCode(error), status: drawingErrorStatus(error) }),
+      });
+      if (outcome.foreign) return;
+      if (outcome.scopeRevision != null) outbox.setScopeRevision(outcome.scopeRevision);
+      if (outcome.lastServer) {
+        lastServerRef.current = outcome.lastServer;
+        for (const item of outcome.lastServer) revisionsRef.current.set(item.id, item.revision);
       }
+      if (outcome.conflict) conflictServerRef.current = outcome.conflict;
+      if (outcome.apply.action === 'drawing') applyJobResult(job, outcome.apply.drawing);
+      else if (outcome.apply.action === 'replaceList') {
+        for (const item of outcome.apply.drawings) revisionsRef.current.set(item.id, item.revision);
+        writeLocal(outcome.apply.drawings, false);
+      } else if (outcome.apply.action === 'rollback') {
+        revisionsRef.current.clear();
+        for (const item of outcome.apply.drawings) revisionsRef.current.set(item.id, item.revision);
+        writeLocal(outcome.apply.drawings, false);
+        setHistory(createHistory(outcome.apply.drawings));
+      } else if (outcome.apply.action === 'deleteRevision') {
+        revisionsRef.current.delete(outcome.apply.id);
+      } else if (outcome.apply.action === 'clearRevisions') {
+        revisionsRef.current.clear();
+      }
+      if (outcome.status) setSyncStatus(outcome.status);
+      if (outcome.kind === 'quota' || outcome.kind === 'conflict' || outcome.kind === 'retry') {
+        setSyncHint(outcome.hint);
+      } else if (outcome.status === 'idle' || outcome.status === 'saving') {
+        setSyncHint(outcome.hint);
+      }
+      for (const other of outcome.readyIds) {
+        if (other !== drawingId) void drainRef.current(other);
+      }
+      if (outcome.kind === 'quota' || outcome.kind === 'conflict' || outcome.kind === 'retry') return;
     }
   }, [applyJobResult, signedIn, writeLocal]);
 
@@ -1077,7 +985,7 @@ export function useDrawingController(args: {
     const generation = outbox.getScopeGeneration();
     const current = outbox.getScope();
     let snapshot = conflictServerRef.current;
-    if (snapshot && (snapshot.scopeGeneration !== generation || !scopeEquals(snapshot.scope, current))) {
+    if (snapshot && !conflictSnapshotUsable(snapshot, current, generation)) {
       return;
     }
     if (!snapshot) {
@@ -1120,7 +1028,7 @@ export function useDrawingController(args: {
     const outbox = outboxRef.current;
     const generation = outbox.getScopeGeneration();
     let snapshot = conflictServerRef.current;
-    if (snapshot && snapshot.scopeGeneration !== generation) return;
+    if (snapshot && !conflictSnapshotUsable(snapshot, outbox.getScope(), generation)) return;
     if (!snapshot) {
       try {
         const remote = await drawingsApi.list(args.ticker, args.range, adjustment);

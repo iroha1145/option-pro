@@ -36,6 +36,64 @@ export function jobIsCurrent(
   return scopeEquals(job.scope, currentScope) && job.scopeGeneration === currentScopeGeneration;
 }
 
+/** Same ticker/range/adjustment — a later clear/replace may have bumped generation. */
+export function jobBelongsToScope(job: PersistJob, currentScope: ScopeKey | null): boolean {
+  return scopeEquals(job.scope, currentScope);
+}
+
+export function conflictSnapshotUsable(
+  snapshot: { scope: ScopeKey; scopeGeneration: number } | null,
+  currentScope: ScopeKey | null,
+  currentGeneration: number,
+): boolean {
+  if (!snapshot) return true;
+  return scopeEquals(snapshot.scope, currentScope) && snapshot.scopeGeneration === currentGeneration;
+}
+
+export type SettleKind = 'success' | 'drop' | 'quota' | 'conflict' | 'superseded' | 'retry';
+
+export function releaseInflight(
+  outbox: DrawingOutbox,
+  job: PersistJob,
+  mode: 'complete' | 'drop' | 'failKeep',
+): boolean {
+  if (!jobBelongsToScope(job, outbox.getScope())) return false;
+  if (mode === 'complete') outbox.complete(job.drawingId, job.generation);
+  else if (mode === 'drop') outbox.dropInflight(job.drawingId);
+  else outbox.failKeep(job.drawingId);
+  outbox.persist();
+  return true;
+}
+
+export function settleJob(args: {
+  outbox: DrawingOutbox;
+  job: PersistJob;
+  kind: SettleKind;
+}): {
+  status: 'idle' | 'saving' | 'unsynced' | 'conflict' | 'write_failed' | null;
+  hint: string | null;
+  readyIds: string[];
+} {
+  if (!jobBelongsToScope(args.job, args.outbox.getScope())) {
+    return { status: null, hint: null, readyIds: [] };
+  }
+  args.outbox.persist();
+  if (args.kind === 'quota') {
+    return { status: 'unsynced', hint: 'quota', readyIds: args.outbox.readyIds() };
+  }
+  if (args.kind === 'conflict') {
+    const readyIds = args.outbox.readyIds().filter((id) => id === SCOPE_JOB_ID);
+    return { status: 'conflict', hint: 'conflict', readyIds };
+  }
+  if (args.kind === 'retry') {
+    return { status: 'write_failed', hint: 'unsynced', readyIds: [] };
+  }
+  if (args.outbox.isEmpty()) {
+    return { status: 'idle', hint: null, readyIds: [] };
+  }
+  return { status: 'saving', hint: null, readyIds: args.outbox.readyIds() };
+}
+
 export function scopeEquals(a: ScopeKey | null, b: ScopeKey | null): boolean {
   if (!a || !b) return false;
   return (

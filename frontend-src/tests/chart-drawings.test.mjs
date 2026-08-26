@@ -33,6 +33,9 @@ async function loadDrawings(t) {
     mapBundle: path.join(drawingsDir, 'analysis/mapBundle.ts'),
     overlaysToMarks: path.join(drawingsDir, 'analysis/overlaysToMarks.ts'),
     sha256: path.join(drawingsDir, 'analysis/sha256.ts'),
+    drain: path.join(drawingsDir, 'drain.ts'),
+    contract: path.join(drawingsDir, 'contract.ts'),
+    zoom: path.join(drawingsDir, 'zoom.ts'),
   };
   await writeFile(
     entry,
@@ -71,8 +74,11 @@ export {
   DrawingOutbox, diffPersistOps, mutableFieldsDiffer, applyPersistResponse,
   resolveListApply, resolveRetryAction, SCOPE_JOB_ID, keepLocalWithServerRevisions,
   regeneratePersistOps, resolveSyncFailure, applyKnownRevisions, latestKnownRevision, parsePersistJobs,
-  jobIsCurrent,
+  jobIsCurrent, jobBelongsToScope, settleJob, releaseInflight, conflictSnapshotUsable,
 } from ${JSON.stringify(files.sync)};
+export { drainPersistJob } from ${JSON.stringify(files.drain)};
+export { parseList, parseSaved, DrawingContractError } from ${JSON.stringify(files.contract)};
+export { insideZoom, zoomFromOption } from ${JSON.stringify(files.zoom)};
 export {
   dragMove, previewDragAnchors, applyPixelShiftConstraint, clampDragPoint, dragExceedsThreshold,
   DRAG_THRESHOLD_MOUSE_PX, DRAG_THRESHOLD_TOUCH_PX,
@@ -1771,4 +1777,227 @@ test('labelBudget never exceeds maxLabels', async (t) => {
   const settings = { ...settingsFromPreset('all'), maxLabels: 4, labelDensity: 1 };
   const labels = labelBudget(overlays, settings);
   assert.ok(labels.length <= settings.maxLabels);
+});
+
+function persistApi(overrides = {}) {
+  const boom = (code, status) => {
+    const err = new Error(code);
+    err.code = code;
+    err.status = status;
+    throw err;
+  };
+  return {
+    create: async (drawing, expected) => ({ drawing: { ...drawing, revision: 1 }, scopeRevision: expected + 1 }),
+    update: async (drawing, expected) => ({ drawing: { ...drawing, revision: drawing.revision + 1 }, scopeRevision: expected + 1 }),
+    remove: async () => ({ ok: true }),
+    clearScope: async () => ({ deleted: 1 }),
+    replaceScope: async (_t, _r, drawings, expected) => ({ drawings, scopeRevision: expected + 1 }),
+    list: async () => ({ drawings: [], scopeRevision: 0 }),
+    ...overrides,
+    boom,
+  };
+}
+
+test('drain releases inflight update so a later clear still runs after 400', async (t) => {
+  const { DrawingOutbox, SCOPE_JOB_ID, drainPersistJob } = await loadDrawings(t);
+  const drawn = drawingOf('horizontal', [ANCHOR_ONE]);
+  const box = new DrawingOutbox(memStore());
+  box.setScope(SCOPE_NVDA);
+  box.enqueue({ drawingId: drawn.id, type: 'update', drawing: drawn });
+  const flying = box.takeNext(drawn.id);
+  box.enqueue({ drawingId: SCOPE_JOB_ID, type: 'clear' });
+  assert.equal(box.takeNext(SCOPE_JOB_ID), null, 'clear waits for inflight update');
+  const outcome = await drainPersistJob({
+    outbox: box,
+    job: flying,
+    api: persistApi({
+      update: async () => {
+        const err = new Error('invalid_price');
+        err.code = 'invalid_price';
+        err.status = 400;
+        throw err;
+      },
+    }),
+    drawings: [drawn],
+    lastServer: [drawn],
+    revisions: new Map([[drawn.id, 1]]),
+  });
+  assert.ok(outcome.kind === 'drop' || outcome.kind === 'superseded');
+  assert.notEqual(outcome.status, 'idle');
+  assert.ok(outcome.readyIds.includes(SCOPE_JOB_ID));
+  const clear = box.takeNext(SCOPE_JOB_ID);
+  assert.equal(clear.type, 'clear');
+});
+
+test('drain releases inflight create so a later replace still runs after quota', async (t) => {
+  const { DrawingOutbox, SCOPE_JOB_ID, drainPersistJob } = await loadDrawings(t);
+  const drawn = drawingOf('horizontal', [ANCHOR_ONE]);
+  const box = new DrawingOutbox(memStore());
+  box.setScope(SCOPE_NVDA);
+  box.enqueue({ drawingId: drawn.id, type: 'create', drawing: drawn });
+  const flying = box.takeNext(drawn.id);
+  box.enqueue({ drawingId: SCOPE_JOB_ID, type: 'replace', drawings: [] });
+  assert.equal(box.takeNext(SCOPE_JOB_ID), null, 'replace waits for inflight create');
+  const outcome = await drainPersistJob({
+    outbox: box,
+    job: flying,
+    api: persistApi({
+      create: async () => {
+        const err = new Error('drawings_full');
+        err.code = 'drawings_full';
+        err.status = 409;
+        throw err;
+      },
+    }),
+    drawings: [drawn],
+    lastServer: [],
+    revisions: new Map(),
+  });
+  assert.equal(outcome.kind, 'superseded');
+  assert.equal(outcome.apply.action, 'none');
+  const replace = box.takeNext(SCOPE_JOB_ID);
+  assert.equal(replace.type, 'replace');
+});
+
+test('update 404 while still local enters conflict and regenerates create/delete', async (t) => {
+  const { DrawingOutbox, drainPersistJob, regeneratePersistOps } = await loadDrawings(t);
+  const local = drawingOf('horizontal', [ANCHOR_ONE]);
+  const serverOnly = drawingOf('horizontal', [ANCHOR_ONE], { id: '22222222-2222-4222-8222-222222222222' });
+  const box = new DrawingOutbox(memStore());
+  box.setScope(SCOPE_NVDA);
+  box.enqueue({ drawingId: local.id, type: 'update', drawing: local });
+  const flying = box.takeNext(local.id);
+  const outcome = await drainPersistJob({
+    outbox: box,
+    job: flying,
+    api: persistApi({
+      update: async () => {
+        const err = new Error('drawing_not_found');
+        err.code = 'drawing_not_found';
+        err.status = 404;
+        throw err;
+      },
+      list: async () => ({ drawings: [serverOnly], scopeRevision: 4 }),
+    }),
+    drawings: [local],
+    lastServer: [serverOnly],
+    revisions: new Map([[local.id, 1]]),
+  });
+  assert.equal(outcome.kind, 'conflict');
+  assert.equal(outcome.status, 'conflict');
+  assert.notEqual(outcome.status, 'idle');
+  assert.ok(outcome.conflict);
+  assert.equal(outcome.conflict.scopeRevision, 4);
+  const ops = regeneratePersistOps([local], [serverOnly]);
+  assert.deepEqual(ops.map((op) => op.type).sort(), ['create', 'delete']);
+  const queued = box.snapshot().map((job) => job.type).sort();
+  assert.deepEqual(queued, ['create', 'delete']);
+});
+
+test('delayed takeServerConflict for another scope is ignored', async (t) => {
+  const { DrawingOutbox, conflictSnapshotUsable } = await loadDrawings(t);
+  const box = new DrawingOutbox(null);
+  const aapl = { identity: 'acct', ticker: 'AAPL', range: '1d', adjustment: 'raw' };
+  const msft = { identity: 'acct', ticker: 'MSFT', range: '1d', adjustment: 'raw' };
+  const aaplGen = box.setScope(aapl);
+  const snapshot = {
+    scope: aapl,
+    scopeGeneration: aaplGen,
+    scopeRevision: 3,
+    drawings: [drawingOf('horizontal', [ANCHOR_ONE], { ticker: 'AAPL' })],
+  };
+  const msftGen = box.setScope(msft);
+  assert.equal(conflictSnapshotUsable(snapshot, box.getScope(), msftGen), false);
+  assert.equal(box.getScope().ticker, 'MSFT');
+});
+
+test('parseList and parseSaved throw on illegal server bodies', async (t) => {
+  const { parseList, parseSaved, DrawingContractError } = await loadDrawings(t);
+  const throws = (fn) => {
+    try {
+      fn();
+      return null;
+    } catch (error) {
+      return error.name;
+    }
+  };
+  assert.equal(throws(() => parseList({})), 'DrawingContractError');
+  assert.equal(throws(() => parseList({ drawings: 'nope', scope_revision: 0 })), 'DrawingContractError');
+  assert.equal(throws(() => parseList({ drawings: [{ kind: 'nope' }], scope_revision: 0 })), 'DrawingContractError');
+  assert.equal(throws(() => parseSaved({ id: 'not-a-uuid' })), 'DrawingContractError');
+  assert.equal(DrawingContractError.name, 'DrawingContractError');
+});
+
+test('quota rollback stays on the last server snapshot after setScope', async (t) => {
+  const { DrawingOutbox, drainPersistJob } = await loadDrawings(t);
+  const server = drawingOf('horizontal', [ANCHOR_ONE]);
+  const extra = drawingOf('horizontal', [ANCHOR_ONE], { id: '22222222-2222-4222-8222-222222222222' });
+  const box = new DrawingOutbox(memStore());
+  box.setScope(SCOPE_NVDA);
+  box.enqueue({ drawingId: extra.id, type: 'create', drawing: extra });
+  const flying = box.takeNext(extra.id);
+  const outcome = await drainPersistJob({
+    outbox: box,
+    job: flying,
+    api: persistApi({
+      create: async () => {
+        const err = new Error('drawings_range_full');
+        err.code = 'drawings_range_full';
+        err.status = 409;
+        throw err;
+      },
+    }),
+    drawings: [server, extra],
+    lastServer: [server],
+    revisions: new Map([[server.id, 1]]),
+  });
+  assert.equal(outcome.kind, 'quota');
+  assert.equal(outcome.apply.action, 'rollback');
+  assert.deepEqual(outcome.apply.drawings.map((item) => item.id), [server.id]);
+  const msft = { identity: 'acct', ticker: 'MSFT', range: '1d', adjustment: 'raw' };
+  box.setScope(msft);
+  const delayed = await drainPersistJob({
+    outbox: box,
+    job: flying,
+    api: persistApi(),
+    drawings: [],
+    lastServer: [],
+    revisions: new Map(),
+  });
+  assert.equal(delayed.foreign, true);
+  assert.equal(delayed.apply.action, 'none');
+});
+
+test('datazoom record survives a later setOption rebuild', async (t) => {
+  const { insideZoom, zoomFromOption } = await loadDrawings(t);
+  const saved = { start: 20, end: 90, pinnedEnd: false };
+  const first = insideZoom('1d', 200, [0], saved);
+  assert.equal(first[0].startValue, 20);
+  assert.equal(first[0].endValue, 90);
+  const recorded = zoomFromOption({ dataZoom: first }, 200);
+  const rebuilt = insideZoom('1d', 200, [0], recorded);
+  assert.equal(rebuilt[0].startValue, first[0].startValue);
+  assert.equal(rebuilt[0].endValue, first[0].endValue);
+});
+
+test('persisted barrier order survives reload hydrate', async (t) => {
+  const { DrawingOutbox, SCOPE_JOB_ID, parsePersistJobs, outboxStorageKey } = await loadDrawings(t);
+  const store = memStore();
+  const drawn = drawingOf('horizontal', [ANCHOR_ONE]);
+  const box = new DrawingOutbox(store);
+  box.setScope(SCOPE_NVDA);
+  box.enqueue({ drawingId: drawn.id, type: 'update', drawing: drawn });
+  const flying = box.takeNext(drawn.id);
+  box.enqueue({ drawingId: SCOPE_JOB_ID, type: 'clear' });
+  assert.equal(box.takeNext(SCOPE_JOB_ID), null);
+  const raw = JSON.parse(store.getItem(outboxStorageKey('acct', 'NVDA', '1d', 'raw')));
+  const restored = new DrawingOutbox(store);
+  restored.setScope(SCOPE_NVDA);
+  const jobs = restored.snapshot();
+  assert.ok(jobs.some((job) => job.type === 'update' || job.drawingId === drawn.id));
+  assert.ok(jobs.some((job) => job.type === 'clear'));
+  const parsed = parsePersistJobs(raw, SCOPE_NVDA, restored.getScopeGeneration());
+  const seqs = parsed.map((job) => job.seq);
+  assert.deepEqual(seqs, [...seqs].sort((a, b) => a - b));
+  void flying;
 });

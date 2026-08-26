@@ -48,6 +48,7 @@ import { fmtCompact, fmtPct, fmtPrice, fmtSigned } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { t } from '../../i18n/core.ts';
 import { CHART_RANGES, DEFAULT_CHART_RANGE, getDetailChart, type ChartRange } from './api';
+import { insideZoom, zoomFromOption, type ZoomWindow } from './chart-drawings/zoom.ts';
 import type { ChartBarEx } from '@/mocks/fixtures';
 import type { TechnicalStructure, TechSwingPoint } from '@/api/types';
 
@@ -200,58 +201,12 @@ function barTooltipTitle(iso: string, range: ChartRange): string {
     : ymd;
 }
 
-/**
- * 日/周 K 默认视窗（参考日股工作台：日 K 默认约 6 个月，不把全史挤进一屏）。
- * inside 缩放：滚轮/双指可回看全部历史；数据仍全量在图，叠加点位索引不受影响。
- */
-const DEFAULT_ZOOM_BARS: Partial<Record<ChartRange, number>> = { '1d': 126, '1w': 104 };
-
-/**
- * 用户当前的缩放视窗（bar 索引）。ReactECharts 用 notMerge:true 提交 option，
- * 每次 option 重建都会按 startValue/endValue 重造 inside 缩放——落笔、点选、
- * 拖拽提交、切图层都在重建 option，于是每一次交互都把用户滚到的窗口弹回默认。
- * pinnedEnd：视窗原本贴着最后一根，静默刷新多出一根时继续贴着，而不是原地留一根缝。
- */
-export interface ZoomWindow {
-  start: number;
-  end: number;
-  pinnedEnd: boolean;
-}
-
-function insideZoom(range: ChartRange, barCount: number, axes: number[], saved?: ZoomWindow | null) {
-  const window = DEFAULT_ZOOM_BARS[range];
-  if (!window || barCount <= window) return undefined;
-  const last = barCount - 1;
-  let startValue = barCount - window;
-  let endValue = last;
-  if (saved) {
-    const span = Math.max(1, saved.end - saved.start);
-    endValue = saved.pinnedEnd ? last : Math.min(last, Math.max(1, saved.end));
-    startValue = Math.max(0, Math.min(endValue - 1, saved.pinnedEnd ? endValue - span : saved.start));
-  }
-  return [
-    {
-      type: 'inside' as const,
-      xAxisIndex: axes,
-      startValue,
-      endValue,
-      minValueSpan: 15,
-    },
-  ];
-}
-
 /** 读回 ECharts 实例当前的 inside 缩放窗口（索引口径）。 */
 function readZoomWindow(chart: EChartsInstance, barCount: number): ZoomWindow | null {
-  const option = chart.getOption() as { dataZoom?: { startValue?: unknown; endValue?: unknown }[] } | null;
-  const row = option?.dataZoom?.[0];
-  const start = Number(row?.startValue);
-  const end = Number(row?.endValue);
-  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
-  return {
-    start: Math.max(0, Math.round(start)),
-    end: Math.round(end),
-    pinnedEnd: Math.round(end) >= barCount - 1,
-  };
+  return zoomFromOption(
+    chart.getOption() as { dataZoom?: { startValue?: unknown; endValue?: unknown }[] } | null,
+    barCount,
+  );
 }
 
 /** 回撤尺覆盖层：pending = 已选起点待终点；done = 测量完成 */
