@@ -53,6 +53,7 @@ export const CHROME: Dict = {
   '正在搜索股票目录…': ['Searching the ticker directory…', '銘柄リストを検索中…'],
   '搜索未完成': ['Search did not complete', '検索が完了しませんでした'],
   '没有匹配的结果': ['No matches', '一致する結果がありません'],
+  '清除搜索': ['Clear search', '検索をクリア'],
   '试试代码': ['Try a ticker', 'ティッカーで検索'],
   '或中文名（英伟达）': ['or a company name (NVIDIA)', 'または銘柄名（エヌビディア）'],
   '股票': ['Stocks', '銘柄'],

@@ -5,7 +5,7 @@
  */
 import { useMemo } from 'react';
 import ReactECharts from '@/components/charts/ReactECharts';
-import { baseAnimation, CH, glassTooltip, type ChartOption } from '@/lib/chart';
+import { baseAnimation, CH, insightDotRow, insightLine, insightTooltip, type ChartOption } from '@/lib/chart';
 import { fmtPrice } from '@/lib/format';
 import type { CtaInstrumentEstimate } from '@/api/types';
 import { t } from '../../i18n/core.ts';
@@ -56,29 +56,33 @@ function scenarioOption(row: CtaInstrumentEstimate): ChartOption | null {
       axisLabel: { color: CH.ink400, fontSize: 10, fontFamily: '"IBM Plex Mono", monospace' },
       splitLine: { lineStyle: { color: CH.lineChart, width: 1 } },
     },
-    tooltip: glassTooltip({
+    tooltip: insightTooltip({
       trigger: 'axis',
       formatter: (params: unknown) => {
-        const arr = params as { dataIndex: number; seriesName: string; data: number }[];
+        const arr = params as { dataIndex: number; seriesName: string; data: number; color?: string }[];
         if (!arr.length) return '';
         const idx = arr[0].dataIndex;
         const rows = arr
-          .map((s) => `<div>${s.seriesName}: <b>${s.data > 0 ? '+' : ''}${s.data}</b></div>`)
-          .join('');
+          .map((s) =>
+            insightDotRow(
+              typeof s.color === 'string' ? s.color : CH.brand500,
+              s.seriesName,
+              `${s.data > 0 ? '+' : ''}${s.data}`,
+            ),
+          )
+          .join('<span style="display:inline-block;width:12px"></span>');
         const pct = `${pctOf(idx) > 0 ? '+' : ''}${pctOf(idx).toFixed(1)}%`;
         return (
-          `<div style="font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:17px">` +
-          `<div style="color:#8A94B0">${t('收于 {p}（{pct}）', { p: fmtPrice(curve.prices[idx]), pct })}</div>${rows}</div>`
+          `<div style="color:${CH.ink400};font-size:11px;margin-bottom:4px">${t('收于 {p}（{pct}）', { p: fmtPrice(curve.prices[idx]), pct })}</div>` +
+          `<div style="display:flex;flex-wrap:wrap;gap:4px 0">${rows}</div>`
         );
       },
     }),
     series: [
-      {
-        type: 'line' as const,
+      /* Insight Cards 折线工艺：平滑 2.25px 主线 + 细虚线对照 */
+      insightLine(CH.brand500, {
         name: t('完整敞口'),
         data: curve.full,
-        showSymbol: false,
-        lineStyle: { color: CH.brand500, width: 1.8 },
         markLine: {
           symbol: 'none',
           silent: true,
@@ -134,15 +138,13 @@ function scenarioOption(row: CtaInstrumentEstimate): ChartOption | null {
             }
           : undefined,
         z: 3,
-      },
-      {
-        type: 'line' as const,
+      }),
+      insightLine(CH.ink400, {
         name: t('仅趋势（波动率冻结）'),
         data: curve.trend_only,
-        showSymbol: false,
-        lineStyle: { color: CH.ink400, width: 1.2, type: [5, 4] as number[] },
+        lineStyle: { color: CH.ink400, width: 1.5, type: [5, 4] as number[], cap: 'round', join: 'round' },
         z: 2,
-      },
+      }),
     ],
   } as ChartOption;
 }
@@ -152,8 +154,10 @@ export default function ScenarioChart({ row }: { row: CtaInstrumentEstimate }) {
   if (!option) return <p className="mt-2 text-caption text-ink-400">{t('暂无数据')}</p>;
   return (
     <>
-      <div className="mt-1.5 h-56">
-        <ReactECharts option={option} ariaLabel={t('CTA 情景曲线')} />
+      <div className="mt-1.5 rounded-lg border border-line bg-card-warm p-2">
+        <div className="h-56">
+          <ReactECharts option={option} ariaLabel={t('CTA 情景曲线')} />
+        </div>
       </div>
       <p className="mt-1 flex flex-wrap items-center gap-x-3 text-micro text-ink-400">
         <span className="inline-flex items-center gap-1">

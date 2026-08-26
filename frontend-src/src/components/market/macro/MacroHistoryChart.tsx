@@ -6,7 +6,7 @@
 import { useMemo, useState } from 'react';
 import type { ApiError } from '@/api/client';
 import ReactECharts from '@/components/charts/ReactECharts';
-import { CH, baseAnimation, baseGrid, glassTooltip, valueAxis } from '@/lib/chart';
+import { CH, baseAnimation, baseGrid, insightDotRow, insightLine, insightTooltip, valueAxis } from '@/lib/chart';
 import { cn } from '@/lib/utils';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
 import InfoHint from '@/components/shared/InfoHint';
@@ -83,15 +83,12 @@ export default function MacroHistoryChart({
     );
 
     const series: Record<string, unknown>[] = [
-      {
+      /* Insight Cards 折线工艺（lib/chart）：平滑 2.25px；回算段保留虚线语义 */
+      insightLine(CH.brand600, {
         name: t('综合分（回算）'),
-        type: 'line',
         data: revised,
-        showSymbol: false,
-        smooth: false,
         connectNulls: false,
-        lineStyle: { color: CH.brand600, width: 2, type: [5, 4] },
-        itemStyle: { color: CH.brand600 },
+        lineStyle: { color: CH.brand600, width: 2.25, type: [5, 4], cap: 'round', join: 'round' },
         markLine: {
           silent: true,
           symbol: 'none',
@@ -104,64 +101,60 @@ export default function MacroHistoryChart({
           lineStyle: { color: CH.ink300, width: 1, type: [3, 3] },
           data: [{ yAxis: 50 }],
         },
-      },
-      {
+      }),
+      insightLine(CH.brand600, {
         name: t('综合分（本地点时）'),
-        type: 'line',
         data: local,
-        showSymbol: false,
-        smooth: false,
         connectNulls: false,
-        lineStyle: { color: CH.brand600, width: 2 },
-        itemStyle: { color: CH.brand600 },
-      },
+      }),
     ];
 
     shownModules.forEach((moduleId) => {
       const colorIndex = MACRO_MODULE_ORDER.indexOf(moduleId);
-      series.push({
-        name: t(modules.find((item) => item.moduleId === moduleId)?.nameZh ?? moduleId),
-        type: 'line',
-        data: points.map((point) => point.moduleScores[moduleId] ?? null),
-        showSymbol: false,
-        smooth: false,
-        connectNulls: false,
-        lineStyle: {
-          color: MODULE_LINE_COLORS[colorIndex] ?? CH.ink300,
-          width: 1.2,
-          opacity: 0.85,
-        },
-        itemStyle: { color: MODULE_LINE_COLORS[colorIndex] ?? CH.ink300 },
-      });
+      const color = MODULE_LINE_COLORS[colorIndex] ?? CH.ink300;
+      series.push(
+        insightLine(color, {
+          name: t(modules.find((item) => item.moduleId === moduleId)?.nameZh ?? moduleId),
+          data: points.map((point) => point.moduleScores[moduleId] ?? null),
+          connectNulls: false,
+          lineStyle: { color, width: 1.5, opacity: 0.85, cap: 'round', join: 'round' },
+        }),
+      );
     });
 
     return {
       ...baseAnimation,
       grid: baseGrid({ left: 4, right: 8, top: 16, bottom: 4 }),
-      tooltip: glassTooltip({
+      tooltip: insightTooltip({
         formatter: (params: unknown) => {
           const rows = Array.isArray(params) ? params : [params];
           const first = rows[0] as { axisValue?: string } | undefined;
           const date = first?.axisValue ?? '';
           const basis = basisByDate.get(date) ?? null;
           const regime = regimeByDate.get(date) ?? null;
-          const lines = rows
+          const dots = rows
             .filter((row) => (row as { value?: unknown }).value !== null)
             .map((row) => {
-              const item = row as { seriesName?: string; value?: number };
-              return `${item.seriesName ?? ''} ${
-                typeof item.value === 'number' ? item.value.toFixed(1) : '—'
-              }`;
-            });
-          return [
-            date,
-            ...lines,
+              const item = row as { seriesName?: string; value?: number; color?: string };
+              return insightDotRow(
+                typeof item.color === 'string' ? item.color : CH.brand600,
+                item.seriesName ?? '',
+                typeof item.value === 'number' ? item.value.toFixed(1) : '—',
+              );
+            })
+            .join('<span style="display:inline-block;width:12px"></span>');
+          const meta = [
             // regime 是中文分档名（同卡片处已译）：tooltip 里同样要过词典
             regime ? t('环境：{regime}', { regime: t(regime) }) : '',
             basis ? t('历史基础：{basis}', { basis: BASIS_LABEL[basis] ?? basis }) : '',
           ]
             .filter(Boolean)
-            .join('<br/>');
+            .join(' · ');
+          return (
+            `<div style="color:${CH.ink400};font-size:11px;margin-bottom:4px">${date}</div>` +
+            `<div style="display:flex;flex-wrap:wrap;gap:4px 0">${dots}</div>` +
+            (meta ? `<div style="color:${CH.ink400};font-size:11px;margin-top:4px">${meta}</div>` : '')
+          );
         },
       }),
       xAxis: {
@@ -226,7 +219,9 @@ export default function MacroHistoryChart({
           )}
         </p>
       )}
-      <div className="mt-4 h-[240px] w-full">
+      {/* Insight Cards 内嵌图台：暖白纸面 + 发丝边，把绘图区收进一层里 */}
+      <div className="mt-4 rounded-lg border border-line bg-card-warm p-2">
+        <div className="h-[240px] w-full">
         {loading && points.length === 0 ? (
           <SkeletonBlock className="h-full w-full" />
         ) : error && points.length === 0 ? (
@@ -249,6 +244,7 @@ export default function MacroHistoryChart({
         ) : (
           <ReactECharts option={option} ariaLabel={t("宏观环境综合分历史曲线")} />
         )}
+        </div>
       </div>
 
       {modules.length > 0 && (

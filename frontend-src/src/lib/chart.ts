@@ -118,6 +118,80 @@ export function glassTooltip(overrides: Record<string, unknown> = {}) {
   };
 }
 
+/* ---------- Insight Cards 折线工艺（beautifului.dev · Insight Cards） ----------
+ * 只用于折线图卡片：smooth 曲线 2.25px、极淡渐变面积、实心细游标（26% 墨色）、
+ * 顶部锚定的白底胶囊 tooltip（发丝边 + sh-2 + r-8 + 圆点数值行）。
+ * K线/柱状等其他图仍走 glassTooltip 毛玻璃工艺，互不串味。 */
+
+/** hex → rgba（insight 渐变面积用；CH 调色全部是 6 位 hex） */
+export function withAlpha(hex: string, alpha: number): string {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
+}
+
+/** Insight 折线 series 片段：贝塞尔平滑近似参考实现的 Catmull-Rom 滑翔感 */
+export function insightLine(color: string, overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    type: 'line' as const,
+    showSymbol: false,
+    smooth: 0.45,
+    lineStyle: { color, width: 2.25, cap: 'round', join: 'round' },
+    itemStyle: { color },
+    ...overrides,
+  };
+}
+
+/** Insight 渐变面积：顶部 12% 同色渐隐到底部全透明（替代点阵，仅折线图） */
+export function insightAreaStyle(color: string): LineSeriesOption['areaStyle'] {
+  return {
+    color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+      { offset: 0, color: withAlpha(color, 0.12) },
+      { offset: 1, color: withAlpha(color, 0) },
+    ]),
+  };
+}
+
+/** Insight tooltip 数值行：8px 圆点 + 可选标签 + 加粗数值 */
+export function insightDotRow(color: string, label: string, value: string): string {
+  return (
+    `<span style="display:inline-flex;align-items:center;gap:6px">` +
+    `<span style="width:8px;height:8px;border-radius:50%;background:${color};flex:0 0 8px"></span>` +
+    (label ? `<span style="color:${CH.ink400}">${label}</span>` : '') +
+    `<span style="font-weight:600">${value}</span></span>`
+  );
+}
+
+/** Insight 白底胶囊 tooltip：顶部 6px 锚定跟随游标 x，实心 1px 墨游标 */
+export function insightTooltip(overrides: Record<string, unknown> = {}) {
+  return {
+    trigger: 'axis' as const,
+    backgroundColor: '#FFFFFF',
+    borderColor: 'var(--line-strong)',
+    borderWidth: 1,
+    padding: [6, 10],
+    textStyle: { color: '#2A3550', fontSize: 11.5, fontFamily: 'Inter, sans-serif' },
+    extraCssText:
+      'box-shadow:0 1px 2px rgba(16,24,40,.03),0 12px 32px -14px rgba(16,24,40,.10);' +
+      'border-radius:8px;font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1;',
+    confine: true,
+    position: (
+      point: number[],
+      _params: unknown,
+      _dom: unknown,
+      _rect: unknown,
+      size: { contentSize: number[]; viewSize: number[] },
+    ) => [
+      Math.min(Math.max(point[0] - size.contentSize[0] / 2, 0), size.viewSize[0] - size.contentSize[0]),
+      6,
+    ],
+    axisPointer: {
+      type: 'line' as const,
+      lineStyle: { color: 'rgba(13,22,38,.26)', width: 1 },
+    },
+    ...overrides,
+  };
+}
+
 /* ---------- 点阵面积图 pattern（§6-2） ---------- */
 let stippleCanvas: HTMLCanvasElement | null = null;
 export function stipplePattern(): HTMLCanvasElement | null {

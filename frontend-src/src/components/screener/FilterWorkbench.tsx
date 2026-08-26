@@ -5,12 +5,13 @@
  * 行3 板块多选（折叠 +N）· 价格区间 · 成交额下限 · 开始扫描（真实等待态）
  * 行 stagger 60ms；过滤器变更主按钮脉冲（box-shadow 呼吸 1.2s ×2）
  */
-import { useRef, useState } from 'react';
-import { motion } from 'framer-motion';
+import { useId, useState } from 'react';
+import { MotionConfig, motion, useReducedMotion } from 'framer-motion';
 import type { SectorOption, StrengthProfile } from '@/api/types';
 import { cn } from '@/lib/utils';
-import { useTabsPill } from '@/lib/transitions';
+import { SPRING_INDICATOR } from '@/lib/motion';
 import Icon from '@/components/icons';
+import GlidePill from '@/components/shared/GlidePill';
 import Segmented from '@/components/shared/Segmented';
 import MenuSelect from '@/components/shared/MenuSelect';
 import {
@@ -50,24 +51,18 @@ function TierSegmented({
   onChange: (v: TierFilter) => void;
 }) {
   const scopeNote = coversPool ? __t('已评分候选池') : __t('当前快照返回的行');
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const pillRef = useRef<HTMLSpanElement>(null);
-  /* depKey 带上计数串：档位数字变了标签会变宽，pill 宽度要跟着重量一次 */
-  useTabsPill(
-    wrapRef,
-    pillRef,
-    TIER_OPTIONS.findIndex((o) => o.value === value),
-    TIER_OPTIONS.map((o) => counts[o.value]).join(','),
-  );
+  const layoutId = useId();
+  const reduce = useReducedMotion();
   return (
-    <div
-      ref={wrapRef}
+    <MotionConfig transition={reduce ? { duration: 0 } : SPRING_INDICATOR}>
+    {/* beui motion tabs 滑行指示器；layoutRoot 把投影收进条内（可横向滚动） */}
+    <motion.div
+      layoutRoot
       role="tablist"
       aria-label={__t('强度分档 · 计数基于{scope}', { scope: scopeNote })}
       title={__t('分档计数基于{scope}', { scope: scopeNote })}
       className="t-tabs no-scrollbar max-w-full overflow-x-auto border border-line"
     >
-      <span ref={pillRef} className="t-tabs-pill shadow-btn" aria-hidden="true" />
       {TIER_OPTIONS.map((o, index) => {
         const active = value === o.value;
         return (
@@ -97,12 +92,13 @@ function TierSegmented({
               if (target < 0) return;
               event.preventDefault();
               onChange(TIER_OPTIONS[target].value);
-              const next = wrapRef.current?.querySelectorAll<HTMLElement>('.t-tab')[target];
+              const next = event.currentTarget.parentElement?.querySelectorAll<HTMLElement>('.t-tab')[target];
               next?.focus();
             }}
             className="t-tab shrink-0 whitespace-nowrap text-caption font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30"
           >
-            <span className="flex items-baseline gap-1">
+            {active && <GlidePill layoutId={layoutId} />}
+            <span className="relative z-10 flex items-baseline gap-1">
               {o.label}
               <span className={cn('font-mono text-[11px] leading-[14px] tnum', active ? 'text-brand-600' : 'text-ink-300')}>
                 {counts[o.value]}
@@ -111,7 +107,8 @@ function TierSegmented({
           </button>
         );
       })}
-    </div>
+    </motion.div>
+    </MotionConfig>
   );
 }
 

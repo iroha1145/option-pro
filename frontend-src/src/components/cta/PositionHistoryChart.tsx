@@ -7,7 +7,7 @@
  */
 import { useMemo } from 'react';
 import ReactECharts from '@/components/charts/ReactECharts';
-import { baseAnimation, CH, glassTooltip, stippleAreaStyle, type ChartOption } from '@/lib/chart';
+import { baseAnimation, CH, insightAreaStyle, insightDotRow, insightLine, insightTooltip, type ChartOption } from '@/lib/chart';
 import { t } from '../../i18n/core.ts';
 import { signed } from './ctaMeta';
 
@@ -33,7 +33,7 @@ function historyOption(history: { date: string; position: number }[]): ChartOpti
       axisLabel: { color: CH.ink400, fontSize: 10, fontFamily: '"IBM Plex Mono", monospace' },
       splitLine: { lineStyle: { color: CH.lineChart, width: 1 } },
     },
-    tooltip: glassTooltip({
+    tooltip: insightTooltip({
       trigger: 'axis',
       formatter: (params: unknown) => {
         const arr = params as { dataIndex: number }[];
@@ -41,20 +41,17 @@ function historyOption(history: { date: string; position: number }[]): ChartOpti
         const point = history[arr[0].dataIndex];
         if (!point) return '';
         return (
-          `<div style="font-family:'IBM Plex Mono',monospace;font-size:11px;line-height:17px">` +
-          `<div style="color:#8A94B0">${point.date}</div>` +
-          `<div>${t('估算目标仓位')}: <b>${signed(point.position)}</b></div></div>`
+          `<div style="color:${CH.ink400};font-size:11px;margin-bottom:4px">${point.date}</div>` +
+          insightDotRow(CH.brand500, t('估算目标仓位'), signed(point.position))
         );
       },
     }),
     series: [
-      {
-        type: 'line' as const,
+      /* Insight Cards 折线工艺：平滑 2.25px + 同色渐隐面积（替代点阵） */
+      insightLine(CH.brand500, {
         name: t('估算目标仓位'),
         data: history.map((h) => h.position),
-        showSymbol: false,
-        lineStyle: { color: CH.brand500, width: 1.8 },
-        areaStyle: stippleAreaStyle(),
+        areaStyle: insightAreaStyle(CH.brand500),
         markLine: {
           symbol: 'none',
           silent: true,
@@ -80,7 +77,7 @@ function historyOption(history: { date: string; position: number }[]): ChartOpti
           ],
         },
         z: 3,
-      },
+      }),
     ],
   } as ChartOption;
 }
@@ -89,8 +86,11 @@ export default function PositionHistoryChart({ history }: { history: { date: str
   const option = useMemo(() => historyOption(history), [history]);
   if (!option) return <p className="mt-2 text-caption text-ink-400">{t('暂无数据')}</p>;
   return (
-    <div className="mt-1.5 h-56">
-      <ReactECharts option={option} ariaLabel={t('估算仓位历史曲线')} />
+    /* Insight Cards 内嵌图台：暖白纸面 + 发丝边 */
+    <div className="mt-1.5 rounded-lg border border-line bg-card-warm p-2">
+      <div className="h-56">
+        <ReactECharts option={option} ariaLabel={t('估算仓位历史曲线')} />
+      </div>
     </div>
   );
 }

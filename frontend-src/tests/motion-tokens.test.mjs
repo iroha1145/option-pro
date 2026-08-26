@@ -66,8 +66,9 @@ const SURFACES = [
   ['pages/Watchlist.tsx', /<MenuSelect/, 'MenuSelect (watchlist sort)'],
   ['components/catalysts/FilterBar.tsx', /<MenuSelect/, 'MenuSelect (catalyst status)'],
   ['components/shared/Segmented.tsx', /t-tabs/, 't-tabs'],
-  ['components/shared/Segmented.tsx', /t-tabs-pill/, 't-tabs-pill'],
-  ['components/shared/Segmented.tsx', /useTabsPill/, 'useTabsPill'],
+  ['components/shared/Segmented.tsx', /GlidePill/, 'GlidePill (segmented)'],
+  ['components/shared/Segmented.tsx', /SPRING_INDICATOR/, 'beui spring (segmented)'],
+  ['components/shared/Segmented.tsx', /layoutRoot/, 'layoutRoot (segmented)'],
   ['components/shared/Skeleton.tsx', /t-skel/, 't-skel'],
   ['components/shared/Skeleton.tsx', /t-skel-skeleton is-pulsing/, 't-skel-skeleton'],
   ['components/shared/InfoHint.tsx', /t-tt-wrap/, 't-tt-wrap'],
@@ -75,8 +76,10 @@ const SURFACES = [
   ['components/shared/InfoHint.tsx', /['"]t-tt /, 't-tt'],
   ['components/screener/SideCards.tsx', /t-acc/, 't-acc'],
   ['components/screener/SideCards.tsx', /t-acc-panel-inner/, 't-acc-panel-inner'],
-  ['components/screener/FilterWorkbench.tsx', /useTabsPill/, 'TierSegmented pill hook'],
-  ['components/screener/FilterWorkbench.tsx', /t-tabs-pill/, 'TierSegmented t-tabs-pill'],
+  ['components/screener/FilterWorkbench.tsx', /GlidePill/, 'TierSegmented glide pill'],
+  ['components/screener/FilterWorkbench.tsx', /SPRING_INDICATOR/, 'TierSegmented beui spring'],
+  ['components/shared/GlidePill.tsx', /layout="position"/, 'beui layoutId pill'],
+  ['components/CommandPalette.tsx', /placeListGlide/, 'palette glide highlight'],
   ['pages/Login.tsx', /t-input-wrap/, 't-input-wrap'],
   ['pages/Login.tsx', /userShake\.classes\.wrap/, 'username shake wrap className'],
   ['pages/Login.tsx', /pwShake\.classes\.input/, 'password shake input className'],
@@ -260,16 +263,26 @@ test('toast rows collapse on the toast clocks so the stack never jumps', async (
   assert.doesNotMatch(toast, /flex-col gap-2/);
 });
 
-test('tabs keep catalog motion but Paper Terminal geometry, focus ring restored', async () => {
+test('tabs ride the beui spring indicator with Paper Terminal geometry, focus ring restored', async () => {
+  /* 几何仍是 catalog 的纸面分段控件（8px 条 / 26px 高），指示器换成
+     beui.dev components/motion/tabs 的 layoutId 弹簧（SPRING_INDICATOR，
+     170/24/1.2）；reduced-motion 由 MotionConfig 归零。 */
   const catalog = await source('styles/transitions-catalog.css');
   const adaptation = catalog.slice(catalog.indexOf('Paper Terminal color remaps'));
   assert.match(adaptation, /\.t-tabs \{[^}]*border-radius: 8px;/s);
-  assert.match(adaptation, /\.t-tabs-pill \{[^}]*height: 26px;/s);
+  const motion = await source('lib/motion.ts');
+  assert.match(motion, /stiffness: 170/);
+  assert.match(motion, /damping: 24/);
+  assert.match(motion, /mass: 1\.2/);
+  const pill = await source('components/shared/GlidePill.tsx');
+  assert.match(pill, /layout="position"/);
+  assert.match(pill, /shadow-btn/);
   const segmented = await source('components/shared/Segmented.tsx');
   assert.match(segmented, /focus-visible:ring-2/);
-  assert.match(segmented, /t-tabs-pill shadow-btn/);
+  assert.match(segmented, /useReducedMotion/);
   const workbench = await source('components/screener/FilterWorkbench.tsx');
-  assert.doesNotMatch(workbench, /layoutId="tier-thumb"/, 'TierSegmented must ride the catalog pill');
+  assert.match(workbench, /useReducedMotion/);
+  assert.doesNotMatch(workbench, /useTabsPill/, 'TierSegmented rides the beui spring pill');
 });
 
 test('MenuSelect keeps the native-select keyboard contract it replaced', async () => {

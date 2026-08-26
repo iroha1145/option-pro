@@ -4,7 +4,7 @@
  * 分组：股票（防抖搜索）/ 功能 / 最近（本地 5 条）· ↑↓ 循环 · Enter 打开 · ESC 关闭
  * 字体口径：中文走正文 sans，mono 仅用于代码/序号/快捷键；选中行 brand-50 底 + 左 2px brand 竖条。
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ApiError } from '@/api/client';
 import { stocksApi } from '@/api/modules/stocks';
@@ -68,6 +68,26 @@ function Kbd({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * 结果列表的滑行高亮（beautifului.dev Search 的 GlideMenu 手感）：
+ * 一个绝对定位的高亮块在行间滑动，transform/height 走 CSS 缓动（弹簧见
+ * --ease-snap），首绘不补间。不用 framer layoutId——chrome 覆盖层保持
+ * catalog CSS 单一动效语言（motion-tokens 契约）。
+ */
+function placeListGlide(el: HTMLElement, row: { offsetTop: number; offsetHeight: number }, animate: boolean): void {
+  if (!animate) {
+    const prev = el.style.transition;
+    el.style.transition = 'none';
+    el.style.transform = `translateY(${row.offsetTop}px)`;
+    el.style.height = `${row.offsetHeight}px`;
+    void el.offsetWidth;
+    el.style.transition = prev;
+    return;
+  }
+  el.style.transform = `translateY(${row.offsetTop}px)`;
+  el.style.height = `${row.offsetHeight}px`;
+}
+
 export default function CommandPalette({ open, onClose, onOpenTicker, onForceRefresh }: PaletteProps) {
   const navigate = useNavigate();
   const { isOwner, isSignedIn, username, logout } = useAccess();
@@ -81,6 +101,8 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
      走进遮罩后方的页面，关闭后也不回到触发点。 */
   const panelRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const glideRef = useRef<HTMLSpanElement>(null);
+  const glidePainted = useRef(false);
   useFocusTrap(panelRef, open, { initialFocusRef: inputRef });
   const closeMs = readRootDurationMs('--modal-close-dur', 150);
   const phase = useOverlayPhase(open, closeMs);
@@ -254,6 +276,22 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
     el?.scrollIntoView({ block: 'nearest' });
   }, [clampedActive]);
 
+  /* 滑行高亮定位：跟随 active 行（键盘 ↑↓ 与鼠标悬停同一套），首绘/列表
+     换批时瞬放不补间，行内切换才滑行。 */
+  useLayoutEffect(() => {
+    const glide = glideRef.current;
+    if (!glide) return;
+    const row = listRef.current?.querySelector<HTMLElement>(`[data-idx="${clampedActive}"]`);
+    if (!row || flat.length === 0) {
+      glide.style.opacity = '0';
+      glidePainted.current = false;
+      return;
+    }
+    glide.style.opacity = '1';
+    placeListGlide(glide, row, glidePainted.current);
+    glidePainted.current = true;
+  }, [clampedActive, flat.length, entries]);
+
   /* 面板打开时锁背景滚动（审计 2.2.14）：与 Drawer 同口径，滚轮不再穿透
      到背后的页面。关闭动画期间仍锁，避免背后页面跟着滚。 */
   useEffect(() => {
@@ -319,6 +357,21 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
               />
               {searching ? (
                 <span className="size-4 animate-spin rounded-full border-2 border-brand-100 border-t-brand-600" aria-label={__t("搜索中")} />
+              ) : query ? (
+                /* beautifului Search 的清除钮：fade-in 150ms 进场，点后清空并回焦 */
+                <button
+                  type="button"
+                  aria-label={__t('清除搜索')}
+                  onClick={() => {
+                    setQuery('');
+                    setSearchError(null);
+                    setActive(0);
+                    inputRef.current?.focus();
+                  }}
+                  className="anim-fade-in flex size-6 shrink-0 items-center justify-center rounded-full text-ink-400 transition-colors duration-fast hover:bg-line/70 hover:text-ink-800"
+                >
+                  <Icon name="x" size={12} />
+                </button>
               ) : (
                 <Kbd>ESC</Kbd>
               )}
@@ -326,7 +379,21 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
 
             {/* listbox/option + activedescendant（审计 2.5.3）：读屏跟随高亮播报，
                 不再只有肉眼可见的背景色变化 */}
-            <div id="command-palette-listbox" role="listbox" ref={listRef} className="max-h-[46vh] overflow-y-auto py-1.5">
+            <div id="command-palette-listbox" role="listbox" ref={listRef} className="relative max-h-[46vh] overflow-y-auto py-1.5">
+              {/* 滑行高亮（GlideMenu 手感）：绝对定位在行间滑动，brand-50 底 +
+                  左 2px brand 竖条随行；active 由键盘/悬停共同驱动 */}
+              <span
+                ref={glideRef}
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-x-1.5 top-0 z-0 rounded-md bg-brand-50"
+                style={{
+                  height: 0,
+                  opacity: 0,
+                  transition: 'transform 250ms var(--ease-snap), height 250ms var(--ease-snap), opacity 160ms',
+                }}
+              >
+                <span className="absolute inset-y-1 left-0 w-0.5 rounded-full bg-brand-600" />
+              </span>
               {searching && flat.length === 0 && (
                 <div className="flex flex-col items-center py-10 text-center" role="status">
                   <span className="size-5 animate-spin rounded-full border-2 border-brand-100 border-t-brand-600" aria-hidden="true" />
@@ -343,10 +410,13 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
                 </div>
               )}
               {!searching && !searchError && flat.length === 0 && (
-                <div className="flex flex-col items-center py-10 text-center">
-                  <Icon name="search" size={30} className="text-ink-300" />
-                  <p className="mt-3 text-body-s text-ink-400">{__t('没有匹配的结果')}</p>
-                  <p className="mt-1 text-micro text-ink-300">
+                <div className="anim-fade-in flex flex-col items-center py-10 text-center">
+                  {/* beautifului Search 空态：内嵌图标砖 + 主文案 + 提示 */}
+                  <span className="flex size-9 items-center justify-center rounded-lg border border-line bg-card-warm text-ink-300 shadow-[inset_0_1px_2px_rgba(16,24,40,.05)]">
+                    <Icon name="search" size={16} />
+                  </span>
+                  <p className="mt-3 text-body-s font-medium text-ink-700">{__t('没有匹配的结果')}</p>
+                  <p className="mt-1 text-micro text-ink-400">
                     {__t('试试代码')} <span className="font-mono">NVDA</span> {__t('或中文名（英伟达）')}
                   </p>
                 </div>
@@ -364,11 +434,9 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
                       onClick={e.action}
                       onMouseEnter={() => setActive(e.idx)}
                       className={cn(
-                        'relative flex w-full items-center gap-2.5 px-4 py-2 text-left transition-colors duration-fast',
-                        e.idx === clampedActive ? 'bg-brand-50' : 'hover:bg-paper-2/70',
+                        'relative z-10 flex w-full items-center gap-2.5 rounded-md px-4 py-2 text-left transition-colors duration-fast',
                       )}
                     >
-                      {e.idx === clampedActive && <span className="absolute inset-y-1 left-0 w-0.5 rounded-full bg-brand-600" aria-hidden="true" />}
                       <Icon name={e.icon} size={15} className={cn('shrink-0', e.idx === clampedActive ? 'text-brand-600' : 'text-ink-400')} />
                       {e.no && <span className="font-mono text-micro text-ink-400 tnum">{e.no}</span>}
                       <span
