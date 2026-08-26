@@ -76,9 +76,10 @@ export default function DrawingWorkspace({
             }}
             onImportFile={(text) => {
               try {
-                controller.importJson(JSON.parse(text));
+                const parsed = JSON.parse(text);
+                controller.importJson(parsed);
               } catch {
-                controller.importJson(null);
+                // invalid JSON — do not pass null to importJson (would clear all drawings)
               }
             }}
             onImportLocal={() => controller.importAnonymous()}

@@ -162,9 +162,9 @@ export function toProjectedDrawing(
   drawing: ChartDrawing,
   ctx: RenderContext,
 ): ProjectedDrawing | null {
-  const geom = drawingSegments(drawing, ctx);
-  if (geom.unresolved) return null;
-  const { points } = projectAnchors(drawing, ctx);
+  const { points, unresolved } = projectAnchors(drawing, ctx);
+  if (unresolved) return null;
+  const geom = geometryFromPoints(drawing.kind, points, ctx);
   const segments = [
     ...geom.segments,
     ...geom.horizontals.map((level) => ({
@@ -289,7 +289,8 @@ export function drawingsToMarks(
   const points: object[] = [];
   const polygons: FillPolygon[] = [];
   const unresolvedIds: string[] = [];
-  for (const drawing of drawings) {
+  const sorted = [...drawings].sort((a, b) => a.zOrder - b.zOrder);
+  for (const drawing of sorted) {
     if (drawing.hidden) continue;
     const geom = drawingSegments(drawing, ctx);
     if (geom.unresolved) {
@@ -353,7 +354,7 @@ export function drawingsToMarks(
             formatter: drawing.text.replace(/\s+/g, ' ').slice(0, 240),
             position: 'right',
             fontSize: 11,
-            color: '#3D4A68',
+            color: lineStyle.color,
           },
         });
       }

@@ -85,6 +85,7 @@ export function useDrawingController(args: {
   } | null>(null);
   const rafRef = useRef(0);
   const styleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inflightRef = useRef(0);
   const drawingsRef = useRef(drawings);
   const signedIn = args.identity.signedIn;
 
@@ -158,6 +159,7 @@ export function useDrawingController(args: {
 
   const persistOne = useCallback(async (drawing: ChartDrawing, mode: 'create' | 'update') => {
     if (!signedIn) return;
+    inflightRef.current++;
     setSyncStatus('saving');
     try {
       const saved = mode === 'create'
@@ -171,9 +173,15 @@ export function useDrawingController(args: {
           return next;
         });
       }
-      setSyncStatus('idle');
-      setSyncHint(null);
+      inflightRef.current--;
+      if (inflightRef.current <= 0) {
+        inflightRef.current = 0;
+        setSyncStatus('idle');
+        setSyncHint(null);
+      }
     } catch (error) {
+      inflightRef.current--;
+      if (inflightRef.current < 0) inflightRef.current = 0;
       if (isConflictError(error)) {
         setSyncStatus('conflict');
         setSyncHint('conflict');
@@ -272,6 +280,7 @@ export function useDrawingController(args: {
     const next = drawingsRef.current.filter((item) => item.id !== selectedId);
     pushDrawings(next);
     setSelectedId(null);
+    setFocusAnchor(null);
     if (signedIn && target) {
       void drawingsApi.remove(target.id).catch(() => setSyncStatus('unsynced'));
     }
@@ -280,10 +289,41 @@ export function useDrawingController(args: {
   const clearAll = useCallback(() => {
     pushDrawings([]);
     setSelectedId(null);
+    setFocusAnchor(null);
     if (signedIn) {
-      void drawingsApi.clearScope(args.ticker, args.range, adjustment).catch(() => setSyncStatus('unsynced'));
+      setSyncStatus('saving');
+      void drawingsApi.clearScope(args.ticker, args.range, adjustment)
+        .then(() => setSyncStatus('idle'))
+        .catch(() => setSyncStatus('unsynced'));
     }
   }, [adjustment, args.range, args.ticker, pushDrawings, signedIn]);
+
+  const syncHistoryDiff = useCallback((prev: ChartDrawing[], next: ChartDrawing[]) => {
+    if (!signedIn) return;
+    const prevIds = new Set(prev.map((d) => d.id));
+    const nextIds = new Set(next.map((d) => d.id));
+    for (const d of prev) {
+      if (!nextIds.has(d.id)) {
+        setSyncStatus('saving');
+        void drawingsApi.remove(d.id)
+          .then(() => { if (inflightRef.current <= 0) setSyncStatus('idle'); })
+          .catch(() => setSyncStatus('unsynced'));
+      }
+    }
+    for (const d of next) {
+      if (!prevIds.has(d.id)) {
+        void persistOne(d, 'create');
+      }
+    }
+    for (const d of next) {
+      if (prevIds.has(d.id)) {
+        const old = prev.find((p) => p.id === d.id);
+        if (old && JSON.stringify(old.anchors) !== JSON.stringify(d.anchors)) {
+          void persistOne(d, 'update');
+        }
+      }
+    }
+  }, [persistOne, signedIn]);
 
   const undo = useCallback(() => {
     setHistory((prev) => {
@@ -291,9 +331,10 @@ export function useDrawingController(args: {
       const next = historyUndo(prev);
       setDrawings(next.present);
       saveDrawings(storageKey, next.present);
+      syncHistoryDiff(prev.present, next.present);
       return next;
     });
-  }, [storageKey]);
+  }, [storageKey, syncHistoryDiff]);
 
   const redo = useCallback(() => {
     setHistory((prev) => {
@@ -301,9 +342,10 @@ export function useDrawingController(args: {
       const next = historyRedo(prev);
       setDrawings(next.present);
       saveDrawings(storageKey, next.present);
+      syncHistoryDiff(prev.present, next.present);
       return next;
     });
-  }, [storageKey]);
+  }, [storageKey, syncHistoryDiff]);
 
   const patchSelected = useCallback((patch: Partial<ChartDrawing>, persist: boolean) => {
     if (!selectedId) return;
@@ -412,7 +454,7 @@ export function useDrawingController(args: {
       const point = readPoint(event.offsetX, event.offsetY, alt, shift);
       if (tool !== 'select') {
         if (!point) return;
-        if (tool === 'horizontal' && point) {
+        if (tool === 'horizontal') {
           const result = addDraftPoint(null, 'horizontal', point);
           if (result.status === 'complete') completeDrawing('horizontal', result.points);
         } else {
@@ -471,6 +513,7 @@ export function useDrawingController(args: {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       rafRef.current = requestAnimationFrame(() => {
         rafRef.current = 0;
+        if (!dragRef.current) return;
         const converted = chart.convertFromPixel({ gridIndex: 0 }, [event.offsetX, event.offsetY]) as number[] | null;
         if (!converted) return;
         const current = drawingsRef.current.find((item) => item.id === drag.id);
@@ -674,9 +717,18 @@ export function useDrawingController(args: {
       id: item.id || newId(),
     }));
     pushDrawings(incoming);
-    incoming.forEach((item) => void persistOne(item, 'create'));
+    if (signedIn && incoming.length) {
+      const queue = [...incoming];
+      const next = async () => {
+        const item = queue.shift();
+        if (!item) return;
+        await persistOne(item, 'create').catch(() => {});
+        void next();
+      };
+      void next();
+    }
     return null;
-  }, [adjustment, args.range, args.ticker, persistOne, pushDrawings]);
+  }, [adjustment, args.range, args.ticker, persistOne, pushDrawings, signedIn]);
 
   const importAnonymous = useCallback(() => {
     const loaded = loadDrawings(anonymousStorageKey(args.ticker, args.range, adjustment));

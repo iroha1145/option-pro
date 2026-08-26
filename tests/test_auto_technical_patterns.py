@@ -302,4 +302,4 @@ def test_structure_payload_includes_auto_patterns() -> None:
     assert isinstance(result["auto_patterns"], list)
     for row in result["auto_patterns"]:
         assert row["dataThrough"] <= result["data_through"]
-        assert timedelta(days=0) or True
+        assert datetime.fromisoformat(row["dataThrough"]) <= datetime.fromisoformat(result["data_through"])

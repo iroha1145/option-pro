@@ -66,6 +66,7 @@ function parseAnchor(raw: unknown): ChartDrawing['anchors'][number] | null {
   const barKey = typeof raw.barKey === 'string' ? raw.barKey.trim() : '';
   const price = typeof raw.price === 'number' ? raw.price : Number(raw.price);
   if (!time || !barKey || barKey.length > 64) return null;
+  if ([...barKey].some((ch) => ch.charCodeAt(0) < 32)) return null;
   if (!Number.isFinite(price) || price <= 0 || price > PRICE_MAX) return null;
   return { time, barKey, price };
 }
@@ -90,30 +91,10 @@ function parseStyle(raw: unknown): DrawingStyle | null {
   return style;
 }
 
-const DRAWING_KEYS = new Set([
-  'schemaVersion',
-  'id',
-  'ticker',
-  'range',
-  'adjustment',
-  'kind',
-  'anchors',
-  'style',
-  'text',
-  'locked',
-  'hidden',
-  'zOrder',
-  'revision',
-  'createdAt',
-  'updatedAt',
-]);
 
 export function parseDrawing(raw: unknown): ChartDrawing | null {
   if (!isRecord(raw)) return null;
   if ('option' in raw || 'graphic' in raw || 'css' in raw) return null;
-  for (const key of Object.keys(raw)) {
-    if (!DRAWING_KEYS.has(key)) return null;
-  }
   if (raw.schemaVersion !== SCHEMA_VERSION && raw.schemaVersion !== undefined) return null;
   if (typeof raw.id !== 'string' || !UUID_RE.test(raw.id)) return null;
   if (typeof raw.ticker !== 'string' || !raw.ticker.trim()) return null;
@@ -136,8 +117,9 @@ export function parseDrawing(raw: unknown): ChartDrawing | null {
   } else if (kind === 'text') {
     return null;
   }
-  const zOrder = raw.zOrder === undefined ? 0 : Number(raw.zOrder);
-  if (!Number.isFinite(zOrder) || Math.abs(zOrder) > 1_000_000) return null;
+  const zOrderRaw = raw.zOrder === undefined ? 0 : Number(raw.zOrder);
+  if (!Number.isFinite(zOrderRaw) || Math.abs(zOrderRaw) > 1_000_000) return null;
+  const zOrder = Math.trunc(zOrderRaw);
   const revision = raw.revision === undefined ? 1 : Number(raw.revision);
   if (!Number.isInteger(revision) || revision < 1) return null;
   return {
@@ -227,7 +209,7 @@ export function whitelistStyle(style: DrawingStyle): DrawingStyle | null {
 
 export function whitelistText(text: string): string | null {
   if (text.length > DRAWING_TEXT_MAX) return null;
-  if (text.includes('<') || text.includes('>')) return null;
+  if (text.includes('<') || text.includes('>') || text.includes('\0')) return null;
   if (!text.trim()) return null;
   return text;
 }

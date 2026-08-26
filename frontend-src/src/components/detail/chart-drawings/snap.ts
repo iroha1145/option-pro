@@ -15,7 +15,7 @@ export interface SnapResult {
 }
 
 export function nearestPrice(
-  pointerPrice: number,
+  _pointerPrice: number,
   pointerY: number,
   candidates: SnapCandidate[],
   priceToY: (price: number) => number,
@@ -30,8 +30,7 @@ export function nearestPrice(
     }
   }
   if (!best) {
-    if (!Number.isFinite(pointerPrice)) return null;
-    return { price: pointerPrice, kind: 'ohlc' };
+    return null;
   }
   return { price: best.price, kind: best.kind };
 }
