@@ -5,8 +5,18 @@
  */
 import { useMemo } from 'react';
 import ReactECharts from '@/components/charts/ReactECharts';
-import { baseAnimation, CH, insightDotRow, insightLine, insightTooltip, type ChartOption } from '@/lib/chart';
+import {
+  baseAnimation,
+  CH,
+  INSIGHT_FRAME,
+  insightDotRow,
+  insightLine,
+  insightTooltip,
+  insightTooltipBody,
+  type ChartOption,
+} from '@/lib/chart';
 import { fmtPrice } from '@/lib/format';
+import { cn } from '@/lib/utils';
 import type { CtaInstrumentEstimate } from '@/api/types';
 import { t } from '../../i18n/core.ts';
 
@@ -62,24 +72,23 @@ function scenarioOption(row: CtaInstrumentEstimate): ChartOption | null {
         const arr = params as { dataIndex: number; seriesName: string; data: number; color?: string }[];
         if (!arr.length) return '';
         const idx = arr[0].dataIndex;
-        const rows = arr
-          .map((s) =>
-            insightDotRow(
-              typeof s.color === 'string' ? s.color : CH.brand500,
-              s.seriesName,
-              `${s.data > 0 ? '+' : ''}${s.data}`,
-            ),
-          )
-          .join('<span style="display:inline-block;width:12px"></span>');
+        const rows = arr.map((s) =>
+          insightDotRow(
+            typeof s.color === 'string' ? s.color : CH.brand500,
+            s.seriesName,
+            `${s.data > 0 ? '+' : ''}${s.data}`,
+          ),
+        );
         const pct = `${pctOf(idx) > 0 ? '+' : ''}${pctOf(idx).toFixed(1)}%`;
-        return (
-          `<div style="color:${CH.ink400};font-size:11px;margin-bottom:4px">${t('收于 {p}（{pct}）', { p: fmtPrice(curve.prices[idx]), pct })}</div>` +
-          `<div style="display:flex;flex-wrap:wrap;gap:4px 0">${rows}</div>`
+        return insightTooltipBody(
+          t('收于 {p}（{pct}）', { p: fmtPrice(curve.prices[idx]), pct }),
+          rows,
         );
       },
     }),
     series: [
-      /* Insight Cards 折线工艺：平滑 2.25px 主线 + 细虚线对照 */
+      /* Insight Cards 折线工艺：2.25px 圆头主线 + 细虚线对照；
+         曲线是分段线性的模型输出，不平滑（平滑会在档位之间编出假读数） */
       insightLine(CH.brand500, {
         name: t('完整敞口'),
         data: curve.full,
@@ -142,7 +151,7 @@ function scenarioOption(row: CtaInstrumentEstimate): ChartOption | null {
       insightLine(CH.ink400, {
         name: t('仅趋势（波动率冻结）'),
         data: curve.trend_only,
-        lineStyle: { color: CH.ink400, width: 1.5, type: [5, 4] as number[], cap: 'round', join: 'round' },
+        lineStyle: { width: 1.5, type: [5, 4] as number[] },
         z: 2,
       }),
     ],
@@ -154,7 +163,7 @@ export default function ScenarioChart({ row }: { row: CtaInstrumentEstimate }) {
   if (!option) return <p className="mt-2 text-caption text-ink-400">{t('暂无数据')}</p>;
   return (
     <>
-      <div className="mt-1.5 rounded-lg border border-line bg-card-warm p-2">
+      <div className={cn(INSIGHT_FRAME, 'mt-1.5')}>
         <div className="h-56">
           <ReactECharts option={option} ariaLabel={t('CTA 情景曲线')} />
         </div>

@@ -1,19 +1,24 @@
 // PR #113 审查阻断项的行为回归（真实 DOM 交互，不是源码字符串断言）：
-//   1. 命令面板滑行高亮首开/重开立即可见，首绘不从旧位置补间；
+//   1. 命令面板滑行高亮首开/重开立即可见，且**不从旧位置补间**；
 //   2. 清除钮 Enter/Space 只清空并回焦输入框，不触发高亮结果；
-//   3. 横向滚动 TierSegmented（layoutScroll）滚动后滑块落点仍对齐；
+//   3. 横向滚动 TierSegmented 滚动后滑块落点仍对齐；
 //   4. GlidePill 位置与宽度同步动画，且与按钮同级、不遮邻居文字；
 //   附带：方向键/Home/End 遍历、reduced-motion 瞬切、移动端窄屏取证。
+//
+// 两条方法论纪律（都是本 PR 审查里踩过的）：
+//   · 「有没有补间」必须看**真实帧序列**。只断言落定态是自欺：Playwright 的
+//     toHaveCSS/boundingBox 都会自动重试，等它们通过时弹簧早落定了，从旧位置
+//     滑过来的 bug 照样全绿。用装在动作**之前**的 rAF 采样器判定。
+//   · 定位元素用稳定的 data-* 句柄，不用「无子元素的 aria-hidden span」这类
+//     结构指纹，也不断言 z-index 具体数值——给滑块加个装饰子元素或改用
+//     isolation 分层，指纹就静默失配，而实际行为没变。
 import { expect, test } from "@playwright/test";
-import { mkdirSync } from "node:fs";
-import { join } from "node:path";
-
-const SCREENSHOT_DIR = join(process.cwd(), "test-results", "visual-evidence");
-mkdirSync(SCREENSHOT_DIR, { recursive: true });
+import { captureEvidence } from "./support/evidence.mjs";
 
 const paletteDialog = (page) => page.getByRole("dialog", { name: "命令面板" });
 const paletteInput = (page) => page.getByRole("combobox", { name: "搜索股票或功能" });
-const glide = (page) => page.locator('#command-palette-listbox > span[aria-hidden="true"]').first();
+const GLIDE_SELECTOR = "#command-palette-listbox [data-glide-list]";
+const glide = (page) => page.locator(GLIDE_SELECTOR);
 const paletteRow = (page, idx) => page.locator(`#command-palette-listbox [data-idx="${idx}"]`);
 
 async function openPalette(page) {
@@ -26,14 +31,44 @@ async function closePalette(page) {
   await expect(paletteDialog(page)).toBeHidden();
 }
 
-/** 滑块与目标行的 viewport 矩形在 2px 公差内对齐（只比 y/高，滑块 x 有 inset）。 */
-async function expectAlignedWithRow(page, row) {
-  const glideBox = await glide(page).boundingBox();
-  const rowBox = await row.boundingBox();
-  expect(glideBox, "glide highlight must have a box").not.toBeNull();
-  expect(rowBox, "active row must have a box").not.toBeNull();
-  expect(Math.abs(glideBox.y - rowBox.y)).toBeLessThanOrEqual(2);
-  expect(Math.abs(glideBox.height - rowBox.height)).toBeLessThanOrEqual(2);
+/**
+ * 装上按帧采样器（必须在触发动作**之前**调用）：元素不存在的帧自动跳过，
+ * 上限 120 帧防止长测试堆积。
+ */
+async function startRectSampler(page, selector) {
+  await page.evaluate((sel) => {
+    window.__rectSamples = [];
+    const tick = () => {
+      const el = document.querySelector(sel);
+      if (el && window.__rectSamples.length < 120) {
+        const r = el.getBoundingClientRect();
+        window.__rectSamples.push({ x: r.x, y: r.y, w: r.width, h: r.height });
+      }
+      window.__rectRaf = requestAnimationFrame(tick);
+    };
+    tick();
+  }, selector);
+}
+
+async function stopRectSampler(page) {
+  return page.evaluate(() => {
+    cancelAnimationFrame(window.__rectRaf);
+    return window.__rectSamples ?? [];
+  });
+}
+
+/** 采样序列里元素**没有走过位**：每一帧都落在最终位置的公差内。 */
+function expectNoTravel(samples, axes = ["y", "h"], tolerance = 1.5) {
+  expect(samples.length, "sampler must have caught at least one frame").toBeGreaterThan(0);
+  const last = samples[samples.length - 1];
+  for (const sample of samples) {
+    for (const axis of axes) {
+      expect(
+        Math.abs(sample[axis] - last[axis]),
+        `${axis} must never travel: saw ${sample[axis]} before settling at ${last[axis]}`,
+      ).toBeLessThanOrEqual(tolerance);
+    }
+  }
 }
 
 test.describe("command palette glide highlight (#113 blocker 1+2)", () => {
@@ -42,18 +77,51 @@ test.describe("command palette glide highlight (#113 blocker 1+2)", () => {
   });
 
   test("highlight is visible on first open, placed without animating from a stale spot", async ({ page }) => {
+    await startRectSampler(page, GLIDE_SELECTOR);
     await openPalette(page);
-    /* 首开立即不透明、且矩形就是第一行——首绘是瞬放，不是从旧位置滑入 */
     await expect(glide(page)).toHaveCSS("opacity", "1");
-    await expectAlignedWithRow(page, paletteRow(page, 0));
+    const samples = await stopRectSampler(page);
+    /* 首绘是瞬放：采样器从面板出现的第一帧起就该一直在第一行 */
+    expectNoTravel(samples);
+    const rowBox = await paletteRow(page, 0).boundingBox();
+    expect(Math.abs(samples[samples.length - 1].y - rowBox.y)).toBeLessThanOrEqual(2);
+    expect(Math.abs(samples[samples.length - 1].h - rowBox.height)).toBeLessThanOrEqual(2);
   });
 
-  test("highlight is visible again after close and reopen", async ({ page }) => {
+  test("reopening after moving the highlight does not tween it from the old row", async ({ page }) => {
+    /* 关键是先把高亮挪下去再关：面板 mounted 与 open 同一次渲染翻真，而
+       active 归零在 passive effect 里，所以重开时高亮很容易先按上一次的
+       active 落笔、再滑回第一行——只断言落定态的测试看不见这一段。 */
     await openPalette(page);
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("ArrowDown");
+    await expect(paletteRow(page, 2)).toHaveAttribute("aria-selected", "true");
     await closePalette(page);
+
+    await startRectSampler(page, GLIDE_SELECTOR);
     await openPalette(page);
     await expect(glide(page)).toHaveCSS("opacity", "1");
-    await expectAlignedWithRow(page, paletteRow(page, 0));
+    const samples = await stopRectSampler(page);
+    expectNoTravel(samples);
+    const rowBox = await paletteRow(page, 0).boundingBox();
+    expect(Math.abs(samples[samples.length - 1].y - rowBox.y)).toBeLessThanOrEqual(2);
+  });
+
+  test("clearing the query re-places the highlight instantly on the new batch", async ({ page }) => {
+    /* 换批（股票批 → 最近/功能批）是单次渲染完成的，中间没有空列表可以
+       复位「已落笔」标志，所以这条路径同样会从旧股票行滑过来。 */
+    await openPalette(page);
+    await paletteInput(page).pressSequentially("NVDA");
+    const clear = page.getByRole("button", { name: "清除搜索" });
+    await expect(clear).toBeVisible();
+    await page.keyboard.press("ArrowDown");
+
+    await startRectSampler(page, GLIDE_SELECTOR);
+    await clear.click();
+    await expect(paletteInput(page)).toHaveValue("");
+    await expect(paletteRow(page, 0)).toHaveAttribute("aria-selected", "true");
+    const samples = await stopRectSampler(page);
+    expectNoTravel(samples);
   });
 
   test("clear button Enter clears the query and refocuses the input", async ({ page }) => {
@@ -94,6 +162,36 @@ test.describe("command palette glide highlight (#113 blocker 1+2)", () => {
     await page.waitForTimeout(300);
     expect(navigations, "option Enter must navigate exactly once").toBe(1);
   });
+
+  test("keyboard focus keeps the visible highlight and Enter in agreement", async ({ page }) => {
+    /* 面板级 Enter 让原生元素自己派发 click，所以焦点行必须始终就是那条
+       唯一可见的高亮行——否则 Tab 到第 1 行、Enter 打开的却是第 0 行。 */
+    await openPalette(page);
+    const second = paletteRow(page, 1);
+    await second.focus();
+    await expect(second).toHaveAttribute("aria-selected", "true");
+    await expect(paletteRow(page, 0)).toHaveAttribute("aria-selected", "false");
+    const [glideBox, rowBox] = await Promise.all([glide(page).boundingBox(), second.boundingBox()]);
+    expect(Math.abs(glideBox.y - rowBox.y), "glide must follow keyboard focus").toBeLessThanOrEqual(2);
+  });
+
+  test("IME composition keystrokes are not hijacked by the panel", async ({ page }) => {
+    /* 中文名搜索是产品自己在空态里推荐的用法：组词确认的那次回车必须留给
+       输入法，不能被面板抢去「打开当前高亮项」并把组词内容丢掉。 */
+    await openPalette(page);
+    const input = paletteInput(page);
+    await input.focus();
+    await input.evaluate((el) => {
+      el.dispatchEvent(new CompositionEvent("compositionstart", { bubbles: true }));
+      el.value = "ying";
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await input.evaluate((el) => {
+      el.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", keyCode: 229, isComposing: true, bubbles: true }));
+    });
+    await expect(paletteDialog(page), "composing Enter must not close the palette").toBeVisible();
+    await expect(page).toHaveURL(/\/$/);
+  });
 });
 
 test.describe("spring tabs glide (#113 blocker 3+4)", () => {
@@ -112,10 +210,11 @@ test.describe("spring tabs glide (#113 blocker 3+4)", () => {
     await expect(page.locator('[aria-label="筛选工作台"]')).toBeVisible();
   }
 
-  const tierList = (page) => page.locator('[role="tablist"][aria-label^="强度分档"]');
+  const TIER_LIST = '[role="tablist"][aria-label^="强度分档"]';
+  const TIER_PILL = `${TIER_LIST} [data-glide-pill]`;
+  const tierList = (page) => page.locator(TIER_LIST);
   const tierTab = (page, name) => tierList(page).getByRole("tab", { name, exact: false });
-  const tierPill = (page) =>
-    tierList(page).locator('span[aria-hidden="true"]').filter({ hasNot: page.locator("*") });
+  const tierPill = (page) => page.locator(TIER_PILL);
 
   /** 当前激活 tab 与其滑块的完整矩形（位置 + 尺寸）在公差内一致。 */
   async function expectPillMatchesTab(pill, tab, tolerance = 3) {
@@ -145,7 +244,7 @@ test.describe("spring tabs glide (#113 blocker 3+4)", () => {
       .toBeLessThanOrEqual(tolerance);
   }
 
-  test("pill animates width in flight instead of snapping, then settles on the active tab", async ({ page }) => {
+  test("pill animates position and width in flight instead of snapping", async ({ page }) => {
     await openScreener(page);
     const narrow = tierTab(page, /^S /).or(tierTab(page, "S")).first();
     const wide = tierTab(page, "全部");
@@ -155,31 +254,40 @@ test.describe("spring tabs glide (#113 blocker 3+4)", () => {
     /* 弹簧需要先落定向左（否则会拿飞行中间帧当基准） */
     await pollPillSettled(pill, narrow);
 
+    /* 采样器先装上，再点击：中途帧由真实 rAF 序列给出，不靠挂钟猜时刻
+       （CI 争抢时 waitForTimeout(60) 之后弹簧可能早已落定，必翻）。 */
+    await startRectSampler(page, TIER_PILL);
     await wide.click();
-    const finalBox = await wide.boundingBox();
-    /* 弹簧飞行中段采样：位置或尺寸必须还在补间（不等于终点），不是瞬跳 */
-    await page.waitForTimeout(60);
-    const midBox = await pill.boundingBox();
-    expect(
-      Math.abs(midBox.width - finalBox.width) > 1 || Math.abs(midBox.x - finalBox.x) > 1,
-      "mid-flight pill must still be tweening (position or size), not snapped to the target",
-    ).toBe(true);
     await pollPillSettled(pill, wide);
+    const samples = await stopRectSampler(page);
+    const last = samples[samples.length - 1];
+    const travelled = samples.some(
+      (s) => Math.abs(s.x - last.x) > 1 || Math.abs(s.w - last.w) > 1,
+    );
+    expect(travelled, "pill must tween position AND size, not snap to the target").toBe(true);
+    /* 尺寸确实补间过：宽度不是一步到位（position-only 投影会让宽度瞬跳） */
+    const widthsSeen = new Set(samples.map((s) => Math.round(s.w)));
+    expect(widthsSeen.size, "width must interpolate, not jump in one step").toBeGreaterThan(1);
     await expectPillMatchesTab(pill, wide, 4);
   });
 
   test("pill is a sibling of the tab buttons, never painted above their labels", async ({ page }) => {
     await openScreener(page);
     /* 结构：滑块不得是任何按钮的后代 */
-    await expect(tierList(page).locator('.t-tab span[aria-hidden="true"]')).toHaveCount(0);
-    /* 层级：按钮 z-index 为数值（1+），滑块 z-auto 垫在全部按钮之下 */
-    const pillZ = await tierPill(page).evaluate((node) => getComputedStyle(node).zIndex);
-    const tabZ = await tierTab(page, "全部").evaluate((node) => getComputedStyle(node).zIndex);
-    expect(pillZ).toBe("auto");
-    expect(Number.parseInt(tabZ, 10)).toBeGreaterThanOrEqual(1);
+    await expect(tierList(page).locator(".t-tab [data-glide-pill]")).toHaveCount(0);
+    /* 行为（不看 z-index 数值）：激活标签文字中心点上，命中测试拿到的必须是
+       按钮自己（或其后代），而不是滑块。 */
+    const active = tierTab(page, "全部");
+    await pollPillSettled(tierPill(page), active);
+    const topmostIsTab = await active.evaluate((node) => {
+      const r = node.getBoundingClientRect();
+      const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+      return Boolean(hit && (hit === node || node.contains(hit)));
+    });
+    expect(topmostIsTab, "the active tab label must be the topmost element at its own centre").toBe(true);
   });
 
-  test("scrolled horizontal tabs keep the pill aligned (layoutScroll)", async ({ page }) => {
+  test("scrolled horizontal tabs keep the pill aligned", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await openScreener(page);
     /* 数据无关地强制溢出：把分档条夹窄，保证横向可滚动 */
@@ -205,9 +313,7 @@ test.describe("spring tabs glide (#113 blocker 3+4)", () => {
     await expectPillMatchesTab(tierPill(page), first, 4);
 
     /* 移动端窄屏取证（合并门槛 #7） */
-    await page.locator('[aria-label="筛选工作台"]').screenshot({
-      path: join(SCREENSHOT_DIR, "tier-tabs-scrolled-pill-aligned-390.png"),
-    });
+    await captureEvidence(page.locator('[aria-label="筛选工作台"]'), "tier-tabs-scrolled-pill-aligned-390");
   });
 
   test("arrow keys, Home and End traverse every tab in both tablists", async ({ page }) => {
@@ -247,8 +353,8 @@ test.describe("spring tabs glide (#113 blocker 3+4)", () => {
 });
 
 test.describe("spring tabs under reduced motion", () => {
-  /* playwright.config 全局 reducedMotion: "reduce"：MotionConfig duration 0，
-     滑块瞬切不做弹簧（duration-0 的静态契约见 motion-tokens.test）。
+  /* playwright.config 全局 reducedMotion: "reduce"：GlidePill 自持的
+     useReducedMotion 把 transition 归零，滑块瞬切不做弹簧。
      headless 软渲染会饿死 rAF，落点用 poll 等而不是定死 100ms。 */
   test("pill lands on the active tab without spring travel", async ({ page }) => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
@@ -256,8 +362,8 @@ test.describe("spring tabs under reduced motion", () => {
     await expect(page).toHaveURL(/\/screener$/);
     const list = page.locator('[role="tablist"][aria-label^="强度分档"]');
     const target = list.getByRole("tab", { name: /^B/ }).first();
+    const pill = page.locator('[role="tablist"][aria-label^="强度分档"] [data-glide-pill]');
     await target.click();
-    const pill = list.locator('span[aria-hidden="true"]').filter({ hasNot: page.locator("*") });
     await expect
       .poll(
         async () => {

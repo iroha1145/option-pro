@@ -14,7 +14,8 @@ export const DUR_SECTION = 0.56;
 /**
  * 共享布局滑行弹簧（beui.dev components/motion/tabs 原值）。
  * 指示器类（tabs pill / 列表高亮）统一用它：一点过冲让滑块落定带活气，
- * 而不是生硬贴上去；reduced-motion 由调用点 MotionConfig 归零。
+ * 而不是生硬贴上去；reduced-motion 归零由 GlidePill 自持（唯一会动的就是
+ * 那个 span，不需要每个调用点再包一层 MotionConfig）。
  */
 export const SPRING_INDICATOR: Transition = {
   type: 'spring',

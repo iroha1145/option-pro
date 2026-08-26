@@ -16,7 +16,7 @@ import {
   overlayTiming,
   overlayVisible,
   parseDurationMs,
-  placeTabsPill,
+  placeGlide,
   readCssVar,
   replayShake,
   shakeDurationMs,
@@ -25,6 +25,21 @@ import {
 const here = path.dirname(fileURLToPath(import.meta.url));
 const src = path.resolve(here, '..', 'src');
 const source = (p) => readFile(path.join(src, p), 'utf8');
+
+/** Strip comments before matching: these guards must read the code, not the
+    prose next to it — a comment repeating `layoutRoot` once satisfied the
+    layoutRoot guard, so deleting the prop left the suite green (审查 #113)。 */
+function codeOf(text) {
+  return text
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n')
+    .filter((line) => {
+      const trimmed = line.trimStart();
+      return !trimmed.startsWith('//') && !trimmed.startsWith('*');
+    })
+    .join('\n');
+}
+const code = async (p) => codeOf(await source(p));
 
 const TOKEN_NAMES = [
   '--duration-stagger',
@@ -66,9 +81,9 @@ const SURFACES = [
   ['pages/Watchlist.tsx', /<MenuSelect/, 'MenuSelect (watchlist sort)'],
   ['components/catalysts/FilterBar.tsx', /<MenuSelect/, 'MenuSelect (catalyst status)'],
   ['components/shared/Segmented.tsx', /t-tabs/, 't-tabs'],
-  ['components/shared/Segmented.tsx', /GlidePill/, 'GlidePill (segmented)'],
-  ['components/shared/Segmented.tsx', /SPRING_INDICATOR/, 'beui spring (segmented)'],
-  ['components/shared/Segmented.tsx', /layoutRoot/, 'layoutRoot (segmented)'],
+  ['components/shared/Segmented.tsx', /\{active && <GlidePill layoutId=\{layoutId\} \/>\}/, 'GlidePill (segmented)'],
+  ['components/shared/Segmented.tsx', /layoutRoot=\{!scrollable\}/, 'layoutRoot 投影（内联 / fixed 容器）'],
+  ['components/shared/Segmented.tsx', /layoutScroll=\{scrollable\}/, 'layoutScroll 投影（可横向滚动的条）'],
   ['components/shared/Skeleton.tsx', /t-skel/, 't-skel'],
   ['components/shared/Skeleton.tsx', /t-skel-skeleton is-pulsing/, 't-skel-skeleton'],
   ['components/shared/InfoHint.tsx', /t-tt-wrap/, 't-tt-wrap'],
@@ -76,11 +91,16 @@ const SURFACES = [
   ['components/shared/InfoHint.tsx', /['"]t-tt /, 't-tt'],
   ['components/screener/SideCards.tsx', /t-acc/, 't-acc'],
   ['components/screener/SideCards.tsx', /t-acc-panel-inner/, 't-acc-panel-inner'],
-  ['components/screener/FilterWorkbench.tsx', /GlidePill/, 'TierSegmented glide pill'],
-  ['components/screener/FilterWorkbench.tsx', /SPRING_INDICATOR/, 'TierSegmented beui spring'],
-  ['components/screener/FilterWorkbench.tsx', /layoutScroll/, 'TierSegmented scroll-aware projection'],
+  ['components/screener/FilterWorkbench.tsx', /<Segmented<TierFilter>/, 'TierSegmented 走共享分段控件'],
+  ['components/screener/FilterWorkbench.tsx', /^\s+scrollable$/m, 'TierSegmented 声明可横向滚动'],
   ['components/shared/GlidePill.tsx', /layoutId=\{layoutId\}/, 'beui layoutId pill'],
-  ['components/CommandPalette.tsx', /placeListGlide/, 'palette glide highlight'],
+  ['components/shared/GlidePill.tsx', /data-glide-pill/, 'GlidePill 取证句柄'],
+  [
+    'components/shared/GlidePill.tsx',
+    /transition=\{reduce \? \{ duration: 0 \} : SPRING_INDICATOR\}/,
+    '滑块自持弹簧 + reduced-motion 归零',
+  ],
+  ['components/CommandPalette.tsx', /placeGlide\(/, 'palette glide highlight'],
   ['pages/Login.tsx', /t-input-wrap/, 't-input-wrap'],
   ['pages/Login.tsx', /userShake\.classes\.wrap/, 'username shake wrap className'],
   ['pages/Login.tsx', /pwShake\.classes\.input/, 'password shake input className'],
@@ -163,8 +183,7 @@ test('overlay close timing is shorter than open (dropdown/modal/panel)', async (
 
 test('chrome sources wire documented t-* hooks and drop stacked framer enter/exit', async () => {
   for (const [file, pattern, label] of SURFACES) {
-    const code = await source(file);
-    assert.match(code, pattern, `${label} missing in ${file}`);
+    assert.match(await code(file), pattern, `${label} missing in ${file}`);
   }
   const toast = await source('components/Toast.tsx');
   assert.doesNotMatch(toast, /from 'framer-motion'/);
@@ -267,32 +286,39 @@ test('toast rows collapse on the toast clocks so the stack never jumps', async (
 test('tabs ride the beui spring indicator with Paper Terminal geometry, focus ring restored', async () => {
   /* 几何仍是 catalog 的纸面分段控件（8px 条 / 26px 高），指示器是
      beui.dev components/motion/tabs 的 layoutId 弹簧（SPRING_INDICATOR，
-     170/24/1.2）；reduced-motion 由 MotionConfig 归零。
-     审查 #113 修正确认：layout="position" 只动位置、宽度瞬跳，禁用；
-     可横向滚动的 TierSegmented 用 layoutScroll（layoutRoot 只给 fixed 容器，
-     如 MobileDock 里的 Segmented）；指示器与按钮同级，方向键从最近的
-     tablist 查全体标签（wrapper 下 parentElement 只剩当前 wrapper）。 */
+     170/24/1.2）；弹簧与 reduced-motion 归零都在 GlidePill 里，调用点不再包
+     MotionConfig。审查 #113 修正确认：layout="position" 只动位置、宽度瞬跳，
+     禁用；可横向滚动的条用 layoutScroll，其余（含 MobileDock 的 fixed 容器）
+     用 layoutRoot；指示器与按钮同级，方向键从最近的 tablist 查全体标签
+     （wrapper 下 parentElement 只剩当前 wrapper）。
+     以下一律读 codeOf() 后的代码：注释里复读一遍 layoutRoot 不算实现。 */
   const catalog = await source('styles/transitions-catalog.css');
-  const adaptation = catalog.slice(catalog.indexOf('Paper Terminal color remaps'));
+  /* 先按注释里的分节标记切，再剥注释：剥完标记就没了，而声明块才是断言对象 */
+  const adaptation = codeOf(catalog.slice(catalog.indexOf('Paper Terminal color remaps')));
   assert.match(adaptation, /\.t-tabs \{[^}]*border-radius: 8px;/s);
-  const motion = await source('lib/motion.ts');
+  /* 滑块归 framer 之后本仓再没有 .t-tabs-pill 标记，几何适配是死样式 */
+  assert.doesNotMatch(adaptation, /\.t-tabs-pill/, '无人渲染的 pill 不留适配块');
+  const motion = await code('lib/motion.ts');
   assert.match(motion, /stiffness: 170/);
   assert.match(motion, /damping: 24/);
   assert.match(motion, /mass: 1\.2/);
-  const pill = await source('components/shared/GlidePill.tsx');
+  const pill = await code('components/shared/GlidePill.tsx');
   assert.doesNotMatch(pill, /layout="position"/, 'position-only 投影让宽度瞬跳');
   assert.match(pill, /shadow-btn/);
-  const segmented = await source('components/shared/Segmented.tsx');
+  /* 弹簧与归零只此一份：调用点不该再各自包 MotionConfig */
+  assert.match(pill, /useReducedMotion\(\)/);
+  const segmented = await code('components/shared/Segmented.tsx');
   assert.match(segmented, /focus-visible:ring-2/);
-  assert.match(segmented, /useReducedMotion/);
-  assert.match(segmented, /layoutRoot/, 'MobileDock 是 fixed 容器，Segmented 保持 layoutRoot');
+  assert.doesNotMatch(segmented, /MotionConfig/, '滑块自持 transition，调用点不再包 MotionConfig');
   assert.match(segmented, /closest<HTMLElement>\('\[role="tablist"\]'\)/);
-  const workbench = await source('components/screener/FilterWorkbench.tsx');
-  assert.match(workbench, /useReducedMotion/);
-  assert.match(workbench, /layoutScroll/);
-  assert.doesNotMatch(workbench, /layoutRoot/, '横向滚动 tabs 用 layoutScroll，不是 layoutRoot');
-  assert.match(workbench, /closest<HTMLElement>\('\[role="tablist"\]'\)/);
-  assert.doesNotMatch(workbench, /useTabsPill/, 'TierSegmented rides the beui spring pill');
+  /* 可横向滚动时的 affordance 与不收缩的项跟着 scrollable 一起走 */
+  assert.match(segmented, /scrollable && 'no-scrollbar max-w-full overflow-x-auto'/);
+  assert.match(segmented, /scrollable && 'shrink-0 whitespace-nowrap'/);
+  const workbench = await code('components/screener/FilterWorkbench.tsx');
+  /* 键盘/结构只留共享件一份：TierSegmented 曾整段抄写并已跑偏（审计 2.5.9） */
+  assert.doesNotMatch(workbench, /closest<HTMLElement>/, 'roving tabindex 只应存在于 shared/Segmented');
+  assert.doesNotMatch(workbench, /onKeyDown/, 'TierSegmented 不再自持键盘实现');
+  assert.doesNotMatch(workbench, /MotionConfig/);
 });
 
 test('MenuSelect keeps the native-select keyboard contract it replaced', async () => {
@@ -320,24 +346,51 @@ test('overlayClassName / overlayVisible drive the documented state classes', () 
   assert.equal(overlayVisible(false, 'closed'), false);
 });
 
-test('placeTabsPill first paint writes transform/width without a transition', () => {
-  let reads = 0;
-  const pill = {
-    style: { transition: 'transform 250ms', transform: '', width: '' },
+function fakeGlide() {
+  const style = { transition: 'transform 250ms', transform: '', width: '', height: '' };
+  style.setProperty = (name, value) => {
+    style[name] = value;
+  };
+  const el = {
+    style,
+    reads: 0,
     get offsetWidth() {
-      reads += 1;
+      el.reads += 1;
       return 1;
     },
   };
-  placeTabsPill(pill, { offsetLeft: 40, offsetWidth: 80 }, false);
-  assert.equal(pill.style.transform, 'translateX(40px)');
-  assert.equal(pill.style.width, '80px');
-  assert.equal(pill.style.transition, 'transform 250ms');
-  assert.ok(reads >= 1, 'must force a reflow via offsetWidth');
+  return el;
+}
 
-  placeTabsPill(pill, { offsetLeft: 120, offsetWidth: 64 }, true);
-  assert.equal(pill.style.transform, 'translateX(120px)');
-  assert.equal(pill.style.width, '64px');
+test('placeGlide writes transform + the axis size, suspending the transition on first paint', () => {
+  /* 横向标签条走 x（translateX + width），纵向结果列表走 y（translateY + height）。
+     animate=false 是首绘/换批：掐断过渡→写→回流→还原，否则会从 translate(0)/
+     size:0 补间过来。 */
+  const x = fakeGlide();
+  placeGlide(x, { offset: 40, size: 80 }, { axis: 'x', animate: false });
+  assert.equal(x.style.transform, 'translateX(40px)');
+  assert.equal(x.style.width, '80px');
+  assert.equal(x.style.height, '', 'x 轴不许碰高度');
+  assert.equal(x.style.transition, 'transform 250ms', '掐断后必须还原调用方的过渡');
+  assert.ok(x.reads >= 1, 'must force a reflow via offsetWidth');
+
+  const painted = x.reads;
+  placeGlide(x, { offset: 120, size: 64 }, { axis: 'x', animate: true });
+  assert.equal(x.style.transform, 'translateX(120px)');
+  assert.equal(x.style.width, '64px');
+  assert.equal(x.reads, painted, 'animate 路径要留给 CSS 补间，不强制回流');
+
+  const y = fakeGlide();
+  placeGlide(y, { offset: 18, size: 36 }, { axis: 'y', animate: false });
+  assert.equal(y.style.transform, 'translateY(18px)');
+  assert.equal(y.style.height, '36px');
+  assert.equal(y.style.width, '', 'y 轴不许碰宽度');
+  assert.equal(y.style.transition, 'transform 250ms');
+  assert.ok(y.reads >= 1);
+
+  placeGlide(y, { offset: 54, size: 40 }, { axis: 'y', animate: true });
+  assert.equal(y.style.transform, 'translateY(54px)');
+  assert.equal(y.style.height, '40px');
 });
 
 test('replayShake removes, reflows, then re-adds is-shaking', async () => {

@@ -5,13 +5,11 @@
  * 行3 板块多选（折叠 +N）· 价格区间 · 成交额下限 · 开始扫描（真实等待态）
  * 行 stagger 60ms；过滤器变更主按钮脉冲（box-shadow 呼吸 1.2s ×2）
  */
-import { useId, useState } from 'react';
-import { MotionConfig, motion, useReducedMotion } from 'framer-motion';
+import { useState } from 'react';
+import { motion } from 'framer-motion';
 import type { SectorOption, StrengthProfile } from '@/api/types';
 import { cn } from '@/lib/utils';
-import { SPRING_INDICATOR } from '@/lib/motion';
 import Icon from '@/components/icons';
-import GlidePill from '@/components/shared/GlidePill';
 import Segmented from '@/components/shared/Segmented';
 import MenuSelect from '@/components/shared/MenuSelect';
 import {
@@ -29,7 +27,7 @@ import { t as __t } from '../../i18n/core.ts';
 const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
 const SPRING_POP = { type: 'spring', stiffness: 520, damping: 32 } as const;
 
-/* ---------------- 分档 Segmented（自定义：带 Mono 11 数量徽标） ---------------- */
+/* ---------------- 分档 Segmented（共享件 + Mono 11 数量徽标） ---------------- */
 const TIER_OPTIONS: { value: TierFilter; label: string }[] = [
   { value: 'all', label: __t('全部') },
   { value: 'S', label: 'S' },
@@ -51,71 +49,26 @@ function TierSegmented({
   onChange: (v: TierFilter) => void;
 }) {
   const scopeNote = coversPool ? __t('已评分候选池') : __t('当前快照返回的行');
-  const layoutId = useId();
-  const reduce = useReducedMotion();
+  /* 只剩三处真实差异：徽标标签、aria/title 文案、可横向滚动（滚动条投影用
+     layoutScroll）。键盘/结构/指示器全部复用共享件——两份抄写在本 PR 里已经
+     各自跑偏过一次（审计 2.5.9）。 */
   return (
-    <MotionConfig transition={reduce ? { duration: 0 } : SPRING_INDICATOR}>
-    {/* beui motion tabs 滑行指示器。layoutScroll：本条可横向滚动
-        （overflow-x-auto），布局测量必须计入容器滚动偏移，否则窄屏滚动
-        后切换标签滑块跳位；给 fixed 容器用的根投影模式不适用（阻断 3）。 */}
-    <motion.div
-      layoutScroll
-      role="tablist"
-      aria-label={__t('强度分档 · 计数基于{scope}', { scope: scopeNote })}
+    <Segmented<TierFilter>
+      options={TIER_OPTIONS}
+      value={value}
+      onChange={onChange}
+      scrollable
+      ariaLabel={__t('强度分档 · 计数基于{scope}', { scope: scopeNote })}
       title={__t('分档计数基于{scope}', { scope: scopeNote })}
-      className="t-tabs no-scrollbar max-w-full overflow-x-auto border border-line"
-    >
-      {TIER_OPTIONS.map((o, index) => {
-        const active = value === o.value;
-        return (
-          /* 指示器与按钮同级：滑块垫在 z-10 透明按钮之下，不遮邻居文字 */
-          <div key={o.value} className="relative shrink-0">
-            {active && <GlidePill layoutId={layoutId} />}
-            <button
-              role="tab"
-              aria-selected={active}
-              /* tablist 标准键盘行为，与 shared/Segmented 的 P3-5 口径一致
-                 （审计 2.5.9）：roving tabindex + 方向键 + Home/End。 */
-              tabIndex={active ? 0 : -1}
-              onClick={() => onChange(o.value)}
-              onKeyDown={(event) => {
-                const step =
-                  event.key === 'ArrowRight' || event.key === 'ArrowDown'
-                    ? 1
-                    : event.key === 'ArrowLeft' || event.key === 'ArrowUp'
-                      ? -1
-                      : 0;
-                let target = -1;
-                if (step !== 0) {
-                  target = (index + step + TIER_OPTIONS.length) % TIER_OPTIONS.length;
-                } else if (event.key === 'Home') {
-                  target = 0;
-                } else if (event.key === 'End') {
-                  target = TIER_OPTIONS.length - 1;
-                }
-                if (target < 0) return;
-                event.preventDefault();
-                onChange(TIER_OPTIONS[target].value);
-                /* 从最近的 tablist 查全体标签（wrapper 结构连锁修） */
-                const tabs = event.currentTarget
-                  .closest<HTMLElement>('[role="tablist"]')
-                  ?.querySelectorAll<HTMLElement>('.t-tab');
-                tabs?.[target]?.focus();
-              }}
-              className="t-tab relative z-10 shrink-0 whitespace-nowrap text-caption font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30"
-            >
-              <span className="flex items-baseline gap-1">
-                {o.label}
-                <span className={cn('font-mono text-[11px] leading-[14px] tnum', active ? 'text-brand-600' : 'text-ink-300')}>
-                  {counts[o.value]}
-                </span>
-              </span>
-            </button>
-          </div>
-        );
-      })}
-    </motion.div>
-    </MotionConfig>
+      renderLabel={(o, active) => (
+        <span className="flex items-baseline gap-1">
+          {o.label}
+          <span className={cn('font-mono text-[11px] leading-[14px] tnum', active ? 'text-brand-600' : 'text-ink-300')}>
+            {counts[o.value]}
+          </span>
+        </span>
+      )}
+    />
   );
 }
 

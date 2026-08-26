@@ -119,7 +119,7 @@ export function glassTooltip(overrides: Record<string, unknown> = {}) {
 }
 
 /* ---------- Insight Cards 折线工艺（beautifului.dev · Insight Cards） ----------
- * 只用于折线图卡片：smooth 曲线 2.25px、极淡渐变面积、实心细游标（26% 墨色）、
+ * 只用于折线图卡片：2.25px 圆头线、极淡渐变面积、实心细游标（26% 墨色）、
  * 顶部锚定的白底胶囊 tooltip（发丝边 + sh-2 + r-8 + 圆点数值行）。
  * K线/柱状等其他图仍走 glassTooltip 毛玻璃工艺，互不串味。 */
 
@@ -129,26 +129,70 @@ export function withAlpha(hex: string, alpha: number): string {
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
 }
 
-/** Insight 折线 series 片段：贝塞尔平滑近似参考实现的 Catmull-Rom 滑翔感 */
-export function insightLine(color: string, overrides: Record<string, unknown> = {}): Record<string, unknown> {
-  return {
-    type: 'line' as const,
-    showSymbol: false,
-    smooth: 0.45,
-    lineStyle: { color, width: 2.25, cap: 'round', join: 'round' },
-    itemStyle: { color },
-    ...overrides,
-  };
+/** Insight 内嵌图台：暖白纸面 + 发丝边，把绘图区收进一层里（外边距各站点自给） */
+export const INSIGHT_FRAME = 'rounded-lg border border-line bg-card-warm p-2';
+
+/** Insight 滑翔平滑度（贝塞尔近似 Catmull-Rom）：只给愿意被平滑的曲线显式传入 */
+export const INSIGHT_SMOOTH = 0.45;
+
+const isPlainObject = (v: unknown): v is Record<string, unknown> =>
+  typeof v === 'object' && v !== null && !Array.isArray(v);
+
+/* 一层深合并：lineStyle/itemStyle 这类嵌套工艺基底不该被调用点整段重抄，
+   否则以后调工艺会静默绕过每个抄过的 series。调用点只写 delta。 */
+function mergeOneLevel(
+  base: Record<string, unknown>,
+  patch: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...base };
+  for (const [key, value] of Object.entries(patch)) {
+    const prev = out[key];
+    out[key] = isPlainObject(prev) && isPlainObject(value) ? { ...prev, ...value } : value;
+  }
+  return out;
 }
 
-/** Insight 渐变面积：顶部 12% 同色渐隐到底部全透明（替代点阵，仅折线图） */
-export function insightAreaStyle(color: string): LineSeriesOption['areaStyle'] {
-  return {
-    color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-      { offset: 0, color: withAlpha(color, 0.12) },
-      { offset: 1, color: withAlpha(color, 0) },
-    ]),
-  };
+/** Insight 折线 series 片段：overrides 只需给 delta（如 lineStyle: { width: 1.5 }） */
+export function insightLine(color: string, overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return mergeOneLevel(
+    {
+      type: 'line' as const,
+      showSymbol: false,
+      /* 分析型曲线默认不平滑：平滑会在真实观测点之间伪造出没测过的读数。
+         要 Insight 的滑翔手感，调用点显式传 smooth: INSIGHT_SMOOTH。 */
+      smooth: false,
+      lineStyle: { color, width: 2.25, cap: 'round', join: 'round' },
+      itemStyle: { color },
+    },
+    overrides,
+  );
+}
+
+/**
+ * Insight 渐变面积：同色 12% 渐隐，浓的一头永远贴着数据线。
+ *
+ * areaStyle 的基线是 0，负值段的多边形长在 0 轴「下方」——固定的上→下渐变
+ * 会把浓色压在 0 轴、把透明留给曲线，正好反过来（净空是 CTA 的常规状态，
+ * 不是边角情况）。所以按 0 在多边形包围盒里的位置切一刀：正负两瓣各自从
+ * 曲线端起浓、到 0 轴收干。values 用来定位那一刀，必须是本条 series 的数据。
+ */
+export function insightAreaStyle(
+  color: string,
+  values: (number | null | undefined)[],
+): LineSeriesOption['areaStyle'] {
+  const nums = values.filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+  const top = Math.max(0, ...nums);
+  const bottom = Math.min(0, ...nums);
+  const strong = withAlpha(color, 0.12);
+  const clear = withAlpha(color, 0);
+  /* 全正/全负时 0 落在包围盒边界，下面的去重会把它退化成单向渐变 */
+  const zero = top === bottom ? 1 : top / (top - bottom);
+  const stops = [
+    { offset: 0, color: top > 0 ? strong : clear },
+    { offset: zero, color: clear },
+    { offset: 1, color: bottom < 0 ? strong : clear },
+  ].filter((stop, i, all) => i === 0 || stop.offset !== all[i - 1].offset);
+  return { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, stops) };
 }
 
 /** Insight tooltip 数值行：8px 圆点 + 可选标签 + 加粗数值 */
@@ -158,6 +202,19 @@ export function insightDotRow(color: string, label: string, value: string): stri
     `<span style="width:8px;height:8px;border-radius:50%;background:${color};flex:0 0 8px"></span>` +
     (label ? `<span style="color:${CH.ink400}">${label}</span>` : '') +
     `<span style="font-weight:600">${value}</span></span>`
+  );
+}
+
+/**
+ * Insight tooltip 正文：日期头 + 数值行 + 可选脚注，排版只此一处。
+ * 行距交给 flex 的 column-gap——早先用 12px 占位 span 拼接，换行时那个
+ * span 会落在行首，读成一段幽灵缩进。
+ */
+export function insightTooltipBody(header: string, rows: string[], meta = ''): string {
+  return (
+    `<div style="color:${CH.ink400};font-size:11px;margin-bottom:4px">${header}</div>` +
+    `<div style="display:flex;flex-wrap:wrap;gap:4px 12px">${rows.join('')}</div>` +
+    (meta ? `<div style="color:${CH.ink400};font-size:11px;margin-top:4px">${meta}</div>` : '')
   );
 }
 

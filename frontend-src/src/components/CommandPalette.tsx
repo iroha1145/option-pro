@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils';
 import {
   overlayClassName,
   overlayVisible,
+  placeGlide,
   readRootDurationMs,
   useOverlayPhase,
 } from '@/lib/transitions';
@@ -68,26 +69,6 @@ function Kbd({ children }: { children: React.ReactNode }) {
   );
 }
 
-/**
- * 结果列表的滑行高亮（beautifului.dev Search 的 GlideMenu 手感）：
- * 一个绝对定位的高亮块在行间滑动，transform/height 走 CSS 缓动（弹簧见
- * --ease-snap），首绘不补间。不用 framer layoutId——chrome 覆盖层保持
- * catalog CSS 单一动效语言（motion-tokens 契约）。
- */
-function placeListGlide(el: HTMLElement, row: { offsetTop: number; offsetHeight: number }, animate: boolean): void {
-  if (!animate) {
-    const prev = el.style.transition;
-    el.style.transition = 'none';
-    el.style.transform = `translateY(${row.offsetTop}px)`;
-    el.style.height = `${row.offsetHeight}px`;
-    void el.offsetWidth;
-    el.style.transition = prev;
-    return;
-  }
-  el.style.transform = `translateY(${row.offsetTop}px)`;
-  el.style.height = `${row.offsetHeight}px`;
-}
-
 export default function CommandPalette({ open, onClose, onOpenTicker, onForceRefresh }: PaletteProps) {
   const navigate = useNavigate();
   const { isOwner, isSignedIn, username, logout } = useAccess();
@@ -103,6 +84,9 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
   const listRef = useRef<HTMLDivElement>(null);
   const glideRef = useRef<HTMLSpanElement>(null);
   const glidePainted = useRef(false);
+  /* 上次落笔时用的那一批结果。换批（搜索出结果、清空搜索、重开面板）时
+     几何基准整个换掉，必须瞬放；只有同一批里挪 active 才滑行。 */
+  const glideBatch = useRef<Entry[] | null>(null);
   useFocusTrap(panelRef, open, { initialFocusRef: inputRef });
   const closeMs = readRootDurationMs('--modal-close-dur', 150);
   const phase = useOverlayPhase(open, closeMs);
@@ -253,6 +237,10 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
   const clampedActive = Math.min(active, Math.max(0, flat.length - 1));
 
   const onKeyDown = (e: React.KeyboardEvent) => {
+    /* 输入法组词期间一律不接管按键：组词中的回车/上下键属于候选窗，
+       抢过来会把「英伟达」这类中文名搜索的确认键变成「打开当前高亮项」，
+       组词内容当场丢失（zh 是默认语言，空态文案自己就在教用户输中文名）。 */
+    if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       setActive((a) => (flat.length ? (a + 1) % flat.length : 0));
@@ -282,26 +270,41 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
   }, [clampedActive]);
 
   /* 滑行高亮定位：跟随 active 行（键盘 ↑↓ 与鼠标悬停同一套），首绘/列表
-     换批时瞬放不补间，行内切换才滑行。
+     换批时瞬放不补间，同一批内挪 active 才滑行。
      依赖必须带 mounted（审查 #113 阻断 1）：面板关闭时组件未挂载、高亮
      节点不存在，effect 提前返回；随后打开时若其余依赖没变，effect 不再
-     执行，高亮会永远停在 height:0/opacity:0。 */
+     执行，高亮会永远停在 height:0/opacity:0。
+     补间与否只看 glideBatch，不能只看 glidePainted：重开面板时 mounted 与
+     open 同一次渲染翻真，而 active 归零在 passive effect 里，本 layout
+     effect 会先按上次的 active 落一次笔；清空搜索则是「股票批 → 最近/功能
+     批」单次渲染换完、中间没有空列表可以复位标志——两条路径都会让高亮
+     从旧行位置滑过来，正是本 PR 自称要防的 stale 补间。 */
   useLayoutEffect(() => {
     if (!mounted) {
       glidePainted.current = false;
+      glideBatch.current = null;
       return;
     }
     const glide = glideRef.current;
     const row = listRef.current?.querySelector<HTMLElement>(`[data-idx="${clampedActive}"]`);
-    if (!glide || !row || flat.length === 0) {
+    if (!glide || !row || entries.length === 0) {
       if (glide) glide.style.opacity = '0';
       glidePainted.current = false;
+      glideBatch.current = null;
       return;
     }
+    const sameBatch = glideBatch.current === entries;
+    placeGlide(
+      glide,
+      { offset: row.offsetTop, size: row.offsetHeight },
+      { axis: 'y', animate: glidePainted.current && sameBatch },
+    );
+    /* opacity 必须在落笔之后写：瞬放路径里 transition:'none' + 强制回流会把
+       同一帧内已经改过的 opacity 一起定死，淡入就永远播不出来。 */
     glide.style.opacity = '1';
-    placeListGlide(glide, row, glidePainted.current);
     glidePainted.current = true;
-  }, [mounted, clampedActive, flat.length, entries]);
+    glideBatch.current = entries;
+  }, [mounted, clampedActive, entries]);
 
   /* 面板打开时锁背景滚动（审计 2.2.14）：与 Drawer 同口径，滚轮不再穿透
      到背后的页面。关闭动画期间仍锁，避免背后页面跟着滚。 */
@@ -396,11 +399,18 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
               <span
                 ref={glideRef}
                 aria-hidden="true"
+                /* 取证测试的稳定句柄：别拿「listbox 下第一个 aria-hidden span」
+                   这种结构指纹找它（它自己就带装饰子元素）。 */
+                data-glide-list=""
                 className="pointer-events-none absolute inset-x-1.5 top-0 z-0 rounded-md bg-brand-50"
                 style={{
                   height: 0,
                   opacity: 0,
-                  transition: 'transform 250ms var(--ease-snap), height 250ms var(--ease-snap), opacity 160ms',
+                  /* 走 catalog 的滑动标签时钟（--tabs-dur/--tabs-ease）与档位内的
+                     快挡时长，不再在这里写 250/160 这种近邻字面量：动效标度调一次
+                     就该同时到达标签胶囊和这里。 */
+                  transition:
+                    'transform var(--tabs-dur) var(--tabs-ease), height var(--tabs-dur) var(--tabs-ease), opacity var(--duration-quick)',
                 }}
               >
                 <span className="absolute inset-y-1 left-0 w-0.5 rounded-full bg-brand-600" />
@@ -434,7 +444,9 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
               )}
               {groups.map((g) => (
                 <div key={g.name}>
-                  <p className="eyebrow px-4 pb-1 pt-2.5">{__t(g.name)}</p>
+                  {/* 分组标题也要抬到滑块之上：高亮块是不透明的 brand-50 底，
+                      跨组滑行时会从标题上碾过去，只抬按钮会让标题文字闪掉。 */}
+                  <p className="eyebrow relative z-10 px-4 pb-1 pt-2.5">{__t(g.name)}</p>
                   {g.items.map((e) => (
                     <button
                       key={e.id}
@@ -444,6 +456,10 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
                       data-idx={e.idx}
                       onClick={e.action}
                       onMouseEnter={() => setActive(e.idx)}
+                      /* 键盘焦点也要把高亮拉过来：面板级 Enter 让原生元素自己
+                         派发 click（阻断 2），若焦点行与高亮行能分家，Tab 到第 1
+                         行再按 Enter 打开的就不是唯一可见高亮的那一行。 */
+                      onFocus={() => setActive(e.idx)}
                       className={cn(
                         'relative z-10 flex w-full items-center gap-2.5 rounded-md px-4 py-2 text-left transition-colors duration-fast',
                       )}

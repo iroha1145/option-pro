@@ -256,6 +256,8 @@
   from { opacity: 0; }
   to { opacity: 1; }
 }
+/* 不用 tailwindcss-animate 的 animate-in fade-in：本文件底部的减少动态钳制
+   只认这里的类名，插件工具类会漏过那一条。 */
 .anim-fade-in {
   animation: fade-in 180ms ease-out both;
 }

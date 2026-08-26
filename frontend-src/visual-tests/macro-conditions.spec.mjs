@@ -9,12 +9,12 @@
 // 对无扩展名文档路径返回 index.html，正是生产网关 main.py::_is_spa_document_path
 // 的行为。比点击指数纸带更稳：纸带是 animate-marquee 持续位移的元素。
 import { expect, test } from "@playwright/test";
-import { mkdir, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { captureEvidence } from "./support/evidence.mjs";
 
 const INDEX_HTML = join(process.cwd(), "..", "frontend", "index.html");
 
-const SCREENSHOT_DIR = join(process.cwd(), "test-results", "visual-evidence");
 const NOW = "2026-07-24T22:30:00Z";
 const TODAY = "2026-07-24";
 const YESTERDAY = "2026-07-23";
@@ -235,10 +235,9 @@ async function openMarket(page) {
 }
 
 async function shot(page, name) {
-  await mkdir(SCREENSHOT_DIR, { recursive: true });
   const section = page.locator('section[aria-label="宏观环境"]');
   await section.scrollIntoViewIfNeeded();
-  await page.screenshot({ path: join(SCREENSHOT_DIR, `${name}.png`), fullPage: true });
+  await captureEvidence(page, name, { fullPage: true });
   expect(SECRET_PATTERN.test(await page.content())).toBe(false);
 }
 

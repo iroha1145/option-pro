@@ -6,7 +6,17 @@
 import { useMemo, useState } from 'react';
 import type { ApiError } from '@/api/client';
 import ReactECharts from '@/components/charts/ReactECharts';
-import { CH, baseAnimation, baseGrid, insightDotRow, insightLine, insightTooltip, valueAxis } from '@/lib/chart';
+import {
+  CH,
+  INSIGHT_FRAME,
+  baseAnimation,
+  baseGrid,
+  insightDotRow,
+  insightLine,
+  insightTooltip,
+  insightTooltipBody,
+  valueAxis,
+} from '@/lib/chart';
 import { cn } from '@/lib/utils';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
 import InfoHint from '@/components/shared/InfoHint';
@@ -83,12 +93,13 @@ export default function MacroHistoryChart({
     );
 
     const series: Record<string, unknown>[] = [
-      /* Insight Cards 折线工艺（lib/chart）：平滑 2.25px；回算段保留虚线语义 */
+      /* Insight Cards 折线工艺（lib/chart）：2.25px 圆头线；回算段保留虚线语义。
+         0–100 分位是逐日观测，不平滑——插值出来的分数没有任何一天测到过。 */
       insightLine(CH.brand600, {
         name: t('综合分（回算）'),
         data: revised,
         connectNulls: false,
-        lineStyle: { color: CH.brand600, width: 2.25, type: [5, 4], cap: 'round', join: 'round' },
+        lineStyle: { type: [5, 4] },
         markLine: {
           silent: true,
           symbol: 'none',
@@ -117,7 +128,7 @@ export default function MacroHistoryChart({
           name: t(modules.find((item) => item.moduleId === moduleId)?.nameZh ?? moduleId),
           data: points.map((point) => point.moduleScores[moduleId] ?? null),
           connectNulls: false,
-          lineStyle: { color, width: 1.5, opacity: 0.85, cap: 'round', join: 'round' },
+          lineStyle: { width: 1.5, opacity: 0.85 },
         }),
       );
     });
@@ -141,8 +152,7 @@ export default function MacroHistoryChart({
                 item.seriesName ?? '',
                 typeof item.value === 'number' ? item.value.toFixed(1) : '—',
               );
-            })
-            .join('<span style="display:inline-block;width:12px"></span>');
+            });
           const meta = [
             // regime 是中文分档名（同卡片处已译）：tooltip 里同样要过词典
             regime ? t('环境：{regime}', { regime: t(regime) }) : '',
@@ -150,11 +160,7 @@ export default function MacroHistoryChart({
           ]
             .filter(Boolean)
             .join(' · ');
-          return (
-            `<div style="color:${CH.ink400};font-size:11px;margin-bottom:4px">${date}</div>` +
-            `<div style="display:flex;flex-wrap:wrap;gap:4px 0">${dots}</div>` +
-            (meta ? `<div style="color:${CH.ink400};font-size:11px;margin-top:4px">${meta}</div>` : '')
-          );
+          return insightTooltipBody(date, dots, meta);
         },
       }),
       xAxis: {
@@ -219,8 +225,7 @@ export default function MacroHistoryChart({
           )}
         </p>
       )}
-      {/* Insight Cards 内嵌图台：暖白纸面 + 发丝边，把绘图区收进一层里 */}
-      <div className="mt-4 rounded-lg border border-line bg-card-warm p-2">
+      <div className={cn(INSIGHT_FRAME, 'mt-4')}>
         <div className="h-[240px] w-full">
         {loading && points.length === 0 ? (
           <SkeletonBlock className="h-full w-full" />

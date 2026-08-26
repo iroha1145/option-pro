@@ -89,7 +89,9 @@ test('跑马灯第二套副本对键盘与读屏软件不可见', async () => {
 
 test('分段控件实现 roving tabindex 与方向键', async () => {
   const segmented = codeOf(await source('components/shared/Segmented.tsx'));
-  assert.match(segmented, /tabIndex=\{value === o\.value \? 0 : -1\}/);
+  // 选中判定与 roving tabindex 是同一个谓词，别再各写一遍（审查 #113）
+  assert.match(segmented, /const active = value === o\.value;/);
+  assert.match(segmented, /tabIndex=\{active \? 0 : -1\}/);
   assert.match(segmented, /event\.key === 'ArrowRight' \|\| event\.key === 'ArrowDown'/);
   assert.match(segmented, /event\.key === 'ArrowLeft' \|\| event\.key === 'ArrowUp'/);
   assert.match(segmented, /event\.key === 'Home'/);

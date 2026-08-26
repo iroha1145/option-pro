@@ -3,7 +3,7 @@
  * Durations stay in CSS custom properties; these helpers only read them and
  * toggle the documented class / attribute hooks (is-open, is-closing, is-shaking).
  */
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 export type OverlayPhase = 'closed' | 'preopen' | 'open' | 'closing';
 
@@ -91,25 +91,32 @@ export function useOverlayPhase(open: boolean, closeMs: number): OverlayPhase {
 }
 
 /**
- * Write the sliding-tabs pill to a tab's offset. First paint and resize pass
- * `animate=false` so the pill does not tween from translateX(0)/width:0.
+ * 把滑行指示器写到目标格的位置/尺寸上。`animate=false` 用于首绘与换批：
+ * 先掐断过渡再写、强制回流后还原，避免从 translate(0)/size:0 补间过来。
+ * 轴向由调用点决定——横向标签条是 x（translateX + width），纵向结果列表
+ * 是 y（translateY + height）。
+ *
+ * 注意：掐断过渡期间写入的**任何**属性都不会补间，所以调用方若还想让
+ * opacity 淡入，必须在本函数返回之后再写 opacity。
  */
-export function placeTabsPill(
-  pill: HTMLElement,
-  tab: { offsetLeft: number; offsetWidth: number },
-  animate: boolean,
+export function placeGlide(
+  el: HTMLElement,
+  rect: { offset: number; size: number },
+  opts: { axis: 'x' | 'y'; animate: boolean },
 ): void {
-  if (!animate) {
-    const prev = pill.style.transition;
-    pill.style.transition = 'none';
-    pill.style.transform = `translateX(${tab.offsetLeft}px)`;
-    pill.style.width = `${tab.offsetWidth}px`;
-    void pill.offsetWidth;
-    pill.style.transition = prev;
+  const transform = opts.axis === 'x' ? `translateX(${rect.offset}px)` : `translateY(${rect.offset}px)`;
+  const sizeProp = opts.axis === 'x' ? 'width' : 'height';
+  if (!opts.animate) {
+    const prev = el.style.transition;
+    el.style.transition = 'none';
+    el.style.transform = transform;
+    el.style.setProperty(sizeProp, `${rect.size}px`);
+    void el.offsetWidth;
+    el.style.transition = prev;
     return;
   }
-  pill.style.transform = `translateX(${tab.offsetLeft}px)`;
-  pill.style.width = `${tab.offsetWidth}px`;
+  el.style.transform = transform;
+  el.style.setProperty(sizeProp, `${rect.size}px`);
 }
 
 /** Remove → reflow → add `.is-shaking` so the keyframe always restarts. */
@@ -190,43 +197,6 @@ export function useCatalogShake(holdMs = 1200) {
     play,
     clear,
   };
-}
-
-/**
- * Shared owner for the sliding-tabs pill (catalog 16). `depKey` covers
- * label/badge width changes that don't move the active index (e.g. the
- * screener tier counts) — pass anything that changes the measured widths.
- */
-export function useTabsPill(
-  wrapRef: RefObject<HTMLElement | null>,
-  pillRef: RefObject<HTMLElement | null>,
-  activeIndex: number,
-  depKey?: unknown,
-): void {
-  const firstPaint = useRef(true);
-
-  useLayoutEffect(() => {
-    const wrap = wrapRef.current;
-    const pill = pillRef.current;
-    if (!wrap || !pill) return;
-    const tab = wrap.querySelectorAll<HTMLElement>('.t-tab')[activeIndex];
-    if (!tab) return;
-    const animate = !firstPaint.current;
-    firstPaint.current = false;
-    placeTabsPill(pill, tab, animate);
-  }, [wrapRef, pillRef, activeIndex, depKey]);
-
-  useLayoutEffect(() => {
-    const onResize = () => {
-      const wrap = wrapRef.current;
-      const pill = pillRef.current;
-      if (!wrap || !pill) return;
-      const active = wrap.querySelector<HTMLElement>('.t-tab[aria-selected="true"]');
-      if (active) placeTabsPill(pill, active, false);
-    };
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, [wrapRef, pillRef]);
 }
 
 export function shakeDurationMs(cssText: string): number {
