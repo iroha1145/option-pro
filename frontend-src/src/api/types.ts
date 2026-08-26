@@ -398,6 +398,28 @@ export interface TechnicalStructure {
   /** 序列断裂点（坏拼接/异常断崖）；分析只用断裂之后的一致段 */
   series_break_at?: string | null;
   as_of?: string | null;
+  auto_patterns?: AutoTechnicalPattern[];
+  auto_patterns_version?: string;
+}
+
+export interface AutoTechnicalPattern {
+  id: string;
+  algorithmVersion: string;
+  kind: 'support_trend' | 'resistance_trend' | 'channel' | 'triangle' | 'wedge' | 'box';
+  subtype?: string;
+  direction: 'bullish' | 'bearish' | 'neutral';
+  anchors: { time: string; barKey: string; price: number }[];
+  confidence: number;
+  touches: number;
+  formationStart: string;
+  formationEnd: string;
+  dataThrough: string;
+  status: 'forming' | 'testing' | 'broken_up' | 'broken_down' | 'invalidated';
+  breakoutPrice?: number | null;
+  invalidationPrice?: number | null;
+  measuredTarget?: number | null;
+  measuredTargetNote?: string;
+  rationaleCodes: string[];
 }
 
 /* ---------- CTA 趋势资金代理估算（大盘分析页） ---------- */

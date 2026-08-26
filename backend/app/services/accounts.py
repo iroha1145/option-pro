@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
+import math
 import re
 import secrets
 import sqlite3
@@ -23,7 +25,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 
 from app.access import _b64decode, _b64encode  # shared encoding with owner hashes
 
@@ -46,6 +48,54 @@ USERNAME_MAX_LENGTH = 32
 PASSWORD_MAX_LENGTH = 256
 WATCHLIST_MAX_TICKERS = 50
 SESSION_SECONDS = 30 * 24 * 60 * 60
+
+DRAWING_KINDS = frozenset(
+    {"horizontal", "segment", "ray", "channel", "rectangle", "fibonacci", "text"}
+)
+CHART_RANGES = frozenset({"5m", "15m", "1h", "1d", "1w"})
+CHART_ADJUSTMENTS = frozenset({"raw"})
+DRAWING_ANCHOR_COUNTS = {
+    "horizontal": 1,
+    "segment": 2,
+    "ray": 2,
+    "channel": 3,
+    "rectangle": 2,
+    "fibonacci": 2,
+    "text": 1,
+}
+DRAWING_WIDTHS = frozenset({1, 2, 3, 4})
+DRAWING_DASHES = frozenset({"solid", "dashed", "dotted"})
+DRAWING_PALETTE = frozenset(
+    {
+        "#2E46E0",
+        "#3B59F2",
+        "#6B82FF",
+        "#0E9F6E",
+        "#E5484D",
+        "#E8930C",
+        "#0B7285",
+        "#3D4A68",
+        "#8A94B0",
+        "brand",
+        "up",
+        "down",
+        "ink",
+        "warn",
+        "ai",
+    }
+)
+DRAWINGS_PER_RANGE_MAX = 500
+DRAWINGS_PER_ACCOUNT_MAX = 2000
+DRAWING_PAYLOAD_MAX_BYTES = 16_384
+DRAWING_TEXT_MAX = 240
+DRAWING_PRICE_MAX = 10_000_000.0
+DRAWING_SCHEMA_VERSION = 1
+
+_HEX_COLOR = re.compile(r"^#[0-9A-Fa-f]{6}$")
+_UUID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+    re.IGNORECASE,
+)
 
 _TICKER_PATTERN = re.compile(
     r"^(?:\^[A-Z0-9][A-Z0-9._-]{0,10}|[A-Z0-9][A-Z0-9._-]{0,11})$"
@@ -80,6 +130,21 @@ CREATE TABLE IF NOT EXISTS account_watchlist (
 );
 CREATE INDEX IF NOT EXISTS idx_account_watchlist_order
     ON account_watchlist(user_id, position);
+CREATE TABLE IF NOT EXISTS account_chart_drawings (
+    drawing_id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL
+        REFERENCES accounts(user_id) ON DELETE CASCADE,
+    ticker TEXT NOT NULL,
+    chart_range TEXT NOT NULL,
+    adjustment TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    revision INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_account_chart_drawings_scope
+    ON account_chart_drawings(user_id, ticker, chart_range, adjustment);
 """
 
 
@@ -193,6 +258,191 @@ def normalize_ticker(ticker: str) -> str:
     if not _TICKER_PATTERN.fullmatch(symbol):
         raise AccountError("invalid_ticker")
     return symbol
+
+
+def normalize_chart_range(value: str) -> str:
+    key = str(value or "").strip()
+    if key not in CHART_RANGES:
+        raise AccountError("invalid_range")
+    return key
+
+
+def normalize_chart_adjustment(value: str) -> str:
+    key = str(value or "").strip()
+    if key not in CHART_ADJUSTMENTS:
+        raise AccountError("invalid_adjustment")
+    return key
+
+
+def normalize_drawing_id(value: str) -> str:
+    drawing_id = str(value or "").strip()
+    if not _UUID_RE.fullmatch(drawing_id):
+        raise AccountError("invalid_drawing_id")
+    return drawing_id.lower()
+
+
+def normalize_drawing_color(value: str) -> str:
+    color = str(value or "").strip()
+    if color in DRAWING_PALETTE:
+        return color if not color.startswith("#") else color.upper()
+    if _HEX_COLOR.fullmatch(color):
+        return color.upper()
+    raise AccountError("invalid_color")
+
+
+def _parse_iso_time(value: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        raise AccountError("invalid_time")
+    normalized = text[:-1] + "+00:00" if text.endswith("Z") else text
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError as exc:
+        raise AccountError("invalid_time") from exc
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc).isoformat()
+
+
+def _require_finite_price(value: Any) -> float:
+    try:
+        price = float(value)
+    except (TypeError, ValueError) as exc:
+        raise AccountError("invalid_price") from exc
+    if not math.isfinite(price) or price <= 0 or price > DRAWING_PRICE_MAX:
+        raise AccountError("invalid_price")
+    return price
+
+
+def _validate_anchor(raw: Mapping[str, Any]) -> dict[str, Any]:
+    if not isinstance(raw, Mapping):
+        raise AccountError("invalid_anchors")
+    extra = set(raw.keys()) - {"time", "barKey", "price"}
+    if extra:
+        raise AccountError("invalid_anchors")
+    bar_key = str(raw.get("barKey") or "").strip()
+    if not bar_key or len(bar_key) > 64:
+        raise AccountError("invalid_anchors")
+    if any(ord(ch) < 32 for ch in bar_key):
+        raise AccountError("invalid_anchors")
+    return {
+        "time": _parse_iso_time(str(raw.get("time") or "")),
+        "barKey": bar_key,
+        "price": _require_finite_price(raw.get("price")),
+    }
+
+
+def validate_drawing_payload(raw: Mapping[str, Any], *, require_id: bool = True) -> dict[str, Any]:
+    """Strict drawing body: whitelist only, no ECharts options or expressions."""
+
+    if not isinstance(raw, Mapping):
+        raise AccountError("invalid_payload")
+    extra_fields = set(raw.keys()) - {
+        "schemaVersion",
+        "id",
+        "ticker",
+        "range",
+        "adjustment",
+        "kind",
+        "anchors",
+        "style",
+        "text",
+        "locked",
+        "hidden",
+        "zOrder",
+    }
+    if extra_fields:
+        raise AccountError("invalid_payload")
+    kind = str(raw.get("kind") or "").strip()
+    if kind not in DRAWING_KINDS:
+        raise AccountError("invalid_kind")
+    anchors_raw = raw.get("anchors")
+    expected = DRAWING_ANCHOR_COUNTS[kind]
+    if not isinstance(anchors_raw, list) or len(anchors_raw) != expected:
+        raise AccountError("invalid_anchors")
+    anchors = [_validate_anchor(item) for item in anchors_raw]
+    style_raw = raw.get("style")
+    if not isinstance(style_raw, Mapping):
+        raise AccountError("invalid_style")
+    extra_style = set(style_raw.keys()) - {"color", "width", "dash", "fillOpacity"}
+    if extra_style:
+        raise AccountError("invalid_style")
+    try:
+        width = int(style_raw.get("width"))
+    except (TypeError, ValueError) as exc:
+        raise AccountError("invalid_style") from exc
+    if width not in DRAWING_WIDTHS:
+        raise AccountError("invalid_style")
+    dash = str(style_raw.get("dash") or "").strip()
+    if dash not in DRAWING_DASHES:
+        raise AccountError("invalid_style")
+    fill_opacity = style_raw.get("fillOpacity")
+    if fill_opacity is not None:
+        try:
+            fill_opacity = float(fill_opacity)
+        except (TypeError, ValueError) as exc:
+            raise AccountError("invalid_style") from exc
+        if not math.isfinite(fill_opacity) or fill_opacity < 0 or fill_opacity > 1:
+            raise AccountError("invalid_style")
+    text = raw.get("text")
+    if text is None:
+        text_out = None
+    else:
+        if not isinstance(text, str):
+            raise AccountError("invalid_text")
+        if len(text) > DRAWING_TEXT_MAX:
+            raise AccountError("text_too_long")
+        if "<" in text or ">" in text or "\x00" in text:
+            raise AccountError("invalid_text")
+        text_out = text
+        if kind == "text" and not text_out.strip():
+            raise AccountError("invalid_text")
+    if kind == "text" and not (text_out or "").strip():
+        raise AccountError("invalid_text")
+    try:
+        z_order = int(raw.get("zOrder", 0))
+    except (TypeError, ValueError) as exc:
+        raise AccountError("invalid_payload") from exc
+    if z_order < -1_000_000 or z_order > 1_000_000:
+        raise AccountError("invalid_payload")
+    schema_version = raw.get("schemaVersion", DRAWING_SCHEMA_VERSION)
+    try:
+        schema_version = int(schema_version)
+    except (TypeError, ValueError) as exc:
+        raise AccountError("invalid_payload") from exc
+    if schema_version != DRAWING_SCHEMA_VERSION:
+        raise AccountError("invalid_payload")
+    drawing_id = normalize_drawing_id(str(raw.get("id") or "")) if require_id else None
+    ticker = normalize_ticker(str(raw.get("ticker") or ""))
+    chart_range = normalize_chart_range(str(raw.get("range") or ""))
+    adjustment = normalize_chart_adjustment(str(raw.get("adjustment") or "raw"))
+    payload = {
+        "schemaVersion": DRAWING_SCHEMA_VERSION,
+        "kind": kind,
+        "anchors": anchors,
+        "style": {
+            "color": normalize_drawing_color(str(style_raw.get("color") or "")),
+            "width": width,
+            "dash": dash,
+            **({} if fill_opacity is None else {"fillOpacity": fill_opacity}),
+        },
+        "text": text_out,
+        "locked": bool(raw.get("locked", False)),
+        "hidden": bool(raw.get("hidden", False)),
+        "zOrder": z_order,
+    }
+    encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    if len(encoded.encode("utf-8")) > DRAWING_PAYLOAD_MAX_BYTES:
+        raise AccountError("payload_too_large")
+    return {
+        "id": drawing_id,
+        "ticker": ticker,
+        "range": chart_range,
+        "adjustment": adjustment,
+        "kind": kind,
+        "payload": payload,
+        "payload_json": encoded,
+    }
 
 
 def _utcnow_iso() -> str:
@@ -485,6 +735,232 @@ class AccountStore:
             )
             connection.commit()
         return self.watchlist(user_id)
+
+    # ---------------- chart drawings ----------------
+
+    def _row_to_drawing(self, row: sqlite3.Row) -> dict[str, Any]:
+        payload = json.loads(str(row["payload_json"]))
+        return {
+            "schemaVersion": DRAWING_SCHEMA_VERSION,
+            "id": str(row["drawing_id"]),
+            "ticker": str(row["ticker"]),
+            "range": str(row["chart_range"]),
+            "adjustment": str(row["adjustment"]),
+            "kind": str(row["kind"]),
+            "anchors": payload.get("anchors", []),
+            "style": payload.get("style", {}),
+            "text": payload.get("text"),
+            "locked": bool(payload.get("locked", False)),
+            "hidden": bool(payload.get("hidden", False)),
+            "zOrder": int(payload.get("zOrder", 0)),
+            "revision": int(row["revision"]),
+            "createdAt": str(row["created_at"]),
+            "updatedAt": str(row["updated_at"]),
+        }
+
+    def list_drawings(
+        self,
+        user_id: str,
+        ticker: str,
+        chart_range: str,
+        adjustment: str = "raw",
+    ) -> list[dict[str, Any]]:
+        symbol = normalize_ticker(ticker)
+        range_key = normalize_chart_range(chart_range)
+        adj = normalize_chart_adjustment(adjustment)
+        self.initialize()
+        with self._connect() as connection:
+            rows = connection.execute(
+                """SELECT drawing_id, user_id, ticker, chart_range, adjustment,
+                          kind, payload_json, revision, created_at, updated_at
+                     FROM account_chart_drawings
+                    WHERE user_id=? AND ticker=? AND chart_range=? AND adjustment=?
+                    ORDER BY created_at, drawing_id""",
+                (user_id, symbol, range_key, adj),
+            ).fetchall()
+        return [self._row_to_drawing(row) for row in rows]
+
+    def get_drawing(self, user_id: str, drawing_id: str) -> dict[str, Any] | None:
+        drawing_id = normalize_drawing_id(drawing_id)
+        self.initialize()
+        with self._connect() as connection:
+            row = connection.execute(
+                """SELECT drawing_id, user_id, ticker, chart_range, adjustment,
+                          kind, payload_json, revision, created_at, updated_at
+                     FROM account_chart_drawings
+                    WHERE user_id=? AND drawing_id=?""",
+                (user_id, drawing_id),
+            ).fetchone()
+        return None if row is None else self._row_to_drawing(row)
+
+    def create_drawing(self, user_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
+        parsed = validate_drawing_payload(body, require_id=True)
+        drawing_id = parsed["id"]
+        self.initialize()
+        now_iso = _utcnow_iso()
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            existing = connection.execute(
+                "SELECT user_id FROM account_chart_drawings WHERE drawing_id=?",
+                (drawing_id,),
+            ).fetchone()
+            if existing is not None:
+                connection.rollback()
+                if str(existing["user_id"]) != user_id:
+                    raise AccountError("drawing_forbidden")
+                raise AccountError("drawing_exists")
+            range_count = int(
+                connection.execute(
+                    """SELECT COUNT(*) FROM account_chart_drawings
+                        WHERE user_id=? AND ticker=? AND chart_range=? AND adjustment=?""",
+                    (user_id, parsed["ticker"], parsed["range"], parsed["adjustment"]),
+                ).fetchone()[0]
+            )
+            if range_count >= DRAWINGS_PER_RANGE_MAX:
+                connection.rollback()
+                raise AccountError("drawings_range_full")
+            total = int(
+                connection.execute(
+                    "SELECT COUNT(*) FROM account_chart_drawings WHERE user_id=?",
+                    (user_id,),
+                ).fetchone()[0]
+            )
+            if total >= DRAWINGS_PER_ACCOUNT_MAX:
+                connection.rollback()
+                raise AccountError("drawings_full")
+            connection.execute(
+                """INSERT INTO account_chart_drawings
+                       (drawing_id, user_id, ticker, chart_range, adjustment,
+                        kind, payload_json, revision, created_at, updated_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    drawing_id,
+                    user_id,
+                    parsed["ticker"],
+                    parsed["range"],
+                    parsed["adjustment"],
+                    parsed["kind"],
+                    parsed["payload_json"],
+                    1,
+                    now_iso,
+                    now_iso,
+                ),
+            )
+            connection.commit()
+        created = self.get_drawing(user_id, drawing_id)
+        assert created is not None
+        return created
+
+    def update_drawing(
+        self,
+        user_id: str,
+        drawing_id: str,
+        body: Mapping[str, Any],
+        *,
+        expected_revision: int,
+    ) -> dict[str, Any]:
+        drawing_id = normalize_drawing_id(drawing_id)
+        if not isinstance(expected_revision, int) or expected_revision < 1:
+            raise AccountError("revision_conflict")
+        parsed = validate_drawing_payload(
+            {**body, "id": drawing_id},
+            require_id=True,
+        )
+        self.initialize()
+        now_iso = _utcnow_iso()
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                """SELECT user_id, ticker, chart_range, adjustment, revision
+                     FROM account_chart_drawings WHERE drawing_id=?""",
+                (drawing_id,),
+            ).fetchone()
+            if row is None:
+                connection.rollback()
+                raise AccountError("drawing_not_found")
+            if str(row["user_id"]) != user_id:
+                connection.rollback()
+                raise AccountError("drawing_forbidden")
+            if (
+                str(row["ticker"]) != parsed["ticker"]
+                or str(row["chart_range"]) != parsed["range"]
+                or str(row["adjustment"]) != parsed["adjustment"]
+            ):
+                connection.rollback()
+                raise AccountError("scope_mismatch")
+            current_revision = int(row["revision"])
+            if current_revision != expected_revision:
+                connection.rollback()
+                raise AccountError("revision_conflict")
+            connection.execute(
+                """UPDATE account_chart_drawings
+                      SET kind=?, payload_json=?, revision=?, updated_at=?
+                    WHERE drawing_id=? AND user_id=? AND revision=?""",
+                (
+                    parsed["kind"],
+                    parsed["payload_json"],
+                    current_revision + 1,
+                    now_iso,
+                    drawing_id,
+                    user_id,
+                    expected_revision,
+                ),
+            )
+            connection.commit()
+        updated = self.get_drawing(user_id, drawing_id)
+        assert updated is not None
+        return updated
+
+    def delete_drawing(self, user_id: str, drawing_id: str) -> None:
+        drawing_id = normalize_drawing_id(drawing_id)
+        self.initialize()
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT user_id FROM account_chart_drawings WHERE drawing_id=?",
+                (drawing_id,),
+            ).fetchone()
+            if row is None:
+                connection.rollback()
+                raise AccountError("drawing_not_found")
+            if str(row["user_id"]) != user_id:
+                connection.rollback()
+                raise AccountError("drawing_forbidden")
+            connection.execute(
+                "DELETE FROM account_chart_drawings WHERE drawing_id=? AND user_id=?",
+                (drawing_id, user_id),
+            )
+            connection.commit()
+
+    def delete_drawings_in_scope(
+        self,
+        user_id: str,
+        ticker: str,
+        chart_range: str,
+        adjustment: str = "raw",
+    ) -> int:
+        symbol = normalize_ticker(ticker)
+        range_key = normalize_chart_range(chart_range)
+        adj = normalize_chart_adjustment(adjustment)
+        self.initialize()
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            cursor = connection.execute(
+                """DELETE FROM account_chart_drawings
+                    WHERE user_id=? AND ticker=? AND chart_range=? AND adjustment=?""",
+                (user_id, symbol, range_key, adj),
+            )
+            deleted = int(cursor.rowcount)
+            connection.commit()
+        return deleted
+
+    def delete_account(self, user_id: str) -> None:
+        """Test/admin helper: deleting the account row cascades drawings."""
+
+        self.initialize()
+        with self._connect() as connection:
+            connection.execute("DELETE FROM accounts WHERE user_id=?", (user_id,))
+            connection.commit()
 
 
 _store: AccountStore | None = None

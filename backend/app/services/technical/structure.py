@@ -29,6 +29,10 @@ from app.services.strength.price_action import (
     compute_price_action,
 )
 from app.services.strength.vol_price_match import compute_vol_price_match
+from app.services.technical.auto_patterns import (
+    ALGORITHM_VERSION as AUTO_PATTERNS_VERSION,
+    detect_auto_patterns,
+)
 from app.services.technical.base_structure import detect_base_structure
 from app.services.technical.indicators import compute_technicals
 
@@ -309,6 +313,14 @@ def compute_technical_structure(
     if base_state:
         overlays["base_status"] = base_state["status"]
 
+    try:
+        auto_patterns = detect_auto_patterns(
+            analysis,
+            data_through=analysis["dates"][-1],
+        )
+    except Exception:
+        auto_patterns = []
+
     return {
         "version": STRUCTURE_VERSION,
         "base": base,
@@ -317,6 +329,8 @@ def compute_technical_structure(
         "vol_price": vol_price,
         "technicals": technicals,
         "chart_overlays": overlays,
+        "auto_patterns": auto_patterns,
+        "auto_patterns_version": AUTO_PATTERNS_VERSION,
         "bar_count": len(analysis["closes"]),
         # data_through = 指标/结构实际吃到的最后一根收盘 K；last_bar 描述
         # 图上可见的最后一根（可能未收盘）。两者不同时 UI 应标「暂定」。

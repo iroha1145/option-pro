@@ -8,7 +8,7 @@
  * 锚点按 bar 时间戳存储、静默刷新后重新解析，解析不到判失效
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import ReactECharts from '@/components/charts/ReactECharts';
 import Segmented from '@/components/shared/Segmented';
 import EmptyState from '@/components/shared/EmptyState';
@@ -17,7 +17,13 @@ import { SkeletonBlock } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
 import { STRUCTURE_HINTS } from '@/lib/structureHints';
 import { usePolling } from '@/hooks/usePolling';
+import { useAccess } from '@/hooks/useAccess';
 import { baseAnimation, CH, glassTooltip, stippleAreaStyle, type ChartOption, type EChartsInstance } from '@/lib/chart';
+import { useDrawingController } from './chart-drawings/useDrawingController.ts';
+import DrawingToolbar from './chart-drawings/DrawingToolbar.tsx';
+import DrawingWorkspace from './chart-drawings/DrawingWorkspace.tsx';
+import { autoPatternsToMarks } from './chart-drawings/renderer.ts';
+import ConfirmDialog from '@/components/catalysts/ConfirmDialog';
 import {
   barTimeMs,
   measureRange,
@@ -272,6 +278,7 @@ function buildOption(
   prevClose?: number,
   overlay?: MeasureOverlay | null,
   tech?: ReturnType<typeof technicalMarks> | null,
+  extra?: { lines: object[]; points: object[]; areas: object[] } | null,
 ): ChartOption {
   const labels = bars.map((b) => fmtAxisLabel(b.t, range));
   const upFill = CH.up600;
@@ -279,9 +286,9 @@ function buildOption(
   const measure = measureMarks(overlay);
   // 技术点位与回撤尺共用蜡烛系列的 mark 通道，两组数据直接并列
   const marks = {
-    lines: [...(tech?.lines ?? []), ...measure.lines],
-    points: [...(tech?.points ?? []), ...measure.points],
-    areas: [...(tech?.areas ?? []), ...measure.areas],
+    lines: [...(tech?.lines ?? []), ...(extra?.lines ?? []), ...measure.lines],
+    points: [...(tech?.points ?? []), ...(extra?.points ?? []), ...measure.points],
+    areas: [...(tech?.areas ?? []), ...(extra?.areas ?? []), ...measure.areas],
   };
 
   const common = {
@@ -590,7 +597,11 @@ export default function KlineChart({
   const [basis, setBasis] = useState<MeasureBasis>('wick');
   const [chartInst, setChartInst] = useState<EChartsInstance | null>(null);
   const [showLevels, setShowLevels] = useState(true);
+  const [clearConfirm, setClearConfirm] = useState(false);
   const measureActive = measure.phase !== 'idle';
+  const { username, isOwner, isCustomer, canManageWatchlist } = useAccess();
+  const reducedMotion = Boolean(useReducedMotion());
+  const identityKey = isCustomer && username ? `account:${username}` : isOwner ? 'owner' : 'anonymous';
   const bars = data?.bars;
   // 结构负载与图表 bars 各有缓存，可能短暂错版本；不同源就暂隐叠加。
   const overlaysConsistent = useMemo(
@@ -603,9 +614,12 @@ export default function KlineChart({
   const effectiveBasis: MeasureBasis = mode === 'area' ? 'close' : basis;
 
   // 锚点属于旧价格序列：切标的 / 周期 / 显示模式一律清除，不跨序列迁移
-  useEffect(() => {
+  const measureScope = `${ticker}|${range}|${mode}`;
+  const [armedScope, setArmedScope] = useState(measureScope);
+  if (armedScope !== measureScope) {
+    setArmedScope(measureScope);
     setMeasure({ phase: 'idle' });
-  }, [ticker, range, mode]);
+  }
 
   useEffect(() => {
     if (!measureActive) return;
@@ -665,13 +679,59 @@ export default function KlineChart({
     [levelsAvailable, showLevels, overlays, data],
   );
 
+  const drawing = useDrawingController({
+    ticker,
+    range,
+    bars: data?.bars,
+    ma20: data?.ma20,
+    swingPrices: [
+      ...(overlays?.swing_highs ?? []).map((item) => item.price),
+      ...(overlays?.swing_lows ?? []).map((item) => item.price),
+    ].filter((price): price is number => price != null),
+    levelPrices: [overlays?.resistance_high, overlays?.resistance_low, overlays?.invalidation_price]
+      .filter((price): price is number => price != null && Number.isFinite(price)),
+    chart: chartInst,
+    identity: { signedIn: canManageWatchlist, key: identityKey },
+    measureActive,
+    onCancelMeasure: () => setMeasure({ phase: 'idle' }),
+    reducedMotion,
+  });
+
+  const extraMarks = useMemo(() => {
+    const hand = drawing.marks;
+    if (!drawing.autoPatternsEnabled || range !== '1d' || !overlaysConsistent || !data) {
+      return hand;
+    }
+    const prices = data.bars.flatMap((bar) => [bar.h, bar.l]);
+    const auto = autoPatternsToMarks(
+      technical?.auto_patterns ?? [],
+      {
+        bars: data.bars,
+        range,
+        xMin: 0,
+        xMax: data.bars.length - 1,
+        yMin: Math.min(...prices),
+        yMax: Math.max(...prices),
+      },
+      70,
+    );
+    return {
+      lines: [...auto.lines, ...hand.lines],
+      points: [...auto.points, ...hand.points],
+      areas: [...auto.areas, ...hand.areas],
+    };
+  }, [data, drawing.autoPatternsEnabled, drawing.marks, overlaysConsistent, range, technical?.auto_patterns]);
+
   const option = useMemo(
-    () => (data ? buildOption(data.bars, data.ma20, range, mode, prevClose, overlay, techMarks) : null),
-    [data, range, mode, prevClose, overlay, techMarks],
+    () => (data ? buildOption(data.bars, data.ma20, range, mode, prevClose, overlay, techMarks, extraMarks) : null),
+    [data, range, mode, prevClose, overlay, techMarks, extraMarks],
   );
 
-  return (
-    <section className={className} aria-label={t('{ticker} K 线图', { ticker })}>
+  const chartBody = (
+    <section
+      className={cn(className, drawing.expanded && 'flex h-full min-h-0 flex-col')}
+      aria-label={t('{ticker} K 线图', { ticker })}
+    >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Segmented
           options={CHART_RANGES}
@@ -719,15 +779,74 @@ export default function KlineChart({
             type="button"
             aria-pressed={measureActive}
             aria-label={t('回撤测量尺')}
-            onClick={() =>
-              setMeasure((prev) => (prev.phase === 'idle' ? { phase: 'selectStart' } : { phase: 'idle' }))
-            }
+            onClick={() => {
+              drawing.setTool('select');
+              setMeasure((prev) => (prev.phase === 'idle' ? { phase: 'selectStart' } : { phase: 'idle' }));
+            }}
             className={toggleButtonCls(measureActive)}
           >
             {t('回撤')}
           </button>
         </div>
       </div>
+      <div className={cn('mt-2', drawing.expanded && 'hidden')}>
+        <DrawingToolbar
+          tool={drawing.tool}
+          onTool={(next) => {
+            if (next !== 'select') setMeasure({ phase: 'idle' });
+            drawing.setTool(next);
+          }}
+          canUndo={drawing.canUndo}
+          canRedo={drawing.canRedo}
+          onUndo={drawing.undo}
+          onRedo={drawing.redo}
+          autoPatternsEnabled={drawing.autoPatternsEnabled}
+          onToggleAuto={() => drawing.setAutoPatternsEnabled((prev) => !prev)}
+          expanded={drawing.expanded}
+          onToggleExpanded={() => drawing.setExpanded((prev) => !prev)}
+          syncStatus={drawing.syncStatus}
+          onRetry={drawing.retry}
+          compact
+        />
+      </div>
+      {drawing.tool !== 'select' && (
+        <p className="mt-1 text-micro text-ink-400" aria-live="polite">
+          {t('当前工具：{name}', {
+            name:
+              drawing.tool === 'horizontal' ? t('水平线')
+                : drawing.tool === 'segment' ? t('趋势线')
+                  : drawing.tool === 'ray' ? t('射线')
+                    : drawing.tool === 'channel' ? t('平行通道')
+                      : drawing.tool === 'rectangle' ? t('矩形')
+                        : drawing.tool === 'fibonacci' ? t('斐波那契')
+                          : t('文字'),
+          })}
+          {' · '}
+          {t('按 Esc 取消绘制')}
+        </p>
+      )}
+      {drawing.inProgress?.kind === 'text' && (
+        <form
+          className="mt-2 flex items-center gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            drawing.commitText(drawing.draftText);
+          }}
+        >
+          <label className="flex-1 text-micro">
+            <span className="sr-only">{t('文字注释')}</span>
+            <input
+              autoFocus
+              maxLength={240}
+              value={drawing.draftText}
+              onChange={(event) => drawing.setDraftText(event.target.value)}
+              className="w-full rounded-xs border border-line bg-card px-2 py-1 text-caption outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30"
+              placeholder={t('点击放置文字，然后输入内容')}
+            />
+          </label>
+          <button type="submit" className="rounded-xs border border-brand-400 bg-brand-50 px-2 py-1 text-micro text-brand-700">{t('保存文字')}</button>
+        </form>
+      )}
 
       {data?._stale && (
         <p className="mt-3 flex items-center gap-1.5 rounded-xs border border-warn-600/30 bg-warn-50 px-2.5 py-1.5 text-caption text-warn-600">
@@ -736,7 +855,7 @@ export default function KlineChart({
         </p>
       )}
 
-      <div className="relative mt-3" style={{ height }}>
+      <div className="relative mt-3 min-h-0" style={{ height: drawing.expanded ? '100%' : height }}>
         <AnimatePresence mode="wait">
           {loading ? (
             <motion.div
@@ -779,7 +898,7 @@ export default function KlineChart({
               <ReactECharts
                 option={option}
                 onInit={setChartInst}
-                className={measureActive ? 'cursor-crosshair' : undefined}
+                className={measureActive || drawing.tool !== 'select' ? 'cursor-crosshair' : undefined}
                 ariaLabel={t('{ticker} {range} {mode}图', { ticker, range, mode: mode === 'candle' ? t('K 线') : t('面积') })}
               />
             </motion.div>
@@ -851,6 +970,23 @@ export default function KlineChart({
           baseStatus={overlays?.base_status ?? null}
         />
       )}
+      {drawing.autoPatternsEnabled && range === '1d' && overlaysConsistent && (
+        <p className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-micro text-ink-400">
+          {(technical?.auto_patterns ?? [])
+            .filter((pattern) => pattern.confidence >= 70)
+            .slice(0, 4)
+            .map((pattern) => (
+              <span key={pattern.id} title={t('技术投影，不是价格预测')}>
+                {t('形态 · {name} · 置信度 {n}', {
+                  name: autoPatternName(pattern.kind, pattern.subtype),
+                  n: Math.round(pattern.confidence),
+                })}
+                {' · '}
+                {t('触碰 {n} 次', { n: pattern.touches })}
+              </span>
+            ))}
+        </p>
+      )}
 
       <p className={cn('mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 text-micro text-ink-400')}>
         <span className="font-mono tnum">
@@ -866,7 +1002,25 @@ export default function KlineChart({
           {data ? t('读取于 {at}', { at: new Date(data.as_of).toLocaleString('zh-CN', { hour12: false }) }) : ''}
         </span>
       </p>
+      <ConfirmDialog
+        open={clearConfirm}
+        title={t('清除全部手绘')}
+        description={t('确认清除当前标的与周期的全部手绘图形？此操作可撤销。')}
+        confirmLabel={t('确认清除')}
+        danger
+        onConfirm={() => {
+          drawing.clearAll();
+          setClearConfirm(false);
+        }}
+        onCancel={() => setClearConfirm(false)}
+      />
     </section>
+  );
+
+  return (
+    <DrawingWorkspace open={drawing.expanded} controller={drawing} reducedMotion={reducedMotion}>
+      {chartBody}
+    </DrawingWorkspace>
   );
 }
 
@@ -888,6 +1042,20 @@ function lastBarText(data: { bars: ChartBarEx[]; last_bar_at?: string | null }, 
  * 检出失效基底时点明状态、结构与图表错版本时说明为何暂隐，
  * 而不是永远同一句「按日线结构自动标注」。
  */
+function autoPatternName(kind: string, subtype?: string | null): string {
+  if (kind === 'support_trend') return t('上升支撑');
+  if (kind === 'resistance_trend') return t('下降阻力');
+  if (kind === 'channel') return subtype === 'falling' ? t('下降通道') : t('上升通道');
+  if (kind === 'triangle') {
+    if (subtype === 'ascending') return t('上升三角形');
+    if (subtype === 'descending') return t('下降三角形');
+    return t('对称三角形');
+  }
+  if (kind === 'wedge') return subtype === 'falling' ? t('下降楔形') : t('上升楔形');
+  if (kind === 'box') return t('水平箱体');
+  return kind;
+}
+
 function OverlayLegend({
   mode,
   shown,

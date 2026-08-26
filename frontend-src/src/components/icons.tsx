@@ -11,7 +11,9 @@ export type IconName =
   | 'arrow-up-right' | 'arrow-down-right' | 'external' | 'chevron-down' | 'chevron-right'
   | 'dots-grid' | 'flame-line' | 'spark-ai' | 'shield' | 'target' | 'flag' | 'x' | 'plus'
   | 'refresh' | 'wallet-gauge' | 'doc-quote' | 'logout' | 'arrow-up' | 'arrow-down' | 'minus'
-  | 'check' | 'menu' | 'list' | 'cards' | 'languages';
+  | 'check' | 'menu' | 'list' | 'cards' | 'languages'
+  | 'trend-line' | 'ray-right' | 'channel' | 'rect' | 'fib' | 'text-note'
+  | 'lock' | 'unlock' | 'eye' | 'eye-off' | 'undo' | 'redo' | 'expand' | 'compress';
 
 interface IconProps extends SVGProps<SVGSVGElement> {
   name: IconName;
@@ -197,6 +199,68 @@ const PATHS: Record<IconName, ReactElement> = {
       <circle cx="12" cy="12" r="8.3" />
       <path d="M12 3.75c2.5 2.3 3.9 5.15 3.9 8.25s-1.4 5.95-3.9 8.25c-2.5-2.3-3.9-5.15-3.9-8.25s1.4-5.95 3.9-8.25Z" />
       <path d="M3.9 12h16.2" />
+    </>
+  ),
+  'trend-line': <path d="M4.2 17.6 10 12.2 14.2 15.4 19.8 6.4" />,
+  'ray-right': (
+    <>
+      <path d="M4.4 16.8 12.2 9.4" />
+      <path d="M12.2 9.4 20.2 5.6" />
+      <circle cx="12.2" cy="9.4" r="1.1" fill="currentColor" stroke="none" />
+    </>
+  ),
+  channel: (
+    <>
+      <path d="M4.2 16.2 19.6 8.4" />
+      <path d="M4.6 19.2 20 11.4" />
+    </>
+  ),
+  rect: <rect x="5" y="6.2" width="14" height="11.6" rx="1.4" />,
+  fib: (
+    <>
+      <path d="M4.4 6.2h15.2M4.4 10h15.2M4.4 13.2h15.2M4.4 17.6h15.2" />
+    </>
+  ),
+  'text-note': (
+    <>
+      <path d="M7.2 5.2h9.6v13.6H7.2z" />
+      <path d="M9.2 9.2h5.6M9.2 12.4h5.6M9.2 15.6h3.4" />
+    </>
+  ),
+  lock: (
+    <>
+      <rect x="6.2" y="10.4" width="11.6" height="8.4" rx="1.4" />
+      <path d="M8.4 10.4V8.2a3.6 3.6 0 0 1 7.2 0v2.2" />
+    </>
+  ),
+  unlock: (
+    <>
+      <rect x="6.2" y="10.4" width="11.6" height="8.4" rx="1.4" />
+      <path d="M8.4 10.4V8.2a3.6 3.6 0 0 1 6.6-1.4" />
+    </>
+  ),
+  eye: (
+    <>
+      <path d="M3.6 12S7.2 6.6 12 6.6 20.4 12 20.4 12 16.8 17.4 12 17.4 3.6 12 3.6 12Z" />
+      <circle cx="12" cy="12" r="2.2" />
+    </>
+  ),
+  'eye-off': (
+    <>
+      <path d="M4 5.2 19.6 18.8M9.2 9.4A4.6 4.6 0 0 0 8 12c0 2.2 1.8 3.8 4 3.8 1 0 1.9-.3 2.6-.9" />
+      <path d="M3.6 12S7.2 6.6 12 6.6c1.4 0 2.7.4 3.8 1" />
+    </>
+  ),
+  undo: <path d="M8.2 7.4 4.6 11l3.6 3.6M5.2 11h9.4a4.4 4.4 0 1 1 0 8.8H12" />,
+  redo: <path d="M15.8 7.4 19.4 11l-3.6 3.6M18.8 11H9.4a4.4 4.4 0 1 0 0 8.8H12" />,
+  expand: (
+    <>
+      <path d="M8.2 4.4H4.4v3.8M15.8 4.4h3.8v3.8M8.2 19.6H4.4v-3.8M15.8 19.6h3.8v-3.8" />
+    </>
+  ),
+  compress: (
+    <>
+      <path d="M9.6 4.8v4H5.6M14.4 4.8v4h4M9.6 19.2v-4H5.6M14.4 19.2v-4h4" />
     </>
   ),
 };

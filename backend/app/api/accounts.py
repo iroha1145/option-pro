@@ -14,11 +14,12 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import Annotated
+import math
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Path, Request, Response, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, Request, Response, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.access import (
     request_is_owner_session,
@@ -29,8 +30,13 @@ from app.access import (
 from app.services.accounts import (
     Account,
     AccountError,
+    DRAWING_TEXT_MAX,
+    DRAWINGS_PER_RANGE_MAX,
     WATCHLIST_MAX_TICKERS,
     get_account_store,
+    normalize_chart_adjustment,
+    normalize_chart_range,
+    normalize_ticker,
 )
 
 ACCOUNT_COOKIE_NAME = "optix_user_session"
@@ -198,6 +204,12 @@ _ERROR_STATUS = {
     "registration_closed": status.HTTP_503_SERVICE_UNAVAILABLE,
     "invalid_credentials": status.HTTP_401_UNAUTHORIZED,
     "watchlist_full": status.HTTP_409_CONFLICT,
+    "drawing_exists": status.HTTP_409_CONFLICT,
+    "revision_conflict": status.HTTP_409_CONFLICT,
+    "drawings_range_full": status.HTTP_409_CONFLICT,
+    "drawings_full": status.HTTP_409_CONFLICT,
+    "drawing_not_found": status.HTTP_404_NOT_FOUND,
+    "drawing_forbidden": status.HTTP_404_NOT_FOUND,
 }
 
 _ERROR_MESSAGE = {
@@ -213,6 +225,26 @@ _ERROR_MESSAGE = {
     "invalid_credentials": "用户名或密码不正确",
     "invalid_ticker": "股票代码格式不正确",
     "watchlist_full": f"自选最多 {WATCHLIST_MAX_TICKERS} 只股票",
+    "invalid_range": "图表周期不受支持",
+    "invalid_adjustment": "复权口径不受支持",
+    "invalid_kind": "绘图类型不受支持",
+    "invalid_drawing_id": "绘图编号格式不正确",
+    "invalid_color": "颜色必须是十六进制或调色板值",
+    "invalid_anchors": "锚点数量或坐标无效",
+    "invalid_price": "价格必须是有限正数",
+    "invalid_time": "时间必须是有效的 ISO 时间",
+    "invalid_style": "线条样式不受支持",
+    "invalid_text": "文字内容无效",
+    "text_too_long": f"文字最多 {DRAWING_TEXT_MAX} 个字符",
+    "invalid_payload": "绘图数据格式无效",
+    "payload_too_large": "绘图数据过大",
+    "drawing_exists": "该绘图已存在",
+    "drawing_not_found": "绘图不存在",
+    "drawing_forbidden": "绘图不存在",
+    "revision_conflict": "绘图已被其他设备更新，请重新加载",
+    "drawings_range_full": f"当前范围最多 {DRAWINGS_PER_RANGE_MAX} 个绘图",
+    "drawings_full": "账户绘图数量已达上限",
+    "scope_mismatch": "不能把绘图移动到其他标的或周期",
 }
 
 
@@ -231,13 +263,13 @@ def current_account(request: Request) -> Account | None:
     return get_account_store().resolve_session(token)
 
 
-def require_watchlist_account(request: Request) -> Account:
-    """Resolve whichever principal owns the watchlist being addressed.
+def require_personal_account(request: Request) -> Account:
+    """Resolve the personal-data principal (watchlist, drawings, …).
 
     A customer cookie wins when present, so an owner who is also signed in as a
-    customer in the same browser still edits the customer list they can see. An
+    customer in the same browser still edits the customer data they can see. An
     owner session otherwise resolves to the single reserved owner row. Order
-    matters only for that overlap; the two never share a list.
+    matters only for that overlap; the two never share personal data.
     """
 
     account = current_account(request)
@@ -249,6 +281,9 @@ def require_watchlist_account(request: Request) -> Account:
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail={"code": "account_login_required", "message": "请先登录"},
     )
+
+
+require_watchlist_account = require_personal_account
 
 
 def attach_account_cookie(response: Response, token: str, max_age: int) -> None:
@@ -400,5 +435,212 @@ def remove_watchlist_ticker(
         raise account_http_error(exc) from exc
     return JSONResponse(
         {"tickers": tickers, "max_tickers": WATCHLIST_MAX_TICKERS},
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+DrawingKind = Literal[
+    "horizontal",
+    "segment",
+    "ray",
+    "channel",
+    "rectangle",
+    "fibonacci",
+    "text",
+]
+ChartRangeLiteral = Literal["5m", "15m", "1h", "1d", "1w"]
+DashLiteral = Literal["solid", "dashed", "dotted"]
+
+
+class DrawingAnchorBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    time: str = Field(min_length=1, max_length=64)
+    barKey: str = Field(min_length=1, max_length=64)
+    price: float
+
+    @field_validator("price")
+    @classmethod
+    def price_must_be_finite_positive(cls, value: float) -> float:
+        if not math.isfinite(value) or value <= 0:
+            raise ValueError("invalid_price")
+        return value
+
+
+class DrawingStyleBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    color: str = Field(min_length=1, max_length=16)
+    width: Literal[1, 2, 3, 4]
+    dash: DashLiteral
+    fillOpacity: float | None = None
+
+    @field_validator("fillOpacity")
+    @classmethod
+    def fill_must_be_unit_interval(cls, value: float | None) -> float | None:
+        if value is None:
+            return value
+        if not math.isfinite(value) or value < 0 or value > 1:
+            raise ValueError("invalid_style")
+        return value
+
+
+class ChartDrawingCreateBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schemaVersion: Literal[1]
+    id: str = Field(min_length=36, max_length=36)
+    ticker: str = Field(min_length=1, max_length=16)
+    range: ChartRangeLiteral
+    adjustment: Literal["raw"] = "raw"
+    kind: DrawingKind
+    anchors: list[DrawingAnchorBody] = Field(min_length=1, max_length=3)
+    style: DrawingStyleBody
+    text: str | None = Field(default=None, max_length=DRAWING_TEXT_MAX)
+    locked: bool = False
+    hidden: bool = False
+    zOrder: int = 0
+
+
+class ChartDrawingUpdateBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schemaVersion: Literal[1]
+    id: str | None = Field(default=None, min_length=36, max_length=36)
+    revision: int = Field(ge=1)
+    ticker: str = Field(min_length=1, max_length=16)
+    range: ChartRangeLiteral
+    adjustment: Literal["raw"] = "raw"
+    kind: DrawingKind
+    anchors: list[DrawingAnchorBody] = Field(min_length=1, max_length=3)
+    style: DrawingStyleBody
+    text: str | None = Field(default=None, max_length=DRAWING_TEXT_MAX)
+    locked: bool = False
+    hidden: bool = False
+    zOrder: int = 0
+
+
+def _scope_query(
+    ticker: str,
+    chart_range: str,
+    adjustment: str,
+) -> tuple[str, str, str]:
+    try:
+        return (
+            normalize_ticker(ticker),
+            normalize_chart_range(chart_range),
+            normalize_chart_adjustment(adjustment),
+        )
+    except AccountError as exc:
+        raise account_http_error(exc) from exc
+
+
+@router.get("/chart-drawings")
+def list_chart_drawings(
+    request: Request,
+    ticker: Annotated[str, Query(min_length=1, max_length=16)],
+    range: Annotated[ChartRangeLiteral, Query()],
+    adjustment: Annotated[Literal["raw"], Query()] = "raw",
+) -> Response:
+    account = require_personal_account(request)
+    symbol, range_key, adj = _scope_query(ticker, range, adjustment)
+    drawings = get_account_store().list_drawings(
+        account.user_id, symbol, range_key, adj
+    )
+    return JSONResponse(
+        {
+            "drawings": drawings,
+            "max_per_range": DRAWINGS_PER_RANGE_MAX,
+        },
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@router.post(
+    "/chart-drawings",
+    dependencies=[Depends(require_same_origin_json)],
+)
+def create_chart_drawing(
+    request: Request,
+    payload: Annotated[ChartDrawingCreateBody, Body()],
+) -> Response:
+    account = require_personal_account(request)
+    try:
+        created = get_account_store().create_drawing(
+            account.user_id,
+            payload.model_dump(),
+        )
+    except AccountError as exc:
+        raise account_http_error(exc) from exc
+    return JSONResponse(
+        created,
+        status_code=status.HTTP_201_CREATED,
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@router.put(
+    "/chart-drawings/{drawing_id}",
+    dependencies=[Depends(require_same_origin_json)],
+)
+def update_chart_drawing(
+    request: Request,
+    drawing_id: Annotated[str, Path(min_length=36, max_length=36)],
+    payload: Annotated[ChartDrawingUpdateBody, Body()],
+) -> Response:
+    account = require_personal_account(request)
+    body = payload.model_dump()
+    expected = int(body.pop("revision"))
+    body_id = body.pop("id", None)
+    if body_id and body_id.lower() != drawing_id.lower():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "invalid_drawing_id", "message": "绘图编号与路径不一致"},
+        )
+    try:
+        updated = get_account_store().update_drawing(
+            account.user_id,
+            drawing_id,
+            body,
+            expected_revision=expected,
+        )
+    except AccountError as exc:
+        raise account_http_error(exc) from exc
+    return JSONResponse(updated, headers={"Cache-Control": "no-store"})
+
+
+@router.delete(
+    "/chart-drawings/{drawing_id}",
+    dependencies=[Depends(require_same_origin_request)],
+)
+def delete_chart_drawing(
+    request: Request,
+    drawing_id: Annotated[str, Path(min_length=36, max_length=36)],
+) -> Response:
+    account = require_personal_account(request)
+    try:
+        get_account_store().delete_drawing(account.user_id, drawing_id)
+    except AccountError as exc:
+        raise account_http_error(exc) from exc
+    return JSONResponse({"ok": True}, headers={"Cache-Control": "no-store"})
+
+
+@router.delete(
+    "/chart-drawings",
+    dependencies=[Depends(require_same_origin_request)],
+)
+def delete_chart_drawings_in_scope(
+    request: Request,
+    ticker: Annotated[str, Query(min_length=1, max_length=16)],
+    range: Annotated[ChartRangeLiteral, Query()],
+    adjustment: Annotated[Literal["raw"], Query()] = "raw",
+) -> Response:
+    account = require_personal_account(request)
+    symbol, range_key, adj = _scope_query(ticker, range, adjustment)
+    deleted = get_account_store().delete_drawings_in_scope(
+        account.user_id, symbol, range_key, adj
+    )
+    return JSONResponse(
+        {"deleted": deleted},
         headers={"Cache-Control": "no-store"},
     )
