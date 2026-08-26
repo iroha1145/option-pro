@@ -3074,6 +3074,20 @@ async def _load_stock_chart(
         bars = payload.get("bars") if isinstance(payload, dict) else None
         if not isinstance(bars, list) or not bars:
             raise RuntimeError("Daily stock chart provider returned no bars")
+    if range_key in {"5m", "15m", "1h"} and isinstance(payload, dict):
+        bars = payload.get("bars") if isinstance(payload.get("bars"), list) else []
+        if bars:
+            from app.services.technical.chart_analysis import assemble_intraday_analysis
+
+            try:
+                payload["chart_analysis"] = assemble_intraday_analysis(
+                    bars,
+                    ticker=ticker,
+                    chart_range=range_key,
+                    adjustment=adjustment,
+                )
+            except Exception:
+                payload["chart_analysis"] = None
     return payload
 
 
@@ -3106,6 +3120,34 @@ async def _guest_daily_chart_snapshot(symbol: str) -> dict[str, Any] | None:
     return result if isinstance(result, dict) else None
 
 
+async def _spy_closes_by_date(owner: bool) -> dict[str, float] | None:
+    """SPY raw daily closes keyed by NY session date. Missing SPY omits RS, never fabricates."""
+
+    try:
+        spy = await _stale_while_revalidate_endpoint(
+            "chart:SPY:1d:raw",
+            _CHART_TTL.get("1d", 600),
+            _CHART_MAX_AGE.get("1d", 24 * 60 * 60),
+            lambda: _load_stock_chart("SPY", "1d", "raw"),
+            allow_refresh=owner,
+        )
+    except Exception:
+        return None
+    bars = spy.get("bars") if isinstance(spy, dict) else None
+    if not bars:
+        return None
+    from app.services.technical.structure import clean_series
+
+    series = clean_series(bars)
+    if series is None:
+        return None
+    out: dict[str, float] = {}
+    for day, close in zip(series["dates"], series["closes"]):
+        if close and close > 0:
+            out[str(day)] = float(close)
+    return out or None
+
+
 async def _load_stock_technical(symbol: str, owner: bool) -> dict[str, Any]:
     from app.services.technical.structure import compute_technical_structure
 
@@ -3118,8 +3160,14 @@ async def _load_stock_technical(symbol: str, owner: bool) -> dict[str, Any]:
         allow_refresh=owner,
     )
     bars = chart.get("bars") if isinstance(chart, dict) else None
+    spy_closes = await _spy_closes_by_date(owner)
     # 结构计算是纯 CPU（≈500 根日线几毫秒），但仍不占事件循环。
-    result = await asyncio.to_thread(compute_technical_structure, bars or [])
+    result = await asyncio.to_thread(
+        compute_technical_structure,
+        bars or [],
+        ticker=symbol,
+        spy_closes=spy_closes,
+    )
     if result is None:
         raise HTTPException(
             status_code=503,
@@ -3172,15 +3220,21 @@ async def stock_technical(ticker: str):
         bars = chart.get("bars") if isinstance(chart, dict) else None
         if not bars:
             raise exc
-        result = await asyncio.to_thread(compute_technical_structure, bars)
+        result = await asyncio.to_thread(compute_technical_structure, bars, ticker=symbol)
         if result is None:
             raise exc
-        return _sanitize({
+        payload = _sanitize({
             "ticker": symbol,
             "as_of": chart.get("as_of") if isinstance(chart, dict) else None,
             "basis": "raw_daily",
             **result,
         })
+        analysis = payload.get("chart_analysis")
+        if isinstance(analysis, dict):
+            analysis["ticker"] = symbol
+            analysis["range"] = "1d"
+            analysis["adjustment"] = "raw"
+        return payload
 
 
 _MASSIVE_CHART_WINDOWS = {

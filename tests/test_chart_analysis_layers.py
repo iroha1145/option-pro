@@ -12,7 +12,12 @@ from app.services.technical.auto_patterns import (
     detect_auto_patterns,
 )
 from app.services.technical.base_structure import detect_base_structure
-from app.services.technical.chart_analysis import assemble_chart_analysis, bar_fingerprint
+from app.services.technical.chart_analysis import (
+    assemble_chart_analysis,
+    assemble_intraday_analysis,
+    bar_fingerprint,
+    consecutive_swing_labels,
+)
 from app.services.technical.layer_registry import PRESETS, preset_enabled
 from app.services.technical.structure import clean_series, compute_technical_structure
 
@@ -218,7 +223,8 @@ def test_bundle_has_required_overlay_fields_and_no_echarts_option() -> None:
     }
     assert required <= set(bundle)
     pane_ids = {pane["id"] for pane in bundle["indicatorPanes"]}
-    assert {"rsi", "macd", "obv", "clv", "range_persistence", "spy_rs"} <= pane_ids
+    assert {"rsi", "macd", "obv", "clv", "range_persistence"} <= pane_ids
+    assert "spy_rs" not in pane_ids
     for overlay in bundle["overlays"]:
         for key in (
             "id",
@@ -264,3 +270,132 @@ def test_scanner_not_imported_by_chart_analysis() -> None:
     assert "scan_strength" not in source
     assert "from app.services.strength.scanner" not in source
     assert "import echarts" not in source.lower()
+    assert "from app.services.strength.scoring import score_intrinsic" in source
+
+
+def test_swing_labels_from_consecutive_confirmed_highs_and_lows() -> None:
+    highs = [
+        {"trade_date": "2025-01-02", "price": 10.0},
+        {"trade_date": "2025-01-06", "price": 12.0},
+        {"trade_date": "2025-01-10", "price": 11.0},
+    ]
+    lows = [
+        {"trade_date": "2025-01-04", "price": 8.0},
+        {"trade_date": "2025-01-08", "price": 9.0},
+        {"trade_date": "2025-01-12", "price": 7.0},
+    ]
+    assert consecutive_swing_labels(highs, role="high") == ["H", "HH", "LH"]
+    assert consecutive_swing_labels(lows, role="low") == ["L", "HL", "LL"]
+    series = _series(_zigzag(180, lambda i: 50 + 0.18 * i, lambda i: 62 + 0.18 * i))
+    bundle = assemble_chart_analysis(
+        series=series,
+        data_through=series["dates"][-1],
+        price_action={"swing_highs": highs, "swing_lows": lows, "structure": "uptrend"},
+        auto_patterns=[],
+    )
+    high_labels = [row["label"] for row in bundle["overlays"] if row["kind"] == "swing" and row["geometry"].get("role") == "high"]
+    low_labels = [row["label"] for row in bundle["overlays"] if row["kind"] == "swing" and row["geometry"].get("role") == "low"]
+    assert high_labels == ["H", "HH", "LH"]
+    assert low_labels == ["L", "HL", "LL"]
+
+
+def test_assemble_keeps_per_pattern_volume_confirmation() -> None:
+    bars = _zigzag(180, lambda i: 50 + 0.18 * i, lambda i: 62 + 0.18 * i)
+    rows = _detect(bars)
+    assert rows
+    original = rows[0]["volumeConfirmation"]
+    original_priority = rows[0]["displayPriority"]
+    bundle = assemble_chart_analysis(
+        series=_series(bars),
+        data_through=_series(bars)["dates"][-1],
+        auto_patterns=rows,
+        vol_price={"status": "active", "setup_type": "absorption_bullish", "setup_label": "多头吸收"},
+    )
+    pattern = next(row for row in bundle["overlays"] if row["id"] == rows[0]["id"])
+    assert pattern["evidence"]["volumeConfirmation"] == original
+    assert pattern["displayPriority"] == original_priority
+    vol = next(row for row in bundle["overlays"] if row["kind"] == "volume_setup")
+    assert vol["evidence"]["volumeConfirmation"] == 0.7
+    assert vol["id"] != rows[0]["id"]
+
+
+def test_spy_rs_nonempty_when_aligned_closes_passed() -> None:
+    series = _series(_zigzag(120, lambda i: 50 + 0.1 * i, lambda i: 60 + 0.1 * i))
+    spy = [close * 0.4 + 10 for close in series["closes"]]
+    bundle = assemble_chart_analysis(
+        series=series,
+        data_through=series["dates"][-1],
+        auto_patterns=[],
+        spy_closes=spy,
+    )
+    pane = next(row for row in bundle["indicatorPanes"] if row["id"] == "spy_rs")
+    values = pane["values"]["rs"]
+    assert any(value is not None for value in values)
+    assert values[-1] == round(series["closes"][-1] / spy[-1], 6)
+    empty = assemble_chart_analysis(series=series, data_through=series["dates"][-1], auto_patterns=[])
+    assert all(row["id"] != "spy_rs" for row in empty["indicatorPanes"])
+
+
+def test_strength_context_uses_score_intrinsic_families() -> None:
+    series = _series(_zigzag(180, lambda i: 50 + 0.18 * i, lambda i: 62 + 0.18 * i))
+    bundle = assemble_chart_analysis(
+        series=series,
+        data_through=series["dates"][-1],
+        auto_patterns=[],
+        technicals={"rsi14": 62.0, "rsi_score": 70.0, "macd": {"direction_pct": 0.4}},
+        price_action={"status": "active", "score": 64.0},
+        vol_price={"status": "active", "setup_type": "absorption_bullish", "breakout_quality_adjustment": 4.0},
+    )
+    ctx = bundle["strengthContext"]
+    assert ctx["finalScore"] is None
+    assert ctx["globalPercentile"] is None
+    families = ctx["families"]
+    assert set(families) >= {"short", "mid", "long", "trend", "breakout", "price_action"}
+    assert any(families[name]["score"] is not None for name in families)
+    quality = next(row["shapeQuality"] for row in bundle["overlays"] if row["kind"] == "ma")
+    ctx["families"]["short"]["score"] = 1.0
+    again = assemble_chart_analysis(
+        series=series,
+        data_through=series["dates"][-1],
+        auto_patterns=[],
+        technicals={"rsi14": 10.0, "rsi_score": 5.0},
+        price_action={"status": "active", "score": 10.0},
+    )
+    assert next(row["shapeQuality"] for row in again["overlays"] if row["kind"] == "ma") == quality
+
+
+def test_intraday_vwap_opening_range_rvol_on_demand() -> None:
+    start = int(datetime(2025, 1, 6, 14, 30, tzinfo=timezone.utc).timestamp())
+    bars = []
+    price = 100.0
+    for i in range(78):
+        close = price + 0.05
+        bars.append(
+            {
+                "t": start + i * 300,
+                "o": price,
+                "h": close + 0.15,
+                "l": price - 0.1,
+                "c": close,
+                "v": 1_000 + i * 10,
+            }
+        )
+        price = close
+    bundle = assemble_intraday_analysis(bars, ticker="AAPL", chart_range="5m")
+    assert bundle is not None
+    assert bundle["range"] == "5m"
+    kinds = {row["kind"] for row in bundle["overlays"]}
+    assert {"vwap", "opening_range", "breakout"} <= kinds
+    vwap = next(row for row in bundle["overlays"] if row["kind"] == "vwap")
+    assert any(value is not None for value in vwap["geometry"]["values"])
+    hold = next(row for row in bundle["overlays"] if row["id"].startswith("intraday-hold"))
+    assert "rvolTimeOfDay" in hold["evidence"]
+    assert "clv" in hold["evidence"]
+    assert "holdBarsAboveVwap" in hold["evidence"]
+    expected = bar_fingerprint(
+        [str(bar["t"]) for bar in bars],
+        [bar["c"] for bar in bars],
+        [bar["h"] for bar in bars],
+        [bar["l"] for bar in bars],
+    )
+    assert bundle["barFingerprint"] == expected

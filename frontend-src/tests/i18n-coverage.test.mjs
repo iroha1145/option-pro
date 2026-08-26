@@ -101,10 +101,10 @@ function inThrow(node) {
  * TYPE_DISCRIMINANTS 第 2 类）。行号来自这些 mock 拼接语句。
  */
 const KNOWN_TEMPLATE_EXEMPT_LINES = new Set([
-  'components/detail/api.ts:396',
-  'components/detail/api.ts:535',
-  'components/detail/api.ts:536',
-  'components/detail/api.ts:537',
+  'components/detail/api.ts:400',
+  'components/detail/api.ts:539',
+  'components/detail/api.ts:540',
+  'components/detail/api.ts:541',
 ]);
 
 // ── 收集 dict/*.ts 里的全部词条（跳过 types.ts / index.ts 本身） ────────────
@@ -166,10 +166,10 @@ const KNOWN_TYPE_DISCRIMINANTS = new Set([
   // 客户账号退出/登录条目（#18）：group 判别字段，同上由渲染处 __t 包裹
   'components/CommandPalette.tsx:204 功能',
   'components/CommandPalette.tsx:216 功能',
-  'components/detail/api.ts:458 数据不足',
-  'components/detail/api.ts:460 偏多',
-  'components/detail/api.ts:462 偏空',
-  'components/detail/api.ts:463 中性',
+  'components/detail/api.ts:462 数据不足',
+  'components/detail/api.ts:464 偏多',
+  'components/detail/api.ts:466 偏空',
+  'components/detail/api.ts:467 中性',
   // 等待占位哨兵：对照后端落库的中文字面量，绝不能 __t（译文永不命中，防御失效）
   'components/catalysts/api.ts:132 中文标题等待生成',
   'components/catalysts/api.ts:132 中文摘要等待生成',
@@ -177,11 +177,11 @@ const KNOWN_TYPE_DISCRIMINANTS = new Set([
   'pages/Market.tsx:68 偏多',
   'pages/Market.tsx:68 偏空',
   'pages/Market.tsx:68 中性',
-  'components/detail/api.ts:533 偏贵',
-  'components/detail/api.ts:533 相对便宜',
-  'components/detail/api.ts:533 中性',
-  'components/detail/api.ts:538 近端观察 MA20 附近的量能配合与突破延续性；若量价背离放大，偏向读数将快速回落。',
-  'components/detail/api.ts:539 以上为方向性研究结论，非收益预测。',
+  'components/detail/api.ts:537 偏贵',
+  'components/detail/api.ts:537 相对便宜',
+  'components/detail/api.ts:537 中性',
+  'components/detail/api.ts:542 近端观察 MA20 附近的量能配合与突破延续性；若量价背离放大，偏向读数将快速回落。',
+  'components/detail/api.ts:543 以上为方向性研究结论，非收益预测。',
   // `t(macroMissingReason(status) ?? '暂无宏观读数')` — the literal is the right
   // operand of `??`, not itself t()'s direct argument, so the classifier can't see
   // that the whole expression is covered by the outer call. It is (verified by hand).

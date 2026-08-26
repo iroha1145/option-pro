@@ -137,6 +137,8 @@ export const OVERLAY_LAYER_BY_KIND: Record<string, string> = {
   trap: 'traps',
   breakout: 'breakouts',
   volume_setup: 'breakouts',
+  vwap: 'breakouts',
+  opening_range: 'breakouts',
 };
 
 export function layersStorageKey(identity: string): string {

@@ -82,8 +82,9 @@ SQLite 表 `account_chart_drawings` 在 `accounts.db`，WAL、外键、账户删
 | `base_structure.py` | 整理区 / 箱体的**唯一**事实源（阻力带、支撑带、pivot、invalidation、窗口共识） |
 | `vol_price_match.py` | 近 10 日量价摘要；副图提供 OBV / CLV / 美元成交额序列 |
 | `technical/indicators.py` | MA20/50/200 主图序列；RSI、MACD、Range Position 副图 |
-| `strength/scoring.py` 的家族摘要 | short/mid/long/trend/breakout/price_action 只进侧栏 `strengthContext`，**不进** `shapeQuality` |
-| 日线突破 | 由基底状态映射 trigger / testing / failed；分钟 VWAP / 开盘区间按需加载 |
+| `strength/scoring.py` 的 `score_intrinsic` | short/mid/long/trend/breakout/price_action 家族分与有效权重只进侧栏 `strengthContext`；`finalScore` / 横截面百分位保持 `None`，**不进** `shapeQuality` |
+| 日线突破 | 由基底状态映射 trigger / testing / failed |
+| 分钟图（5m/15m/1h，随 K 线按需加载） | VWAP、开盘区间、time-of-day RVOL、末根 CLV、hold bars；挂在图表 payload 的 `chart_analysis` 上 |
 
 自动形态 **v2**（`optix-auto-patterns-v2`）：先按 `data_through` 截断，丢掉未收盘末根后再算 ATR 与 span=2/3/5 摆动。两点只出候选，最终轨来自触点 Theil–Sen 稳健回归；残差用逐根局部 ATR 归一化；触点时间去重（≥3 根）。单支撑只允许 `broken_down`，单阻力只允许 `broken_up`，二者都没有测量目标。通道 / 三角 / 楔形要两侧触点、交替、主体在内、宽度与 apex 合理。箱体不在此模块重复检测。
 
@@ -93,7 +94,7 @@ SQLite 表 `account_chart_drawings` 在 `accounts.db`，WAL、外键、账户删
 
 量价确认可以改 `displayPriority`，不能改几何。Strength 最终分从不进入 `shapeQuality`。
 
-前端只在 `barFingerprint` + `range` + `adjustment` + `dataThrough` 与当前图一致时渲染。Strength 快照不一致时只显示快照日期，不生成价格几何。未收盘末根不进日线指标与形态。保留 `series_break_at`：断裂之后的一致段才分析。
+前端只在 `barFingerprint` + `range` + `adjustment` + `dataThrough` 与当前图一致时渲染。指纹是同一段原始串 `n|first|last|lastClose|lastHigh|lastLow|acc` 的 FNV-1a 64 位 hex16，由可见已收盘 K 线在前端重算，对不上就不画。SPY RS 只在能按日期对齐 SPY 收盘时下发，否则省略空副图。Strength 快照不一致时只显示快照日期，不生成价格几何。未收盘末根不进日线指标与形态。保留 `series_break_at`：断裂之后的一致段才分析。每条自动形态保留自己的 `volumeConfirmation`；量价模块只增加自己的 overlay。摆动点 HH/HL/LH/LL 由相邻已确认高低点比较得出，不是整段结构一个标签。
 
 「算法与图层」菜单由 Layer Registry 生成（不是在 `KlineChart.tsx` 里为每个算法写死开关）。预设：极简 / 结构分析 / 突破交易 / 动量 / 量价 / 全部。极简最多 3 个自动形态、6 个文字标签。设置键 `option-pro:chart-layers:v1:{principal}`，与手绘 `option-pro:chart-drawings:v1:…` 分开；登录主体持久化，访客用 localStorage。RSI/MACD/OBV/CLV/Range Persistence/SPY RS 走独立副图；Strength 标量走侧栏。手绘永远叠在自动层之上。自动层淡色虚线；测试/突破可强调。移动端菜单是底部抽屉。
 

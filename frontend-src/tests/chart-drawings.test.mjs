@@ -32,6 +32,7 @@ async function loadDrawings(t) {
     registry: path.join(drawingsDir, 'analysis/registry.ts'),
     settings: path.join(drawingsDir, 'analysis/settings.ts'),
     mapBundle: path.join(drawingsDir, 'analysis/mapBundle.ts'),
+    overlaysToMarks: path.join(drawingsDir, 'analysis/overlaysToMarks.ts'),
   };
   await writeFile(
     entry,
@@ -69,7 +70,9 @@ export {
 } from ${JSON.stringify(files.settings)};
 export {
   mapChartAnalysis, analysisMatchesChart, filterOverlays, filterPanes, labelBudget, barFingerprint,
+  barFingerprintFromBars, closedBarsForFingerprint,
 } from ${JSON.stringify(files.mapBundle)};
+export { overlaysToMarks, overlaysToSeries, analysisLayout, alignSeriesToBars } from ${JSON.stringify(files.overlaysToMarks)};
 `,
     'utf8',
   );
@@ -972,13 +975,94 @@ test('fingerprint and dataThrough mismatch yields no auto marks', async (t) => {
     strengthContext: { finalScore: null, note: 'not a win probability' },
   });
   assert.ok(bundle);
-  assert.equal(analysisMatchesChart(bundle, { range: '1d', adjustment: 'raw', dataThrough: '2026-07-16' }), true);
-  assert.equal(analysisMatchesChart(bundle, { range: '1d', adjustment: 'raw', dataThrough: '2026-07-15' }), false);
-  assert.equal(analysisMatchesChart(bundle, { range: '1w', adjustment: 'raw', dataThrough: '2026-07-16' }), false);
+  assert.equal(analysisMatchesChart(bundle, { range: '1d', adjustment: 'raw', dataThrough: '2026-07-16' }), false);
+  assert.equal(analysisMatchesChart(bundle, { range: '1d', adjustment: 'raw', dataThrough: '2026-07-16', fingerprint: 'abc' }), true);
+  assert.equal(analysisMatchesChart(bundle, { range: '1d', adjustment: 'raw', dataThrough: '2026-07-15', fingerprint: 'abc' }), false);
+  assert.equal(analysisMatchesChart(bundle, { range: '1w', adjustment: 'raw', dataThrough: '2026-07-16', fingerprint: 'abc' }), false);
   assert.equal(analysisMatchesChart(bundle, { range: '1d', adjustment: 'raw', dataThrough: '2026-07-16', fingerprint: 'other' }), false);
-  const none = analysisMatchesChart(bundle, { range: '1d', adjustment: 'raw', dataThrough: '2026-07-15' })
+  const none = analysisMatchesChart(bundle, { range: '1d', adjustment: 'raw', dataThrough: '2026-07-15', fingerprint: 'abc' })
     ? filterOverlays(bundle.overlays, settingsFromPreset('minimal'))
     : [];
   assert.equal(none.length, 0);
   assert.equal(mapChartAnalysis({ option: { series: [] }, dataThrough: 'x', barFingerprint: 'y' }), null);
+});
+
+test('layer toggles change real marks and MA series, not only filterOverlays', async (t) => {
+  const {
+    overlaysToMarks, overlaysToSeries, filterOverlays, settingsFromPreset, toggleLayer, analysisLayout,
+    analysisMatchesChart, barFingerprint, barFingerprintFromBars,
+  } = await loadDrawings(t);
+  const bars = [
+    { t: '2026-07-06T13:30:00Z', o: 10, h: 12, l: 9, c: 11 },
+    { t: '2026-07-07T13:30:00Z', o: 11, h: 13, l: 10, c: 12 },
+    { t: '2026-07-08T13:30:00Z', o: 12, h: 14, l: 11, c: 13 },
+  ];
+  const ctx = { bars, range: '1d', xMin: 0, xMax: 2, yMin: 9, yMax: 14 };
+  const overlays = [
+    overlayOf('swing', {
+      id: 's',
+      group: 'price',
+      geometry: { type: 'point', role: 'high', anchors: [{ time: '2026-07-07T00:00:00Z', barKey: '2026-07-07', price: 13 }] },
+    }),
+    overlayOf('level', { id: 'lv', geometry: { type: 'level', price: 12, role: 'resistance' } }),
+    overlayOf('candle', {
+      id: 'cd',
+      group: 'event',
+      geometry: { type: 'point', pattern: 'hammer', anchors: [{ time: '2026-07-08T00:00:00Z', barKey: '2026-07-08', price: 13 }] },
+    }),
+    overlayOf('trap', {
+      id: 'tr',
+      group: 'event',
+      geometry: { type: 'point', pattern: 'spring', anchors: [{ time: '2026-07-06T00:00:00Z', barKey: '2026-07-06', price: 9 }] },
+    }),
+    overlayOf('breakout', { id: 'br', group: 'event', geometry: { type: 'levels', pivot: 13, invalidation: 10 } }),
+    overlayOf('volume_setup', { id: 'vs', group: 'event', geometry: { type: 'summary', window: 10 } }),
+    overlayOf('ma', { id: 'ma20', geometry: { type: 'series', window: 20, values: [null, 11, 12], dates: ['2026-07-06', '2026-07-07', '2026-07-08'] } }),
+    overlayOf('support_trend', {
+      id: 'st',
+      geometry: {
+        anchors: [
+          { time: '2026-07-06T13:30:00Z', barKey: '2026-07-06', price: 9 },
+          { time: '2026-07-08T13:30:00Z', barKey: '2026-07-08', price: 11 },
+        ],
+      },
+    }),
+  ];
+  const all = settingsFromPreset('all');
+  const visible = filterOverlays(overlays, all);
+  const marks = overlaysToMarks(visible, ctx);
+  assert.ok(marks.points.length >= 3, 'swing/candle/trap become markPoints');
+  assert.ok(marks.lines.length >= 3, 'level/breakout/trend become markLines');
+  assert.ok(marks.areas.length >= 1, 'volume_setup becomes a markArea');
+  const series = overlaysToSeries(visible, bars, '1d');
+  assert.equal(series.some((line) => line.id === 'ma20'), true);
+  const withoutMa = filterOverlays(overlays, toggleLayer(all, 'ma20'));
+  assert.equal(overlaysToSeries(withoutMa, bars, '1d').some((line) => line.id === 'ma20'), false);
+  const structureMarks = overlaysToMarks(filterOverlays(overlays, settingsFromPreset('structure')), ctx);
+  assert.ok(structureMarks.points.some((point) => Array.isArray(point.coord)));
+  assert.equal(overlaysToSeries(filterOverlays(overlays, settingsFromPreset('structure')), bars, '1d').length, 0);
+
+  const grids = analysisLayout(6);
+  assert.equal(grids.length, 8);
+  for (const grid of grids) {
+    const top = Number.parseFloat(grid.top);
+    const height = Number.parseFloat(grid.height);
+    assert.ok(grid.top.endsWith('%'));
+    assert.ok(top + height <= 100 + 1e-6, `overflow ${grid.top}+${grid.height}`);
+  }
+
+  const fp = barFingerprint(
+    ['2026-07-06', '2026-07-07', '2026-07-08'],
+    [11, 12, 13],
+    [12, 13, 14],
+    [9, 10, 11],
+  );
+  const fromBars = barFingerprintFromBars(bars, '1d');
+  assert.equal(fromBars, fp);
+  const bundle = {
+    ticker: 'AAPL', range: '1d', adjustment: 'raw', dataThrough: '2026-07-08',
+    barFingerprint: fp, overlays: [], indicatorPanes: [], strengthContext: null, barCount: 3, lastClose: 13,
+  };
+  assert.equal(analysisMatchesChart(bundle, { range: '1d', adjustment: 'raw', dataThrough: '2026-07-08', fingerprint: fp }), true);
+  assert.equal(analysisMatchesChart(bundle, { range: '1d', adjustment: 'raw', dataThrough: '2026-07-08', fingerprint: 'nope' }), false);
 });

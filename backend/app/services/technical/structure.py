@@ -235,6 +235,9 @@ def compute_technical_structure(
     *,
     last_bar_closed: bool | None = None,
     now: datetime | None = None,
+    ticker: str = "",
+    spy_closes: Sequence[float | None] | Mapping[str, float] | None = None,
+    chart_range: str = "1d",
 ) -> dict[str, Any] | None:
     """Full detail-page structure payload, or ``None`` when bars are unusable.
 
@@ -322,10 +325,18 @@ def compute_technical_structure(
     except Exception:
         auto_patterns = []
 
+    aligned_spy = spy_closes
+    if isinstance(spy_closes, Mapping):
+        aligned_spy = spy_closes
+    elif spy_closes is not None:
+        by_index = list(spy_closes)
+        if len(by_index) == len(series["dates"]) and len(analysis["dates"]) != len(series["dates"]):
+            aligned_spy = by_index[: len(analysis["dates"])]
     chart_analysis = assemble_chart_analysis(
         series=analysis,
         data_through=analysis["dates"][-1],
-        chart_range="1d",
+        ticker=ticker,
+        chart_range=chart_range,
         adjustment="raw",
         price_action=price_action,
         vol_price=vol_price,
@@ -333,7 +344,9 @@ def compute_technical_structure(
         base_state=base_state,
         technicals=technicals,
         auto_patterns=auto_patterns,
+        spy_closes=aligned_spy,
         series_break_at=series_break_at,
+        hist=frame,
     )
 
     return {

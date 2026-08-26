@@ -22,9 +22,9 @@ import { baseAnimation, CH, glassTooltip, stippleAreaStyle, type ChartOption, ty
 import { useDrawingController } from './chart-drawings/useDrawingController.ts';
 import DrawingToolbar from './chart-drawings/DrawingToolbar.tsx';
 import DrawingWorkspace from './chart-drawings/DrawingWorkspace.tsx';
-import { autoPatternsToMarks } from './chart-drawings/renderer.ts';
 import LayerMenu from './chart-drawings/LayerMenu.tsx';
-import { mapChartAnalysis, analysisMatchesChart, filterOverlays, filterPanes, labelBudget } from './chart-drawings/analysis/mapBundle.ts';
+import { mapChartAnalysis, analysisMatchesChart, filterOverlays, filterPanes, labelBudget, barFingerprintFromBars } from './chart-drawings/analysis/mapBundle.ts';
+import { overlaysToMarks, overlaysToSeries, analysisLayout } from './chart-drawings/analysis/overlaysToMarks.ts';
 import { loadLayerSettings, saveLayerSettings } from './chart-drawings/analysis/settings.ts';
 import type { LayerSettings } from './chart-drawings/analysis/settings.ts';
 import ConfirmDialog from '@/components/catalysts/ConfirmDialog';
@@ -274,25 +274,6 @@ function measureMarks(overlay: MeasureOverlay | null | undefined) {
   };
 }
 
-function analysisLayout(paneCount: number) {
-  const extra = Math.max(0, paneCount);
-  const priceH = extra ? Math.max(34, 58 - extra * 8) : 60;
-  const volH = extra ? 12 : 17;
-  const paneH = extra ? Math.max(8, Math.min(12, Math.floor(22 / extra))) : 0;
-  let cursor = 12;
-  const grids: { left: number; right: number; top: string; height: string; containLabel: boolean }[] = [
-    { left: 8, right: 8, top: `${cursor}`, height: `${priceH}%`, containLabel: true },
-  ];
-  cursor = priceH + 14;
-  grids.push({ left: 8, right: 8, top: `${cursor}%`, height: `${volH}%`, containLabel: true });
-  cursor += volH + 2;
-  for (let i = 0; i < extra; i += 1) {
-    grids.push({ left: 8, right: 8, top: `${cursor}%`, height: `${paneH}%`, containLabel: true });
-    cursor += paneH + 1;
-  }
-  return grids;
-}
-
 function buildOption(
   bars: ChartBarEx[],
   ma20: (number | null)[],
@@ -302,7 +283,7 @@ function buildOption(
   overlay?: MeasureOverlay | null,
   tech?: ReturnType<typeof technicalMarks> | null,
   extra?: { lines: object[]; points: object[]; areas: object[]; polygons?: { vertices: { x: number; y: number }[]; color: string; opacity: number }[] } | null,
-  analysis?: { extraMa?: { name: string; data: (number | null)[] }[]; panes?: { id: string; label: string; data: (number | null)[] }[] } | null,
+  analysis?: { showMa20?: boolean; extraMa?: { name: string; data: (number | null)[] }[]; panes?: { id: string; label: string; data: (number | null)[] }[] } | null,
 ): ChartOption {
   const labels = bars.map((b) => fmtAxisLabel(b.t, range));
   const upFill = CH.up600;
@@ -541,7 +522,7 @@ function buildOption(
         markArea: marks.areas.length ? { silent: true, data: marks.areas } : undefined,
         z: 3,
       },
-      {
+      ...((analysis?.showMa20 !== false) ? [{
         type: 'line' as const,
         name: 'MA20',
         xAxisIndex: 0,
@@ -552,7 +533,7 @@ function buildOption(
         lineStyle: { color: CH.brand500, width: 1.5, type: [4, 4] as number[] },
         tooltip: { show: false },
         z: 4,
-      },
+      }] : []),
       ...((analysis?.extraMa ?? []).map((line) => ({
         type: 'line' as const,
         name: line.name,
@@ -745,14 +726,27 @@ export default function KlineChart({
     saveLayerSettings(identityKey, next);
   };
   const analysisBundle = useMemo(
-    () => mapChartAnalysis(technical?.chart_analysis ?? technical ?? null),
-    [technical],
+    () => mapChartAnalysis(
+      range === '1d'
+        ? (technical?.chart_analysis ?? technical ?? null)
+        : (data?.chart_analysis ?? null),
+    ),
+    [technical, data, range],
   );
+  const visibleFingerprint = useMemo(() => {
+    if (!data?.bars?.length || !analysisBundle) return null;
+    const dropLast = range === '1d' && technical?.last_bar?.closed === false;
+    return barFingerprintFromBars(data.bars, range, {
+      dropLast,
+      fromDate: range === '1d' ? (technical?.series_break_at ?? null) : null,
+    });
+  }, [data, range, analysisBundle, technical]);
   const analysisOk = analysisMatchesChart(analysisBundle, {
-    range: '1d',
+    range,
     adjustment: 'raw',
-    dataThrough: technical?.data_through,
-  }) && range === '1d' && overlaysConsistent;
+    dataThrough: range === '1d' ? technical?.data_through : analysisBundle?.dataThrough,
+    fingerprint: visibleFingerprint,
+  }) && (range !== '1d' || overlaysConsistent);
   const visibleOverlays = useMemo(() => {
     if (!analysisOk || !analysisBundle) return [];
     return filterOverlays(analysisBundle.overlays, layerSettings);
@@ -788,44 +782,14 @@ export default function KlineChart({
     const hand = drawing.marks;
     if (!analysisOk || !data) return hand;
     const prices = data.bars.flatMap((bar) => [bar.h, bar.l]);
-    const patternLike = visibleOverlays
-      .filter((overlayRow) =>
-        ['support_trend', 'resistance_trend', 'channel', 'triangle', 'wedge', 'box'].includes(overlayRow.kind),
-      )
-      .map((overlayRow) => {
-        let anchors = Array.isArray(overlayRow.geometry.anchors) ? overlayRow.geometry.anchors : [];
-        if (overlayRow.kind === 'box' && anchors.length < 2) {
-          const lo = Number(overlayRow.geometry.supportLow);
-          const hi = Number(overlayRow.geometry.resistanceHigh);
-          if (Number.isFinite(lo) && Number.isFinite(hi)) {
-            anchors = [
-              { time: `${overlayRow.formationStart}T00:00:00+00:00`, barKey: overlayRow.formationStart, price: lo },
-              { time: `${overlayRow.formationEnd}T00:00:00+00:00`, barKey: overlayRow.formationEnd, price: lo },
-              { time: `${overlayRow.formationStart}T00:00:00+00:00`, barKey: overlayRow.formationStart, price: hi },
-              { time: `${overlayRow.formationEnd}T00:00:00+00:00`, barKey: overlayRow.formationEnd, price: hi },
-            ];
-          }
-        }
-        return {
-          kind: overlayRow.kind,
-          subtype: overlayRow.geometry.subtype,
-          confidence: overlayRow.shapeQuality * 100,
-          status: overlayRow.status,
-          anchors,
-        };
-      });
-    const auto = autoPatternsToMarks(
-      patternLike as Parameters<typeof autoPatternsToMarks>[0],
-      {
-        bars: data.bars,
-        range,
-        xMin: 0,
-        xMax: data.bars.length - 1,
-        yMin: Math.min(...prices),
-        yMax: Math.max(...prices),
-      },
-      0,
-    );
+    const auto = overlaysToMarks(visibleOverlays, {
+      bars: data.bars,
+      range,
+      xMin: 0,
+      xMax: data.bars.length - 1,
+      yMin: Math.min(...prices),
+      yMax: Math.max(...prices),
+    });
     return {
       lines: [...auto.lines, ...hand.lines],
       points: [...auto.points, ...hand.points],
@@ -835,18 +799,21 @@ export default function KlineChart({
   }, [analysisOk, data, drawing.marks, range, visibleOverlays]);
 
   const analysisOption = useMemo(() => {
-    const extraMa = visibleOverlays
-      .filter((overlayRow) => overlayRow.kind === 'ma' && overlayRow.id !== 'ma20' && Array.isArray(overlayRow.geometry.values))
-      .map((overlayRow) => ({
-        name: overlayRow.label,
-        data: overlayRow.geometry.values as (number | null)[],
-      }));
-    const panes = visiblePanes.map((pane) => {
-      const series = pane.values.rsi ?? pane.values.macd ?? pane.values.histogram ?? pane.values.obv ?? pane.values.clv ?? pane.values.position ?? pane.values.rs ?? [];
-      return { id: pane.id, label: pane.label, data: series };
-    });
-    return { extraMa, panes };
-  }, [visibleOverlays, visiblePanes]);
+    const showMa20 = layerSettings.enabled.includes('ma20');
+    const extraMa = (analysisOk && data
+      ? overlaysToSeries(visibleOverlays, data.bars, range)
+      : []
+    )
+      .filter((line) => line.id !== 'ma20')
+      .map((line) => ({ name: line.name, data: line.data }));
+    const panes = analysisOk
+      ? visiblePanes.map((pane) => {
+        const series = pane.values.rsi ?? pane.values.macd ?? pane.values.histogram ?? pane.values.obv ?? pane.values.clv ?? pane.values.position ?? pane.values.rs ?? [];
+        return { id: pane.id, label: pane.label, data: series };
+      })
+      : [];
+    return { showMa20, extraMa, panes };
+  }, [analysisOk, data, range, visibleOverlays, visiblePanes, layerSettings]);
 
   const option = useMemo(
     () => (data ? buildOption(data.bars, data.ma20, range, mode, prevClose, overlay, techMarks, extraMarks, analysisOption) : null),
@@ -1105,6 +1072,7 @@ export default function KlineChart({
           inconsistent={levelsInconsistent}
           hasBase={overlays?.resistance_high != null}
           baseStatus={overlays?.base_status ?? null}
+          showMa20={layerSettings.enabled.includes('ma20')}
         />
       )}
       {analysisOk && visibleLabels.length > 0 && (
@@ -1216,12 +1184,14 @@ function OverlayLegend({
   inconsistent,
   hasBase,
   baseStatus,
+  showMa20 = true,
 }: {
   mode: ChartMode;
   shown: boolean;
   inconsistent: boolean;
   hasBase: boolean;
   baseStatus: TechnicalStructure['chart_overlays']['base_status'] | null;
+  showMa20?: boolean;
 }) {
   if (inconsistent) {
     return (
@@ -1255,7 +1225,7 @@ function OverlayLegend({
         )}
       {chip(<span aria-hidden className="text-warn-600" style={{ fontSize: 8 }}>▼</span>, t('确认摆动高点'))}
       {chip(<span aria-hidden className="text-ai-600" style={{ fontSize: 8 }}>▲</span>, t('确认摆动低点'))}
-      {mode === 'candle'
+      {mode === 'candle' && showMa20
         && chip(
           <span className="inline-block h-0 w-4 border-t border-dashed border-brand-500" aria-hidden />,
           t('MA20 · 最近 20 根常规时段收盘的均线'),

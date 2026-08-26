@@ -215,8 +215,50 @@ export function analysisMatchesChart(
   if (!opts.dataThrough || bundle.dataThrough !== opts.dataThrough) return false;
   if (opts.barCount != null && bundle.barCount != null && opts.barCount !== bundle.barCount) return false;
   if (opts.lastClose != null && bundle.lastClose != null && Math.abs(opts.lastClose - bundle.lastClose) > 1e-4) return false;
-  if (opts.fingerprint && bundle.barFingerprint && opts.fingerprint !== bundle.barFingerprint) return false;
+  if (!opts.fingerprint || opts.fingerprint !== bundle.barFingerprint) return false;
   return true;
+}
+
+function epochOfStamp(value: string): number {
+  if (/^\d+$/.test(value)) {
+    const n = Number(value);
+    return n > 100_000_000_000 ? Math.floor(n / 1000) : n;
+  }
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) ? Math.floor(ms / 1000) : 0;
+}
+
+export function closedBarsForFingerprint<T extends { t: string; h: number; l: number; c: number; ext?: boolean; quote_only?: boolean }>(
+  bars: T[],
+  range: string,
+  opts?: { dropLast?: boolean; fromDate?: string | null },
+): T[] {
+  let rows = bars.filter((bar) => bar.ext !== true && bar.quote_only !== true);
+  if (opts?.fromDate && (range === '1d' || range === '1w')) {
+    const index = rows.findIndex((bar) => nyDateFromEpoch(epochOfStamp(bar.t)) === opts.fromDate);
+    if (index > 0) rows = rows.slice(index);
+  }
+  if (opts?.dropLast && rows.length) rows = rows.slice(0, -1);
+  return rows;
+}
+
+export function barFingerprintFromBars(
+  bars: { t: string; h: number; l: number; c: number; ext?: boolean; quote_only?: boolean }[],
+  range: string,
+  opts?: { dropLast?: boolean; fromDate?: string | null },
+): string {
+  const rows = closedBarsForFingerprint(bars, range, opts);
+  const dates = rows.map((bar) => (
+    range === '5m' || range === '15m' || range === '1h'
+      ? String(epochOfStamp(bar.t))
+      : nyDateFromEpoch(epochOfStamp(bar.t))
+  ));
+  return barFingerprint(
+    dates,
+    rows.map((bar) => bar.c),
+    rows.map((bar) => bar.h),
+    rows.map((bar) => bar.l),
+  );
 }
 
 const ACTIVE_STATUSES = new Set(['forming', 'testing', 'triggered', 'confirmed', 'retest']);

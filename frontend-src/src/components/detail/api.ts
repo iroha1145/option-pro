@@ -52,6 +52,7 @@ export const CHART_RANGES: { value: ChartRange; label: string }[] = [
 function mapChartEx(body: unknown, ticker: string, range: ChartRange): StockChartEx {
   const r = asRec(body);
   const bars = unwrap(body, 'bars').map((b: Rec) => mapBar<ChartBarEx>(b));
+  const analysis = r.chart_analysis ?? r.chartAnalysis;
   return {
     ticker,
     range,
@@ -60,6 +61,9 @@ function mapChartEx(body: unknown, ticker: string, range: ChartRange): StockChar
     as_of: pickS(r, 'as_of', 'asOf') ?? '',
     last_bar_at: pickS(r, 'last_bar_at'),
     ...(r._stale === true ? { _stale: true } : {}),
+    ...(analysis && typeof analysis === 'object' && !Array.isArray(analysis)
+      ? { chart_analysis: analysis as Record<string, unknown> }
+      : {}),
   };
 }
 
