@@ -18,6 +18,11 @@ function toolButton(page, name) {
   return page.getByRole("button", { name, exact: true });
 }
 
+/** K 线周期 / 蜡烛·面积 用的是 Segmented `role="tab"`，不是 toolbar button。 */
+function chartTab(page, name) {
+  return page.getByRole("tab", { name, exact: true });
+}
+
 async function openStock(page, ticker = "AAPL") {
   const errors = [];
   page.on("pageerror", (error) => errors.push(String(error)));
@@ -26,21 +31,35 @@ async function openStock(page, ticker = "AAPL") {
   return errors;
 }
 
-async function chartFilled(page) {
-  const filled = await page.evaluate(() => {
-    const canvas = document.querySelector("canvas");
-    if (!canvas) return 0;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return 0;
-    const { width, height } = canvas;
-    const sample = ctx.getImageData(0, 0, Math.min(width, 200), Math.min(height, 200)).data;
+async function paintedPixels(page) {
+  return page.evaluate(() => {
+    const host = document.querySelector('[role="img"][aria-label$="图"]');
+    const canvases = Array.from((host ?? document).querySelectorAll("canvas"));
     let painted = 0;
-    for (let i = 3; i < sample.length; i += 16) {
-      if (sample[i] > 8) painted += 1;
+    for (const canvas of canvases) {
+      const width = Number(canvas.width) || 0;
+      const height = Number(canvas.height) || 0;
+      if (width < 16 || height < 16) continue;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) continue;
+      let sample;
+      try {
+        sample = ctx.getImageData(0, 0, Math.min(width, 200), Math.min(height, 200)).data;
+      } catch {
+        continue;
+      }
+      let count = 0;
+      for (let i = 3; i < sample.length; i += 16) {
+        if (sample[i] > 8) count += 1;
+      }
+      if (count > painted) painted = count;
     }
     return painted;
   });
-  expect(filled).toBeGreaterThan(40);
+}
+
+async function chartFilled(page) {
+  await expect.poll(() => paintedPixels(page), { timeout: 20_000 }).toBeGreaterThan(40);
 }
 
 test.use({ viewport: { width: 1440, height: 900 } });
@@ -119,16 +138,23 @@ test("candle and area modes share drawings", async ({ page }) => {
   const canvas = page.locator("canvas").first();
   const box = await canvas.boundingBox();
   await page.mouse.click(box.x + box.width * 0.45, box.y + box.height * 0.4);
-  await page.getByRole("button", { name: "面积" }).click();
+  await chartTab(page, "面积").click();
+  await expect(chartTab(page, "面积")).toHaveAttribute("aria-selected", "true");
   await chartFilled(page);
-  await page.getByRole("button", { name: "K 线" }).click();
+  await chartTab(page, "K 线").click();
+  await expect(chartTab(page, "K 线")).toHaveAttribute("aria-selected", "true");
   await chartFilled(page);
 });
 
 test("ticker and range switch isolates drawings", async ({ page }) => {
   test.skip(!HAS_REAL_BACKEND, "stock drawings visual path needs OPTIX_VISUAL_BASE_URL");
   await openStock(page, "AAPL");
-  await page.getByRole("button", { name: "日线" }).click();
+  await toolButton(page, "水平线").click();
+  const canvas = page.locator("canvas").first();
+  const box = await canvas.boundingBox();
+  await page.mouse.click(box.x + box.width * 0.45, box.y + box.height * 0.4);
+  await chartTab(page, "日线").click();
+  await expect(chartTab(page, "日线")).toHaveAttribute("aria-selected", "true");
   await page.goto("/stock/MSFT", { waitUntil: "domcontentloaded" });
   await expect(toolButton(page, "选择")).toBeVisible({ timeout: 15_000 });
   await chartFilled(page);
@@ -143,6 +169,7 @@ test("refresh persistence keeps guest drawings", async ({ page }) => {
   await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.4);
   await page.reload({ waitUntil: "domcontentloaded" });
   await expect(toolButton(page, "选择")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("img", { name: /K 线图$|面积图$/ })).toBeVisible({ timeout: 15_000 });
   await chartFilled(page);
 });
 
@@ -200,7 +227,7 @@ test("undo color text lock delete then refresh", async ({ page }) => {
   const canvas = page.locator("canvas").first();
   const box = await canvas.boundingBox();
   await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.4);
-  await page.getByRole("button", { name: "锁定" }).click();
+  await page.getByRole("button", { name: "锁定", exact: true }).click();
   await toolButton(page, "撤销").click();
   await page.reload({ waitUntil: "domcontentloaded" });
   await expect(toolButton(page, "选择")).toBeVisible({ timeout: 15_000 });
