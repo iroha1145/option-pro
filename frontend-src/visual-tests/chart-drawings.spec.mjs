@@ -252,8 +252,8 @@ test("layer presets switch algorithm and pattern groups", async ({ page }) => {
     await dialog.getByRole("button", { name, exact: true }).click();
     await expect(dialog.getByRole("button", { name, exact: true })).toHaveAttribute("aria-pressed", "true");
   }
-  await expect(dialog.getByRole("checkbox", { name: "RSI" })).toBeVisible();
-  await expect(dialog.getByRole("checkbox", { name: "自动趋势线/通道/三角形/楔形" })).toBeVisible();
+  await expect(dialog.getByRole("checkbox", { name: "RSI", exact: true }).first()).toBeVisible();
+  await expect(dialog.getByRole("checkbox", { name: "自动趋势线/通道/三角形/楔形", exact: true }).first()).toBeVisible();
   await page.keyboard.press("Escape");
   await chartFilled(page);
 });
