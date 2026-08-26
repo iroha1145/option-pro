@@ -195,6 +195,49 @@ export function insightAreaStyle(
   return { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, stops) };
 }
 
+/**
+ * Insight 端点圆点：最后一个数据点上的实心点 + 白环（参考图的签名之一）。
+ * 它标的是「读数落在这里」，所以只给最后一点，不是每点都发 symbol。
+ * 返回整个 markPoint，调用点若已有 markPoint 需自行合并（一级合并会整段覆盖）。
+ */
+export function insightEndpointMark(color: string, index: number, value: number): Record<string, unknown> {
+  return {
+    symbol: 'circle',
+    symbolSize: 9,
+    silent: true,
+    label: { show: false },
+    itemStyle: { color, borderColor: '#FFFFFF', borderWidth: 2 },
+    data: [{ coord: [index, value] }],
+  };
+}
+
+/**
+ * Insight 参考位：同色淡虚线（阈值/末值参照）。返回的是 markLine 的**一条数据**，
+ * 好让调用点和自己已有的参考线（如 0 轴）并存，而不是被整段替换。
+ */
+export function insightReferenceMark(color: string, yValue: number): Record<string, unknown> {
+  return {
+    yAxis: yValue,
+    lineStyle: { color: withAlpha(color, 0.45), width: 1, type: [5, 5] as number[] },
+    label: { show: false },
+  };
+}
+
+/**
+ * Insight 左缘淡出：线色改为横向渐变，最左侧收到透明。
+ *
+ * 它表达的是「窗口从这里开始，之前的数据没画」，不是「这段数据不确定」——
+ * 只给窗口边界本身就是任意截断的曲线用（如固定回看 N 日），坐标轴两端即为
+ * 数据全集的图别用，否则会读成对早期读数的信心衰减。
+ */
+export function insightLineFade(color: string): unknown {
+  return new echarts.graphic.LinearGradient(0, 0, 1, 0, [
+    { offset: 0, color: withAlpha(color, 0) },
+    { offset: 0.14, color },
+    { offset: 1, color },
+  ]);
+}
+
 /** Insight tooltip 数值行：8px 圆点 + 可选标签 + 加粗数值 */
 export function insightDotRow(color: string, label: string, value: string): string {
   return (

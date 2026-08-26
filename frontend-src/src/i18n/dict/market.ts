@@ -162,6 +162,7 @@ export const MARKET: Dict = {
   '{proxy} 代理数据暂不可用': ['{proxy} proxy data is currently unavailable', '{proxy} の代理データは現在利用できません'],
   '当前状态': ['Current state', '現在の状態'],
   '估算目标仓位': ['Est. target position', '推定目標ポジション'],
+  '0 为多空分界 · 最新 {v}': ['0 splits long from short · latest {v}', '0 が買い/売りの境目 · 最新 {v}'],
   '前值 {v}': ['prev {v}', '前回 {v}'],
   '今日边际流': ['Today\'s marginal flow', '本日の限界フロー'],
   '趋势 {a} · 波动率 {b}': ['Trend {a} · Vol {b}', 'トレンド{a} · ボラ{b}'],

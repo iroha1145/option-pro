@@ -10,16 +10,18 @@ import ReactECharts from '@/components/charts/ReactECharts';
 import {
   baseAnimation,
   CH,
-  INSIGHT_FRAME,
   INSIGHT_SMOOTH,
   insightAreaStyle,
   insightDotRow,
+  insightEndpointMark,
   insightLine,
+  insightLineFade,
+  insightReferenceMark,
   insightTooltip,
   insightTooltipBody,
   type ChartOption,
 } from '@/lib/chart';
-import { cn } from '@/lib/utils';
+import { InsightFrame } from '@/components/shared/InsightCard';
 import { t } from '../../i18n/core.ts';
 import { signed } from './ctaMeta';
 
@@ -64,8 +66,12 @@ function historyOption(history: { date: string; position: number }[]): ChartOpti
         name: t('估算目标仓位'),
         data: positions,
         smooth: INSIGHT_SMOOTH,
+        /* 左缘淡出：120 日窗口的起点是任意截断，不是数据的开端 */
+        lineStyle: { color: insightLineFade(CH.brand500) },
         /* 面积渐变要认这条曲线的正负：净空区间的面积长在 0 轴下方 */
         areaStyle: insightAreaStyle(CH.brand500, positions),
+        /* 末读数落点：实心圆 + 白环 */
+        markPoint: insightEndpointMark(CH.brand500, positions.length - 1, positions[positions.length - 1]),
         markLine: {
           symbol: 'none',
           silent: true,
@@ -75,6 +81,8 @@ function historyOption(history: { date: string; position: number }[]): ChartOpti
               lineStyle: { color: CH.ink400, width: 1, type: [4, 4] as number[] },
               label: { show: false },
             },
+            /* 末值参考位：把「现在这条线停在哪」横着拉通，读数不用回头找 y 轴 */
+            insightReferenceMark(CH.brand500, positions[positions.length - 1]),
           ],
         },
         markArea: {
@@ -99,11 +107,17 @@ function historyOption(history: { date: string; position: number }[]): ChartOpti
 export default function PositionHistoryChart({ history }: { history: { date: string; position: number }[] }) {
   const option = useMemo(() => historyOption(history), [history]);
   if (!option) return <p className="mt-2 text-caption text-ink-400">{t('暂无数据')}</p>;
+  const last = history[history.length - 1];
   return (
-    <div className={cn(INSIGHT_FRAME, 'mt-1.5')}>
+    /* 图台表头写清参照口径：0 轴是多空分界，末值是这条线现在停的位置 */
+    <InsightFrame
+      label={t('0 为多空分界 · 最新 {v}', { v: signed(last.position) })}
+      action={<span className="font-mono text-micro text-ink-400 tnum">{last.date}</span>}
+      className="mt-1.5"
+    >
       <div className="h-56">
         <ReactECharts option={option} ariaLabel={t('估算仓位历史曲线')} />
       </div>
-    </div>
+    </InsightFrame>
   );
 }
