@@ -7,7 +7,10 @@
 // draws is written to a persistent account. Two rules follow:
 //   1. afterEach deletes the scopes this file touches — leftovers pile up
 //      inside one run (later `.first()` lookups land on stale objects) and
-//      across runs toward the 500-per-scope cap.
+//      across runs toward the 500-per-scope cap. Only GET+DELETE the scopes
+//      this file actually draws (AAPL 1d/1w, MSFT 1d) and skip empty DELETEs:
+//      a 2×5 sweep of empty scopes filled the gateway 200/60 light bucket so
+//      later POSTs and the OCC clear landed on 429.
 //   2. chartFilled() only counts painted alpha in a 200x200 corner of the
 //      price canvas — candles alone satisfy it. It proves the chart rendered,
 //      never that a drawing exists. Object-level facts are asserted against
@@ -18,8 +21,12 @@ import { join } from "node:path";
 
 const SCREENSHOT_DIR = join(process.cwd(), "test-results", "visual-evidence");
 const HAS_REAL_BACKEND = Boolean(process.env.OPTIX_VISUAL_BASE_URL);
-const TOUCHED_TICKERS = ["AAPL", "MSFT"];
-const TOUCHED_RANGES = ["1d", "1w", "1h", "15m", "5m"];
+/** Scopes this file actually draws. Empty 1h/15m/5m DELETEs were light-bucket noise. */
+const TOUCHED_SCOPES = [
+  { ticker: "AAPL", range: "1d" },
+  { ticker: "AAPL", range: "1w" },
+  { ticker: "MSFT", range: "1d" },
+];
 
 async function screenshot(page, name) {
   await mkdir(SCREENSHOT_DIR, { recursive: true });
@@ -57,21 +64,44 @@ async function expandChart(page) {
   await expect(page.getByRole("dialog", { name: "绘图工作区" })).toBeVisible();
 }
 
+/** Same-origin GET so cookies/Origin match the page. page.request is a distinct client. */
+async function listDrawings(page, ticker = "AAPL", range = "1d") {
+  return page.evaluate(async ({ ticker, range }) => {
+    const url = `/api/account/chart-drawings?ticker=${encodeURIComponent(ticker)}&range=${encodeURIComponent(range)}&adjustment=raw`;
+    const res = await fetch(url, { credentials: "same-origin" });
+    const body = await res.json().catch(() => ({}));
+    return {
+      status: res.status,
+      drawings: Array.isArray(body.drawings) ? body.drawings : null,
+      revision: Number(body.scope_revision ?? 0),
+    };
+  }, { ticker, range });
+}
+
+/** Poll sentinel: 429 is transient; never treat it as n=0 / unlocked / 409. */
+function drawingsLockState(listed) {
+  if (listed.status === 429) return "rate-limited";
+  if (listed.status !== 200) return `http ${listed.status}`;
+  if (!Array.isArray(listed.drawings)) return "n=?";
+  if (listed.drawings.length !== 1) return `n=${listed.drawings.length}`;
+  return listed.drawings[0].locked ? "locked" : "unlocked";
+}
+
 /** 从页面发 DELETE（带 Origin），page.request 没有 CSRF 头会被 403 吞掉。 */
 async function clearTouchedDrawings(page) {
   await page.unrouteAll({ behavior: "ignoreErrors" }).catch(() => {});
-  await page.evaluate(async ({ tickers, ranges }) => {
-    for (const ticker of tickers) {
-      for (const range of ranges) {
-        const url = `/api/account/chart-drawings?ticker=${encodeURIComponent(ticker)}&range=${encodeURIComponent(range)}&adjustment=raw`;
-        const listed = await fetch(url, { credentials: "same-origin" }).then((res) => res.json()).catch(() => null);
-        const revision = Number(listed?.scope_revision ?? 0);
-        await fetch(`${url}&expected_scope_revision=${encodeURIComponent(revision)}`, {
-          method: "DELETE",
-          credentials: "same-origin",
-          headers: { "X-Optix-Action": "1" },
-        }).catch(() => {});
-      }
+  await page.evaluate(async (scopes) => {
+    for (const { ticker, range } of scopes) {
+      const url = `/api/account/chart-drawings?ticker=${encodeURIComponent(ticker)}&range=${encodeURIComponent(range)}&adjustment=raw`;
+      const listed = await fetch(url, { credentials: "same-origin" }).then((res) => res.json()).catch(() => null);
+      const drawings = Array.isArray(listed?.drawings) ? listed.drawings : [];
+      if (!drawings.length) continue;
+      const revision = Number(listed?.scope_revision ?? 0);
+      await fetch(`${url}&expected_scope_revision=${encodeURIComponent(revision)}`, {
+        method: "DELETE",
+        credentials: "same-origin",
+        headers: { "X-Optix-Action": "1" },
+      }).catch(() => {});
     }
     try {
       for (const key of Object.keys(localStorage)) {
@@ -80,7 +110,7 @@ async function clearTouchedDrawings(page) {
     } catch {
       /* private mode */
     }
-  }, { tickers: TOUCHED_TICKERS, ranges: TOUCHED_RANGES });
+  }, TOUCHED_SCOPES);
 }
 
 /** 展开工作区，断言当前标的/周期下**恰好** n 个绘图对象（n=0 就是缺席断言）。 */
@@ -316,23 +346,20 @@ test("hide then restore from the object list", async ({ page }) => {
 
 test("undo color text lock delete then refresh", async ({ page }) => {
   test.skip(!HAS_REAL_BACKEND, "stock drawings visual path needs OPTIX_VISUAL_BASE_URL");
+  test.setTimeout(90_000);
   await openStock(page);
   await placeHorizontal(page, 0.5, 0.4);
   await expandChart(page);
   const row = drawingRows(page).first();
+  // Create must land before lock: a PUT 404 while still-local is conflict, not idle.
+  await expect.poll(async () => drawingsLockState(await listDrawings(page)), { timeout: 20_000 }).toBe("unlocked");
   await toolButton(page, "锁定").first().click();
   await expect(row).toContainText("已锁定");
+  await expect.poll(async () => drawingsLockState(await listDrawings(page)), { timeout: 20_000 }).toBe("locked");
   await toolButton(page, "撤销").first().click();
   await expect(row).not.toContainText("已锁定");
   // 不读工具条文案（同步标签会改）：等 GET 上的 locked 落地再刷新。
-  await expect.poll(async () => {
-    const res = await page.request.get("/api/account/chart-drawings?ticker=AAPL&range=1d&adjustment=raw");
-    if (!res.ok()) return `http ${res.status()}`;
-    const body = await res.json();
-    const drawings = body.drawings || [];
-    if (drawings.length !== 1) return `n=${drawings.length}`;
-    return drawings[0].locked ? "locked" : "unlocked";
-  }, { timeout: 15_000 }).toBe("unlocked");
+  await expect.poll(async () => drawingsLockState(await listDrawings(page)), { timeout: 20_000 }).toBe("unlocked");
   await page.reload({ waitUntil: "domcontentloaded" });
   await expect(toolButton(page, "选择")).toBeVisible({ timeout: 20_000 });
   await expectDrawingCount(page, 1);
@@ -406,26 +433,29 @@ test("failed save survives refresh and replays after network returns", async ({ 
   const retry = toolButton(page, "重试同步");
   if (await retry.isVisible().catch(() => false)) await retry.click();
   await expect.poll(async () => {
-    const res = await page.request.get("/api/account/chart-drawings?ticker=AAPL&range=1d&adjustment=raw");
-    if (!res.ok()) return `http ${res.status()}`;
-    const body = await res.json();
-    return Array.isArray(body.drawings) ? body.drawings.length : -1;
+    const listed = await listDrawings(page);
+    if (listed.status === 429) return "rate-limited";
+    if (listed.status !== 200) return `http ${listed.status}`;
+    return Array.isArray(listed.drawings) ? listed.drawings.length : -1;
   }, { timeout: 20_000 }).toBe(1);
 });
 
 test("stale clear from a second context is 409 and keeps the newer drawing", async ({ browser, page }) => {
   test.skip(!HAS_REAL_BACKEND, "stock drawings visual path needs OPTIX_VISUAL_BASE_URL");
+  test.setTimeout(120_000);
   await openStock(page);
   await placeHorizontal(page, 0.4, 0.4);
   await expectDrawingCount(page, 1);
+  let staleRev = 0;
   await expect.poll(async () => {
-    const res = await page.request.get("/api/account/chart-drawings?ticker=AAPL&range=1d&adjustment=raw");
-    const body = await res.json();
-    return Number(body.scope_revision || 0);
-  }, { timeout: 15_000 }).toBeGreaterThan(0);
-  const listed = await page.request.get("/api/account/chart-drawings?ticker=AAPL&range=1d&adjustment=raw");
-  const before = await listed.json();
-  const staleRev = Number(before.scope_revision);
+    const listed = await listDrawings(page);
+    if (listed.status === 429) return 0;
+    if (listed.drawings?.length === 1 && listed.revision > 0) {
+      staleRev = listed.revision;
+      return listed.revision;
+    }
+    return 0;
+  }, { timeout: 20_000 }).toBeGreaterThan(0);
   const storage = await page.context().storageState();
   const other = await browser.newContext({ storageState: storage });
   const pageB = await other.newPage();
@@ -433,16 +463,28 @@ test("stale clear from a second context is 409 and keeps the newer drawing", asy
   await expect(toolButton(pageB, "选择")).toBeVisible({ timeout: 20_000 });
   await placeHorizontal(pageB, 0.62, 0.55);
   await expectDrawingCount(pageB, 2);
-  const stale = await page.evaluate(async (revision) => {
-    const res = await fetch("/api/account/chart-drawings?ticker=AAPL&range=1d&adjustment=raw&expected_scope_revision=" + revision, {
-      method: "DELETE",
-      credentials: "same-origin",
-      headers: { "X-Optix-Action": "1" },
-    });
-    const body = await res.json().catch(() => ({}));
-    return { status: res.status, code: body?.detail?.code || null };
-  }, staleRev);
-  expect(stale.status).toBe(409);
+  await expect.poll(async () => {
+    const listed = await listDrawings(pageB);
+    if (listed.status === 429) return "rate-limited";
+    if (listed.status !== 200) return `http ${listed.status}`;
+    return Array.isArray(listed.drawings) ? listed.drawings.length : -1;
+  }, { timeout: 20_000 }).toBe(2);
+  /** @type {{ status: number, code: string | null }} */
+  let stale = { status: 0, code: null };
+  await expect.poll(async () => {
+    stale = await page.evaluate(async (revision) => {
+      const res = await fetch(`/api/account/chart-drawings?ticker=AAPL&range=1d&adjustment=raw&expected_scope_revision=${encodeURIComponent(revision)}`, {
+        method: "DELETE",
+        credentials: "same-origin",
+        headers: { "X-Optix-Action": "1" },
+      });
+      const body = await res.json().catch(() => ({}));
+      const detail = body && typeof body.detail === "object" ? body.detail : null;
+      return { status: res.status, code: detail?.code || body?.error || null };
+    }, staleRev);
+    // 429 is the light-bucket throttle, not OCC. Keep polling until a real status.
+    return stale.status === 429 ? "rate-limited" : stale.status;
+  }, { timeout: 90_000 }).toBe(409);
   expect(stale.code).toBe("scope_revision_conflict");
   await expectDrawingCount(pageB, 2);
   await other.close();

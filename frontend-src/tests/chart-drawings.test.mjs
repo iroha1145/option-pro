@@ -1336,6 +1336,8 @@ test('sync failures branch on the body code: only revision_conflict is a conflic
   // 网络/5xx 才该留在队列里等重试。
   assert.equal(resolveSyncFailure('update', null, 503), 'retry');
   assert.equal(resolveSyncFailure('create', null, null), 'retry');
+  assert.equal(resolveSyncFailure('create', 'rate_limited', 429), 'retry');
+  assert.equal(resolveSyncFailure('delete', null, 429), 'retry');
 });
 
 test('a selection click commits nothing: no history entry and no PUT without real movement', async (t) => {

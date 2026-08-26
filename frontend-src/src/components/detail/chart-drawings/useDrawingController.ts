@@ -544,6 +544,9 @@ export function useDrawingController(args: {
   const undo = useCallback(() => {
     setHistory((prev) => {
       if (!canUndo(prev)) return prev;
+      // Drop the style debounce: a lock/color PUT queued before undo must not
+      // fire after the history diff has already enqueued the reverted payload.
+      discardPendingEdits();
       const stepped = historyUndo(prev);
       const present = restoreHistory(stepped.present);
       const next = { ...stepped, present };
@@ -555,11 +558,12 @@ export function useDrawingController(args: {
       syncHistoryDiff(prev.present, present);
       return next;
     });
-  }, [flushLocalSave, restoreHistory, storageKey, syncHistoryDiff]);
+  }, [discardPendingEdits, flushLocalSave, restoreHistory, storageKey, syncHistoryDiff]);
 
   const redo = useCallback(() => {
     setHistory((prev) => {
       if (!canRedo(prev)) return prev;
+      discardPendingEdits();
       const stepped = historyRedo(prev);
       const present = restoreHistory(stepped.present);
       const next = { ...stepped, present };
@@ -571,7 +575,7 @@ export function useDrawingController(args: {
       syncHistoryDiff(prev.present, present);
       return next;
     });
-  }, [flushLocalSave, restoreHistory, storageKey, syncHistoryDiff]);
+  }, [discardPendingEdits, flushLocalSave, restoreHistory, storageKey, syncHistoryDiff]);
 
   /**
    * 逐字编辑合并成一条历史记录：不合并的话每一键都深拷两份图形表、整表写一次
