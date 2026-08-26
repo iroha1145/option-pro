@@ -35,9 +35,9 @@ function chartTab(page, name) {
   return page.getByRole("tab", { name, exact: true });
 }
 
-/** Inspector 的对象行：aria-label 是「绘图对象 {kind}」，跨刷新稳定。 */
+/** Inspector 的对象行：aria-label 是「绘图对象 {kind}」，只认展开工作区里的那一份。 */
 function drawingRows(page) {
-  return page.getByRole("button", { name: /^绘图对象 / });
+  return page.getByRole("dialog", { name: "绘图工作区" }).getByRole("button", { name: /^绘图对象 / });
 }
 
 async function openStock(page, ticker = "AAPL") {
@@ -51,8 +51,27 @@ async function openStock(page, ticker = "AAPL") {
 /** 对象列表只活在展开的绘图工作区里，所以断言前先展开。 */
 async function expandChart(page) {
   const expand = toolButton(page, "展开图表");
-  if (await expand.count()) await expand.click();
+  if (await expand.isVisible().catch(() => false)) await expand.click();
   await expect(page.getByRole("dialog", { name: "绘图工作区" })).toBeVisible();
+}
+
+/** 从页面发 DELETE（带 Origin），page.request 没有 CSRF 头会被 403 吞掉。 */
+async function clearTouchedDrawings(page) {
+  await page.unrouteAll({ behavior: "ignoreErrors" }).catch(() => {});
+  await page.waitForLoadState("networkidle").catch(() => {});
+  await page.evaluate(async ({ tickers, ranges }) => {
+    for (const ticker of tickers) {
+      for (const range of ranges) {
+        const url = `/api/account/chart-drawings?ticker=${encodeURIComponent(ticker)}&range=${encodeURIComponent(range)}&adjustment=raw`;
+        await fetch(url, { method: "DELETE", credentials: "same-origin", headers: { "X-Optix-Action": "1" } }).catch(() => {});
+      }
+    }
+    try {
+      localStorage.clear();
+    } catch {
+      /* private mode */
+    }
+  }, { tickers: TOUCHED_TICKERS, ranges: TOUCHED_RANGES });
 }
 
 /** 展开工作区，断言当前标的/周期下**恰好** n 个绘图对象（n=0 就是缺席断言）。 */
@@ -108,24 +127,19 @@ async function chartFilled(page) {
 
 test.use({ viewport: { width: 1440, height: 900 } });
 
+test.beforeEach(async ({ page }) => {
+  if (!HAS_REAL_BACKEND) return;
+  // 上一轮 CI 的残留会让「恰好 n 条」全红；page.request.delete 过不了同源守卫。
+  await page.goto("/stock/AAPL", { waitUntil: "domcontentloaded" });
+  await expect(toolButton(page, "选择")).toBeVisible({ timeout: 15_000 });
+  await clearTouchedDrawings(page);
+});
+
 test.afterEach(async ({ page }) => {
   if (!HAS_REAL_BACKEND) return;
   // 「失败重试」用例把非 GET 全 abort 掉了，先撤路由再清扫。
-  await page.unrouteAll({ behavior: "ignoreErrors" }).catch(() => {});
-  for (const ticker of TOUCHED_TICKERS) {
-    for (const range of TOUCHED_RANGES) {
-      await page.request
-        .delete(`/api/account/chart-drawings?ticker=${ticker}&range=${range}&adjustment=raw`)
-        .catch(() => {});
-    }
-  }
-  await page.evaluate(() => {
-    try {
-      localStorage.clear();
-    } catch {
-      /* private mode / detached document */
-    }
-  }).catch(() => {});
+  // 清扫必须走页面 fetch：page.request.delete 没有 Origin，同源守卫会 403。
+  await clearTouchedDrawings(page);
 });
 
 test("chart drawings toolbar is present on a stock page when data loads", async ({ page }) => {
