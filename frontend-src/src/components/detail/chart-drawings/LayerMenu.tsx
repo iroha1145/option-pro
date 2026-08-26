@@ -74,7 +74,9 @@ export default function LayerMenu({
               {LAYERS.filter((layer) => layer.group === group.id).map((layer) => {
                 const on = settings.enabled.includes(layer.id);
                 const gate = layerInputEnabled(layer, mode);
-                const reason = gate.reason ? t(gate.reason) : null;
+                const reason = gate.reason === 'area_no_panes_or_ma'
+                  ? t('面积图不支持副图与均线叠加')
+                  : null;
                 return (
                   <li key={layer.id}>
                     <label className={cn('flex items-center gap-2', !gate.enabled && 'text-ink-400')}>

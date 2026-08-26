@@ -1996,7 +1996,7 @@ test('area mode disables pane and MA layer inputs', async (t) => {
     assert.equal(layerInputEnabled(byId[id], 'area').enabled, false, id);
     assert.equal(layerInputEnabled(byId[id], 'candle').enabled, true, id);
   }
-  assert.equal(layerInputEnabled(byId.rsi, 'area').reason, '面积图不支持副图与均线叠加');
+  assert.equal(layerInputEnabled(byId.rsi, 'area').reason, 'area_no_panes_or_ma');
   assert.equal(layerInputEnabled(byId.swings, 'area').enabled, true);
 });
 

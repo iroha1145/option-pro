@@ -175,7 +175,7 @@ export function layerInputEnabled(
   mode: ChartRenderMode,
 ): { enabled: boolean; reason: string | null } {
   if (mode === 'area' && (layer.group === 'pane' || layer.kind === 'ma')) {
-    return { enabled: false, reason: '面积图不支持副图与均线叠加' };
+    return { enabled: false, reason: 'area_no_panes_or_ma' };
   }
   return { enabled: true, reason: null };
 }
