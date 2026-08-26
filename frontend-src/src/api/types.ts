@@ -400,6 +400,7 @@ export interface TechnicalStructure {
   as_of?: string | null;
   auto_patterns?: AutoTechnicalPattern[];
   auto_patterns_version?: string;
+  chart_analysis?: Record<string, unknown> | null;
 }
 
 export interface AutoTechnicalPattern {

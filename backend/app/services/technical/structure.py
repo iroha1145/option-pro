@@ -34,6 +34,7 @@ from app.services.technical.auto_patterns import (
     detect_auto_patterns,
 )
 from app.services.technical.base_structure import detect_base_structure
+from app.services.technical.chart_analysis import assemble_chart_analysis
 from app.services.technical.indicators import compute_technicals
 
 STRUCTURE_VERSION = "us-structure-v2"
@@ -321,6 +322,20 @@ def compute_technical_structure(
     except Exception:
         auto_patterns = []
 
+    chart_analysis = assemble_chart_analysis(
+        series=analysis,
+        data_through=analysis["dates"][-1],
+        chart_range="1d",
+        adjustment="raw",
+        price_action=price_action,
+        vol_price=vol_price,
+        base=base,
+        base_state=base_state,
+        technicals=technicals,
+        auto_patterns=auto_patterns,
+        series_break_at=series_break_at,
+    )
+
     return {
         "version": STRUCTURE_VERSION,
         "base": base,
@@ -331,6 +346,7 @@ def compute_technical_structure(
         "chart_overlays": overlays,
         "auto_patterns": auto_patterns,
         "auto_patterns_version": AUTO_PATTERNS_VERSION,
+        "chart_analysis": chart_analysis,
         "bar_count": len(analysis["closes"]),
         # data_through = 指标/结构实际吃到的最后一根收盘 K；last_bar 描述
         # 图上可见的最后一根（可能未收盘）。两者不同时 UI 应标「暂定」。

@@ -185,6 +185,83 @@ def range_position(
     }
 
 
+def sma_series(closes: Sequence[float], window: int) -> list[float | None]:
+    n = len(closes)
+    out: list[float | None] = [None] * n
+    if window < 1 or n < window:
+        return out
+    acc = 0.0
+    for i, value in enumerate(closes):
+        acc += value
+        if i >= window:
+            acc -= closes[i - window]
+        if i >= window - 1:
+            out[i] = _safe(acc / window)
+    return out
+
+
+def rsi_series(closes: Sequence[float], period: int = 14) -> list[float | None]:
+    n = len(closes)
+    out: list[float | None] = [None] * n
+    if n < period + 1:
+        return out
+    gains = 0.0
+    losses = 0.0
+    for i in range(1, period + 1):
+        delta = closes[i] - closes[i - 1]
+        if delta > 0:
+            gains += delta
+        else:
+            losses -= delta
+    avg_gain = gains / period
+    avg_loss = losses / period
+    if avg_loss <= 0:
+        out[period] = 100.0 if avg_gain > 0 else 50.0
+    else:
+        out[period] = _safe(100.0 - 100.0 / (1.0 + avg_gain / avg_loss), 2)
+    for i in range(period + 1, n):
+        delta = closes[i] - closes[i - 1]
+        avg_gain = (avg_gain * (period - 1) + max(delta, 0.0)) / period
+        avg_loss = (avg_loss * (period - 1) + max(-delta, 0.0)) / period
+        if avg_loss <= 0:
+            out[i] = 100.0 if avg_gain > 0 else 50.0
+        else:
+            out[i] = _safe(100.0 - 100.0 / (1.0 + avg_gain / avg_loss), 2)
+    return out
+
+
+def macd_series(closes: Sequence[float]) -> dict[str, list[float | None]]:
+    n = len(closes)
+    empty = [None] * n
+    if n < 40:
+        return {"macd": empty, "signal": empty[:], "histogram": empty[:]}
+    fast = _ema_series(closes, 12)
+    slow = _ema_series(closes, 26)
+    macd_line = [f - s for f, s in zip(fast, slow)]
+    signal = _ema_series(macd_line, 9)
+    histogram = [m - s for m, s in zip(macd_line, signal)]
+    return {
+        "macd": [_safe(v) for v in macd_line],
+        "signal": [_safe(v) for v in signal],
+        "histogram": [_safe(v) for v in histogram],
+    }
+
+
+def range_position_series(
+    closes: Sequence[float], highs: Sequence[float], lows: Sequence[float], window: int = 60
+) -> list[float | None]:
+    n = len(closes)
+    out: list[float | None] = [None] * n
+    if n < window:
+        return out
+    for i in range(window - 1, n):
+        window_high = max(highs[i - window + 1 : i + 1])
+        window_low = min(lows[i - window + 1 : i + 1])
+        span = window_high - window_low
+        out[i] = _safe((closes[i] - window_low) / span if span > 0 else 0.5)
+    return out
+
+
 def compute_technicals(series: dict[str, list]) -> dict[str, Any]:
     closes = list(series.get("closes") or [])
     highs = list(series.get("highs") or [])
@@ -210,9 +287,13 @@ __all__ = [
     "compute_technicals",
     "ma_slope",
     "macd_direction",
+    "macd_series",
     "range_position",
+    "range_position_series",
     "rsi14",
     "rsi_score",
+    "rsi_series",
+    "sma_series",
     "trend_efficiency",
     "trend_stability",
 ]

@@ -733,6 +733,7 @@ function mapTechnicalStructure(body: unknown): TechnicalStructure {
     as_of: pickS(r, 'as_of', 'asOf'),
     auto_patterns: auto.auto_patterns,
     auto_patterns_version: auto.auto_patterns_version,
+    chart_analysis: auto.chart_analysis,
   };
 }
 

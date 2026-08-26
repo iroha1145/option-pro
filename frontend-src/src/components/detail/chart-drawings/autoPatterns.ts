@@ -117,11 +117,18 @@ export function mapAutoPatterns(raw: unknown): AutoTechnicalPattern[] {
 export function mapTechnicalAutoFields(body: unknown): {
   auto_patterns: AutoTechnicalPattern[];
   auto_patterns_version?: string;
+  chart_analysis: Record<string, unknown> | null;
 } {
   const row = isRecord(body) ? body : {};
   const version = nonEmptyString(row.auto_patterns_version ?? row.autoPatternsVersion) ?? undefined;
+  const analysis = isRecord(row.chart_analysis)
+    ? row.chart_analysis
+    : isRecord(row.chartAnalysis)
+      ? row.chartAnalysis
+      : null;
   return {
     auto_patterns: mapAutoPatterns(row.auto_patterns ?? row.autoPatterns),
     auto_patterns_version: version,
+    chart_analysis: analysis && analysis.option == null ? analysis : null,
   };
 }

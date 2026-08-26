@@ -13,11 +13,19 @@ export default function DrawingWorkspace({
   controller,
   children,
   reducedMotion,
+  layersOpen = false,
+  onOpenLayers,
+  autoPatternsEnabled,
+  onToggleAuto,
 }: {
   open: boolean;
   controller: DrawingController;
   children: ReactNode;
   reducedMotion: boolean;
+  layersOpen?: boolean;
+  onOpenLayers?: () => void;
+  autoPatternsEnabled?: boolean;
+  onToggleAuto?: () => void;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const [confirmClear, setConfirmClear] = useState(false);
@@ -41,8 +49,10 @@ export default function DrawingWorkspace({
         canRedo={controller.canRedo}
         onUndo={controller.undo}
         onRedo={controller.redo}
-        autoPatternsEnabled={controller.autoPatternsEnabled}
-        onToggleAuto={() => controller.setAutoPatternsEnabled((prev) => !prev)}
+        autoPatternsEnabled={autoPatternsEnabled ?? controller.autoPatternsEnabled}
+        onToggleAuto={onToggleAuto ?? (() => controller.setAutoPatternsEnabled((prev) => !prev))}
+        layersOpen={layersOpen}
+        onOpenLayers={onOpenLayers}
         expanded={controller.expanded}
         onToggleExpanded={() => controller.setExpanded(false)}
         syncStatus={controller.syncStatus}

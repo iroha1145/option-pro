@@ -23,6 +23,10 @@ import { useDrawingController } from './chart-drawings/useDrawingController.ts';
 import DrawingToolbar from './chart-drawings/DrawingToolbar.tsx';
 import DrawingWorkspace from './chart-drawings/DrawingWorkspace.tsx';
 import { autoPatternsToMarks } from './chart-drawings/renderer.ts';
+import LayerMenu from './chart-drawings/LayerMenu.tsx';
+import { mapChartAnalysis, analysisMatchesChart, filterOverlays, filterPanes, labelBudget } from './chart-drawings/analysis/mapBundle.ts';
+import { loadLayerSettings, saveLayerSettings } from './chart-drawings/analysis/settings.ts';
+import type { LayerSettings } from './chart-drawings/analysis/settings.ts';
 import ConfirmDialog from '@/components/catalysts/ConfirmDialog';
 import {
   barTimeMs,
@@ -270,6 +274,25 @@ function measureMarks(overlay: MeasureOverlay | null | undefined) {
   };
 }
 
+function analysisLayout(paneCount: number) {
+  const extra = Math.max(0, paneCount);
+  const priceH = extra ? Math.max(34, 58 - extra * 8) : 60;
+  const volH = extra ? 12 : 17;
+  const paneH = extra ? Math.max(8, Math.min(12, Math.floor(22 / extra))) : 0;
+  let cursor = 12;
+  const grids: { left: number; right: number; top: string; height: string; containLabel: boolean }[] = [
+    { left: 8, right: 8, top: `${cursor}`, height: `${priceH}%`, containLabel: true },
+  ];
+  cursor = priceH + 14;
+  grids.push({ left: 8, right: 8, top: `${cursor}%`, height: `${volH}%`, containLabel: true });
+  cursor += volH + 2;
+  for (let i = 0; i < extra; i += 1) {
+    grids.push({ left: 8, right: 8, top: `${cursor}%`, height: `${paneH}%`, containLabel: true });
+    cursor += paneH + 1;
+  }
+  return grids;
+}
+
 function buildOption(
   bars: ChartBarEx[],
   ma20: (number | null)[],
@@ -279,6 +302,7 @@ function buildOption(
   overlay?: MeasureOverlay | null,
   tech?: ReturnType<typeof technicalMarks> | null,
   extra?: { lines: object[]; points: object[]; areas: object[]; polygons?: { vertices: { x: number; y: number }[]; color: string; opacity: number }[] } | null,
+  analysis?: { extraMa?: { name: string; data: (number | null)[] }[]; panes?: { id: string; label: string; data: (number | null)[] }[] } | null,
 ): ChartOption {
   const labels = bars.map((b) => fmtAxisLabel(b.t, range));
   const upFill = CH.up600;
@@ -417,52 +441,37 @@ function buildOption(
     itemStyle: { color: b.c >= b.o ? 'rgba(14,159,110,.4)' : 'rgba(229,72,77,.4)' },
   }));
 
+  const panes = analysis?.panes ?? [];
+  const grids = analysisLayout(panes.length);
+  const axisIndexes = grids.map((_, index) => index);
   return {
     ...common,
-    grid: [
-      { left: 8, right: 8, top: 12, height: '60%', containLabel: true },
-      { left: 8, right: 8, top: '76%', height: '17%', containLabel: true },
-    ],
-    dataZoom: insideZoom(range, bars.length, [0, 1]),
-    xAxis: [
-      {
-        type: 'category' as const,
-        gridIndex: 0,
-        data: labels,
-        axisLine: { show: false },
-        axisTick: { show: false },
-        axisLabel: { show: false },
-      },
-      {
-        type: 'category' as const,
-        gridIndex: 1,
-        data: labels,
-        axisLine: { show: false },
-        axisTick: { show: false },
-        axisLabel: { color: CH.ink400, fontSize: 11, fontFamily: '"IBM Plex Mono", monospace' },
-      },
-    ],
-    yAxis: [
-      {
-        type: 'value' as const,
-        gridIndex: 0,
-        scale: true,
-        position: 'right' as const,
-        axisLine: { show: false },
-        axisTick: { show: false },
-        axisLabel: { color: CH.ink400, fontSize: 11, fontFamily: '"IBM Plex Mono", monospace' },
-        splitLine: { lineStyle: { color: CH.lineChart, width: 1 } },
-      },
-      {
-        type: 'value' as const,
-        gridIndex: 1,
-        scale: true,
-        axisLine: { show: false },
-        axisTick: { show: false },
-        axisLabel: { show: false },
-        splitLine: { show: false },
-      },
-    ],
+    grid: grids,
+    dataZoom: insideZoom(range, bars.length, axisIndexes),
+    xAxis: grids.map((_, index) => ({
+      type: 'category' as const,
+      gridIndex: index,
+      data: labels,
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: index === grids.length - 1
+        ? { color: CH.ink400, fontSize: 11, fontFamily: '"IBM Plex Mono", monospace' }
+        : { show: false },
+    })),
+    yAxis: grids.map((_, index) => ({
+      type: 'value' as const,
+      gridIndex: index,
+      scale: true,
+      position: 'right' as const,
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: index === 0
+        ? { color: CH.ink400, fontSize: 11, fontFamily: '"IBM Plex Mono", monospace' }
+        : { show: false },
+      splitLine: index === 0
+        ? { lineStyle: { color: CH.lineChart, width: 1 } }
+        : { show: false },
+    })),
     tooltip: glassTooltip({
       trigger: 'axis',
       axisPointer: {
@@ -544,6 +553,18 @@ function buildOption(
         tooltip: { show: false },
         z: 4,
       },
+      ...((analysis?.extraMa ?? []).map((line) => ({
+        type: 'line' as const,
+        name: line.name,
+        xAxisIndex: 0,
+        yAxisIndex: 0,
+        data: line.data,
+        showSymbol: false,
+        connectNulls: true,
+        lineStyle: { color: CH.ink400, width: 1, type: [4, 4] as number[] },
+        tooltip: { show: false },
+        z: 4,
+      }))),
       {
         type: 'bar' as const,
         xAxisIndex: 1,
@@ -553,6 +574,18 @@ function buildOption(
         tooltip: { show: false },
         z: 2,
       },
+      ...panes.map((pane, index) => ({
+        type: 'line' as const,
+        name: pane.label,
+        xAxisIndex: index + 2,
+        yAxisIndex: index + 2,
+        data: pane.data,
+        showSymbol: false,
+        connectNulls: true,
+        lineStyle: { color: CH.brand500, width: 1 },
+        tooltip: { show: false },
+        z: 2,
+      })),
       ...(fillSeries ? [fillSeries] : []),
     ],
   } as ChartOption;
@@ -705,6 +738,34 @@ export default function KlineChart({
     [levelsAvailable, showLevels, overlays, data],
   );
 
+  const [layerSettings, setLayerSettings] = useState<LayerSettings>(() => loadLayerSettings(identityKey));
+  const [layersOpen, setLayersOpen] = useState(false);
+  const persistLayers = (next: LayerSettings) => {
+    setLayerSettings(next);
+    saveLayerSettings(identityKey, next);
+  };
+  const analysisBundle = useMemo(
+    () => mapChartAnalysis(technical?.chart_analysis ?? technical ?? null),
+    [technical],
+  );
+  const analysisOk = analysisMatchesChart(analysisBundle, {
+    range: '1d',
+    adjustment: 'raw',
+    dataThrough: technical?.data_through,
+  }) && range === '1d' && overlaysConsistent;
+  const visibleOverlays = useMemo(() => {
+    if (!analysisOk || !analysisBundle) return [];
+    return filterOverlays(analysisBundle.overlays, layerSettings);
+  }, [analysisOk, analysisBundle, layerSettings]);
+  const visiblePanes = useMemo(() => {
+    if (!analysisOk || !analysisBundle) return [];
+    return filterPanes(analysisBundle.indicatorPanes, layerSettings);
+  }, [analysisOk, analysisBundle, layerSettings]);
+  const visibleLabels = useMemo(
+    () => labelBudget(visibleOverlays, layerSettings),
+    [visibleOverlays, layerSettings],
+  );
+
   const drawing = useDrawingController({
     ticker,
     range,
@@ -725,12 +786,36 @@ export default function KlineChart({
 
   const extraMarks = useMemo(() => {
     const hand = drawing.marks;
-    if (!drawing.autoPatternsEnabled || range !== '1d' || !overlaysConsistent || !data) {
-      return hand;
-    }
+    if (!analysisOk || !data) return hand;
     const prices = data.bars.flatMap((bar) => [bar.h, bar.l]);
+    const patternLike = visibleOverlays
+      .filter((overlayRow) =>
+        ['support_trend', 'resistance_trend', 'channel', 'triangle', 'wedge', 'box'].includes(overlayRow.kind),
+      )
+      .map((overlayRow) => {
+        let anchors = Array.isArray(overlayRow.geometry.anchors) ? overlayRow.geometry.anchors : [];
+        if (overlayRow.kind === 'box' && anchors.length < 2) {
+          const lo = Number(overlayRow.geometry.supportLow);
+          const hi = Number(overlayRow.geometry.resistanceHigh);
+          if (Number.isFinite(lo) && Number.isFinite(hi)) {
+            anchors = [
+              { time: `${overlayRow.formationStart}T00:00:00+00:00`, barKey: overlayRow.formationStart, price: lo },
+              { time: `${overlayRow.formationEnd}T00:00:00+00:00`, barKey: overlayRow.formationEnd, price: lo },
+              { time: `${overlayRow.formationStart}T00:00:00+00:00`, barKey: overlayRow.formationStart, price: hi },
+              { time: `${overlayRow.formationEnd}T00:00:00+00:00`, barKey: overlayRow.formationEnd, price: hi },
+            ];
+          }
+        }
+        return {
+          kind: overlayRow.kind,
+          subtype: overlayRow.geometry.subtype,
+          confidence: overlayRow.shapeQuality * 100,
+          status: overlayRow.status,
+          anchors,
+        };
+      });
     const auto = autoPatternsToMarks(
-      technical?.auto_patterns ?? [],
+      patternLike as Parameters<typeof autoPatternsToMarks>[0],
       {
         bars: data.bars,
         range,
@@ -739,7 +824,7 @@ export default function KlineChart({
         yMin: Math.min(...prices),
         yMax: Math.max(...prices),
       },
-      70,
+      0,
     );
     return {
       lines: [...auto.lines, ...hand.lines],
@@ -747,11 +832,25 @@ export default function KlineChart({
       areas: [...auto.areas, ...hand.areas],
       polygons: [...(auto.polygons ?? []), ...(hand.polygons ?? [])],
     };
-  }, [data, drawing.autoPatternsEnabled, drawing.marks, overlaysConsistent, range, technical?.auto_patterns]);
+  }, [analysisOk, data, drawing.marks, range, visibleOverlays]);
+
+  const analysisOption = useMemo(() => {
+    const extraMa = visibleOverlays
+      .filter((overlayRow) => overlayRow.kind === 'ma' && overlayRow.id !== 'ma20' && Array.isArray(overlayRow.geometry.values))
+      .map((overlayRow) => ({
+        name: overlayRow.label,
+        data: overlayRow.geometry.values as (number | null)[],
+      }));
+    const panes = visiblePanes.map((pane) => {
+      const series = pane.values.rsi ?? pane.values.macd ?? pane.values.histogram ?? pane.values.obv ?? pane.values.clv ?? pane.values.position ?? pane.values.rs ?? [];
+      return { id: pane.id, label: pane.label, data: series };
+    });
+    return { extraMa, panes };
+  }, [visibleOverlays, visiblePanes]);
 
   const option = useMemo(
-    () => (data ? buildOption(data.bars, data.ma20, range, mode, prevClose, overlay, techMarks, extraMarks) : null),
-    [data, range, mode, prevClose, overlay, techMarks, extraMarks],
+    () => (data ? buildOption(data.bars, data.ma20, range, mode, prevClose, overlay, techMarks, extraMarks, analysisOption) : null),
+    [data, range, mode, prevClose, overlay, techMarks, extraMarks, analysisOption],
   );
 
   const chartBody = (
@@ -827,8 +926,16 @@ export default function KlineChart({
           canRedo={drawing.canRedo}
           onUndo={drawing.undo}
           onRedo={drawing.redo}
-          autoPatternsEnabled={drawing.autoPatternsEnabled}
-          onToggleAuto={() => drawing.setAutoPatternsEnabled((prev) => !prev)}
+          autoPatternsEnabled={layerSettings.enabled.includes('auto_patterns')}
+          onToggleAuto={() => persistLayers({
+            ...layerSettings,
+            preset: 'custom',
+            enabled: layerSettings.enabled.includes('auto_patterns')
+              ? layerSettings.enabled.filter((id) => id !== 'auto_patterns')
+              : [...layerSettings.enabled, 'auto_patterns'],
+          })}
+          layersOpen={layersOpen}
+          onOpenLayers={() => setLayersOpen(true)}
           expanded={drawing.expanded}
           onToggleExpanded={() => drawing.setExpanded((prev) => !prev)}
           syncStatus={drawing.syncStatus}
@@ -1000,23 +1107,26 @@ export default function KlineChart({
           baseStatus={overlays?.base_status ?? null}
         />
       )}
-      {drawing.autoPatternsEnabled && range === '1d' && overlaysConsistent && (
+      {analysisOk && visibleLabels.length > 0 && (
         <p className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-micro text-ink-400">
-          {(technical?.auto_patterns ?? [])
-            .filter((pattern) => pattern.confidence >= 70)
-            .slice(0, 4)
-            .map((pattern) => (
-              <span key={pattern.id} title={t('技术投影，不是价格预测')}>
-                {t('形态 · {name} · 置信度 {n}', {
-                  name: autoPatternName(pattern.kind, pattern.subtype),
-                  n: Math.round(pattern.confidence),
-                })}
-                {' · '}
-                {t('触碰 {n} 次', { n: pattern.touches })}
-              </span>
-            ))}
+          {visibleLabels.map((overlayRow) => (
+            <span key={overlayRow.id} title={t('几何质量不是胜率')}>
+              {t('形态 · {name} · 置信度 {n}', {
+                name: autoPatternName(overlayRow.kind, typeof overlayRow.geometry.subtype === 'string' ? overlayRow.geometry.subtype : overlayRow.label),
+                n: Math.round(overlayRow.shapeQuality * 100),
+              })}
+              {typeof overlayRow.evidence.touches === 'number' ? ` · ${t('触碰 {n} 次', { n: overlayRow.evidence.touches })}` : ''}
+            </span>
+          ))}
         </p>
       )}
+      <LayerMenu
+        open={layersOpen}
+        onClose={() => setLayersOpen(false)}
+        settings={layerSettings}
+        onChange={persistLayers}
+        strengthContext={analysisBundle?.strengthContext ?? null}
+      />
 
       <p className={cn('mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 text-micro text-ink-400')}>
         <span className="font-mono tnum">
@@ -1048,7 +1158,21 @@ export default function KlineChart({
   );
 
   return (
-    <DrawingWorkspace open={drawing.expanded} controller={drawing} reducedMotion={reducedMotion}>
+    <DrawingWorkspace
+      open={drawing.expanded}
+      controller={drawing}
+      reducedMotion={reducedMotion}
+      layersOpen={layersOpen}
+      onOpenLayers={() => setLayersOpen(true)}
+      autoPatternsEnabled={layerSettings.enabled.includes('auto_patterns')}
+      onToggleAuto={() => persistLayers({
+        ...layerSettings,
+        preset: 'custom',
+        enabled: layerSettings.enabled.includes('auto_patterns')
+          ? layerSettings.enabled.filter((id) => id !== 'auto_patterns')
+          : [...layerSettings.enabled, 'auto_patterns'],
+      })}
+    >
       {chartBody}
     </DrawingWorkspace>
   );

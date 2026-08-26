@@ -98,8 +98,9 @@ def test_rising_channel() -> None:
         peak_fn=lambda i: 52 + 0.14 * i,
     )
     rows = _detect(bars)
-    found = _high_conf(rows, "channel", "rising") or _high_conf(rows, "channel")
+    found = _high_conf(rows, "channel", "rising")
     assert found is not None, rows
+    assert found["subtype"] == "rising"
 
 
 def test_falling_channel() -> None:
@@ -109,8 +110,9 @@ def test_falling_channel() -> None:
         peak_fn=lambda i: 102 - 0.14 * i,
     )
     rows = _detect(bars)
-    found = _high_conf(rows, "channel", "falling") or _high_conf(rows, "channel")
+    found = _high_conf(rows, "channel", "falling")
     assert found is not None, rows
+    assert found["subtype"] == "falling"
 
 
 def test_symmetric_triangle() -> None:
@@ -120,8 +122,9 @@ def test_symmetric_triangle() -> None:
         peak_fn=lambda i: 90 - 0.12 * i,
     )
     rows = _detect(bars)
-    found = _high_conf(rows, "triangle", "symmetric") or _high_conf(rows, "triangle")
+    found = _high_conf(rows, "triangle", "symmetric")
     assert found is not None, rows
+    assert found["subtype"] == "symmetric"
 
 
 def test_ascending_triangle() -> None:
@@ -131,8 +134,9 @@ def test_ascending_triangle() -> None:
         peak_fn=lambda i: 80.0,
     )
     rows = _detect(bars)
-    found = _high_conf(rows, "triangle", "ascending") or _high_conf(rows, "triangle")
+    found = _high_conf(rows, "triangle", "ascending")
     assert found is not None, rows
+    assert found["subtype"] == "ascending"
 
 
 def test_descending_triangle() -> None:
@@ -142,8 +146,9 @@ def test_descending_triangle() -> None:
         peak_fn=lambda i: 90 - 0.14 * i,
     )
     rows = _detect(bars)
-    found = _high_conf(rows, "triangle", "descending") or _high_conf(rows, "triangle")
+    found = _high_conf(rows, "triangle", "descending")
     assert found is not None, rows
+    assert found["subtype"] == "descending"
 
 
 def test_rising_wedge() -> None:
@@ -153,8 +158,9 @@ def test_rising_wedge() -> None:
         peak_fn=lambda i: 70 + 0.12 * i,
     )
     rows = _detect(bars)
-    found = _high_conf(rows, "wedge", "rising") or _high_conf(rows, "wedge")
+    found = _high_conf(rows, "wedge", "rising")
     assert found is not None, rows
+    assert found["subtype"] == "rising"
 
 
 def test_falling_wedge() -> None:
@@ -164,8 +170,9 @@ def test_falling_wedge() -> None:
         peak_fn=lambda i: 110 - 0.22 * i,
     )
     rows = _detect(bars)
-    found = _high_conf(rows, "wedge", "falling") or _high_conf(rows, "wedge")
+    found = _high_conf(rows, "wedge", "falling")
     assert found is not None, rows
+    assert found["subtype"] == "falling"
 
 
 def test_horizontal_box() -> None:
@@ -175,9 +182,23 @@ def test_horizontal_box() -> None:
         peak_fn=lambda i: 62.0,
     )
     rows = _detect(bars)
-    found = _high_conf(rows, "box")
-    assert found is not None, rows
-    assert found["subtype"] in {"horizontal", "box", None} or found["kind"] == "box"
+    assert all(row["kind"] != "box" for row in rows)
+    from app.services.technical.base_structure import detect_base_structure
+    from app.services.technical.chart_analysis import assemble_chart_analysis
+
+    series = _series(bars)
+    prior = {key: values[:-1] for key, values in series.items()}
+    base = detect_base_structure(prior)
+    assert base is not None
+    bundle = assemble_chart_analysis(
+        series=series,
+        data_through=series["dates"][-1],
+        base=base,
+        auto_patterns=rows,
+    )
+    boxes = [row for row in bundle["overlays"] if row["kind"] == "box"]
+    assert boxes
+    assert all(row["sourceId"] == "base_structure" for row in boxes)
 
 
 def test_noisy_data_does_not_emit_high_confidence() -> None:
@@ -332,11 +353,11 @@ def test_single_trend_status_and_no_measured_target() -> None:
     patterned = [
         row
         for row in rows + down_rows
-        if row["kind"] in {"channel", "triangle", "wedge", "box"}
+        if row["kind"] in {"channel", "triangle", "wedge"}
         and row.get("measuredTarget") is not None
     ]
     for row in patterned:
-        assert row["kind"] in {"channel", "triangle", "wedge", "box"}
+        assert row["kind"] in {"channel", "triangle", "wedge"}
 
 
 def test_structure_payload_includes_auto_patterns() -> None:

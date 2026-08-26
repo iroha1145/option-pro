@@ -3132,6 +3132,11 @@ async def _load_stock_technical(symbol: str, owner: bool) -> dict[str, Any]:
         "basis": "raw_daily",
         **result,
     }
+    analysis = payload.get("chart_analysis")
+    if isinstance(analysis, dict):
+        analysis["ticker"] = symbol
+        analysis["range"] = "1d"
+        analysis["adjustment"] = "raw"
     return payload
 
 

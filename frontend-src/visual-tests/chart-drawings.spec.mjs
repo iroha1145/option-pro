@@ -236,8 +236,24 @@ test("undo color text lock delete then refresh", async ({ page }) => {
 test("auto patterns render from a real technical payload", async ({ page }) => {
   test.skip(!HAS_REAL_BACKEND, "stock drawings visual path needs OPTIX_VISUAL_BASE_URL");
   await openStock(page);
-  await toolButton(page, "自动结构已开启").click();
-  await toolButton(page, "自动结构已关闭").click();
-  await toolButton(page, "自动结构已开启").click();
+  await toolButton(page, "算法与图层").click();
+  await expect(page.getByRole("dialog", { name: "算法与图层" })).toBeVisible();
+  await page.getByRole("button", { name: "极简", exact: true }).click();
+  await chartFilled(page);
+});
+
+test("layer presets switch algorithm and pattern groups", async ({ page }) => {
+  test.skip(!HAS_REAL_BACKEND, "stock drawings visual path needs OPTIX_VISUAL_BASE_URL");
+  await openStock(page);
+  await toolButton(page, "算法与图层").click();
+  const dialog = page.getByRole("dialog", { name: "算法与图层" });
+  await expect(dialog).toBeVisible();
+  for (const name of ["极简", "结构分析", "突破交易", "动量", "量价", "全部"]) {
+    await dialog.getByRole("button", { name, exact: true }).click();
+    await expect(dialog.getByRole("button", { name, exact: true })).toHaveAttribute("aria-pressed", "true");
+  }
+  await expect(dialog.getByRole("checkbox", { name: "RSI" })).toBeVisible();
+  await expect(dialog.getByRole("checkbox", { name: "自动趋势线/通道/三角形/楔形" })).toBeVisible();
+  await page.keyboard.press("Escape");
   await chartFilled(page);
 });

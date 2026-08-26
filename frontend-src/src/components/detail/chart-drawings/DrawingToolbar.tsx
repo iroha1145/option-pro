@@ -34,6 +34,8 @@ export default function DrawingToolbar({
   onRedo,
   autoPatternsEnabled,
   onToggleAuto,
+  layersOpen = false,
+  onOpenLayers,
   expanded,
   onToggleExpanded,
   syncStatus,
@@ -51,6 +53,8 @@ export default function DrawingToolbar({
   onRedo: () => void;
   autoPatternsEnabled: boolean;
   onToggleAuto: () => void;
+  layersOpen?: boolean;
+  onOpenLayers?: () => void;
   expanded: boolean;
   onToggleExpanded: () => void;
   syncStatus: SyncStatus;
@@ -95,10 +99,10 @@ export default function DrawingToolbar({
       </button>
       <button
         type="button"
-        aria-label={autoPatternsEnabled ? t('自动结构已开启') : t('自动结构已关闭')}
-        aria-pressed={autoPatternsEnabled}
-        onClick={onToggleAuto}
-        className={toolButtonCls(autoPatternsEnabled)}
+        aria-label={t('算法与图层')}
+        aria-pressed={layersOpen || autoPatternsEnabled}
+        onClick={() => (onOpenLayers ? onOpenLayers() : onToggleAuto())}
+        className={toolButtonCls(layersOpen || autoPatternsEnabled)}
       >
         <Icon name="layers" size={15} />
       </button>

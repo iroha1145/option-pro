@@ -29,6 +29,9 @@ async function loadDrawings(t) {
     autoPatterns: path.join(drawingsDir, 'autoPatterns.ts'),
     sync: path.join(drawingsDir, 'sync.ts'),
     drag: path.join(drawingsDir, 'drag.ts'),
+    registry: path.join(drawingsDir, 'analysis/registry.ts'),
+    settings: path.join(drawingsDir, 'analysis/settings.ts'),
+    mapBundle: path.join(drawingsDir, 'analysis/mapBundle.ts'),
   };
   await writeFile(
     entry,
@@ -59,6 +62,14 @@ export {
   resolveListApply, resolveRetryAction, SCOPE_JOB_ID, keepLocalWithServerRevisions,
 } from ${JSON.stringify(files.sync)};
 export { dragMove, previewDragAnchors, applyPixelShiftConstraint } from ${JSON.stringify(files.drag)};
+export { LAYERS, PRESETS, layersStorageKey, GROUPS } from ${JSON.stringify(files.registry)};
+export {
+  DEFAULT_LAYER_SETTINGS, settingsFromPreset, parseLayerSettings, loadLayerSettings,
+  saveLayerSettings, toggleLayer, layerIdForOverlay,
+} from ${JSON.stringify(files.settings)};
+export {
+  mapChartAnalysis, analysisMatchesChart, filterOverlays, filterPanes, labelBudget, barFingerprint,
+} from ${JSON.stringify(files.mapBundle)};
 `,
     'utf8',
   );
@@ -873,4 +884,101 @@ test('replace import policy helper treats empty and swapped sets as the new list
   box.enqueue({ drawingId: SCOPE_JOB_ID, type: 'replace', drawings: [] });
   const empty = box.takeNext(SCOPE_JOB_ID);
   assert.deepEqual(empty.drawings, []);
+});
+
+function overlayOf(kind, extra = {}) {
+  return {
+    id: extra.id ?? kind,
+    sourceId: extra.sourceId ?? 'auto_patterns',
+    algorithmVersion: 'optix-auto-patterns-v2',
+    group: extra.group ?? 'price',
+    kind,
+    geometry: extra.geometry ?? { anchors: [{ time: 't', barKey: '2026-07-06', price: 10 }, { time: 't2', barKey: '2026-07-16', price: 12 }] },
+    status: extra.status ?? 'forming',
+    direction: 'bullish',
+    shapeQuality: extra.shapeQuality ?? 0.8,
+    displayPriority: extra.displayPriority ?? 0.7,
+    evidence: { shapeQuality: 0.8, volumeConfirmation: 0.5, trendAlignment: 0.5, recency: 0.5, consensus: 1 },
+    formationStart: '2026-07-06',
+    formationEnd: '2026-07-16',
+    dataThrough: '2026-07-16',
+    label: kind,
+    detail: 'geometry quality is not a win rate',
+  };
+}
+
+test('layer registry filters algorithm and pattern groups and presets', async (t) => {
+  const {
+    PRESETS, settingsFromPreset, toggleLayer, filterOverlays, filterPanes, labelBudget, layersStorageKey,
+  } = await loadDrawings(t);
+  const structure = settingsFromPreset('structure');
+  assert.equal(structure.preset, 'structure');
+  assert.ok(structure.enabled.includes('auto_patterns'));
+  assert.equal(PRESETS.minimal.maxPatterns, 3);
+  assert.equal(PRESETS.minimal.maxLabels, 6);
+  const overlays = [
+    overlayOf('support_trend', { id: 'a', displayPriority: 0.9 }),
+    overlayOf('support_trend', { id: 'b', displayPriority: 0.8 }),
+    overlayOf('support_trend', { id: 'c', displayPriority: 0.7 }),
+    overlayOf('support_trend', { id: 'd', displayPriority: 0.6 }),
+    overlayOf('swing', { id: 's', group: 'price', geometry: { type: 'point' } }),
+  ];
+  const minimal = settingsFromPreset('minimal');
+  const kept = filterOverlays(overlays, minimal);
+  assert.equal(kept.filter((row) => row.kind === 'support_trend').length, 3);
+  assert.equal(kept.some((row) => row.id === 's'), false);
+  const withSwings = filterOverlays(overlays, structure);
+  assert.equal(withSwings.some((row) => row.id === 's'), true);
+  const custom = toggleLayer(minimal, 'rsi');
+  assert.equal(custom.preset, 'custom');
+  const panes = filterPanes(
+    [{ id: 'rsi', label: 'RSI', kind: 'rsi', values: { rsi: [1] }, dates: [] }, { id: 'macd', label: 'MACD', kind: 'macd', values: { macd: [1] }, dates: [] }],
+    settingsFromPreset('momentum'),
+  );
+  assert.deepEqual(panes.map((pane) => pane.id).sort(), ['macd', 'rsi']);
+  const labels = labelBudget(overlays, settingsFromPreset('minimal'));
+  assert.ok(labels.length <= 6);
+  assert.equal(layersStorageKey('anonymous').startsWith('option-pro:chart-layers:v1:'), true);
+  assert.equal(layersStorageKey('anonymous').includes('chart-drawings'), false);
+});
+
+test('layer settings persist on a key separate from drawings', async (t) => {
+  const { loadLayerSettings, saveLayerSettings, settingsFromPreset, layersStorageKey, anonymousStorageKey } = await loadDrawings(t);
+  const mem = new Map();
+  const storage = {
+    getItem: (key) => mem.get(key) ?? null,
+    setItem: (key, value) => { mem.set(key, value); },
+    removeItem: (key) => { mem.delete(key); },
+  };
+  const next = settingsFromPreset('breakout');
+  saveLayerSettings('anonymous', next, storage);
+  const loaded = loadLayerSettings('anonymous', storage);
+  assert.equal(loaded.preset, 'breakout');
+  assert.ok(loaded.enabled.includes('breakouts'));
+  assert.notEqual(layersStorageKey('anonymous'), anonymousStorageKey('AAPL', '1d', 'raw'));
+});
+
+test('fingerprint and dataThrough mismatch yields no auto marks', async (t) => {
+  const { mapChartAnalysis, analysisMatchesChart, filterOverlays, settingsFromPreset } = await loadDrawings(t);
+  const bundle = mapChartAnalysis({
+    ticker: 'AAPL',
+    range: '1d',
+    adjustment: 'raw',
+    dataThrough: '2026-07-16',
+    barFingerprint: 'abc',
+    barCount: 10,
+    overlays: [overlayOf('support_trend')],
+    indicatorPanes: [{ id: 'rsi', label: 'RSI', kind: 'rsi', values: { rsi: [50] }, dates: ['2026-07-16'] }],
+    strengthContext: { finalScore: null, note: 'not a win probability' },
+  });
+  assert.ok(bundle);
+  assert.equal(analysisMatchesChart(bundle, { range: '1d', adjustment: 'raw', dataThrough: '2026-07-16' }), true);
+  assert.equal(analysisMatchesChart(bundle, { range: '1d', adjustment: 'raw', dataThrough: '2026-07-15' }), false);
+  assert.equal(analysisMatchesChart(bundle, { range: '1w', adjustment: 'raw', dataThrough: '2026-07-16' }), false);
+  assert.equal(analysisMatchesChart(bundle, { range: '1d', adjustment: 'raw', dataThrough: '2026-07-16', fingerprint: 'other' }), false);
+  const none = analysisMatchesChart(bundle, { range: '1d', adjustment: 'raw', dataThrough: '2026-07-15' })
+    ? filterOverlays(bundle.overlays, settingsFromPreset('minimal'))
+    : [];
+  assert.equal(none.length, 0);
+  assert.equal(mapChartAnalysis({ option: { series: [] }, dataThrough: 'x', barFingerprint: 'y' }), null);
 });
