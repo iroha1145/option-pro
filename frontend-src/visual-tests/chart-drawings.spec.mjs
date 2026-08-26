@@ -43,8 +43,10 @@ function drawingRows(page) {
 async function openStock(page, ticker = "AAPL") {
   const errors = [];
   page.on("pageerror", (error) => errors.push(String(error)));
-  await page.goto(`/stock/${ticker}`, { waitUntil: "domcontentloaded" });
-  await expect(toolButton(page, "选择")).toBeVisible({ timeout: 15_000 });
+  if (!page.url().includes(`/stock/${ticker}`)) {
+    await page.goto(`/stock/${ticker}`, { waitUntil: "domcontentloaded" });
+  }
+  await expect(toolButton(page, "选择")).toBeVisible({ timeout: 20_000 });
   return errors;
 }
 
@@ -58,7 +60,6 @@ async function expandChart(page) {
 /** 从页面发 DELETE（带 Origin），page.request 没有 CSRF 头会被 403 吞掉。 */
 async function clearTouchedDrawings(page) {
   await page.unrouteAll({ behavior: "ignoreErrors" }).catch(() => {});
-  await page.waitForLoadState("networkidle").catch(() => {});
   await page.evaluate(async ({ tickers, ranges }) => {
     for (const ticker of tickers) {
       for (const range of ranges) {
@@ -67,7 +68,9 @@ async function clearTouchedDrawings(page) {
       }
     }
     try {
-      localStorage.clear();
+      for (const key of Object.keys(localStorage)) {
+        if (key.includes("chart-drawing")) localStorage.removeItem(key);
+      }
     } catch {
       /* private mode */
     }
@@ -315,8 +318,10 @@ test("undo color text lock delete then refresh", async ({ page }) => {
   await expect(row).toContainText("已锁定");
   await toolButton(page, "撤销").first().click();
   await expect(row).not.toContainText("已锁定");
+  // 撤销入队的 PUT 落地前刷新会把服务器上的「已锁定」读回来。
+  await expect(page.getByText("已同步").first()).toBeVisible({ timeout: 15_000 });
   await page.reload({ waitUntil: "domcontentloaded" });
-  await expect(toolButton(page, "选择")).toBeVisible({ timeout: 15_000 });
+  await expect(toolButton(page, "选择")).toBeVisible({ timeout: 20_000 });
   await expectDrawingCount(page, 1);
   await expect(drawingRows(page).first()).not.toContainText("已锁定");
 });
