@@ -53,13 +53,15 @@ export interface PresetDef {
   labelDensity: number;
 }
 
+/* 质量门槛与后端检测器闸门齐平（0.45）：高于它等于把后端已放行的形态再滤一遍，
+   实测会滤成 0 条。预设之间的疏密差异交给 maxPatterns。 */
 export const PRESETS: Record<Exclude<PresetId, 'custom'>, PresetDef> = {
   minimal: {
     label: t('极简'),
     enabled: ['ma20', 'auto_patterns'],
     maxPatterns: 3,
     maxLabels: 6,
-    minShapeQuality: 0.7,
+    minShapeQuality: 0.45,
     onlyActive: true,
     showInvalidated: false,
     labelDensity: 0.4,
@@ -69,7 +71,7 @@ export const PRESETS: Record<Exclude<PresetId, 'custom'>, PresetDef> = {
     enabled: ['swings', 'support_resistance', 'bases', 'pivots', 'auto_patterns', 'candles', 'traps'],
     maxPatterns: 8,
     maxLabels: 10,
-    minShapeQuality: 0.55,
+    minShapeQuality: 0.45,
     onlyActive: false,
     showInvalidated: false,
     labelDensity: 0.7,
@@ -79,7 +81,7 @@ export const PRESETS: Record<Exclude<PresetId, 'custom'>, PresetDef> = {
     enabled: ['bases', 'pivots', 'breakouts', 'auto_patterns', 'obv', 'clv'],
     maxPatterns: 6,
     maxLabels: 8,
-    minShapeQuality: 0.55,
+    minShapeQuality: 0.45,
     onlyActive: true,
     showInvalidated: true,
     labelDensity: 0.6,
@@ -89,7 +91,7 @@ export const PRESETS: Record<Exclude<PresetId, 'custom'>, PresetDef> = {
     enabled: ['ma20', 'ma50', 'ma200', 'rsi', 'macd', 'spy_rs'],
     maxPatterns: 0,
     maxLabels: 4,
-    minShapeQuality: 0.7,
+    minShapeQuality: 0.45,
     onlyActive: true,
     showInvalidated: false,
     labelDensity: 0.4,
@@ -99,7 +101,7 @@ export const PRESETS: Record<Exclude<PresetId, 'custom'>, PresetDef> = {
     enabled: ['obv', 'clv', 'range_persistence', 'traps', 'breakouts'],
     maxPatterns: 4,
     maxLabels: 6,
-    minShapeQuality: 0.55,
+    minShapeQuality: 0.45,
     onlyActive: false,
     showInvalidated: false,
     labelDensity: 0.5,
@@ -109,7 +111,7 @@ export const PRESETS: Record<Exclude<PresetId, 'custom'>, PresetDef> = {
     enabled: LAYERS.map((layer) => layer.id),
     maxPatterns: 12,
     maxLabels: 16,
-    minShapeQuality: 0.5,
+    minShapeQuality: 0.45,
     onlyActive: false,
     showInvalidated: true,
     labelDensity: 1,

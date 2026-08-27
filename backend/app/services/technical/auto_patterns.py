@@ -22,7 +22,10 @@ _MIN_BARS = 40
 _MIN_SPAN = 20
 _TOUCH_ATR = 0.35
 _PENETRATE_ATR = 0.55
-_KEEP_QUALITY = 0.55
+# 真实行情里形态的几何质量普遍落在 0.55 以下：线上实测 NVDA 515 根日线能拟合出
+# 12 个候选，0.55 一个不留、0.45 留 2 个。原值是照着合成测试数据（理想锯齿）定的，
+# 单元测试一直全绿，而线上从上线起一条也没画出来过。
+_KEEP_QUALITY = 0.45
 _MAX_RESULTS = 12
 _TOUCH_GAP = 3
 _SWING_SPANS = (2, 3, 5)

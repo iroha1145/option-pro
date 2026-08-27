@@ -430,8 +430,10 @@ test("layer presets switch algorithm and pattern groups", async ({ page }) => {
     await expect(dialog.getByRole("checkbox", { name: dead, exact: true })).toHaveCount(0);
   }
   // 「最低几何质量」和标签条上的「置信度 87」同一把尺（0–100），不是 0–1。
+  // 值与后端检测器闸门 _KEEP_QUALITY 齐平：高于它等于把后端已放行的形态再滤
+  // 一遍，线上实测会滤成 0 条（自动形态上线后一直画不出来就是这么来的）。
   await dialog.getByRole("button", { name: "极简", exact: true }).click();
-  await expect(dialog.getByRole("spinbutton", { name: "最低几何质量" })).toHaveValue("70");
+  await expect(dialog.getByRole("spinbutton", { name: "最低几何质量" })).toHaveValue("45");
   await page.keyboard.press("Escape");
   await chartFilled(page);
 });

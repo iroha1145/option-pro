@@ -31,13 +31,16 @@ LAYERS: list[dict[str, Any]] = [
     # 已随前端 registry 一起删除。要恢复请连同 pane/绘制一起加，parity 测试会盯住两边。
 ]
 
+# 各预设的质量门槛统一到 0.45（= 检测器闸门）：高于它等于把后端已放行的形态
+# 再滤一遍，实测会滤成 0 条。「极简 vs 全部」的差异交给 maxPatterns 的条数上限，
+# 不靠一条会把所有形态一起滤光的质量线。
 PRESETS: dict[str, dict[str, Any]] = {
     "minimal": {
         "label": "极简",
         "enabled": ["ma20", "auto_patterns"],
         "maxPatterns": 3,
         "maxLabels": 6,
-        "minShapeQuality": 0.70,
+        "minShapeQuality": 0.45,
         "onlyActive": True,
         "showInvalidated": False,
         "labelDensity": 0.4,
@@ -55,7 +58,7 @@ PRESETS: dict[str, dict[str, Any]] = {
         ],
         "maxPatterns": 8,
         "maxLabels": 10,
-        "minShapeQuality": 0.55,
+        "minShapeQuality": 0.45,
         "onlyActive": False,
         "showInvalidated": False,
         "labelDensity": 0.7,
@@ -65,7 +68,7 @@ PRESETS: dict[str, dict[str, Any]] = {
         "enabled": ["bases", "pivots", "breakouts", "auto_patterns", "obv", "clv"],
         "maxPatterns": 6,
         "maxLabels": 8,
-        "minShapeQuality": 0.55,
+        "minShapeQuality": 0.45,
         "onlyActive": True,
         "showInvalidated": True,
         "labelDensity": 0.6,
@@ -75,7 +78,7 @@ PRESETS: dict[str, dict[str, Any]] = {
         "enabled": ["ma20", "ma50", "ma200", "rsi", "macd", "spy_rs"],
         "maxPatterns": 0,
         "maxLabels": 4,
-        "minShapeQuality": 0.70,
+        "minShapeQuality": 0.45,
         "onlyActive": True,
         "showInvalidated": False,
         "labelDensity": 0.4,
@@ -85,7 +88,7 @@ PRESETS: dict[str, dict[str, Any]] = {
         "enabled": ["obv", "clv", "range_persistence", "traps", "breakouts"],
         "maxPatterns": 4,
         "maxLabels": 6,
-        "minShapeQuality": 0.55,
+        "minShapeQuality": 0.45,
         "onlyActive": False,
         "showInvalidated": False,
         "labelDensity": 0.5,
@@ -95,7 +98,7 @@ PRESETS: dict[str, dict[str, Any]] = {
         "enabled": [layer["id"] for layer in LAYERS],
         "maxPatterns": 12,
         "maxLabels": 16,
-        "minShapeQuality": 0.50,
+        "minShapeQuality": 0.45,
         "onlyActive": False,
         "showInvalidated": True,
         "labelDensity": 1.0,
@@ -103,7 +106,7 @@ PRESETS: dict[str, dict[str, Any]] = {
 }
 
 ADVANCED_DEFAULTS = {
-    "minShapeQuality": 0.70,
+    "minShapeQuality": 0.45,
     "onlyActive": True,
     "showInvalidated": False,
     "maxPatterns": 3,
