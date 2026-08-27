@@ -193,7 +193,9 @@ async function chartFilled(page) {
 }
 
 test.use({ viewport: { width: 1440, height: 900 } });
-test.describe.configure({ timeout: 120_000 });
+// 180s：beforeEach 在热桶下最多等 90s 工具栏，正文的 OCC 轮询也要 90s——
+// 120s 总闸会在两者叠加时把「正在自愈」误杀成超时（CI 取证：61s 等挂载 + 57s 轮询）。
+test.describe.configure({ timeout: 180_000 });
 
 test.beforeEach(async ({ page }) => {
   if (!HAS_REAL_BACKEND) return;
@@ -486,7 +488,7 @@ test("failed save survives refresh and replays after network returns", async ({ 
 
 test("stale clear from a second context is 409 and keeps the newer drawing", async ({ browser, page }) => {
   test.skip(!HAS_REAL_BACKEND, "stock drawings visual path needs OPTIX_VISUAL_BASE_URL");
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   await openStock(page);
   await placeHorizontal(page, 0.4, 0.4);
   await expectDrawingCount(page, 1);
@@ -495,6 +497,10 @@ test("stale clear from a second context is 409 and keeps the newer drawing", asy
     await clickRetryIfShown(page);
     const listed = await listDrawings(page);
     if (listed.status === 429) return 0;
+    if ((listed.drawings?.length ?? 0) > 1) {
+      // 残留不会自愈：本测只放了一条，多出来的必是上游清扫漏网。快诊快断。
+      throw new Error(`scope polluted: ${listed.drawings.map((d) => d.id).join(",")}`);
+    }
     if (listed.drawings?.length === 1 && listed.revision > 0) {
       staleRev = listed.revision;
       return listed.revision;
@@ -657,7 +663,7 @@ test("expanded mobile workspace has no horizontal overflow", async ({ page }) =>
 
 test("stale update from a second context is 409 and keeps the newer color", async ({ browser, page }) => {
   test.skip(!HAS_REAL_BACKEND, "stock drawings visual path needs OPTIX_VISUAL_BASE_URL");
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   await openStock(page);
   await placeHorizontal(page, 0.4, 0.4);
   await expectDrawingCount(page, 1);
@@ -670,6 +676,10 @@ test("stale update from a second context is 409 and keeps the newer color", asyn
     // and aborts instead of waiting for drain after an empty 200.
     if (listed.status === 429) return 0;
     if (listed.status !== 200 || !listed.drawings?.length) return 0;
+    if (listed.drawings.length > 1) {
+      // 残留不会自愈：本测只放了一条，多出来的必是上游清扫漏网。快诊快断。
+      throw new Error(`scope polluted: ${listed.drawings.map((d) => d.id).join(",")}`);
+    }
     const row = listed.drawings[0];
     stale = {
       id: row.id,
