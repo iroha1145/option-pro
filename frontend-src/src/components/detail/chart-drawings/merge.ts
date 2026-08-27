@@ -37,9 +37,21 @@ export type PendingEval = {
 /**
  * Compare GET revision against the immutable outbox base.
  * Clear/replace on mismatch is always conflict. Update/delete conflict when
- * the target is gone or its drawing revision changed. Unrelated remote rows
- * stay. Creates replay only when the id is free.
+ * the target is gone, the frozen drawing revision is missing, or that
+ * revision changed. Unrelated remote rows stay. Creates replay only when
+ * the id is free.
  */
+
+function frozenDrawingRevision(job: PersistJob): number | null {
+  const tagged = job.expectedDrawingRevision;
+  if (typeof tagged === 'number' && Number.isInteger(tagged) && tagged >= 1) return tagged;
+  const fromDrawing = job.drawing?.revision;
+  if (typeof fromDrawing === 'number' && Number.isInteger(fromDrawing) && fromDrawing >= 1) {
+    return fromDrawing;
+  }
+  return null;
+}
+
 export function evaluateRemoteVsPending(args: {
   remoteDrawings: ChartDrawing[];
   remoteRevision: number;
@@ -74,8 +86,8 @@ export function evaluateRemoteVsPending(args: {
           unsafe = true;
           break;
         }
-        const localRev = job.drawing?.revision;
-        if (localRev != null && row.revision !== localRev) {
+        const localRev = frozenDrawingRevision(job);
+        if (localRev == null || row.revision !== localRev) {
           unsafe = true;
           break;
         }

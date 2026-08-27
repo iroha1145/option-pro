@@ -842,6 +842,8 @@ test('outbox retry replays pending ops and ignores stale list tokens', async (t)
   assert.equal(resolveRetryAction('write_failed', false), 'replay');
   assert.equal(resolveRetryAction('load_failed', true), 'reload');
   assert.equal(resolveRetryAction(null, true), 'idle');
+  assert.equal(resolveRetryAction('write_failed', false, false), 'reload');
+  assert.equal(resolveRetryAction('write_failed', false, true), 'replay');
   const other = { ...scope, ticker: 'AAPL' };
   assert.equal(resolveListApply(true, false), false);
   const stale = applyPersistResponse({
@@ -2402,4 +2404,140 @@ test('parseMutation throws without scope_revision', async (t) => {
     updatedAt: '2026-07-06T13:30:00Z',
   })), 'DrawingContractError');
   assert.equal(DrawingContractError.name, 'DrawingContractError');
+});
+
+test('offline delete of X against a newer remote revision is conflict', async (t) => {
+  const { DrawingOutbox, completeScopeLoad, evaluateRemoteVsPending } = await loadDrawings(t);
+  const local = drawingOf('horizontal', [ANCHOR_ONE]);
+  const remote = { ...local, revision: 4, style: { color: '#ff0000', width: 2, dash: 'solid' } };
+  const box = new DrawingOutbox(memStore());
+  box.setScope(SCOPE_NVDA);
+  box.setScopeRevision(2);
+  box.enqueue({
+    drawingId: local.id,
+    type: 'delete',
+    drawing: local,
+    expectedDrawingRevision: local.revision,
+  });
+  assert.equal(box.snapshot()[0].expectedDrawingRevision, 1);
+  const evaluation = evaluateRemoteVsPending({
+    remoteDrawings: [remote],
+    remoteRevision: 5,
+    baseRevision: box.getBaseScopeRevision(),
+    jobs: box.snapshot(),
+  });
+  assert.equal(evaluation.kind, 'conflict');
+  assert.equal(evaluation.drain, false);
+  assert.equal(evaluation.adoptScopeRevision, false);
+  const outcome = await completeScopeLoad({
+    generation: box.getScopeGeneration(),
+    outbox: box,
+    cached: { ok: true, missing: false, drawings: [], state: 'empty', recoverable: true, error: null },
+    list: async () => ({ drawings: [remote], scopeRevision: 5 }),
+  });
+  assert.equal(outcome.conflict, true);
+  assert.equal(outcome.drain, false);
+  assert.equal(outcome.baselineReady, true);
+  const pending = box.takeNext(local.id);
+  assert.equal(pending.type, 'delete');
+  assert.equal(pending.expectedScopeRevision, 2);
+  assert.notEqual(pending.expectedScopeRevision, 5);
+  assert.equal(pending.expectedDrawingRevision, 1);
+});
+
+test('legacy delete job without drawing revision conflicts when remote X changed', async (t) => {
+  const { DrawingOutbox, completeScopeLoad, evaluateRemoteVsPending } = await loadDrawings(t);
+  const local = drawingOf('horizontal', [ANCHOR_ONE]);
+  const remote = { ...local, revision: 4 };
+  const box = new DrawingOutbox(memStore());
+  box.setScope(SCOPE_NVDA);
+  box.setScopeRevision(2);
+  box.enqueue({ drawingId: local.id, type: 'delete' });
+  assert.equal(box.snapshot()[0].expectedDrawingRevision, undefined);
+  const evaluation = evaluateRemoteVsPending({
+    remoteDrawings: [remote],
+    remoteRevision: 5,
+    baseRevision: box.getBaseScopeRevision(),
+    jobs: box.snapshot(),
+  });
+  assert.equal(evaluation.kind, 'conflict');
+  assert.equal(evaluation.drain, false);
+  const outcome = await completeScopeLoad({
+    generation: box.getScopeGeneration(),
+    outbox: box,
+    cached: { ok: true, missing: false, drawings: [], state: 'empty', recoverable: true, error: null },
+    list: async () => ({ drawings: [remote], scopeRevision: 5 }),
+  });
+  assert.equal(outcome.conflict, true);
+  assert.equal(outcome.drain, false);
+  const pending = box.takeNext(local.id);
+  assert.equal(pending.expectedScopeRevision, 2);
+});
+
+test('delete job persists expectedDrawingRevision across hydrate', async (t) => {
+  const { DrawingOutbox, parsePersistJobs, outboxStorageKey } = await loadDrawings(t);
+  const local = drawingOf('horizontal', [ANCHOR_ONE]);
+  const store = memStore();
+  const box = new DrawingOutbox(store);
+  box.setScope(SCOPE_NVDA);
+  box.setScopeRevision(2);
+  box.enqueue({ drawingId: local.id, type: 'delete', drawing: local });
+  assert.equal(box.getBaseScopeRevision(), 2);
+  assert.equal(box.snapshot()[0].expectedDrawingRevision, 1);
+  const raw = JSON.parse(store.getItem(outboxStorageKey('acct', 'NVDA', '1d', 'raw')));
+  const parsed = parsePersistJobs(raw, SCOPE_NVDA, 1);
+  assert.equal(parsed[0].type, 'delete');
+  assert.equal(parsed[0].expectedDrawingRevision, 1);
+  const restored = new DrawingOutbox(store);
+  restored.setScope(SCOPE_NVDA);
+  assert.equal(restored.getBaseScopeRevision(), 2);
+  assert.equal(restored.snapshot()[0].expectedDrawingRevision, 1);
+});
+
+test('GET failure with pending jobs retries completeScopeLoad not drain', async (t) => {
+  const { DrawingOutbox, completeScopeLoad, resolveRetryAction } = await loadDrawings(t);
+  const local = drawingOf('horizontal', [ANCHOR_ONE]);
+  const box = new DrawingOutbox(memStore());
+  box.setScope(SCOPE_NVDA);
+  box.setScopeRevision(2);
+  box.enqueue({ drawingId: local.id, type: 'update', drawing: local });
+  let lists = 0;
+  const first = await completeScopeLoad({
+    generation: box.getScopeGeneration(),
+    outbox: box,
+    cached: { ok: true, missing: false, drawings: [local], state: 'ok', recoverable: true, error: null },
+    list: async () => {
+      lists += 1;
+      const err = new Error('offline');
+      err.status = 503;
+      throw err;
+    },
+  });
+  assert.equal(first.status, 'write_failed');
+  assert.equal(first.baselineReady, false);
+  assert.equal(first.drain, false);
+  assert.equal(box.isBaselineReady(), false);
+  assert.equal(box.isEmpty(), false);
+  assert.equal(
+    resolveRetryAction('write_failed', box.isEmpty(), box.isBaselineReady()),
+    'reload',
+  );
+  const second = await completeScopeLoad({
+    generation: box.getScopeGeneration(),
+    outbox: box,
+    cached: { ok: true, missing: false, drawings: [local], state: 'ok', recoverable: true, error: null },
+    list: async () => {
+      lists += 1;
+      return { drawings: [local], scopeRevision: 2 };
+    },
+  });
+  assert.equal(lists, 2);
+  assert.equal(second.baselineReady, true);
+  assert.equal(box.isBaselineReady(), true);
+  assert.equal(second.status, 'saving');
+  assert.equal(second.drain, true);
+  assert.equal(
+    resolveRetryAction('write_failed', box.isEmpty(), box.isBaselineReady()),
+    'replay',
+  );
 });

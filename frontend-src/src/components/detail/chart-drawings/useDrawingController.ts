@@ -562,13 +562,20 @@ export function useDrawingController(args: {
     pendingEdits.current.delete(id);
     outboxRef.current.cancelId(id);
     setRejectedImport(null);
+    const target = drawingsRef.current.find((item) => item.id === id);
     const next = drawingsRef.current.filter((item) => item.id !== id);
     pushDrawings(next);
     if (selectedId === id) {
       setSelectedId(null);
       setFocusAnchor(null);
     }
-    enqueue({ drawingId: id, type: 'delete' });
+    enqueue({
+      drawingId: id,
+      type: 'delete',
+      ...(target
+        ? { drawing: target, expectedDrawingRevision: target.revision }
+        : {}),
+    });
   }, [enqueue, pushDrawings, selectedId]);
 
   const deleteSelected = useCallback(() => {
@@ -588,8 +595,14 @@ export function useDrawingController(args: {
   const syncHistoryDiff = useCallback((prev: ChartDrawing[], next: ChartDrawing[]) => {
     if (!signedIn) return;
     for (const op of diffPersistOps(prev, next)) {
-      if (op.type === 'delete') enqueue({ drawingId: op.id, type: 'delete' });
-      else if (op.type === 'create') enqueue({ drawingId: op.drawing.id, type: 'create', drawing: op.drawing });
+      if (op.type === 'delete') {
+        enqueue({
+          drawingId: op.id,
+          type: 'delete',
+          drawing: op.drawing,
+          expectedDrawingRevision: op.drawing.revision,
+        });
+      } else if (op.type === 'create') enqueue({ drawingId: op.drawing.id, type: 'create', drawing: op.drawing });
       else enqueue({ drawingId: op.drawing.id, type: 'update', drawing: op.drawing });
     }
   }, [enqueue, signedIn]);
@@ -1032,7 +1045,7 @@ export function useDrawingController(args: {
         : syncStatus === 'write_failed' || syncStatus === 'unsynced'
           ? 'write_failed'
           : null;
-    const action = resolveRetryAction(failure, outbox.isEmpty());
+    const action = resolveRetryAction(failure, outbox.isEmpty(), outbox.isBaselineReady());
     if (action === 'reload') {
       void loadScope(outbox.getScopeGeneration());
       return;

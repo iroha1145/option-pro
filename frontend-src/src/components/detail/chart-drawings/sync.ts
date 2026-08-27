@@ -24,6 +24,8 @@ export interface PersistJob {
   drawings?: ChartDrawing[];
   /** 发出请求时冻结的范围版本；await 之后只认这一份。 */
   expectedScopeRevision?: number;
+  /** Frozen drawing revision for update/delete; GET rebase may not invent one. */
+  expectedDrawingRevision?: number;
   /** 全局单调序号：范围级任务与单条任务靠它保持先后，不然清空会追上后画的线。 */
   seq?: number;
 }
@@ -125,14 +127,14 @@ export function mutableFieldsDiffer(a: ChartDrawing, b: ChartDrawing): boolean {
 export type HistoryPersistOp =
   | { type: 'create'; drawing: ChartDrawing }
   | { type: 'update'; drawing: ChartDrawing }
-  | { type: 'delete'; id: string };
+  | { type: 'delete'; id: string; drawing: ChartDrawing };
 
 export function diffPersistOps(prev: ChartDrawing[], next: ChartDrawing[]): HistoryPersistOp[] {
   const prevMap = new Map(prev.map((item) => [item.id, item]));
   const nextMap = new Map(next.map((item) => [item.id, item]));
   const ops: HistoryPersistOp[] = [];
-  for (const [id] of prevMap) {
-    if (!nextMap.has(id)) ops.push({ type: 'delete', id });
+  for (const [id, drawing] of prevMap) {
+    if (!nextMap.has(id)) ops.push({ type: 'delete', id, drawing });
   }
   for (const [id, drawing] of nextMap) {
     const old = prevMap.get(id);
@@ -151,8 +153,11 @@ export type SyncFailure = 'load_failed' | 'write_failed' | 'conflict' | null;
 export function resolveRetryAction(
   failure: SyncFailure,
   outboxEmpty: boolean,
+  baselineReady = true,
 ): 'reload' | 'replay' | 'idle' | 'conflict' {
   if (failure === 'conflict') return 'conflict';
+  // GET never established this scope: drain would no-op while baselineReady is false.
+  if (!baselineReady) return 'reload';
   if (failure === 'load_failed') return 'reload';
   if (failure === 'write_failed') return outboxEmpty ? 'idle' : 'replay';
   return outboxEmpty ? 'idle' : 'replay';
@@ -161,7 +166,7 @@ export function resolveRetryAction(
 export type RegeneratedOp =
   | { type: 'create'; drawingId: string; drawing: ChartDrawing }
   | { type: 'update'; drawingId: string; drawing: ChartDrawing }
-  | { type: 'delete'; drawingId: string };
+  | { type: 'delete'; drawingId: string; drawing: ChartDrawing };
 
 export function regeneratePersistOps(
   local: ChartDrawing[],
@@ -178,8 +183,8 @@ export function regeneratePersistOps(
       ops.push({ type: 'update', drawingId: id, drawing: { ...drawing, revision: remote.revision } });
     }
   }
-  for (const [id] of serverMap) {
-    if (!localMap.has(id)) ops.push({ type: 'delete', drawingId: id });
+  for (const [id, drawing] of serverMap) {
+    if (!localMap.has(id)) ops.push({ type: 'delete', drawingId: id, drawing });
   }
   return ops;
 }
@@ -314,7 +319,14 @@ export function parsePersistJobs(
     }
     const seq = Number(job.seq);
     const expected = Number(job.expectedScopeRevision);
-    jobs.push({
+    const taggedDrawingRev = Number(job.expectedDrawingRevision);
+    const fromDrawing = drawing?.revision;
+    const expectedDrawingRevision = Number.isInteger(taggedDrawingRev) && taggedDrawingRev >= 1
+      ? taggedDrawingRev
+      : (typeof fromDrawing === 'number' && Number.isInteger(fromDrawing) && fromDrawing >= 1
+        ? fromDrawing
+        : undefined);
+    jobs.push(freezeDrawingRevision({
       drawingId,
       generation,
       scopeGeneration,
@@ -323,10 +335,22 @@ export function parsePersistJobs(
       ...(drawing ? { drawing } : {}),
       ...(drawings ? { drawings } : {}),
       ...(Number.isInteger(expected) && expected >= 0 ? { expectedScopeRevision: expected } : {}),
+      ...(expectedDrawingRevision != null ? { expectedDrawingRevision } : {}),
       seq: Number.isFinite(seq) ? seq : generation,
-    });
+    }));
   }
   return jobs.sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0));
+}
+
+/** Stamp a write-once drawing revision so GET rebase cannot invent one. */
+export function freezeDrawingRevision(job: PersistJob): PersistJob {
+  if (job.type !== 'update' && job.type !== 'delete') return job;
+  if (job.expectedDrawingRevision != null) return job;
+  const rev = job.drawing?.revision;
+  if (typeof rev === 'number' && Number.isInteger(rev) && rev >= 1) {
+    return { ...job, expectedDrawingRevision: rev };
+  }
+  return job;
 }
 
 /** Keep local mutable fields and adopt the server revision so a retry can PUT. */
@@ -473,14 +497,14 @@ export class DrawingOutbox {
       if (last?.type === 'update') {
         row.generation += 1;
         this.seqCounter += 1;
-        const job: PersistJob = {
+        const job: PersistJob = freezeDrawingRevision({
           ...partial,
           drawingId: id,
           generation: row.generation,
           scopeGeneration: this.scopeGeneration,
           scope: this.currentScope,
           seq: this.seqCounter,
-        };
+        });
         row.pending[row.pending.length - 1] = job;
         this.captureBaseIfNeeded(wasEmpty);
         this.persistCurrent();
@@ -489,14 +513,14 @@ export class DrawingOutbox {
     }
     row.generation += 1;
     this.seqCounter += 1;
-    const job: PersistJob = {
+    const job: PersistJob = freezeDrawingRevision({
       ...partial,
       drawingId: id,
       generation: row.generation,
       scopeGeneration: this.scopeGeneration,
       scope: this.currentScope,
       seq: this.seqCounter,
-    };
+    });
     row.pending.push(job);
     this.captureBaseIfNeeded(wasEmpty);
     this.persistCurrent();
@@ -656,8 +680,16 @@ export class DrawingOutbox {
       chain.pending = [];
     }
     for (const op of ops) {
-      if (op.type === 'delete') this.enqueue({ drawingId: op.drawingId, type: 'delete' });
-      else this.enqueue({ drawingId: op.drawingId, type: op.type, drawing: op.drawing });
+      if (op.type === 'delete') {
+        this.enqueue({
+          drawingId: op.drawingId,
+          type: 'delete',
+          drawing: op.drawing,
+          expectedDrawingRevision: op.drawing.revision,
+        });
+      } else {
+        this.enqueue({ drawingId: op.drawingId, type: op.type, drawing: op.drawing });
+      }
     }
   }
 
