@@ -71,8 +71,8 @@ export default function LayerMenu({
                 className={cn(
                   'rounded-full border px-2.5 py-1 transition-colors duration-fast',
                   settings.preset === id
-                    ? 'border-brand-400 bg-brand-50 text-brand-700'
-                    : 'border-line text-ink-500 hover:border-line-strong hover:text-ink-700',
+                    ? 'border-brand-600 bg-brand-600 font-medium text-white shadow-btn'
+                    : 'border-line bg-card text-ink-500 hover:border-line-strong hover:text-ink-700',
                 )}
               >
                 {PRESETS[id].label}
@@ -82,8 +82,10 @@ export default function LayerMenu({
         </section>
 
         {GROUPS.map((group) => (
-          <section key={group.id}>
-            <h3 className="mb-1.5 border-b border-line pb-1 font-medium text-ink-600">{group.label}</h3>
+          /* Fine-tune Card 的卡片语言：每个分组一张白纸卡（发丝边 + sh-card），
+             行铺满卡宽、悬停有底，控件右缘对齐——不是裸列表贴在抽屉底上。 */
+          <section key={group.id} className="rounded-lg border border-line bg-card p-2 shadow-card">
+            <h3 className="mb-1 px-1.5 pt-0.5 font-medium text-ink-600">{group.label}</h3>
             <ul className="flex flex-col">
               {LAYERS.filter((layer) => layer.group === group.id).map((layer) => {
                 const on = settings.enabled.includes(layer.id);
@@ -95,7 +97,7 @@ export default function LayerMenu({
                 return (
                   <li key={layer.id}>
                     {/* 检查器行式：左边标签（带悬停解释），右边控件对齐 */}
-                    <div className={cn('flex min-h-8 items-center gap-2 py-0.5', !gate.enabled && 'text-ink-400')}>
+                    <div className={cn('flex min-h-8 items-center gap-2 rounded-md px-1.5 py-0.5 transition-colors duration-fast hover:bg-paper-2/70', !gate.enabled && 'text-ink-400')}>
                       <label className="flex min-w-0 flex-1 items-center gap-1.5">
                         <input
                           type="checkbox"
@@ -120,12 +122,12 @@ export default function LayerMenu({
           </section>
         ))}
 
-        <section>
-          <h3 className="mb-1.5 border-b border-line pb-1 font-medium text-ink-600">{t('高级')}</h3>
+        <section className="rounded-lg border border-line bg-card p-2 shadow-card">
+          <h3 className="mb-1 px-1.5 pt-0.5 font-medium text-ink-600">{t('高级')}</h3>
 
           {/* 0–100 的旋钮给滑杆 + 实时读数：数字框要先选中再改、还看不出量程，
               而这两个值的手感本来就是「拖着找一个合适的松紧」。 */}
-          <div className="flex items-center gap-2 py-1">
+          <div className="flex items-center gap-2 rounded-md px-1.5 py-1 transition-colors duration-fast hover:bg-paper-2/70">
             <span className="flex-1">{t('最低几何质量')}</span>
             <input
               type="range"
@@ -144,7 +146,7 @@ export default function LayerMenu({
             </span>
           </div>
 
-          <div className="flex items-center gap-2 py-1">
+          <div className="flex items-center gap-2 rounded-md px-1.5 py-1 transition-colors duration-fast hover:bg-paper-2/70">
             <span className="flex-1">{t('标签密度')}</span>
             <input
               type="range"
@@ -163,7 +165,7 @@ export default function LayerMenu({
             </span>
           </div>
 
-          <div className="flex items-center gap-2 py-1">
+          <div className="flex items-center gap-2 rounded-md px-1.5 py-1 transition-colors duration-fast hover:bg-paper-2/70">
             <span className="flex-1">{t('最大形态数')}</span>
             <input
               type="number"
@@ -178,7 +180,7 @@ export default function LayerMenu({
             />
           </div>
 
-          <label className="flex min-h-8 items-center gap-1.5 py-0.5">
+          <label className="flex min-h-8 items-center gap-1.5 rounded-md px-1.5 py-0.5 transition-colors duration-fast hover:bg-paper-2/70">
             <input
               type="checkbox"
               checked={settings.onlyActive}
@@ -188,7 +190,7 @@ export default function LayerMenu({
             />
             <span className="flex-1">{t('仅当前有效')}</span>
           </label>
-          <label className="flex min-h-8 items-center gap-1.5 py-0.5">
+          <label className="flex min-h-8 items-center gap-1.5 rounded-md px-1.5 py-0.5 transition-colors duration-fast hover:bg-paper-2/70">
             <input
               type="checkbox"
               checked={settings.showInvalidated}
@@ -201,8 +203,8 @@ export default function LayerMenu({
         </section>
 
         {families && (
-          <section>
-            <h3 className="mb-1.5 border-b border-line pb-1 font-medium text-ink-600">{t('选股上下文')}</h3>
+          <section className="rounded-lg border border-line bg-card p-2 shadow-card">
+            <h3 className="mb-1 px-1.5 pt-0.5 font-medium text-ink-600">{t('选股上下文')}</h3>
             <p className="mb-2 text-ink-400">{t('几何质量不是胜率')}</p>
             <dl className="grid grid-cols-2 gap-x-4 gap-y-1">
               {['short', 'mid', 'long', 'trend', 'breakout', 'price_action'].map((name) => (

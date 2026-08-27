@@ -91,17 +91,35 @@ function drawingsLockState(listed) {
 async function clearTouchedDrawings(page) {
   await page.unrouteAll({ behavior: "ignoreErrors" }).catch(() => {});
   await page.evaluate(async (scopes) => {
+    /* 清扫必须熬过限流，不能吞：GET 429 被当「空 scope」跳过、DELETE 429 被
+       .catch 吞掉，都会把残留漏给下一条用例（Expected 1 / Received 2 就是
+       这么来的）。Retry-After 现在是诚实值（通常 1–3s），按它等再试，有界。 */
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const backoffFrom = (res) => {
+      const header = Number(res?.headers?.get?.("retry-after"));
+      return Math.min(Number.isFinite(header) && header > 0 ? header * 1000 : 1500, 5000);
+    };
     for (const { ticker, range } of scopes) {
       const url = `/api/account/chart-drawings?ticker=${encodeURIComponent(ticker)}&range=${encodeURIComponent(range)}&adjustment=raw`;
-      const listed = await fetch(url, { credentials: "same-origin" }).then((res) => res.json()).catch(() => null);
-      const drawings = Array.isArray(listed?.drawings) ? listed.drawings : [];
-      if (!drawings.length) continue;
-      const revision = Number(listed?.scope_revision ?? 0);
-      await fetch(`${url}&expected_scope_revision=${encodeURIComponent(revision)}`, {
-        method: "DELETE",
-        credentials: "same-origin",
-        headers: { "X-Optix-Action": "1" },
-      }).catch(() => {});
+      for (let attempt = 0; attempt < 6; attempt += 1) {
+        const listedRes = await fetch(url, { credentials: "same-origin" }).catch(() => null);
+        if (!listedRes) break;
+        if (listedRes.status === 429) { await wait(backoffFrom(listedRes)); continue; }
+        if (!listedRes.ok) break;
+        const listed = await listedRes.json().catch(() => null);
+        const drawings = Array.isArray(listed?.drawings) ? listed.drawings : [];
+        if (!drawings.length) break;
+        const revision = Number(listed?.scope_revision ?? 0);
+        const removed = await fetch(`${url}&expected_scope_revision=${encodeURIComponent(revision)}`, {
+          method: "DELETE",
+          credentials: "same-origin",
+          headers: { "X-Optix-Action": "1" },
+        }).catch(() => null);
+        if (removed && removed.status === 429) { await wait(backoffFrom(removed)); continue; }
+        // 409 = revision 在 GET 与 DELETE 之间动了：回头重新 GET 再删
+        if (removed && removed.status === 409) continue;
+        break;
+      }
     }
     try {
       for (const key of Object.keys(localStorage)) {

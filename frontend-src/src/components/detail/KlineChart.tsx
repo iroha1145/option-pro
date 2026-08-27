@@ -767,7 +767,7 @@ export default function KlineChart({
       xMax: data.bars.length - 1,
       yMin: Math.min(...prices),
       yMax: Math.max(...prices),
-    });
+    }, autoPatternName);
     return {
       lines: [...auto.lines, ...hand.lines],
       points: [...auto.points, ...hand.points],
