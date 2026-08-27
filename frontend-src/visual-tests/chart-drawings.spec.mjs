@@ -578,6 +578,26 @@ test("expanded mobile workspace has no horizontal overflow", async ({ page }) =>
   await workspace.evaluate(async (el) => {
     await Promise.all(el.getAnimations().map((animation) => animation.finished.catch(() => {})));
   });
+  const overlayAlpha = await workspace.evaluate((el) => {
+    const color = getComputedStyle(el).backgroundColor;
+    const canvas = document.createElement("canvas");
+    canvas.width = 1;
+    canvas.height = 1;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return 0;
+    ctx.fillStyle = color;
+    ctx.fillRect(0, 0, 1, 1);
+    return ctx.getImageData(0, 0, 1, 1).data[3];
+  });
+  expect(overlayAlpha).toBe(255);
+  const coversViewport = await page.evaluate(() => {
+    const dialog = document.querySelector('[role="dialog"][aria-label="绘图工作区"]');
+    if (!dialog) return false;
+    const top = document.elementFromPoint(Math.floor(window.innerWidth / 2), 8);
+    const bottom = document.elementFromPoint(Math.floor(window.innerWidth / 2), window.innerHeight - 8);
+    return Boolean(dialog.contains(top) && dialog.contains(bottom));
+  });
+  expect(coversViewport).toBe(true);
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(1);
   const chartBox = await workspace.locator(".min-h-\\[240px\\]").first().boundingBox();
@@ -607,8 +627,10 @@ test("stale update from a second context is 409 and keeps the newer color", asyn
   let stale = { id: "", revision: 0, scope: 0, color: "" };
   await expect.poll(async () => {
     const listed = await listDrawings(page);
-    if (listed.status === 429) return "rate-limited";
-    if (listed.status !== 200 || !listed.drawings?.length) return `http ${listed.status}`;
+    // Numbers only: toBeGreaterThan(0) type-errors on "http 200" / "rate-limited"
+    // and aborts instead of waiting for drain after an empty 200.
+    if (listed.status === 429) return 0;
+    if (listed.status !== 200 || !listed.drawings?.length) return 0;
     const row = listed.drawings[0];
     stale = {
       id: row.id,
@@ -617,7 +639,7 @@ test("stale update from a second context is 409 and keeps the newer color", asyn
       color: row.style?.color || "",
     };
     return listed.drawings.length === 1 && listed.revision > 0 ? listed.revision : 0;
-  }, { timeout: 20_000 }).toBeGreaterThan(0);
+  }, { timeout: 90_000 }).toBeGreaterThan(0);
   const storage = await page.context().storageState();
   const other = await browser.newContext({ storageState: storage });
   const pageB = await other.newPage();

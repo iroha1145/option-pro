@@ -1,4 +1,5 @@
 import { useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { cn } from '@/lib/utils';
 import {
@@ -43,14 +44,16 @@ export default function DrawingWorkspace({
   const mounted = overlayVisible(open, phase);
   useFocusTrap(panelRef, open);
   if (!mounted) return <>{children}</>;
-  return (
+  const panel = (
     <div
       ref={panelRef}
       role="dialog"
       aria-modal="true"
       aria-label={t('绘图工作区')}
       className={cn(
-        'fixed inset-0 z-[70] flex flex-col bg-page p-3 md:p-4',
+        // bg-paper is the real page token; bg-page is not a color and left
+        // the overlay transparent so the stock header/volume showed through.
+        'fixed inset-0 z-[70] flex flex-col bg-paper p-3 md:p-4',
         !reducedMotion && 't-modal',
         !reducedMotion && overlayClassName(phase),
       )}
@@ -144,4 +147,5 @@ export default function DrawingWorkspace({
       />
     </div>
   );
+  return createPortal(panel, document.body);
 }
