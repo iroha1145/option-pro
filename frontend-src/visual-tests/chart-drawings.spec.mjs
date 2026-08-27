@@ -445,11 +445,11 @@ test("layer presets switch algorithm and pattern groups", async ({ page }) => {
     await dialog.getByRole("button", { name, exact: true }).click();
     await expect(dialog.getByRole("button", { name, exact: true })).toHaveAttribute("aria-pressed", "true");
   }
-  await expect(dialog.getByRole("checkbox", { name: "RSI", exact: true }).first()).toBeVisible();
-  await expect(dialog.getByRole("checkbox", { name: "自动趋势线/通道/三角形/楔形", exact: true }).first()).toBeVisible();
-  // strength_* 那族图层勾了什么都不画，已整族移除：菜单里不该再有它们的开关。
+  await expect(dialog.getByRole("switch", { name: "RSI", exact: true }).first()).toBeVisible();
+  await expect(dialog.getByRole("switch", { name: "自动趋势线/通道/三角形/楔形", exact: true }).first()).toBeVisible();
+  // strength_* 那族图层勾了什么都不画，已整族移除：菜单里不该再有它们的开关（现在是 role="switch" 拨杆）。
   for (const dead of ["short", "mid", "long", "trend", "breakout", "price_action"]) {
-    await expect(dialog.getByRole("checkbox", { name: dead, exact: true })).toHaveCount(0);
+    await expect(dialog.getByRole("switch", { name: dead, exact: true })).toHaveCount(0);
   }
   // 「最低几何质量」和标签条上的「置信度 87」同一把尺（0–100），不是 0–1。
   // 控件是滑杆（slider）不是数字框：0–100 的旋钮拖着找松紧比键入数字顺手。
