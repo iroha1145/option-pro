@@ -22,6 +22,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
 import type { ScoreHint } from '@/lib/scoreHints';
@@ -62,6 +63,7 @@ export default function InfoHint({
   align = 'center',
   size = 13,
   className,
+  children,
 }: {
   hint: ScoreHint;
   /** 浮层出现的方向；表格首行/页脚等边缘位置按需选 bottom */
@@ -70,6 +72,13 @@ export default function InfoHint({
   align?: 'start' | 'center' | 'end';
   size?: number;
   className?: string;
+  /**
+   * 自定义触发器。传了就用它当触发点（如绘图工具按钮本身），不再渲染那个「i」
+   * 图标——工具条上再挂一排 i 是噪点，用户期待的是悬停按钮本体就出解释。
+   * 此时外层不套 role="button"/tabIndex：children 往往已经是 <button>，
+   * 嵌套可交互元素会让读屏念出两层控件。
+   */
+  children?: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -161,37 +170,49 @@ export default function InfoHint({
         setOpen(false);
       }}
     >
-      <span
-        ref={triggerRef}
-        role="button"
-        tabIndex={0}
-        aria-label={t('{title}：查看说明', { title: hint.title })}
-        aria-expanded={open}
-        aria-describedby={exposed ? tooltipId : undefined}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
-        className={cn(
-          't-tt-trigger inline-flex cursor-help items-center rounded-full text-ink-300 outline-none transition-colors duration-fast',
-          'hover:text-brand-600 focus-visible:text-brand-600',
-          open && 'text-brand-600',
-        )}
-        onClick={(event) => {
-          event.stopPropagation();
-          event.preventDefault();
-          setOpen((value) => !value);
-        }}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' || event.key === ' ') {
+      {children ? (
+        <span
+          ref={triggerRef}
+          className="inline-flex"
+          aria-describedby={exposed ? tooltipId : undefined}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+        >
+          {children}
+        </span>
+      ) : (
+        <span
+          ref={triggerRef}
+          role="button"
+          tabIndex={0}
+          aria-label={t('{title}：查看说明', { title: hint.title })}
+          aria-expanded={open}
+          aria-describedby={exposed ? tooltipId : undefined}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          className={cn(
+            't-tt-trigger inline-flex cursor-help items-center rounded-full text-ink-300 outline-none transition-colors duration-fast',
+            'hover:text-brand-600 focus-visible:text-brand-600',
+            open && 'text-brand-600',
+          )}
+          onClick={(event) => {
             event.stopPropagation();
             event.preventDefault();
             setOpen((value) => !value);
-          } else if (event.key === 'Escape') {
-            setOpen(false);
-          }
-        }}
-      >
-        <InfoGlyph size={size} />
-      </span>
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.stopPropagation();
+              event.preventDefault();
+              setOpen((value) => !value);
+            } else if (event.key === 'Escape') {
+              setOpen(false);
+            }
+          }}
+        >
+          <InfoGlyph size={size} />
+        </span>
+      )}
 
       {/* 收起时整个移出 DOM（审计 2.5.10）：常驻的 opacity-0 节点会被读屏当正文
           连读，每个 InfoHint 的几十字算法说明全部混进页面内容。 */}
