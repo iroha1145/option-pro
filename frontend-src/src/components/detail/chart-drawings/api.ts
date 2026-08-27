@@ -1,9 +1,9 @@
 /** Server drawings client. Guests never call this; anonymous data stays local. */
 import { ApiError, del, get, post, put, toQuery } from '@/api/client';
 import type { ChartAdjustment, ChartDrawing, ChartRange } from './types.ts';
-import { parseList, parseSaved } from './contract.ts';
+import { parseList, parseMutation, parseSaved } from './contract.ts';
 
-export { DrawingContractError, parseList, parseSaved, type DrawingListResponse } from './contract.ts';
+export { DrawingContractError, parseList, parseMutation, parseSaved, type DrawingListResponse } from './contract.ts';
 
 function drawingBody(drawing: ChartDrawing) {
   return {
@@ -48,10 +48,16 @@ export const drawingsApi = {
       expected_scope_revision: expectedScopeRevision,
     }).then(parseSaved),
 
-  remove: (drawingId: string, expectedScopeRevision: number) =>
+  remove: (
+    drawingId: string,
+    expectedScopeRevision: number,
+    ticker: string,
+    range: ChartRange,
+    adjustment: ChartAdjustment = 'raw',
+  ) =>
     del<unknown>(
-      `/account/chart-drawings/${encodeURIComponent(drawingId)}?${toQuery({ expected_scope_revision: expectedScopeRevision })}`,
-    ),
+      `/account/chart-drawings/${encodeURIComponent(drawingId)}?${scopeQuery(ticker, range, adjustment, { expected_scope_revision: expectedScopeRevision })}`,
+    ).then(parseMutation),
 
   clearScope: (
     ticker: string,
@@ -61,7 +67,7 @@ export const drawingsApi = {
   ) =>
     del<unknown>(
       `/account/chart-drawings?${scopeQuery(ticker, range, adjustment, { expected_scope_revision: expectedScopeRevision })}`,
-    ),
+    ).then(parseMutation),
 
   replaceScope: (
     ticker: string,

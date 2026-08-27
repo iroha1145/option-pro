@@ -8,6 +8,7 @@ series, not Radar ranks or market-fit.
 from __future__ import annotations
 
 import hashlib
+import math
 from datetime import datetime, timezone
 from typing import Any, Mapping, Sequence
 from zoneinfo import ZoneInfo
@@ -18,6 +19,7 @@ from app.services.strength.features import _feature_row as build_feature_row
 from app.services.strength.scoring import score_intrinsic
 from app.services.technical.auto_patterns import (
     ALGORITHM_VERSION as AUTO_PATTERNS_VERSION,
+    apply_display_evidence,
     compute_display_priority,
     detect_auto_patterns,
 )
@@ -36,6 +38,95 @@ BUNDLE_VERSION = "optix-chart-analysis-v1"
 FINGERPRINT_ALGORITHM = "sha256-bar-ohlcv-v1"
 _NY = ZoneInfo("America/New_York")
 _INTRADAY_RANGES = {"5m", "15m", "1h"}
+
+
+def _finite_number(value: Any) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(number):
+        return None
+    return number
+
+
+def _clamp01(value: float) -> float:
+    return max(0.0, min(1.0, float(value)))
+
+
+def volume_confirmation_from_vol_price(vol_price: Mapping[str, Any] | None) -> float:
+    """Map existing vol_price_match fields onto 0–1 display evidence."""
+
+    if not vol_price:
+        return 0.5
+    parts: list[float] = []
+    setup = f"{vol_price.get('setup_type') or ''} {vol_price.get('setup_label') or ''}".lower()
+    if "absor" in setup or "吸收" in setup:
+        parts.append(0.85)
+    elif "vacuum" in setup or "真空" in setup:
+        parts.append(0.25)
+    obv = _finite_number(vol_price.get("obv_slope"))
+    if obv is not None:
+        parts.append(_clamp01(0.5 + max(-0.5, min(0.5, obv * 40.0))))
+    clv = _finite_number(vol_price.get("clv_mean"))
+    if clv is not None:
+        parts.append(_clamp01((clv + 1.0) / 2.0))
+    bqa = _finite_number(vol_price.get("breakout_quality_adjustment"))
+    if bqa is not None:
+        if abs(bqa) <= 1:
+            parts.append(_clamp01(0.5 + bqa / 2.0))
+        else:
+            parts.append(_clamp01(0.5 + max(-0.5, min(0.5, bqa / 20.0))))
+    fbr = _finite_number(vol_price.get("false_breakout_risk"))
+    if fbr is not None:
+        risk = fbr / 100.0 if fbr > 1.0 else fbr
+        parts.append(_clamp01(1.0 - risk))
+    if not parts:
+        return 0.5
+    return round(sum(parts) / len(parts), 4)
+
+
+def trend_alignment_from_technicals(
+    technicals: Mapping[str, Any] | None,
+    *,
+    spy_rs: float | None = None,
+) -> float:
+    """Map MA stack / MACD / trend efficiency / SPY RS onto 0–1 display evidence."""
+
+    technicals = technicals or {}
+    parts: list[float] = []
+    ma20 = _finite_number(technicals.get("ma20"))
+    ma50 = _finite_number(technicals.get("ma50"))
+    ma200 = _finite_number(technicals.get("ma200"))
+    close = _finite_number(technicals.get("close") or technicals.get("last_close"))
+    if ma20 is not None and ma50 is not None and ma200 is not None:
+        if ma20 > ma50 > ma200:
+            parts.append(0.85)
+        elif ma20 < ma50 < ma200:
+            parts.append(0.15)
+        else:
+            parts.append(0.5)
+        if close is not None:
+            parts.append(0.7 if close > ma50 else 0.3)
+    slope = _finite_number(technicals.get("ma50_slope_pct_21d"))
+    if slope is not None:
+        parts.append(_clamp01(0.5 + max(-0.5, min(0.5, slope / 10.0))))
+    macd = technicals.get("macd") if isinstance(technicals.get("macd"), Mapping) else {}
+    hist = _finite_number(
+        (macd or {}).get("hist")
+        or (macd or {}).get("histogram")
+        or (macd or {}).get("direction_pct")
+    )
+    if hist is not None:
+        parts.append(_clamp01(0.5 + max(-0.5, min(0.5, hist / 100.0 if abs(hist) > 1 else hist))))
+    te = _finite_number(technicals.get("trend_efficiency_63d"))
+    if te is not None:
+        parts.append(_clamp01(te if te <= 1 else te / 100.0))
+    if spy_rs is not None:
+        parts.append(_clamp01(0.5 + max(-0.5, min(0.5, (float(spy_rs) - 100.0) / 40.0))))
+    if not parts:
+        return 0.5
+    return round(sum(parts) / len(parts), 4)
 
 
 def _fmt6(value: Any) -> str:
@@ -195,7 +286,14 @@ def _pattern_overlays(patterns: Sequence[Mapping[str, Any]], data_through: str) 
     return overlays
 
 
-def _base_overlays(base: Mapping[str, Any] | None, base_state: Mapping[str, Any] | None, data_through: str) -> list[dict[str, Any]]:
+def _base_overlays(
+    base: Mapping[str, Any] | None,
+    base_state: Mapping[str, Any] | None,
+    data_through: str,
+    *,
+    volume_confirmation: float,
+    trend_alignment: float,
+) -> list[dict[str, Any]]:
     if not base:
         return []
     start = str(base.get("base_start") or data_through)
@@ -213,8 +311,8 @@ def _base_overlays(base: Mapping[str, Any] | None, base_state: Mapping[str, Any]
     consensus = min(1.0, float(base.get("window_agreement") or 1) / max(float(base.get("windows_scanned") or 7), 1.0))
     evidence = {
         "shapeQuality": quality,
-        "volumeConfirmation": 0.5,
-        "trendAlignment": 0.5,
+        "volumeConfirmation": round(float(volume_confirmation), 4),
+        "trendAlignment": round(float(trend_alignment), 4),
         "recency": 0.6,
         "consensus": round(consensus, 4),
         "sources": ["base_structure"],
@@ -242,7 +340,7 @@ def _base_overlays(base: Mapping[str, Any] | None, base_state: Mapping[str, Any]
             status=status,
             direction="neutral",
             shape_quality=quality,
-            display_priority=compute_display_priority(quality, 0.5, 0.5, 0.6, consensus),
+            display_priority=compute_display_priority(quality, volume_confirmation, trend_alignment, 0.6, consensus),
             evidence=evidence,
             formation_start=start,
             formation_end=end,
@@ -267,7 +365,7 @@ def _base_overlays(base: Mapping[str, Any] | None, base_state: Mapping[str, Any]
             status=status,
             direction="neutral",
             shape_quality=quality,
-            display_priority=compute_display_priority(quality, 0.5, 0.5, 0.6, consensus),
+            display_priority=compute_display_priority(quality, volume_confirmation, trend_alignment, 0.6, consensus),
             evidence=evidence,
             formation_start=start,
             formation_end=end,
@@ -537,6 +635,8 @@ def _breakout_overlays(
     data_through: str,
     *,
     chart_range: str,
+    volume_confirmation: float,
+    trend_alignment: float,
 ) -> list[dict[str, Any]]:
     if not base or not base_state:
         return []
@@ -566,11 +666,17 @@ def _breakout_overlays(
             status=status,
             direction="bullish" if status in {"triggered", "confirmed", "retest"} else ("bearish" if status == "failed" else "neutral"),
             shape_quality=float(base.get("quality") or 0.5),
-            display_priority=0.5,
+            display_priority=compute_display_priority(
+                float(base.get("quality") or 0.5),
+                volume_confirmation,
+                trend_alignment,
+                0.7,
+                1.0,
+            ),
             evidence={
                 "shapeQuality": float(base.get("quality") or 0.5),
-                "volumeConfirmation": 0.5,
-                "trendAlignment": 0.5,
+                "volumeConfirmation": round(float(volume_confirmation), 4),
+                "trendAlignment": round(float(trend_alignment), 4),
                 "recency": 0.7,
                 "consensus": 1.0,
                 "sources": ["base_structure"],
@@ -1194,18 +1300,41 @@ def assemble_chart_analysis(
     price_action = price_action or {}
     vol_price = vol_price or {}
     technicals = technicals or {}
+    volume_confirmation = volume_confirmation_from_vol_price(vol_price)
+    trend_alignment = trend_alignment_from_technicals(technicals)
     if auto_patterns is None:
         auto_patterns = detect_auto_patterns(series, data_through=data_through)
+    auto_patterns = [
+        apply_display_evidence(row, volume_confirmation, trend_alignment)
+        for row in auto_patterns
+    ]
     overlays: list[dict[str, Any]] = []
     if chart_range in _INTRADAY_RANGES:
         overlays.extend(_intraday_overlays(series, data_through, chart_range))
     else:
         overlays.extend(_ma_overlays(series, data_through))
         overlays.extend(_price_action_overlays(price_action, series, data_through))
-        overlays.extend(_base_overlays(base, base_state, data_through))
+        overlays.extend(
+            _base_overlays(
+                base,
+                base_state,
+                data_through,
+                volume_confirmation=volume_confirmation,
+                trend_alignment=trend_alignment,
+            )
+        )
         overlays.extend(_pattern_overlays(auto_patterns, data_through))
         overlays.extend(_vol_price_overlays(vol_price, data_through))
-        overlays.extend(_breakout_overlays(base, base_state, data_through, chart_range=chart_range))
+        overlays.extend(
+            _breakout_overlays(
+                base,
+                base_state,
+                data_through,
+                chart_range=chart_range,
+                volume_confirmation=volume_confirmation,
+                trend_alignment=trend_alignment,
+            )
+        )
     return {
         "version": BUNDLE_VERSION,
         "registryVersion": LAYER_REGISTRY_VERSION,

@@ -63,15 +63,27 @@ def compute_display_priority(
 def apply_volume_confirmation(row: Mapping[str, Any], volume_confirmation: float) -> dict[str, Any]:
     """Change displayPriority from volumeConfirmation without touching geometry."""
 
+    return apply_display_evidence(row, volume_confirmation, float(row.get("trendAlignment") or 0.0))
+
+
+def apply_display_evidence(
+    row: Mapping[str, Any],
+    volume_confirmation: float,
+    trend_alignment: float,
+) -> dict[str, Any]:
+    """Change displayPriority from volume/trend evidence; geometry stays put."""
+
     updated = dict(row)
     evidence = dict(updated.get("evidence") or {})
     evidence["volumeConfirmation"] = round(_clamp01(volume_confirmation), 4)
+    evidence["trendAlignment"] = round(_clamp01(trend_alignment), 4)
     updated["volumeConfirmation"] = evidence["volumeConfirmation"]
+    updated["trendAlignment"] = evidence["trendAlignment"]
     updated["evidence"] = evidence
     updated["displayPriority"] = compute_display_priority(
         float(updated.get("shapeQuality") or 0.0),
         evidence["volumeConfirmation"],
-        float(updated.get("trendAlignment") or 0.0),
+        evidence["trendAlignment"],
         float(updated.get("recency") or 0.0),
         float(updated.get("consensus") or 0.0),
     )

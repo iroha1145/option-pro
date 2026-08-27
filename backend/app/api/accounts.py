@@ -681,21 +681,28 @@ def update_chart_drawing(
 def delete_chart_drawing(
     request: Request,
     drawing_id: Annotated[str, Path(min_length=36, max_length=36)],
+    ticker: Annotated[str, Query(min_length=1, max_length=16)],
+    range: Annotated[ChartRangeLiteral, Query()],
     expected_scope_revision: Annotated[int, Query(ge=0)],
+    adjustment: Annotated[Literal["raw"], Query()] = "raw",
 ) -> Response:
     account = require_personal_account(request)
+    symbol, range_key, adj = _scope_query(ticker, range, adjustment)
     try:
-        deleted, scope_revision = get_account_store().delete_drawing(
+        _deleted, scope_revision = get_account_store().delete_drawing(
             account.user_id,
             drawing_id,
+            ticker=symbol,
+            chart_range=range_key,
+            adjustment=adj,
             expected_scope_revision=expected_scope_revision,
         )
     except AccountError as exc:
         raise account_http_error(exc) from exc
-    body: dict[str, Any] = {"ok": True}
-    if deleted and scope_revision is not None:
-        body["scope_revision"] = scope_revision
-    return JSONResponse(body, headers={"Cache-Control": "no-store"})
+    return JSONResponse(
+        {"ok": True, "scope_revision": scope_revision},
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @router.delete(

@@ -22,19 +22,11 @@ const stocksApi = readFileSync(join(src, 'api/modules/stocks.ts'), 'utf8');
 const structurePanel = readFileSync(join(src, 'components/detail/StructurePanel.tsx'), 'utf8');
 const detailApi = readFileSync(join(src, 'components/detail/api.ts'), 'utf8');
 
-test('阻力带以 base_start/base_end 定位，不再全图贯穿', () => {
-  assert.match(kline, /const startIndex = locateDay\(overlays\.base_start\)/);
-  assert.match(kline, /const endIndex = locateDay\(overlays\.base_end\)/);
-  assert.match(kline, /xAxis: startIndex/);
-  assert.match(kline, /\{ xAxis: endIndex, yAxis: overlays\.resistance_high \}/);
-  // 失效位是线段（起点=基底起点），不是 yAxis-only 的全宽线
-  assert.match(kline, /coord: \[startIndex, overlays\.invalidation_price\]/);
-});
-
-test('基底失效时带子转灰并标注状态', () => {
-  assert.match(kline, /const failed = overlays\.base_status === 'failed'/);
-  assert.match(kline, /failed \? CH\.ink400 : CH\.brand400/);
-  assert.match(kline, /阻力带（基底已失效）/);
+test('旧 technicalMarks 绘制路径已删除，吸附只吃闸门后的 overlays', () => {
+  assert.equal(kline.includes('function technicalMarks('), false);
+  assert.match(kline, /snapCandidatesFromOverlays\(visibleOverlays\)/);
+  assert.match(kline, /overlaysToMarks\(visibleOverlays/);
+  assert.match(kline, /analysisOk = gateReason === 'ok'/);
 });
 
 test('结构与图表错版本时暂隐叠加（一致性闸门在 analysisOk 里）', () => {

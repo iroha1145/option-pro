@@ -163,6 +163,8 @@ export const DRAWINGS: Dict = {
   'K线形态': ['Candle patterns', 'ローソク足パターン'],
   'Spring/Upthrust': ['Spring/Upthrust', 'スプリング/アプストラスト'],
   '突破触发/确认/回踩/失败': ['Breakout trigger/confirm/retest/fail', 'ブレイク発動/確認/リテスト/失敗'],
+  '突破触发/测试/失败': ['Breakout trigger/test/fail', 'ブレイク発動/テスト/失敗'],
+  '导出上次未保存的导入文件': ['Export last unsaved import', '未保存の取り込みを書き出す'],
   'Range Persistence': ['Range Persistence', 'レンジ持続'],
   'SPY Relative Strength': ['SPY Relative Strength', 'SPY相対強度'],
   'MA20': ['MA20', 'MA20'],

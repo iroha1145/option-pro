@@ -533,6 +533,10 @@ class AccountStore:
             if int(row["pk"]) > 0
         ]
         if pk_columns == ["drawing_id"]:
+            # RENAME keeps the old index name, so CREATE INDEX IF NOT EXISTS
+            # on the new table would skip and the drop would leave the table
+            # without idx_account_chart_drawings_scope.
+            connection.execute("DROP INDEX IF EXISTS idx_account_chart_drawings_scope")
             connection.execute(
                 "ALTER TABLE account_chart_drawings "
                 "RENAME TO account_chart_drawings_legacy_pk"
@@ -545,6 +549,10 @@ class AccountStore:
                       FROM account_chart_drawings_legacy_pk"""
             )
             connection.execute("DROP TABLE account_chart_drawings_legacy_pk")
+            connection.execute(
+                """CREATE INDEX IF NOT EXISTS idx_account_chart_drawings_scope
+                       ON account_chart_drawings(user_id, ticker, chart_range, adjustment)"""
+            )
         connection.executescript(_SCHEMA)
         connection.execute(
             """INSERT INTO account_chart_drawing_scopes
@@ -1173,20 +1181,30 @@ class AccountStore:
         user_id: str,
         drawing_id: str,
         *,
+        ticker: str,
+        chart_range: str,
+        adjustment: str,
         expected_scope_revision: int,
-    ) -> tuple[bool, int | None]:
+    ) -> tuple[bool, int]:
         """删除是幂等的：行本来就不在，也算删成功，且不抬 scope_revision。
 
         没有墓碑表，重放的删除和多设备重复删除永远找不到行；报 404 的话客户端
         的 outbox 就再也丢不掉这个任务。别人的行照样删不到——user_id 是条件之一。
         行还在时必须对上 expected_scope_revision，否则 409，避免清掉别人刚画的。
+        指名 scope 的真实 revision 始终返回，前端不得猜 expected+1。
         """
 
         expected = _require_expected_scope_revision(expected_scope_revision)
         drawing_id = normalize_drawing_id(drawing_id)
+        symbol = normalize_ticker(ticker)
+        range_key = normalize_chart_range(chart_range)
+        adj = normalize_chart_adjustment(adjustment)
         self.initialize()
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
+            current = self._read_scope_revision(
+                connection, user_id, symbol, range_key, adj
+            )
             row = connection.execute(
                 """SELECT ticker, chart_range, adjustment
                      FROM account_chart_drawings
@@ -1194,15 +1212,25 @@ class AccountStore:
                 (user_id, drawing_id),
             ).fetchone()
             if row is None:
+                if current != expected:
+                    connection.rollback()
+                    raise AccountError("scope_revision_conflict")
+                connection.commit()
+                return False, current
+            if (
+                str(row["ticker"]) != symbol
+                or str(row["chart_range"]) != range_key
+                or str(row["adjustment"]) != adj
+            ):
                 connection.rollback()
-                return False, None
+                raise AccountError("scope_mismatch")
             try:
                 new_revision = self._bump_scope_revision(
                     connection,
                     user_id,
-                    str(row["ticker"]),
-                    str(row["chart_range"]),
-                    str(row["adjustment"]),
+                    symbol,
+                    range_key,
+                    adj,
                     expected,
                 )
             except AccountError:

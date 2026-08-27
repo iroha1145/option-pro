@@ -110,6 +110,18 @@ export default function DrawingWorkspace({
               link.click();
               URL.revokeObjectURL(url);
             }}
+            hasRejectedImport={controller.hasRejectedImport}
+            onExportRejected={() => {
+              const payload = controller.exportRejectedImport();
+              if (!payload) return;
+              const blob = new Blob([payload], { type: 'application/json' });
+              const url = URL.createObjectURL(blob);
+              const link = document.createElement('a');
+              link.href = url;
+              link.download = 'chart-drawings-unsaved-import.json';
+              link.click();
+              URL.revokeObjectURL(url);
+            }}
             onImportFile={(text) => {
               controller.importFromText(text);
             }}

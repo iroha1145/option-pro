@@ -164,7 +164,10 @@ async function chartFilled(page) {
   await expect.poll(() => paintedPixels(page), { timeout: 20_000 }).toBeGreaterThan(40);
 }
 
-test.use({ viewport: { width: 1440, height: 900 } });
+test.use({
+  viewport: { width: 1440, height: 900 },
+  reducedMotion: "reduce",
+});
 
 test.beforeEach(async ({ page }) => {
   if (!HAS_REAL_BACKEND) return;
@@ -551,14 +554,105 @@ test("zoom then recolor keeps the dataZoom window", async ({ page }) => {
 
 test("expanded mobile workspace has no horizontal overflow", async ({ page }) => {
   test.skip(!HAS_REAL_BACKEND, "stock drawings visual path needs OPTIX_VISUAL_BASE_URL");
+  await page.emulateMedia({ reducedMotion: "reduce" });
   // beforeEach already opened AAPL at desktop and waited for the toolbar.
   // A second goto at 390px re-hits the light bucket and can leave the chart
   // unmounted (no 选择). Resize the loaded page, then expand.
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(toolButton(page, "展开图表")).toBeVisible({ timeout: 20_000 });
   await expandChart(page);
-  await expect(page.getByRole("dialog", { name: "绘图工作区" })).toBeVisible();
+  const workspace = page.getByRole("dialog", { name: "绘图工作区" });
+  await expect(workspace).toBeVisible();
+  await expect.poll(async () => workspace.evaluate((el) => getComputedStyle(el).opacity)).toBe("1");
+  await workspace.evaluate(async (el) => {
+    await Promise.all(el.getAnimations().map((animation) => animation.finished.catch(() => {})));
+  });
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(1);
+  const chartBox = await workspace.locator(".min-h-\\[240px\\]").first().boundingBox();
+  expect(chartBox?.height ?? 0).toBeGreaterThanOrEqual(240);
+  const inspector = workspace.locator("aside");
+  await expect(inspector).toBeVisible();
+  const inspectorOverflow = await inspector.evaluate((el) => getComputedStyle(el).overflowY);
+  expect(["auto", "scroll", "overlay"].some((value) => inspectorOverflow.includes(value) || inspectorOverflow === "auto")).toBeTruthy();
+  const tool = toolButton(page, "选择");
+  const toolBox = await tool.boundingBox();
+  expect(Math.min(toolBox?.width ?? 0, toolBox?.height ?? 0)).toBeGreaterThanOrEqual(40);
   await screenshot(page, "390x844-expanded-workspace");
+  await toolButton(page, "算法与图层").click();
+  const layers = page.getByRole("dialog", { name: "算法与图层" });
+  await expect(layers).toBeVisible();
+  await expect.poll(async () => layers.evaluate((el) => getComputedStyle(el).opacity)).toBe("1");
+  await screenshot(page, "390x844-layer-drawer");
+});
+
+test("stale update from a second context is 409 and keeps the newer color", async ({ browser, page }) => {
+  test.skip(!HAS_REAL_BACKEND, "stock drawings visual path needs OPTIX_VISUAL_BASE_URL");
+  test.setTimeout(120_000);
+  await openStock(page);
+  await placeHorizontal(page, 0.4, 0.4);
+  await expectDrawingCount(page, 1);
+  /** @type {{ id: string, revision: number, scope: number, color: string }} */
+  let stale = { id: "", revision: 0, scope: 0, color: "" };
+  await expect.poll(async () => {
+    const listed = await listDrawings(page);
+    if (listed.status === 429) return "rate-limited";
+    if (listed.status !== 200 || !listed.drawings?.length) return `http ${listed.status}`;
+    const row = listed.drawings[0];
+    stale = {
+      id: row.id,
+      revision: Number(row.revision),
+      scope: listed.revision,
+      color: row.style?.color || "",
+    };
+    return listed.drawings.length === 1 && listed.revision > 0 ? listed.revision : 0;
+  }, { timeout: 20_000 }).toBeGreaterThan(0);
+  const storage = await page.context().storageState();
+  const other = await browser.newContext({ storageState: storage });
+  const pageB = await other.newPage();
+  await pageB.goto("/stock/AAPL", { waitUntil: "domcontentloaded" });
+  await expect(toolButton(pageB, "选择")).toBeVisible({ timeout: 20_000 });
+  await expectDrawingCount(pageB, 1);
+  await pageB.getByRole("button", { name: "颜色 红色" }).click();
+  await expect.poll(async () => {
+    const listed = await listDrawings(pageB);
+    if (listed.status === 429) return "rate-limited";
+    if (listed.status !== 200) return `http ${listed.status}`;
+    const row = listed.drawings?.[0];
+    return row?.style?.color && row.style.color !== stale.color ? row.style.color : "pending";
+  }, { timeout: 20_000 }).not.toBe("pending");
+  /** @type {{ status: number, code: string | null }} */
+  let conflict = { status: 0, code: null };
+  await expect.poll(async () => {
+    conflict = await page.evaluate(async (payload) => {
+      const res = await fetch(`/api/account/chart-drawings/${encodeURIComponent(payload.id)}`, {
+        method: "PUT",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", "X-Optix-Action": "1" },
+        body: JSON.stringify({
+          schemaVersion: 1,
+          id: payload.id,
+          ticker: "AAPL",
+          range: "1d",
+          adjustment: "raw",
+          kind: "horizontal",
+          anchors: [{ time: "2026-01-02T14:30:00Z", barKey: "2026-01-02", price: 100 }],
+          style: { color: "#2E46E0", width: 2, dash: "solid" },
+          locked: false,
+          hidden: false,
+          zOrder: 0,
+          revision: payload.revision,
+          expected_scope_revision: payload.scope,
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      const detail = body && typeof body.detail === "object" ? body.detail : null;
+      return { status: res.status, code: detail?.code || body?.error || null };
+    }, stale);
+    return conflict.status === 429 ? "rate-limited" : conflict.status;
+  }, { timeout: 90_000 }).toBe(409);
+  expect(["scope_revision_conflict", "revision_conflict"]).toContain(conflict.code);
+  const listedB = await listDrawings(pageB);
+  expect(listedB.drawings?.[0]?.style?.color).not.toBe("#2E46E0");
+  await other.close();
 });

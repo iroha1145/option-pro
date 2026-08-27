@@ -345,6 +345,11 @@ export class DrawingOutbox {
   private scopeGeneration = 0;
   private currentScope: ScopeKey | null = null;
   private knownScopeRevision = 0;
+  /** Frozen when the queue first becomes non-empty. Retry must not rewrite it. */
+  private baseScopeRevision: number | null = null;
+  /** After a safe GET rebase, takeNext may stamp unset expected from this once. */
+  private sendScopeRevision: number | null = null;
+  private baselineReady = false;
   private chains = new Map<string, Chain>();
   private seqCounter = 0;
   private readonly store: StorageLike | null;
@@ -368,6 +373,38 @@ export class DrawingOutbox {
     return this.knownScopeRevision;
   }
 
+  getBaseScopeRevision(): number | null {
+    return this.baseScopeRevision;
+  }
+
+  isBaselineReady(): boolean {
+    return this.baselineReady;
+  }
+
+  markBaselineReady(): void {
+    this.baselineReady = true;
+  }
+
+  setSendScopeRevision(revision: number): void {
+    if (!Number.isInteger(revision) || revision < 0) return;
+    this.sendScopeRevision = revision;
+  }
+
+  rebaseBase(revision: number): void {
+    if (!Number.isInteger(revision) || revision < 0) return;
+    this.knownScopeRevision = revision;
+    this.baseScopeRevision = revision;
+    this.sendScopeRevision = revision;
+    this.baselineReady = true;
+    this.persistCurrent();
+  }
+
+  clearBase(): void {
+    this.baseScopeRevision = null;
+    this.sendScopeRevision = null;
+    this.persistCurrent();
+  }
+
   setScopeRevision(revision: number): void {
     if (!Number.isInteger(revision) || revision < 0) return;
     this.knownScopeRevision = revision;
@@ -378,6 +415,9 @@ export class DrawingOutbox {
     this.currentScope = scope;
     this.scopeGeneration += 1;
     this.knownScopeRevision = 0;
+    this.sendScopeRevision = null;
+    this.baselineReady = false;
+    this.baseScopeRevision = null;
     this.chains.clear();
     this.hydrateCurrent();
     return this.scopeGeneration;
@@ -415,6 +455,7 @@ export class DrawingOutbox {
 
   enqueue(partial: Omit<PersistJob, 'generation' | 'scopeGeneration' | 'scope'>): PersistJob | null {
     if (!this.currentScope) return null;
+    const wasEmpty = this.isEmpty();
     if (partial.type === 'replace' || partial.type === 'clear') {
       this.scopeGeneration += 1;
       for (const [id, chain] of this.chains) {
@@ -441,6 +482,7 @@ export class DrawingOutbox {
           seq: this.seqCounter,
         };
         row.pending[row.pending.length - 1] = job;
+        this.captureBaseIfNeeded(wasEmpty);
         this.persistCurrent();
         return job;
       }
@@ -456,8 +498,21 @@ export class DrawingOutbox {
       seq: this.seqCounter,
     };
     row.pending.push(job);
+    this.captureBaseIfNeeded(wasEmpty);
     this.persistCurrent();
     return job;
+  }
+
+  private captureBaseIfNeeded(wasEmpty: boolean): void {
+    if (!wasEmpty) return;
+    if (this.baseScopeRevision != null) return;
+    this.baseScopeRevision = this.knownScopeRevision;
+  }
+
+  private clearBaseIfEmpty(): void {
+    if (!this.isEmpty()) return;
+    this.baseScopeRevision = null;
+    this.sendScopeRevision = null;
   }
 
   hasInflight(): boolean {
@@ -488,7 +543,11 @@ export class DrawingOutbox {
     if (this.blockedHead(drawingId, row.pending[0])) return null;
     const next = row.pending.shift();
     if (!next) return null;
-    next.expectedScopeRevision = this.knownScopeRevision;
+    if (next.expectedScopeRevision == null) {
+      next.expectedScopeRevision = this.sendScopeRevision
+        ?? this.baseScopeRevision
+        ?? this.knownScopeRevision;
+    }
     row.inflight = next;
     this.persistCurrent();
     return row.inflight;
@@ -509,6 +568,7 @@ export class DrawingOutbox {
     const row = this.chains.get(drawingId);
     if (!row?.inflight) return;
     row.inflight = null;
+    this.clearBaseIfEmpty();
     this.persistCurrent();
   }
 
@@ -517,6 +577,7 @@ export class DrawingOutbox {
     if (row?.inflight?.generation === generation) {
       row.inflight = null;
     }
+    this.clearBaseIfEmpty();
     this.persistCurrent();
   }
 
@@ -618,7 +679,10 @@ export class DrawingOutbox {
     const key = this.persistKey();
     if (!this.store || !key) return;
     try {
-      this.store.setItem(key, JSON.stringify({ jobs: this.snapshot() }));
+      this.store.setItem(key, JSON.stringify({
+        jobs: this.snapshot(),
+        baseScopeRevision: this.baseScopeRevision,
+      }));
     } catch {
       /* private mode / quota */
     }
@@ -642,10 +706,21 @@ export class DrawingOutbox {
     }
     const restored = parsePersistJobs(parsed, this.currentScope, this.scopeGeneration);
     if (restored.length) this.restoreForRetry(restored);
+    const row = parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : {};
+    const base = Number(row.baseScopeRevision);
+    if (Number.isInteger(base) && base >= 0) this.baseScopeRevision = base;
+    else if (restored.length) {
+      const expected = restored
+        .map((job) => job.expectedScopeRevision)
+        .filter((value): value is number => value != null);
+      this.baseScopeRevision = expected.length ? Math.min(...expected) : 0;
+    }
   }
 
   cancelAll(): void {
     this.chains.clear();
+    this.baseScopeRevision = null;
+    this.sendScopeRevision = null;
     this.persistCurrent();
   }
 

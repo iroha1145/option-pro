@@ -51,3 +51,8 @@ export function parseSaved(body: unknown): { drawing: ChartDrawing; scopeRevisio
   if (!isRecord(body)) throw new DrawingContractError('invalid_drawing');
   return { drawing, scopeRevision: parseScopeRevision(body) };
 }
+
+export function parseMutation(body: unknown): { scopeRevision: number } {
+  if (!isRecord(body)) throw new DrawingContractError('invalid_mutation');
+  return { scopeRevision: parseScopeRevision(body) };
+}

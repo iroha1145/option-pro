@@ -38,7 +38,8 @@ import {
   type HistoryState,
 } from './history.ts';
 import { hitTestDrawings, isLockedDragBlocked, type PointerKind, type ProjectedDrawing } from './hitTest.ts';
-import { ohlcCandidates, snapPointer } from './snap.ts';
+import { ohlcCandidates, snapPointer, type SnapCandidate } from './snap.ts';
+import { quotaRollbackDrawings, type ServerSnapshot } from './merge.ts';
 import {
   addDraftPoint,
   escapeHandledByOverlay,
@@ -114,8 +115,7 @@ export function useDrawingController(args: {
   adjustment?: ChartAdjustment;
   bars: BarLike[] | undefined;
   ma20?: (number | null)[];
-  swingPrices?: number[];
-  levelPrices?: number[];
+  snapCandidates?: SnapCandidate[];
   chart: EChartsInstance | null;
   identity: DrawingIdentity;
   measureActive: boolean;
@@ -131,6 +131,7 @@ export function useDrawingController(args: {
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(args.identity.signedIn ? 'idle' : 'guest');
   const [syncHint, setSyncHint] = useState<string | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
+  const [rejectedImport, setRejectedImport] = useState<string | null>(null);
   const [autoPatternsEnabled, setAutoPatternsEnabled] = useState(true);
   const [expanded, setExpanded] = useState(false);
   const [draftText, setDraftText] = useState('');
@@ -148,8 +149,7 @@ export function useDrawingController(args: {
   const coalesceRef = useRef<{ id: string; at: number } | null>(null);
   const drawingsRef = useRef(drawings);
   const outboxRef = useRef(new DrawingOutbox());
-  const lastServerRef = useRef<ChartDrawing[]>([]);
-  const rejectedImportRef = useRef<string | null>(null);
+  const lastServerRef = useRef<ServerSnapshot | null>(null);
   const conflictServerRef = useRef<{
     scope: ScopeKey;
     scopeGeneration: number;
@@ -240,24 +240,36 @@ export function useDrawingController(args: {
   const drain = useCallback(async (drawingId: string) => {
     if (!signedIn) return;
     const outbox = outboxRef.current;
+    if (!outbox.isBaselineReady()) return;
     while (true) {
       const job = outbox.takeNext(drawingId);
       if (!job) return;
       setSyncStatus('saving');
+      const rolled = quotaRollbackDrawings(
+        lastServerRef.current,
+        outbox.getScope(),
+        outbox.getScopeGeneration(),
+      );
       const outcome = await drainPersistJob({
         outbox,
         job,
         api: drawingsApi,
         drawings: drawingsRef.current,
-        lastServer: lastServerRef.current,
+        lastServer: rolled,
         revisions: revisionsRef.current,
         localDirty: pendingEdits.current.has(job.drawingId),
         errorInfo: (error) => ({ code: drawingErrorCode(error), status: drawingErrorStatus(error) }),
       });
       if (outcome.foreign) return;
-      if (outcome.scopeRevision != null) outbox.setScopeRevision(outcome.scopeRevision);
-      if (outcome.lastServer) {
-        lastServerRef.current = outcome.lastServer;
+      if (outcome.scopeRevision != null && outcome.kind === 'success') {
+        outbox.setScopeRevision(outcome.scopeRevision);
+      }
+      if (outcome.lastServer && outbox.getScope()) {
+        lastServerRef.current = {
+          scope: outbox.getScope() as ScopeKey,
+          scopeGeneration: outbox.getScopeGeneration(),
+          drawings: outcome.lastServer,
+        };
         for (const item of outcome.lastServer) revisionsRef.current.set(item.id, item.revision);
       }
       if (outcome.conflict) conflictServerRef.current = outcome.conflict;
@@ -266,10 +278,18 @@ export function useDrawingController(args: {
         for (const item of outcome.apply.drawings) revisionsRef.current.set(item.id, item.revision);
         writeLocal(outcome.apply.drawings, false);
       } else if (outcome.apply.action === 'rollback') {
+        const restored = quotaRollbackDrawings(
+          lastServerRef.current,
+          outbox.getScope(),
+          outbox.getScopeGeneration(),
+        );
         revisionsRef.current.clear();
-        for (const item of outcome.apply.drawings) revisionsRef.current.set(item.id, item.revision);
-        writeLocal(outcome.apply.drawings, false);
-        setHistory(createHistory(outcome.apply.drawings));
+        for (const item of restored) revisionsRef.current.set(item.id, item.revision);
+        writeLocal(restored, false);
+        setHistory(createHistory(restored));
+        if (job.type === 'replace' && job.drawings) {
+          setRejectedImport(JSON.stringify({ schemaVersion: 1, drawings: job.drawings }));
+        }
       } else if (outcome.apply.action === 'deleteRevision') {
         revisionsRef.current.delete(outcome.apply.id);
       } else if (outcome.apply.action === 'clearRevisions') {
@@ -285,8 +305,32 @@ export function useDrawingController(args: {
         if (other !== drawingId) void drainRef.current(other);
       }
       if (outcome.kind === 'quota' || outcome.kind === 'conflict' || outcome.kind === 'retry') return;
+      if (outcome.reconcile && outbox.isEmpty()) {
+        const generation = outbox.getScopeGeneration();
+        const scope = outbox.getScope();
+        try {
+          const remote = await drawingsApi.list(args.ticker, args.range, adjustment);
+          if (outbox.getScopeGeneration() !== generation || !outbox.isEmpty()) return;
+          writeLocal(remote.drawings, false);
+          if (scope) {
+            lastServerRef.current = {
+              scope,
+              scopeGeneration: generation,
+              drawings: remote.drawings,
+            };
+          }
+          outbox.setScopeRevision(remote.scopeRevision);
+          outbox.clearBase();
+          setSyncStatus('idle');
+          setSyncHint(null);
+        } catch {
+          setSyncStatus('load_failed');
+          setSyncHint('unsynced');
+        }
+        return;
+      }
     }
-  }, [applyJobResult, signedIn, writeLocal]);
+  }, [adjustment, applyJobResult, args.range, args.ticker, signedIn, writeLocal]);
 
   const drainRef = useRef(drain);
   drainRef.current = drain;
@@ -295,6 +339,7 @@ export function useDrawingController(args: {
     if (!signedIn) return;
     const queued = outboxRef.current.enqueue(job);
     if (!queued) return;
+    if (!outboxRef.current.isBaselineReady()) return;
     void drain(queued.drawingId);
   }, [drain, signedIn]);
 
@@ -331,10 +376,21 @@ export function useDrawingController(args: {
       errorInfo: (error) => ({ code: drawingErrorCode(error), status: drawingErrorStatus(error) }),
     });
     if (outcome.foreign) return;
-    if (outcome.lastServer) {
-      lastServerRef.current = outcome.lastServer;
+    if (outcome.lastServer && outboxRef.current.getScope()) {
+      lastServerRef.current = {
+        scope: outboxRef.current.getScope() as ScopeKey,
+        scopeGeneration: outboxRef.current.getScopeGeneration(),
+        drawings: outcome.lastServer,
+      };
       for (const item of outcome.lastServer) revisionsRef.current.set(item.id, item.revision);
-      outboxRef.current.stampRevisions(outcome.lastServer);
+    }
+    if (outcome.conflict && outcome.lastServer && outboxRef.current.getScope()) {
+      conflictServerRef.current = {
+        scope: outboxRef.current.getScope() as ScopeKey,
+        scopeGeneration: outboxRef.current.getScopeGeneration(),
+        scopeRevision: outcome.scopeRevision ?? 0,
+        drawings: outcome.lastServer,
+      };
     }
     if (outcome.apply !== 'none') {
       writeLocal(outcome.drawings, false, { persist: outcome.persist });
@@ -342,7 +398,7 @@ export function useDrawingController(args: {
     }
     setSyncStatus(outcome.status);
     setSyncHint(outcome.hint);
-    if (outcome.drain) {
+    if (outcome.drain && outboxRef.current.isBaselineReady()) {
       for (const id of outboxRef.current.readyIds()) void drainRef.current(id);
     }
   }, [adjustment, args.range, args.ticker, signedIn, storageKey, writeLocal]);
@@ -371,7 +427,13 @@ export function useDrawingController(args: {
     // 切 scope 前先把未发出的活收好：直接清计时器 + 清队列等于把离线改动删掉。
     flushPendingEdits();
     flushLocalSave();
+    lastServerRef.current = null;
     revisionsRef.current.clear();
+    conflictServerRef.current = null;
+    setRejectedImport(null);
+    setSelectedId(null);
+    setFocusAnchor(null);
+    setInProgress(null);
     const generation = outboxRef.current.setScope(currentScope());
     const run = async () => {
       await Promise.resolve();
@@ -392,6 +454,7 @@ export function useDrawingController(args: {
   }, [flushLocalSave, flushPendingEdits]);
 
   const persistOne = useCallback((drawing: ChartDrawing, mode: 'create' | 'update') => {
+    setRejectedImport(null);
     enqueue({ drawingId: drawing.id, type: mode, drawing });
   }, [enqueue]);
 
@@ -498,6 +561,7 @@ export function useDrawingController(args: {
     }
     pendingEdits.current.delete(id);
     outboxRef.current.cancelId(id);
+    setRejectedImport(null);
     const next = drawingsRef.current.filter((item) => item.id !== id);
     pushDrawings(next);
     if (selectedId === id) {
@@ -514,6 +578,7 @@ export function useDrawingController(args: {
 
   const clearAll = useCallback(() => {
     discardPendingEdits();
+    setRejectedImport(null);
     pushDrawings([]);
     setSelectedId(null);
     setFocusAnchor(null);
@@ -685,8 +750,7 @@ export function useDrawingController(args: {
       const candidates = [
         ...ohlcCandidates(bar),
         ...(args.ma20?.[barIndex] != null ? [{ price: args.ma20[barIndex] as number, kind: 'ma20' as const }] : []),
-        ...(args.swingPrices ?? []).map((price) => ({ price, kind: 'swing' as const })),
-        ...(args.levelPrices ?? []).map((price) => ({ price, kind: 'level' as const })),
+        ...(args.snapCandidates ?? []),
         ...drawingsRef.current.flatMap((item) => item.anchors.map((anchor) => ({ price: anchor.price, kind: 'anchor' as const }))),
       ];
       const snapped = snapPointer({
@@ -868,7 +932,7 @@ export function useDrawingController(args: {
       zr.off('mouseup', onUp);
       zr.off('globalout', onUp);
     };
-  }, [args.bars, args.chart, args.levelPrices, args.ma20, args.measureActive, args.range, args.swingPrices, completeDrawing, inProgress, persistOne, pushDrawings, refreshGraphic, selectedId, tool, visibleCtx]);
+  }, [args.bars, args.chart, args.ma20, args.measureActive, args.range, args.snapCandidates, completeDrawing, inProgress, persistOne, pushDrawings, refreshGraphic, selectedId, tool, visibleCtx]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -1015,13 +1079,17 @@ export function useDrawingController(args: {
     }
     if (snapshot.scopeGeneration !== outbox.getScopeGeneration()) return;
     const server = snapshot.drawings;
-    outbox.setScopeRevision(snapshot.scopeRevision);
-    lastServerRef.current = server;
-    // 服务器版本号是权威记账：先记账再重建操作，重放才不会又撞一次冲突。
+    lastServerRef.current = {
+      scope: snapshot.scope,
+      scopeGeneration: snapshot.scopeGeneration,
+      drawings: server,
+    };
+    // 只有用户点「保留本地」才把任务重建到最新 scope/drawing revision。
     for (const item of server) revisionsRef.current.set(item.id, item.revision);
     const next = keepLocalWithServerRevisions(drawingsRef.current, server);
     writeLocal(next, false);
     outbox.replacePending(regeneratePersistOps(next, server));
+    outbox.rebaseBase(snapshot.scopeRevision);
     setSyncStatus('saving');
     setSyncHint(null);
     for (const id of outbox.readyIds()) void drain(id);
@@ -1065,10 +1133,17 @@ export function useDrawingController(args: {
     // 「用服务器版本」也要停掉防抖里的样式/文字改动：否则 400ms 后它照样发出去，
     // 而且拿的是刚刷新的 revision，PUT 会成功——用户丢弃的编辑又被写了回去。
     discardPendingEdits();
+    setRejectedImport(null);
     conflictServerRef.current = null;
     revisionsRef.current.clear();
     outbox.setScopeRevision(snapshot.scopeRevision);
-    lastServerRef.current = server;
+    outbox.clearBase();
+    outbox.markBaselineReady();
+    lastServerRef.current = {
+      scope: snapshot.scope,
+      scopeGeneration: snapshot.scopeGeneration,
+      drawings: server,
+    };
     for (const item of server) revisionsRef.current.set(item.id, item.revision);
     writeLocal(server, false);
     setHistory(createHistory(server));
@@ -1090,14 +1165,17 @@ export function useDrawingController(args: {
       revision: 1,
       id: item.id || newId(),
     }));
+    discardPendingEdits();
+    setSelectedId(null);
+    setFocusAnchor(null);
     setImportError(null);
-    rejectedImportRef.current = JSON.stringify({ schemaVersion: 1, drawings: incoming });
+    setRejectedImport(null);
     pushDrawings(incoming);
     if (signedIn) {
       enqueue({ drawingId: SCOPE_JOB_ID, type: 'replace', drawings: incoming });
     }
     return null;
-  }, [adjustment, args.range, args.ticker, enqueue, pushDrawings, signedIn]);
+  }, [adjustment, args.range, args.ticker, discardPendingEdits, enqueue, pushDrawings, signedIn]);
 
   const importFromText = useCallback((text: string) => {
     try {
@@ -1151,7 +1229,9 @@ export function useDrawingController(args: {
     patchSelected,
     patchDrawing,
     updateStyle,
-    exportJson: () => rejectedImportRef.current ?? exportDrawings(drawings),
+    exportJson: () => exportDrawings(drawings),
+    exportRejectedImport: () => rejectedImport,
+    hasRejectedImport: Boolean(rejectedImport),
     importJson,
     importFromText,
     importAnonymous,

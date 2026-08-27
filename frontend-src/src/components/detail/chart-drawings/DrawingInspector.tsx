@@ -57,6 +57,8 @@ export default function DrawingInspector({
   onDeleteId,
   onZ,
   onExport,
+  onExportRejected,
+  hasRejectedImport,
   onImportFile,
   onImportLocal,
   onClear,
@@ -76,12 +78,14 @@ export default function DrawingInspector({
   onDeleteId?: (id: string) => void;
   onZ: (delta: number) => void;
   onExport: () => void;
+  onExportRejected?: () => void;
+  hasRejectedImport?: boolean;
   onImportFile: (text: string) => void;
   onImportLocal: () => void;
   onClear: () => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
-  const listed = [...drawings].sort((a, b) => a.zOrder - b.zOrder);
+  const listed = [...(drawings ?? [])].sort((a, b) => a.zOrder - b.zOrder);
   return (
     <div className="flex flex-col gap-3 text-caption text-ink-600">
       <p className="text-micro font-medium text-ink-500">{t('对象')}</p>
@@ -237,6 +241,9 @@ export default function DrawingInspector({
       )}
       <div className="flex flex-wrap gap-1 border-t border-line pt-2">
         <button type="button" onClick={onExport} className="rounded-xs border border-line px-2 py-1 text-micro">{t('导出 JSON')}</button>
+        {hasRejectedImport && onExportRejected ? (
+          <button type="button" onClick={onExportRejected} className="rounded-xs border border-line px-2 py-1 text-micro">{t('导出上次未保存的导入文件')}</button>
+        ) : null}
         <button type="button" onClick={() => fileRef.current?.click()} className="rounded-xs border border-line px-2 py-1 text-micro">{t('导入 JSON')}</button>
         <button type="button" onClick={onImportLocal} className="rounded-xs border border-line px-2 py-1 text-micro">{t('导入本机绘图')}</button>
         <button type="button" onClick={onClear} className="rounded-xs border border-down-600/40 px-2 py-1 text-micro text-down-600">{t('清除全部手绘')}</button>

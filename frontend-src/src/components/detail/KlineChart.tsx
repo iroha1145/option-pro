@@ -20,6 +20,7 @@ import { usePolling } from '@/hooks/usePolling';
 import { useAccess } from '@/hooks/useAccess';
 import { baseAnimation, CH, glassTooltip, stippleAreaStyle, type ChartOption, type EChartsInstance } from '@/lib/chart';
 import { useDrawingController } from './chart-drawings/useDrawingController.ts';
+import { snapCandidatesFromOverlays } from './chart-drawings/snap.ts';
 import DrawingToolbar from './chart-drawings/DrawingToolbar.tsx';
 import DrawingWorkspace from './chart-drawings/DrawingWorkspace.tsx';
 import LayerMenu from './chart-drawings/LayerMenu.tsx';
@@ -50,118 +51,10 @@ import { t } from '../../i18n/core.ts';
 import { CHART_RANGES, DEFAULT_CHART_RANGE, getDetailChart, type ChartRange } from './api';
 import { insideZoom, zoomFromOption, type ZoomWindow } from './chart-drawings/zoom.ts';
 import type { ChartBarEx } from '@/mocks/fixtures';
-import type { TechnicalStructure, TechSwingPoint } from '@/api/types';
+import type { TechnicalStructure } from '@/api/types';
 
 type ChartMode = 'candle' | 'area';
 export type TechOverlays = TechnicalStructure['chart_overlays'];
-
-/**
- * 技术点位 → markLine / markArea / markPoint。
- * 只在日 K 上绘制：结构与图表同源同序列，摆动点按「精确 t → 交易日」两级
- * 寻址到当前序列的具体一根（mock 两次生成的 t 差几毫秒，退到日历日仍准）。
- *
- * 阻力带/失效位是「从基底起点起」的水平参考，不是全史事实：
- * - 实心段 = 基底形成区间 [base_start, base_end]
- * - 淡化段 = base_end 之后的延伸观察区（价位仍被盯着，但基底已是历史检测）
- * - 已跌破失效位（failed）→ 整带转灰，只保留失效位红线警示语义
- */
-function technicalMarks(overlays: TechOverlays | null | undefined, bars: ChartBarEx[]) {
-  const empty = { lines: [] as object[], points: [] as object[], areas: [] as object[] };
-  if (!overlays || bars.length === 0) return empty;
-  const idxByT = new Map<string, number>();
-  const idxByDay = new Map<string, number>();
-  bars.forEach((b, i) => {
-    idxByT.set(b.t, i);
-    const day = b.t.slice(0, 10);
-    if (!idxByDay.has(day)) idxByDay.set(day, i);
-  });
-  const locate = (p: TechSwingPoint): number =>
-    idxByT.get(p.t) ?? idxByDay.get(p.trade_date || p.t.slice(0, 10)) ?? -1;
-  const locateDay = (day: string | null | undefined): number =>
-    day ? idxByDay.get(day) ?? -1 : -1;
-
-  const lines: object[] = [];
-  const points: object[] = [];
-  const areas: object[] = [];
-  const failed = overlays.base_status === 'failed';
-  const lastIndex = bars.length - 1;
-  const startIndex = locateDay(overlays.base_start);
-  const endIndex = locateDay(overlays.base_end);
-
-  if (
-    overlays.invalidation_price != null
-    && Number.isFinite(overlays.invalidation_price)
-    && startIndex >= 0
-  ) {
-    lines.push([
-      {
-        coord: [startIndex, overlays.invalidation_price],
-        lineStyle: { color: CH.down600, width: 1, type: 'dotted' as const },
-        label: {
-          ...MEASURE_LABEL_FONT,
-          formatter: t('失效位 {p}', { p: fmtPrice(overlays.invalidation_price) }),
-          color: CH.down600,
-          position: 'insideEndBottom' as const,
-        },
-      },
-      { coord: [lastIndex, overlays.invalidation_price] },
-    ]);
-  }
-  if (
-    overlays.resistance_low != null
-    && overlays.resistance_high != null
-    && Number.isFinite(overlays.resistance_low)
-    && Number.isFinite(overlays.resistance_high)
-    && startIndex >= 0
-    && endIndex >= startIndex
-  ) {
-    const bandColor = failed ? CH.ink400 : CH.brand400;
-    const labelColor = failed ? CH.ink400 : CH.brand600;
-    areas.push([
-      {
-        xAxis: startIndex,
-        yAxis: overlays.resistance_low,
-        itemStyle: { color: bandColor, opacity: 0.1 },
-        label: {
-          ...MEASURE_LABEL_FONT,
-          show: true,
-          formatter: failed ? t('阻力带（基底已失效）') : t('阻力带'),
-          color: labelColor,
-          position: 'insideTopRight' as const,
-        },
-      },
-      { xAxis: endIndex, yAxis: overlays.resistance_high },
-    ]);
-    if (endIndex < lastIndex) {
-      areas.push([
-        {
-          xAxis: endIndex,
-          yAxis: overlays.resistance_low,
-          itemStyle: { color: bandColor, opacity: 0.04 },
-          label: { show: false },
-        },
-        { xAxis: lastIndex, yAxis: overlays.resistance_high },
-      ]);
-    }
-  }
-  const markSwings = (list: TechSwingPoint[], isHigh: boolean) => {
-    for (const point of list.slice(-3)) {
-      const index = locate(point);
-      if (index < 0 || point.price == null) continue;
-      points.push({
-        coord: [index, point.price],
-        symbol: 'triangle',
-        symbolRotate: isHigh ? 180 : 0,
-        symbolSize: 8,
-        itemStyle: { color: isHigh ? CH.warn600 : CH.ai600 },
-        label: { show: false },
-      });
-    }
-  };
-  markSwings(overlays.swing_highs ?? [], true);
-  markSwings(overlays.swing_lows ?? [], false);
-  return { lines, points, areas };
-}
 
 /**
  * 结构负载与当前图表 bars 是否同一份数据。
@@ -278,7 +171,6 @@ function buildOption(
   mode: ChartMode,
   prevClose?: number,
   overlay?: MeasureOverlay | null,
-  tech?: ReturnType<typeof technicalMarks> | null,
   extra?: { lines: object[]; points: object[]; areas: object[]; polygons?: { vertices: { x: number; y: number }[]; color: string; opacity: number }[] } | null,
   analysis?: { showMa20?: boolean; extraMa?: { name: string; data: (number | null)[] }[]; panes?: PanePlot[] } | null,
   zoom?: ZoomWindow | null,
@@ -287,11 +179,10 @@ function buildOption(
   const upFill = CH.up600;
   const downFill = CH.down600;
   const measure = measureMarks(overlay);
-  // 技术点位与回撤尺共用蜡烛系列的 mark 通道，两组数据直接并列
   const marks = {
-    lines: [...(tech?.lines ?? []), ...(extra?.lines ?? []), ...measure.lines],
-    points: [...(tech?.points ?? []), ...(extra?.points ?? []), ...measure.points],
-    areas: [...(tech?.areas ?? []), ...(extra?.areas ?? []), ...measure.areas],
+    lines: [...(extra?.lines ?? []), ...measure.lines],
+    points: [...(extra?.points ?? []), ...measure.points],
+    areas: [...(extra?.areas ?? []), ...measure.areas],
   };
 
   const polygons = extra?.polygons ?? [];
@@ -857,12 +748,7 @@ export default function KlineChart({
     range,
     bars: data?.bars,
     ma20: data?.ma20,
-    swingPrices: [
-      ...(overlays?.swing_highs ?? []).map((item) => item.price),
-      ...(overlays?.swing_lows ?? []).map((item) => item.price),
-    ].filter((price): price is number => price != null),
-    levelPrices: [overlays?.resistance_high, overlays?.resistance_low, overlays?.invalidation_price]
-      .filter((price): price is number => price != null && Number.isFinite(price)),
+    snapCandidates: snapCandidatesFromOverlays(visibleOverlays),
     chart: chartInst,
     identity: { signedIn: canManageWatchlist, key: identityKey },
     measureActive,
@@ -912,7 +798,7 @@ export default function KlineChart({
   const option = useMemo(
     // zoomRef 是有意不进依赖的：滚轮缩放不该触发 option 重建，但每次真的重建时
     // 都要带上用户当前的视窗，否则 notMerge 会把 inside 缩放重置回默认窗口。
-    () => (data ? buildOption(data.bars, data.ma20, range, mode, prevClose, overlay, null, extraMarks, analysisOption, zoomRef.current) : null),
+    () => (data ? buildOption(data.bars, data.ma20, range, mode, prevClose, overlay, extraMarks, analysisOption, zoomRef.current) : null),
     [data, range, mode, prevClose, overlay, extraMarks, analysisOption],
   );
 

@@ -84,3 +84,35 @@ export function ohlcCandidates(bar: { o: number; h: number; l: number; c: number
     { price: bar.c, kind: 'ohlc' },
   ];
 }
+
+function finitePrice(value: unknown): number | null {
+  const price = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(price) && price > 0 ? price : null;
+}
+
+/** Hand-draw snap from overlays that already passed analysisGate. */
+export function snapCandidatesFromOverlays(
+  overlays: Array<{ kind: string; geometry?: Record<string, unknown> }>,
+): SnapCandidate[] {
+  const out: SnapCandidate[] = [];
+  for (const overlay of overlays) {
+    const geometry = overlay.geometry ?? {};
+    if (overlay.kind === 'swing') {
+      const anchors = Array.isArray(geometry.anchors) ? geometry.anchors : [];
+      for (const anchor of anchors) {
+        const price = finitePrice(anchor && typeof anchor === 'object' ? (anchor as { price?: unknown }).price : null);
+        if (price != null) out.push({ price, kind: 'swing' });
+      }
+      const point = finitePrice(geometry.price);
+      if (point != null) out.push({ price: point, kind: 'swing' });
+      continue;
+    }
+    if (overlay.kind === 'level' || overlay.kind === 'pivot' || overlay.kind === 'box') {
+      for (const key of ['price', 'resistanceHigh', 'resistanceLow', 'supportLow', 'supportHigh', 'pivot', 'invalidation']) {
+        const price = finitePrice(geometry[key]);
+        if (price != null) out.push({ price, kind: 'level' });
+      }
+    }
+  }
+  return out;
+}

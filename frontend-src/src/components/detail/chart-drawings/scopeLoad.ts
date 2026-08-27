@@ -1,4 +1,5 @@
 /** Scope switch / conflict apply / area-mode layer gates. No React. */
+import { evaluateRemoteVsPending } from './merge.ts';
 import { drawingsFromCache, type LoadResult } from './storage.ts';
 import {
   conflictSnapshotUsable,
@@ -44,14 +45,16 @@ export function previewScopeLoad(cached: LoadResult): ScopePreview {
 
 export type ScopeLoadComplete = {
   foreign: boolean;
-  apply: 'remote' | 'cache' | 'none';
+  apply: 'remote' | 'cache' | 'replay' | 'none';
   drawings: ChartDrawing[];
   persist: 'now' | 'skip';
-  status: 'idle' | 'saving' | 'load_failed' | 'write_failed' | 'guest';
+  status: 'idle' | 'saving' | 'load_failed' | 'write_failed' | 'guest' | 'conflict';
   hint: string | null;
   lastServer?: ChartDrawing[];
   scopeRevision?: number;
   drain: boolean;
+  conflict: boolean;
+  baselineReady: boolean;
 };
 
 const FOREIGN: ScopeLoadComplete = {
@@ -62,6 +65,8 @@ const FOREIGN: ScopeLoadComplete = {
   status: 'idle',
   hint: null,
   drain: false,
+  conflict: false,
+  baselineReady: false,
 };
 
 function isAuthStatus(
@@ -74,9 +79,9 @@ function isAuthStatus(
 }
 
 /**
- * Await the GET, then apply only if generation still matches. Pending
- * clear/replace keeps the cache (including an authoritative empty list)
- * and does not paint the previous ticker from a late body.
+ * Await the GET, then apply only if generation still matches.
+ * Pending jobs replay onto remote.drawings; they never inherit the GET
+ * revision unless evaluateRemoteVsPending says the send is safe.
  */
 export async function completeScopeLoad(args: {
   generation: number;
@@ -89,50 +94,91 @@ export async function completeScopeLoad(args: {
   try {
     const remote = await args.list();
     if (outbox.getScopeGeneration() !== args.generation) return FOREIGN;
-    outbox.setScopeRevision(remote.scopeRevision);
-    if (!outbox.isEmpty()) {
+    if (outbox.isEmpty()) {
+      outbox.setScopeRevision(remote.scopeRevision);
+      outbox.clearBase();
+      outbox.markBaselineReady();
+      if (!resolveListApply(true, true)) {
+        return {
+          foreign: false,
+          apply: 'none',
+          drawings: drawingsFromCache(cached),
+          persist: 'skip',
+          status: 'saving',
+          hint: null,
+          lastServer: remote.drawings,
+          scopeRevision: remote.scopeRevision,
+          drain: false,
+          conflict: false,
+          baselineReady: true,
+        };
+      }
       return {
         foreign: false,
-        apply: 'cache',
-        drawings: drawingsFromCache(cached),
-        persist: 'skip',
-        status: 'saving',
-        hint: null,
-        lastServer: remote.drawings,
-        scopeRevision: remote.scopeRevision,
-        drain: true,
-      };
-    }
-    if (!resolveListApply(outbox.isEmpty(), true)) {
-      return {
-        foreign: false,
-        apply: 'none',
-        drawings: drawingsFromCache(cached),
-        persist: 'skip',
-        status: 'saving',
+        apply: 'remote',
+        drawings: remote.drawings,
+        persist: 'now',
+        status: 'idle',
         hint: null,
         lastServer: remote.drawings,
         scopeRevision: remote.scopeRevision,
         drain: false,
+        conflict: false,
+        baselineReady: true,
+      };
+    }
+    const evaluation = evaluateRemoteVsPending({
+      remoteDrawings: remote.drawings,
+      remoteRevision: remote.scopeRevision,
+      baseRevision: outbox.getBaseScopeRevision(),
+      jobs: outbox.snapshot(),
+    });
+    outbox.markBaselineReady();
+    if (evaluation.adoptScopeRevision) outbox.setSendScopeRevision(remote.scopeRevision);
+    if (evaluation.kind === 'conflict') {
+      return {
+        foreign: false,
+        apply: 'replay',
+        drawings: evaluation.drawings,
+        persist: 'now',
+        status: 'conflict',
+        hint: 'conflict',
+        lastServer: remote.drawings,
+        scopeRevision: remote.scopeRevision,
+        drain: false,
+        conflict: true,
+        baselineReady: true,
       };
     }
     return {
       foreign: false,
-      apply: 'remote',
-      drawings: remote.drawings,
+      apply: 'replay',
+      drawings: evaluation.drawings,
       persist: 'now',
-      status: 'idle',
+      status: 'saving',
       hint: null,
       lastServer: remote.drawings,
       scopeRevision: remote.scopeRevision,
-      drain: false,
+      drain: evaluation.drain,
+      conflict: false,
+      baselineReady: true,
     };
   } catch (error) {
     if (outbox.getScopeGeneration() !== args.generation) return FOREIGN;
     const drawings = drawingsFromCache(cached);
     const persist: 'now' | 'skip' = cached.ok || drawings.length ? 'now' : 'skip';
     if (isAuthStatus(error, args.errorInfo)) {
-      return { foreign: false, apply: 'cache', drawings, persist, status: 'guest', hint: null, drain: false };
+      return {
+        foreign: false,
+        apply: 'cache',
+        drawings,
+        persist,
+        status: 'guest',
+        hint: null,
+        drain: false,
+        conflict: false,
+        baselineReady: false,
+      };
     }
     return {
       foreign: false,
@@ -142,6 +188,8 @@ export async function completeScopeLoad(args: {
       status: outbox.isEmpty() ? 'load_failed' : 'write_failed',
       hint: 'unsynced',
       drain: false,
+      conflict: false,
+      baselineReady: false,
     };
   }
 }

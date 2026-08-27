@@ -391,19 +391,21 @@ def test_assemble_keeps_per_pattern_volume_confirmation() -> None:
     bars = _zigzag(180, lambda i: 50 + 0.18 * i, lambda i: 62 + 0.18 * i)
     rows = _detect(bars)
     assert rows
-    original = rows[0]["volumeConfirmation"]
-    original_priority = rows[0]["displayPriority"]
+    original_quality = rows[0]["shapeQuality"]
+    original_anchors = rows[0].get("anchors")
     bundle = assemble_chart_analysis(
         series=_series(bars),
         data_through=_series(bars)["dates"][-1],
         auto_patterns=rows,
-        vol_price={"status": "active", "setup_type": "absorption_bullish", "setup_label": "多头吸收"},
+        vol_price={"status": "active", "setup_type": "absorption_bullish", "setup_label": "多头吸收", "obv_slope": 0.2, "clv_mean": 0.4},
+        technicals={"ma20": 60, "ma50": 55, "ma200": 50, "ma50_slope_pct_21d": 2.0, "macd": {"direction_pct": 20}, "trend_efficiency_63d": 0.7},
     )
     pattern = next(row for row in bundle["overlays"] if row["id"] == rows[0]["id"])
-    assert pattern["evidence"]["volumeConfirmation"] == original
-    assert pattern["displayPriority"] == original_priority
+    assert pattern["shapeQuality"] == original_quality
+    assert pattern["geometry"]["anchors"] == original_anchors
+    assert pattern["evidence"]["volumeConfirmation"] != 0.5
+    assert pattern["evidence"]["trendAlignment"] != 0.5
     vol = next(row for row in bundle["overlays"] if row["kind"] == "volume_setup")
-    assert vol["evidence"]["volumeConfirmation"] == 0.7
     assert vol["id"] != rows[0]["id"]
 
 
@@ -816,3 +818,57 @@ def test_pattern_id_hashes_all_rail_anchors() -> None:
         ],
     )
     assert two != four
+
+
+def test_base_structure_volume_and_trend_are_not_constant() -> None:
+    from app.services.technical.chart_analysis import (
+        trend_alignment_from_technicals,
+        volume_confirmation_from_vol_price,
+    )
+
+    vol = volume_confirmation_from_vol_price({
+        "setup_type": "absorption_bullish",
+        "setup_label": "多头吸收",
+        "obv_slope": 0.2,
+        "clv_mean": 0.5,
+        "breakout_quality_adjustment": 6.0,
+        "false_breakout_risk": 10.0,
+    })
+    trend = trend_alignment_from_technicals({
+        "ma20": 62,
+        "ma50": 58,
+        "ma200": 50,
+        "close": 63,
+        "ma50_slope_pct_21d": 3.0,
+        "macd": {"direction_pct": 25},
+        "trend_efficiency_63d": 0.8,
+    })
+    assert vol != 0.5
+    assert trend != 0.5
+    series = _series(_zigzag(180, lambda i: 50 + 0.18 * i, lambda i: 62 + 0.18 * i))
+    base = {
+        "base_start": series["dates"][10],
+        "base_end": series["dates"][40],
+        "quality": 0.61,
+        "pivot_id": "pivot-test",
+        "pivot_price": 55.0,
+        "invalidation_price": 48.0,
+        "resistance_high": 62.0,
+        "resistance_low": 60.0,
+        "window_agreement": 3,
+        "windows_scanned": 7,
+        "detector_version": "us-base-structure-v2",
+    }
+    bundle = assemble_chart_analysis(
+        series=series,
+        data_through=series["dates"][-1],
+        auto_patterns=[],
+        base=base,
+        base_state={"status": "in_base"},
+        vol_price={"status": "active", "setup_type": "absorption_bullish", "obv_slope": 0.2, "clv_mean": 0.5, "breakout_quality_adjustment": 6.0, "false_breakout_risk": 10.0},
+        technicals={"ma20": 62, "ma50": 58, "ma200": 50, "close": 63, "ma50_slope_pct_21d": 3.0, "macd": {"direction_pct": 25}, "trend_efficiency_63d": 0.8},
+    )
+    box = next(row for row in bundle["overlays"] if row["kind"] == "box")
+    assert box["evidence"]["volumeConfirmation"] != 0.5
+    assert box["evidence"]["trendAlignment"] != 0.5
+    assert box["shapeQuality"] == 0.61

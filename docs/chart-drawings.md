@@ -57,8 +57,8 @@ GET    /api/account/chart-drawings?ticker=&range=&adjustment=
 POST   /api/account/chart-drawings
 POST   /api/account/chart-drawings/replace?ticker=&range=&adjustment=
 PUT    /api/account/chart-drawings/{drawing_id}
-DELETE /api/account/chart-drawings/{drawing_id}
-DELETE /api/account/chart-drawings?ticker=&range=&adjustment=
+DELETE /api/account/chart-drawings/{drawing_id}?ticker=&range=&adjustment=&expected_scope_revision=
+DELETE /api/account/chart-drawings?ticker=&range=&adjustment=&expected_scope_revision=
 ```
 
 - 严格 Pydantic，`extra="forbid"`
@@ -69,11 +69,11 @@ DELETE /api/account/chart-drawings?ticker=&range=&adjustment=
 - 所有写入（POST create / PUT / DELETE 一行 / DELETE 范围 / POST replace）携带 `expected_scope_revision`，在一条 `BEGIN IMMEDIATE` 事务里校验、变更、+1。不匹配返回 **409 `scope_revision_conflict`**，clear/replace 不能悄悄覆盖另一台设备的更新
 - 单条 `revision` 仍在：更新还带期望 drawing revision；不匹配返回 **409 `revision_conflict`**
 - **409 不等于版本冲突**：配额满也是 409（`drawings_range_full` / `drawings_full`）。每个错误响应都带机器可读的 `code`，客户端必须按 `code` 分支——只有 `revision_conflict` / `scope_revision_conflict` / `drawing_id_conflict` 是真冲突。把配额当冲突处理会让「保留本地」把必败的创建无限重放
-- **重放幂等**：同一账户 + 同一 `drawing_id` + 同一规范化 payload 的 POST 返回已存的那行且不抬 `scope_revision`；payload 或范围不同则 **409 `drawing_id_conflict`**（不会返回别的范围的行）。DELETE 一行不存在的绘图是成功且不抬 revision（无墓碑）。响应丢失后的重试因此能收敛
+- **重放幂等**：同一账户 + 同一 `drawing_id` + 同一规范化 payload 的 POST 返回已存的那行且不抬 `scope_revision`；payload 或范围不同则 **409 `drawing_id_conflict`**（不会返回别的范围的行）。DELETE 一行必须带指名 scope；行不存在时成功且不抬 revision，但响应仍带该 scope 当前的 `scope_revision`（无墓碑，前端不得猜 `expected+1`）。响应丢失后的重试因此能收敛
 - 导入当前范围是事务替换：先校验全部，再删旧插入新，并校验 `expected_scope_revision`。编号与**同账户的其他范围**冲突时改发新 UUID；跨账户不再冲突（见下）。空列表会清空当前范围。
 - 锚点时间必须是带 `Z` 或显式偏移的 RFC 3339；naive 本地时间拒绝。文字对象允许空字符串；NUL / HTML 标签 / 超长文本仍拒绝。
 
-SQLite 表 `account_chart_drawings` 在 `accounts.db`，WAL、外键、账户删除级联。主键是 **`(user_id, drawing_id)` 复合键**：绘图编号只在账户内唯一，所以两个账户可以各自持有同一个编号，创建他人编号也不再能通过「404 还是 201」反推对方是否存在。范围版本记在 `account_chart_drawing_scopes`。`initialize()` 对旧的全局 `drawing_id` 主键做 copy-forward（改名 → 建新表 → `INSERT SELECT`），已有绘图行不会被 DROP 丢掉。
+SQLite 表 `account_chart_drawings` 在 `accounts.db`，WAL、外键、账户删除级联。主键是 **`(user_id, drawing_id)` 复合键**：绘图编号只在账户内唯一，所以两个账户可以各自持有同一个编号，创建他人编号也不再能通过「404 还是 201」反推对方是否存在。范围版本记在 `account_chart_drawing_scopes`。`initialize()` 对旧的全局 `drawing_id` 主键做 copy-forward（改名前 `DROP INDEX idx_account_chart_drawings_scope` → 改名 → 建新表 → `INSERT SELECT` → 删除临时表后重建范围索引），已有绘图行不会被 DROP 丢掉，新表仍有 `idx_account_chart_drawings_scope`。
 
 ## 自动形态与统一图层
 

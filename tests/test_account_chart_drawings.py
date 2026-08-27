@@ -69,6 +69,8 @@ CREATE TABLE IF NOT EXISTS account_chart_drawings (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
+CREATE INDEX IF NOT EXISTS idx_account_chart_drawings_scope
+    ON account_chart_drawings(user_id, ticker, chart_range, adjustment);
 """
 
 
@@ -186,10 +188,22 @@ def _update(client: TestClient, body: dict, *, revision: int, expected_scope_rev
     )
 
 
-def _delete_one(client: TestClient, drawing_id: str, *, expected_scope_revision: int):
+def _delete_one(
+    client: TestClient,
+    drawing_id: str,
+    *,
+    expected_scope_revision: int,
+    ticker: str = "NVDA",
+    chart_range: str = "1d",
+):
     return client.delete(
         f"/api/account/chart-drawings/{drawing_id}",
-        params={"expected_scope_revision": expected_scope_revision},
+        params={
+            "ticker": ticker,
+            "range": chart_range,
+            "adjustment": "raw",
+            "expected_scope_revision": expected_scope_revision,
+        },
         headers=HEADERS,
     )
 
@@ -323,10 +337,15 @@ def test_legacy_global_drawing_id_primary_key_is_rebuilt(tmp_path) -> None:
             """SELECT scope_revision FROM account_chart_drawing_scopes
                 WHERE user_id='usr_legacy' AND ticker='NVDA' AND chart_range='1d' AND adjustment='raw'"""
         ).fetchone()
+        indexes = {
+            str(row[1])
+            for row in connection.execute("PRAGMA index_list(account_chart_drawings)")
+        }
     assert [name for _, name in key_columns] == ["user_id", "drawing_id"]
     assert accounts_left == 1
     assert kept == 1
     assert scopes is not None
+    assert "idx_account_chart_drawings_scope" in indexes
     assert int(scope_rev[0]) == 1
     listed = upgraded.list_drawings("usr_legacy", "NVDA", "1d")
     assert listed[0]["id"] == drawing_id
@@ -698,10 +717,13 @@ def test_delete_is_idempotent(client: TestClient) -> None:
     for _ in range(2):
         removed = _delete_one(client, body["id"], expected_scope_revision=2)
         assert removed.status_code == 200
-        assert removed.json() == {"ok": True}
-    never_existed = _delete_one(client, str(uuid.uuid4()), expected_scope_revision=0)
+        assert removed.json() == {"ok": True, "scope_revision": 2}
+    never_existed = _delete_one(client, str(uuid.uuid4()), expected_scope_revision=2)
     assert never_existed.status_code == 200
-    assert never_existed.json() == {"ok": True}
+    assert never_existed.json() == {"ok": True, "scope_revision": 2}
+    stale_missing = _delete_one(client, str(uuid.uuid4()), expected_scope_revision=0)
+    assert stale_missing.status_code == 409
+    assert stale_missing.json()["detail"]["code"] == "scope_revision_conflict"
 
 
 def test_moving_a_drawing_to_another_scope_is_rejected(client: TestClient) -> None:
@@ -797,7 +819,12 @@ def test_same_id_in_two_accounts_stays_isolated(store: AccountStore) -> None:
 
     # B 的删除同样只删掉 B 自己那条。
     store.delete_drawing(
-        second.account.user_id, body["id"], expected_scope_revision=2
+        second.account.user_id,
+        body["id"],
+        ticker="AAPL",
+        chart_range="1d",
+        adjustment="raw",
+        expected_scope_revision=2,
     )
     assert store.get_drawing(second.account.user_id, body["id"]) is None
     assert store.get_drawing(first.account.user_id, body["id"]) is not None
@@ -1148,3 +1175,43 @@ def test_reinitialize_keeps_drawings_and_scope_revision(store: AccountStore) -> 
     listed, again = store.list_drawings_page(session.account.user_id, "NVDA", "1d")
     assert [row["id"] for row in listed] == [created["id"]]
     assert again == 1
+
+
+def test_delete_missing_row_returns_named_scope_revision(client: TestClient) -> None:
+    _register(client, "miss-id", "pw")
+    body = _drawing()
+    created = _create(client, body, expected_scope_revision=0)
+    assert created.status_code == 201
+    missing = _delete_one(client, str(uuid.uuid4()), expected_scope_revision=1)
+    assert missing.status_code == 200
+    assert missing.json()["ok"] is True
+    assert missing.json()["scope_revision"] == 1
+    listed = client.get(
+        "/api/account/chart-drawings",
+        params={"ticker": "NVDA", "range": "1d", "adjustment": "raw"},
+    )
+    assert listed.json()["scope_revision"] == 1
+    assert len(listed.json()["drawings"]) == 1
+
+
+def test_every_mutation_body_includes_integer_scope_revision(client: TestClient) -> None:
+    _register(client, "rev-body", "pw")
+    body = _drawing()
+    created = _create(client, body, expected_scope_revision=0)
+    assert isinstance(created.json()["scope_revision"], int)
+    updated = _update(client, {**body, "locked": True}, revision=1, expected_scope_revision=1)
+    assert isinstance(updated.json()["scope_revision"], int)
+    extra = _drawing()
+    extra["id"] = str(uuid.uuid4())
+    replaced = client.post(
+        "/api/account/chart-drawings/replace",
+        params={"ticker": "NVDA", "range": "1d", "adjustment": "raw"},
+        json={"schemaVersion": 1, "expected_scope_revision": updated.json()["scope_revision"], "drawings": [extra]},
+        headers=HEADERS,
+    )
+    assert replaced.status_code == 200
+    assert isinstance(replaced.json()["scope_revision"], int)
+    deleted = _delete_one(client, extra["id"], expected_scope_revision=replaced.json()["scope_revision"])
+    assert isinstance(deleted.json()["scope_revision"], int)
+    cleared = _clear_scope(client, expected_scope_revision=deleted.json()["scope_revision"])
+    assert isinstance(cleared.json()["scope_revision"], int)

@@ -20,7 +20,7 @@ LAYERS: list[dict[str, Any]] = [
     {"id": "auto_patterns", "group": "price", "kind": "pattern", "label": "自动趋势线/通道/三角形/楔形"},
     {"id": "candles", "group": "event", "kind": "candle", "label": "K线形态"},
     {"id": "traps", "group": "event", "kind": "trap", "label": "Spring/Upthrust"},
-    {"id": "breakouts", "group": "event", "kind": "breakout", "label": "突破触发/确认/回踩/失败"},
+    {"id": "breakouts", "group": "event", "kind": "breakout", "label": "突破触发/测试/失败"},
     {"id": "rsi", "group": "pane", "kind": "rsi", "label": "RSI"},
     {"id": "macd", "group": "pane", "kind": "macd", "label": "MACD"},
     {"id": "obv", "group": "pane", "kind": "obv", "label": "OBV"},

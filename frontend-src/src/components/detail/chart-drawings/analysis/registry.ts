@@ -27,7 +27,7 @@ export const LAYERS: LayerDef[] = [
   { id: 'auto_patterns', group: 'price', kind: 'pattern', label: t('自动趋势线/通道/三角形/楔形') },
   { id: 'candles', group: 'event', kind: 'candle', label: t('K线形态') },
   { id: 'traps', group: 'event', kind: 'trap', label: t('Spring/Upthrust') },
-  { id: 'breakouts', group: 'event', kind: 'breakout', label: t('突破触发/确认/回踩/失败') },
+  { id: 'breakouts', group: 'event', kind: 'breakout', label: t('突破触发/测试/失败') },
   { id: 'rsi', group: 'pane', kind: 'rsi', label: t('RSI') },
   { id: 'macd', group: 'pane', kind: 'macd', label: t('MACD') },
   { id: 'obv', group: 'pane', kind: 'obv', label: t('OBV') },
