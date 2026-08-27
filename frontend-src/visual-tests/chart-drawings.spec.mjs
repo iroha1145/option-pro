@@ -132,6 +132,12 @@ async function placeHorizontal(page, xRatio = 0.5, yRatio = 0.4) {
   return box;
 }
 
+/** 429 / GET-not-ready leaves write_failed; 重试同步 re-GETs or replays drain. */
+async function clickRetryIfShown(page) {
+  const retry = toolButton(page, "重试同步");
+  if (await retry.isVisible().catch(() => false)) await retry.click();
+}
+
 async function paintedPixels(page) {
   return page.evaluate(() => {
     const host = document.querySelector('[role="img"][aria-label$="图"]');
@@ -461,6 +467,7 @@ test("stale clear from a second context is 409 and keeps the newer drawing", asy
   await expectDrawingCount(page, 1);
   let staleRev = 0;
   await expect.poll(async () => {
+    await clickRetryIfShown(page);
     const listed = await listDrawings(page);
     if (listed.status === 429) return 0;
     if (listed.drawings?.length === 1 && listed.revision > 0) {
@@ -482,6 +489,7 @@ test("stale clear from a second context is 409 and keeps the newer drawing", asy
   await placeHorizontal(pageB, 0.62, 0.55);
   await expectDrawingCount(pageB, 2);
   await expect.poll(async () => {
+    await clickRetryIfShown(pageB);
     const listed = await listDrawings(pageB);
     if (listed.status === 429) return -1;
     if (listed.status !== 200) return -1;
@@ -631,6 +639,7 @@ test("stale update from a second context is 409 and keeps the newer color", asyn
   /** @type {{ id: string, revision: number, scope: number, color: string }} */
   let stale = { id: "", revision: 0, scope: 0, color: "" };
   await expect.poll(async () => {
+    await clickRetryIfShown(page);
     const listed = await listDrawings(page);
     // Numbers only: toBeGreaterThan(0) type-errors on "http 200" / "rate-limited"
     // and aborts instead of waiting for drain after an empty 200.
