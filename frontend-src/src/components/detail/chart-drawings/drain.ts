@@ -67,6 +67,8 @@ export type DrainOutcome = {
   lastServer?: ChartDrawing[];
   scopeRevision?: number;
   reconcile: boolean;
+  /** 429 时服务器给的等待秒数；其余 retry 失败为 null/缺省。 */
+  retryAfterSeconds?: number | null;
 };
 
 const FOREIGN: DrainOutcome = {
@@ -297,6 +299,12 @@ export async function drainPersistJob(args: {
       }
     }
     const settled = settleJob({ outbox, job, kind: 'retry' });
-    return { foreign: false, kind: 'retry', apply: { action: 'none' }, conflict: null, reconcile: false, ...settled };
+    // 429 的 Retry-After（秒）随 outcome 透出：这是服务器亲口说的「几秒后再来」，
+    // 调用方按它排定时自动重放，而不是把任务搁成 unsynced 等人手点。
+    const row = error && typeof error === 'object' ? error as { retryAfter?: unknown } : {};
+    const retryAfterSeconds = typeof row.retryAfter === 'number' && Number.isFinite(row.retryAfter)
+      ? row.retryAfter
+      : null;
+    return { foreign: false, kind: 'retry', apply: { action: 'none' }, conflict: null, reconcile: false, retryAfterSeconds, ...settled };
   }
 }

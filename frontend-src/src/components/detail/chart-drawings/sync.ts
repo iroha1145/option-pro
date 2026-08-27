@@ -150,6 +150,23 @@ export function resolveListApply(outboxEmpty: boolean, tokenMatch: boolean): boo
   return outboxEmpty && tokenMatch;
 }
 
+
+/**
+ * 自动重放的等待时长（毫秒）。
+ *
+ * 服务器给了 Retry-After 就听它的（钳在 1–120 秒：0/负数不空转，超长值不把
+ * 任务押到天荒地老）；没给（断网、5xx）按 5s → 15s → 45s → 60s 封顶退避。
+ * 纯函数，不读时钟——排定时机由调用方的 setTimeout 承担。
+ */
+export function nextDrainRetryDelayMs(attempt: number, retryAfterSeconds?: number | null): number {
+  if (typeof retryAfterSeconds === 'number' && Number.isFinite(retryAfterSeconds)) {
+    return Math.min(Math.max(retryAfterSeconds, 1), 120) * 1000;
+  }
+  const ladder = [5_000, 15_000, 45_000];
+  const index = Math.max(attempt, 1) - 1;
+  return index < ladder.length ? ladder[index] : 60_000;
+}
+
 export type SyncFailure = 'load_failed' | 'write_failed' | 'conflict' | null;
 
 export function resolveRetryAction(

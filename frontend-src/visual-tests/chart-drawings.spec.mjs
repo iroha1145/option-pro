@@ -124,6 +124,10 @@ async function expectDrawingCount(page, n) {
 
 /** 在价格区落一笔水平线（工具按钮 → 画布点击）。 */
 async function placeHorizontal(page, xRatio = 0.5, yRatio = 0.4) {
+  /* 落笔前必须等图表画完：readPoint 走 containPixel，首绘没铺开时坐标系
+     未就绪，点击会被判到网格外——这一笔就静默没了（双上下文用例的 pageB
+     只等了工具条就点，抓到过「已同步 + 少一条」的终态）。 */
+  await chartFilled(page);
   await toolButton(page, "水平线").click();
   const canvas = page.locator("canvas").first();
   const box = await canvas.boundingBox();

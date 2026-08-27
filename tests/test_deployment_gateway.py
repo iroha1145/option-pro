@@ -1148,7 +1148,21 @@ def test_stock_drawer_read_bucket_is_bounded_and_independent(
             limited = client.get("/api/earnings/upcoming")
             assert limited.status_code == 429
             assert limited.json()["error"] == "rate_limited"
-            assert limited.headers["retry-after"] == str(main._RL_WINDOW)
+            # Retry-After 是诚实值：刚打满时最老条目还没老化，等待≈整窗；
+            # 允许 ±1 的取整边界，但绝不再是恒定常量。
+            fresh_wait = int(limited.headers["retry-after"])
+            assert main._RL_WINDOW - 1 <= fresh_wait <= main._RL_WINDOW + 1
+
+            # 把桶里的条目人为拨老 50 秒：名额在 ~10 秒后就有，Retry-After
+            # 必须报这个真实数，而不是把客户端多押整整一分钟。
+            key = next(k for k in main._rl_buckets if k.endswith(":m"))
+            aged = main._rl_buckets[key]
+            for index in range(len(aged)):
+                aged[index] -= 50
+            aged_limited = client.get("/api/earnings/upcoming")
+            assert aged_limited.status_code == 429
+            aged_wait = int(aged_limited.headers["retry-after"])
+            assert 1 <= aged_wait <= main._RL_WINDOW - 45
     finally:
         main._rl_buckets.clear()
 

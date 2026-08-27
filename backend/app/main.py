@@ -632,10 +632,16 @@ class _GatewayMiddleware:
             while bucket and bucket[0] < cutoff:
                 bucket.popleft()
             if len(bucket) >= limit:
+                # Retry-After 报真实等待而不是整窗常量：滚动窗口里最早的那批
+                # 条目老化出窗就有名额，通常只差几秒。恒发 60 会让守规矩的
+                # 客户端（绘图 outbox 按 Retry-After 排自动重放）把任务多押
+                # 五十几秒，也让「{n} 秒后重试」的文案对用户撒谎。
+                oldest_blocking = bucket[len(bucket) - limit]
+                retry_after = max(1, int(oldest_blocking + _RL_WINDOW - now) + 1)
                 return await _send_json(
                     send_with_response_headers, 429,
-                    {"error": "rate_limited", "message": f"Too many requests; try again in {_RL_WINDOW}s"},
-                    extra_headers=[(b"retry-after", str(_RL_WINDOW).encode())],
+                    {"error": "rate_limited", "message": f"Too many requests; try again in {retry_after}s"},
+                    extra_headers=[(b"retry-after", str(retry_after).encode())],
                 )
             bucket.append(now)
 
