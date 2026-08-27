@@ -2,7 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { ReactNode } from 'react';
 import { accountApi } from '@/api/modules/account';
 import { accessApi } from '@/api/modules/access';
-import { PRINCIPAL_INVALID_EVENT } from '@/api/client';
+import { ApiError, PRINCIPAL_INVALID_EVENT } from '@/api/client';
+import { identityRetryDelayMs } from '@/lib/identityRetry';
 import { dropSharedReads } from '@/api/sharedRead';
 import { setQueryPrincipal } from '@/api/queryRegistry';
 import { resetMarketReadState } from '@/api/marketRead';
@@ -85,10 +86,22 @@ export function AccessProvider({ children }: { children: ReactNode }) {
    */
   const identityRef = useRef<string | null>(null);
 
+  /**
+   * 探测失败的自愈重试（见 identityRetryDelayMs 的注释）：不能指望 60 秒定时
+   * ——那只对已有主体的会话开。计时器跨代作废由 readInto 自身的世代守卫兜底。
+   */
+  const retryTimerRef = useRef<number | null>(null);
+  const retryAttemptRef = useRef(0);
+
   const readInto = useCallback(async (generation: number) => {
     try {
       const next = await accessApi.status();
       if (generation !== generationRef.current) return;
+      retryAttemptRef.current = 0;
+      if (retryTimerRef.current !== null) {
+        window.clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
       const identity = `${next.role}\u0000${next.accountUsername ?? ''}`;
       if (identityRef.current !== null && identityRef.current !== identity) {
         // 主体变了:注册表(含持久层)、marketRead、catalysts 读缓存一起作废,
@@ -105,6 +118,14 @@ export function AccessProvider({ children }: { children: ReactNode }) {
       if (generation !== generationRef.current) return;
       // 身份读不到时保留当前已知身份并明确置错，而不是悄悄退回访客。
       setIdentityUnavailable(true);
+      retryAttemptRef.current += 1;
+      const retryAfter = error instanceof ApiError ? error.retryAfter : undefined;
+      const delay = identityRetryDelayMs(retryAttemptRef.current, retryAfter ?? null);
+      if (retryTimerRef.current !== null) window.clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = window.setTimeout(() => {
+        retryTimerRef.current = null;
+        void readInto(generationRef.current).catch(() => undefined);
+      }, delay);
       throw error;
     } finally {
       if (generation === generationRef.current) setLoading(false);
@@ -129,6 +150,12 @@ export function AccessProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void refresh().catch(() => undefined);
+    return () => {
+      if (retryTimerRef.current !== null) {
+        window.clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
+    };
   }, [refresh]);
 
   // backend 重启、新设备登录或会话过期后，旧 SPA 不能继续显示“已登录”。

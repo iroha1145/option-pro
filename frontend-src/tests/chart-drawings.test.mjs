@@ -38,6 +38,7 @@ async function loadDrawings(t) {
     merge: path.join(drawingsDir, 'merge.ts'),
     contract: path.join(drawingsDir, 'contract.ts'),
     zoom: path.join(drawingsDir, 'zoom.ts'),
+    identityRetry: path.join(src, 'lib', 'identityRetry.ts'),
   };
   await writeFile(
     entry,
@@ -85,6 +86,7 @@ export {
 export { replayPendingOps, evaluateRemoteVsPending, quotaRollbackDrawings } from ${JSON.stringify(files.merge)};
 export { parseList, parseSaved, parseMutation, DrawingContractError } from ${JSON.stringify(files.contract)};
 export { insideZoom, zoomFromOption } from ${JSON.stringify(files.zoom)};
+export { identityRetryDelayMs } from ${JSON.stringify(files.identityRetry)};
 export {
   dragMove, previewDragAnchors, applyPixelShiftConstraint, clampDragPoint, dragExceedsThreshold,
   DRAG_THRESHOLD_MOUSE_PX, DRAG_THRESHOLD_TOUCH_PX,
@@ -2116,6 +2118,20 @@ test('network drain failure carries no Retry-After and falls back to the ladder'
   assert.equal(nextDrainRetryDelayMs(1, 7), 7_000);
   assert.equal(nextDrainRetryDelayMs(3, 0), 1_000, '0/负数不允许空转成忙等');
   assert.equal(nextDrainRetryDelayMs(1, 999), 120_000, '超长 Retry-After 不把任务押到天荒地老');
+});
+
+test('identity probe failure retries on its own ladder and honors Retry-After', async (t) => {
+  const { identityRetryDelayMs } = await loadDrawings(t);
+  // /access/status 挂掉的会话没有 60 秒定时兜底（hasPrincipal 门），自愈只能靠
+  // 这把梯子；首个探测 429 卡成永久访客时，画的图会静默进访客本地桶、绝不上传。
+  assert.deepEqual(
+    [1, 2, 3, 4, 9].map((attempt) => identityRetryDelayMs(attempt)),
+    [2_000, 5_000, 15_000, 30_000, 30_000],
+  );
+  assert.equal(identityRetryDelayMs(1, 3), 3_000, '诚实 Retry-After 优先于梯子');
+  assert.equal(identityRetryDelayMs(2, 0.4), 1_000, '亚秒值收到 1s，不忙等');
+  assert.equal(identityRetryDelayMs(1, 999), 60_000, '上限对齐既有 60s 核验节奏');
+  assert.equal(identityRetryDelayMs(1, Number.NaN), 2_000, 'NaN 回落梯子');
 });
 
 test('drain releases inflight update so a later clear still runs after 400', async (t) => {
