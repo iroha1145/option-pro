@@ -366,9 +366,10 @@ export function useDrawingController(args: {
   }, [drain, signedIn]);
 
   const loadScope = useCallback(async (generation: number) => {
-    setSelectedId(null);
-    setInProgress(null);
-    dragPreviewRef.current = null;
+    /* 这里不清 selectedId/inProgress/拖拽预览：交互态重置属于**换 scope**，
+       由切换 effect 自己做（它本来就做了）。loadScope 还会被后台自愈调用
+       （限流/断网后的定时重载）——后台恢复把用户正选中的图形踢掉，Inspector
+       会当着用户的面消失（CI 取证等「颜色 红色」超时抓到的就是这个）。 */
     conflictServerRef.current = null;
     if (!signedIn) {
       const loaded = loadDrawings(storageKey);
@@ -475,6 +476,7 @@ export function useDrawingController(args: {
     setSelectedId(null);
     setFocusAnchor(null);
     setInProgress(null);
+    dragPreviewRef.current = null;
     if (autoRetryTimer.current) {
       clearTimeout(autoRetryTimer.current);
       autoRetryTimer.current = null;

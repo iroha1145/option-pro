@@ -411,6 +411,10 @@ export interface AutoPatternLike {
   status: string;
   anchors: { time: string; barKey: string; price: number }[];
   hidden?: boolean;
+  /** 线色（按 kind 分色）；缺省中性灰。 */
+  color?: string;
+  /** 线端标签（如「上升支撑」）；缺省不画。 */
+  label?: string;
 }
 
 export function autoPatternGeometry(
@@ -468,17 +472,31 @@ export function autoPatternsToMarks(
   const areas: object[] = [];
   const points: object[] = [];
   const polygons: FillPolygon[] = [];
-  const lineStyle = { color: '#8A94B0', width: 1, type: [4, 4] as number[] };
   for (const pattern of patterns) {
     if (pattern.confidence < minConfidence) continue;
     const geom = autoPatternGeometry(pattern, ctx);
     if (!geom) continue;
-    for (const segment of geom.segments) {
+    /* 分色 + 线端标签：此前所有形态线都是同一根淡灰虚线且无名，图上支撑/
+       阻力/通道边完全分不出来，只能去页脚标签条猜。标签只挂第一段（通道/
+       三角的第二条边不重复报名），文字与线同色。 */
+    const color = pattern.color ?? '#8A94B0';
+    const lineStyle = { color, width: 1, type: [4, 4] as number[] };
+    geom.segments.forEach((segment, index) => {
+      const label = index === 0 && pattern.label
+        ? {
+            show: true,
+            formatter: pattern.label,
+            position: 'end' as const,
+            color,
+            fontSize: 10,
+            distance: 4,
+          }
+        : { show: false };
       lines.push([
-        { ...coord(segment.a.x, segment.a.y), lineStyle },
+        { ...coord(segment.a.x, segment.a.y), lineStyle, label },
         coord(segment.b.x, segment.b.y),
       ]);
-    }
+    });
     if (geom.fill) {
       if (fillIsAxisAligned(geom.fill)) {
         const xs = geom.fill.map((p) => p.x);
@@ -487,12 +505,12 @@ export function autoPatternsToMarks(
           {
             xAxis: Math.min(...xs),
             yAxis: Math.min(...ys),
-            itemStyle: { color: '#8A94B0', opacity: 0.06 },
+            itemStyle: { color, opacity: 0.06 },
           },
           { xAxis: Math.max(...xs), yAxis: Math.max(...ys) },
         ]);
       } else {
-        polygons.push({ vertices: geom.fill, color: '#8A94B0', opacity: 0.06 });
+        polygons.push({ vertices: geom.fill, color, opacity: 0.06 });
       }
     }
   }

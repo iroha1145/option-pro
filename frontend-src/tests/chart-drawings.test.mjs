@@ -1988,6 +1988,73 @@ test('keep-local reset removes stale barriers and persists one exact replacement
   assert.equal(parsed[0].origin, 'conflict_keep');
 });
 
+test('pattern rails carry per-kind color and a single end label', async (t) => {
+  const { autoPatternsToMarks } = await loadDrawings(t);
+  // bar.t 是 ISO 字符串（projection.nySessionDate 直接 slice），沿用 barsFor 的口径
+  const bars = Array.from({ length: 30 }, (_, i) => {
+    const day = String(1 + i).padStart(2, '0');
+    return { t: `2026-07-${day}T13:30:00Z`, o: 100 + i, h: 101 + i, l: 99 + i, c: 100.5 + i };
+  });
+  const ctx = { bars, range: '1d', xMin: 0, xMax: 29, yMin: 90, yMax: 140 };
+  const stamp = (i) => bars[i].t;
+  const key = (i) => `2026-07-${String(1 + i).padStart(2, '0')}`;
+  const anchorAt = (i, price) => ({ time: stamp(i), barKey: key(i), price });
+  const marks = autoPatternsToMarks([
+    {
+      id: 'p1', kind: 'support_trend', confidence: 60, status: 'forming',
+      anchors: [anchorAt(2, 100), anchorAt(20, 118)],
+      color: '#0E9F6E', label: '上升支撑',
+    },
+    {
+      id: 'p2', kind: 'channel', confidence: 60, status: 'forming',
+      anchors: [anchorAt(2, 100), anchorAt(20, 118), anchorAt(2, 104), anchorAt(20, 122)],
+      color: '#3B59F2', label: '上升通道',
+    },
+  ], ctx, 0);
+  // 此前所有形态线同一根淡灰虚线且无名，图上支撑/阻力/通道边完全分不出来。
+  const support = marks.lines[0][0];
+  assert.equal(support.lineStyle.color, '#0E9F6E');
+  assert.equal(support.label.show, true);
+  assert.equal(support.label.formatter, '上升支撑');
+  assert.equal(support.label.position, 'end');
+  // 通道两条边同色，但标签只挂第一段——第二条边不重复报名
+  const chanA = marks.lines[1][0];
+  const chanB = marks.lines[2][0];
+  assert.equal(chanA.lineStyle.color, '#3B59F2');
+  assert.equal(chanB.lineStyle.color, '#3B59F2');
+  assert.equal(chanA.label.show, true);
+  assert.equal(chanB.label.show, false);
+  // 填充也跟线色（不再是灰蒙一层）
+  const poly = (marks.polygons ?? [])[0];
+  assert.ok(poly, 'channel 应产出填充多边形');
+  assert.equal(poly.color, '#3B59F2');
+  // 没给 color/label 的形态维持旧行为：灰线、无标签
+  const bare = autoPatternsToMarks([
+    { id: 'p3', kind: 'support_trend', confidence: 60, status: 'forming', anchors: [anchorAt(2, 100), anchorAt(20, 118)] },
+  ], ctx, 0);
+  assert.equal(bare.lines[0][0].lineStyle.color, '#8A94B0');
+  assert.equal(bare.lines[0][0].label.show, false);
+});
+
+test('stale quality-gate defaults migrate once and deliberate values survive', async (t) => {
+  const { parseLayerSettings, saveLayerSettings, layersStorageKey } = await loadDrawings(t);
+  // v1 存量里的 0.70/0.55/0.50 是旧预设常量，不是用户手填的：迁到新默认 0.45，
+  // 否则老用户勾着「自动趋势线」也永远看不到线，还以为功能是坏的。
+  assert.equal(parseLayerSettings({ minShapeQuality: 0.7 }).minShapeQuality, 0.45);
+  assert.equal(parseLayerSettings({ minShapeQuality: 0.55 }).minShapeQuality, 0.45);
+  // 手填的其他值原样保留
+  assert.equal(parseLayerSettings({ minShapeQuality: 0.6 }).minShapeQuality, 0.6);
+  // v2 起迁移封口：用户日后**有意**放回 70% 不能被反复改掉
+  assert.equal(parseLayerSettings({ schemaVersion: 2, minShapeQuality: 0.7 }).minShapeQuality, 0.7);
+  // 落盘自动盖版本戳，读回后即是 v2 语义
+  const store = new Map();
+  const storage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) };
+  saveLayerSettings('anonymous', { ...parseLayerSettings({}), minShapeQuality: 0.7, preset: 'custom' }, storage);
+  const raw = JSON.parse(store.get(layersStorageKey('anonymous')));
+  assert.equal(raw.schemaVersion, 2);
+  assert.equal(parseLayerSettings(raw).minShapeQuality, 0.7);
+});
+
 test('429 drain failure surfaces the server Retry-After so callers can self-heal', async (t) => {
   const { DrawingOutbox, drainPersistJob } = await loadDrawings(t);
   const drawing = drawingOf('horizontal', [ANCHOR_ONE]);

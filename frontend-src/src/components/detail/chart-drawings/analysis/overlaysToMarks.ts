@@ -88,9 +88,22 @@ export function overlaysToSeries(
     });
 }
 
+/** 形态线按 kind 分色（与 lib/chart 的 CH 调色同值；此处写字面量是因为
+ *  本模块要进单测的 vm bundle，不能拖 echarts 进来）。box 维持中性灰：
+ *  它是「区域」不是「方向线」，抢色只会稀释支撑/阻力的红绿语义。 */
+const PATTERN_LINE_COLORS: Record<string, string> = {
+  support_trend: '#0E9F6E',    // up600：支撑在下，向上托
+  resistance_trend: '#E5484D', // down600：阻力在上，向下压
+  channel: '#3B59F2',          // brand500
+  triangle: '#E8930C',         // warn600
+  wedge: '#0B7285',            // ai600 青瓷
+};
+
 export function overlaysToMarks(
   overlays: AnalysisOverlay[],
   ctx: RenderContext,
+  /** 形态的展示名（KlineChart 注入 autoPatternName）：给了才画线端标签。 */
+  patternLabel?: (kind: string, subtype?: string | null) => string | null,
 ): DrawingMarks {
   const lines: object[] = [];
   const points: object[] = [];
@@ -125,13 +138,16 @@ export function overlaysToMarks(
         ];
       }
     }
+    const subtype = typeof overlay.geometry.subtype === 'string' ? overlay.geometry.subtype : undefined;
     return {
       id: overlay.id,
       kind: overlay.kind,
-      subtype: typeof overlay.geometry.subtype === 'string' ? overlay.geometry.subtype : undefined,
+      subtype,
       confidence: overlay.shapeQuality * 100,
       status: overlay.status,
       anchors,
+      color: PATTERN_LINE_COLORS[overlay.kind],
+      label: patternLabel ? patternLabel(overlay.kind, subtype) ?? undefined : undefined,
     };
   });
   const patternMarks = autoPatternsToMarks(patterns, ctx, 0);
