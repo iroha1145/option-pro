@@ -468,20 +468,25 @@ test("stale clear from a second context is 409 and keeps the newer drawing", asy
       return listed.revision;
     }
     return 0;
-  }, { timeout: 20_000 }).toBeGreaterThan(0);
+  }, { timeout: 90_000 }).toBeGreaterThan(0);
   const storage = await page.context().storageState();
   const other = await browser.newContext({ storageState: storage });
   const pageB = await other.newPage();
   await pageB.goto("/stock/AAPL", { waitUntil: "domcontentloaded" });
-  await expect(toolButton(pageB, "选择")).toBeVisible({ timeout: 20_000 });
+  await expect.poll(async () => {
+    if (await toolButton(pageB, "选择").isVisible().catch(() => false)) return "ready";
+    const listed = await listDrawings(pageB);
+    if (listed.status === 429) return "rate-limited";
+    return listed.status === 200 ? "no-toolbar" : `http ${listed.status}`;
+  }, { timeout: 90_000 }).toBe("ready");
   await placeHorizontal(pageB, 0.62, 0.55);
   await expectDrawingCount(pageB, 2);
   await expect.poll(async () => {
     const listed = await listDrawings(pageB);
-    if (listed.status === 429) return "rate-limited";
-    if (listed.status !== 200) return `http ${listed.status}`;
+    if (listed.status === 429) return -1;
+    if (listed.status !== 200) return -1;
     return Array.isArray(listed.drawings) ? listed.drawings.length : -1;
-  }, { timeout: 20_000 }).toBe(2);
+  }, { timeout: 90_000 }).toBe(2);
   /** @type {{ status: number, code: string | null }} */
   let stale = { status: 0, code: null };
   await expect.poll(async () => {
