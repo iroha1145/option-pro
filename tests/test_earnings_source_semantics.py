@@ -702,6 +702,15 @@ def test_fallback_date_does_not_reuse_estimates_from_an_old_calendar_record(
     monkeypatch.setattr(earnings, "EARNINGS_TICKERS", ["FALL"])
     monkeypatch.setattr(earnings.yf, "Ticker", lambda _symbol: FallbackTicker())
 
+    async def unavailable_finnhub(_today):
+        return earnings._finnhub_fetch_result(
+            configured=False,
+            succeeded=False,
+            error="not_configured",
+        )
+
+    monkeypatch.setattr(earnings, "_fetch_finnhub_earnings", unavailable_finnhub)
+
     payload = asyncio.run(earnings._build_upcoming_earnings(date(2026, 7, 10)))
 
     row = payload["earnings"][0]
@@ -867,6 +876,15 @@ def test_yahoo_recent_report_waiting_for_actual_does_not_jump_to_next_quarter(
         "Ticker",
         lambda _symbol: DelayedActualTicker(),
     )
+
+    async def unavailable_finnhub(_today):
+        return earnings._finnhub_fetch_result(
+            configured=False,
+            succeeded=False,
+            error="not_configured",
+        )
+
+    monkeypatch.setattr(earnings, "_fetch_finnhub_earnings", unavailable_finnhub)
 
     payload = asyncio.run(
         earnings._build_upcoming_earnings(date(2026, 7, 23))

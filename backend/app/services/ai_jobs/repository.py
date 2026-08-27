@@ -1510,6 +1510,7 @@ class AIJobRepository:
         analysis_stage: str | None = None,
         status: str | None = None,
         legacy_report_date: str | None = None,
+        now: datetime | None = None,
     ) -> dict[str, Any] | None:
         """Find the newest job for one report.
 
@@ -1541,7 +1542,10 @@ class AIJobRepository:
                       )
                 """
                 parameters.append(legacy_report_date)
-            parameters.append(_iso(_utcnow() - timedelta(days=30)))
+            observed = (now or _utcnow())
+            if observed.tzinfo is None or observed.utcoffset() is None:
+                observed = observed.replace(tzinfo=timezone.utc)
+            parameters.append(_iso(observed.astimezone(timezone.utc) - timedelta(days=30)))
             if analysis_stage:
                 if analysis_stage == "pre_release":
                     # Jobs written before earnings stages were introduced are

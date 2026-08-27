@@ -301,7 +301,6 @@ export const DETAIL: Dict = {
   K线数据不足: ['Not enough chart data', 'ローソク足データが不足'],
   价格异常: ['Invalid price', '価格が異常'],
   量价数据不足: ['Not enough volume/price data', '量価データが不足'],
-  '失效位 {p}': ['Invalidation {p}', '失効ライン {p}'],
   技术点位: ['Levels', 'テクニカル水準'],
   '在图上叠加技术点位（阻力带/失效位/摆动点）': ['Overlay technical levels on the chart (resistance band / invalidation / swings)', 'チャートにテクニカル水準を重ねる（レジスタンス帯／失効ライン／スイング）'],
   '技术点位按日线结构计算，仅日 K 线模式绘制': ['Levels are computed from daily structure and drawn only on the daily candlestick view', '水準は日足構造から計算され、日足ローソク表示でのみ描画されます'],

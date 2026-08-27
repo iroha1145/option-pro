@@ -398,6 +398,9 @@ export interface TechnicalStructure {
   /** 序列断裂点（坏拼接/异常断崖）；分析只用断裂之后的一致段 */
   series_break_at?: string | null;
   as_of?: string | null;
+  /** 统一的分析图层包（overlays / indicatorPanes / strengthContext）。
+      形态只走 overlays 一条路：顶层 auto_patterns 副本没人读，后端已停发。 */
+  chart_analysis?: Record<string, unknown> | null;
 }
 
 /* ---------- CTA 趋势资金代理估算（大盘分析页） ---------- */
