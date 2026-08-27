@@ -4,7 +4,7 @@
  * 分组：股票（防抖搜索）/ 功能 / 最近（本地 5 条）· ↑↓ 循环 · Enter 打开 · ESC 关闭
  * 字体口径：中文走正文 sans，mono 仅用于代码/序号/快捷键；选中行 brand-50 底 + 左 2px brand 竖条。
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { ApiError } from '@/api/client';
 import { stocksApi } from '@/api/modules/stocks';
@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils';
 import {
   overlayClassName,
   overlayVisible,
+  placeGlide,
   readRootDurationMs,
   useOverlayPhase,
 } from '@/lib/transitions';
@@ -81,20 +82,30 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
      走进遮罩后方的页面，关闭后也不回到触发点。 */
   const panelRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const glideRef = useRef<HTMLSpanElement>(null);
+  const glidePainted = useRef(false);
+  /* 上次落笔时用的那一批结果。换批（搜索出结果、清空搜索、重开面板）时
+     几何基准整个换掉，必须瞬放；只有同一批里挪 active 才滑行。 */
+  const glideBatch = useRef<Entry[] | null>(null);
   useFocusTrap(panelRef, open, { initialFocusRef: inputRef });
   const closeMs = readRootDurationMs('--modal-close-dur', 150);
   const phase = useOverlayPhase(open, closeMs);
   const mounted = overlayVisible(open, phase);
 
-  /* 全局快捷键 ⌘K / Ctrl+K 由 Layout 绑定；此处处理打开后逻辑 */
+  /* 归零放在**收起之后**而不是打开时：打开时才清会让面板先按上一次的 active
+     渲染一帧、随后再被重置成 0，滑行高亮因此要落两次笔——第二次同批同元素，
+     就成了从上次那一行补间过来（阻断 1 的另一半）。收起后清则重开只落一次。 */
   useEffect(() => {
-    if (open) {
-      setQuery('');
-      setResults([]);
-      setSearchError(null);
-      setActive(0);
-      requestAnimationFrame(() => inputRef.current?.focus());
-    }
+    if (mounted) return;
+    setQuery('');
+    setResults([]);
+    setSearchError(null);
+    setActive(0);
+  }, [mounted]);
+
+  /* 全局快捷键 ⌘K / Ctrl+K 由 Layout 绑定；此处只负责打开后把焦点交给输入框 */
+  useEffect(() => {
+    if (open) requestAnimationFrame(() => inputRef.current?.focus());
   }, [open]);
 
   /* 防抖 200ms 搜索 */
@@ -231,6 +242,10 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
   const clampedActive = Math.min(active, Math.max(0, flat.length - 1));
 
   const onKeyDown = (e: React.KeyboardEvent) => {
+    /* 输入法组词期间一律不接管按键：组词中的回车/上下键属于候选窗，
+       抢过来会把「英伟达」这类中文名搜索的确认键变成「打开当前高亮项」，
+       组词内容当场丢失（zh 是默认语言，空态文案自己就在教用户输中文名）。 */
+    if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       setActive((a) => (flat.length ? (a + 1) % flat.length : 0));
@@ -238,6 +253,11 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
       e.preventDefault();
       setActive((a) => (flat.length ? (a - 1 + flat.length) % flat.length : 0));
     } else if (e.key === 'Enter') {
+      /* 原生交互元素（清除钮/结果行按钮）让浏览器派发原生 click——面板级
+         Enter 只服务输入框。否则 preventDefault 会吃掉清除钮的点击行为，
+         还误把当前高亮结果的 action() 执行掉（审查 #113 阻断 2）。 */
+      const target = e.target as HTMLElement;
+      if (target.closest('button, a, [role="button"]')) return;
       e.preventDefault();
       flat[clampedActive]?.action();
     } else if (e.key === 'Escape') {
@@ -253,6 +273,43 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
     const el = listRef.current?.querySelector<HTMLElement>(`[data-idx="${clampedActive}"]`);
     el?.scrollIntoView({ block: 'nearest' });
   }, [clampedActive]);
+
+  /* 滑行高亮定位：跟随 active 行（键盘 ↑↓ 与鼠标悬停同一套），首绘/列表
+     换批时瞬放不补间，同一批内挪 active 才滑行。
+     依赖必须带 mounted（审查 #113 阻断 1）：面板关闭时组件未挂载、高亮
+     节点不存在，effect 提前返回；随后打开时若其余依赖没变，effect 不再
+     执行，高亮会永远停在 height:0/opacity:0。
+     补间与否只看 glideBatch，不能只看 glidePainted：重开面板时 mounted 与
+     open 同一次渲染翻真，而 active 归零在 passive effect 里，本 layout
+     effect 会先按上次的 active 落一次笔；清空搜索则是「股票批 → 最近/功能
+     批」单次渲染换完、中间没有空列表可以复位标志——两条路径都会让高亮
+     从旧行位置滑过来，正是本 PR 自称要防的 stale 补间。 */
+  useLayoutEffect(() => {
+    if (!mounted) {
+      glidePainted.current = false;
+      glideBatch.current = null;
+      return;
+    }
+    const glide = glideRef.current;
+    const row = listRef.current?.querySelector<HTMLElement>(`[data-idx="${clampedActive}"]`);
+    if (!glide || !row || entries.length === 0) {
+      if (glide) glide.style.opacity = '0';
+      glidePainted.current = false;
+      glideBatch.current = null;
+      return;
+    }
+    const sameBatch = glideBatch.current === entries;
+    placeGlide(
+      glide,
+      { offset: row.offsetTop, size: row.offsetHeight },
+      { axis: 'y', animate: glidePainted.current && sameBatch },
+    );
+    /* opacity 必须在落笔之后写：瞬放路径里 transition:'none' + 强制回流会把
+       同一帧内已经改过的 opacity 一起定死，淡入就永远播不出来。 */
+    glide.style.opacity = '1';
+    glidePainted.current = true;
+    glideBatch.current = entries;
+  }, [mounted, clampedActive, entries]);
 
   /* 面板打开时锁背景滚动（审计 2.2.14）：与 Drawer 同口径，滚轮不再穿透
      到背后的页面。关闭动画期间仍锁，避免背后页面跟着滚。 */
@@ -319,6 +376,21 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
               />
               {searching ? (
                 <span className="size-4 animate-spin rounded-full border-2 border-brand-100 border-t-brand-600" aria-label={__t("搜索中")} />
+              ) : query ? (
+                /* beautifului Search 的清除钮：fade-in 150ms 进场，点后清空并回焦 */
+                <button
+                  type="button"
+                  aria-label={__t('清除搜索')}
+                  onClick={() => {
+                    setQuery('');
+                    setSearchError(null);
+                    setActive(0);
+                    inputRef.current?.focus();
+                  }}
+                  className="anim-fade-in flex size-6 shrink-0 items-center justify-center rounded-full text-ink-400 transition-colors duration-fast hover:bg-line/70 hover:text-ink-800"
+                >
+                  <Icon name="x" size={12} />
+                </button>
               ) : (
                 <Kbd>ESC</Kbd>
               )}
@@ -326,7 +398,28 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
 
             {/* listbox/option + activedescendant（审计 2.5.3）：读屏跟随高亮播报，
                 不再只有肉眼可见的背景色变化 */}
-            <div id="command-palette-listbox" role="listbox" ref={listRef} className="max-h-[46vh] overflow-y-auto py-1.5">
+            <div id="command-palette-listbox" role="listbox" ref={listRef} className="relative max-h-[46vh] overflow-y-auto py-1.5">
+              {/* 滑行高亮（GlideMenu 手感）：绝对定位在行间滑动，brand-50 底 +
+                  左 2px brand 竖条随行；active 由键盘/悬停共同驱动 */}
+              <span
+                ref={glideRef}
+                aria-hidden="true"
+                /* 取证测试的稳定句柄：别拿「listbox 下第一个 aria-hidden span」
+                   这种结构指纹找它（它自己就带装饰子元素）。 */
+                data-glide-list=""
+                className="pointer-events-none absolute inset-x-1.5 top-0 z-0 rounded-md bg-brand-50"
+                style={{
+                  height: 0,
+                  opacity: 0,
+                  /* 走 catalog 的滑动标签时钟（--tabs-dur/--tabs-ease）与档位内的
+                     快挡时长，不再在这里写 250/160 这种近邻字面量：动效标度调一次
+                     就该同时到达标签胶囊和这里。 */
+                  transition:
+                    'transform var(--tabs-dur) var(--tabs-ease), height var(--tabs-dur) var(--tabs-ease), opacity var(--duration-quick)',
+                }}
+              >
+                <span className="absolute inset-y-1 left-0 w-0.5 rounded-full bg-brand-600" />
+              </span>
               {searching && flat.length === 0 && (
                 <div className="flex flex-col items-center py-10 text-center" role="status">
                   <span className="size-5 animate-spin rounded-full border-2 border-brand-100 border-t-brand-600" aria-hidden="true" />
@@ -343,17 +436,22 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
                 </div>
               )}
               {!searching && !searchError && flat.length === 0 && (
-                <div className="flex flex-col items-center py-10 text-center">
-                  <Icon name="search" size={30} className="text-ink-300" />
-                  <p className="mt-3 text-body-s text-ink-400">{__t('没有匹配的结果')}</p>
-                  <p className="mt-1 text-micro text-ink-300">
+                <div className="anim-fade-in flex flex-col items-center py-10 text-center">
+                  {/* beautifului Search 空态：内嵌图标砖 + 主文案 + 提示 */}
+                  <span className="flex size-9 items-center justify-center rounded-lg border border-line bg-card-warm text-ink-300 shadow-[inset_0_1px_2px_rgba(16,24,40,.05)]">
+                    <Icon name="search" size={16} />
+                  </span>
+                  <p className="mt-3 text-body-s font-medium text-ink-700">{__t('没有匹配的结果')}</p>
+                  <p className="mt-1 text-micro text-ink-400">
                     {__t('试试代码')} <span className="font-mono">NVDA</span> {__t('或中文名（英伟达）')}
                   </p>
                 </div>
               )}
               {groups.map((g) => (
                 <div key={g.name}>
-                  <p className="eyebrow px-4 pb-1 pt-2.5">{__t(g.name)}</p>
+                  {/* 分组标题也要抬到滑块之上：高亮块是不透明的 brand-50 底，
+                      跨组滑行时会从标题上碾过去，只抬按钮会让标题文字闪掉。 */}
+                  <p className="eyebrow relative z-10 px-4 pb-1 pt-2.5">{__t(g.name)}</p>
                   {g.items.map((e) => (
                     <button
                       key={e.id}
@@ -363,12 +461,14 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
                       data-idx={e.idx}
                       onClick={e.action}
                       onMouseEnter={() => setActive(e.idx)}
+                      /* 键盘焦点也要把高亮拉过来：面板级 Enter 让原生元素自己
+                         派发 click（阻断 2），若焦点行与高亮行能分家，Tab 到第 1
+                         行再按 Enter 打开的就不是唯一可见高亮的那一行。 */
+                      onFocus={() => setActive(e.idx)}
                       className={cn(
-                        'relative flex w-full items-center gap-2.5 px-4 py-2 text-left transition-colors duration-fast',
-                        e.idx === clampedActive ? 'bg-brand-50' : 'hover:bg-paper-2/70',
+                        'relative z-10 flex w-full items-center gap-2.5 rounded-md px-4 py-2 text-left transition-colors duration-fast',
                       )}
                     >
-                      {e.idx === clampedActive && <span className="absolute inset-y-1 left-0 w-0.5 rounded-full bg-brand-600" aria-hidden="true" />}
                       <Icon name={e.icon} size={15} className={cn('shrink-0', e.idx === clampedActive ? 'text-brand-600' : 'text-ink-400')} />
                       {e.no && <span className="font-mono text-micro text-ink-400 tnum">{e.no}</span>}
                       <span

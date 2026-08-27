@@ -21,8 +21,7 @@
 //   Watchlist.tsx L88-107「强制刷新」按钮的 disabled/title 状态验证（乐观锁逻辑仍在
 //   src/api/modules/runtime.ts，等未来设置页接入后再补 E2E）。
 import { expect, test } from "@playwright/test";
-import { mkdir } from "node:fs/promises";
-import { join } from "node:path";
+import { captureEvidence } from "./support/evidence.mjs";
 
 
 const PASSWORD_BASE_URL = process.env.OPTIX_PASSWORD_BASE_URL || "https://127.0.0.1:8768";
@@ -31,7 +30,6 @@ const PASSWORD_BASE_URL = process.env.OPTIX_PASSWORD_BASE_URL || "https://127.0.
 const OWNER_USERNAME = "admin";
 const OWNER_PASSWORD = "optix-browser-test-password-2026";
 const NOW = "2026-07-16T12:00:00Z";
-const SCREENSHOT_DIR = join(process.cwd(), "test-results", "visual-evidence");
 
 
 function catalystNews() {
@@ -244,8 +242,7 @@ async function expectOwnerShell(page) {
 
 
 async function screenshot(page, name) {
-  await mkdir(SCREENSHOT_DIR, { recursive: true });
-  await page.screenshot({ path: join(SCREENSHOT_DIR, `${name}.png`) });
+  await captureEvidence(page, name);
 }
 
 

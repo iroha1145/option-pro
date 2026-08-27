@@ -1073,6 +1073,7 @@ def test_scheduled_actuals_queue_final_and_lock_after_success(
 def test_blocked_final_is_not_requeued_on_every_scheduled_cycle(
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,
+    anchor_ai_jobs_clock,
 ) -> None:
     """A budget-blocked finalization must not be duplicated each cycle.
 
@@ -1128,6 +1129,11 @@ def test_blocked_final_is_not_requeued_on_every_scheduled_cycle(
         }
 
     now = datetime(2026, 7, 24, 9, 0, tzinfo=timezone.utc)
+    # 仓储的「近 30 天任务」滑动窗口读真实时钟，而本测试夹具冻结在 2026-07-24：
+    # 窗口滑过夹具行后 latest_for_report 找不到已存在的 budget_blocked 终结任务，
+    # 去重守卫失效（2026-08-24 起 CI 确定性变红）。锚定口径见 conftest 的夹具，
+    # 那里也解释了为什么不能把时钟彻底冻死。
+    anchor_ai_jobs_clock(now)
     task = EarningsAnalysisTask(
         "blocked-final",
         settings=settings,

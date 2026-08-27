@@ -6,6 +6,7 @@ import type { Dict } from './types';
 export const DETAIL: Dict = {
   /* src/components/StockDrawerBody.tsx */
   '成交量': ['Volume', '出来高'],
+  'vs 昨收': ['vs prev close', '前日終値比'],
   '登录状态已失效': ['Session expired', 'セッションの有効期限切れ'],
   '正在重试': ['Retrying', '再試行中'],
   '信号': ['Signals', 'シグナル'],

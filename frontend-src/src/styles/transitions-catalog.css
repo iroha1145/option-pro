@@ -452,8 +452,9 @@
 }
 
 /* Paper Terminal geometry for catalog tabs：r-md 语言 + 旧 Segmented 的 30px
-   总高（catalog demo 是 48px 药丸 / 36px 高）。运动维度（--tabs-dur/--tabs-ease
-   + JS 写 transform/width）保持 catalog 原样。 */
+   总高（catalog demo 是 48px 药丸 / 36px 高）。只改条与标签：滑块换成了
+   framer 的 GlidePill（自带白底胶囊几何），.t-tabs-pill 在本仓已无人渲染，
+   给它留一份适配就是没人看得见的死样式。 */
 .t-tabs {
   gap: 2px;
   padding: 2px;
@@ -462,11 +463,6 @@
 .t-tab {
   height: 26px;
   padding: 2px 10px;
-  border-radius: 6px;
-}
-.t-tabs-pill {
-  top: 2px;
-  height: 26px;
   border-radius: 6px;
 }
 

@@ -5,11 +5,10 @@
  * 行3 板块多选（折叠 +N）· 价格区间 · 成交额下限 · 开始扫描（真实等待态）
  * 行 stagger 60ms；过滤器变更主按钮脉冲（box-shadow 呼吸 1.2s ×2）
  */
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import type { SectorOption, StrengthProfile } from '@/api/types';
 import { cn } from '@/lib/utils';
-import { useTabsPill } from '@/lib/transitions';
 import Icon from '@/components/icons';
 import Segmented from '@/components/shared/Segmented';
 import MenuSelect from '@/components/shared/MenuSelect';
@@ -28,7 +27,7 @@ import { t as __t } from '../../i18n/core.ts';
 const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
 const SPRING_POP = { type: 'spring', stiffness: 520, damping: 32 } as const;
 
-/* ---------------- 分档 Segmented（自定义：带 Mono 11 数量徽标） ---------------- */
+/* ---------------- 分档 Segmented（共享件 + Mono 11 数量徽标） ---------------- */
 const TIER_OPTIONS: { value: TierFilter; label: string }[] = [
   { value: 'all', label: __t('全部') },
   { value: 'S', label: 'S' },
@@ -50,68 +49,26 @@ function TierSegmented({
   onChange: (v: TierFilter) => void;
 }) {
   const scopeNote = coversPool ? __t('已评分候选池') : __t('当前快照返回的行');
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const pillRef = useRef<HTMLSpanElement>(null);
-  /* depKey 带上计数串：档位数字变了标签会变宽，pill 宽度要跟着重量一次 */
-  useTabsPill(
-    wrapRef,
-    pillRef,
-    TIER_OPTIONS.findIndex((o) => o.value === value),
-    TIER_OPTIONS.map((o) => counts[o.value]).join(','),
-  );
+  /* 只剩三处真实差异：徽标标签、aria/title 文案、可横向滚动（滚动条投影用
+     layoutScroll）。键盘/结构/指示器全部复用共享件——两份抄写在本 PR 里已经
+     各自跑偏过一次（审计 2.5.9）。 */
   return (
-    <div
-      ref={wrapRef}
-      role="tablist"
-      aria-label={__t('强度分档 · 计数基于{scope}', { scope: scopeNote })}
+    <Segmented<TierFilter>
+      options={TIER_OPTIONS}
+      value={value}
+      onChange={onChange}
+      scrollable
+      ariaLabel={__t('强度分档 · 计数基于{scope}', { scope: scopeNote })}
       title={__t('分档计数基于{scope}', { scope: scopeNote })}
-      className="t-tabs no-scrollbar max-w-full overflow-x-auto border border-line"
-    >
-      <span ref={pillRef} className="t-tabs-pill shadow-btn" aria-hidden="true" />
-      {TIER_OPTIONS.map((o, index) => {
-        const active = value === o.value;
-        return (
-          <button
-            key={o.value}
-            role="tab"
-            aria-selected={active}
-            /* tablist 标准键盘行为，与 shared/Segmented 的 P3-5 口径一致
-               （审计 2.5.9）：roving tabindex + 方向键 + Home/End。 */
-            tabIndex={active ? 0 : -1}
-            onClick={() => onChange(o.value)}
-            onKeyDown={(event) => {
-              const step =
-                event.key === 'ArrowRight' || event.key === 'ArrowDown'
-                  ? 1
-                  : event.key === 'ArrowLeft' || event.key === 'ArrowUp'
-                    ? -1
-                    : 0;
-              let target = -1;
-              if (step !== 0) {
-                target = (index + step + TIER_OPTIONS.length) % TIER_OPTIONS.length;
-              } else if (event.key === 'Home') {
-                target = 0;
-              } else if (event.key === 'End') {
-                target = TIER_OPTIONS.length - 1;
-              }
-              if (target < 0) return;
-              event.preventDefault();
-              onChange(TIER_OPTIONS[target].value);
-              const next = wrapRef.current?.querySelectorAll<HTMLElement>('.t-tab')[target];
-              next?.focus();
-            }}
-            className="t-tab shrink-0 whitespace-nowrap text-caption font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30"
-          >
-            <span className="flex items-baseline gap-1">
-              {o.label}
-              <span className={cn('font-mono text-[11px] leading-[14px] tnum', active ? 'text-brand-600' : 'text-ink-300')}>
-                {counts[o.value]}
-              </span>
-            </span>
-          </button>
-        );
-      })}
-    </div>
+      renderLabel={(o, active) => (
+        <span className="flex items-baseline gap-1">
+          {o.label}
+          <span className={cn('font-mono text-[11px] leading-[14px] tnum', active ? 'text-brand-600' : 'text-ink-300')}>
+            {counts[o.value]}
+          </span>
+        </span>
+      )}
+    />
   );
 }
 

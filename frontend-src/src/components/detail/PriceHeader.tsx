@@ -10,7 +10,7 @@ import { useCountUp } from '@/hooks/useCountUp';
 import { cn } from '@/lib/utils';
 import { fmtCompact, fmtPrice, fmtTimeHHMMSS } from '@/lib/format';
 import TickerLogo from '@/components/shared/TickerLogo';
-import ChangeBadge from '@/components/shared/ChangeBadge';
+import { InsightValue } from '@/components/shared/InsightCard';
 import SessionLED from '@/components/shared/SessionLED';
 import StrengthBar from '@/components/shared/StrengthBar';
 import InfoHint from '@/components/shared/InfoHint';
@@ -71,24 +71,23 @@ export default function PriceHeader({ detail }: { detail: StockDetail }) {
       </div>
 
       <div className="mt-4 flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
-        <div className="min-w-0 max-w-full flex flex-wrap items-end gap-x-3 gap-y-2">
-          <p
-            className={cn(
-              'tick-flash rounded-sm px-1 font-mono text-[clamp(30px,10vw,44px)] font-medium leading-none tracking-[-0.02em] text-ink-900 tnum',
-              flash === 'up' && 'tick-flash-up',
-              flash === 'down' && 'tick-flash-down',
-            )}
-          >
-            ${fmtPrice(shown)}
-          </p>
-          <div className="flex items-center gap-2 pb-1.5">
-            <ChangeBadge value={detail.changePct} />
-            {isNum(detail.change) && (
-              <span className={cn('font-mono text-data-m tnum', detail.change >= 0 ? 'text-up-700' : 'text-down-700')}>
-                {detail.change >= 0 ? '+' : '−'}{fmtPrice(Math.abs(detail.change))}
-              </span>
-            )}
-          </div>
+        {/* Insight Cards 的数值块口径：大读数 + 涨跌 + 绝对变动 + **比较基准**。
+            基准不是装饰——只给「+2.57%」而不说跟谁比，读者只能猜；tick-flash
+            仍要贴在价格本体上，所以外面再包一层承接闪动类名。 */}
+        <div
+          className={cn(
+            'tick-flash min-w-0 max-w-full rounded-sm px-1',
+            flash === 'up' && 'tick-flash-up',
+            flash === 'down' && 'tick-flash-down',
+          )}
+        >
+          <InsightValue
+            size="xl"
+            value={`$${fmtPrice(shown)}`}
+            changePct={detail.changePct}
+            change={isNum(detail.change) ? detail.change : null}
+            basis={__t('vs 昨收')}
+          />
         </div>
         <p className="pb-1.5 text-right font-mono text-micro text-ink-500 tnum">
           {__t('成交量')} {compactOr(detail.volume)} {__t('· 市值')} {isNum(detail.marketCap) ? `$${fmtCompact(detail.marketCap)}` : '—'}

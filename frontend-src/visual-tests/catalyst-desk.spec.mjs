@@ -12,10 +12,8 @@
 //   /catalysts 与 /breakouts 走 Navbar 应用内导航（BrowserRouter 客户端路由），
 //   /market 在静态模式下依赖真实行情入口，该用例跳过并注明原因。
 import { expect, test } from "@playwright/test";
-import { mkdir } from "node:fs/promises";
-import { join } from "node:path";
+import { captureEvidence } from "./support/evidence.mjs";
 
-const SCREENSHOT_DIR = join(process.cwd(), "test-results", "visual-evidence");
 const HAS_REAL_BACKEND = Boolean(process.env.OPTIX_VISUAL_BASE_URL);
 // 旧 spec 的防泄露扫描（htmlContainsProjectKey）按原样保留：证据页面绝不允许出现服务机密
 const SECRET_PATTERN = /(?:sk-proj-[A-Za-z0-9_-]{20,}|OPENAI_API_KEY|FINNHUB_API_KEY|INTERNAL_API_TOKEN|APP_PASSWORD_HASH)/;
@@ -23,8 +21,7 @@ const SECRET_PATTERN = /(?:sk-proj-[A-Za-z0-9_-]{20,}|OPENAI_API_KEY|FINNHUB_API
 test.use({ viewport: { width: 1440, height: 900 } });
 
 async function screenshot(page, name) {
-  await mkdir(SCREENSHOT_DIR, { recursive: true });
-  await page.screenshot({ path: join(SCREENSHOT_DIR, `${name}.png`), fullPage: false });
+  await captureEvidence(page, name, { fullPage: false });
 }
 
 // 宽松壳断言：标题、Logo、主导航（真实数据不可预置，不断言行情内容）
