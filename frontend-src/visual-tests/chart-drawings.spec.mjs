@@ -729,7 +729,10 @@ test("stale update from a second context is 409 and keeps the newer color", asyn
     return conflict.status === 429 ? "rate-limited" : conflict.status;
   }, { timeout: 90_000 }).toBe(409);
   expect(["scope_revision_conflict", "revision_conflict"]).toContain(conflict.code);
-  const listedB = await listDrawings(pageB);
-  expect(listedB.drawings?.[0]?.style?.color).toBe("#E5484D");
+  await expect.poll(async () => {
+    const listedB = await listDrawings(pageB);
+    if (listedB.status === 429) return "";
+    return listedB.drawings?.[0]?.style?.color ?? "";
+  }, { timeout: 90_000 }).toBe("#E5484D");
   await other.close();
 });
