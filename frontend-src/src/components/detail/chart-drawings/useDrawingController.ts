@@ -61,6 +61,7 @@ import {
   resolveRetryAction,
   type PersistJob,
   type ScopeKey,
+  nextDrainRetryDelayMs,
 } from './sync.ts';
 import { clampDragPoint, dragExceedsThreshold, applyPixelShiftConstraint, dragMove, type DragOrigin } from './drag.ts';
 import { resolvePaintColor } from './schema.ts';
@@ -141,6 +142,9 @@ export function useDrawingController(args: {
   const styleTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   /** 防抖窗口里还没入队的编辑：服务器回声不许盖掉它们。 */
   const pendingEdits = useRef(new Map<string, ChartDrawing>());
+  /* 429/断网后的自动重放：定时器 + 第几次尝试。成功、人工重试、切 scope 都清零。 */
+  const autoRetryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoRetryAttempt = useRef(0);
   /** 服务器确认过的 revision；历史快照里的旧号一律不发。 */
   const revisionsRef = useRef(new Map<string, number>());
   const localSaveRef = useRef<{ key: string; list: ChartDrawing[]; timer: ReturnType<typeof setTimeout> } | null>(null);
@@ -296,6 +300,29 @@ export function useDrawingController(args: {
       } else if (outcome.status === 'idle' || outcome.status === 'saving') {
         setSyncHint(outcome.hint);
       }
+      if (outcome.kind === 'retry') {
+        /* 可重试失败（429/断网/5xx）不能只试一次就搁成 unsynced 等人手点——
+           取证与线上都抓到过：一次 429 之后任务永远趴在队里。429 听服务器的
+           Retry-After，其余按 5s→15s→45s→60s 退避；重试同步按钮照旧可用，
+           人工点了会先走这里的清零再排新一轮。 */
+        autoRetryAttempt.current += 1;
+        const delay = nextDrainRetryDelayMs(autoRetryAttempt.current, outcome.retryAfterSeconds);
+        if (autoRetryTimer.current) clearTimeout(autoRetryTimer.current);
+        const generation = outbox.getScopeGeneration();
+        autoRetryTimer.current = setTimeout(() => {
+          autoRetryTimer.current = null;
+          const box = outboxRef.current;
+          if (box.getScopeGeneration() !== generation) return;
+          if (box.isEmpty() || !box.isBaselineReady()) return;
+          for (const id of box.readyIds()) void drainRef.current(id);
+        }, delay);
+      } else {
+        autoRetryAttempt.current = 0;
+        if (autoRetryTimer.current) {
+          clearTimeout(autoRetryTimer.current);
+          autoRetryTimer.current = null;
+        }
+      }
       for (const other of outcome.readyIds) {
         if (other !== drawingId) void drainRef.current(other);
       }
@@ -396,7 +423,26 @@ export function useDrawingController(args: {
     if (outcome.drain && outboxRef.current.isBaselineReady()) {
       for (const id of outboxRef.current.readyIds()) void drainRef.current(id);
     }
+    if (!outcome.baselineReady && (outcome.status === 'load_failed' || outcome.status === 'write_failed')) {
+      /* 列表被 429/断网挡下时也要自愈：baseline 建立不起来，drain 会一直跳过，
+         挂载撞上限流热窗的页面若不自动重载就永远定身在 load_failed——离线画的
+         东西连出手的机会都没有（取证抓到的零 POST 死局就是这么来的）。 */
+      autoRetryAttempt.current += 1;
+      const delay = nextDrainRetryDelayMs(autoRetryAttempt.current, outcome.retryAfterSeconds);
+      if (autoRetryTimer.current) clearTimeout(autoRetryTimer.current);
+      autoRetryTimer.current = setTimeout(() => {
+        autoRetryTimer.current = null;
+        const box = outboxRef.current;
+        if (box.getScopeGeneration() !== generation) return;
+        void loadScopeRef.current(generation);
+      }, delay);
+    } else if (outcome.baselineReady) {
+      autoRetryAttempt.current = 0;
+    }
   }, [adjustment, args.range, args.ticker, signedIn, storageKey, writeLocal]);
+
+  const loadScopeRef = useRef(loadScope);
+  loadScopeRef.current = loadScope;
 
   /** 把防抖窗口里的编辑立刻入队（只入队不发送），再清空计时器。 */
   const flushPendingEdits = useCallback(() => {
@@ -429,6 +475,11 @@ export function useDrawingController(args: {
     setSelectedId(null);
     setFocusAnchor(null);
     setInProgress(null);
+    if (autoRetryTimer.current) {
+      clearTimeout(autoRetryTimer.current);
+      autoRetryTimer.current = null;
+    }
+    autoRetryAttempt.current = 0;
     const generation = outboxRef.current.setScope(currentScope());
     const run = async () => {
       await Promise.resolve();
@@ -441,8 +492,32 @@ export function useDrawingController(args: {
     };
   }, [currentScope, flushLocalSave, flushPendingEdits, loadScope]);
 
+  /* 断网恢复即刻重放：浏览器亲口说 online 了还让任务趴在队里等退避计时，
+     等于把「网络回来了」这个最强信号扔掉。走事件而不是缩短退避间隔。 */
+  useEffect(() => {
+    if (!signedIn) return;
+    const onOnline = () => {
+      const box = outboxRef.current;
+      if (autoRetryTimer.current) {
+        clearTimeout(autoRetryTimer.current);
+        autoRetryTimer.current = null;
+      }
+      autoRetryAttempt.current = 0;
+      if (!box.isBaselineReady()) {
+        // 断网期间连列表都没拉到：恢复后先重建 baseline，再由 loadScope 决定 drain。
+        void loadScopeRef.current(box.getScopeGeneration());
+        return;
+      }
+      if (box.isEmpty()) return;
+      for (const id of box.readyIds()) void drainRef.current(id);
+    };
+    window.addEventListener('online', onOnline);
+    return () => window.removeEventListener('online', onOnline);
+  }, [signedIn]);
+
   useEffect(() => () => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    if (autoRetryTimer.current) clearTimeout(autoRetryTimer.current);
     flushPendingEdits();
     flushLocalSave();
     outboxRef.current.persist();
@@ -1031,6 +1106,11 @@ export function useDrawingController(args: {
   }, [args.chart, drawings, inProgress, refreshGraphic, selectedId, visibleCtx]);
 
   const retry = useCallback(() => {
+    if (autoRetryTimer.current) {
+      clearTimeout(autoRetryTimer.current);
+      autoRetryTimer.current = null;
+    }
+    autoRetryAttempt.current = 0;
     if (!signedIn) return;
     const outbox = outboxRef.current;
     const failure = syncStatus === 'load_failed'

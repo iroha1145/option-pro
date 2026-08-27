@@ -76,7 +76,7 @@ export {
   DrawingOutbox, diffPersistOps, mutableFieldsDiffer, applyPersistResponse,
   resolveListApply, resolveRetryAction, SCOPE_JOB_ID, keepLocalWithServerRevisions,
   regeneratePersistOps, resolveSyncFailure, applyKnownRevisions, latestKnownRevision, parsePersistJobs,
-  jobIsCurrent, jobBelongsToScope, settleJob, releaseInflight, conflictSnapshotUsable,
+  jobIsCurrent, jobBelongsToScope, settleJob, releaseInflight, conflictSnapshotUsable, nextDrainRetryDelayMs,
 } from ${JSON.stringify(files.sync)};
 export { drainPersistJob } from ${JSON.stringify(files.drain)};
 export {
@@ -1986,6 +1986,69 @@ test('keep-local reset removes stale barriers and persists one exact replacement
   const parsed = parsePersistJobs(raw, SCOPE_NVDA, box.getScopeGeneration());
   assert.equal(parsed.length, 1);
   assert.equal(parsed[0].origin, 'conflict_keep');
+});
+
+test('429 drain failure surfaces the server Retry-After so callers can self-heal', async (t) => {
+  const { DrawingOutbox, drainPersistJob } = await loadDrawings(t);
+  const drawing = drawingOf('horizontal', [ANCHOR_ONE]);
+  const box = new DrawingOutbox(memStore());
+  box.setScope(SCOPE_NVDA);
+  box.rebaseBase(0);
+  box.enqueue({ drawingId: drawing.id, type: 'create', drawing });
+  const job = box.takeNext(drawing.id);
+  const outcome = await drainPersistJob({
+    outbox: box,
+    job,
+    api: persistApi({
+      create: async () => {
+        const error = new Error('rate_limited');
+        error.code = 'rate_limited';
+        error.status = 429;
+        error.retryAfter = 7;
+        throw error;
+      },
+    }),
+    drawings: [drawing],
+    lastServer: [],
+    revisions: new Map(),
+  });
+  // 一次 429 之后任务在生产上永远趴在队里等人手点，正是这一族取证反复翻车的
+  // 根因：kind 必须仍是 retry（可重放），且把服务器亲口说的等待秒数递出去。
+  assert.equal(outcome.kind, 'retry');
+  assert.equal(outcome.retryAfterSeconds, 7);
+  assert.equal(box.snapshot().length, 1, '429 是限流不是拒绝，任务必须留在队里');
+});
+
+test('network drain failure carries no Retry-After and falls back to the ladder', async (t) => {
+  const { DrawingOutbox, drainPersistJob, nextDrainRetryDelayMs } = await loadDrawings(t);
+  const drawing = drawingOf('horizontal', [ANCHOR_ONE]);
+  const box = new DrawingOutbox(memStore());
+  box.setScope(SCOPE_NVDA);
+  box.rebaseBase(0);
+  box.enqueue({ drawingId: drawing.id, type: 'create', drawing });
+  const job = box.takeNext(drawing.id);
+  const outcome = await drainPersistJob({
+    outbox: box,
+    job,
+    api: persistApi({
+      create: async () => {
+        throw new TypeError('Failed to fetch');
+      },
+    }),
+    drawings: [drawing],
+    lastServer: [],
+    revisions: new Map(),
+  });
+  assert.equal(outcome.kind, 'retry');
+  assert.equal(outcome.retryAfterSeconds ?? null, null);
+  // 阶梯：5s → 15s → 45s → 60s 封顶；服务器给了秒数就听它的并钳在 1–120s。
+  assert.deepEqual(
+    [1, 2, 3, 4, 9].map((attempt) => nextDrainRetryDelayMs(attempt)),
+    [5_000, 15_000, 45_000, 60_000, 60_000],
+  );
+  assert.equal(nextDrainRetryDelayMs(1, 7), 7_000);
+  assert.equal(nextDrainRetryDelayMs(3, 0), 1_000, '0/负数不允许空转成忙等');
+  assert.equal(nextDrainRetryDelayMs(1, 999), 120_000, '超长 Retry-After 不把任务押到天荒地老');
 });
 
 test('drain releases inflight update so a later clear still runs after 400', async (t) => {

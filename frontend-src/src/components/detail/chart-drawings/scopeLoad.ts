@@ -53,6 +53,8 @@ export type ScopeLoadComplete = {
   lastServer?: ChartDrawing[];
   scopeRevision?: number;
   drain: boolean;
+  /** 列表被 429/断网挡下时的等待秒数（服务器给了就带）；成功路径缺省。 */
+  retryAfterSeconds?: number | null;
   conflict: boolean;
   baselineReady: boolean;
 };
@@ -180,6 +182,10 @@ export async function completeScopeLoad(args: {
         baselineReady: false,
       };
     }
+    const row = error && typeof error === 'object' ? error as { retryAfter?: unknown } : {};
+    const retryAfterSeconds = typeof row.retryAfter === 'number' && Number.isFinite(row.retryAfter)
+      ? row.retryAfter
+      : null;
     return {
       foreign: false,
       apply: 'cache',
@@ -187,6 +193,7 @@ export async function completeScopeLoad(args: {
       persist,
       status: outbox.isEmpty() ? 'load_failed' : 'write_failed',
       hint: 'unsynced',
+      retryAfterSeconds,
       drain: false,
       conflict: false,
       baselineReady: false,
