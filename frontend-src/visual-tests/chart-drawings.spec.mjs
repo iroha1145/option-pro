@@ -165,12 +165,25 @@ async function chartFilled(page) {
 }
 
 test.use({ viewport: { width: 1440, height: 900 } });
+test.describe.configure({ timeout: 120_000 });
 
 test.beforeEach(async ({ page }) => {
   if (!HAS_REAL_BACKEND) return;
   // 上一轮 CI 的残留会让「恰好 n 条」全红；page.request.delete 过不了同源守卫。
   await page.goto("/stock/AAPL", { waitUntil: "domcontentloaded" });
-  await expect(toolButton(page, "选择")).toBeVisible({ timeout: 20_000 });
+  // After ~25 drawing specs the owner light bucket 429s stock/chart GETs, so
+  // the toolbar is missing until a 200 lands. Poll like the OCC helpers:
+  // 429 is transient, not a missing toolbar.
+  await expect.poll(async () => {
+    if (await toolButton(page, "选择").isVisible().catch(() => false)) return "ready";
+    const listed = await listDrawings(page);
+    if (listed.status === 429) return "rate-limited";
+    if (listed.status !== 200) {
+      await page.goto("/stock/AAPL", { waitUntil: "domcontentloaded" }).catch(() => {});
+      return `http ${listed.status}`;
+    }
+    return "no-toolbar";
+  }, { timeout: 90_000 }).toBe("ready");
   await clearTouchedDrawings(page);
 });
 
