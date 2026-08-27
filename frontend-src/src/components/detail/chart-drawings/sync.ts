@@ -22,6 +22,8 @@ export interface PersistJob {
   type: PersistOpType;
   drawing?: ChartDrawing;
   drawings?: ChartDrawing[];
+  /** Distinguish a user import from an explicit keep-local conflict overwrite. */
+  origin?: 'import' | 'conflict_keep';
   /** 发出请求时冻结的范围版本；await 之后只认这一份。 */
   expectedScopeRevision?: number;
   /** Frozen drawing revision for update/delete; GET rebase may not invent one. */
@@ -326,6 +328,9 @@ export function parsePersistJobs(
       : (typeof fromDrawing === 'number' && Number.isInteger(fromDrawing) && fromDrawing >= 1
         ? fromDrawing
         : undefined);
+    const origin = job.origin === 'import' || job.origin === 'conflict_keep'
+      ? job.origin
+      : undefined;
     jobs.push(freezeDrawingRevision({
       drawingId,
       generation,
@@ -334,6 +339,7 @@ export function parsePersistJobs(
       type,
       ...(drawing ? { drawing } : {}),
       ...(drawings ? { drawings } : {}),
+      ...(origin ? { origin } : {}),
       ...(Number.isInteger(expected) && expected >= 0 ? { expectedScopeRevision: expected } : {}),
       ...(expectedDrawingRevision != null ? { expectedDrawingRevision } : {}),
       seq: Number.isFinite(seq) ? seq : generation,
@@ -691,6 +697,27 @@ export class DrawingOutbox {
         this.enqueue({ drawingId: op.drawingId, type: op.type, drawing: op.drawing });
       }
     }
+  }
+
+  /**
+   * The user explicitly chose “keep local”. Replace every stale per-id/barrier
+   * job with one atomic scope replacement based on the freshly-read revision.
+   * This is the only safe way to preserve replace→edit and clear→create intent.
+   */
+  replaceWithExactScope(
+    drawings: ChartDrawing[],
+    revision: number,
+    origin: 'import' | 'conflict_keep' = 'conflict_keep',
+  ): PersistJob | null {
+    if (!this.currentScope) return null;
+    this.cancelAll();
+    this.rebaseBase(revision);
+    return this.enqueue({
+      drawingId: SCOPE_JOB_ID,
+      type: 'replace',
+      drawings,
+      origin,
+    });
   }
 
   persist(): void {

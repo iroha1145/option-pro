@@ -1808,6 +1808,186 @@ function persistApi(overrides = {}) {
   };
 }
 
+test('confirmed mutation advances the scope base for the next queued job', async (t) => {
+  const { DrawingOutbox, drainPersistJob } = await loadDrawings(t);
+  const firstDrawing = drawingOf('horizontal', [ANCHOR_ONE]);
+  const secondDrawing = drawingOf('horizontal', [ANCHOR_ONE], {
+    id: '22222222-2222-4222-8222-222222222222',
+  });
+  const box = new DrawingOutbox(memStore());
+  box.setScope(SCOPE_NVDA);
+  box.rebaseBase(5);
+  box.enqueue({ drawingId: firstDrawing.id, type: 'create', drawing: firstDrawing });
+  box.enqueue({ drawingId: secondDrawing.id, type: 'create', drawing: secondDrawing });
+
+  const firstJob = box.takeNext(firstDrawing.id);
+  assert.equal(firstJob.expectedScopeRevision, 5);
+  const first = await drainPersistJob({
+    outbox: box,
+    job: firstJob,
+    api: persistApi(),
+    drawings: [firstDrawing, secondDrawing],
+    lastServer: [],
+    revisions: new Map(),
+  });
+  assert.equal(first.kind, 'success');
+  assert.deepEqual(first.lastServer.map((item) => item.id), [firstDrawing.id]);
+  assert.equal(box.getBaseScopeRevision(), 6);
+
+  const secondJob = box.takeNext(secondDrawing.id);
+  assert.equal(secondJob.expectedScopeRevision, 6);
+});
+
+test('successful superseded update advances a queued clear and its rollback snapshot', async (t) => {
+  const { DrawingOutbox, SCOPE_JOB_ID, drainPersistJob } = await loadDrawings(t);
+  const original = drawingOf('horizontal', [ANCHOR_ONE]);
+  const edited = { ...original, locked: true };
+  const box = new DrawingOutbox(memStore());
+  box.setScope(SCOPE_NVDA);
+  box.rebaseBase(5);
+  box.enqueue({ drawingId: edited.id, type: 'update', drawing: edited });
+  const updateJob = box.takeNext(edited.id);
+  box.enqueue({ drawingId: SCOPE_JOB_ID, type: 'clear' });
+
+  const outcome = await drainPersistJob({
+    outbox: box,
+    job: updateJob,
+    api: persistApi(),
+    drawings: [edited],
+    lastServer: [original],
+    revisions: new Map([[original.id, original.revision]]),
+  });
+  assert.equal(outcome.kind, 'superseded');
+  assert.equal(outcome.lastServer.length, 1);
+  assert.equal(outcome.lastServer[0].locked, true);
+  assert.equal(outcome.lastServer[0].revision, 2);
+
+  const clearJob = box.takeNext(SCOPE_JOB_ID);
+  assert.equal(clearJob.type, 'clear');
+  assert.equal(clearJob.expectedScopeRevision, 6);
+});
+
+test('quota rollback retains a mutation that already succeeded in the same queue', async (t) => {
+  const { DrawingOutbox, drainPersistJob } = await loadDrawings(t);
+  const accepted = drawingOf('horizontal', [ANCHOR_ONE]);
+  const rejected = drawingOf('horizontal', [ANCHOR_ONE], {
+    id: '22222222-2222-4222-8222-222222222222',
+  });
+  const box = new DrawingOutbox(memStore());
+  box.setScope(SCOPE_NVDA);
+  box.rebaseBase(0);
+  box.enqueue({ drawingId: accepted.id, type: 'create', drawing: accepted });
+  box.enqueue({ drawingId: rejected.id, type: 'create', drawing: rejected });
+
+  const acceptedJob = box.takeNext(accepted.id);
+  const acceptedOutcome = await drainPersistJob({
+    outbox: box,
+    job: acceptedJob,
+    api: persistApi(),
+    drawings: [accepted, rejected],
+    lastServer: [],
+    revisions: new Map(),
+  });
+  assert.deepEqual(acceptedOutcome.lastServer.map((item) => item.id), [accepted.id]);
+
+  const rejectedJob = box.takeNext(rejected.id);
+  const quota = await drainPersistJob({
+    outbox: box,
+    job: rejectedJob,
+    api: persistApi({
+      create: async () => {
+        const error = new Error('drawings_range_full');
+        error.code = 'drawings_range_full';
+        error.status = 409;
+        throw error;
+      },
+    }),
+    drawings: [accepted, rejected],
+    lastServer: acceptedOutcome.lastServer,
+    revisions: new Map([[accepted.id, 1]]),
+  });
+  assert.equal(quota.kind, 'quota');
+  assert.deepEqual(quota.apply.drawings.map((item) => item.id), [accepted.id]);
+});
+
+test('unrelated remote change safely rebases local create followed by update', async (t) => {
+  const { DrawingOutbox, evaluateRemoteVsPending } = await loadDrawings(t);
+  const local = drawingOf('horizontal', [ANCHOR_ONE]);
+  const edited = { ...local, hidden: true };
+  const remoteOnly = drawingOf('horizontal', [ANCHOR_ONE], {
+    id: '22222222-2222-4222-8222-222222222222',
+  });
+  const box = new DrawingOutbox(memStore());
+  box.setScope(SCOPE_NVDA);
+  box.setScopeRevision(3);
+  box.enqueue({ drawingId: local.id, type: 'create', drawing: local });
+  box.enqueue({ drawingId: local.id, type: 'update', drawing: edited });
+
+  const evaluation = evaluateRemoteVsPending({
+    remoteDrawings: [remoteOnly],
+    remoteRevision: 4,
+    baseRevision: box.getBaseScopeRevision(),
+    jobs: box.snapshot(),
+  });
+  assert.equal(evaluation.kind, 'merge');
+  assert.equal(evaluation.adoptScopeRevision, true);
+  assert.equal(evaluation.drawings.find((item) => item.id === local.id).hidden, true);
+  assert.equal(evaluation.drawings.some((item) => item.id === remoteOnly.id), true);
+});
+
+test('conflict replay keeps replace plus later edits as the visible local intent', async (t) => {
+  const { DrawingOutbox, SCOPE_JOB_ID, evaluateRemoteVsPending } = await loadDrawings(t);
+  const imported = drawingOf('horizontal', [ANCHOR_ONE]);
+  const edited = { ...imported, style: { ...imported.style, color: '#E5484D' } };
+  const remoteOnly = drawingOf('horizontal', [ANCHOR_ONE], {
+    id: '22222222-2222-4222-8222-222222222222',
+  });
+  const box = new DrawingOutbox(memStore());
+  box.setScope(SCOPE_NVDA);
+  box.setScopeRevision(2);
+  box.enqueue({
+    drawingId: SCOPE_JOB_ID,
+    type: 'replace',
+    drawings: [imported],
+    origin: 'import',
+  });
+  box.enqueue({ drawingId: imported.id, type: 'update', drawing: edited });
+
+  const evaluation = evaluateRemoteVsPending({
+    remoteDrawings: [remoteOnly],
+    remoteRevision: 3,
+    baseRevision: box.getBaseScopeRevision(),
+    jobs: box.snapshot(),
+  });
+  assert.equal(evaluation.kind, 'conflict');
+  assert.deepEqual(evaluation.drawings.map((item) => item.id), [imported.id]);
+  assert.equal(evaluation.drawings[0].style.color, '#E5484D');
+});
+
+test('keep-local reset removes stale barriers and persists one exact replacement', async (t) => {
+  const { DrawingOutbox, SCOPE_JOB_ID, parsePersistJobs, outboxStorageKey } = await loadDrawings(t);
+  const store = memStore();
+  const desired = drawingOf('horizontal', [ANCHOR_ONE], { hidden: true });
+  const box = new DrawingOutbox(store);
+  box.setScope(SCOPE_NVDA);
+  box.rebaseBase(4);
+  box.enqueue({ drawingId: SCOPE_JOB_ID, type: 'clear' });
+  box.enqueue({ drawingId: desired.id, type: 'update', drawing: desired });
+
+  const queued = box.replaceWithExactScope([desired], 9, 'conflict_keep');
+  assert.ok(queued);
+  assert.equal(box.snapshot().length, 1);
+  assert.equal(box.snapshot()[0].type, 'replace');
+  assert.equal(box.snapshot()[0].origin, 'conflict_keep');
+  const flying = box.takeNext(SCOPE_JOB_ID);
+  assert.equal(flying.expectedScopeRevision, 9);
+
+  const raw = JSON.parse(store.getItem(outboxStorageKey('acct', 'NVDA', '1d', 'raw')));
+  const parsed = parsePersistJobs(raw, SCOPE_NVDA, box.getScopeGeneration());
+  assert.equal(parsed.length, 1);
+  assert.equal(parsed[0].origin, 'conflict_keep');
+});
+
 test('drain releases inflight update so a later clear still runs after 400', async (t) => {
   const { DrawingOutbox, SCOPE_JOB_ID, drainPersistJob } = await loadDrawings(t);
   const drawn = drawingOf('horizontal', [ANCHOR_ONE]);
@@ -1976,8 +2156,8 @@ test('empty cache + pending clear does not show the previous ticker before list 
   assert.equal(outcome.conflict, true);
   assert.equal(outcome.status, 'conflict');
   assert.equal(outcome.drain, false);
-  assert.equal(outcome.drawings.length, 1);
-  assert.equal(outcome.drawings[0].id, aapl.id);
+  assert.equal(outcome.drawings.length, 0);
+  assert.equal(outcome.drawings.some((row) => row.ticker === 'AAPL'), false);
 
   let releaseStale;
   const staleList = new Promise((resolve) => { releaseStale = resolve; });
@@ -2155,8 +2335,10 @@ test('offline clear vs remote B is conflict and keeps B', async (t) => {
   });
   assert.equal(outcome.conflict, true);
   assert.equal(outcome.drain, false);
-  assert.equal(outcome.drawings.length, 1);
-  assert.equal(outcome.drawings[0].id, extra.id);
+  // Local intent is clear: the conflict view is empty. Take-server still has B.
+  assert.equal(outcome.drawings.length, 0);
+  assert.equal(outcome.lastServer.length, 1);
+  assert.equal(outcome.lastServer[0].id, extra.id);
   assert.deepEqual(replayPendingOps([extra], box.snapshot().filter((job) => job.type !== 'clear')).map((row) => row.id), [extra.id]);
 });
 

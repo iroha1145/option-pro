@@ -91,6 +91,15 @@ function readError(
   return { code, status };
 }
 
+function upsertServerDrawing(
+  drawings: ChartDrawing[],
+  saved: ChartDrawing,
+): ChartDrawing[] {
+  const index = drawings.findIndex((item) => item.id === saved.id);
+  if (index < 0) return [...drawings, saved];
+  return drawings.map((item, itemIndex) => (itemIndex === index ? saved : item));
+}
+
 /**
  * Run one already-inflight job to completion.
  *
@@ -118,12 +127,14 @@ export async function drainPersistJob(args: {
       const saved = await api.create(job.drawing, expected);
       scopeRevision = saved.scopeRevision;
       apply = { action: 'drawing', drawing: saved.drawing };
+      lastServer = upsertServerDrawing(args.lastServer, saved.drawing);
     } else if (job.type === 'update' && job.drawing) {
       const local = args.drawings.find((item) => item.id === job.drawing?.id) ?? job.drawing;
       const revision = latestKnownRevision(args.revisions, job.drawing.id, local.revision);
       const saved = await api.update({ ...job.drawing, revision }, expected);
       scopeRevision = saved.scopeRevision;
       apply = { action: 'drawing', drawing: saved.drawing };
+      lastServer = upsertServerDrawing(args.lastServer, saved.drawing);
     } else if (job.type === 'delete') {
       const removed = await api.remove(
         job.drawingId,
@@ -134,6 +145,7 @@ export async function drainPersistJob(args: {
       );
       scopeRevision = removed.scopeRevision;
       apply = { action: 'deleteRevision', id: job.drawingId };
+      lastServer = args.lastServer.filter((item) => item.id !== job.drawingId);
     } else if (job.type === 'clear') {
       const cleared = await api.clearScope(
         job.scope.ticker,
@@ -167,7 +179,10 @@ export async function drainPersistJob(args: {
     }
 
     if (!jobBelongsToScope(job, outbox.getScope())) return FOREIGN;
-    if (scopeRevision != null) outbox.setScopeRevision(scopeRevision);
+    // A confirmed mutation is now the concurrency base for every job behind it.
+    // This must happen for superseded jobs too: an update that finished while a
+    // clear/replace was queued still advanced the server scope revision.
+    if (scopeRevision != null) outbox.rebaseBase(scopeRevision);
     const applies = jobIsCurrent(job, outbox.getScope(), outbox.getScopeGeneration());
     releaseInflight(outbox, job, 'complete');
     if (!applies) {

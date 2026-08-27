@@ -69,6 +69,8 @@ export function evaluateRemoteVsPending(args: {
   }
   const mismatch = args.baseRevision != null && args.remoteRevision !== args.baseRevision;
   const remoteById = new Map(args.remoteDrawings.map((row) => [row.id, row]));
+  const workingById = new Map(remoteById);
+  const locallyCreated = new Set<string>();
   let unsafe = false;
   if (mismatch) {
     for (const job of jobs) {
@@ -76,29 +78,52 @@ export function evaluateRemoteVsPending(args: {
         unsafe = true;
         break;
       }
-      if (job.type === 'create' && remoteById.has(job.drawingId)) {
-        unsafe = true;
-        break;
+      if (job.type === 'create') {
+        if (!job.drawing || workingById.has(job.drawingId)) {
+          unsafe = true;
+          break;
+        }
+        workingById.set(job.drawingId, job.drawing);
+        locallyCreated.add(job.drawingId);
+        continue;
       }
       if (job.type === 'update' || job.type === 'delete') {
-        const row = remoteById.get(job.drawingId);
+        const row = workingById.get(job.drawingId);
         if (!row) {
           unsafe = true;
           break;
         }
-        const localRev = frozenDrawingRevision(job);
-        if (localRev == null || row.revision !== localRev) {
-          unsafe = true;
-          break;
+        // A target created earlier in this same local queue has no remote
+        // revision yet; create→update/delete is nevertheless a safe replay.
+        if (!locallyCreated.has(job.drawingId)) {
+          const localRev = frozenDrawingRevision(job);
+          if (localRev == null || row.revision !== localRev) {
+            unsafe = true;
+            break;
+          }
+        }
+        if (job.type === 'update') {
+          if (!job.drawing) {
+            unsafe = true;
+            break;
+          }
+          workingById.set(job.drawingId, {
+            ...job.drawing,
+            revision: row.revision,
+          });
+        } else {
+          workingById.delete(job.drawingId);
+          locallyCreated.delete(job.drawingId);
         }
       }
     }
   }
   if (unsafe) {
-    const skipBarrier = jobs.filter((job) => job.type !== 'clear' && job.type !== 'replace');
     return {
       kind: 'conflict',
-      drawings: replayPendingOps(args.remoteDrawings, skipBarrier),
+      // The conflict view must represent the real local intent. Dropping a
+      // replace/clear here made “keep local” silently lose imported edits.
+      drawings: replayPendingOps(args.remoteDrawings, jobs),
       drain: false,
       adoptScopeRevision: false,
     };

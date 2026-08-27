@@ -55,10 +55,8 @@ import {
   applyKnownRevisions,
   applyPersistResponse,
   diffPersistOps,
-  keepLocalWithServerRevisions,
   mutableFieldsDiffer,
   patchRevision,
-  regeneratePersistOps,
   replaceDrawing,
   resolveRetryAction,
   type PersistJob,
@@ -261,9 +259,6 @@ export function useDrawingController(args: {
         errorInfo: (error) => ({ code: drawingErrorCode(error), status: drawingErrorStatus(error) }),
       });
       if (outcome.foreign) return;
-      if (outcome.scopeRevision != null && outcome.kind === 'success') {
-        outbox.setScopeRevision(outcome.scopeRevision);
-      }
       if (outcome.lastServer && outbox.getScope()) {
         lastServerRef.current = {
           scope: outbox.getScope() as ScopeKey,
@@ -287,7 +282,7 @@ export function useDrawingController(args: {
         for (const item of restored) revisionsRef.current.set(item.id, item.revision);
         writeLocal(restored, false);
         setHistory(createHistory(restored));
-        if (job.type === 'replace' && job.drawings) {
+        if (job.type === 'replace' && job.drawings && job.origin === 'import') {
           setRejectedImport(JSON.stringify({ schemaVersion: 1, drawings: job.drawings }));
         }
       } else if (outcome.apply.action === 'deleteRevision') {
@@ -1092,21 +1087,29 @@ export function useDrawingController(args: {
     }
     if (snapshot.scopeGeneration !== outbox.getScopeGeneration()) return;
     const server = snapshot.drawings;
+    const desired = drawingsRef.current;
+    // The local state already contains debounced edits. Cancel their timers,
+    // then express the complete desired state as one atomic scope replacement.
+    discardPendingEdits();
+    setRejectedImport(null);
+    revisionsRef.current.clear();
+    for (const item of server) revisionsRef.current.set(item.id, item.revision);
+    const queued = outbox.replaceWithExactScope(
+      desired,
+      snapshot.scopeRevision,
+      'conflict_keep',
+    );
+    if (!queued) return;
+    conflictServerRef.current = null;
     lastServerRef.current = {
       scope: snapshot.scope,
-      scopeGeneration: snapshot.scopeGeneration,
+      scopeGeneration: outbox.getScopeGeneration(),
       drawings: server,
     };
-    // 只有用户点「保留本地」才把任务重建到最新 scope/drawing revision。
-    for (const item of server) revisionsRef.current.set(item.id, item.revision);
-    const next = keepLocalWithServerRevisions(drawingsRef.current, server);
-    writeLocal(next, false);
-    outbox.replacePending(regeneratePersistOps(next, server));
-    outbox.rebaseBase(snapshot.scopeRevision);
     setSyncStatus('saving');
     setSyncHint(null);
-    for (const id of outbox.readyIds()) void drain(id);
-  }, [adjustment, args.identity.key, args.range, args.ticker, drain, signedIn, writeLocal]);
+    void drain(queued.drawingId);
+  }, [adjustment, args.identity.key, args.range, args.ticker, discardPendingEdits, drain, signedIn]);
 
   const takeServerConflict = useCallback(async () => {
     if (!signedIn) return;
@@ -1185,7 +1188,12 @@ export function useDrawingController(args: {
     setRejectedImport(null);
     pushDrawings(incoming);
     if (signedIn) {
-      enqueue({ drawingId: SCOPE_JOB_ID, type: 'replace', drawings: incoming });
+      enqueue({
+        drawingId: SCOPE_JOB_ID,
+        type: 'replace',
+        drawings: incoming,
+        origin: 'import',
+      });
     }
     return null;
   }, [adjustment, args.range, args.ticker, discardPendingEdits, enqueue, pushDrawings, signedIn]);
