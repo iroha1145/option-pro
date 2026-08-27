@@ -609,7 +609,11 @@ test("stale update from a second context is 409 and keeps the newer color", asyn
   const other = await browser.newContext({ storageState: storage });
   const pageB = await other.newPage();
   await pageB.goto("/stock/AAPL", { waitUntil: "domcontentloaded" });
-  await expect(toolButton(pageB, "选择")).toBeVisible({ timeout: 20_000 });
+  await expect.poll(async () => {
+    const listed = await listDrawings(pageB);
+    if (listed.status === 429) return "rate-limited";
+    return listed.status;
+  }, { timeout: 20_000 }).toBe(200);
   /** @type {{ status: number, color: string }} */
   let updated = { status: 0, color: "" };
   await expect.poll(async () => {
