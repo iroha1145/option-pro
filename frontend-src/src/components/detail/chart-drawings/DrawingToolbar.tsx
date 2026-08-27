@@ -1,3 +1,5 @@
+import InfoHint from '@/components/shared/InfoHint';
+import { TOOL_HINTS } from './hints';
 import Icon, { type IconName } from '@/components/icons';
 import { cn } from '@/lib/utils';
 import { t } from '../../../i18n/core.ts';
@@ -83,17 +85,19 @@ export default function DrawingToolbar({
     <div className={cn('flex flex-wrap items-center gap-1.5', compact && 'gap-1')}>
       <span className="mr-1 text-micro font-medium text-ink-500">{t('绘图')}</span>
       {TOOLS.map((item) => (
-        <button
-          key={item.id}
-          type="button"
-          aria-label={item.label}
-          aria-pressed={tool === item.id}
-          title={item.label}
-          onClick={() => onTool(item.id)}
-          className={toolButtonCls(tool === item.id)}
-        >
-          <Icon name={item.icon} size={15} />
-        </button>
+        /* 悬停按钮本体就出解释：工具条上只有图标，光靠 title 属性既慢又只给
+           标签名，用户无从知道「射线」「平行通道」画出来该怎么读。 */
+        <InfoHint key={item.id} hint={TOOL_HINTS[item.id]} side="bottom" size={13}>
+          <button
+            type="button"
+            aria-label={item.label}
+            aria-pressed={tool === item.id}
+            onClick={() => onTool(item.id)}
+            className={toolButtonCls(tool === item.id)}
+          >
+            <Icon name={item.icon} size={15} />
+          </button>
+        </InfoHint>
       ))}
       <span className="mx-1 h-4 w-px bg-line" aria-hidden />
       <button type="button" aria-label={t('撤销')} disabled={!canUndo} onClick={onUndo} className={cn(toolButtonCls(false), !canUndo && 'opacity-40')}>
