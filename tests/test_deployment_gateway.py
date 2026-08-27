@@ -156,6 +156,9 @@ _SAME_ORIGIN_JSON_ONLY_OPERATIONS = {
     ("POST", "/api/account/register"),
     ("POST", "/api/account/watchlist"),
     ("PUT", "/api/account/watchlist"),
+    ("POST", "/api/account/chart-drawings"),
+    ("POST", "/api/account/chart-drawings/replace"),
+    ("PUT", "/api/account/chart-drawings/{drawing_id}"),
 }
 
 #: Same category, but bodyless — there is no content type to assert, so these
@@ -163,6 +166,8 @@ _SAME_ORIGIN_JSON_ONLY_OPERATIONS = {
 _SAME_ORIGIN_REQUEST_ONLY_OPERATIONS = {
     ("POST", "/api/account/logout"),
     ("DELETE", "/api/account/watchlist/{ticker}"),
+    ("DELETE", "/api/account/chart-drawings"),
+    ("DELETE", "/api/account/chart-drawings/{drawing_id}"),
 }
 
 #: Every operation that is deliberately reachable without an owner session.

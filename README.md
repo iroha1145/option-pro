@@ -242,6 +242,8 @@ v1 只用于展示与研究，**不写入任何正式股票评分**。
 [点时语义](docs/macro-conditions/point-in-time.md) ·
 [运维](docs/macro-conditions/operations.md)
 
+个股图的手动画线、账户同步和自动技术形态见 [docs/chart-drawings.md](docs/chart-drawings.md)。
+
 ## 本地验证
 
 ```bash

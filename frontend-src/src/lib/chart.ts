@@ -3,9 +3,10 @@
  * 发丝网格 / 毛玻璃 tooltip / 绘制动画 / 点阵面积 / 斜纹柱
  */
 import * as echarts from 'echarts/core';
-import { BarChart, CandlestickChart, LineChart, PieChart } from 'echarts/charts';
+import { BarChart, CandlestickChart, CustomChart, LineChart, PieChart } from 'echarts/charts';
 import {
   DataZoomComponent,
+  GraphicComponent,
   GridComponent,
   MarkAreaComponent,
   MarkLineComponent,
@@ -14,9 +15,10 @@ import {
 } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
 import type { ComposeOption } from 'echarts/core';
-import type { BarSeriesOption, CandlestickSeriesOption, LineSeriesOption, PieSeriesOption } from 'echarts/charts';
+import type { BarSeriesOption, CandlestickSeriesOption, CustomSeriesOption, LineSeriesOption, PieSeriesOption } from 'echarts/charts';
 import type {
   DataZoomComponentOption,
+  GraphicComponentOption,
   GridComponentOption,
   MarkAreaComponentOption,
   MarkLineComponentOption,
@@ -25,9 +27,9 @@ import type {
 } from 'echarts/components';
 
 echarts.use([
-  LineChart, BarChart, CandlestickChart, PieChart,
+  LineChart, BarChart, CandlestickChart, PieChart, CustomChart,
   GridComponent, TooltipComponent, DataZoomComponent, MarkLineComponent,
-  MarkPointComponent, MarkAreaComponent,
+  MarkPointComponent, MarkAreaComponent, GraphicComponent,
   CanvasRenderer,
 ]);
 
@@ -38,12 +40,14 @@ export type ChartOption = ComposeOption<
   | BarSeriesOption
   | CandlestickSeriesOption
   | PieSeriesOption
+  | CustomSeriesOption
   | GridComponentOption
   | TooltipComponentOption
   | DataZoomComponentOption
   | MarkLineComponentOption
   | MarkPointComponentOption
   | MarkAreaComponentOption
+  | GraphicComponentOption
 >;
 
 /** echarts.init 返回的实例类型（供交互层 convertFromPixel/zr 事件使用） */

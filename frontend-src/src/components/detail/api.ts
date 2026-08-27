@@ -51,6 +51,7 @@ export const CHART_RANGES: { value: ChartRange; label: string }[] = [
 function mapChartEx(body: unknown, ticker: string, range: ChartRange): StockChartEx {
   const r = asRec(body);
   const bars = unwrap(body, 'bars').map((b: Rec) => mapBar<ChartBarEx>(b));
+  const analysis = r.chart_analysis ?? r.chartAnalysis;
   return {
     ticker,
     range,
@@ -59,6 +60,9 @@ function mapChartEx(body: unknown, ticker: string, range: ChartRange): StockChar
     as_of: pickS(r, 'as_of', 'asOf') ?? '',
     last_bar_at: pickS(r, 'last_bar_at'),
     ...(r._stale === true ? { _stale: true } : {}),
+    ...(analysis && typeof analysis === 'object' && !Array.isArray(analysis)
+      ? { chart_analysis: analysis as Record<string, unknown> }
+      : {}),
   };
 }
 
@@ -652,6 +656,12 @@ function mapTechnicalStructure(body: unknown): TechnicalStructure {
     });
   const lastBarRaw = asRec(r.last_bar);
   const lastBarPoint = mapSwingPoint(lastBarRaw);
+  // 形态列表只从 chart_analysis.overlays 走一条路；负载里的 auto_patterns 顶层
+  // 副本没有任何组件读，后端已停发。带 option/graphic 的负载一律当不可信丢弃。
+  const analysisRaw = asRec(r.chart_analysis ?? r.chartAnalysis);
+  const chartAnalysis = Object.keys(analysisRaw).length && analysisRaw.option == null && analysisRaw.graphic == null
+    ? analysisRaw
+    : null;
   return {
     base,
     base_state,
@@ -729,6 +739,7 @@ function mapTechnicalStructure(body: unknown): TechnicalStructure {
         },
     series_break_at: pickS(r, 'series_break_at'),
     as_of: pickS(r, 'as_of', 'asOf'),
+    chart_analysis: chartAnalysis,
   };
 }
 
@@ -737,7 +748,13 @@ export function getTechnicalStructure(ticker: string, force = false): Promise<Te
   return mockOr(
     () => {
       if (!fx.hasTicker(symbol)) throw new ApiError(404, __t('代码 {ticker} 不存在', { ticker: symbol }));
-      return fx2.getTechnicalStructure(symbol);
+      const row = fx2.getTechnicalStructure(symbol);
+      // 日线分析包线上挂在 /technical 上（分钟包挂 /chart）。data_through 跟着
+      // 分析包的纽约交易日走：闸门要求两者逐字相等，用 UTC 切片会差一天。
+      const analysis = fx.buildChartAnalysis(symbol, fx.getStockChartEx(symbol, '1d').bars, '1d');
+      return analysis
+        ? { ...row, data_through: String(analysis.dataThrough), chart_analysis: analysis }
+        : row;
     },
     () =>
       marketGet(`/stocks/${encodeURIComponent(symbol)}/technical`, {

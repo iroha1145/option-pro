@@ -318,6 +318,7 @@ class EarningsAnalysisTask:
         repository = await self._prepare_repository()
         retention_deleted = await _call_local(
             repository.prune_earnings_retention,
+            now=self._now(),
             retention_days=30,
         )
         if manual and not bool(effective.ai.manual_analysis_enabled):
@@ -479,6 +480,7 @@ class EarningsAnalysisTask:
                     # count as the preliminary run, otherwise a released
                     # report can never finalize.
                     legacy_report_date=payload.get("earnings_date"),
+                    now=self._now(),
                 )
                 if not preliminary:
                     skipped_final_without_pre_release += 1
@@ -488,6 +490,7 @@ class EarningsAnalysisTask:
                 payload["ticker"],
                 payload["report_id"],
                 analysis_stage=analysis_stage,
+                now=self._now(),
             )
             latest_status = str((latest or {}).get("status") or "")
             retry_failed_report = bool(

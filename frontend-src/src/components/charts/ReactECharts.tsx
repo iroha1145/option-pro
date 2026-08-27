@@ -16,13 +16,19 @@ export default function ReactECharts({ option, className, style, onClick, onInit
   const ref = useRef<HTMLDivElement>(null);
   const chartRef = useRef<EChartsInstance | null>(null);
   const onInitRef = useRef(onInit);
-  onInitRef.current = onInit;
+
+  useEffect(() => {
+    onInitRef.current = onInit;
+  }, [onInit]);
 
   useEffect(() => {
     if (!ref.current) return;
     const chart = echarts.init(ref.current, undefined, { renderer: 'canvas' });
     chartRef.current = chart;
-    const ro = new ResizeObserver(() => chart.resize());
+    const ro = new ResizeObserver(() => {
+      if (chart.isDisposed()) return;
+      chart.resize();
+    });
     ro.observe(ref.current);
     onInitRef.current?.(chart);
     return () => {
