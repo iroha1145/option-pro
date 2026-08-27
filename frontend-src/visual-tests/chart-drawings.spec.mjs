@@ -430,8 +430,10 @@ test("layer presets switch algorithm and pattern groups", async ({ page }) => {
     await expect(dialog.getByRole("checkbox", { name: dead, exact: true })).toHaveCount(0);
   }
   // 「最低几何质量」和标签条上的「置信度 87」同一把尺（0–100），不是 0–1。
+  // 控件是滑杆（slider）不是数字框：0–100 的旋钮拖着找松紧比键入数字顺手，
+  // 数字框还看不出量程。
   await dialog.getByRole("button", { name: "极简", exact: true }).click();
-  await expect(dialog.getByRole("spinbutton", { name: "最低几何质量" })).toHaveValue("70");
+  await expect(dialog.getByRole("slider", { name: "最低几何质量" })).toHaveValue("70");
   await page.keyboard.press("Escape");
   await chartFilled(page);
 });
