@@ -22,6 +22,8 @@ from datetime import datetime, timezone
 from typing import Any, Mapping, Sequence
 from zoneinfo import ZoneInfo
 
+import logging
+
 import pandas as pd
 
 from app.services.market_calendar import early_close_minutes, is_trading_day
@@ -35,12 +37,58 @@ from app.services.technical.base_structure import detect_base_structure
 from app.services.technical.chart_analysis import assemble_chart_analysis
 from app.services.technical.indicators import compute_technicals
 
+logger = logging.getLogger(__name__)
+
 STRUCTURE_VERSION = "us-structure-v2"
 
 _NEW_YORK_TZ = ZoneInfo("America/New_York")
 _SWING_SPAN = 3
 _SWING_LOOKBACK = 120
 _MIN_BARS = 30
+
+_PATTERN_FAIL_COUNTS: dict[str, int] = {}
+_PATTERN_FAIL_KEY_CAP = 200
+_PATTERN_FAIL_TRACEBACKS = 3
+_PATTERN_FAIL_MSG_CHARS = 200
+_pattern_fail_suppressed = False
+
+
+def _log_pattern_failure(ticker: str, exc: Exception) -> None:
+    """记录形态检测失败，且三重有界，绝不刷爆日志。
+
+    这条路径每个请求每支票都会走一遍：真出系统性故障时，不设限的
+    ``logger.exception`` 会按请求量刷屏，把日志盘吃掉。所以：
+      1. 按（票 × 异常类型）去重——同一种故障每支票只说一次；
+      2. 只有最先的几次带堆栈，之后是单行摘要（堆栈才是体积大头）；
+      3. 去重表的键数封顶，满了就停止收录并只提示一次，避免字典本身无限增长。
+
+    计数保留在内存里，重启清零——它服务的是「线上现在有没有在静默失败」，
+    不是长期统计。
+    """
+    global _pattern_fail_suppressed
+    key = f"{ticker or '?'}:{type(exc).__name__}"
+    seen = _PATTERN_FAIL_COUNTS.get(key)
+    if seen is not None:
+        _PATTERN_FAIL_COUNTS[key] = seen + 1
+        return
+    if len(_PATTERN_FAIL_COUNTS) >= _PATTERN_FAIL_KEY_CAP:
+        if not _pattern_fail_suppressed:
+            _pattern_fail_suppressed = True
+            logger.warning(
+                "auto-pattern failures exceeded %d distinct keys; further first-sightings are not logged",
+                _PATTERN_FAIL_KEY_CAP,
+            )
+        return
+    _PATTERN_FAIL_COUNTS[key] = 1
+    with_traceback = len(_PATTERN_FAIL_COUNTS) <= _PATTERN_FAIL_TRACEBACKS
+    logger.warning(
+        "auto-pattern detection failed for %s: %s",
+        key,
+        str(exc)[:_PATTERN_FAIL_MSG_CHARS],
+        exc_info=with_traceback,
+    )
+
+
 # 相邻收盘比落在这个区间外视为序列断裂（错误的未复权拼接、坏行情源）。
 # 真实单日 ±50%+ 的行情极罕见且多伴随停牌；跨过断裂点做摆动/基底分析
 # 得到的全是假结构，宁可只用断裂之后的一致段。
@@ -324,8 +372,11 @@ def compute_technical_structure(
             analysis,
             data_through=analysis["dates"][-1],
         )
-    except Exception:
+    except Exception as exc:
+        # 装饰性图层不该拖垮整页，但也不能像以前那样一声不吭：这个裸吞曾让
+        # 「线上一条形态都画不出来」看起来和「本来就没有形态」完全一样。
         auto_patterns = []
+        _log_pattern_failure(ticker, exc)
 
     aligned_spy = spy_closes
     if isinstance(spy_closes, Mapping):
