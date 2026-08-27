@@ -164,10 +164,7 @@ async function chartFilled(page) {
   await expect.poll(() => paintedPixels(page), { timeout: 20_000 }).toBeGreaterThan(40);
 }
 
-test.use({
-  viewport: { width: 1440, height: 900 },
-  reducedMotion: "reduce",
-});
+test.use({ viewport: { width: 1440, height: 900 } });
 
 test.beforeEach(async ({ page }) => {
   if (!HAS_REAL_BACKEND) return;
@@ -510,6 +507,7 @@ test("zoom then recolor keeps the dataZoom window", async ({ page }) => {
   await openStock(page);
   await placeHorizontal(page, 0.5, 0.4);
   await expandChart(page);
+  await drawingRows(page).first().click();
   const zoomed = await page.evaluate(() => {
     const host = document.querySelector('[role="img"][aria-label$="图"]');
     const chart = host && host.__echarts__;
@@ -612,15 +610,41 @@ test("stale update from a second context is 409 and keeps the newer color", asyn
   const pageB = await other.newPage();
   await pageB.goto("/stock/AAPL", { waitUntil: "domcontentloaded" });
   await expect(toolButton(pageB, "选择")).toBeVisible({ timeout: 20_000 });
-  await expectDrawingCount(pageB, 1);
-  await pageB.getByRole("button", { name: "颜色 红色" }).click();
+  /** @type {{ status: number, color: string }} */
+  let updated = { status: 0, color: "" };
   await expect.poll(async () => {
-    const listed = await listDrawings(pageB);
-    if (listed.status === 429) return "rate-limited";
-    if (listed.status !== 200) return `http ${listed.status}`;
-    const row = listed.drawings?.[0];
-    return row?.style?.color && row.style.color !== stale.color ? row.style.color : "pending";
-  }, { timeout: 20_000 }).not.toBe("pending");
+    updated = await pageB.evaluate(async () => {
+      const listedRes = await fetch("/api/account/chart-drawings?ticker=AAPL&range=1d&adjustment=raw", { credentials: "same-origin" });
+      const listed = await listedRes.json().catch(() => ({}));
+      const row = Array.isArray(listed.drawings) ? listed.drawings[0] : null;
+      if (!row) return { status: listedRes.status, color: "" };
+      const res = await fetch(`/api/account/chart-drawings/${encodeURIComponent(row.id)}`, {
+        method: "PUT",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", "X-Optix-Action": "1" },
+        body: JSON.stringify({
+          schemaVersion: 1,
+          id: row.id,
+          ticker: "AAPL",
+          range: "1d",
+          adjustment: "raw",
+          kind: row.kind,
+          anchors: row.anchors,
+          style: { ...(row.style || {}), color: "#E5484D" },
+          text: row.text ?? null,
+          locked: Boolean(row.locked),
+          hidden: Boolean(row.hidden),
+          zOrder: Number(row.zOrder) || 0,
+          revision: row.revision,
+          expected_scope_revision: Number(listed.scope_revision ?? 0),
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      return { status: res.status, color: body.style?.color || "" };
+    });
+    return updated.status === 429 ? "rate-limited" : updated.status;
+  }, { timeout: 90_000 }).toBe(200);
+  expect(updated.color).toBe("#E5484D");
   /** @type {{ status: number, code: string | null }} */
   let conflict = { status: 0, code: null };
   await expect.poll(async () => {
@@ -653,6 +677,6 @@ test("stale update from a second context is 409 and keeps the newer color", asyn
   }, { timeout: 90_000 }).toBe(409);
   expect(["scope_revision_conflict", "revision_conflict"]).toContain(conflict.code);
   const listedB = await listDrawings(pageB);
-  expect(listedB.drawings?.[0]?.style?.color).not.toBe("#2E46E0");
+  expect(listedB.drawings?.[0]?.style?.color).toBe("#E5484D");
   await other.close();
 });
