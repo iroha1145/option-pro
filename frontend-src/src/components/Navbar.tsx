@@ -3,7 +3,7 @@
  * Logo | 01–06 编号导航（滑动下划线） | ⌘K 触发 | 时段LED+纽约时钟 | AI 点（owner）| 登录/退出
  * 移动端折叠为 48px：Logo + ⌘K + 时钟。
  */
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router';
 import { cn } from '@/lib/utils';
 import { useNow } from '@/hooks/useNow';
@@ -50,20 +50,6 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
   // 读不到时段时点是浅灰「未知」而不是「休市」（与审计 2.2.1 同根因）
   const session = status?.session ?? null;
 
-  const navRef = useRef<HTMLElement>(null);
-  const [indicator, setIndicator] = useState<{ left: number } | null>(null);
-
-  useLayoutEffect(() => {
-    const nav = navRef.current;
-    if (!nav) return;
-    const active = nav.querySelector<HTMLElement>('[data-active="true"]');
-    if (active) {
-      setIndicator({ left: active.offsetLeft + active.offsetWidth / 2 - 12 });
-    } else {
-      // 非导航路由（/stock/:t、404）下划线必须复位，否则停在上一个导航项下
-      setIndicator(null);
-    }
-  }, [location.pathname]);
 
   const [loggingOut, setLoggingOut] = useState(false);
   const handleLogout = async () => {
@@ -97,13 +83,15 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
         </Link>
 
         {/* 编号导航（桌面） */}
-        <nav ref={navRef} className="relative mx-auto hidden h-full items-center gap-1 xl:flex" aria-label={t("主导航")}>
-          {NAV_ITEMS.map((item) => (
+                <nav className="relative mx-auto hidden h-full items-center gap-1 xl:flex" aria-label={t("主导航")}>
+          {NAV_ITEMS.map((item) => {
+            /* '/' 必须精确匹配：startsWith('/') 对任何路径都为真，首页会永远亮着 */
+            const active = item.path === '/' ? location.pathname === '/' : location.pathname.startsWith(item.path);
+            return (
             <NavLink
               key={item.path}
               to={item.path}
-              /* '/' 必须精确匹配：startsWith('/') 对任何路径都为真，首页会永远亮着 */
-              data-active={item.path === '/' ? location.pathname === '/' : location.pathname.startsWith(item.path)}
+              data-active={active}
               className={({ isActive }) =>
                 cn(
                   /* R4 加到 9 项后 1440(xl) 逼近满宽：sub-2xl 收 px-2，登录态
@@ -116,15 +104,24 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
               {/* 9 项编号在 xl–2xl 之间是压垮布局的最后一根稻草（1440 登录态
                   「退出」被挤出视口）：sub-2xl 只留文字标签，≥2xl 恢复编号。 */}
               <span className="hidden font-mono text-[11px] text-ink-400 2xl:inline">{item.no}</span>
-              {item.label}
+              {/* 撑满高度、宽度恰为标签本身：指示器放进来后 bottom-0 就是导航条底边，
+                  left-1/2 就是**文字**中心——不再靠 JS 量像素，也就不会因为标签
+                  平移（编号在 2xl 出现、字体加载、右侧簇变宽把 mx-auto 推走）而错位。 */}
+              <span data-nav-label className="relative flex h-full items-center">
+                {item.label}
+                {active && (
+                  /* 普通 span，不用 framer 的 layoutId 投影：跨父级投影在这条导航上
+                     实测不落位（transform 停在上一个父级的坐标不释放，蓝条被钉住）。
+                     纯 CSS 居中在激活项内部，永远对齐，代价是没有项间滑动。 */
+                  <span
+                    aria-hidden="true"
+                    className="absolute inset-x-0 bottom-0 mx-auto h-0.5 w-6 rounded-full bg-brand-600"
+                  />
+                )}
+              </span>
             </NavLink>
-          ))}
-          {/* 滑动下划线指示器（2px × 24px，260ms） */}
-          <span
-            aria-hidden="true"
-            className="absolute bottom-0 h-0.5 w-6 rounded-full bg-brand-600 transition-[left,opacity] duration-ui ease-paper"
-            style={indicator ? { left: indicator.left, opacity: 1 } : { opacity: 0 }}
-          />
+            );
+          })}
         </nav>
 
         {/* 右侧操作区 */}
