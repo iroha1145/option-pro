@@ -8,7 +8,7 @@
  * leading-none，激活态只换色不换字重；行统一 h-8，控件右缘对齐。
  * 动效走 transitions.dev 目录：开关 27-toggle（双段回弹），读数 02-number-pop-in。
  */
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { cn } from '@/lib/utils';
 import Icon from '@/components/icons';
@@ -51,16 +51,17 @@ function clampInput(raw: string, min: number, max: number, fallback: number): nu
 
 /**
  * 读数徽章（02-number-pop-in）：值变了才 pop，首帧不动——弹窗开场已有
- * t-modal 缩放，六个徽章再齐跳一次就成了烟花。key 换掉整组以重放动画。
+ * t-modal 缩放，六个徽章再齐跳一次就成了烟花。换值在渲染期调 state
+ * （React 认可的 adjust-on-render）：变更当帧就直接以 is-animating 重挂载；
+ * 若放 useEffect 里 bump，会先画一帧静止的新值、下一帧再从头 pop，闪一下。
  */
 function PopValue({ text }: { text: string }) {
-  const prev = useRef(text);
+  const [prev, setPrev] = useState(text);
   const [runId, setRunId] = useState(0);
-  useEffect(() => {
-    if (prev.current === text) return;
-    prev.current = text;
+  if (prev !== text) {
+    setPrev(text);
     setRunId((n) => n + 1);
-  }, [text]);
+  }
   const chars = [...text];
   const n = chars.length;
   return (
@@ -125,6 +126,102 @@ function Switch({
   );
 }
 
+/** 读数徽章的壳：灰底小牌，内容走 PopValue。宽度按内容定——「100%」要 w-12，
+    两位数步进值 w-9 就够；壳等宽（tnum 等宽数字）pop 时牌子本身不晃。 */
+function ValueBadge({ text, className }: { text: string; className?: string }) {
+  return (
+    <span
+      className={cn(
+        'inline-flex h-6 items-center justify-center rounded-sm bg-paper-2 font-mono leading-none text-ink-700 tnum',
+        className,
+      )}
+    >
+      <PopValue text={text} />
+    </span>
+  );
+}
+
+/**
+ * 0–100 的旋钮行：滑杆 + 实时读数。数字框要先选中再改、还看不出量程，
+ * 而这两个值的手感本来就是「拖着找一个合适的松紧」。原生 range 保住
+ * role=slider（取证断言不动），外观在 index.css 的 .ft-range。
+ */
+function SliderRow({
+  label,
+  value,
+  step,
+  onApply,
+}: {
+  label: string;
+  value: number;
+  step: number;
+  onApply: (next: number) => void;
+}) {
+  return (
+    <div className="flex h-8 items-center gap-2.5 rounded-md px-1.5 transition-colors duration-fast hover:bg-paper-2/70">
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      <input
+        type="range"
+        min={0}
+        max={100}
+        step={step}
+        aria-label={label}
+        value={value}
+        onChange={(event) => onApply(clampInput(event.target.value, 0, 100, value))}
+        className="ft-range w-28 shrink-0 cursor-pointer"
+        style={{ '--fill': `${value}%` } as CSSProperties}
+      />
+      <ValueBadge text={`${value}%`} className="w-12 shrink-0" />
+    </div>
+  );
+}
+
+/** 最大形态数上限（沿用旧数字框的 max={24}）。 */
+const MAX_PATTERNS = 24;
+
+const STEPPER_BUTTON = cn(
+  'inline-flex size-6 shrink-0 items-center justify-center rounded-md border border-line bg-card leading-none text-ink-500 shadow-btn transition-[transform,color,background-color] duration-fast hover:bg-paper-2 hover:text-ink-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40',
+  FOCUS_RING,
+);
+
+/** −/+ 步进器：比数字框少一次「选中」，边界即禁用态，右缘与滑杆徽章收在同一条线上。 */
+function StepperRow({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (next: number) => void;
+}) {
+  return (
+    <div className="flex h-8 items-center justify-between gap-2 rounded-md px-1.5 transition-colors duration-fast hover:bg-paper-2/70">
+      <span className="min-w-0 truncate">{label}</span>
+      <span className="flex items-center gap-1">
+        <button
+          type="button"
+          aria-label={t('减少')}
+          disabled={value <= 0}
+          onClick={() => onChange(Math.max(0, value - 1))}
+          className={STEPPER_BUTTON}
+        >
+          −
+        </button>
+        <ValueBadge text={String(value)} className="w-9 shrink-0" />
+        <button
+          type="button"
+          aria-label={t('增加')}
+          disabled={value >= MAX_PATTERNS}
+          onClick={() => onChange(Math.min(MAX_PATTERNS, value + 1))}
+          className={STEPPER_BUTTON}
+        >
+          +
+        </button>
+      </span>
+    </div>
+  );
+}
+
 function LayerRow({
   label,
   checked,
@@ -166,7 +263,7 @@ function Card({ title, meta, children, className }: { title: string; meta?: stri
     <section className={cn('rounded-lg border border-line bg-card p-2 shadow-card', className)}>
       <div className="mb-1 flex h-6 items-center justify-between px-1.5 pt-0.5">
         <h3 className="font-medium leading-none text-ink-600">{title}</h3>
-        {meta && <span className="font-mono text-[11px] leading-none text-ink-300 tnum">{meta}</span>}
+        {meta && <span className="font-mono text-micro leading-none text-ink-300 tnum">{meta}</span>}
       </div>
       {children}
     </section>
@@ -192,6 +289,10 @@ export default function LayerMenu({
   const patch = (next: Partial<LayerSettings>) => onChange({ ...settings, preset: 'custom', ...next });
 
   const panelRef = useRef<HTMLDivElement>(null);
+  /* shadcn Dialog 语义：标题走 aria-labelledby、副标题走 aria-describedby，
+     比光秃秃一个 aria-label 多给读屏一句「这窗是干什么的」。 */
+  const titleId = useId();
+  const descId = useId();
   const closeMs = readRootDurationMs('--modal-close-dur', 150);
   const phase = useOverlayPhase(open, closeMs);
   const mounted = overlayVisible(open, phase);
@@ -239,36 +340,6 @@ export default function LayerMenu({
     );
   };
 
-  const sliderRow = (
-    label: string,
-    value100: number,
-    step: number,
-    apply: (next100: number) => void,
-  ) => (
-    <div className="flex h-8 items-center gap-2.5 rounded-md px-1.5 transition-colors duration-fast hover:bg-paper-2/70">
-      <span className="min-w-0 flex-1 truncate">{label}</span>
-      <input
-        type="range"
-        min={0}
-        max={100}
-        step={step}
-        aria-label={label}
-        value={value100}
-        onChange={(event) => apply(clampInput(event.target.value, 0, 100, value100))}
-        className="ft-range w-28 shrink-0 cursor-pointer"
-        style={{ '--fill': `${value100}%` } as CSSProperties}
-      />
-      <span className="inline-flex h-6 w-12 items-center justify-center rounded-sm bg-paper-2 font-mono leading-none text-ink-700 tnum">
-        <PopValue text={`${value100}%`} />
-      </span>
-    </div>
-  );
-
-  const stepBtn = cn(
-    'inline-flex size-6 shrink-0 items-center justify-center rounded-md border border-line bg-card leading-none text-ink-500 shadow-btn transition-colors duration-fast hover:bg-paper-2 hover:text-ink-700 disabled:cursor-not-allowed disabled:opacity-40',
-    FOCUS_RING,
-  );
-
   return (
     <>
       <div
@@ -282,7 +353,8 @@ export default function LayerMenu({
           ref={panelRef}
           role="dialog"
           aria-modal="true"
-          aria-label={t('算法与图层')}
+          aria-labelledby={titleId}
+          aria-describedby={descId}
           className={cn(
             't-modal flex max-h-[86vh] flex-col overflow-hidden rounded-xl border border-line bg-paper-2 shadow-sh-3',
             overlayClassName(phase),
@@ -290,27 +362,28 @@ export default function LayerMenu({
         >
           <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line bg-card px-5 py-3">
             <div className="min-w-0">
-              <h2 className="truncate text-body font-medium leading-tight text-ink-900">{t('算法与图层')}</h2>
-              <p className="mt-0.5 truncate text-micro text-ink-400">{t('选择预设，或逐层微调算法与图层。')}</p>
+              <h2 id={titleId} className="truncate text-body font-medium leading-tight text-ink-900">{t('算法与图层')}</h2>
+              <p id={descId} className="mt-0.5 truncate text-micro text-ink-400">{t('选择预设，或逐层微调算法与图层。')}</p>
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
               <button
                 type="button"
                 onClick={() => onChange(settingsFromPreset('minimal'))}
                 className={cn(
-                  'inline-flex h-7 items-center rounded-md border border-line bg-card px-2.5 text-micro leading-none text-ink-500 shadow-btn transition-colors duration-fast hover:bg-paper-2 hover:text-ink-700',
+                  'inline-flex h-7 items-center rounded-md border border-line bg-card px-2.5 text-micro leading-none text-ink-500 shadow-btn transition-[transform,color,background-color] duration-fast hover:bg-paper-2 hover:text-ink-700 active:scale-95',
                   FOCUS_RING,
                 )}
               >
                 {t('恢复默认')}
               </button>
               <button
+                type="button"
                 onClick={onClose}
                 className={cn(
                   'inline-flex size-7 items-center justify-center rounded-md text-ink-400 transition-[transform,color,background-color] duration-fast hover:bg-paper-2 hover:text-ink-600 active:scale-95',
                   FOCUS_RING,
                 )}
-                aria-label={t('关闭抽屉')}
+                aria-label={t('关闭')}
               >
                 <Icon name="x" size={16} />
               </button>
@@ -347,44 +420,23 @@ export default function LayerMenu({
             </div>
 
             <Card title={t('高级')} className="mt-3">
-              {/* 0–100 的旋钮给滑杆 + 实时读数：数字框要先选中再改、还看不出量程，
-                  而这两个值的手感本来就是「拖着找一个合适的松紧」。 */}
-              {sliderRow(t('最低几何质量'), Math.round(settings.minShapeQuality * 100), 5, (next) => {
-                patch({ minShapeQuality: next / 100 });
-              })}
-              {sliderRow(t('标签密度'), Math.round(settings.labelDensity * 100), 10, (next) => {
-                patch({ labelDensity: next / 100 });
-              })}
-
-              <div className="flex h-8 items-center justify-between gap-2 rounded-md px-1.5 transition-colors duration-fast hover:bg-paper-2/70">
-                <span className="min-w-0 truncate">{t('最大形态数')}</span>
-                <span className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    aria-label={t('减少')}
-                    disabled={settings.maxPatterns <= 0}
-                    onClick={() => patch({ maxPatterns: Math.max(0, settings.maxPatterns - 1) })}
-                    className={stepBtn}
-                  >
-                    −
-                  </button>
-                  <span
-                    aria-label={t('最大形态数')}
-                    className="inline-flex h-6 w-9 items-center justify-center rounded-sm bg-paper-2 font-mono leading-none text-ink-700 tnum"
-                  >
-                    <PopValue text={String(settings.maxPatterns)} />
-                  </span>
-                  <button
-                    type="button"
-                    aria-label={t('增加')}
-                    disabled={settings.maxPatterns >= 24}
-                    onClick={() => patch({ maxPatterns: Math.min(24, settings.maxPatterns + 1) })}
-                    className={stepBtn}
-                  >
-                    +
-                  </button>
-                </span>
-              </div>
+              <SliderRow
+                label={t('最低几何质量')}
+                value={Math.round(settings.minShapeQuality * 100)}
+                step={5}
+                onApply={(next) => patch({ minShapeQuality: next / 100 })}
+              />
+              <SliderRow
+                label={t('标签密度')}
+                value={Math.round(settings.labelDensity * 100)}
+                step={10}
+                onApply={(next) => patch({ labelDensity: next / 100 })}
+              />
+              <StepperRow
+                label={t('最大形态数')}
+                value={settings.maxPatterns}
+                onChange={(next) => patch({ maxPatterns: next })}
+              />
 
               <LayerRow
                 label={t('仅当前有效')}
