@@ -52,6 +52,9 @@ export default defineConfig({
   ],
   webServer: webServers.length ? webServers : undefined,
   use: {
+    /* 动作级兜底：默认 actionTimeout=0 是无界等待，一次 isVisible→click 的采样
+       竞态就能把整条用例吊满（chart-drawings 重试横幅事故，动作流实测 91.6s）。 */
+    actionTimeout: 15_000,
     baseURL: visualBaseURL,
     browserName: "chromium",
     launchOptions: process.env.OPTIX_PLAYWRIGHT_EXECUTABLE_PATH

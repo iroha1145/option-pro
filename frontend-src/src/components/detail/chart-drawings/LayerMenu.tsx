@@ -9,6 +9,7 @@
  * 动效走 transitions.dev 目录：开关 27-toggle（双段回弹），读数 02-number-pop-in。
  */
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { cn } from '@/lib/utils';
 import Icon from '@/components/icons';
@@ -313,6 +314,10 @@ export default function LayerMenu({
 
   if (!mounted) return null;
 
+  /* 与 DrawingWorkspace 同规：portal 到 body。组件挂在 KlineChart 里，头顶是
+     .page-enter 的路由进场 transform——transform ≠ none 的祖先会接管 fixed 的
+     包含块，弹窗就相对整页而不是视口定位（移动端实测 shellTop 飘到 2300+）。 */
+
   const [primaryGroup, ...secondaryGroups] = GROUPS;
   const groupCard = (group: (typeof GROUPS)[number]) => {
     const rows = LAYERS.filter((layer) => layer.group === group.id);
@@ -340,7 +345,7 @@ export default function LayerMenu({
     );
   };
 
-  return (
+  return createPortal(
     <>
       <div
         className={cn('t-backdrop fixed inset-0 z-[85] bg-[rgba(13,22,38,.34)] backdrop-blur-[2px]', phase === 'open' && 'is-open')}
@@ -403,7 +408,11 @@ export default function LayerMenu({
                     'inline-flex h-7 items-center rounded-full border px-3 leading-none transition-colors duration-fast',
                     FOCUS_RING,
                     settings.preset === id
-                      ? 'border-brand-600 bg-brand-600 text-white shadow-btn'
+                      /* shadow-chip 而非 shadow-btn：btn 的 75% 白内高光是给白底
+                         描边次按钮的，压在蓝底实心胶囊上就是一道白边，还把填充
+                         视觉压低 1px 显得没对齐（用户两轮截图抓的就是它）。
+                         chip 是设计系统里选中态胶囊的专用档（ResultTable 页码同款）。 */
+                      ? 'border-brand-600 bg-brand-600 text-white shadow-chip'
                       : 'border-line bg-card text-ink-500 hover:border-line-strong hover:text-ink-700',
                   )}
                 >
@@ -468,6 +477,7 @@ export default function LayerMenu({
           </div>
         </div>
       </div>
-    </>
+    </>,
+    document.body,
   );
 }
