@@ -3,6 +3,9 @@ import type { Dict } from './types';
 export const DRAWINGS: Dict = {
   '绘图': ['Draw', '描画'],
   '选择': ['Select', '選択'],
+  '选择预设，或逐层微调算法与图层。': ['Pick a preset, or fine-tune each algorithm and layer.', 'プリセットを選ぶか、各アルゴリズムとレイヤーを個別に調整します。'],
+  '减少': ['Decrease', '減らす'],
+  '增加': ['Increase', '増やす'],
   '水平线': ['Horizontal', '水平線'],
   '趋势线': ['Trend segment', 'トレンドライン'],
   '射线': ['Ray', 'レイ'],

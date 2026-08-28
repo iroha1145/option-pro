@@ -230,6 +230,48 @@
    动画运行期间 from 帧就是当前值：任何形式的 from{opacity:0}（JS 或 CSS）
    在动画时钟被饿死/冻结时都表现为「内容已挂载的全白页」；transform 的
    from 帧最坏也只是停在 6px 偏移，内容始终可读。 */
+/* 算法与图层的精修滑杆（Fine-tune Card 语言）：原生 range 保住 role=slider，
+   外观全换——轨道用 --fill 百分比染进度，拇指白底描边悬浮。fill 由组件按
+   value 内联写入；聚焦环走全站 focus-visible 约定。 */
+.ft-range {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--brand-600) var(--fill, 0%), var(--line) var(--fill, 0%));
+  outline: none;
+}
+.ft-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--card);
+  border: 1px solid var(--line-strong);
+  box-shadow: 0 1px 2px rgba(13, 22, 38, 0.18);
+  cursor: pointer;
+  transition: transform 150ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.ft-range::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--card);
+  border: 1px solid var(--line-strong);
+  box-shadow: 0 1px 2px rgba(13, 22, 38, 0.18);
+  cursor: pointer;
+  transition: transform 150ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.ft-range:active::-webkit-slider-thumb { transform: scale(1.12); }
+.ft-range:active::-moz-range-thumb { transform: scale(1.12); }
+.ft-range:focus-visible {
+  box-shadow: 0 0 0 2px var(--card), 0 0 0 4px rgba(59, 89, 242, 0.3);
+}
+@media (prefers-reduced-motion: reduce) {
+  .ft-range::-webkit-slider-thumb, .ft-range::-moz-range-thumb { transition: none; }
+}
+
 .page-enter {
   animation: page-enter 0.24s cubic-bezier(0.16, 1, 0.3, 1);
 }
