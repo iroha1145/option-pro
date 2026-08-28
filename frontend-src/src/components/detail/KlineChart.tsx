@@ -499,6 +499,9 @@ function buildOption(
                 data: paneMeta.marks.map((value) => ({
                   yAxis: value,
                   lineStyle: { color: CH.ink300, width: 1, type: [4, 4] as number[] },
+                  /* 关掉 echarts 默认线尾数值：它把 0/30/70 打进轴槽，正好骑在
+                     副图自己的轴刻度上（用户截图里加粗的 0 就是两字叠印）。 */
+                  label: { show: false },
                 })),
               }
             : undefined,

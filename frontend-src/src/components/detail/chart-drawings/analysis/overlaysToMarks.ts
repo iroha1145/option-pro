@@ -91,12 +91,14 @@ export function overlaysToSeries(
 /** 形态线按 kind 分色（与 lib/chart 的 CH 调色同值；此处写字面量是因为
  *  本模块要进单测的 vm bundle，不能拖 echarts 进来）。box 维持中性灰：
  *  它是「区域」不是「方向线」，抢色只会稀释支撑/阻力的红绿语义。 */
+/* 一律取 700 档：600 档细虚线浮在白纸上不够显（用户实测「颜色不够明显」）。
+   字面量而非 import——本模块进 vm 测试 bundle，进不了 CSS token。 */
 const PATTERN_LINE_COLORS: Record<string, string> = {
-  support_trend: '#0E9F6E',    // up600：支撑在下，向上托
-  resistance_trend: '#E5484D', // down600：阻力在上，向下压
-  channel: '#3B59F2',          // brand500
-  triangle: '#E8930C',         // warn600
-  wedge: '#0B7285',            // ai600 青瓷
+  support_trend: '#0B7A55',    // up700：支撑在下，向上托
+  resistance_trend: '#C4302B', // down700：阻力在上，向下压
+  channel: '#2338C8',          // brand700
+  triangle: '#C27706',         // warn600 按 600→700 同比例加深（体系无 warn-700）
+  wedge: '#085E6E',            // ai600 青瓷同比例加深（体系无 ai-700）
 };
 
 export function overlaysToMarks(

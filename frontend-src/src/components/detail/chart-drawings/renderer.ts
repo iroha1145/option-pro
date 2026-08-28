@@ -472,24 +472,55 @@ export function autoPatternsToMarks(
   const areas: object[] = [];
   const points: object[] = [];
   const polygons: FillPolygon[] = [];
+  /* 分色 + 线端标签：此前所有形态线都是同一根淡灰虚线且无名，图上支撑/
+     阻力/通道边完全分不出来，只能去页脚标签条猜。标签只挂第一段（通道/
+     三角的第二条边不重复报名），文字与线同色。 */
+  const kept: { pattern: AutoPatternLike; geom: NonNullable<ReturnType<typeof autoPatternGeometry>>; endY: number }[] = [];
   for (const pattern of patterns) {
     if (pattern.confidence < minConfidence) continue;
     const geom = autoPatternGeometry(pattern, ctx);
     if (!geom) continue;
-    /* 分色 + 线端标签：此前所有形态线都是同一根淡灰虚线且无名，图上支撑/
-       阻力/通道边完全分不出来，只能去页脚标签条猜。标签只挂第一段（通道/
-       三角的第二条边不重复报名），文字与线同色。 */
-    const color = pattern.color ?? '#8A94B0';
-    const lineStyle = { color, width: 1, type: [4, 4] as number[] };
+    kept.push({ pattern, geom, endY: geom.segments[0]?.b.y ?? 0 });
+  }
+  /* 线端标签防叠（用户截图：「水平箱体」骑在轴刻度 190 上、多形态字互压）：
+     ① 位置一律 insideEnd*（留在绘图区内），绝不用 'end'——那会画进 y 轴槽；
+     ② 文字带白底小药丸，跨在蜡烛/别的线上也读得清；
+     ③ 落点在同一价格带（4% 图高）里的形态顺次换 上/下/远上/远下 四档错开，
+        形态总数被 maxPatterns 钳着，四档够用。 */
+  const LABEL_SLOTS = [
+    { position: 'insideEndTop' as const, distance: 4 },
+    { position: 'insideEndBottom' as const, distance: 4 },
+    { position: 'insideEndTop' as const, distance: 18 },
+    { position: 'insideEndBottom' as const, distance: 18 },
+  ];
+  const band = Math.max((ctx.yMax - ctx.yMin) * 0.04, 1e-9);
+  const slotOf = new Map<AutoPatternLike, number>();
+  {
+    let prevY = Number.POSITIVE_INFINITY;
+    let slot = -1;
+    for (const item of [...kept].sort((a, b) => b.endY - a.endY)) {
+      slot = prevY - item.endY < band ? Math.min(slot + 1, LABEL_SLOTS.length - 1) : 0;
+      prevY = item.endY;
+      slotOf.set(item.pattern, slot);
+    }
+  }
+  for (const { pattern, geom } of kept) {
+    // 兜底灰从 ink400 加深到 ink500，线宽 1→1.5：细虚线在白纸上不够显。
+    const color = pattern.color ?? '#5A6788';
+    const lineStyle = { color, width: 1.5, type: [4, 4] as number[] };
+    const slotCfg = LABEL_SLOTS[slotOf.get(pattern) ?? 0];
     geom.segments.forEach((segment, index) => {
       const label = index === 0 && pattern.label
         ? {
             show: true,
             formatter: pattern.label,
-            position: 'end' as const,
+            position: slotCfg.position,
+            distance: slotCfg.distance,
             color,
             fontSize: 10,
-            distance: 4,
+            backgroundColor: 'rgba(255,255,255,0.88)',
+            padding: [1, 4] as number[],
+            borderRadius: 3,
           }
         : { show: false };
       lines.push([
@@ -505,12 +536,12 @@ export function autoPatternsToMarks(
           {
             xAxis: Math.min(...xs),
             yAxis: Math.min(...ys),
-            itemStyle: { color, opacity: 0.06 },
+            itemStyle: { color, opacity: 0.1 },
           },
           { xAxis: Math.max(...xs), yAxis: Math.max(...ys) },
         ]);
       } else {
-        polygons.push({ vertices: geom.fill, color, opacity: 0.06 });
+        polygons.push({ vertices: geom.fill, color, opacity: 0.1 });
       }
     }
   }

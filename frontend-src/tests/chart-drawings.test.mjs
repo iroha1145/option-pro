@@ -2018,13 +2018,18 @@ test('pattern rails carry per-kind color and a single end label', async (t) => {
   assert.equal(support.lineStyle.color, '#0E9F6E');
   assert.equal(support.label.show, true);
   assert.equal(support.label.formatter, '上升支撑');
-  assert.equal(support.label.position, 'end');
+  // 标签留在绘图区内（insideEnd*），绝不用 'end'——那会画进 y 轴槽骑在刻度上；
+  // 白底药丸保证跨在蜡烛上也读得清（用户截图：「水平箱体」压 190、多形态互叠）。
+  assert.equal(support.label.position, 'insideEndTop');
+  assert.equal(support.label.backgroundColor, 'rgba(255,255,255,0.88)');
   // 通道两条边同色，但标签只挂第一段——第二条边不重复报名
   const chanA = marks.lines[1][0];
   const chanB = marks.lines[2][0];
   assert.equal(chanA.lineStyle.color, '#3B59F2');
   assert.equal(chanB.lineStyle.color, '#3B59F2');
   assert.equal(chanA.label.show, true);
+  // 两个形态落点同价（118）：同价带内顺次换侧防叠印
+  assert.equal(chanA.label.position, 'insideEndBottom');
   assert.equal(chanB.label.show, false);
   // 填充也跟线色（不再是灰蒙一层）
   const poly = (marks.polygons ?? [])[0];
@@ -2034,7 +2039,7 @@ test('pattern rails carry per-kind color and a single end label', async (t) => {
   const bare = autoPatternsToMarks([
     { id: 'p3', kind: 'support_trend', confidence: 60, status: 'forming', anchors: [anchorAt(2, 100), anchorAt(20, 118)] },
   ], ctx, 0);
-  assert.equal(bare.lines[0][0].lineStyle.color, '#8A94B0');
+  assert.equal(bare.lines[0][0].lineStyle.color, '#5A6788');
   assert.equal(bare.lines[0][0].label.show, false);
 });
 
