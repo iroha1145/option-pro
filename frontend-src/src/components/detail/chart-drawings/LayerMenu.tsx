@@ -1,10 +1,14 @@
 /**
  * 算法与图层：独立居中小窗（transitions.dev modal，同 ConfirmDialog 骨架）。
  * 之前是右侧 Drawer——用户明确要"单独小窗口弹窗，不是右侧的"；而且白卡片
- * 贴在白抽屉底上发丝边几乎不可见。现在窗体正文用 paper-2 灰底衬白卡，
- * 开关走 FilterBar 的拨杆语言（role="switch"），才有 Fine-tune Card 的辨识度。
+ * 贴在白抽屉底上发丝边几乎不可见。窗体正文用 paper-2 灰底衬白卡。
+ *
+ * 对齐制度（用户抓包：胶囊里 CJK 文本靠 padding 凑行高会浮沉、激活态加粗
+ * 还会把 chip 撑宽）：所有按钮/胶囊一律 固定高度 + inline-flex 居中 +
+ * leading-none，激活态只换色不换字重；行统一 h-8，控件右缘对齐。
+ * 动效走 transitions.dev 目录：开关 27-toggle（双段回弹），读数 02-number-pop-in。
  */
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { cn } from '@/lib/utils';
 import Icon from '@/components/icons';
@@ -31,6 +35,8 @@ const PRESET_ORDER: Exclude<PresetId, 'custom'>[] = [
   'all',
 ];
 
+const FOCUS_RING = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30';
+
 /**
  * 数字输入的即时钳制：清空（Number('') === 0）和越界都不该被持久化。
  * 「最低几何质量」按 0–100 收，和标签条上的「置信度 87」同一把尺——
@@ -43,7 +49,41 @@ function clampInput(raw: string, min: number, max: number, fallback: number): nu
   return Math.min(max, Math.max(min, value));
 }
 
-/** FilterBar 同款拨杆；名字给 aria-label，禁用态由行头 title 给原因。 */
+/**
+ * 读数徽章（02-number-pop-in）：值变了才 pop，首帧不动——弹窗开场已有
+ * t-modal 缩放，六个徽章再齐跳一次就成了烟花。key 换掉整组以重放动画。
+ */
+function PopValue({ text }: { text: string }) {
+  const prev = useRef(text);
+  const [runId, setRunId] = useState(0);
+  useEffect(() => {
+    if (prev.current === text) return;
+    prev.current = text;
+    setRunId((n) => n + 1);
+  }, [text]);
+  const chars = [...text];
+  const n = chars.length;
+  return (
+    <span
+      key={runId}
+      className={cn('t-digit-group', runId > 0 && 'is-animating')}
+      style={{ '--digit-dur': '250ms', '--digit-distance': '5px' } as CSSProperties}
+    >
+      {chars.map((ch, i) => (
+        <span
+          key={i}
+          className="t-digit"
+          data-stagger={i === n - 2 ? '1' : i === n - 1 ? '2' : undefined}
+        >
+          {ch}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+/** 27-toggle 拨杆：轨道 32×18、拇指 14，行程 = 32 − 2×2 − 14 = 14px。
+    is-init 只在首次交互后加，否则开场每个"开"态开关都要空放一次回弹。 */
 function Switch({
   checked,
   disabled,
@@ -55,6 +95,7 @@ function Switch({
   label: string;
   onToggle: () => void;
 }) {
+  const [init, setInit] = useState(false);
   return (
     <button
       type="button"
@@ -65,20 +106,21 @@ function Switch({
       onClick={(event) => {
         // 行本身也可点：拨杆自吃事件，避免冒泡到行再翻一次等于没动。
         event.stopPropagation();
-        if (!disabled) onToggle();
+        if (disabled) return;
+        setInit(true);
+        onToggle();
       }}
+      data-on={checked ? 'true' : 'false'}
+      style={{ '--toggle-travel': '14px' } as CSSProperties}
       className={cn(
-        'relative h-[18px] w-8 shrink-0 rounded-pill shadow-track transition-colors duration-ui',
+        't-toggle relative h-[18px] w-8 shrink-0 rounded-pill shadow-track',
+        FOCUS_RING,
+        init && 'is-init',
         checked ? 'bg-brand-600' : 'bg-ink-300',
         disabled && 'cursor-not-allowed opacity-40',
       )}
     >
-      <span
-        className={cn(
-          'absolute top-[2px] size-[14px] rounded-full bg-card shadow-knob transition-[left] duration-ui ease-paper',
-          checked ? 'left-[16px]' : 'left-[2px]',
-        )}
-      />
+      <span className="t-toggle-thumb absolute left-[2px] top-[2px] size-[14px] rounded-full bg-card shadow-knob" />
     </button>
   );
 }
@@ -105,7 +147,7 @@ function LayerRow({
         if (!disabled) onToggle();
       }}
       className={cn(
-        'flex min-h-8 items-center justify-between gap-2 rounded-md px-1.5 py-0.5 transition-colors duration-fast',
+        'flex h-8 items-center justify-between gap-2 rounded-md px-1.5 transition-colors duration-fast',
         disabled ? 'cursor-not-allowed text-ink-400' : 'cursor-pointer hover:bg-paper-2/70',
       )}
     >
@@ -118,11 +160,14 @@ function LayerRow({
   );
 }
 
-/** 灰底正文里的一张白纸卡：Fine-tune Card 的分组单元。 */
-function Card({ title, children, className }: { title: string; children: ReactNode; className?: string }) {
+/** 灰底正文里的一张白纸卡：Fine-tune Card 的分组单元。meta 放右上（如 2/8）。 */
+function Card({ title, meta, children, className }: { title: string; meta?: string; children: ReactNode; className?: string }) {
   return (
     <section className={cn('rounded-lg border border-line bg-card p-2 shadow-card', className)}>
-      <h3 className="mb-1 px-1.5 pt-0.5 font-medium text-ink-600">{title}</h3>
+      <div className="mb-1 flex h-6 items-center justify-between px-1.5 pt-0.5">
+        <h3 className="font-medium leading-none text-ink-600">{title}</h3>
+        {meta && <span className="font-mono text-[11px] leading-none text-ink-300 tnum">{meta}</span>}
+      </div>
       {children}
     </section>
   );
@@ -168,26 +213,60 @@ export default function LayerMenu({
   if (!mounted) return null;
 
   const [primaryGroup, ...secondaryGroups] = GROUPS;
-  const groupCard = (group: (typeof GROUPS)[number]) => (
-    <Card key={group.id} title={group.label}>
-      <ul className="flex flex-col">
-        {LAYERS.filter((layer) => layer.group === group.id).map((layer) => {
-          const gate = layerInputEnabled(layer, mode);
-          return (
-            <li key={layer.id}>
-              <LayerRow
-                label={layer.label}
-                checked={settings.enabled.includes(layer.id)}
-                disabled={!gate.enabled}
-                reason={gate.reason === 'area_no_panes_or_ma' ? t('面积图不支持副图与均线叠加') : null}
-                hint={LAYER_HINTS[layer.id]}
-                onToggle={() => onChange(toggleLayer(settings, layer.id))}
-              />
-            </li>
-          );
-        })}
-      </ul>
-    </Card>
+  const groupCard = (group: (typeof GROUPS)[number]) => {
+    const rows = LAYERS.filter((layer) => layer.group === group.id);
+    const onCount = rows.filter((layer) => settings.enabled.includes(layer.id)).length;
+    return (
+      <Card key={group.id} title={group.label} meta={`${onCount}/${rows.length}`}>
+        <ul className="flex flex-col">
+          {rows.map((layer) => {
+            const gate = layerInputEnabled(layer, mode);
+            return (
+              <li key={layer.id}>
+                <LayerRow
+                  label={layer.label}
+                  checked={settings.enabled.includes(layer.id)}
+                  disabled={!gate.enabled}
+                  reason={gate.reason === 'area_no_panes_or_ma' ? t('面积图不支持副图与均线叠加') : null}
+                  hint={LAYER_HINTS[layer.id]}
+                  onToggle={() => onChange(toggleLayer(settings, layer.id))}
+                />
+              </li>
+            );
+          })}
+        </ul>
+      </Card>
+    );
+  };
+
+  const sliderRow = (
+    label: string,
+    value100: number,
+    step: number,
+    apply: (next100: number) => void,
+  ) => (
+    <div className="flex h-8 items-center gap-2.5 rounded-md px-1.5 transition-colors duration-fast hover:bg-paper-2/70">
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      <input
+        type="range"
+        min={0}
+        max={100}
+        step={step}
+        aria-label={label}
+        value={value100}
+        onChange={(event) => apply(clampInput(event.target.value, 0, 100, value100))}
+        className="ft-range w-28 shrink-0 cursor-pointer"
+        style={{ '--fill': `${value100}%` } as CSSProperties}
+      />
+      <span className="inline-flex h-6 w-12 items-center justify-center rounded-sm bg-paper-2 font-mono leading-none text-ink-700 tnum">
+        <PopValue text={`${value100}%`} />
+      </span>
+    </div>
+  );
+
+  const stepBtn = cn(
+    'inline-flex size-6 shrink-0 items-center justify-center rounded-md border border-line bg-card leading-none text-ink-500 shadow-btn transition-colors duration-fast hover:bg-paper-2 hover:text-ink-700 disabled:cursor-not-allowed disabled:opacity-40',
+    FOCUS_RING,
   );
 
   return (
@@ -209,19 +288,28 @@ export default function LayerMenu({
             overlayClassName(phase),
           )}
         >
-          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-line bg-card px-4 py-3">
-            <h2 className="min-w-0 truncate text-body font-medium text-ink-900">{t('算法与图层')}</h2>
-            <div className="flex shrink-0 items-center gap-1">
+          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-line bg-card px-5 py-3">
+            <div className="min-w-0">
+              <h2 className="truncate text-body font-medium leading-tight text-ink-900">{t('算法与图层')}</h2>
+              <p className="mt-0.5 truncate text-micro text-ink-400">{t('选择预设，或逐层微调算法与图层。')}</p>
+            </div>
+            <div className="flex shrink-0 items-center gap-1.5">
               <button
                 type="button"
                 onClick={() => onChange(settingsFromPreset('minimal'))}
-                className="rounded-xs px-1.5 py-0.5 text-micro text-ink-400 underline-offset-2 transition-colors duration-fast hover:text-brand-600 hover:underline"
+                className={cn(
+                  'inline-flex h-7 items-center rounded-md border border-line bg-card px-2.5 text-micro leading-none text-ink-500 shadow-btn transition-colors duration-fast hover:bg-paper-2 hover:text-ink-700',
+                  FOCUS_RING,
+                )}
               >
                 {t('恢复默认')}
               </button>
               <button
                 onClick={onClose}
-                className="rounded-sm p-1.5 text-ink-400 transition-[transform,color,background-color] duration-fast hover:bg-paper-2 hover:text-ink-600 active:scale-95"
+                className={cn(
+                  'inline-flex size-7 items-center justify-center rounded-md text-ink-400 transition-[transform,color,background-color] duration-fast hover:bg-paper-2 hover:text-ink-600 active:scale-95',
+                  FOCUS_RING,
+                )}
                 aria-label={t('关闭抽屉')}
               >
                 <Icon name="x" size={16} />
@@ -229,9 +317,8 @@ export default function LayerMenu({
             </div>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 text-micro">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 text-micro">
             <div className="flex flex-wrap items-center gap-1.5">
-              <span className="mr-0.5 font-medium text-ink-600">{t('预设')}</span>
               {PRESET_ORDER.map((id) => (
                 <button
                   key={id}
@@ -240,9 +327,10 @@ export default function LayerMenu({
                   aria-label={PRESETS[id].label}
                   onClick={() => onChange(settingsFromPreset(id))}
                   className={cn(
-                    'rounded-full border px-2.5 py-1 transition-colors duration-fast',
+                    'inline-flex h-7 items-center rounded-full border px-3 leading-none transition-colors duration-fast',
+                    FOCUS_RING,
                     settings.preset === id
-                      ? 'border-brand-600 bg-brand-600 font-medium text-white shadow-btn'
+                      ? 'border-brand-600 bg-brand-600 text-white shadow-btn'
                       : 'border-line bg-card text-ink-500 hover:border-line-strong hover:text-ink-700',
                   )}
                 >
@@ -261,57 +349,41 @@ export default function LayerMenu({
             <Card title={t('高级')} className="mt-3">
               {/* 0–100 的旋钮给滑杆 + 实时读数：数字框要先选中再改、还看不出量程，
                   而这两个值的手感本来就是「拖着找一个合适的松紧」。 */}
-              <div className="flex items-center gap-2 rounded-md px-1.5 py-1 transition-colors duration-fast hover:bg-paper-2/70">
-                <span className="flex-1">{t('最低几何质量')}</span>
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  step={5}
-                  aria-label={t('最低几何质量')}
-                  value={Math.round(settings.minShapeQuality * 100)}
-                  onChange={(event) => patch({
-                    minShapeQuality: clampInput(event.target.value, 0, 100, Math.round(settings.minShapeQuality * 100)) / 100,
-                  })}
-                  className="w-32 accent-brand-600"
-                />
-                <span className="w-12 rounded-sm bg-paper-2 px-1 py-0.5 text-center font-mono text-ink-700 tnum">
-                  {Math.round(settings.minShapeQuality * 100)}%
-                </span>
-              </div>
+              {sliderRow(t('最低几何质量'), Math.round(settings.minShapeQuality * 100), 5, (next) => {
+                patch({ minShapeQuality: next / 100 });
+              })}
+              {sliderRow(t('标签密度'), Math.round(settings.labelDensity * 100), 10, (next) => {
+                patch({ labelDensity: next / 100 });
+              })}
 
-              <div className="flex items-center gap-2 rounded-md px-1.5 py-1 transition-colors duration-fast hover:bg-paper-2/70">
-                <span className="flex-1">{t('标签密度')}</span>
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  step={10}
-                  aria-label={t('标签密度')}
-                  value={Math.round(settings.labelDensity * 100)}
-                  onChange={(event) => patch({
-                    labelDensity: clampInput(event.target.value, 0, 100, Math.round(settings.labelDensity * 100)) / 100,
-                  })}
-                  className="w-32 accent-brand-600"
-                />
-                <span className="w-12 rounded-sm bg-paper-2 px-1 py-0.5 text-center font-mono text-ink-700 tnum">
-                  {Math.round(settings.labelDensity * 100)}%
+              <div className="flex h-8 items-center justify-between gap-2 rounded-md px-1.5 transition-colors duration-fast hover:bg-paper-2/70">
+                <span className="min-w-0 truncate">{t('最大形态数')}</span>
+                <span className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    aria-label={t('减少')}
+                    disabled={settings.maxPatterns <= 0}
+                    onClick={() => patch({ maxPatterns: Math.max(0, settings.maxPatterns - 1) })}
+                    className={stepBtn}
+                  >
+                    −
+                  </button>
+                  <span
+                    aria-label={t('最大形态数')}
+                    className="inline-flex h-6 w-9 items-center justify-center rounded-sm bg-paper-2 font-mono leading-none text-ink-700 tnum"
+                  >
+                    <PopValue text={String(settings.maxPatterns)} />
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={t('增加')}
+                    disabled={settings.maxPatterns >= 24}
+                    onClick={() => patch({ maxPatterns: Math.min(24, settings.maxPatterns + 1) })}
+                    className={stepBtn}
+                  >
+                    +
+                  </button>
                 </span>
-              </div>
-
-              <div className="flex min-h-8 items-center gap-2 rounded-md px-1.5 py-1 transition-colors duration-fast hover:bg-paper-2/70">
-                <span className="flex-1">{t('最大形态数')}</span>
-                <input
-                  type="number"
-                  min={0}
-                  max={24}
-                  aria-label={t('最大形态数')}
-                  value={settings.maxPatterns}
-                  onChange={(event) => patch({
-                    maxPatterns: Math.round(clampInput(event.target.value, 0, 24, settings.maxPatterns)),
-                  })}
-                  className="w-16 rounded-xs border border-line px-1.5 py-0.5 text-right font-mono tnum"
-                />
               </div>
 
               <LayerRow
