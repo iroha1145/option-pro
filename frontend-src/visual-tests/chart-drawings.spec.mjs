@@ -157,7 +157,12 @@ async function placeHorizontal(page, xRatio = 0.5, yRatio = 0.4) {
 /** 429 / GET-not-ready leaves write_failed; 重试同步 re-GETs or replays drain. */
 async function clickRetryIfShown(page) {
   const retry = toolButton(page, "重试同步");
-  if (await retry.isVisible().catch(() => false)) await retry.click();
+  if (await retry.isVisible().catch(() => false)) {
+    // 横幅是自愈型的：isVisible 采样到最后一帧后它可能自己消失，无界 click 会为
+    // 一个再也不回来的按钮等满整个测试（CI 动作流实测悬死 91.6s，期间轮询零请求）。
+    // 消失 = 已无可重试，本身就是成功——限时并吞掉超时。
+    await retry.click({ timeout: 1_000 }).catch(() => {});
+  }
 }
 
 async function paintedPixels(page) {
@@ -395,14 +400,16 @@ test("undo color text lock delete then refresh", async ({ page }) => {
   await expandChart(page);
   const row = drawingRows(page).first();
   // Create must land before lock: a PUT 404 while still-local is conflict, not idle.
-  await expect.poll(async () => drawingsLockState(await listDrawings(page)), { timeout: 20_000 }).toBe("unlocked");
+  // 锁状态轮询打的是真服务器：热桶下诚实 Retry-After 是 1–3s，但 20s 窗口可能
+  // 整段落在热窗里；45s 跨过 60s 滚动桶的冷却期（本地连跑三次实测 20s 不够）。
+  await expect.poll(async () => drawingsLockState(await listDrawings(page)), { timeout: 45_000 }).toBe("unlocked");
   await toolButton(page, "锁定").first().click();
   await expect(row).toContainText("已锁定");
-  await expect.poll(async () => drawingsLockState(await listDrawings(page)), { timeout: 20_000 }).toBe("locked");
+  await expect.poll(async () => drawingsLockState(await listDrawings(page)), { timeout: 45_000 }).toBe("locked");
   await toolButton(page, "撤销").first().click();
   await expect(row).not.toContainText("已锁定");
   // 不读工具条文案（同步标签会改）：等 GET 上的 locked 落地再刷新。
-  await expect.poll(async () => drawingsLockState(await listDrawings(page)), { timeout: 20_000 }).toBe("unlocked");
+  await expect.poll(async () => drawingsLockState(await listDrawings(page)), { timeout: 45_000 }).toBe("unlocked");
   await page.reload({ waitUntil: "domcontentloaded" });
   await expect(toolButton(page, "选择")).toBeVisible({ timeout: 20_000 });
   await expectDrawingCount(page, 1);
