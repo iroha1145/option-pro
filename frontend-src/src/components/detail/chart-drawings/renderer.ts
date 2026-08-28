@@ -505,8 +505,9 @@ export function autoPatternsToMarks(
     }
   }
   for (const { pattern, geom } of kept) {
-    const color = pattern.color ?? '#8A94B0';
-    const lineStyle = { color, width: 1, type: [4, 4] as number[] };
+    // 兜底灰从 ink400 加深到 ink500，线宽 1→1.5：细虚线在白纸上不够显。
+    const color = pattern.color ?? '#5A6788';
+    const lineStyle = { color, width: 1.5, type: [4, 4] as number[] };
     const slotCfg = LABEL_SLOTS[slotOf.get(pattern) ?? 0];
     geom.segments.forEach((segment, index) => {
       const label = index === 0 && pattern.label
@@ -535,12 +536,12 @@ export function autoPatternsToMarks(
           {
             xAxis: Math.min(...xs),
             yAxis: Math.min(...ys),
-            itemStyle: { color, opacity: 0.06 },
+            itemStyle: { color, opacity: 0.1 },
           },
           { xAxis: Math.max(...xs), yAxis: Math.max(...ys) },
         ]);
       } else {
-        polygons.push({ vertices: geom.fill, color, opacity: 0.06 });
+        polygons.push({ vertices: geom.fill, color, opacity: 0.1 });
       }
     }
   }

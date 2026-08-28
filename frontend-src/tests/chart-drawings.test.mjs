@@ -2039,7 +2039,7 @@ test('pattern rails carry per-kind color and a single end label', async (t) => {
   const bare = autoPatternsToMarks([
     { id: 'p3', kind: 'support_trend', confidence: 60, status: 'forming', anchors: [anchorAt(2, 100), anchorAt(20, 118)] },
   ], ctx, 0);
-  assert.equal(bare.lines[0][0].lineStyle.color, '#8A94B0');
+  assert.equal(bare.lines[0][0].lineStyle.color, '#5A6788');
   assert.equal(bare.lines[0][0].label.show, false);
 });
 
