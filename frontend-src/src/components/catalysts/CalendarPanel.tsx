@@ -109,7 +109,6 @@ export default function CalendarPanel({ refreshToken }: { refreshToken: number }
   return (
     <div className="card-surface overflow-hidden">
       {groups.map(([date, events], gi) => {
-        const d = new Date(`${date}T00:00:00`);
         const isToday = date === todayKey;
         return (
           <div key={date} className={cn(gi > 0 && 'border-t border-line')}>
