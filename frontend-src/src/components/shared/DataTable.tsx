@@ -8,6 +8,8 @@ export interface Column<T> {
   key: string;
   /** 列头内容；th 内层是 inline-flex gap-1，可携带 InfoHint 等行内小件 */
   title: ReactNode;
+  /** 排序按钮外的兄弟节点（如 InfoHint），避免把可交互 ⓘ 嵌进排序 button */
+  hint?: ReactNode;
   align?: 'left' | 'right' | 'center';
   width?: string;
   sortable?: boolean;
@@ -96,20 +98,23 @@ export default function DataTable<T>({
               >
                 {/* 排序必须是真正的按钮（审计 P3-1）：旧实现把 onClick 绑在 <th> 上，
                     既不可聚焦也没有键盘事件，纯鼠标操作。 */}
-                {c.sortable ? (
-                  <button
-                    type="button"
-                    onClick={() => toggleSort(c.key)}
-                    className="inline-flex items-center gap-1 rounded-xs transition-colors duration-fast hover:text-ink-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30"
-                  >
-                    {c.title}
-                    <span className={cn('inline-flex transition-transform duration-200', sort?.key === c.key && !sort.desc && 'rotate-180', sort?.key !== c.key && 'opacity-30')}>
-                      <Icon name="chevron-down" size={11} />
-                    </span>
-                  </button>
-                ) : (
-                  <span className="inline-flex items-center gap-1">{c.title}</span>
-                )}
+                <span className="inline-flex items-center gap-1">
+                  {c.sortable ? (
+                    <button
+                      type="button"
+                      onClick={() => toggleSort(c.key)}
+                      className="inline-flex items-center gap-1 rounded-xs transition-colors duration-fast hover:text-ink-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30"
+                    >
+                      {c.title}
+                      <span className={cn('inline-flex transition-transform duration-200', sort?.key === c.key && !sort.desc && 'rotate-180', sort?.key !== c.key && 'opacity-30')}>
+                        <Icon name="chevron-down" size={11} />
+                      </span>
+                    </button>
+                  ) : (
+                    <span className="inline-flex items-center gap-1">{c.title}</span>
+                  )}
+                  {c.hint}
+                </span>
               </th>
             ))}
           </tr>

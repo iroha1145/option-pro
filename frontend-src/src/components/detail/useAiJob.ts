@@ -1,4 +1,4 @@
-/** AI 任务轮询 Hook：2.5s 节奏至 succeeded/failed/cancelled 终止，总超时 5 分钟（§11） */
+/** AI 任务轮询 Hook：退避 [2,3,5,8,10]s 至 succeeded/failed/cancelled 终止，总超时 5 分钟（§11） */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { aiJobsApi } from '@/api/modules/ai-jobs';
 import type { AiJob } from '@/api/types';
@@ -60,9 +60,15 @@ export function useAiJob() {
           return;
         }
         if (!aliveRef.current || generation !== generationRef.current) return;
-        timerRef.current = setTimeout(() => void tick(), 2500);
+        const delays = [2000, 3000, 5000, 8000, 10000];
+        const delay = typeof document !== 'undefined' && document.hidden
+          ? 10000
+          : delays[Math.min(attempt, delays.length - 1)];
+        attempt += 1;
+        timerRef.current = setTimeout(() => void tick(), delay);
       };
-      timerRef.current = setTimeout(() => void tick(), 2500);
+      let attempt = 0;
+      timerRef.current = setTimeout(() => void tick(), 2000);
     },
     [stop],
   );
@@ -103,8 +109,9 @@ export function useAiJob() {
       const j = await aiJobsApi.cancel(job.id);
       setJob(j);
       stop();
-    } catch {
-      /* 忽略取消失败 */
+    } catch (e) {
+      if (!aliveRef.current) return;
+      setError(e instanceof Error ? e.message : t('取消失败'));
     }
   }, [job, stop]);
 

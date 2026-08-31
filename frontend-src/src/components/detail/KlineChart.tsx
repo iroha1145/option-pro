@@ -13,6 +13,7 @@ import ReactECharts from '@/components/charts/ReactECharts';
 import Segmented from '@/components/shared/Segmented';
 import EmptyState from '@/components/shared/EmptyState';
 import InfoHint from '@/components/shared/InfoHint';
+import ManualStockPull from '@/components/detail/ManualStockPull';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
 import { STRUCTURE_HINTS } from '@/lib/structureHints';
@@ -45,7 +46,8 @@ import {
   type MeasureBasis,
   type RangeMeasure,
 } from '@/lib/drawdown';
-import { fmtCompact, fmtPct, fmtPrice, fmtSigned } from '@/lib/format';
+import { fmtCompact, fmtLocaleDateTime, fmtPct, fmtPrice, fmtSigned } from '@/lib/format';
+import { escapeHandledByOverlay } from './chart-drawings/tools.ts';
 import { cn } from '@/lib/utils';
 import { t } from '../../i18n/core.ts';
 import { CHART_RANGES, DEFAULT_CHART_RANGE, getDetailChart, type ChartRange } from './api';
@@ -621,15 +623,6 @@ export default function KlineChart({
     };
   }, [chartInst, bars]);
 
-  useEffect(() => {
-    if (!measureActive) return;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setMeasure({ phase: 'idle' });
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [measureActive]);
-
   // 选点走 zrender 全域点击：点击任意位置吸附最近可测 bar（series 命中区太窄，移动端点不中）
   useEffect(() => {
     const chart = chartInst;
@@ -758,6 +751,26 @@ export default function KlineChart({
     onCancelMeasure: () => setMeasure({ phase: 'idle' }),
     reducedMotion,
   });
+
+  useEffect(() => {
+    if (!measureActive) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      const openModals = typeof document === 'undefined'
+        ? 0
+        : document.querySelectorAll('[role="dialog"],[role="alertdialog"],[aria-modal="true"]').length;
+      if (escapeHandledByOverlay({
+        defaultPrevented: event.defaultPrevented,
+        openModals,
+        workspaceExpanded: drawing.expanded,
+      })) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setMeasure({ phase: 'idle' });
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [drawing.expanded, measureActive]);
 
   const extraMarks = useMemo(() => {
     const hand = drawing.marks;
@@ -953,15 +966,27 @@ export default function KlineChart({
               <EmptyState
                 variant="empty"
                 image="/empty-chart.svg"
-                title={t("K 线暂不可用")}
-                description={t('{ticker} · {range}数据暂不可用，其他周期仍可切换', { ticker, range: CHART_RANGES.find((item) => item.value === range)?.label ?? range })}
+                title={
+                  error?.bizCode === 'public_snapshot_unavailable'
+                    ? t('该标的暂无完整数据')
+                    : t('K 线暂不可用')
+                }
+                description={
+                  error?.bizCode === 'public_snapshot_unavailable'
+                    ? t('该股票暂无数据，可手动获取最新行情、日线与技术指标')
+                    : t('{ticker} · {range}数据暂不可用，其他周期仍可切换', { ticker, range: CHART_RANGES.find((item) => item.value === range)?.label ?? range })
+                }
                 action={
-                  <button
-                    onClick={() => refresh()}
-                    className="rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] duration-fast hover:brightness-105"
-                  >
-                    {t('重试')}
-                  </button>
+                  error?.bizCode === 'public_snapshot_unavailable' ? (
+                    <ManualStockPull ticker={ticker} compact onPulled={() => refresh({ force: true })} />
+                  ) : (
+                    <button
+                      onClick={() => refresh()}
+                      className="rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] duration-fast hover:brightness-105"
+                    >
+                      {t('重试')}
+                    </button>
+                  )
                 }
                 className="py-6"
               />
@@ -1096,7 +1121,7 @@ export default function KlineChart({
             : ' '}
         </span>
         <span className="font-mono tnum">
-          {data ? t('读取于 {at}', { at: new Date(data.as_of).toLocaleString('zh-CN', { hour12: false }) }) : ''}
+          {data ? t('读取于 {at}', { at: fmtLocaleDateTime(data.as_of, { hour12: false }) }) : ''}
         </span>
       </p>
     </section>

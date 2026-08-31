@@ -310,6 +310,27 @@ def test_analysis_progress_requires_owner_access() -> None:
     assert not any(call[0] == "analysis_progress" for call in service.calls)
 
 
+def test_feed_forwards_theme_query() -> None:
+    service = StubPersonalService()
+    response = client_for(service).get(
+        "/api/catalysts/feed",
+        params={"theme": "evt_theme_ai_capex"},
+    )
+    assert response.status_code == 200
+    call = next(item for item in service.calls if item[0] == "feed")
+    assert call[1]["theme"] == "evt_theme_ai_capex"
+
+
+def test_feed_rejects_invalid_theme_query() -> None:
+    service = StubPersonalService()
+    response = client_for(service).get(
+        "/api/catalysts/feed",
+        params={"theme": "not a theme!!"},
+    )
+    assert response.status_code == 422
+    assert not any(call[0] == "feed" for call in service.calls)
+
+
 def test_ticker_batch_forwards_directional_stock_filters() -> None:
     service = StubPersonalService()
     client = client_for(service)

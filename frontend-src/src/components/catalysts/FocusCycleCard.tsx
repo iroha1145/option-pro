@@ -13,6 +13,7 @@ import InfoHint from '@/components/shared/InfoHint';
 import Icon from '@/components/icons';
 import { SCORE_HINTS } from '@/lib/scoreHints';
 import { cn } from '@/lib/utils';
+import { fmtLocaleDate, fmtLocaleDateTime } from '@/lib/format';
 import { t } from '../../i18n/core.ts';
 
 const STAGES = [t('萌芽'), t('发酵'), t('主升'), t('退潮')] as const;
@@ -76,8 +77,8 @@ function fmtCycleDate(iso: string, withTime: boolean): string {
   const d = new Date(iso);
   if (!iso || Number.isNaN(d.getTime())) return '—';
   return withTime
-    ? d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
-    : d.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
+    ? fmtLocaleDateTime(iso)
+    : fmtLocaleDate(iso, { month: '2-digit', day: '2-digit' });
 }
 
 const CYCLE_STATUS_CN: Record<string, string> = {
@@ -208,10 +209,12 @@ export default function FocusCycleCard({ refreshToken = 0 }: { refreshToken?: nu
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [job, setJob] = useState<FocusCycleJob | null>(null);
   const pollRef = useRef<number | null>(null);
+  const pollGenRef = useRef(0);
 
   const stopPoll = useCallback(() => {
+    pollGenRef.current += 1;
     if (pollRef.current !== null) {
-      window.clearInterval(pollRef.current);
+      window.clearTimeout(pollRef.current);
       pollRef.current = null;
     }
   }, []);
@@ -245,7 +248,12 @@ export default function FocusCycleCard({ refreshToken = 0 }: { refreshToken?: nu
         return;
       }
       const pollDeadline = Date.now() + 5 * 60_000;
-      pollRef.current = window.setInterval(async () => {
+      const BACKOFF = [2000, 3000, 5000, 8000, 10000];
+      const generation = pollGenRef.current;
+      let attempt = 0;
+      const stillThisPoll = () => generation === pollGenRef.current;
+      const tick = async () => {
+        if (!stillThisPoll()) return;
         if (Date.now() >= pollDeadline) {
           stopPoll();
           latestQ.refresh();
@@ -255,24 +263,37 @@ export default function FocusCycleCard({ refreshToken = 0 }: { refreshToken?: nu
         }
         try {
           const next = await catalystsContract.focusCycleJob(j.cycleId!);
+          if (!stillThisPoll()) return;
           setJob({ ...next });
-          if (next.status === 'completed' || next.status === 'failed') {
+          if (['completed', 'failed', 'cancelled', 'canceled'].includes(next.status)) {
             stopPoll();
             if (next.status === 'completed') {
               toast.success(t('新焦点周期已生成'));
               latestQ.refresh();
-            } else {
+            } else if (next.status === 'failed') {
               toast.error(t('焦点周期计算失败'), t('请稍后重试'));
+            } else {
+              toast.info(t('任务已取消'));
+              latestQ.refresh();
             }
-            window.setTimeout(() => setJob(null), 1200);
+            window.setTimeout(() => {
+              if (stillThisPoll()) setJob(null);
+            }, 1200);
+            return;
           }
         } catch (error) {
+          if (!stillThisPoll()) return;
           stopPoll();
           setJob(null);
           latestQ.refresh();
           toast.error(t('焦点周期状态读取失败'), error instanceof Error ? error.message : t('请稍后刷新页面'));
+          return;
         }
-      }, 2000);
+        const delay = BACKOFF[Math.min(attempt, BACKOFF.length - 1)];
+        attempt += 1;
+        pollRef.current = window.setTimeout(() => void tick(), delay);
+      };
+      pollRef.current = window.setTimeout(() => void tick(), BACKOFF[0]);
     } catch (e) {
       toast.error(t('提交失败'), e instanceof Error ? e.message : undefined);
     } finally {
@@ -280,7 +301,7 @@ export default function FocusCycleCard({ refreshToken = 0 }: { refreshToken?: nu
     }
   }, [latestQ, stopPoll, toast]);
 
-  const running = job && (job.status === 'queued' || job.status === 'in_progress');
+  const running = job && ['queued', 'in_progress', 'cancel_requested', 'pending', 'preparing'].includes(job.status);
 
   return (
     /* 后续区块 rise-in 减量：直接呈现 */

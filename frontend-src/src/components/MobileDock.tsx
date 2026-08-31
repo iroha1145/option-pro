@@ -33,7 +33,8 @@ const MORE_ITEMS: { label: string; path: string; icon: IconName; desc: string }[
 export default function MobileDock() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { isOwner, isSignedIn, username } = useAccess();
+  const { isOwner, isSignedIn, username, logout } = useAccess();
+  const [loggingOut, setLoggingOut] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   /* aria-modal 配套（审计 #60）：声明了模态就要真的困住焦点，Drawer 与
      CommandPalette 都调了 useFocusTrap，这里补齐。 */
@@ -52,7 +53,10 @@ export default function MobileDock() {
   useEffect(() => {
     if (!moreOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setMoreOpen(false);
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      setMoreOpen(false);
     };
     document.addEventListener('keydown', onKey);
     document.body.style.overflow = 'hidden';
@@ -196,21 +200,35 @@ export default function MobileDock() {
                 ))}
                 <div className="mx-3 my-2 border-t border-line" />
                 <button
+                  type="button"
+                  disabled={loggingOut}
                   onClick={() => {
-                    setMoreOpen(false);
-                    navigate('/login');
+                    if (!isSignedIn) {
+                      setMoreOpen(false);
+                      navigate('/login');
+                      return;
+                    }
+                    setLoggingOut(true);
+                    void logout()
+                      .catch(() => undefined)
+                      .finally(() => {
+                        setLoggingOut(false);
+                        setMoreOpen(false);
+                      });
                   }}
-                  className="flex w-full items-center gap-3 rounded-md px-3 py-3 text-left transition-[transform,background-color] hover:bg-paper-2 active:bg-line/60"
+                  className="flex w-full items-center gap-3 rounded-md px-3 py-3 text-left transition-[transform,background-color] hover:bg-paper-2 active:bg-line/60 disabled:cursor-wait disabled:opacity-60"
                 >
                   <span className={cn('flex size-9 items-center justify-center rounded-md border border-line', isOwner ? 'bg-up-50 text-up-700' : 'bg-card-warm text-ink-400')}>
-                    <Icon name="shield" size={17} />
+                    <Icon name={isSignedIn ? 'logout' : 'shield'} size={17} />
                   </span>
                   <span className="flex-1">
                     <span className="block text-body-s font-medium text-ink-800">
                       {isOwner ? t('Owner 已登录') : isSignedIn ? t('已登录 {name}', { name: username ?? '' }) : t('访客只读模式')}
                     </span>
                     <span className="block text-micro text-ink-400">
-                      {isOwner ? t('可执行写操作') : isSignedIn ? t('自选保存在账号里') : t('登录后可用个人自选与手动拉取')}
+                      {isOwner || isSignedIn
+                        ? (loggingOut ? t('正在退出…') : t('退出登录'))
+                        : t('登录后可用个人自选与手动拉取')}
                     </span>
                   </span>
                 </button>

@@ -286,6 +286,7 @@ def catalyst_feed(
         "other",
     ]] = Query(default=None),
     multi_source_only: bool = Query(default=False),
+    theme: Optional[str] = Query(default=None, max_length=64, pattern=r"^[A-Za-z0-9_-]+$"),
     service: PersonalCatalystService = Depends(_service),
 ) -> dict:
     _require_public_query_bound(
@@ -311,6 +312,7 @@ def catalyst_feed(
             horizon=horizon,
             mechanism=mechanism,
             multi_source_only=multi_source_only,
+            theme=theme,
         )
     except CatalystError as error:
         _raise_safe(error)

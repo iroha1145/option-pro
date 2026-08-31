@@ -515,11 +515,15 @@ function qs(q: CatalystFeedQuery): string {
     min_confidence: conf,
     min_abs_impact: toBackendImpact(q.minAbsImpact),
     multi_source_only: q.multiSourceOnly ? true : undefined,
+    theme: q.themeId || undefined,
     limit: q.limit,
     cursor: q.cursor ?? undefined,
   });
   return s ? `?${s}` : '';
 }
+
+/** 供测试断言 live 查询串是否带上 theme 等过滤项。 */
+export { qs as serializeCatalystFeedQuery };
 
 /* ================= 股票影响汇总（batch results map → 客户端聚合） ================= */
 

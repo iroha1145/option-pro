@@ -104,7 +104,7 @@ function completedStageLabel(value: EarningsImpactResult): string {
   const stage = normalizedStage(value.analysisStage);
   if (stage === 'pre_release') return __t('发布前分析');
   if (stage === 'post_release_manual') return __t('发布后分析');
-  return __t('简体中文');
+  return __t('分析完成');
 }
 
 /* ---------------- 报告级服务端状态：不展示任务编号、费用或取消能力 ---------------- */
@@ -188,6 +188,8 @@ interface ImpactCardProps {
   ticker: string | null;
   row?: EarningsRow | null;
   onAnalyzed: (ticker: string, analysis: EarningsReportAnalysis) => void;
+  /** 日历快照修订（asOf / 刷新状态）。刷新后必须重新读报告级分析。 */
+  calendarRevision?: string | null;
   className?: string;
 }
 
@@ -200,7 +202,7 @@ function reportAnalysisNeedsPolling(value: EarningsReportAnalysis | null): boole
   return isActive(normalizedStage(value.status)) || value.finalizationInProgress;
 }
 
-export default function ImpactCard({ ticker, row, onAnalyzed, className }: ImpactCardProps) {
+export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, className }: ImpactCardProps) {
   const { isOwner, aiEnabled, aiAvailable } = useAccess();
   const { openTicker } = useShell();
   const toast = useToast();
@@ -330,6 +332,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
     reportDate ?? '',
     reportYear ?? '',
     reportQuarter ?? '',
+    calendarRevision ?? '',
     aiEnabled,
     aiAvailable,
     isOwner,
@@ -353,7 +356,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
     if (!ticker) return;
     const id = window.setTimeout(() => void loadImpact(ticker), 0);
     return () => window.clearTimeout(id);
-  }, [ticker, aiEnabled, aiAvailable, isOwner, loadImpact]);
+  }, [ticker, calendarRevision, aiEnabled, aiAvailable, isOwner, loadImpact]);
 
   /* 排队、分析或自动终版期间只轮询报告级 GET。 */
   const shouldPoll = reportAnalysisNeedsPolling(analysis);
@@ -610,6 +613,9 @@ export default function ImpactCard({ ticker, row, onAnalyzed, className }: Impac
               <div className="mt-5">
                 <JobSteps analysis={analysis} />
               </div>
+              {errorMsg && (
+                <p className="mt-3 text-micro leading-5 text-warn-600">{errorMsg}</p>
+              )}
               <p className="mt-5 border-t border-line pt-3 text-micro leading-5 text-ink-400">
                 {__t('分析完成后会自动显示，不用刷新页面。')}
               </p>

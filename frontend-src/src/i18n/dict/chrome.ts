@@ -70,6 +70,7 @@ export const CHROME: Dict = {
   '退出 Owner 登录': ['Sign out of Owner mode', 'オーナーからサインアウト'],
   '退出 {name}': ['Sign out {name}', '{name} からサインアウト'],
   '退出登录': ['Sign out', 'サインアウト'],
+  '正在退出…': ['Signing out…', 'サインアウト中…'],
   '已退出登录': ['Signed out', 'サインアウトしました'],
   '退出失败': ['Sign-out failed', 'サインアウトに失敗しました'],
   'Owner 或客户账号': ['Owner or customer account', 'オーナーまたは顧客アカウント'],

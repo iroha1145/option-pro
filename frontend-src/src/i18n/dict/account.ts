@@ -110,6 +110,7 @@ export const ACCOUNT: Dict = {
 
   /* ---------------- 404（NotFound.tsx） ---------------- */
   '页面不存在': ['Page not found', 'ページが見つかりません'],
+  '返回首页': ['Back to home', 'ホームに戻る'],
 
   /* ---------------- 建设中占位页（_PageStub.tsx） ---------------- */
   '· 建设中': ['· Under construction', '· 準備中'],

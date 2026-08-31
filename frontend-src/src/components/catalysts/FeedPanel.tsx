@@ -8,7 +8,7 @@ import { SkeletonBlock } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
 import InfoHint from '@/components/shared/InfoHint';
 import { cn } from '@/lib/utils';
-import { fmtRelative } from '@/lib/format';
+import { fmtLocaleDate, fmtLocaleTime, fmtRelative } from '@/lib/format';
 import { SCORE_HINTS } from '@/lib/scoreHints';
 import { catalystsContract } from './api';
 import type { CatalystNewsItem } from './api';
@@ -28,8 +28,8 @@ function TimeCol({ iso }: { iso: string }) {
     <div className="flex w-11 shrink-0 flex-col items-center pt-0.5">
       <span className="font-mono text-[11px] leading-[14px] text-ink-400 tnum">
         {sameDay
-          ? d.toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit' })
-          : d.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })}
+          ? fmtLocaleTime(iso)
+          : fmtLocaleDate(iso, { month: '2-digit', day: '2-digit' })}
       </span>
       <span className="mt-1.5 hidden w-[2px] flex-1 rounded-full bg-line sm:block" aria-hidden="true" />
     </div>
@@ -59,23 +59,16 @@ export function NewsRow({
       transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1], delay: animate ? Math.min(index * 0.03, 0.3) : 0 }}
       /* v8.1：行级去位移。上浮属于「卡片脱离纸面」的 elevation 隐喻——列表行无阴影无边界，
          浮起没有语义；60 行高频扫视区满屏跳也违反动效克制。背景色 + 标题下划线两重反馈已够。 */
-      className="group relative flex cursor-pointer gap-3 px-4 py-[18px] transition-colors duration-fast hover:bg-paper-2/70 focus-visible:bg-paper-2/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-400/60 sm:px-5"
-      onClick={() => onOpen(item.newsId)}
-      /* 键盘可达：article + onClick 对 Tab 键用户完全不存在，右侧那颗
-         「AI 分析」按钮又是 aria-hidden 的 span——整条新闻打不开。 */
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.target !== e.currentTarget) return;
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          onOpen(item.newsId);
-        }
-      }}
-      aria-label={item.titleZh}
+      className="group relative flex gap-3 px-4 py-[18px] transition-colors duration-fast hover:bg-paper-2/70 sm:px-5"
     >
+      <button
+        type="button"
+        onClick={() => onOpen(item.newsId)}
+        aria-label={item.titleZh}
+        className="absolute inset-0 z-0 focus-visible:bg-paper-2/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-400/60"
+      />
       <TimeCol iso={item.publishedAt} />
-      <div className="min-w-0 flex-1">
+      <div className="relative z-10 min-w-0 flex-1 pointer-events-none">
         {/* 顶行：来源 · 相对时间 · 多源 · 过期 */}
         <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-micro text-ink-400">
           <span className="font-medium text-ink-500">{item.source}</span>
@@ -98,7 +91,7 @@ export function NewsRow({
         <p className="mt-1 line-clamp-2 text-body-s text-ink-500">{item.summaryZh}</p>
         {/* 底行：代码 chips + 分析状态 + 分类/置信度/影响 */}
         <div className="mt-2.5 flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
-          <span className="flex max-w-full flex-wrap items-center gap-1" onClick={(e) => e.stopPropagation()}>
+          <span className="pointer-events-auto flex max-w-full flex-wrap items-center gap-1">
             {item.sourceTickers.map((t) => (
               <TickerChip key={t} ticker={t} onClick={() => openTicker(t)} />
             ))}
@@ -111,7 +104,7 @@ export function NewsRow({
                   后面各挂一句常驻免责声明（「· 非胜率」「· 非收益」）、又各带一个 ⓘ，
                   每条新闻重复一遍、又解释不了自己。声明留着，收进这一个 ⓘ。
                   三者同处一个 flex 单元：换行时一起走，ⓘ 不会被甩到下一行。 */}
-              <span className="flex shrink-0 items-center gap-x-2 whitespace-nowrap">
+              <span className="pointer-events-auto flex shrink-0 items-center gap-x-2 whitespace-nowrap">
                 <ConfidenceLabel value={a.confidence} bare />
                 {bestImpact && <ImpactValue value={bestImpact.impactScore} bare />}
                 <InfoHint hint={SCORE_HINTS.newsAssessment} size={11} />

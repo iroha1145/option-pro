@@ -302,7 +302,10 @@ export default function LayerMenu({
   useEffect(() => {
     if (!mounted) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      onClose();
     };
     document.addEventListener('keydown', onKey);
     document.body.style.overflow = 'hidden';

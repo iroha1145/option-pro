@@ -3,7 +3,7 @@
  * B0 页头带 · B1 概览统计（count-up）· B2 可排序表格/卡片（tick-flash）· B3 侧栏（信号/强度分布/市场时钟）
  * 轮询 60s · 空态 / 骨架 / 503 · 响应式
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { motion } from 'framer-motion';
 import { stocksApi } from '@/api/modules/stocks';
@@ -258,6 +258,7 @@ function WatchCard({
   index,
   onClick,
   onRemove,
+  removing,
   showStrength,
   showSignals,
   animateIn,
@@ -267,6 +268,7 @@ function WatchCard({
   onClick: () => void;
   /** 仅登录客户可移除自己的自选 */
   onRemove?: () => void;
+  removing?: boolean;
   showStrength: boolean;
   showSignals: boolean;
   /**
@@ -332,6 +334,7 @@ function WatchCard({
           type="button"
           aria-label={t('将 {ticker} 移出自选', { ticker: item.ticker })}
           title={t("移出自选")}
+          disabled={removing}
           onClick={(event) => {
             event.stopPropagation();
             onRemove();
@@ -372,6 +375,8 @@ export default function Watchlist() {
   const [maxTickers, setMaxTickers] = useState(50);
   const [addInput, setAddInput] = useState('');
   const [savingTicker, setSavingTicker] = useState(false);
+  const [removingTickers, setRemovingTickers] = useState<Set<string>>(() => new Set());
+  const removingRef = useRef(new Set<string>());
 
   useEffect(() => {
     if (!canManageWatchlist) {
@@ -431,12 +436,18 @@ export default function Watchlist() {
 
   const onRemoveTicker = useCallback(
     async (symbol: string) => {
+      if (removingRef.current.has(symbol)) return;
+      removingRef.current.add(symbol);
+      setRemovingTickers(new Set(removingRef.current));
       try {
         const next = await accountApi.remove(symbol);
         setMyTickers(next.tickers);
         toast.info(t('已移出自选'), symbol);
       } catch (error) {
         toast.error(t('移除失败'), error instanceof ApiError ? error.message : t('请稍后再试'));
+      } finally {
+        removingRef.current.delete(symbol);
+        setRemovingTickers(new Set(removingRef.current));
       }
     },
     [toast],
@@ -565,12 +576,8 @@ export default function Watchlist() {
       ...(rowStrengthAvailable
         ? [{
             key: 'strength',
-            title: (
-              <>
-                {t('强度')}
-                <InfoHint hint={SCORE_HINTS.strengthComposite} side="bottom" size={11} />
-              </>
-            ),
+            title: t('强度'),
+            hint: <InfoHint hint={SCORE_HINTS.strengthComposite} side="bottom" size={11} />,
             sortable: true,
             sortValue: (r: WatchlistItem) => r.strengthScore,
             render: (r: WatchlistItem) => <StrengthBar score={r.strengthScore} width={80} />,
@@ -608,12 +615,13 @@ export default function Watchlist() {
                 type="button"
                 title={t('从自选移除 {ticker}', { ticker: r.ticker })}
                 aria-label={t('从自选移除 {ticker}', { ticker: r.ticker })}
+                disabled={removingTickers.has(r.ticker)}
                 onClick={(event) => {
                   // 行本身是「打开详情」的点击目标，删除必须先拦住冒泡。
                   event.stopPropagation();
                   void onRemoveTicker(r.ticker);
                 }}
-                className="inline-flex size-7 items-center justify-center rounded-sm border border-line bg-card text-ink-400 opacity-0 transition-[opacity,color] duration-fast hover:border-down-600/40 hover:text-down-600 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30 group-hover:opacity-100"
+                className="inline-flex size-7 items-center justify-center rounded-sm border border-line bg-card text-ink-400 opacity-0 transition-[opacity,color] duration-fast hover:border-down-600/40 hover:text-down-600 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30 group-hover:opacity-100 disabled:cursor-wait disabled:opacity-40"
               >
                 <Icon name="x" size={13} />
               </button>
@@ -625,7 +633,7 @@ export default function Watchlist() {
         ),
       },
     ],
-    [flashes, rowSignalsAvailable, rowStrengthAvailable, canManageWatchlist, onRemoveTicker],
+    [flashes, rowSignalsAvailable, rowStrengthAvailable, canManageWatchlist, onRemoveTicker, removingTickers],
   );
 
   // 个人自选还没读回来时同样算加载中：先摆出默认池、再换成个人列表，
@@ -991,6 +999,7 @@ export default function Watchlist() {
                       animateIn={i < FIRST_BATCH}
                       onClick={() => openTicker(it.ticker)}
                       onRemove={canManageWatchlist ? () => void onRemoveTicker(it.ticker) : undefined}
+                      removing={removingTickers.has(it.ticker)}
                       showStrength={rowStrengthAvailable}
                       showSignals={rowSignalsAvailable}
                     />
@@ -1007,6 +1016,7 @@ export default function Watchlist() {
                     animateIn={i < FIRST_BATCH}
                     onClick={() => openTicker(it.ticker)}
                     onRemove={canManageWatchlist ? () => void onRemoveTicker(it.ticker) : undefined}
+                    removing={removingTickers.has(it.ticker)}
                     showStrength={rowStrengthAvailable}
                     showSignals={rowSignalsAvailable}
                   />

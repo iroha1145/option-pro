@@ -136,7 +136,7 @@ export function TickerChip({ ticker, onClick, className }: { ticker: string; onC
   );
   if (!onClick) return <span className={cls}>{ticker}</span>;
   return (
-    <button onClick={onClick} className={cls}>
+    <button type="button" onClick={onClick} className={cls}>
       {ticker}
     </button>
   );

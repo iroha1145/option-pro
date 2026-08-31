@@ -1,6 +1,27 @@
 /** 数字 / 时间格式化（等宽数字场景统一走这里） */
 
-import { t } from '../i18n/core.ts';
+import { localeTag, t } from '../i18n/core.ts';
+
+/** 界面日期：跟当前语言走，不再写死 zh-CN。无效输入显「—」。 */
+export function fmtLocaleDate(iso: string, opts?: Intl.DateTimeFormatOptions): string {
+  const d = new Date(iso);
+  if (!iso || Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString(localeTag(), opts ?? { year: 'numeric', month: '2-digit', day: '2-digit' });
+}
+
+/** 界面时刻：跟当前语言走。无效输入显「—」。 */
+export function fmtLocaleTime(iso: string, opts?: Intl.DateTimeFormatOptions): string {
+  const d = new Date(iso);
+  if (!iso || Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleTimeString(localeTag(), opts ?? { hour12: false, hour: '2-digit', minute: '2-digit' });
+}
+
+/** 界面日期+时刻：跟当前语言走。无效输入显「—」。 */
+export function fmtLocaleDateTime(iso: string, opts?: Intl.DateTimeFormatOptions): string {
+  const d = new Date(iso);
+  if (!iso || Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleString(localeTag(), opts ?? { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
 export function fmtPrice(n: number, digits = 2): string {
   return n.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }

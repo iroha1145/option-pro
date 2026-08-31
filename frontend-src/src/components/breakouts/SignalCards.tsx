@@ -69,24 +69,21 @@ function SignalCard({ ev, index, flash, locate, onOpen }: SignalCardProps) {
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: Math.min(index * 0.045, 0.5) }}
-      onClick={() => onOpen(ev)}
-      onKeyDown={(e) => {
-        if (e.target !== e.currentTarget) return; // 卡内真按钮的键盘激活不拦截
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          onOpen(ev);
-        }
-      }}
-      role="button"
-      tabIndex={0}
-      aria-label={t('{ticker} {setup} 信号卡，打开事件详情', { ticker: ev.ticker, setup: SETUP_CN[ev.setup_type] ?? ev.setup_type ?? '' })}
+      className="relative"
     >
+      {/* 整卡点击与 ticker 按钮是兄弟，避免 article[role=button] 内再嵌 button。 */}
+      <button
+        type="button"
+        onClick={() => onOpen(ev)}
+        aria-label={t('{ticker} {setup} 信号卡，打开事件详情', { ticker: ev.ticker, setup: SETUP_CN[ev.setup_type] ?? ev.setup_type ?? '' })}
+        className="absolute inset-0 z-0 rounded-lg"
+      />
       {/* hover 上浮 -3px + sh-2 走 card-lift（hover/pointer 门控 CSS，触屏不粘滞）。
           必须挂内层 div：framer 入场后在本元素留下内联 transform:none，
           会压掉同元素上的 CSS hover 位移（原 whileHover 方案因此存在）。 */}
       <div
         className={cn(
-          'card-surface card-lift h-full cursor-pointer p-4',
+          'pointer-events-none card-surface card-lift relative z-10 h-full cursor-pointer p-4',
           locate && 'bk-locate',
         )}
       >
@@ -95,12 +92,13 @@ function SignalCard({ ev, index, flash, locate, onOpen }: SignalCardProps) {
         <TickerLogo ticker={ev.ticker} />
         <div className="min-w-0 flex-1">
           <button
+            type="button"
             onClick={(e) => {
               e.stopPropagation();
               openTicker(ev.ticker);
             }}
             aria-label={t('打开 {ticker} 个股详情抽屉', { ticker: ev.ticker })}
-            className="font-mono text-body-s font-semibold text-ink-800 underline-offset-2 transition-colors hover:text-brand-600 hover:underline"
+            className="pointer-events-auto font-mono text-body-s font-semibold text-ink-800 underline-offset-2 transition-colors hover:text-brand-600 hover:underline"
           >
             {ev.ticker}
           </button>
