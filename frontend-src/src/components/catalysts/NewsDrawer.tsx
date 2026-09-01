@@ -174,33 +174,38 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
         setJob({ ...next });
         if (TERMINAL.includes(next.status)) {
           stopPoll();
+          /* 终态收尾只认「抽屉还停在这条新闻上」。不能用链条世代判：
+             stopPoll/effect 清理都会换代，拿 stillThisPoll 守收尾必然永假，
+             完成结果就写不回抽屉与列表、状态芯片也清不掉（首版事故）。 */
+          const sameNews = () => activeNewsRef.current === job.newsId;
           if (next.status === 'completed') {
             toast.success(__t('AI 分析已完成'));
             const fresh = await catalystsContract.news(job.newsId);
-            if (!stillThisPoll()) return;
+            if (!sameNews()) return;
             setItem(fresh);
             onUpdate(fresh);
           } else if (next.status === 'insufficient_context') {
             const fresh = await catalystsContract.news(job.newsId);
-            if (!stillThisPoll()) return;
+            if (!sameNews()) return;
             setItem(fresh);
             onUpdate(fresh);
             toast.info(__t('规则判定信息不足'), __t('未调用模型'));
           } else if (next.status === 'failed') {
             toast.error(__t('分析失败'), next.error ?? __t('可重试'));
             const fresh = await catalystsContract.news(job.newsId);
-            if (!stillThisPoll()) return;
+            if (!sameNews()) return;
             setItem(fresh);
             onUpdate(fresh);
           } else {
             toast.info(__t('任务已取消'));
             const fresh = await catalystsContract.news(job.newsId);
-            if (!stillThisPoll()) return;
+            if (!sameNews()) return;
             setItem(fresh);
             onUpdate(fresh);
           }
           window.setTimeout(() => {
-            if (stillThisPoll()) setJob(null);
+            // 按 jobId 函数式清理：600ms 内若已提交新任务，不误伤新 job。
+            setJob((cur) => (cur && cur.jobId === job.jobId ? null : cur));
           }, 600);
           return;
         }

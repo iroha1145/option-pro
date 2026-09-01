@@ -211,15 +211,21 @@ export default function FocusCycleCard({ refreshToken = 0 }: { refreshToken?: nu
   const pollRef = useRef<number | null>(null);
   const pollGenRef = useRef(0);
 
+  /* stopPoll 只杀计时器；换代（作废在途响应与收尾）只发生在真正「弃链」的
+     场合：卸载、或新一次提交顶掉旧链。终态分支里调 stopPoll 后收尾定时器
+     仍要跑——若把换代塞进 stopPoll，完成横幅的清理守卫永假、永不消失。 */
   const stopPoll = useCallback(() => {
-    pollGenRef.current += 1;
     if (pollRef.current !== null) {
       window.clearTimeout(pollRef.current);
       pollRef.current = null;
     }
   }, []);
+  const abandonPoll = useCallback(() => {
+    pollGenRef.current += 1;
+    stopPoll();
+  }, [stopPoll]);
 
-  useEffect(() => stopPoll, [stopPoll]);
+  useEffect(() => abandonPoll, [abandonPoll]);
 
   const submittingRef = useRef(false);
   const startJob = useCallback(async () => {
@@ -238,7 +244,7 @@ export default function FocusCycleCard({ refreshToken = 0 }: { refreshToken?: nu
       const j = await catalystsContract.triggerFocusCycle(failedCycleId);
       setJob(j);
       toast.info(t('焦点周期计算已提交'), t('完成后自动刷新'));
-      stopPoll();
+      abandonPoll();
       if (!j.cycleId) {
         // 202 已受理但响应未携带周期编号：延迟拉取 latest 兜底，不误报失败
         window.setTimeout(() => {
@@ -277,7 +283,8 @@ export default function FocusCycleCard({ refreshToken = 0 }: { refreshToken?: nu
               latestQ.refresh();
             }
             window.setTimeout(() => {
-              if (stillThisPoll()) setJob(null);
+              // 按 cycleId 函数式清理：1200ms 内再提交不误伤新 job。
+              setJob((cur) => (cur && cur.cycleId === j.cycleId ? null : cur));
             }, 1200);
             return;
           }
@@ -299,7 +306,7 @@ export default function FocusCycleCard({ refreshToken = 0 }: { refreshToken?: nu
     } finally {
       submittingRef.current = false;
     }
-  }, [latestQ, stopPoll, toast]);
+  }, [abandonPoll, latestQ, stopPoll, toast]);
 
   const running = job && ['queued', 'in_progress', 'cancel_requested', 'pending', 'preparing'].includes(job.status);
 

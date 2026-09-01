@@ -69,7 +69,7 @@ function SignalCard({ ev, index, flash, locate, onOpen }: SignalCardProps) {
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: Math.min(index * 0.045, 0.5) }}
-      className="relative"
+      className="card-lift-host relative"
     >
       {/* 整卡点击与 ticker 按钮是兄弟，避免 article[role=button] 内再嵌 button。 */}
       <button
