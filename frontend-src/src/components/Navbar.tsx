@@ -3,7 +3,7 @@
  * Logo | 01–06 编号导航（滑动下划线） | ⌘K 触发 | 时段LED+纽约时钟 | AI 点（owner）| 登录/退出
  * 移动端折叠为 48px：Logo + ⌘K + 时钟。
  */
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router';
 import { cn } from '@/lib/utils';
 import { useNow } from '@/hooks/useNow';
@@ -12,6 +12,7 @@ import { useToast } from '@/components/Toast';
 import { marketApi } from '@/api/modules/market';
 import { usePolling } from '@/hooks/usePolling';
 import { fmtNyTime } from '@/lib/format';
+import { placeGlide } from '@/lib/transitions';
 import Icon from '@/components/icons';
 import { SessionDot } from '@/components/shared/SessionLED';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
@@ -51,7 +52,39 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
   const session = status?.session ?? null;
 
 
+  const navRef = useRef<HTMLElement>(null);
+  const glideRef = useRef<HTMLSpanElement>(null);
+  const glideReadyRef = useRef(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const activePath = NAV_ITEMS.find((item) =>
+    item.path === '/' ? location.pathname === '/' : location.pathname.startsWith(item.path),
+  )?.path ?? '';
+
+  useLayoutEffect(() => {
+    const nav = navRef.current;
+    const bar = glideRef.current;
+    if (!nav || !bar) return;
+    const align = (animate: boolean) => {
+      const label = nav.querySelector('[data-active="true"] [data-nav-label]') as HTMLElement | null;
+      if (!label) {
+        bar.style.width = '0px';
+        return;
+      }
+      const navBox = nav.getBoundingClientRect();
+      const box = label.getBoundingClientRect();
+      placeGlide(bar, { offset: box.left - navBox.left, size: box.width }, { axis: 'x', animate });
+    };
+    align(glideReadyRef.current);
+    glideReadyRef.current = true;
+    const onResize = () => align(false);
+    const ro = new ResizeObserver(onResize);
+    ro.observe(nav);
+    window.addEventListener('resize', onResize);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', onResize);
+    };
+  }, [activePath]);
   const handleLogout = async () => {
     if (loggingOut) return;
     setLoggingOut(true);
@@ -83,7 +116,12 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
         </Link>
 
         {/* 编号导航（桌面） */}
-                <nav className="relative mx-auto hidden h-full items-center gap-1 xl:flex" aria-label={t("主导航")}>
+        <nav
+          ref={navRef}
+          className="relative mx-auto hidden h-full items-center gap-1 xl:flex"
+          aria-label={t("主导航")}
+        >
+          <span ref={glideRef} data-nav-glide="" aria-hidden="true" className="nav-glide" />
           {NAV_ITEMS.map((item) => {
             /* '/' 必须精确匹配：startsWith('/') 对任何路径都为真，首页会永远亮着 */
             const active = item.path === '/' ? location.pathname === '/' : location.pathname.startsWith(item.path);
@@ -104,20 +142,10 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
               {/* 9 项编号在 xl–2xl 之间是压垮布局的最后一根稻草（1440 登录态
                   「退出」被挤出视口）：sub-2xl 只留文字标签，≥2xl 恢复编号。 */}
               <span className="hidden font-mono text-[11px] text-ink-400 2xl:inline">{item.no}</span>
-              {/* 撑满高度、宽度恰为标签本身：指示器放进来后 bottom-0 就是导航条底边，
-                  left-1/2 就是**文字**中心——不再靠 JS 量像素，也就不会因为标签
-                  平移（编号在 2xl 出现、字体加载、右侧簇变宽把 mx-auto 推走）而错位。 */}
+              {/* 标签盒是滑行下划线的测量锚：placeGlide 按它的 left/width 补间，
+                  跨项滑动（beUI tabs / transitions.dev tabs-sliding）。 */}
               <span data-nav-label className="relative flex h-full items-center">
                 {item.label}
-                {active && (
-                  /* 普通 span，不用 framer 的 layoutId 投影：跨父级投影在这条导航上
-                     实测不落位（transform 停在上一个父级的坐标不释放，蓝条被钉住）。
-                     纯 CSS 居中在激活项内部，永远对齐，代价是没有项间滑动。 */
-                  <span
-                    aria-hidden="true"
-                    className="absolute inset-x-0 bottom-0 mx-auto h-0.5 w-6 rounded-full bg-brand-600"
-                  />
-                )}
               </span>
             </NavLink>
             );
@@ -130,7 +158,7 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
             onClick={onOpenPalette}
             /* xl–2xl 是 9 项导航的拥挤带（审计：1280 + 长用户名/英日文风险）：
                该档只留搜索图标（下方按钮），文字框在 md–xl 与 ≥2xl 显示。 */
-            className="hidden h-8 w-44 items-center gap-2 rounded-md border border-line bg-card-warm px-3 text-caption text-ink-400 transition-colors duration-fast hover:border-line-strong hover:text-ink-500 md:flex xl:hidden 2xl:flex 2xl:w-[220px]"
+            className="hidden h-8 w-44 items-center gap-2 rounded-md border border-line bg-card-warm px-3 text-caption text-ink-400 transition-[border-color,box-shadow,color] duration-fast hover:border-line-strong hover:text-ink-500 focus-visible:border-brand-500 focus-visible:shadow-focus-ring md:flex xl:hidden 2xl:flex 2xl:w-[220px]"
             aria-label={t("打开命令面板")}
           >
             <Icon name="search" size={14} />

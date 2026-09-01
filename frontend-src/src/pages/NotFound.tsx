@@ -19,7 +19,7 @@ export default function NotFound() {
       action={
         <Link
           to="/"
-          className="inline-flex min-h-11 items-center justify-center rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105"
+          className="btn-primary"
         >
           {t('返回首页')}
         </Link>

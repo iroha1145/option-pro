@@ -108,6 +108,13 @@ const SURFACES = [
   ['components/Toast.tsx', /t-toast-row/, 't-toast-row stack collapse'],
   ['components/shared/Skeleton.tsx', /SkeletonReveal/, 'SkeletonReveal export'],
   ['pages/Watchlist.tsx', /<SkeletonReveal/, 'SkeletonReveal (watchlist)'],
+  ['components/Navbar.tsx', /placeGlide\(/, 'nav glide underline'],
+  ['components/Navbar.tsx', /data-nav-glide/, 'nav glide handle'],
+  ['components/MobileDock.tsx', /layoutRoot/, 'dock layoutRoot'],
+  ['components/MobileDock.tsx', /<GlidePill/, 'dock GlidePill'],
+  ['pages/Home.tsx', /link-learn/, 'learn-more 查看全部'],
+  ['pages/Home.tsx', /btn-primary/, 'shadcn primary button'],
+  ['pages/NotFound.tsx', /btn-primary/, '404 primary button'],
 ];
 
 test('motion-token custom properties ship in transitions-root.css', async () => {
@@ -414,4 +421,17 @@ test('replayShake removes, reflows, then re-adds is-shaking', async () => {
   replayShake(el);
   assert.equal(classes.has('is-shaking'), true);
   assert.ok(reads >= 1);
+});
+
+test('page enter and chrome polish ride transitions.dev / shadcn tokens', async () => {
+  const css = await source('index.css');
+  assert.match(css, /\.page-enter \{[^}]*var\(--page-slide-dur\)[^}]*var\(--page-slide-ease\)/s);
+  assert.match(css, /translateY\(var\(--page-slide-distance\)\)/);
+  assert.match(css, /\.btn-primary \{/);
+  assert.match(css, /\.link-learn \{/);
+  assert.match(css, /\.card-glare \{/);
+  assert.match(css, /\.nav-glide \{/);
+  assert.match(css, /var\(--tabs-dur\)/);
+  assert.match(css, /var\(--learn-shift\)/);
+  assert.match(css, /var\(--tilt-glare-opacity\)/);
 });

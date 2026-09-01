@@ -3,7 +3,7 @@
  * 悬浮胶囊：离屏 12px + safe-area、圆角毛玻璃、墨色浮起阴影；
  * 五个入口同级单色（雷达不再是中央凸起圆钮）；「更多」上弹 sheet（spring-gentle）。
  */
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useId, useState, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { AnimatePresence, motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
@@ -11,6 +11,7 @@ import { useAccess } from '@/hooks/useAccess';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import Icon, { type IconName } from '@/components/icons';
 import Segmented from '@/components/shared/Segmented';
+import GlidePill from '@/components/shared/GlidePill';
 import { LOCALES, getLocale, setLocale, t } from '../i18n/core.ts';
 
 /* setLocale() 整页重载才会切语言，模块级常量在加载期求值一次即可，不需要每次渲染重算 */
@@ -67,29 +68,26 @@ export default function MobileDock() {
   }, [moreOpen]);
 
   const moreActive = MORE_ITEMS.some((m) => location.pathname.startsWith(m.path));
+  const dockGlideId = useId();
 
   const renderItem = (item: (typeof DOCK_ITEMS)[number]) => {
     /* '/' 必须精确匹配：startsWith('/') 对任何路径都为真，首页会永远亮着 */
     const active = item.path === '/' ? location.pathname === '/' : location.pathname.startsWith(item.path);
     return (
-      <Link
-        key={item.path}
-        to={item.path}
-        className="relative flex min-h-[44px] flex-1 flex-col items-center justify-center gap-1 transition-transform duration-fast active:scale-[0.96]"
-        aria-label={item.label}
-        aria-current={active ? 'page' : undefined}
-      >
-        {/* 当前页的小标记：图标上方一枚 4px 圆点，比整块高亮安静 */}
-        <span
-          aria-hidden="true"
-          className={cn(
-            'absolute top-1.5 size-1 rounded-full bg-brand-600 transition-opacity duration-fast',
-            active ? 'opacity-100' : 'opacity-0',
-          )}
-        />
-        <Icon name={item.icon} size={19} className={active ? 'text-brand-600' : 'text-ink-400'} />
-        <span className={cn('text-[10px] leading-none', active ? 'font-medium text-brand-600' : 'text-ink-400')}>{item.label}</span>
-      </Link>
+      <div key={item.path} className="relative flex flex-1">
+        {active && (
+          <GlidePill layoutId={dockGlideId} className="inset-1 rounded-xl bg-brand-50 shadow-none" />
+        )}
+        <Link
+          to={item.path}
+          className="relative z-10 flex min-h-[44px] flex-1 flex-col items-center justify-center gap-1 transition-transform duration-fast active:scale-[0.96]"
+          aria-label={item.label}
+          aria-current={active ? 'page' : undefined}
+        >
+          <Icon name={item.icon} size={19} className={active ? 'text-brand-600' : 'text-ink-400'} />
+          <span className={cn('text-[10px] leading-none', active ? 'font-medium text-brand-600' : 'text-ink-400')}>{item.label}</span>
+        </Link>
+      </div>
     );
   };
 
@@ -101,25 +99,24 @@ export default function MobileDock() {
         className="glass fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-[60] mx-auto flex h-16 max-w-md items-stretch rounded-2xl border border-line px-1.5 shadow-dock xl:hidden"
         aria-label={t('移动端导航')}
       >
-        {DOCK_ITEMS.map(renderItem)}
-        <button
-          onClick={() => setMoreOpen(true)}
-          className="relative flex min-h-[44px] flex-1 flex-col items-center justify-center gap-1 transition-transform duration-fast active:scale-[0.96]"
-          aria-label={t('更多')}
-          aria-current={moreActive ? 'page' : undefined}
-        >
-          {/* 处在板块/财报/大盘/CTA/催化时，「更多」承担当前页标记——否则
-              Dock 看起来像没有任何当前页面（GPT-5.6-Pro 审计）。 */}
-          <span
-            aria-hidden="true"
-            className={cn(
-              'absolute top-1.5 size-1 rounded-full bg-brand-600 transition-opacity duration-fast',
-              moreActive ? 'opacity-100' : 'opacity-0',
+        {/* layoutRoot：Dock 是 fixed 容器，投影坐标必须收进条内（beUI Dock / tabs） */}
+        <motion.div layoutRoot className="flex h-full w-full items-stretch">
+          {DOCK_ITEMS.map(renderItem)}
+          <div className="relative flex flex-1">
+            {moreActive && (
+              <GlidePill layoutId={dockGlideId} className="inset-1 rounded-xl bg-brand-50 shadow-none" />
             )}
-          />
-          <Icon name="menu" size={19} className={moreActive ? 'text-brand-600' : 'text-ink-400'} />
-          <span className={cn('text-[10px] leading-none', moreActive ? 'font-medium text-brand-600' : 'text-ink-400')}>{t('更多')}</span>
-        </button>
+            <button
+              onClick={() => setMoreOpen(true)}
+              className="relative z-10 flex min-h-[44px] w-full flex-col items-center justify-center gap-1 transition-transform duration-fast active:scale-[0.96]"
+              aria-label={t('更多')}
+              aria-current={moreActive ? 'page' : undefined}
+            >
+              <Icon name="menu" size={19} className={moreActive ? 'text-brand-600' : 'text-ink-400'} />
+              <span className={cn('text-[10px] leading-none', moreActive ? 'font-medium text-brand-600' : 'text-ink-400')}>{t('更多')}</span>
+            </button>
+          </div>
+        </motion.div>
       </nav>
 
       {/* 「更多」上弹 sheet */}

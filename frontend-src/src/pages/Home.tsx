@@ -39,6 +39,7 @@ import TickerLogo from '@/components/shared/TickerLogo';
 import EmptyState from '@/components/shared/EmptyState';
 import { SkeletonBlock, SkeletonCard, SkeletonRows } from '@/components/shared/Skeleton';
 import Sparkline from '@/components/charts/Sparkline';
+import Icon from '@/components/icons';
 import { localeTag, t } from '../i18n/core.ts';
 
 const MARKET_TO_SESSION: Record<string, MarketSession> = {
@@ -79,7 +80,7 @@ function RetryButton({ onClick, refreshing }: { onClick: () => void; refreshing:
     <button
       onClick={onClick}
       disabled={refreshing}
-      className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105 disabled:opacity-60"
+      className="btn-primary"
     >
       {refreshing && <span className="size-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
       {t('重试')}
@@ -105,9 +106,12 @@ function SectionCard({
         <h3 className="text-h3 text-ink-900">{title}</h3>
         <Link
           to={to}
-          className="shrink-0 text-caption font-medium text-brand-700 transition-colors duration-fast hover:text-brand-600"
+          className="link-learn shrink-0 text-caption font-medium text-brand-700 transition-colors duration-fast hover:text-brand-600"
         >
           {t('查看全部')}
+          <span className="link-learn-chevron" aria-hidden="true">
+            <Icon name="chevron-right" size={12} />
+          </span>
         </Link>
       </div>
       {children}
@@ -351,7 +355,7 @@ export default function Home() {
                 >
                   <Link
                     to={`/market?index=${q.code}`}
-                    className="card-surface card-hover flex flex-col gap-1 rounded-lg p-3"
+                    className="card-surface card-hover card-glare flex flex-col gap-1 rounded-lg p-3"
                     aria-label={t('{name} {code} 详情', { name: q.name, code: q.code })}
                   >
                     <span className="truncate text-caption text-ink-500">{q.name}</span>

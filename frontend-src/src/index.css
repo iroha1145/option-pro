@@ -146,6 +146,104 @@
     border-radius: 12px;
     box-shadow: var(--shadow-sh-1), inset 0 1px 0 rgba(255, 255, 255, .7);
   }
+
+  /* shadcn Button + beUI spring-press：主操作统一皮。调用点只写 btn-primary，
+     hover / active / disabled / focus 由这里收口，避免各页 brightness-105 漂移。 */
+  .btn-primary {
+    display: inline-flex;
+    min-height: 2.75rem;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 8px;
+    background: var(--brand-600);
+    padding: 0.5rem 1rem;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 1.25;
+    color: #fff;
+    box-shadow: var(--shadow-sh-1), 0 1px 0 rgba(255, 255, 255, .18) inset;
+    transition:
+      transform var(--duration-quick) var(--ease-smooth-out),
+      background-color var(--duration-quick) var(--ease-smooth-out),
+      filter var(--duration-quick) var(--ease-smooth-out);
+  }
+  .btn-primary:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+    box-shadow: none;
+  }
+  .btn-primary:not(:disabled):active {
+    transform: scale(0.98);
+    box-shadow: inset 0 1.5px 3px rgba(13, 22, 38, .28), 0 1px 2px rgba(16, 24, 40, .10);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .btn-primary:not(:disabled):hover {
+      background: var(--brand-700);
+    }
+  }
+
+  /* transitions.dev 23 Learn more：文字旁的 chevron 悬停平移 2px */
+  .link-learn {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+  }
+  .link-learn .link-learn-chevron {
+    display: inline-flex;
+    transition: transform var(--learn-in) var(--learn-ease);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .link-learn:hover .link-learn-chevron {
+      transform: translateX(var(--learn-shift));
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .link-learn .link-learn-chevron { transition: none; }
+  }
+
+  /* beUI / rareui tilt-lite：卡片悬停一层对角高光，不做 3D 翻面（数据卡要稳） */
+  .card-glare {
+    position: relative;
+    isolation: isolate;
+  }
+  .card-glare::after {
+    content: "";
+    pointer-events: none;
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    opacity: 0;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.55), transparent 46%);
+    transition: opacity var(--tilt-glare-fade) var(--tilt-glare-ease);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .card-glare:hover::after {
+      opacity: var(--tilt-glare-opacity);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .card-glare::after { transition: none; }
+  }
+
+  /* 主导航滑行下划线（beUI tabs + transitions.dev tabs-sliding） */
+  .nav-glide {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 2px;
+    width: 0;
+    border-radius: 999px;
+    background: var(--brand-600);
+    pointer-events: none;
+    will-change: transform, width;
+    transition:
+      transform var(--tabs-dur) var(--tabs-ease),
+      width var(--tabs-dur) var(--tabs-ease);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .nav-glide { transition: none !important; }
+  }
   .card-hover {
     transition: transform 260ms var(--ease-paper), box-shadow 260ms var(--ease-paper);
   }
@@ -292,7 +390,7 @@
 }
 
 .page-enter {
-  animation: page-enter 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: page-enter var(--page-slide-dur) var(--page-slide-ease);
 }
 @media (prefers-reduced-motion: reduce) {
   .page-enter {
@@ -301,7 +399,7 @@
 }
 @keyframes page-enter {
   from {
-    transform: translateY(6px);
+    transform: translateY(var(--page-slide-distance));
   }
 }
 
