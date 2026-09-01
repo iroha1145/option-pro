@@ -89,6 +89,11 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
   const backoffRef = useRef(0);
   /* 关闭抽屉 / 换条时递增，作废在途 analysisJob 响应（审计 P1）。 */
   const pollGenRef = useRef(0);
+  /* 跟 prop，不跟 item：关抽屉后 item 仍可能留着给退场动画，item.newsId 守卫会继续热。 */
+  const openNewsRef = useRef<string | null>(newsId);
+  useEffect(() => {
+    openNewsRef.current = newsId;
+  }, [newsId]);
 
   const stopPoll = useCallback(() => {
     pollGenRef.current += 1;
@@ -130,29 +135,25 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
   }, [newsId]);
 
   /* 详情含在途任务 → 恢复轮询 */
-  const activeNewsRef = useRef<string | null>(null);
   useEffect(() => {
-    activeNewsRef.current = item?.newsId ?? null;
-  }, [item?.newsId]);
-  useEffect(() => {
-    if (!item?.analysisJobId || job) return;
+    if (!newsId || !item?.analysisJobId || job) return;
     if (item.analysisStatus !== 'queued' && item.analysisStatus !== 'in_progress') return;
     const forNews = item.newsId;
     catalystsContract
       .analysisJob(item.analysisJobId)
       .then((j) => {
-        // 响应落地时可能已经换了新闻（甚至关了抽屉再开新条）：旧 job 不得污染新条
-        if (activeNewsRef.current !== forNews) return;
+        // 响应落地时可能已经换了新闻或关了抽屉：旧 job 不得复活轮询 / 污染新条
+        if (openNewsRef.current !== forNews) return;
         if (!TERMINAL.includes(j.status)) setJob(j);
       })
       .catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [item?.newsId]);
+  }, [newsId, item?.newsId]);
 
   /* 轮询任务至终态（退避 2s→3s→5s→8s→10s，总超时 5 分钟） */
   const pollDeadlineRef = useRef<{ jobId: string; at: number } | null>(null);
   useEffect(() => {
-    if (!job || TERMINAL.includes(job.status)) return;
+    if (!newsId || !job || TERMINAL.includes(job.status)) return;
     if (pollDeadlineRef.current?.jobId !== job.jobId) {
       pollDeadlineRef.current = { jobId: job.jobId, at: Date.now() + 5 * 60_000 };
     }
@@ -160,12 +161,14 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
     const BACKOFF = [2000, 3000, 5000, 8000, 10000];
     const generation = pollGenRef.current;
     const stillThisPoll = () =>
-      generation === pollGenRef.current && activeNewsRef.current === job.newsId;
+      generation === pollGenRef.current && openNewsRef.current === job.newsId;
     const tick = async () => {
       if (!stillThisPoll()) return;
       if (Date.now() >= deadline) {
         stopPoll();
-        toast.error(__t('分析任务仍在处理中'), __t('稍后刷新页面可继续查看结果'));
+        if (openNewsRef.current === job.newsId) {
+          toast.error(__t('分析任务仍在处理中'), __t('稍后刷新页面可继续查看结果'));
+        }
         return;
       }
       try {
@@ -174,10 +177,12 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
         setJob({ ...next });
         if (TERMINAL.includes(next.status)) {
           stopPoll();
-          /* 终态收尾只认「抽屉还停在这条新闻上」。不能用链条世代判：
+          /* 终态收尾只认「抽屉还开着且仍是这条」。不能用链条世代判：
              stopPoll/effect 清理都会换代，拿 stillThisPoll 守收尾必然永假，
-             完成结果就写不回抽屉与列表、状态芯片也清不掉（首版事故）。 */
-          const sameNews = () => activeNewsRef.current === job.newsId;
+             完成结果就写不回抽屉与列表、状态芯片也清不掉（首版事故）。
+             也不能跟 item.newsId：关抽屉后 item 仍可能留着给退场动画。 */
+          const sameNews = () => openNewsRef.current === job.newsId;
+          if (!sameNews()) return;
           if (next.status === 'completed') {
             toast.success(__t('AI 分析已完成'));
             const fresh = await catalystsContract.news(job.newsId);
@@ -221,7 +226,7 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
     pollRef.current = window.setTimeout(() => void tick(), 2000);
     return stopPoll;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [job?.jobId, job?.status]);
+  }, [newsId, job?.jobId, job?.status]);
 
   const submittingRef = useRef(false);
   const startAnalysis = useCallback(
