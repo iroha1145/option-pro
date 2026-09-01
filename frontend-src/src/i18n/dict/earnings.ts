@@ -102,6 +102,7 @@ export const EARNINGS: Dict = {
   '这次分析没有完成': ["This analysis didn't complete.", "今回の分析は完了しませんでした。"],
   '发布前分析': ["Pre-release analysis", "発表前分析"],
   '发布后分析': ["Post-release analysis", "発表後分析"],
+  '分析完成': ["Analysis complete", "分析完了"],
   '第 1 / 1 条正在排队': ["Item 1 of 1 queued", "1/1件がキュー待ち"],
   '正在分析第 1 / 1 条': ["Analyzing item 1 of 1", "1/1件を分析中"],
   '等待开始': ["Waiting to start", "開始待ち"],

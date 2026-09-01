@@ -3878,6 +3878,24 @@ class LocalCatalystIntelligence:
             )
         return item
 
+    @staticmethod
+    def _theme_member_news_ids(connection: sqlite3.Connection, theme: str) -> set[int]:
+        """Resolve a theme / event_group_id to member news_ids (latest version)."""
+        row = connection.execute(
+            """SELECT news_identities_json FROM catalyst_local_event_groups
+               WHERE event_group_id=?
+               ORDER BY event_group_version DESC LIMIT 1""",
+            (theme,),
+        ).fetchone()
+        if row is None:
+            return set()
+        identities = _loads(row["news_identities_json"], [])
+        members: set[int] = set()
+        for identity in identities:
+            if isinstance(identity, Mapping) and identity.get("news_id") is not None:
+                members.add(int(identity["news_id"]))
+        return members
+
     def status(
         self,
         *,
@@ -4040,6 +4058,9 @@ class LocalCatalystIntelligence:
             raise ValueError("as_of must be timezone-aware")
         window_hours = int(kwargs.get("window_hours") or 72)
         limit = min(100, max(1, int(kwargs.get("limit") or 50)))
+        theme = str(kwargs.get("theme") or "").strip()
+        if theme and not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", theme):
+            theme = ""
         query_hash = _sha(
             {
                 key: kwargs.get(key)
@@ -4056,6 +4077,7 @@ class LocalCatalystIntelligence:
                     "horizon",
                     "mechanism",
                     "multi_source_only",
+                    "theme",
                 )
             }
         )
@@ -4091,6 +4113,11 @@ class LocalCatalystIntelligence:
                     for row in rows
                 ]
             data_through = self._data_through(connection)
+            theme_member_ids = (
+                self._theme_member_news_ids(connection, theme)
+                if theme
+                else set()
+            )
         ticker = str(kwargs.get("ticker") or "").upper()
         source = str(kwargs.get("source") or "").casefold()
         classification = kwargs.get("classification")
@@ -4135,6 +4162,20 @@ class LocalCatalystIntelligence:
             if multi_source_only:
                 row = rows_by_news_id.get(int(item["news_id"]))
                 if not row or int(row.get("source_count") or 0) < 2:
+                    continue
+            if theme:
+                theme_l = theme.casefold()
+                theme_ids = [
+                    str(value).casefold()
+                    for value in (item.get("theme_ids") or [])
+                ]
+                event_group = str(item.get("event_group_id") or "").casefold()
+                news_id = int(item.get("news_id") or 0)
+                if (
+                    theme_l not in theme_ids
+                    and event_group != theme_l
+                    and news_id not in theme_member_ids
+                ):
                     continue
             filtered.append(item)
         page = filtered[offset : offset + limit]

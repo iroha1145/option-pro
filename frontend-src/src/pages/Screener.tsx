@@ -20,7 +20,7 @@ import { useAccess } from '@/hooks/useAccess';
 import { useToast } from '@/components/Toast';
 import { useShell } from '@/components/Layout';
 import { cn } from '@/lib/utils';
-import { fmtCompact, fmtTimeHHMMSS } from '@/lib/format';
+import { fmtCompact, fmtLocaleDateTime, fmtTimeHHMMSS } from '@/lib/format';
 import {
   MACRO_SHADOW_HINT,
   MACRO_TONE_LABEL,
@@ -58,7 +58,7 @@ import {
   type Tier,
   type TierFilter,
 } from '@/components/screener/types';
-import { t as __t } from '../i18n/core.ts';
+import { localeTag, t as __t } from '../i18n/core.ts';
 
 const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
 const PAGE_SIZE = 20;
@@ -128,7 +128,7 @@ export default function Screener() {
           }
         : countByTier(snapshotRows.map((r) => r.strengthScore)),
       tierCountsCoverPool: distribution !== null,
-      sectors: [...new Set(snapshotRows.map((r) => r.sector))].sort((a, b) => a.localeCompare(b, 'zh-CN')),
+      sectors: [...new Set(snapshotRows.map((r) => r.sector))].sort((a, b) => a.localeCompare(b, localeTag())),
       count: universeQ.data?.universeCount ?? snapshotRows.length,
     };
   }, [universeQ.data]);
@@ -622,7 +622,7 @@ export default function Screener() {
                 )}
                 {scanMeta?.stale && (
                   <span className="rounded-xs bg-warn-50 px-1.5 py-px text-micro text-warn-600">
-                    {__t('数据未刷新')}{scanMeta.snapshotSavedAt ? ` · ${new Date(scanMeta.snapshotSavedAt).toLocaleString('zh-CN')}` : ''}
+                    {__t('数据未刷新')}{scanMeta.snapshotSavedAt ? ` · ${fmtLocaleDateTime(scanMeta.snapshotSavedAt)}` : ''}
                   </span>
                 )}
                 {chips.map((c) => (

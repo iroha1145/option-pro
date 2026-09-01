@@ -8,6 +8,7 @@ import { useToast } from '@/components/Toast';
 import { useShell } from '@/components/Layout';
 import { SkeletonBlock, SkeletonText } from '@/components/shared/Skeleton';
 import { cn } from '@/lib/utils';
+import { fmtLocaleDateTime, fmtLocaleTime } from '@/lib/format';
 import { catalystsContract } from './api';
 import type { CatalystNewsItem, NewsAnalysisJob, NewsClassification, TrustedStockImpact } from './api';
 import { AnalysisStatusChip, ClassificationChip, ConfidenceLabel, ImpactValue, Led, StaleChip, TickerChip } from './bits';
@@ -86,8 +87,11 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
   const [confirm, setConfirm] = useState<'create' | 'force' | 'cancel' | null>(null);
   const pollRef = useRef<number | null>(null);
   const backoffRef = useRef(0);
+  /* 关闭抽屉 / 换条时递增，作废在途 analysisJob 响应（审计 P1）。 */
+  const pollGenRef = useRef(0);
 
   const stopPoll = useCallback(() => {
+    pollGenRef.current += 1;
     if (pollRef.current !== null) {
       window.clearTimeout(pollRef.current);
       pollRef.current = null;
@@ -154,7 +158,11 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
     }
     const deadline = pollDeadlineRef.current.at;
     const BACKOFF = [2000, 3000, 5000, 8000, 10000];
+    const generation = pollGenRef.current;
+    const stillThisPoll = () =>
+      generation === pollGenRef.current && activeNewsRef.current === job.newsId;
     const tick = async () => {
+      if (!stillThisPoll()) return;
       if (Date.now() >= deadline) {
         stopPoll();
         toast.error(__t('分析任务仍在处理中'), __t('稍后刷新页面可继续查看结果'));
@@ -162,37 +170,50 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
       }
       try {
         const next = await catalystsContract.analysisJob(job.jobId);
+        if (!stillThisPoll()) return;
         setJob({ ...next });
         if (TERMINAL.includes(next.status)) {
           stopPoll();
+          /* 终态收尾只认「抽屉还停在这条新闻上」。不能用链条世代判：
+             stopPoll/effect 清理都会换代，拿 stillThisPoll 守收尾必然永假，
+             完成结果就写不回抽屉与列表、状态芯片也清不掉（首版事故）。 */
+          const sameNews = () => activeNewsRef.current === job.newsId;
           if (next.status === 'completed') {
             toast.success(__t('AI 分析已完成'));
             const fresh = await catalystsContract.news(job.newsId);
+            if (!sameNews()) return;
             setItem(fresh);
             onUpdate(fresh);
           } else if (next.status === 'insufficient_context') {
             const fresh = await catalystsContract.news(job.newsId);
+            if (!sameNews()) return;
             setItem(fresh);
             onUpdate(fresh);
             toast.info(__t('规则判定信息不足'), __t('未调用模型'));
           } else if (next.status === 'failed') {
             toast.error(__t('分析失败'), next.error ?? __t('可重试'));
             const fresh = await catalystsContract.news(job.newsId);
+            if (!sameNews()) return;
             setItem(fresh);
             onUpdate(fresh);
           } else {
             toast.info(__t('任务已取消'));
             const fresh = await catalystsContract.news(job.newsId);
+            if (!sameNews()) return;
             setItem(fresh);
             onUpdate(fresh);
           }
-          window.setTimeout(() => setJob(null), 600);
+          window.setTimeout(() => {
+            // 按 jobId 函数式清理：600ms 内若已提交新任务，不误伤新 job。
+            setJob((cur) => (cur && cur.jobId === job.jobId ? null : cur));
+          }, 600);
           return;
         }
         const delay = BACKOFF[Math.min(backoffRef.current, BACKOFF.length - 1)];
         backoffRef.current += 1;
         pollRef.current = window.setTimeout(() => void tick(), delay);
       } catch {
+        if (!stillThisPoll()) return;
         pollRef.current = window.setTimeout(() => void tick(), 5000);
       }
     };
@@ -282,7 +303,7 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
             <span className="font-medium text-ink-500">{item.source}</span>
             <span aria-hidden="true">·</span>
             <span className="font-mono tnum">
-              {new Date(item.publishedAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+              {fmtLocaleDateTime(item.publishedAt)}
             </span>
             {item.sourceCount > 1 && <span className="rounded-xs bg-paper-2 px-1 py-px font-mono text-[10px]">{item.sourceCount} {__t('源确认')}</span>}
             {item.isStale && <StaleChip />}
@@ -372,7 +393,7 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
                 </div>
                 <p className="mt-3 border-t border-line pt-2.5 font-mono text-micro text-ink-400 tnum">
                   {__t('AI 生成于')}{' '}
-                  {new Date(analysis.generatedAt).toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit' })}
+                  {fmtLocaleTime(analysis.generatedAt)}
                 </p>
               </motion.div>
             )}

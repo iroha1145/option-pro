@@ -1,6 +1,14 @@
 /** 过滤器模型与默认值（独立模块，供页面/过滤条/面板共享，URL 为唯一事实来源） */
 import type { CatalystFeedQuery, NewsAnalysisStatus, NewsClassification } from './api';
 
+/** 主题 ID：字母数字/下划线/连字符，最长 64。非法值一律丢弃，不进 URL、不发给后端。 */
+export const THEME_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+
+export function sanitizeThemeId(raw: string | null | undefined): string | null {
+  const value = String(raw ?? '').trim();
+  return THEME_ID_RE.test(value) ? value : null;
+}
+
 export interface CatalystFilters {
   ticker: string;
   windowHours: number;

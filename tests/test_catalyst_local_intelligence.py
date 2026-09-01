@@ -771,6 +771,60 @@ def test_reconcile_archives_invalid_published_news_and_makes_it_due_again(
         ).fetchone()[0] == 2
 
 
+def test_feed_theme_filter_matches_event_group_members(tmp_path) -> None:
+    etl, _, intelligence = _stack(tmp_path)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    _apply_news(
+        etl,
+        [
+            _news_change(1, 201, available_at=now - timedelta(hours=1)),
+            _news_change(2, 202, available_at=now - timedelta(minutes=30)),
+        ],
+        as_of=now,
+    )
+    intelligence.reconcile()
+    theme = "evt_theme_filter_test"
+    identities = json.dumps(
+        [
+            {
+                "news_id": 201,
+                "change_sequence": 1,
+                "content_hash": "hash-201-1",
+            }
+        ]
+    )
+    with sqlite3.connect(intelligence.db_path) as connection:
+        connection.execute(
+            """INSERT INTO catalyst_local_event_groups(
+                   event_group_id,event_group_version,input_hash,
+                   event_type,representative_news_id,
+                   representative_change_sequence,
+                   representative_content_hash,representative_title_zh,
+                   representative_summary_zh,first_published_at,
+                   last_published_at,available_at,source_count,
+                   source_names_json,validated_tickers_json,
+                   news_identities_json,hot_score,component_scores_json,
+                   reasons_json,created_at
+               ) VALUES(?,1,?,'earnings',201,1,'hash-201-1','标题','摘要',?,?,?,1,
+                        '[]','[]',?,50,'{}','[]',?)""",
+            (
+                theme,
+                "d" * 64,
+                _iso(now),
+                _iso(now),
+                _iso(now),
+                identities,
+                _iso(now),
+            ),
+        )
+        connection.commit()
+
+    unmatched = intelligence.feed(as_of=now, window_hours=72, theme="evt_missing")
+    assert unmatched["items"] == []
+    matched = intelligence.feed(as_of=now, window_hours=72, theme=theme)
+    assert [item["news_id"] for item in matched["items"]] == [201]
+
+
 def test_batch_aggregates_full_directional_window_and_applies_stock_filters(
     tmp_path,
 ) -> None:

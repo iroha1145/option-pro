@@ -16,7 +16,7 @@ import HotspotsStrip from '@/components/catalysts/HotspotsStrip';
 import FocusCycleCard from '@/components/catalysts/FocusCycleCard';
 import ManagePanel from '@/components/catalysts/ManagePanel';
 import FilterBar from '@/components/catalysts/FilterBar';
-import { DEFAULT_FILTERS, type CatalystFilters } from '@/components/catalysts/filters';
+import { DEFAULT_FILTERS, sanitizeThemeId, type CatalystFilters } from '@/components/catalysts/filters';
 import FeedPanel from '@/components/catalysts/FeedPanel';
 import StocksPanel from '@/components/catalysts/StocksPanel';
 import CalendarPanel from '@/components/catalysts/CalendarPanel';
@@ -70,7 +70,7 @@ function parseFilters(sp: URLSearchParams): CatalystFilters {
     minConfidence: boundedNumber(sp.get('conf'), 0, 90, 0) / 100,
     minAbsImpact: boundedNumber(sp.get('impact'), 0, 5, 0),
     multiSourceOnly: sp.get('multi') === '1',
-    themeId: sp.get('theme'),
+    themeId: sanitizeThemeId(sp.get('theme')),
   };
 }
 

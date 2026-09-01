@@ -18,10 +18,10 @@ export default function NotFound() {
       description={t('没有找到 {path} 对应的页面。链接可能已失效或地址输入有误。', { path: location.pathname })}
       action={
         <Link
-          to="/watchlist"
+          to="/"
           className="inline-flex min-h-11 items-center justify-center rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105"
         >
-          {t('返回自选')}
+          {t('返回首页')}
         </Link>
       }
       /* 占位是整屏高的（见 PageFallback）。这一页如果只有几百像素，页脚会从

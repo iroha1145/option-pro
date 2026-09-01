@@ -164,6 +164,12 @@
       transform: translateY(-3px);
       box-shadow: var(--shadow-sh-2);
     }
+    /* 覆盖层按钮方案（SignalCards）：card-lift 本体是 pointer-events-none，
+       :hover 永远打不中——由外层宿主代为触发，动效与上面同款。 */
+    .card-lift-host:hover .card-lift {
+      transform: translateY(-3px);
+      box-shadow: var(--shadow-sh-2);
+    }
   }
 
   /* 表格数字 */

@@ -6,6 +6,7 @@ import type { EconomicEvent } from './api';
 import EmptyState from '@/components/shared/EmptyState';
 import { SkeletonRows } from '@/components/shared/Skeleton';
 import { cn } from '@/lib/utils';
+import { fmtLocaleDate, fmtLocaleTime } from '@/lib/format';
 import { t as __t } from '../../i18n/core.ts';
 
 const IMPACT_STYLE: Record<EconomicEvent['impact'], { bar: string; chip: string; dots: number }> = {
@@ -108,14 +109,13 @@ export default function CalendarPanel({ refreshToken }: { refreshToken: number }
   return (
     <div className="card-surface overflow-hidden">
       {groups.map(([date, events], gi) => {
-        const d = new Date(`${date}T00:00:00`);
         const isToday = date === todayKey;
         return (
           <div key={date} className={cn(gi > 0 && 'border-t border-line')}>
             {/* 日期分组头 */}
             <div className={cn('flex items-center justify-between px-5 py-2.5', isToday ? 'bg-brand-50' : 'bg-card-warm')}>
               <p className={cn('font-mono text-caption font-semibold tnum', isToday ? 'text-brand-700' : 'text-ink-600')}>
-                {d.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit', weekday: 'short' })}
+                {fmtLocaleDate(`${date}T00:00:00`, { month: '2-digit', day: '2-digit', weekday: 'short' })}
                 {isToday && <span className="ml-2 rounded-xs bg-brand-600 px-1.5 py-0.5 text-[10px] font-medium text-white">{__t('今日')}</span>}
               </p>
               <span className="font-mono text-micro text-ink-400 tnum">{events.length} {__t('项')}</span>
@@ -135,7 +135,7 @@ export default function CalendarPanel({ refreshToken }: { refreshToken: number }
                     <span className={cn('w-[3px] shrink-0 rounded-full', s.bar)} aria-hidden="true" />
                     <div className="flex w-12 shrink-0 flex-col justify-center">
                       <span className="font-mono text-[11px] leading-[14px] text-ink-500 tnum">
-                        {allDay ? __t('全天') : t.toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit' })}
+                        {allDay ? __t('全天') : fmtLocaleTime(ev.scheduledAt)}
                       </span>
                       <span className="text-[10px] leading-[14px] text-ink-300">{ev.country}</span>
                     </div>

@@ -707,7 +707,12 @@ export default function Earnings() {
           {loading ? (
             <SkeletonCard />
           ) : (
-            <ImpactCard row={selectedRow} ticker={selectedTicker} onAnalyzed={onReportAnalysis} />
+            <ImpactCard
+              row={selectedRow}
+              ticker={selectedTicker}
+              calendarRevision={q.data?.asOf ?? refreshStatus}
+              onAnalyzed={onReportAnalysis}
+            />
           )}
           {!loading && !error503 && <EpsHatchChart items={visibleItems} />}
           {!loading && !error503 && <DensityStrip items={items} onJumpDay={onJumpDay} />}
