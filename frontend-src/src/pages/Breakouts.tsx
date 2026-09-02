@@ -20,6 +20,7 @@ import { useAccess } from '@/hooks/useAccess';
 import { useToast } from '@/components/Toast';
 import { useShell } from '@/components/Layout';
 import { cn } from '@/lib/utils';
+import Switch from '@/components/shared/Switch';
 import { fmtTimeHHMMSS } from '@/lib/format';
 import EmptyState from '@/components/shared/EmptyState';
 import SourceNote from '@/components/shared/SourceNote';
@@ -77,31 +78,10 @@ function FChip({ active, onClick, children, ariaLabel }: { active: boolean; onCl
 /* ---------------- 只看自选开关（toggle，knob 260ms） ---------------- */
 function WatchOnlyToggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
   return (
-    <button
-      role="switch"
-      aria-checked={value}
-      onClick={() => onChange(!value)}
-      className="flex items-center gap-2 text-caption text-ink-500 transition-colors hover:text-ink-800"
-    >
-      <motion.span
-        whileTap={{ scale: 0.96 }}
-        transition={{ type: 'spring', stiffness: 520, damping: 32 }}
-        /* shrink-0：flex 行挤压下轨道不得缩窄（缩到 21px 时 knob 直接飞出压住标签） */
-        className={cn('relative h-5 w-9 shrink-0 rounded-pill shadow-track transition-colors duration-ui', value ? 'bg-brand-600' : 'bg-line-strong')}
-      >
-        {/* left 显式锚定（与 ManagePanel/FilterBar 同范式）：绝对定位不写 left 时
-            静态位置生效，而 button 的 UA text-align:center 会把基准推到轨道正中，
-            translate 再叠加就双重偏移 */}
-        <span
-          className={cn(
-            'absolute top-0.5 size-4 rounded-full bg-white shadow-knob transition-[left] duration-ui ease-paper',
-            value ? 'left-[18px]' : 'left-0.5',
-          )}
-          aria-hidden="true"
-        />
-      </motion.span>
+    <label className="flex cursor-pointer items-center gap-2 text-caption text-ink-500 transition-colors hover:text-ink-800">
+      <Switch size="lg" checked={value} onToggle={() => onChange(!value)} />
       {__t('只看自选')}
-    </button>
+    </label>
   );
 }
 

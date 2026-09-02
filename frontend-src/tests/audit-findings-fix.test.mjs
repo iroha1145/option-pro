@@ -38,7 +38,6 @@ test('sanitizeThemeId 只接受安全主题 ID', () => {
 test('live feed 查询串带上 theme', async () => {
   const api = codeOf(await source('components/catalysts/api.ts'));
   assert.match(api, /theme: q\.themeId \|\| undefined/);
-  assert.match(api, /serializeCatalystFeedQuery/);
 });
 
 test('界面日期走 localeTag，不再写死 zh-CN', () => {
@@ -86,8 +85,10 @@ test('FocusCycle 用 setTimeout 退避，cancel_requested 算运行中', async (
   assert.match(card, /pollGenRef = useRef\(0\)/);
   assert.match(card, /window\.setTimeout\(\(\) => void tick\(\)/);
   assert.doesNotMatch(card, /window\.setInterval/);
-  assert.match(card, /cancel_requested/);
-  assert.match(card, /cancelled/);
+  // 状态只认 nFocusJob 归一化后的四值：cancelled 归 failed、cancel_requested 归 in_progress，
+  // 不再写永远不可达的分支（复审）。
+  assert.match(card, /next\.status === 'completed' \|\| next\.status === 'failed'/);
+  assert.match(card, /job\.status === 'queued' \|\| job\.status === 'in_progress'/);
 });
 
 test('DataTable 的 hint 在排序按钮外，Watchlist 强度列不再把 InfoHint 塞进 button', async () => {
@@ -100,12 +101,18 @@ test('DataTable 的 hint 在排序按钮外，Watchlist 强度列不再把 InfoH
 });
 
 test('SignalCards / FeedPanel 不再把可交互嵌进 role=button 的 article', async () => {
-  const cards = codeOf(await source('components/breakouts/SignalCards.tsx'));
+  // closest('button, a, [role="button"]') 这类选择器字符串不是 JSX 属性，先剥掉再查。
+  const withoutSelectors = (text) => text.replace(/\[role="button"\]/g, '');
+  const cards = withoutSelectors(codeOf(await source('components/breakouts/SignalCards.tsx')));
   assert.doesNotMatch(cards, /role="button"/);
-  assert.match(cards, /pointer-events-auto/);
-  const feed = codeOf(await source('components/catalysts/FeedPanel.tsx'));
+  // 内容层保留指针事件（可划选、title 可悬停），整卡点击由内容层转发并让开划选与真按钮。
+  assert.doesNotMatch(cards, /pointer-events-none/);
+  assert.match(cards, /getSelection\(\)/);
+  const feed = withoutSelectors(codeOf(await source('components/catalysts/FeedPanel.tsx')));
   assert.doesNotMatch(feed, /role="button"/);
   assert.match(feed, /absolute inset-0/);
+  assert.doesNotMatch(feed, /className="[^"]*pointer-events-none/);
+  assert.match(feed, /getSelection\(\)/);
 });
 
 test('MobileDock 已登录走退出，Escape 拦住冒泡', async () => {

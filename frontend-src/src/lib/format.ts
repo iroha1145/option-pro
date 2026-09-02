@@ -2,25 +2,42 @@
 
 import { localeTag, t } from '../i18n/core.ts';
 
+/* Intl.DateTimeFormat 按 (locale, options) 缓存：每次 toLocale*(tag, opts) 都会新建
+   formatter（几十到几百微秒），而这些助手坐在 feed 行、日历行等列表热路径上；
+   仓库对 etFmt 单例早有同款要求。setLocale() 整页重载，缓存不会跨语言串。 */
+const DTF_CACHE = new Map<string, Intl.DateTimeFormat>();
+function dtf(opts: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+  const tag = localeTag();
+  const key = `${tag}|${JSON.stringify(opts)}`;
+  let fmt = DTF_CACHE.get(key);
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat(tag, opts);
+    DTF_CACHE.set(key, fmt);
+  }
+  return fmt;
+}
+function validDate(iso: string): Date | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 /** 界面日期：跟当前语言走，不再写死 zh-CN。无效输入显「—」。 */
 export function fmtLocaleDate(iso: string, opts?: Intl.DateTimeFormatOptions): string {
-  const d = new Date(iso);
-  if (!iso || Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString(localeTag(), opts ?? { year: 'numeric', month: '2-digit', day: '2-digit' });
+  const d = validDate(iso);
+  return d ? dtf(opts ?? { year: 'numeric', month: '2-digit', day: '2-digit' }).format(d) : '—';
 }
 
 /** 界面时刻：跟当前语言走。无效输入显「—」。 */
 export function fmtLocaleTime(iso: string, opts?: Intl.DateTimeFormatOptions): string {
-  const d = new Date(iso);
-  if (!iso || Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleTimeString(localeTag(), opts ?? { hour12: false, hour: '2-digit', minute: '2-digit' });
+  const d = validDate(iso);
+  return d ? dtf(opts ?? { hour12: false, hour: '2-digit', minute: '2-digit' }).format(d) : '—';
 }
 
 /** 界面日期+时刻：跟当前语言走。无效输入显「—」。 */
 export function fmtLocaleDateTime(iso: string, opts?: Intl.DateTimeFormatOptions): string {
-  const d = new Date(iso);
-  if (!iso || Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleString(localeTag(), opts ?? { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+  const d = validDate(iso);
+  return d ? dtf(opts ?? { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(d) : '—';
 }
 export function fmtPrice(n: number, digits = 2): string {
   return n.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });

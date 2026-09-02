@@ -71,7 +71,7 @@ export {
 } from ${JSON.stringify(files.tools)};
 export {
   drawingsToMarks, drawingSegments, toProjectedDrawing, overlayMarks, selectionOverlay, projectToPixels,
-  draftOverlay, graphicFromOverlay, autoPatternGeometry, autoPatternsToMarks, fillIsAxisAligned,
+  draftOverlay, graphicFromOverlay, autoPatternGeometry, autoPatternsToMarks, fillIsAxisAligned, deconflictEndLabels,
 } from ${JSON.stringify(files.renderer)};
 export {
   DrawingOutbox, diffPersistOps, mutableFieldsDiffer, applyPersistResponse,
@@ -1991,7 +1991,7 @@ test('keep-local reset removes stale barriers and persists one exact replacement
 });
 
 test('pattern rails carry per-kind color and a single end label', async (t) => {
-  const { autoPatternsToMarks } = await loadDrawings(t);
+  const { autoPatternsToMarks, deconflictEndLabels } = await loadDrawings(t);
   // bar.t 是 ISO 字符串（projection.nySessionDate 直接 slice），沿用 barsFor 的口径
   const bars = Array.from({ length: 30 }, (_, i) => {
     const day = String(1 + i).padStart(2, '0');
@@ -2028,9 +2028,13 @@ test('pattern rails carry per-kind color and a single end label', async (t) => {
   assert.equal(chanA.lineStyle.color, '#3B59F2');
   assert.equal(chanB.lineStyle.color, '#3B59F2');
   assert.equal(chanA.label.show, true);
-  // 两个形态落点同价（118）：同价带内顺次换侧防叠印
-  assert.equal(chanA.label.position, 'insideEndBottom');
   assert.equal(chanB.label.show, false);
+  // 防叠不在本函数里做（手绘标签也要一起排），由合并点的 deconflictEndLabels 负责：
+  // 两个形态落点同价（118），同价带内顺次换侧。
+  const spread = deconflictEndLabels(marks.lines, 90, 140);
+  assert.equal(spread[0][0].label.position, 'insideEndTop');
+  assert.equal(spread[1][0].label.position, 'insideEndBottom');
+  assert.equal(spread[2][0].label.show, false, '第二条通道边仍无标签');
   // 填充也跟线色（不再是灰蒙一层）
   const poly = (marks.polygons ?? [])[0];
   assert.ok(poly, 'channel 应产出填充多边形');
@@ -2123,6 +2127,40 @@ test('network drain failure carries no Retry-After and falls back to the ladder'
   assert.equal(nextDrainRetryDelayMs(1, 7), 7_000);
   assert.equal(nextDrainRetryDelayMs(3, 0), 1_000, '0/负数不允许空转成忙等');
   assert.equal(nextDrainRetryDelayMs(1, 999), 120_000, '超长 Retry-After 不把任务押到天荒地老');
+});
+
+test('deconflictEndLabels spreads every end label in a price band, hand-drawn ones included', async (t) => {
+  const { deconflictEndLabels } = await loadDrawings(t);
+  const labeled = (y, formatter) => [
+    { coord: [0, y], label: { show: true, formatter, position: 'insideEndTop', distance: 4 } },
+    { coord: [20, y] },
+  ];
+  // 六条落点几乎同价：四档封顶的旧实现会让第 5、6 条叠回 slot3；现在档位不封顶。
+  const same = [100, 100.2, 99.9, 100.1, 100.05, 99.95].map((y, i) => labeled(y, `p${i}`));
+  const spread = deconflictEndLabels(same, 90, 140);
+  const keys = spread.map((line) => `${line[0].label.position}@${line[0].label.distance}`);
+  assert.equal(new Set(keys).size, 6, '六枚标签六个不同档位');
+  assert.ok(keys.includes('insideEndTop@4') && keys.includes('insideEndBottom@4'));
+  assert.ok(keys.includes('insideEndTop@18') && keys.includes('insideEndBottom@18'));
+  assert.ok(keys.includes('insideEndTop@32') && keys.includes('insideEndBottom@32'));
+  // 隔项不误重置（band = 50×5% = 2.5）：B 与 A 同带须换侧；C 与 A 相距 2.6 已出带，
+  // 与 B 同带但 B 占的是 slot1，C 可回 slot0。
+  const chain = [labeled(100, 'A'), labeled(98.5, 'B'), labeled(97.4, 'C')];
+  const chained = deconflictEndLabels(chain, 90, 140);
+  assert.equal(chained[0][0].label.position, 'insideEndTop');
+  assert.equal(chained[1][0].label.position, 'insideEndBottom', 'B 在 A 的价格带内，换侧');
+  assert.equal(chained[2][0].label.position, 'insideEndTop', 'C 已离开 A 的带，可回 slot0');
+  // 手绘水平线的标签（无 distance 字段、等宽字体）同样参与排布，且其它字段原样保留。
+  const hand = [
+    { coord: [0, 100], label: { show: true, formatter: '1.618', position: 'insideEndTop', fontFamily: 'mono' } },
+    { coord: [20, 100] },
+  ];
+  const mixed = deconflictEndLabels([labeled(100, '上升支撑'), hand], 90, 140);
+  assert.equal(mixed[1][0].label.position, 'insideEndBottom');
+  assert.equal(mixed[1][0].label.fontFamily, 'mono');
+  // 无标签/单标签直接原样返回。
+  const bare = [[{ coord: [0, 100] }, { coord: [20, 100] }]];
+  assert.deepEqual(deconflictEndLabels(bare, 90, 140), bare);
 });
 
 test('identity probe failure retries on its own ladder and honors Retry-After', async (t) => {

@@ -14,6 +14,7 @@ import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { cn } from '@/lib/utils';
 import Icon from '@/components/icons';
 import InfoHint from '@/components/shared/InfoHint';
+import Switch from '@/components/shared/Switch';
 import {
   overlayClassName,
   overlayVisible,
@@ -38,17 +39,6 @@ const PRESET_ORDER: Exclude<PresetId, 'custom'>[] = [
 
 const FOCUS_RING = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30';
 
-/**
- * 数字输入的即时钳制：清空（Number('') === 0）和越界都不该被持久化。
- * 「最低几何质量」按 0–100 收，和标签条上的「置信度 87」同一把尺——
- * 以前控件是 0–1 而 UI 显 0–100，看到 87 填 60 就把全部形态滤没了。
- */
-function clampInput(raw: string, min: number, max: number, fallback: number): number {
-  if (raw.trim() === '') return fallback;
-  const value = Number(raw);
-  if (!Number.isFinite(value)) return fallback;
-  return Math.min(max, Math.max(min, value));
-}
 
 /**
  * 读数徽章（02-number-pop-in）：值变了才 pop，首帧不动——弹窗开场已有
@@ -81,49 +71,6 @@ function PopValue({ text }: { text: string }) {
         </span>
       ))}
     </span>
-  );
-}
-
-/** 27-toggle 拨杆：轨道 32×18、拇指 14，行程 = 32 − 2×2 − 14 = 14px。
-    is-init 只在首次交互后加，否则开场每个"开"态开关都要空放一次回弹。 */
-function Switch({
-  checked,
-  disabled,
-  label,
-  onToggle,
-}: {
-  checked: boolean;
-  disabled?: boolean;
-  label: string;
-  onToggle: () => void;
-}) {
-  const [init, setInit] = useState(false);
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      disabled={disabled}
-      onClick={(event) => {
-        // 行本身也可点：拨杆自吃事件，避免冒泡到行再翻一次等于没动。
-        event.stopPropagation();
-        if (disabled) return;
-        setInit(true);
-        onToggle();
-      }}
-      data-on={checked ? 'true' : 'false'}
-      style={{ '--toggle-travel': '14px' } as CSSProperties}
-      className={cn(
-        't-toggle relative h-[18px] w-8 shrink-0 rounded-pill shadow-track',
-        FOCUS_RING,
-        init && 'is-init',
-        checked ? 'bg-brand-600' : 'bg-ink-300',
-        disabled && 'cursor-not-allowed opacity-40',
-      )}
-    >
-      <span className="t-toggle-thumb absolute left-[2px] top-[2px] size-[14px] rounded-full bg-card shadow-knob" />
-    </button>
   );
 }
 
@@ -168,7 +115,7 @@ function SliderRow({
         step={step}
         aria-label={label}
         value={value}
-        onChange={(event) => onApply(clampInput(event.target.value, 0, 100, value))}
+        onChange={(event) => onApply(Number(event.target.value))}
         className="ft-range w-28 shrink-0 cursor-pointer"
         style={{ '--fill': `${value}%` } as CSSProperties}
       />

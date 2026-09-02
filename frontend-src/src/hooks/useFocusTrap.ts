@@ -53,6 +53,14 @@ export function useFocusTrap(
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Tab') return;
+      /* 焦点在另一个打开的模态里（portal 到 body 的嵌套弹窗，如工作区上层的图层
+         菜单）：让内层圈套自己管，外层不抢——否则两个圈套在同一次 Tab 上互相拽，
+         键盘永远钉在内层首项（复审实测：预设/开关/滑杆全部不可达）。 */
+      const focused = document.activeElement;
+      if (focused instanceof Element) {
+        const foreignModal = focused.closest('[aria-modal="true"]');
+        if (foreignModal && foreignModal !== container && !container.contains(foreignModal)) return;
+      }
       const items = focusableWithin(container);
       if (items.length === 0) {
         // 面板内没有可聚焦元素时，Tab 也不能跑出去。

@@ -49,6 +49,9 @@ export function useAiJob() {
           const j = await aiJobsApi.get(id);
           if (!aliveRef.current || generation !== generationRef.current) return;
           setJob(j);
+          // 轮询仍在继续时唯一可能挂着的 error 是「取消失败」：新状态到手就清掉，
+          // 别让一条红字陪着后续的成功结果常驻。
+          setError(null);
           if (TERMINAL.has(j.status)) {
             stop();
             return;
@@ -107,8 +110,14 @@ export function useAiJob() {
     }
     try {
       const j = await aiJobsApi.cancel(job.id);
+      if (!aliveRef.current) return;
       setJob(j);
-      stop();
+      setError(null);
+      /* 后端对 in_progress 只落 cancel_requested_at、status 原样返回（非终态）：
+         此时不能 stop()——worker 稍后才真正转 cancelled，轮询要留着去观察它，
+         否则 UI 永远停在「模型正在处理…」。只有服务端直接给了终态（排队中的
+         任务立即 cancelled）才收尾。 */
+      if (TERMINAL.has(j.status)) stop();
     } catch (e) {
       if (!aliveRef.current) return;
       setError(e instanceof Error ? e.message : t('取消失败'));

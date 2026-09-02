@@ -68,7 +68,19 @@ export function NewsRow({
         className="absolute inset-0 z-0 focus-visible:bg-paper-2/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-400/60"
       />
       <TimeCol iso={item.publishedAt} />
-      <div className="relative z-10 min-w-0 flex-1 pointer-events-none">
+      {/* 内容层保留指针事件（可划选复制标题、title 提示可悬停），整行点击由这里
+          转发到 onOpen；键盘/读屏走上面那颗覆盖层按钮。点在按钮/链接/ⓘ 上或
+          正在划选文字时不转发——此前把内容层整体禁掉指针事件的方案，把文字选择
+          与所有原生 title 一起杀掉了（复审实锤）。 */}
+      <div
+        className="relative z-10 min-w-0 flex-1 cursor-pointer"
+        onClick={(event) => {
+          const target = event.target as Element;
+          if (target.closest('button, a, [role="button"], input, select, textarea')) return;
+          if (window.getSelection()?.toString()) return;
+          onOpen(item.newsId);
+        }}
+      >
         {/* 顶行：来源 · 相对时间 · 多源 · 过期 */}
         <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-micro text-ink-400">
           <span className="font-medium text-ink-500">{item.source}</span>
@@ -91,7 +103,7 @@ export function NewsRow({
         <p className="mt-1 line-clamp-2 text-body-s text-ink-500">{item.summaryZh}</p>
         {/* 底行：代码 chips + 分析状态 + 分类/置信度/影响 */}
         <div className="mt-2.5 flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
-          <span className="pointer-events-auto flex max-w-full flex-wrap items-center gap-1">
+          <span className="flex max-w-full flex-wrap items-center gap-1">
             {item.sourceTickers.map((t) => (
               <TickerChip key={t} ticker={t} onClick={() => openTicker(t)} />
             ))}
@@ -104,7 +116,7 @@ export function NewsRow({
                   后面各挂一句常驻免责声明（「· 非胜率」「· 非收益」）、又各带一个 ⓘ，
                   每条新闻重复一遍、又解释不了自己。声明留着，收进这一个 ⓘ。
                   三者同处一个 flex 单元：换行时一起走，ⓘ 不会被甩到下一行。 */}
-              <span className="pointer-events-auto flex shrink-0 items-center gap-x-2 whitespace-nowrap">
+              <span className="flex shrink-0 items-center gap-x-2 whitespace-nowrap">
                 <ConfidenceLabel value={a.confidence} bare />
                 {bestImpact && <ImpactValue value={bestImpact.impactScore} bare />}
                 <InfoHint hint={SCORE_HINTS.newsAssessment} size={11} />

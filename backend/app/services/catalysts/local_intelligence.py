@@ -4058,13 +4058,19 @@ class LocalCatalystIntelligence:
             raise ValueError("as_of must be timezone-aware")
         window_hours = int(kwargs.get("window_hours") or 72)
         limit = min(100, max(1, int(kwargs.get("limit") or 50)))
+        # 事件组 id 生成时即小写十六进制（evt_/cal_ 前缀），这里 casefold 一次，
+        # 让大小写变体也能命中成员表（SQL 等值是大小写敏感的）。非法值不再静默
+        # 清空——那会把「按主题过滤」的翻页游标绑在未过滤全量 feed 上；对齐上面
+        # as_of 的做法直接抬错，HTTP 层本就有同一正则的 422 挡在前面。
         theme = str(kwargs.get("theme") or "").strip()
         if theme and not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", theme):
-            theme = ""
+            raise ValueError("theme must match [A-Za-z0-9_-]{1,64}")
+        theme = theme.casefold()
         query_hash = _sha(
             {
-                key: kwargs.get(key)
-                for key in (
+                **{
+                    key: kwargs.get(key)
+                    for key in (
                     "window_hours",
                     "ticker",
                     "source",
@@ -4077,8 +4083,9 @@ class LocalCatalystIntelligence:
                     "horizon",
                     "mechanism",
                     "multi_source_only",
-                    "theme",
-                )
+                    )
+                },
+                "theme": theme or None,
             }
         )
         offset, cursor_anchor = _cursor_decode(kwargs.get("cursor"), query_hash)
@@ -4163,20 +4170,10 @@ class LocalCatalystIntelligence:
                 row = rows_by_news_id.get(int(item["news_id"]))
                 if not row or int(row.get("source_count") or 0) < 2:
                     continue
-            if theme:
-                theme_l = theme.casefold()
-                theme_ids = [
-                    str(value).casefold()
-                    for value in (item.get("theme_ids") or [])
-                ]
-                event_group = str(item.get("event_group_id") or "").casefold()
-                news_id = int(item.get("news_id") or 0)
-                if (
-                    theme_l not in theme_ids
-                    and event_group != theme_l
-                    and news_id not in theme_member_ids
-                ):
-                    continue
+            # feed item（_item()）不携带 theme_ids / event_group_id 字段，主题归属
+            # 只有事件组成员表这一条真路径；之前多写的两条字段匹配永远不成立。
+            if theme and int(item.get("news_id") or 0) not in theme_member_ids:
+                continue
             filtered.append(item)
         page = filtered[offset : offset + limit]
         has_more = offset + limit < len(filtered)
