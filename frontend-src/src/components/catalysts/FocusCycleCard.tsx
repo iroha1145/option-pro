@@ -271,17 +271,18 @@ export default function FocusCycleCard({ refreshToken = 0 }: { refreshToken?: nu
           const next = await catalystsContract.focusCycleJob(j.cycleId!);
           if (!stillThisPoll()) return;
           setJob({ ...next });
-          if (['completed', 'failed', 'cancelled', 'canceled'].includes(next.status)) {
+          /* nFocusJob 已把状态归一到 queued|in_progress|completed|failed（cancelled
+             归 failed、cancel_requested 归 in_progress），这里只认这四值——此前多写的
+             cancelled/cancel_requested 分支永远不可达，还被 grep 测试钉住了死字串。 */
+          if (next.status === 'completed' || next.status === 'failed') {
             stopPoll();
             if (next.status === 'completed') {
               toast.success(t('新焦点周期已生成'));
-              latestQ.refresh();
-            } else if (next.status === 'failed') {
-              toast.error(t('焦点周期计算失败'), t('请稍后重试'));
             } else {
-              toast.info(t('任务已取消'));
-              latestQ.refresh();
+              toast.error(t('焦点周期计算失败'), t('请稍后重试'));
             }
+            // 成败都重读 latest：失败态（含被取消的）也要让卡片回到最新可用周期。
+            latestQ.refresh();
             window.setTimeout(() => {
               // 按 cycleId 函数式清理：1200ms 内再提交不误伤新 job。
               setJob((cur) => (cur && cur.cycleId === j.cycleId ? null : cur));
@@ -308,7 +309,7 @@ export default function FocusCycleCard({ refreshToken = 0 }: { refreshToken?: nu
     }
   }, [abandonPoll, latestQ, stopPoll, toast]);
 
-  const running = job && ['queued', 'in_progress', 'cancel_requested', 'pending', 'preparing'].includes(job.status);
+  const running = job && (job.status === 'queued' || job.status === 'in_progress');
 
   return (
     /* 后续区块 rise-in 减量：直接呈现 */

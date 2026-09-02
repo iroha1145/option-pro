@@ -69,7 +69,7 @@ function SignalCard({ ev, index, flash, locate, onOpen }: SignalCardProps) {
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: Math.min(index * 0.045, 0.5) }}
-      className="card-lift-host relative"
+      className="relative"
     >
       {/* 整卡点击与 ticker 按钮是兄弟，避免 article[role=button] 内再嵌 button。 */}
       <button
@@ -83,9 +83,17 @@ function SignalCard({ ev, index, flash, locate, onOpen }: SignalCardProps) {
           会压掉同元素上的 CSS hover 位移（原 whileHover 方案因此存在）。 */}
       <div
         className={cn(
-          'pointer-events-none card-surface card-lift relative z-10 h-full cursor-pointer p-4',
+          'card-surface card-lift relative z-10 h-full cursor-pointer p-4',
           locate && 'bk-locate',
         )}
+        /* 内容层保留指针事件：文字可划选、ScoreBars 的 title 可悬停、card-lift 的
+           :hover 直接生效；整卡点击由此转发，点在 ticker 按钮或划选文字时不转发。 */
+        onClick={(event) => {
+          const target = event.target as Element;
+          if (target.closest('button, a, [role="button"]')) return;
+          if (window.getSelection()?.toString()) return;
+          onOpen(ev);
+        }}
       >
       {/* 顶行：Logo + 代码/名称 + 相对时间（ticker 点击开个股抽屉） */}
       <div className="flex items-center gap-2.5">
@@ -98,7 +106,7 @@ function SignalCard({ ev, index, flash, locate, onOpen }: SignalCardProps) {
               openTicker(ev.ticker);
             }}
             aria-label={t('打开 {ticker} 个股详情抽屉', { ticker: ev.ticker })}
-            className="pointer-events-auto font-mono text-body-s font-semibold text-ink-800 underline-offset-2 transition-colors hover:text-brand-600 hover:underline"
+            className="font-mono text-body-s font-semibold text-ink-800 underline-offset-2 transition-colors hover:text-brand-600 hover:underline"
           >
             {ev.ticker}
           </button>

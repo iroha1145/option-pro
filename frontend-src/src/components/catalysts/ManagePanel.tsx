@@ -20,6 +20,7 @@ import { useToast } from '@/components/Toast';
 import { Led } from './bits';
 import Icon from '@/components/icons';
 import { cn } from '@/lib/utils';
+import Switch from '@/components/shared/Switch';
 import { fmtRelative } from '@/lib/format';
 import { t as __t } from '../../i18n/core.ts';
 
@@ -86,28 +87,10 @@ function ActionButton({ label, busy, onClick }: { label: string; busy: boolean; 
 
 function Toggle({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) {
   return (
-    <button
-      role="switch"
-      aria-checked={value}
-      onClick={() => onChange(!value)}
-      className="flex w-full items-center justify-between gap-3 rounded-md border border-line bg-card-warm px-3 py-2 text-left transition-colors duration-fast hover:border-brand-400"
-    >
+    <label className="flex w-full cursor-pointer items-center justify-between gap-3 rounded-md border border-line bg-card-warm px-3 py-2 text-left transition-colors duration-fast hover:border-brand-400">
       <span className="text-caption text-ink-700">{label}</span>
-      <span
-        className={cn(
-          'relative h-4 w-7 shrink-0 rounded-pill shadow-track transition-colors duration-fast',
-          value ? 'bg-brand-600' : 'bg-ink-300',
-        )}
-        aria-hidden="true"
-      >
-        <span
-          className={cn(
-            'absolute top-0.5 size-3 rounded-full bg-white shadow-knob transition-[left] duration-fast',
-            value ? 'left-[14px]' : 'left-0.5',
-          )}
-        />
-      </span>
-    </button>
+      <Switch size="sm" checked={value} onToggle={() => onChange(!value)} />
+    </label>
   );
 }
 

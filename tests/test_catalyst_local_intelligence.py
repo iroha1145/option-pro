@@ -823,6 +823,13 @@ def test_feed_theme_filter_matches_event_group_members(tmp_path) -> None:
     assert unmatched["items"] == []
     matched = intelligence.feed(as_of=now, window_hours=72, theme=theme)
     assert [item["news_id"] for item in matched["items"]] == [201]
+    # 事件组 id 生成即小写；大小写变体（分享链接手打、大写粘贴）也要命中，
+    # 而不是静默返回空 feed。
+    upper = intelligence.feed(as_of=now, window_hours=72, theme=theme.upper())
+    assert [item["news_id"] for item in upper["items"]] == [201]
+    # 非法主题值直接抬错（与 as_of 同口径），不再静默清空成未过滤全量。
+    with pytest.raises(ValueError):
+        intelligence.feed(as_of=now, window_hours=72, theme="not a theme!!")
 
 
 def test_batch_aggregates_full_directional_window_and_applies_stock_filters(

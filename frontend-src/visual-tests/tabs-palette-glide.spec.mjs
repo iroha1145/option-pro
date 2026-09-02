@@ -73,6 +73,12 @@ async function startRectSampler(page, selector) {
 }
 
 async function stopRectSampler(page) {
+  /* 断言（toHaveAttribute 等）可能在滑块/选中行刚落地的同一帧内就满足，此时 rAF
+     还没来得及记下任何样本就被 stop——"sampler must have caught at least one frame"
+     偶发零样本即此。停之前先让出两帧，保证至少记到一帧稳定态。 */
+  await page.evaluate(() => new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve(undefined)));
+  }));
   return page.evaluate(() => {
     cancelAnimationFrame(window.__rectRaf);
     return window.__rectSamples ?? [];

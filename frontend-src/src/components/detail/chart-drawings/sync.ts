@@ -1,5 +1,6 @@
 /** Per-id serial outbox, scope tokens, and full-field undo diffs. */
 import type { ChartAdjustment, ChartDrawing, ChartRange } from './types.ts';
+import { retryDelayMs, type RetryLadder } from '@/lib/retryDelay';
 import { parseDrawing } from './schema.ts';
 import { outboxStorageKey, type StorageLike } from './storage.ts';
 
@@ -158,13 +159,15 @@ export function resolveListApply(outboxEmpty: boolean, tokenMatch: boolean): boo
  * 任务押到天荒地老）；没给（断网、5xx）按 5s → 15s → 45s → 60s 封顶退避。
  * 纯函数，不读时钟——排定时机由调用方的 setTimeout 承担。
  */
+const DRAIN_LADDER: RetryLadder = {
+  ladderMs: [5_000, 15_000, 45_000],
+  tailMs: 60_000,
+  capSeconds: 120,
+  nonPositive: 'clamp',
+};
+
 export function nextDrainRetryDelayMs(attempt: number, retryAfterSeconds?: number | null): number {
-  if (typeof retryAfterSeconds === 'number' && Number.isFinite(retryAfterSeconds)) {
-    return Math.min(Math.max(retryAfterSeconds, 1), 120) * 1000;
-  }
-  const ladder = [5_000, 15_000, 45_000];
-  const index = Math.max(attempt, 1) - 1;
-  return index < ladder.length ? ladder[index] : 60_000;
+  return retryDelayMs(attempt, retryAfterSeconds, DRAIN_LADDER);
 }
 
 export type SyncFailure = 'load_failed' | 'write_failed' | 'conflict' | null;

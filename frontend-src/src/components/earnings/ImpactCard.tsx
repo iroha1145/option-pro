@@ -327,12 +327,14 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
   );
 
   /* 换标的/权限变化 → 渲染期同步重置（adjust-state-during-render），副作用留给 effect */
+  /* calendarRevision 不进这把键：它只该触发下方 effect 的软重读（loadImpact 按
+     序号校验落地），进了硬重置就会在 job 阶段把进行中的 JobSteps 清成骨架、
+     5 分钟轮询预算归零——owner 手动「刷新日历」的 5s 追赶轮询正好会撞上。 */
   const contextKey = [
     ticker ?? '',
     reportDate ?? '',
     reportYear ?? '',
     reportQuarter ?? '',
-    calendarRevision ?? '',
     aiEnabled,
     aiAvailable,
     isOwner,

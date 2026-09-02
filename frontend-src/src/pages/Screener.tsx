@@ -62,6 +62,9 @@ import { localeTag, t as __t } from '../i18n/core.ts';
 
 const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
 const PAGE_SIZE = 20;
+/* 板块名排序的 Collator 建一次：localeCompare(b, tag) 在 sort 比较函数里每次都会新建
+   Collator，O(n log n) 次构造；setLocale() 整页重载，模块级缓存安全。 */
+const SECTOR_COLLATOR = new Intl.Collator(localeTag());
 /** 契约 /catalysts/tickers/batch 的匿名上限；超过就必须切片。 */
 const CATALYST_BATCH_SIZE = 20;
 
@@ -128,7 +131,7 @@ export default function Screener() {
           }
         : countByTier(snapshotRows.map((r) => r.strengthScore)),
       tierCountsCoverPool: distribution !== null,
-      sectors: [...new Set(snapshotRows.map((r) => r.sector))].sort((a, b) => a.localeCompare(b, localeTag())),
+      sectors: [...new Set(snapshotRows.map((r) => r.sector))].sort(SECTOR_COLLATOR.compare),
       count: universeQ.data?.universeCount ?? snapshotRows.length,
     };
   }, [universeQ.data]);
@@ -622,7 +625,7 @@ export default function Screener() {
                 )}
                 {scanMeta?.stale && (
                   <span className="rounded-xs bg-warn-50 px-1.5 py-px text-micro text-warn-600">
-                    {__t('数据未刷新')}{scanMeta.snapshotSavedAt ? ` · ${fmtLocaleDateTime(scanMeta.snapshotSavedAt)}` : ''}
+                    {__t('数据未刷新')}{scanMeta.snapshotSavedAt ? ` · ${fmtLocaleDateTime(scanMeta.snapshotSavedAt, { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })}` : ''}
                   </span>
                 )}
                 {chips.map((c) => (

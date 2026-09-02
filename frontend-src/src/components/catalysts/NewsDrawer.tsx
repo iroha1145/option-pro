@@ -178,30 +178,40 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
              stopPoll/effect 清理都会换代，拿 stillThisPoll 守收尾必然永假，
              完成结果就写不回抽屉与列表、状态芯片也清不掉（首版事故）。 */
           const sameNews = () => activeNewsRef.current === job.newsId;
+          /* 取回详情要自己会重试：这里已 stopPoll 换代，外层 catch 的 stillThisPoll
+             必然为假，会把一次瞬时 429 直接吞成永久静默（toast 已喊完成、抽屉却停在
+             旧态，复审实锤）。有界三次、1.5s/3s 退避；抽屉已换条就放弃。 */
+          const refreshItem = async () => {
+            const waits = [1_500, 3_000];
+            for (let attempt = 0; ; attempt += 1) {
+              try {
+                const fresh = await catalystsContract.news(job.newsId);
+                if (!sameNews()) return;
+                setItem(fresh);
+                onUpdate(fresh);
+                return;
+              } catch (error) {
+                if (!sameNews()) return;
+                if (attempt >= waits.length) {
+                  toast.error(__t('任务查询失败'), error instanceof Error ? error.message : __t('稍后刷新页面可继续查看结果'));
+                  return;
+                }
+                await new Promise((resolve) => window.setTimeout(resolve, waits[attempt]));
+              }
+            }
+          };
           if (next.status === 'completed') {
             toast.success(__t('AI 分析已完成'));
-            const fresh = await catalystsContract.news(job.newsId);
-            if (!sameNews()) return;
-            setItem(fresh);
-            onUpdate(fresh);
+            await refreshItem();
           } else if (next.status === 'insufficient_context') {
-            const fresh = await catalystsContract.news(job.newsId);
-            if (!sameNews()) return;
-            setItem(fresh);
-            onUpdate(fresh);
-            toast.info(__t('规则判定信息不足'), __t('未调用模型'));
+            await refreshItem();
+            if (sameNews()) toast.info(__t('规则判定信息不足'), __t('未调用模型'));
           } else if (next.status === 'failed') {
             toast.error(__t('分析失败'), next.error ?? __t('可重试'));
-            const fresh = await catalystsContract.news(job.newsId);
-            if (!sameNews()) return;
-            setItem(fresh);
-            onUpdate(fresh);
+            await refreshItem();
           } else {
             toast.info(__t('任务已取消'));
-            const fresh = await catalystsContract.news(job.newsId);
-            if (!sameNews()) return;
-            setItem(fresh);
-            onUpdate(fresh);
+            await refreshItem();
           }
           window.setTimeout(() => {
             // 按 jobId 函数式清理：600ms 内若已提交新任务，不误伤新 job。
