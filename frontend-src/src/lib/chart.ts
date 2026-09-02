@@ -25,8 +25,8 @@ import type {
   MarkPointComponentOption,
   TooltipComponentOption,
 } from 'echarts/components';
-import { CHART_MONO_FONT } from './chartFonts';
-import { directionColors, getColorMode } from './colorPreference';
+import { CHART_MONO_FONT } from './chartFonts.ts';
+import { directionColors, getColorMode } from './colorPreference.ts';
 
 echarts.use([
   LineChart, BarChart, CandlestickChart, PieChart, CustomChart,
