@@ -19,7 +19,8 @@ import Icon from '@/components/icons';
 import { STRUCTURE_HINTS } from '@/lib/structureHints';
 import { usePolling } from '@/hooks/usePolling';
 import { useAccess } from '@/hooks/useAccess';
-import { baseAnimation, CH, CHART_MONO_FONT, glassTooltip, stippleAreaStyle, type ChartOption, type EChartsInstance } from '@/lib/chart';
+import { baseAnimation, CH, CHART_MONO_FONT, glassTooltip, stippleAreaStyle, withAlpha, type ChartOption, type EChartsInstance } from '@/lib/chart';
+import { useColorMode } from '@/hooks/useColorMode.ts';
 import { useDrawingController } from './chart-drawings/useDrawingController.ts';
 import { snapCandidatesFromOverlays } from './chart-drawings/snap.ts';
 import DrawingToolbar from './chart-drawings/DrawingToolbar.tsx';
@@ -130,7 +131,7 @@ function measureMarks(overlay: MeasureOverlay | null | undefined) {
   }
   const { m } = overlay;
   const dir = m.isDrawdown ? CH.down600 : CH.up600;
-  const dirFill = m.isDrawdown ? 'rgba(229,72,77,.07)' : 'rgba(14,159,110,.07)';
+  const dirFill = withAlpha(dir, 0.07);
   return {
     lines: [
       {
@@ -311,7 +312,7 @@ function buildOption(
   }));
   const volData = bars.map((b) => ({
     value: b.v,
-    itemStyle: { color: b.c >= b.o ? 'rgba(14,159,110,.4)' : 'rgba(229,72,77,.4)' },
+    itemStyle: { color: withAlpha(b.c >= b.o ? CH.up600 : CH.down600, 0.4) },
   }));
 
   const panes = analysis?.panes ?? [];
@@ -560,6 +561,7 @@ export default function KlineChart({
   technical?: TechnicalStructure | null;
 }) {
   const overlays = technical?.chart_overlays ?? null;
+  const colorMode = useColorMode();
   // Daily bars are the reliable default covered by Massive Stocks Starter;
   // intraday intervals remain available on demand. The default lives in ./api so
   // the prefetch and this component request the same URL.
@@ -819,7 +821,7 @@ export default function KlineChart({
     // zoomRef 是有意不进依赖的：滚轮缩放不该触发 option 重建，但每次真的重建时
     // 都要带上用户当前的视窗，否则 notMerge 会把 inside 缩放重置回默认窗口。
     () => (data ? buildOption(data.bars, data.ma20, range, mode, prevClose, overlay, extraMarks, analysisOption, zoomRef.current) : null),
-    [data, range, mode, prevClose, overlay, extraMarks, analysisOption],
+    [data, range, mode, prevClose, overlay, extraMarks, analysisOption, colorMode],
   );
 
   const chartBody = (

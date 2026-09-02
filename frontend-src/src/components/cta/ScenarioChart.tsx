@@ -19,6 +19,7 @@ import {
 import { fmtPrice } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { CtaInstrumentEstimate } from '@/api/types';
+import { useColorMode } from '@/hooks/useColorMode.ts';
 import { t } from '../../i18n/core.ts';
 
 function scenarioOption(row: CtaInstrumentEstimate): ChartOption | null {
@@ -160,7 +161,8 @@ function scenarioOption(row: CtaInstrumentEstimate): ChartOption | null {
 }
 
 export default function ScenarioChart({ row }: { row: CtaInstrumentEstimate }) {
-  const option = useMemo(() => scenarioOption(row), [row]);
+  const colorMode = useColorMode();
+  const option = useMemo(() => scenarioOption(row), [row, colorMode]);
   if (!option) return <p className="mt-2 text-caption text-ink-400">{t('暂无数据')}</p>;
   return (
     <>

@@ -28,6 +28,7 @@ import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import { fmtNyEventTime, fmtNyHHmm, fmtPrice, fmtRelative } from '@/lib/format';
 import { MACRO_TONE_LABEL, macroToneOf } from '@/lib/macroFit';
 import { baseAnimation, CH, CHART_MONO_FONT, glassTooltip, type ChartOption } from '@/lib/chart';
+import { useColorMode } from '@/hooks/useColorMode.ts';
 import {
   asFullDetail,
   LIFECYCLE_CHIP_CLASS,
@@ -341,10 +342,11 @@ function buildMiniOption(bars: MiniBar[]): ChartOption {
 function MiniKline({ ticker }: { ticker: string }) {
   /* 15m 周期（与 StockChart['range'] 类型一致）+ 截取最近 96 根展示 */
   const { data, error, loading, refresh } = usePolling(() => stocksApi.chart(ticker, '15m'), null, [ticker]);
+  const colorMode = useColorMode();
   const option = useMemo(() => {
     if (!data || data.candles.length <= 1) return null;
     return buildMiniOption(data.candles.slice(-96));
-  }, [data]);
+  }, [data, colorMode]);
   /* 突破标的常不在常规覆盖范围内：503 时可手动拉取（与详情页 ManualStockPull 同一预算通道） */
   const [pulling, setPulling] = useState(false);
   const [pullError, setPullError] = useState<string | null>(null);

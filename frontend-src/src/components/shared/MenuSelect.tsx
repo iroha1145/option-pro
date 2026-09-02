@@ -48,7 +48,7 @@ export default function MenuSelect<T extends string | number>({
     const rect = ref.current.getBoundingClientRect();
     const spaceBelow = window.innerHeight - rect.bottom;
     const spaceAbove = rect.top;
-    if (spaceBelow < 220 && spaceAbove > spaceBelow) {
+    if (spaceBelow < 280 && spaceAbove > spaceBelow) {
       setPlacement('top');
     } else {
       setPlacement('bottom');

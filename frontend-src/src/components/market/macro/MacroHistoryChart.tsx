@@ -27,6 +27,7 @@ import {
   type MacroModule,
   type MacroModuleId,
 } from '@/api/modules/macro';
+import { useColorMode } from '@/hooks/useColorMode.ts';
 import { t } from '../../../i18n/core.ts';
 
 export const HISTORY_RANGES = [
@@ -44,16 +45,10 @@ const BASIS_LABEL: Record<string, string> = {
   mixed: t('混合基础'),
 };
 
-/** 模块线共用全站图表调色，不给模块分配固定鲜艳色。 */
-const MODULE_LINE_COLORS: string[] = [
-  CH.brand400,
-  CH.ink400,
-  CH.brand600,
-  CH.ink300,
-  CH.up600,
-  CH.warn600,
-  CH.ai600,
-];
+/** 模块线共用全站图表调色，不给模块分配固定鲜艳色。每次读取以免锁死涨跌色。 */
+function moduleLineColors(): string[] {
+  return [CH.brand400, CH.ink400, CH.brand600, CH.ink300, CH.up600, CH.warn600, CH.ai600];
+}
 
 export default function MacroHistoryChart({
   points,
@@ -78,6 +73,7 @@ export default function MacroHistoryChart({
   onRangeChange: (value: HistoryRangeKey) => void;
 }) {
   const [shownModules, setShownModules] = useState<MacroModuleId[]>([]);
+  const colorMode = useColorMode();
 
   const option = useMemo(() => {
     const dates = points.map((point) => point.date);
@@ -122,7 +118,7 @@ export default function MacroHistoryChart({
 
     shownModules.forEach((moduleId) => {
       const colorIndex = MACRO_MODULE_ORDER.indexOf(moduleId);
-      const color = MODULE_LINE_COLORS[colorIndex] ?? CH.ink300;
+      const color = moduleLineColors()[colorIndex] ?? CH.ink300;
       series.push(
         insightLine(color, {
           name: t(modules.find((item) => item.moduleId === moduleId)?.nameZh ?? moduleId),
@@ -178,7 +174,7 @@ export default function MacroHistoryChart({
       yAxis: valueAxis({ min: 0, max: 100, interval: 25 }),
       series,
     };
-  }, [points, modules, shownModules]);
+  }, [points, modules, shownModules, colorMode]);
 
   return (
     <section className="card-surface p-5" aria-label={t("宏观环境历史")}>

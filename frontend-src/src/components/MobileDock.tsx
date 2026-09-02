@@ -14,7 +14,8 @@ import Icon, { type IconName } from '@/components/icons';
 import Segmented from '@/components/shared/Segmented';
 import GlidePill from '@/components/shared/GlidePill';
 import { LOCALES, getLocale, setLocale, t } from '../i18n/core.ts';
-import { getColorMode, setColorMode, type ColorMode } from '@/lib/colorPreference.ts';
+import { setColorMode, type ColorMode } from '@/lib/colorPreference.ts';
+import { useColorMode } from '@/hooks/useColorMode.ts';
 
 /* setLocale() 整页重载才会切语言，模块级常量在加载期求值一次即可，不需要每次渲染重算 */
 const DOCK_ITEMS: { label: string; path: string; icon: IconName }[] = [
@@ -70,7 +71,7 @@ export default function MobileDock() {
     };
   }, [moreOpen]);
 
-  const [colorMode, setLocalColorMode] = useState<ColorMode>(() => getColorMode());
+  const colorMode = useColorMode();
 
   const moreActive = MORE_ITEMS.some((m) => location.pathname.startsWith(m.path));
   const dockGlideId = useId();
@@ -185,10 +186,7 @@ export default function MobileDock() {
                       { value: 'asian', label: t('红涨绿跌') },
                     ]}
                     value={colorMode}
-                    onChange={(m) => {
-                      setColorMode(m);
-                      setLocalColorMode(m);
-                    }}
+                    onChange={setColorMode}
                   />
                 </div>
                 <div className="mx-3 my-2 border-t border-line" />

@@ -221,7 +221,7 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
           )}
 
           <LanguageSwitcher className="hidden md:block" />
-          <ColorModeSwitcher className="hidden lg:flex" />
+          <ColorModeSwitcher className="hidden xl:flex" />
 
           {isSignedIn ? (
             <button

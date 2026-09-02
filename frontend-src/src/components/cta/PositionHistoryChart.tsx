@@ -23,6 +23,7 @@ import {
   type ChartOption,
 } from '@/lib/chart';
 import { InsightFrame } from '@/components/shared/InsightCard';
+import { useColorMode } from '@/hooks/useColorMode.ts';
 import { t } from '../../i18n/core.ts';
 import { signed } from './ctaMeta';
 
@@ -106,7 +107,8 @@ function historyOption(history: { date: string; position: number }[]): ChartOpti
 }
 
 export default function PositionHistoryChart({ history }: { history: { date: string; position: number }[] }) {
-  const option = useMemo(() => historyOption(history), [history]);
+  const colorMode = useColorMode();
+  const option = useMemo(() => historyOption(history), [history, colorMode]);
   if (!option) return <p className="mt-2 text-caption text-ink-400">{t('暂无数据')}</p>;
   const last = history[history.length - 1];
   return (

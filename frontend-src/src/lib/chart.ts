@@ -26,6 +26,7 @@ import type {
   TooltipComponentOption,
 } from 'echarts/components';
 import { CHART_MONO_FONT } from './chartFonts';
+import { directionColors, getColorMode } from './colorPreference';
 
 echarts.use([
   LineChart, BarChart, CandlestickChart, PieChart, CustomChart,
@@ -54,7 +55,7 @@ export type ChartOption = ComposeOption<
 /** echarts.init 返回的实例类型（供交互层 convertFromPixel/zr 事件使用） */
 export type EChartsInstance = ReturnType<typeof echarts.init>;
 
-/* ---------- 调色（与 CSS 变量一致） ---------- */
+/* ---------- 调色（与 CSS 变量一致；up/down 随涨跌色彩习惯） ---------- */
 export const CH = {
   ink400: '#6F7B9E',
   ink300: '#B7BFD3',
@@ -62,11 +63,15 @@ export const CH = {
   brand600: '#2E46E0',
   brand500: '#3B59F2',
   brand400: '#6B82FF',
-  up600: '#0E9F6E',
-  down600: '#E5484D',
+  get up600() {
+    return directionColors().up600;
+  },
+  get down600() {
+    return directionColors().down600;
+  },
   warn600: '#E8930C',
   ai600: '#0B7285', // v8.1 弃 AI 紫 → 青瓷 teal（与 CSS 变量一致）
-} as const;
+};
 
 /* ---------- 通用配置 ---------- */
 /* 数据是读的：入场/更新动画统一 300ms cubicOut，range 切换不重复播长动画 */
@@ -348,7 +353,9 @@ const HEAT_STOPS: { pct: number; rgb: [number, number, number] }[] = [
 ];
 
 export function heatColor(pct: number): string {
-  const clamped = Math.max(-3, Math.min(3, pct));
+  /* 热力两端是「涨/跌」不是固定绿/红：亚洲习惯下翻转符号，色阶两端对调。 */
+  const signed = getColorMode() === 'asian' ? -pct : pct;
+  const clamped = Math.max(-3, Math.min(3, signed));
   for (let i = 0; i < HEAT_STOPS.length - 1; i++) {
     const a = HEAT_STOPS[i];
     const b = HEAT_STOPS[i + 1];
