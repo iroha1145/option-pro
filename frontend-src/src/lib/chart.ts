@@ -25,6 +25,7 @@ import type {
   MarkPointComponentOption,
   TooltipComponentOption,
 } from 'echarts/components';
+import { CHART_MONO_FONT } from './chartFonts';
 
 echarts.use([
   LineChart, BarChart, CandlestickChart, PieChart, CustomChart,
@@ -55,7 +56,7 @@ export type EChartsInstance = ReturnType<typeof echarts.init>;
 
 /* ---------- 调色（与 CSS 变量一致） ---------- */
 export const CH = {
-  ink400: '#8A94B0',
+  ink400: '#6F7B9E',
   ink300: '#B7BFD3',
   lineChart: '#EDF0F4', // v8.1 随纸面降温
   brand600: '#2E46E0',
@@ -80,13 +81,15 @@ export function baseGrid(overrides: Partial<GridComponentOption> = {}): GridComp
   return { left: 8, right: 8, top: 12, bottom: 8, containLabel: true, ...overrides };
 }
 
+export { CHART_MONO_FONT };
+
 export function categoryAxis(labels: string[]) {
   return {
     type: 'category' as const,
     data: labels,
     axisLine: { show: false },
     axisTick: { show: false },
-    axisLabel: { color: CH.ink400, fontSize: 11, fontFamily: '"IBM Plex Mono", monospace' },
+    axisLabel: { color: CH.ink400, fontSize: 11, fontFamily: CHART_MONO_FONT },
   };
 }
 
@@ -95,7 +98,7 @@ export function valueAxis(overrides: Record<string, unknown> = {}) {
     type: 'value' as const,
     axisLine: { show: false },
     axisTick: { show: false },
-    axisLabel: { color: CH.ink400, fontSize: 11, fontFamily: '"IBM Plex Mono", monospace' },
+    axisLabel: { color: CH.ink400, fontSize: 11, fontFamily: CHART_MONO_FONT },
     splitLine: { lineStyle: { color: CH.lineChart, width: 1 } },
     ...overrides,
   };

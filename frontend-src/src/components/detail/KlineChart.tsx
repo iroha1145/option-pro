@@ -19,7 +19,7 @@ import Icon from '@/components/icons';
 import { STRUCTURE_HINTS } from '@/lib/structureHints';
 import { usePolling } from '@/hooks/usePolling';
 import { useAccess } from '@/hooks/useAccess';
-import { baseAnimation, CH, glassTooltip, stippleAreaStyle, type ChartOption, type EChartsInstance } from '@/lib/chart';
+import { baseAnimation, CH, CHART_MONO_FONT, glassTooltip, stippleAreaStyle, type ChartOption, type EChartsInstance } from '@/lib/chart';
 import { useDrawingController } from './chart-drawings/useDrawingController.ts';
 import { snapCandidatesFromOverlays } from './chart-drawings/snap.ts';
 import DrawingToolbar from './chart-drawings/DrawingToolbar.tsx';
@@ -110,7 +110,7 @@ type MeasureOverlay =
   | { kind: 'pending'; aIdx: number }
   | { kind: 'done'; m: RangeMeasure };
 
-const MEASURE_LABEL_FONT = { fontSize: 10, fontFamily: '"IBM Plex Mono", monospace' };
+const MEASURE_LABEL_FONT = { fontSize: 10, fontFamily: CHART_MONO_FONT };
 
 /** 覆盖层 → markLine / markPoint / markArea 数据（K线与面积模式共用） */
 function measureMarks(overlay: MeasureOverlay | null | undefined) {
@@ -233,7 +233,7 @@ function buildOption(
           formatter: t('昨收 {p}', { p: fmtPrice(prevClose) }),
           color: CH.ink400,
           fontSize: 10,
-          fontFamily: '"IBM Plex Mono", monospace',
+          fontFamily: CHART_MONO_FONT,
           position: 'insideStartTop' as const,
         },
       });
@@ -248,7 +248,7 @@ function buildOption(
         data: labels,
         axisLine: { show: false },
         axisTick: { show: false },
-        axisLabel: { color: CH.ink400, fontSize: 11, fontFamily: '"IBM Plex Mono", monospace' },
+        axisLabel: { color: CH.ink400, fontSize: 11, fontFamily: CHART_MONO_FONT },
       },
       yAxis: {
         type: 'value' as const,
@@ -256,7 +256,7 @@ function buildOption(
         position: 'right' as const,
         axisLine: { show: false },
         axisTick: { show: false },
-        axisLabel: { color: CH.ink400, fontSize: 11, fontFamily: '"IBM Plex Mono", monospace' },
+        axisLabel: { color: CH.ink400, fontSize: 11, fontFamily: CHART_MONO_FONT },
         splitLine: { lineStyle: { color: CH.lineChart, width: 1 } },
       },
       tooltip: glassTooltip({
@@ -268,8 +268,8 @@ function buildOption(
           const chg = b.c - b.o;
           const color = chg >= 0 ? CH.up600 : CH.down600;
           return (
-            `<div style="font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:19px">` +
-            `<div style="color:#8A94B0">${barTooltipTitle(b.t, range)}${b.quote_only ? t(' · 仅报价') : ''}</div>` +
+            `<div style="font-family:${CHART_MONO_FONT};font-size:12px;line-height:19px">` +
+            `<div style="color:#6F7B9E">${barTooltipTitle(b.t, range)}${b.quote_only ? t(' · 仅报价') : ''}</div>` +
             `<div>${t('收 {c}', { c: `<b style="color:${color}">${fmtPrice(b.c)}</b>` })}</div>` +
             `<div>${t('量 {v}', { v: fmtCompact(b.v) })}</div></div>`
           );
@@ -287,7 +287,7 @@ function buildOption(
             formatter: () => fmtPrice(last),
             color: CH.brand600,
             fontSize: 11,
-            fontFamily: '"IBM Plex Mono", monospace',
+            fontFamily: CHART_MONO_FONT,
             distance: 6,
           },
           markLine: areaMarkLines.length
@@ -354,7 +354,7 @@ function buildOption(
       axisLine: { show: false },
       axisTick: { show: false },
       axisLabel: index === grids.length - 1
-        ? { color: CH.ink400, fontSize: 11, fontFamily: '"IBM Plex Mono", monospace' }
+        ? { color: CH.ink400, fontSize: 11, fontFamily: CHART_MONO_FONT }
         : { show: false },
     })),
     yAxis: grids.map((_, index) => {
@@ -369,7 +369,7 @@ function buildOption(
         axisLine: { show: false },
         axisTick: { show: false },
         axisLabel: index === 0 || pane
-          ? { color: CH.ink400, fontSize: 11, fontFamily: '"IBM Plex Mono", monospace' }
+          ? { color: CH.ink400, fontSize: 11, fontFamily: CHART_MONO_FONT }
           : { show: false },
         splitLine: index === 0
           ? { lineStyle: { color: CH.lineChart, width: 1 } }
@@ -387,7 +387,7 @@ function buildOption(
           borderColor: '#E9ECF1', // v8.1 tooltip 边框随 line 降温（原 #E9E7E0 暖灰漏网）
           borderWidth: 1,
           color: '#5A6788',
-          fontFamily: '"IBM Plex Mono", monospace',
+          fontFamily: CHART_MONO_FONT,
           fontSize: 10,
         },
       },
@@ -411,10 +411,10 @@ function buildOption(
         const prev = idx > 0 ? bars[idx - 1] : null;
         const gapChg = prev && prev.c > 0 ? b.c - prev.c : null;
         const row = (k: string, v: string) =>
-          `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#8A94B0">${k}</span><span>${v}</span></div>`;
+          `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#6F7B9E">${k}</span><span>${v}</span></div>`;
         return (
-          `<div style="font-family:'IBM Plex Mono',monospace;font-size:12px;line-height:19px;min-width:150px">` +
-          `<div style="color:#8A94B0;margin-bottom:2px">${barTooltipTitle(b.t, range)}${b.quote_only ? t(' · <span style="color:#E8930C">仅报价</span>') : ''}</div>` +
+          `<div style="font-family:${CHART_MONO_FONT};font-size:12px;line-height:19px;min-width:150px">` +
+          `<div style="color:#6F7B9E;margin-bottom:2px">${barTooltipTitle(b.t, range)}${b.quote_only ? t(' · <span style="color:#E8930C">仅报价</span>') : ''}</div>` +
           row(t('开'), fmtPrice(b.o)) +
           row(t('高'), fmtPrice(b.h)) +
           row(t('低'), fmtPrice(b.l)) +

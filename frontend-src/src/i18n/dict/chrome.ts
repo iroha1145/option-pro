@@ -21,6 +21,20 @@ export const CHROME: Dict = {
   '移动端导航': ['Mobile navigation', 'モバイルナビゲーション'],
   '更多': ['More', 'その他'],
   '更多功能': ['More pages', 'その他の機能'],
+  '涨跌色彩': ['Price color', '騰落カラー'],
+  '绿涨红跌': ['Green up', '緑高赤安'],
+  '红涨绿跌': ['Red up', '赤高緑安'],
+  '当前：绿涨红跌（点击切换红涨绿跌）': [
+    'Current: Green up / Red down (Click to switch to Red up / Green down)',
+    '現在: 緑高赤安（クリックで赤高緑安に切替）',
+  ],
+  '当前：红涨绿跌（点击切换绿涨红跌）': [
+    'Current: Red up / Green down (Click to switch to Green up / Red down)',
+    '現在: 赤高緑安（クリックで緑高赤安に切替）',
+  ],
+  '切换涨跌色彩模式': ['Switch price color mode', '騰落カラーモードの切替'],
+  '绿涨': ['Green ↑', '緑高'],
+  '红涨': ['Red ↑', '赤高'],
 
   /* 登录状态 */
   '登录': ['Sign in', 'サインイン'],

@@ -32,6 +32,7 @@ export function insideZoom(
       startValue,
       endValue,
       minValueSpan: 15,
+      preventDefaultMouseMove: false,
     },
   ];
 }

@@ -60,6 +60,7 @@ export default function Switch({
       style={{ '--toggle-travel': `${geo.travel}px` } as CSSProperties}
       className={cn(
         't-toggle relative shrink-0 rounded-pill shadow-track transition-transform duration-fast active:scale-95',
+        'before:absolute before:-inset-2 before:content-[""] sm:before:hidden',
         init && 'is-init',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30',
         geo.track,

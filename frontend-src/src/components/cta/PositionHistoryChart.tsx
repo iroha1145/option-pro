@@ -10,6 +10,7 @@ import ReactECharts from '@/components/charts/ReactECharts';
 import {
   baseAnimation,
   CH,
+  CHART_MONO_FONT,
   INSIGHT_SMOOTH,
   insightAreaStyle,
   insightDotRow,
@@ -36,7 +37,7 @@ function historyOption(history: { date: string; position: number }[]): ChartOpti
       data: history.map((h) => h.date.slice(5)),
       axisLine: { show: false },
       axisTick: { show: false },
-      axisLabel: { color: CH.ink400, fontSize: 10, fontFamily: '"IBM Plex Mono", monospace', interval: 23 },
+      axisLabel: { color: CH.ink400, fontSize: 10, fontFamily: CHART_MONO_FONT, interval: 23 },
     },
     yAxis: {
       type: 'value' as const,
@@ -45,7 +46,7 @@ function historyOption(history: { date: string; position: number }[]): ChartOpti
       position: 'right' as const,
       axisLine: { show: false },
       axisTick: { show: false },
-      axisLabel: { color: CH.ink400, fontSize: 10, fontFamily: '"IBM Plex Mono", monospace' },
+      axisLabel: { color: CH.ink400, fontSize: 10, fontFamily: CHART_MONO_FONT },
       splitLine: { lineStyle: { color: CH.lineChart, width: 1 } },
     },
     tooltip: insightTooltip({

@@ -41,6 +41,19 @@ export default function MenuSelect<T extends string | number>({
   const phase = useOverlayPhase(open, closeMs);
   const mounted = overlayVisible(open, phase);
   const current = options.find((o) => o.value === value) ?? options[0];
+  const [placement, setPlacement] = useState<'bottom' | 'top'>('bottom');
+
+  useEffect(() => {
+    if (!open || !ref.current) return;
+    const rect = ref.current.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    if (spaceBelow < 220 && spaceAbove > spaceBelow) {
+      setPlacement('top');
+    } else {
+      setPlacement('bottom');
+    }
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -136,9 +149,14 @@ export default function MenuSelect<T extends string | number>({
         <div
           role="listbox"
           aria-label={ariaLabel}
-          data-origin={align === 'right' ? 'top-right' : 'top-left'}
+          data-origin={
+            placement === 'top'
+              ? align === 'right' ? 'bottom-right' : 'bottom-left'
+              : align === 'right' ? 'top-right' : 'top-left'
+          }
           className={cn(
-            't-dropdown absolute top-9 z-40 min-w-full whitespace-nowrap rounded-md border border-line bg-card p-1.5 shadow-sh-2',
+            't-dropdown absolute z-40 min-w-full whitespace-nowrap rounded-md border border-line bg-card p-1.5 shadow-sh-2',
+            placement === 'top' ? 'bottom-9' : 'top-9',
             align === 'right' ? 'right-0' : 'left-0',
             overlayClassName(phase),
           )}
