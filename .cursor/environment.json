@@ -1,0 +1,15 @@
+{
+  "name": "Optix Pro",
+  "user": "ubuntu",
+  "install": "bash .cursor/install.sh",
+  "terminals": [
+    {
+      "name": "backend",
+      "command": "mkdir -p \"$HOME/optix-data\" && DATA_DIR=\"$HOME/optix-data\" ALLOWED_HOSTS=localhost,127.0.0.1 HOST_BIND=127.0.0.1 PORT=2000 .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 2000 --app-dir backend",
+      "description": "Optix Pro FastAPI backend serving the prebuilt SPA and JSON API on http://localhost:2000 (health at /health, readiness at /ready). Runs directly with uvicorn since Cloud Agent VMs have no Docker daemon; runtime data lives in $HOME/optix-data."
+    }
+  ],
+  "ports": [
+    { "name": "web", "port": 2000 }
+  ]
+}
