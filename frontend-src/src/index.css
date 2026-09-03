@@ -21,7 +21,7 @@
     --ink-700: #2A3550;
     --ink-600: #3D4A68;
     --ink-500: #5A6788;
-    --ink-400: #8A94B0;
+    --ink-400: #6F7B9E;
     --ink-300: #B7BFD3;
     /* §1.3 发丝线（v8 更淡；v8.1 随纸面降温——冷纸面配暖灰线会显脏，同族蓝灰 hue≈218°） */
     --line: #E9ECF1;
@@ -81,6 +81,16 @@
     /* Catalog paint 重映射只有一份，在 transitions-catalog.css 的适配区——
        这里 @layer base 的副本在层叠里永远输给未分层的 transitions-root.css，
        是死代码还会误导改错地方。 */
+  }
+
+  /* 亚洲市场偏好模式（红涨绿跌）：通过 html[data-color-mode="asian"] 挂载 */
+  html[data-color-mode="asian"] {
+    --up-600: #E5484D;
+    --up-700: #C4302B;
+    --up-50: #FCECEC;
+    --down-600: #0E9F6E;
+    --down-700: #0B7A55;
+    --down-50: #E5F6EF;
   }
 
   html {

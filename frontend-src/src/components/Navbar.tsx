@@ -16,6 +16,7 @@ import { placeGlide } from '@/lib/transitions';
 import Icon from '@/components/icons';
 import { SessionDot } from '@/components/shared/SessionLED';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
+import ColorModeSwitcher from '@/components/ColorModeSwitcher';
 import { t } from '../i18n/core.ts';
 
 export const NAV_ITEMS = [
@@ -220,15 +221,16 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
           )}
 
           <LanguageSwitcher className="hidden md:block" />
+          <ColorModeSwitcher className="hidden xl:flex" />
 
           {isSignedIn ? (
             <button
               onClick={handleLogout}
               disabled={loggingOut}
-              className="flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-line bg-card px-3 text-caption text-ink-500 shadow-btn transition-colors hover:text-ink-800 disabled:cursor-wait disabled:opacity-60"
+              className="flex h-8 max-w-[140px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-line bg-card px-3 text-caption text-ink-500 shadow-btn transition-colors hover:text-ink-800 disabled:cursor-wait disabled:opacity-60 md:max-w-none"
             >
-              <Icon name="logout" size={14} />
-              {username ? t('退出 {name}', { name: username }) : t('退出')}
+              <Icon name="logout" size={14} className="shrink-0" />
+              <span className="truncate">{username ? t('退出 {name}', { name: username }) : t('退出')}</span>
             </button>
           ) : (
             <Link

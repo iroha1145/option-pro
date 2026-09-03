@@ -19,6 +19,8 @@ import Icon from '@/components/icons';
 export default function LanguageSwitcher({ className }: { className?: string }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
   const current = getLocale();
   const closeMs = readRootDurationMs('--dropdown-close-dur', 150);
   const phase = useOverlayPhase(open, closeMs);
@@ -26,11 +28,22 @@ export default function LanguageSwitcher({ className }: { className?: string }) 
 
   useEffect(() => {
     if (!open) return;
+    const target =
+      listRef.current?.querySelector<HTMLButtonElement>('[role="menuitemradio"][aria-checked="true"]') ??
+      listRef.current?.querySelector<HTMLButtonElement>('[role="menuitemradio"]');
+    target?.focus();
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
     const onDoc = (e: MouseEvent) => {
       if (!ref.current?.contains(e.target as Node)) setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
+      if (e.key === 'Escape') {
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
     };
     document.addEventListener('mousedown', onDoc);
     document.addEventListener('keydown', onKey);
@@ -40,12 +53,35 @@ export default function LanguageSwitcher({ className }: { className?: string }) 
     };
   }, [open]);
 
+  const onMenuKeyDown = (e: React.KeyboardEvent<HTMLUListElement>) => {
+    const items = Array.from(
+      listRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitemradio"]') ?? [],
+    );
+    if (!items.length) return;
+    const idx = items.indexOf(document.activeElement as HTMLButtonElement);
+    let target = -1;
+    if (e.key === 'ArrowDown') target = Math.min(idx + 1, items.length - 1);
+    else if (e.key === 'ArrowUp') target = Math.max(idx - 1, 0);
+    else if (e.key === 'Home') target = 0;
+    else if (e.key === 'End') target = items.length - 1;
+    else return;
+    e.preventDefault();
+    items[target]?.focus();
+  };
+
   const currentMeta = LOCALES.find((l) => l.code === current) ?? LOCALES[0];
 
   return (
     <div ref={ref} className={cn('relative', className)}>
       <button
+        ref={triggerRef}
         onClick={() => setOpen((v) => !v)}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            setOpen(true);
+          }
+        }}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={t('切换界面语言')}
@@ -68,7 +104,7 @@ export default function LanguageSwitcher({ className }: { className?: string }) 
           )}
         >
           <p className="px-2 pb-1.5 pt-1 eyebrow">{t('界面语言')}</p>
-          <ul>
+          <ul ref={listRef} onKeyDown={onMenuKeyDown}>
             {LOCALES.map((l) => {
               const active = l.code === current;
               return (
@@ -81,7 +117,7 @@ export default function LanguageSwitcher({ className }: { className?: string }) 
                       setLocale(l.code);
                     }}
                     className={cn(
-                      'flex w-full items-center gap-2 rounded-xs px-2 py-1.5 text-left text-body-s transition-colors',
+                      'flex w-full items-center gap-2 rounded-xs px-2 py-1.5 text-left text-body-s transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30',
                       active ? 'text-brand-600' : 'text-ink-700 hover:bg-paper-2',
                     )}
                   >

@@ -2,6 +2,7 @@ import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { fmtPct } from '@/lib/format';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
+import { useColorMode } from '@/hooks/useColorMode.ts';
 import type { SectorVm } from './model';
 import { heatTone, periodLabel } from './model';
 import { t } from '../../i18n/core.ts';
@@ -20,6 +21,10 @@ function HeatTile({
   selected: boolean;
   onToggle: () => void;
 }) {
+  /* heatTone → heatColor 在渲染期直接读全局涨跌习惯（模块级快照，不是 props）。
+     不订阅就只有换盘那一刻不重绘：整块热力矩阵留在旧口径上，与页面其余部分
+     （徽章、涨跌幅、K 线）红绿相反，直到别的原因触发一次重渲染才追上。 */
+  useColorMode();
   const value = sector.avgReturn ?? 0;
   /* count-up 减量：热力砖涨跌直接呈现终值 */
   const animated = value;
