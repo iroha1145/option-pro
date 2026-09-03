@@ -6,7 +6,7 @@
 import { useEffect, useId, useState, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { AnimatePresence, motion } from 'framer-motion';
-import { cn } from '@/lib/utils';
+import { cn, isNavPathActive } from '@/lib/utils';
 import { useAccess } from '@/hooks/useAccess';
 import { useToast } from '@/components/Toast';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
@@ -73,12 +73,13 @@ export default function MobileDock() {
 
   const colorMode = useColorMode();
 
-  const moreActive = MORE_ITEMS.some((m) => location.pathname.startsWith(m.path));
+  const moreActive = MORE_ITEMS.some((m) => isNavPathActive(location.pathname, m.path));
   const dockGlideId = useId();
 
   const renderItem = (item: (typeof DOCK_ITEMS)[number]) => {
-    /* '/' 必须精确匹配：startsWith('/') 对任何路径都为真，首页会永远亮着 */
-    const active = item.path === '/' ? location.pathname === '/' : location.pathname.startsWith(item.path);
+    /* 高亮口径与顶栏共用 isNavPathActive 语义：根路径精确匹配（裸 startsWith('/')
+       对任何路径都真，首页会永远亮着），其余按段边界（/cta 不得点亮 /catalysts）。 */
+    const active = isNavPathActive(location.pathname, item.path);
     return (
       <div key={item.path} className="relative flex flex-1">
         {active && (
@@ -197,10 +198,10 @@ export default function MobileDock() {
                       setMoreOpen(false);
                       navigate(m.path);
                     }}
-                    aria-current={location.pathname.startsWith(m.path) ? 'page' : undefined}
+                    aria-current={isNavPathActive(location.pathname, m.path) ? 'page' : undefined}
                     className={cn(
                       'flex w-full items-center gap-3 rounded-md px-3 py-3 text-left transition-[transform,background-color] hover:bg-paper-2 active:bg-line/60',
-                      location.pathname.startsWith(m.path) && 'bg-brand-50',
+                      isNavPathActive(location.pathname, m.path) && 'bg-brand-50',
                     )}
                   >
                     <span className="flex size-9 items-center justify-center rounded-md border border-line bg-card-warm text-brand-600">
@@ -210,7 +211,7 @@ export default function MobileDock() {
                       <span className="block text-body-s font-medium text-ink-800">{m.label}</span>
                       <span className="block text-micro text-ink-400">{m.desc}</span>
                     </span>
-                    {location.pathname.startsWith(m.path) ? (
+                    {isNavPathActive(location.pathname, m.path) ? (
                       <span className="size-1.5 shrink-0 rounded-full bg-brand-600" aria-hidden="true" />
                     ) : (
                       <Icon name="chevron-right" size={14} className="text-ink-300" />

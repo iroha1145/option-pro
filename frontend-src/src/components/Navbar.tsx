@@ -5,7 +5,7 @@
  */
 import { useLayoutEffect, useRef, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router';
-import { cn } from '@/lib/utils';
+import { cn, isNavPathActive } from '@/lib/utils';
 import { useNow } from '@/hooks/useNow';
 import { useAccess } from '@/hooks/useAccess';
 import { useToast } from '@/components/Toast';
@@ -57,9 +57,7 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
   const glideRef = useRef<HTMLSpanElement>(null);
   const glideReadyRef = useRef(false);
   const [loggingOut, setLoggingOut] = useState(false);
-  const activePath = NAV_ITEMS.find((item) =>
-    item.path === '/' ? location.pathname === '/' : location.pathname.startsWith(item.path),
-  )?.path ?? '';
+  const activePath = NAV_ITEMS.find((item) => isNavPathActive(location.pathname, item.path))?.path ?? '';
 
   const alignRef = useRef<(animate: boolean) => void>(() => undefined);
   useLayoutEffect(() => {
@@ -135,21 +133,19 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
         >
           <span ref={glideRef} data-nav-glide="" aria-hidden="true" className="nav-glide" />
           {NAV_ITEMS.map((item) => {
-            /* '/' 必须精确匹配：startsWith('/') 对任何路径都为真，首页会永远亮着 */
-            const active = item.path === '/' ? location.pathname === '/' : location.pathname.startsWith(item.path);
+            const active = isNavPathActive(location.pathname, item.path);
             return (
             <NavLink
               key={item.path}
               to={item.path}
+              end={item.path === '/'}
               data-active={active}
-              className={({ isActive }) =>
-                cn(
-                  /* R4 加到 9 项后 1440(xl) 逼近满宽：sub-2xl 收 px-2，登录态
-                     右侧簇（AI 胶囊+退出）才不会被挤出视口；≥2xl 恢复 3.5。 */
-                  'flex h-full items-center gap-1.5 whitespace-nowrap px-2 text-body-s transition-colors duration-fast 2xl:px-3.5',
-                  isActive ? 'font-medium text-brand-600' : 'text-ink-500 hover:text-ink-800',
-                )
-              }
+              className={cn(
+                /* R4 加到 9 项后 1440(xl) 逼近满宽：sub-2xl 收 px-2，登录态
+                   右侧簇（AI 胶囊+退出）才不会被挤出视口；≥2xl 恢复 3.5。 */
+                'flex h-full items-center gap-1.5 whitespace-nowrap px-2 text-body-s transition-colors duration-fast 2xl:px-3.5',
+                active ? 'font-medium text-brand-600' : 'text-ink-500 hover:text-ink-800',
+              )}
             >
               {/* 9 项编号在 xl–2xl 之间是压垮布局的最后一根稻草（1440 登录态
                   「退出」被挤出视口）：sub-2xl 只留文字标签，≥2xl 恢复编号。 */}
