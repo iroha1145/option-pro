@@ -128,3 +128,26 @@ test('K 线 / 情景 / 仓位 / 迷你 K 在色彩习惯变化时重建 option',
   assert.match(history, /\[history, colorMode\]/);
   assert.match(lead, /\[data, colorMode\]/);
 });
+
+/* 上一条按名点了四张图；这条是镜子：任何在渲染期读全局涨跌习惯的组件都必须订阅。
+   板块热力矩阵就是这么漏的——heatTone 内部走 getColorMode()，组件却没订阅，
+   换盘后整块矩阵停在旧口径，与同屏徽章/涨跌幅红绿相反（本轮复审确诊）。 */
+test('渲染期读涨跌习惯的 .tsx 必须订阅 useColorMode', async () => {
+  const { readdir } = await import('node:fs/promises');
+  const READS_GLOBAL = /\bCH\.(up600|down600)\b|\bheat(Tone|Color)\s*\(/;
+  const offenders = [];
+  const walk = async (dir) => {
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) await walk(full);
+      else if (entry.name.endsWith('.tsx')) {
+        const code = codeOf(await readFile(full, 'utf8'));
+        if (READS_GLOBAL.test(code) && !/useColorMode\s*\(/.test(code)) {
+          offenders.push(path.relative(src, full));
+        }
+      }
+    }
+  };
+  await walk(src);
+  assert.deepEqual(offenders, [], `这些组件读涨跌色却没订阅换盘：${offenders.join(', ')}`);
+});
