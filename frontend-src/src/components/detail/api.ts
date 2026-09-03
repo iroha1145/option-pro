@@ -29,7 +29,7 @@ import type {
   StockTrendBias,
   TrendBiasFactor,
 } from '@/mocks/fixtures';
-import { t as __t } from '../../i18n/core.ts';
+import { localeTag, t as __t } from '../../i18n/core.ts';
 
 export type ChartRange = StockChart['range'];
 /**
@@ -393,7 +393,7 @@ function signalTone(key: string, value: number): TrendBiasFactor['tone'] {
 }
 
 function signalReading(label: string, key: string, value: number): string {
-  const formatted = value.toLocaleString('zh-CN', {
+  const formatted = value.toLocaleString(localeTag(), {
     maximumFractionDigits: 2,
   });
   return `${label}：${formatted}${PERCENT_SIGNALS.has(key) ? '%' : ''}`;

@@ -58,30 +58,41 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
   const [loggingOut, setLoggingOut] = useState(false);
   const activePath = NAV_ITEMS.find((item) => isNavPathActive(location.pathname, item.path))?.path ?? '';
 
+  const alignRef = useRef<(animate: boolean) => void>(() => undefined);
   useLayoutEffect(() => {
     const nav = navRef.current;
     const bar = glideRef.current;
     if (!nav || !bar) return;
-    const align = (animate: boolean) => {
+    alignRef.current = (animate: boolean) => {
       const label = nav.querySelector('[data-active="true"] [data-nav-label]') as HTMLElement | null;
       if (!label) {
         bar.style.width = '0px';
         return;
       }
+      // 相对 nav 盒测量：整条导航被右侧簇推移时偏移自消，不再靠像素绝对值。
       const navBox = nav.getBoundingClientRect();
       const box = label.getBoundingClientRect();
       placeGlide(bar, { offset: box.left - navBox.left, size: box.width }, { axis: 'x', animate });
     };
-    align(glideReadyRef.current);
-    glideReadyRef.current = true;
-    const onResize = () => align(false);
-    const ro = new ResizeObserver(onResize);
+    /* ResizeObserver 只挂一次：每次 observe() 都会在同一渲染帧投递一次初始观察，
+       若随 activePath 重建，那次初始回调会紧跟 align(true) 用 transition:none 把刚起步
+       的补间当帧掐断——「滑行」永远只是瞬移（复审实锤）。首帧投递也要跳过：初始
+       定位由下方按 activePath 的 effect 负责。nav 是内容定宽的 flex 盒，字体加载、
+       2xl 编号出现、语言切换都会改它的尺寸而触发 RO；整体位移不改尺寸也不需要重对齐。 */
+    let primed = false;
+    const ro = new ResizeObserver(() => {
+      if (!primed) {
+        primed = true;
+        return;
+      }
+      alignRef.current(false);
+    });
     ro.observe(nav);
-    window.addEventListener('resize', onResize);
-    return () => {
-      ro.disconnect();
-      window.removeEventListener('resize', onResize);
-    };
+    return () => ro.disconnect();
+  }, []);
+  useLayoutEffect(() => {
+    alignRef.current(glideReadyRef.current);
+    glideReadyRef.current = true;
   }, [activePath]);
   const handleLogout = async () => {
     if (loggingOut) return;

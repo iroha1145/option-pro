@@ -522,8 +522,6 @@ function qs(q: CatalystFeedQuery): string {
   return s ? `?${s}` : '';
 }
 
-/** 供测试断言 live 查询串是否带上 theme 等过滤项。 */
-export { qs as serializeCatalystFeedQuery };
 
 /* ================= 股票影响汇总（batch results map → 客户端聚合） ================= */
 

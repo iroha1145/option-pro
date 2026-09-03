@@ -5,6 +5,7 @@ import Segmented from '@/components/shared/Segmented';
 import MenuSelect from '@/components/shared/MenuSelect';
 import Icon from '@/components/icons';
 import { cn } from '@/lib/utils';
+import Switch from '@/components/shared/Switch';
 import type { NewsAnalysisStatus, NewsClassification } from './api';
 import { catalystsContract } from './api';
 import { DEFAULT_FILTERS, type CatalystFilters } from './filters';
@@ -158,27 +159,13 @@ export default function FilterBar({ filters, onChange, total, filtered }: Filter
       />
 
       {/* 多源确认开关 */}
-      <button
-        role="switch"
-        aria-checked={filters.multiSourceOnly}
-        onClick={() => set({ multiSourceOnly: !filters.multiSourceOnly })}
-        className="flex items-center gap-2"
-      >
-        <span
-          className={cn(
-            'relative h-[18px] w-8 shrink-0 rounded-pill shadow-track transition-colors duration-ui',
-            filters.multiSourceOnly ? 'bg-brand-600' : 'bg-ink-300',
-          )}
-        >
-          <span
-            className={cn(
-              'absolute top-[2px] size-[14px] rounded-full bg-card shadow-knob transition-[left] duration-ui ease-paper',
-              filters.multiSourceOnly ? 'left-[16px]' : 'left-[2px]',
-            )}
-          />
-        </span>
+      <label className="flex cursor-pointer items-center gap-2">
+        <Switch
+          checked={filters.multiSourceOnly}
+          onToggle={() => set({ multiSourceOnly: !filters.multiSourceOnly })}
+        />
         <span className={cn('whitespace-nowrap text-micro', filters.multiSourceOnly ? 'text-ink-800' : 'text-ink-400')}>{t('多源确认')}</span>
-      </button>
+      </label>
 
       {activeCount > 0 && (
         <button

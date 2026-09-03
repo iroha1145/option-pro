@@ -8,6 +8,7 @@ import { Link, useLocation, useNavigate } from 'react-router';
 import { AnimatePresence, motion } from 'framer-motion';
 import { cn, isNavPathActive } from '@/lib/utils';
 import { useAccess } from '@/hooks/useAccess';
+import { useToast } from '@/components/Toast';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import Icon, { type IconName } from '@/components/icons';
 import Segmented from '@/components/shared/Segmented';
@@ -35,6 +36,7 @@ export default function MobileDock() {
   const location = useLocation();
   const navigate = useNavigate();
   const { isOwner, isSignedIn, username, logout } = useAccess();
+  const toast = useToast();
   const [loggingOut, setLoggingOut] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   /* aria-modal 配套（审计 #60）：声明了模态就要真的困住焦点，Drawer 与
@@ -207,11 +209,13 @@ export default function MobileDock() {
                     }
                     setLoggingOut(true);
                     void logout()
-                      .catch(() => undefined)
-                      .finally(() => {
-                        setLoggingOut(false);
-                        setMoreOpen(false);
-                      });
+                      .then(() => setMoreOpen(false))
+                      .catch((error: unknown) => {
+                        /* 登出失败不能静默（Navbar 同款教训：按了没反应、会话还挂着）：
+                           sheet 留着、给 toast，用户看得见自己仍在登录态。 */
+                        toast.error(t('退出失败'), error instanceof Error ? error.message : undefined);
+                      })
+                      .finally(() => setLoggingOut(false));
                   }}
                   className="flex w-full items-center gap-3 rounded-md px-3 py-3 text-left transition-[transform,background-color] hover:bg-paper-2 active:bg-line/60 disabled:cursor-wait disabled:opacity-60"
                 >
@@ -229,6 +233,23 @@ export default function MobileDock() {
                     </span>
                   </span>
                 </button>
+                {isSignedIn && (
+                  /* 登录态此前一步可达 /login 的换账号流程（旧实现无条件 navigate），
+                     改成登出后该入口丢了：补回来。 */
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMoreOpen(false);
+                      navigate('/login');
+                    }}
+                    className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left text-micro text-ink-500 transition-[background-color] hover:bg-paper-2 active:bg-line/60"
+                  >
+                    <span className="flex size-9 items-center justify-center rounded-md border border-line bg-card-warm text-ink-400">
+                      <Icon name="shield" size={17} />
+                    </span>
+                    {t('退出并换账号')}
+                  </button>
+                )}
               </div>
             </motion.div>
           </>

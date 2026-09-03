@@ -39,7 +39,6 @@ test('sanitizeThemeId 只接受安全主题 ID', () => {
 test('live feed 查询串带上 theme', async () => {
   const api = codeOf(await source('components/catalysts/api.ts'));
   assert.match(api, /theme: q\.themeId \|\| undefined/);
-  assert.match(api, /serializeCatalystFeedQuery/);
 });
 
 test('界面日期走 localeTag，不再写死 zh-CN', () => {
@@ -59,7 +58,10 @@ test('NewsDrawer 关闭/换条会递增世代，在途 job 不得写回', async 
   assert.match(drawer, /openNewsRef\.current = newsId/);
   assert.match(drawer, /sameNews = \(\) => openNewsRef\.current === job\.newsId/);
   assert.doesNotMatch(drawer, /activeNewsRef/);
-  const terminal = drawer.match(/if \(TERMINAL\.includes\(next\.status\)\) \{[\s\S]*?window\.setTimeout/);
+  /* 窗口取到分支真正的结尾（600ms 清 job 那句）：#129 的 refreshItem 里自带
+     退避定时器，若按第一个 window.setTimeout 截断，完成 toast 落在窗口外，
+     下面的先后顺序断言会永假。 */
+  const terminal = drawer.match(/if \(TERMINAL\.includes\(next\.status\)\) \{[\s\S]*?\}, 600\);/);
   assert.ok(terminal, '终态分支应存在');
   assert.match(terminal[0], /const sameNews = \(\) => openNewsRef\.current === job\.newsId/);
   assert.match(terminal[0], /if \(!sameNews\(\)\) return/);
@@ -92,13 +94,16 @@ test('useAiJob 用退避轮询，取消失败写入 error', async () => {
   assert.doesNotMatch(hook, /setTimeout\(\(\) => void tick\(\), 2500\)/);
 });
 
-test('FocusCycle 用 setTimeout 退避，cancel_requested 算运行中', async () => {
+test('FocusCycle 用 setTimeout 退避，状态只认归一四值，停表与弃代分职', async () => {
   const card = codeOf(await source('components/catalysts/FocusCycleCard.tsx'));
   assert.match(card, /pollGenRef = useRef\(0\)/);
   assert.match(card, /window\.setTimeout\(\(\) => void tick\(\)/);
   assert.doesNotMatch(card, /window\.setInterval/);
-  assert.match(card, /cancel_requested/);
-  assert.match(card, /cancelled/);
+  /* 状态只认 nFocusJob 归一化后的四值：cancelled 归 failed、cancel_requested 归
+     in_progress。此前那两条只 grep 死字串的断言反倒把不可达分支钉住了，去掉；
+     真正要锁的是归一后的判定与「停表 / 弃代」分职。 */
+  assert.match(card, /next\.status === 'completed' \|\| next\.status === 'failed'/);
+  assert.match(card, /job\.status === 'queued' \|\| job\.status === 'in_progress'/);
   assert.match(card, /abandonPoll = useCallback/);
   const stopPoll = card.match(/const stopPoll = useCallback\(\(\) => \{[\s\S]*?\}, \[\]\);/);
   assert.ok(stopPoll, 'stopPoll 应只杀计时器');
@@ -115,12 +120,18 @@ test('DataTable 的 hint 在排序按钮外，Watchlist 强度列不再把 InfoH
 });
 
 test('SignalCards / FeedPanel 不再把可交互嵌进 role=button 的 article', async () => {
-  const cards = codeOf(await source('components/breakouts/SignalCards.tsx'));
+  // closest('button, a, [role="button"]') 这类选择器字符串不是 JSX 属性，先剥掉再查。
+  const withoutSelectors = (text) => text.replace(/\[role="button"\]/g, '');
+  const cards = withoutSelectors(codeOf(await source('components/breakouts/SignalCards.tsx')));
   assert.doesNotMatch(cards, /role="button"/);
-  assert.match(cards, /pointer-events-auto/);
-  const feed = codeOf(await source('components/catalysts/FeedPanel.tsx'));
+  // 内容层保留指针事件（可划选、title 可悬停），整卡点击由内容层转发并让开划选与真按钮。
+  assert.doesNotMatch(cards, /pointer-events-none/);
+  assert.match(cards, /getSelection\(\)/);
+  const feed = withoutSelectors(codeOf(await source('components/catalysts/FeedPanel.tsx')));
   assert.doesNotMatch(feed, /role="button"/);
   assert.match(feed, /absolute inset-0/);
+  assert.doesNotMatch(feed, /className="[^"]*pointer-events-none/);
+  assert.match(feed, /getSelection\(\)/);
 });
 
 test('MobileDock 已登录走退出，Escape 拦住冒泡', async () => {

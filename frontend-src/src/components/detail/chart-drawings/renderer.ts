@@ -475,47 +475,27 @@ export function autoPatternsToMarks(
   /* 分色 + 线端标签：此前所有形态线都是同一根淡灰虚线且无名，图上支撑/
      阻力/通道边完全分不出来，只能去页脚标签条猜。标签只挂第一段（通道/
      三角的第二条边不重复报名），文字与线同色。 */
-  const kept: { pattern: AutoPatternLike; geom: NonNullable<ReturnType<typeof autoPatternGeometry>>; endY: number }[] = [];
+  const kept: { pattern: AutoPatternLike; geom: NonNullable<ReturnType<typeof autoPatternGeometry>> }[] = [];
   for (const pattern of patterns) {
     if (pattern.confidence < minConfidence) continue;
     const geom = autoPatternGeometry(pattern, ctx);
     if (!geom) continue;
-    kept.push({ pattern, geom, endY: geom.segments[0]?.b.y ?? 0 });
-  }
-  /* 线端标签防叠（用户截图：「水平箱体」骑在轴刻度 190 上、多形态字互压）：
-     ① 位置一律 insideEnd*（留在绘图区内），绝不用 'end'——那会画进 y 轴槽；
-     ② 文字带白底小药丸，跨在蜡烛/别的线上也读得清；
-     ③ 落点在同一价格带（4% 图高）里的形态顺次换 上/下/远上/远下 四档错开，
-        形态总数被 maxPatterns 钳着，四档够用。 */
-  const LABEL_SLOTS = [
-    { position: 'insideEndTop' as const, distance: 4 },
-    { position: 'insideEndBottom' as const, distance: 4 },
-    { position: 'insideEndTop' as const, distance: 18 },
-    { position: 'insideEndBottom' as const, distance: 18 },
-  ];
-  const band = Math.max((ctx.yMax - ctx.yMin) * 0.04, 1e-9);
-  const slotOf = new Map<AutoPatternLike, number>();
-  {
-    let prevY = Number.POSITIVE_INFINITY;
-    let slot = -1;
-    for (const item of [...kept].sort((a, b) => b.endY - a.endY)) {
-      slot = prevY - item.endY < band ? Math.min(slot + 1, LABEL_SLOTS.length - 1) : 0;
-      prevY = item.endY;
-      slotOf.set(item.pattern, slot);
-    }
+    kept.push({ pattern, geom });
   }
   for (const { pattern, geom } of kept) {
     // 兜底灰从 ink400 加深到 ink500，线宽 1→1.5：细虚线在白纸上不够显。
     const color = pattern.color ?? '#5A6788';
     const lineStyle = { color, width: 1.5, type: [4, 4] as number[] };
-    const slotCfg = LABEL_SLOTS[slotOf.get(pattern) ?? 0];
     geom.segments.forEach((segment, index) => {
+      /* 位置一律 insideEnd*（留在绘图区内），绝不用 'end'——那会画进 y 轴槽骑在
+         刻度上；防叠分档不在这里做，交给合并点的 deconflictEndLabels（手绘水平线/
+         斐波那契的标签也要一起排，只在本函数内排会漏掉它们）。 */
       const label = index === 0 && pattern.label
         ? {
             show: true,
             formatter: pattern.label,
-            position: slotCfg.position,
-            distance: slotCfg.distance,
+            position: 'insideEndTop' as const,
+            distance: 4,
             color,
             fontSize: 10,
             backgroundColor: 'rgba(255,255,255,0.88)',
@@ -551,4 +531,54 @@ export function autoPatternsToMarks(
 export function lastBarKey(bars: BarLike[], range: ChartRange): string | null {
   if (!bars.length) return null;
   return barKeyOf(bars[bars.length - 1], range);
+}
+
+/**
+ * 线端标签统一防叠（在自动形态与手绘标签合并之后调用）。
+ *
+ * 只处理 markLine 数据里「首点带 show 标签、末点带 coord」的条目；按末点价格从高
+ * 到低排，落点相距不足一个价格带（图高 5%）的标签视为同簇，簇内按序换档：
+ * 上 4px → 下 4px → 上 18px → 下 18px → 上 32px …——档位不封顶（形态数可到 24，
+ * 之前四档封顶后第 5 条起又叠回去），换档判定对簇内所有已放置标签做，而不是
+ * 只看紧邻前一项（那会让隔一项的两枚 slot0 标签重新相撞）。
+ * 价格带以价格计而标签以像素计是已知近似：极矮的图上一个带可能不足一行字高，
+ * 但簇内不同档位的像素间距是硬保证，只是簇边界会偶有一次误判。
+ */
+export function deconflictEndLabels(lines: object[], yMin: number, yMax: number): object[] {
+  type Labeled = { index: number; y: number };
+  const labeled: Labeled[] = [];
+  lines.forEach((entry, index) => {
+    if (!Array.isArray(entry) || entry.length < 2) return;
+    const head = entry[0] as { label?: { show?: boolean } };
+    const tail = entry[1] as { coord?: unknown[] };
+    const y = Array.isArray(tail?.coord) ? Number(tail.coord[1]) : Number.NaN;
+    if (!head?.label?.show || !Number.isFinite(y)) return;
+    labeled.push({ index, y });
+  });
+  if (labeled.length < 2) return lines;
+  const band = Math.max((yMax - yMin) * 0.05, 1e-9);
+  const placed: { y: number; slot: number }[] = [];
+  const slotOf = new Map<number, number>();
+  for (const item of [...labeled].sort((a, b) => b.y - a.y)) {
+    let slot = 0;
+    while (placed.some((other) => other.slot === slot && Math.abs(other.y - item.y) < band)) slot += 1;
+    placed.push({ y: item.y, slot });
+    slotOf.set(item.index, slot);
+  }
+  return lines.map((entry, index) => {
+    const slot = slotOf.get(index);
+    if (slot === undefined) return entry;
+    const [head, ...rest] = entry as [{ label: Record<string, unknown> }, ...object[]];
+    return [
+      {
+        ...head,
+        label: {
+          ...head.label,
+          position: slot % 2 === 0 ? 'insideEndTop' : 'insideEndBottom',
+          distance: 4 + 14 * Math.floor(slot / 2),
+        },
+      },
+      ...rest,
+    ];
+  });
 }

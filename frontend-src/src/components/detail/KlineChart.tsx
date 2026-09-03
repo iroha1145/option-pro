@@ -52,6 +52,7 @@ import { cn } from '@/lib/utils';
 import { t } from '../../i18n/core.ts';
 import { CHART_RANGES, DEFAULT_CHART_RANGE, getDetailChart, type ChartRange } from './api';
 import { insideZoom, zoomFromOption, type ZoomWindow } from './chart-drawings/zoom.ts';
+import { deconflictEndLabels } from './chart-drawings/renderer.ts';
 import type { ChartBarEx } from '@/mocks/fixtures';
 import type { TechnicalStructure } from '@/api/types';
 
@@ -776,16 +777,19 @@ export default function KlineChart({
     const hand = drawing.marks;
     if (!analysisOk || !data) return hand;
     const prices = data.bars.flatMap((bar) => [bar.h, bar.l]);
+    const yMin = Math.min(...prices);
+    const yMax = Math.max(...prices);
     const auto = overlaysToMarks(visibleOverlays, {
       bars: data.bars,
       range,
       xMin: 0,
       xMax: data.bars.length - 1,
-      yMin: Math.min(...prices),
-      yMax: Math.max(...prices),
+      yMin,
+      yMax,
     }, autoPatternName);
+    // 自动形态与手绘线的线端标签在这里汇合，防叠必须在汇合后做（见 deconflictEndLabels）。
     return {
-      lines: [...auto.lines, ...hand.lines],
+      lines: deconflictEndLabels([...auto.lines, ...hand.lines], yMin, yMax),
       points: [...auto.points, ...hand.points],
       areas: [...auto.areas, ...hand.areas],
       polygons: [...(auto.polygons ?? []), ...(hand.polygons ?? [])],
@@ -980,10 +984,7 @@ export default function KlineChart({
                   error?.bizCode === 'public_snapshot_unavailable' ? (
                     <ManualStockPull ticker={ticker} compact onPulled={() => refresh({ force: true })} />
                   ) : (
-                    <button
-                      onClick={() => refresh()}
-                      className="rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] duration-fast hover:brightness-105"
-                    >
+                    <button type="button" onClick={() => refresh()} className="btn-primary">
                       {t('重试')}
                     </button>
                   )
