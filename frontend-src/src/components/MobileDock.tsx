@@ -14,6 +14,8 @@ import Icon, { type IconName } from '@/components/icons';
 import Segmented from '@/components/shared/Segmented';
 import GlidePill from '@/components/shared/GlidePill';
 import { LOCALES, getLocale, setLocale, t } from '../i18n/core.ts';
+import { setColorMode, type ColorMode } from '@/lib/colorPreference.ts';
+import { useColorMode } from '@/hooks/useColorMode.ts';
 
 /* setLocale() 整页重载才会切语言，模块级常量在加载期求值一次即可，不需要每次渲染重算 */
 const DOCK_ITEMS: { label: string; path: string; icon: IconName }[] = [
@@ -69,11 +71,14 @@ export default function MobileDock() {
     };
   }, [moreOpen]);
 
+  const colorMode = useColorMode();
+
   const moreActive = MORE_ITEMS.some((m) => isNavPathActive(location.pathname, m.path));
   const dockGlideId = useId();
 
   const renderItem = (item: (typeof DOCK_ITEMS)[number]) => {
-    /* '/' 必须精确匹配：startsWith('/') 对任何路径都为真，首页会永远亮着 */
+    /* 高亮口径与顶栏共用 isNavPathActive 语义：根路径精确匹配（裸 startsWith('/')
+       对任何路径都真，首页会永远亮着），其余按段边界（/cta 不得点亮 /catalysts）。 */
     const active = isNavPathActive(location.pathname, item.path);
     return (
       <div key={item.path} className="relative flex flex-1">
@@ -167,6 +172,22 @@ export default function MobileDock() {
                     options={LOCALES.map((l) => ({ value: l.code, label: l.short }))}
                     value={getLocale()}
                     onChange={(code) => setLocale(code)}
+                  />
+                </div>
+                <div className="flex items-center justify-between gap-3 rounded-md px-3 py-3">
+                  <span className="flex items-center gap-3">
+                    <span className="flex size-9 items-center justify-center rounded-md border border-line bg-card-warm text-brand-600">
+                      <Icon name="candle" size={17} />
+                    </span>
+                    <span className="text-body-s font-medium text-ink-800">{t('涨跌色彩')}</span>
+                  </span>
+                  <Segmented<ColorMode>
+                    options={[
+                      { value: 'western', label: t('绿涨红跌') },
+                      { value: 'asian', label: t('红涨绿跌') },
+                    ]}
+                    value={colorMode}
+                    onChange={setColorMode}
                   />
                 </div>
                 <div className="mx-3 my-2 border-t border-line" />

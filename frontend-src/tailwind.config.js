@@ -23,7 +23,7 @@ module.exports = {
           700: '#2A3550',
           600: '#3D4A68',
           500: '#5A6788',
-          400: '#8A94B0',
+          400: '#6F7B9E',
           300: '#B7BFD3',
         },
         line: {
@@ -40,15 +40,17 @@ module.exports = {
           100: '#E4E9FF',
           50: '#F0F3FF',
         },
+        /* 涨跌色走 CSS 变量，html[data-color-mode=asian] 换盘后工具类一起换。
+           <alpha-value> 保住 bg-up-600/20 这类透明度变体。 */
         up: {
-          700: '#0B7A55',
-          600: '#0E9F6E',
-          50: '#E5F6EF',
+          700: 'color-mix(in srgb, var(--up-700) calc(100% * <alpha-value>), transparent)',
+          600: 'color-mix(in srgb, var(--up-600) calc(100% * <alpha-value>), transparent)',
+          50: 'color-mix(in srgb, var(--up-50) calc(100% * <alpha-value>), transparent)',
         },
         down: {
-          700: '#C4302B',
-          600: '#E5484D',
-          50: '#FCECEC',
+          700: 'color-mix(in srgb, var(--down-700) calc(100% * <alpha-value>), transparent)',
+          600: 'color-mix(in srgb, var(--down-600) calc(100% * <alpha-value>), transparent)',
+          50: 'color-mix(in srgb, var(--down-50) calc(100% * <alpha-value>), transparent)',
         },
         warn: {
           /* 700：警示横幅主文案用档（warn-50 底上比 600 重一档，审计 2.4.5） */
@@ -203,9 +205,9 @@ module.exports = {
         /* v8.3 tick-flash keyframes 退役：keyframes 一旦触发必须跑完、无法中断，
            改为 index.css 的 .tick-flash*（常驻 600ms 回落 transition + 瞬时上色态）。 */
         'led-pulse': {
-          '0%': { boxShadow: '0 0 0 0 rgba(14,159,110,.55)' },
-          '70%': { boxShadow: '0 0 0 6px rgba(14,159,110,0)' },
-          '100%': { boxShadow: '0 0 0 0 rgba(14,159,110,0)' },
+          '0%': { boxShadow: '0 0 0 0 color-mix(in srgb, var(--up-600) 55%, transparent)' },
+          '70%': { boxShadow: '0 0 0 6px color-mix(in srgb, var(--up-600) 0%, transparent)' },
+          '100%': { boxShadow: '0 0 0 0 color-mix(in srgb, var(--up-600) 0%, transparent)' },
         },
         'radar-sweep': {
           from: { transform: 'rotate(0deg)' },

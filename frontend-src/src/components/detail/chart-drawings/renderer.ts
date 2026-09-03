@@ -7,6 +7,7 @@ import {
 } from './geometry.ts';
 import { barKeyOf, resolveAnchor } from './projection.ts';
 import { resolvePaintColor } from './schema.ts';
+import { CHART_MONO_FONT } from '@/lib/chartFonts.ts';
 import type { ProjectedDrawing } from './hitTest.ts';
 import type { ChartDrawing, ChartRange, DrawingKind, Point, Segment } from './types.ts';
 
@@ -337,7 +338,7 @@ export function drawingsToMarks(
             formatter: level.label,
             position: 'insideEndTop',
             fontSize: 10,
-            fontFamily: '"IBM Plex Mono", monospace',
+            fontFamily: CHART_MONO_FONT,
             color: lineStyle.color,
           },
         },

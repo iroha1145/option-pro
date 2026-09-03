@@ -10,6 +10,7 @@ import ReactECharts from '@/components/charts/ReactECharts';
 import {
   baseAnimation,
   CH,
+  CHART_MONO_FONT,
   INSIGHT_SMOOTH,
   insightAreaStyle,
   insightDotRow,
@@ -22,6 +23,7 @@ import {
   type ChartOption,
 } from '@/lib/chart';
 import { InsightFrame } from '@/components/shared/InsightCard';
+import { useColorMode } from '@/hooks/useColorMode.ts';
 import { t } from '../../i18n/core.ts';
 import { signed } from './ctaMeta';
 
@@ -36,7 +38,7 @@ function historyOption(history: { date: string; position: number }[]): ChartOpti
       data: history.map((h) => h.date.slice(5)),
       axisLine: { show: false },
       axisTick: { show: false },
-      axisLabel: { color: CH.ink400, fontSize: 10, fontFamily: '"IBM Plex Mono", monospace', interval: 23 },
+      axisLabel: { color: CH.ink400, fontSize: 10, fontFamily: CHART_MONO_FONT, interval: 23 },
     },
     yAxis: {
       type: 'value' as const,
@@ -45,7 +47,7 @@ function historyOption(history: { date: string; position: number }[]): ChartOpti
       position: 'right' as const,
       axisLine: { show: false },
       axisTick: { show: false },
-      axisLabel: { color: CH.ink400, fontSize: 10, fontFamily: '"IBM Plex Mono", monospace' },
+      axisLabel: { color: CH.ink400, fontSize: 10, fontFamily: CHART_MONO_FONT },
       splitLine: { lineStyle: { color: CH.lineChart, width: 1 } },
     },
     tooltip: insightTooltip({
@@ -105,7 +107,8 @@ function historyOption(history: { date: string; position: number }[]): ChartOpti
 }
 
 export default function PositionHistoryChart({ history }: { history: { date: string; position: number }[] }) {
-  const option = useMemo(() => historyOption(history), [history]);
+  const colorMode = useColorMode();
+  const option = useMemo(() => historyOption(history), [history, colorMode]);
   if (!option) return <p className="mt-2 text-caption text-ink-400">{t('暂无数据')}</p>;
   const last = history[history.length - 1];
   return (

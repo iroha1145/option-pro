@@ -27,7 +27,8 @@ import { cn } from '@/lib/utils';
 import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import { fmtNyEventTime, fmtNyHHmm, fmtPrice, fmtRelative } from '@/lib/format';
 import { MACRO_TONE_LABEL, macroToneOf } from '@/lib/macroFit';
-import { baseAnimation, CH, glassTooltip, type ChartOption } from '@/lib/chart';
+import { baseAnimation, CH, CHART_MONO_FONT, glassTooltip, type ChartOption } from '@/lib/chart';
+import { useColorMode } from '@/hooks/useColorMode.ts';
 import {
   asFullDetail,
   LIFECYCLE_CHIP_CLASS,
@@ -41,7 +42,7 @@ import {
 import type { BreakoutCurrentEvent, BreakoutEventFull, BreakoutSession, LifecycleState } from './types';
 import { t } from '../../i18n/core.ts';
 
-const MONO = '"IBM Plex Mono", monospace';
+const MONO = CHART_MONO_FONT;
 
 /* ---------------- 工具 ---------------- */
 
@@ -309,7 +310,7 @@ function buildMiniOption(bars: MiniBar[]): ChartOption {
         const color = chg >= 0 ? CH.up600 : CH.down600;
         return (
           `<div style="font-family:${MONO};font-size:12px;line-height:19px">` +
-          `<div style="color:#8A94B0">${fmtBarTime(b.t)}${b.quote_only ? t(' · 仅报价') : ''}</div>` +
+          `<div style="color:#6F7B9E">${fmtBarTime(b.t)}${b.quote_only ? t(' · 仅报价') : ''}</div>` +
           `${t('开 {o}', { o: b.o.toFixed(2) })} · ${t('高 {h}', { h: b.h.toFixed(2) })}<br/>${t('低 {l}', { l: b.l.toFixed(2) })} · ` +
           `${t('收 {c}', { c: `<b style="color:${color}">${b.c.toFixed(2)}</b>` })}</div>`
         );
@@ -341,10 +342,11 @@ function buildMiniOption(bars: MiniBar[]): ChartOption {
 function MiniKline({ ticker }: { ticker: string }) {
   /* 15m 周期（与 StockChart['range'] 类型一致）+ 截取最近 96 根展示 */
   const { data, error, loading, refresh } = usePolling(() => stocksApi.chart(ticker, '15m'), null, [ticker]);
+  const colorMode = useColorMode();
   const option = useMemo(() => {
     if (!data || data.candles.length <= 1) return null;
     return buildMiniOption(data.candles.slice(-96));
-  }, [data]);
+  }, [data, colorMode]);
   /* 突破标的常不在常规覆盖范围内：503 时可手动拉取（与详情页 ManualStockPull 同一预算通道） */
   const [pulling, setPulling] = useState(false);
   const [pullError, setPullError] = useState<string | null>(null);

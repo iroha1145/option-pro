@@ -64,7 +64,7 @@ function FChip({ active, onClick, children, ariaLabel }: { active: boolean; onCl
       aria-pressed={active}
       aria-label={ariaLabel}
       className={cn(
-        'rounded-pill border px-2.5 py-1 text-micro font-medium transition-[transform,color,background-color,border-color] duration-fast',
+        'relative rounded-pill border px-2.5 py-1 text-micro font-medium transition-[transform,color,background-color,border-color] duration-fast before:absolute before:-inset-1.5 before:content-[""] sm:before:hidden',
         active
           ? 'scale-[1.04] border-brand-600 bg-brand-600 text-white shadow-chip'
           : 'border-line bg-card text-ink-500 hover:border-brand-400 hover:text-brand-600',
