@@ -5,4 +5,3 @@ export function toneOf(value: number | null | undefined): Tone {
   if (typeof value !== 'number' || !Number.isFinite(value) || value === 0) return 'flat';
   return value > 0 ? 'up' : 'down';
 }
-

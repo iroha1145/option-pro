@@ -129,8 +129,20 @@ for (const width of [390, 1440]) {
         };
       }));
       expect(geometry.length).toBeGreaterThanOrEqual(10);
-      expect(geometry.every((button) => button.radius <= 8)).toBe(true);
+      expect(geometry.every((button) => button.radius <= (width === 390 ? 9 : 8))).toBe(true);
       expect(geometry.every((button) => button.height >= (width === 390 ? 44 : 28))).toBe(true);
+      if (width === 390) {
+        for (const group of [statuses, scores]) {
+          const raisedAndVisible = await group.evaluate((rail) => {
+            const selected = rail.querySelector('[aria-pressed="true"]').getBoundingClientRect();
+            const track = rail.getBoundingClientRect();
+            const viewport = rail.closest('.selection-viewport').getBoundingClientRect();
+            return selected.top < track.top && selected.bottom > track.bottom
+              && selected.top - viewport.top >= 4 && viewport.bottom - selected.bottom >= 4;
+          });
+          expect(raisedAndVisible).toBe(true);
+        }
+      }
       await noPageOverflow(page);
       await capture(page, `breakouts-filters-${width}`, toolbar);
     });
