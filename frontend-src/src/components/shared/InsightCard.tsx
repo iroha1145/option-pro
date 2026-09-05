@@ -100,7 +100,7 @@ export function InsightValue({
   size = 'md',
   className,
 }: {
-  value: string;
+  value: ReactNode;
   suffix?: string;
   changePct?: number | null;
   change?: number | null;

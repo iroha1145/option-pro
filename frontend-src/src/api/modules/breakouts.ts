@@ -166,6 +166,9 @@ export function normalizeBreakoutEvent(raw: unknown): BreakoutSignal & BreakoutE
     result: (pickS(r, 'result') as BreakoutEvent['result'] | null) ?? lifecycleToResult(lifecycle),
     /* ---- 契约全字段（页面按 BreakoutEventFull 读取） ---- */
     event_id: eventId,
+    state_version: pickN(r, 'state_version') ?? 0,
+    evidence_at: pickS(r, 'evidence_at'),
+    trigger_source: pickS(r, 'trigger_source'),
     exchange: pickS(r, 'exchange'),
     sector: pickLabel(r, 'sector') ?? '',
     session: sessionRaw && (SESSIONS as readonly string[]).includes(sessionRaw) ? sessionRaw : 'closed',

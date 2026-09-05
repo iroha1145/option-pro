@@ -742,6 +742,8 @@ class BreakoutRadarService:
 
         prior = BreakoutEvent.model_validate(prior_value)
         prior_features = dict(prior.features or {})
+        live_evidence_at = prior.evidence_at
+        live_intraday: pd.DataFrame | None = None
         structure = (
             BreakoutStructure.model_validate(prior.structure)
             if prior.structure is not None
@@ -846,6 +848,24 @@ class BreakoutRadarService:
                     reason="intraday_snapshot_invalid",
                     versions=versions,
                 )
+        if prior.state_version and prior.triggered_at is not None and not expired_due:
+            complete = self._completed_session_bars(intraday_frame, cutoff)
+            # Require whole provider bars starting at/after the observed tick.
+            # Pre-trigger holds and a partly observed triggering interval cannot
+            # retroactively turn a freshly observed tick into a confirmation.
+            live_intraday = complete[complete.index >= pd.Timestamp(prior.triggered_at)]
+            if live_intraday.empty:
+                return self._unreviewed_carryover(
+                    prior_value, observed_at=observed_at,
+                    reason="awaiting_complete_post_trigger_bar", versions=versions,
+                )
+            live_evidence_at = (live_intraday.index[-1] + pd.Timedelta(minutes=5)).to_pydatetime()
+            features.update(self._structure_intraday_features(
+                structure, live_intraday, cutoff, _finite(features.get("atr20")),
+            ))
+            features.update(self._opening_range_confirmation_features(live_intraday, cutoff, features))
+        elif prior.state_version and expired_due:
+            live_evidence_at = observed_at
         _attach_price_provenance(
             features,
             daily_snapshot=None if expired_due else daily_snapshot,
@@ -884,10 +904,10 @@ class BreakoutRadarService:
         )
         bar_evidence = (
             self._continuation_bar_evidence(
-                intraday_frame,
+                live_intraday if live_intraday is not None else intraday_frame,
                 cutoff,
                 event_started_at=prior.first_seen_at,
-                prior_last_seen_at=prior.last_seen_at,
+                prior_last_seen_at=prior.evidence_at or prior.last_seen_at,
                 previous_close=previous_close,
                 invalidation_price=invalidation,
                 atr=atr,
@@ -1201,7 +1221,7 @@ class BreakoutRadarService:
                     "from_state": result.previous_state,
                     "to_state": result.state,
                     "reason": result.reason,
-                    "evidence_at": observed_at,
+                    "evidence_at": live_evidence_at if prior.state_version else observed_at,
                     "evidence": {
                         "source_snapshot_id": source_snapshot_id,
                         "carryover": True,
@@ -1309,6 +1329,9 @@ class BreakoutRadarService:
             first_seen_at=first_seen_at,
             triggered_at=triggered_at,
             state_changed_at=state_changed_at,
+            state_version=prior.state_version,
+            evidence_at=live_evidence_at,
+            trigger_source=prior.trigger_source,
             last_seen_at=observed_at,
             pivot_id=prior.pivot_id,
             event_price=price,
@@ -1656,6 +1679,7 @@ class BreakoutRadarService:
         trading_date: date | None = None,
         previous_events: Mapping[str, list[Mapping[str, Any]]] | None = None,
         carryover_events: Sequence[Mapping[str, Any]] | None = None,
+        realtime_events: Sequence[Mapping[str, Any]] | None = None,
         expired_due_event_ids: Sequence[str] | None = None,
         carryover_has_more: bool = False,
         **_: Any,
@@ -1674,6 +1698,12 @@ class BreakoutRadarService:
                 : self.settings.provider_result_limit
             ]
         ]
+        live_priors = [BreakoutEvent.model_validate(item).model_dump(mode="python")
+                       for item in (realtime_events or ())]
+        if len(live_priors) > 200:
+            raise ValueError("at most 200 realtime events can be evaluated")
+        live_events: list[BreakoutEvent] = []
+        live_transitions: list[dict[str, Any]] = []
         raw_carryovers = list(carryover_events or ())
         if len(raw_carryovers) > 200:
             raise ValueError("at most 200 carryover events can be evaluated")
@@ -2789,6 +2819,54 @@ class BreakoutRadarService:
             transitions.extend(continued_transitions)
             shadows.append(continued_shadow)
 
+        # Evaluate live state with the same fetched bars, independently of the
+        # ordinary scan. Neither tick prices nor tick times enter public scans.
+        for prior in live_priors:
+            ticker = str(prior.get("ticker") or "").strip().upper()
+            event_id = str(prior.get("event_id") or "")
+            sector_symbol = self._sector_benchmark(
+                ticker,
+                str(prior.get("sector") or "") or None,
+            )
+            try:
+                continued, continued_transitions, continued_shadow = self._continue_event(
+                    prior,
+                    daily_snapshot=daily_map.get(ticker),
+                    intraday_snapshot=intraday_map.get(ticker),
+                    market_daily_snapshot=daily_map.get("SPY"),
+                    sector_daily_snapshot=(
+                        daily_map.get(sector_symbol) if sector_symbol else None
+                    ),
+                    sector_symbol=sector_symbol,
+                    liquidity_distribution=cached_liquidity,
+                    cutoff=cutoff,
+                    observed_at=observed_at,
+                    observed_session=observed_session,
+                    market=market,
+                    source_snapshot_id=source_snapshot_id,
+                    versions=versions,
+                    expired_due=event_id in due_ids,
+                )
+            except (AttributeError, KeyError, TypeError, ValueError, IndexError) as exc:
+                per_event_errors.append(
+                    {
+                        "event_id": event_id,
+                        "ticker": ticker,
+                        "error_code": "carryover_processing_error",
+                        "error_type": type(exc).__name__,
+                    }
+                )
+                continued, continued_transitions, continued_shadow = (
+                    self._unreviewed_carryover(
+                        prior,
+                        observed_at=observed_at,
+                        reason="carryover_processing_error",
+                        versions=versions,
+                    )
+                )
+            live_events.append(continued)
+            live_transitions.extend(continued_transitions)
+
         # A carryover owns its stable event identity.  This also keeps replayed
         # scans idempotent if the same ticker was present in discovery input.
         events = list({item.event_id: item for item in events}.values())
@@ -2851,6 +2929,8 @@ class BreakoutRadarService:
             )
         return {
             "events": events,
+            "realtime_events": live_events,
+            "realtime_transitions": live_transitions,
             "structures": structures,
             "transitions": transitions,
             "range_persistence_shadow": shadows,

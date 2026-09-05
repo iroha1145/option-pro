@@ -7,6 +7,7 @@ from typing import Any
 import httpx
 
 from app.config import Settings, get_settings
+from app.services.finnhub_budget import mark_finnhub_rate_limited, reserve_finnhub_request
 
 OPTION_DATA_SOURCE_CANDIDATES = [
     {
@@ -89,13 +90,17 @@ def _score_from_finnhub_metrics(metrics: dict[str, Any]) -> float | None:
     return round(max(0.0, min(100.0, score)), 1)
 
 
-def _cached_get(client: httpx.Client, url: str, params: dict[str, Any], cache_key: str) -> dict[str, Any]:
+def _cached_get(client: httpx.Client, url: str, params: dict[str, Any], cache_key: str, *, api_key: str) -> dict[str, Any]:
     now = time.time()
     cached = _CACHE.get(cache_key)
     if cached and cached[0] > now:
         return cached[1]
 
+    if not reserve_finnhub_request(api_key, timeout=0):
+        raise RuntimeError("finnhub_budget_unavailable")
     response = client.get(url, params=params)
+    if getattr(response, "status_code", None) == 429:
+        mark_finnhub_rate_limited(api_key, retry_after=getattr(response, "headers", {}).get("Retry-After", 60))
     response.raise_for_status()
     data = response.json()
     if not isinstance(data, dict):
@@ -141,6 +146,7 @@ def enrich_rows_with_finnhub(rows: list[dict[str, Any]], settings: Settings | No
                         f"{base_url}/stock/metric",
                         {"symbol": symbol, "metric": "all"},
                         f"finnhub:metric:{symbol}",
+                        api_key=token,
                     )
                     metrics = payload.get("metric") if isinstance(payload.get("metric"), dict) else {}
                     if not metrics:

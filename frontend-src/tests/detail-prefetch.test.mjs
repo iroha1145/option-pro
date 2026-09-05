@@ -77,7 +77,7 @@ test('预取失败被吞掉，但错误态仍由各面板自己那次调用呈�
 test('抽屉在 loading 分支之前就发起预取', () => {
   const code = codeOf(drawerBody);
   const prefetchAt = code.indexOf('prefetchStockDetailPanels(symbol)');
-  const loadingReturnAt = code.indexOf('if (loading)');
+  const loadingReturnAt = code.indexOf('if (loading && !detail)');
   assert.ok(prefetchAt > 0, '详情页没有调用预取');
   assert.ok(loadingReturnAt > 0);
   assert.ok(
@@ -100,7 +100,7 @@ test('没有在 loading 分支里另挂一个 KlineChart', () => {
   // 那样做会让 React 在两棵不同的树之间卸载重挂，图表的轮询会真的跑两遍 ——
   // 比原来的串行更糟。
   const code = codeOf(drawerBody);
-  const loadingAt = code.indexOf('if (loading)');
+  const loadingAt = code.indexOf('if (loading && !detail)');
   const errorAt = code.indexOf('if (!detail)');
   assert.ok(loadingAt > 0 && errorAt > loadingAt);
   const loadingBranch = code.slice(loadingAt, errorAt);

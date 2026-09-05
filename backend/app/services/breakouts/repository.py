@@ -1,8 +1,9 @@
 """SQLite persistence for atomically published Breakout Radar snapshots.
 
-The worker is the only writer.  API callers construct the repository with
-``read_only=True``; those connections use SQLite ``mode=ro`` and
-``query_only`` and therefore cannot create or migrate a database by accident.
+The worker owns scheduled scan rows; the quote service writes only the separate
+versioned live overlay. API callers construct the repository with ``read_only=True``;
+those connections use SQLite ``mode=ro`` and ``query_only`` and cannot create or
+migrate a database by accident.
 """
 
 from __future__ import annotations
@@ -506,6 +507,37 @@ SCHEMA_CHECKSUM = hashlib.sha256(
     "\n".join(" ".join(statement.split()) for statement in _SCHEMA).encode("utf-8")
 ).hexdigest()
 
+# Independent additive extension: v3 scan snapshots remain byte-for-byte
+# compatible and contain only scheduled-bar evidence.
+LIVE_SCHEMA_VERSION = "breakout-live-v1"
+_LIVE_SCHEMA = (
+    """CREATE TABLE IF NOT EXISTS breakout_live_schema (
+        version TEXT PRIMARY KEY, checksum TEXT NOT NULL, applied_at TEXT NOT NULL
+    ) STRICT""",
+    """CREATE TABLE IF NOT EXISTS breakout_live_events (
+        event_id TEXT PRIMARY KEY REFERENCES breakout_events(event_id),
+        state_version INTEGER NOT NULL CHECK(state_version > 0),
+        evidence_at TEXT NOT NULL,
+        event_json TEXT NOT NULL
+            CHECK(length(CAST(event_json AS BLOB)) <= 524288 AND json_valid(event_json)),
+        updated_at TEXT NOT NULL
+    ) STRICT""",
+    """CREATE TABLE IF NOT EXISTS breakout_live_transitions (
+        event_id TEXT NOT NULL REFERENCES breakout_live_events(event_id),
+        state_version INTEGER NOT NULL CHECK(state_version > 0),
+        evidence_at TEXT NOT NULL,
+        transition_json TEXT NOT NULL
+            CHECK(length(CAST(transition_json AS BLOB)) <= 65536 AND json_valid(transition_json)),
+        created_at TEXT NOT NULL,
+        PRIMARY KEY(event_id, state_version)
+    ) STRICT""",
+    "CREATE INDEX IF NOT EXISTS idx_breakout_live_events_recent ON breakout_live_events(updated_at DESC,event_id)",
+)
+LIVE_SCHEMA_CHECKSUM = hashlib.sha256(
+    "\n".join(" ".join(statement.split()) for statement in _LIVE_SCHEMA).encode()
+).hexdigest()
+
+
 _CARRYOVER_LATEST_ROWS_SQL = """
 WITH latest_rowids AS MATERIALIZED (
     SELECT head.event_id,
@@ -668,6 +700,7 @@ class BreakoutRepository:
                     current_version=versions or None,
                 )
             self._require_schema(connection)
+            self._initialize_live_schema(connection)
             violations = connection.execute("PRAGMA foreign_key_check").fetchall()
             if violations:
                 preview = "; ".join(
@@ -686,6 +719,182 @@ class BreakoutRepository:
                 connection.rollback()
             connection.execute("PRAGMA foreign_keys=ON")
             connection.close()
+
+    def _initialize_live_schema(self, connection: sqlite3.Connection) -> None:
+        for statement in _LIVE_SCHEMA:
+            connection.execute(statement)
+        rows = connection.execute("SELECT version,checksum FROM breakout_live_schema").fetchall()
+        if not rows:
+            connection.execute(
+                "INSERT INTO breakout_live_schema VALUES(?,?,?)",
+                (LIVE_SCHEMA_VERSION, LIVE_SCHEMA_CHECKSUM, _timestamp(self._now())),
+            )
+        elif len(rows) != 1 or rows[0]["version"] != LIVE_SCHEMA_VERSION or rows[0]["checksum"] != LIVE_SCHEMA_CHECKSUM:
+            raise SchemaVersionError("unsupported breakout live schema or checksum")
+
+    @staticmethod
+    def _has_live_schema(connection: sqlite3.Connection) -> bool:
+        # Read-only callers of older v3 databases never create tables.
+        exists = connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='breakout_live_schema'"
+        ).fetchone()
+        if exists is None:
+            return False
+        rows = connection.execute("SELECT version,checksum FROM breakout_live_schema").fetchall()
+        if len(rows) != 1 or rows[0]["version"] != LIVE_SCHEMA_VERSION or rows[0]["checksum"] != LIVE_SCHEMA_CHECKSUM:
+            raise SchemaVersionError("unsupported breakout live schema or checksum")
+        return True
+
+    def overlay_live_events(
+        self, events: Sequence[Mapping[str, Any]], *, as_of: datetime | None = None,
+        with_transitions: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Opt-in effective view. Scheduled snapshots and public defaults stay pure."""
+        result = [dict(event) for event in events]
+        if not result:
+            return result
+        connection = self._read_connection()
+        try:
+            self._require_schema(connection)
+            connection.execute("BEGIN")
+            if not self._has_live_schema(connection):
+                return result
+            for index, event in enumerate(result):
+                row = connection.execute(
+                    "SELECT event_json,evidence_at FROM breakout_live_events WHERE event_id=?",
+                    (str(event.get("event_id") or ""),),
+                ).fetchone()
+                if row is None or (as_of is not None and row["evidence_at"] > _timestamp(as_of)):
+                    continue
+                live = _json_loads(row["event_json"], {})
+                # A scheduled terminal decision is also valid for the live view
+                # when no live recheck was possible (e.g. a worker upgrade).
+                if str(event.get("lifecycle_state")) in {"FAILED", "EXPIRED"} and _timestamp(event["last_seen_at"]) >= row["evidence_at"]:
+                    continue
+                if with_transitions:
+                    transitions = connection.execute(
+                        "SELECT transition_json FROM breakout_live_transitions WHERE event_id=? ORDER BY state_version",
+                        (str(event["event_id"]),),
+                    ).fetchall()
+                    live["transitions"] = [_json_loads(item["transition_json"], {}) for item in transitions]
+                result[index] = live
+            return result
+        finally:
+            connection.close()
+
+    def recent_live_events(
+        self, *, as_of: datetime, lookback_seconds: int = 172_800, limit: int = 200,
+    ) -> list[dict[str, Any]]:
+        """Bounded durable stream recovery, including recently terminal events."""
+        if not 1 <= limit <= 500 or not 1 <= lookback_seconds <= 604_800:
+            raise ValueError("invalid realtime recovery window")
+        observed = _aware_utc(as_of)
+        connection = self._read_connection()
+        try:
+            self._require_schema(connection)
+            if not self._has_live_schema(connection):
+                return []
+            rows = connection.execute(
+                """SELECT event_json FROM breakout_live_events
+                   WHERE updated_at>=? AND updated_at<=? AND evidence_at<=?
+                   ORDER BY updated_at DESC,event_id LIMIT ?""",
+                (_timestamp(observed - timedelta(seconds=lookback_seconds)),
+                 _timestamp(observed), _timestamp(observed), limit),
+            ).fetchall()
+            return [_json_loads(row["event_json"], {}) for row in rows]
+        finally:
+            connection.close()
+
+    def commit_live_trigger(
+        self, event: Mapping[str, Any], *, expected_version: int = 0,
+    ) -> dict[str, Any] | None:
+        """Atomically publish the first observed trade trigger, never a scan row."""
+        body = dict(event)
+        event_id = str(body["event_id"])
+        evidence_at = _timestamp(body["evidence_at"])
+        now_text = _timestamp(self._now())
+        connection = self._write_connection()
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            self._require_schema(connection)
+            self._initialize_live_schema(connection)
+            base = connection.execute(
+                "SELECT lifecycle_state,last_seen_at FROM breakout_events WHERE event_id=?",
+                (event_id,),
+            ).fetchone()
+            current = connection.execute(
+                "SELECT state_version FROM breakout_live_events WHERE event_id=?", (event_id,)
+            ).fetchone()
+            if (base is None or base["lifecycle_state"] != "WATCHING"
+                or base["last_seen_at"] >= evidence_at or current is not None
+                or expected_version != 0 or body.get("lifecycle_state") != "TRIGGERED"):
+                return None
+            body["state_version"] = 1
+            body["evidence_at"] = evidence_at
+            connection.execute(
+                "INSERT INTO breakout_live_events VALUES(?,?,?,?,?)",
+                (event_id, 1, evidence_at, _json_dumps(body, max_bytes=MAX_EVENT_JSON_BYTES), now_text),
+            )
+            transition = {
+                "event_id": event_id, "state_version": 1,
+                "from_state": "WATCHING", "to_state": "TRIGGERED",
+                "reason": "realtime_trade_above_breakout_buffer",
+                "evidence_at": evidence_at, "source": "finnhub",
+                "price": body.get("event_price"),
+            }
+            connection.execute(
+                "INSERT INTO breakout_live_transitions VALUES(?,?,?,?,?)",
+                (event_id, 1, evidence_at, _json_dumps(transition), now_text),
+            )
+            connection.commit()
+            return body
+        finally:
+            if connection.in_transaction:
+                connection.rollback()
+            connection.close()
+
+    def _reconcile_live_scan(
+        self, connection: sqlite3.Connection, events: Sequence[Any],
+        transitions: Sequence[Mapping[str, Any]], now_text: str,
+    ) -> None:
+        if not events or not self._has_live_schema(connection):
+            return
+        for value in events:
+            event = _mapping(value)
+            event["lifecycle_state"] = str(_enum_value(event["lifecycle_state"]))
+            event_id = str(event["event_id"])
+            row = connection.execute(
+                "SELECT state_version,evidence_at,event_json FROM breakout_live_events WHERE event_id=?",
+                (event_id,),
+            ).fetchone()
+            if row is None or int(event.get("state_version") or 0) != row["state_version"]:
+                continue
+            prior = _json_loads(row["event_json"], {})
+            evidence_at = _timestamp(event.get("evidence_at") or event["last_seen_at"])
+            if (evidence_at <= row["evidence_at"]
+                or str(prior.get("lifecycle_state")) in {"FAILED", "EXPIRED"}):
+                continue
+            # The state machine processes each live prior separately; CAS also
+            # fences a late scan calculated before a newer trade/scan commit.
+            version = int(row["state_version"]) + 1
+            event["state_version"] = version
+            event["evidence_at"] = evidence_at
+            connection.execute(
+                "UPDATE breakout_live_events SET state_version=?,evidence_at=?,event_json=?,updated_at=? WHERE event_id=? AND state_version=?",
+                (version, evidence_at, _json_dumps(event, max_bytes=MAX_EVENT_JSON_BYTES), now_text, event_id, row["state_version"]),
+            )
+            event_changes = [dict(item) for item in transitions if str(item.get("event_id")) == event_id]
+            if str(event.get("lifecycle_state")) != str(prior.get("lifecycle_state")):
+                transition = {
+                    "event_id": event_id, "state_version": version,
+                    "from_state": prior["lifecycle_state"], "to_state": event["lifecycle_state"],
+                    "reason": event.get("transition_reason"), "evidence_at": evidence_at,
+                    "source": "completed_5m_bars", "steps": event_changes,
+                }
+                connection.execute(
+                    "INSERT INTO breakout_live_transitions VALUES(?,?,?,?,?)",
+                    (event_id, version, evidence_at, _json_dumps(transition), now_text),
+                )
 
     @staticmethod
     def _event_table_columns(connection: sqlite3.Connection) -> set[str]:
@@ -1928,6 +2137,7 @@ class BreakoutRepository:
             self._insert_structures(connection, str(scan_id), structures, now_text)
             self._publish_hook("candidates_structures", connection)
 
+            rejected_event_ids: set[str] = set()
             event_records, id_aliases = self._upsert_events(
                 connection,
                 str(scan_id),
@@ -1935,6 +2145,7 @@ class BreakoutRepository:
                 events,
                 transitions,
                 now_text,
+                rejected_event_ids=rejected_event_ids,
             )
             self._insert_transitions(
                 connection,
@@ -1945,6 +2156,11 @@ class BreakoutRepository:
                 event_records,
                 id_aliases,
                 now_text,
+                rejected_event_ids=rejected_event_ids,
+            )
+            self._reconcile_live_scan(
+                connection, list(payload.get("realtime_events") or ()),
+                list(payload.get("realtime_transitions") or ()), now_text,
             )
             self._publish_hook("events_transitions", connection)
 
@@ -2138,6 +2354,7 @@ class BreakoutRepository:
         events: Sequence[Mapping[str, Any]],
         transitions: Sequence[Mapping[str, Any]],
         now_text: str,
+        *, rejected_event_ids: set[str] | None = None,
     ) -> tuple[list[dict[str, Any]], dict[str, str]]:
         records: list[dict[str, Any]] = []
         aliases: dict[str, str] = {}
@@ -2318,9 +2535,13 @@ class BreakoutRepository:
                 # Terminal lifecycle states are monotonic.  A rediscovered
                 # ticker may create a new event identity, but it must never
                 # revive an old terminal row through an upsert race.
+                if rejected_event_ids is not None:
+                    rejected_event_ids.add(event_id)
                 records.append(_json_loads(existing["event_json"], {}))
                 continue
             if existing is not None and incoming_last_seen_at < existing["last_seen_at"]:
+                if rejected_event_ids is not None:
+                    rejected_event_ids.add(event_id)
                 records.append(_json_loads(existing["event_json"], {}))
                 continue
             priority = self._score(event, "alert_priority_score")
@@ -2401,6 +2622,7 @@ class BreakoutRepository:
         events: Sequence[Mapping[str, Any]],
         aliases: Mapping[str, str],
         now_text: str,
+        *, rejected_event_ids: set[str] | None = None,
     ) -> None:
         values = [dict(item) for item in transitions]
         explicit_event_ids = {
@@ -2436,6 +2658,8 @@ class BreakoutRepository:
         for transition in values:
             incoming_id = str(transition.get("event_id") or "")
             event_id = aliases.get(incoming_id, incoming_id)
+            if event_id in (rejected_event_ids or set()):
+                continue
             if not event_id:
                 raise ValueError("transition event_id is required")
             from_state = str(_enum_value(transition.get("from_state")) or "")

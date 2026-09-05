@@ -34,6 +34,15 @@ premarket_seconds = 600
 closed_seconds = 1800
 range_persistence_mode = "shadow"
 
+[quotes]
+# 先在站长账号验证。公开展示 Finnhub 行情及衍生信号前须取得书面授权。
+enabled = false
+public_enabled = false
+signals_enabled = false
+max_symbols = 50
+publish_interval_ms = 250
+release_seconds = 30
+
 [public_home]
 poll_seconds = 30
 watchlist_seconds = 1800

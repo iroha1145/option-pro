@@ -232,6 +232,10 @@ class BreakoutWorker:
             expired_due_limit=expired_due_limit,
         )
         carryover_events = list(carryover_batch.events)
+        effective_events = self.repository.overlay_live_events(
+            carryover_events, as_of=clock_snapshot.as_of,
+        )
+        realtime_events = [event for event in effective_events if event.get("state_version")]
         previous_events: dict[str, list[Mapping[str, Any]]] = {}
         for event in carryover_events:
             ticker = str(event.get("ticker") or "").strip().upper()
@@ -244,6 +248,7 @@ class BreakoutWorker:
             "candidates": candidates,
             "previous_events": previous_events,
             "carryover_events": carryover_events,
+            "realtime_events": realtime_events,
             "expired_due_event_ids": carryover_batch.expired_due_event_ids,
             "carryover_has_more": carryover_batch.has_more,
             "clock_snapshot": clock_snapshot,

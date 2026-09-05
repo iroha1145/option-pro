@@ -26,6 +26,7 @@ from app.public_home_snapshot import (
 )
 from app.personal_config import get_personal_config
 from app.config import get_settings
+from app.services.finnhub_budget import async_reserve_finnhub_request, mark_finnhub_rate_limited
 
 router = APIRouter(prefix="/api/earnings", tags=["earnings"])
 
@@ -379,6 +380,8 @@ async def _fetch_finnhub_earnings(today: date) -> dict[str, Any]:
         segment_end: date,
     ) -> dict[str, Any]:
         try:
+            if not await async_reserve_finnhub_request(token, timeout=0):
+                return {"rows": [], "succeeded": False, "error": "rate_limited"}
             response = await client.get(
                 f"{str(settings.finnhub_base_url).rstrip('/')}/calendar/earnings",
                 params={
@@ -392,6 +395,8 @@ async def _fetch_finnhub_earnings(today: date) -> dict[str, Any]:
             return {"rows": [], "succeeded": False, "error": "timeout"}
         except httpx.HTTPStatusError as exc:
             status_code = exc.response.status_code
+            if status_code == 429:
+                await asyncio.to_thread(mark_finnhub_rate_limited, token, retry_after=exc.response.headers.get("Retry-After", 60))
             error = (
                 "unauthorized"
                 if status_code in {401, 403}

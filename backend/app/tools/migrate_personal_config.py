@@ -52,6 +52,14 @@ premarket_seconds = {config.breakout.premarket_seconds}
 closed_seconds = {config.breakout.closed_seconds}
 range_persistence_mode = {_toml_string(config.breakout.range_persistence_mode)}
 
+[quotes]
+enabled = {str(config.quotes.enabled).lower()}
+public_enabled = {str(config.quotes.public_enabled).lower()}
+signals_enabled = {str(config.quotes.signals_enabled).lower()}
+max_symbols = {config.quotes.max_symbols}
+publish_interval_ms = {config.quotes.publish_interval_ms}
+release_seconds = {config.quotes.release_seconds}
+
 [public_home]
 poll_seconds = {config.public_home.poll_seconds}
 watchlist_seconds = {config.public_home.watchlist_seconds}

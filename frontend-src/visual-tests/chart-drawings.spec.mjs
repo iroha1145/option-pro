@@ -21,6 +21,22 @@ import { join } from "node:path";
 
 const SCREENSHOT_DIR = join(process.cwd(), "test-results", "visual-evidence");
 const HAS_REAL_BACKEND = Boolean(process.env.OPTIX_VISUAL_BASE_URL);
+const chartRateLimits = new WeakMap();
+
+function trackChartRateLimits(page) {
+  if (chartRateLimits.has(page)) return;
+  const state = { retryAt: null };
+  chartRateLimits.set(page, state);
+  page.on("response", (response) => {
+    if (!/\/api\/stocks\/[^/]+\/chart(?:\?|$)/.test(response.url())) return;
+    if (response.status() === 429) {
+      const seconds = Number(response.headers()["retry-after"]);
+      state.retryAt = Date.now() + (Number.isFinite(seconds) && seconds > 0 ? seconds * 1_000 : 2_000);
+    } else if (response.ok()) {
+      state.retryAt = null;
+    }
+  });
+}
 /** Scopes this file actually draws. Empty 1h/15m/5m DELETEs were light-bucket noise. */
 const TOUCHED_SCOPES = [
   { ticker: "AAPL", range: "1d" },
@@ -48,6 +64,7 @@ function drawingRows(page) {
 }
 
 async function openStock(page, ticker = "AAPL") {
+  trackChartRateLimits(page);
   const errors = [];
   page.on("pageerror", (error) => errors.push(String(error)));
   if (!page.url().includes(`/stock/${ticker}`)) {
@@ -194,7 +211,22 @@ async function paintedPixels(page) {
 
 /** 只证明「画布上有东西」——绝不能拿它当「绘图存在」的证据。 */
 async function chartFilled(page) {
-  await expect.poll(() => paintedPixels(page), { timeout: 20_000 }).toBeGreaterThan(40);
+  await expect.poll(async () => {
+    const painted = await paintedPixels(page);
+    if (painted > 40) return painted;
+    // A visible drawing toolbar does not imply the separate chart GET passed.
+    // Honor an observed 429, then use the chart's ordinary recovery button.
+    const rateLimit = chartRateLimits.get(page);
+    if (rateLimit?.retryAt != null && Date.now() >= rateLimit.retryAt) {
+      rateLimit.retryAt = Date.now() + 5_000;
+      const retry = page.getByRole("region", { name: /K 线图$/ })
+        .getByRole("button", { name: "重试", exact: true });
+      if (await retry.isVisible().catch(() => false)) {
+        await retry.click({ timeout: 1_000 }).catch(() => {});
+      }
+    }
+    return painted;
+  }, { timeout: 90_000, intervals: [500, 1_000, 2_000] }).toBeGreaterThan(40);
 }
 
 test.use({ viewport: { width: 1440, height: 900 } });
@@ -204,6 +236,7 @@ test.describe.configure({ timeout: 180_000 });
 
 test.beforeEach(async ({ page }) => {
   if (!HAS_REAL_BACKEND) return;
+  trackChartRateLimits(page);
   // 上一轮 CI 的残留会让「恰好 n 条」全红；page.request.delete 过不了同源守卫。
   await page.goto("/stock/AAPL", { waitUntil: "domcontentloaded" });
   // After ~25 drawing specs the owner light bucket 429s stock/chart GETs, so
@@ -517,6 +550,7 @@ test("stale clear from a second context is 409 and keeps the newer drawing", asy
   const storage = await page.context().storageState();
   const other = await browser.newContext({ storageState: storage });
   const pageB = await other.newPage();
+  trackChartRateLimits(pageB);
   await pageB.goto("/stock/AAPL", { waitUntil: "domcontentloaded" });
   await expect.poll(async () => {
     if (await toolButton(pageB, "选择").isVisible().catch(() => false)) return "ready";
@@ -699,6 +733,7 @@ test("stale update from a second context is 409 and keeps the newer color", asyn
   const storage = await page.context().storageState();
   const other = await browser.newContext({ storageState: storage });
   const pageB = await other.newPage();
+  trackChartRateLimits(pageB);
   await pageB.goto("/stock/AAPL", { waitUntil: "domcontentloaded" });
   await expect.poll(async () => {
     const listed = await listDrawings(pageB);

@@ -1,3 +1,4 @@
+import { useQuoteSymbols } from '@/hooks/useLiveQuote';
 /**
  * §02 选股扫描（screener.md 完整实现）
  * B0 页头带（上次扫描 / 扫描历史 popover / owner strength_refresh）
@@ -388,6 +389,7 @@ export default function Screener() {
   );
 
   const pageTickerKey = pageRows.map((r) => r.ticker).join(',');
+  useQuoteSymbols(pageRows.map((r) => r.ticker), expanded ? [expanded] : []);
   useEffect(() => {
     if (scanState !== 'done') return;
     const now = Date.now();

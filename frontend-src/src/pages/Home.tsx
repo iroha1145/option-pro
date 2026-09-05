@@ -1,3 +1,5 @@
+import { useQuoteSymbols } from '@/hooks/useLiveQuote';
+import { LivePrice, LiveChange } from '@/components/shared/LiveQuote';
 /**
  * §01 首页（/）
  * 指数带（列表由后端决定：live 为美股三指+日经+上证共 5 个，mock 6 个——
@@ -692,7 +694,7 @@ function MarketStatusPanel({
 /** 雷达信号卡：TickerLogo+类型胶囊+相对时间 / 名称+价+涨跌 / 强度条。
  *  不加 aria-label：整行可见内容自然组成可访问名（审计）。 */
 function RadarSignalCard({ signal: s, index: i }: { signal: BreakoutSignal; index: number }) {
-  const hasPrice = Number.isFinite(s.price) && s.price > 0;
+  useQuoteSymbols([s.ticker]);
   return (
     <motion.div
       initial={{ opacity: 0, y: 14 }}
@@ -711,9 +713,9 @@ function RadarSignalCard({ signal: s, index: i }: { signal: BreakoutSignal; inde
         <div className="mt-2 flex items-center gap-2">
           <span className="min-w-0 flex-1 truncate text-caption text-ink-500">{s.name}</span>
           <span className="shrink-0 font-mono text-caption text-ink-800 tnum">
-            {hasPrice ? fmtPrice(s.price) : '—'}
+            <LivePrice symbol={s.ticker} fallback={s.price} />
           </span>
-          <ChangeBadge value={s.changePct} size="sm" className="shrink-0" />
+          <LiveChange symbol={s.ticker} fallback={s.changePct} size="sm" className="shrink-0" />
         </div>
         <div className="mt-2">
           <StrengthBar score={s.strengthScore} width={56} showScore />
@@ -770,7 +772,7 @@ function EarningsAnchorRow({ item: it, todayKey }: { item: EarningsItem; todayKe
 
 /** 自选异动：当日涨跌与最长 30 交易日日线分开标明，长期图仅取真实日线。 */
 function WatchlistMoverCard({ item, index: i, preparation, statusReadFailed }: { item: WatchlistItem; index: number; preparation?: StockDataStatus; statusReadFailed: boolean }) {
-  const hasPrice = Number.isFinite(item.price) && item.price > 0;
+  useQuoteSymbols([item.ticker]);
   const trend = item.dailyTrend && item.dailyTrend.length > 1 ? item.dailyTrend : null;
   const spark = trend?.map((point) => point.close) ?? null;
   const periodChange = spark ? (spark[spark.length - 1] / spark[0] - 1) * 100 : null;
@@ -788,12 +790,12 @@ function WatchlistMoverCard({ item, index: i, preparation, statusReadFailed }: {
           <span className="min-w-0 flex-1 truncate text-caption text-ink-500">{item.name}</span>
           <span className="flex shrink-0 items-center gap-1.5">
             <span className="text-micro text-ink-400">{t('当日')}</span>
-            <ChangeBadge value={item.changePct} size="sm" />
+            <LiveChange symbol={item.ticker} fallback={item.changePct} fallbackAt={item.updatedAt} size="sm" />
           </span>
         </div>
         <div className="mt-2 flex items-end justify-between gap-2">
           <span className="metric-value text-data-l text-ink-900 tnum">
-            {hasPrice ? fmtPrice(item.price) : '—'}
+            <LivePrice symbol={item.ticker} fallback={item.price} fallbackAt={item.updatedAt} />
           </span>
           <span className="text-micro text-ink-400">{trend ? t('近 {count} 个交易日', { count: trend.length }) : t('日线走势')}</span>
         </div>

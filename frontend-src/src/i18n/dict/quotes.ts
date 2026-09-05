@@ -1,0 +1,26 @@
+import type { Dict } from './types';
+
+export const QUOTES: Dict = {
+  '暂无实时行情 · 定时更新': ['Live quotes unavailable · periodic updates', 'リアルタイム株価なし · 定期更新'],
+  '标普500基金': ['S&P 500 fund', 'S&P 500 ファンド'],
+  '纳斯达克100基金': ['Nasdaq 100 fund', 'ナスダック100 ファンド'],
+  '道琼斯基金': ['Dow Jones fund', 'ダウ平均ファンド'],
+  '罗素2000基金': ['Russell 2000 fund', 'ラッセル2000 ファンド'],
+  '{fund} · 美元价格': ['{fund} · price in USD', '{fund} · 米ドル建て価格'],
+  '基金行情 · 美元': ['Fund prices · USD', 'ファンド価格 · 米ドル'],
+  '行情连接中': ['Connecting quotes', '株価に接続中'],
+  '行情重连中': ['Reconnecting quotes', '株価に再接続中'],
+  '定时更新': ['Periodic updates', '定期更新'],
+  '暂无新成交 · 最后报价': ['No recent trades · last quote', '新たな約定なし · 最後の株価'],
+  '等待报价': ['Awaiting quote', '株価を待機中'],
+  '盘前实时': ['Live pre-market', '市場開始前・リアルタイム'],
+  '盘后实时': ['Live after-hours', '時間外・リアルタイム'],
+  '实时': ['Live', 'リアルタイム'],
+  '实时成交触发': ['Triggered by live trade', 'リアルタイム約定で発火'],
+  '实时成交触发 · 完整行情确认中': ['Live trade trigger · awaiting complete bars', 'リアルタイム約定で発火 · 完全な足で確認待ち'],
+  '时间待更新': ['Time pending', '時刻の更新待ち'],
+  '状态版本': ['State version', '状態バージョン'],
+  '个股行情': ['Stock price', '個別株価'],
+  '成交时间 {time}': ['Trade time {time}', '約定時刻 {time}'],
+  '昨收 ${price}': ['Previous close ${price}', '前日終値 ${price}'],
+};

@@ -1,3 +1,4 @@
+import NumberTicker from '@/components/shared/NumberTicker';
 /**
  * 雷达价格标尺：统一的圆点、短刻线与文字价位，不使用装饰性图标。
  * 参照价固定在真实位置，现价以圆点和读数突出；更新仍使用共享短过渡。
@@ -79,7 +80,7 @@ export default function PriceScale({ invalidation, trigger, target, current, lar
           >
             <span>{t('现价')}</span>
             <strong className={cn('tick-flash rounded px-0.5 tnum', flash === 'up' && 'tick-flash-up', flash === 'down' && 'tick-flash-down')}>
-              {fmtPrice(current)}
+              <NumberTicker text={fmtPrice(current)} />
             </strong>
           </motion.span>
         </div>

@@ -134,6 +134,9 @@ export interface BreakoutTransition {
 /** 契约 BreakoutEvent 全字段（历史事件 / 事件详情） */
 export interface BreakoutEventFull extends BreakoutEventDetail {
   event_id: string;
+  state_version?: number;
+  evidence_at?: string | null;
+  trigger_source?: string | null;
   name: string;
   sector: string;
   session: BreakoutSession;

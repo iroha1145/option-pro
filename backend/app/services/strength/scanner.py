@@ -18,6 +18,7 @@ from app.config import get_settings
 from app.services import massive
 from app.services import yahoo
 from app.services.cache import cache
+from app.services.finnhub_budget import mark_finnhub_rate_limited, reserve_finnhub_request
 from app.services.sectors import SECTORS
 from app.services.strength.features import (
     _MIN_52W_HISTORY_BARS,
@@ -480,6 +481,8 @@ def _download_finnhub_history(tickers: list[str], period: str) -> tuple[pd.DataF
     try:
         with httpx.Client(timeout=timeout, headers={"X-Finnhub-Token": token}) as client:
             def fetch_one(symbol: str) -> pd.DataFrame:
+                if not reserve_finnhub_request(token, timeout=0):
+                    raise RuntimeError("finnhub_budget_unavailable")
                 response = client.get(
                     f"{base_url}/stock/candle",
                     params={
@@ -489,6 +492,8 @@ def _download_finnhub_history(tickers: list[str], period: str) -> tuple[pd.DataF
                         "to": end_ts,
                     },
                 )
+                if getattr(response, "status_code", None) == 429:
+                    mark_finnhub_rate_limited(token, retry_after=getattr(response, "headers", {}).get("Retry-After", 60))
                 response.raise_for_status()
                 return _finnhub_candle_frame(symbol, response.json())
 
