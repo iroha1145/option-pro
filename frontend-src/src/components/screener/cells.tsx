@@ -7,6 +7,7 @@ import type { ScreenerRow } from '@/api/types';
 import { cn } from '@/lib/utils';
 import { fmtRelative } from '@/lib/format';
 import Icon from '@/components/icons';
+import PointerTooltip from '@/components/shared/PointerTooltip';
 import { strengthBarClass } from '@/lib/strengthColor';
 import {
   screenerStrengthPresentation,
@@ -63,7 +64,19 @@ export function ScoreCell({ score, index }: { score: number; index: number }) {
 export function SubscoreTicks({ row, tipSide = 'top' }: { row: ScreenerRow; tipSide?: 'top' | 'bottom' }) {
   const dims = subscoreDimsOf(row);
   return (
-    <span className="group relative inline-flex items-center gap-1" aria-label={t("分项强度")}>
+    <PointerTooltip
+      label={t('分项强度')}
+      side={tipSide}
+      width={160}
+      className="gap-1"
+      contentClassName="p-2.5"
+      content={dims.map(({ key, label, value }) => (
+        <span key={key} className="flex items-center justify-between gap-3 py-0.5 text-micro">
+          <span className="text-ink-500">{label}</span>
+          <span className="font-mono text-ink-800 tnum">{value !== null ? value : '—'}</span>
+        </span>
+      ))}
+    >
       {dims.map(({ key, value }) => (
         <span key={key} className="inline-block h-[3px] w-[14px] overflow-hidden rounded-full bg-line" aria-hidden="true">
           {value !== null && (
@@ -74,22 +87,7 @@ export function SubscoreTicks({ row, tipSide = 'top' }: { row: ScreenerRow; tipS
           )}
         </span>
       ))}
-      {/* 表格容器是 overflow-x-auto 滚动盒，浮层无法越过其上边缘——前几行
-        * 朝下展开，其余朝上（审计 2.4.8）。 */}
-      <span
-        className={cn(
-          'glass pointer-events-none absolute left-1/2 z-20 hidden w-40 -translate-x-1/2 rounded-md border border-line p-2.5 shadow-sh-2 group-hover:block',
-          tipSide === 'top' ? '-top-2 -translate-y-full' : '-bottom-2 translate-y-full',
-        )}
-      >
-        {dims.map(({ key, label, value }) => (
-          <span key={key} className="flex items-center justify-between py-0.5 text-micro">
-            <span className="text-ink-500">{label}</span>
-            <span className="font-mono text-ink-800 tnum">{value !== null ? value : '—'}</span>
-          </span>
-        ))}
-      </span>
-    </span>
+    </PointerTooltip>
   );
 }
 
@@ -118,18 +116,12 @@ export function CatalystBadge({ summary, tipSide = 'top' }: { summary: CatalystS
   const label = net > 0 ? t('利多') : net < 0 ? t('利空') : t('中性');
   const countText = `${summary.count}${summary.hasMore ? '+' : ''}`;
   return (
-    <span className="group relative inline-flex">
-      <span className={cn('inline-flex items-center gap-1 rounded-xs px-1.5 py-0.5 text-micro font-medium leading-[16px]', tone)}>
-        <Icon name="bolt" size={11} />
-        {label}
-        <span className="font-mono tnum">{countText}</span>
-      </span>
-      <span
-        className={cn(
-          'glass pointer-events-none absolute right-0 z-20 hidden w-60 rounded-md border border-line p-3 shadow-sh-2 group-hover:block',
-          tipSide === 'top' ? '-top-2 -translate-y-full' : '-bottom-2 translate-y-full',
-        )}
-      >
+    <PointerTooltip
+      label={`${t('催化剂 · 72H')} · ${label} ${countText}`}
+      side={tipSide}
+      width={240}
+      contentClassName="p-3"
+      content={<>
         <span className="block text-micro text-ink-500">
           {t('72h 窗口 · 利多')} <span className="font-mono text-up-700 tnum">{summary.pos}</span>
           {' · '}{t('利空')} <span className="font-mono text-down-700 tnum">{summary.neg}</span>
@@ -144,14 +136,20 @@ export function CatalystBadge({ summary, tipSide = 'top' }: { summary: CatalystS
           )}
         </span>
         {summary.latestTitle && (
-          <span className="mt-1.5 block truncate text-caption text-ink-800" title={summary.latestTitle}>
+          <span className="mt-1.5 line-clamp-3 break-words text-caption text-ink-800">
             {summary.latestTitle}
           </span>
         )}
         {summary.latestAt && (
           <span className="mt-0.5 block font-mono text-micro text-ink-400 tnum">{fmtRelative(summary.latestAt)}</span>
         )}
+      </>}
+    >
+      <span className={cn('inline-flex items-center gap-1 rounded-xs px-1.5 py-0.5 text-micro font-medium leading-[16px]', tone)}>
+        <Icon name="bolt" size={11} />
+        {label}
+        <span className="font-mono tnum">{countText}</span>
       </span>
-    </span>
+    </PointerTooltip>
   );
 }

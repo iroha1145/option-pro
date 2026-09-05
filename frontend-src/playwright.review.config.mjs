@@ -2,7 +2,7 @@ import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
   testDir: './visual-tests',
-  testMatch: ['ui-review.spec.mjs', 'options-redesign.spec.mjs', 'feedback-layout.spec.mjs', 'overlay-behavior.spec.mjs', 'smart-drawings.spec.mjs'],
+  testMatch: ['ui-review.spec.mjs', 'options-redesign.spec.mjs', 'feedback-layout.spec.mjs', 'overlay-behavior.spec.mjs', 'smart-drawings.spec.mjs', 'screener-tooltips.spec.mjs'],
   outputDir: './test-results/review',
   workers: 1,
   timeout: 30_000,

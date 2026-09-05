@@ -41,7 +41,7 @@ from app.services.signals import (
     compute_market_signals,
     compute_stock_signals,
 )
-from app.stock_pull_snapshot import read_stock_pull_resource
+from app.stock_data_reads import read_latest_stock_resource as read_stock_pull_resource
 
 router = APIRouter(prefix="/api/signals", tags=["signals"])
 logger = logging.getLogger(__name__)
@@ -198,7 +198,7 @@ async def _build_market_signals_payload() -> dict:
 async def _owner_stock_signal_evidence(
     symbol: str,
 ) -> tuple[dict, dict | None, str | None]:
-    """Use a fresh manual pull first, then live data with durable fallback."""
+    """Use a fresh durable resource first, then live data with durable fallback."""
 
     saved = await asyncio.to_thread(
         read_stock_pull_resource,
@@ -206,7 +206,7 @@ async def _owner_stock_signal_evidence(
         "signals",
     )
     if saved is not None and saved["fresh"]:
-        return dict(saved["payload"]), saved, "manual_pull"
+        return dict(saved["payload"]), saved, saved.get("source", "manual_pull")
     try:
         live = await asyncio.to_thread(compute_stock_signals, symbol)
         if not isinstance(live, dict):
@@ -215,7 +215,7 @@ async def _owner_stock_signal_evidence(
     except Exception:
         if saved is None:
             raise
-        return dict(saved["payload"]), saved, "manual_pull"
+        return dict(saved["payload"]), saved, saved.get("source", "manual_pull")
 
 
 @router.get("/market")
@@ -299,10 +299,11 @@ async def stock_signals(ticker: str):
                 symbol,
                 "signals",
             )
-            signals = cached_stock_signals(symbol)
-            if signals is None and saved is not None:
+            if saved is not None:
                 signals = dict(saved["payload"])
-                snapshot_source = "manual_pull"
+                snapshot_source = saved.get("source", "manual_pull")
+            else:
+                signals = cached_stock_signals(symbol)
         if signals is None:
             raise public_snapshot_unavailable(f"signals:stock:{symbol}")
         signals = dict(signals)
@@ -378,7 +379,7 @@ async def stock_ai_analysis(
             await _owner_stock_signal_evidence(symbol)
         )
         evidence_stale = bool(
-            snapshot_source == "manual_pull"
+            snapshot_source is not None
             and saved is not None
             and not saved["fresh"]
         )
@@ -398,7 +399,7 @@ async def stock_ai_analysis(
                 float(saved["saved_at"]),
                 timezone.utc,
             ).isoformat()
-            if snapshot_source == "manual_pull" and saved is not None
+            if snapshot_source is not None and saved is not None
             else datetime.now(timezone.utc).isoformat()
         )
         context = await build_signal_context(symbol)

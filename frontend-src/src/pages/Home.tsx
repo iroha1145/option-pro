@@ -9,7 +9,7 @@
  * - 无有效价显「—」，不显 0.00；sparkline 仅 mock 有数据，live 无指数 K 线端点如实留空
  * - 强度聚合 aggregateAvailable !== true 时隐藏对应行，不显 0
  */
-import { useMemo, type ReactNode } from 'react';
+import { useEffect, useMemo, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { motion } from 'framer-motion';
 import { isMock, type ApiError } from '@/api/client';
@@ -24,6 +24,9 @@ import { marketPulseApi } from '@/components/market/api';
 import { regimeMean } from '@/lib/regime';
 import { getIndexIntraday } from '@/mocks/marketPulse';
 import { usePolling } from '@/hooks/usePolling';
+import { useStockDataStatus } from '@/hooks/useStockDataStatus';
+import type { StockDataStatus } from '@/lib/stockDataStatus';
+import { quoteSymbol } from '@/lib/quoteSymbol';
 import { useNow } from '@/hooks/useNow';
 import { cn } from '@/lib/utils';
 import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
@@ -31,6 +34,7 @@ import { fmtCountdown, fmtNyTime, fmtPrice, fmtRelative, fmtTimeHHMMSS } from '@
 import { instrumentName, signed } from '@/components/cta/ctaMeta';
 import PageHeader from '@/components/shared/PageHeader';
 import StaleStrip from '@/components/shared/StaleStrip';
+import StockDataCoverage from '@/components/shared/StockDataCoverage';
 import SessionLED from '@/components/shared/SessionLED';
 import StrengthBar from '@/components/shared/StrengthBar';
 import { exNum, isFeaturedRow, type EarningsRow } from '@/components/earnings/types';
@@ -205,7 +209,7 @@ export default function Home() {
   const strengthQ = usePolling(() => strengthApi.market(), 300_000);
   const breakoutsQ = usePolling(() => breakoutsApi.current(), 300_000);
   const earningsQ = usePolling(() => earningsApi.upcoming(), 300_000);
-  const watchlistQ = usePolling(() => stocksApi.watchlist(), 300_000);
+  const watchlistQ = usePolling(() => stocksApi.watchlist(true), 300_000);
   const ctaQ = usePolling(() => marketApi.ctaTrend(), 300_000);
 
   const status = statusQ.data;
@@ -292,6 +296,17 @@ export default function Home() {
   }, [watchlistQ.data]);
 
   const ctaInstruments = ctaQ.data?.instruments ?? [];
+  const readiness = useStockDataStatus([
+    ...(watchlistQ.data ?? []).map((item) => item.ticker),
+    ...breakouts.map((item) => item.ticker), ...earnings.map((item) => item.ticker),
+    ...movers.map((item) => item.ticker), 'NVDA',
+  ]);
+  const { refresh: refreshWatchlist } = watchlistQ;
+  useEffect(() => {
+    if (!readiness.dailyVersion) return;
+    stocksApi.invalidatePreparedDaily();
+    refreshWatchlist({ force: true });
+  }, [readiness.dailyVersion, refreshWatchlist]);
 
   return (
     <div>
@@ -316,6 +331,8 @@ export default function Home() {
           </>
         }
       />
+
+      <StockDataCoverage state={readiness} className="mt-4" />
 
       {/* 指数带（SPX/NDX/DJI/RUT/SOX/VIX，点击进 /market?index= 高亮定位） */}
       <section className="mt-8" aria-label={t('指数概览')}>
@@ -452,7 +469,7 @@ export default function Home() {
           >
             <div className="grid grid-cols-1 gap-2.5 px-4 pb-4 pt-3 sm:grid-cols-2 md:px-5 md:pb-5">
               {movers.map((item, i) => (
-                <WatchlistMoverCard key={item.ticker} item={item} index={i} />
+                <WatchlistMoverCard key={item.ticker} item={item} index={i} preparation={readiness.byTicker.get(quoteSymbol(item.ticker))} statusReadFailed={Boolean(readiness.error)} />
               ))}
             </div>
           </ListBody>
@@ -744,7 +761,7 @@ function EarningsAnchorRow({ item: it, todayKey }: { item: EarningsItem; todayKe
 }
 
 /** 自选异动：当日涨跌与最长 30 交易日日线分开标明，长期图仅取真实日线。 */
-function WatchlistMoverCard({ item, index: i }: { item: WatchlistItem; index: number }) {
+function WatchlistMoverCard({ item, index: i, preparation, statusReadFailed }: { item: WatchlistItem; index: number; preparation?: StockDataStatus; statusReadFailed: boolean }) {
   const hasPrice = Number.isFinite(item.price) && item.price > 0;
   const trend = item.dailyTrend && item.dailyTrend.length > 1 ? item.dailyTrend : null;
   const spark = trend?.map((point) => point.close) ?? null;
@@ -781,7 +798,12 @@ function WatchlistMoverCard({ item, index: i }: { item: WatchlistItem; index: nu
             </figcaption>
           </figure>
         ) : (
-          <div className="mt-3 flex h-[112px] items-center justify-center rounded-sm bg-paper-2 px-4 text-center text-caption text-ink-400">{t('暂无日线走势，打开详情后可更新')}</div>
+          <div className="mt-3 flex h-[112px] items-center justify-center rounded-sm bg-paper-2 px-4 text-center text-caption text-ink-400">
+            {statusReadFailed ? t('暂无日线走势，准备状态读取失败')
+              : preparation?.resources.dailyChart.available ? t('日线已准备，正在更新图表')
+                : preparation?.status === 'failed' || preparation?.refreshStatus === 'failed' ? t('日线准备失败，后台将稍后重试')
+                  : t('后台正在准备日线，完成后自动显示')}
+          </div>
         )}
         <div className="mt-2 flex items-center justify-between gap-2">
           <StrengthBar score={item.strengthScore} width={56} />

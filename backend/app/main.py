@@ -189,6 +189,7 @@ _LIGHT_API_PATHS = {
 _CACHED_MARKET_READ_PATHS = {
     "/api/stocks/watchlist",
     "/api/stocks/search",
+    "/api/stocks/data/status",
     "/api/strength/scan",
 }
 _CACHED_MARKET_READ_PATTERNS = tuple(
@@ -249,6 +250,7 @@ _PUBLIC_READ_API_PATHS = {
     "/api/access/status",
     "/api/stocks/watchlist",
     "/api/stocks/search",
+    "/api/stocks/data/status",
     "/api/options/unusual",
     "/api/earnings/upcoming",
     "/api/sectors",

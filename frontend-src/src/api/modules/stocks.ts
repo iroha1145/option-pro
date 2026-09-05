@@ -1,6 +1,7 @@
 /** 股票域：watchlist / detail / signals / chart / search */
-import { mockOr, post } from '../client';
+import { get, mockOr, post } from '../client';
 import { quoteSymbol } from '@/lib/quoteSymbol';
+import { mapStockDataStatus, normalizeStatusTickers, type StockDataStatus } from '@/lib/stockDataStatus';
 import { marketGet, resetMarketReadPaths } from '../marketRead';
 import { asRec, pickN, pickS, pickLabel, unwrap, type Rec } from '../live';
 import { mapMacroFitDrivers } from '../macroFields';
@@ -214,6 +215,27 @@ function mapPull(body: unknown): StockPullResult {
 }
 
 export const stocksApi = {
+  /** Shared preparation status is read directly so an old cache cannot hide failures. */
+  dataStatus: async (input: readonly string[]): Promise<StockDataStatus[]> => {
+    const tickers = normalizeStatusTickers(input);
+    const batches: string[][] = [];
+    for (let start = 0; start < tickers.length; start += 200) batches.push(tickers.slice(start, start + 200));
+    const results = await Promise.all(batches.map((batch) => mockOr(
+      async () => {
+        const at = '2026-09-04T20:00:00Z';
+        const ready = { available: true, fresh: true, as_of: at };
+        return mapStockDataStatus({ items: batch.map((ticker) => ({ ticker, status: 'ready', refresh_status: 'ready', as_of: at,
+          resources: { overview: ready, daily_chart: ready, signals: ready } })) }, batch);
+      },
+      () => get(`/stocks/data/status?tickers=${encodeURIComponent(batch.join(','))}`)
+        .then((body) => mapStockDataStatus(body, batch)),
+    )));
+    return results.flat();
+  },
+  /** Detach reads started before a newly prepared daily snapshot arrived. */
+  invalidatePreparedDaily: (ticker?: string): void => resetMarketReadPaths([
+    ticker ? `/stocks/${encodeURIComponent(quoteSymbol(ticker))}/chart?range=1d&adjustment=raw` : '/stocks/watchlist',
+  ]),
   /**
    * 站点默认自选（覆盖全部板块成分）。
    *

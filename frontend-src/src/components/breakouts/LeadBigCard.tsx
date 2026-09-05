@@ -14,6 +14,7 @@ import { ApiError } from '@/api/client';
 import { breakoutsApi } from '@/api/modules/breakouts';
 import { stocksApi } from '@/api/modules/stocks';
 import type { Candle } from '@/api/types';
+import type { StockDataStatus } from '@/lib/stockDataStatus';
 import { usePolling } from '@/hooks/usePolling';
 import { useCountUp } from '@/hooks/useCountUp';
 import { useShell } from '@/hooks/useShell';
@@ -25,7 +26,7 @@ import { SkeletonBlock } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
 import { cn } from '@/lib/utils';
 import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
-import { fmtNyEventTime, fmtNyHHmm, fmtPrice, fmtRelative } from '@/lib/format';
+import { fmtNyEventTime, fmtPrice, fmtRelative } from '@/lib/format';
 import { MACRO_TONE_LABEL, macroToneOf } from '@/lib/macroFit';
 import { baseAnimation, CH, CHART_MONO_FONT, glassTooltip, type ChartOption } from '@/lib/chart';
 import { useColorMode } from '@/hooks/useColorMode.ts';
@@ -259,15 +260,15 @@ function LifecycleStepper({ state }: { state: LifecycleState }) {
   );
 }
 
-/* ---------------- K线迷你图（15m 蜡烛最近 96 根 · 发丝网格 · 十字光标 · 诚实空态） ---------------- */
+/* ---------------- K线迷你图（日线最近 30 根 · 发丝网格 · 十字光标 · 诚实空态） ---------------- */
 /** mapBar 运行时携带契约 quote_only（可选字段，Candle 类型未声明，此处宽松扩展读取） */
 type MiniBar = Candle & { quote_only?: boolean };
 
 function buildMiniOption(bars: MiniBar[]): ChartOption {
-  /* K 线 bar 的语义时区是美东交易时段，轴标/tooltip 与卡头事件时间同口径 */
-  const labels = bars.map((b) => fmtNyHHmm(b.t));
-  /** tooltip 时间：15m 跨日数据需 M/DD 日期前缀，末根 quote_only 如实标注 */
-  const fmtBarTime = (iso: string) => fmtNyEventTime(iso);
+  // Daily bars carry a session date: retain date-only values without shifting them to yesterday.
+  const fmtBarTime = (iso: string) => /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso
+    : Number.isFinite(Date.parse(iso)) ? new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date(iso)) : '—';
+  const labels = bars.map((b) => fmtBarTime(b.t).slice(5));
   return {
     ...baseAnimation,
     grid: { left: 6, right: 6, top: 10, bottom: 4, containLabel: true },
@@ -340,15 +341,19 @@ function buildMiniOption(bars: MiniBar[]): ChartOption {
   } as ChartOption;
 }
 
-function MiniKline({ ticker }: { ticker: string }) {
-  /* 15m 周期（与 StockChart['range'] 类型一致）+ 截取最近 96 根展示 */
-  const { data, error, loading, refresh } = usePolling(() => stocksApi.chart(ticker, '15m'), null, [ticker]);
+function MiniKline({ ticker, dailyVersion, preparation, statusReadFailed }: { ticker: string; dailyVersion: string; preparation?: StockDataStatus; statusReadFailed: boolean }) {
+  useEffect(() => {
+    if (dailyVersion) stocksApi.invalidatePreparedDaily(ticker);
+  }, [ticker, dailyVersion]);
+  const { data, error, loading, refresh } = usePolling(
+    () => stocksApi.chart(ticker, '1d', 'raw', Boolean(dailyVersion)), null, [ticker, dailyVersion],
+  );
   const colorMode = useColorMode();
   const option = useMemo(() => {
     // 图表构造器读取 CSS 涨跌色，配色模式变化时需重新取值。
     void colorMode;
     if (!data || data.candles.length <= 1) return null;
-    return buildMiniOption(data.candles.slice(-96));
+    return buildMiniOption(data.candles.slice(-30));
   }, [data, colorMode]);
   /* 突破标的常不在常规覆盖范围内：503 时可手动拉取（与详情页 ManualStockPull 同一预算通道） */
   const [pulling, setPulling] = useState(false);
@@ -366,7 +371,7 @@ function MiniKline({ ticker }: { ticker: string }) {
     setPullError(null);
     try {
       await stocksApi.pull(ticker);
-      refresh();
+      refresh({ force: true });
     } catch (cause) {
       setPullError(
         cause instanceof ApiError
@@ -390,10 +395,13 @@ function MiniKline({ ticker }: { ticker: string }) {
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 px-4 text-center">
           <img src="/empty-chart.svg" alt="" className="h-12 w-auto opacity-90" loading="lazy" />
           <p className="text-caption font-medium text-ink-600">
-            {snapshotMissing ? t('暂无当日 K 线') : t('K 线读取失败')}
+            {error && !snapshotMissing ? t('K 线读取失败') : t('暂无日线走势')}
           </p>
           <p className="text-micro text-ink-400">
-            {snapshotMissing ? t('可点击下方按钮获取最新行情') : t('分时行情暂不可用')}
+            {statusReadFailed ? t('暂无日线走势，准备状态读取失败')
+              : preparation?.resources.dailyChart.available ? t('日线读取失败，请稍后重试')
+                : preparation?.status === 'failed' || preparation?.refreshStatus === 'failed' ? t('日线准备失败，后台将稍后重试')
+                  : t('后台正在准备日线，完成后自动显示')}
           </p>
           {pullError && (
             <p role="alert" className="text-micro text-down-700">
@@ -425,7 +433,7 @@ function MiniKline({ ticker }: { ticker: string }) {
           </div>
         </div>
       ) : (
-        <ReactECharts option={option} ariaLabel={t('{ticker} 15 分钟迷你 K 线图', { ticker })} />
+        <ReactECharts option={option} ariaLabel={t('{ticker} 日线迷你 K 线图', { ticker })} />
       )}
     </div>
   );
@@ -541,9 +549,12 @@ interface LeadBigCardProps {
   flash: 'up' | 'down' | null;
   locate: boolean;
   onOpen: (ev: BreakoutCurrentEvent) => void;
+  dailyVersion?: string;
+  preparation?: StockDataStatus;
+  statusReadFailed?: boolean;
 }
 
-export default function LeadBigCard({ ev, flash, locate, onOpen }: LeadBigCardProps) {
+export default function LeadBigCard({ ev, flash, locate, onOpen, dailyVersion = '', preparation, statusReadFailed = false }: LeadBigCardProps) {
   const { openTicker } = useShell();
   const ref = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -663,7 +674,8 @@ export default function LeadBigCard({ ev, flash, locate, onOpen }: LeadBigCardPr
 
       {/* K线迷你图 */}
       <div className="mt-3">
-        <MiniKline ticker={e.ticker} />
+        <p className="mb-1 text-micro text-ink-400">{t('日线 · 最多 30 个交易日')}</p>
+        <MiniKline key={e.ticker} ticker={e.ticker} dailyVersion={dailyVersion} preparation={preparation} statusReadFailed={statusReadFailed} />
       </div>
 
       {/* 三价位行 + 告警优先级环（右上同排） */}

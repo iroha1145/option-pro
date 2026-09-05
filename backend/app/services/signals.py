@@ -240,6 +240,13 @@ def daily_adjusted_history(symbol: str, period: str = "1y") -> pd.DataFrame:
     return _history(symbol, period)
 
 
+def cached_adjusted_history(symbol: str, period: str = "1y") -> pd.DataFrame | None:
+    """Read benchmark history without starting another provider request."""
+
+    value = _read_cached(f"hist:{symbol.upper().strip()}:{period}")
+    return value.copy() if isinstance(value, pd.DataFrame) else None
+
+
 def _bulk_history(symbols: list[str], period: str = "1y") -> dict[str, pd.DataFrame]:
     """Download many symbols in ONE yfinance batch call instead of N sequential
     requests. Falls back to per-symbol fetch for anything missing."""
@@ -617,6 +624,7 @@ def compute_stock_signals_from_history(
     *,
     spy_history: pd.DataFrame | None = None,
     price_provider: str | None = None,
+    include_options: bool = True,
 ) -> dict:
     """Compute stock signals from caller-supplied, real daily OHLCV history."""
 
@@ -711,12 +719,14 @@ def compute_stock_signals_from_history(
 
     # Options data is enrichment only. A provider 402/timeout must not erase
     # otherwise valid price-derived stock signals.
-    try:
-        from app.services.yahoo import get_stock_iv
+    iv = None
+    if include_options:
+        try:
+            from app.services.yahoo import get_stock_iv
 
-        iv = get_stock_iv(symbol)
-    except Exception:
-        iv = None
+            iv = get_stock_iv(symbol)
+        except Exception:
+            pass
     add(
         "atm_iv_percent",
         round(iv * 100, 1) if iv is not None else None,

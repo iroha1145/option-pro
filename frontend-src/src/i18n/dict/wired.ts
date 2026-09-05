@@ -21,7 +21,6 @@ export const WIRED: Dict = {
   '高 {h}': ['High {h}', '高値 {h}'],
   '低 {l}': ['Low {l}', '安値 {l}'],
   '收 {c}': ['Close {c}', '終値 {c}'],
-  '{ticker} 15 分钟迷你 K 线图': ['{ticker} 15-minute mini candlestick chart', '{ticker} 15分足ミニチャート'],
   '共 {n} 条': ['{n} total', '全{n}件'],
   '已加载 {n} 条{suffix}': ['{n}{suffix} loaded', '{n}{suffix}件を読み込み済み'],
   '暂时打不开这条新闻的详情': ["Can't open this article's details right now", 'この記事の詳細を今は開けません'],

@@ -14,6 +14,10 @@ import { breakoutsApi } from '@/api/modules/breakouts';
 import { runtimeApi } from '@/api/modules/runtime';
 import { stocksApi } from '@/api/modules/stocks';
 import { usePolling } from '@/hooks/usePolling';
+import { useStockDataStatus } from '@/hooks/useStockDataStatus';
+import { dailyDataVersion } from '@/lib/stockDataStatus';
+import { quoteSymbol } from '@/lib/quoteSymbol';
+import StockDataCoverage from '@/components/shared/StockDataCoverage';
 import { useTickFlash } from '@/hooks/useTickFlash';
 import { useNow } from '@/hooks/useNow';
 import { useAccess } from '@/hooks/useAccess';
@@ -149,6 +153,7 @@ export default function Breakouts() {
     () => [...(eventsQ.data?.items ?? []).map(asFullEvent), ...extraEvents],
     [eventsQ.data, extraEvents],
   );
+  const readiness = useStockDataStatus([...currentAll.map((event) => event.ticker), ...events.map((event) => event.ticker)]);
 
   /* 筛选行状态：状态 / 评分 / ticker 聚焦 */
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
@@ -357,6 +362,7 @@ export default function Breakouts() {
           </span>
         </div>
       </motion.header>
+      <StockDataCoverage state={readiness} className="mt-4" />
 
       {/* 同一工具栏内明确区分两个筛选维度；窄屏按组换行，触控目标不互相覆盖。 */}
       <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-3 border-b border-line pb-4" data-breakout-filters="">
@@ -492,6 +498,9 @@ export default function Breakouts() {
               <div className="min-w-0 lg:col-span-7">
                 <LeadBigCard
                   ev={current[0]}
+                  dailyVersion={dailyDataVersion(readiness.byTicker.get(quoteSymbol(current[0].ticker)))}
+                  preparation={readiness.byTicker.get(quoteSymbol(current[0].ticker))}
+                  statusReadFailed={Boolean(readiness.error)}
                   flash={flashes[current[0].ticker] ?? null}
                   locate={locateTicker === current[0].ticker}
                   onOpen={openFromCard}

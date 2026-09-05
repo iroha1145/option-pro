@@ -352,6 +352,28 @@ def test_password_mode_serves_public_reads_and_protects_owner_surfaces() -> None
         assert cross_site_batch.status_code == 403
 
 
+def test_password_visitor_stock_data_status_is_public_and_cannot_start_pulls(
+    tmp_path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    runtime = _runtime("password")
+    app = FastAPI()
+    app.state.access_runtime = runtime
+    app.include_router(stocks.router, dependencies=[Depends(require_public_read_or_owner_access)])
+    app.add_middleware(_GatewayMiddleware, access_runtime=runtime)
+
+    async def forbidden(*args, **kwargs):
+        pytest.fail("A public data status GET must not start a stock pull")
+
+    monkeypatch.setattr(stocks, "_pull_stock_data_once", forbidden)
+    with TestClient(_PeerAddress(app, "203.0.113.40"), base_url="https://testserver") as client:
+        result = client.get("/api/stocks/data/status?tickers=AAPL")
+        assert result.status_code == 200
+        assert result.json()["items"][0]["status"] == "pending"
+        assert client.post("/api/stocks/data/status", json={}).status_code == 401
+    assert not (tmp_path / "public-stock-data-v1").exists()
+
+
 def test_password_visitor_stock_pull_is_same_origin_and_rate_limited(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
