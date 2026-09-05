@@ -181,8 +181,8 @@ export default function Catalysts() {
 
 
       {/* 标签页（URL 同步 ?tab=） */}
-      <div className="mt-8 flex min-w-0 items-center gap-1 border-b border-line max-md:border-b-0">
-        <SelectionViewport className="min-w-0 flex-1">
+      <div className="mt-8 flex min-w-0 items-center gap-1 border-b border-line max-md:flex-wrap max-md:border-b-0">
+        <SelectionViewport className="min-w-0 flex-1 max-md:basis-full">
           <div className="mobile-selection-rail no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto" role="tablist" aria-label={__t("催化剂视图")}>
             {TABS.map((t) => (
               <button
