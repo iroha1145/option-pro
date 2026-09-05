@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test:visual": "playwright test --config=playwright.config.mjs",
-    "test:review": "playwright test --config=playwright.review.config.mjs"
+    "test:review": "playwright test --config=playwright.review.config.mjs",
+    "test:quotes": "playwright test --config=playwright.quotes.config.mjs"
   },
   "dependencies": {
     "@radix-ui/react-select": "^2.3.7",

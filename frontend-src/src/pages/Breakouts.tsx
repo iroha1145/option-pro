@@ -1,3 +1,6 @@
+import { invalidateQueryPaths } from '@/api/queryRegistry';
+import { quoteStore } from '@/lib/liveQuotes';
+import { useQuoteSymbols, useRadarVersion, useRadarUpdates } from '@/hooks/useLiveQuote';
 /**
  * §03 突破雷达（原版布局 · Paper Terminal 皮肤）
  * 页头带：§03 眉题 + 衬线大标 + 副标（仅流程句）+ 右侧紧凑状态条
@@ -142,9 +145,17 @@ export default function Breakouts() {
 
   const status = asFullStatus(statusQ.data);
   /* 必须记忆化：useTickFlash 以这个数组为依赖，每次渲染都换新引用会让效应无限重跑。 */
+  const radarVersion = useRadarVersion();
+  const refreshCurrent = currentQ.refresh;
+  const refreshEvents = eventsQ.refresh;
   const currentAll = useMemo(
-    () => asCurrentEvents(currentQ.data?.events ?? null),
-    [currentQ.data],
+    () => asCurrentEvents(currentQ.data?.events ?? null).map(event => {
+      const update = quoteStore.getRadarEvent(event.event_id);
+      return update && Number(update.state_version) > (event.state_version ?? 0) ? { ...event, ...update } : event;
+    }),
+    // External event snapshots are keyed by their monotonic store revision.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [currentQ.data, radarVersion],
   );
   const events = useMemo(
     () => [...(eventsQ.data?.items ?? []).map(asFullEvent), ...extraEvents],
@@ -187,6 +198,8 @@ export default function Breakouts() {
     [events, onlyWatch, watchSet, watchReady, statusFilter, minScore, tickerFilter],
   );
 
+  useQuoteSymbols([...current.map(event => event.ticker), ...filteredEvents.map(event => event.ticker)]);
+
   /* 现价 tick-flash：定时器由 useTickFlash 单独持有（审计 P2-5） */
   const flashes = useTickFlash(currentAll, breakoutKey, breakoutPrice);
 
@@ -210,20 +223,33 @@ export default function Breakouts() {
     setSelected(ev);
     setDetailError(null);
     detailForRef.current = ev.event_id;
-    /* 契约 GET /breakouts/events/{id}：详情到位后替换（mock 同形） */
-    breakoutsApi
-      .eventDetail(ev.event_id)
-      .then((d) => {
-        if (detailForRef.current !== ev.event_id) return;
-        setSelected((prev) => (prev && prev.event_id === ev.event_id ? asFullDetail(d) : prev));
-        setDetailError(null);
-      })
-      .catch((error: unknown) => {
-        if (detailForRef.current !== ev.event_id) return;
-        // 详情失败此前被完全吞掉：界面既不报错也不给重试（审计 P2-20）。
-        setDetailError(error instanceof ApiError ? error : new ApiError(500, __t('详情加载失败')));
-      });
   };
+  const selectedId = selected?.event_id ?? '';
+  const selectedCurrentVersion = currentAll.find(event => event.event_id === selectedId)?.state_version ?? 0;
+  const selectedDetailRequest = useRef(0);
+  const refreshSelectedDetail = useCallback(() => {
+    if (!selectedId) return;
+    const request = ++selectedDetailRequest.current;
+    detailForRef.current = selectedId;
+    void breakoutsApi.eventDetail(selectedId).then(detail => {
+      if (request !== selectedDetailRequest.current || detailForRef.current !== selectedId) return;
+      const next = asFullDetail(detail);
+      setSelected(previous => previous?.event_id === selectedId && (next.state_version ?? 0) >= (previous.state_version ?? 0) ? next : previous);
+      setDetailError(null);
+    }).catch((error: unknown) => {
+      if (request !== selectedDetailRequest.current || detailForRef.current !== selectedId) return;
+      setDetailError(error instanceof ApiError ? error : new ApiError(500, __t('详情加载失败')));
+    });
+  }, [selectedId]);
+  useEffect(() => {
+    // Changing or closing selection invalidates its in-flight detail response.
+    selectedDetailRequest.current++;
+    refreshSelectedDetail();
+  }, [refreshSelectedDetail, selectedCurrentVersion]);
+  useRadarUpdates(useCallback(update => {
+    if (update.resync_required) { invalidateQueryPaths(['/breakouts/current'], { reload: true }); refreshCurrent({ force: true }); refreshEvents(); }
+    if (update.resync_required || update.events.some(event => event.event_id === selectedId)) refreshSelectedDetail();
+  }, [refreshCurrent, refreshEvents, selectedId, refreshSelectedDetail]));
 
   /* ticker 聚焦（详情「该代码全部事件」回填筛选行 chip，并滚动到历史回溯栏） */
   const railRef = useRef<HTMLDivElement>(null);
@@ -554,7 +580,7 @@ export default function Breakouts() {
       <EventDetail
         event={selected}
         detailError={detailError}
-        onRetryDetail={selected ? () => openFromArchive(selected) : undefined}
+        onRetryDetail={selected ? refreshSelectedDetail : undefined}
         onClose={() => {
           setSelected(null);
           setDetailError(null);

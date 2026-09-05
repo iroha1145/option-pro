@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import { fmtPct, fmtSigned } from '@/lib/format';
 import Icon from '@/components/icons';
 import SoftBadge from './SoftBadge';
+import NumberTicker from './NumberTicker';
 import { t } from '../../i18n/core.ts';
 
 export default function ChangeBadge({
@@ -81,7 +82,7 @@ export default function ChangeBadge({
         size={12}
         strokeWidth={1.45}
       />
-      {text}
+      <NumberTicker text={text} />
     </SoftBadge>
   );
 }

@@ -1,3 +1,5 @@
+import { useQuoteSymbols } from '@/hooks/useLiveQuote';
+import { LivePrice, LiveChange } from '@/components/shared/LiveQuote';
 /**
  * §01 自选观察（watchlist.md 完整实现）
  * B0 页头带 · B1 概览统计（count-up）· B2 可排序表格/卡片（tick-flash）· B3 侧栏（信号/强度分布/市场时钟）
@@ -23,12 +25,11 @@ import { useNow } from '@/hooks/useNow';
 import { useToast } from '@/hooks/useToast';
 import { useShell } from '@/hooks/useShell';
 import { cn } from '@/lib/utils';
-import { fmtCountdown, fmtNyTime, fmtPrice, fmtTimeHHMMSS } from '@/lib/format';
+import { fmtCountdown, fmtNyTime, fmtTimeHHMMSS } from '@/lib/format';
 import type { MarketSignalsSnapshot, WatchlistItem } from '@/api/types';
 import PageHeader from '@/components/shared/PageHeader';
 import StatCard from '@/components/shared/StatCard';
 import TickerLogo from '@/components/shared/TickerLogo';
-import ChangeBadge from '@/components/shared/ChangeBadge';
 import StrengthBar from '@/components/shared/StrengthBar';
 import SignalChip from '@/components/shared/SignalChip';
 import Segmented from '@/components/shared/Segmented';
@@ -301,10 +302,10 @@ function WatchCard({
           <p className="font-mono text-body-s font-semibold text-ink-800">{item.ticker}</p>
           <p className="truncate text-micro text-ink-400">{item.name}</p>
         </div>
-        <ChangeBadge value={item.changePct} size="sm" />
+        <LiveChange symbol={item.ticker} fallback={item.changePct} fallbackAt={item.updatedAt} size="sm" />
       </div>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-        <p className="metric-value text-data-l text-ink-900 tnum">{fmtPrice(item.price)}</p>
+        <p className="metric-value text-data-l text-ink-900 tnum"><LivePrice symbol={item.ticker} fallback={item.price} fallbackAt={item.updatedAt} /></p>
         {item.sector && <SoftBadge className="max-w-[60%]" title={item.sector}><span className="truncate">{item.sector}</span></SoftBadge>}
       </div>
       <div className="mt-2">
@@ -551,14 +552,14 @@ export default function Watchlist() {
         sortValue: (r) => r.price,
         render: (r) => (
           <span
-            key={`${r.ticker}-${r.price}`}
+            key={r.ticker}
             className={cn(
               'tick-flash inline-block rounded-xs px-1 font-mono text-[15px] leading-6 text-ink-900 tnum',
               flashes[r.ticker] === 'up' && 'tick-flash-up',
               flashes[r.ticker] === 'down' && 'tick-flash-down',
             )}
           >
-            {fmtPrice(r.price)}
+            <LivePrice symbol={r.ticker} fallback={r.price} fallbackAt={r.updatedAt} />
           </span>
         ),
       },
@@ -568,7 +569,7 @@ export default function Watchlist() {
         align: 'right',
         sortable: true,
         sortValue: (r) => r.changePct,
-        render: (r) => <ChangeBadge value={r.changePct} />,
+        render: (r) => <LiveChange symbol={r.ticker} fallback={r.changePct} fallbackAt={r.updatedAt} />,
       },
       {
         key: 'spark',
@@ -670,6 +671,7 @@ export default function Watchlist() {
   // 唯一排序实现见 watchlistSort：卡片、表格与渐进切片必须消费同一份排序结果，
   // 否则「先切片再排序」会把局部样本冒充成完整结果。
   const cardItems = useMemo(() => sortWatchlistItems(items, sort), [items, sort]);
+  useQuoteSymbols(cardItems.map(item => item.ticker));
   /* 「上涨/下跌」卡读的是 wl（自选行情），骨架条件必须包含它——否则
      signals/strength 先返回时会把还没读到的自选渲染成「0 / 0」（审计 2.2.11）。 */
   const statsLoading = signalsQ.loading || strengthQ.loading || (wl.loading && !wl.data);
@@ -714,7 +716,7 @@ export default function Watchlist() {
       {/* B0 页头带 */}
       <PageHeader
         section="01"
-        eyebrow="WATCHLIST · DELAYED 15MIN"
+        eyebrow="WATCHLIST"
         title={t("自选观察")}
         description={t("你盯住的票，今天谁在动。")}
         meta={

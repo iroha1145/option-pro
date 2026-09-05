@@ -1,7 +1,9 @@
+import { useQuoteSymbols } from '@/hooks/useLiveQuote';
+import { LivePrice } from '@/components/shared/LiveQuote';
 /** 当前 ATM IV 在所选板块成分中的真实横截面排名。 */
 import { useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
-import { fmtPrice, fmtRelative } from '@/lib/format';
+import { fmtRelative } from '@/lib/format';
 import type { ApiError } from '@/api/client';
 import TickerLogo from '@/components/shared/TickerLogo';
 import EmptyState from '@/components/shared/EmptyState';
@@ -80,6 +82,7 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, meta,
     }
     return sorted;
   }, [data, desc]);
+  useQuoteSymbols(rows.map(row => row.ticker));
   return (
     <div className="card-surface p-4 md:p-6">
       {/* 头：标题 + 徽标 + 排序 */}
@@ -203,7 +206,7 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, meta,
                   <td
                     className="px-2 py-2 text-right font-mono text-data-m text-ink-800 tnum"
                   >
-                    {r.price !== null ? fmtPrice(r.price) : <span className="text-ink-300">—</span>}
+                    <LivePrice symbol={r.ticker} fallback={r.price} />
                   </td>
                   <td className="px-2 py-2">
                     {r.rank !== null ? (

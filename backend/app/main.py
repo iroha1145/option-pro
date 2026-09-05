@@ -6,6 +6,7 @@ import os as _os
 import re as _re
 import threading
 import time as _time
+from contextlib import asynccontextmanager
 from collections import deque as _deque
 from pathlib import Path
 
@@ -54,6 +55,7 @@ from app.api import (
     macro_conditions,
     market,
     options,
+    quotes,
     runtime_settings,
     sectors,
     settings,
@@ -117,10 +119,38 @@ class _ExactTrustedHostMiddleware:
         await self.app(scope, receive, send)
 
 
+@asynccontextmanager
+async def _lifespan(application: FastAPI):
+    from app.config import get_settings
+    from app.services.realtime_quotes import QuoteHub
+
+    configuration = get_settings()
+    application.state.quote_settings = configuration
+    radar = None
+    if configuration.quotes_enabled or configuration.quotes_signals_enabled:
+        from app.services.breakouts.realtime import BreakoutRealtimeAdapter
+
+        radar = BreakoutRealtimeAdapter()
+    hub = QuoteHub(
+        configuration,
+        radar_loader=radar.radar_symbols if radar is not None else None,
+        radar_event_loader=radar.radar_updates if radar is not None and configuration.quotes_signals_enabled else None,
+        trade_handler=radar.handle_trade if radar is not None and configuration.quotes_signals_enabled else None,
+    )
+    application.state.quote_hub = hub
+    try:
+        await hub.start()
+        yield
+    finally:
+        await hub.close()
+        application.state.quote_hub = None
+
+
 app = FastAPI(
     title="Optix Pro Options Visualization API",
     description="Personal stock, options, signal, and market-data API.",
     version=_APP_VERSION,
+    lifespan=_lifespan,
     # Documentation routes stay off in this deployment (audit P3-7). The gateway
     # treats extension-less GETs as SPA documents, so /docs and /redoc would load
     # their shell while /openapi.json stayed behind the access gate -- a half-open
@@ -247,6 +277,8 @@ def _is_spa_document_path(path: str) -> bool:
         return True
     return "." not in path.rsplit("/", 1)[-1]
 _PUBLIC_READ_API_PATHS = {
+    "/api/quotes",
+    "/api/quotes/stream",
     "/api/access/status",
     "/api/stocks/watchlist",
     "/api/stocks/search",
@@ -700,6 +732,7 @@ app.include_router(options.router, dependencies=_PUBLIC_READ_DEPENDENCIES)
 app.include_router(earnings.router, dependencies=_PUBLIC_READ_DEPENDENCIES)
 app.include_router(sectors.router, dependencies=_PUBLIC_READ_DEPENDENCIES)
 app.include_router(market.router, dependencies=_PUBLIC_READ_DEPENDENCIES)
+app.include_router(quotes.router, dependencies=_PUBLIC_READ_DEPENDENCIES)
 # Macro reads are public research content; the refresh route carries its own
 # owner and same-origin dependencies on top of this router-wide gate.
 app.include_router(macro_conditions.router, dependencies=_PUBLIC_READ_DEPENDENCIES)

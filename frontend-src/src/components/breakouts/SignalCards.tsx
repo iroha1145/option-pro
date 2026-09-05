@@ -1,3 +1,6 @@
+import { preferLiveQuote } from '@/lib/liveQuotes';
+import { LivePrice, LiveChange } from '@/components/shared/LiveQuote';
+import { useLiveQuote, useLiveRadarEvent } from '@/hooks/useLiveQuote';
 /**
  * SignalCards · 当日其余事件小卡网格（V3 小卡结构重建，剥离 LeadSignalCard 引用）
  * 仅渲染除 lead 外的当日事件；3 列网格（md 2 列 / 移动单列），stagger 45ms
@@ -10,10 +13,9 @@ import { useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { DUR_SECTION } from '@/lib/motion';
-import { fmtPrice, fmtRelative } from '@/lib/format';
+import { fmtRelative } from '@/lib/format';
 import { useShell } from '@/hooks/useShell';
 import TickerLogo from '@/components/shared/TickerLogo';
-import ChangeBadge from '@/components/shared/ChangeBadge';
 import SoftBadge from '@/components/shared/SoftBadge';
 import StrengthBar from '@/components/shared/StrengthBar';
 import Icon from '@/components/icons';
@@ -57,7 +59,10 @@ interface SignalCardProps {
   onOpen: (ev: BreakoutCurrentEvent) => void;
 }
 
-function SignalCard({ ev, index, flash, locate, onOpen }: SignalCardProps) {
+function SignalCard({ ev: initialEvent, index, flash, locate, onOpen }: SignalCardProps) {
+  const state = useLiveRadarEvent(initialEvent);
+  const quote = useLiveQuote(state.ticker);
+  const ev = preferLiveQuote(quote, Number.isFinite(state.current_price)) ? { ...state, current_price: quote!.price! } : state;
   const { openTicker } = useShell();
   const ref = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -122,6 +127,7 @@ function SignalCard({ ev, index, flash, locate, onOpen }: SignalCardProps) {
       {/* chip 行 */}
       <div className="mt-2.5">
         <ChipRow ev={ev} />
+        {ev.trigger_source === 'finnhub' && ev.lifecycle_state === 'TRIGGERED' && <p className="mt-1 text-[10px] text-ink-400">{t('实时成交触发 · 完整行情确认中')}</p>}
       </div>
 
       {/* 现价行（tick-flash） */}
@@ -133,9 +139,9 @@ function SignalCard({ ev, index, flash, locate, onOpen }: SignalCardProps) {
             flash === 'down' && 'tick-flash-down',
           )}
         >
-          {typeof ev.current_price === 'number' && Number.isFinite(ev.current_price) ? fmtPrice(ev.current_price) : '—'}
+          <LivePrice symbol={ev.ticker} fallback={ev.current_price} />
         </span>
-        <ChangeBadge value={ev.session_change_pct} />
+        <LiveChange symbol={ev.ticker} fallback={ev.session_change_pct} />
       </div>
 
       {/* 价格标尺 */}

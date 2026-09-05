@@ -10,6 +10,7 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { Outlet, useLocation, useNavigate, useNavigationType } from 'react-router';
 import Navbar from '@/components/Navbar';
 import IndexTape from '@/components/IndexTape';
+import QuoteConnection from '@/components/QuoteConnection';
 import Footer from '@/components/Footer';
 import RouteErrorBoundary from '@/components/shared/RouteErrorBoundary';
 import PageFallback from '@/components/shared/PageFallback';
@@ -58,6 +59,7 @@ export default function Layout() {
 
   return (
     <ShellContext.Provider value={value}>
+      <QuoteConnection />
       {/* overflow-x-clip：绝对定位的解释浮层即使处于 opacity-0 也占布局盒，
           窄屏时会把文档撑出横向滚动条。clip 只裁剪绘制，不建立滚动容器、
           不影响 sticky，也不裁剪 position:fixed 的 Dock；

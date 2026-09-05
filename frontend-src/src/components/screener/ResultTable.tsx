@@ -1,3 +1,4 @@
+import { LivePrice, LiveChange } from '@/components/shared/LiveQuote';
 /**
  * B2 结果表（桌面 ≥768px）：紧凑 44px 行 · 发丝线 · 行展开 accordion（260ms）· 分页
  * 列：# / 代码 / 强度分 / 分项 / 价·涨跌 / 催化剂 72h / 成交额 / ▸
@@ -8,10 +9,9 @@ import { Fragment } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { ScreenerRow } from '@/api/types';
 import { cn } from '@/lib/utils';
-import { fmtCompact, fmtPrice } from '@/lib/format';
+import { fmtCompact } from '@/lib/format';
 import Icon from '@/components/icons';
 import TickerLogo from '@/components/shared/TickerLogo';
-import ChangeBadge from '@/components/shared/ChangeBadge';
 import InfoHint from '@/components/shared/InfoHint';
 import MacroFitBadge from '@/components/shared/MacroFitBadge';
 import { macroShadowHint } from '@/lib/scoreHints';
@@ -174,17 +174,17 @@ export default function ResultTable({
                   {/* 价 / 涨跌 */}
                   <td className="px-3 py-2 text-right">
                     <span
-                      key={`${r.ticker}-${r.price}`}
+                      key={r.ticker}
                       className={cn(
                         'tick-flash inline-block rounded-xs px-1 font-mono text-body-s text-ink-900 tnum',
                         flashes[r.ticker] === 'up' && 'tick-flash-up',
                         flashes[r.ticker] === 'down' && 'tick-flash-down',
                       )}
                     >
-                      {fmtPrice(r.price)}
+                      <LivePrice symbol={r.ticker} fallback={r.price} />
                     </span>
                     <span className="ml-1.5 align-middle">
-                      <ChangeBadge value={r.changePct} size="sm" />
+                      <LiveChange symbol={r.ticker} fallback={r.changePct} size="sm" />
                     </span>
                   </td>
                   {/* 催化剂 72h */}

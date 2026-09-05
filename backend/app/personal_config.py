@@ -145,6 +145,17 @@ class BreakoutConfig(StrictConfigModel):
     range_persistence_mode: Literal["off", "shadow", "active"] = "shadow"
 
 
+class QuotesConfig(StrictConfigModel):
+    """Bounded real-time prices; public redistribution is separately enabled."""
+
+    enabled: bool = False
+    public_enabled: bool = False
+    signals_enabled: bool = False
+    max_symbols: int = Field(default=50, ge=4, le=50)
+    publish_interval_ms: int = Field(default=250, ge=100, le=1000)
+    release_seconds: int = Field(default=30, ge=0, le=30)
+
+
 class PublicHomeConfig(StrictConfigModel):
     poll_seconds: int = Field(default=30, ge=10, le=300)
     watchlist_seconds: int = Field(default=1800, ge=300, le=86_400)
@@ -264,6 +275,7 @@ class PersonalConfig(StrictConfigModel):
     ai: AIConfig = Field(default_factory=AIConfig)
     catalyst: CatalystConfig = Field(default_factory=CatalystConfig)
     breakout: BreakoutConfig = Field(default_factory=BreakoutConfig)
+    quotes: QuotesConfig = Field(default_factory=QuotesConfig)
     public_home: PublicHomeConfig = Field(default_factory=PublicHomeConfig)
     earnings: EarningsConfig = Field(default_factory=EarningsConfig)
     macro: MacroConfig = Field(default_factory=MacroConfig)

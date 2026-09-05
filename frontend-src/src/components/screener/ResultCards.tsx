@@ -1,3 +1,4 @@
+import { LivePrice, LiveChange } from '@/components/shared/LiveQuote';
 /**
  * B4 移动端结果卡片流（<768px 表格转卡片）
  * 卡内：代码 + 强度大分 + 分项微条 + 涨跌 + 催化剂徽标；点按展开 accordion 明细。
@@ -6,10 +7,8 @@ import SoftBadge from '@/components/shared/SoftBadge';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { ScreenerRow } from '@/api/types';
 import { cn } from '@/lib/utils';
-import { fmtPrice } from '@/lib/format';
 import Icon from '@/components/icons';
 import TickerLogo from '@/components/shared/TickerLogo';
-import ChangeBadge from '@/components/shared/ChangeBadge';
 import InfoHint from '@/components/shared/InfoHint';
 import MacroFitBadge from '@/components/shared/MacroFitBadge';
 import { SCORE_HINTS } from '@/lib/scoreHints';
@@ -85,7 +84,7 @@ export default function ResultCards({
                   </span>
                   <span className="block truncate text-micro text-ink-400" title={r.name}>{r.name}</span>
                 </span>
-                <ChangeBadge value={r.changePct} size="sm" />
+                <LiveChange symbol={r.ticker} fallback={r.changePct} size="sm" />
                 <Icon
                   name="chevron-down"
                   size={14}
@@ -104,7 +103,7 @@ export default function ResultCards({
                   </span>
                 </span>
                 <span className="pb-0.5 text-right">
-                  <span className="block metric-value text-data-m text-ink-800 tnum">{fmtPrice(r.price)}</span>
+                  <span className="block metric-value text-data-m text-ink-800 tnum"><LivePrice symbol={r.ticker} fallback={r.price} /></span>
                 </span>
               </span>
               <span

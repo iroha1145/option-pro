@@ -1,3 +1,4 @@
+import { useQuoteSymbols } from '@/hooks/useLiveQuote';
 /**
  * /stock/:ticker 个股研究整页（v2 · 参考日股工作台 StockDetail 卡片重排）
  *
@@ -37,6 +38,7 @@ import { t, t as __t } from '../i18n/core.ts';
 export default function StockDetail() {
   const { ticker = '' } = useParams();
   const symbol = ticker.toUpperCase();
+  useQuoteSymbols([symbol], [symbol]);
   const navigate = useNavigate();
 
   const [dataRevision, setDataRevision] = useState(0);
@@ -103,21 +105,14 @@ export default function StockDetail() {
     </button>
   );
 
-  if (loading) {
+  if (loading && !detail) {
     return (
       <div className="space-y-5" aria-busy="true">
         <div className="flex items-center justify-between">
           {backButton}
           <span className="eyebrow">STOCK · ${symbol}</span>
         </div>
-        <div className="flex items-center gap-3">
-          <SkeletonBlock className="size-10 rounded-sm" />
-          <div className="flex-1 space-y-2">
-            <SkeletonBlock className="h-4 w-32" />
-            <SkeletonBlock className="h-3 w-20" />
-          </div>
-        </div>
-        <SkeletonBlock className="h-12 w-48" />
+        <PriceHeader symbol={symbol} />
         <SkeletonBlock className="h-[380px] w-full rounded-md" />
         <SkeletonText lines={4} />
       </div>
@@ -137,6 +132,7 @@ export default function StockDetail() {
           {backButton}
           <span className="eyebrow">STOCK · ${symbol}</span>
         </div>
+        <PriceHeader symbol={symbol} />
         <EmptyState
           variant="empty"
           image="/empty-chart.svg"
@@ -261,6 +257,8 @@ export default function StockDetail() {
             <KlineChart
               ticker={detail.ticker}
               prevClose={detail.prevClose}
+              currentPrice={detail.price}
+              quoteUpdatedAt={detail.updatedAt}
               height={420}
               refreshVersion={dataRevision}
               technical={technical}

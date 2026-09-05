@@ -1,9 +1,12 @@
+import { preferLiveQuote } from '@/lib/liveQuotes';
+import { LiveChange, QuoteIndicator } from '@/components/shared/LiveQuote';
+import { useLiveQuote, useLiveRadarEvent, useQuoteSymbols } from '@/hooks/useLiveQuote';
 /**
  * B4 事件详情模态（breakouts.md；居中 720px，spring-pop 240ms，ESC/背板关闭）
  * 支撑/阻力区带可视化 · 区间持续指标 · transitions 生命周期轨迹
  * 评分条组 · 证据竖向时间线（stagger 30ms）· 内嵌该股催化剂摘要（catalystsApi.byTicker）
  */
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ApiError } from '@/api/client';
 import { catalystsApi } from '@/api/modules/catalysts';
@@ -191,13 +194,18 @@ interface EventDetailProps {
 }
 
 export default function EventDetail({
-  event,
+  event: initialEvent,
   onClose,
   onOpenTicker,
   onShowTickerEvents,
   detailError = null,
   onRetryDetail,
 }: EventDetailProps) {
+  const liveEvent = useLiveRadarEvent(initialEvent ?? { event_id: '' });
+  const state = initialEvent ? liveEvent as BreakoutEventFull : null;
+  const quote = useLiveQuote(state?.ticker ?? '');
+  const event = useMemo(() => state && preferLiveQuote(quote, Number.isFinite(state.current_price)) ? { ...state, current_price: quote!.price! } : state, [state, quote]);
+  useQuoteSymbols(event ? [event.ticker] : [], event ? [event.ticker] : []);
   /* 焦点圈定 + 关闭后归还焦点（审计 P3-2 同一口径） */
   const panelRef = useRef<HTMLDivElement>(null);
   useFocusTrap(panelRef, event !== null);
@@ -290,11 +298,13 @@ export default function EventDetail({
               {/* 价格标尺放大版 */}
               <section>
                 <p className="eyebrow mb-2">{__t('价格标尺')}</p>
+                <QuoteIndicator symbol={event.ticker} />
+                {event.trigger_source === 'finnhub' && <p className="mb-2 text-micro text-ink-500">{__t('实时成交触发')} · {event.evidence_at ? new Date(event.evidence_at).toLocaleTimeString('zh-CN', { hour12: false }) : __t('时间待更新')} · {__t('状态版本')} {event.state_version}</p>}
                 <PriceScale large invalidation={event.invalidation_price} trigger={event.event_price} target={event.target_price} current={event.current_price} />
                 <div className="mt-1 flex flex-wrap gap-x-4 font-mono text-micro text-ink-400 tnum">
                   <span>{__t('跳空')} {fin(event.gap_pct) ? `${event.gap_pct >= 0 ? '+' : ''}${event.gap_pct.toFixed(2)}%` : '—'}</span>
                   <span>{__t('量能')} {fin(event.rvol_time_of_day) ? `${event.rvol_time_of_day.toFixed(1)}×` : '—'}</span>
-                  <span>{__t('时段涨跌')} {fin(event.session_change_pct) ? `${event.session_change_pct >= 0 ? '+' : ''}${event.session_change_pct.toFixed(2)}%` : '—'}</span>
+                  <span>{__t('时段涨跌')} <LiveChange symbol={event.ticker} fallback={event.session_change_pct} size="sm" /></span>
                 </div>
               </section>
 

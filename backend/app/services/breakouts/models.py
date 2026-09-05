@@ -270,6 +270,9 @@ class BreakoutEvent(_StrictModel):
     first_seen_at: AwareDatetime
     triggered_at: Optional[AwareDatetime] = None
     state_changed_at: AwareDatetime
+    state_version: int = Field(default=0, ge=0)
+    evidence_at: Optional[AwareDatetime] = None
+    trigger_source: Optional[str] = None
     last_seen_at: AwareDatetime
     pivot_id: str = Field(min_length=1, max_length=128)
     event_price: Optional[float] = Field(default=None, gt=0)

@@ -6,6 +6,9 @@ import { memo } from 'react';
 import { useNavigate } from 'react-router';
 import { marketApi } from '@/api/modules/market';
 import { usePolling } from '@/hooks/usePolling';
+import { useLiveQuote, useQuoteStatus, useQuoteSymbols } from '@/hooks/useLiveQuote';
+import { MARKET_FUNDS } from '@/lib/liveQuotes';
+import { LivePrice, LiveChange } from '@/components/shared/LiveQuote';
 import { useTickFlash } from '@/hooks/useTickFlash';
 import { fmtPct, fmtPrice } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -59,7 +62,22 @@ const TapeRow = memo(function TapeRow({ items, flashes, onOpen }: { items: Index
 const tapeKey = (q: IndexQuote) => q.code;
 const tapePrice = (q: IndexQuote) => q.price;
 
+const FUND_LABELS: Record<string, string> = { SPY: t('标普500基金'), QQQ: t('纳斯达克100基金'), DIA: t('道琼斯基金'), IWM: t('罗素2000基金') };
+function FundTapeItem({ symbol, onOpen }: { symbol: string; onOpen: () => void }) {
+  const quote = useLiveQuote(symbol);
+  return <button type="button" onClick={onOpen} title={t('{fund} · 美元价格', { fund: FUND_LABELS[symbol] })} className="inline-flex items-baseline gap-2 rounded-xs px-1 hover:bg-brand-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30">
+    <span className="text-caption font-semibold text-ink-800">{FUND_LABELS[symbol]}</span>
+    <span className="font-mono text-micro text-ink-400">{symbol}</span>
+    <LivePrice symbol={symbol} prefix="$" indicator={false} className="font-mono text-caption text-ink-600" />
+    <LiveChange symbol={symbol} fallback={quote?.change_pct} size="sm" />
+    <span className="ml-2 text-[8px] text-ink-300" aria-hidden="true">◆</span>
+  </button>;
+}
+
 export default function IndexTape() {
+  const quoteStatus = useQuoteStatus();
+  const useFunds = quoteStatus.enabled && quoteStatus.configured && quoteStatus.allowed !== false;
+  useQuoteSymbols(useFunds ? MARKET_FUNDS : []);
   const { data } = usePolling(() => marketApi.indices(), 60_000);
   /* 闪烁定时器由 useTickFlash 单独持有：旧写法把定时器当 effect cleanup，
      下一轮没有价格变化时状态就再也没人清除（审计 P2-5）。 */
@@ -71,16 +89,16 @@ export default function IndexTape() {
 
   return (
     <div className="marquee-track relative flex h-9 items-center overflow-hidden border-b border-line bg-paper-2/80">
-      <div className="marquee-inner flex w-max animate-marquee items-center gap-8 whitespace-nowrap pl-4" aria-hidden={items.length === 0}>
-        <TapeRow items={items} flashes={flashes} onOpen={openMarket} />
+      <div className="marquee-inner flex w-max animate-marquee items-center gap-8 whitespace-nowrap pl-4" aria-hidden={!useFunds && items.length === 0}>
+        {useFunds ? MARKET_FUNDS.map(symbol => <FundTapeItem key={symbol} symbol={symbol} onOpen={() => navigate(`/stock/${symbol}`)} />) : <TapeRow items={items} flashes={flashes} onOpen={openMarket} />}
         {/* 第二套只为无缝滚动存在：不能让键盘与读屏软件把每个指数访问两遍
             （审计 P3-4）。aria-hidden 挡读屏，inert 挡 Tab 与点击。 */}
         <div className="contents" aria-hidden="true" inert>
-          <TapeRow items={items} flashes={flashes} onOpen={openMarket} />
+          {useFunds ? MARKET_FUNDS.map(symbol => <FundTapeItem key={symbol} symbol={symbol} onOpen={() => navigate(`/stock/${symbol}`)} />) : <TapeRow items={items} flashes={flashes} onOpen={openMarket} />}
         </div>
       </div>
       <span className="glass absolute right-0 top-0 z-10 flex h-full items-center border-l border-line px-3 text-micro font-medium text-ink-400">
-        {t('延迟行情')}
+        {useFunds ? (quoteStatus.connected ? t('基金行情 · 美元') : t('行情连接中')) : t('延迟行情')}
       </span>
     </div>
   );

@@ -1,0 +1,132 @@
+import { expect, test } from '@playwright/test';
+import { mkdir } from 'node:fs/promises';
+const at = '2026-09-04T15:00:00Z';
+const status = { enabled: true, configured: true, allowed: true, public_enabled: true, connected: true, connection_status: 'connected', market_session: 'regular' };
+const price = (symbol, value = 100, extra = {}) => ({ symbol, price: value, previous_close: 99, change: value - 99, change_pct: (value / 99 - 1) * 100, trade_at: at, received_at: at, source: 'finnhub', session: 'regular', freshness: 'live', subscription_status: 'live', ...extra });
+async function fixture(page, enabled = true) {
+  const state = { requests: [], errors: [], completeDetail: false, radar: { event_id: 'live-event', ticker: 'AAPL', name: 'Apple', session: 'regular', setup_type: 'DAILY_BASE_BREAKOUT', lifecycle_state: 'WATCHING', state_version: 0, event_at: at, current_price: 100, event_price: 100, invalidation_price: 90, target_price: 120, session_change_pct: 1, intrinsic_strength_score: 80 }, transitions: [{ state: 'WATCHING', at }] };
+  page.on('pageerror', error => state.errors.push(error.message));
+  await page.addInitScript(() => {
+    window.quoteStreams = [];
+    class MockEventSource {
+      constructor(url) { this.url = url; this.closed = false; this.listeners = new Map(); window.quoteStreams.push(this); }
+      addEventListener(type, callback) { this.listeners.set(type, callback); }
+      close() { this.closed = true; }
+      emit(type, data) { this.listeners.get(type)?.({ data: JSON.stringify(data) }); }
+    }
+    window.EventSource = MockEventSource;
+    localStorage.setItem('optix-locale', 'zh');
+  });
+  await page.route('**/*', route => ['127.0.0.1', 'localhost'].includes(new URL(route.request().url()).hostname) ? route.continue() : route.abort());
+  await page.route('**/api/**', async route => {
+    const url = new URL(route.request().url()); if (!url.pathname.startsWith('/api/')) return route.continue(); state.requests.push(url.pathname + url.search);
+    if (url.pathname === '/api/access/status') return route.fulfill({ json: { access_mode: 'password', logged_in: false, account: null } });
+    if (url.pathname === '/api/quotes') return route.fulfill({ json: { quotes: enabled ? (url.searchParams.get('symbols') ?? '').split(',').filter(Boolean).map(symbol => price(symbol)) : [], status: { ...status, allowed: enabled } } });
+    if (url.pathname === '/api/market/status') return route.fulfill({ json: { session: 'regular', label: '盘中', is_open: true } });
+    if (url.pathname === '/api/market/indices') return route.fulfill({ json: { indices: [{ code: 'SPX', symbol: '^GSPC', price: 6000, change_percent: 1 }] } });
+    if (url.pathname === '/api/stocks/watchlist') return route.fulfill({ json: { groups: [{ id: 'all', name: 'All', stocks: Array.from({ length: 32 }, (_, i) => ({ ticker: i === 0 ? 'AAPL' : `S${String(i).padStart(3, '0')}`, name: `Stock ${i}`, price: 100 + i, change: i, change_percent: i, quote_as_of: at })) }] } });
+    if (url.pathname === '/api/stocks/data/status') return route.fulfill({ json: { items: (url.searchParams.get('tickers') ?? '').split(',').map(ticker => ({ ticker, status: 'ready', refresh_status: 'ready', resources: { overview: { available: true, fresh: true, as_of: at }, daily_chart: { available: true, fresh: true, as_of: at }, signals: { available: true, fresh: true, as_of: at } } })) } });
+    if (url.pathname === '/api/breakouts/current') return route.fulfill({ json: { events: [state.radar], as_of: at, session: 'regular' } });
+    if (url.pathname === '/api/breakouts/events') return route.fulfill({ json: { events: [], next_cursor: null } });
+    if (url.pathname === '/api/breakouts/events/live-event') return route.fulfill({ json: { event: state.radar, transitions: state.transitions } });
+    if (url.pathname === '/api/breakouts/status') return route.fulfill({ json: { enabled: true, market_session: 'regular' } });
+    if (state.completeDetail && url.pathname === '/api/stocks/AAPL') return route.fulfill({ json: { ticker: 'AAPL', name: 'Apple', price: 100, change: 1, change_percent: 1, as_of: at, prev_close: 99 } });
+    if (state.completeDetail && url.pathname === '/api/stocks/AAPL/chart') return route.fulfill({ json: { ticker: 'AAPL', interval: '1d', adjustment: 'raw', bars: Array.from({ length: 240 }, (_, i) => ({ t: new Date(Date.UTC(2026, 0, 1 + i)).toISOString().slice(0, 10), o: 98 + i % 3, h: 102 + i % 3, l: 96 + i % 3, c: 100 + i % 3, v: 1000 + i })).filter(bar => ![0, 6].includes(new Date(bar.t).getUTCDay())) } });
+    if (url.pathname === '/api/stocks/AAPL') return; // Deliberately keep full technical detail pending.
+    return route.fulfill({ status: 503, json: { message: 'No analysis fixture' } });
+  });
+  return state;
+}
+const latestSymbols = page => page.evaluate(() => {
+  const stream = window.quoteStreams.filter(row => !row.closed).at(-1);
+  return stream ? new URL(stream.url, location.origin).searchParams.get('symbols').split(',') : [];
+});
+const emit = (page, symbol, value, extra = {}) => page.evaluate(({ symbol, value, at, extra }) => {
+  window.quoteStreams.filter(row => !row.closed).at(-1).emit('quotes', { quotes: [{ symbol, price: value, previous_close: 99, change: value - 99, change_pct: (value / 99 - 1) * 100, trade_at: at, received_at: at, source: 'finnhub', session: 'regular', freshness: 'live', subscription_status: 'live', ...extra }] });
+}, { symbol, value, at, extra });
+
+test('watchlist subscribes offscreen rows, pushes prices without reordering, and releases on navigation', async ({ page }) => {
+  const state = await fixture(page); await page.goto('/watchlist');
+  await expect.poll(() => latestSymbols(page)).toContain('S031');
+  await expect.poll(() => latestSymbols(page)).toContain('SPY');
+  const before = await page.locator('main [data-quote-symbol]').evaluateAll(rows => rows.map(row => row.dataset.quoteSymbol));
+  expect(before.length).toBeGreaterThan(0);
+  const symbol = before[0]; await emit(page, symbol, 1234.56);
+  await expect(page.locator(`main [data-quote-symbol="${symbol}"]`).first().locator('[aria-label="1,234.56"]')).toBeVisible();
+  const after = await page.locator('main [data-quote-symbol]').evaluateAll(rows => rows.map(row => row.dataset.quoteSymbol));
+  expect(after).toEqual(before);
+  await emit(page, symbol, 1234.56, { subscription_status: 'limited', freshness: 'snapshot' });
+  await expect(page.locator(`main [data-quote-symbol="${symbol}"]`).first()).toContainText('定时更新');
+  await page.getByRole('link', { name: '大盘', exact: true }).first().click();
+  await expect.poll(() => latestSymbols(page)).not.toContain('S031');
+  expect(await page.evaluate(() => window.quoteStreams.filter(row => !row.closed).length)).toBe(1);
+  expect(state.errors).toEqual([]);
+});
+
+for (const width of [390, 1440]) {
+  test(`detail price arrives while analysis is pending, with decimal rolling at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 }); const state = await fixture(page); await page.goto('/stock/AAPL');
+    const header = page.locator('main [data-quote-symbol="AAPL"]').first();
+    await expect(header.locator('[aria-label="$100.00"]')).toBeVisible();
+    await emit(page, 'AAPL', 999.99); await expect(header.locator('[aria-label="$999.99"]')).toBeVisible();
+    await emit(page, 'AAPL', 1000.01); await expect(header.locator('[aria-label="$1,000.01"]')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'AAPL' })).toBeVisible();
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.waitForTimeout(350); // Let the 250 ms digit transition reach its real final frame.
+    await mkdir('test-results/quotes', { recursive: true });
+    await page.screenshot({ path: `test-results/quotes/detail-${width}.png`, animations: 'disabled' });
+    expect(state.errors).toEqual([]);
+  });
+}
+
+test('visitors without quote access keep delayed indices and never open a stream', async ({ page }) => {
+  const state = await fixture(page, false); await page.goto('/watchlist');
+  await expect(page.getByText('SPX', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('延迟行情', { exact: true }).first()).toBeVisible();
+  await expect(page.getByText('标普500基金', { exact: true })).toHaveCount(0);
+  expect(await page.evaluate(() => window.quoteStreams.length)).toBe(0);
+  expect(state.requests.filter(url => url.startsWith('/api/quotes'))).toHaveLength(1);
+  expect(state.errors).toEqual([]);
+});
+
+
+test('an open radar detail follows new versions and reconciles missed states after reconnect', async ({ page }) => {
+  const state = await fixture(page); await page.goto('/breakouts');
+  await page.getByRole('button', { name: '查看完整证据', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'AAPL 突破事件详情' });
+  await expect(dialog).toBeVisible();
+  state.radar = { ...state.radar, state_version: 1, lifecycle_state: 'TRIGGERED', trigger_source: 'finnhub', evidence_at: at, triggered_at: at };
+  state.transitions.push({ state: 'TRIGGERED', at });
+  await page.evaluate(event => window.quoteStreams.filter(row => !row.closed).at(-1).emit('radar', { events: [event] }), state.radar);
+  await expect(dialog.getByRole('list', { name: '生命周期轨迹' })).toContainText('已触发');
+  state.radar = { ...state.radar, state_version: 2, lifecycle_state: 'CONFIRMED' };
+  state.transitions.push({ state: 'CONFIRMED', at });
+  // This confirmation is deliberately not pushed. The reconnect must fill the gap.
+  await page.evaluate(() => window.quoteStreams.filter(row => !row.closed).at(-1).onerror());
+  await expect(dialog.getByRole('list', { name: '生命周期轨迹' })).toContainText('已确认');
+  await expect(dialog.getByText('已确认', { exact: true }).first()).toBeVisible();
+  expect(state.errors).toEqual([]);
+});
+
+
+test('live chart reference updates without rewriting candles or resetting the zoom', async ({ page }) => {
+  const state = await fixture(page); state.completeDetail = true; await page.goto('/stock/AAPL');
+  const chartHost = page.getByRole('img', { name: 'AAPL 1d K 线图', exact: true });
+  await expect(chartHost).toBeVisible();
+  const before = await page.evaluate(async () => {
+    const { echarts } = await import('/src/lib/chart.ts');
+    const chart = echarts.getInstanceByDom(document.querySelector('[aria-label="AAPL 1d K 线图"]'));
+    window.testQuoteChart = chart;
+    chart.dispatchAction({ type: 'dataZoom', startValue: 100, endValue: 171 });
+    const option = chart.getOption();
+    return { candles: option.series.find(row => row.type === 'candlestick').data, zoom: option.dataZoom[0] };
+  });
+  await emit(page, 'AAPL', 105.27);
+  await expect.poll(() => page.evaluate(() => window.testQuoteChart.getOption().series.find(row => row.id === 'realtime-price-reference').markLine.data[0]?.yAxis)).toBe(105.27);
+  const after = await page.evaluate(() => {
+    const option = window.testQuoteChart.getOption();
+    return { candles: option.series.find(row => row.type === 'candlestick').data, zoom: option.dataZoom[0] };
+  });
+  expect(after.candles).toEqual(before.candles); expect(after.zoom.startValue).toBe(before.zoom.startValue); expect(after.zoom.endValue).toBe(before.zoom.endValue);
+  expect(state.errors).toEqual([]);
+});

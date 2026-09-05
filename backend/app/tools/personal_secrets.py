@@ -437,6 +437,12 @@ def _validate_connection(
     url: str,
     headers: dict[str, str],
 ) -> dict[str, bool | int | str]:
+    finnhub_key = headers.get("X-Finnhub-Token", "")
+    if finnhub_key:
+        from app.services.finnhub_budget import reserve_finnhub_request
+
+        if not reserve_finnhub_request(finnhub_key, timeout=0):
+            return _validation_state(checked=False, ok=False, reason="rate_limited")
     try:
         request = urllib.request.Request(
             url,
@@ -449,6 +455,10 @@ def _validate_connection(
                 raise ValueError("invalid HTTP status")
             response.read(_VALIDATION_READ_LIMIT_BYTES)
     except urllib.error.HTTPError as exc:
+        if finnhub_key and exc.code == 429:
+            from app.services.finnhub_budget import mark_finnhub_rate_limited
+
+            mark_finnhub_rate_limited(finnhub_key, retry_after=(exc.headers or {}).get("Retry-After", 60))
         try:
             status = int(exc.code)
             if not 100 <= status <= 599:

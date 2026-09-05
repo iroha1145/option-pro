@@ -12,6 +12,14 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 
+@pytest.fixture(autouse=True)
+def _isolated_finnhub_budget(monkeypatch, tmp_path):
+    """Provider mocks share the real limiter, with a fresh per-test database."""
+    from app.services import finnhub_budget
+
+    monkeypatch.setattr(finnhub_budget, "default_budget_path", lambda: tmp_path / "finnhub-budget.sqlite")
+
+
 @pytest.fixture
 def anchor_ai_jobs_clock(monkeypatch):
     """把 ai_jobs 仓储的私有时钟锚到用例的夹具时钟上。

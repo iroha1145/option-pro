@@ -156,6 +156,7 @@ def test_finnhub_fetch_accepts_valid_symbols_outside_curated_yahoo_list(
     calls: list[dict[str, str]] = []
     active = 0
     max_active = 0
+    all_segments_started = asyncio.Event()
 
     class Response:
         def raise_for_status(self) -> None:
@@ -203,7 +204,11 @@ def test_finnhub_fetch_accepts_valid_symbols_outside_curated_yahoo_list(
             calls.append(dict(params))
             active += 1
             max_active = max(max_active, active)
-            await asyncio.sleep(0)
+            if active == 5:
+                all_segments_started.set()
+            # Budget reservations use worker threads and can finish in any
+            # order. Hold responses until all admitted segments are in flight.
+            await asyncio.wait_for(all_segments_started.wait(), timeout=5)
             active -= 1
             return Response()
 
@@ -231,7 +236,7 @@ def test_finnhub_fetch_accepts_valid_symbols_outside_curated_yahoo_list(
     assert result["succeeded"] is True
     assert result["truncated"] is False
     assert result["error"] is None
-    assert calls == [
+    assert sorted(calls, key=lambda call: call["from"]) == [
         {"from": "2026-07-20", "to": "2026-07-26"},
         {"from": "2026-07-27", "to": "2026-08-02"},
         {"from": "2026-08-03", "to": "2026-08-09"},
@@ -317,7 +322,7 @@ def test_finnhub_saturated_week_splits_to_days_and_keeps_google_actual(
         for call in calls
         if call["from"] == call["to"] and "2026-07-20" <= call["from"] <= "2026-07-26"
     ]
-    assert [call["from"] for call in daily_calls] == [
+    assert sorted(call["from"] for call in daily_calls) == [
         "2026-07-20",
         "2026-07-21",
         "2026-07-22",

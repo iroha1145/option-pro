@@ -69,6 +69,9 @@ class BreakoutEventResponse(_ResponseModel):
     first_seen_at: AwareDatetime
     triggered_at: Optional[AwareDatetime] = None
     state_changed_at: AwareDatetime
+    state_version: int = Field(default=0, ge=0)
+    evidence_at: Optional[AwareDatetime] = None
+    trigger_source: Optional[str] = None
     last_seen_at: AwareDatetime
     event_age_seconds: float = Field(ge=0)
     state_age_seconds: float = Field(ge=0)
@@ -384,6 +387,9 @@ def _public_event(
         first_seen_at=first_seen_at,
         triggered_at=triggered_at,
         state_changed_at=state_changed_at,
+        state_version=int(stored.get("state_version") or 0),
+        evidence_at=stored.get("evidence_at"),
+        trigger_source=stored.get("trigger_source"),
         last_seen_at=last_seen_at,
         event_age_seconds=age,
         state_age_seconds=state_age,
@@ -481,6 +487,21 @@ def _public_event(
 
 def _repository(settings: BreakoutSettings) -> BreakoutRepository:
     return BreakoutRepository(settings.db_path, read_only=True)
+
+
+def _live_overlay(
+    repository: BreakoutRepository, items: list[Any], *, with_transitions: bool = False,
+) -> list[Any]:
+    """Only opt-in authorized views may expose trade-derived radar state."""
+    from app.api.quotes import realtime_visible
+
+    if not realtime_visible(signals=True):
+        return items
+    try:
+        return repository.overlay_live_events(items, with_transitions=with_transitions)
+    except (OSError, ValueError, sqlite3.Error, BreakoutRepositoryError):
+        logger.warning("Could not load realtime radar overlay")
+        return items
 
 
 def _unavailable_root(
@@ -675,6 +696,7 @@ def current() -> BreakoutRootResponse:
             database_status="active",
         )
     stored_scan = dict(scan)
+    stored_scan["events"] = _live_overlay(repository, list(stored_scan.get("events") or []))
     result = _root_from_scan(
         settings,
         stored_scan,
@@ -790,7 +812,10 @@ def event_detail(event_id: str) -> BreakoutEventDetailResponse:
     if not settings.enabled:
         raise HTTPException(status_code=404, detail="Breakout Radar is disabled")
     try:
-        event = _repository(settings).get_event(event_id)
+        repository = _repository(settings)
+        event = repository.get_event(event_id)
+        if event is not None:
+            event = _live_overlay(repository, [event], with_transitions=True)[0]
     except SchemaVersionError as exc:
         raise HTTPException(
             status_code=503,
@@ -834,7 +859,8 @@ def ticker_events(ticker: str) -> BreakoutTickerResponse:
             current_state=None,
         )
     try:
-        items = list(_repository(settings).events_for_ticker(symbol))
+        repository = _repository(settings)
+        items = _live_overlay(repository, list(repository.events_for_ticker(symbol)))
     except SchemaVersionError:
         return BreakoutTickerResponse(
             as_of=_now(),

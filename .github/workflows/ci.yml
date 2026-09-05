@@ -98,6 +98,9 @@ jobs:
       - name: Verify offline UI and keyboard behavior
         run: npm --prefix frontend-src run test:review
 
+      - name: Verify real-time quote UI with local simulated trades
+        run: npm --prefix frontend-src run test:quotes
+
       - name: Check shell script syntax
         run: bash -n setup.sh personal.sh scripts/compose.sh scripts/deploy.sh scripts/lock-dependencies.sh
 

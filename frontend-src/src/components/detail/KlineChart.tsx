@@ -1,3 +1,5 @@
+import { useLiveQuote, useQuoteStatus } from '@/hooks/useLiveQuote';
+import { quoteLabel, preferLiveQuote } from '@/lib/liveQuotes';
 /**
  * K线主图（stock-detail.md S1 · design.md §6-1 / §6-2）
  * 蜡烛：阳实心 --up-600 / 阴实心 --down-600 / 影线 1.2px / MA20 --brand-500 虚线(4/4)
@@ -556,6 +558,8 @@ function toggleButtonCls(active: boolean): string {
 export default function KlineChart({
   ticker,
   prevClose,
+  currentPrice,
+  quoteUpdatedAt,
   height = 320,
   className,
   refreshVersion = 0,
@@ -563,6 +567,8 @@ export default function KlineChart({
 }: {
   ticker: string;
   prevClose?: number;
+  currentPrice?: number | null;
+  quoteUpdatedAt?: string | null;
   height?: number;
   className?: string;
   refreshVersion?: number;
@@ -570,6 +576,8 @@ export default function KlineChart({
       当前 bars 的同源校验——不一致宁可暂隐，也不把旧带画到新 K 线上 */
   technical?: TechnicalStructure | null;
 }) {
+  const liveQuote = useLiveQuote(ticker);
+  const quoteStatus = useQuoteStatus();
   const overlays = technical?.chart_overlays ?? null;
   const colorMode = useColorMode();
   // Daily bars are the reliable default covered by Massive Stocks Starter;
@@ -845,9 +853,28 @@ export default function KlineChart({
   }, [analysisOk, data, drawing.expanded, mode, range, visibleOverlays, visiblePanes, layerSettings]);
 
   const option = useMemo(
-    () => (data ? buildOption(data.bars, data.ma20, range, mode, prevClose, overlay, extraMarks, analysisOption, null, colorMode) : null),
+    () => {
+      if (!data) return null;
+      const base = buildOption(data.bars, data.ma20, range, mode, prevClose, overlay, extraMarks, analysisOption, null, colorMode);
+      const series = Array.isArray(base.series) ? base.series : base.series ? [base.series] : [];
+      return { ...base, series: [...series, { id: 'realtime-price-reference', type: 'line', xAxisIndex: 0, yAxisIndex: 0, data: [], showSymbol: false, lineStyle: { opacity: 0 }, silent: true, animation: false, tooltip: { show: false }, markLine: { symbol: 'none', data: [] } }] } as ChartOption;
+    },
     [data, range, mode, prevClose, overlay, extraMarks, analysisOption, colorMode],
   );
+  // Only this separate reference series changes per trade. Historical candles,
+  // volume, drawings and the user's zoom window are not rebuilt or overwritten.
+  useEffect(() => {
+    if (!chartInst || chartInst.isDisposed() || !option) return;
+    const price = liveQuote ? (preferLiveQuote(liveQuote, typeof currentPrice === 'number' && currentPrice > 0, quoteUpdatedAt) ? liveQuote.price : currentPrice) : null;
+    const valid = typeof price === 'number' && Number.isFinite(price) && price > 0;
+    chartInst.setOption({ series: [{ id: 'realtime-price-reference', data: valid && bars?.length ? [[bars.length - 1, price]] : [], markLine: {
+      symbol: 'none', silent: true, animation: false,
+      lineStyle: { type: 'dashed', width: 1, color: CH.brand500 },
+      label: { show: true, position: 'insideEndTop', formatter: valid ? `${quoteLabel(liveQuote!, quoteStatus.market_session)} $${price.toFixed(2)}` : '', color: CH.brand500, fontSize: 10 },
+      data: valid ? [{ yAxis: price }] : [],
+    } }] }, { notMerge: false, lazyUpdate: true, silent: true });
+  }, [chartInst, option, liveQuote, quoteStatus.market_session, currentPrice, quoteUpdatedAt, bars]);
+
   // The chart calls this from its commit effect. A scroll never rebuilds the
   // option, and an abandoned render cannot reset the live chart's viewport.
   const prepareOption = useCallback((next: ChartOption): ChartOption => {

@@ -1,3 +1,6 @@
+import { preferLiveQuote } from '@/lib/liveQuotes';
+import { LivePrice, LiveChange } from '@/components/shared/LiveQuote';
+import { useLiveQuote, useLiveRadarEvent } from '@/hooks/useLiveQuote';
 /**
  * LeadBigCard · 当日信号 lead 事件「压缩版大事件卡」（Paper Terminal 皮肤，7/12 宽）
  * 结构：状态 chips 行（lg 合并 meta 行）+ 「首要信号」徽章 → Serif Display-M 标题（ticker 开抽屉）
@@ -19,7 +22,6 @@ import { usePolling } from '@/hooks/usePolling';
 import { useCountUp } from '@/hooks/useCountUp';
 import { useShell } from '@/hooks/useShell';
 import ReactECharts from '@/components/charts/ReactECharts';
-import ChangeBadge from '@/components/shared/ChangeBadge';
 import SoftBadge from '@/components/shared/SoftBadge';
 import InfoHint from '@/components/shared/InfoHint';
 import { SCORE_HINTS } from '@/lib/scoreHints';
@@ -555,7 +557,9 @@ interface LeadBigCardProps {
   statusReadFailed?: boolean;
 }
 
-export default function LeadBigCard({ ev, flash, locate, onOpen, dailyVersion = '', preparation, statusReadFailed = false }: LeadBigCardProps) {
+export default function LeadBigCard({ ev: initialEvent, flash, locate, onOpen, dailyVersion = '', preparation, statusReadFailed = false }: LeadBigCardProps) {
+  const ev = useLiveRadarEvent(initialEvent);
+  const quote = useLiveQuote(ev.ticker);
   const { openTicker } = useShell();
   const ref = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -578,7 +582,7 @@ export default function LeadBigCard({ ev, flash, locate, onOpen, dailyVersion = 
   }, [ev.event_id]);
   const detailEv = detail && detail.id === ev.event_id ? detail.ev : null;
 
-  const e = useMemo(() => {
+  const enriched = useMemo(() => {
     if (!detailEv) return ev;
     const out: Record<string, unknown> = { ...ev };
     for (const [k, v] of Object.entries(detailEv)) {
@@ -587,8 +591,14 @@ export default function LeadBigCard({ ev, flash, locate, onOpen, dailyVersion = 
     /* 现价以 current 轮询为准（tick-flash 联动） */
     out.current_price = ev.current_price;
     out.session_change_pct = ev.session_change_pct;
+    if ((ev.state_version ?? 0) >= (detailEv.state_version ?? 0)) {
+      out.lifecycle_state = ev.lifecycle_state; out.state_version = ev.state_version;
+      out.evidence_at = ev.evidence_at; out.trigger_source = ev.trigger_source;
+      out.triggered_at = ev.triggered_at;
+    }
     return out as unknown as BreakoutCurrentEvent;
   }, [ev, detailEv]);
+  const e = preferLiveQuote(quote, Number.isFinite(enriched.current_price)) ? { ...enriched, current_price: quote!.price! } : enriched;
 
   /* 宽松扩展字段（契约之外的运行时字段，缺失显「—」/省略） */
   const loose = e as unknown as {
@@ -692,9 +702,9 @@ export default function LeadBigCard({ ev, flash, locate, onOpen, dailyVersion = 
                   flash === 'down' && 'tick-flash-down',
                 )}
               >
-                {num(e.current_price) !== null ? fmtPrice(e.current_price) : '—'}
+                <LivePrice symbol={e.ticker} fallback={e.current_price} />
               </span>
-              <ChangeBadge value={e.session_change_pct} size="sm" />
+              <LiveChange symbol={e.ticker} fallback={e.session_change_pct} size="sm" />
             </p>
           </div>
           <div className="radar-value-cell px-3 py-2.5">
