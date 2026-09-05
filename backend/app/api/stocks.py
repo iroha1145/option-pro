@@ -31,6 +31,7 @@ from app.access import (
     request_account_session,
     require_same_origin_json,
 )
+from app.services import company_logo_cache
 from app.data_paths import get_data_paths
 from app.personal_config import get_personal_config
 from app.public_home_snapshot import (
@@ -583,8 +584,16 @@ from app.services.utils import sanitize as _sanitize
 _LOGO_MEDIA_TYPES = {"image/png", "image/jpeg", "image/webp", "image/svg+xml"}
 _LOGO_MAX_BYTES = 512 * 1024
 _LOGO_NOT_FOUND_TTL = 60 * 60
-_LOGO_SUCCESS_TTL = 24 * 60 * 60
+_LOGO_SUCCESS_TTL = company_logo_cache.FRESH_SECONDS
+_LOGO_STALE_TTL = company_logo_cache.STALE_SECONDS
+_LOGO_MEMORY_ENTRIES = 128
+_LOGO_MEMORY_BYTES = 16 * 1024 * 1024
+_logo_refresh_tasks: dict[str, asyncio.Task[None]] = {}
+_logo_retry_after: dict[str, float] = {}
+_logo_http: httpx.AsyncClient | None = None
+_logo_slots: asyncio.Semaphore | None = None
 _LOGO_NOT_FOUND = {"not_found": True}
+_LOGO_UNAVAILABLE = {"unavailable": True}
 _LOGO_ALLOWED_HOSTS = frozenset(
     {
         "financialmodelingprep.com",
@@ -642,65 +651,118 @@ def _logo_urls(symbol: str, website: str | None = None) -> list[str]:
     return list(dict.fromkeys(candidates))
 
 
-async def _fetch_company_logo(symbol: str) -> dict[str, Any]:
-    headers = {
-        "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-        "User-Agent": "Mozilla/5.0 (compatible; OptixPro/1.0)",
-    }
-    async with httpx.AsyncClient(follow_redirects=False, timeout=6.0, headers=headers) as client:
-        for url in _logo_urls(symbol):
-            current = url
-            for _redirect in range(4):
-                if not _safe_logo_url(current):
-                    break
+def _new_logo_client() -> httpx.AsyncClient:
+    return httpx.AsyncClient(
+        follow_redirects=False, timeout=4.0,
+        limits=httpx.Limits(max_connections=6, max_keepalive_connections=6),
+        headers={"Accept": "image/webp,image/png,image/jpeg,image/svg+xml",
+                 "User-Agent": "Mozilla/5.0 (compatible; OptixPro/1.0)"},
+    )
+
+
+async def start_company_logo_client() -> None:
+    global _logo_http, _logo_slots
+    _logo_http = _new_logo_client()
+    _logo_slots = asyncio.Semaphore(6)
+
+
+async def close_company_logo_client() -> None:
+    global _logo_http, _logo_slots
+    tasks = list(_logo_refresh_tasks.values())
+    for task in tasks:
+        task.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
+    _logo_refresh_tasks.clear()
+    if _logo_http is not None:
+        await _logo_http.aclose()
+    _logo_http = None
+    _logo_slots = None
+
+
+async def _fetch_logo_url(client: httpx.AsyncClient, url: str) -> tuple[dict[str, Any] | None, bool]:
+    """Return (image, transient_failure), validating every redirect and byte."""
+    current = url
+    for _redirect in range(4):
+        if not _safe_logo_url(current):
+            return None, False
+        try:
+            async with client.stream("GET", current) as resp:
+                if resp.status_code in {301, 302, 303, 307, 308}:
+                    location = resp.headers.get("location")
+                    if not location:
+                        return None, False
+                    current = urljoin(str(resp.url), location)
+                    continue
+                if resp.status_code != 200:
+                    return None, resp.status_code == 429 or resp.status_code >= 500
+                media_type = resp.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+                if media_type not in _LOGO_MEDIA_TYPES:
+                    return None, False
                 try:
-                    async with client.stream("GET", current) as resp:
-                        if resp.status_code in {301, 302, 303, 307, 308}:
-                            location = resp.headers.get("location")
-                            if not location:
-                                break
-                            current = urljoin(str(resp.url), location)
-                            continue
-                        media_type = (
-                            resp.headers.get("content-type", "")
-                            .split(";", 1)[0]
-                            .strip()
-                            .lower()
-                        )
-                        content_length = resp.headers.get("content-length")
-                        if content_length:
-                            try:
-                                if int(content_length) > _LOGO_MAX_BYTES:
-                                    break
-                            except ValueError:
-                                pass
-                        if resp.status_code != 200 or media_type not in _LOGO_MEDIA_TYPES:
-                            break
-                        chunks: list[bytes] = []
-                        size = 0
-                        async for chunk in resp.aiter_bytes():
-                            size += len(chunk)
-                            if size > _LOGO_MAX_BYTES:
-                                chunks = []
-                                break
-                            chunks.append(chunk)
-                        content = b"".join(chunks)
-                        if len(content) > 64:
-                            return {
-                                "content": content,
-                                "media_type": media_type,
-                                "source": current,
-                            }
-                        break
-                except Exception:
-                    break
+                    if int(resp.headers.get("content-length", "0")) > _LOGO_MAX_BYTES:
+                        return None, False
+                except ValueError:
+                    pass
+                chunks: list[bytes] = []
+                size = 0
+                async for chunk in resp.aiter_bytes():
+                    size += len(chunk)
+                    if size > _LOGO_MAX_BYTES:
+                        return None, False
+                    chunks.append(chunk)
+                if size > 64:
+                    return {"content": b"".join(chunks), "media_type": media_type, "source": current}, False
+                return None, False
+        except httpx.HTTPError:
+            return None, True
+    return None, False
+
+
+async def _fetch_company_logo(symbol: str) -> dict[str, Any]:
+    # Two workers race a small trusted source list; at most six requests in
+    # total in the application. A slow primary cannot serialize every fallback.
+    client = _logo_http or _new_logo_client()
+    owned = client is not _logo_http
+    slots = _logo_slots or asyncio.Semaphore(6)
+    urls = iter(_logo_urls(symbol))
+    transient = False
+
+    async def worker() -> dict[str, Any] | None:
+        nonlocal transient
+        for url in urls:
+            async with slots:
+                value, failed = await _fetch_logo_url(client, url)
+            transient = transient or failed
+            if value is not None:
+                return value
+        return None
+
+    tasks = [asyncio.create_task(worker()) for _ in range(2)]
+    try:
+        async with asyncio.timeout(12):
+            for task in asyncio.as_completed(tasks):
+                value = await task
+                if value is not None:
+                    return value
+    except TimeoutError:
+        transient = True
+    finally:
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        if owned:
+            await client.aclose()
+    if transient:
+        raise HTTPException(status_code=503, detail="Company logo temporarily unavailable", headers={"Retry-After": "60"})
     raise HTTPException(status_code=404, detail="Company logo not found")
 
 
 def _safe_logo_url(value: str) -> bool:
     try:
         parsed = urlparse(value)
-        if parsed.scheme.lower() != "https" or not parsed.hostname:
+        if (parsed.scheme.lower() != "https" or not parsed.hostname
+            or parsed.username is not None or parsed.password is not None
+            or parsed.port not in {None, 443} or len(value) > 2048):
             return False
         hostname = parsed.hostname.strip("[]").lower().rstrip(".")
         if hostname not in _LOGO_ALLOWED_HOSTS:
@@ -721,54 +783,111 @@ def _safe_logo_url(value: str) -> bool:
         return False
 
 
-async def _cached_company_logo(
-    symbol: str,
-    *,
-    allow_refresh: bool = True,
-) -> dict[str, Any]:
-    variants = _logo_symbol_variants(symbol)
-    if not variants:
-        raise HTTPException(status_code=404, detail="Invalid ticker")
-    canonical_symbol = variants[0]
-    key = f"logo:{canonical_symbol}"
-    now = time.time()
-    hit = _usable_hit(key, now)
-    if hit is not None and hit.expires_at > now:
-        if hit.value == _LOGO_NOT_FOUND:
-            raise HTTPException(status_code=404, detail="Company logo not found")
-        return hit.value
-    if not allow_refresh:
-        raise public_snapshot_unavailable(key)
+def _remember_company_logo(key: str, entry: _EndpointCacheEntry) -> None:
+    _maybe_purge_endpoint_cache(time.time())
+    _endpoint_cache.pop(key, None)
+    _endpoint_cache[key] = entry
+    # Logos must not consume the generic cache's potential 2048 x 512 KiB.
+    rows = [(k, v) for k, v in _endpoint_cache.items() if k.startswith("logo:")]
+    size = sum(len(v.value.get("content", b"")) for _, v in rows)
+    remaining = len(rows)
+    for old_key, old in rows:
+        if remaining <= _LOGO_MEMORY_ENTRIES and size <= _LOGO_MEMORY_BYTES:
+            break
+        _endpoint_cache.pop(old_key, None)
+        size -= len(old.value.get("content", b""))
+        remaining -= 1
+        if not _endpoint_lock_users.get(old_key):
+            _endpoint_locks.pop(old_key, None)
+    for retry_key in list(_logo_retry_after):
+        if _logo_retry_after[retry_key] <= time.time():
+            _logo_retry_after.pop(retry_key, None)
 
+
+def _logo_value(entry: _EndpointCacheEntry) -> dict[str, Any]:
+    if entry.value == _LOGO_UNAVAILABLE:
+        raise HTTPException(status_code=503, detail="Company logo temporarily unavailable", headers={"Retry-After": "60"})
+    if entry.value == _LOGO_NOT_FOUND:
+        raise HTTPException(status_code=404, detail="Company logo not found")
+    # Keep the original acquisition time so a disk hit cannot reset the age.
+    return {**entry.value, "fetched_at": entry.fetched_at}
+
+
+async def _load_company_logo(symbol: str, key: str) -> dict[str, Any]:
     lock = _lock_for(key)
     try:
         async with lock:
             now = time.time()
             hit = _usable_hit(key, now)
             if hit is not None and hit.expires_at > now:
-                if hit.value == _LOGO_NOT_FOUND:
-                    raise HTTPException(status_code=404, detail="Company logo not found")
-                return hit.value
+                return _logo_value(hit)
             try:
-                value = await _fetch_company_logo(canonical_symbol)
+                value = await _fetch_company_logo(symbol)
                 ttl = _LOGO_SUCCESS_TTL
+                stale_ttl = _LOGO_STALE_TTL
             except HTTPException as exc:
+                if hit is not None and hit.value != _LOGO_NOT_FOUND:
+                    _logo_retry_after[key] = time.time() + 300
+                    return _logo_value(hit)
                 if exc.status_code != 404:
+                    # A network outage is not a durable "missing company".
+                    # Briefly cache the failure in RAM to collapse retries.
+                    failed_at = time.time()
+                    _remember_company_logo(key, _EndpointCacheEntry(
+                        failed_at + 60, failed_at + 60, failed_at, dict(_LOGO_UNAVAILABLE)))
                     raise
                 value = dict(_LOGO_NOT_FOUND)
-                ttl = _LOGO_NOT_FOUND_TTL
-            _maybe_purge_endpoint_cache(now)
-            _endpoint_cache[key] = _EndpointCacheEntry(
-                expires_at=now + ttl,
-                stale_until=now + ttl,
-                fetched_at=now,
-                value=value,
-            )
-            if value == _LOGO_NOT_FOUND:
-                raise HTTPException(status_code=404, detail="Company logo not found")
-            return value
+                ttl, stale_ttl = _LOGO_NOT_FOUND_TTL, 0
+            now = time.time()  # TTL starts after network I/O, not before it.
+            entry = _EndpointCacheEntry(now + ttl, now + ttl + stale_ttl, now, value)
+            _remember_company_logo(key, entry)
+            await asyncio.to_thread(company_logo_cache.write, symbol, vars(entry), now)
+            return _logo_value(entry)
     finally:
         _release_lock(key, lock)
+
+
+def _refresh_company_logo(symbol: str, key: str) -> None:
+    if key in _logo_refresh_tasks or _logo_retry_after.get(key, 0) > time.time():
+        return
+    # Bound background work even if many old logos are opened at once.
+    if len(_logo_refresh_tasks) >= 32:
+        return
+
+    async def refresh() -> None:
+        try:
+            await _load_company_logo(symbol, key)
+        except HTTPException:
+            pass
+        finally:
+            _logo_refresh_tasks.pop(key, None)
+
+    _logo_refresh_tasks[key] = asyncio.create_task(refresh())
+
+
+async def _cached_company_logo(symbol: str, *, allow_refresh: bool = True) -> dict[str, Any]:
+    variants = _logo_symbol_variants(symbol)
+    if not variants:
+        raise HTTPException(status_code=404, detail="Invalid ticker")
+    symbol = variants[0]
+    key = f"logo:{symbol}"
+    now = time.time()
+    hit = _usable_hit(key, now)
+    if hit is None:
+        saved = await asyncio.to_thread(company_logo_cache.read, symbol, now)
+        if saved is not None:
+            # A concurrent fill may have finished while the disk was read.
+            hit = _usable_hit(key, time.time())
+            if hit is None or saved["fetched_at"] > hit.fetched_at:
+                hit = _EndpointCacheEntry(**saved)
+                _remember_company_logo(key, hit)
+    if hit is not None:
+        if hit.expires_at <= now and allow_refresh:
+            _refresh_company_logo(symbol, key)
+        return _logo_value(hit)
+    if not allow_refresh:
+        raise public_snapshot_unavailable(key)
+    return await _load_company_logo(symbol, key)
 
 
 KNOWN_TICKERS = {
@@ -2600,7 +2719,7 @@ async def stock_signals(ticker: str):
 
 
 @router.get("/{ticker}/logo")
-async def stock_logo(ticker: str):
+async def stock_logo(ticker: str, request: Request = None):
     symbol = quote_symbol(ticker)
     variants = _logo_symbol_variants(symbol)
     if not variants:
@@ -2609,16 +2728,21 @@ async def stock_logo(ticker: str):
         variants[0],
         allow_refresh=current_request_is_owner(),
     )
-    return Response(
-        content=logo["content"],
-        media_type=logo["media_type"],
-        headers={
-            "Cache-Control": "public, max-age=86400",
-            "Content-Security-Policy": "sandbox; default-src 'none'",
-            "X-Content-Type-Options": "nosniff",
-            "X-Logo-Source": logo["source"],
-        },
-    )
+    etag = '"' + hashlib.sha256(logo["content"]).hexdigest() + '"'
+    age = max(0, int(time.time() - logo.get("fetched_at", time.time())))
+    headers = {
+        "Cache-Control": f"public, max-age={_LOGO_SUCCESS_TTL}, stale-while-revalidate={_LOGO_STALE_TTL}",
+        "Age": str(age),
+        "ETag": etag,
+        "Content-Security-Policy": "sandbox; default-src 'none'",
+        "X-Content-Type-Options": "nosniff",
+        "X-Logo-Source": logo["source"],
+    }
+    candidates = request.headers.get("if-none-match", "").split(",") if request else []
+    if any(tag.strip().removeprefix("W/") in {etag, "*"} for tag in candidates):
+        return Response(status_code=304, headers=headers)
+    return Response(content=logo["content"], media_type=logo["media_type"], headers=headers)
+
 
 
 def _attach_macro_fit(symbol: str, payload: Any) -> Any:

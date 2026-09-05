@@ -27,6 +27,10 @@ export interface QuoteStatus {
 }
 export interface QuoteEnvelope { quotes: LiveQuote[]; status: QuoteStatus }
 export interface RadarUpdate { events: Record<string, unknown>[]; resync_required?: boolean }
+const STATUS_FIELDS = ['enabled', 'configured', 'public_enabled', 'allowed', 'connected', 'connection_status', 'market_session', 'resync_required'] as const;
+const QUOTE_FIELDS = ['symbol', 'price', 'previous_close', 'change', 'change_pct', 'trade_at', 'received_at', 'session', 'source', 'freshness', 'subscription_status', 'subscription_reason'] as const;
+const MAX_STORED_QUOTES = 2048;
+const MAX_STORED_RADAR_EVENTS = 512;
 const INITIAL_STATUS: QuoteStatus = { enabled: false, configured: false, public_enabled: false, connected: false, connection_status: 'disabled' };
 const isRecord = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value);
 function isQuoteStatus(value: unknown): value is QuoteStatus {
@@ -75,6 +79,7 @@ export class QuoteStore {
   private radarEvents = new Map<string, Record<string, unknown>>();
   private radarEventListeners = new Map<string, Set<Listener>>();
   private radarListeners = new Set<(update: RadarUpdate) => void>();
+  private subscriptionKey = '';
   private consumers = new Map<symbol, { symbols: string[]; focus: string[] }>();
   private status = INITIAL_STATUS;
   private stream: Stream | null = null;
@@ -112,6 +117,12 @@ export class QuoteStore {
       accepted.push(event);
       changed = true; this.radarEvents.set(id, event); this.radarEventListeners.get(id)?.forEach(fn => fn());
     }
+    if (this.radarEvents.size > MAX_STORED_RADAR_EVENTS) {
+      for (const id of this.radarEvents.keys()) {
+        if (this.radarEvents.size <= MAX_STORED_RADAR_EVENTS) break;
+        if (!this.radarEventListeners.has(id)) this.radarEvents.delete(id);
+      }
+    }
     if (changed) { this.radarVersion++; this.radarVersionListeners.forEach(fn => fn()); }
     this.radarListeners.forEach(fn => fn({ events: accepted, resync_required: data.resync_required === true }));
   }
@@ -126,8 +137,8 @@ export class QuoteStore {
   register(symbols: readonly string[], focus: readonly string[] = []) {
     const id = Symbol();
     this.consumers.set(id, { symbols: normalizeQuoteSymbols(symbols), focus: normalizeQuoteSymbols(focus) });
-    this.schedule();
-    return () => { this.consumers.delete(id); this.schedule(); };
+    this.subscriptionsChanged();
+    return () => { this.consumers.delete(id); this.subscriptionsChanged(); };
   }
   start(owner: boolean) {
     this.stop(); this.started = true; this.owner = owner; this.terminal = false; this.failures = 0;
@@ -164,8 +175,11 @@ export class QuoteStore {
     for (const symbol of symbols) this.listeners.get(symbol)?.forEach(fn => fn());
   }
   private setStatus(status: QuoteStatus) {
-    if (JSON.stringify(status) === JSON.stringify(this.status)) return;
-    this.status = status; this.statusListeners.forEach(fn => fn());
+    // Provider heartbeats include volatile as_of/last_message_at counters.
+    // They aren't display state and must not redraw every subscribed chart.
+    if (STATUS_FIELDS.every(key => status[key] === this.status[key])) return;
+    this.status = Object.fromEntries(STATUS_FIELDS.map(key => [key, status[key]])) as unknown as QuoteStatus;
+    this.statusListeners.forEach(fn => fn());
   }
   private symbols() {
     const rows = [...this.consumers.values()];
@@ -174,6 +188,16 @@ export class QuoteStore {
     const ordered = normalizeQuoteSymbols([...MARKET_FUNDS.filter(symbol => all.includes(symbol)), ...focus, ...all]);
     const symbols = ordered.slice(0, 200);
     return { symbols, focus: focus.filter(symbol => symbols.includes(symbol)), omitted: ordered.slice(200) };
+  }
+  private subscriptionsChanged() {
+    const { symbols, focus, omitted } = this.symbols();
+    const key = JSON.stringify([symbols, focus]);
+    if (key === this.subscriptionKey) {
+      if (this.permitted && omitted.length) this.query();
+      return;
+    }
+    this.subscriptionKey = key;
+    this.schedule();
   }
   private query() {
     const { symbols, focus, omitted } = this.symbols();
@@ -282,10 +306,19 @@ export class QuoteStore {
     if (!this.flushTimer) this.flushTimer = setTimeout(() => {
       this.flushTimer = null;
       for (const [symbol, quote] of this.pending) {
-        if (JSON.stringify(this.quotes.get(symbol)) === JSON.stringify(quote)) continue;
+        const previous = this.quotes.get(symbol);
+        if (previous && QUOTE_FIELDS.every(key => previous[key] === quote[key])) continue;
         this.quotes.set(symbol, quote); this.listeners.get(symbol)?.forEach(fn => fn());
       }
       this.pending.clear();
+      // Keep all currently requested symbols; evict only old navigation data.
+      if (this.quotes.size > MAX_STORED_QUOTES) {
+        const active = new Set(this.symbols().symbols);
+        for (const symbol of this.quotes.keys()) {
+          if (this.quotes.size <= MAX_STORED_QUOTES) break;
+          if (!active.has(symbol) && !this.listeners.has(symbol)) this.quotes.delete(symbol);
+        }
+      }
     }, 250);
   }
 }

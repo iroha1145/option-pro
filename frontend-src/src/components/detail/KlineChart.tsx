@@ -861,20 +861,23 @@ export default function KlineChart({
     },
     [data, range, mode, prevClose, overlay, extraMarks, analysisOption, colorMode],
   );
-  // Only this separate reference series changes per trade. Historical candles,
-  // volume, drawings and the user's zoom window are not rebuilt or overwritten.
+  // Depend on the visible reference values, not the entire quote: unchanged
+  // prices with newer trade timestamps must not call ECharts.setOption again.
+  const usesLiveReference = preferLiveQuote(liveQuote, typeof currentPrice === 'number' && currentPrice > 0, quoteUpdatedAt);
+  const referenceCandidate = liveQuote ? (usesLiveReference ? liveQuote.price : currentPrice) : null;
+  const referencePrice = typeof referenceCandidate === 'number' && Number.isFinite(referenceCandidate) && referenceCandidate > 0 ? referenceCandidate : null;
+  const referenceLabel = referencePrice !== null && liveQuote
+    ? `${displayedQuoteLabel(liveQuote, quoteStatus, usesLiveReference)} $${referencePrice.toFixed(2)}` : '';
+  const referenceBarCount = bars?.length ?? 0;
   useEffect(() => {
     if (!chartInst || chartInst.isDisposed() || !option) return;
-    const usesLive = preferLiveQuote(liveQuote, typeof currentPrice === 'number' && currentPrice > 0, quoteUpdatedAt);
-    const price = liveQuote ? (usesLive ? liveQuote.price : currentPrice) : null;
-    const valid = typeof price === 'number' && Number.isFinite(price) && price > 0;
-    chartInst.setOption({ series: [{ id: 'realtime-price-reference', data: valid && bars?.length ? [[bars.length - 1, price]] : [], markLine: {
+    chartInst.setOption({ series: [{ id: 'realtime-price-reference', data: referencePrice !== null && referenceBarCount ? [[referenceBarCount - 1, referencePrice]] : [], markLine: {
       symbol: 'none', silent: true, animation: false,
       lineStyle: { type: 'dashed', width: 1, color: CH.brand500 },
-      label: { show: true, position: 'insideEndTop', formatter: valid ? `${displayedQuoteLabel(liveQuote!, quoteStatus, usesLive)} $${price.toFixed(2)}` : '', color: CH.brand500, fontSize: 10 },
-      data: valid ? [{ yAxis: price }] : [],
+      label: { show: true, position: 'insideEndTop', formatter: referenceLabel, color: CH.brand500, fontSize: 10 },
+      data: referencePrice !== null ? [{ yAxis: referencePrice }] : [],
     } }] }, { notMerge: false, lazyUpdate: true, silent: true });
-  }, [chartInst, option, liveQuote, quoteStatus, currentPrice, quoteUpdatedAt, bars]);
+  }, [chartInst, option, referencePrice, referenceLabel, referenceBarCount]);
 
   // The chart calls this from its commit effect. A scroll never rebuilds the
   // option, and an abandoned render cannot reset the live chart's viewport.

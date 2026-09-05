@@ -72,3 +72,16 @@ def _reset_read_caches():
     _clear()
     yield
     _clear()
+
+
+@pytest.fixture(autouse=True)
+def _isolated_company_logo_cache(monkeypatch, tmp_path):
+    """Logo disk/memory caches cannot leak provider fixtures between tests."""
+    from app.services import company_logo_cache
+    from app.api import stocks
+
+    monkeypatch.setattr(company_logo_cache, "cache_path", lambda: tmp_path / "company-logos.sqlite")
+    for key in list(stocks._endpoint_cache):
+        if key.startswith("logo:"):
+            stocks._endpoint_cache.pop(key, None)
+    stocks._logo_retry_after.clear()

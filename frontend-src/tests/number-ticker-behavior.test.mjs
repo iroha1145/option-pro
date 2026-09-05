@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
 import { createRequire } from 'node:module';
+import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 const require = createRequire(import.meta.url);
 function moduleAt(path, imports = {}) {
@@ -30,19 +31,22 @@ test('decimal and place-value identity survives sign and thousands-boundary chan
 });
 
 test('first render displays exact decimal price without counting from zero', () => {
-  const html = renderToStaticMarkup(component({ text: '$1,234.56' }));
+  const html = renderToStaticMarkup(createElement(component, { text: '$1,234.56' }));
   assert.match(html, /aria-label="\$1,234\.56"/);
   assert.match(html, /translateY\(-5\.5em\)/);
   assert.match(html, /translateY\(-6\.6[0-9]*em\)/);
   assert.match(html, /width:1ch/);
 });
 
-test('reduced motion removes rolling duration while unchanged place keys remain stable', () => {
-  for (const reduce of [false, true]) {
-    reduced = reduce;
-    const tree = component({ text: '-12.34%' });
-    const digit = tree.props.children.props.children.find(child => child.props.children?.props?.animate);
-    assert.equal(digit.props.children.props.initial, false);
-    assert.equal(digit.props.children.props.transition.duration, reduce ? 0 : 0.25);
-  }
+test('unchanged numbers and digits are memoized and reduced motion removes digit columns', () => {
+  reduced = false;
+  const animated = renderToStaticMarkup(createElement(component, { text: '-12.34%' }));
+  assert.match(animated, /transition:transform 250ms cubic-bezier/);
+  assert.equal(component.$$typeof, Symbol.for('react.memo'));
+  reduced = true;
+  const reducedHtml = renderToStaticMarkup(createElement(component, { text: '-12.34%' }));
+  assert.match(reducedHtml, /-12\.34%/);
+  assert.doesNotMatch(reducedHtml, /translateY|transition|width:1ch/);
+  assert.equal((reducedHtml.match(/<span/g) ?? []).length, 2);
+  reduced = false;
 });
