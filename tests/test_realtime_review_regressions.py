@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import json
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -146,5 +147,133 @@ def test_rest_price_ahead_of_trade_does_not_hide_observed_crossing(tmp_path, mon
         # Genuine out-of-order websocket trades still cannot trigger old evidence.
         await hub._process_trade({"s": "AAPL", "p": 110, "t": int((AT + timedelta(seconds=9)).timestamp()*1000), "v": 100, "c": ["1"]})
         assert observed == [105]
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("revision", ["still_eligible", "higher_resistance", "market_blocked", "deleted", "newer_observation"])
+def test_same_trade_rechecks_revised_candidate_before_following_retreat(seeded, monkeypatch, tmp_path, revision):
+    _, repo, adapter = seeded
+    monkeypatch.setattr(quotes, "_utcnow", lambda: AT + timedelta(seconds=20))
+    reloads = []
+    commits = []
+    original_load = adapter._load_events
+    original_commit = repo.commit_live_trigger
+
+    def load():
+        reloads.append(True)
+        return original_load()
+
+    def commit(body, **kwargs):
+        commits.append(body["evidence_at"])
+        return original_commit(body, **kwargs)
+
+    async def run():
+        await adapter.radar_symbols()
+        monkeypatch.setattr(adapter, "_load_events", load)
+        monkeypatch.setattr(repo, "commit_live_trigger", commit)
+        if revision == "deleted":
+            with sqlite3.connect(repo.path) as connection:
+                connection.execute("DELETE FROM breakout_events WHERE event_id='event-AAPL'")
+        else:
+            observed = 15 if revision == "newer_observation" else 5
+            revised = event(last_seen_at=(AT + timedelta(seconds=observed)).isoformat())
+            if revision == "higher_resistance":
+                revised["structure"]["resistance_zone"]["high"] = 110
+            if revision == "market_blocked":
+                revised["data_quality"]["market_eligibility"] = "blocked"
+            publish(repo, AT + timedelta(seconds=observed), [revised])
+        hub = quotes.QuoteHub(SimpleNamespace(data_dir=tmp_path, quotes_enabled=True,
+            quotes_signals_enabled=True, finnhub_api_key="fixture"), trade_handler=adapter.handle_trade)
+        client_id = await hub.subscribe(["AAPL"])
+        # Both trades are in the same frame; there is no independent inventory
+        # refresh between the first crossing and the subsequent retreat.
+        await hub._process_message(json.dumps({"type": "trade", "data": [
+            {"s": "AAPL", "p": 105, "t": int((AT + timedelta(seconds=10)).timestamp() * 1000), "v": 100, "c": ["1"]},
+            {"s": "AAPL", "p": 99, "t": int((AT + timedelta(seconds=11)).timestamp() * 1000), "v": 200, "c": ["1"]},
+        ]}))
+        rows = repo.recent_live_events(as_of=AT + timedelta(seconds=20))
+        assert len(reloads) == 1
+        assert hub._quotes["AAPL"]["price"] == 99
+        assert hub._signals_resync_required is False
+        assert hub._status()["last_error"] is None
+        if revision == "still_eligible":
+            assert len(commits) == 2
+            assert [row["lifecycle_state"] for row in rows] == ["TRIGGERED"]
+            assert rows[0]["event_price"] == 105
+            assert datetime.fromisoformat(rows[0]["evidence_at"].replace("Z", "+00:00")) == AT + timedelta(seconds=10)
+            assert hub._clients[client_id].queue.get_nowait()["data"]["events"][0]["lifecycle_state"] == "TRIGGERED"
+        else:
+            assert len(commits) == 1
+            assert rows == []
+            assert hub._clients[client_id].queue.empty()
+
+    asyncio.run(run())
+
+
+def test_same_trade_retry_stops_after_a_second_candidate_conflict(seeded, monkeypatch):
+    _, repo, adapter = seeded
+    commits = []
+    reloads = []
+    original_load = adapter._load_events
+    original_commit = repo.commit_live_trigger
+
+    def load():
+        reloads.append(True)
+        return original_load()
+
+    def commit(body, **kwargs):
+        commits.append(body["evidence_at"])
+        revised_at = AT + timedelta(seconds=4 + len(commits))
+        publish(repo, revised_at, [event(last_seen_at=revised_at.isoformat())])
+        return original_commit(body, **kwargs)
+
+    async def run():
+        await adapter.radar_symbols()
+        monkeypatch.setattr(adapter, "_load_events", load)
+        monkeypatch.setattr(repo, "commit_live_trigger", commit)
+        assert await adapter.handle_trade(trade(price=105)) == []
+        assert len(commits) == 2
+        assert len(reloads) == 1
+        assert commits[0] == commits[1], "retry must retain the original trade evidence time"
+        assert repo.recent_live_events(as_of=AT + timedelta(seconds=20)) == []
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("failure", ["reload", "second_commit"])
+def test_same_trade_retry_storage_failures_still_reach_hub(seeded, monkeypatch, tmp_path, failure):
+    _, repo, adapter = seeded
+    monkeypatch.setattr(quotes, "_utcnow", lambda: AT + timedelta(seconds=20))
+    commits = []
+    original_commit = repo.commit_live_trigger
+
+    def fail():
+        raise sqlite3.OperationalError("fixture unavailable")
+
+    def commit(body, **kwargs):
+        commits.append(body["evidence_at"])
+        if len(commits) == 2:
+            fail()
+        return original_commit(body, **kwargs)
+
+    async def run():
+        await adapter.radar_symbols()
+        publish(repo, AT + timedelta(seconds=5), [event(last_seen_at=(AT + timedelta(seconds=5)).isoformat())])
+        if failure == "reload":
+            monkeypatch.setattr(adapter, "_load_events", fail)
+        else:
+            monkeypatch.setattr(repo, "commit_live_trigger", commit)
+        hub = quotes.QuoteHub(SimpleNamespace(data_dir=tmp_path, quotes_enabled=True,
+            quotes_signals_enabled=True, finnhub_api_key="fixture"), trade_handler=adapter.handle_trade)
+        client_id = await hub.subscribe(["AAPL"])
+        await hub._process_trade({"s": "AAPL", "p": 105, "t": int((AT + timedelta(seconds=10)).timestamp() * 1000), "v": 100, "c": ["1"]})
+        assert hub._quotes["AAPL"]["price"] == 105
+        assert hub._signals_resync_required is True
+        assert hub._status()["last_error"] == "radar_trade_failed"
+        assert hub._clients[client_id].resync_required is True
+        assert repo.recent_live_events(as_of=AT + timedelta(seconds=20)) == []
+        if failure == "second_commit":
+            assert len(commits) == 2
 
     asyncio.run(run())
