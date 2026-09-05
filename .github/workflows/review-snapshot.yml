@@ -1,0 +1,22 @@
+name: Review source snapshot
+on:
+  push:
+    branches: [fix/realtime-quotes-review-20260906]
+    paths: [.github/workflows/review-snapshot.yml]
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - name: Export tracked sources only
+        run: git archive --format=tar.gz -o /tmp/option-pro-review-source.tar.gz HEAD
+      - uses: actions/upload-artifact@v4
+        with:
+          name: option-pro-review-source
+          path: /tmp/option-pro-review-source.tar.gz
+          retention-days: 1
