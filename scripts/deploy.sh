@@ -241,7 +241,7 @@ verify_worker() {
                 2>/dev/null
         )" && worker_payload_is_ready "$payload"; then
             printf '%s\n' "$payload"
-            return
+            return 0
         fi
         sleep 2
     done
@@ -272,7 +272,7 @@ verify_public_snapshots() {
             if printf '%s' "$report" | grep -q '"stale":\[[^]]'; then
                 printf 'Note: some public home data is past its refresh window; the worker will pick it up on its own schedule.\n' >&2
             fi
-            return
+            return 0
         fi
         sleep 2
     done
