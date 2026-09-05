@@ -1,5 +1,5 @@
 /** Company logo, with an initial only when no usable image is available. */
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { isMock } from '@/api/client';
 import { companyLogoSources, companySymbol } from '@/lib/companyLogo';
 import { cn } from '@/lib/utils';
@@ -37,7 +37,8 @@ function CompanyMark({ ticker, size = 32, className }: Props) {
   );
 }
 
-export default function TickerLogo(props: Props) {
+const TickerLogo = memo(function TickerLogo(props: Props) {
   const ticker = companySymbol(props.ticker);
   return <CompanyMark key={ticker} {...props} ticker={ticker} />;
-}
+});
+export default TickerLogo;

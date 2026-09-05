@@ -325,3 +325,57 @@ test('price labels distinguish a rendered fallback from the disconnected cached 
   assert.equal(h.displayedQuoteLabel(stale, disconnected, true), '行情重连中');
   assert.equal(h.displayedQuoteLabel(quote('AAPL', 105), enabled, true), '实时');
 });
+
+test('volatile server timestamps do not invalidate every status subscriber', async () => {
+  const h = harness();
+  h.store.register(['AAPL', 'MSFT']); h.store.start(false); await h.tick(300);
+  let updates = 0;
+  h.store.subscribeStatus(() => updates++);
+  const previous = h.store.getStatus();
+  for (let i = 0; i < 100; i++) {
+    h.streams.at(-1).emit('status', { ...enabled, as_of: `tick-${i}`, last_message_at: `tick-${i}`, client_count: i });
+  }
+  assert.equal(updates, 0);
+  assert.equal(h.store.getStatus(), previous);
+  h.streams.at(-1).emit('status', { ...enabled, connected: false, connection_status: 'reconnecting' });
+  assert.equal(updates, 1);
+  h.store.stop();
+});
+
+test('duplicate symbol consumers do not reconnect a healthy shared stream', async () => {
+  const h = harness();
+  h.store.register(['AAPL']); h.store.start(false); await h.tick(300);
+  const requests = h.requests.length;
+  const first = h.streams.at(-1);
+  const release = h.store.register(['AAPL']); await h.tick(300);
+  release(); await h.tick(300);
+  assert.equal(first.closed, false);
+  assert.equal(h.requests.length, requests);
+  assert.equal(h.streams.length, 1);
+  h.store.stop();
+});
+
+test('one-symbol delta leaves unchanged quotes and listeners untouched', async () => {
+  const h = harness();
+  h.store.register(['AAPL', 'MSFT']); h.store.start(false); await h.tick(300);
+  const old = h.store.getQuote('MSFT');
+  let changes = 0;
+  h.store.subscribe('MSFT', () => changes++);
+  h.streams.at(-1).emit('quotes', { quotes: [quote('AAPL', 123, 20)], status: enabled });
+  await h.tick(300);
+  assert.equal(h.store.getQuote('AAPL').price, 123);
+  assert.equal(h.store.getQuote('MSFT'), old);
+  assert.equal(changes, 0);
+  h.store.stop();
+});
+
+test('new over-limit consumers get fallback state without reopening the unchanged stream', async () => {
+  const h = harness();
+  h.store.register(Array.from({ length: 200 }, (_, i) => `S${i}`));
+  h.store.start(false); await h.tick(300);
+  const first = h.streams.at(-1);
+  h.store.register(['OVER']); await h.tick(300);
+  assert.equal(first.closed, false);
+  assert.equal(h.store.getQuote('OVER').subscription_status, 'limited');
+  h.store.stop();
+});

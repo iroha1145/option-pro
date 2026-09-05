@@ -264,7 +264,13 @@ class QuoteHub:
                     # A slow browser may have missed a radar event. It must
                     # refetch the durable radar state, not infer the gap.
                     client.resync_required = False
+                    # Deltas may have been dropped by a slow reader. Discard
+                    # the stale queue and restore every requested quote before
+                    # resuming deltas; radar resync still uses durable state.
+                    while not client.queue.empty():
+                        client.queue.get_nowait()
                     yield {"event": "status", "data": {**self._status(), "resync_required": True}}
+                    yield {"event": "quotes", "data": await self.snapshot(client.symbols)}
                 try:
                     event = await asyncio.wait_for(client.queue.get(), timeout=min(10, self._release_seconds / 2))
                 except TimeoutError:
@@ -366,17 +372,37 @@ class QuoteHub:
             client.resync_required = True
         client.queue.put_nowait(event)
 
+    def _publish_pending(self) -> None:
+        """Build each changed symbol once, not a full page for every reader."""
+        dirty, self._dirty_symbols = self._dirty_symbols, set()
+        all_dirty, self._all_dirty = self._all_dirty, False
+        status_dirty, self._status_dirty = self._status_dirty, False
+        if not self._clients or not (dirty or all_dirty or status_dirty):
+            return
+        status = self._status()
+        views: dict[str, dict[str, Any]] = {}
+        frames: dict[tuple[str, ...], dict[str, Any]] = {}
+        for client in list(self._clients.values()):
+            symbols = tuple(symbol for symbol in client.symbols
+                            if all_dirty or _provider_symbol(symbol) in dirty)
+            if symbols:
+                frame = frames.get(symbols)
+                if frame is None:
+                    for symbol in symbols:
+                        if symbol not in views:
+                            views[symbol] = self._quote_view(symbol)
+                    frame = {"event": "quotes", "data": {
+                        "quotes": [views[symbol] for symbol in symbols], "status": status,
+                    }}
+                    frames[symbols] = frame
+                self._emit(client, frame)
+            elif status_dirty:
+                self._emit(client, {"event": "status", "data": status})
+
     async def _publisher(self) -> None:
         while self._running:
             await asyncio.sleep(self._interval)
-            dirty, self._dirty_symbols = self._dirty_symbols, set()
-            all_dirty, self._all_dirty = self._all_dirty, False
-            status_dirty, self._status_dirty = self._status_dirty, False
-            for client in list(self._clients.values()):
-                if all_dirty or dirty.intersection(client.provider_symbols):
-                    self._emit(client, {"event": "quotes", "data": await self.snapshot(client.symbols)})
-                elif status_dirty:
-                    self._emit(client, {"event": "status", "data": self._status()})
+            self._publish_pending()
 
     async def _housekeeping(self) -> None:
         while self._running:
@@ -647,7 +673,11 @@ class QuoteHub:
             return
         # Do not collapse this array to its last price. A single frame may
         # contain a breakout followed by a retreat below the same threshold.
-        for raw_trade in message["data"]:
+        for index, raw_trade in enumerate(message["data"]):
+            # Non-triggering trades often contain no actual I/O await. Yield
+            # periodically so a large frame cannot starve HTTP/SSE heartbeats.
+            if index and index % 128 == 0:
+                await asyncio.sleep(0)
             await self._process_trade(raw_trade)
 
     async def _process_trade(self, raw: Any) -> None:

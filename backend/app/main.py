@@ -139,10 +139,12 @@ async def _lifespan(application: FastAPI):
     )
     application.state.quote_hub = hub
     try:
+        await stocks.start_company_logo_client()
         await hub.start()
         yield
     finally:
         await hub.close()
+        await stocks.close_company_logo_client()
         application.state.quote_hub = None
 
 

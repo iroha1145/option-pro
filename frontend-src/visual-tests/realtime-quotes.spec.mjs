@@ -144,6 +144,19 @@ test('live chart reference updates without rewriting candles or resetting the zo
     return { candles: option.series.find(row => row.type === 'candlestick').data, zoom: option.dataZoom[0] };
   });
   expect(after.candles).toEqual(before.candles); expect(after.zoom.startValue).toBe(before.zoom.startValue); expect(after.zoom.endValue).toBe(before.zoom.endValue);
+  await page.evaluate(() => {
+    const chart = window.testQuoteChart;
+    const original = chart.setOption.bind(chart);
+    window.referencePatches = 0;
+    chart.setOption = (option, ...args) => {
+      if (option.series?.some(row => row.id === 'realtime-price-reference')) window.referencePatches++;
+      return original(option, ...args);
+    };
+  });
+  await emit(page, 'AAPL', 105.27, { trade_at: '2026-09-04T15:00:01Z', received_at: '2026-09-04T15:00:01Z' });
+  await page.waitForTimeout(600);
+  expect(await page.evaluate(() => window.referencePatches)).toBe(0);
+
   expect(state.errors).toEqual([]);
 });
 
@@ -176,5 +189,33 @@ test('detail labels a retained price as reconnecting, never live, after a stream
   await page.evaluate(() => window.quoteStreams.filter(row => !row.closed).at(-1).onerror());
   await expect(page.locator('main header').first()).toContainText('行情重连中');
   await expect(page.locator('main [aria-label="$105.27"]').first()).toBeVisible();
+  expect(state.errors).toEqual([]);
+});
+
+test('timestamp-only quote bursts keep number DOM stable and reduced motion removes digit columns', async ({ page }) => {
+  const state = await fixture(page);
+  await page.goto('/stock/AAPL');
+  const number = page.locator('main [data-quote-symbol="AAPL"]').first().locator('[aria-label="$100.00"]');
+  await expect(number).toBeVisible();
+  await expect.poll(() => latestSymbols(page)).toContain('AAPL');
+  await page.waitForTimeout(500);
+  await number.evaluate(element => {
+    window.numberMutations = 0;
+    window.numberObserver = new MutationObserver(rows => { window.numberMutations += rows.length; });
+    window.numberObserver.observe(element, { attributes: true, childList: true, subtree: true, characterData: true });
+  });
+  await page.evaluate(({ status, quote }) => {
+    const stream = window.quoteStreams.filter(row => !row.closed).at(-1);
+    for (let i = 1; i <= 200; i++) {
+      const stamp = new Date(Date.parse(quote.trade_at) + i).toISOString();
+      stream.emit('quotes', { quotes: [{ ...quote, trade_at: stamp, received_at: stamp }], status: { ...status, as_of: stamp } });
+    }
+  }, { status, quote: price('AAPL') });
+  await page.waitForTimeout(600);
+  expect(await page.evaluate(() => window.numberMutations)).toBe(0);
+  await page.evaluate(() => window.numberObserver.disconnect());
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await expect.poll(() => number.locator('span').count()).toBe(1);
+  await expect(number).toHaveText('$100.00');
   expect(state.errors).toEqual([]);
 });
