@@ -4,7 +4,7 @@ const at = '2026-09-04T15:00:00Z';
 const status = { enabled: true, configured: true, allowed: true, public_enabled: true, connected: true, connection_status: 'connected', market_session: 'regular' };
 const price = (symbol, value = 100, extra = {}) => ({ symbol, price: value, previous_close: 99, change: value - 99, change_pct: (value / 99 - 1) * 100, trade_at: at, received_at: at, source: 'finnhub', session: 'regular', freshness: 'live', subscription_status: 'live', ...extra });
 async function fixture(page, enabled = true) {
-  const state = { requests: [], errors: [], completeDetail: false, radar: { event_id: 'live-event', ticker: 'AAPL', name: 'Apple', session: 'regular', setup_type: 'DAILY_BASE_BREAKOUT', lifecycle_state: 'WATCHING', state_version: 0, event_at: at, current_price: 100, event_price: 100, invalidation_price: 90, target_price: 120, session_change_pct: 1, intrinsic_strength_score: 80 }, transitions: [{ state: 'WATCHING', at }] };
+  const state = { requests: [], errors: [], completeDetail: false, quoteDelayMs: 0, radar: { event_id: 'live-event', ticker: 'AAPL', name: 'Apple', session: 'regular', setup_type: 'DAILY_BASE_BREAKOUT', lifecycle_state: 'WATCHING', state_version: 0, event_at: at, current_price: 100, event_price: 100, invalidation_price: 90, target_price: 120, session_change_pct: 1, intrinsic_strength_score: 80 }, transitions: [{ state: 'WATCHING', at }] };
   page.on('pageerror', error => state.errors.push(error.message));
   await page.addInitScript(() => {
     window.quoteStreams = [];
@@ -21,7 +21,10 @@ async function fixture(page, enabled = true) {
   await page.route('**/api/**', async route => {
     const url = new URL(route.request().url()); if (!url.pathname.startsWith('/api/')) return route.continue(); state.requests.push(url.pathname + url.search);
     if (url.pathname === '/api/access/status') return route.fulfill({ json: { access_mode: 'password', logged_in: false, account: null } });
-    if (url.pathname === '/api/quotes') return route.fulfill({ json: { quotes: enabled ? (url.searchParams.get('symbols') ?? '').split(',').filter(Boolean).map(symbol => price(symbol)) : [], status: { ...status, allowed: enabled } } });
+    if (url.pathname === '/api/quotes') {
+      if (state.quoteDelayMs) await new Promise(resolve => setTimeout(resolve, state.quoteDelayMs));
+      return route.fulfill({ json: { quotes: enabled ? (url.searchParams.get('symbols') ?? '').split(',').filter(Boolean).map(symbol => price(symbol)) : [], status: { ...status, allowed: enabled } } });
+    }
     if (url.pathname === '/api/market/status') return route.fulfill({ json: { session: 'regular', label: '盘中', is_open: true } });
     if (url.pathname === '/api/market/indices') return route.fulfill({ json: { indices: [{ code: 'SPX', symbol: '^GSPC', price: 6000, change_percent: 1 }] } });
     if (url.pathname === '/api/stocks/watchlist') return route.fulfill({ json: { groups: [{ id: 'all', name: 'All', stocks: Array.from({ length: 32 }, (_, i) => ({ ticker: i === 0 ? 'AAPL' : `S${String(i).padStart(3, '0')}`, name: `Stock ${i}`, price: 100 + i, change: i, change_percent: i, quote_as_of: at })) }] } });
@@ -41,9 +44,17 @@ const latestSymbols = page => page.evaluate(() => {
   const stream = window.quoteStreams.filter(row => !row.closed).at(-1);
   return stream ? new URL(stream.url, location.origin).searchParams.get('symbols').split(',') : [];
 });
-const emit = (page, symbol, value, extra = {}) => page.evaluate(({ symbol, value, at, extra }) => {
-  window.quoteStreams.filter(row => !row.closed).at(-1).emit('quotes', { quotes: [{ symbol, price: value, previous_close: 99, change: value - 99, change_pct: (value / 99 - 1) * 100, trade_at: at, received_at: at, source: 'finnhub', session: 'regular', freshness: 'live', subscription_status: 'live', ...extra }] });
-}, { symbol, value, at, extra });
+async function emitEvent(page, type, data) {
+  // The page and its HTTP quote snapshot can render before EventSource exists.
+  // Check and deliver in one browser task so a reconnect cannot race the send.
+  await expect.poll(() => page.evaluate(({ type, data }) => {
+    const stream = window.quoteStreams.filter(row => !row.closed).at(-1);
+    if (!stream?.listeners.has(type)) return false;
+    stream.emit(type, data);
+    return true;
+  }, { type, data })).toBe(true);
+}
+const emit = (page, symbol, value, extra = {}) => emitEvent(page, 'quotes', { quotes: [price(symbol, value, extra)] });
 
 test('watchlist subscribes offscreen rows, pushes prices without reordering, and releases on navigation', async ({ page }) => {
   const state = await fixture(page); await page.goto('/watchlist');
@@ -91,18 +102,23 @@ test('visitors without quote access keep delayed indices and never open a stream
 
 
 test('an open radar detail follows new versions and reconciles missed states after reconnect', async ({ page }) => {
-  const state = await fixture(page); await page.goto('/breakouts');
+  const state = await fixture(page); state.quoteDelayMs = 750; await page.goto('/breakouts');
   await page.getByRole('button', { name: '查看完整证据', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'AAPL 突破事件详情' });
   await expect(dialog).toBeVisible();
   state.radar = { ...state.radar, state_version: 1, lifecycle_state: 'TRIGGERED', trigger_source: 'finnhub', evidence_at: at, triggered_at: at };
   state.transitions.push({ state: 'TRIGGERED', at });
-  await page.evaluate(event => window.quoteStreams.filter(row => !row.closed).at(-1).emit('radar', { events: [event] }), state.radar);
+  await emitEvent(page, 'radar', { events: [state.radar] });
   await expect(dialog.getByRole('list', { name: '生命周期轨迹' })).toContainText('已触发');
   state.radar = { ...state.radar, state_version: 2, lifecycle_state: 'CONFIRMED' };
   state.transitions.push({ state: 'CONFIRMED', at });
   // This confirmation is deliberately not pushed. The reconnect must fill the gap.
-  await page.evaluate(() => window.quoteStreams.filter(row => !row.closed).at(-1).onerror());
+  await expect.poll(() => page.evaluate(() => {
+    const stream = window.quoteStreams.filter(row => !row.closed).at(-1);
+    if (typeof stream?.onerror !== 'function') return false;
+    stream.onerror();
+    return true;
+  })).toBe(true);
   await expect(dialog.getByRole('list', { name: '生命周期轨迹' })).toContainText('已确认');
   await expect(dialog.getByText('已确认', { exact: true }).first()).toBeVisible();
   expect(state.errors).toEqual([]);
