@@ -1,24 +1,15 @@
 /**
  * 期权链派生指标（展示层纯函数）。
- * 只从 OptionChain 已有字段计算：逐腿求和时跳过缺失腿，整侧全缺则合计为
- * null（显「—」），绝不落 0；权利金流按 vol × 买卖中价 × 100 估算。
+ * 一条记录对应一份合约，保留缺失字段与精确行权价。
+ * 金额按成交量 × 买卖中价 × 100 估算，不推断实际资金流向。
  */
-import type { OptionChain, OptionChainRow } from '@/api/types';
+import type { OptionChain } from '@/api/types';
 import { midpoint, volOiState, type VolOiState } from '../optionAnalysis.ts';
 
-export interface RowMeta {
-  callVolOi: VolOiState;
-  putVolOi: VolOiState;
-  callAlert: boolean;
-  putAlert: boolean;
-  callPremium: number | null; // 美元，估算
-  putPremium: number | null;
-}
-
-/** 量持比 > 3 或持仓量为 0 而有成交（全部新开仓）都算异动。 */
+/** 成交量达到持仓量三倍，或零持仓有成交；不推断开平仓方向。 */
 export function isAlerting(state: VolOiState): boolean {
   return (
-    (state.kind === 'ratio' && state.ratio > 3) || state.kind === 'new_opening'
+    (state.kind === 'ratio' && state.ratio >= 3) || state.kind === 'new_opening'
   );
 }
 
@@ -29,105 +20,67 @@ function premiumOf(
 ): number | null {
   const m = midpoint(bid, ask);
   if (volume === null || m === null) return null;
-  return volume * m * 100;
+  const estimate = volume * m * 100;
+  return Number.isFinite(estimate) ? estimate : null;
 }
 
-export function rowMeta(r: OptionChainRow): RowMeta {
-  const callVolOi = volOiState(r.callVol, r.callOi);
-  const putVolOi = volOiState(r.putVol, r.putOi);
-  return {
-    callVolOi,
-    putVolOi,
-    callAlert: isAlerting(callVolOi),
-    putAlert: isAlerting(putVolOi),
-    callPremium: premiumOf(r.callVol, r.callBid, r.callAsk),
-    putPremium: premiumOf(r.putVol, r.putBid, r.putAsk),
-  };
+export type ContractSide = 'call' | 'put';
+export type ContractScope = 'near' | 'alerts' | 'all';
+export interface ChainContract {
+  id: string;
+  side: ContractSide;
+  strike: number;
+  volume: number | null;
+  openInterest: number | null;
+  bid: number | null;
+  ask: number | null;
+  iv: number | null;
+  mid: number | null;
+  premium: number | null;
+  volOi: VolOiState;
+  activity: ('ratio' | 'zero_oi' | 'volume' | 'premium')[];
 }
 
-/** 异动角标文案：有比值显倍数，新开仓显 ∞（量持比不适用）。 */
-export function volOiBadge(state: VolOiState): string | null {
-  if (state.kind === 'ratio') return state.ratio > 3 ? `${state.ratio.toFixed(1)}×` : null;
-  return state.kind === 'new_opening' ? '∞' : null;
+const nonnegative = (n: number | null): number | null =>
+  n !== null && Number.isFinite(n) && n >= 0 ? n : null;
+
+/** One row is one contract. A missing opposite leg never becomes a zero-valued contract. */
+export function contractsForChain(chain: OptionChain): ChainContract[] {
+  return chain.rows.flatMap((row) => {
+    if (!Number.isFinite(row.strike) || row.strike <= 0) return [];
+    return (['call', 'put'] as const).flatMap((side): ChainContract[] => {
+      const volume = nonnegative(side === 'call' ? row.callVol : row.putVol);
+      const openInterest = nonnegative(side === 'call' ? row.callOi : row.putOi);
+      const bid = nonnegative(side === 'call' ? row.callBid : row.putBid);
+      const ask = nonnegative(side === 'call' ? row.callAsk : row.putAsk);
+      const iv = nonnegative(side === 'call' ? row.callIv : row.putIv);
+      if ([volume, openInterest, bid, ask, iv].every((n) => n === null)) return [];
+      const mid = midpoint(bid, ask);
+      const premium = premiumOf(volume, bid, ask);
+      const volOi = volOiState(volume, openInterest);
+      const activity: ChainContract['activity'] = [];
+      if (volOi.kind === 'ratio' && volOi.ratio >= 3) activity.push('ratio');
+      if (volOi.kind === 'new_opening') activity.push('zero_oi');
+      if (volume !== null && volume >= 5000) activity.push('volume');
+      if (premium !== null && premium >= 500000) activity.push('premium');
+      return [{ id: `${side}-${row.strike}`, side, strike: row.strike, volume, openInterest,
+        bid, ask, iv, mid, premium, volOi, activity }];
+    });
+  }).sort((a, b) => a.strike - b.strike || (a.side === 'call' ? -1 : 1));
 }
 
-export interface ChainTotals {
-  callVol: number | null;
-  putVol: number | null;
-  callOi: number | null;
-  putOi: number | null;
-  /** 估算权利金流（美元）逐腿合计；该侧无可估算腿时为 null。 */
-  callPremium: number | null;
-  putPremium: number | null;
-  /** 横条归一基准：两侧共用一个全链最大值，Call/Put 量级才可比。 */
-  maxVol: number | null;
-  maxOi: number | null;
-}
-
-function sumLegs(values: (number | null)[]): number | null {
-  let total = 0;
-  let seen = false;
-  for (const value of values) {
-    if (value === null || !Number.isFinite(value)) continue;
-    total += value;
-    seen = true;
+/** Near-money view uses eleven observed strikes; no invented strike spacing or spot. */
+export function selectContracts(
+  contracts: ChainContract[], scope: ContractScope, side: ContractSide | 'all', spot: number | null,
+): ChainContract[] {
+  let rows = contracts;
+  if (scope === 'alerts') {
+    rows = rows.filter((c) => c.activity.length > 0).sort((a, b) =>
+      (b.volume ?? -1) - (a.volume ?? -1) || a.strike - b.strike);
+  } else if (scope === 'near' && spot !== null && Number.isFinite(spot) && spot > 0) {
+    const nearest = new Set([...new Set(contracts.map((c) => c.strike))]
+      .sort((a, b) => Math.abs(a - spot) - Math.abs(b - spot) || a - b).slice(0, 11));
+    rows = rows.filter((c) => nearest.has(c.strike));
   }
-  return seen ? total : null;
-}
-
-function maxLeg(values: (number | null)[]): number | null {
-  let max = 0;
-  let seen = false;
-  for (const value of values) {
-    if (value === null || !Number.isFinite(value)) continue;
-    if (value > max) max = value;
-    seen = true;
-  }
-  return seen && max > 0 ? max : null;
-}
-
-export function summarizeChain(chain: OptionChain): ChainTotals {
-  const rows = chain.rows;
-  return {
-    callVol: sumLegs(rows.map((r) => r.callVol)),
-    putVol: sumLegs(rows.map((r) => r.putVol)),
-    callOi: sumLegs(rows.map((r) => r.callOi)),
-    putOi: sumLegs(rows.map((r) => r.putOi)),
-    callPremium: sumLegs(
-      rows.map((r) => premiumOf(r.callVol, r.callBid, r.callAsk)),
-    ),
-    putPremium: sumLegs(
-      rows.map((r) => premiumOf(r.putVol, r.putBid, r.putAsk)),
-    ),
-    // 全链归一：把两侧放进同一个数组取最大值，而不是各侧各归一。
-    maxVol: maxLeg(rows.flatMap((r) => [r.callVol, r.putVol])),
-    maxOi: maxLeg(rows.flatMap((r) => [r.callOi, r.putOi])),
-  };
-}
-
-/** 横条宽度占比 0..1；值缺失或无归一基准时为 0（不画条，数字仍显「—」）。 */
-export function barShare(value: number | null, max: number | null): number {
-  if (value === null || max === null || max <= 0 || !Number.isFinite(value)) {
-    return 0;
-  }
-  return Math.min(1, Math.max(0, value / max));
-}
-
-/** 两侧合计：至少一侧有值才返回数字，全缺为 null。 */
-export function sumSides(
-  call: number | null,
-  put: number | null,
-): number | null {
-  if (call === null && put === null) return null;
-  return (call ?? 0) + (put ?? 0);
-}
-
-/** Call/Put 比值：分母缺失 → null（显「—」）；分母为 0 而分子有量 → Infinity（显 ∞）。 */
-export function cpRatio(
-  call: number | null,
-  put: number | null,
-): number | null {
-  if (call === null || put === null) return null;
-  if (put === 0) return call > 0 ? Infinity : null;
-  return call / put;
+  return side === 'all' ? rows : rows.filter((c) => c.side === side);
 }

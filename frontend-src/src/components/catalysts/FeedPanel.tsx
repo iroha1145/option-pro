@@ -1,12 +1,14 @@
+import AnalysisIcon from '@/components/shared/AnalysisIcon';
 /** feed 新闻流面板：电报带列表 + 呼吸式刷新 + 游标分页 + 空态/骨架/503 */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { ApiError } from '@/api/client';
-import { useShell } from '@/components/Layout';
+import { useShell } from '@/hooks/useShell';
 import EmptyState from '@/components/shared/EmptyState';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
 import InfoHint from '@/components/shared/InfoHint';
+import SoftBadge from '@/components/shared/SoftBadge';
 import { cn } from '@/lib/utils';
 import { fmtLocaleDate, fmtLocaleTime, fmtRelative } from '@/lib/format';
 import { SCORE_HINTS } from '@/lib/scoreHints';
@@ -87,9 +89,9 @@ export function NewsRow({
           <span aria-hidden="true">·</span>
           <span className="font-mono tnum">{fmtRelative(item.publishedAt)}</span>
           {item.sourceCount > 1 && (
-            <span className="rounded-xs bg-paper-2 px-1 py-px font-mono text-[10px] text-ink-400" title={__t("多源确认条数")}>
+            <SoftBadge className="font-mono" title={__t("多源确认条数")}>
               {item.sourceCount} {__t('源')}
-            </span>
+            </SoftBadge>
           )}
           {item.isStale && <StaleChip />}
         </p>
@@ -125,15 +127,17 @@ export function NewsRow({
           )}
         </div>
       </div>
-      {/* 右侧：AI 分析幽灵钮（hover 显现） */}
-      <div className="flex w-8 shrink-0 items-start justify-end">
-        <span
-          className="flex size-7 items-center justify-center rounded-sm border border-line bg-card text-ai-600 opacity-0 shadow-sh-1 transition-[opacity,transform] duration-fast group-hover:opacity-100 group-active:scale-95"
+      {/* 右侧：独立分析入口，使用与标题相同的详情回调。 */}
+      <div className="relative z-10 flex w-8 shrink-0 items-start justify-end">
+        <button
+          type="button"
+          onClick={() => onOpen(item.newsId)}
+          className="flex size-8 items-center justify-center rounded-md bg-ai-600 text-white shadow-btn transition-[filter] duration-fast hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai-600/40 focus-visible:ring-offset-2"
           title={__t("查看 / 生成 AI 分析")}
-          aria-hidden="true"
+          aria-label={__t("查看 / 生成 AI 分析")}
         >
-          <Icon name="spark-ai" size={14} />
-        </span>
+          <AnalysisIcon size={14} />
+        </button>
       </div>
     </motion.article>
   );

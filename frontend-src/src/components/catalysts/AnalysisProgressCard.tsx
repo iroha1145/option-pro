@@ -1,10 +1,10 @@
+import AnalysisIcon from '@/components/shared/AnalysisIcon';
 import { useState } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import Icon from '@/components/icons';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
+import SoftBadge, { type BadgeTone } from '@/components/shared/SoftBadge';
 import { useAccess } from '@/hooks/useAccess';
 import { usePolling } from '@/hooks/usePolling';
-import { cn } from '@/lib/utils';
 import { fmtRelative } from '@/lib/format';
 import { Led } from './bits';
 import { fetchNewsAnalysisProgress } from './analysisProgressApi';
@@ -14,16 +14,16 @@ import { t } from '../../i18n/core.ts';
 function Metric({
   label,
   value,
-  tone = 'text-ink-900',
+  tone = 'neutral',
 }: {
   label: string;
   value: number;
-  tone?: string;
+  tone?: BadgeTone;
 }) {
   return (
     <div className="min-w-0 rounded-sm border border-line bg-card px-3 py-2.5">
       <p className="text-micro text-ink-400">{label}</p>
-      <p className={cn('mt-0.5 font-mono text-data-m tnum', tone)}>{value}</p>
+      <SoftBadge tone={tone} size="md" className="mt-1 font-mono">{value}</SoftBadge>
     </div>
   );
 }
@@ -105,7 +105,7 @@ function OwnerAnalysisProgressCard() {
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <p className="eyebrow flex items-center gap-2">
-            <Icon name="spark-ai" size={13} className="text-ai-600" />
+            <AnalysisIcon size={13} className="text-ai-600" />
             {t('NEWS ANALYSIS · 新闻分析进度')}
           </p>
           <div className="mt-1.5 flex items-center gap-2">
@@ -149,20 +149,20 @@ function OwnerAnalysisProgressCard() {
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-8">
         <Metric label={t("总任务")} value={progress.total} />
         <Metric label={t("已结束")} value={progress.finished} />
-        <Metric label={t("成功")} value={progress.succeeded} tone="text-up-700" />
+        <Metric label={t("成功")} value={progress.succeeded} tone="up" />
         <Metric
           label={t("待校验")}
           value={progress.awaitingValidation}
-          tone={progress.awaitingValidation ? 'text-warn-600' : undefined}
+          tone={progress.awaitingValidation ? 'warn' : undefined}
         />
         <Metric
           label={t("被拒绝")}
           value={progress.rejected}
-          tone={progress.rejected ? 'text-down-700' : undefined}
+          tone={progress.rejected ? 'down' : undefined}
         />
-        <Metric label={t("失败")} value={progress.failed} tone={progress.failed ? 'text-down-700' : undefined} />
-        <Metric label={t("等待")} value={progress.waiting} tone={progress.waiting ? 'text-warn-600' : undefined} />
-        <Metric label={t("进行中")} value={progress.inProgress} tone={progress.inProgress ? 'text-ai-600' : undefined} />
+        <Metric label={t("失败")} value={progress.failed} tone={progress.failed ? 'down' : undefined} />
+        <Metric label={t("等待")} value={progress.waiting} tone={progress.waiting ? 'warn' : undefined} />
+        <Metric label={t("进行中")} value={progress.inProgress} tone={progress.inProgress ? 'ai' : undefined} />
       </div>
 
       <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-micro text-ink-400">

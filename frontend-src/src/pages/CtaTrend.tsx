@@ -9,7 +9,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { marketApi } from '@/api/modules/market';
 import { marketPulseApi } from '@/components/market/api';
-import { regimeMean } from '@/components/market/RegimePanel';
+import { regimeMean } from '@/lib/regime';
 import { usePolling } from '@/hooks/usePolling';
 import { fmtTimeHHMMSS } from '@/lib/format';
 import PageHeader from '@/components/shared/PageHeader';

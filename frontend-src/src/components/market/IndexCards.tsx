@@ -2,7 +2,7 @@
  * B1 指数概览（6 卡：SPX/NDX/DJI/RUT/SOX/VIX）
  * 名称+代码 · 价格直接呈现（tick-flash 提示更新）· ChangeBadge · 当日 mini sparkline
  * live 模式无指数 K 线端点 → 不渲染分时图模块
- * ?index= 指定的卡高亮（左缘 2px brand 条）并滚动定位
+ * ?index= 指定的卡高亮并滚动定位
  */
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
@@ -11,6 +11,7 @@ import type { IndexQuote } from '@/api/types';
 import { getIndexIntraday } from '@/mocks/marketPulse';
 import { cn } from '@/lib/utils';
 import { fmtPrice } from '@/lib/format';
+import { quoteSymbol } from '@/lib/quoteSymbol';
 import ChangeBadge from '@/components/shared/ChangeBadge';
 import EmptyState from '@/components/shared/EmptyState';
 import { SkeletonCard } from '@/components/shared/Skeleton';
@@ -29,7 +30,7 @@ const IndexCard = memo(function IndexCard({
   index: number;
   flash: 'up' | 'down' | undefined;
   focused: boolean;
-  registerRef: (code: string, el: HTMLDivElement | null) => void;
+  registerRef: (code: string, el: HTMLButtonElement | null) => void;
   onOpen: (code: string) => void;
 }) {
   /* 数据纪律：无有效价（live 快照缺失时映射为 0）显「—」，不显 0.00 */
@@ -44,7 +45,7 @@ const IndexCard = memo(function IndexCard({
     /* 用真 button 而不是加 onClick 的 div：键盘可达，读屏能报出这是可操作项。 */
     <motion.button
       type="button"
-      ref={(el) => registerRef(quote.code, el as HTMLDivElement | null)}
+      ref={(el) => registerRef(quote.code, el)}
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.48, ease: [0.16, 1, 0.3, 1], delay: Math.min(index * 0.045, 0.4) }}
@@ -52,8 +53,8 @@ const IndexCard = memo(function IndexCard({
          这里不做「选中」：本页四个面板都是全市场读数，没有按指数的版本可切换，
          留一个改不动数据的选中态等于承诺一个兑现不了的交互。?index= 仍然保留，
          但只用于从顶部 tape 跳进来时高亮定位。
-         必须传真实符号 ^GSPC：详情页与 /stocks 端点不认显示短码 SPX。 */
-      onClick={() => onOpen(quote.symbol || quote.code)}
+         统一传真实符号 ^GSPC，使跳转与缓存键保持一致。 */
+      onClick={() => onOpen(quoteSymbol(quote.symbol || quote.code))}
       /* 上浮 -3px/240ms 与自选卡、热点卡同一套手感；走 whileHover 而不是 CSS
          hover:-translate-y，因为入场动画结束后 framer 会留下内联 transform，
          把 CSS 位移压掉。 */
@@ -62,7 +63,7 @@ const IndexCard = memo(function IndexCard({
         'card-surface card-glare relative block w-full overflow-hidden p-4 text-left',
         'transition-shadow duration-240 ease-out hover:shadow-sh-2',
         'focus-visible:outline-none focus-visible:shadow-focus-ring',
-        focused && 'shadow-[inset_2px_0_0_0_var(--brand-600),0_1px_2px_rgba(13,22,38,.05),inset_0_1px_0_rgba(255,255,255,.9)] ring-1 ring-brand-100',
+        focused && 'ring-1 ring-brand-100',
       )}
       aria-label={t('{name} {code} 详情', { name: quote.name, code: quote.code })}
     >
@@ -75,7 +76,7 @@ const IndexCard = memo(function IndexCard({
       </div>
       <p
         className={cn(
-          'tick-flash mt-2 inline-block rounded-xs px-1 font-mono text-data-l text-ink-900 tnum',
+          'metric-value tick-flash mt-3 inline-block rounded-xs text-[24px] leading-8 text-ink-900',
           flash === 'up' && 'tick-flash-up',
           flash === 'down' && 'tick-flash-down',
         )}
@@ -83,8 +84,9 @@ const IndexCard = memo(function IndexCard({
         {hasPrice ? fmtPrice(price) : '—'}
       </p>
       {spark && (
-        <div className="mt-2 flex h-8 items-end justify-between gap-2">
-          <Sparkline data={spark} width={132} height={30} change={quote.changePct} className="w-full" />
+        <div className="mt-2 flex h-8 items-center justify-between gap-2">
+          <span className="text-micro text-ink-400">{t('当日')}</span>
+          <Sparkline data={spark} width={84} height={28} change={quote.changePct} className="max-w-[65%]" />
         </div>
       )}
     </motion.button>
@@ -130,8 +132,8 @@ export default function IndexCards({
   }, [data]);
 
   /* ?index= 滚动定位 */
-  const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
-  const registerRef = (code: string, el: HTMLDivElement | null) => {
+  const cardRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const registerRef = (code: string, el: HTMLButtonElement | null) => {
     cardRefs.current[code] = el;
   };
   /* 每个 focus 值只滚动一次：deps 里的 data 每 60s 轮询都换新引用，

@@ -2,6 +2,7 @@
  * B4 移动端结果卡片流（<768px 表格转卡片）
  * 卡内：代码 + 强度大分 + 分项微条 + 涨跌 + 催化剂徽标；点按展开 accordion 明细。
  */
+import SoftBadge from '@/components/shared/SoftBadge';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { ScreenerRow } from '@/api/types';
 import { cn } from '@/lib/utils';
@@ -78,8 +79,11 @@ export default function ResultCards({
               <span className="flex items-center gap-2.5">
                 <TickerLogo ticker={r.ticker} size={32} />
                 <span className="min-w-0 flex-1">
-                  <span className="block font-mono text-body-s font-semibold text-ink-800">{r.ticker}</span>
-                  <span className="block truncate text-micro text-ink-400">{r.name} · {r.sector}</span>
+                  <span className="flex flex-wrap items-center gap-1.5">
+                    <span className="font-mono text-body-s font-semibold text-ink-800">{r.ticker}</span>
+                    {r.sector && <SoftBadge className="max-w-[7.5rem]" title={r.sector}><span className="truncate">{r.sector}</span></SoftBadge>}
+                  </span>
+                  <span className="block truncate text-micro text-ink-400" title={r.name}>{r.name}</span>
                 </span>
                 <ChangeBadge value={r.changePct} size="sm" />
                 <Icon
@@ -90,31 +94,28 @@ export default function ResultCards({
               </span>
               <span className="mt-3 flex items-end justify-between gap-3">
                 <span>
-                  <span className={cn('font-mono text-data-xl tnum', strength.textClass)}>
+                  <SoftBadge tone={strength.badgeTone} size="md" className="metric-value text-data-l tnum">
                     {/* 与表格列同口径的一位小数，避免 84 / 84.4 混排 */}
                     {r.strengthScore.toFixed(1)}
-                  </span>
+                  </SoftBadge>
                   <span className="ml-1.5 text-micro text-ink-400">
                     {t('强度分 ·')} {strength.band} {strength.label}
                     <InfoHint hint={SCORE_HINTS.strengthComposite} size={11} className="ml-1" />
                   </span>
                 </span>
                 <span className="pb-0.5 text-right">
-                  <span className="block font-mono text-data-m text-ink-800 tnum">{fmtPrice(r.price)}</span>
+                  <span className="block metric-value text-data-m text-ink-800 tnum">{fmtPrice(r.price)}</span>
                 </span>
               </span>
               <span
-                className="relative mt-2.5 h-[3px] w-full rounded-pill bg-line"
+                className="strength-track relative mt-2.5 h-1 w-full rounded-pill bg-paper"
                 role="presentation"
                 aria-hidden="true"
                 data-strength-band={strength.band}
                 data-strength-tone={strength.tone}
               >
-                <motion.span
+                <span
                   className={cn('block h-full origin-left rounded-pill', strength.barClass)}
-                  initial={{ scaleX: 0 }}
-                  animate={{ scaleX: 1 }}
-                  transition={{ duration: 0.7, ease: EASE_PAPER, delay: 0.15 + i * 0.03 }}
                   style={{ width: `${strengthWidth}%` }}
                 />
                 {/* 几何全部走 top/left，一点都不用 CSS transform：framer 为了动 scale

@@ -21,7 +21,7 @@
     --ink-700: #2A3550;
     --ink-600: #3D4A68;
     --ink-500: #5A6788;
-    --ink-400: #6F7B9E;
+    --ink-400: #626F8B;
     --ink-300: #B7BFD3;
     /* §1.3 发丝线（v8 更淡；v8.1 随纸面降温——冷纸面配暖灰线会显脏，同族蓝灰 hue≈218°） */
     --line: #E9ECF1;
@@ -56,6 +56,11 @@
     --shadow-sh-1: 0 1px 2px rgba(16, 24, 40, .03);
     --shadow-sh-2: 0 1px 2px rgba(16, 24, 40, .03), 0 12px 32px -14px rgba(16, 24, 40, .10);
     --shadow-sh-3: 0 2px 4px rgba(16, 24, 40, .04), 0 24px 56px -16px rgba(16, 24, 40, .16);
+    /* Cloud Monitor 的细节层次，保留 Optix 的纸面与群青。 */
+    --control-track: #F2F4F7;
+    --control-selected-shadow: 0 2px 4px rgba(24, 43, 68, .045), 0 5px 12px -4px rgba(24, 43, 68, .09);
+    --card-shadow: 0 2px 4px rgba(24, 43, 68, .02), 0 9px 25px -12px rgba(24, 43, 68, .12);
+    --popover-shadow: 0 2px 5px rgba(24, 43, 68, .045), 0 10px 28px -10px rgba(24, 43, 68, .15);
 
     /* shadcn/ui 基座变量（亮纸面映射；v8.1 hue 44°→220° 随纸面降温，杜绝冷暖混用） */
     --background: 220 20% 97%;
@@ -74,8 +79,8 @@
     --accent-foreground: 232 74% 53%;
     --destructive: 359 75% 59%;
     --destructive-foreground: 0 0% 98%;
-    --border: 45 15% 90%;
-    --input: 43 13% 83%;
+    --border: 220 22% 89%;
+    --input: 220 18% 80%;
     --ring: 232 74% 53%;
     --radius: 12px; /* v8 圆角回暖：r-lg 8→12 */
     /* Catalog paint 重映射只有一份，在 transitions-catalog.css 的适配区——
@@ -111,7 +116,7 @@
     inset: 0;
     z-index: -1;
     pointer-events: none;
-    background-image: radial-gradient(circle, rgba(13, 22, 38, .035) 1px, transparent 1px);
+    background-image: radial-gradient(circle, rgba(13, 22, 38, .02) 1px, transparent 1px);
     background-size: 22px 22px;
   }
 
@@ -122,7 +127,8 @@
 
   /* 聚焦环即时出现：禁过渡动画（polish-brief §B/§C.8） */
   :focus-visible {
-    outline: none;
+    outline: 2px solid var(--brand-600);
+    outline-offset: 3px;
     box-shadow: 0 0 0 3px rgba(46, 70, 224, .18);
     border-radius: 6px;
     transition: none;
@@ -135,6 +141,42 @@
 }
 
 @layer components {
+  .skip-link {
+    position: fixed;
+    top: .75rem;
+    left: 1rem;
+    z-index: 100;
+    transform: translateY(-200%);
+    border-radius: 8px;
+    padding: .75rem 1rem;
+    background: var(--ink-900);
+    color: white;
+  }
+  .skip-link:focus { transform: none; }
+
+  /* shadcn Select portal: origin follows the collision-resolved placement.
+     Same entry/exit clock as transitions.dev menus, without a hidden focus tail. */
+  .select-surface {
+    transform-origin: var(--radix-select-content-transform-origin);
+    max-height: min(20rem, var(--radix-select-content-available-height));
+    min-width: var(--radix-select-trigger-width);
+    max-width: calc(100vw - 24px);
+  }
+  .select-surface[data-state="open"] {
+    animation: select-enter var(--dropdown-open-dur, 200ms) var(--ease-paper);
+  }
+  .select-surface[data-state="closed"] {
+    pointer-events: none;
+    animation: select-exit var(--dropdown-close-dur, 150ms) ease-in;
+  }
+  @keyframes select-enter {
+    from { opacity: 0; transform: scale(.97); }
+    to { opacity: 1; transform: scale(1); }
+  }
+  @keyframes select-exit {
+    to { opacity: 0; transform: scale(.98); }
+  }
+
   /* 发丝线工具类 */
   .hairline-b { border-bottom: 1px solid var(--line); }
   .hairline-t { border-top: 1px solid var(--line); }
@@ -154,7 +196,7 @@
     background: var(--card);
     border: 1px solid var(--line);
     border-radius: 12px;
-    box-shadow: var(--shadow-sh-1), inset 0 1px 0 rgba(255, 255, 255, .7);
+    box-shadow: var(--card-shadow);
   }
 
   /* shadcn Button + beUI spring-press：主操作统一皮。调用点只写 btn-primary，
@@ -265,11 +307,11 @@
      （鼠标/触控板）下生效；触屏 tap 后 :hover 会粘住不解除，卡片一直浮着。 */
   @media (hover: hover) and (pointer: fine) {
     .card-hover:hover {
-      transform: translateY(-3px);
+      transform: translateY(-2px);
       box-shadow: var(--shadow-sh-2), inset 0 1px 0 rgba(255, 255, 255, .7);
     }
     .card-lift:hover {
-      transform: translateY(-3px);
+      transform: translateY(-2px);
       box-shadow: var(--shadow-sh-2);
     }
   }
@@ -283,6 +325,8 @@
   /* 眉题 Eyebrow（仅拉丁文） */
   .eyebrow {
     @apply font-sans text-eyebrow uppercase text-ink-400;
+    letter-spacing: .035em;
+    font-weight: 500;
   }
 
   /* v8 内容节奏：页内区块间距 32→36（作用于 Layout main 内的 mt-8 区块，不改页面结构） */
@@ -317,6 +361,216 @@
   .tick-flash { transition: background-color 600ms cubic-bezier(.22,1,.36,1); }
   .tick-flash-up { background-color: var(--up-50); transition: none; }
   .tick-flash-down { background-color: var(--down-50); transition: none; }
+}
+
+/* 浅色轨道与白色浮片，承接 Cloud Monitor 的范围选择器。
+   保留按压/键盘语义和原有滑行逻辑，只统一呈现。 */
+.control-button {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  background: var(--card);
+  color: var(--ink-600);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  white-space: nowrap;
+  transition: color 150ms var(--ease-snap), background-color 150ms var(--ease-snap), border-color 150ms var(--ease-snap), box-shadow 150ms var(--ease-snap);
+}
+.control-button[aria-pressed="true"] {
+  border-color: transparent;
+  background: var(--brand-50);
+  color: var(--brand-700);
+  font-weight: 500;
+}
+.control-button:disabled { cursor: not-allowed; opacity: .5; }
+.control-button:focus-visible {
+  outline: 2px solid var(--brand-600);
+  outline-offset: 2px;
+}
+.filter-group {
+  display: inline-flex;
+  max-width: 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--control-track);
+}
+.filter-group .control-button {
+  min-height: 28px;
+  padding: 4px 10px;
+  border-color: transparent;
+  border-radius: 7px;
+  background: transparent;
+}
+.filter-group .control-button[aria-pressed="true"] {
+  border-color: transparent;
+  background: var(--card);
+  color: var(--brand-700);
+  box-shadow: var(--control-selected-shadow);
+}
+.t-tabs.selection-group {
+  padding: 3px;
+  border-radius: 10px;
+  border-color: var(--line);
+  background: var(--control-track);
+}
+@layer components {
+  /* 移动导航可通过已有 bg-brand-50 / shadow-none 保留自身的选中底色。 */
+  .selection-indicator {
+    border-radius: 7px;
+    background: var(--card);
+    box-shadow: var(--control-selected-shadow);
+  }
+}
+.t-tabs.selection-group .t-tab {
+  height: auto;
+  min-height: 28px;
+  border-radius: 7px;
+  padding: 4px 10px;
+  color: var(--ink-600);
+}
+.t-tabs.selection-group .t-tab[aria-selected="true"] { color: var(--brand-700); font-weight: 500; }
+@media (hover: hover) and (pointer: fine) {
+  .control-button:not(:disabled):not([aria-pressed="true"]):hover { background: var(--paper-2); border-color: var(--line-strong); color: var(--ink-800); }
+  .filter-group .control-button:not(:disabled):not([aria-pressed="true"]):hover { border-color: transparent; }
+  .t-tabs.selection-group .t-tab:not([aria-selected="true"]):hover { color: var(--ink-900); background: var(--paper-2); }
+}
+@media (pointer: coarse) {
+  .control-button, .filter-group .control-button, .t-tabs.selection-group .t-tab { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) { .control-button { transition: none; } }
+
+/* Phone selectors mirror the narrow rail and raised selection in Cloud Monitor.
+   The separate scrolling viewport retains room for the full touch target/shadow. */
+.selection-viewport { display: contents; }
+@media (max-width: 767px) {
+  .selection-viewport {
+    display: block;
+    min-width: 0;
+    max-width: 100%;
+    width: fit-content;
+    padding: 14px 4px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+  }
+  .selection-viewport-full { width: 100%; }
+  .t-tabs.selection-group,
+  .filter-group,
+  .mobile-selection-rail {
+    display: inline-flex;
+    position: relative;
+    width: max-content;
+    max-width: none;
+    height: 34px;
+    min-height: 34px;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 2px;
+    padding: 2px;
+    overflow: visible;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    background: var(--control-track);
+  }
+  .selection-viewport-full > .mobile-selection-rail { width: 100%; }
+  .selection-viewport-full > .mobile-selection-rail > button { flex: 1; }
+  .t-tabs.selection-group > div { flex-shrink: 0; }
+  .t-tabs.selection-group .t-tab,
+  .filter-group > .control-button,
+  .mobile-selection-rail > button,
+  .mobile-selection-rail .mobile-selection-option {
+    position: relative;
+    flex-shrink: 0;
+    height: 44px;
+    min-height: 44px;
+    min-width: 44px;
+    padding: 8px 12px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: var(--ink-600);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 20px;
+    white-space: nowrap;
+  }
+  .t-tabs.selection-group .selection-indicator {
+    border-radius: 9px;
+    background: var(--card);
+    box-shadow: 0 3px 12px rgb(28 42 68 / 7%);
+  }
+  .filter-group > .control-button[aria-pressed="true"],
+  .mobile-selection-rail > button:is([aria-selected="true"], [aria-pressed="true"]),
+  .mobile-selection-rail .mobile-selection-option[aria-pressed="true"] {
+    background: var(--card);
+    color: var(--brand-700);
+    box-shadow: 0 3px 12px rgb(28 42 68 / 7%);
+  }
+  .mobile-selection-rail [data-selection-decoration] { display: none; }
+  .mobile-selection-rail > button:focus-visible,
+  .mobile-selection-rail .mobile-selection-option:focus-visible {
+    outline: 2px solid var(--brand-600);
+    outline-offset: 2px;
+  }
+}
+
+/* 数据读数与小标签：代码仍使用等宽字体，主要数值使用等宽数字的正文字体。 */
+.metric-value {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", sans-serif;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  letter-spacing: -.035em;
+}
+.soft-badge { border-radius: 5px; }
+
+/* Read-only floating details share one surface; coordinates never animate. */
+.cloud-popover {
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--card);
+  box-shadow: var(--popover-shadow);
+  animation: cloud-popover-enter 140ms ease-out both;
+}
+@keyframes cloud-popover-enter { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .cloud-popover { animation: none; }
+  .cloud-chart-tooltip { transition: none !important; }
+}
+@media (pointer: coarse) {
+  .color-mode-control { min-height: 44px; }
+}
+.change-badge { font-family: inherit; font-weight: 500; white-space: nowrap; letter-spacing: -.015em; }
+.strength-track { background: var(--control-track); }
+.strength-fill { opacity: .78; }
+.insight-frame {
+  background: var(--paper-2);
+  border-radius: 10px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .7);
+}
+.menu-select-trigger {
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(24, 43, 68, .025);
+}
+.data-coverage-strip {
+  padding: 8px 0;
+  line-height: 20px;
+}
+@media (pointer: coarse) {
+  .menu-select-trigger,
+  .scan-trigger,
+  .screener-price-input,
+  .disclosure-trigger,
+  details.radar-disclosure > summary { min-height: 44px; }
 }
 
 /* §3.6 按钮立体层级的全局状态物理（token 见 tailwind.config boxShadow.btn/btn-hi/
@@ -466,5 +720,14 @@
   }
   *, *::before, *::after {
     transition-duration: 160ms !important;
+  }
+}
+
+/* Keep keyboard focus visible when the operating system replaces page colors. */
+@media (forced-colors: active) {
+  :focus-visible {
+    outline: 2px solid Highlight !important;
+    outline-offset: 3px;
+    box-shadow: none !important;
   }
 }

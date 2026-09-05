@@ -56,6 +56,12 @@ export const ACCOUNT: Dict = {
   '起一个用户名': ['Pick a username', '希望のユーザー名'],
   '密码': ['Password', 'パスワード'],
   '设置密码': ['Create a password', 'パスワードを設定'],
+  '至少 15 个字符，可使用一句容易记住的长短语': [
+    'Use at least 15 characters. A memorable long phrase works well.',
+    '15文字以上で設定してください。覚えやすい長いフレーズも使えます。',
+  ],
+  '新密码至少需要 15 个字符': ['New passwords need at least 15 characters.', '新しいパスワードは15文字以上にしてください。'],
+  '这个密码过于常见，请换一个较长的短语': ['This password is too common. Choose a longer phrase.', 'よく使われるパスワードです。別の長いフレーズを使ってください。'],
   '输入密码': ['Enter your password', 'パスワードを入力'],
   '隐藏密码': ['Hide password', 'パスワードを隠す'],
   '显示密码': ['Show password', 'パスワードを表示する'],

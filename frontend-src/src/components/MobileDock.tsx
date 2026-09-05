@@ -8,8 +8,11 @@ import { Link, useLocation, useNavigate } from 'react-router';
 import { AnimatePresence, motion } from 'framer-motion';
 import { cn, isNavPathActive } from '@/lib/utils';
 import { useAccess } from '@/hooks/useAccess';
-import { useToast } from '@/components/Toast';
+import { useToast } from '@/hooks/useToast';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
+import { overlayVisible, useOverlayPhase } from '@/lib/transitions';
+import { isTopFocusScope } from '@/lib/focusScope';
 import Icon, { type IconName } from '@/components/icons';
 import Segmented from '@/components/shared/Segmented';
 import GlidePill from '@/components/shared/GlidePill';
@@ -35,6 +38,11 @@ const MORE_ITEMS: { label: string; path: string; icon: IconName; desc: string }[
 ];
 
 export default function MobileDock() {
+  const { pathname } = useLocation();
+  return <MobileDockContent key={pathname} />;
+}
+
+function MobileDockContent() {
   const location = useLocation();
   const navigate = useNavigate();
   const { isOwner, isSignedIn, username, logout } = useAccess();
@@ -45,29 +53,25 @@ export default function MobileDock() {
      CommandPalette 都调了 useFocusTrap，这里补齐。 */
   const sheetRef = useRef<HTMLDivElement | null>(null);
   useFocusTrap(sheetRef, moreOpen);
-  /* 导航离开时同步强制关闭：sheet 的卸载依赖 AnimatePresence 退场动画完成，
-     而催化这类重页面挂载会持续榨干低端手机的主线程，退场被饿死时白色 sheet
-     会一直盖在新页面上（手机「进催化白屏、刷新才好」的根因）。路由一变就
-     立刻置 false，退场动画能跑就跑、跑不动也不影响下一帧强制清理。 */
-  useEffect(() => {
-    setMoreOpen(false);
-  }, [location.pathname]);
+  const overlayId = useId();
+  const morePhase = useOverlayPhase(moreOpen, 150);
+  useBodyScrollLock(overlayVisible(moreOpen, morePhase));
+  // The pathname key unmounts the sheet synchronously on navigation; it cannot
+  // cover a newly mounted page while waiting for an exit animation.
 
   /* 「更多」sheet 声明了 aria-modal，就要有配套行为（审计 2.5.5）：
      Escape 可关 + 打开期间锁背景滚动。 */
   useEffect(() => {
     if (!moreOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
+      if (e.key !== 'Escape' || e.defaultPrevented || e.isComposing || e.keyCode === 229 || !isTopFocusScope(sheetRef.current)) return;
       e.preventDefault();
-      e.stopPropagation();
+      e.stopImmediatePropagation();
       setMoreOpen(false);
     };
     document.addEventListener('keydown', onKey);
-    document.body.style.overflow = 'hidden';
     return () => {
       document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = '';
     };
   }, [moreOpen]);
 
@@ -83,7 +87,7 @@ export default function MobileDock() {
     return (
       <div key={item.path} className="relative flex flex-1">
         {active && (
-          <GlidePill layoutId={dockGlideId} className="inset-1 rounded-xl bg-brand-50 shadow-none" />
+          <GlidePill layoutId={dockGlideId} className="inset-1 rounded-md bg-brand-50 shadow-none" />
         )}
         <Link
           to={item.path}
@@ -100,10 +104,10 @@ export default function MobileDock() {
 
   return (
     <>
-      {/* 悬浮胶囊 Dock：离屏 12px、全圆角、毛玻璃 + 墨色浮起阴影；
+      {/* 悬浮导航 Dock：离屏 12px、小圆角、毛玻璃与轻阴影；
           雷达与其余入口同级同色，不再做中央凸起圆钮。 */}
       <nav
-        className="glass fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-[60] mx-auto flex h-16 max-w-md items-stretch rounded-2xl border border-line px-1.5 shadow-dock xl:hidden"
+        className="glass fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-[60] mx-auto flex h-16 max-w-md items-stretch rounded-lg border border-line px-1.5 shadow-dock xl:hidden"
         aria-label={t('移动端导航')}
       >
         {/* layoutRoot：Dock 是 fixed 容器，投影坐标必须收进条内（beUI Dock / tabs） */}
@@ -111,7 +115,7 @@ export default function MobileDock() {
           {DOCK_ITEMS.map(renderItem)}
           <div className="relative flex flex-1">
             {moreActive && (
-              <GlidePill layoutId={dockGlideId} className="inset-1 rounded-xl bg-brand-50 shadow-none" />
+              <GlidePill layoutId={dockGlideId} className="inset-1 rounded-md bg-brand-50 shadow-none" />
             )}
             <button
               onClick={() => setMoreOpen(true)}
@@ -139,6 +143,8 @@ export default function MobileDock() {
                  掉帧的最大单项，纯色遮罩视觉上足够。 */
               className="fixed inset-0 z-[64] bg-[rgba(13,22,38,.32)] xl:hidden"
               onClick={() => setMoreOpen(false)}
+              data-focus-backdrop={overlayId}
+              aria-hidden="true"
             />
             <motion.div
               initial={{ y: '100%' }}
@@ -154,6 +160,7 @@ export default function MobileDock() {
               className="fixed inset-x-0 bottom-0 z-[65] max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain rounded-t-xl border-t border-line bg-card pb-[calc(env(safe-area-inset-bottom)+16px)] shadow-sh-3 xl:hidden"
               role="dialog"
               aria-modal="true"
+              data-focus-overlay={overlayId}
               aria-label={t('更多功能')}
             >
               <div className="flex justify-center pb-1 pt-2 text-ink-300">

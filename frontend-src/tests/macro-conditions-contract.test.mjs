@@ -551,13 +551,8 @@ test('the market page places macro between the regime panel and the signal readi
   assert.match(text, /B7 联动卡/);
 });
 
-test('useCountUp honours prefers-reduced-motion so the score never sticks at zero', async () => {
-  const text = await readFile(path.join(srcDir, 'hooks', 'useCountUp.ts'), 'utf8');
-  assert.match(text, /prefers-reduced-motion: reduce/);
-  assert.match(text, /if \(reduced\) \{/);
-  // 命中 reduced 分支时直接设为目标值，不启动逐帧动画
-  assert.match(text, /setValue\(target\);/);
-});
+// Reduced-motion, interruption and exact final values are exercised against the
+// hook in numeric-motion-behavior.test.mjs, including live media-query changes.
 
 test('the macro panel adds no high-frequency flashing for score changes', async () => {
   const dir = path.join(srcDir, 'components', 'market', 'macro');

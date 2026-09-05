@@ -4,6 +4,8 @@ import { echarts, type ChartOption, type EChartsInstance } from '@/lib/chart';
 
 interface ReactEChartsProps {
   option: ChartOption;
+  /** Read interaction state only when committing the option to the chart. */
+  prepareOption?: (option: ChartOption) => ChartOption;
   className?: string;
   style?: React.CSSProperties;
   onClick?: (params: unknown) => void;
@@ -12,7 +14,7 @@ interface ReactEChartsProps {
   ariaLabel?: string;
 }
 
-export default function ReactECharts({ option, className, style, onClick, onInit, ariaLabel }: ReactEChartsProps) {
+export default function ReactECharts({ option, prepareOption, className, style, onClick, onInit, ariaLabel }: ReactEChartsProps) {
   const ref = useRef<HTMLDivElement>(null);
   const chartRef = useRef<EChartsInstance | null>(null);
   const onInitRef = useRef(onInit);
@@ -41,12 +43,12 @@ export default function ReactECharts({ option, className, style, onClick, onInit
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
-    chart.setOption(option, { notMerge: true });
+    chart.setOption(prepareOption ? prepareOption(option) : option, { notMerge: true });
     if (onClick) {
       chart.off('click');
       chart.on('click', onClick);
     }
-  }, [option, onClick]);
+  }, [option, onClick, prepareOption]);
 
   return (
     <div

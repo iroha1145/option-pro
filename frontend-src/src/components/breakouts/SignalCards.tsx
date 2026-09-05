@@ -2,7 +2,7 @@
  * SignalCards · 当日其余事件小卡网格（V3 小卡结构重建，剥离 LeadSignalCard 引用）
  * 仅渲染除 lead 外的当日事件；3 列网格（md 2 列 / 移动单列），stagger 45ms
  * 小卡 = TickerLogo + 代码/名称 + 相对触发时间 · SETUP_CN+LIFECYCLE_CN chips · 现价/涨跌 tick-flash
- *       · rvol 量能徽标 · PriceScale 价格标尺 · 9 评分迷你条 · 强度条 + 证据 N 条
+ *       · rvol 量能徽标 · PriceScale 价格标尺 · 可展开的 9 评分迷你条 · 强度条 + 证据 N 条
  * 交互：hover translateY(-3px)+sh-2（240ms ease-out，全站统一 card-lift 参数）· 点击小卡开 EventDetail 模态
  *      · 点击 ticker 走 useShell().openTicker 个股抽屉（非全屏纪律）
  */
@@ -11,9 +11,10 @@ import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { DUR_SECTION } from '@/lib/motion';
 import { fmtPrice, fmtRelative } from '@/lib/format';
-import { useShell } from '@/components/Layout';
+import { useShell } from '@/hooks/useShell';
 import TickerLogo from '@/components/shared/TickerLogo';
 import ChangeBadge from '@/components/shared/ChangeBadge';
+import SoftBadge from '@/components/shared/SoftBadge';
 import StrengthBar from '@/components/shared/StrengthBar';
 import Icon from '@/components/icons';
 import PriceScale from './PriceScale';
@@ -29,18 +30,18 @@ function ChipRow({ ev }: { ev: BreakoutCurrentEvent }) {
   const rvol = typeof ev.rvol_time_of_day === 'number' && Number.isFinite(ev.rvol_time_of_day) ? ev.rvol_time_of_day : null;
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <span className="inline-flex items-center whitespace-nowrap rounded-xs border border-brand-400/60 bg-brand-50 px-1.5 py-px text-micro font-medium leading-[16px] text-brand-600">
+      <span className="radar-chip radar-chip-brand">
         {SETUP_CN[ev.setup_type] ?? ev.setup_type ?? '—'}
       </span>
       <span
         className={cn(
-          'inline-flex items-center whitespace-nowrap rounded-xs border px-1.5 py-px text-micro font-medium leading-[16px]',
+          'radar-chip',
           LIFECYCLE_CHIP_CLASS[LIFECYCLE_TONE[ev.lifecycle_state] ?? 'ink'],
         )}
       >
         {LIFECYCLE_CN[ev.lifecycle_state] ?? ev.lifecycle_state ?? '—'}
       </span>
-      <span className="ml-auto inline-flex items-center gap-1 rounded-xs border border-warn-600/40 bg-warn-50 px-1.5 py-px font-mono text-micro leading-[16px] text-warn-600 tnum">
+      <span className="radar-chip radar-chip-volume ml-auto tnum">
         {t('量能')} {rvol !== null ? `${rvol.toFixed(1)}×` : '—'}
       </span>
     </div>
@@ -83,14 +84,14 @@ function SignalCard({ ev, index, flash, locate, onOpen }: SignalCardProps) {
           会压掉同元素上的 CSS hover 位移（原 whileHover 方案因此存在）。 */}
       <div
         className={cn(
-          'card-surface card-lift relative z-10 h-full cursor-pointer p-4',
+          'radar-signal-card card-surface card-lift relative z-10 h-full cursor-pointer p-4',
           locate && 'bk-locate',
         )}
         /* 内容层保留指针事件：文字可划选、ScoreBars 的 title 可悬停、card-lift 的
            :hover 直接生效；整卡点击由此转发，点在 ticker 按钮或划选文字时不转发。 */
         onClick={(event) => {
           const target = event.target as Element;
-          if (target.closest('button, a, [role="button"]')) return;
+          if (target.closest('button, a, summary, [role="button"]')) return;
           if (window.getSelection()?.toString()) return;
           onOpen(ev);
         }}
@@ -110,9 +111,10 @@ function SignalCard({ ev, index, flash, locate, onOpen }: SignalCardProps) {
           >
             {ev.ticker}
           </button>
-          <p className="truncate text-micro text-ink-400">
-            {ev.name} · {ev.sector}
-          </p>
+          <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+            <p className="min-w-0 truncate text-micro text-ink-400">{ev.name}</p>
+            {ev.sector && <SoftBadge size="sm" tone="neutral">{ev.sector}</SoftBadge>}
+          </div>
         </div>
         <span className="shrink-0 font-mono text-micro text-ink-400 tnum">{fmtRelative(ev.triggered_at)}</span>
       </div>
@@ -123,7 +125,7 @@ function SignalCard({ ev, index, flash, locate, onOpen }: SignalCardProps) {
       </div>
 
       {/* 现价行（tick-flash） */}
-      <div className="mt-3 flex items-end justify-between gap-2">
+      <div className="radar-quote-row mt-3 flex items-end justify-between gap-2">
         <span
           className={cn(
             'tick-flash rounded-xs px-1 font-mono text-data-l text-ink-900 tnum',
@@ -147,13 +149,19 @@ function SignalCard({ ev, index, flash, locate, onOpen }: SignalCardProps) {
       />
 
       {/* 评分套组迷你条 */}
-      <ScoreBarsMini event={ev} className="mt-3 border-t border-line pt-3" />
+      <details className="radar-disclosure mt-3">
+        <summary>
+          <span>{t('评分套组')}</span>
+          <Icon name="chevron-down" size={14} className="radar-disclosure-arrow" />
+        </summary>
+        <ScoreBarsMini event={ev} className="pb-3 pt-1" />
+      </details>
 
       {/* 底行：后端未提供证据时不显示假 0。 */}
-      <div className="mt-3 flex items-center justify-between border-t border-line pt-3">
+      <div className="radar-card-footer flex items-center justify-between gap-3 pt-3">
         <StrengthBar score={ev.intrinsic_strength_score} width={64} />
         {(ev.evidence ?? []).length > 0 && (
-          <span className="inline-flex items-center gap-1 text-micro text-ink-400">
+          <span className="radar-evidence-link inline-flex items-center gap-1 text-micro text-ink-500">
             <Icon name="doc-quote" size={12} />
             {t('证据')} {(ev.evidence ?? []).length} {t('条')}
           </span>

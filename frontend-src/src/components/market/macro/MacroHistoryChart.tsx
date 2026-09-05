@@ -20,6 +20,7 @@ import {
 import { cn } from '@/lib/utils';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
 import InfoHint from '@/components/shared/InfoHint';
+import SelectionViewport from '@/components/shared/SelectionViewport';
 import { SCORE_HINTS_MACRO } from '@/lib/scoreHints';
 import {
   MACRO_MODULE_ORDER,
@@ -76,6 +77,8 @@ export default function MacroHistoryChart({
   const colorMode = useColorMode();
 
   const option = useMemo(() => {
+    // 图表构造器读取 CSS 涨跌色，配色模式变化时需重新取值。
+    void colorMode;
     const dates = points.map((point) => point.date);
     const basisByDate = new Map(points.map((point) => [point.date, point.historyBasis]));
     const regimeByDate = new Map(points.map((point) => [point.date, point.regime]));
@@ -189,24 +192,26 @@ export default function MacroHistoryChart({
             className="ml-1"
           />
         </p>
-        <div className="flex flex-wrap gap-1" role="group" aria-label={t("历史区间")}>
-          {HISTORY_RANGES.map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              aria-pressed={range === item.key}
-              onClick={() => onRangeChange(item.key)}
-              className={cn(
-                'rounded-xs px-2 py-1 font-mono text-micro tnum outline-none transition-colors duration-fast',
-                range === item.key
-                  ? 'bg-brand-50 text-brand-700 shadow-chip'
-                  : 'text-ink-400 hover:text-ink-600 focus-visible:text-ink-600',
-              )}
-            >
-              {item.key}
-            </button>
-          ))}
-        </div>
+        <SelectionViewport>
+          <div className="mobile-selection-rail flex flex-wrap gap-1" role="group" aria-label={t("历史区间")}>
+            {HISTORY_RANGES.map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                aria-pressed={range === item.key}
+                onClick={() => onRangeChange(item.key)}
+                className={cn(
+                  'rounded-xs px-2 py-1 font-mono text-micro tnum outline-none transition-colors duration-fast',
+                  range === item.key
+                    ? 'bg-brand-50 text-brand-700 shadow-chip'
+                    : 'text-ink-400 hover:text-ink-600 focus-visible:text-ink-600',
+                )}
+              >
+                {item.key}
+              </button>
+            ))}
+          </div>
+        </SelectionViewport>
       </div>
 
       {error && points.length > 0 && (
@@ -249,33 +254,35 @@ export default function MacroHistoryChart({
       </div>
 
       {modules.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-1.5" role="group" aria-label={t("叠加模块线")}>
-          {modules.map((module) => {
-            const active = shownModules.includes(module.moduleId);
-            return (
-              <button
-                key={module.moduleId}
-                type="button"
-                aria-pressed={active}
-                onClick={() =>
-                  setShownModules((previous) =>
-                    previous.includes(module.moduleId)
-                      ? previous.filter((item) => item !== module.moduleId)
-                      : [...previous, module.moduleId],
-                  )
-                }
-                className={cn(
-                  'rounded-xs border px-2 py-0.5 text-micro outline-none transition-colors duration-fast',
-                  active
-                    ? 'border-brand-400 bg-brand-50 text-brand-700 shadow-chip'
-                    : 'border-line text-ink-400 hover:text-ink-600 focus-visible:text-ink-600',
-                )}
-              >
-                {t(module.nameZh)}
-              </button>
-            );
-          })}
-        </div>
+        <SelectionViewport>
+          <div className="mobile-selection-rail mt-3 flex flex-wrap gap-1.5" role="group" aria-label={t("叠加模块线")}>
+            {modules.map((module) => {
+              const active = shownModules.includes(module.moduleId);
+              return (
+                <button
+                  key={module.moduleId}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() =>
+                    setShownModules((previous) =>
+                      previous.includes(module.moduleId)
+                        ? previous.filter((item) => item !== module.moduleId)
+                        : [...previous, module.moduleId],
+                    )
+                  }
+                  className={cn(
+                    'rounded-xs border px-2 py-0.5 text-micro outline-none transition-colors duration-fast',
+                    active
+                      ? 'border-brand-400 bg-brand-50 text-brand-700 shadow-chip'
+                      : 'border-line text-ink-400 hover:text-ink-600 focus-visible:text-ink-600',
+                  )}
+                >
+                  {t(module.nameZh)}
+                </button>
+              );
+            })}
+          </div>
+        </SelectionViewport>
       )}
 
       <p className="mt-3 border-t border-line pt-3 text-micro leading-relaxed text-ink-400">

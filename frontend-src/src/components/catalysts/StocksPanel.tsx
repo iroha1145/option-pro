@@ -10,6 +10,7 @@ import { toFeedQuery } from './filters';
 import EmptyState from '@/components/shared/EmptyState';
 import TickerLogo from '@/components/shared/TickerLogo';
 import InfoHint from '@/components/shared/InfoHint';
+import SoftBadge from '@/components/shared/SoftBadge';
 import { SCORE_HINTS } from '@/lib/scoreHints';
 import { SkeletonRows } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
@@ -48,7 +49,7 @@ function NetImpactBar({ value, analyzed }: { value: number; analyzed: number }) 
   }
   const clamped = Math.max(-RANGE, Math.min(RANGE, value));
   const pct = ((clamped + RANGE) / (2 * RANGE)) * 100;
-  const tone = value > 0.05 ? 'text-up-700' : value < -0.05 ? 'text-down-700' : 'text-ink-500';
+  const tone = value > 0.05 ? 'up' : value < -0.05 ? 'down' : 'neutral';
   const sign = value > 0 ? '+' : value < 0 ? '−' : '';
   return (
     <div className="flex items-center gap-2.5">
@@ -76,10 +77,10 @@ function NetImpactBar({ value, analyzed }: { value: number; analyzed: number }) 
           />
         </span>
       </div>
-      <span className={cn('font-mono text-data-m tnum', tone)} title={t("净影响分")}>
+      <SoftBadge tone={tone} size="md" className="font-mono" title={t("净影响分")}>
         {sign}
         {Math.abs(value).toFixed(2)}
-      </span>
+      </SoftBadge>
     </div>
   );
 }
@@ -162,13 +163,18 @@ export default function StocksPanel({ filters, refreshToken }: { filters: Cataly
           >
             <span className="flex min-w-0 flex-1 items-center gap-2.5 sm:w-40 sm:flex-none">
               <TickerLogo ticker={r.ticker} size={28} />
-              <span className="min-w-0">
+              <span className="min-w-0 flex-1">
                 <span className="block font-mono text-body-s font-semibold text-ink-800">{r.ticker}</span>
                 {(r.name !== r.ticker || r.sector) && (
-                  <span className="block truncate text-micro text-ink-400">
-                    {r.name !== r.ticker ? r.name : ''}
-                    {r.name !== r.ticker && r.sector ? ' · ' : ''}
-                    {r.sector}
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    {r.name !== r.ticker && (
+                      <span className="min-w-0 truncate text-micro text-ink-400" title={r.name}>{r.name}</span>
+                    )}
+                    {r.sector && (
+                      <SoftBadge className={cn('shrink-0', r.name !== r.ticker && 'max-w-[48%]')} title={r.sector}>
+                        <span className="truncate">{r.sector}</span>
+                      </SoftBadge>
+                    )}
                   </span>
                 )}
               </span>
@@ -177,11 +183,11 @@ export default function StocksPanel({ filters, refreshToken }: { filters: Cataly
               <NetImpactBar value={r.netImpact} analyzed={r.analyzed} />
             </span>
             <span className="hidden items-center gap-1 font-mono text-micro tnum md:flex" title={t("利多 / 利空 / 中性")}>
-              <span className="text-up-700">{r.bullish}</span>
+              <SoftBadge tone="up">{r.bullish}</SoftBadge>
               <span className="text-ink-300">/</span>
-              <span className="text-down-700">{r.bearish}</span>
+              <SoftBadge tone="down">{r.bearish}</SoftBadge>
               <span className="text-ink-300">/</span>
-              <span className="text-ink-500">{r.neutral}</span>
+              <SoftBadge>{r.neutral}</SoftBadge>
             </span>
             <span className="hidden w-14 text-right font-mono text-micro text-ink-500 tnum sm:block" title={t("来源数")}>
               {r.sourceDiversity} {t('源')}

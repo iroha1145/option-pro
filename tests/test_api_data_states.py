@@ -525,7 +525,10 @@ def test_full_watchlist_failed_refresh_keeps_only_bounded_stale_snapshot(monkeyp
         stocks._endpoint_cache["watchlist"] = old_entry
         calls = 0
 
+        release_refresh = asyncio.Event()
+
         async def failed_watchlist():
+            await release_refresh.wait()
             nonlocal calls
             calls += 1
             raise RuntimeError("provider unavailable")
@@ -535,6 +538,7 @@ def test_full_watchlist_failed_refresh_keeps_only_bounded_stale_snapshot(monkeyp
         stale = await stocks.watchlist(None)
         assert stale["groups"] == [{"id": "old"}]
         refresh_task = stocks._endpoint_refresh_tasks["watchlist"]
+        release_refresh.set()
         await asyncio.gather(refresh_task, return_exceptions=True)
         await asyncio.sleep(0)
 
@@ -577,7 +581,10 @@ def test_full_watchlist_refresh_failure_cools_down_then_retries(monkeypatch, tmp
         stocks._endpoint_cache["watchlist"] = old_entry
         calls = 0
 
+        release_refresh = asyncio.Event()
+
         async def refresh_watchlist():
+            await release_refresh.wait()
             nonlocal calls
             calls += 1
             if calls == 1:
@@ -589,6 +596,7 @@ def test_full_watchlist_refresh_failure_cools_down_then_retries(monkeypatch, tmp
         first = await stocks.watchlist(None)
         assert first["groups"][0]["id"] == "old"
         first_task = stocks._endpoint_refresh_tasks["watchlist"]
+        release_refresh.set()
         await asyncio.gather(first_task, return_exceptions=True)
         await asyncio.sleep(0)
 
@@ -607,9 +615,11 @@ def test_full_watchlist_refresh_failure_cools_down_then_retries(monkeypatch, tmp
         assert old_entry.stale_until == 31_000.0
 
         clock[0] = 30_060.0
+        release_refresh.clear()
         retrying = await stocks.watchlist(None)
         assert retrying["stale_reason"] == "background_refresh_pending"
         retry_task = stocks._endpoint_refresh_tasks["watchlist"]
+        release_refresh.set()
         await retry_task
         await asyncio.sleep(0)
 
@@ -725,12 +735,16 @@ def test_private_watchlist_reloads_newer_snapshot_but_keeps_live_refresh_semanti
             saved_at=44_990.0,
         )
 
+        release_refresh = asyncio.Event()
+
         async def no_network():
+            await release_refresh.wait()
             raise RuntimeError("network is disabled in this test")
 
         monkeypatch.setattr(stocks, "_build_watchlist", no_network)
         refreshed = await stocks.watchlist(None)
         refresh_task = stocks._endpoint_refresh_tasks["watchlist"]
+        release_refresh.set()
         with pytest.raises(RuntimeError, match="network is disabled"):
             await refresh_task
         await asyncio.sleep(0)
@@ -772,7 +786,10 @@ def test_watchlist_snapshot_write_failure_does_not_fail_refresh(monkeypatch, tmp
             value=_watchlist_payload("old"),
         )
 
+        release_refresh = asyncio.Event()
+
         async def refreshed_watchlist():
+            await release_refresh.wait()
             return _watchlist_payload("live")
 
         def failed_replace(_source, _destination):
@@ -784,6 +801,7 @@ def test_watchlist_snapshot_write_failure_does_not_fail_refresh(monkeypatch, tmp
         stale = await stocks.watchlist(None)
         assert stale["groups"][0]["id"] == "old"
         refresh_task = stocks._endpoint_refresh_tasks["watchlist"]
+        release_refresh.set()
         await refresh_task
         await asyncio.sleep(0)
 

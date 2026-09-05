@@ -1,7 +1,8 @@
 /** Map ChartAnalysisBundle overlays to ECharts marks/series. No algorithm logic. */
 
 import { autoPatternsToMarks, type DrawingMarks, type RenderContext } from '../renderer.ts';
-import { resolveAnchor } from '../projection.ts';
+import { resolveAnchor, barKeyOf } from '../projection.ts';
+import { LINE_INK, manualLineInk, isSupportLevel } from '../linePresentation.ts';
 import { barStampForRange, isPatternKind, type AnalysisOverlay, type AnalysisPane } from './mapBundle.ts';
 
 export interface OverlaySeriesLine {
@@ -42,10 +43,6 @@ export function alignSeriesToBars(
     byDate.set(day, finite(values[index]));
   });
   return bars.map((bar) => byDate.get(barStampForRange(bar.t, range)) ?? null);
-}
-
-function paleLine(color = '#8A94B0', width = 1) {
-  return { color, width, type: [4, 4] as number[] };
 }
 
 function asNumber(value: unknown): number | null {
@@ -106,6 +103,7 @@ export function overlaysToMarks(
   ctx: RenderContext,
   /** 形态的展示名（KlineChart 注入 autoPatternName）：给了才画线端标签。 */
   patternLabel?: (kind: string, subtype?: string | null) => string | null,
+  labelIds?: ReadonlySet<string>,
 ): DrawingMarks {
   const lines: object[] = [];
   const points: object[] = [];
@@ -149,7 +147,8 @@ export function overlaysToMarks(
       status: overlay.status,
       anchors,
       color: PATTERN_LINE_COLORS[overlay.kind],
-      label: patternLabel ? patternLabel(overlay.kind, subtype) ?? undefined : undefined,
+      label: patternLabel && (!labelIds || labelIds.has(overlay.id))
+        ? patternLabel(overlay.kind, subtype) ?? undefined : undefined,
     };
   });
   const patternMarks = autoPatternsToMarks(patterns, ctx, 0);
@@ -158,10 +157,15 @@ export function overlaysToMarks(
   areas.push(...patternMarks.areas);
   polygons.push(...(patternMarks.polygons ?? []));
 
-  const pushLevel = (price: number, color = '#8A94B0') => {
+  const pushLevel = (price: number, color: string = LINE_INK.neutral, label?: string, historical?: { start: number; end: number }) => {
+    if (price <= 0) return;
     lines.push([
-      { coord: [ctx.xMin, price], lineStyle: paleLine(color) },
-      { coord: [ctx.xMax, price] },
+      { coord: [historical?.start ?? ctx.xMin, price], clipToPlot: true,
+        lineStyle: { ...manualLineInk(color, 2, historical ? [2, 4] : 'solid'), opacity: historical ? 0.38 : 1 },
+        label: label ? { show: true, formatter: `${label} · ${price.toLocaleString('en-US', { maximumFractionDigits: price < 1 ? 4 : 2 })}`,
+          position: 'insideEndTop', fontSize: 11, lineHeight: 12, color,
+          backgroundColor: 'rgba(255,255,255,0.96)', padding: [1, 4], borderRadius: 3 } : { show: false } },
+      { coord: [historical?.end ?? ctx.xMax, price] },
     ]);
   };
 
@@ -186,7 +190,19 @@ export function overlaysToMarks(
     }
     if (overlay.kind === 'level') {
       const price = asNumber(overlay.geometry.price);
-      if (price !== null) pushLevel(price);
+      if (price !== null) {
+        const support = isSupportLevel(overlay.geometry, ctx.bars[ctx.bars.length - 1]?.c);
+        const label = (!labelIds || labelIds.has(overlay.id))
+          ? patternLabel?.(support ? 'support_trend' : 'resistance_trend', 'horizontal') ?? undefined : undefined;
+        let historical: { start: number; end: number } | undefined;
+        if (['invalidated', 'broken_up', 'broken_down', 'failed', 'expired'].includes(overlay.status)) {
+          const locate = (key: string) => ctx.bars.findIndex(bar => barKeyOf(bar, ctx.range) === key || barStampForRange(bar.t, ctx.range) === key);
+          const start = locate(overlay.formationStart), end = locate(overlay.formationEnd);
+          if (start < 0 || end <= start) continue;
+          historical = { start, end };
+        }
+        pushLevel(price, support ? LINE_INK.support : LINE_INK.resistance, label, historical);
+      }
       continue;
     }
     if (overlay.kind === 'pivot' || overlay.kind === 'breakout') {

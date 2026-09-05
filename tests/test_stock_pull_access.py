@@ -77,7 +77,7 @@ def test_signed_in_customer_can_pull_with_account_scoped_budget(
     client = _client(store)
     registered = client.post(
         "/api/account/register",
-        json={"username": "carol", "password": "pw"},
+        json={"username": "carol", "password": "fixture-password-for-tests"},
         headers=HEADERS,
     )
     assert registered.status_code == 201

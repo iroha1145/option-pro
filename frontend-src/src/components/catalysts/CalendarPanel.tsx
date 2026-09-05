@@ -4,22 +4,23 @@ import { usePolling } from '@/hooks/usePolling';
 import { browserCalendarQuery, catalystsContract } from './api';
 import type { EconomicEvent } from './api';
 import EmptyState from '@/components/shared/EmptyState';
+import SoftBadge, { type BadgeTone } from '@/components/shared/SoftBadge';
 import { SkeletonRows } from '@/components/shared/Skeleton';
 import { cn } from '@/lib/utils';
 import { fmtLocaleDate, fmtLocaleTime } from '@/lib/format';
 import { t as __t } from '../../i18n/core.ts';
 
-const IMPACT_STYLE: Record<EconomicEvent['impact'], { bar: string; chip: string; dots: number }> = {
-  high: { bar: 'bg-down-600', chip: 'bg-down-50 text-down-700', dots: 3 },
-  medium: { bar: 'bg-warn-600', chip: 'bg-warn-50 text-warn-600', dots: 2 },
-  low: { bar: 'bg-brand-400', chip: 'bg-brand-50 text-brand-600', dots: 1 },
-  holiday: { bar: 'bg-ink-300', chip: 'bg-paper-2 text-ink-500 border border-line', dots: 0 },
+const IMPACT_STYLE: Record<EconomicEvent['impact'], { bar: string; tone: BadgeTone; dots: number }> = {
+  high: { bar: 'bg-down-600', tone: 'down', dots: 3 },
+  medium: { bar: 'bg-warn-600', tone: 'warn', dots: 2 },
+  low: { bar: 'bg-brand-400', tone: 'brand', dots: 1 },
+  holiday: { bar: 'bg-ink-300', tone: 'neutral', dots: 0 },
 };
 
 function ImpactChip({ ev }: { ev: EconomicEvent }) {
   const s = IMPACT_STYLE[ev.impact];
   return (
-    <span className={cn('inline-flex items-center gap-1 rounded-xs px-1.5 py-0.5 text-micro font-medium', s.chip)}>
+    <SoftBadge tone={s.tone}>
       {s.dots > 0 && (
         <span className="flex gap-0.5" aria-hidden="true">
           {Array.from({ length: 3 }, (_, i) => (
@@ -28,7 +29,7 @@ function ImpactChip({ ev }: { ev: EconomicEvent }) {
         </span>
       )}
       {ev.impactZh}
-    </span>
+    </SoftBadge>
   );
 }
 
@@ -150,9 +151,9 @@ export default function CalendarPanel({ refreshToken }: { refreshToken: number }
                         <span>
                           {__t('实际')}{' '}
                           {ev.actual !== null ? (
-                            <span className="font-medium text-brand-600">{ev.actual}</span>
+                            <SoftBadge tone="brand">{ev.actual}</SoftBadge>
                           ) : ev.releaseStatus === 'awaiting_source' ? (
-                            <span className="text-warn-600">{__t('数据源未回填')}</span>
+                            <SoftBadge tone="warn">{__t('数据源未回填')}</SoftBadge>
                           ) : (
                             <span className="text-ink-300">{__t('待公布')}</span>
                           )}

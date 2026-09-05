@@ -6,8 +6,8 @@
  * （无快照 / 未归板块 / 暴露观测不足）在这里也各说各话。
  */
 import { cn } from '@/lib/utils';
+import SoftBadge from './SoftBadge';
 import {
-  MACRO_TONE_CLASS,
   MACRO_TONE_LABEL,
   macroMissingReason,
   macroToneOf,
@@ -36,27 +36,21 @@ export default function MacroFitBadge({
   if (tone === null || typeof score !== 'number') {
     const reason = t(macroMissingReason(status) ?? '暂无宏观读数');
     return (
-      <span
-        className={cn(
-          'inline-flex items-center rounded-xs border border-line bg-card-warm px-1.5 py-px text-micro text-ink-400',
-          className,
-        )}
+      <SoftBadge
+        className={className}
         title={reason}
       >
         {compact ? t('无读数') : reason}
-      </span>
+      </SoftBadge>
     );
   }
   return (
-    <span
-      className={cn(
-        'inline-flex items-center gap-1 rounded-xs border px-1.5 py-px text-micro',
-        MACRO_TONE_CLASS[tone],
-        className,
-      )}
+    <SoftBadge
+      tone={tone === 'tailwind' ? 'up' : tone === 'headwind' ? 'down' : 'neutral'}
+      className={cn('gap-1', className)}
     >
-      <span className="font-mono tnum">{score.toFixed(1)}</span>
+      <span className="tnum">{score.toFixed(1)}</span>
       <span>{t(MACRO_TONE_LABEL[tone])}</span>
-    </span>
+    </SoftBadge>
   );
 }

@@ -105,12 +105,12 @@ test('breakout event rows survive a null event price without inventing one', asy
   assert.match(types, /price: number \| null;/);
 });
 
-test('index cards open the detail page with the real symbol, never the display code', async () => {
-  // /stock/SPX 会整页「行情服务暂不可用」：详情页与 /stocks 端点只认 ^GSPC。
+test('index cards pass a canonical symbol into detail navigation', async () => {
+  // 映射、旧别名请求和演示价格一致性由 index-and-watchlist-behavior.test.mjs 执行验证。
   const cards = await source('components/market/IndexCards.tsx');
   const market = await source('api/modules/market.ts');
   const mocks = await source('mocks/fixtures.ts');
-  assert.match(cards, /onOpen\(quote\.symbol \|\| quote\.code\)/);
+  assert.match(cards, /onOpen\(quoteSymbol\(quote\.symbol \|\| quote\.code\)\)/);
   assert.doesNotMatch(cards, /onOpen\(quote\.code\)(?!\s*\|\|)/);
   assert.match(market, /symbol,\n/);
   assert.match(mocks, /symbol: '\^GSPC'/);

@@ -56,7 +56,8 @@ export interface WatchlistItem {
   price: number;
   change: number;
   changePct: number;
-  sparkline: number[];    // 24 点分时
+  sparkline: number[];    // 兼容旧短图；线上为最多 7 个日线/最新报价点
+  dailyTrend?: { date: string; close: number }[]; // 最多 30 个缓存日线，不拼接盘前盘后报价
   strengthScore: number;  // 0–100
   signals: Signal[];
   updatedAt: string;
@@ -267,6 +268,8 @@ export interface Candle {
   ext?: boolean;
   /** 零成交的报价路径 bar：只有报价包络，不是真实成交 OHLC */
   quote_only?: boolean;
+  /** 分钟行情在生成该快照时是否已收盘；旧日/周快照可缺省。 */
+  closed?: boolean;
 }
 export interface StockChart {
   ticker: string;

@@ -3,14 +3,8 @@
  * 轨道 line 色 3px 圆角，填充 grow-bar；色阶 <50 ink-300 / 50–69 brand-400 / 70–84 brand-600 / ≥85 up-600
  */
 import { cn } from '@/lib/utils';
+import { strengthBarClass } from '@/lib/strengthColor';
 import { t } from '../../i18n/core.ts';
-
-export function strengthBarClass(score: number): string {
-  if (score >= 85) return 'bg-up-600';
-  if (score >= 70) return 'bg-brand-600';
-  if (score >= 50) return 'bg-brand-400';
-  return 'bg-ink-300';
-}
 
 export default function StrengthBar({
   score,
@@ -27,15 +21,15 @@ export default function StrengthBar({
   const valid = typeof score === 'number' && Number.isFinite(score);
   return (
     <span className={cn('inline-flex items-center gap-2', className)} aria-label={valid ? t('强度分 {score}', { score }) : t('强度分缺失')}>
-      <span className="h-[3px] overflow-hidden rounded-pill bg-line" style={{ width }} role="presentation">
+      <span className="strength-track h-1 overflow-hidden rounded-pill bg-line" style={{ width }} role="presentation">
         {valid && (
           <span
-            className={cn('block h-full origin-left rounded-pill animate-grow-bar', strengthBarClass(score))}
-            style={{ width: `${Math.max(2, Math.min(100, score))}%` }}
+            className={cn('strength-fill block h-full origin-left rounded-pill animate-grow-bar', strengthBarClass(score))}
+            style={{ width: `${Math.max(0, Math.min(100, score))}%` }}
           />
         )}
       </span>
-      {showScore && <span className="font-mono text-[13px] leading-[18px] text-ink-600 tnum">{valid ? score : '—'}</span>}
+      {showScore && <span className="text-[12px] font-medium leading-[18px] text-ink-600 tnum">{valid ? score : '—'}</span>}
     </span>
   );
 }

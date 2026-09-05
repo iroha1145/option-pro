@@ -40,6 +40,8 @@ if (!process.env.OPTIX_PASSWORD_BASE_URL) {
 
 export default defineConfig({
   testDir: "./visual-tests",
+  // This suite uses isolated demo data and a Vite-only component harness.
+  testIgnore: ["ui-review.spec.mjs", "options-redesign.spec.mjs", "feedback-layout.spec.mjs", "overlay-behavior.spec.mjs", "smart-drawings.spec.mjs", "screener-tooltips.spec.mjs", "stock-data-status.spec.mjs"],
   outputDir: "./test-results/playwright",
   timeout: 45_000,
   expect: { timeout: 10_000 },
@@ -62,7 +64,7 @@ export default defineConfig({
       : undefined,
     locale: "zh-CN",
     timezoneId: "America/New_York",
-    reducedMotion: "reduce",
+    contextOptions: { reducedMotion: "reduce" },
     ignoreHTTPSErrors: true,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",

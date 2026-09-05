@@ -34,7 +34,14 @@ COPY config/personal.toml /app/config/personal.toml
 COPY frontend /app/frontend
 COPY THIRD_PARTY_NOTICES.md /licenses/THIRD_PARTY_NOTICES.md
 COPY third_party/BreakoutAnalysis-LICENSE /licenses/BreakoutAnalysis-LICENSE
-RUN python -c "from pathlib import Path; root = Path('/app/frontend'); files = sorted(path.relative_to(root).as_posix() for path in root.rglob('*') if path.is_file()); Path('/app/frontend-manifest.txt').write_text('\\n'.join(files) + '\\n', encoding='utf-8')"
+COPY third_party/ /licenses/third_party/
+# Git checkouts under a restrictive umask can leave copied source unreadable
+# to the runtime user. Keep files root-owned while granting read/traverse access.
+RUN python -c "from pathlib import Path; root = Path('/app/frontend'); files = sorted(path.relative_to(root).as_posix() for path in root.rglob('*') if path.is_file()); Path('/app/frontend-manifest.txt').write_text('\\n'.join(files) + '\\n', encoding='utf-8')" \
+    && find /app/backend/app /app/config /app/frontend /licenses -type d -exec chmod 0755 {} + \
+    && find /app/backend/app /app/config /app/frontend /licenses -type f -exec chmod 0644 {} + \
+    && chmod 0755 /app /app/backend \
+    && chmod 0644 /app/frontend-manifest.txt
 
 USER app
 

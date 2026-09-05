@@ -6,7 +6,7 @@ import {
   type SectorStrengthEnvelope,
 } from '@/api/modules/sectors';
 import { usePolling } from '@/hooks/usePolling';
-import { useShell } from '@/components/Layout';
+import { useShell } from '@/hooks/useShell';
 import { fmtRelative, fmtTimeHHMMSS } from '@/lib/format';
 import PageHeader from '@/components/shared/PageHeader';
 import Segmented from '@/components/shared/Segmented';

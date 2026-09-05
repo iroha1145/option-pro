@@ -6,7 +6,7 @@
  */
 import { useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router';
-import { useShell } from '@/components/Layout';
+import { useShell } from '@/hooks/useShell';
 import { marketApi } from '@/api/modules/market';
 import Icon from '@/components/icons';
 import { signalsApi } from '@/api/modules/signals';
@@ -19,7 +19,8 @@ import PageHeader from '@/components/shared/PageHeader';
 import SessionLED from '@/components/shared/SessionLED';
 import IndexCards from '@/components/market/IndexCards';
 import StatusCard from '@/components/market/StatusCard';
-import RegimePanel, { regimeMean } from '@/components/market/RegimePanel';
+import RegimePanel from '@/components/market/RegimePanel';
+import { regimeMean } from '@/lib/regime';
 import SignalsReading, { type TrendBias } from '@/components/market/SignalsReading';
 import BreadthHistogram from '@/components/market/BreadthHistogram';
 import LinkCards from '@/components/market/LinkCards';

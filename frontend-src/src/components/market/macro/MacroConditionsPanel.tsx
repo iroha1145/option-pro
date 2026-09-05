@@ -6,7 +6,7 @@
  * insufficient_history —— 刷新失败保留旧面板、显示 Warning，不清空图表、不把旧值改成 0。
  * 手动刷新只对 Owner 显示；访客可读全部数据，但看不到也触发不了 Worker 动作。
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ApiError } from '@/api/client';
 import { invalidateQueryPaths } from '@/api/queryRegistry';
 import { macroApi, type MacroConditionsResponse } from '@/api/modules/macro';
@@ -104,11 +104,8 @@ export default function MacroConditionsPanel({
    * 这里在动作未完成期间每 5 秒读一次快照版本，版本一变即认定完成并停表。
    */
   const [refreshBaseline, setRefreshBaseline] = useState<string | null>(null);
-  /* refresh 经 ref 取用：conditionsQ 是每次渲染的新对象，直接进 deps 会让
-     effect 每渲染重建——started 不停归零，3 分钟放弃逻辑成死代码，且 5 秒
-     强拉回源直到离开页面。 */
-  const refreshConditionsRef = useRef(conditionsQ.refresh);
-  refreshConditionsRef.current = conditionsQ.refresh;
+  // usePolling keeps refresh stable; the result object itself changes per render.
+  const refreshConditions = conditionsQ.refresh;
   useEffect(() => {
     if (refreshPhase !== 'queued' && refreshPhase !== 'in_progress') return;
     const started = Date.now();
@@ -123,21 +120,19 @@ export default function MacroConditionsPanel({
          浏览器 HTTP 缓存（max-age 窗口内）或在途旧请求都可能让这一拍
          白转，直到整个跟进窗口烧完（审计 P1-01 同族）。 */
       invalidateQueryPaths(['/macro/conditions'], { reload: true });
-      refreshConditionsRef.current({ force: true });
+      refreshConditions({ force: true });
     }, REFRESH_FOLLOW_INTERVAL_MS);
     return () => window.clearInterval(timer);
-  }, [refreshPhase]);
+  }, [refreshConditions, refreshPhase]);
 
   /* 快照版本变化即表示刷新已落地，明确复位而不是让状态一直挂着。 */
-  const snapshotStamp = conditionsQ.data?.dataThrough ?? conditionsQ.data?.asOf ?? null;
-  useEffect(() => {
-    if (refreshPhase !== 'queued' && refreshPhase !== 'in_progress') return;
-    if (refreshBaseline === null || snapshotStamp === null) return;
+  const snapshotStamp = conditionsQ.data?.asOf ?? conditionsQ.data?.dataThrough ?? null;
+  if ((refreshPhase === 'queued' || refreshPhase === 'in_progress') && snapshotStamp !== null) {
     if (snapshotStamp !== refreshBaseline) {
       setRefreshPhase('idle');
       setRefreshNote(t('宏观快照已更新。'));
     }
-  }, [snapshotStamp, refreshBaseline, refreshPhase]);
+  }
 
   const data = conditionsQ.data;
   const status = data?.status ?? 'unavailable';

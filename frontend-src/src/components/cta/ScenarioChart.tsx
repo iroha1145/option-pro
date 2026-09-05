@@ -162,7 +162,11 @@ function scenarioOption(row: CtaInstrumentEstimate): ChartOption | null {
 
 export default function ScenarioChart({ row }: { row: CtaInstrumentEstimate }) {
   const colorMode = useColorMode();
-  const option = useMemo(() => scenarioOption(row), [row, colorMode]);
+  const option = useMemo(() => {
+    // 图表构造器读取 CSS 涨跌色，配色模式变化时需重新取值。
+    void colorMode;
+    return scenarioOption(row);
+  }, [row, colorMode]);
   if (!option) return <p className="mt-2 text-caption text-ink-400">{t('暂无数据')}</p>;
   return (
     <>

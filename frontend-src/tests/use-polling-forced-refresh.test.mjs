@@ -126,7 +126,7 @@ function createReactStub() {
   };
 }
 
-function loadUsePolling(React) {
+function loadUsePolling(React, environment = {}) {
   const source = fs.readFileSync(hookPath, 'utf8');
   const compiled = ts.transpileModule(source, {
     compilerOptions: {
@@ -162,6 +162,7 @@ function loadUsePolling(React) {
     Promise,
     Set,
     Array,
+    ...environment,
   });
   return module.exports.usePolling;
 }
@@ -249,3 +250,35 @@ test('forced refresh replaces stale error state with the fresh result', async ()
   assert.equal(read().data.version, 'new');
   assert.equal(read().error, null);
 });
+
+for (const trigger of ['interval', 'visibility']) {
+  test(`automatic ${trigger} refresh still publishes data after forced refresh`, async () => {
+    const { React, mount } = createReactStub();
+    let interval;
+    let onVisible;
+    const usePolling = loadUsePolling(React, {
+      setInterval(callback) { interval = callback; return 1; },
+      clearInterval() {},
+      document: {
+        visibilityState: 'visible',
+        addEventListener(name, callback) { if (name === 'visibilitychange') onVisible = callback; },
+        removeEventListener() {},
+      },
+    });
+    let calls = 0;
+    const read = mount(() => usePolling(async () => ({ version: ++calls }), 1000));
+    await settle();
+    assert.equal(read().data.version, 1);
+    read().refresh({ force: true });
+    await settle();
+    assert.equal(read().data.version, 2);
+
+    if (trigger === 'interval') interval();
+    else onVisible();
+    await settle();
+
+    assert.equal(calls, 3);
+    assert.equal(read().data.version, 3, 'scheduled results must use the current request generation');
+    assert.equal(read().refreshing, false);
+  });
+}

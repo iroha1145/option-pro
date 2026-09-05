@@ -3,16 +3,14 @@
  * index_trend / momentum / breadth / volume / risk_appetite / risk_on_spread
  * live：直读 /strength/market 的 market_regime 真实六维分 + 综合分/label/warnings（不再由分布推导）
  * mock：无 regime 字段时回退直方图确定性推导（不编造随机量）
- * grow-bar 700ms 错峰 45ms + 毛玻璃 tooltip
+ * 数值条首帧显示完整比例，不以自身零面积观测触发；说明按需查看
  */
-import { motion } from 'framer-motion';
+import SoftBadge from '@/components/shared/SoftBadge';
 import type { MarketRegimeDims, MarketRegimeInfo, MarketStrength } from '@/api/types';
 import SourceNote from '@/components/shared/SourceNote';
 import InfoHint from '@/components/shared/InfoHint';
 import { SCORE_HINTS, type ScoreHintKey } from '@/lib/scoreHints';
 import { t, getLocale } from '../../i18n/core.ts';
-
-const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
 
 interface RegimeDim {
   key: string;
@@ -77,7 +75,7 @@ function deriveRegime(m: MarketStrength): RegimeDim[] {
   ];
 }
 
-function RegimeBar({ dim, index }: { dim: RegimeDim; index: number }) {
+function RegimeBar({ dim }: { dim: RegimeDim }) {
   /* count-up 减量：六维条数值直接呈现终值 */
   const v = dim.value ?? 0;
   return (
@@ -86,31 +84,27 @@ function RegimeBar({ dim, index }: { dim: RegimeDim; index: number }) {
           {dim.label}
           <InfoHint hint={SCORE_HINTS[dim.hintKey]} side="bottom" size={11} className="ml-0.5" />
         </span>
-        <span className="relative h-1.5 flex-1 overflow-hidden rounded-pill bg-line" role="presentation">
+        <span className="strength-track relative h-1.5 flex-1 overflow-hidden rounded-pill bg-paper" role="presentation">
           {dim.value !== null && (
-            <motion.span
+            <span
               className="block h-full origin-left rounded-pill bg-brand-500"
-              initial={{ scaleX: 0 }}
-              whileInView={{ scaleX: 1 }}
-              viewport={{ once: true, amount: 0.4 }}
-              transition={{ duration: 0.7, ease: EASE_PAPER, delay: index * 0.045 }}
               style={{ width: `${Math.max(0, Math.min(100, dim.value))}%` }}
             />
           )}
         </span>
-        <span className="text-right font-mono text-caption text-ink-800 tnum">
+        <span className="metric-value text-right text-caption text-ink-800 tnum">
           {dim.value !== null ? Math.round(v) : '—'}
         </span>
       {/* 毛玻璃 tooltip（绝对定位，不占网格槽位） */}
-      <div className="glass pointer-events-none absolute -top-2 left-16 z-20 hidden w-56 -translate-y-full rounded-md border border-line p-3 shadow-sh-2 group-hover:block">
+      <div className="cloud-popover pointer-events-none absolute -top-2 left-16 z-20 hidden w-56 -translate-y-full p-3 group-hover:block">
         <p className="flex items-baseline justify-between">
           <span className="text-caption font-semibold text-ink-800">{dim.label}</span>
           {getLocale() === 'zh' && <span className="font-mono text-micro text-ink-400">{dim.en}</span>}
         </p>
         <p className="mt-1.5 text-micro leading-[16px] text-ink-500">{dim.hint}</p>
-        <p className="mt-1.5 font-mono text-caption text-brand-600 tnum">
+        <SoftBadge tone={dim.value === null ? 'neutral' : 'brand'} className="mt-1.5">
           {dim.value !== null ? `${Math.round(dim.value * 10) / 10} / 100` : t('暂无数据')}
-        </p>
+        </SoftBadge>
       </div>
     </div>
   );
@@ -127,7 +121,7 @@ export default function MarketRegimeCard({ market }: { market: MarketStrength })
           <InfoHint hint={SCORE_HINTS.marketRegime} side="bottom" size={12} className="ml-1" />
         </p>
         {regime && regime.score !== null ? (
-          <span className="font-mono text-data-m text-ink-900 tnum">{regime.score}</span>
+          <span className="metric-value text-data-m text-ink-900 tnum">{regime.score}</span>
         ) : (
           <span className="font-mono text-micro text-ink-300 tnum">{t('6 维')}</span>
         )}
@@ -135,26 +129,26 @@ export default function MarketRegimeCard({ market }: { market: MarketStrength })
       {regime && (regime.label || regime.spreadLabel) && (
         <p className="mt-1.5 flex flex-wrap items-center gap-1.5">
           {regime.label && (
-            <span className="rounded-xs bg-brand-50 px-1.5 py-px text-micro font-medium text-brand-700">{regime.label}</span>
+            <SoftBadge tone="brand">{regime.label}</SoftBadge>
           )}
           {regime.spreadLabel && (
-            <span className="rounded-xs border border-line bg-card-warm px-1.5 py-px text-micro text-ink-500">{regime.spreadLabel}</span>
+            <SoftBadge>{regime.spreadLabel}</SoftBadge>
           )}
         </p>
       )}
       <div className="mt-4 grid grid-cols-[max-content_minmax(0,1fr)_max-content] gap-y-3">
-        {dims.map((d, i) => (
-          <RegimeBar key={d.key} dim={d} index={i} />
+        {dims.map((d) => (
+          <RegimeBar key={d.key} dim={d} />
         ))}
       </div>
       {regime && regime.warnings.length > 0 && (
         <ul className="mt-3.5 space-y-1 border-t border-line pt-3">
           {regime.warnings.map((w, i) => (
-            <li key={i} className="flex items-start gap-1.5 text-micro leading-[16px] text-warn-600">
-              <span className="mt-px shrink-0" aria-hidden="true">
-                ⚠
-              </span>
-              {w}
+            <li key={i}>
+              <SoftBadge tone="warn" className="items-start whitespace-normal">
+                <span className="mt-px shrink-0" aria-hidden="true">⚠</span>
+                {w}
+              </SoftBadge>
             </li>
           ))}
         </ul>

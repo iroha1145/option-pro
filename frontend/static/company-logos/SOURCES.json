@@ -1,0 +1,300 @@
+{
+  "purpose": "Company identification in stock lists. Marks belong to their respective owners.",
+  "retrieved": "2026-09-05",
+  "logos": [
+    {
+      "ticker": "NVDA",
+      "url": "https://financialmodelingprep.com/image-stock/NVDA.png",
+      "bytes": 11180,
+      "sha256": "65adfc123c82dd816d8bebeaded5d0bdd72a4a799d1c0e23d310eaf6e2c457e6"
+    },
+    {
+      "ticker": "TSLA",
+      "url": "https://financialmodelingprep.com/image-stock/TSLA.png",
+      "bytes": 9738,
+      "sha256": "4f1bd145f2ad8de3c83d973ab4c2a36e352fdd838bf3ba10e8b186f53509f8c0"
+    },
+    {
+      "ticker": "AAPL",
+      "url": "https://financialmodelingprep.com/image-stock/AAPL.png",
+      "bytes": 1974,
+      "sha256": "41483c742e810831c12663ef2040d306f81440e15126f34b623dd08a09bbb63e"
+    },
+    {
+      "ticker": "AMD",
+      "url": "https://financialmodelingprep.com/image-stock/AMD.png",
+      "bytes": 5301,
+      "sha256": "2c94246f0c6dd24e4136d603400d486def9be17696db53d7841533011b3a99c9"
+    },
+    {
+      "ticker": "MSFT",
+      "url": "https://financialmodelingprep.com/image-stock/MSFT.png",
+      "bytes": 938,
+      "sha256": "5464732326598baca91f5aaa9b19ca9b8ced1655465a41a54f3424485be5e33a"
+    },
+    {
+      "ticker": "META",
+      "url": "https://financialmodelingprep.com/image-stock/META.png",
+      "bytes": 16236,
+      "sha256": "c48757bf1cc853fcf07dd247df5cc8edc2699853d09874e9cf6cfec6702c15c5"
+    },
+    {
+      "ticker": "AMZN",
+      "url": "https://financialmodelingprep.com/image-stock/AMZN.png",
+      "bytes": 9484,
+      "sha256": "4940123a81ddefbf5915f143f2ab7220e0a76e5c06e6b7a9eaad1b4acf42da51"
+    },
+    {
+      "ticker": "GOOGL",
+      "url": "https://financialmodelingprep.com/image-stock/GOOGL.png",
+      "bytes": 12773,
+      "sha256": "bd3b7de49841562702c9b4f18f221a2c318979e1380f1658064600081021e4fe"
+    },
+    {
+      "ticker": "AVGO",
+      "url": "https://financialmodelingprep.com/image-stock/AVGO.png",
+      "bytes": 17025,
+      "sha256": "0afd68b45dbefb8ad9e75bc9cda3898a3d75ab026dde215cfe9def48d4fb4a41"
+    },
+    {
+      "ticker": "SMCI",
+      "url": "https://financialmodelingprep.com/image-stock/SMCI.png",
+      "bytes": 7329,
+      "sha256": "8193770c6837c36dc6064388122b2d80e626a699f7637362445904a390c537bd"
+    },
+    {
+      "ticker": "TSM",
+      "url": "https://financialmodelingprep.com/image-stock/TSM.png",
+      "bytes": 24451,
+      "sha256": "7fabd18a1cc531cd6b815f95b4263bde42c5250f5bf846465925e85df55c4a95"
+    },
+    {
+      "ticker": "ARM",
+      "url": "https://financialmodelingprep.com/image-stock/ARM.png",
+      "bytes": 1841,
+      "sha256": "76eadc1bbd3f9d6a50a9e7fa81cb99c2e5f33e547e6a6b6460706062a496ed46"
+    },
+    {
+      "ticker": "MU",
+      "url": "https://financialmodelingprep.com/image-stock/MU.png",
+      "bytes": 10893,
+      "sha256": "c4c6752eef5eeef3392c61484b4e971eb95c4a3876fe5ce416a68d7ab9d43985"
+    },
+    {
+      "ticker": "INTC",
+      "url": "https://financialmodelingprep.com/image-stock/INTC.png",
+      "bytes": 1240,
+      "sha256": "fed34e20fa27940daa8aabdf3da83d87b4ec1bc73956f5fd773d9acb72d12d7d"
+    },
+    {
+      "ticker": "NFLX",
+      "url": "https://financialmodelingprep.com/image-stock/NFLX.png",
+      "bytes": 5173,
+      "sha256": "351d461bc92473fd2b16ceb4032ba82e5b159c91404c48070d29aa4325898355"
+    },
+    {
+      "ticker": "CRM",
+      "url": "https://financialmodelingprep.com/image-stock/CRM.png",
+      "bytes": 12664,
+      "sha256": "abd0c3efe9b4cd4541fbc642b1cf7575898361ca1d89d03b857d7bc0fd2fede5"
+    },
+    {
+      "ticker": "PLTR",
+      "url": "https://financialmodelingprep.com/image-stock/PLTR.png",
+      "bytes": 2318,
+      "sha256": "b33a15c8379a89328ea6a77282bbef4c65a3c419d69695278d82071fb398e236"
+    },
+    {
+      "ticker": "COIN",
+      "url": "https://financialmodelingprep.com/image-stock/COIN.png",
+      "bytes": 17751,
+      "sha256": "7e6731c56cc0420dd150bf591bd370d5db6271dffb815df36f71b59ba0bbb2da"
+    },
+    {
+      "ticker": "HOOD",
+      "url": "https://financialmodelingprep.com/image-stock/HOOD.png",
+      "bytes": 9500,
+      "sha256": "7e231a0969c743544890e6ee370d63d5f7d41c5f922c2c583171f5455d8b6962"
+    },
+    {
+      "ticker": "SPY",
+      "url": "https://financialmodelingprep.com/image-stock/SPY.png",
+      "bytes": 7684,
+      "sha256": "ed83f3c088d3df794c68fd4ed6fcc4d5daf240b906edd88251406479b1163ef4"
+    },
+    {
+      "ticker": "QQQ",
+      "url": "https://eodhd.com/img/logos/US/QQQ.png",
+      "bytes": 5965,
+      "sha256": "d1ff69035356f0c50e103a2ae6d57128d7d04bea54c373bf07dc5c9d8b3d943c",
+      "selection_note": "Readable complete logo on light backgrounds."
+    },
+    {
+      "ticker": "ORCL",
+      "url": "https://financialmodelingprep.com/image-stock/ORCL.png",
+      "bytes": 8964,
+      "sha256": "79bb1cdf0dc02acc962bff80867e4d4ce6d6a035cff1180270a71472fece99f0"
+    },
+    {
+      "ticker": "ADBE",
+      "url": "https://financialmodelingprep.com/image-stock/ADBE.png",
+      "bytes": 8431,
+      "sha256": "e48f89d4e1ebee9f4679a05dec4386adc62549f10bb89aa8886ff3a2629309a3"
+    },
+    {
+      "ticker": "NOW",
+      "url": "https://financialmodelingprep.com/image-stock/NOW.png",
+      "bytes": 13055,
+      "sha256": "37685add2efcbb11e9e9102e781ba89e562a920a664cc45a4c48c65385c1e2b4"
+    },
+    {
+      "ticker": "SHOP",
+      "url": "https://financialmodelingprep.com/image-stock/SHOP.png",
+      "bytes": 17639,
+      "sha256": "9d23c906679a8e9489a3ee6d9dbbff7efc1e14ef4511d53e749e122a9cb60cd8"
+    },
+    {
+      "ticker": "UBER",
+      "url": "https://static2.finnhub.io/file/publicdatany/finnhubimage/stock_logo/UBER.png",
+      "bytes": 58085,
+      "sha256": "52eeddb966cac4409dc90531c783febd2bf287e62ca014c304cf83e53f20307f",
+      "selection_note": "Readable complete logo on light backgrounds."
+    },
+    {
+      "ticker": "ABNB",
+      "url": "https://financialmodelingprep.com/image-stock/ABNB.png",
+      "bytes": 18072,
+      "sha256": "183e24c6461d7f74d6638faf574668ffe279499627a26d5c222bb99b8334f939"
+    },
+    {
+      "ticker": "DASH",
+      "url": "https://financialmodelingprep.com/image-stock/DASH.png",
+      "bytes": 3874,
+      "sha256": "0fc66c474393fb2df60013e62c85ed3fc0c6384224c2752da5fb640cca93fa84"
+    },
+    {
+      "ticker": "LLY",
+      "url": "https://financialmodelingprep.com/image-stock/LLY.png",
+      "bytes": 14115,
+      "sha256": "e51670387d685b1e5a01ebf54fc43b6dbabf04206787bfa9e54bd4048760590f"
+    },
+    {
+      "ticker": "UNH",
+      "url": "https://static2.finnhub.io/file/publicdatany/finnhubimage/stock_logo/UNH.png",
+      "bytes": 23416,
+      "sha256": "fa19e9e3c4b4d676ab8830bed897eaaff00cdc1b1de7a37b63709a7ff47badbe",
+      "selection_note": "Readable complete logo on light backgrounds."
+    },
+    {
+      "ticker": "JPM",
+      "url": "https://financialmodelingprep.com/image-stock/JPM.png",
+      "bytes": 7893,
+      "sha256": "79b7f8e3a577e3abefac1c78c74aa8fc76c518549c2d39fbd1149e34f434f84c"
+    },
+    {
+      "ticker": "V",
+      "url": "https://eodhd.com/img/logos/US/V.png",
+      "bytes": 4745,
+      "sha256": "7d2514f563eeb58f8f3d9cd820560baccd409c4b01c6bf123a8dd3459b9f723f",
+      "selection_note": "Readable complete logo on light backgrounds."
+    },
+    {
+      "ticker": "XOM",
+      "url": "https://financialmodelingprep.com/image-stock/XOM.png",
+      "bytes": 11061,
+      "sha256": "0b1d5fb71de7b018cc54dc117fa26d2e7c679e41d13976d23be5ad1ef18c5ad2"
+    },
+    {
+      "ticker": "CVX",
+      "url": "https://financialmodelingprep.com/image-stock/CVX.png",
+      "bytes": 25214,
+      "sha256": "1ec4fa69f5cbaa598602b1722a32092cc5686b476353d1985ea84d9cf61a92fd"
+    },
+    {
+      "ticker": "CAT",
+      "url": "https://static2.finnhub.io/file/publicdatany/finnhubimage/stock_logo/CAT.png",
+      "bytes": 25721,
+      "sha256": "f098c5f22af3b54981e96324914b7b673c90f0f9bb7ae82df8e0aa2dab80a794",
+      "selection_note": "Readable complete logo on light backgrounds."
+    },
+    {
+      "ticker": "GE",
+      "url": "https://financialmodelingprep.com/image-stock/GE.png",
+      "bytes": 50756,
+      "sha256": "95188b797921032142bd64712d0e49c18140138cebfc66896ac878bda76ab022"
+    },
+    {
+      "ticker": "DE",
+      "url": "https://financialmodelingprep.com/image-stock/DE.png",
+      "bytes": 48241,
+      "sha256": "f4e47c8234c8a3d65a3c037dcb48ad5d6146c651204d8bb8e9c9650bdac19ca6"
+    },
+    {
+      "ticker": "WMT",
+      "url": "https://financialmodelingprep.com/image-stock/WMT.png",
+      "bytes": 11258,
+      "sha256": "e32229b23d924425247e8ec6f9e5baec93bcbf46bb935b2542fb01af1799f332"
+    },
+    {
+      "ticker": "COST",
+      "url": "https://financialmodelingprep.com/image-stock/COST.png",
+      "bytes": 5868,
+      "sha256": "64f1f9025601494ea8848780219672c8b83d1aa8993a2dd285183c89caf516a1"
+    },
+    {
+      "ticker": "PG",
+      "url": "https://financialmodelingprep.com/image-stock/PG.png",
+      "bytes": 43199,
+      "sha256": "0f791f99071560d447ebe8dbcdbad2062913bb321ee0f6f86d4798ee240ba939"
+    },
+    {
+      "ticker": "KO",
+      "url": "https://financialmodelingprep.com/image-stock/KO.png",
+      "bytes": 19990,
+      "sha256": "0b16138b7e293a63a7aa3417a6993f7f3deea5c33dfe43c380b9ebe12876dcd9"
+    },
+    {
+      "ticker": "NEE",
+      "url": "https://financialmodelingprep.com/image-stock/NEE.png",
+      "bytes": 29926,
+      "sha256": "a93d139f5ac02073c8c359fb84deb28694b5567cc9ac545362494a8915920fed"
+    },
+    {
+      "ticker": "SO",
+      "url": "https://financialmodelingprep.com/image-stock/SO.png",
+      "bytes": 22890,
+      "sha256": "084ffdfdcf3d27df1b9f71a8f8c1e15fdd4694bbfd7a33514cb11813f083f973"
+    },
+    {
+      "ticker": "LIN",
+      "url": "https://financialmodelingprep.com/image-stock/LIN.png",
+      "bytes": 7419,
+      "sha256": "44aa05bb57d373eadcee46cbe8ad33973016e7724e599de286eb94e76347f172"
+    },
+    {
+      "ticker": "FCX",
+      "url": "https://financialmodelingprep.com/image-stock/FCX.png",
+      "bytes": 4432,
+      "sha256": "dff01d6734b5cace16c3519e81fb460b29f6cb30fb514c6932236a0d705ef841"
+    },
+    {
+      "ticker": "MRVL",
+      "url": "https://static2.finnhub.io/file/publicdatany/finnhubimage/stock_logo/MRVL.png",
+      "bytes": 38292,
+      "sha256": "3ae2e2b55c807f04d23ec64d5729b300f5909c3ea55b0df3a73a4723c540e758",
+      "selection_note": "Readable complete logo on light backgrounds."
+    },
+    {
+      "ticker": "SNOW",
+      "url": "https://financialmodelingprep.com/image-stock/SNOW.png",
+      "bytes": 13316,
+      "sha256": "bd46063b61d215127e12d7b9ed1777c965f0cb0e4ec9bbf387acf7c54ec43b7c"
+    },
+    {
+      "ticker": "DDOG",
+      "url": "https://financialmodelingprep.com/image-stock/DDOG.png",
+      "bytes": 6395,
+      "sha256": "8569335c137bb1023217c3769e02df3f647628f23d52c907b13050248f5a0d92"
+    }
+  ]
+}

@@ -13,15 +13,10 @@ import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { fmtPrice } from '@/lib/format';
 import ChangeBadge from '@/components/shared/ChangeBadge';
+import SoftBadge from '@/components/shared/SoftBadge';
 import Icon from '@/components/icons';
 
-type Tone = 'up' | 'down' | 'flat';
-
-/** 平盘是第三种事实：0 不算涨，别让它拿到向上的箭头与绿色（同 ChangeBadge 口径）。 */
-export function toneOf(value: number | null | undefined): Tone {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value === 0) return 'flat';
-  return value > 0 ? 'up' : 'down';
-}
+import { toneOf, type Tone } from '@/lib/insightTone';
 
 const TONE_TEXT: Record<Tone, string> = {
   up: 'text-up-600',
@@ -44,7 +39,7 @@ export function InsightCard({
   children: ReactNode;
 }) {
   return (
-    <section className={cn('rounded-lg border border-line bg-card p-3 shadow-card', className)}>
+    <section className={cn('card-surface p-4', className)}>
       <header className="flex items-center gap-2">
         {tone !== 'flat' && (
           <Icon
@@ -55,7 +50,7 @@ export function InsightCard({
         )}
         <h3 className="min-w-0 truncate text-body-s font-semibold text-ink-900">{title}</h3>
         {badge && (
-          <span className="ml-auto shrink-0 rounded-full bg-paper-2 px-2 py-0.5 text-micro text-ink-500">{badge}</span>
+          <SoftBadge className="ml-auto shrink-0">{badge}</SoftBadge>
         )}
       </header>
       <div className="mt-2.5">{children}</div>
@@ -79,7 +74,7 @@ export function InsightFrame({
   children: ReactNode;
 }) {
   return (
-    <div className={cn('rounded-lg border border-line bg-card-warm p-2', className)}>
+    <div className={cn('insight-frame rounded-lg border border-line bg-card-warm p-2', className)}>
       {(label || action) && (
         <div className="mb-1 flex min-h-6 items-center gap-2 px-1">
           {label && <span className="min-w-0 truncate text-micro text-ink-400">{label}</span>}
@@ -119,7 +114,7 @@ export function InsightValue({
     <div className={cn('flex flex-wrap items-baseline gap-x-2.5 gap-y-1', className)}>
       <span
         className={cn(
-          'font-mono font-medium tracking-[-0.02em] text-ink-900 tnum',
+          'metric-value text-ink-900',
           size === 'xl' ? 'text-[clamp(30px,10vw,44px)] leading-none' : 'text-data-l leading-tight',
         )}
       >
@@ -128,10 +123,10 @@ export function InsightValue({
       {suffix && <span className="text-body-s text-ink-500">{suffix}</span>}
       {changePct !== undefined && <ChangeBadge value={changePct} size={size === 'xl' ? 'md' : 'sm'} />}
       {hasChange && (
-        <span className={cn('font-mono tnum', size === 'xl' ? 'text-data-m' : 'text-caption', TONE_TEXT[tone])}>
-          {change >= 0 ? '+' : '−'}
+        <SoftBadge tone={tone === 'flat' ? 'neutral' : tone} size={size === 'xl' ? 'md' : 'sm'}>
+          {change > 0 ? '+' : change < 0 ? '−' : ''}
           {fmtPrice(Math.abs(change))}
-        </span>
+        </SoftBadge>
       )}
       {basis && <span className="text-micro text-ink-400">{basis}</span>}
     </div>

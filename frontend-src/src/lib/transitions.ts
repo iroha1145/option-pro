@@ -4,6 +4,7 @@
  * toggle the documented class / attribute hooks (is-open, is-closing, is-shaking).
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion.ts';
 
 export type OverlayPhase = 'closed' | 'preopen' | 'open' | 'closing';
 
@@ -74,18 +75,33 @@ export function readRootDurationMs(name: string, fallback: number): number {
  * flips to `open` so the catalog CSS actually tweens.
  */
 export function useOverlayPhase(open: boolean, closeMs: number): OverlayPhase {
-  const [phase, setPhase] = useState<OverlayPhase>(open ? 'open' : 'closed');
+  const reduced = usePrefersReducedMotion();
+  const [state, setState] = useState<{ open: boolean; reduced: boolean | null; phase: OverlayPhase }>({
+    open,
+    reduced,
+    phase: open ? (reduced ? 'open' : 'preopen') : 'closed',
+  });
+  let phase = state.phase;
+  if (state.open !== open || state.reduced !== reduced) {
+    phase = reduced ? (open ? 'open' : 'closed')
+      : open ? 'preopen' : state.phase === 'closed' ? 'closed' : 'closing';
+    // 由受控 open 推导当前阶段，不先提交旧的可见状态再在布局效果里修正。
+    setState({ open, reduced, phase });
+  }
 
   useLayoutEffect(() => {
-    if (open) {
-      setPhase('preopen');
-      const id = window.requestAnimationFrame(() => setPhase('open'));
+    if (phase === 'preopen') {
+      const id = window.requestAnimationFrame(() => {
+        setState((previous) => previous.phase === 'preopen' ? { ...previous, phase: 'open' } : previous);
+      });
       return () => window.cancelAnimationFrame(id);
     }
-    setPhase((prev) => (prev === 'closed' ? 'closed' : 'closing'));
-    const timer = window.setTimeout(() => setPhase('closed'), Math.max(0, closeMs));
+    if (phase !== 'closing') return;
+    const timer = window.setTimeout(() => {
+      setState((previous) => previous.phase === 'closing' ? { ...previous, phase: 'closed' } : previous);
+    }, Math.max(0, closeMs));
     return () => window.clearTimeout(timer);
-  }, [open, closeMs]);
+  }, [phase, closeMs]);
 
   return phase;
 }
@@ -152,6 +168,7 @@ export function useCatalogShake(holdMs = 1200) {
   const [withMessage, setWithMessage] = useState(false);
   const inputRef = useRef<HTMLDivElement>(null);
   const holdTimer = useRef(0);
+  const shakeFrame = useRef(0);
 
   const play = useCallback(
     (opts?: { message?: boolean }) => {
@@ -159,7 +176,17 @@ export function useCatalogShake(holdMs = 1200) {
       setShaking(false);
       setWithMessage(opts?.message ?? false);
       if (holdTimer.current) window.clearTimeout(holdTimer.current);
+      if (shakeFrame.current) window.cancelAnimationFrame(shakeFrame.current);
+      // 事件提交移除旧抖动类后，下一帧测量再启动；重复提交只保留最后一次。
+      shakeFrame.current = window.requestAnimationFrame(() => {
+        const el = inputRef.current;
+        if (el) void el.offsetWidth;
+        setShaking(true);
+        shakeFrame.current = 0;
+      });
       holdTimer.current = window.setTimeout(() => {
+        if (shakeFrame.current) window.cancelAnimationFrame(shakeFrame.current);
+        shakeFrame.current = 0;
         setError(false);
         setShaking(false);
         holdTimer.current = 0;
@@ -170,21 +197,17 @@ export function useCatalogShake(holdMs = 1200) {
 
   const clear = useCallback(() => {
     if (holdTimer.current) window.clearTimeout(holdTimer.current);
+    if (shakeFrame.current) window.cancelAnimationFrame(shakeFrame.current);
     holdTimer.current = 0;
+    shakeFrame.current = 0;
     setError(false);
     setShaking(false);
   }, []);
 
-  useLayoutEffect(() => {
-    if (!error || shaking) return;
-    const el = inputRef.current;
-    if (el) void el.offsetWidth;
-    setShaking(true);
-  }, [error, shaking]);
-
   useEffect(
     () => () => {
       if (holdTimer.current) window.clearTimeout(holdTimer.current);
+      if (shakeFrame.current) window.cancelAnimationFrame(shakeFrame.current);
     },
     [],
   );

@@ -1,3 +1,5 @@
+import AnalysisIcon from '@/components/shared/AnalysisIcon';
+import SoftBadge from '@/components/shared/SoftBadge';
 /**
  * §05 财报日历 × AI 影响（earnings.md 完整实现）
  * B0 页头带（AI 状态点 + owner 刷新日历 60s 冷却三态）
@@ -15,7 +17,7 @@ import { ApiError } from '@/api/client';
 import { useAccess } from '@/hooks/useAccess';
 import { useNow } from '@/hooks/useNow';
 import { usePolling } from '@/hooks/usePolling';
-import { useToast } from '@/components/Toast';
+import { useToast } from '@/hooks/useToast';
 import { cn } from '@/lib/utils';
 import { fmtTimeHHMMSS } from '@/lib/format';
 import Icon from '@/components/icons';
@@ -380,8 +382,9 @@ export default function Earnings() {
   /* 页头右侧：AI 状态点 + owner 刷新 */
   const headerMeta = (
     <>
-      <span
-        className="flex items-center gap-2"
+      <SoftBadge
+        tone={aiAvailable ? 'ai' : aiEnabled ? 'warn' : 'neutral'}
+        size="md"
         aria-label={
           aiAvailable
             ? t('AI 分析可用')
@@ -395,14 +398,14 @@ export default function Earnings() {
         {aiAvailable ? (
           <>
             <PulseDot className="bg-ai-600" size={8} />
-            <Icon name="spark-ai" size={15} className="text-ai-600" />
-            <span className="text-caption text-ai-600">{t('AI 可用')}</span>
+            <AnalysisIcon size={15} className="text-ai-600" />
+            <span>{t('AI 可用')}</span>
           </>
         ) : aiEnabled ? (
           <>
             <span className="size-2 rounded-full bg-warn-600" aria-hidden="true" />
-            <Icon name="spark-ai" size={15} className="text-warn-600" />
-            <span className="text-caption text-warn-600">
+            <AnalysisIcon size={15} className="text-warn-600" />
+            <span>
               {['analysis_in_progress', 'global_concurrency_limit', 'queue_busy'].includes(aiReason ?? '')
                 ? t('AI 处理中')
                 : t('AI 暂不可用')}
@@ -411,11 +414,11 @@ export default function Earnings() {
         ) : (
           <>
             <span className="size-2 rounded-full bg-ink-300" aria-hidden="true" />
-            <Icon name="spark-ai" size={15} className="text-ink-300" />
-            <span className="text-caption text-ink-400">{isOwner ? t('AI 未开启') : t('单股分析可用')}</span>
+            <AnalysisIcon size={15} />
+            <span>{isOwner ? t('AI 未开启') : t('单股分析可用')}</span>
           </>
         )}
-      </span>
+      </SoftBadge>
       {q.loading && q.data && (
         <span className="font-mono text-micro text-ink-400">{t('正在确认最新数据…')}</span>
       )}

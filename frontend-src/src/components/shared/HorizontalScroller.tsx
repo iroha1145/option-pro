@@ -16,6 +16,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import Icon from '@/components/icons';
 import { computeScrollEdges } from '@/lib/scrollEdges';
@@ -82,7 +83,8 @@ export default function HorizontalScroller({
     const node = ref.current;
     if (!node) return;
     // 翻将近一屏，留一点重叠，免得刚划过去的那张完全看不见了。
-    node.scrollBy({ left: direction * node.clientWidth * 0.85, behavior: 'smooth' });
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    node.scrollBy({ left: direction * node.clientWidth * 0.85, behavior: reduced ? 'instant' : 'smooth' });
   }, []);
 
   const arrow = (side: 'left' | 'right') => {
@@ -96,7 +98,7 @@ export default function HorizontalScroller({
         className={cn(
           // 触屏直接划就行，按钮只给指针设备。
           'absolute top-1/2 z-20 hidden size-8 -translate-y-1/2 items-center justify-center',
-          'rounded-full border border-line-strong bg-card text-ink-500 shadow-sh-2',
+          'rounded-md border border-line-strong bg-card text-ink-500 shadow-sh-1',
           'transition-colors duration-fast hover:text-ink-800 focus-visible:outline-none',
           'focus-visible:ring-2 focus-visible:ring-brand-500/30 md:inline-flex',
           side === 'left' ? 'left-1 md:left-2' : 'right-1 md:right-2',
@@ -129,7 +131,8 @@ export default function HorizontalScroller({
       )}
       {arrow('left')}
       {arrow('right')}
-      <div
+      <motion.div
+        layoutScroll
         ref={ref}
         className={cn('overflow-x-auto no-scrollbar', scrollerClassName)}
         /* 键盘可达：溢出容器要能获得焦点才能用方向键滚动。 */
@@ -138,7 +141,7 @@ export default function HorizontalScroller({
         aria-label={label}
       >
         {children}
-      </div>
+      </motion.div>
     </div>
   );
 }

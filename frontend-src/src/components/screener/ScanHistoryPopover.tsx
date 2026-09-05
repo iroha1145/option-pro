@@ -2,11 +2,13 @@
  * 页头「扫描历史」幽灵钮 + popover（scale .96→1 spring-pop）
  * 列最近 5 次：时间（Mono）/ 参数摘要 / 结果数
  */
+import SoftBadge from '@/components/shared/SoftBadge';
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { fmtTimeHHMMSS } from '@/lib/format';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
+import { isTopFocusScope } from '@/lib/focusScope';
 import Icon from '@/components/icons';
 import type { ScanHistoryEntry } from './types';
 import { t } from '../../i18n/core.ts';
@@ -25,7 +27,10 @@ export default function ScanHistoryPopover({ history }: { history: ScanHistoryEn
       if (!ref.current?.contains(e.target as Node)) setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
+      if (e.key !== 'Escape' || e.defaultPrevented || e.isComposing || e.keyCode === 229 || !isTopFocusScope(popoverRef.current)) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      setOpen(false);
     };
     document.addEventListener('mousedown', onDoc);
     document.addEventListener('keydown', onKey);
@@ -72,9 +77,9 @@ export default function ScanHistoryPopover({ history }: { history: ScanHistoryEn
                     <span className="min-w-0 flex-1 truncate text-micro text-ink-500" title={h.summary}>
                       {h.summary}
                     </span>
-                    <span className="shrink-0 rounded-xs bg-brand-50 px-1.5 py-px font-mono text-micro text-brand-700 tnum">
+                    <SoftBadge tone="brand" className="shrink-0">
                       {h.count} {t('只')}
-                    </span>
+                    </SoftBadge>
                   </li>
                 ))}
               </ul>

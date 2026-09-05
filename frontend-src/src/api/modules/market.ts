@@ -15,6 +15,7 @@ import type {
   MarketStatus,
 } from '../types';
 import { t } from '../../i18n/core.ts';
+import { quoteSymbol } from '@/lib/quoteSymbol';
 
 /**
  * Yahoo 风格指数符号 → UI 短代码 + 中文名（纸带与 /market 指数卡共用此映射）。
@@ -33,7 +34,7 @@ const INDEX_SYMBOL_MAP: Record<string, { code: string; name: string }> = {
 };
 
 /** 契约 {indices:[{symbol, price, change_percent}], ...} → UI IndexQuote[] */
-function mapIndices(body: unknown): IndexQuote[] {
+export function mapIndices(body: unknown): IndexQuote[] {
   return unwrap(body, 'indices').flatMap((r) => {
     const price = pickN(r, 'price');
     const changePct = pickN(r, 'change_percent', 'changePct');
@@ -41,12 +42,11 @@ function mapIndices(body: unknown): IndexQuote[] {
     if (price === null || changePct === null) return [];
     // change 由 price 与 change_percent 反推（真实算术，非编造）
     const change = Math.round(((price * changePct) / (100 + changePct)) * 100) / 100;
-    const symbol = pickS(r, 'code', 'symbol') ?? '';
+    const symbol = quoteSymbol(pickS(r, 'symbol', 'code') ?? '');
     const mapped = INDEX_SYMBOL_MAP[symbol];
     return [{
       code: mapped?.code ?? symbol,
-      // 真实符号必须随行保留：详情页与全部 /stocks 端点只认 ^GSPC，
-      // 拿显示短码 SPX 去开详情会整页报「行情服务暂不可用」。
+      // 随行保留真实符号，详情跳转与共享请求使用同一缓存键。
       symbol,
       name: mapped?.name ?? pickS(r, 'name') ?? symbol,
       price,

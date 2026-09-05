@@ -37,6 +37,8 @@ class Bar(BaseModel):
     session: Optional[Literal["regular", "pre", "post"]] = None
     ext: bool = False
     quote_only: bool = False
+    # Intraday snapshots mark completion at fetch time; legacy daily rows omit it.
+    closed: Optional[bool] = None
 
 
 class MovingAveragePoint(BaseModel):

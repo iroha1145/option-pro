@@ -245,15 +245,12 @@
   left: 50%;
   transform: translate(-50%, 0) scale(var(--tt-scale));
   transform-origin: 50% 100%;
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: var(--tt-bg);
+  padding: 10px 12px;
+  border-radius: 9px;
+  background: var(--card);
   color: var(--tt-fg);
   white-space: nowrap;
-  box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.06),
-    0 2px 6px 0 rgba(0, 0, 0, 0.05),
-    0 4px 42px 0 rgba(0, 0, 0, 0.06);
+  box-shadow: var(--popover-shadow);
   opacity: 0;
   pointer-events: none;
   /* Default rule controls the LEAVE state. transition-delay
@@ -497,12 +494,12 @@
   bottom: auto;
   left: 0;
   white-space: normal;
-  transform: scale(var(--tt-scale));
+  transform: translateY(2px);
   transform-origin: 50% 0%;
 }
 .t-tt[data-portal].is-shown {
   opacity: 1;
-  transform: scale(1);
+  transform: translateY(0);
   transition-duration: var(--tt-in-dur);
   transition-timing-function: var(--tt-in-ease);
   transition-delay: var(--tt-delay);

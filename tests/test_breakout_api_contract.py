@@ -301,6 +301,33 @@ def test_current_reads_only_completed_scan_and_never_calls_provider(tmp_path, mo
     assert "raw_provider_fields" not in response.text
 
 
+def test_read_endpoints_register_only_the_actual_returned_stocks(tmp_path, monkeypatch) -> None:
+    path = tmp_path / "displayed-stocks.db"
+    repository = BreakoutRepository(path)
+    repository.initialize()
+    _publish(repository, NOW, [
+        _event("event-a", "AAPL", NOW, 91.0),
+        _event("event-b", "MSFT", NOW, 80.0),
+    ])
+    _heartbeat(repository, NOW + timedelta(seconds=30))
+    monkeypatch.setattr(breakout_api, "get_breakout_settings", lambda: _settings(path))
+    monkeypatch.setattr(breakout_api, "_now", lambda: NOW + timedelta(seconds=30))
+    registered = []
+    monkeypatch.setattr(breakout_api, "register_public_stock_demand", lambda rows: registered.extend(rows))
+    client = _client()
+    first = client.get("/api/breakouts/events?limit=1").json()
+    assert registered == [first["events"][0]["ticker"]]
+    registered.clear()
+    second = client.get("/api/breakouts/events", params={"limit": 1, "cursor": first["next_cursor"]}).json()
+    assert registered == [second["events"][0]["ticker"]]
+    assert set(registered) != {first["events"][0]["ticker"]}
+    registered.clear()
+    assert client.get("/api/breakouts/events?ticker=NOPE").json()["events"] == []
+    assert registered == []
+    current = client.get("/api/breakouts/current").json()
+    assert set(registered) == {row["ticker"] for row in current["events"]}
+
+
 def test_read_endpoints_are_active_with_fresh_worker_and_snapshot(tmp_path, monkeypatch) -> None:
     path = tmp_path / "fresh-read-state.db"
     repository = BreakoutRepository(path)

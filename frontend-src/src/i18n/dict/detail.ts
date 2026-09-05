@@ -123,7 +123,7 @@ export const DETAIL: Dict = {
   '暂未获取到该标的的期权到期日': ['Couldn\'t fetch expiration dates for this ticker', 'この銘柄の限月を取得できませんでした'],
   '选择到期日': ['Select expiration', '限月を選択'],
   '标的价': ['Underlying price', '原資産価格'],
-  '· 标的现价不可用，价内侧与平值行未标注': ['· Underlying price unavailable — the ITM side and ATM row aren\'t marked', '· 原資産の現在値が取得できないため、ITM側とATM行はマークされません'],
+  '· 标的现价不可用': ['· Underlying price unavailable', '· 原資産の現在値を取得できません'],
   ' · 暂未刷新，显示最近一次结果': [' · not yet refreshed — showing the last available result', ' · 未更新、直近の結果を表示'],
   'CALLS · 量/持 · 权利金': ['CALLS · Vol/OI · Premium', 'CALLS · 出来高/建玉 · プレミアム'],
   '行权价': ['Strike', '権利行使価格'],
@@ -133,7 +133,6 @@ export const DETAIL: Dict = {
   /* OptionsPanel UI 重构：摘要条 / 三带数据条表 / 移动卡片 / 图例 */
   '总成交量': ['Total volume', '総出来高'],
   '总持仓量': ['Total open interest', '総建玉'],
-  'C/P 比 {ratio}': ['C/P ratio {ratio}', 'C/P レシオ {ratio}'],
   '估算权利金流': ['Estimated premium flow', '推定プレミアムフロー'],
   '缺买卖价，不可估算': ['Not estimable — missing bid/ask', '気配値がなく推定不可'],
   '异动合约': ['Unusual contracts', '取引急増の銘柄'],

@@ -38,7 +38,7 @@ function IvRankBar({ rank, replayKey }: { rank: number; replayKey: string }) {
   return (
     <span className="inline-flex items-center gap-2">
       <span className="w-8 text-right font-mono text-body-s font-semibold text-ink-800 tnum">{rank}</span>
-      <span className="h-[3px] w-[100px] overflow-hidden rounded-pill bg-line" role="presentation">
+      <span className="h-1 w-[100px] strength-track overflow-hidden rounded-pill bg-line" role="presentation">
         <span
           key={replayKey}
           className="block h-full origin-left animate-grow-bar rounded-pill"

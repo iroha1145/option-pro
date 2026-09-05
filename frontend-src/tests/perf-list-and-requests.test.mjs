@@ -41,7 +41,7 @@ test('渐进列表的契约：前缀切片，且给得出剩余数量', async ()
   // 剩余数量必须可见，否则用户无从知道「这不是全部」
   assert.match(source, /remaining: Math\.max\(0, total - limit\)/);
   // 条数变化只夹紧，不回退（见下方专门的用例）
-  assert.match(source, /current > total && total > 0/);
+  assert.match(source, /total > 0 \? Math\.max\(initial, Math\.min\(limit, total\)\) : limit/);
   // 不支持 IntersectionObserver 时必须仍可手动加载
   assert.match(source, /typeof IntersectionObserver === 'undefined'/);
 });
@@ -322,8 +322,8 @@ test('条数变化时夹紧上限，而不是退回首批', async () => {
     /useEffect\(\(\) => \{\s*setLimit\(initial\);\s*\}/,
     '不能因为条数变化就回退到首批',
   );
-  assert.match(hook, /current > total && total > 0/);
-  assert.match(hook, /Math\.max\(initial, total\)/);
+  assert.match(hook, /total > 0 \? Math\.max\(initial, Math\.min\(limit, total\)\) : limit/);
+  assert.match(hook, /if \(boundedLimit !== limit\) setLimit\(boundedLimit\)/);
 });
 
 /* ---------- 个人自选的加载 / 失败 / 真空三态 ---------- */

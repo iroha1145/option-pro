@@ -179,6 +179,8 @@ export const BREAKOUTS: Dict = {
   '65 分以上': ['65+', '65以上'],
   '80 分以上': ['80+', '80以上'],
   '只看自选': ['Watchlist only', 'ウォッチリストのみ'],
+  '查看自选': ['View watchlist', 'ウォッチリストを見る'],
+  '查看范围': ['View scope', '表示範囲'],
   '详情加载失败': ['Failed to load detail', '詳細の読み込みに失敗しました'],
   '已请求刷新': ['Refresh requested', '更新をリクエストしました'],
   '扫描任务已受理，完成后自动更新': ["Scan accepted — updates automatically once it's done", 'スキャンジョブを受け付けました。完了後、自動的に更新されます。'],
@@ -211,9 +213,9 @@ export const BREAKOUTS: Dict = {
   '没有符合筛选的信号': ['No signals match your filters', '条件に一致するシグナルなし'],
   '雷达在转，信号还没来': ["Radar's spinning — signals haven't come in yet", 'レーダー稼働中、シグナル待ち'],
   '放宽筛选条件，或清除代码聚焦试试': ['Loosen your filters, or clear the ticker focus and try again', '絞り込み条件を緩めるか、銘柄コードの絞り込みを解除してお試しください。'],
-  '自选池本轮暂无触发，试试关闭「只看自选」': [
-    'No triggers from your watchlist this round — try turning off “Watchlist only”',
-    'ウォッチリストには今回トリガーがありません。「ウォッチリストのみ」をオフにしてお試しください。',
+  '自选池本轮暂无触发，试试「查看全部」': [
+    'No triggers from your watchlist this round — try “View all”',
+    'ウォッチリストには今回トリガーがありません。「すべて見る」をお試しください。',
   ],
   '下一轮扫描在冷却结束后自动开始': ['The next scan starts automatically once the cooldown ends', 'クールダウン終了後、次回スキャンが自動的に開始されます。'],
   '看看历史事件': ['Browse event history', 'イベント履歴を見る'],

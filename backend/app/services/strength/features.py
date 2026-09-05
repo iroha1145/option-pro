@@ -16,6 +16,7 @@ from typing import Any, Mapping
 
 import pandas as pd
 
+from app.services.daily_returns import aligned_benchmark_return
 from app.services.strength.price_action import compute_price_action
 from app.services.strength.vol_price_match import compute_vol_price_match
 from app.services.zh_names import get_zh_name
@@ -89,9 +90,11 @@ def _ret(close: pd.Series, days: int) -> float | None:
 
 
 def _feature_row(ticker: str, hist: pd.DataFrame, spy: pd.DataFrame, sector_meta: Mapping[str, Any]) -> dict[str, Any] | None:
-    if hist.empty or len(hist) < 63:
+    if hist.empty or len(hist) < 63 or "Close" not in hist.columns:
         return None
     close = pd.to_numeric(hist["Close"], errors="coerce").replace([math.inf, -math.inf], pd.NA).dropna()
+    if len(close) < 63:
+        return None
     volume = (
         pd.to_numeric(hist["Volume"], errors="coerce").replace([math.inf, -math.inf], pd.NA)
         if "Volume" in hist.columns
@@ -143,9 +146,9 @@ def _feature_row(ticker: str, hist: pd.DataFrame, spy: pd.DataFrame, sector_meta
     vol_price_match = compute_vol_price_match(hist)
     price_action = compute_price_action(hist)
 
-    spy_close = spy["Close"].dropna() if not spy.empty and "Close" in spy.columns else pd.Series(dtype=float)
+    spy_close = spy["Close"] if not spy.empty and "Close" in spy.columns else pd.Series(dtype=float)
     stock_ret_63 = _ret(close, 63)
-    spy_ret_63 = _ret(spy_close, 63) if len(spy_close) else None
+    spy_ret_63 = _safe_float(aligned_benchmark_return(close, spy_close, 63), 5)
 
     moving_average_states = [
         price > average

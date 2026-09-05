@@ -165,7 +165,7 @@ def test_signed_in_customer_pull_passes_both_gateway_layers(
         with TestClient(app, base_url="https://testserver") as client:
             registered = client.post(
                 "/api/account/register",
-                json={"username": "boundary_carol", "password": "pw"},
+                json={"username": "boundary_carol", "password": "fixture-password-for-tests"},
                 headers=_action_headers(),
             )
             assert registered.status_code == 201

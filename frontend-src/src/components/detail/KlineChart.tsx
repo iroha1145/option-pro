@@ -7,7 +7,7 @@
  * 回撤尺：手动两点区间测量（K线默认高—低口径可切收盘，面积固定收盘口径），
  * 锚点按 bar 时间戳存储、静默刷新后重新解析，解析不到判失效
  */
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import ReactECharts from '@/components/charts/ReactECharts';
 import Segmented from '@/components/shared/Segmented';
@@ -19,10 +19,17 @@ import Icon from '@/components/icons';
 import { STRUCTURE_HINTS } from '@/lib/structureHints';
 import { usePolling } from '@/hooks/usePolling';
 import { useAccess } from '@/hooks/useAccess';
-import { baseAnimation, CH, CHART_MONO_FONT, glassTooltip, stippleAreaStyle, withAlpha, type ChartOption, type EChartsInstance } from '@/lib/chart';
+import { baseAnimation, CH, CHART_MONO_FONT, escapeTooltipText, glassTooltip, stippleAreaStyle, withAlpha, type ChartOption, type EChartsInstance } from '@/lib/chart';
+import { directionColors, getColorMode, type ColorMode } from '@/lib/colorPreference.ts';
 import { useColorMode } from '@/hooks/useColorMode.ts';
 import { useDrawingController } from './chart-drawings/useDrawingController.ts';
 import { snapCandidatesFromOverlays } from './chart-drawings/snap.ts';
+import { railCandidatesFromOverlays } from './chart-drawings/railSnap.ts';
+import { barKeyOf } from './chart-drawings/projection.ts';
+import { detectSmartLines, selectSmartOverlays, withChartIndices } from './chart-drawings/analysis/smartLines.ts';
+import { isSupportLevel } from './chart-drawings/linePresentation.ts';
+import AnalysisLegend from './chart-drawings/AnalysisLegend';
+import { clippedLineSeries, isClippedLine } from './chart-drawings/clippedLines';
 import DrawingToolbar from './chart-drawings/DrawingToolbar.tsx';
 import DrawingWorkspace from './chart-drawings/DrawingWorkspace.tsx';
 import LayerMenu from './chart-drawings/LayerMenu.tsx';
@@ -178,13 +185,14 @@ function buildOption(
   extra?: { lines: object[]; points: object[]; areas: object[]; polygons?: { vertices: { x: number; y: number }[]; color: string; opacity: number }[] } | null,
   analysis?: { showMa20?: boolean; extraMa?: { name: string; data: (number | null)[] }[]; panes?: PanePlot[] } | null,
   zoom?: ZoomWindow | null,
+  colorMode: ColorMode = getColorMode(),
 ): ChartOption {
   const labels = bars.map((b) => fmtAxisLabel(b.t, range));
-  const upFill = CH.up600;
-  const downFill = CH.down600;
+  const { up600: upFill, down600: downFill } = directionColors(colorMode);
   const measure = measureMarks(overlay);
+  const railSeries = clippedLineSeries(extra?.lines ?? []);
   const marks = {
-    lines: [...(extra?.lines ?? []), ...measure.lines],
+    lines: [...(extra?.lines ?? []).filter(line => !isClippedLine(line)), ...measure.lines],
     points: [...(extra?.points ?? []), ...measure.points],
     areas: [...(extra?.areas ?? []), ...measure.areas],
   };
@@ -267,7 +275,7 @@ function buildOption(
           const b = bars[arr[0]?.dataIndex ?? 0];
           if (!b) return '';
           const chg = b.c - b.o;
-          const color = chg >= 0 ? CH.up600 : CH.down600;
+          const color = chg >= 0 ? upFill : downFill;
           return (
             `<div style="font-family:${CHART_MONO_FONT};font-size:12px;line-height:19px">` +
             `<div style="color:#6F7B9E">${barTooltipTitle(b.t, range)}${b.quote_only ? t(' · 仅报价') : ''}</div>` +
@@ -301,6 +309,7 @@ function buildOption(
           z: 3,
         },
         ...(fillSeries ? [{ ...fillSeries, xAxisIndex: 0, yAxisIndex: 0 }] : []),
+        ...(railSeries ? [railSeries] : []),
       ],
     } as ChartOption;
   }
@@ -312,7 +321,7 @@ function buildOption(
   }));
   const volData = bars.map((b) => ({
     value: b.v,
-    itemStyle: { color: withAlpha(b.c >= b.o ? CH.up600 : CH.down600, 0.4) },
+    itemStyle: { color: withAlpha(b.c >= b.o ? upFill : downFill, 0.4) },
   }));
 
   const panes = analysis?.panes ?? [];
@@ -400,19 +409,19 @@ function buildOption(
         const b = bars[idx];
         if (!b) return '';
         const signedCell = (chg: number, pct: number | null) => {
-          const color = chg >= 0 ? CH.up600 : CH.down600;
+          const color = chg >= 0 ? upFill : downFill;
           const sign = chg >= 0 ? '+' : '−';
           const pctText = pct === null ? '' : ` (${sign}${Math.abs(pct).toFixed(2)}%)`;
           return `<span style="color:${color}">${sign}${Math.abs(chg).toFixed(2)}${pctText}</span>`;
         };
         const chg = b.c - b.o;
-        const color = chg >= 0 ? CH.up600 : CH.down600;
+        const color = chg >= 0 ? upFill : downFill;
         // 「开→收」量的是 bar 实体；跳空行情里它看不见隔夜缺口，所以再给
         // 「较前收」一行（上一根收盘为基准）。首根没有前收，只显示开→收。
         const prev = idx > 0 ? bars[idx - 1] : null;
         const gapChg = prev && prev.c > 0 ? b.c - prev.c : null;
         const row = (k: string, v: string) =>
-          `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#6F7B9E">${k}</span><span>${v}</span></div>`;
+          `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#6F7B9E">${escapeTooltipText(k)}</span><span>${v}</span></div>`;
         return (
           `<div style="font-family:${CHART_MONO_FONT};font-size:12px;line-height:19px;min-width:150px">` +
           `<div style="color:#6F7B9E;margin-bottom:2px">${barTooltipTitle(b.t, range)}${b.quote_only ? t(' · <span style="color:#E8930C">仅报价</span>') : ''}</div>` +
@@ -512,6 +521,7 @@ function buildOption(
         };
       }),
       ...(fillSeries ? [fillSeries] : []),
+      ...(railSeries ? [railSeries] : []),
     ],
   } as ChartOption;
 }
@@ -567,6 +577,8 @@ export default function KlineChart({
   // the prefetch and this component request the same URL.
   const [range, setRange] = useState<ChartRange>(DEFAULT_CHART_RANGE);
   const [mode, setMode] = useState<ChartMode>('candle');
+  // Per-chart view preference; never rewrites saved hand drawings or backend scores.
+  const [smartDrawingEnabled, setSmartDrawingEnabled] = useState(true);
   const seenRefreshVersion = useRef(refreshVersion);
   const { data, error, loading, refresh } = usePolling(
     () => {
@@ -599,15 +611,11 @@ export default function KlineChart({
   const measureScope = `${ticker}|${range}|${mode}`;
   const zoomScope = `${ticker}|${range}`;
   const [armedScope, setArmedScope] = useState(measureScope);
-  const [armedZoomScope, setArmedZoomScope] = useState(zoomScope);
-  const zoomRef = useRef<ZoomWindow | null>(null);
+  const zoomRef = useRef<{ scope: string; window: ZoomWindow } | null>(null);
+  useLayoutEffect(() => { zoomRef.current = null; }, [zoomScope]);
   if (armedScope !== measureScope) {
     setArmedScope(measureScope);
     setMeasure({ phase: 'idle' });
-  }
-  if (armedZoomScope !== zoomScope) {
-    setArmedZoomScope(zoomScope);
-    zoomRef.current = null; // 换序列＝换 bar 索引；面积/K 线切换要保住视窗
   }
 
   // 用户滚过的视窗记在 ref 里：option 每次重建（落笔、点选、拖拽提交、切图层）
@@ -618,13 +626,13 @@ export default function KlineChart({
     const handler = () => {
       if (chart.isDisposed()) return;
       const next = readZoomWindow(chart, bars?.length ?? 0);
-      if (next) zoomRef.current = next;
+      if (next) zoomRef.current = { scope: zoomScope, window: next };
     };
     chart.on('datazoom', handler);
     return () => {
       if (!chart.isDisposed()) chart.off('datazoom', handler);
     };
-  }, [chartInst, bars]);
+  }, [chartInst, bars, zoomScope]);
 
   // 选点走 zrender 全域点击：点击任意位置吸附最近可测 bar（series 命中区太窄，移动端点不中）
   useEffect(() => {
@@ -729,10 +737,29 @@ export default function KlineChart({
     if (levelsInconsistent) return null; // 图例那条「版本不一致」已经说过同一件事
     return fingerprintDiagnosis(analysisBundle, data.bars, range, fingerprintOpts);
   }, [analysisBundle, data, gateReason, levelsInconsistent, range, fingerprintOpts]);
+  const chartKeys = useMemo(() => (data?.bars ?? []).map(bar => barKeyOf(bar, range)), [data?.bars, range]);
+  const smartBars = useMemo(() => withChartIndices(gatedBars.map(bar => ({
+    ...bar, key: barKeyOf(bar, range),
+  })), chartKeys), [gatedBars, range, chartKeys]);
+  const smartProposals = useMemo(() => {
+    if (!analysisOk || !smartDrawingEnabled
+      || !layerSettings.enabled.some(id => id === 'auto_patterns' || id === 'support_resistance')) return [];
+    return detectSmartLines(smartBars);
+  }, [analysisOk, smartDrawingEnabled, smartBars, layerSettings.enabled]);
   const visibleOverlays = useMemo(() => {
     if (!analysisOk || !analysisBundle) return [];
-    return filterOverlays(analysisBundle.overlays, layerSettings);
-  }, [analysisOk, analysisBundle, layerSettings]);
+    if (!smartDrawingEnabled) return filterOverlays(analysisBundle.overlays, layerSettings);
+    // Filter enabled layers/status/quality BEFORE geometric deduplication. An invisible
+    // channel must never suppress a visible trendline; apply the count cap afterwards.
+    const candidates = filterOverlays([...analysisBundle.overlays, ...smartProposals], {
+      ...layerSettings, maxPatterns: 64,
+    });
+    return selectSmartOverlays(candidates, smartBars, layerSettings.maxPatterns);
+  }, [analysisOk, analysisBundle, layerSettings, smartDrawingEnabled, smartProposals, smartBars]);
+  const drawingSnapCandidates = useMemo(() => [
+    ...snapCandidatesFromOverlays(visibleOverlays),
+    ...railCandidatesFromOverlays(visibleOverlays, chartKeys),
+  ], [visibleOverlays, chartKeys]);
   const visiblePanes = useMemo(() => {
     if (!analysisOk || !analysisBundle) return [];
     return filterPanes(analysisBundle.indicatorPanes, layerSettings);
@@ -747,7 +774,7 @@ export default function KlineChart({
     range,
     bars: data?.bars,
     ma20: data?.ma20,
-    snapCandidates: snapCandidatesFromOverlays(visibleOverlays),
+    snapCandidates: drawingSnapCandidates,
     chart: chartInst,
     identity: { signedIn: canManageWatchlist, key: identityKey },
     measureActive,
@@ -788,7 +815,7 @@ export default function KlineChart({
       xMax: data.bars.length - 1,
       yMin,
       yMax,
-    }, autoPatternName);
+    }, autoPatternName, new Set(visibleLabels.map(item => item.id)));
     // 自动形态与手绘线的线端标签在这里汇合，防叠必须在汇合后做（见 deconflictEndLabels）。
     return {
       lines: deconflictEndLabels([...auto.lines, ...hand.lines], yMin, yMax),
@@ -796,7 +823,7 @@ export default function KlineChart({
       areas: [...auto.areas, ...hand.areas],
       polygons: [...(auto.polygons ?? []), ...(hand.polygons ?? [])],
     };
-  }, [analysisOk, data, drawing.marks, range, visibleOverlays]);
+  }, [analysisOk, data, drawing.marks, range, visibleOverlays, visibleLabels]);
 
   const analysisOption = useMemo(() => {
     const showMa20 = layerSettings.enabled.includes('ma20');
@@ -818,11 +845,23 @@ export default function KlineChart({
   }, [analysisOk, data, drawing.expanded, mode, range, visibleOverlays, visiblePanes, layerSettings]);
 
   const option = useMemo(
-    // zoomRef 是有意不进依赖的：滚轮缩放不该触发 option 重建，但每次真的重建时
-    // 都要带上用户当前的视窗，否则 notMerge 会把 inside 缩放重置回默认窗口。
-    () => (data ? buildOption(data.bars, data.ma20, range, mode, prevClose, overlay, extraMarks, analysisOption, zoomRef.current) : null),
+    () => (data ? buildOption(data.bars, data.ma20, range, mode, prevClose, overlay, extraMarks, analysisOption, null, colorMode) : null),
     [data, range, mode, prevClose, overlay, extraMarks, analysisOption, colorMode],
   );
+  // The chart calls this from its commit effect. A scroll never rebuilds the
+  // option, and an abandoned render cannot reset the live chart's viewport.
+  const prepareOption = useCallback((next: ChartOption): ChartOption => {
+    const saved = zoomRef.current;
+    if (!saved || saved.scope !== zoomScope || !Array.isArray(next.dataZoom)) return next;
+    const restored = insideZoom(range, bars?.length ?? 0, [], saved.window)?.[0];
+    if (!restored) return next;
+    return {
+      ...next,
+      dataZoom: next.dataZoom.map((row) => ({
+        ...row, startValue: restored.startValue, endValue: restored.endValue,
+      })),
+    };
+  }, [bars?.length, range, zoomScope]);
 
   const chartBody = (
     <section
@@ -845,6 +884,16 @@ export default function KlineChart({
             value={mode}
             onChange={setMode}
           />
+          <button
+            type="button"
+            aria-pressed={smartDrawingEnabled}
+            disabled={!analysisOk || !layerSettings.enabled.some(id => id === 'auto_patterns' || id === 'support_resistance')}
+            title={t('基于已收盘 K 线补充识别、合并重复线；不改变后端信号评分')}
+            onClick={() => setSmartDrawingEnabled(value => !value)}
+            className={cn(toggleButtonCls(smartDrawingEnabled), 'min-h-8 disabled:cursor-not-allowed disabled:opacity-50')}
+          >
+            {t('智能画线')}
+          </button>
           {mode === 'area' && (
             <span className="text-micro text-ink-400">{t('面积图不支持副图与均线叠加')}</span>
           )}
@@ -1004,6 +1053,7 @@ export default function KlineChart({
             >
               <ReactECharts
                 option={option}
+                prepareOption={prepareOption}
                 onInit={setChartInst}
                 className={measureActive || drawing.tool !== 'select' ? 'cursor-crosshair' : undefined}
                 ariaLabel={t('{ticker} {range} {mode}图', { ticker, range, mode: mode === 'candle' ? t('K 线') : t('面积') })}
@@ -1086,12 +1136,13 @@ export default function KlineChart({
           })}
         </p>
       )}
+      {analysisOk && <AnalysisLegend overlays={visibleOverlays} smartEnabled={smartDrawingEnabled} />}
       {analysisOk && visibleLabels.length > 0 && (
         <p className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-micro text-ink-400">
           {visibleLabels.map((overlayRow) => {
             const name = autoPatternName(
-              overlayRow.kind,
-              typeof overlayRow.geometry.subtype === 'string' ? overlayRow.geometry.subtype : null,
+              overlayRow.kind === 'level' ? (isSupportLevel(overlayRow.geometry, data?.bars[data.bars.length - 1]?.c) ? 'support_trend' : 'resistance_trend') : overlayRow.kind,
+              overlayRow.kind === 'level' ? 'horizontal' : typeof overlayRow.geometry.subtype === 'string' ? overlayRow.geometry.subtype : null,
             );
             if (!name) return null;
             const touches = overlayRow.evidence.touches;
@@ -1166,9 +1217,9 @@ function lastBarText(data: { bars: ChartBarEx[]; last_bar_at?: string | null }, 
 
 /** 只认已命名的形态；认不出就返回 null，绝不把 kind 原样打成「形态 · ma」。 */
 function autoPatternName(kind: string, subtype?: string | null): string | null {
-  if (kind === 'support_trend') return t('上升支撑');
-  if (kind === 'resistance_trend') return t('下降阻力');
-  if (kind === 'channel') return subtype === 'falling' ? t('下降通道') : t('上升通道');
+  if (kind === 'support_trend') return subtype === 'horizontal' ? t('水平支撑') : subtype === 'falling' ? t('下降支撑') : t('上升支撑');
+  if (kind === 'resistance_trend') return subtype === 'horizontal' ? t('水平阻力') : subtype === 'rising' ? t('上升阻力') : t('下降阻力');
+  if (kind === 'channel') return subtype === 'horizontal' ? t('水平通道') : subtype === 'falling' ? t('下降通道') : t('上升通道');
   if (kind === 'triangle') {
     if (subtype === 'ascending') return t('上升三角形');
     if (subtype === 'descending') return t('下降三角形');

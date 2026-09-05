@@ -1,3 +1,5 @@
+import AnalysisIcon from '@/components/shared/AnalysisIcon';
+import SoftBadge, { type BadgeTone } from '@/components/shared/SoftBadge';
 /**
  * B3 AI 影响分析卡 + B4 AI 任务状态机（earnings.md）
  * 顶边 2px ai-600 标识条 · 吸顶 · 换代码 blur(6px)→0 + fade 400ms「聚焦」
@@ -22,8 +24,8 @@ import type {
   EarningsReportAnalysis,
 } from '@/api/modules/earnings';
 import { useAccess } from '@/hooks/useAccess';
-import { useToast } from '@/components/Toast';
-import { useShell } from '@/components/Layout';
+import { useToast } from '@/hooks/useToast';
+import { useShell } from '@/hooks/useShell';
 import { cn } from '@/lib/utils';
 import Icon from '@/components/icons';
 import SourceNote from '@/components/shared/SourceNote';
@@ -130,10 +132,10 @@ function JobSteps({ analysis }: { analysis: EarningsReportAnalysis }) {
   );
 }
 
-const DIRECTION_META: Record<EarningsImpactDirection, { label: string; className: string }> = {
-  bullish: { label: __t('利多'), className: 'border-up-600/25 bg-up-50 text-up-700' },
-  bearish: { label: __t('利空'), className: 'border-down-600/25 bg-down-50 text-down-700' },
-  mixed: { label: __t('多空交织'), className: 'border-warn-600/25 bg-warn-50 text-warn-600' },
+const DIRECTION_META: Record<EarningsImpactDirection, { label: string; tone: BadgeTone }> = {
+  bullish: { label: __t('利多'), tone: 'up' },
+  bearish: { label: __t('利空'), tone: 'down' },
+  mixed: { label: __t('多空交织'), tone: 'warn' },
 };
 
 const RELATION_LABELS: Record<EarningsImpactRelation, string> = {
@@ -472,7 +474,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
           {phase === 'loading' && (
             <div aria-label={__t("AI 影响分析加载中")}>
               <div className="flex items-center gap-2">
-                <Icon name="spark-ai" size={16} className="text-ai-600" />
+                <AnalysisIcon size={16} className="text-ai-600" />
                 <span className="font-display text-[18px] leading-6 text-ink-900">{__t('AI 影响 ·')} {ticker}</span>
               </div>
               <div className="mt-4 space-y-4">
@@ -526,7 +528,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
               <button
                 type="button"
                 disabled
-                className="mt-4 h-8 cursor-not-allowed rounded-md border border-line bg-card-warm px-3 text-caption text-ink-300"
+                className="mt-4 h-8 cursor-not-allowed rounded-md bg-paper-2 px-3 text-caption font-medium text-ink-400"
               >
                 {__t('自动重分析中')}
               </button>
@@ -536,12 +538,12 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
           {/* ---------- 最终结果锁定，禁止重复请求 ---------- */}
           {phase === 'final-locked' && (
             <div className="flex flex-col items-center py-9 text-center">
-              <span className="flex size-12 items-center justify-center rounded-lg border border-up-600/25 bg-up-50 text-up-700">
-                <Icon name="spark-ai" size={22} />
+              <span className="flex size-12 items-center justify-center rounded-lg bg-up-50 text-up-700">
+                <AnalysisIcon size={22} />
               </span>
-              <span className="mt-3 rounded-pill border border-up-600/25 bg-up-50 px-2.5 py-1 text-micro font-semibold text-up-700">
+              <SoftBadge tone="up" className="mt-3">
                 {__t('已锁定 · 最终分析')}
-              </span>
+              </SoftBadge>
               <h3 className="mt-3 text-h3 text-ink-800">{__t('该财报不再重复分析')}</h3>
               <p className="mt-1 max-w-[280px] text-caption text-ink-500">
                 {__t('财报发布后的自动重分析已经完成，后台已禁止再次创建同一财报的任务。')}
@@ -549,7 +551,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
               <button
                 type="button"
                 disabled
-                className="mt-4 h-8 cursor-not-allowed rounded-md border border-line bg-card-warm px-3 text-caption text-ink-300"
+                className="mt-4 h-8 cursor-not-allowed rounded-md bg-paper-2 px-3 text-caption font-medium text-ink-400"
               >
                 {__t('最终分析已锁定')}
               </button>
@@ -559,8 +561,8 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
           {/* ---------- 409：公开生成引导 ---------- */}
           {phase === 'needs-analysis' && (
             <div className="flex flex-col items-center py-8 text-center">
-              <span className="flex size-12 items-center justify-center rounded-lg border border-ai-600/30 bg-ai-50 text-ai-600">
-                <Icon name="spark-ai" size={22} />
+              <span className="flex size-12 items-center justify-center rounded-lg bg-ai-50 text-ai-600">
+                <AnalysisIcon size={22} />
               </span>
               <h3 className="mt-3 text-h3 text-ink-800">{__t('尚未生成 AI 影响')}</h3>
               <p className="mt-1 max-w-[280px] text-caption text-ink-500">
@@ -577,7 +579,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
                       disabled={submitting}
                       className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md bg-ai-600 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105 disabled:cursor-wait disabled:opacity-60"
                     >
-                      <Icon name="spark-ai" size={13} />
+                      <AnalysisIcon size={13} />
                       {submitting ? __t('正在提交…') : __t('生成分析')}
                     </button>
                     <button
@@ -593,7 +595,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
                   onClick={() => setConfirming(true)}
                   className="mt-4 flex h-9 items-center gap-2 rounded-md bg-ai-600 px-4 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105"
                 >
-                  <Icon name="spark-ai" size={14} />
+                  <AnalysisIcon size={14} />
                   {__t('生成分析')}
                 </button>
               )}
@@ -633,7 +635,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
               </div>
               <button
                 onClick={() => setPhase('needs-analysis')}
-                className="mt-3 flex h-8 items-center gap-1.5 rounded-md border border-line bg-card px-3 text-caption text-ink-600 shadow-btn transition-colors hover:border-ai-600/50 hover:text-ai-600"
+                className="mt-3 flex h-8 items-center gap-1.5 rounded-md bg-ai-600 px-3 text-caption font-medium text-white shadow-btn transition-[filter] hover:brightness-105"
               >
                 <Icon name="refresh" size={13} />
                 {__t('重试')}
@@ -655,7 +657,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
                   setPhase('loading');
                   void loadImpact(ticker);
                 }}
-                className="mt-4 flex h-8 items-center gap-1.5 rounded-md bg-brand-600 px-3.5 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105"
+                className="mt-4 flex h-8 items-center gap-1.5 rounded-md bg-ai-600 px-3.5 text-caption font-medium text-white shadow-btn transition-[filter] hover:brightness-105"
               >
                 <Icon name="refresh" size={13} />
                 {__t('重试')}
@@ -673,21 +675,21 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
               {/* 1 头部 */}
               <Section>
                 <div className="flex items-center gap-2">
-                  <Icon name="spark-ai" size={16} className="text-ai-600" />
+                  <AnalysisIcon size={16} className="text-ai-600" />
                   <h3 className="font-display text-[18px] leading-6 text-ink-900">{__t('AI 影响 ·')} {impact.ticker}</h3>
                   {isFinalImpact(impact) ? (
-                    <span className="ml-auto rounded-pill border border-up-600/25 bg-up-50 px-2 py-0.5 text-micro font-semibold text-up-700">
+                    <SoftBadge tone="up" className="ml-auto">
                       {__t('已锁定 · 最终分析')}
-                    </span>
+                    </SoftBadge>
                   ) : isImpactFinalizing(impact) ? (
-                    <span className="ml-auto inline-flex items-center gap-1.5 rounded-pill border border-ai-600/25 bg-ai-50 px-2 py-0.5 text-micro font-medium text-ai-600">
+                    <SoftBadge tone="ai" className="ml-auto">
                       <PulseDot className="bg-ai-600" size={6} />
                       {__t('自动重分析中')}
-                    </span>
+                    </SoftBadge>
                   ) : (
-                    <span className="ml-auto rounded-pill border border-ai-600/20 bg-ai-50 px-2 py-0.5 text-micro font-medium text-ai-600">
+                    <SoftBadge tone="ai" className="ml-auto">
                       {completedStageLabel(impact)}
-                    </span>
+                    </SoftBadge>
                   )}
                 </div>
                 <p className="mt-1 text-micro text-ink-400">
@@ -747,9 +749,9 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
                         <span className="flex min-w-0 items-center gap-2">
                           <span className="font-mono text-caption font-semibold text-ink-900">${item.ticker}</span>
                           <span className="min-w-0 truncate text-caption text-ink-500">{item.name}</span>
-                          <span className={cn('ml-auto shrink-0 rounded-xs border px-1.5 py-0.5 text-micro font-medium', meta.className)}>
+                          <SoftBadge tone={meta.tone} className="ml-auto shrink-0">
                             {meta.label}
-                          </span>
+                          </SoftBadge>
                         </span>
                         <span className="mt-1.5 block text-micro text-ink-400">{RELATION_LABELS[item.relation]}</span>
                         <span className="mt-1 block text-caption leading-5 text-ink-600">{item.reason}</span>
@@ -787,7 +789,7 @@ function LockedPanel({ title, description, iconClass }: { title: string; descrip
   return (
     <div className="flex flex-col items-center py-10 text-center">
       <span className={cn('flex size-12 items-center justify-center rounded-lg border border-line bg-card-warm', iconClass)}>
-        <Icon name="spark-ai" size={22} />
+        <AnalysisIcon size={22} />
       </span>
       <h3 className="mt-3 text-h3 text-ink-800">{title}</h3>
       <p className="mt-1 max-w-[260px] text-caption text-ink-500">{description}</p>

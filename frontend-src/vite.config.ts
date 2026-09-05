@@ -110,15 +110,15 @@ export default defineConfig(() => {
     server: {
       port: 3000,
       proxy: {
-        // 本地 live 调试:/api 反代到生产(只读验证用)
+        // 默认只连接本机后端；生产调试必须显式设置 OPTIX_API_PROXY。
         // headers.origin 改写为目标源:后端 require_same_origin_* 校验 Origin==Host,
         // 否则 dev 下所有写操作(batch/登录/触发)都会被如实拒绝
         "/api": {
-          target: process.env.OPTIX_API_PROXY || "https://option.openweb-ui.xyz",
+          target: process.env.OPTIX_API_PROXY || "http://127.0.0.1:2000",
           changeOrigin: true,
           secure: true,
           headers: {
-            origin: process.env.OPTIX_API_PROXY || "https://option.openweb-ui.xyz",
+            origin: process.env.OPTIX_API_PROXY || "http://127.0.0.1:2000",
           },
         },
       },
@@ -130,11 +130,11 @@ export default defineConfig(() => {
       port: 4173,
       proxy: {
         "/api": {
-          target: process.env.OPTIX_API_PROXY || "https://option.openweb-ui.xyz",
+          target: process.env.OPTIX_API_PROXY || "http://127.0.0.1:2000",
           changeOrigin: true,
           secure: true,
           headers: {
-            origin: process.env.OPTIX_API_PROXY || "https://option.openweb-ui.xyz",
+            origin: process.env.OPTIX_API_PROXY || "http://127.0.0.1:2000",
           },
         },
       },

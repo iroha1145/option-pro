@@ -4,9 +4,7 @@
  * 右：元信息槽（刷新钮、更新时间、视图切换）· 底部 1px line 发丝线
  */
 import type { ReactNode } from 'react';
-import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { DUR_SECTION } from '@/lib/motion';
 
 interface PageHeaderProps {
   section: string;      // 01
@@ -19,13 +17,10 @@ interface PageHeaderProps {
 
 export default function PageHeader({ section, eyebrow, title, description, meta, className }: PageHeaderProps) {
   return (
-    <motion.header
-      initial={{ opacity: 0, y: 14 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: DUR_SECTION, ease: [0.16, 1, 0.3, 1] }}
+    <header
       className={cn('flex flex-wrap items-end justify-between gap-x-6 gap-y-4 border-b border-line pb-5', className)}
     >
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1 basis-72">
         <p className="flex items-baseline gap-2.5">
           <span className="font-mono text-caption font-semibold text-brand-600">§{section}</span>
           <span className="eyebrow">{eyebrow}</span>
@@ -34,6 +29,6 @@ export default function PageHeader({ section, eyebrow, title, description, meta,
         {description && <p className="mt-1.5 text-body-s text-ink-500">{description}</p>}
       </div>
       {meta && <div className="flex max-w-full flex-wrap items-center gap-x-4 gap-y-2 pb-1">{meta}</div>}
-    </motion.header>
+    </header>
   );
 }

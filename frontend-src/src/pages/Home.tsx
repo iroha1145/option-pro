@@ -9,7 +9,7 @@
  * - 无有效价显「—」，不显 0.00；sparkline 仅 mock 有数据，live 无指数 K 线端点如实留空
  * - 强度聚合 aggregateAvailable !== true 时隐藏对应行，不显 0
  */
-import { useMemo, type ReactNode } from 'react';
+import { useEffect, useMemo, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { motion } from 'framer-motion';
 import { isMock, type ApiError } from '@/api/client';
@@ -21,9 +21,12 @@ import { breakoutsApi } from '@/api/modules/breakouts';
 import { earningsApi } from '@/api/modules/earnings';
 import { stocksApi } from '@/api/modules/stocks';
 import { marketPulseApi } from '@/components/market/api';
-import { regimeMean } from '@/components/market/RegimePanel';
+import { regimeMean } from '@/lib/regime';
 import { getIndexIntraday } from '@/mocks/marketPulse';
 import { usePolling } from '@/hooks/usePolling';
+import { useStockDataStatus } from '@/hooks/useStockDataStatus';
+import type { StockDataStatus } from '@/lib/stockDataStatus';
+import { quoteSymbol } from '@/lib/quoteSymbol';
 import { useNow } from '@/hooks/useNow';
 import { cn } from '@/lib/utils';
 import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
@@ -31,6 +34,7 @@ import { fmtCountdown, fmtNyTime, fmtPrice, fmtRelative, fmtTimeHHMMSS } from '@
 import { instrumentName, signed } from '@/components/cta/ctaMeta';
 import PageHeader from '@/components/shared/PageHeader';
 import StaleStrip from '@/components/shared/StaleStrip';
+import StockDataCoverage from '@/components/shared/StockDataCoverage';
 import SessionLED from '@/components/shared/SessionLED';
 import StrengthBar from '@/components/shared/StrengthBar';
 import { exNum, isFeaturedRow, type EarningsRow } from '@/components/earnings/types';
@@ -175,10 +179,10 @@ function ListBody({
 /** 统计小砖：居中大数字 + micro 标签（涨绿/跌红/平灰；无数据显 —） */
 function MiniStat({ label, value, tone }: { label: string; value: number | null; tone: 'up' | 'down' | 'flat' }) {
   return (
-    <div className="rounded-md bg-paper-2 py-2 text-center">
+    <div className="rounded-[9px] bg-paper-2/70 py-2.5 text-center">
       <p
         className={cn(
-          'font-mono text-data-l tnum',
+          'metric-value text-data-l tnum',
           value === null
             ? 'text-ink-400'
             : tone === 'up'
@@ -205,7 +209,7 @@ export default function Home() {
   const strengthQ = usePolling(() => strengthApi.market(), 300_000);
   const breakoutsQ = usePolling(() => breakoutsApi.current(), 300_000);
   const earningsQ = usePolling(() => earningsApi.upcoming(), 300_000);
-  const watchlistQ = usePolling(() => stocksApi.watchlist(), 300_000);
+  const watchlistQ = usePolling(() => stocksApi.watchlist(true), 300_000);
   const ctaQ = usePolling(() => marketApi.ctaTrend(), 300_000);
 
   const status = statusQ.data;
@@ -292,6 +296,17 @@ export default function Home() {
   }, [watchlistQ.data]);
 
   const ctaInstruments = ctaQ.data?.instruments ?? [];
+  const readiness = useStockDataStatus([
+    ...(watchlistQ.data ?? []).map((item) => item.ticker),
+    ...breakouts.map((item) => item.ticker), ...earnings.map((item) => item.ticker),
+    ...movers.map((item) => item.ticker), 'NVDA',
+  ]);
+  const { refresh: refreshWatchlist } = watchlistQ;
+  useEffect(() => {
+    if (!readiness.dailyVersion) return;
+    stocksApi.invalidatePreparedDaily();
+    refreshWatchlist({ force: true });
+  }, [readiness.dailyVersion, refreshWatchlist]);
 
   return (
     <div>
@@ -316,6 +331,8 @@ export default function Home() {
           </>
         }
       />
+
+      <StockDataCoverage state={readiness} className="mt-4" />
 
       {/* 指数带（SPX/NDX/DJI/RUT/SOX/VIX，点击进 /market?index= 高亮定位） */}
       <section className="mt-8" aria-label={t('指数概览')}>
@@ -359,7 +376,7 @@ export default function Home() {
                     aria-label={t('{name} {code} 详情', { name: q.name, code: q.code })}
                   >
                     <span className="truncate text-caption text-ink-500">{q.name}</span>
-                    <span className="font-mono text-data-l text-ink-900 tnum">
+                    <span className="metric-value text-data-l text-ink-900 tnum">
                       {hasPrice ? fmtPrice(q.price) : '—'}
                     </span>
                     <span className="flex items-end justify-between gap-2">
@@ -376,7 +393,7 @@ export default function Home() {
       </section>
 
       {/* 行2：市场状态 + 雷达信号 */}
-      <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-3">
+      <div className="mt-8 grid grid-cols-1 items-start gap-6 lg:grid-cols-3">
         <MarketStatusPanel
           status={status}
           session={session}
@@ -420,7 +437,7 @@ export default function Home() {
       </div>
 
       {/* 行3：财报临近 + 自选异动 */}
-      <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div className="mt-8 grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
         <SectionCard title={t('财报临近')} to="/earnings">
           <ListBody
             loading={earningsQ.loading}
@@ -452,7 +469,7 @@ export default function Home() {
           >
             <div className="grid grid-cols-1 gap-2.5 px-4 pb-4 pt-3 sm:grid-cols-2 md:px-5 md:pb-5">
               {movers.map((item, i) => (
-                <WatchlistMoverCard key={item.ticker} item={item} index={i} />
+                <WatchlistMoverCard key={item.ticker} item={item} index={i} preparation={readiness.byTicker.get(quoteSymbol(item.ticker))} statusReadFailed={Boolean(readiness.error)} />
               ))}
             </div>
           </ListBody>
@@ -632,25 +649,33 @@ function MarketStatusPanel({
         <MiniStat label={t('平盘')} value={breadth.flat} tone="flat" />
       </div>
 
-      {/* honesty：接口明确给出全市场聚合才显示，不显 0 */}
-      {strength?.aggregateAvailable === true && (
-        <p className="mt-3 text-micro text-ink-400">
-          {t('平均强度 {avg} · ≥85 {n} 只', { avg: strength.avgScore.toFixed(1), n: strength.ge85Count })}
-        </p>
-      )}
-      {/* 两列短行 + 两位小数：此前直拼 `${label} ${value}` 会把后端原始小数
-          （1.9381）挤成一整段（审计首页问题 6） */}
-      {signalMetrics && signalMetrics.length > 0 && (
-        <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1">
-          {signalMetrics.slice(0, 4).map((m) => (
-            <p key={m.label} className="flex items-baseline justify-between gap-2 text-micro text-ink-400">
-              <span className="min-w-0 truncate">{m.label}</span>
-              <span className="shrink-0 font-mono text-ink-600 tnum">
-                {Number.isInteger(m.value) ? m.value : m.value.toFixed(2)}
-              </span>
-            </p>
-          ))}
-        </div>
+      {/* 辅助指标按需展开；缺失读数仍遵守原有数据纪律，不补零。 */}
+      {(strength?.aggregateAvailable === true || (signalMetrics && signalMetrics.length > 0)) && (
+        <details className="group/readings mt-4 border-t border-line/70 pt-3" data-testid="home-supporting-metrics">
+          <summary className="disclosure-trigger flex cursor-pointer list-none items-center justify-between gap-2 rounded-md py-1 text-caption font-medium text-ink-600 outline-none hover:text-ink-800 focus-visible:ring-2 focus-visible:ring-brand-400/40 [&::-webkit-details-marker]:hidden">
+            <span>{t('辅助读数')}</span>
+            <Icon name="chevron-down" size={13} className="text-ink-400 transition-transform group-open/readings:rotate-180" />
+          </summary>
+          <div className="mt-2 rounded-lg bg-paper-2/60 p-3">
+            {strength?.aggregateAvailable === true && (
+              <p className="text-caption text-ink-600">
+                {t('平均强度 {avg} · ≥85 {n} 只', { avg: strength.avgScore.toFixed(1), n: strength.ge85Count })}
+              </p>
+            )}
+            {signalMetrics && signalMetrics.length > 0 && (
+              <div className={cn('grid grid-cols-2 gap-x-4 gap-y-2', strength?.aggregateAvailable === true && 'mt-3')}>
+                {signalMetrics.slice(0, 4).map((metric) => (
+                  <p key={metric.label} className="flex items-baseline justify-between gap-2 text-micro text-ink-500">
+                    <span className="min-w-0 truncate">{metric.label}</span>
+                    <span className="metric-value shrink-0 text-ink-700 tnum">
+                      {Number.isInteger(metric.value) ? metric.value : metric.value.toFixed(2)}
+                    </span>
+                  </p>
+                ))}
+              </div>
+            )}
+          </div>
+        </details>
       )}
       {auxError && (
         <StaleStrip
@@ -678,7 +703,7 @@ function RadarSignalCard({ signal: s, index: i }: { signal: BreakoutSignal; inde
         <div className="flex items-center gap-2">
           <TickerLogo ticker={s.ticker} size={24} />
           <span className="shrink-0 font-mono text-caption font-semibold text-ink-800">{s.ticker}</span>
-          <span className="min-w-0 truncate rounded-xs border border-line px-1.5 py-0.5 text-micro text-ink-600">
+          <span className="min-w-0 truncate rounded-md bg-paper-2 px-2 py-1 text-micro font-medium text-ink-600">
             {s.label}
           </span>
           <span className="ml-auto shrink-0 text-micro text-ink-400">{fmtRelative(s.at)}</span>
@@ -710,8 +735,8 @@ function EarningsAnchorRow({ item: it, todayKey }: { item: EarningsItem; todayKe
     >
       <span
         className={cn(
-          'w-11 shrink-0 rounded-md border py-1 text-center',
-          isToday ? 'border-brand-600/20 bg-brand-50' : 'border-line bg-paper-2',
+          'w-11 shrink-0 rounded-[9px] py-1.5 text-center',
+          isToday ? 'bg-brand-50' : 'bg-paper-2/80',
         )}
       >
         <span
@@ -735,7 +760,7 @@ function EarningsAnchorRow({ item: it, todayKey }: { item: EarningsItem; todayKe
             {t('EPS 预期 {v}', { v: eps.toFixed(2) })}
           </span>
         )}
-        <span className="rounded-xs bg-paper-2 px-1.5 py-0.5 text-micro text-ink-600">
+        <span className="rounded-md bg-paper-2 px-2 py-1 text-micro text-ink-600">
           {it.timing === 'bmo' ? t('盘前') : it.timing === 'amc' ? t('盘后') : t('时间待定')}
         </span>
       </span>
@@ -743,11 +768,12 @@ function EarningsAnchorRow({ item: it, todayKey }: { item: EarningsItem; todayKe
   );
 }
 
-/** 自选异动迷你卡：Ticker+名称+涨跌 / 大价+sparkline（缺失不渲染）/ 强度条+首条信号 */
-function WatchlistMoverCard({ item, index: i }: { item: WatchlistItem; index: number }) {
-  const hasChange = Number.isFinite(item.changePct);
+/** 自选异动：当日涨跌与最长 30 交易日日线分开标明，长期图仅取真实日线。 */
+function WatchlistMoverCard({ item, index: i, preparation, statusReadFailed }: { item: WatchlistItem; index: number; preparation?: StockDataStatus; statusReadFailed: boolean }) {
   const hasPrice = Number.isFinite(item.price) && item.price > 0;
-  const spark = Array.isArray(item.sparkline) && item.sparkline.length > 1 ? item.sparkline : null;
+  const trend = item.dailyTrend && item.dailyTrend.length > 1 ? item.dailyTrend : null;
+  const spark = trend?.map((point) => point.close) ?? null;
+  const periodChange = spark ? (spark[spark.length - 1] / spark[0] - 1) * 100 : null;
   const signalLabel = item.signals?.[0]?.label ?? null;
   return (
     <motion.div
@@ -755,21 +781,38 @@ function WatchlistMoverCard({ item, index: i }: { item: WatchlistItem; index: nu
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: staggerDelay(i) }}
     >
-      <Link to={`/stock/${encodeURIComponent(item.ticker)}`} className="card-surface card-hover block rounded-lg p-3">
+      <Link to={`/stock/${encodeURIComponent(item.ticker)}`} className="card-surface card-hover block overflow-hidden rounded-lg p-4" data-testid="watchlist-mover-card">
         <div className="flex items-center gap-2">
           <TickerLogo ticker={item.ticker} size={24} />
           <span className="shrink-0 font-mono text-caption font-semibold text-ink-800">{item.ticker}</span>
           <span className="min-w-0 flex-1 truncate text-caption text-ink-500">{item.name}</span>
-          <ChangeBadge value={item.changePct} size="sm" className="shrink-0" />
+          <span className="flex shrink-0 items-center gap-1.5">
+            <span className="text-micro text-ink-400">{t('当日')}</span>
+            <ChangeBadge value={item.changePct} size="sm" />
+          </span>
         </div>
         <div className="mt-2 flex items-end justify-between gap-2">
-          <span className="font-mono text-data-l text-ink-900 tnum">
+          <span className="metric-value text-data-l text-ink-900 tnum">
             {hasPrice ? fmtPrice(item.price) : '—'}
           </span>
-          {spark && (
-            <Sparkline data={spark} width={96} height={24} change={hasChange ? item.changePct : 0} />
-          )}
+          <span className="text-micro text-ink-400">{trend ? t('近 {count} 个交易日', { count: trend.length }) : t('日线走势')}</span>
         </div>
+        {spark && trend && periodChange !== null ? (
+          <figure className="mt-3" data-testid="watchlist-daily-trend" aria-label={t('{ticker} 日线走势，{start} 至 {end}，区间涨跌 {change}%', { ticker: item.ticker, start: trend[0].date, end: trend[trend.length - 1].date, change: periodChange.toFixed(2) })}>
+            <Sparkline data={spark} width={320} height={88} change={periodChange} variant="area" stretch className="h-[88px] w-full" />
+            <figcaption className="mt-1 flex items-center justify-between gap-2 font-mono text-micro text-ink-400 tnum">
+              <span>{trend[0].date.slice(5)} — {trend[trend.length - 1].date.slice(5)}</span>
+              <span className="flex items-center gap-1.5"><span className="font-sans">{t('区间')}</span><ChangeBadge value={periodChange} size="sm" /></span>
+            </figcaption>
+          </figure>
+        ) : (
+          <div className="mt-3 flex h-[112px] items-center justify-center rounded-sm bg-paper-2 px-4 text-center text-caption text-ink-400">
+            {statusReadFailed ? t('暂无日线走势，准备状态读取失败')
+              : preparation?.resources.dailyChart.available ? t('日线已准备，正在更新图表')
+                : preparation?.status === 'failed' || preparation?.refreshStatus === 'failed' ? t('日线准备失败，后台将稍后重试')
+                  : t('后台正在准备日线，完成后自动显示')}
+          </div>
+        )}
         <div className="mt-2 flex items-center justify-between gap-2">
           <StrengthBar score={item.strengthScore} width={56} />
           {signalLabel && <span className="truncate text-micro text-ink-400">{signalLabel}</span>}
@@ -806,12 +849,12 @@ function SignalGridSkeleton({ cards }: { cards: number }) {
   );
 }
 
-/** 自选迷你卡骨架：2 列镜像真实卡（logo+徽标 / 大价+sparkline / 强度条） */
+/** 自选卡骨架：镜像完整日线图区，加载前后保持卡片高度。 */
 function MoverGridSkeleton({ cards }: { cards: number }) {
   return (
     <div className="grid grid-cols-1 gap-2.5 px-4 pb-4 pt-3 sm:grid-cols-2 md:px-5 md:pb-5" aria-hidden="true">
       {Array.from({ length: cards }, (_, i) => (
-        <div key={i} className="card-surface rounded-lg p-3">
+        <div key={i} className="card-surface rounded-lg p-4">
           <div className="flex items-center gap-2">
             <SkeletonBlock className="size-6 rounded-sm" />
             <SkeletonBlock className="h-3 w-12" />
@@ -822,6 +865,7 @@ function MoverGridSkeleton({ cards }: { cards: number }) {
             <SkeletonBlock className="h-6 w-24" />
             <SkeletonBlock className="h-6 w-24" />
           </div>
+          <SkeletonBlock className="mt-3 h-[112px] w-full rounded-sm" />
           <SkeletonBlock className="mt-2.5 h-[3px] w-14 rounded-pill" />
         </div>
       ))}

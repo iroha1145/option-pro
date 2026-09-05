@@ -9,12 +9,13 @@ from __future__ import annotations
 
 import hashlib
 import math
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping, Sequence
 from zoneinfo import ZoneInfo
 
 import pandas as pd
 
+from app.services.market_calendar import early_close_minutes, is_trading_day
 from app.services.strength.features import _feature_row as build_feature_row
 from app.services.strength.scoring import score_intrinsic
 from app.services.technical.auto_patterns import (
@@ -38,6 +39,71 @@ BUNDLE_VERSION = "optix-chart-analysis-v1"
 FINGERPRINT_ALGORITHM = "sha256-bar-ohlcv-v1"
 _NY = ZoneInfo("America/New_York")
 _INTRADAY_RANGES = {"5m", "15m", "1h"}
+_INTRADAY_SECONDS = {"5m": 300, "15m": 900, "1h": 3600}
+
+
+def _bar_start_utc(value: Any) -> datetime | None:
+    """Decode a provider bar's start without assuming the server's time zone."""
+    try:
+        if isinstance(value, str):
+            stamp = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            if stamp.tzinfo is None:
+                return None
+            return stamp.astimezone(timezone.utc)
+        if isinstance(value, bool):
+            return None
+        epoch = float(value)
+        if not math.isfinite(epoch) or epoch <= 0:
+            return None
+        if epoch > 100_000_000_000:
+            epoch /= 1000
+        return datetime.fromtimestamp(epoch, tz=timezone.utc)
+    except (TypeError, ValueError, OverflowError, OSError):
+        return None
+
+
+def _intraday_session_close(start: datetime) -> datetime | None:
+    local = start.astimezone(_NY)
+    day = local.date()
+    close_minute = early_close_minutes(day) or 16 * 60
+    if not is_trading_day(day) or not 570 <= local.hour * 60 + local.minute < close_minute:
+        return None
+    return local.replace(
+        hour=close_minute // 60, minute=close_minute % 60, second=0, microsecond=0,
+    ).astimezone(timezone.utc)
+
+
+def mark_intraday_closed(
+    bars: Sequence[Mapping[str, Any]],
+    chart_range: str,
+    *,
+    now: datetime | None = None,
+) -> list[dict[str, Any]]:
+    """Keep every chart row, marking completion at this payload's observation time.
+
+    A cached partial bar must never become a completed bar just because time has
+    passed. Preserve an explicit False until a fresh provider fetch replaces it.
+    Hourly bars at the regular-session end may be shorter than a full hour.
+    """
+    seconds = _INTRADAY_SECONDS.get(chart_range)
+    if seconds is None:
+        return [dict(bar) for bar in bars]
+    cutoff = now if now is not None else datetime.now(timezone.utc)
+    if cutoff.tzinfo is None:
+        raise ValueError("intraday completion requires a timezone-aware cutoff")
+    cutoff = cutoff.astimezone(timezone.utc)
+    result: list[dict[str, Any]] = []
+    for bar in bars:
+        start = _bar_start_utc(bar.get("t"))
+        closed = False
+        if start is not None:
+            end = start + timedelta(seconds=seconds)
+            session_close = _intraday_session_close(start)
+            if session_close is not None and bar.get("ext") is not True:
+                end = min(end, session_close)
+            closed = bar.get("closed") is not False and end <= cutoff
+        result.append({**bar, "closed": closed})
+    return result
 
 
 def _finite_number(value: Any) -> float | None:
@@ -1210,8 +1276,12 @@ def series_from_chart_bars(
     closes: list[float] = []
     volumes: list[float] = []
     for bar in bars:
-        if bar.get("ext") is True or bar.get("quote_only") is True:
+        if bar.get("ext") is True or bar.get("quote_only") is True or bar.get("closed") is False:
             continue
+        if chart_range in _INTRADAY_RANGES:
+            start = _bar_start_utc(bar.get("t"))
+            if start is None or _intraday_session_close(start) is None:
+                continue
         try:
             raw_t = bar["t"]
             if isinstance(raw_t, str):
@@ -1259,12 +1329,14 @@ def assemble_intraday_analysis(
     ticker: str = "",
     chart_range: str,
     adjustment: str = "raw",
+    now: datetime | None = None,
 ) -> dict[str, Any] | None:
-    """Minute VWAP / opening range / RVOL / CLV / hold bars, on demand."""
+    """Minute indicators and fingerprint from completed regular-session bars."""
 
     if chart_range not in _INTRADAY_RANGES:
         return None
-    series = series_from_chart_bars(bars, chart_range)
+    completed = mark_intraday_closed(bars, chart_range, now=now)
+    series = series_from_chart_bars(completed, chart_range)
     if series is None:
         return None
     data_through = series["dates"][-1]

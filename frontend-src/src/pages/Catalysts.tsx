@@ -7,6 +7,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { motion } from 'framer-motion';
 import PageHeader from '@/components/shared/PageHeader';
+import SelectionViewport from '@/components/shared/SelectionViewport';
 import Icon from '@/components/icons';
 import { cn } from '@/lib/utils';
 import { fmtTimeHHMMSS } from '@/lib/format';
@@ -180,28 +181,33 @@ export default function Catalysts() {
 
 
       {/* 标签页（URL 同步 ?tab=） */}
-      <div className="no-scrollbar mt-8 flex items-center gap-1 overflow-x-auto border-b border-line" role="tablist" aria-label={__t("催化剂视图")}>
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            role="tab"
-            aria-selected={tab === t.id}
-            onClick={() => setTab(t.id)}
-            className={cn(
-              'relative shrink-0 whitespace-nowrap px-3.5 py-2.5 text-body-s font-medium transition-colors duration-fast sm:px-4',
-              tab === t.id ? 'text-brand-600' : 'text-ink-500 hover:text-ink-800',
-            )}
-          >
-            {t.label}
-            {tab === t.id && (
-              <motion.span
-                layoutId="catalysts-tab-underline"
-                className="absolute inset-x-3 bottom-[-1px] h-[2px] rounded-full bg-brand-600"
-                transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
-              />
-            )}
-          </button>
-        ))}
+      <div className="mt-8 flex min-w-0 items-center gap-1 border-b border-line max-md:flex-wrap max-md:border-b-0">
+        <SelectionViewport className="min-w-0 flex-1 max-md:basis-full">
+          <div className="mobile-selection-rail no-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto" role="tablist" aria-label={__t("催化剂视图")}>
+            {TABS.map((t) => (
+              <button
+                key={t.id}
+                role="tab"
+                aria-selected={tab === t.id}
+                onClick={() => setTab(t.id)}
+                className={cn(
+                  'relative shrink-0 whitespace-nowrap px-3.5 py-2.5 text-body-s font-medium transition-colors duration-fast sm:px-4',
+                  tab === t.id ? 'text-brand-600' : 'text-ink-500 hover:text-ink-800',
+                )}
+              >
+                {t.label}
+                {tab === t.id && (
+                  <motion.span
+                    data-selection-decoration=""
+                    layoutId="catalysts-tab-underline"
+                    className="absolute inset-x-3 bottom-[-1px] h-[2px] rounded-full bg-brand-600"
+                    transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
+                  />
+                )}
+              </button>
+            ))}
+          </div>
+        </SelectionViewport>
         {tab === 'feed' && total !== null && (
           <span className="ml-auto shrink-0 pb-1 font-mono text-micro text-ink-400 tnum">{total} {__t('条')}</span>
         )}

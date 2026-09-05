@@ -7,6 +7,7 @@
  * 状态：未扫描 empty-scan.svg · 扫描中骨架 · 无命中 · 503 快照不可用（保留上次结果）
  * 数据：strengthApi.scan / market / profilesMeta + catalystsApi.batchSummaries72h（单次批量）+ signalsApi.stock
  */
+import SoftBadge from '@/components/shared/SoftBadge';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { strengthApi, type StrengthScanEnvelope } from '@/api/modules/strength';
@@ -17,8 +18,8 @@ import { ApiError, isMock } from '@/api/client';
 import type { ScreenerRow, SectorOption, StrengthProfile } from '@/api/types';
 import { usePolling } from '@/hooks/usePolling';
 import { useAccess } from '@/hooks/useAccess';
-import { useToast } from '@/components/Toast';
-import { useShell } from '@/components/Layout';
+import { useToast } from '@/hooks/useToast';
+import { useShell } from '@/hooks/useShell';
 import { cn } from '@/lib/utils';
 import { fmtCompact, fmtLocaleDateTime, fmtTimeHHMMSS } from '@/lib/format';
 import {
@@ -30,6 +31,7 @@ import {
 import Icon from '@/components/icons';
 import PageHeader from '@/components/shared/PageHeader';
 import Segmented from '@/components/shared/Segmented';
+import FilterButton from '@/components/shared/FilterButton';
 import EmptyState from '@/components/shared/EmptyState';
 import { SkeletonCard, SkeletonRows } from '@/components/shared/Skeleton';
 import FilterWorkbench from '@/components/screener/FilterWorkbench';
@@ -610,34 +612,34 @@ export default function Screener() {
                 {/* 客户端条件只作用在后端返回的强度前 N 名上（审计 P1-05）：
                     后端把 top 硬限在 120，因此候选池更大时结果不是全市场筛选。 */}
                 {truncatedScope && (
-                  <span
-                    className="rounded-xs bg-warn-50 px-1.5 py-px text-micro text-warn-600"
+                  <SoftBadge
+                    tone="warn"
                     title={__t('价格上限、多板块、分档与最低分是客户端条件，只能作用在后端返回的这 {returned} 行上；已评分候选共 {screened} 只。', { returned: truncatedScope.returned, screened: truncatedScope.screened })}
                   >
                     {__t('仅在强度前')} {truncatedScope.returned} {__t('名内筛选')}
-                  </span>
+                  </SoftBadge>
                 )}
                 {preparingCatalystSort && (
-                  <span className="inline-flex items-center gap-1.5 rounded-xs bg-paper-2 px-1.5 py-px text-micro text-ink-500">
+                  <SoftBadge>
                     <span className="size-2.5 animate-spin rounded-full border-[1.5px] border-brand-600/25 border-t-brand-600" aria-hidden="true" />
                     {__t('正在准备排序数据 · 剩余')} {missingCatalystTickers.length}
-                  </span>
+                  </SoftBadge>
                 )}
                 {scanMeta?.stale && (
-                  <span className="rounded-xs bg-warn-50 px-1.5 py-px text-micro text-warn-600">
+                  <SoftBadge tone="warn" className="whitespace-normal">
                     {__t('数据未刷新')}{scanMeta.snapshotSavedAt ? ` · ${fmtLocaleDateTime(scanMeta.snapshotSavedAt, { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })}` : ''}
-                  </span>
+                  </SoftBadge>
                 )}
                 {chips.map((c) => (
-                  <span
+                  <SoftBadge
                     key={c.key}
-                    className="inline-flex items-center gap-1 rounded-xs border border-line bg-card-warm px-1.5 py-0.5 text-micro text-ink-500"
+                    className="gap-1"
                   >
                     {c.label}
                     <button onClick={c.onRemove} aria-label={__t('移除条件 {label}', { label: c.label })} className="text-ink-300 transition-colors hover:text-down-600">
                       <Icon name="x" size={10} />
                     </button>
-                  </span>
+                  </SoftBadge>
                 ))}
               </>
             ) : (
@@ -645,9 +647,8 @@ export default function Screener() {
             )}
             <div className="ml-auto flex flex-wrap items-center gap-2">
               {/* 可选列开关。关掉时同时清掉宏观筛选：否则行会按一个看不见的条件被筛掉。 */}
-              <button
-                type="button"
-                aria-pressed={showMacro}
+              <FilterButton
+                active={showMacro}
                 onClick={() => {
                   setShowMacro((on) => {
                     if (on) setMacroToneFilter('all');
@@ -656,16 +657,10 @@ export default function Screener() {
                   setPage(1);
                 }}
                 title={__t('{title}：{body}{note}', { title: __t(MACRO_SHADOW_HINT.title), body: __t(MACRO_SHADOW_HINT.body), note: __t(MACRO_SHADOW_HINT.note) })}
-                className={cn(
-                  'flex h-8 items-center gap-1.5 rounded-pill border px-3 text-caption shadow-btn transition-colors duration-fast',
-                  showMacro
-                    ? 'border-brand-600 bg-brand-100 font-medium text-brand-700'
-                    : 'border-line bg-card text-ink-500 hover:border-line-strong hover:text-ink-800',
-                )}
               >
                 <Icon name="layers" size={13} />
                 {__t('宏观适配')}
-              </button>
+              </FilterButton>
               {showMacro && (
                 <Segmented<MacroTone | 'all'>
                   options={[
@@ -722,7 +717,7 @@ export default function Screener() {
                             <button
                               key={p.id}
                               onClick={() => onPresetQuick(p.id)}
-                              className="flex h-8 items-center gap-1.5 rounded-pill border border-line bg-card px-3 text-caption text-ink-500 shadow-btn transition-colors duration-fast hover:border-brand-400/60 hover:text-brand-600"
+                              className="control-button"
                             >
                               <Icon name="spark-ai" size={13} className="text-ink-300" />
                               {p.name}
@@ -761,7 +756,7 @@ export default function Screener() {
                 {rows && (
                   <div className="mt-4">
                     <p className="mb-2 flex items-center gap-2 text-caption text-ink-400">
-                      <span className="rounded-xs bg-warn-50 px-1.5 py-px font-mono text-micro text-warn-600">{__t('已过期')}</span>
+                      <SoftBadge tone="warn">{__t('已过期')}</SoftBadge>
                       {__t('上次成功扫描于')} <span className="font-mono tnum">{lastScanAt ? fmtTimeHHMMSS(lastScanAt) : '—'}</span>
                     </p>
                     <div className="hidden md:block">
@@ -1010,7 +1005,7 @@ function SuggestButton({ label, onClick }: { label: string; onClick: () => void 
   return (
     <button
       onClick={onClick}
-      className="flex h-8 items-center rounded-pill border border-line bg-card px-3 text-caption text-ink-500 shadow-btn transition-colors duration-fast hover:border-brand-400/60 hover:text-brand-600"
+      className="control-button"
     >
       {label}
     </button>

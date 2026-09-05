@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import Icon from '@/components/icons';
+import SelectionViewport from '@/components/shared/SelectionViewport';
 import { cn } from '@/lib/utils';
 import { t } from '../../../i18n/core.ts';
 import type { ChartDrawing, DrawingKind, DrawingStyle } from './types.ts';
@@ -163,7 +164,8 @@ export default function DrawingInspector({
               />
             ))}
           </div>
-          <div className="flex gap-1" role="group" aria-label={t('线宽')}>
+          <SelectionViewport>
+          <div className="mobile-selection-rail flex gap-1" role="group" aria-label={t('线宽')}>
             {WIDTHS.map((width) => (
               <button
                 key={width}
@@ -180,7 +182,9 @@ export default function DrawingInspector({
               </button>
             ))}
           </div>
-          <div className="flex gap-1" role="group" aria-label={t('线型')}>
+          </SelectionViewport>
+          <SelectionViewport>
+          <div className="mobile-selection-rail flex gap-1" role="group" aria-label={t('线型')}>
             {DASHES.map((dash) => (
               <button
                 key={dash.id}
@@ -197,6 +201,7 @@ export default function DrawingInspector({
               </button>
             ))}
           </div>
+          </SelectionViewport>
           {(drawing.kind === 'channel' || drawing.kind === 'rectangle') && (
             <label className="flex items-center gap-2 text-micro">
               <span>{t('填充透明度')}</span>

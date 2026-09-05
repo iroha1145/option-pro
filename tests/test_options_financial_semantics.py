@@ -169,7 +169,7 @@ def test_concurrent_total_failures_share_one_negative_result(
     )
 
 
-def test_public_option_reads_cold_pull_yahoo_and_coalesce(
+def test_owner_option_reads_cold_pull_yahoo_and_coalesce(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     expiration_calls = 0
@@ -204,7 +204,7 @@ def test_public_option_reads_cold_pull_yahoo_and_coalesce(
     monkeypatch.setattr(yahoo, "get_option_chain", load_chain)
 
     async def scenario() -> tuple[list[dict], list[dict]]:
-        with request_owner_access_context(False):
+        with request_owner_access_context(True):
             expirations = await asyncio.gather(
                 *[options.expirations("aaoi") for _ in range(5)]
             )
@@ -226,7 +226,7 @@ def test_public_option_reads_cold_pull_yahoo_and_coalesce(
     assert all(row["ticker"] == "AAOI" for row in chains)
 
 
-def test_public_option_failure_is_cooled_without_repeating_provider_calls(
+def test_owner_option_failure_is_cooled_without_repeating_provider_calls(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     now = [500.0]
@@ -246,7 +246,7 @@ def test_public_option_failure_is_cooled_without_repeating_provider_calls(
     monkeypatch.setattr(options.time, "monotonic", lambda: now[0])
 
     async def scenario() -> list[object]:
-        with request_owner_access_context(False):
+        with request_owner_access_context(True):
             return await asyncio.gather(
                 *[
                     options.option_chain("aaoi", "2030-08-16")
@@ -265,7 +265,7 @@ def test_public_option_failure_is_cooled_without_repeating_provider_calls(
         for result in first
     )
 
-    with request_owner_access_context(False):
+    with request_owner_access_context(True):
         with pytest.raises(HTTPException) as cooled:
             asyncio.run(options.option_chain("aaoi", "2030-08-16"))
     assert cooled.value.headers == {"Retry-After": "30"}

@@ -1,5 +1,6 @@
+import { usePrefersReducedMotion } from '@/hooks/usePrefersReducedMotion';
 /** DataTable：发丝线行、r-lg 容器、表头 Eyebrow 化、行 hover paper-2 底、可排序 */
-import { useMemo, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import Icon from '@/components/icons';
@@ -49,6 +50,7 @@ export default function DataTable<T>({
   className,
   rowClassName,
 }: DataTableProps<T>) {
+  const reducedMotion = usePrefersReducedMotion();
   const [innerSort, setInnerSort] = useState(defaultSort);
   const sort = sortProp !== undefined ? sortProp : innerSort;
   const setSort = (s: SortState | null) => {
@@ -88,6 +90,7 @@ export default function DataTable<T>({
             {columns.map((c) => (
               <th
                 key={c.key}
+                scope="col"
                 style={c.width ? { width: c.width } : undefined}
                 className={cn(
                   'border-b border-line px-4 py-2.5 text-eyebrow font-sans uppercase tracking-[0.14em] text-ink-400',
@@ -125,26 +128,14 @@ export default function DataTable<T>({
             return (
               <motion.tr
                 key={key}
-                layout="position"
-                transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
-                onClick={onRowClick ? () => onRowClick(row) : undefined}
-                /* 可点击行同时可聚焦、可回车/空格触发（审计 P3-1）。 */
-                {...(onRowClick
-                  ? {
-                      tabIndex: 0,
-                      role: 'button' as const,
-                      onKeyDown: (event: ReactKeyboardEvent<HTMLTableRowElement>) => {
-                        /* 只处理落在行本体上的按键：行内真按钮（如「从自选移除」）
-                           的 Enter 激活是 keydown 的默认动作，容器 preventDefault
-                           会吃掉它，让键盘用户执行到相反的动作（打开详情）。 */
-                        if (event.target !== event.currentTarget) return;
-                        if (event.key === 'Enter' || event.key === ' ') {
-                          event.preventDefault();
-                          onRowClick(row);
-                        }
-                      },
-                    }
-                  : {})}
+                layout={reducedMotion ? false : 'position'}
+                transition={{ duration: reducedMotion ? 0 : 0.24, ease: [0.16, 1, 0.3, 1] }}
+                /* Preserve native table semantics; columns supply real links or
+                   buttons for keyboard users. Nested controls own their clicks. */
+                onClick={onRowClick ? (event) => {
+                  if ((event.target as Element).closest('a, button, input, select, [role="button"]')) return;
+                  onRowClick(row);
+                } : undefined}
                 className={cn(
                   'group border-b border-line last:border-0 transition-colors duration-fast',
                   onRowClick && 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500/30',

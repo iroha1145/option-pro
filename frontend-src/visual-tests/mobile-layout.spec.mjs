@@ -66,9 +66,61 @@ for (const viewport of VIEWPORTS) {
       await expect(page).toHaveURL(/\/catalysts$/);
       const tabs = page.getByRole("tablist", { name: "催化剂视图" });
       await expect(tabs).toBeVisible();
+      const tabViewport = page.locator(".selection-viewport").filter({ has: tabs });
       await expect
-        .poll(() => tabs.evaluate((node) => getComputedStyle(node).overflowX))
+        .poll(() => tabViewport.evaluate((node) => getComputedStyle(node).overflowX))
         .toMatch(/auto|scroll/);
+
+      // The outer viewport scrolls while the raised tab itself remains unclipped.
+      await tabViewport.scrollIntoViewIfNeeded();
+      const scrollRange = await tabViewport.evaluate((node) => node.scrollWidth - node.clientWidth);
+      await tabViewport.hover();
+      await page.mouse.wheel(scrollRange + viewport.width, 0);
+      if (scrollRange > 1) {
+        await expect.poll(() => tabViewport.evaluate((node) => node.scrollLeft)).toBeGreaterThan(0);
+      }
+      const tabButtons = tabs.getByRole("tab");
+      const firstTab = tabButtons.first();
+      const lastTab = tabButtons.last();
+      const expectLastTabWithinViewport = async () => {
+        await expect.poll(async () => {
+          const [outer, button] = await Promise.all([tabViewport.boundingBox(), lastTab.boundingBox()]);
+          return outer !== null && button !== null
+            && button.x >= outer.x - 1
+            && button.x + button.width <= outer.x + outer.width + 1
+            && button.y >= outer.y - 1
+            && button.y + button.height <= outer.y + outer.height + 1;
+        }).toBe(true);
+      };
+      await expectLastTabWithinViewport();
+      await lastTab.click();
+      await expect(lastTab).toHaveAttribute("aria-selected", "true");
+      await expectNoDocumentOverflow(page);
+
+      // Every tab remains reachable with the keyboard, including beyond the rail's edge.
+      await firstTab.click();
+      await expect(firstTab).toBeFocused();
+      await expect(lastTab).toHaveAttribute("aria-selected", "false");
+      for (let index = 1; index < await tabButtons.count(); index += 1) {
+        await page.keyboard.press("Tab");
+        await expect(tabButtons.nth(index)).toBeFocused();
+      }
+      await expectLastTabWithinViewport();
+      // The feed count arrives asynchronously and must not squeeze the focused tab.
+      await expect(tabViewport.locator("..").getByText(/^\d+\s*条$/)).toBeVisible();
+      let previousWidth = -1;
+      let stableWidths = 0;
+      await expect.poll(async () => {
+        const width = await tabViewport.evaluate((node) => node.getBoundingClientRect().width);
+        stableWidths = Math.abs(width - previousWidth) < 0.5 ? stableWidths + 1 : 0;
+        previousWidth = width;
+        return stableWidths;
+      }).toBeGreaterThanOrEqual(2);
+      await expect(lastTab).toBeFocused();
+      await expectLastTabWithinViewport();
+      await page.keyboard.press("Enter");
+      await expect(lastTab).toHaveAttribute("aria-selected", "true");
+      await expectLastTabWithinViewport();
       await expectNoDocumentOverflow(page);
     });
   });

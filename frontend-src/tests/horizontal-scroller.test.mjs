@@ -89,12 +89,16 @@ test('热点卡顶条被卡片圆角裁切，不会画出圆角', async () => {
   );
 });
 
-test('板块 chip 条也用上了这个组件，且 tablist 语义留在原处', async () => {
+test('板块选择复用 Segmented 键盘行为，真实滚动层提供布局偏移', async () => {
   const chips = await source('components/sectors/SectorChips.tsx');
   // 实测 /sectors 上这条 chip 带藏掉 1474px（2117 轨道 / 643 视口）且没有任何控件
   assert.match(chips, /<HorizontalScroller/);
-  // role="tablist" 必须留在真正装 tab 的元素上，不能挪到滚动容器
-  assert.match(chips, /<div ref=\{listRef\} role="tablist" aria-label=\{t\("板块切换"\)\} className="flex gap-1\.5">/);
+  // tablist 留在共享分段控件上，外层只管理滚动和自动显示当前项。
+  assert.match(chips, /<Segmented/);
+  assert.match(chips, /ariaLabel=\{t\('板块切换'\)\}/);
+  assert.match(chips, /behavior: 'instant'/);
+  const scroller = await source('components/shared/HorizontalScroller.tsx');
+  assert.match(scroller, /<motion\.div\s+layoutScroll\s+ref=\{ref\}/);
   // 原来那层裸的 overflow-x-auto 不该再留着
   assert.doesNotMatch(chips, /overflow-x-auto py-0\.5 no-scrollbar/);
 });

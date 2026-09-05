@@ -70,9 +70,8 @@ export function useProgressiveList<T>(
    *
    * 用户要过的东西不该被一次后台刷新收回去；需要的只是别超过现有总数。
    */
-  useEffect(() => {
-    setLimit((current) => (current > total && total > 0 ? Math.max(initial, total) : current));
-  }, [total, initial]);
+  const boundedLimit = total > 0 ? Math.max(initial, Math.min(limit, total)) : limit;
+  if (boundedLimit !== limit) setLimit(boundedLimit);
 
   const loadAll = useCallback(() => setLimit(Number.MAX_SAFE_INTEGER), []);
 

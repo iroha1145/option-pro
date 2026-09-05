@@ -39,27 +39,13 @@ test('可排序表头是真正的按钮，不是绑在 th 上的 onClick', async
   assert.match(table, /aria-sort=\{sort\?\.key === c\.key/);
 });
 
-test('可点击行可聚焦并响应 Enter / 空格', async () => {
-  const table = codeOf(await source('components/shared/DataTable.tsx'));
-  assert.match(table, /tabIndex: 0,/);
-  assert.match(table, /role: 'button' as const,/);
-  assert.match(table, /event\.key === 'Enter' \|\| event\.key === ' '/);
-  // 焦点必须看得见
-  assert.match(table, /focus-visible:ring-2/);
-});
+// Native table rows and their actual stock links are verified behaviorally in
+// visual-tests/ui-review.spec.mjs, including independent nested controls.
 
 /* ---------------- P3-2 / P3-3：焦点圈定与归还 ---------------- */
 
-test('焦点圈定同时做三件事：移入、限制 Tab、关闭后归还', async () => {
-  const hook = codeOf(await source('hooks/useFocusTrap.ts'));
-  assert.match(hook, /initial\.focus\(\{ preventScroll: true \}\)/);
-  assert.match(hook, /if \(event\.key !== 'Tab'\) return;/);
-  assert.match(hook, /previouslyFocused\.focus\(\{ preventScroll: true \}\)/);
-  // 触发者可能已被卸载，不能盲目抢焦点
-  assert.match(hook, /document\.contains\(previouslyFocused\)/);
-  // 焦点已经跑到外面时要拉回来
-  assert.match(hook, /!container\.contains\(current\)/);
-});
+// Actual move / Tab / restore, disabled ancestors, detached triggers and stacked
+// portals are exercised in visual-tests/overlay-behavior.spec.mjs.
 
 test('抽屉、命令面板与事件详情都启用了焦点圈定', async () => {
   for (const [file, expected] of [

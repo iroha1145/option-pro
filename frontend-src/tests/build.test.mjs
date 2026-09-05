@@ -207,11 +207,11 @@ test('screener waiting state does not invent a percentage', async () => {
   assert.match(workbench, /aria-busy=\{scanning\}/);
 });
 
-test('mobile screener gives the sector field a full row and keeps chips on one line', async () => {
+test('screener keeps sector chips unshrunk in the full-row advanced filter section', async () => {
   const source = await readFile(filterWorkbenchSource, 'utf8');
-  assert.match(source, /data-screener-field="sectors"/);
-  assert.match(source, /w-full min-w-0 flex-none sm:w-auto sm:flex-1/);
-  assert.match(source, /h-7 shrink-0 items-center whitespace-nowrap/);
+  assert.match(source, /data-screener-field="sectors" className="min-w-0"/);
+  assert.match(source, /<FilterButton key=\{sector.id\}[^\n]*className="shrink-0"/);
+  assert.match(source, /h-8 shrink-0 items-center whitespace-nowrap/);
 });
 
 test('screener result strength colors use stable score bands on mobile and desktop', async () => {

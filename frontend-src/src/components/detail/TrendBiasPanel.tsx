@@ -5,7 +5,7 @@
  */
 import { motion } from 'framer-motion';
 import { usePolling } from '@/hooks/usePolling';
-import { strengthBarClass } from '@/components/shared/StrengthBar';
+import { strengthBarClass } from '@/lib/strengthColor';
 import { SkeletonText } from '@/components/shared/Skeleton';
 import InfoHint from '@/components/shared/InfoHint';
 import { SCORE_HINTS } from '@/lib/scoreHints';

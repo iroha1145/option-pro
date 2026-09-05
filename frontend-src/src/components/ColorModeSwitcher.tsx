@@ -18,17 +18,15 @@ export default function ColorModeSwitcher({ className }: { className?: string })
       title={asian ? t('当前：红涨绿跌（点击切换绿涨红跌）') : t('当前：绿涨红跌（点击切换红涨绿跌）')}
       aria-label={t('切换涨跌色彩模式')}
       className={cn(
-        'flex h-8 items-center gap-1.5 rounded-md border border-line bg-card-warm px-2 text-caption shadow-btn transition-colors duration-fast hover:border-line-strong hover:text-ink-800',
+        'color-mode-control inline-flex h-8 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-line bg-card px-2.5 text-ink-500 transition-colors duration-fast hover:bg-paper hover:text-ink-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink-400',
         className,
       )}
     >
-      {/* 点色走 up/down token：换盘后 CSS 变量对调，不必再反转 class。 */}
-      <span className="flex items-center gap-0.5">
-        <span className="size-2 rounded-full bg-up-600" />
-        <span className="size-2 rounded-full bg-down-600" />
-      </span>
-      <span className="font-mono text-[11px] text-ink-600 tnum">
-        {asian ? t('红涨') : t('绿涨')}
+      <svg width="14" height="14" viewBox="0 0 20 20" fill="none" aria-hidden="true" className="shrink-0">
+        <path d="M6 15V4m0 0L3 7m3-3 3 3M14 5v11m0 0 3-3m-3 3-3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+      <span className="whitespace-nowrap text-[11px] font-medium leading-4">
+        {asian ? t('红涨绿跌') : t('绿涨红跌')}
       </span>
     </button>
   );

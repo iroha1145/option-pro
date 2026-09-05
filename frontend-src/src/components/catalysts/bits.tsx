@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { DUR_SECTION } from '@/lib/motion';
 import InfoHint from '@/components/shared/InfoHint';
+import SoftBadge, { type BadgeTone } from '@/components/shared/SoftBadge';
 import { SCORE_HINTS } from '@/lib/scoreHints';
 import type { NewsAnalysisStatus, NewsClassification } from './api';
 import { t } from '../../i18n/core.ts';
@@ -29,43 +30,38 @@ export function Led({ tone, pulse = false, className }: { tone: LedTone; pulse?:
 }
 
 /* ---------------- 分类 chip（bullish 绿 / bearish 红 / neutral 灰） ---------------- */
-const CLS_STYLE: Record<NewsClassification, { label: string; cls: string }> = {
-  bullish: { label: t('利多'), cls: 'bg-up-50 text-up-700' },
-  bearish: { label: t('利空'), cls: 'bg-down-50 text-down-700' },
-  neutral: { label: t('中性'), cls: 'bg-paper-2 text-ink-500 border border-line' },
+const CLS_STYLE: Record<NewsClassification, { label: string; tone: BadgeTone }> = {
+  bullish: { label: t('利多'), tone: 'up' },
+  bearish: { label: t('利空'), tone: 'down' },
+  neutral: { label: t('中性'), tone: 'neutral' },
 };
 
 export function ClassificationChip({ classification, className }: { classification: NewsClassification; className?: string }) {
   const s = CLS_STYLE[classification];
   return (
-    <motion.span
-      initial={{ scale: 0.86, opacity: 0 }}
-      animate={{ scale: 1, opacity: 1 }}
-      transition={{ type: 'spring', stiffness: 520, damping: 32 }}
-      className={cn('inline-flex items-center rounded-xs px-1.5 py-0.5 text-micro font-medium', s.cls, className)}
-    >
+    <SoftBadge tone={s.tone} className={className}>
       {s.label}
-    </motion.span>
+    </SoftBadge>
   );
 }
 
 /* ---------------- 分析状态 chip ---------------- */
-const ANALYSIS_STYLE: Record<NewsAnalysisStatus, { label: string; cls: string; led?: LedTone; pulse?: boolean }> = {
-  pending: { label: t('未分析'), cls: 'border border-line text-ink-400' },
-  queued: { label: t('排队中'), cls: 'bg-warn-50 text-warn-600', led: 'warn', pulse: true },
-  in_progress: { label: t('分析中'), cls: 'bg-brand-50 text-brand-600', led: 'brand', pulse: true },
-  completed: { label: t('已分析'), cls: 'bg-ai-50 text-ai-600' },
-  insufficient_context: { label: t('信息不足'), cls: 'bg-paper-2 text-ink-500 border border-line' },
-  failed: { label: t('分析失败'), cls: 'bg-down-50 text-down-700' },
+const ANALYSIS_STYLE: Record<NewsAnalysisStatus, { label: string; tone: BadgeTone; led?: LedTone; pulse?: boolean }> = {
+  pending: { label: t('未分析'), tone: 'neutral' },
+  queued: { label: t('排队中'), tone: 'warn', led: 'warn', pulse: true },
+  in_progress: { label: t('分析中'), tone: 'brand', led: 'brand', pulse: true },
+  completed: { label: t('已分析'), tone: 'ai' },
+  insufficient_context: { label: t('信息不足'), tone: 'warn' },
+  failed: { label: t('分析失败'), tone: 'down' },
 };
 
 export function AnalysisStatusChip({ status, className }: { status: NewsAnalysisStatus; className?: string }) {
   const s = ANALYSIS_STYLE[status];
   return (
-    <span className={cn('inline-flex items-center gap-1 rounded-xs px-1.5 py-0.5 text-micro font-medium', s.cls, className)}>
+    <SoftBadge tone={s.tone} className={className}>
       {s.led && <Led tone={s.led} pulse={s.pulse} className="size-1.5" />}
       {s.label}
-    </span>
+    </SoftBadge>
   );
 }
 
@@ -86,10 +82,10 @@ export function ConfidenceLabel({
   bare?: boolean;
 }) {
   return (
-    <span className={cn('font-mono text-micro text-ink-500 tnum', className)}>
+    <SoftBadge className={cn('font-mono', className)}>
       {(value * 100).toFixed(0)}%
       {!bare && <InfoHint hint={SCORE_HINTS.newsConfidence} size={11} className="ml-1" />}
-    </span>
+    </SoftBadge>
   );
 }
 
@@ -113,24 +109,24 @@ export function ImpactValue({
   bare?: boolean;
 }) {
   if (value === null || Number.isNaN(value)) {
-    return <span className={cn('shrink-0 font-mono text-micro text-ink-300', className)}>{dash}</span>;
+    return <SoftBadge className={cn('shrink-0 font-mono', className)}>{dash}</SoftBadge>;
   }
   const sign = value > 0 ? '+' : value < 0 ? '−' : '';
-  const tone = value > 0.05 ? 'text-up-700' : value < -0.05 ? 'text-down-700' : 'text-ink-500';
+  const tone = value > 0.05 ? 'up' : value < -0.05 ? 'down' : 'neutral';
   return (
     /* shrink-0 + nowrap：这是一个紧凑读数，「−4.00 ⓘ」不该被折行拆开。 */
-    <span className={cn('shrink-0 whitespace-nowrap font-mono text-micro tnum', tone, className)}>
+    <SoftBadge tone={tone} className={cn('shrink-0 font-mono', className)}>
       {sign}
       {Math.abs(value).toFixed(2)}
       {!bare && <InfoHint hint={SCORE_HINTS.newsImpact} size={11} className="ml-1" />}
-    </span>
+    </SoftBadge>
   );
 }
 
 /* ---------------- 代码 chip(无 onClick 渲染为 span,可安全嵌入按钮内) ---------------- */
 export function TickerChip({ ticker, onClick, className }: { ticker: string; onClick?: () => void; className?: string }) {
   const cls = cn(
-    'inline-flex items-center rounded-xs bg-brand-50 px-1.5 py-0.5 font-mono text-[11px] leading-[14px] font-medium text-brand-700 transition-colors duration-fast',
+    'soft-badge inline-flex items-center bg-brand-50 px-1.5 py-0.5 font-mono text-[11px] leading-[16px] font-medium text-brand-700 transition-colors duration-fast',
     onClick ? 'hover:bg-brand-100 cursor-pointer' : 'cursor-default',
     className,
   );
@@ -164,9 +160,9 @@ export function HeatMeter({ level, heat, className }: { level: number; heat: num
 /* ---------------- 过期 chip ---------------- */
 export function StaleChip() {
   return (
-    <span className="inline-flex items-center rounded-xs border border-line bg-card-warm px-1.5 py-0.5 text-micro font-medium text-ink-400">
+    <SoftBadge>
       {t('过期')}
-    </span>
+    </SoftBadge>
   );
 }
 

@@ -81,7 +81,7 @@ export default function BreadthHistogram({
               score >= 85 ? 'bg-up-600' : score >= 70 ? 'bg-brand-600' : score >= 50 ? 'bg-brand-400' : 'bg-ink-300';
             return (
               <div key={i} className="group relative flex-1">
-                <div className="glass pointer-events-none absolute -top-7 left-1/2 z-10 hidden -translate-x-1/2 rounded-xs border border-line px-1.5 py-0.5 font-mono text-[10px] text-ink-600 shadow-sh-2 group-hover:block">
+                <div className="cloud-popover pointer-events-none absolute -top-7 left-1/2 z-10 hidden -translate-x-1/2 px-1.5 py-0.5 text-[11px] text-ink-600 group-hover:block">
                   {n}
                 </div>
                 <motion.div

@@ -1,9 +1,11 @@
+import AnalysisIcon from '@/components/shared/AnalysisIcon';
+import SoftBadge from '@/components/shared/SoftBadge';
 /** B2 市场焦点周期卡：FOCUS CYCLE + 阶段步进条 + serif 摘要 + 逐股评估 + 历史对照折叠 + owner 手动触发 */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAccess } from '@/hooks/useAccess';
 import { usePolling } from '@/hooks/usePolling';
-import { useToast } from '@/components/Toast';
+import { useToast } from '@/hooks/useToast';
 import { catalystsContract } from './api';
 import type { FocusCycleJob, MarketFocusCycle, NewsClassification } from './api';
 import { ImpactValue, Led } from './bits';
@@ -110,10 +112,10 @@ function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; com
           {cycle.dominantEvent}
         </h3>
         {statusCn && (
-          <span className="inline-flex items-center gap-1.5 rounded-xs border border-warn-600/40 bg-warn-50 px-1.5 py-0.5 text-micro font-medium text-warn-600">
+          <SoftBadge tone="warn">
             <Led tone="warn" pulse={cycle.status === 'in_progress' || cycle.status === 'cancel_requested'} className="size-1.5" />
             {statusCn}
-          </span>
+          </SoftBadge>
         )}
         <span className="font-mono text-micro text-ink-400 tnum">
           {cycle.cycleId} · {cycle.trigger === 'manual' ? t('手动触发') : t('定时生成')} · {cycle.model}
@@ -157,16 +159,16 @@ function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; com
                  shrink-0 的偏向读数被折成「非收 / 益」。 */
               className="flex flex-col gap-1 rounded-sm border border-line bg-card px-2.5 py-2 sm:flex-row sm:items-center sm:gap-2.5"
             >
-              <span className="flex min-w-0 items-center gap-2.5">
+              <span className="flex min-w-0 flex-wrap items-center gap-2">
                 <span className={cn('flex size-5 shrink-0 items-center justify-center rounded-xs', d.cls)}>
                   <Icon name={d.icon} size={12} />
                 </span>
                 <span className="shrink-0 font-mono text-caption font-semibold text-ink-800">{a.ticker}</span>
                 {a.insufficientEvidence ? (
                   /* 后端在证据不足时强制 catalyst_bias 为 null。说「证据不足」，而不是画一个 0。 */
-                  <span className="shrink-0 whitespace-nowrap rounded-xs border border-line bg-paper-2 px-1.5 py-px text-micro text-ink-500">
+                  <SoftBadge tone="warn" className="shrink-0">
                     {t('证据不足')}
-                  </span>
+                  </SoftBadge>
                 ) : (
                   <ImpactValue value={a.catalystBias} bare />
                 )}
@@ -174,15 +176,15 @@ function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; com
                   /* 偏向与置信共用一条说明（见 SCORE_HINTS.focusCycleAssessment）。
                      原先两个读数后面各挂一句常驻免责声明（「· 非收益」「· 非胜率」），
                      每行重复、又解释不了自己。声明留着，但收进这一个 ⓘ。 */
-                  <span className="flex shrink-0 items-center whitespace-nowrap font-mono text-micro text-ink-400 tnum">
+                  <SoftBadge className="shrink-0 font-mono">
                     {t('置信')} {Math.round(a.confidence * 100)}
                     <InfoHint hint={SCORE_HINTS.focusCycleAssessment} size={11} className="ml-1" />
-                  </span>
+                  </SoftBadge>
                 )}
                 {a.horizon && (
-                  <span className="shrink-0 whitespace-nowrap rounded-xs bg-paper-2 px-1.5 py-px text-micro text-ink-400">
+                  <SoftBadge className="shrink-0">
                     {HORIZON_LABEL[a.horizon]}
-                  </span>
+                  </SoftBadge>
                 )}
               </span>
               <span
@@ -324,20 +326,20 @@ export default function FocusCycleCard({ refreshToken = 0 }: { refreshToken?: nu
             onClick={() => setConfirmOpen(true)}
             disabled={!!running}
             className={cn(
-              'flex items-center gap-2 rounded-md border px-3 py-1.5 text-caption font-medium shadow-btn transition-colors duration-fast',
+              'flex items-center gap-2 rounded-md bg-ai-600 px-3 py-2 text-caption font-medium text-white shadow-btn transition-[filter] duration-fast',
               running
-                ? 'cursor-wait border-brand-400 bg-brand-100/60 text-brand-600'
-                : 'border-line bg-card text-ink-600 hover:border-brand-400 hover:text-brand-600',
+                ? 'cursor-wait opacity-60'
+                : 'hover:brightness-105',
             )}
           >
             {running ? (
               <>
-                <Led tone="brand" pulse className="size-1.5" />
+                <Led tone="ai" pulse className="size-1.5 bg-white" />
                 {t('周期计算中')}{job.progress !== null ? ` ${job.progress}%` : ''}
               </>
             ) : (
               <>
-                <Icon name="spark-ai" size={14} className="text-ai-600" />
+                <AnalysisIcon size={14} />
                 {latestQ.data?.latestAttempt || latestQ.data?.status === 'failed'
                   ? t('重试焦点周期')
                   : t('触发新周期')}

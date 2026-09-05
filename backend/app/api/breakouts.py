@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+import logging
 from datetime import date as CalendarDate
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -27,9 +28,19 @@ from app.services.breakouts.repository import (
 )
 from app.services.strength.market_shape import MARKET_SHAPE_VERSION
 from app.services.strength.scoring import SCORE_VERSION as STRENGTH_SCORE_VERSION
+from app.public_stock_data import register_public_stock_demand
 
 
 router = APIRouter(prefix="/api/breakouts", tags=["breakouts"])
+logger = logging.getLogger(__name__)
+
+
+def _register_displayed_stocks(events: list[Any]) -> None:
+    """Only validated rows actually returned to a visitor may add demand."""
+    try:
+        register_public_stock_demand(event.ticker for event in events)
+    except (OSError, ValueError):
+        logger.warning("Could not record displayed breakout stock demand")
 
 
 class _ResponseModel(BaseModel):
@@ -664,7 +675,7 @@ def current() -> BreakoutRootResponse:
             database_status="active",
         )
     stored_scan = dict(scan)
-    return _root_from_scan(
+    result = _root_from_scan(
         settings,
         stored_scan,
         read_state=_read_state(
@@ -673,6 +684,8 @@ def current() -> BreakoutRootResponse:
             completed_snapshot=stored_scan,
         ),
     )
+    _register_displayed_stocks(result.events)
+    return result
 
 
 @router.get("/events", response_model=BreakoutEventPageResponse)
@@ -744,7 +757,7 @@ def events(
         else "unavailable"
     )
     macro = _macro_reader()
-    return BreakoutEventPageResponse(
+    result = BreakoutEventPageResponse(
         as_of=_now(),
         session=session,
         status=page_status,
@@ -767,6 +780,8 @@ def events(
         next_session_at=read_state.details.get("next_session_at"),
         failure_domain=read_state.details.get("failure_domain"),
     )
+    _register_displayed_stocks(result.events)
+    return result
 
 
 @router.get("/events/{event_id}", response_model=BreakoutEventDetailResponse)
@@ -789,6 +804,7 @@ def event_detail(event_id: str) -> BreakoutEventDetailResponse:
     if event is None:
         raise HTTPException(status_code=404, detail="Breakout event not found")
     public_event = _public_event(settings, dict(event), macro=_macro_reader())
+    _register_displayed_stocks([public_event])
     return BreakoutEventDetailResponse(
         as_of=_now(),
         status="active",

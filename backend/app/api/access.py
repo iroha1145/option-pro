@@ -126,7 +126,6 @@ def _customer_login(request: Request, payload: LoginRequest) -> Response:
         attach_account_cookie,
         account_http_error,
         check_login_cooldown,
-        clear_login_failures,
         record_login_failure,
     )
     from app.services.accounts import AccountError, get_account_store
@@ -142,7 +141,9 @@ def _customer_login(request: Request, payload: LoginRequest) -> Response:
     except AccountError as exc:
         record_login_failure(request)
         raise account_http_error(exc) from exc
-    clear_login_failures(request)
+    # This bucket covers all usernames from one source address. A successful
+    # login to an attacker's own account must not erase guesses against others;
+    # failures expire through the normal rolling window instead.
     response = JSONResponse(
         {
             "access_mode": "password",

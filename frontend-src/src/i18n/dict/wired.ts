@@ -21,13 +21,11 @@ export const WIRED: Dict = {
   '高 {h}': ['High {h}', '高値 {h}'],
   '低 {l}': ['Low {l}', '安値 {l}'],
   '收 {c}': ['Close {c}', '終値 {c}'],
-  '{ticker} 15 分钟迷你 K 线图': ['{ticker} 15-minute mini candlestick chart', '{ticker} 15分足ミニチャート'],
   '共 {n} 条': ['{n} total', '全{n}件'],
   '已加载 {n} 条{suffix}': ['{n}{suffix} loaded', '{n}{suffix}件を読み込み済み'],
   '暂时打不开这条新闻的详情': ["Can't open this article's details right now", 'この記事の詳細を今は開けません'],
   '{ticker} {setup} 首要信号大卡': ['{ticker} {setup} lead signal card', '{ticker} {setup} 主要シグナルカード'],
   '价格标尺：失效 {invalid}，触发 {trigger}，目标 {target}，现价 {current}': ['Price scale: invalidation {invalid}, trigger {trigger}, target {target}, current {current}', '価格スケール：無効化ライン {invalid}、トリガー {trigger}、目標 {target}、現在値 {current}'],
-  '{marker} / 现价': ['{marker} / current', '{marker} / 現在値'],
   '{ticker} {setup} 信号卡，打开事件详情': ['{ticker} {setup} signal card, open event details', '{ticker} {setup} シグナルカード、イベント詳細を開く'],
 
   // ── 新闻情报（catalysts）──────────────────────────────────────────────
@@ -73,8 +71,6 @@ export const WIRED: Dict = {
   '期权数据暂时获取不到': ['Options data is temporarily unavailable', 'オプションデータを一時的に取得できません'],
   '期权数据为延迟数据': ['Options data is delayed', 'オプションデータは遅延配信です'],
   ' · 更新于 {time}': [' · Updated {time}', ' · {time} 更新'],
-  '成交异动 {badge}': ['Unusual activity {badge}', '出来高異常 {badge}'],
-  ' · 权利金流约 ${amount}（估算）': [' · Premium flow ~${amount} (est.)', ' · 権利金フロー 約${amount}（推定）'],
   '趋势偏向分 {score}，{label}': ['Trend bias score {score}, {label}', 'トレンドバイアススコア {score}、{label}'],
 
   // ── 财报（earnings）──────────────────────────────────────────────────
@@ -132,7 +128,6 @@ export const WIRED: Dict = {
 
   // ── 期权异动证据（detail/optionAnalysis）────────────────────────────
   '成交量/持仓量 {ratio} 倍': ['Volume/OI {ratio}×', '出来高/建玉 {ratio}倍'],
-  '持仓量为 0 且成交 {volume} 张，全部为新开仓（量持比不适用）': ['Open interest is 0 with {volume} contracts traded — all new positions (Vol/OI not applicable)', '建玉0で出来高 {volume}枚、すべて新規建て（出来高/建玉は適用外）'],
   '成交量 {volume} 张': ['Volume {volume} contracts', '出来高 {volume}枚'],
   '按买卖中价估算权利金 {premium} 美元': ['Premium ~${premium} at the mid price', '仲値ベースの推定権利金 {premium}ドル'],
   '深度虚值约 {pct}%': ['Deep OTM, ~{pct}%', 'ディープOTM 約{pct}%'],

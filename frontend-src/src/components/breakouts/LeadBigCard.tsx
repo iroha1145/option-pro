@@ -2,7 +2,7 @@
  * LeadBigCard · 当日信号 lead 事件「压缩版大事件卡」（Paper Terminal 皮肤，7/12 宽）
  * 结构：状态 chips 行（lg 合并 meta 行）+ 「首要信号」徽章 → Serif Display-M 标题（ticker 开抽屉）
  *      → K线迷你图（ECharts 蜡烛 150px）→ 三价位行 + 优先级环（右上同排）
- *      → 生命周期步进条 → 4 评分条 + 贡献分段条 → 风险提醒 → 底部版本与按钮
+ *      → 生命周期步进条 → 4 评分条 + 可展开的贡献/版本详情 → 风险提醒 → 底部按钮
  * 数据：breakouts/current 事件 + breakouts/events/{id} 详情补全（宽松字段合并，缺字段显「—」）
  * 动效：rise-in 进场 · count-up 优先级环 · grow-bar 错峰 · draw-line 环弧 · 现价 tick-flash
  *      · 步进条节点 60ms 错峰入场 + 连接线渐进填充 400ms
@@ -14,18 +14,20 @@ import { ApiError } from '@/api/client';
 import { breakoutsApi } from '@/api/modules/breakouts';
 import { stocksApi } from '@/api/modules/stocks';
 import type { Candle } from '@/api/types';
+import type { StockDataStatus } from '@/lib/stockDataStatus';
 import { usePolling } from '@/hooks/usePolling';
 import { useCountUp } from '@/hooks/useCountUp';
-import { useShell } from '@/components/Layout';
+import { useShell } from '@/hooks/useShell';
 import ReactECharts from '@/components/charts/ReactECharts';
 import ChangeBadge from '@/components/shared/ChangeBadge';
+import SoftBadge from '@/components/shared/SoftBadge';
 import InfoHint from '@/components/shared/InfoHint';
 import { SCORE_HINTS } from '@/lib/scoreHints';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
 import { cn } from '@/lib/utils';
 import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
-import { fmtNyEventTime, fmtNyHHmm, fmtPrice, fmtRelative } from '@/lib/format';
+import { fmtNyEventTime, fmtPrice, fmtRelative } from '@/lib/format';
 import { MACRO_TONE_LABEL, macroToneOf } from '@/lib/macroFit';
 import { baseAnimation, CH, CHART_MONO_FONT, glassTooltip, type ChartOption } from '@/lib/chart';
 import { useColorMode } from '@/hooks/useColorMode.ts';
@@ -111,7 +113,7 @@ function PriorityRing({ score }: { score: number | null }) {
   /* score=null 表示后端判定 insufficient_data（算不出来）。渲染成「0」会被
      读成「优先级极低」并据此排除信号（审计 2.1.13）——同卡其他缺失字段
      都显「—」，这里保持一致。 */
-  const v = useCountUp(score ?? 0, 900);
+  const v = useCountUp(score ?? Number.NaN, 900);
   const r = 24;
   const c = 2 * Math.PI * r;
   const frac = score === null ? 0 : Math.max(0, Math.min(100, score)) / 100;
@@ -141,11 +143,12 @@ function PriorityRing({ score }: { score: number | null }) {
         </svg>
         <div className="absolute inset-0 flex items-center justify-center">
           <span className="font-mono text-[15px] font-medium leading-[20px] text-ink-900 tnum">
-            {score === null ? '—' : Math.round(v)}
+            <span className="sr-only">{score === null ? '—' : Math.round(score)}</span>
+            <span aria-hidden="true">{score === null ? '—' : Math.round(v)}</span>
           </span>
         </div>
       </div>
-      <span className="mt-0.5 whitespace-nowrap text-[10px] leading-[13px] text-ink-400">
+      <span className="mt-0.5 whitespace-nowrap text-[11px] leading-[15px] text-ink-400">
         {t('告警优先级')}
         <InfoHint hint={SCORE_HINTS.breakoutPriority} side="top" align="end" size={11} className="ml-0.5" />
       </span>
@@ -204,7 +207,7 @@ function LifecycleStepper({ state }: { state: LifecycleState }) {
       />
       <span
         className={cn(
-          'mt-1.5 whitespace-nowrap text-[10px] leading-[14px]',
+          'mt-1.5 whitespace-nowrap text-[11px] leading-[16px]',
           tone === 'current' && 'font-semibold text-brand-700',
           (tone === 'past' || tone === 'future') && 'text-ink-400',
           tone === 'down' && 'font-semibold text-down-700',
@@ -258,15 +261,15 @@ function LifecycleStepper({ state }: { state: LifecycleState }) {
   );
 }
 
-/* ---------------- K线迷你图（15m 蜡烛最近 96 根 · 发丝网格 · 十字光标 · 诚实空态） ---------------- */
+/* ---------------- K线迷你图（日线最近 30 根 · 发丝网格 · 十字光标 · 诚实空态） ---------------- */
 /** mapBar 运行时携带契约 quote_only（可选字段，Candle 类型未声明，此处宽松扩展读取） */
 type MiniBar = Candle & { quote_only?: boolean };
 
 function buildMiniOption(bars: MiniBar[]): ChartOption {
-  /* K 线 bar 的语义时区是美东交易时段，轴标/tooltip 与卡头事件时间同口径 */
-  const labels = bars.map((b) => fmtNyHHmm(b.t));
-  /** tooltip 时间：15m 跨日数据需 M/DD 日期前缀，末根 quote_only 如实标注 */
-  const fmtBarTime = (iso: string) => fmtNyEventTime(iso);
+  // Daily bars carry a session date: retain date-only values without shifting them to yesterday.
+  const fmtBarTime = (iso: string) => /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso
+    : Number.isFinite(Date.parse(iso)) ? new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date(iso)) : '—';
+  const labels = bars.map((b) => fmtBarTime(b.t).slice(5));
   return {
     ...baseAnimation,
     grid: { left: 6, right: 6, top: 10, bottom: 4, containLabel: true },
@@ -275,7 +278,7 @@ function buildMiniOption(bars: MiniBar[]): ChartOption {
       data: labels,
       axisLine: { show: false },
       axisTick: { show: false },
-      axisLabel: { color: CH.ink400, fontSize: 10, fontFamily: MONO, hideOverlap: true },
+      axisLabel: { color: CH.ink400, fontSize: 11, fontFamily: MONO, hideOverlap: true },
     },
     yAxis: {
       type: 'value' as const,
@@ -283,8 +286,8 @@ function buildMiniOption(bars: MiniBar[]): ChartOption {
       position: 'right' as const,
       axisLine: { show: false },
       axisTick: { show: false },
-      axisLabel: { color: CH.ink400, fontSize: 10, fontFamily: MONO },
-      splitLine: { lineStyle: { color: CH.lineChart, width: 1 } },
+      axisLabel: { color: CH.ink400, fontSize: 11, fontFamily: MONO },
+      splitLine: { lineStyle: { color: CH.lineChart, width: 1, type: [2, 4], opacity: 0.7 } },
     },
     tooltip: glassTooltip({
       trigger: 'axis',
@@ -339,13 +342,19 @@ function buildMiniOption(bars: MiniBar[]): ChartOption {
   } as ChartOption;
 }
 
-function MiniKline({ ticker }: { ticker: string }) {
-  /* 15m 周期（与 StockChart['range'] 类型一致）+ 截取最近 96 根展示 */
-  const { data, error, loading, refresh } = usePolling(() => stocksApi.chart(ticker, '15m'), null, [ticker]);
+function MiniKline({ ticker, dailyVersion, preparation, statusReadFailed }: { ticker: string; dailyVersion: string; preparation?: StockDataStatus; statusReadFailed: boolean }) {
+  useEffect(() => {
+    if (dailyVersion) stocksApi.invalidatePreparedDaily(ticker);
+  }, [ticker, dailyVersion]);
+  const { data, error, loading, refresh } = usePolling(
+    () => stocksApi.chart(ticker, '1d', 'raw', Boolean(dailyVersion)), null, [ticker, dailyVersion],
+  );
   const colorMode = useColorMode();
   const option = useMemo(() => {
+    // 图表构造器读取 CSS 涨跌色，配色模式变化时需重新取值。
+    void colorMode;
     if (!data || data.candles.length <= 1) return null;
-    return buildMiniOption(data.candles.slice(-96));
+    return buildMiniOption(data.candles.slice(-30));
   }, [data, colorMode]);
   /* 突破标的常不在常规覆盖范围内：503 时可手动拉取（与详情页 ManualStockPull 同一预算通道） */
   const [pulling, setPulling] = useState(false);
@@ -363,7 +372,7 @@ function MiniKline({ ticker }: { ticker: string }) {
     setPullError(null);
     try {
       await stocksApi.pull(ticker);
-      refresh();
+      refresh({ force: true });
     } catch (cause) {
       setPullError(
         cause instanceof ApiError
@@ -378,7 +387,7 @@ function MiniKline({ ticker }: { ticker: string }) {
   };
 
   return (
-    <div className="relative h-[120px] overflow-hidden rounded-md border border-line-chart bg-card-warm sm:h-[150px]">
+    <div className="radar-mini-chart relative h-[120px] overflow-hidden rounded-md bg-card-warm sm:h-[150px]">
       {loading ? (
         <div className="absolute inset-0 p-3" aria-hidden="true">
           <SkeletonBlock className="h-full w-full rounded-sm border border-line-chart" />
@@ -387,10 +396,13 @@ function MiniKline({ ticker }: { ticker: string }) {
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 px-4 text-center">
           <img src="/empty-chart.svg" alt="" className="h-12 w-auto opacity-90" loading="lazy" />
           <p className="text-caption font-medium text-ink-600">
-            {snapshotMissing ? t('暂无当日 K 线') : t('K 线读取失败')}
+            {error && !snapshotMissing ? t('K 线读取失败') : t('暂无日线走势')}
           </p>
           <p className="text-micro text-ink-400">
-            {snapshotMissing ? t('可点击下方按钮获取最新行情') : t('分时行情暂不可用')}
+            {statusReadFailed ? t('暂无日线走势，准备状态读取失败')
+              : preparation?.resources.dailyChart.available ? t('日线读取失败，请稍后重试')
+                : preparation?.status === 'failed' || preparation?.refreshStatus === 'failed' ? t('日线准备失败，后台将稍后重试')
+                  : t('后台正在准备日线，完成后自动显示')}
           </p>
           {pullError && (
             <p role="alert" className="text-micro text-down-700">
@@ -422,7 +434,7 @@ function MiniKline({ ticker }: { ticker: string }) {
           </div>
         </div>
       ) : (
-        <ReactECharts option={option} ariaLabel={t('{ticker} 15 分钟迷你 K 线图', { ticker })} />
+        <ReactECharts option={option} ariaLabel={t('{ticker} 日线迷你 K 线图', { ticker })} />
       )}
     </div>
   );
@@ -447,7 +459,7 @@ function BigScoreBars({ ev }: { ev: BreakoutEventFull }) {
               {d.label}
               <InfoHint hint={d.hint} size={11} className="ml-0.5" />
             </span>
-            <div className="h-[3px] overflow-hidden rounded-pill bg-line">
+            <div className="radar-bar-track h-[5px] overflow-hidden rounded-pill bg-line">
               {/* 缺失值保持空轨道，与 ScoreBars 的 fin(v) 口径一致（审计 2.2.15）：
                 * 3% 的实心条会被读成「有分，只是很低」，与右侧的「—」矛盾。 */}
               {raw !== null && (
@@ -506,7 +518,7 @@ function ContributionBar({ ev }: { ev: BreakoutEventFull }) {
 
   return (
     <div aria-label={t("评分贡献分解")}>
-      <div className="flex h-[3px] overflow-hidden rounded-pill bg-line">
+      <div className="flex radar-bar-track h-[5px] overflow-hidden rounded-pill bg-line">
         {parts.map((p, i) => (
           <motion.div
             key={p.d.key}
@@ -538,9 +550,12 @@ interface LeadBigCardProps {
   flash: 'up' | 'down' | null;
   locate: boolean;
   onOpen: (ev: BreakoutCurrentEvent) => void;
+  dailyVersion?: string;
+  preparation?: StockDataStatus;
+  statusReadFailed?: boolean;
 }
 
-export default function LeadBigCard({ ev, flash, locate, onOpen }: LeadBigCardProps) {
+export default function LeadBigCard({ ev, flash, locate, onOpen, dailyVersion = '', preparation, statusReadFailed = false }: LeadBigCardProps) {
   const { openTicker } = useShell();
   const ref = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -603,22 +618,22 @@ export default function LeadBigCard({ ev, flash, locate, onOpen }: LeadBigCardPr
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.56, ease: EASE_PAPER }}
       aria-label={t('{ticker} {setup} 首要信号大卡', { ticker: e.ticker, setup: SETUP_CN[e.setup_type] ?? e.setup_type ?? '' })}
-      className={cn('card-surface p-5', locate && 'bk-locate')}
+      className={cn('radar-lead-card card-surface p-5', locate && 'bk-locate')}
     >
       {/* 顶行：状态 chips + 相对时间（lg 合并 meta 行）· 右侧首要信号徽章 */}
       <div className="flex flex-wrap items-center gap-1.5">
         <span
           className={cn(
-            'inline-flex items-center whitespace-nowrap rounded-xs border px-1.5 py-px text-micro font-medium leading-[16px]',
+            'radar-chip',
             LIFECYCLE_CHIP_CLASS[LIFECYCLE_TONE[e.lifecycle_state] ?? 'ink'],
           )}
         >
           {LIFECYCLE_CN[e.lifecycle_state] ?? e.lifecycle_state ?? '—'}
         </span>
-        <span className="inline-flex items-center whitespace-nowrap rounded-xs border border-brand-400/60 bg-brand-50 px-1.5 py-px text-micro font-medium leading-[16px] text-brand-600">
+        <span className="radar-chip radar-chip-brand">
           {SETUP_CN[e.setup_type] ?? e.setup_type ?? '—'}
         </span>
-        <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-xs border border-line bg-card px-1.5 py-px text-micro leading-[16px] text-ink-500">
+        <span className="radar-chip radar-chip-neutral">
           <span className={cn('size-1.5 rounded-full', SESSION_DOT[e.session], e.session !== 'closed' && 'animate-led-pulse')} aria-hidden="true" />
           {SESSION_CN[e.session]}
         </span>
@@ -626,12 +641,12 @@ export default function LeadBigCard({ ev, flash, locate, onOpen }: LeadBigCardPr
         {/* lg 以上：meta 并入 chips 行（空格分隔 inline 项，不再用 · 串） */}
         <span className="hidden items-center gap-3 text-micro text-ink-500 lg:inline-flex">
           {exchange && <span>{exchange}</span>}
-          <span>{e.sector}</span>
+          <SoftBadge size="sm" tone="neutral">{e.sector}</SoftBadge>
           <span className="font-mono tnum">{t('跳空')} {gap !== null ? `${gap >= 0 ? '+' : ''}${gap.toFixed(2)}%` : '—'}</span>
           <span className="font-mono tnum">{t('量能')} {rvol !== null ? `${rvol.toFixed(1)}×` : '—'}</span>
           <span className="font-mono tnum">{fmtEventTime(e.event_at)} {t('美东')}</span>
         </span>
-        <span className="ml-auto inline-flex items-center gap-1.5 rounded-pill border border-brand-400/50 bg-brand-50 px-2.5 py-1 text-micro font-medium text-brand-600">
+        <span className="radar-chip radar-chip-brand ml-auto">
           <Icon name="radar" size={12} />
           {t('首要信号')}
         </span>
@@ -651,7 +666,7 @@ export default function LeadBigCard({ ev, flash, locate, onOpen }: LeadBigCardPr
         </h3>
         <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-ink-500 lg:hidden">
           {exchange && <span>{exchange}</span>}
-          <span>{e.sector}</span>
+          <SoftBadge size="sm" tone="neutral">{e.sector}</SoftBadge>
           <span className="font-mono tnum">{t('跳空')} {gap !== null ? `${gap >= 0 ? '+' : ''}${gap.toFixed(2)}%` : '—'}</span>
           <span className="font-mono tnum">{t('同时段量能')} {rvol !== null ? `${rvol.toFixed(1)}×` : '—'}</span>
           <span className="font-mono tnum">{t('事件时间')} {fmtEventTime(e.event_at)} {t('美东')}</span>
@@ -660,13 +675,14 @@ export default function LeadBigCard({ ev, flash, locate, onOpen }: LeadBigCardPr
 
       {/* K线迷你图 */}
       <div className="mt-3">
-        <MiniKline ticker={e.ticker} />
+        <p className="mb-1 text-micro text-ink-400">{t('日线 · 最多 30 个交易日')}</p>
+        <MiniKline key={e.ticker} ticker={e.ticker} dailyVersion={dailyVersion} preparation={preparation} statusReadFailed={statusReadFailed} />
       </div>
 
       {/* 三价位行 + 告警优先级环（右上同排） */}
       <div className="mt-3 flex flex-col gap-2.5 sm:flex-row sm:items-stretch">
         <div className="grid flex-1 grid-cols-1 gap-2.5 sm:grid-cols-3">
-          <div className="rounded-md border border-line bg-card-warm px-3 py-2">
+          <div className="radar-value-cell px-3 py-2.5">
             <p className="text-micro text-ink-400">{t('当前价')}</p>
             <p className="mt-0.5 flex items-center gap-2">
               <span
@@ -681,22 +697,22 @@ export default function LeadBigCard({ ev, flash, locate, onOpen }: LeadBigCardPr
               <ChangeBadge value={e.session_change_pct} size="sm" />
             </p>
           </div>
-          <div className="rounded-md border border-line bg-card-warm px-3 py-2">
+          <div className="radar-value-cell px-3 py-2.5">
             <p className="flex items-center gap-1 text-micro text-ink-400">
-              <Icon name="flag" size={11} className="text-brand-600" />
+              <span className="radar-reference-glyph radar-reference-trigger" aria-hidden="true" />
               {t('突破枢轴')}
             </p>
             <p className="mt-0.5 font-mono text-data-l text-ink-900 tnum">{num(e.pivot_price) !== null ? fmtPrice(e.pivot_price) : '—'}</p>
           </div>
-          <div className="rounded-md border border-line bg-card-warm px-3 py-2">
+          <div className="radar-value-cell px-3 py-2.5">
             <p className="flex items-center gap-1 text-micro text-ink-400">
-              <Icon name="shield" size={11} className="text-down-600" />
+              <span className="radar-reference-glyph radar-reference-invalid" aria-hidden="true" />
               {t('失效位置')}
             </p>
             <p className="mt-0.5 font-mono text-data-l text-ink-900 tnum">{invalid !== null ? fmtPrice(invalid) : '—'}</p>
           </div>
         </div>
-        <div className="flex flex-col items-center justify-center gap-1.5 rounded-md border border-line bg-card-warm px-3 py-1.5">
+        <div className="radar-value-cell radar-priority-cell flex flex-col items-center justify-center gap-1.5 px-3 py-1.5">
           <PriorityRing score={num(e.alert_priority_score)} />
           {/* 宏观影子：显示的是「如果接入，优先级会变成多少」，环上的分数不变。
               上限 ±4；突破质量、确认、流动性、追高风险和事件生命周期一律不动。 */}
@@ -710,18 +726,24 @@ export default function LeadBigCard({ ev, flash, locate, onOpen }: LeadBigCardPr
       </div>
 
       {/* 4 评分条 + 贡献分段条 */}
-      <div className="mt-4 grid grid-cols-1 gap-4 border-t border-line pt-3 lg:grid-cols-2">
+      <div className="mt-4 border-t border-line pt-3">
         <section aria-label={t("四维评分")}>
           <p className="eyebrow mb-2">{t('四维评分')}</p>
           <BigScoreBars ev={e} />
         </section>
-        <section aria-label={t("评分贡献")} className="lg:border-l lg:border-line lg:pl-4">
-          <p className="eyebrow mb-2">
-            {t('评分贡献')}
-            <InfoHint hint={SCORE_HINTS.breakoutPriority} size={12} className="ml-1" />
-          </p>
-          <ContributionBar ev={e} />
-        </section>
+        <details className="radar-disclosure radar-lead-disclosure mt-3">
+          <summary>
+            <span>{t('评分贡献')}</span>
+            <Icon name="chevron-down" size={14} className="radar-disclosure-arrow" />
+          </summary>
+          <div className="pb-3 pt-1">
+            <ContributionBar ev={e} />
+            <p className="mt-3 text-micro text-ink-400">
+              {t('评分')} {scoreVersion} {t('· 形态')} {shapeTxt} {t('· 观测')} {observedAgo(e.event_at)}
+              <InfoHint hint={SCORE_HINTS.breakoutPriority} size={12} className="ml-1" />
+            </p>
+          </div>
+        </details>
       </div>
 
       {/* 风险提醒 */}
@@ -730,7 +752,7 @@ export default function LeadBigCard({ ev, flash, locate, onOpen }: LeadBigCardPr
           {warnings.map((w, i) => (
             <span
               key={i}
-              className="inline-flex items-center gap-1 rounded-xs border border-warn-600/40 bg-warn-50 px-2 py-0.5 text-micro text-warn-600"
+              className="radar-chip radar-chip-volume"
             >
               <Icon name="flag" size={11} />
               {w}
@@ -739,12 +761,9 @@ export default function LeadBigCard({ ev, flash, locate, onOpen }: LeadBigCardPr
         </div>
       )}
 
-      {/* 底行：版本信息 + 操作按钮（「打开研究页」保留全屏 /stock/:t） */}
+      {/* 操作按钮（版本信息在评分贡献中，「打开研究页」保留全屏 /stock/:t） */}
       <div className="mt-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-3 border-t border-line pt-3">
-        <p className="font-mono text-micro text-ink-400 tnum">
-          {t('评分')} {scoreVersion} {t('· 形态')} {shapeTxt} {t('· 观测')} {observedAgo(e.event_at)}
-        </p>
-        <div className="flex items-center gap-2">
+        <div className="ml-auto flex flex-wrap items-center gap-2">
           <button
             onClick={() => onOpen(e)}
             className="flex items-center gap-1.5 rounded-md border border-line bg-card px-3.5 py-2 text-caption font-medium text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"

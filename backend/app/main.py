@@ -41,6 +41,8 @@ from app.access import (
     require_same_origin_action,
 )
 from app.deployment_boundary import canonicalize_hostname, normalize_allowed_hosts
+from app.document_policy import is_stock_document_path, static_cache_control
+from app.request_limits import BodyRejected, ClientDisconnected, bounded_api_receive
 from app.api import (
     access,
     accounts,
@@ -161,6 +163,12 @@ _RL_WINDOW = 60         # seconds
 _RL_MAX_KEYS = 10_000   # safety valve against IP-churn memory growth
 _rl_last_prune = 0.0
 
+# Bound bytes before FastAPI buffers/decodes JSON. Field lengths only run after
+# that allocation, and a chunked request need not declare Content-Length.
+_MAX_API_BODY_BYTES = 2 * 1024 * 1024
+_MAX_CREDENTIAL_BODY_BYTES = 4 * 1024
+_CREDENTIAL_BODY_PATHS = {"/api/account/register", "/api/access/login"}
+
 _HEAVY_API_PREFIXES = (
     "/api/ai/",
     "/api/earnings/",
@@ -181,6 +189,7 @@ _LIGHT_API_PATHS = {
 _CACHED_MARKET_READ_PATHS = {
     "/api/stocks/watchlist",
     "/api/stocks/search",
+    "/api/stocks/data/status",
     "/api/strength/scan",
 }
 _CACHED_MARKET_READ_PATTERNS = tuple(
@@ -234,11 +243,14 @@ def _is_spa_document_path(path: str) -> bool:
         return False
     if any(path.startswith(prefix) for prefix in _SPA_EXCLUDED_PREFIXES):
         return False
+    if is_stock_document_path(path):
+        return True
     return "." not in path.rsplit("/", 1)[-1]
 _PUBLIC_READ_API_PATHS = {
     "/api/access/status",
     "/api/stocks/watchlist",
     "/api/stocks/search",
+    "/api/stocks/data/status",
     "/api/options/unusual",
     "/api/earnings/upcoming",
     "/api/sectors",
@@ -531,15 +543,11 @@ class _GatewayMiddleware:
                     headers["Cloudflare-CDN-Cache-Control"] = "no-store"
                     headers["Content-Security-Policy"] = _HTML_CSP
                 elif is_static:
-                    if path.startswith("/assets/"):
-                        # Content-hashed build artifacts never change in place.
-                        headers["Cache-Control"] = (
-                            "public, max-age=31536000, immutable"
-                        )
-                    else:
-                        headers["Cache-Control"] = (
-                            "public, max-age=300, stale-while-revalidate=60"
-                        )
+                    cache_control = static_cache_control(path, message["status"])
+                    headers["Cache-Control"] = cache_control
+                    if cache_control == "no-store":
+                        headers["CDN-Cache-Control"] = "no-store"
+                        headers["Cloudflare-CDN-Cache-Control"] = "no-store"
                 elif path.startswith("/api/") or path in {"/health", "/ready"}:
                     # Default-deny caching, but let snapshot endpoints opt into
                     # conditional caching (ETag + private max-age) explicitly.
@@ -644,6 +652,30 @@ class _GatewayMiddleware:
                     extra_headers=[(b"retry-after", str(retry_after).encode())],
                 )
             bucket.append(now)
+
+        if path.startswith("/api/"):
+            body_limit = (
+                _MAX_CREDENTIAL_BODY_BYTES
+                if path.rstrip("/") in _CREDENTIAL_BODY_PATHS
+                else _MAX_API_BODY_BYTES
+            )
+            try:
+                receive = await bounded_api_receive(scope, receive, limit=body_limit)
+            except ClientDisconnected:
+                return
+            except BodyRejected as exc:
+                # A rejected HTTP/1 upload may still have unread wire bytes.
+                # HTTP/2 forbids this connection-specific response header.
+                close_headers = (
+                    [(b"connection", b"close")]
+                    if scope.get("http_version") in {"1.0", "1.1"}
+                    else []
+                )
+                return await _send_json(
+                    send_with_response_headers, exc.status,
+                    {"error": exc.code, "message": exc.message},
+                    extra_headers=close_headers,
+                )
 
         with request_owner_access_context(owner_access):
             return await self.app(scope, receive, send_with_response_headers)

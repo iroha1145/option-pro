@@ -39,26 +39,7 @@ export function fmtLocaleDateTime(iso: string, opts?: Intl.DateTimeFormatOptions
   const d = validDate(iso);
   return d ? dtf(opts ?? { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(d) : '—';
 }
-export function fmtPrice(n: number, digits = 2): string {
-  return n.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
-}
-
-export function fmtSigned(n: number, digits = 2): string {
-  const s = fmtPrice(Math.abs(n), digits);
-  return `${n >= 0 ? '+' : '−'}${s}`;
-}
-
-export function fmtPct(n: number, digits = 2): string {
-  return `${n >= 0 ? '+' : '−'}${Math.abs(n).toFixed(digits)}%`;
-}
-
-export function fmtCompact(n: number): string {
-  if (n >= 1e12) return `${(n / 1e12).toFixed(2)}T`;
-  if (n >= 1e9) return `${(n / 1e9).toFixed(2)}B`;
-  if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
-  if (n >= 1e3) return `${(n / 1e3).toFixed(1)}K`;
-  return String(Math.round(n));
-}
+export { fmtPrice, fmtSigned, fmtPct, fmtCompact } from './numericFormat.ts';
 
 export function fmtTimeHHMMSS(ts: number | Date): string {
   const d = typeof ts === 'number' ? new Date(ts) : ts;
@@ -77,13 +58,7 @@ export function fmtTimeHHMMSS(ts: number | Date): string {
 
 /** 纽约时间 HH:MM:SS（秒级走字） */
 export function fmtNyTime(d: Date): string {
-  return d.toLocaleTimeString('en-US', {
-    timeZone: 'America/New_York',
-    hour12: false,
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  });
+  return fmtTimeHHMMSS(d); // same h23 midnight and invalid-date semantics
 }
 
 /* 事件时刻的全站统一 ET 口径。行情事件（突破触发、K 线 bar、快照观测）的
@@ -154,7 +129,9 @@ export function fmtRelativeShort(iso: string | null | undefined): string {
 }
 
 export function fmtCountdown(targetIso: string, now: number): string {
-  const ms = Math.max(0, new Date(targetIso).getTime() - now);
+  const remaining = new Date(targetIso).getTime() - now;
+  if (!Number.isFinite(remaining)) return '—';
+  const ms = Math.max(0, remaining);
   const h = Math.floor(ms / 3_600_000);
   const m = Math.floor((ms % 3_600_000) / 60_000);
   const s = Math.floor((ms % 60_000) / 1000);

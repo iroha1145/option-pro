@@ -7,7 +7,7 @@ import { motion } from 'framer-motion';
 import type { ApiError } from '@/api/client';
 import type { MarketRegime } from './api';
 import { cn } from '@/lib/utils';
-import { strengthBarClass } from '@/components/shared/StrengthBar';
+import { strengthBarClass } from '@/lib/strengthColor';
 import EmptyState from '@/components/shared/EmptyState';
 import InfoHint from '@/components/shared/InfoHint';
 import { SCORE_HINTS, type ScoreHint } from '@/lib/scoreHints';
@@ -36,11 +36,7 @@ const DIMS: { key: keyof MarketRegime; label: string; tip: string; hint: ScoreHi
 const DIMS_SOURCE_NOTE =
   t('六维算自同一篮固定基准：SPY / QQQ / IWM / RSP、11 个行业 ETF、VIX、HYG / IEF / TLT / 10 年期、GLD、SOXX / SMH —— 是全市场读数，不区分指数。');
 
-function regimeMean(r: MarketRegime): number {
-  return DIMS.reduce((s, d) => s + r[d.key], 0) / DIMS.length;
-}
-
-export { regimeMean };
+import { regimeMean } from '@/lib/regime';
 
 export default function RegimePanel({
   data,
@@ -109,7 +105,7 @@ export default function RegimePanel({
                 </span>
                 <span className="font-mono text-data-m text-ink-800 tnum">{score}</span>
               </div>
-              <div className="mt-1.5 h-[3px] overflow-hidden rounded-pill bg-line" role="presentation">
+              <div className="mt-1.5 h-1 strength-track overflow-hidden rounded-pill bg-line" role="presentation">
                 <motion.div
                   className={cn('h-full origin-left rounded-pill', strengthBarClass(score))}
                   initial={{ scaleX: 0 }}
@@ -120,7 +116,7 @@ export default function RegimePanel({
                 />
               </div>
               {/* 毛玻璃 tooltip */}
-              <div className="glass pointer-events-none absolute -top-2 left-0 z-20 hidden w-56 -translate-y-full rounded-md border border-line p-3 text-micro leading-relaxed text-ink-600 shadow-sh-2 group-hover:block">
+              <div className="cloud-popover pointer-events-none absolute -top-2 left-0 z-20 hidden w-56 -translate-y-full p-3 text-micro leading-relaxed text-ink-600 group-hover:block">
                 <p className="mb-1 font-mono text-[10px] uppercase tracking-wider text-ink-400">{d.key}</p>
                 {d.tip}
               </div>

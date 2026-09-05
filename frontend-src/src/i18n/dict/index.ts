@@ -23,6 +23,9 @@ import { WATCHLIST } from './watchlist.ts';
 import { WIRED } from './wired.ts';
 import { MOCKS } from './mocks.ts';
 import { DRAWINGS } from './drawings.ts';
+import { SMART_DRAWINGS } from './smartDrawings.ts';
+import { OPTIONS_UI } from './optionsUi.ts';
+import { STOCK_DATA } from './stockData.ts';
 import type { Dict } from './types.ts';
 
 export const DICT: Dict = {
@@ -42,4 +45,7 @@ export const DICT: Dict = {
   ...WIRED,
   ...MOCKS,
   ...DRAWINGS,
+  ...SMART_DRAWINGS,
+  ...OPTIONS_UI,
+  ...STOCK_DATA,
 };

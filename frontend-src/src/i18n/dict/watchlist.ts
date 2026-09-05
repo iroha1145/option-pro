@@ -5,6 +5,14 @@
 import type { Dict } from './types';
 
 export const WATCHLIST: Dict = {
+  '指数': ['Index', '指数'],
+  '当日': ['Today', '当日'],
+  '日线走势': ['Daily trend', '日足の推移'],
+  '近 {count} 个交易日': ['Last {count} trading days', '直近 {count} 営業日'],
+  '区间': ['Period', '期間'],
+  '暂无日线走势，打开详情后可更新': ['No daily trend yet. Open details to update.', '日足データがありません。詳細画面から更新できます。'],
+  '{ticker} 日线走势，{start} 至 {end}，区间涨跌 {change}%': ['{ticker} daily trend, {start} to {end}, period change {change}%', '{ticker} の日足、{start}〜{end}、期間騰落率 {change}%'],
+
   '只（默认关注池）': ['tickers (default pool)', '銘柄（デフォルト注目プール）'],
   '自选暂时都不在行情覆盖范围内': ['None of your watchlist is covered by quotes yet', 'ウォッチリストの銘柄はまだ相場データの対象外です'],
   '上方列出的代码已保存在账号里，行情覆盖后会自动出现': ['The tickers listed above are saved to your account and will appear once covered', '上に列挙したティッカーはアカウントに保存済みで、対象になり次第表示されます'],

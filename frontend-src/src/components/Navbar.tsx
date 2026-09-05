@@ -8,7 +8,7 @@ import { Link, NavLink, useLocation, useNavigate } from 'react-router';
 import { cn, isNavPathActive } from '@/lib/utils';
 import { useNow } from '@/hooks/useNow';
 import { useAccess } from '@/hooks/useAccess';
-import { useToast } from '@/components/Toast';
+import { useToast } from '@/hooks/useToast';
 import { marketApi } from '@/api/modules/market';
 import { usePolling } from '@/hooks/usePolling';
 import { fmtNyTime } from '@/lib/format';

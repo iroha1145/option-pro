@@ -1,5 +1,5 @@
 /**
- * ChangeBadge：Mono + 语义浅底 r-xs，↑/↓ 图标（不仅依赖颜色，§10）
+ * ChangeBadge：无描边语义浅底、等宽数字，↑/↓ 图标（不仅依赖颜色）
  *
  * format='points' 用于「分数点」变化（如宏观环境的 7 日分数变化）：分数是 0–100 的
  * 分位点，把 −3.5 分渲染成 −3.5% 会读成百分比，属于事实错误。默认仍是百分比。
@@ -7,6 +7,7 @@
 import { cn } from '@/lib/utils';
 import { fmtPct, fmtSigned } from '@/lib/format';
 import Icon from '@/components/icons';
+import SoftBadge from './SoftBadge';
 import { t } from '../../i18n/core.ts';
 
 export default function ChangeBadge({
@@ -25,16 +26,16 @@ export default function ChangeBadge({
   /* live 缺失涨跌数据：如实显「—」中性徽标，不显 +0.00% */
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     return (
-      <span
+      <SoftBadge
+        size={size}
         className={cn(
-          'inline-flex items-center gap-1 rounded-xs bg-paper-2 font-mono text-ink-400 tnum',
-          size === 'md' ? 'px-1.5 py-0.5 text-[13px] leading-[18px]' : 'px-1 py-px text-micro',
+          'change-badge text-ink-400',
           className,
         )}
         aria-label={t("涨跌数据缺失")}
       >
         —
-      </span>
+      </SoftBadge>
     );
   }
   /* 平盘是第三种事实，不是「涨」。旧写法 value >= 0 让 0.00% 显示绿色 ↑ 并读成
@@ -60,15 +61,11 @@ export default function ChangeBadge({
       ? '0.00%'
       : fmtPct(value);
   return (
-    <span
+    <SoftBadge
+      size={size}
+      tone={direction === 'flat' ? 'neutral' : direction}
       className={cn(
-        'inline-flex items-center gap-1 rounded-xs font-mono tnum',
-        size === 'md' ? 'px-1.5 py-0.5 text-[13px] leading-[18px]' : 'px-1 py-px text-micro',
-        direction === 'up'
-          ? 'bg-up-50 text-up-700'
-          : direction === 'down'
-            ? 'bg-down-50 text-down-700'
-            : 'bg-paper-2 text-ink-500',
+        'change-badge',
         className,
       )}
       aria-label={label}
@@ -85,6 +82,6 @@ export default function ChangeBadge({
         strokeWidth={1.45}
       />
       {text}
-    </span>
+    </SoftBadge>
   );
 }

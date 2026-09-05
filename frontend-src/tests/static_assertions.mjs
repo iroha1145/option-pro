@@ -62,14 +62,14 @@ for (const svg of [
 assert.match(index, /rel="icon"[^>]*href="\/logo\.svg"/, '本地 favicon（logo.svg）必须被链接');
 
 // ── assets 目录（路由级分包时代）────────────────────────────────────────────
-// HTML 只引用唯一的 index 入口 js + 唯一 css；其余为懒加载 chunk。
+// HTML 只引用唯一的 index 入口 js + 唯一入口 css；路由可另有按需加载的样式。
 // 全部文件必须带 Vite 内容哈希（后端对 /assets/ 下发 immutable 一年缓存的前提），
 // 目录不得混入 js/css 以外的文件。
 const assetEntries = (await readdir(path.join(artifactDir, 'assets'))).sort();
 const jsAssets = assetEntries.filter(name => name.endsWith('.js'));
 const cssAssets = assetEntries.filter(name => name.endsWith('.css'));
 assert.ok(jsAssets.length >= 1, 'assets 下必须存在 js 产物');
-assert.equal(cssAssets.length, 1, `assets 下应恰有 1 个 css，实际：${cssAssets.join(', ') || '无'}`);
+assert.ok(cssAssets.length >= 1, 'assets 下必须存在 css 产物');
 for (const name of [...jsAssets, ...cssAssets]) {
   assert.match(
     name,
@@ -82,6 +82,13 @@ assert.equal(entryJsRefs.length, 1, `index.html 应恰好引用 1 个 index-*.js
 assert.equal(scriptRefs.length, 1, 'index.html 除入口外不得直接引用其他 js（chunk 走动态 import）');
 assert.equal(styleRefs.length, 1, 'index.html 应恰好引用 1 个样式表');
 assert.match(styleRefs[0], /^\/assets\/index-[^/]+\.css$/, 'CI 就绪探针依赖 index-*.css 命名');
+const builtScripts = await Promise.all(jsAssets.map(name => readFile(path.join(artifactDir, 'assets', name), 'utf8')));
+for (const name of cssAssets) {
+  assert.ok(
+    styleRefs.includes(`/assets/${name}`) || builtScripts.some(source => source.includes(`assets/${name}`)),
+    `按需样式必须有实际加载入口，不能遗留无引用产物：${name}`,
+  );
+}
 for (const ref of [...scriptRefs, ...styleRefs]) {
   assert.ok(
     assetEntries.includes(ref.replace(/^\/assets\//, '')),

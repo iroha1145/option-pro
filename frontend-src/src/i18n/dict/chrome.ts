@@ -2,6 +2,9 @@
 import type { Dict } from './types';
 
 export const CHROME: Dict = {
+  '跳到主要内容': ['Skip to main content', 'メインコンテンツへ移動'],
+  '演示模式 · 当前行情与信号为示例数据': ['Demo mode · Prices and signals are sample data', 'デモモード · 価格とシグナルはサンプルデータです'],
+  '打开 {ticker} 详情': ['Open {ticker} details', '{ticker}の詳細を開く'],
   /* InfoHint（评分口径浮层，几乎每个分数旁边都有一个） */
 
   /* 导航与页面名 */
@@ -77,6 +80,7 @@ export const CHROME: Dict = {
   '选择': ['Select', '選択'],
   '打开': ['Open', '開く'],
   '关闭': ['Close', '閉じる'],
+  '详情面板': ['Details panel', '詳細パネル'],
   '关闭抽屉': ['Close panel', 'パネルを閉じる'],
   '关闭通知': ['Dismiss notification', '通知を閉じる'],
   '强制刷新自选': ['Force-refresh the watchlist', 'ウォッチリストを強制更新'],

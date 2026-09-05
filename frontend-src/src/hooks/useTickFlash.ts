@@ -8,10 +8,10 @@
  *   3. 这一轮没有价格变化 → 不创建新定时器
  *   4. 第 1 步的闪烁状态再也没人清除
  *
- * 于是某几行会永久停在闪烁态。修法是把定时器放在独立的 ref 里，每轮数据到达先
- * 清理并显式复位，再决定是否启动新的闪烁 —— cleanup 不再兼任「结束动画」。
+ * 数值快照决定闪色，独立计时器负责结束。相同报价换数组或回调引用时不重启动画；
+ * 删除、缺失的行从快照中移除，再出现时不与陈旧价格比较。
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 export type FlashDirection = 'up' | 'down';
 export type FlashMap = Record<string, FlashDirection>;
@@ -30,47 +30,47 @@ export function useTickFlash<T>(
   durationMs: number = FLASH_DURATION_MS,
 ): FlashMap {
   const [flashes, setFlashes] = useState<FlashMap>({});
-  const previous = useRef<Record<string, number>>({});
+  const [previous, setPrevious] = useState<Map<string, number>>(() => new Map());
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const values = useMemo(() => {
+    if (!rows) return null;
+    const next = new Map<string, number>();
+    for (const row of rows) {
+      const value = valueOf(row);
+      if (value !== null && Number.isFinite(value)) next.set(keyOf(row), value);
+    }
+    return next;
+  }, [rows, keyOf, valueOf]);
+
+  const changed = values !== null && (values.size !== previous.size
+    || [...values].some(([key, value]) => previous.get(key) !== value));
+  if (changed && values) {
+    const next: [string, FlashDirection][] = [];
+    for (const [key, value] of values) {
+      const prior = previous.get(key);
+      if (prior !== undefined && prior !== value) next.push([key, value > prior ? 'up' : 'down']);
+    }
+    setPrevious(values);
+    setFlashes(Object.fromEntries(next));
+  }
 
   useEffect(() => {
-    if (!rows) return;
-    // 每轮先清掉上一轮的定时器与状态：闪烁的结束不能依赖「下一轮恰好也有变化」。
     if (timer.current !== null) {
       clearTimeout(timer.current);
       timer.current = null;
     }
-    const next: FlashMap = {};
-    for (const row of rows) {
-      const key = keyOf(row);
-      const value = valueOf(row);
-      if (value === null || !Number.isFinite(value)) continue;
-      const prior = previous.current[key];
-      if (prior !== undefined && prior !== value) {
-        next[key] = value > prior ? 'up' : 'down';
-      }
-      previous.current[key] = value;
-    }
-    // 只在真的有变化、或需要从「有闪烁」回到「无闪烁」时写状态：调用方若传入
-    // 每次渲染都换引用的数组，无条件 setState 会把效应变成无限循环。
-    setFlashes((current) =>
-      Object.keys(next).length === 0 && Object.keys(current).length === 0 ? current : next,
-    );
-    if (Object.keys(next).length > 0) {
-      timer.current = setTimeout(() => {
-        timer.current = null;
-        setFlashes({});
-      }, durationMs);
-    }
-    // 只在卸载时清理定时器；状态复位由下一轮开头统一处理。
-  }, [rows, keyOf, valueOf, durationMs]);
-
-  useEffect(
-    () => () => {
-      if (timer.current !== null) clearTimeout(timer.current);
-    },
-    [],
-  );
+    if (Object.keys(flashes).length === 0) return;
+    const activeTimer = setTimeout(() => {
+      if (timer.current !== activeTimer) return;
+      timer.current = null;
+      setFlashes((current) => current === flashes ? {} : current);
+    }, durationMs);
+    timer.current = activeTimer;
+    return () => {
+      clearTimeout(activeTimer);
+      if (timer.current === activeTimer) timer.current = null;
+    };
+  }, [flashes, durationMs]);
 
   return flashes;
 }

@@ -83,6 +83,7 @@ export default function InfoHint({
   const [open, setOpen] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
   const rootRef = useRef<HTMLSpanElement | null>(null);
   const triggerRef = useRef<HTMLSpanElement | null>(null);
   const tooltipRef = useRef<HTMLSpanElement | null>(null);
@@ -90,8 +91,7 @@ export default function InfoHint({
   /* 浮层挂在 body，CSS 的 group-hover/focus-within 够不着它，显示条件收归 state。
      aria 与真实显示一一对应：键盘用户聚焦时读屏（与 Playwright 的可访问树查询）
      都必须拿得到它。 */
-  const exposed = open || focused || hovered;
-  const [coords, setCoords] = useState<{ left: number; top: number } | null>(null);
+  const exposed = !dismissed && (open || focused || hovered);
 
   /**
    * 按视口摆位：水平夹在视口内，垂直空间不够就翻面。
@@ -130,15 +130,15 @@ export default function InfoHint({
     const lowest = Math.max(VIEWPORT_GUTTER, viewportHeight - height - VIEWPORT_GUTTER);
     const top = Math.min(Math.max(placeAbove ? aboveTop : belowTop, VIEWPORT_GUTTER), lowest);
 
-    setCoords({ left, top });
+    // 布局测量只更新浮层位置，不令整个触发控件在每次滚动时重渲染。
+    tip.style.left = `${left}px`;
+    tip.style.top = `${top}px`;
+    tip.classList.add('is-shown');
   }, [align, side]);
 
   /* 显示期间跟住触发点：页面滚动、窗口缩放、上方内容变高都会让它移动。 */
   useLayoutEffect(() => {
-    if (!exposed) {
-      setCoords(null);
-      return;
-    }
+    if (!exposed) return;
     place();
     window.addEventListener('resize', place);
     window.addEventListener('scroll', place, true);
@@ -164,10 +164,19 @@ export default function InfoHint({
     <span
       ref={rootRef}
       className={cn('t-tt-wrap relative inline-flex align-middle', className)}
-      onMouseEnter={() => setHovered(true)}
+      onMouseEnter={() => {
+        setDismissed(false);
+        setHovered(true);
+      }}
       onMouseLeave={() => {
         setHovered(false);
         setOpen(false);
+      }}
+      onKeyDown={(event) => {
+        if (event.key !== 'Escape' || !exposed) return;
+        event.stopPropagation();
+        setOpen(false);
+        setDismissed(true);
       }}
     >
       {children ? (
@@ -175,7 +184,7 @@ export default function InfoHint({
           ref={triggerRef}
           className="inline-flex"
           aria-describedby={exposed ? tooltipId : undefined}
-          onFocus={() => setFocused(true)}
+          onFocus={() => { setDismissed(false); setFocused(true); }}
           onBlur={() => setFocused(false)}
         >
           {children}
@@ -186,9 +195,9 @@ export default function InfoHint({
           role="button"
           tabIndex={0}
           aria-label={t('{title}：查看说明', { title: hint.title })}
-          aria-expanded={open}
+          aria-expanded={exposed}
           aria-describedby={exposed ? tooltipId : undefined}
-          onFocus={() => setFocused(true)}
+          onFocus={() => { setDismissed(false); setFocused(true); }}
           onBlur={() => setFocused(false)}
           className={cn(
             't-tt-trigger inline-flex cursor-help items-center rounded-full text-ink-300 outline-none transition-colors duration-fast',
@@ -198,15 +207,15 @@ export default function InfoHint({
           onClick={(event) => {
             event.stopPropagation();
             event.preventDefault();
+            setDismissed(false);
             setOpen((value) => !value);
           }}
           onKeyDown={(event) => {
             if (event.key === 'Enter' || event.key === ' ') {
               event.stopPropagation();
               event.preventDefault();
+              setDismissed(false);
               setOpen((value) => !value);
-            } else if (event.key === 'Escape') {
-              setOpen(false);
             }
           }}
         >
@@ -231,12 +240,11 @@ export default function InfoHint({
                设计系统的 line 色。 */
             className={cn(
               't-tt pointer-events-none w-max border border-line text-left',
-              coords && 'is-shown',
             )}
             style={{
               zIndex: TOOLTIP_Z_INDEX,
-              left: coords?.left ?? 0,
-              top: coords?.top ?? 0,
+              left: 0,
+              top: 0,
               maxWidth: `min(${TOOLTIP_MAX_WIDTH}px, calc(100vw - ${
                 VIEWPORT_GUTTER * 2
               }px))`,

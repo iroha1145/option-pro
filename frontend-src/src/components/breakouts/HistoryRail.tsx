@@ -153,7 +153,7 @@ export default function HistoryRail({
   let rowIndex = 0;
 
   return (
-    <section aria-label={t("历史事件回溯")} className="card-surface flex max-h-[560px] flex-col overflow-hidden">
+    <section aria-label={t("历史事件回溯")} className="radar-history card-surface flex max-h-[560px] flex-col overflow-hidden">
       {/* 标题行 + 副标 */}
       <div className="shrink-0 border-b border-line px-4 pb-2.5 pt-3.5">
         <p className="flex items-baseline justify-between gap-2">
@@ -164,7 +164,7 @@ export default function HistoryRail({
             </span>
           </span>
           {stale && (
-            <span className="rounded-xs border border-warn-600/40 bg-warn-50 px-1.5 py-px text-micro text-warn-600">{t('已过期')}</span>
+            <span className="radar-chip radar-chip-volume">{t('已过期')}</span>
           )}
         </p>
         <p className="mt-1 text-micro text-ink-400">
@@ -215,11 +215,11 @@ export default function HistoryRail({
             {groups.map(([day, items]) => (
               <div key={day}>
                 {/* 日期分组小头（Serif 13px + 计数） */}
-                <div className="flex items-baseline justify-between border-b border-line bg-card-warm px-3 py-1.5">
-                  <p className="font-display text-[13px] leading-[18px] text-ink-800">{dayLabel(day)}</p>
+                <div className="radar-history-date flex items-baseline justify-between px-4 py-2">
+                  <p className="text-[12px] font-medium leading-[18px] text-ink-500">{dayLabel(day)}</p>
                   <span className="font-mono text-micro text-ink-400 tnum">{items.length} {t('条')}</span>
                 </div>
-                <ul className="divide-y divide-line">
+                <ul className="radar-history-list divide-y divide-line">
                   {items.map((e) => {
                     const i = rowIndex++;
                     const tone = LIFECYCLE_TONE[e.lifecycle_state] ?? 'ink';
@@ -246,7 +246,7 @@ export default function HistoryRail({
                             setup: SETUP_CN[e.setup_type] ?? e.setup_type ?? '',
                             state: LIFECYCLE_CN[e.lifecycle_state] ?? e.lifecycle_state ?? '',
                           })}
-                          className="flex min-h-[52px] cursor-pointer items-center gap-2.5 px-3 py-1.5 transition-colors duration-fast hover:bg-paper-2"
+                          className="radar-history-row flex min-h-[60px] cursor-pointer items-center gap-2.5 px-4 py-2 transition-colors duration-fast hover:bg-paper-2"
                         >
                           {/* 时间 */}
                           <span className="w-10 shrink-0 font-mono text-caption text-ink-400 tnum">{hhmm(e.event_at)}</span>
@@ -258,7 +258,7 @@ export default function HistoryRail({
                             </span>
                             <span className="mt-0.5 flex items-center gap-1.5 text-micro leading-[14px]">
                               <span className="truncate text-ink-400">{SETUP_CN[e.setup_type] ?? e.setup_type ?? '—'}</span>
-                              <span className={cn('inline-flex shrink-0 items-center gap-1 font-medium', TONE_TEXT[tone])}>
+                              <span className={cn('radar-chip radar-history-state shrink-0', TONE_TEXT[tone], `radar-chip-${tone === 'ink' ? 'neutral' : tone}`)}>
                                 <span className={cn('size-1.5 rounded-full', TONE_DOT[tone])} aria-hidden="true" />
                                 {LIFECYCLE_CN[e.lifecycle_state] ?? e.lifecycle_state ?? '—'}
                               </span>
