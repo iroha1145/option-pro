@@ -123,7 +123,7 @@ function HeatTile({
 
       <span
         role="tooltip"
-        className="glass pointer-events-none absolute -top-2 left-1/2 z-30 hidden w-48 -translate-x-1/2 -translate-y-full rounded-md border border-line p-2.5 text-left shadow-sh-2 md:group-hover:block md:group-focus-visible:block"
+        className="cloud-popover pointer-events-none absolute -top-2 left-1/2 z-30 hidden w-48 -translate-x-1/2 -translate-y-full p-2.5 text-left md:group-hover:block md:group-focus-visible:block"
       >
         <span className="eyebrow block">{sector.name} {t('· 成分股汇总')}</span>
         <span className="mt-1.5 block space-y-1 text-micro">

@@ -2,6 +2,7 @@
  * 个股整页 S0 头部（原 StockDrawerBody 抽屉头，抽屉撤除后由整页独占）
  * TickerLogo/名称/真实价格与更新反馈/ChangeBadge/时段 chip/quote_as_of
  */
+import SoftBadge from '@/components/shared/SoftBadge';
 import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { marketApi } from '@/api/modules/market';
@@ -53,9 +54,9 @@ export default function PriceHeader({ detail }: { detail: StockDetail }) {
             <span className="text-body-s text-ink-500">{detail.name}</span>
           </h1>
           <div className="mt-1 flex flex-wrap items-center gap-2">
-            <span className="rounded-xs border border-line-strong bg-card-warm px-1.5 py-px text-micro text-ink-500">
+            <SoftBadge>
               {detail.sector}
-            </span>
+            </SoftBadge>
             {market && <SessionLED session={market.session} label={t('{label} · 延迟 15 分钟', { label: market.label })} />}
           </div>
         </div>

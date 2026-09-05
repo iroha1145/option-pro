@@ -311,9 +311,8 @@ test('tabs ride the beui spring indicator with Paper Terminal geometry, focus ri
   assert.match(motion, /mass: 1\.2/);
   const pill = await code('components/shared/GlidePill.tsx');
   assert.doesNotMatch(pill, /layout="position"/, 'position-only 投影让宽度瞬跳');
-  assert.match(pill, /bg-brand-50/);
-  assert.match(pill, /ring-brand-100/);
-  assert.doesNotMatch(pill, /shadow-btn/, '筛选选中项用浅底和细边，不使用抬起阴影');
+  assert.match(pill, /selection-indicator/);
+  assert.doesNotMatch(pill, /ring-brand-100/, '选择浮片使用白底浅阴影，不叠加旧蓝框');
   /* 弹簧与归零只此一份：调用点不该再各自包 MotionConfig */
   assert.match(pill, /usePrefersReducedMotion\(\)/);
   const segmented = await code('components/shared/Segmented.tsx');

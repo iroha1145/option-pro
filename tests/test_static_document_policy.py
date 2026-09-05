@@ -1,6 +1,8 @@
 """Document fallbacks and cache policy through the actual static app/gateway."""
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -48,13 +50,33 @@ def test_asset_and_api_namespaces_are_not_stock_documents(path):
     assert main._is_spa_document_path(path) is False
 
 
-def test_missing_asset_returns_uncacheable_404_not_the_page_shell(tmp_path):
+@pytest.mark.parametrize("method", ["GET", "HEAD"])
+@pytest.mark.parametrize("path", ["/assets/missing.js", "/static/company-logos/MISSING.png"])
+def test_missing_asset_returns_uncacheable_404_not_the_page_shell(tmp_path, method, path):
     with _client(tmp_path) as client:
-        response = client.get("/assets/missing.js")
+        response = client.request(method, path)
     assert response.status_code == 404
     assert "review shell" not in response.text
     for header in ["cache-control", "cdn-cache-control", "cloudflare-cdn-cache-control"]:
         assert response.headers[header] == "no-store"
+
+
+@pytest.mark.parametrize("method", ["GET", "HEAD"])
+def test_password_visitors_can_read_real_company_logo_with_short_cache(tmp_path, method):
+    source = Path(__file__).resolve().parents[1] / "frontend-src/public/static/company-logos/TSLA.png"
+    image = source.read_bytes()
+    target = tmp_path / "static/company-logos/TSLA.png"
+    target.parent.mkdir(parents=True)
+    target.write_bytes(image)
+
+    with _client(tmp_path) as client:
+        response = client.request(method, "/static/company-logos/TSLA.png")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/png"
+    assert int(response.headers["content-length"]) == len(image)
+    assert response.content == (image if method == "GET" else b"")
+    assert response.headers["cache-control"] == "public, max-age=300, stale-while-revalidate=60"
 
 
 def test_existing_hashed_asset_and_304_keep_long_cache_policy(tmp_path):

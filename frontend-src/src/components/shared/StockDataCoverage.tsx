@@ -6,13 +6,13 @@ export default function StockDataCoverage({ state, className }: { state: ReturnT
   const { summary: s, error, loading, data } = state;
   if (!s.total) return null;
   return (
-    <div className={cn('flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-md border border-line bg-paper-2/60 px-3 py-2 text-micro text-ink-500', className)} role="status" aria-live="polite" data-testid="stock-data-coverage">
+    <div className={cn('data-coverage-strip flex flex-wrap items-center gap-x-4 gap-y-2 text-micro text-ink-500', className)} role="status" aria-live="polite" data-testid="stock-data-coverage">
       <span className="font-medium text-ink-600">{t('数据覆盖')}</span>
       {([
         [t('行情'), s.overview], [t('日线'), s.dailyChart], [t('技术信号'), s.signals],
       ] as const).map(([label, count]) => (
         <span key={label} className="inline-flex items-center gap-1.5">
-          {label}<span className="font-mono text-ink-700 tnum">{data === null ? '—' : count}/{s.total}</span>
+          {label}<span className="rounded bg-paper px-1.5 py-0.5 font-medium text-ink-700 tnum">{data === null ? '—' : count}/{s.total}</span>
         </span>
       ))}
       <span className={cn('flex flex-wrap gap-x-3 gap-y-1', error || s.failed ? 'text-warn-700' : 'text-ink-400')}>

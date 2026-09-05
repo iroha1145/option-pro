@@ -8,6 +8,7 @@ import { useId, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import GlidePill from '@/components/shared/GlidePill';
+import SelectionViewport from '@/components/shared/SelectionViewport';
 
 interface SegmentedOption<T extends string> {
   value: T;
@@ -43,6 +44,7 @@ export default function Segmented<T extends string>({
     /* 投影作用域二选一：layoutRoot 把 layoutId 的坐标收进条内（MobileDock 是
        fixed 容器，否则页面滚动偏移会被回放成位移）；可横向滚动的条必须改用
        layoutScroll，布局测量计入容器滚动偏移，否则滚动后切换滑块跳位。 */
+    <SelectionViewport>
     <motion.div
       layoutRoot={!scrollable}
       layoutScroll={scrollable}
@@ -102,5 +104,6 @@ export default function Segmented<T extends string>({
         );
       })}
     </motion.div>
+    </SelectionViewport>
   );
 }

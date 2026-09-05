@@ -1,3 +1,4 @@
+import SoftBadge from '@/components/shared/SoftBadge';
 /** B1 热点主题带：横滑 snap 卡片列（flame-line + 热度计 + 代表新闻 + 代码 chips），点击打开代表新闻抽屉 */
 import { motion } from 'framer-motion';
 import { usePolling } from '@/hooks/usePolling';
@@ -40,9 +41,9 @@ function HotspotCard({ h, index, onOpen }: { h: HotspotGroup; index: number; onO
           <Icon name="flame-line" size={15} />
         </span>
         {h.eventType && (
-          <span className="shrink-0 rounded-xs border border-brand-400/50 bg-brand-50 px-1.5 py-px text-[10px] leading-[14px] font-medium text-brand-600">
+          <SoftBadge tone="brand" className="shrink-0">
             {h.eventType}
-          </span>
+          </SoftBadge>
         )}
         <HeatMeter level={h.heatLevel} heat={h.heat} className="ml-auto" />
       </div>
@@ -58,9 +59,9 @@ function HotspotCard({ h, index, onOpen }: { h: HotspotGroup; index: number; onO
       <div className="mt-2 flex items-center justify-between gap-2 border-t border-line pt-2">
         <span className="flex min-w-0 flex-wrap gap-1">
           {h.keywords.slice(0, 2).map((k) => (
-            <span key={k} className="truncate rounded-xs border border-line px-1 py-0.5 text-[10px] leading-[14px] text-ink-400">
+            <SoftBadge key={k} className="truncate">
               {k}
-            </span>
+            </SoftBadge>
           ))}
         </span>
         {openable && (
@@ -116,9 +117,9 @@ export default function HotspotsStrip({ onOpenNews, refreshToken = 0 }: { onOpen
         </div>
         <span className="flex items-center gap-2">
           {listStale && (
-            <span className="rounded-xs border border-warn-600/30 bg-warn-50 px-1.5 py-0.5 text-micro text-warn-600">
+            <SoftBadge tone="warn" className="whitespace-normal">
               {__t('已过期 · 刷新失败，展示上次结果')}
-            </span>
+            </SoftBadge>
           )}
           {statusQ.data && (
             <p className="hidden items-center gap-1.5 text-micro text-ink-400 sm:flex">

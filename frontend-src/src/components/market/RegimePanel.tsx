@@ -105,7 +105,7 @@ export default function RegimePanel({
                 </span>
                 <span className="font-mono text-data-m text-ink-800 tnum">{score}</span>
               </div>
-              <div className="mt-1.5 h-[3px] overflow-hidden rounded-pill bg-line" role="presentation">
+              <div className="mt-1.5 h-1 strength-track overflow-hidden rounded-pill bg-line" role="presentation">
                 <motion.div
                   className={cn('h-full origin-left rounded-pill', strengthBarClass(score))}
                   initial={{ scaleX: 0 }}
@@ -116,7 +116,7 @@ export default function RegimePanel({
                 />
               </div>
               {/* 毛玻璃 tooltip */}
-              <div className="glass pointer-events-none absolute -top-2 left-0 z-20 hidden w-56 -translate-y-full rounded-md border border-line p-3 text-micro leading-relaxed text-ink-600 shadow-sh-2 group-hover:block">
+              <div className="cloud-popover pointer-events-none absolute -top-2 left-0 z-20 hidden w-56 -translate-y-full p-3 text-micro leading-relaxed text-ink-600 group-hover:block">
                 <p className="mb-1 font-mono text-[10px] uppercase tracking-wider text-ink-400">{d.key}</p>
                 {d.tip}
               </div>

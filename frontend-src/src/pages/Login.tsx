@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils';
 import { DUR_SECTION } from '@/lib/motion';
 import { useCatalogShake } from '@/lib/transitions';
 import Icon from '@/components/icons';
+import SelectionViewport from '@/components/shared/SelectionViewport';
 import type { IconName } from '@/components/icons';
 import { t } from '../i18n/core.ts';
 
@@ -432,32 +433,35 @@ export default function Login() {
             </div>
 
             {/* 登录 / 注册切换：滑动指示条，沿用页面既有动效曲线 */}
-            <div className="mt-5 grid grid-cols-2 rounded-sm border border-line-strong bg-card p-1">
-              {(['login', 'register'] as const).map((value) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => {
-                    setMode(value);
-                    setStatusMsg(null);
-                  }}
-                  aria-pressed={mode === value}
-                  className={cn(
-                    'relative h-8 rounded-xs text-caption font-medium transition-colors duration-fast',
-                    mode === value ? 'text-white' : 'text-ink-500 hover:text-ink-800',
-                  )}
-                >
-                  {mode === value && (
-                    <motion.span
-                      layoutId="login-mode-pill"
-                      className="absolute inset-0 rounded-xs bg-brand-600 shadow-chip"
-                      transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
-                    />
-                  )}
-                  <span className="relative">{value === 'login' ? t('登录') : t('注册')}</span>
-                </button>
-              ))}
-            </div>
+            <SelectionViewport className="selection-viewport-full">
+              <div className="mobile-selection-rail mt-5 grid grid-cols-2 rounded-sm border border-line-strong bg-card p-1">
+                {(['login', 'register'] as const).map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => {
+                      setMode(value);
+                      setStatusMsg(null);
+                    }}
+                    aria-pressed={mode === value}
+                    className={cn(
+                      'relative h-8 rounded-xs text-caption font-medium transition-colors duration-fast',
+                      mode === value ? 'text-white' : 'text-ink-500 hover:text-ink-800',
+                    )}
+                  >
+                    {mode === value && (
+                      <motion.span
+                        data-selection-decoration=""
+                        layoutId="login-mode-pill"
+                        className="absolute inset-0 rounded-xs bg-brand-600 shadow-chip"
+                        transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
+                      />
+                    )}
+                    <span className="relative">{value === 'login' ? t('登录') : t('注册')}</span>
+                  </button>
+                ))}
+              </div>
+            </SelectionViewport>
 
             {serviceDown && (
               <p role="status" className="mt-4 flex items-center justify-between gap-2 rounded-xs border border-warn-600/30 bg-warn-50 px-2.5 py-1.5 text-caption text-warn-600">

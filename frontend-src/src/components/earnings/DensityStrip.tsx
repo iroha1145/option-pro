@@ -60,7 +60,7 @@ export default function DensityStrip({ items, onJumpDay }: DensityStripProps) {
                       只裁不滚，看不全当天的代码。 */}
                   <span
                     className={cn(
-                      'glass pointer-events-none absolute -top-2 z-20 hidden w-max max-w-[180px] -translate-y-full rounded-md border border-line px-2.5 py-1.5 text-left shadow-sh-2 group-hover:block group-focus-visible:block',
+                      'cloud-popover pointer-events-none absolute -top-2 z-20 hidden w-max max-w-[180px] -translate-y-full px-2.5 py-1.5 text-left group-hover:block group-focus-visible:block',
                       i < days.length / 3
                         ? 'left-0'
                         : i >= (days.length * 2) / 3

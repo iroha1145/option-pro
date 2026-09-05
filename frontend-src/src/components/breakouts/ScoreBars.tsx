@@ -20,16 +20,16 @@ const disp = (v: unknown): string => (fin(v) ? String(Math.round(v)) : '—');
 
 export function ScoreBarsMini({ event, className }: { event: BreakoutEventFull; className?: string }) {
   return (
-    <div className={cn('grid grid-cols-3 gap-x-3 gap-y-1.5', className)} aria-label={t("评分套组")}>
+    <div className={cn('radar-score-grid grid grid-cols-3 gap-x-3 gap-y-2.5', className)} aria-label={t("评分套组")}>
       {SCORE_DEFS.map((d, i) => {
         const v = event[d.key];
         return (
           <div key={d.key} title={`${d.label} ${disp(v)}`}>
             <p className="flex items-baseline justify-between">
-              <span className="text-[10px] leading-[14px] text-ink-400">{d.label}</span>
-              <span className="font-mono text-[10px] leading-[14px] text-ink-500 tnum">{disp(v)}</span>
+              <span className="text-[11px] leading-[16px] text-ink-500">{d.label}</span>
+              <span className="font-mono text-[11px] leading-[16px] text-ink-700 tnum">{disp(v)}</span>
             </p>
-            <div className="mt-0.5 h-[3px] overflow-hidden rounded-pill bg-line">
+            <div className="mt-0.5 radar-bar-track h-[5px] overflow-hidden rounded-pill bg-line">
               {fin(v) && (
                 <motion.div
                   className={cn('h-full origin-left rounded-pill', barCls(d.key, v))}
@@ -56,7 +56,7 @@ export function ScoreBarsFull({ event, className }: { event: BreakoutEventFull; 
         return (
           <div key={d.key} className="col-span-3 grid grid-cols-subgrid items-center gap-x-2.5">
             <span className="whitespace-nowrap text-caption text-ink-500">{d.label}</span>
-            <div className="h-[3px] overflow-hidden rounded-pill bg-line">
+            <div className="radar-bar-track h-[5px] overflow-hidden rounded-pill bg-line">
               {fin(v) && (
                 <motion.div
                   className={cn('h-full origin-left rounded-pill', barCls(d.key, v))}
@@ -103,7 +103,7 @@ export function RangePersistenceBars({ event, className }: { event: BreakoutEven
         {metrics.map((metric, i) => (
           <div key={metric.key} className="col-span-3 grid grid-cols-subgrid items-center gap-x-2.5">
             <span className="whitespace-nowrap text-caption text-ink-500">{metric.label}</span>
-            <div className="h-[3px] overflow-hidden rounded-pill bg-line">
+            <div className="radar-bar-track h-[5px] overflow-hidden rounded-pill bg-line">
               {fin(metric.value) && (
                 <motion.div
                   className={cn('h-full origin-left rounded-pill', scoreBarClass(metric.value))}
@@ -141,7 +141,7 @@ export function RangePersistenceBars({ event, className }: { event: BreakoutEven
         return (
           <div key={d.key} className="col-span-3 grid grid-cols-subgrid items-center gap-x-2.5">
             <span className="whitespace-nowrap text-caption text-ink-500">{d.label}</span>
-            <div className="h-[3px] overflow-hidden rounded-pill bg-line">
+            <div className="radar-bar-track h-[5px] overflow-hidden rounded-pill bg-line">
               <motion.div
                 className={cn('h-full origin-left rounded-pill', scoreBarClass(v))}
                 initial={{ scaleX: 0 }}

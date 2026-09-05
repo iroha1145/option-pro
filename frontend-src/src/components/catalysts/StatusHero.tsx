@@ -1,3 +1,4 @@
+import AnalysisIcon from '@/components/shared/AnalysisIcon';
 /** 状态 hero：数据源状态 / 热点计算 / 分析可用性 / 今日新闻（真实契约口径，不可用原因如实标注） */
 import { motion } from 'framer-motion';
 import { usePolling } from '@/hooks/usePolling';
@@ -5,8 +6,8 @@ import { remoteState } from '@/hooks/remoteState';
 import { catalystsContract } from './api';
 import { Led } from './bits';
 import SourceNote from '@/components/shared/SourceNote';
+import SoftBadge from '@/components/shared/SoftBadge';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
-import Icon from '@/components/icons';
 import { fmtRelative } from '@/lib/format';
 import { DUR_SECTION } from '@/lib/motion';
 import { t } from '../../i18n/core.ts';
@@ -59,10 +60,10 @@ export default function StatusHero({ refreshToken = 0 }: { refreshToken?: number
 
   const reason = s?.analysisReason ? ANALYSIS_REASON_CN[s.analysisReason] ?? { label: t('模型分析不可用'), tone: 'down' as const } : null;
   const unreadCell = (
-    <div className="flex items-center gap-2">
+    <SoftBadge tone="warn" size="md" className="whitespace-normal">
       <Led tone="warn" />
-      <span className="text-body-s font-medium text-ink-800">{t('状态读取失败')}</span>
-    </div>
+      {t('状态读取失败')}
+    </SoftBadge>
   );
 
   return (
@@ -82,10 +83,10 @@ export default function StatusHero({ refreshToken = 0 }: { refreshToken?: number
           ) : (
             <div className="flex items-center gap-2">
               <Led tone={s?.collecting ? 'up' : 'muted'} pulse={!!s?.collecting} />
-              <span className="text-body-s font-medium text-ink-800">
+              <SoftBadge tone={s?.collecting ? 'up' : 'neutral'} size="md" className="whitespace-normal">
                 {s?.collecting ? t('采集中') : t('已暂停')}
                 {s?.collecting && s.intervalMinutes != null && <span className="text-ink-500"> {t('· 每')} {s.intervalMinutes} {t('分钟')}</span>}
-              </span>
+              </SoftBadge>
               <span className="font-mono text-micro text-ink-400 tnum">
                 {s && s.sourcesTotal > 0 ? `${s.sourcesActive}/${s.sourcesTotal} ${s.streams?.length ? t('流') : t('源')}` : ''}
               </span>
@@ -95,10 +96,10 @@ export default function StatusHero({ refreshToken = 0 }: { refreshToken?: number
             <p className="mt-1 flex flex-wrap items-center gap-x-2.5 font-mono text-micro text-ink-400 tnum">
               <span>{t('上次采集')} {fmtRelative(s.lastCrawlAt)}</span>
               {s.streams?.map((st) => (
-                <span key={st.name} className="inline-flex items-center gap-1">
+                <SoftBadge key={st.name} tone={st.ok ? 'up' : 'down'}>
                   <Led tone={st.ok ? 'up' : 'down'} className="size-1.5" />
                   {st.name}
-                </span>
+                </SoftBadge>
               ))}
             </p>
           )}
@@ -112,7 +113,7 @@ export default function StatusHero({ refreshToken = 0 }: { refreshToken?: number
           ) : hs?.state === 'computing' ? (
             <div className="flex items-center gap-2">
               <Led tone="warn" pulse />
-              <span className="text-body-s font-medium text-ink-800">{t('热点计算中…')}</span>
+              <SoftBadge tone="warn" size="md">{t('热点计算中…')}</SoftBadge>
               {hs.etaSeconds != null && (
                 <span className="font-mono text-micro text-ink-400 tnum">{t('预计')} {hs.etaSeconds}s</span>
               )}
@@ -120,9 +121,9 @@ export default function StatusHero({ refreshToken = 0 }: { refreshToken?: number
           ) : (
             <div className="flex items-center gap-2">
               <Led tone={hs?.scanning ? 'brand' : 'muted'} pulse={!!hs?.scanning} />
-              <span className="text-body-s font-medium text-ink-800">
+              <SoftBadge tone={hs?.scanning ? 'brand' : 'neutral'} size="md" className="whitespace-normal">
                 {hs?.scanning ? t('已就绪') : t('已暂停')} · <span className="font-mono tnum">{hs?.groupCount ?? 0}</span> {t('组热点')}
-              </span>
+              </SoftBadge>
             </div>
           )}
           {hs && <p className="mt-1 font-mono text-micro text-ink-400 tnum">{t('更新')} {fmtRelative(hs.updatedAt)}</p>}
@@ -134,16 +135,16 @@ export default function StatusHero({ refreshToken = 0 }: { refreshToken?: number
           ) : statusUnread ? (
             unreadCell
           ) : (
-            <div className="flex items-center gap-2">
-              {/* 「分析可用」是静态状态，不脉冲（脉冲只给真实进行中的任务） */}
-              <Led
-                tone={s?.analysisAvailable ? 'ai' : reason ? reason.tone : 'down'}
-              />
-              <span className="text-body-s font-medium text-ink-800">
+            <SoftBadge
+              tone={s?.analysisAvailable ? 'ai' : reason?.tone === 'muted' ? 'neutral' : reason?.tone ?? 'down'}
+              size="md"
+              className="whitespace-normal"
+            >
+              <AnalysisIcon size={14} />
+              <span>
                 {s?.analysisAvailable ? t('模型分析可用') : reason ? reason.label : t('模型分析不可用')}
               </span>
-              <Icon name="spark-ai" size={14} className="text-ai-600" />
-            </div>
+            </SoftBadge>
           )}
           {s && (
             <p className="mt-1 font-mono text-micro text-ink-400 tnum">

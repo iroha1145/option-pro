@@ -1,3 +1,4 @@
+import AnalysisIcon from '@/components/shared/AnalysisIcon';
 import { useCallback, useEffect, useState } from 'react';
 import { ApiError } from '@/api/client';
 import { adminApi, type RuntimeDoc, type WorkerHealth } from '@/api/modules/admin';
@@ -5,6 +6,7 @@ import { runtimeApi, type WorkerAction } from '@/api/modules/runtime';
 import { useAccess } from '@/hooks/useAccess';
 import { useToast } from '@/hooks/useToast';
 import Icon from '@/components/icons';
+import SoftBadge from '@/components/shared/SoftBadge';
 import { cn } from '@/lib/utils';
 import { t } from '../../i18n/core.ts';
 
@@ -173,14 +175,14 @@ export default function EarningsAnalysisControls() {
       <div className="px-4 py-3.5">
         <div className="flex items-start gap-3">
           <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-ai-50 text-ai-600">
-            <Icon name="spark-ai" size={15} />
+            <AnalysisIcon size={15} />
           </span>
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               <h2 className="text-body-s font-medium text-ink-800">{t('财报分析管理')}</h2>
-              <span className="rounded-pill border border-line px-2 py-0.5 font-mono text-micro text-ink-400">
+              <SoftBadge className="font-mono">
                 {t('未来 5 天')}
-              </span>
+              </SoftBadge>
             </div>
             <p className="mt-1 text-micro leading-5 text-ink-400">
               {t('每只新增财报只建立一个持久任务；重复执行会跳过同一代码、同一财报日。')}
@@ -196,15 +198,15 @@ export default function EarningsAnalysisControls() {
             onClick={() => void updateSchedule()}
             disabled={!doc || loading || running}
             className={cn(
-              'inline-flex h-8 items-center gap-2 rounded-md border px-2.5 text-caption shadow-btn transition-colors',
+              'inline-flex h-8 items-center gap-2 rounded-md px-2.5 text-caption font-medium shadow-btn transition-colors',
               enabled
-                ? 'border-ai-600/30 bg-ai-50 text-ai-600'
-                : 'border-line bg-card text-ink-500',
+                ? 'bg-ai-600 text-white'
+                : 'bg-paper-2 text-ink-600 hover:bg-line',
               (!doc || loading || running) && 'cursor-wait opacity-60',
             )}
           >
             <span
-              className={cn('size-2 rounded-full', enabled ? 'bg-ai-600' : 'bg-ink-300')}
+              className={cn('size-2 rounded-full', enabled ? 'bg-white' : 'bg-ink-400')}
               aria-hidden="true"
             />
             {t('每日自动分析')}
@@ -215,13 +217,13 @@ export default function EarningsAnalysisControls() {
             disabled={!taskReady || running}
             title={!taskReady ? t('财报分析后台任务当前不可用') : t('立即分析未来 5 天内尚未建立任务的财报')}
             className={cn(
-              'inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-caption font-medium shadow-btn transition-colors',
+              'inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-caption font-medium shadow-btn transition-[filter]',
               taskReady && !running
-                ? 'border-line bg-card text-ink-600 hover:border-ai-600/40 hover:text-ai-600'
-                : 'cursor-not-allowed border-line bg-card-warm text-ink-300',
+                ? 'bg-ai-600 text-white hover:brightness-105'
+                : 'cursor-not-allowed bg-paper-2 text-ink-400',
             )}
           >
-            <Icon name="refresh" size={12} className={running ? 'animate-spin' : ''} />
+            {running ? <Icon name="refresh" size={14} className="animate-spin" /> : <AnalysisIcon size={14} />}
             {running ? t('正在检查任务…') : t('立即分析新的财报')}
           </button>
         </div>

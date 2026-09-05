@@ -76,7 +76,7 @@ const IndexCard = memo(function IndexCard({
       </div>
       <p
         className={cn(
-          'tick-flash mt-2 inline-block rounded-xs px-1 font-mono text-data-l text-ink-900 tnum',
+          'metric-value tick-flash mt-3 inline-block rounded-xs text-[24px] leading-8 text-ink-900',
           flash === 'up' && 'tick-flash-up',
           flash === 'down' && 'tick-flash-down',
         )}
@@ -84,8 +84,9 @@ const IndexCard = memo(function IndexCard({
         {hasPrice ? fmtPrice(price) : '—'}
       </p>
       {spark && (
-        <div className="mt-2 flex h-8 items-end justify-between gap-2">
-          <Sparkline data={spark} width={132} height={30} change={quote.changePct} className="w-full" />
+        <div className="mt-2 flex h-8 items-center justify-between gap-2">
+          <span className="text-micro text-ink-400">{t('当日')}</span>
+          <Sparkline data={spark} width={84} height={28} change={quote.changePct} className="max-w-[65%]" />
         </div>
       )}
     </motion.button>

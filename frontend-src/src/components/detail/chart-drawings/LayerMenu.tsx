@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils';
 import Icon from '@/components/icons';
 import InfoHint from '@/components/shared/InfoHint';
 import FilterButton from '@/components/shared/FilterButton';
+import SelectionViewport from '@/components/shared/SelectionViewport';
 import Switch from '@/components/shared/Switch';
 import {
   overlayClassName,
@@ -350,7 +351,8 @@ export default function LayerMenu({
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 text-micro">
-            <div className="flex flex-wrap items-center gap-1.5">
+            <SelectionViewport>
+            <div className="mobile-selection-rail flex flex-wrap items-center gap-1.5">
               {PRESET_ORDER.map((id) => (
                 <FilterButton
                   key={id}
@@ -362,6 +364,7 @@ export default function LayerMenu({
                 </FilterButton>
               ))}
             </div>
+            </SelectionViewport>
 
             {/* 双列瀑布：价格图层 8 行独占左列，事件+副图 9 行叠右列，高矮相当；
                 grid 自动布局会按行对齐留出大片空白，所以用两根 flex 列。 */}

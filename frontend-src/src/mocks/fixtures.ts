@@ -244,6 +244,14 @@ export function getStrengthProfiles(): StrengthProfile[] {
 }
 
 /* ---------------- 选股扫描（48 只） ---------------- */
+// 合成的20日平均成交额，覆盖不同流动性门槛；不是市场实时估算。
+// 单独确定数值，不消耗行内Rng，保留既有分数、涨跌与风险字段的种子结果。
+const SCAN_LIQUID_DOLLAR_VOLUME: Record<string, number> = {
+  NVDA: 18_400_000_000, TSLA: 23_800_000_000, AAPL: 11_600_000_000,
+  AMD: 6_400_000_000, MSFT: 5_400_000_000, META: 4_300_000_000,
+  AMZN: 5_700_000_000, SPY: 21_500_000_000, QQQ: 14_800_000_000,
+};
+
 export function runStrengthScan(): ScreenerRow[] {
   const rows = TICKER_POOL.map((info, i) => {
     const r = new Rng(90210 + i * 37);
@@ -257,6 +265,9 @@ export function runStrengthScan(): ScreenerRow[] {
       price: round2(info.base * (1 + changePct / 100)),
       changePct,
       strengthScore,
+      // 两条缺失样本保留“无成交额”路径，启用门槛时按真实规则排除。
+      avgDollarVolume20d: i % 17 === 16 ? null
+        : SCAN_LIQUID_DOLLAR_VOLUME[info.ticker] ?? 40_000_000 + (i % 8) * 180_000_000,
       band,
       subscores: {
         trend: Math.round(r.normal(62, 16, 15, 98)),

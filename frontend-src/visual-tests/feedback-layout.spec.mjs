@@ -82,7 +82,11 @@ for (const width of [390, 1440]) {
         background: getComputedStyle(button).backgroundColor,
         foreground: getComputedStyle(button).color,
       }));
-      expect(selectionColors.background).not.toBe('rgb(255, 255, 255)');
+      // Cloud Monitor 式白色选中片，在浅灰轨道上仍有清晰层次。
+      expect(selectionColors.background).toBe('rgb(255, 255, 255)');
+      const trackBackground = await statuses.evaluate((group) => getComputedStyle(group).backgroundColor);
+      expect(trackBackground).not.toBe(selectionColors.background);
+      await expect(all).not.toHaveCSS('box-shadow', 'none');
       expect(selectionColors.foreground).not.toBe('rgb(255, 255, 255)');
       await confirmed.focus();
       await page.keyboard.press('Space');
@@ -129,6 +133,58 @@ for (const width of [390, 1440]) {
       expect(geometry.every((button) => button.height >= (width === 390 ? 44 : 28))).toBe(true);
       await noPageOverflow(page);
       await capture(page, `breakouts-filters-${width}`, toolbar);
+    });
+
+    test('breakout view scope supports keyboard and touch while retaining watchlist filtering', async ({ page }) => {
+      await page.goto('/breakouts');
+      const scope = page.getByRole('tablist', { name: '查看范围', exact: true });
+      const all = scope.getByRole('tab', { name: '查看全部', exact: true });
+      const watchlist = scope.getByRole('tab', { name: '查看自选', exact: true });
+      const history = page.getByRole('region', { name: '历史事件回溯', exact: true });
+      const filteredHistory = history.getByText(/· 筛选出\s*\d+\s*条/);
+      await expect(all).toHaveAttribute('aria-selected', 'true');
+      await expect(scope.getByRole('tab')).toHaveCount(2);
+      await expect.poll(() => activeSignalCount(page)).toBeGreaterThan(0);
+      await expect(history.getByRole('button', { name: /打开事件详情$/ }).first()).toBeVisible();
+      const baseline = await activeSignalCount(page);
+      await expect(filteredHistory).toHaveCount(0);
+
+      await all.focus();
+      await page.keyboard.press('ArrowRight');
+      await expect(watchlist).toBeFocused();
+      await expect(watchlist).toHaveAttribute('aria-selected', 'true');
+      await expect(all).toHaveAttribute('tabindex', '-1');
+      await expect(scope.locator('[role="tab"][tabindex="0"]')).toHaveCount(1);
+      await expect(filteredHistory).toBeVisible();
+      await expect.poll(() => activeSignalCount(page)).toBeLessThanOrEqual(baseline);
+
+      await page.keyboard.press('Home');
+      await expect(all).toBeFocused();
+      await expect(all).toHaveAttribute('aria-selected', 'true');
+      await expect(filteredHistory).toHaveCount(0);
+      await expect.poll(() => activeSignalCount(page)).toBe(baseline);
+      await page.keyboard.press('End');
+      await expect(watchlist).toBeFocused();
+      await expect(watchlist).toHaveAttribute('aria-selected', 'true');
+      await page.keyboard.press('ArrowLeft');
+      await expect(all).toBeFocused();
+      await expect(all).toHaveAttribute('aria-selected', 'true');
+
+      if (width === 390) await watchlist.tap();
+      else await watchlist.click();
+      await expect(watchlist).toHaveAttribute('aria-selected', 'true');
+      await expect(filteredHistory).toBeVisible();
+      const geometry = await scope.evaluate((list) => ({
+        overflow: list.scrollWidth - list.clientWidth,
+        buttons: [...list.querySelectorAll('[role="tab"]')].map((tab) => ({
+          width: tab.getBoundingClientRect().width,
+          height: tab.getBoundingClientRect().height,
+        })),
+      }));
+      expect(geometry.overflow).toBeLessThanOrEqual(1);
+      expect(geometry.buttons.every((tab) => tab.width >= 44 && tab.height >= (width === 390 ? 44 : 28))).toBe(true);
+      await noPageOverflow(page);
+      await capture(page, `breakouts-view-scope-${width}`, scope);
     });
 
     test('sector tabs support keyboard navigation and keep the indicator aligned after horizontal scrolling', async ({ page }) => {

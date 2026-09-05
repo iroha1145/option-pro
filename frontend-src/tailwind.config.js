@@ -23,7 +23,7 @@ module.exports = {
           700: '#2A3550',
           600: '#3D4A68',
           500: '#5A6788',
-          400: '#6F7B9E',
+          400: '#626F8B',
           300: '#B7BFD3',
         },
         line: {
@@ -110,7 +110,7 @@ module.exports = {
         'sh-1': '0 1px 2px rgba(16,24,40,.03)',
         'sh-2': '0 1px 2px rgba(16,24,40,.03), 0 12px 32px -14px rgba(16,24,40,.10)',
         'sh-3': '0 2px 4px rgba(16,24,40,.04), 0 24px 56px -16px rgba(16,24,40,.16)',
-        'card': '0 1px 2px rgba(16,24,40,.03), inset 0 1px 0 rgba(255,255,255,.7)',
+        'card': '0 2px 4px rgba(24,43,68,.02), 0 9px 25px -12px rgba(24,43,68,.12)',
         'card-hover': '0 1px 2px rgba(16,24,40,.03), 0 12px 32px -14px rgba(16,24,40,.10), inset 0 1px 0 rgba(255,255,255,.7)',
         'inset-hi': 'inset 0 1px 0 rgba(255,255,255,.7)',
         'focus-ring': '0 0 0 3px rgba(46,70,224,.18)',

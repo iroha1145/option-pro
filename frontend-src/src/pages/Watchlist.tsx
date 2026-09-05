@@ -3,6 +3,7 @@
  * B0 页头带 · B1 概览统计（count-up）· B2 可排序表格/卡片（tick-flash）· B3 侧栏（信号/强度分布/市场时钟）
  * 轮询 60s · 空态 / 骨架 / 503 · 响应式
  */
+import SoftBadge from '@/components/shared/SoftBadge';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { motion } from 'framer-motion';
@@ -56,10 +57,10 @@ function AdvanceDeclineBar({
   const total = Math.max(1, advancers + decliners + unchanged);
   return (
     <div className="mt-2">
-      <p className="font-mono text-data-xl tnum">
-        <span className="text-up-700">{advancers}</span>
+      <p className="flex flex-wrap items-center gap-y-1 metric-value text-data-xl tnum">
+        <SoftBadge tone="up" size="md" className="metric-value text-data-l">{advancers}</SoftBadge>
         <span className="mx-1.5 text-ink-300">/</span>
-        <span className="text-down-700">{decliners}</span>
+        <SoftBadge tone="down" size="md" className="metric-value text-data-l">{decliners}</SoftBadge>
         {unchanged > 0 && (
           <span className="ml-1.5 align-middle text-caption text-ink-400">
             · {unchanged} {t('平')}
@@ -85,7 +86,7 @@ function ScoreDonut({ score }: { score: number }) {
   const target = C * (1 - score / 100);
   return (
     <div className="flex items-center gap-4">
-      <p className="font-mono text-data-xl text-ink-900 tnum">{score.toFixed(1)}</p>
+      <p className="metric-value text-data-xl text-ink-900 tnum">{score.toFixed(1)}</p>
       <svg width="72" height="72" viewBox="0 0 72 72" aria-label={t('平均强度分 {score}', { score: score.toFixed(1) })}>
         <circle cx="36" cy="36" r={R} fill="none" stroke="var(--line)" strokeWidth="6" />
         <motion.circle
@@ -171,15 +172,11 @@ function StrengthHistogram({ histogram }: { histogram: number[] }) {
           const color = score >= 85 ? 'bg-up-600' : score >= 70 ? 'bg-brand-600' : score >= 50 ? 'bg-brand-400' : 'bg-ink-300';
           return (
             <div key={i} className="group relative flex-1">
-              <div className="glass pointer-events-none absolute -top-7 left-1/2 z-10 hidden -translate-x-1/2 rounded-xs border border-line px-1.5 py-0.5 font-mono text-[10px] text-ink-600 shadow-sh-2 group-hover:block">
+              <div className="cloud-popover pointer-events-none absolute -top-7 left-1/2 z-10 hidden -translate-x-1/2 px-1.5 py-0.5 font-mono text-[10px] text-ink-600 group-hover:block">
                 {n}
               </div>
-              <motion.div
+              <div
                 className={cn('w-full origin-bottom rounded-t-[3px]', color)}
-                initial={{ scaleY: 0 }}
-                whileInView={{ scaleY: 1 }}
-                viewport={{ once: true, amount: 0.4 }}
-                transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: i * 0.04 }}
                 style={{ height: `${Math.max(4, (n / max) * 88)}px` }}
               />
             </div>
@@ -203,25 +200,20 @@ function MarketClockCard() {
   return (
     <div className="card-surface p-5">
       <p className="eyebrow">{t('市场时钟 · 纽约')}</p>
-      <div className="mt-3 flex items-center gap-2.5">
+      <SoftBadge tone={session === 'regular' ? 'up' : 'neutral'} size="md" className="mt-3 gap-2.5">
         <SessionDot session={session} />
-        <span
-          className={cn(
-            'font-display text-[20px] leading-[26px]',
-            status?.label ? 'text-ink-900' : 'text-ink-400',
-          )}
-        >
+        <span>
           {status?.label ?? (loading ? t('时段读取中…') : t('时段未知'))}
         </span>
-      </div>
-      <p className="mt-2 font-mono text-data-l text-ink-800 tnum" suppressHydrationWarning>
+      </SoftBadge>
+      <p className="mt-2 metric-value text-data-l text-ink-800 tnum" suppressHydrationWarning>
         {fmtNyTime(new Date(now))}
       </p>
       <p className="mt-1 text-micro text-ink-400">{t('美东时间 ET')}</p>
       {status?.nextEvent && (
         <div className="mt-3 flex items-center justify-between border-t border-line pt-3">
           <span className="text-caption text-ink-500">{t('距')}{status.nextEvent.kind === 'open' ? t('开盘') : t('收盘')}</span>
-          <span className="font-mono text-data-m text-brand-600 tnum">{fmtCountdown(status.nextEvent.at, now)}</span>
+          <SoftBadge tone="brand" className="font-mono tnum">{fmtCountdown(status.nextEvent.at, now)}</SoftBadge>
         </div>
       )}
     </div>
@@ -311,7 +303,10 @@ function WatchCard({
         </div>
         <ChangeBadge value={item.changePct} size="sm" />
       </div>
-      <p className="mt-3 font-mono text-data-l text-ink-900 tnum">{fmtPrice(item.price)}</p>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+        <p className="metric-value text-data-l text-ink-900 tnum">{fmtPrice(item.price)}</p>
+        {item.sector && <SoftBadge className="max-w-[60%]" title={item.sector}><span className="truncate">{item.sector}</span></SoftBadge>}
+      </div>
       <div className="mt-2">
         <Sparkline data={item.sparkline} width={230} height={56} change={item.changePct} variant="area" className="w-full" />
       </div>
@@ -534,13 +529,16 @@ export default function Watchlist() {
         render: (r) => (
           <span className="flex items-center gap-3">
             <TickerLogo ticker={r.ticker} />
-            <span>
-              <Link
-                to={`/stock/${encodeURIComponent(r.ticker)}`}
-                aria-label={t('打开 {ticker} 详情', { ticker: r.ticker })}
-                className="block w-fit rounded-sm font-mono text-body-s font-semibold text-ink-800 hover:text-brand-700 hover:underline"
-              >{r.ticker}</Link>
-              <span className="block max-w-[140px] truncate text-micro text-ink-400">{r.name} · {r.sector}</span>
+            <span className="min-w-0">
+              <span className="flex flex-wrap items-center gap-1.5">
+                <Link
+                  to={`/stock/${encodeURIComponent(r.ticker)}`}
+                  aria-label={t('打开 {ticker} 详情', { ticker: r.ticker })}
+                  className="block w-fit rounded-sm font-mono text-body-s font-semibold text-ink-800 hover:text-brand-700 hover:underline"
+                >{r.ticker}</Link>
+                {r.sector && <SoftBadge className="max-w-[7.5rem]" title={r.sector}><span className="truncate">{r.sector}</span></SoftBadge>}
+              </span>
+              <span className="block max-w-[140px] truncate text-micro text-ink-400" title={r.name}>{r.name}</span>
             </span>
           </span>
         ),
@@ -870,25 +868,22 @@ export default function Watchlist() {
           </div>
 
           {uncoveredTickers.length > 0 && (
-            <p
-              className="mt-3 rounded-md border border-warn-600/25 bg-warn-50 px-3 py-2 text-caption text-warn-600"
-              role="status"
-            >
-              {t('暂无行情：')}{uncoveredTickers.join('、')}
+            <p className="mt-3 flex flex-wrap items-center gap-1.5 text-caption text-ink-500" role="status">
+              <SoftBadge tone="warn" className="whitespace-normal">{t('暂无行情：')}{uncoveredTickers.join('、')}</SoftBadge>
               <span className="ml-1 text-ink-500">{t('（不在当前覆盖范围内，可在个股页手动获取）')}</span>
             </p>
           )}
 
           {personalFailed && (
             <p
-              className="mt-3 flex flex-wrap items-center gap-2 rounded-md border border-warn-600/25 bg-warn-50 px-3 py-2 text-caption text-warn-600"
+              className="mt-3 flex flex-wrap items-center gap-2 text-caption text-ink-500"
               role="status"
             >
-              {t('读不到你的自选列表，下面显示的是系统默认关注池。')}
+              <SoftBadge tone="warn" className="whitespace-normal">{t('读不到你的自选列表，下面显示的是系统默认关注池。')}</SoftBadge>
               <button
                 type="button"
                 onClick={() => setPersonalReloadToken((n) => n + 1)}
-                className="rounded-xs border border-warn-600/30 px-2 py-0.5 font-medium text-warn-600 transition-colors hover:bg-warn-600/10"
+                className="control-button"
               >
                 {t('重试')}
               </button>
@@ -897,10 +892,10 @@ export default function Watchlist() {
 
           {showingDefaultPool && (
             <p
-              className="mt-3 rounded-md border border-line bg-paper-2 px-3 py-2 text-caption text-ink-500"
+              className="mt-3 flex flex-wrap items-center gap-1.5 text-caption text-ink-500"
               role="status"
             >
-              {t('你还没有自己的自选，下面是系统默认关注池。')}
+              <SoftBadge className="whitespace-normal">{t('你还没有自己的自选，下面是系统默认关注池。')}</SoftBadge>
               <span className="ml-1 text-ink-400">{t('上方输入代码即可开始建立自己的列表。')}</span>
             </p>
           )}

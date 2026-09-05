@@ -2,6 +2,8 @@
 import type { Dict } from './types';
 
 export const SCREENER: Dict = {
+  '更多筛选': ['More filters', '詳細フィルター'],
+  '辅助读数': ['Supporting metrics', '補助指標'],
   /* ---------------- FilterWorkbench.tsx ---------------- */
   '全部': ['All', '全て'],
   '最高': ['Max', '上限'],

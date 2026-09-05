@@ -26,7 +26,6 @@ export const WIRED: Dict = {
   '暂时打不开这条新闻的详情': ["Can't open this article's details right now", 'この記事の詳細を今は開けません'],
   '{ticker} {setup} 首要信号大卡': ['{ticker} {setup} lead signal card', '{ticker} {setup} 主要シグナルカード'],
   '价格标尺：失效 {invalid}，触发 {trigger}，目标 {target}，现价 {current}': ['Price scale: invalidation {invalid}, trigger {trigger}, target {target}, current {current}', '価格スケール：無効化ライン {invalid}、トリガー {trigger}、目標 {target}、現在値 {current}'],
-  '{marker} / 现价': ['{marker} / current', '{marker} / 現在値'],
   '{ticker} {setup} 信号卡，打开事件详情': ['{ticker} {setup} signal card, open event details', '{ticker} {setup} シグナルカード、イベント詳細を開く'],
 
   // ── 新闻情报（catalysts）──────────────────────────────────────────────

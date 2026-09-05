@@ -7,6 +7,7 @@
  * 状态：未扫描 empty-scan.svg · 扫描中骨架 · 无命中 · 503 快照不可用（保留上次结果）
  * 数据：strengthApi.scan / market / profilesMeta + catalystsApi.batchSummaries72h（单次批量）+ signalsApi.stock
  */
+import SoftBadge from '@/components/shared/SoftBadge';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { strengthApi, type StrengthScanEnvelope } from '@/api/modules/strength';
@@ -611,34 +612,34 @@ export default function Screener() {
                 {/* 客户端条件只作用在后端返回的强度前 N 名上（审计 P1-05）：
                     后端把 top 硬限在 120，因此候选池更大时结果不是全市场筛选。 */}
                 {truncatedScope && (
-                  <span
-                    className="rounded-xs bg-warn-50 px-1.5 py-px text-micro text-warn-600"
+                  <SoftBadge
+                    tone="warn"
                     title={__t('价格上限、多板块、分档与最低分是客户端条件，只能作用在后端返回的这 {returned} 行上；已评分候选共 {screened} 只。', { returned: truncatedScope.returned, screened: truncatedScope.screened })}
                   >
                     {__t('仅在强度前')} {truncatedScope.returned} {__t('名内筛选')}
-                  </span>
+                  </SoftBadge>
                 )}
                 {preparingCatalystSort && (
-                  <span className="inline-flex items-center gap-1.5 rounded-xs bg-paper-2 px-1.5 py-px text-micro text-ink-500">
+                  <SoftBadge>
                     <span className="size-2.5 animate-spin rounded-full border-[1.5px] border-brand-600/25 border-t-brand-600" aria-hidden="true" />
                     {__t('正在准备排序数据 · 剩余')} {missingCatalystTickers.length}
-                  </span>
+                  </SoftBadge>
                 )}
                 {scanMeta?.stale && (
-                  <span className="rounded-xs bg-warn-50 px-1.5 py-px text-micro text-warn-600">
+                  <SoftBadge tone="warn" className="whitespace-normal">
                     {__t('数据未刷新')}{scanMeta.snapshotSavedAt ? ` · ${fmtLocaleDateTime(scanMeta.snapshotSavedAt, { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })}` : ''}
-                  </span>
+                  </SoftBadge>
                 )}
                 {chips.map((c) => (
-                  <span
+                  <SoftBadge
                     key={c.key}
-                    className="inline-flex items-center gap-1 rounded-xs border border-line bg-card-warm px-1.5 py-0.5 text-micro text-ink-500"
+                    className="gap-1"
                   >
                     {c.label}
                     <button onClick={c.onRemove} aria-label={__t('移除条件 {label}', { label: c.label })} className="text-ink-300 transition-colors hover:text-down-600">
                       <Icon name="x" size={10} />
                     </button>
-                  </span>
+                  </SoftBadge>
                 ))}
               </>
             ) : (
@@ -755,7 +756,7 @@ export default function Screener() {
                 {rows && (
                   <div className="mt-4">
                     <p className="mb-2 flex items-center gap-2 text-caption text-ink-400">
-                      <span className="rounded-xs bg-warn-50 px-1.5 py-px font-mono text-micro text-warn-600">{__t('已过期')}</span>
+                      <SoftBadge tone="warn">{__t('已过期')}</SoftBadge>
                       {__t('上次成功扫描于')} <span className="font-mono tnum">{lastScanAt ? fmtTimeHHMMSS(lastScanAt) : '—'}</span>
                     </p>
                     <div className="hidden md:block">

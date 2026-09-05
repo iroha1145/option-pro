@@ -3,6 +3,7 @@
  * 列：# / 代码 / 强度分 / 分项 / 价·涨跌 / 催化剂 72h / 成交额 / ▸
  * 行 stagger 30ms 仅第一页入场（翻页直接呈现）；排序切换 layout 重排 320ms；价格 tick-flash。
  */
+import SoftBadge from '@/components/shared/SoftBadge';
 import { Fragment } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { ScreenerRow } from '@/api/types';
@@ -147,9 +148,12 @@ export default function ResultTable({
                   <td className="px-3 py-2">
                     <span className="flex items-center gap-2.5">
                       <TickerLogo ticker={r.ticker} size={28} />
-                      <span>
-                        <span className="block font-mono text-body-s font-semibold text-ink-800">{r.ticker}</span>
-                        <span className="block max-w-[150px] truncate text-micro text-ink-400">{r.name} · {r.sector}</span>
+                      <span className="min-w-0">
+                        <span className="flex flex-wrap items-center gap-1.5">
+                          <span className="font-mono text-body-s font-semibold text-ink-800">{r.ticker}</span>
+                          {r.sector && <SoftBadge className="max-w-[7.5rem]" title={r.sector}><span className="truncate">{r.sector}</span></SoftBadge>}
+                        </span>
+                        <span className="block max-w-[150px] truncate text-micro text-ink-400" title={r.name}>{r.name}</span>
                       </span>
                     </span>
                   </td>

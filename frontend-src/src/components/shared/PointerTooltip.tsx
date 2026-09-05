@@ -177,7 +177,7 @@ export default function PointerTooltip({
         id={id}
         role="tooltip"
         data-pointer-tooltip=""
-        className={cn('glass pointer-events-none fixed z-[88] overflow-hidden rounded-md border border-line shadow-sh-2', contentClassName)}
+        className={cn('cloud-popover pointer-events-none fixed z-[88] overflow-hidden', contentClassName)}
         // The app's reduced-motion rule assigns a duration to every element.
         // Disable transition properties so cursor coordinates never tween from (0, 0).
         style={{ left: 0, top: 0, width, maxWidth: 'calc(100vw - 16px)', maxHeight: 'calc(100dvh - 16px)', visibility: 'hidden', transitionProperty: 'none' }}

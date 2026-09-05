@@ -84,7 +84,7 @@ function ZoneBand({ ev }: { ev: BreakoutEventFull }) {
         )}
         {/* 现价竖针 */}
         <div className="absolute inset-y-0 w-[2px] -translate-x-1/2 bg-brand-600 shadow-[0_1px_2px_rgba(16,24,40,.25)]" style={{ left: `${x(ev.current_price)}%` }} aria-hidden="true">
-          <span className="absolute -top-1 left-1/2 size-1.5 -translate-x-1/2 rotate-45 bg-brand-600 shadow-[0_0_0_1.5px_#fff,0_1px_2px_rgba(16,24,40,.3)]" />
+          <span className="radar-price-cursor absolute -top-1 left-1/2 -translate-x-1/2" />
         </div>
       </div>
       <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-0.5 font-mono text-micro text-ink-500 tnum">
@@ -128,10 +128,10 @@ function LifecycleTrack({ ev }: { ev: BreakoutEventFull }) {
                 )}
                 aria-hidden="true"
               />
-              <span className={cn('mt-1.5 whitespace-nowrap text-[10px] leading-[14px]', last ? 'font-semibold text-ink-800' : 'text-ink-400')}>
+              <span className={cn('mt-1.5 whitespace-nowrap text-[11px] leading-[15px]', last ? 'font-semibold text-ink-800' : 'text-ink-400')}>
                 {LIFECYCLE_CN[t.state] ?? t.state}
               </span>
-              <span className="whitespace-nowrap font-mono text-[10px] leading-[14px] text-ink-300 tnum">{hhmm(t.at)}</span>
+              <span className="whitespace-nowrap font-mono text-[11px] leading-[15px] text-ink-300 tnum">{hhmm(t.at)}</span>
             </div>
             {!last && <span className="mx-1 mt-[9px] h-px min-w-4 flex-1 bg-line-strong" aria-hidden="true" />}
           </li>
@@ -239,7 +239,7 @@ export default function EventDetail({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.16 } }}
             transition={{ type: 'spring', stiffness: 520, damping: 32 }}
-            className="relative flex max-h-[88dvh] w-full max-w-[720px] flex-col overflow-hidden rounded-xl border border-line bg-card shadow-sh-3"
+            className="radar-detail relative flex max-h-[88dvh] w-full max-w-[720px] flex-col overflow-hidden rounded-xl border border-line bg-card shadow-sh-3"
           >
             {detailError && (
               <div className="flex flex-wrap items-center gap-2 border-b border-warn-600/25 bg-warn-50 px-5 py-2 text-caption text-warn-600">
@@ -270,7 +270,7 @@ export default function EventDetail({
               </div>
               <span
                 className={cn(
-                  'inline-flex items-center whitespace-nowrap rounded-xs border px-2 py-0.5 text-caption font-medium',
+                  'radar-chip',
                   LIFECYCLE_CHIP_CLASS[LIFECYCLE_TONE[event.lifecycle_state] ?? 'ink'],
                 )}
               >

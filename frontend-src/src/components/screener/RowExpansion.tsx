@@ -1,13 +1,13 @@
 /**
  * 行展开分项明细（screener.md B2 行展开 · accordion 260ms）
- * ① 分项强度 breakdown（与行内微条同源 subscoreDimsOf；4 条 grow-bar + 分值 + 权重）
+ * ① 分项强度 breakdown（与行内微条同源 subscoreDimsOf；4 条比例条 + 分值 + 权重）
  * ② 迷你点阵面积图（§6-2 stipple）：mock 用行内 sparkline；live 契约无 sparkline →
  *    按需拉真实日 K（stocksApi.chart range=1d）取近 6 根收盘；拿不到如实空态，杜绝 Infinity
  * ③ 操作（打开详情 / 相关突破事件）+ 信号 + 成交额
  */
+import SoftBadge from '@/components/shared/SoftBadge';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
-import { motion } from 'framer-motion';
 import { stocksApi } from '@/api/modules/stocks';
 import { ApiError } from '@/api/client';
 import type { ScreenerRow } from '@/api/types';
@@ -26,8 +26,6 @@ import { subscoreDimsOf,
 } from './types';
 import ManualStockPull from '@/components/detail/ManualStockPull';
 import { t } from '../../i18n/core.ts';
-
-const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
 
 /* live 契约分项键 → 评分解释（mock 四维 trend/momentum/… 无对应文案则不渲染图标） */
 const DIM_HINTS: Record<string, ScoreHint> = {
@@ -135,7 +133,7 @@ function DotMatrixBlock({ row }: { row: ScreenerRow }) {
   return (
     <div>
       <p className="eyebrow">{title}</p>
-      <div className="mt-3 rounded-md border border-line bg-card p-3">
+      <div className="mt-3 rounded-[10px] border border-line/70 bg-card p-3">
         {closes === undefined ? (
           <SkeletonBlock className="h-[72px] w-full rounded-sm" />
         ) : closes === null ? (
@@ -185,7 +183,7 @@ export default function RowExpansion({ row, weights, dollarVolume, signals, onOp
       <div>
         <p className="eyebrow">{t('分项强度 · BREAKDOWN')}</p>
         <div className="mt-3 grid grid-cols-[max-content_minmax(0,1fr)_max-content] gap-y-2.5">
-          {dims.map(({ key, label, value }, i) => {
+          {dims.map(({ key, label, value }) => {
             const w = weightOf(key);
             return (
               <div key={key} className="col-span-3 grid grid-cols-subgrid items-center gap-x-2.5">
@@ -193,13 +191,10 @@ export default function RowExpansion({ row, weights, dollarVolume, signals, onOp
                   {label}
                   {DIM_HINTS[key] && <InfoHint hint={DIM_HINTS[key]} side="bottom" size={11} className="ml-0.5" />}
                 </span>
-                <span className="h-1.5 overflow-hidden rounded-pill bg-line" role="presentation">
+                <span className="strength-track h-1.5 overflow-hidden rounded-pill bg-paper" role="presentation">
                   {value !== null && (
-                    <motion.span
+                    <span
                       className={cn('block h-full origin-left rounded-pill', strengthBarClass(value))}
-                      initial={{ scaleX: 0 }}
-                      animate={{ scaleX: 1 }}
-                      transition={{ duration: 0.7, ease: EASE_PAPER, delay: i * 0.05 }}
                       style={{ width: `${Math.max(2, Math.min(100, value))}%` }}
                     />
                   )}
@@ -256,7 +251,7 @@ export default function RowExpansion({ row, weights, dollarVolume, signals, onOp
               <span className="skeleton-shimmer h-5 w-14 rounded-xs" />
             </div>
           ) : signals.state === 'error' ? (
-            <p className="text-caption text-warn-600">{t('信号读取失败 · 收起后重新展开可重试')}</p>
+            <p><SoftBadge tone="warn" className="whitespace-normal">{t('信号读取失败 · 收起后重新展开可重试')}</SoftBadge></p>
           ) : signals.signals.length === 0 ? (
             <p className="text-caption text-ink-400">{t('— 暂无信号')}</p>
           ) : (

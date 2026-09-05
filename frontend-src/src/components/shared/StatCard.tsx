@@ -24,17 +24,17 @@ export default function StatCard({ label, value, digits = 0, suffix, icon, sub, 
   return (
     <div
       className={cn(
-        'card-surface tick-flash p-5',
+        'card-surface metric-card tick-flash p-5',
         flash === 'up' && 'tick-flash-up',
         flash === 'down' && 'tick-flash-down',
         className,
       )}
     >
       <div className="flex items-start justify-between">
-        <p className="eyebrow">{label}</p>
+        <p className="text-caption font-medium text-ink-500">{label}</p>
         {icon && <Icon name={icon} size={18} className="text-ink-400" />}
       </div>
-      <p className="mt-2 font-mono text-data-xl text-ink-900 tnum">
+      <p className="metric-value mt-3 text-data-xl text-ink-900">
         {/* Rare UI counter：读屏只接收实际值，不接收动画中的插值。 */}
         <span className="sr-only">{actual}{suffix}</span>
         <span aria-hidden="true">

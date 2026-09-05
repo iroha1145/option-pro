@@ -25,7 +25,7 @@ import type {
   MarkPointComponentOption,
   TooltipComponentOption,
 } from 'echarts/components';
-import { CHART_MONO_FONT } from './chartFonts.ts';
+import { CHART_MONO_FONT, CHART_TEXT_FONT } from './chartFonts.ts';
 import { directionColors, getColorMode } from './colorPreference.ts';
 
 echarts.use([
@@ -57,7 +57,7 @@ export type EChartsInstance = ReturnType<typeof echarts.init>;
 
 /* ---------- 调色（与 CSS 变量一致；up/down 随涨跌色彩习惯） ---------- */
 export const CH = {
-  ink400: '#6F7B9E',
+  ink400: '#626F8B',
   ink300: '#B7BFD3',
   lineChart: '#EDF0F4', // v8.1 随纸面降温
   brand600: '#2E46E0',
@@ -94,7 +94,7 @@ export function categoryAxis(labels: string[]) {
     data: labels,
     axisLine: { show: false },
     axisTick: { show: false },
-    axisLabel: { color: CH.ink400, fontSize: 11, fontFamily: CHART_MONO_FONT },
+    axisLabel: { color: CH.ink400, fontSize: 11, fontFamily: CHART_TEXT_FONT },
   };
 }
 
@@ -103,25 +103,26 @@ export function valueAxis(overrides: Record<string, unknown> = {}) {
     type: 'value' as const,
     axisLine: { show: false },
     axisTick: { show: false },
-    axisLabel: { color: CH.ink400, fontSize: 11, fontFamily: CHART_MONO_FONT },
+    axisLabel: { color: CH.ink400, fontSize: 11, fontFamily: CHART_TEXT_FONT },
     splitLine: { lineStyle: { color: CH.lineChart, width: 1 } },
     ...overrides,
   };
 }
 
-/** 毛玻璃 tooltip（§6：overlay + blur(14px) + sh-2 + r-md） */
+/** 保留现有调用接口，小窗使用白底、细边和克制阴影。 */
 export function glassTooltip(overrides: Record<string, unknown> = {}) {
   return {
     trigger: 'axis' as const,
-    backgroundColor: 'rgba(253,252,249,0.88)',
+    transitionDuration: 0,
+    className: 'cloud-chart-tooltip',
+    backgroundColor: '#FFFFFF',
     /* tooltip 为 DOM 渲染：边框跟随 --line 令牌（线条细化后自动同步） */
     borderColor: 'var(--line)',
     borderWidth: 1,
     padding: [8, 12],
-    textStyle: { color: '#3D4A68', fontSize: 12, fontFamily: 'Inter, sans-serif' },
+    textStyle: { color: '#3D4A68', fontSize: 12, fontFamily: CHART_TEXT_FONT },
     extraCssText:
-      'backdrop-filter:blur(14px) saturate(1.5);-webkit-backdrop-filter:blur(14px) saturate(1.5);' +
-      'box-shadow:0 1px 2px rgba(13,22,38,.04),0 8px 24px -12px rgba(13,22,38,.12);border-radius:8px;',
+      'box-shadow:var(--popover-shadow);border-radius:9px;font-variant-numeric:tabular-nums;transition:opacity 140ms ease-out;',
     axisPointer: {
       type: 'line' as const,
       lineStyle: { color: CH.ink300, width: 1, type: [3, 3] as number[] },
@@ -142,7 +143,7 @@ export function withAlpha(hex: string, alpha: number): string {
 }
 
 /** Insight 内嵌图台：暖白纸面 + 发丝边，把绘图区收进一层里（外边距各站点自给） */
-export const INSIGHT_FRAME = 'rounded-lg border border-line bg-card-warm p-2';
+export const INSIGHT_FRAME = 'insight-frame rounded-lg border border-line bg-card-warm p-2';
 
 /** Insight 滑翔平滑度（贝塞尔近似 Catmull-Rom）：只给愿意被平滑的曲线显式传入 */
 export const INSIGHT_SMOOTH = 0.45;
@@ -173,7 +174,7 @@ export function insightLine(color: string, overrides: Record<string, unknown> = 
       /* 分析型曲线默认不平滑：平滑会在真实观测点之间伪造出没测过的读数。
          要 Insight 的滑翔手感，调用点显式传 smooth: INSIGHT_SMOOTH。 */
       smooth: false,
-      lineStyle: { color, width: 2.25, cap: 'round', join: 'round' },
+      lineStyle: { color, width: 1.8, cap: 'round', join: 'round' },
       itemStyle: { color },
     },
     overrides,
@@ -195,7 +196,7 @@ export function insightAreaStyle(
   const nums = values.filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
   const top = Math.max(0, ...nums);
   const bottom = Math.min(0, ...nums);
-  const strong = withAlpha(color, 0.12);
+  const strong = withAlpha(color, 0.08);
   const clear = withAlpha(color, 0);
   /* 全正/全负时 0 落在包围盒边界，下面的去重会把它退化成单向渐变 */
   const zero = top === bottom ? 1 : top / (top - bottom);
@@ -215,10 +216,10 @@ export function insightAreaStyle(
 export function insightEndpointMark(color: string, index: number, value: number): Record<string, unknown> {
   return {
     symbol: 'circle',
-    symbolSize: 9,
+    symbolSize: 6,
     silent: true,
     label: { show: false },
-    itemStyle: { color, borderColor: '#FFFFFF', borderWidth: 2 },
+    itemStyle: { color, borderColor: '#FFFFFF', borderWidth: 1.5 },
     data: [{ coord: [index, value] }],
   };
 }
@@ -286,14 +287,16 @@ export function insightTooltipBody(header: string, rows: string[], meta = ''): s
 export function insightTooltip(overrides: Record<string, unknown> = {}) {
   return {
     trigger: 'axis' as const,
+    transitionDuration: 0,
+    className: 'cloud-chart-tooltip',
     backgroundColor: '#FFFFFF',
-    borderColor: 'var(--line-strong)',
+    borderColor: 'var(--line)',
     borderWidth: 1,
-    padding: [6, 10],
-    textStyle: { color: '#2A3550', fontSize: 11.5, fontFamily: 'Inter, sans-serif' },
+    padding: [9, 12],
+    textStyle: { color: '#2A3550', fontSize: 12, fontFamily: CHART_TEXT_FONT },
     extraCssText:
-      'box-shadow:0 1px 2px rgba(16,24,40,.03),0 12px 32px -14px rgba(16,24,40,.10);' +
-      'border-radius:8px;font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1;',
+      'box-shadow:var(--popover-shadow);border-radius:9px;transition:opacity 140ms ease-out;' +
+      'font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1;',
     confine: true,
     position: (
       point: number[],

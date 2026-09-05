@@ -1,3 +1,4 @@
+import SoftBadge from '@/components/shared/SoftBadge';
 /** sources 面板：数据源健康卡（采集状态 + 数据新鲜度 + 最近抓取 + 近 24h 条数） */
 import { motion } from 'framer-motion';
 import { usePolling } from '@/hooks/usePolling';
@@ -6,7 +7,6 @@ import { Led } from './bits';
 import EmptyState from '@/components/shared/EmptyState';
 import { SkeletonCard } from '@/components/shared/Skeleton';
 import SourceNote from '@/components/shared/SourceNote';
-import { cn } from '@/lib/utils';
 import { fmtRelativeShort } from '@/lib/format';
 import { t } from '../../i18n/core.ts';
 
@@ -70,16 +70,11 @@ export default function SourcesPanel({ refreshToken }: { refreshToken: number })
           >
             <div className="flex items-center justify-between">
               <p className="text-h3 text-ink-800">{s.source}</p>
-              <span
-                className={cn(
-                  'inline-flex items-center gap-1.5 rounded-xs px-1.5 py-0.5 text-micro font-medium',
-                  s.status === 'active' ? 'bg-up-50 text-up-700' : 'bg-warn-50 text-warn-600',
-                )}
-              >
+              <SoftBadge tone={s.status === 'active' ? 'up' : 'warn'}>
                 {/* 源正常/异常是静态健康状态，不脉冲 */}
                 <Led tone={s.status === 'active' ? 'up' : 'warn'} className="size-1.5" />
                 {s.status === 'active' ? t('正常') : t('异常')}
-              </span>
+              </SoftBadge>
             </div>
             <div className="mt-4 grid grid-cols-3 gap-2 text-center">
               <div>

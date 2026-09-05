@@ -22,6 +22,8 @@ import {
 } from '@/lib/transitions';
 import { pushRecent, readRecent } from '@/lib/recentTickers';
 import Icon, { type IconName } from '@/components/icons';
+import TickerLogo from '@/components/shared/TickerLogo';
+import SoftBadge from '@/components/shared/SoftBadge';
 import { NAV_ITEMS } from '@/components/Navbar';
 import { t, t as __t } from '../i18n/core.ts';
 
@@ -39,6 +41,8 @@ interface Entry {
   title: string;
   mono?: boolean;
   hint?: string;
+  ticker?: string;
+  sector?: string;
   icon: IconName;
   action: () => void;
 }
@@ -166,14 +170,16 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
           group: __t('股票'),
           title: r.ticker,
           mono: true,
-          hint: `${r.name} · ${r.sector}`,
+          hint: r.name,
+          ticker: r.ticker,
+          sector: r.sector,
           icon: 'candle',
           action: () => pickTicker(r.ticker),
         }),
       );
     } else {
       readRecent().forEach((t) =>
-        list.push({ id: `r-${t}`, group: __t('最近'), title: t, mono: true, hint: __t('最近查看'), icon: 'clock-ny', action: () => pickTicker(t) }),
+        list.push({ id: `r-${t}`, group: __t('最近'), title: t, ticker: t, mono: true, hint: __t('最近查看'), icon: 'clock-ny', action: () => pickTicker(t) }),
       );
       NAV_ITEMS.forEach((n) =>
         list.push({
@@ -469,7 +475,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
                         'relative z-10 flex w-full items-center gap-2.5 rounded-md px-4 py-2 text-left transition-colors duration-fast',
                       )}
                     >
-                      <Icon name={e.icon} size={15} className={cn('shrink-0', e.idx === clampedActive ? 'text-brand-600' : 'text-ink-400')} />
+                      {e.ticker ? <TickerLogo ticker={e.ticker} size={24} /> : <Icon name={e.icon} size={15} className={cn('shrink-0', e.idx === clampedActive ? 'text-brand-600' : 'text-ink-400')} />}
                       {e.no && <span className="font-mono text-micro text-ink-400 tnum">{e.no}</span>}
                       <span
                         className={cn(
@@ -479,7 +485,12 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
                       >
                         {e.title}
                       </span>
-                      {e.hint && <span className="ml-auto min-w-0 max-w-[55%] truncate text-micro text-ink-400">{e.hint}</span>}
+                      {(e.hint || e.sector) && (
+                        <span className="ml-auto flex min-w-0 max-w-[58%] items-center gap-1.5">
+                          {e.hint && <span className="min-w-0 truncate text-micro text-ink-400">{e.hint}</span>}
+                          {e.sector && <SoftBadge className="max-w-[7rem] shrink-0" title={e.sector}><span className="truncate">{e.sector}</span></SoftBadge>}
+                        </span>
+                      )}
                     </button>
                   ))}
                 </div>

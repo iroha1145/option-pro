@@ -1,10 +1,10 @@
+import AnalysisIcon from '@/components/shared/AnalysisIcon';
 /** 确认弹窗（design.md §4.3 + transitions.dev modal：open 250ms / close 150ms） */
 import { useEffect, useId, useRef } from 'react';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { isTopFocusScope } from '@/lib/focusScope';
 import { cn } from '@/lib/utils';
-import Icon from '@/components/icons';
 import {
   overlayClassName,
   overlayVisible,
@@ -89,7 +89,7 @@ export default function ConfirmDialog({
                 danger ? 'bg-down-50 text-down-600' : 'bg-ai-50 text-ai-600',
               )}
             >
-              <Icon name="spark-ai" size={18} />
+              <AnalysisIcon size={18} />
             </span>
             <div className="min-w-0 flex-1">
               <h3 className="text-h3 text-ink-900">{title}</h3>
@@ -108,7 +108,7 @@ export default function ConfirmDialog({
               onClick={onConfirm}
               className={cn(
                 'rounded-md px-3.5 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] duration-fast hover:brightness-105',
-                danger ? 'bg-down-600' : 'bg-brand-600',
+                danger ? 'bg-down-600' : 'bg-ai-600',
               )}
             >
               {confirmLabel}

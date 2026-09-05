@@ -1,3 +1,4 @@
+import AnalysisIcon from '@/components/shared/AnalysisIcon';
 /**
  * B2 即将公布表（earnings.md）· 按日期分组
  * 行：TickerLogo+代码/名称 · 时间（sun-bmo 盘前 warn-600 / moon-amc 盘后 ai-600）
@@ -12,6 +13,7 @@ import { fmtCompact } from '@/lib/format';
 import Icon from '@/components/icons';
 import TickerLogo from '@/components/shared/TickerLogo';
 import EmptyState from '@/components/shared/EmptyState';
+import SoftBadge from '@/components/shared/SoftBadge';
 import type { EarningsRow } from './types';
 import { daysUntil, exBool, exNum, exStr, fmtMDCN, relativeDayCN, weekdayCN } from './types';
 import { t } from '../../i18n/core.ts';
@@ -51,21 +53,22 @@ function EpsPairBars({ est, act, index }: { est: number | null; act: number | nu
 export function TimingBadge({ timing, className }: { timing: EarningsRow['timing']; className?: string }) {
   if (timing == null) {
     return (
-      <span className={cn('inline-flex items-center gap-1.5 text-ink-400', className)} aria-label={t("公布时间待定")}>
+      <SoftBadge className={className} aria-label={t("公布时间待定")}>
         <Icon name="clock-ny" size={14} />
-        <span className="text-caption">{t('时间待定')}</span>
-      </span>
+        {t('时间待定')}
+      </SoftBadge>
     );
   }
   const bmo = timing === 'bmo';
   return (
-    <span
-      className={cn('inline-flex items-center gap-1.5', bmo ? 'text-warn-600' : 'text-ai-600', className)}
+    <SoftBadge
+      tone={bmo ? 'warn' : 'ai'}
+      className={className}
       aria-label={bmo ? t('盘前公布') : t('盘后公布')}
     >
       <Icon name={bmo ? 'sun-bmo' : 'moon-amc'} size={14} />
-      <span className="text-caption">{bmo ? t('盘前') : t('盘后')}</span>
-    </span>
+      {bmo ? t('盘前') : t('盘后')}
+    </SoftBadge>
   );
 }
 
@@ -75,7 +78,7 @@ function ExpectedMoveCell({ pct, index }: { pct: number | null; index: number })
   return (
     <span className="block">
       <span className="font-mono text-data-m text-ink-800 tnum">±{pct.toFixed(1)}%</span>
-      <span className="mt-1 block h-1 w-16 overflow-hidden rounded-pill bg-line" aria-hidden="true">
+      <span className="mt-1 block h-1 w-16 strength-track overflow-hidden rounded-pill bg-line" aria-hidden="true">
         <motion.span
           className="block h-full origin-left rounded-pill bg-ai-600"
           initial={{ scaleX: 0 }}
@@ -114,17 +117,10 @@ function ImpactAction({ row, onSelect }: { row: EarningsRow; onSelect: () => voi
         onSelect();
       }}
       title={title}
-      className={cn(
-        'inline-flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-sm border px-2 text-caption leading-none transition-colors duration-fast',
-        locked
-          ? 'border-ai-600 bg-ai-600 text-white hover:brightness-110'
-          : ready === true || finalizing
-            ? 'border-ai-600/40 bg-ai-50 text-ai-600 hover:bg-ai-600 hover:text-white'
-            : 'border-line bg-card text-ink-500 hover:border-ai-600/50 hover:text-ai-600',
-      )}
+      className="inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md bg-ai-600 px-2.5 text-caption font-medium leading-none text-white shadow-btn transition-[filter] duration-fast hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai-600/40 focus-visible:ring-offset-2"
       aria-label={`${row.ticker} ${title}`}
     >
-      <Icon name="spark-ai" size={12} />
+      <AnalysisIcon size={14} />
       {label}
     </button>
   );
@@ -305,11 +301,15 @@ export default function EarningsList({
                     {/* 代码 */}
                     <span className="flex min-w-0 items-center gap-2.5">
                       <TickerLogo ticker={row.ticker} />
-                      <span className="min-w-0">
+                      <span className="min-w-0 flex-1">
                         <span className="block font-mono text-body-s font-semibold text-ink-800">{row.ticker}</span>
-                        <span className="block max-w-[180px] truncate text-micro text-ink-400">
-                          {row.name}
-                          {sector ? ` · ${sector}` : ''}
+                        <span className="flex min-w-0 items-center gap-1.5">
+                          <span className="min-w-0 truncate text-micro text-ink-400" title={row.name}>{row.name}</span>
+                          {sector && (
+                            <SoftBadge className="max-w-[48%] shrink-0" title={sector}>
+                              <span className="truncate">{sector}</span>
+                            </SoftBadge>
+                          )}
                         </span>
                       </span>
                     </span>
@@ -357,9 +357,13 @@ export default function EarningsList({
                       <TickerLogo ticker={row.ticker} size={28} />
                       <span className="min-w-0 flex-1">
                         <span className="block font-mono text-body-s font-semibold text-ink-800">{row.ticker}</span>
-                        <span className="block truncate text-micro text-ink-400">
-                          {row.name}
-                          {sector ? ` · ${sector}` : ''}
+                        <span className="flex min-w-0 items-center gap-1.5">
+                          <span className="min-w-0 truncate text-micro text-ink-400" title={row.name}>{row.name}</span>
+                          {sector && (
+                            <SoftBadge className="max-w-[48%] shrink-0" title={sector}>
+                              <span className="truncate">{sector}</span>
+                            </SoftBadge>
+                          )}
                         </span>
                       </span>
                       <TimingBadge timing={row.timing} />

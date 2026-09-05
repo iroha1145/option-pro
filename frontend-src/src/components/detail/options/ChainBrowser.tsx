@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 import { fmtCompact, fmtPrice } from '@/lib/format';
 import Icon from '@/components/icons';
 import FilterButton from '@/components/shared/FilterButton';
+import SelectionViewport from '@/components/shared/SelectionViewport';
 import { t } from '../../../i18n/core.ts';
 import { contractsForChain, selectContracts, type ChainContract, type ContractScope, type ContractSide } from './chainMetrics.ts';
 
@@ -104,12 +105,16 @@ export default function ChainBrowser({ chain }: { chain: OptionChain }) {
 
     <section aria-label={t('期权合约列表')}>
       <div className="flex flex-wrap items-center justify-between gap-3">
+        <SelectionViewport>
         <div className="filter-group" role="group" aria-label={t('合约范围')}>
           {([['near', t('现价附近')], ['alerts', t('仅看异动')], ['all', t('全部合约')]] as const).map(([value, label]) => <FilterButton key={value} active={scope === value} onClick={() => { setScope(value); setSelectedId(null); }} >{label}</FilterButton>)}
         </div>
+        </SelectionViewport>
+        <SelectionViewport>
         <div className="filter-group" role="group" aria-label={t('合约类型')}>
           {([['all', t('全部')], ['call', t('看涨（Call）')], ['put', t('看跌（Put）')]] as const).map(([value, label]) => <FilterButton key={value} active={side === value} onClick={() => { setSide(value); setSelectedId(null); }} >{label}</FilterButton>)}
         </div>
+        </SelectionViewport>
       </div>
       <div className="my-3 flex flex-wrap items-center justify-between gap-2 text-caption text-ink-500">
         <p>{scope === 'near' ? hasSpot ? t('展示距离现价最近的 11 档行权价') : t('现价缺失，展示全部行权价') : scope === 'alerts' ? t('按成交量从高到低排列') : t('按行权价从低到高排列')}</p>

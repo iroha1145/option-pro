@@ -1,3 +1,4 @@
+import AnalysisIcon from '@/components/shared/AnalysisIcon';
 /** 新闻详情抽屉：标题/来源/时间/原文外链/摘要 + 模型分析区（任务状态机：生成/重试/取消/轮询） */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -7,25 +8,19 @@ import { useAccess } from '@/hooks/useAccess';
 import { useToast } from '@/hooks/useToast';
 import { useShell } from '@/hooks/useShell';
 import { SkeletonBlock, SkeletonText } from '@/components/shared/Skeleton';
-import { cn } from '@/lib/utils';
+import SoftBadge from '@/components/shared/SoftBadge';
 import { fmtLocaleDateTime, fmtLocaleTime } from '@/lib/format';
 import { catalystsContract } from './api';
-import type { CatalystNewsItem, NewsAnalysisJob, NewsClassification, TrustedStockImpact } from './api';
+import type { CatalystNewsItem, NewsAnalysisJob, TrustedStockImpact } from './api';
 import { AnalysisStatusChip, ClassificationChip, ConfidenceLabel, ImpactValue, Led, StaleChip, TickerChip } from './bits';
 import ConfirmDialog from './ConfirmDialog';
 import { t as __t } from '../../i18n/core.ts';
 
 const TERMINAL: NewsAnalysisJob['status'][] = ['completed', 'failed', 'cancelled', 'insufficient_context'];
-const DIR_STYLE: Record<NewsClassification, { label: string; cls: string }> = {
-  bullish: { label: __t('利多'), cls: 'bg-up-50 text-up-700' },
-  bearish: { label: __t('利空'), cls: 'bg-down-50 text-down-700' },
-  neutral: { label: __t('中性'), cls: 'bg-paper-2 text-ink-500 border border-line' },
-};
 
 /* ---------------- 逐股影响卡 ---------------- */
 function StockImpactCard({ imp, index }: { imp: TrustedStockImpact; index: number }) {
   const { openTicker } = useShell();
-  const d = DIR_STYLE[imp.direction];
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -35,7 +30,7 @@ function StockImpactCard({ imp, index }: { imp: TrustedStockImpact; index: numbe
     >
       <div className="flex flex-wrap items-center gap-2">
         <TickerChip ticker={imp.ticker} onClick={() => openTicker(imp.ticker)} />
-        <span className={cn('rounded-xs px-1.5 py-0.5 text-micro font-medium', d.cls)}>{d.label}</span>
+        <ClassificationChip classification={imp.direction} />
         <ImpactValue value={imp.impactScore} />
         <span className="ml-auto font-mono text-micro text-ink-400">{imp.horizon}</span>
       </div>
@@ -320,7 +315,7 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
             <span className="font-mono tnum">
               {fmtLocaleDateTime(item.publishedAt)}
             </span>
-            {item.sourceCount > 1 && <span className="rounded-xs bg-paper-2 px-1 py-px font-mono text-[10px]">{item.sourceCount} {__t('源确认')}</span>}
+            {item.sourceCount > 1 && <SoftBadge className="font-mono">{item.sourceCount} {__t('源确认')}</SoftBadge>}
             {item.isStale && <StaleChip />}
             <a
               href={item.url}
@@ -353,7 +348,7 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
           <section className="mt-6 rounded-lg border border-line bg-card-warm/50 p-4" aria-label={__t("模型分析区")}>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="flex items-center gap-1.5 text-h3 text-ink-800">
-                <Icon name="spark-ai" size={15} className="text-ai-600" />
+                <AnalysisIcon size={15} className="text-ai-600" />
                 {__t('模型分析')}
               </p>
               <AnalysisStatusChip status={running ? (job.status === 'queued' ? 'queued' : 'in_progress') : item.analysisStatus} />
@@ -415,8 +410,8 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
 
             {/* 信息不足 · 未调用模型 */}
             {showInsufficient && (
-              <div className="mt-4 rounded-md border border-line bg-paper-2 p-4 text-center">
-                <Icon name="doc-quote" size={22} className="mx-auto text-ink-300" />
+              <div className="mt-4 rounded-md bg-warn-50 p-4 text-center">
+                <Icon name="doc-quote" size={22} className="mx-auto text-warn-600" />
                 <p className="mt-2 text-body-s font-medium text-ink-800">{__t('信息不足 · 未调用模型')}</p>
                 <p className="mt-1 text-micro text-ink-400">{__t('这条新闻信息量不足，未做 AI 分析')}</p>
               </div>
@@ -443,16 +438,16 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
                     {(item.analysisStatus === 'pending' || showCancelled) && (
                       <button
                         onClick={() => setConfirm('create')}
-                        className="flex items-center gap-1.5 rounded-md bg-brand-600 px-3.5 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105"
+                        className="flex items-center gap-1.5 rounded-md bg-ai-600 px-3.5 py-2 text-caption font-medium text-white shadow-btn transition-[filter] hover:brightness-105"
                       >
-                        <Icon name="spark-ai" size={13} />
+                        <AnalysisIcon size={13} />
                         {__t('生成 AI 分析')}
                       </button>
                     )}
                     {(showCompleted || showFailed || showInsufficient) && (
                       <button
                         onClick={() => setConfirm('force')}
-                        className="flex items-center gap-1.5 rounded-md border border-line bg-card px-3.5 py-2 text-caption font-medium text-ink-600 shadow-btn transition-colors hover:border-brand-400 hover:text-brand-600"
+                        className="flex items-center gap-1.5 rounded-md bg-ai-600 px-3.5 py-2 text-caption font-medium text-white shadow-btn transition-[filter] hover:brightness-105"
                       >
                         <Icon name="refresh" size={13} />
                         {showFailed || showInsufficient ? __t('重试分析（强制）') : __t('重新分析（强制）')}
