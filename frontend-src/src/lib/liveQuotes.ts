@@ -28,6 +28,31 @@ export interface QuoteStatus {
 export interface QuoteEnvelope { quotes: LiveQuote[]; status: QuoteStatus }
 export interface RadarUpdate { events: Record<string, unknown>[]; resync_required?: boolean }
 const INITIAL_STATUS: QuoteStatus = { enabled: false, configured: false, public_enabled: false, connected: false, connection_status: 'disabled' };
+const isRecord = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value);
+function isQuoteStatus(value: unknown): value is QuoteStatus {
+  return isRecord(value)
+    && typeof value.enabled === 'boolean' && typeof value.configured === 'boolean'
+    && typeof value.public_enabled === 'boolean' && typeof value.connected === 'boolean'
+    && typeof value.connection_status === 'string' && value.connection_status.length > 0
+    && (value.allowed === undefined || typeof value.allowed === 'boolean')
+    && (value.resync_required === undefined || typeof value.resync_required === 'boolean')
+    && (value.market_session === undefined || (typeof value.market_session === 'string' && ['regular', 'premarket', 'postmarket', 'closed'].includes(value.market_session)));
+}
+function isQuote(value: unknown): value is LiveQuote {
+  if (!isRecord(value) || typeof value.symbol !== 'string' || !/^[A-Z][A-Z0-9.-]{0,14}$/i.test(value.symbol)) return false;
+  const nullableNumber = (field: unknown) => field === null || (typeof field === 'number' && Number.isFinite(field));
+  const nullableTime = (field: unknown) => field === null || (typeof field === 'string' && Number.isFinite(Date.parse(field)));
+  return nullableNumber(value.price) && (value.price === null || Number(value.price) > 0)
+    && nullableNumber(value.previous_close) && nullableNumber(value.change) && nullableNumber(value.change_pct)
+    && nullableTime(value.trade_at) && nullableTime(value.received_at)
+    && (value.source === null || typeof value.source === 'string')
+    && typeof value.session === 'string' && ['regular', 'premarket', 'postmarket', 'closed'].includes(value.session)
+    && typeof value.freshness === 'string' && ['live', 'stale', 'snapshot', 'missing'].includes(value.freshness)
+    && typeof value.subscription_status === 'string' && ['live', 'pending', 'limited', 'disabled', 'unconfigured', 'unavailable'].includes(value.subscription_status);
+}
+function isQuoteEnvelope(value: unknown): value is QuoteEnvelope {
+  return isRecord(value) && isQuoteStatus(value.status) && Array.isArray(value.quotes) && value.quotes.every(isQuote);
+}
 export const MARKET_FUNDS = ['SPY', 'QQQ', 'DIA', 'IWM'];
 export function normalizeQuoteSymbols(symbols: readonly string[]): string[] {
   return [...new Set(symbols.map(s => s.trim().toUpperCase()).filter(s => /^[A-Z][A-Z0-9]{0,9}(?:[.-][A-Z0-9]{1,4})?$/.test(s)))];
@@ -154,7 +179,8 @@ export class QuoteStore {
     this.reconnectTimer = setTimeout(() => { this.reconnectTimer = null; void this.connect(); }, delay);
   }
   private accepts(status: QuoteStatus) { return status.enabled && status.configured && (status.allowed ?? (status.public_enabled || this.owner)); }
-  private ingestStatus(status: QuoteStatus) {
+  private ingestStatus(status: unknown) {
+    if (!isQuoteStatus(status)) return;
     this.setStatus(status);
     if (status.resync_required) this.radarListeners.forEach(fn => fn({ events: [], resync_required: true }));
     if (!this.accepts(status)) {
@@ -172,8 +198,17 @@ export class QuoteStore {
         this.setStatus({ ...INITIAL_STATUS, connection_status: 'unavailable' }); return false;
       }
       if (!response.ok) throw new Error('Quote snapshot unavailable');
-      const data = await response.json() as QuoteEnvelope;
+      let data: unknown;
+      try { data = await response.json(); } catch { /* Invalid JSON uses the same safe fallback as an invalid envelope. */ }
       if (generation !== this.generation || !this.visible || !this.started) return false;
+      if (!isQuoteEnvelope(data)) {
+        // Old deployments and proxies can return JSON that isn't a quote
+        // response. Fall back before notifying React with an invalid status.
+        this.permitted = false; this.closeStream(); this.pending.clear(); this.clearQuotes();
+        this.setStatus({ ...INITIAL_STATUS, connection_status: 'unavailable' });
+        this.schedule(Math.min(30_000, 2_000 * 2 ** this.failures++));
+        return false;
+      }
       this.ingestStatus(data.status);
       if (this.terminal) return false;
       this.permitted = true; this.ingest(data.quotes, 'snapshot'); return true;
@@ -195,7 +230,15 @@ export class QuoteStore {
         if (generation !== this.generation || this.stream !== stream) return;
         try { callback(JSON.parse((event as MessageEvent).data) as T); } catch { /* A malformed event does not erase the last quote. */ }
       };
-      stream.addEventListener('quotes', read<QuoteEnvelope>(data => { if (data.status) this.ingestStatus(data.status); if (!this.terminal) this.ingest(data.quotes); this.failures = 0; }));
+      stream.addEventListener('quotes', read<unknown>(data => {
+        if (!isRecord(data)) return;
+        if ('status' in data) {
+          if (!isQuoteStatus(data.status)) return;
+          this.ingestStatus(data.status);
+        }
+        if (!this.terminal && Array.isArray(data.quotes)) this.ingest(data.quotes.filter(isQuote));
+        this.failures = 0;
+      }));
       stream.addEventListener('status', read<QuoteStatus>(data => this.ingestStatus(data)));
       stream.addEventListener('radar', read<RadarUpdate>(data => this.ingestRadar(data)));
       if (!probe) this.radarListeners.forEach(fn => fn({ events: [], resync_required: true }));

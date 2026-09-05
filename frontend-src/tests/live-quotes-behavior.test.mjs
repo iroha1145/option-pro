@@ -23,7 +23,10 @@ function harness() {
   const store = new exports.QuoteStore({
     async fetch(url, init) {
       requests.push({ url, init }); const response = await responder(url, init);
-      return { ok: response.status === 200, status: response.status, json: async () => response.body };
+      return { ok: response.status === 200, status: response.status, json: async () => {
+        if (response.jsonError) throw new SyntaxError('Invalid proxy JSON');
+        return response.body;
+      } };
     },
     stream(url) {
       const listeners = new Map();
@@ -99,6 +102,118 @@ test('disabled, unconfigured and unauthorized accounts do not reconnect or retai
     const h = harness(); h.respond(async () => ({ status })); h.store.start(false); await h.tick(120_000);
     assert.equal(h.requests.length, 1); assert.equal(h.streams.length, 0); h.store.stop();
   }
+});
+
+test('malformed quote probes always expose a safe status to page subscribers', async () => {
+  const malformed = [
+    {}, null, [],
+    { quotes: [] },
+    { quotes: [], status: null },
+    { quotes: [], status: {} },
+    { quotes: [], status: false },
+    { quotes: [], status: { ...enabled, enabled: 'true' } },
+    { quotes: [], status: { ...enabled, configured: null } },
+    { quotes: [], status: { ...enabled, allowed: 'true' } },
+    { quotes: [], status: { ...enabled, market_session: ['regular'] } },
+    { status: enabled },
+    { quotes: null, status: enabled },
+    { quotes: {}, status: enabled },
+    { quotes: 'unavailable', status: enabled },
+    { quotes: [null], status: enabled },
+    { quotes: [{ symbol: 'AAPL' }], status: enabled },
+    { quotes: [quote('AAPL', 100, 0, { change: 'bad' })], status: enabled },
+  ];
+  for (const body of malformed) {
+    const h = harness(); const notifications = [];
+    // Read enabled exactly as IndexTape does while responding to a store
+    // notification; setStatus(undefined) previously broke this render path.
+    h.store.subscribeStatus(() => notifications.push(h.store.getStatus().enabled));
+    h.respond(async () => ({ status: 200, body }));
+    h.store.register(['AAPL']); h.store.start(false); await h.tick(120_000);
+    assert.equal(h.store.getStatus().enabled, false, JSON.stringify(body));
+    assert.equal(h.store.getStatus().configured, false);
+    assert.equal(h.store.getStatus().connected, false);
+    assert.equal(h.store.getStatus().connection_status, 'unavailable');
+    assert.ok(notifications.every(value => typeof value === 'boolean'));
+    assert.equal(h.store.getQuote('AAPL'), undefined);
+    assert.equal(h.streams.length, 0);
+    assert.ok(h.requests.length > 1 && h.requests.length < 12, 'malformed responses retry with bounded backoff');
+    h.store.stop();
+  }
+});
+
+test('malformed initial price snapshot falls back after a valid permission probe', async () => {
+  for (const body of [{}, null, { quotes: [], status: 'bad' }, { status: enabled }]) {
+    const h = harness(); let count = 0;
+    h.respond(async () => ({ status: 200, body: ++count === 2 ? body : { quotes: [quote('AAPL', 100)], status: enabled } }));
+    h.store.register(['AAPL']); h.store.start(false); await h.tick(1000);
+    assert.equal(h.requests.length, 2);
+    assert.equal(h.streams.length, 0);
+    assert.equal(h.store.getStatus().enabled, false);
+    assert.equal(h.store.getQuote('AAPL'), undefined);
+    await h.tick(3000);
+    assert.equal(h.requests.length, 4, 'recovery probes permission again before loading prices');
+    assert.equal(h.streams.length, 1);
+    assert.equal(h.store.getStatus().enabled, true);
+    assert.equal(h.store.getQuote('AAPL').price, 100);
+    h.store.stop();
+  }
+});
+
+test('invalid JSON responses recover through the same permission probe without refreshing the page', async () => {
+  const h = harness(); let count = 0;
+  h.respond(async () => ++count === 1
+    ? { status: 200, jsonError: true }
+    : { status: 200, body: { quotes: [quote('AAPL', 100)], status: enabled } });
+  h.store.register(['AAPL']); h.store.start(false); await h.tick(1000);
+  assert.equal(h.store.getStatus().enabled, false);
+  assert.equal(h.store.getStatus().connection_status, 'unavailable');
+  assert.equal(h.streams.length, 0);
+  await h.tick(3000);
+  assert.equal(h.requests.length, 3);
+  assert.equal(h.store.getStatus().enabled, true);
+  assert.equal(h.store.getQuote('AAPL').price, 100);
+  assert.equal(h.streams.length, 1);
+  h.store.stop();
+});
+
+test('malformed polling snapshots close live delivery and preserve the page fallback', async () => {
+  const h = harness(); h.store.register(['AAPL']); h.store.start(false); await h.tick(1000);
+  assert.equal(h.store.getQuote('AAPL').price, 100);
+  const stream = h.streams[0];
+  // A scheduled fetch must discard pending live batches as well as rendered
+  // quotes so the page resumes its ordinary timed price source.
+  h.respond(async () => ({ status: 200, body: {} }));
+  await h.tick(59_000);
+  stream.emit('quotes', { quotes: [quote('AAPL', 999, 50)] }); await h.tick(1000);
+  assert.equal(stream.closed, true);
+  assert.equal(h.store.getStatus().enabled, false);
+  assert.equal(h.store.getQuote('AAPL'), undefined);
+  assert.equal(h.streams.length, 1);
+  h.respond(async () => ({ status: 200, body: { quotes: [quote('AAPL', 101, 1)], status: enabled } }));
+  await h.tick(3000);
+  assert.equal(h.store.getStatus().enabled, true);
+  assert.equal(h.store.getQuote('AAPL').price, 101);
+  assert.equal(h.streams.length, 2, 'a temporary malformed polling response must recover without a page refresh');
+  h.store.stop();
+});
+
+test('invalid streamed status never poisons a valid store or replaces its last quote', async () => {
+  const h = harness(); h.store.register(['AAPL']); h.store.start(false); await h.tick(1000);
+  const stream = h.streams[0];
+  for (const status of [null, {}, false, [], { ...enabled, enabled: 'yes' }]) {
+    assert.doesNotThrow(() => stream.emit('status', status));
+    assert.doesNotThrow(() => stream.emit('quotes', { quotes: [quote('AAPL', 999, 50)], status }));
+  }
+  stream.emit('quotes', null); stream.emit('quotes', {});
+  await h.tick(250);
+  assert.equal(h.store.getStatus().enabled, true);
+  assert.equal(h.store.getStatus().configured, true);
+  assert.equal(h.store.getQuote('AAPL').price, 100);
+  assert.equal(stream.closed, false);
+  stream.emit('quotes', { quotes: [quote('AAPL', 101, 1)] }); await h.tick(250);
+  assert.equal(h.store.getQuote('AAPL').price, 101, 'valid quote-only stream messages remain supported');
+  h.store.stop();
 });
 
 test('session expiration while a batch is pending cannot publish private prices again', async () => {
