@@ -16,6 +16,10 @@ from app.services.breakouts.repository import BreakoutRepository, BreakoutReposi
 logger = logging.getLogger(__name__)
 
 
+class RealtimeRadarError(RuntimeError):
+    """Sanitized failure: the hub must not mistake missing evidence for success."""
+
+
 def _time(value: Any) -> datetime:
     parsed = value if isinstance(value, datetime) else datetime.fromisoformat(str(value).replace("Z", "+00:00"))
     if parsed.tzinfo is None:
@@ -53,9 +57,9 @@ class BreakoutRealtimeAdapter:
         try:
             events = await asyncio.to_thread(self._load_events)
         except (FileNotFoundError, OSError, sqlite3.Error, BreakoutRepositoryError, ValueError):
-            self._events = {}
-            self._loaded = True
-            return []
+            # Keep the last valid inventory and let QuoteHub report/retry the
+            # failed read. An empty result means a successful empty scan.
+            raise RealtimeRadarError("Radar inventory is unavailable") from None
         self._events = {}
         for event in events:
             self._events.setdefault(str(event["ticker"]), []).append(event)
@@ -78,7 +82,7 @@ class BreakoutRealtimeAdapter:
         try:
             events = await asyncio.to_thread(self.repository.recent_live_events, as_of=self._now())
         except (FileNotFoundError, OSError, sqlite3.Error, BreakoutRepositoryError, ValueError):
-            return []
+            raise RealtimeRadarError("Radar recovery state is unavailable") from None
         return [self._change(event) for event in events]
 
     def _load_events(self) -> list[dict[str, Any]]:
@@ -170,12 +174,20 @@ class BreakoutRealtimeAdapter:
                         "features": {**dict(event.get("features") or {}), "current_price": price,
                                      "realtime_received_at": received_at.isoformat()},
                     }
-                    committed = await asyncio.to_thread(self.repository.commit_live_trigger, updated)
+                    try:
+                        committed = await asyncio.to_thread(
+                            self.repository.commit_live_trigger, updated,
+                            expected_observed_at=event["last_seen_at"],
+                        )
+                    except (OSError, sqlite3.Error, BreakoutRepositoryError, ValueError, TypeError):
+                        # Do not swallow a failed write as "no breakout". The
+                        # quote remains valid, but signal delivery needs resync.
+                        raise RealtimeRadarError("Radar trigger could not be committed") from None
                     if committed is None:
                         continue
                     event.update(committed)
                     changes.append(self._change(committed))
                 return changes
-            except (KeyError, TypeError, ValueError, OSError, sqlite3.Error, BreakoutRepositoryError):
+            except (KeyError, TypeError, ValueError):
                 logger.warning("Could not evaluate realtime radar trade for %s", trade.get("symbol"))
                 return []

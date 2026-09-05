@@ -682,16 +682,18 @@ class QuoteHub:
         if not math.isfinite(volume) or volume < 0:
             return
         previous = self._quotes.get(symbol)
-        if previous and at < previous["_trade_time"]:
-            return
         identity = (at, price, volume, tuple(conditions))
         seen = self._recent_trades.setdefault(symbol, deque(maxlen=128))
-        if identity in seen:
+        # A REST snapshot can arrive ahead of the trade stream. It is a price
+        # watermark, not a trade-evidence watermark: don't lose a real crossing
+        # simply because its following retreat was already seen by REST.
+        if (seen and at < seen[-1][0]) or identity in seen:
             return
         seen.append(identity)
         trade = {"symbol": symbol, "price": price, "trade_at": _iso(at), "received_at": _iso(received),
                  "session": session, "source": "finnhub_websocket", "conditions": conditions, "volume": volume}
-        self._store_quote(symbol, price, at, received, "finnhub_websocket")
+        if previous is None or at >= previous["_trade_time"]:
+            self._store_quote(symbol, price, at, received, "finnhub_websocket")
         if self.signals_enabled and self._trade_handler and conditions and volume > 0 and session != "closed" and (received - at).total_seconds() <= 60:
             try:
                 # Match the exact symbols saved by the radar worker while

@@ -14,7 +14,7 @@ import pytest
 from app.api import breakouts as api
 from app.services.breakouts.config import BreakoutSettings
 from app.services.breakouts.models import BreakoutEvent, MarketSession, MarketShapeSnapshot
-from app.services.breakouts.realtime import BreakoutRealtimeAdapter
+from app.services.breakouts.realtime import BreakoutRealtimeAdapter, RealtimeRadarError
 from app.services.breakouts.repository import BreakoutRepository, SchemaVersionError
 from app.services.breakouts.service import BreakoutRadarService
 
@@ -243,7 +243,8 @@ def test_live_confirmation_uses_complete_post_trigger_bars_only(seeded):
 def test_missing_database_loader_is_read_only(tmp_path):
     settings = BreakoutSettings(_env_file=None, BREAKOUT_RADAR_ENABLED=True, db_path=tmp_path / "missing.db")
     adapter = BreakoutRealtimeAdapter(settings)
-    assert asyncio.run(adapter.radar_symbols()) == []
+    with pytest.raises(RealtimeRadarError, match="inventory is unavailable"):
+        asyncio.run(adapter.radar_symbols())
     assert not settings.db_path.exists()
 
 
@@ -253,7 +254,8 @@ def test_additive_live_schema_checksums_and_readonly_compatibility(seeded):
         connection.execute("UPDATE breakout_live_schema SET checksum='corrupt'")
     with pytest.raises(SchemaVersionError):
         repo.initialize()
-    assert asyncio.run(adapter.radar_symbols()) == []
+    with pytest.raises(RealtimeRadarError, match="inventory is unavailable"):
+        asyncio.run(adapter.radar_symbols())
 
 
 def test_two_live_writers_cannot_commit_duplicate_trade_transition(seeded):

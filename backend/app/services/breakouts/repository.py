@@ -806,12 +806,14 @@ class BreakoutRepository:
             connection.close()
 
     def commit_live_trigger(
-        self, event: Mapping[str, Any], *, expected_version: int = 0,
+        self, event: Mapping[str, Any], *, expected_observed_at: datetime | str,
+        expected_version: int = 0,
     ) -> dict[str, Any] | None:
         """Atomically publish the first observed trade trigger, never a scan row."""
         body = dict(event)
         event_id = str(body["event_id"])
         evidence_at = _timestamp(body["evidence_at"])
+        observed_at = _timestamp(expected_observed_at)
         now_text = _timestamp(self._now())
         connection = self._write_connection()
         try:
@@ -819,13 +821,19 @@ class BreakoutRepository:
             self._require_schema(connection)
             self._initialize_live_schema(connection)
             base = connection.execute(
-                "SELECT lifecycle_state,last_seen_at FROM breakout_events WHERE event_id=?",
+                "SELECT lifecycle_state,last_seen_at,source_snapshot_id FROM breakout_events WHERE event_id=?",
                 (event_id,),
             ).fetchone()
             current = connection.execute(
                 "SELECT state_version FROM breakout_live_events WHERE event_id=?", (event_id,)
             ).fetchone()
+            # A scan may revise resistance/market eligibility while the trade
+            # adapter holds an older WATCHING candidate. Compare the observed
+            # snapshot as well as state/version inside the write transaction;
+            # source identity also catches two scans with equal evidence times.
             if (base is None or base["lifecycle_state"] != "WATCHING"
+                or base["last_seen_at"] != observed_at
+                or base["source_snapshot_id"] != body.get("source_snapshot_id")
                 or base["last_seen_at"] >= evidence_at or current is not None
                 or expected_version != 0 or body.get("lifecycle_state") != "TRIGGERED"):
                 return None
