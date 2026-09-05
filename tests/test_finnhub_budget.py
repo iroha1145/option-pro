@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import sqlite3
+import threading
+import time
 
 from app.services import finnhub_budget as budget
 
@@ -72,3 +74,74 @@ def test_waits_happen_after_transaction_closes(tmp_path, monkeypatch):
 
     monkeypatch.setattr(budget.time, "sleep", sleep)
     assert budget.reserve_finnhub_request("key", timeout=2, db_path=path)
+
+
+def _hold_writer(path, locked, release):
+    with sqlite3.connect(path) as connection:
+        connection.execute("BEGIN IMMEDIATE")
+        locked.set()
+        assert release.wait(timeout=5), "test writer was not released"
+        connection.execute("COMMIT")
+
+
+def test_short_write_contention_does_not_discard_an_available_reservation(tmp_path):
+    path = tmp_path / "budget.sqlite"
+    assert budget.reserve_finnhub_request("seed", db_path=path)
+    locked, release = threading.Event(), threading.Event()
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        writer = pool.submit(_hold_writer, path, locked, release)
+        assert locked.wait(timeout=5)
+        # Keep a real SQLite writer open beyond one connection's busy timeout.
+        timer = threading.Timer(0.35, release.set)
+        timer.start()
+        try:
+            assert budget.reserve_finnhub_request("key", timeout=0, db_path=path)
+        finally:
+            release.set()
+            timer.cancel()
+        writer.result(timeout=5)
+    with sqlite3.connect(path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM finnhub_requests WHERE key_id = ?",
+            (budget._key_id("key"),),
+        ).fetchone()[0] == 1
+
+
+def test_short_write_contention_does_not_lose_a_provider_cooldown(tmp_path, monkeypatch):
+    path = tmp_path / "budget.sqlite"
+    now = [1000.0]
+    monkeypatch.setattr(budget.time, "time", lambda: now[0])
+    assert budget.reserve_finnhub_request("seed", db_path=path)
+    locked, release = threading.Event(), threading.Event()
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        writer = pool.submit(_hold_writer, path, locked, release)
+        assert locked.wait(timeout=5)
+        timer = threading.Timer(0.35, release.set)
+        timer.start()
+        try:
+            budget.mark_finnhub_rate_limited("key", retry_after=10, db_path=path)
+        finally:
+            release.set()
+            timer.cancel()
+        writer.result(timeout=5)
+    now[0] = 1009.0
+    assert not budget.reserve_finnhub_request("key", db_path=path)
+    now[0] = 1010.0
+    assert budget.reserve_finnhub_request("key", db_path=path)
+
+
+def test_persistent_write_lock_fails_closed_within_a_bounded_wait(tmp_path, monkeypatch):
+    path = tmp_path / "budget.sqlite"
+    assert budget.reserve_finnhub_request("seed", db_path=path)
+    monkeypatch.setattr(budget, "_STORAGE_BUSY_RETRY_SECONDS", 0.15)
+    with sqlite3.connect(path) as writer:
+        writer.execute("BEGIN IMMEDIATE")
+        started = time.perf_counter()
+        assert not budget.reserve_finnhub_request("key", db_path=path)
+        assert time.perf_counter() - started < 2
+        writer.execute("COMMIT")
+    with sqlite3.connect(path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM finnhub_requests WHERE key_id = ?",
+            (budget._key_id("key"),),
+        ).fetchone()[0] == 0

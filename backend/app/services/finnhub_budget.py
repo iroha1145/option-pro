@@ -14,12 +14,15 @@ import math
 from pathlib import Path
 import sqlite3
 import time
+from typing import Callable, TypeVar
 
 from app.data_paths import get_data_paths
 
 
 MAX_PER_MINUTE = 60
 MAX_PER_SECOND = 30
+_STORAGE_BUSY_RETRY_SECONDS = 2.0
+_T = TypeVar("_T")
 
 
 def default_budget_path() -> Path:
@@ -52,9 +55,27 @@ def _connect(path: Path) -> sqlite3.Connection:
         raise
 
 
-def _try_reserve(api_key: str, db_path: Path | str | None) -> tuple[bool, float]:
-    if not api_key:
-        return False, 60.0
+def _with_busy_retry(operation: Callable[[], _T]) -> _T:
+    """Retry transient counter contention, never an exhausted account window.
+
+    A zero quota-wait timeout still needs to read/commit the shared counter.
+    In particular, concurrent cold-start schema writes may exceed one SQLite
+    busy timeout without indicating that any provider quota has been spent.
+    Each operation closes its connection before this bounded wait begins.
+    """
+    deadline = time.perf_counter() + _STORAGE_BUSY_RETRY_SECONDS
+    while True:
+        try:
+            return operation()
+        except sqlite3.Error as exc:
+            code = getattr(exc, "sqlite_errorcode", 0) & 0xFF
+            remaining = deadline - time.perf_counter()
+            if code not in {sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED} or remaining <= 0:
+                raise
+            time.sleep(min(0.025, remaining))
+
+
+def _reserve_once(api_key: str, db_path: Path | str | None) -> tuple[bool, float]:
     connection: sqlite3.Connection | None = None
     try:
         connection = _connect(Path(db_path) if db_path else default_budget_path())
@@ -83,13 +104,20 @@ def _try_reserve(api_key: str, db_path: Path | str | None) -> tuple[bool, float]
             )
         connection.execute("COMMIT")
         return delay <= 0, max(0.01, delay)
-    except (OSError, sqlite3.Error):
-        # Deliberately do not log exception text: paths or an upstream caller's
-        # credentials must never reach a public error response.
-        return False, 0.25
     finally:
         if connection is not None:
             connection.close()
+
+
+def _try_reserve(api_key: str, db_path: Path | str | None) -> tuple[bool, float]:
+    if not api_key:
+        return False, 60.0
+    try:
+        return _with_busy_retry(lambda: _reserve_once(api_key, db_path))
+    except (OSError, sqlite3.Error):
+        # Non-transient failures and exhausted storage retries still fail
+        # closed. Never expose paths, credentials, or exception text.
+        return False, 0.25
 
 
 def _timeout_seconds(timeout: float) -> float:
@@ -100,7 +128,11 @@ def _timeout_seconds(timeout: float) -> float:
 def reserve_finnhub_request(
     api_key: str, *, timeout: float = 0.0, db_path: Path | str | None = None
 ) -> bool:
-    """Reserve one REST call; return False when unavailable within ``timeout``."""
+    """Reserve one REST call; ``timeout`` controls waiting for account quota.
+
+    Shared-counter contention has its own short, bounded retry; it never
+    grants a reservation before an atomic transaction has committed.
+    """
     deadline = time.monotonic() + _timeout_seconds(timeout)
     while True:
         reserved, delay = _try_reserve(api_key, db_path)
@@ -143,19 +175,21 @@ def mark_finnhub_rate_limited(
     if not math.isfinite(duration):
         duration = 60.0
     duration = min(3600.0, max(1.0, duration))
-    connection: sqlite3.Connection | None = None
-    try:
+    def record_cooldown() -> None:
         connection = _connect(Path(db_path) if db_path else default_budget_path())
-        connection.execute(
-            "INSERT INTO finnhub_cooldowns(key_id, until_at) VALUES (?, ?) "
-            "ON CONFLICT(key_id) DO UPDATE SET until_at = MAX(until_at, excluded.until_at)",
-            (_key_id(api_key), time.time() + duration),
-        )
+        try:
+            connection.execute(
+                "INSERT INTO finnhub_cooldowns(key_id, until_at) VALUES (?, ?) "
+                "ON CONFLICT(key_id) DO UPDATE SET until_at = MAX(until_at, excluded.until_at)",
+                (_key_id(api_key), time.time() + duration),
+            )
+        finally:
+            connection.close()
+
+    try:
+        _with_busy_retry(record_cooldown)
     except (OSError, sqlite3.Error):
         pass
-    finally:
-        if connection is not None:
-            connection.close()
 
 
 __all__ = [
