@@ -10,20 +10,15 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with:
-          persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: "22.17.1"
-      - name: Prepare locked dependencies for offline review
+          python-version: "3.13"
+      - name: Export missing local review dependencies
         run: |
-          npm ci --prefix frontend-src --ignore-scripts --no-audit --no-fund
-          tar -czf /tmp/option-pro-review-node.tar.gz -C frontend-src node_modules
-          python -m pip install --no-deps --target /tmp/review-python-deps yfinance==1.5.1 curl-cffi==0.15.0 openai==2.45.0
-          tar -czf /tmp/option-pro-review-python.tar.gz -C /tmp review-python-deps
+          python -m pip install --no-deps --target /tmp/review-python-extra peewee multitasking distro jiter sniffio
+          tar -czf /tmp/option-pro-review-python-extra.tar.gz -C /tmp review-python-extra
       - uses: actions/upload-artifact@v4
         with:
-          name: option-pro-review-dependencies
-          path: /tmp/option-pro-review-*.tar.gz
+          name: option-pro-review-python-extra
+          path: /tmp/option-pro-review-python-extra.tar.gz
           retention-days: 1
