@@ -287,3 +287,41 @@ test('reconnecting a visible stream requests radar reconciliation immediately', 
   h.store.setVisible(false); h.store.setVisible(true); await h.tick(1000);
   assert.equal(resyncs, 1); h.store.stop();
 });
+
+
+test('an aborted polling request cannot change a stopped or restarted identity', async () => {
+  const h = harness(); h.store.register(['AAPL']); h.store.start(false); await h.tick(1000);
+  h.respond(async (_url, init) => new Promise((_resolve, reject) => {
+    init.signal.addEventListener('abort', () => reject(new Error('aborted')));
+  }));
+  await h.tick(59_000); // Leave the regular minute poll pending.
+  h.store.stop(); await h.tick(0);
+  assert.equal(h.store.getStatus().connection_status, 'disabled');
+  assert.equal(h.store.getQuote('AAPL'), undefined);
+});
+
+test('a disconnected stale trade yields to a newer timestamped page quote', () => {
+  const h = harness();
+  const stale = quote('AAPL', 105, 10, { freshness: 'stale' });
+  assert.equal(h.preferLiveQuote(stale, true, quote('AAPL', 108, 20).trade_at), false);
+  assert.equal(h.preferLiveQuote(stale, true, quote('AAPL', 100, 0).trade_at), true);
+  assert.equal(h.preferLiveQuote(stale, true), true, 'an undated fallback cannot rewind a disconnected quote');
+  assert.equal(h.preferLiveQuote(stale, false), true, 'retain the last quote when no fallback exists');
+});
+
+test('a malformed radar row cannot suppress valid revisions in the same frame', async () => {
+  const h = harness(); h.store.register(['AAPL']); h.store.start(false); await h.tick(1000);
+  h.streams[0].emit('radar', { events: [null, { event_id: 'bad', state_version: 'NaN' }, { event_id: 'ok', state_version: 1, lifecycle_state: 'TRIGGERED' }] });
+  assert.equal(h.store.getRadarEvent('bad'), undefined);
+  assert.equal(h.store.getRadarEvent('ok')?.state_version, 1);
+  h.store.stop();
+});
+
+
+test('price labels distinguish a rendered fallback from the disconnected cached quote', () => {
+  const h = harness(); const disconnected = { ...enabled, connected: false };
+  const stale = quote('AAPL', 105, 10, { freshness: 'stale' });
+  assert.equal(h.displayedQuoteLabel(stale, disconnected, false), '定时更新');
+  assert.equal(h.displayedQuoteLabel(stale, disconnected, true), '行情重连中');
+  assert.equal(h.displayedQuoteLabel(quote('AAPL', 105), enabled, true), '实时');
+});

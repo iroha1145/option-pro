@@ -5,7 +5,7 @@
 import SoftBadge from '@/components/shared/SoftBadge';
 import { useLiveQuote, useQuoteStatus } from '@/hooks/useLiveQuote';
 import { LivePrice } from '@/components/shared/LiveQuote';
-import { quoteLabel, preferLiveQuote } from '@/lib/liveQuotes';
+import { displayedQuoteLabel, preferLiveQuote } from '@/lib/liveQuotes';
 import { motion } from 'framer-motion';
 import { marketApi } from '@/api/modules/market';
 import { usePolling } from '@/hooks/usePolling';
@@ -32,6 +32,7 @@ export default function PriceHeader({ detail, symbol: requestedSymbol }: { detai
   const { data: market } = usePolling(() => marketApi.status(), 60_000, []);
   const useLive = preferLiveQuote(quote, isNum(detail?.price) && detail.price > 0, detail?.updatedAt);
   const updatedAt = useLive ? quote?.trade_at : detail?.updatedAt;
+  const priceLabel = quote ? displayedQuoteLabel(quote, quoteStatus, useLive || !isNum(detail?.price)) : null;
 
   return (
     <motion.header
@@ -50,7 +51,7 @@ export default function PriceHeader({ detail, symbol: requestedSymbol }: { detai
             <SoftBadge>
               {detail?.sector ?? t('个股行情')}
             </SoftBadge>
-            {market && <SessionLED session={quoteSession === 'postmarket' ? 'afterhours' : quoteSession ?? market.session} label={quote ? quoteLabel(quote, quoteStatus.market_session) : t('{label} · 延迟 15 分钟', { label: market.label })} />}
+            {market && <SessionLED session={quoteSession === 'postmarket' ? 'afterhours' : quoteSession ?? market.session} label={priceLabel ?? t('{label} · 延迟 15 分钟', { label: market.label })} />}
           </div>
         </div>
         <div className="ml-auto text-right">
@@ -86,7 +87,7 @@ export default function PriceHeader({ detail, symbol: requestedSymbol }: { detai
 
       <p className="mt-2 text-micro text-ink-400">
         {__t('报价更新于')} <span className="font-mono tnum">{updatedAt ? fmtTimeHHMMSS(new Date(updatedAt)) : '—'}</span>
-        {quote ? ` · ${quoteLabel(quote, quoteStatus.market_session)}` : __t(' · 延迟行情')}
+        {priceLabel ? ` · ${priceLabel}` : __t(' · 延迟行情')}
       </p>
     </motion.header>
   );

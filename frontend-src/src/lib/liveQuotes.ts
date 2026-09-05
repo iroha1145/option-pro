@@ -103,13 +103,17 @@ export class QuoteStore {
   private ingestRadar(data: RadarUpdate) {
     if (!Array.isArray(data.events)) return;
     let changed = false;
+    const accepted: Record<string, unknown>[] = [];
     for (const event of data.events) {
-      const id = String(event.event_id ?? '');
-      if (!id || Number(event.state_version ?? 0) <= Number(this.radarEvents.get(id)?.state_version ?? -1)) continue;
+      if (!isRecord(event) || typeof event.event_id !== 'string' || !event.event_id || event.event_id.length > 256
+        || typeof event.state_version !== 'number' || !Number.isSafeInteger(event.state_version) || event.state_version < 0) continue;
+      const id = event.event_id;
+      if (event.state_version <= Number(this.radarEvents.get(id)?.state_version ?? -1)) continue;
+      accepted.push(event);
       changed = true; this.radarEvents.set(id, event); this.radarEventListeners.get(id)?.forEach(fn => fn());
     }
     if (changed) { this.radarVersion++; this.radarVersionListeners.forEach(fn => fn()); }
-    this.radarListeners.forEach(fn => fn(data));
+    this.radarListeners.forEach(fn => fn({ events: accepted, resync_required: data.resync_required === true }));
   }
   subscribe = (symbol: string, listener: Listener) => {
     const key = symbol.toUpperCase();
@@ -127,7 +131,14 @@ export class QuoteStore {
   }
   start(owner: boolean) {
     this.stop(); this.started = true; this.owner = owner; this.terminal = false; this.failures = 0;
-    this.pollTimer = setInterval(() => { if (this.permitted && this.visible) void this.snapshot(this.generation).catch(() => this.markDisconnected()); }, 60_000);
+    this.pollTimer = setInterval(() => {
+      if (!this.permitted || !this.visible) return;
+      const generation = this.generation;
+      void this.snapshot(generation).catch(() => {
+        // A previous identity/page poll may reject after stop() or reconnect.
+        if (generation === this.generation && this.started && this.visible && !this.terminal) this.markDisconnected();
+      });
+    }, 60_000);
     this.schedule(0);
     return () => this.stop();
   }
@@ -294,6 +305,15 @@ export function quoteLabel(quote: LiveQuote, currentSession = quote.session): st
 export function preferLiveQuote(quote: LiveQuote | undefined, hasFallback: boolean, fallbackAt?: string | null): boolean {
   if (quote?.price == null || !Number.isFinite(quote.price) || quote.price <= 0) return false;
   if (!hasFallback) return true;
-  if (quote.subscription_status === 'live' && quote.freshness !== 'snapshot') return true;
+  if (quote.subscription_status === 'live' && (quote.freshness === 'live' || (quote.freshness === 'stale' && !fallbackAt))) return true;
+  // A disconnected stream retains its subscription, not its authority over a
+  // newer periodic quote. Keep the last trade only while the fallback is older.
   return Boolean(fallbackAt && timestamp(quote.trade_at) > timestamp(fallbackAt));
+}
+
+/** The label describes the price actually rendered, not a superseded cache. */
+export function displayedQuoteLabel(quote: LiveQuote, status: QuoteStatus, usesLive: boolean): string {
+  if (!usesLive) return t('定时更新');
+  if (!status.connected && quote.subscription_status === 'live') return t('行情重连中');
+  return quoteLabel(quote, status.market_session);
 }

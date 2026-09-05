@@ -1,5 +1,5 @@
 import { useLiveQuote, useQuoteStatus } from '@/hooks/useLiveQuote';
-import { quoteLabel, preferLiveQuote } from '@/lib/liveQuotes';
+import { displayedQuoteLabel, preferLiveQuote } from '@/lib/liveQuotes';
 /**
  * K线主图（stock-detail.md S1 · design.md §6-1 / §6-2）
  * 蜡烛：阳实心 --up-600 / 阴实心 --down-600 / 影线 1.2px / MA20 --brand-500 虚线(4/4)
@@ -865,15 +865,16 @@ export default function KlineChart({
   // volume, drawings and the user's zoom window are not rebuilt or overwritten.
   useEffect(() => {
     if (!chartInst || chartInst.isDisposed() || !option) return;
-    const price = liveQuote ? (preferLiveQuote(liveQuote, typeof currentPrice === 'number' && currentPrice > 0, quoteUpdatedAt) ? liveQuote.price : currentPrice) : null;
+    const usesLive = preferLiveQuote(liveQuote, typeof currentPrice === 'number' && currentPrice > 0, quoteUpdatedAt);
+    const price = liveQuote ? (usesLive ? liveQuote.price : currentPrice) : null;
     const valid = typeof price === 'number' && Number.isFinite(price) && price > 0;
     chartInst.setOption({ series: [{ id: 'realtime-price-reference', data: valid && bars?.length ? [[bars.length - 1, price]] : [], markLine: {
       symbol: 'none', silent: true, animation: false,
       lineStyle: { type: 'dashed', width: 1, color: CH.brand500 },
-      label: { show: true, position: 'insideEndTop', formatter: valid ? `${quoteLabel(liveQuote!, quoteStatus.market_session)} $${price.toFixed(2)}` : '', color: CH.brand500, fontSize: 10 },
+      label: { show: true, position: 'insideEndTop', formatter: valid ? `${displayedQuoteLabel(liveQuote!, quoteStatus, usesLive)} $${price.toFixed(2)}` : '', color: CH.brand500, fontSize: 10 },
       data: valid ? [{ yAxis: price }] : [],
     } }] }, { notMerge: false, lazyUpdate: true, silent: true });
-  }, [chartInst, option, liveQuote, quoteStatus.market_session, currentPrice, quoteUpdatedAt, bars]);
+  }, [chartInst, option, liveQuote, quoteStatus, currentPrice, quoteUpdatedAt, bars]);
 
   // The chart calls this from its commit effect. A scroll never rebuilds the
   // option, and an abandoned render cannot reset the live chart's viewport.

@@ -146,3 +146,35 @@ test('live chart reference updates without rewriting candles or resetting the zo
   expect(after.candles).toEqual(before.candles); expect(after.zoom.startValue).toBe(before.zoom.startValue); expect(after.zoom.endValue).toBe(before.zoom.endValue);
   expect(state.errors).toEqual([]);
 });
+
+for (const width of [320, 390, 768, 1440]) {
+  test(`large live prices remain inside the detail and watchlist layouts at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    const state = await fixture(page);
+    await page.goto('/stock/AAPL');
+    await emit(page, 'AAPL', 750000.01, { previous_close: 749999, change: 1.01, change_pct: 0.00013 });
+    const value = page.locator('main [aria-label="$750,000.01"]').first();
+    await expect(value).toBeVisible();
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    const box = await value.boundingBox(); expect(box.x).toBeGreaterThanOrEqual(0); expect(box.x + box.width).toBeLessThanOrEqual(width);
+    await mkdir('test-results/quotes', { recursive: true });
+    await page.screenshot({ path: `test-results/quotes/review-detail-${width}.png`, animations: 'disabled' });
+    await page.goto('/watchlist');
+    await emit(page, 'AAPL', 750000.01, { previous_close: 749999, change: 1.01, change_pct: 0.00013 });
+    await expect(page.locator('main [aria-label="750,000.01"]').first()).toBeVisible();
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: `test-results/quotes/review-watchlist-${width}.png`, animations: 'disabled' });
+    expect(state.errors).toEqual([]);
+  });
+}
+
+test('detail labels a retained price as reconnecting, never live, after a stream error', async ({ page }) => {
+  const state = await fixture(page); await page.goto('/stock/AAPL');
+  await emit(page, 'AAPL', 105.27);
+  await expect(page.locator('main [aria-label="$105.27"]').first()).toBeVisible();
+  await page.evaluate(() => window.quoteStreams.filter(row => !row.closed).at(-1).onerror());
+  await expect(page.locator('main header').first()).toContainText('行情重连中');
+  await expect(page.locator('main [aria-label="$105.27"]').first()).toBeVisible();
+  expect(state.errors).toEqual([]);
+});
