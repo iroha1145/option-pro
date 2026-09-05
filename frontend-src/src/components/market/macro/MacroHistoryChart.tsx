@@ -76,6 +76,8 @@ export default function MacroHistoryChart({
   const colorMode = useColorMode();
 
   const option = useMemo(() => {
+    // 图表构造器读取 CSS 涨跌色，配色模式变化时需重新取值。
+    void colorMode;
     const dates = points.map((point) => point.date);
     const basisByDate = new Map(points.map((point) => [point.date, point.historyBasis]));
     const regimeByDate = new Map(points.map((point) => [point.date, point.regime]));

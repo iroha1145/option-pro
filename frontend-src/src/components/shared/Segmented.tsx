@@ -49,7 +49,7 @@ export default function Segmented<T extends string>({
       role="tablist"
       aria-label={ariaLabel}
       title={title}
-      className={cn('t-tabs border border-line', scrollable && 'no-scrollbar max-w-full overflow-x-auto', className)}
+      className={cn('t-tabs selection-group border border-line', scrollable && 'no-scrollbar max-w-full overflow-x-auto', className)}
     >
       {options.map((o, index) => {
         const active = value === o.value;
@@ -59,6 +59,7 @@ export default function Segmented<T extends string>({
           <div key={o.value} className={cn('relative', scrollable && 'shrink-0')}>
             {active && <GlidePill layoutId={layoutId} />}
             <button
+              type="button"
               role="tab"
               className={cn(
                 't-tab relative z-10 text-caption font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30',

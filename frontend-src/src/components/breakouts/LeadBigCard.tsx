@@ -16,7 +16,7 @@ import { stocksApi } from '@/api/modules/stocks';
 import type { Candle } from '@/api/types';
 import { usePolling } from '@/hooks/usePolling';
 import { useCountUp } from '@/hooks/useCountUp';
-import { useShell } from '@/components/Layout';
+import { useShell } from '@/hooks/useShell';
 import ReactECharts from '@/components/charts/ReactECharts';
 import ChangeBadge from '@/components/shared/ChangeBadge';
 import InfoHint from '@/components/shared/InfoHint';
@@ -111,7 +111,7 @@ function PriorityRing({ score }: { score: number | null }) {
   /* score=null 表示后端判定 insufficient_data（算不出来）。渲染成「0」会被
      读成「优先级极低」并据此排除信号（审计 2.1.13）——同卡其他缺失字段
      都显「—」，这里保持一致。 */
-  const v = useCountUp(score ?? 0, 900);
+  const v = useCountUp(score ?? Number.NaN, 900);
   const r = 24;
   const c = 2 * Math.PI * r;
   const frac = score === null ? 0 : Math.max(0, Math.min(100, score)) / 100;
@@ -141,7 +141,8 @@ function PriorityRing({ score }: { score: number | null }) {
         </svg>
         <div className="absolute inset-0 flex items-center justify-center">
           <span className="font-mono text-[15px] font-medium leading-[20px] text-ink-900 tnum">
-            {score === null ? '—' : Math.round(v)}
+            <span className="sr-only">{score === null ? '—' : Math.round(score)}</span>
+            <span aria-hidden="true">{score === null ? '—' : Math.round(v)}</span>
           </span>
         </div>
       </div>
@@ -344,6 +345,8 @@ function MiniKline({ ticker }: { ticker: string }) {
   const { data, error, loading, refresh } = usePolling(() => stocksApi.chart(ticker, '15m'), null, [ticker]);
   const colorMode = useColorMode();
   const option = useMemo(() => {
+    // 图表构造器读取 CSS 涨跌色，配色模式变化时需重新取值。
+    void colorMode;
     if (!data || data.candles.length <= 1) return null;
     return buildMiniOption(data.candles.slice(-96));
   }, [data, colorMode]);

@@ -1,10 +1,19 @@
 /** Price/time snap. Thresholds are CSS pixels. Alt disables every snap. */
 import { applyAltNoSnap } from './geometry.ts';
 import { snapBarIndex } from './projection.ts';
+import { candidatesAtBar, type RailSnapCandidate } from './railSnap.ts';
 
-export interface SnapCandidate {
-  price: number;
-  kind: 'ohlc' | 'swing' | 'ma20' | 'level' | 'anchor';
+export type SnapCandidate = RailSnapCandidate;
+
+/** A price just beyond a plot edge must not attract a pointer still inside it. */
+export function visiblePriceToY(chart: {
+  convertToPixel: (finder: { gridIndex: number }, point: number[]) => unknown;
+  containPixel: (finder: { gridIndex: number }, point: number[]) => boolean;
+}, barIndex: number, price: number): number {
+  const pixel = chart.convertToPixel({ gridIndex: 0 }, [barIndex, price]);
+  if (!Array.isArray(pixel) || !pixel.every(Number.isFinite)
+    || !chart.containPixel({ gridIndex: 0 }, pixel)) return Number.NaN;
+  return pixel[1];
 }
 
 export interface SnapResult {
@@ -60,7 +69,7 @@ export function snapPointer(args: {
   const hit = nearestPrice(
     args.pointerPrice,
     args.y,
-    args.candidates,
+    candidatesAtBar(args.candidates, barIndex),
     args.priceToY,
     args.thresholdPx,
   );
@@ -86,16 +95,16 @@ export function ohlcCandidates(bar: { o: number; h: number; l: number; c: number
 }
 
 function finitePrice(value: unknown): number | null {
-  const price = typeof value === 'number' ? value : Number(value);
-  return Number.isFinite(price) && price > 0 ? price : null;
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
 }
 
 /** Hand-draw snap from overlays that already passed analysisGate. */
 export function snapCandidatesFromOverlays(
-  overlays: Array<{ kind: string; geometry?: Record<string, unknown> }>,
+  overlays: Array<{ kind: string; status?: string; hidden?: boolean; geometry?: Record<string, unknown> }>,
 ): SnapCandidate[] {
   const out: SnapCandidate[] = [];
   for (const overlay of overlays) {
+    if (overlay.hidden || ['invalidated', 'broken_up', 'broken_down', 'failed', 'expired'].includes(overlay.status ?? '')) continue;
     const geometry = overlay.geometry ?? {};
     if (overlay.kind === 'swing') {
       const anchors = Array.isArray(geometry.anchors) ? geometry.anchors : [];

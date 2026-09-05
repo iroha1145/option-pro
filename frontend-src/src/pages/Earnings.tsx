@@ -15,7 +15,7 @@ import { ApiError } from '@/api/client';
 import { useAccess } from '@/hooks/useAccess';
 import { useNow } from '@/hooks/useNow';
 import { usePolling } from '@/hooks/usePolling';
-import { useToast } from '@/components/Toast';
+import { useToast } from '@/hooks/useToast';
 import { cn } from '@/lib/utils';
 import { fmtTimeHHMMSS } from '@/lib/format';
 import Icon from '@/components/icons';

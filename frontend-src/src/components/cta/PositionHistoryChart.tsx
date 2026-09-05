@@ -108,7 +108,11 @@ function historyOption(history: { date: string; position: number }[]): ChartOpti
 
 export default function PositionHistoryChart({ history }: { history: { date: string; position: number }[] }) {
   const colorMode = useColorMode();
-  const option = useMemo(() => historyOption(history), [history, colorMode]);
+  const option = useMemo(() => {
+    // 图表构造器读取 CSS 涨跌色，配色模式变化时需重新取值。
+    void colorMode;
+    return historyOption(history);
+  }, [history, colorMode]);
   if (!option) return <p className="mt-2 text-caption text-ink-400">{t('暂无数据')}</p>;
   const last = history[history.length - 1];
   return (

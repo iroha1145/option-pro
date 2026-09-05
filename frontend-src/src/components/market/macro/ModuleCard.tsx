@@ -3,7 +3,7 @@
  * 色阶复用全站 strengthBarClass，不给模块分配固定鲜艳色。
  */
 import { cn } from '@/lib/utils';
-import { strengthBarClass } from '@/components/shared/StrengthBar';
+import { strengthBarClass } from '@/lib/strengthColor';
 import ChangeBadge from '@/components/shared/ChangeBadge';
 import InfoHint from '@/components/shared/InfoHint';
 import { MACRO_MODULE_HINTS } from '@/lib/scoreHints';

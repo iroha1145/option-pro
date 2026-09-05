@@ -1,6 +1,8 @@
 /** 确认弹窗（design.md §4.3 + transitions.dev modal：open 250ms / close 150ms） */
-import { useEffect, useRef } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
+import { isTopFocusScope } from '@/lib/focusScope';
 import { cn } from '@/lib/utils';
 import Icon from '@/components/icons';
 import {
@@ -35,17 +37,22 @@ export default function ConfirmDialog({
   /* 焦点圈定（审计 2.5.7）：打开时把焦点移到「取消」（默认不选中消耗预算的
      动作），Tab 只在对话框内循环，关闭后归还给触发按钮——否则焦点还停在
      抽屉正文里，读屏用户根本不知道弹了确认框。 */
+  const overlayId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
   useFocusTrap(panelRef, open, { initialFocusRef: cancelRef });
   const closeMs = readRootDurationMs('--modal-close-dur', 150);
   const phase = useOverlayPhase(open, closeMs);
   const mounted = overlayVisible(open, phase);
+  useBodyScrollLock(mounted);
 
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onCancel();
+      if (e.key !== 'Escape' || e.defaultPrevented || e.isComposing || e.keyCode === 229 || !isTopFocusScope(panelRef.current)) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      onCancel();
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
@@ -58,6 +65,7 @@ export default function ConfirmDialog({
       <div
         className={cn('t-backdrop fixed inset-0 z-[85] bg-[rgba(13,22,38,.28)] backdrop-blur-[2px]', phase === 'open' && 'is-open')}
         onClick={onCancel}
+        data-focus-backdrop={overlayId}
         aria-hidden="true"
       />
       {/* 水平居中交给外层 translate，避免 t-modal 的 scale transform 顶掉
@@ -67,6 +75,7 @@ export default function ConfirmDialog({
           ref={panelRef}
           role="alertdialog"
           aria-modal="true"
+          data-focus-overlay={overlayId}
           aria-label={title}
           className={cn(
             't-modal rounded-xl border border-line bg-card p-5 shadow-sh-3',

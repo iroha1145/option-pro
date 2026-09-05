@@ -363,7 +363,7 @@ def test_guest_cannot_read_or_write_drawings(client: TestClient) -> None:
 
 
 def test_mutating_requests_require_same_origin(client: TestClient) -> None:
-    _register(client, "alice", "pw")
+    _register(client, "alice", "fixture-password-for-tests")
     body = _drawing()
     missing = client.post("/api/account/chart-drawings", json=body)
     assert missing.status_code == 403
@@ -377,7 +377,7 @@ def test_mutating_requests_require_same_origin(client: TestClient) -> None:
 
 
 def test_crud_round_trip_and_cache_control(client: TestClient) -> None:
-    _register(client, "bob", "pw")
+    _register(client, "bob", "fixture-password-for-tests")
     body = _drawing()
     created = _create(client, body)
     assert created.status_code == 201
@@ -419,7 +419,7 @@ def test_crud_round_trip_and_cache_control(client: TestClient) -> None:
 
 
 def test_stale_revision_returns_409_twice(client: TestClient) -> None:
-    _register(client, "carol", "pw")
+    _register(client, "carol", "fixture-password-for-tests")
     body = _drawing()
     created = _create(client, body)
     assert created.json()["revision"] == 1
@@ -447,7 +447,7 @@ def test_stale_revision_returns_409_twice(client: TestClient) -> None:
 
 
 def test_scoped_bulk_clear_does_not_touch_other_ranges(client: TestClient) -> None:
-    _register(client, "dana", "pw")
+    _register(client, "dana", "fixture-password-for-tests")
     daily = _drawing()
     weekly = _drawing(range="1w", ticker="NVDA")
     other = _drawing(ticker="AAPL")
@@ -471,11 +471,11 @@ def test_scoped_bulk_clear_does_not_touch_other_ranges(client: TestClient) -> No
 
 
 def test_customer_drawings_are_isolated(client: TestClient, store: AccountStore) -> None:
-    _register(client, "erin", "pw")
+    _register(client, "erin", "fixture-password-for-tests")
     first = _drawing()
     assert _create(client, first).status_code == 201
     client.post("/api/account/logout", headers=HEADERS)
-    _register(client, "frank", "pw")
+    _register(client, "frank", "fixture-password-for-tests")
     listed = client.get(
         "/api/account/chart-drawings",
         params={"ticker": "NVDA", "range": "1d", "adjustment": "raw"},
@@ -489,7 +489,7 @@ def test_customer_drawings_are_isolated(client: TestClient, store: AccountStore)
     removed = _delete_one(client, first["id"], expected_scope_revision=0)
     assert removed.status_code == 200
     # Original owner still has the row.
-    erin = store.authenticate("erin", "pw")
+    erin = store.authenticate("erin", "fixture-password-for-tests")
     assert store.get_drawing(erin.account.user_id, first["id"]) is not None
 
 
@@ -501,7 +501,7 @@ def test_owner_drawings_are_isolated_from_customers(
     owned = _drawing(ticker="MSFT")
     created = _create(owner_client, owned)
     assert created.status_code == 201
-    assert _register(owner_client, "gina", "pw-for-gina").status_code == 201
+    assert _register(owner_client, "gina", "fixture-password-for-gina").status_code == 201
     listed = owner_client.get(
         "/api/account/chart-drawings",
         params={"ticker": "MSFT", "range": "1d", "adjustment": "raw"},
@@ -520,7 +520,7 @@ def test_cookie_wins_over_owner_session(owner_client: TestClient) -> None:
     _owner_login(owner_client)
     owner_body = _drawing(ticker="OWNR")
     assert _create(owner_client, owner_body).status_code == 201
-    assert _register(owner_client, "hank", "pw-for-hank").status_code == 201
+    assert _register(owner_client, "hank", "fixture-password-for-hank").status_code == 201
     customer_body = _drawing(ticker="CUST")
     assert _create(owner_client, customer_body).status_code == 201
     customer_list = owner_client.get(
@@ -536,7 +536,7 @@ def test_cookie_wins_over_owner_session(owner_client: TestClient) -> None:
 
 
 def test_extra_forbid_and_illegal_fields(client: TestClient) -> None:
-    _register(client, "ivy", "pw")
+    _register(client, "ivy", "fixture-password-for-tests")
     extra = _drawing()
     extra["option"] = {"series": []}
     response = _create(client, extra)
@@ -571,7 +571,7 @@ def test_nan_inf_and_nonpositive_prices_are_rejected(
 ) -> None:
     from app.services.accounts import validate_drawing_payload
 
-    session = store.register("jude-store", "pw")
+    session = store.register("jude-store", "fixture-password-for-tests")
     for price in (float("nan"), float("inf"), float("-inf"), -1.0, 0.0):
         with pytest.raises(AccountError) as excinfo:
             store.create_drawing(
@@ -600,7 +600,7 @@ def test_nan_inf_and_nonpositive_prices_are_rejected(
                     ]
                 )
             )
-    _register(client, "jude", "pw")
+    _register(client, "jude", "fixture-password-for-tests")
     for price in (-1.0, 0.0):
         response = _create(
             client,
@@ -618,7 +618,7 @@ def test_nan_inf_and_nonpositive_prices_are_rejected(
 
 
 def test_overlong_text_and_illegal_color(client: TestClient) -> None:
-    _register(client, "kara", "pw")
+    _register(client, "kara", "fixture-password-for-tests")
     long_text = _drawing(kind="text", text="字" * 241)
     assert _create(client, long_text).status_code == 422
     html = _drawing(kind="text", text="<script>alert(1)</script>")
@@ -632,7 +632,7 @@ def test_overlong_text_and_illegal_color(client: TestClient) -> None:
 
 
 def test_per_range_cap(store: AccountStore) -> None:
-    session = store.register("leo", "pw")
+    session = store.register("leo", "fixture-password-for-tests")
     revision = 0
     for index in range(DRAWINGS_PER_RANGE_MAX):
         _, revision = store.create_drawing(
@@ -651,7 +651,7 @@ def test_per_range_cap(store: AccountStore) -> None:
 
 def test_payload_size_cap(monkeypatch: pytest.MonkeyPatch, store: AccountStore) -> None:
     monkeypatch.setattr(accounts_mod, "DRAWING_PAYLOAD_MAX_BYTES", 80)
-    session = store.register("mia", "pw")
+    session = store.register("mia", "fixture-password-for-tests")
     with pytest.raises(AccountError) as excinfo:
         store.create_drawing(
             session.account.user_id,
@@ -665,7 +665,7 @@ def test_account_cap_on_create(
     monkeypatch: pytest.MonkeyPatch, store: AccountStore
 ) -> None:
     monkeypatch.setattr(accounts_mod, "DRAWINGS_PER_ACCOUNT_MAX", 3)
-    session = store.register("nate", "pw")
+    session = store.register("nate", "fixture-password-for-tests")
     revision = 0
     for _ in range(3):
         _, revision = store.create_drawing(
@@ -685,7 +685,7 @@ def test_account_cap_on_create(
 def test_create_replay_returns_the_stored_row(client: TestClient) -> None:
     """同一 payload 重放必须成功且不抬 scope_revision；改 payload 则 409。"""
 
-    _register(client, "xena", "pw")
+    _register(client, "xena", "fixture-password-for-tests")
     body = _drawing()
     first = _create(client, body, expected_scope_revision=0)
     assert first.status_code == 201
@@ -708,7 +708,7 @@ def test_create_replay_returns_the_stored_row(client: TestClient) -> None:
 def test_delete_is_idempotent(client: TestClient) -> None:
     """没有墓碑表，重放的删除和多设备重复删除都得算成功。"""
 
-    _register(client, "yuri", "pw")
+    _register(client, "yuri", "fixture-password-for-tests")
     body = _drawing()
     assert _create(client, body).status_code == 201
     first = _delete_one(client, body["id"], expected_scope_revision=1)
@@ -727,7 +727,7 @@ def test_delete_is_idempotent(client: TestClient) -> None:
 
 
 def test_moving_a_drawing_to_another_scope_is_rejected(client: TestClient) -> None:
-    _register(client, "wade", "pw")
+    _register(client, "wade", "fixture-password-for-tests")
     body = _drawing()
     assert _create(client, body).status_code == 201
     for moved in ({"ticker": "AAPL"}, {"range": "1w"}):
@@ -749,7 +749,7 @@ def test_moving_a_drawing_to_another_scope_is_rejected(client: TestClient) -> No
 def test_extreme_offset_time_is_invalid_not_a_crash(client: TestClient) -> None:
     """格式合法但换算到 UTC 会越界的时间：astimezone 抛 OverflowError，不能漏成 500。"""
 
-    _register(client, "vera", "pw")
+    _register(client, "vera", "fixture-password-for-tests")
     for stamp in ("0001-01-01T00:00:00+00:01", "9999-12-31T23:59:59-00:01"):
         response = _create(
             client,
@@ -764,7 +764,7 @@ def test_extreme_offset_time_is_invalid_not_a_crash(client: TestClient) -> None:
 
 
 def test_account_delete_cascades_drawings(store: AccountStore) -> None:
-    session = store.register("nina", "pw")
+    session = store.register("nina", "fixture-password-for-tests")
     created, _rev = store.create_drawing(
         session.account.user_id, _drawing(), expected_scope_revision=0
     )
@@ -793,8 +793,8 @@ def test_owner_account_cannot_be_deleted(store: AccountStore) -> None:
 def test_same_id_in_two_accounts_stays_isolated(store: AccountStore) -> None:
     """编号空间按账户隔离：同一个 id 两边各存一份，谁也读不到、改不到、删不掉对方。"""
 
-    first = store.register("omar", "pw")
-    second = store.register("pia", "pw")
+    first = store.register("omar", "fixture-password-for-tests")
+    second = store.register("pia", "fixture-password-for-tests")
     body = _drawing()
     mine, _mine_rev = store.create_drawing(
         first.account.user_id, body, expected_scope_revision=0
@@ -833,7 +833,7 @@ def test_same_id_in_two_accounts_stays_isolated(store: AccountStore) -> None:
 def test_create_then_get_body_twice(client: TestClient) -> None:
     """Verification step 7: POST then GET, twice, asserting the body."""
 
-    _register(client, "quin", "pw")
+    _register(client, "quin", "fixture-password-for-tests")
     for _ in range(2):
         body = _drawing()
         created = _create(client, body)
@@ -879,7 +879,7 @@ def _replace(
 
 
 def test_replace_current_scope_is_transactional(client: TestClient) -> None:
-    _register(client, "rhea", "pw")
+    _register(client, "rhea", "fixture-password-for-tests")
     original = _drawing()
     assert _create(client, original).status_code == 201
     replacement = _drawing(kind="segment", anchors=[
@@ -908,7 +908,7 @@ def test_replace_current_scope_is_transactional(client: TestClient) -> None:
 
 
 def test_replace_partial_invalid_leaves_previous_set(client: TestClient) -> None:
-    _register(client, "seth", "pw")
+    _register(client, "seth", "fixture-password-for-tests")
     original = _drawing()
     assert _create(client, original).status_code == 201
     bad = _drawing(
@@ -932,12 +932,12 @@ def test_replace_keeps_id_another_account_already_holds(
 ) -> None:
     """别人占着同一个编号不再是冲突：主键带 user_id，两条行本来就不同。"""
 
-    other = store.register("other-owner", "pw")
+    other = store.register("other-owner", "fixture-password-for-tests")
     shared = _drawing()
     store.create_drawing(
         other.account.user_id, shared, expected_scope_revision=0
     )
-    _register(client, "uma", "pw")
+    _register(client, "uma", "fixture-password-for-tests")
     response = _replace(client, [shared])
     assert response.status_code == 200, response.text
     saved = response.json()["drawings"]
@@ -952,7 +952,7 @@ def test_replace_mints_id_when_the_same_account_holds_it_elsewhere(
 ) -> None:
     """本账户在别的周期占着这个编号才需要改发新号，否则插入会撞主键。"""
 
-    _register(client, "vince", "pw")
+    _register(client, "vince", "fixture-password-for-tests")
     weekly = _drawing(range="1w")
     assert _create(client, weekly).status_code == 201
     response = _replace(client, [{**weekly, "range": "1d"}])
@@ -973,7 +973,7 @@ def test_account_cap_counts_other_scopes_on_replace(
     """``other_count + len(batch)`` 是这条路径上最绕的配额算式，钉住它的边界。"""
 
     monkeypatch.setattr(accounts_mod, "DRAWINGS_PER_ACCOUNT_MAX", 3)
-    session = store.register("abe", "pw")
+    session = store.register("abe", "fixture-password-for-tests")
     user_id = session.account.user_id
     aapl_rev = 0
     for _ in range(2):
@@ -1015,7 +1015,7 @@ def test_quota_409_carries_its_own_code(
     """配额满和版本冲突都是 409，客户端只能靠 code 区分——绝不能都当成冲突。"""
 
     monkeypatch.setattr(accounts_mod, "DRAWINGS_PER_ACCOUNT_MAX", 1)
-    _register(client, "bree", "pw")
+    _register(client, "bree", "fixture-password-for-tests")
     assert _create(client).status_code == 201
     full = _create(client)
     assert full.status_code == 409
@@ -1028,7 +1028,7 @@ def test_quota_409_carries_its_own_code(
 def test_stale_scope_clear_and_replace_do_not_clobber(client: TestClient) -> None:
     """Two readers share one scope_revision; A's write makes B's clear/replace 409."""
 
-    _register(client, "device-a", "pw-a")
+    _register(client, "device-a", "fixture-password-for-device-a")
     original = _drawing()
     created = _create(client, original, expected_scope_revision=0)
     assert created.status_code == 201
@@ -1068,7 +1068,7 @@ def test_stale_scope_clear_and_replace_do_not_clobber(client: TestClient) -> Non
 
 
 def test_create_same_id_different_scope_is_drawing_id_conflict(client: TestClient) -> None:
-    _register(client, "id-clash", "pw")
+    _register(client, "id-clash", "fixture-password-for-tests")
     body = _drawing()
     assert _create(client, body, expected_scope_revision=0).status_code == 201
     moved = _create(
@@ -1091,7 +1091,7 @@ def test_create_same_id_different_scope_is_drawing_id_conflict(client: TestClien
 
 
 def test_every_mutation_increments_scope_revision(client: TestClient) -> None:
-    _register(client, "rev-seq", "pw")
+    _register(client, "rev-seq", "fixture-password-for-tests")
     first = _drawing()
     created = _create(client, first, expected_scope_revision=0)
     assert created.json()["scope_revision"] == 1
@@ -1115,7 +1115,7 @@ def test_every_mutation_increments_scope_revision(client: TestClient) -> None:
 
 
 def test_empty_text_drawing_is_legal(client: TestClient) -> None:
-    _register(client, "blank-text", "pw")
+    _register(client, "blank-text", "fixture-password-for-tests")
     body = _drawing(kind="text", text="")
     created = _create(client, body)
     assert created.status_code == 201, created.text
@@ -1126,7 +1126,7 @@ def test_empty_text_drawing_is_legal(client: TestClient) -> None:
 
 
 def test_naive_iso_time_is_rejected(client: TestClient) -> None:
-    _register(client, "naive-time", "pw")
+    _register(client, "naive-time", "fixture-password-for-tests")
     response = _create(
         client,
         _drawing(
@@ -1140,7 +1140,7 @@ def test_naive_iso_time_is_rejected(client: TestClient) -> None:
 
 
 def test_html_and_nul_text_still_rejected(client: TestClient) -> None:
-    _register(client, "bad-text", "pw")
+    _register(client, "bad-text", "fixture-password-for-tests")
     html = _create(client, _drawing(kind="text", text="<b>x</b>"))
     assert html.status_code == 400
     nul = _create(client, _drawing(kind="text", text="ok\x00no"))
@@ -1148,7 +1148,7 @@ def test_html_and_nul_text_still_rejected(client: TestClient) -> None:
 
 
 def test_missing_expected_scope_revision_is_422(client: TestClient) -> None:
-    _register(client, "no-rev", "pw")
+    _register(client, "no-rev", "fixture-password-for-tests")
     body = _drawing()
     created = client.post(
         "/api/account/chart-drawings",
@@ -1165,7 +1165,7 @@ def test_missing_expected_scope_revision_is_422(client: TestClient) -> None:
 
 
 def test_reinitialize_keeps_drawings_and_scope_revision(store: AccountStore) -> None:
-    session = store.register("keep-rows", "pw")
+    session = store.register("keep-rows", "fixture-password-for-tests")
     created, revision = store.create_drawing(
         session.account.user_id, _drawing(), expected_scope_revision=0
     )
@@ -1178,7 +1178,7 @@ def test_reinitialize_keeps_drawings_and_scope_revision(store: AccountStore) -> 
 
 
 def test_delete_missing_row_returns_named_scope_revision(client: TestClient) -> None:
-    _register(client, "miss-id", "pw")
+    _register(client, "miss-id", "fixture-password-for-tests")
     body = _drawing()
     created = _create(client, body, expected_scope_revision=0)
     assert created.status_code == 201
@@ -1195,7 +1195,7 @@ def test_delete_missing_row_returns_named_scope_revision(client: TestClient) -> 
 
 
 def test_every_mutation_body_includes_integer_scope_revision(client: TestClient) -> None:
-    _register(client, "rev-body", "pw")
+    _register(client, "rev-body", "fixture-password-for-tests")
     body = _drawing()
     created = _create(client, body, expected_scope_revision=0)
     assert isinstance(created.json()["scope_revision"], int)

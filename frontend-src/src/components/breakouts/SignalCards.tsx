@@ -11,7 +11,7 @@ import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { DUR_SECTION } from '@/lib/motion';
 import { fmtPrice, fmtRelative } from '@/lib/format';
-import { useShell } from '@/components/Layout';
+import { useShell } from '@/hooks/useShell';
 import TickerLogo from '@/components/shared/TickerLogo';
 import ChangeBadge from '@/components/shared/ChangeBadge';
 import StrengthBar from '@/components/shared/StrengthBar';

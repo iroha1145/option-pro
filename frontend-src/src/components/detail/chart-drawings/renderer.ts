@@ -7,6 +7,7 @@ import {
 } from './geometry.ts';
 import { barKeyOf, resolveAnchor } from './projection.ts';
 import { resolvePaintColor } from './schema.ts';
+import { manualLineInk, renderPatternInk } from './linePresentation.ts';
 import { CHART_MONO_FONT } from '@/lib/chartFonts.ts';
 import type { ProjectedDrawing } from './hitTest.ts';
 import type { ChartDrawing, ChartRange, DrawingKind, Point, Segment } from './types.ts';
@@ -64,11 +65,7 @@ function coord(index: number, price: number) {
 }
 
 function styleOf(drawing: ChartDrawing) {
-  return {
-    color: resolvePaintColor(drawing.style.color),
-    width: drawing.style.width,
-    type: DASH[drawing.style.dash] ?? 'solid',
-  };
+  return manualLineInk(resolvePaintColor(drawing.style.color), drawing.style.width, DASH[drawing.style.dash] ?? 'solid');
 }
 
 export function projectAnchors(
@@ -265,7 +262,7 @@ export function graphicFromOverlay(
   const elements: object[] = [];
   const stroke = resolvePaintColor(color);
   const lineDash = options.solid ? undefined : [4, 3];
-  const lineWidth = options.width ?? (options.solid ? 2 : 1.5);
+  const lineWidth = options.width ?? (options.solid ? 3 : 2.5);
   overlay.fills.forEach((fill, index) => {
     const points = fill.map((point) => toPixel(point)).filter((item): item is Point => item !== null);
     if (points.length < 3) return;
@@ -285,7 +282,7 @@ export function graphicFromOverlay(
       type: 'line',
       id: `overlay-seg-${index}`,
       shape: { x1: a.x, y1: a.y, x2: b.x, y2: b.y },
-      style: { stroke, lineWidth, lineDash },
+      style: { stroke, lineWidth, lineDash, lineCap: 'round', shadowColor: '#FFFFFF', shadowBlur: 3 },
       silent: true,
     });
   });
@@ -295,7 +292,7 @@ export function graphicFromOverlay(
     elements.push({
       type: 'circle',
       id: `overlay-anchor-${index}`,
-      shape: { cx: pixel.x, cy: pixel.y, r: 5 },
+      shape: { cx: pixel.x, cy: pixel.y, r: 6 },
       style: { fill: '#FDFCF9', stroke, lineWidth: 2 },
       silent: true,
     });
@@ -337,9 +334,13 @@ export function drawingsToMarks(
             show: true,
             formatter: level.label,
             position: 'insideEndTop',
-            fontSize: 10,
+            fontSize: 11,
+            lineHeight: 12,
             fontFamily: CHART_MONO_FONT,
             color: lineStyle.color,
+            backgroundColor: 'rgba(255,255,255,0.96)',
+            padding: [1, 4],
+            borderRadius: 3,
           },
         },
         coord(ctx.xMax, level.price),
@@ -469,64 +470,18 @@ export function autoPatternsToMarks(
   ctx: RenderContext,
   minConfidence = 70,
 ): DrawingMarks {
-  const lines: object[] = [];
-  const areas: object[] = [];
-  const points: object[] = [];
-  const polygons: FillPolygon[] = [];
-  /* 分色 + 线端标签：此前所有形态线都是同一根淡灰虚线且无名，图上支撑/
-     阻力/通道边完全分不出来，只能去页脚标签条猜。标签只挂第一段（通道/
-     三角的第二条边不重复报名），文字与线同色。 */
-  const kept: { pattern: AutoPatternLike; geom: NonNullable<ReturnType<typeof autoPatternGeometry>> }[] = [];
+  const out: DrawingMarks = { lines: [], areas: [], points: [], polygons: [], unresolvedIds: [] };
   for (const pattern of patterns) {
-    if (pattern.confidence < minConfidence) continue;
+    if (pattern.hidden || !Number.isFinite(pattern.confidence) || pattern.confidence < minConfidence) continue;
     const geom = autoPatternGeometry(pattern, ctx);
     if (!geom) continue;
-    kept.push({ pattern, geom });
+    const ink = renderPatternInk(pattern, geom, ctx);
+    out.lines.push(...ink.lines);
+    out.points.push(...ink.points);
+    out.areas.push(...ink.areas);
+    out.polygons.push(...ink.polygons);
   }
-  for (const { pattern, geom } of kept) {
-    // 兜底灰从 ink400 加深到 ink500，线宽 1→1.5：细虚线在白纸上不够显。
-    const color = pattern.color ?? '#5A6788';
-    const lineStyle = { color, width: 1.5, type: [4, 4] as number[] };
-    geom.segments.forEach((segment, index) => {
-      /* 位置一律 insideEnd*（留在绘图区内），绝不用 'end'——那会画进 y 轴槽骑在
-         刻度上；防叠分档不在这里做，交给合并点的 deconflictEndLabels（手绘水平线/
-         斐波那契的标签也要一起排，只在本函数内排会漏掉它们）。 */
-      const label = index === 0 && pattern.label
-        ? {
-            show: true,
-            formatter: pattern.label,
-            position: 'insideEndTop' as const,
-            distance: 4,
-            color,
-            fontSize: 10,
-            backgroundColor: 'rgba(255,255,255,0.88)',
-            padding: [1, 4] as number[],
-            borderRadius: 3,
-          }
-        : { show: false };
-      lines.push([
-        { ...coord(segment.a.x, segment.a.y), lineStyle, label },
-        coord(segment.b.x, segment.b.y),
-      ]);
-    });
-    if (geom.fill) {
-      if (fillIsAxisAligned(geom.fill)) {
-        const xs = geom.fill.map((p) => p.x);
-        const ys = geom.fill.map((p) => p.y);
-        areas.push([
-          {
-            xAxis: Math.min(...xs),
-            yAxis: Math.min(...ys),
-            itemStyle: { color, opacity: 0.1 },
-          },
-          { xAxis: Math.max(...xs), yAxis: Math.max(...ys) },
-        ]);
-      } else {
-        polygons.push({ vertices: geom.fill, color, opacity: 0.1 });
-      }
-    }
-  }
-  return { lines, areas, points, polygons, unresolvedIds: [] };
+  return out;
 }
 
 export function lastBarKey(bars: BarLike[], range: ChartRange): string | null {

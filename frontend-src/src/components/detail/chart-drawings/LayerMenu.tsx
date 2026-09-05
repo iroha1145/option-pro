@@ -11,9 +11,12 @@
 import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
+import { isTopFocusScope } from '@/lib/focusScope';
 import { cn } from '@/lib/utils';
 import Icon from '@/components/icons';
 import InfoHint from '@/components/shared/InfoHint';
+import FilterButton from '@/components/shared/FilterButton';
 import Switch from '@/components/shared/Switch';
 import {
   overlayClassName,
@@ -245,22 +248,21 @@ export default function LayerMenu({
   const phase = useOverlayPhase(open, closeMs);
   const mounted = overlayVisible(open, phase);
   useFocusTrap(panelRef, open);
+  useBodyScrollLock(mounted);
 
   useEffect(() => {
-    if (!mounted) return;
+    if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
+      if (e.key !== 'Escape' || e.defaultPrevented || e.isComposing || e.keyCode === 229 || !isTopFocusScope(panelRef.current)) return;
       e.preventDefault();
-      e.stopPropagation();
+      e.stopImmediatePropagation();
       onClose();
     };
     document.addEventListener('keydown', onKey);
-    document.body.style.overflow = 'hidden';
     return () => {
       document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = '';
     };
-  }, [mounted, onClose]);
+  }, [open, onClose]);
 
   if (!mounted) return null;
 
@@ -300,6 +302,7 @@ export default function LayerMenu({
       <div
         className={cn('t-backdrop fixed inset-0 z-[85] bg-[rgba(13,22,38,.34)] backdrop-blur-[2px]', phase === 'open' && 'is-open')}
         onClick={onClose}
+        data-focus-backdrop={titleId}
         aria-hidden="true"
       />
       {/* 居中交给外壳 translate，t-modal 的 scale 留在内层——同 ConfirmDialog 的注释。 */}
@@ -308,6 +311,7 @@ export default function LayerMenu({
           ref={panelRef}
           role="dialog"
           aria-modal="true"
+          data-focus-overlay={titleId}
           aria-labelledby={titleId}
           aria-describedby={descId}
           className={cn(
@@ -348,26 +352,14 @@ export default function LayerMenu({
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 text-micro">
             <div className="flex flex-wrap items-center gap-1.5">
               {PRESET_ORDER.map((id) => (
-                <button
+                <FilterButton
                   key={id}
-                  type="button"
-                  aria-pressed={settings.preset === id}
+                  active={settings.preset === id}
                   aria-label={PRESETS[id].label}
                   onClick={() => onChange(settingsFromPreset(id))}
-                  className={cn(
-                    'inline-flex h-7 items-center rounded-full border px-3 leading-none transition-colors duration-fast',
-                    FOCUS_RING,
-                    settings.preset === id
-                      /* shadow-chip 而非 shadow-btn：btn 的 75% 白内高光是给白底
-                         描边次按钮的，压在蓝底实心胶囊上就是一道白边，还把填充
-                         视觉压低 1px 显得没对齐（用户两轮截图抓的就是它）。
-                         chip 是设计系统里选中态胶囊的专用档（ResultTable 页码同款）。 */
-                      ? 'border-brand-600 bg-brand-600 text-white shadow-chip'
-                      : 'border-line bg-card text-ink-500 hover:border-line-strong hover:text-ink-700',
-                  )}
                 >
                   {PRESETS[id].label}
-                </button>
+                </FilterButton>
               ))}
             </div>
 

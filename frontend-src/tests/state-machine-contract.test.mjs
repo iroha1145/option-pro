@@ -30,13 +30,14 @@ function codeOf(text) {
 
 /* ---------------- P2-5：闪烁不会永久残留 ---------------- */
 
-test('闪烁定时器由独立 ref 持有，每轮数据先复位再决定是否重启', async () => {
+test('闪烁定时器独立结束，数值快照决定是否有新的反馈', async () => {
   const hook = codeOf(await source('hooks/useTickFlash.ts'));
   // 定时器不再是 effect 的 cleanup：那正是「下一轮没有变化就没人清除」的原因
   assert.match(hook, /const timer = useRef<ReturnType<typeof setTimeout> \| null>\(null\)/);
   assert.match(hook, /if \(timer\.current !== null\) \{\s*\n\s*clearTimeout\(timer\.current\);/);
   assert.match(hook, /setFlashes\(\(current\) =>/);
-  assert.match(hook, /if \(Object\.keys\(next\)\.length > 0\)/);
+  assert.match(hook, /if \(Object\.keys\(flashes\)\.length === 0\) return/);
+  assert.match(hook, /\[flashes, durationMs\]/);
 });
 
 test('四处闪烁实现收敛到同一个 hook', async () => {
@@ -218,8 +219,9 @@ test('可选的强度补充有独立截止时间，不拖住核心详情', async
 test('闪烁 hook 不会因不稳定的入参引用陷入无限重渲染', async () => {
   const hook = codeOf(await source('hooks/useTickFlash.ts'));
   const page = codeOf(await source('pages/Breakouts.tsx'));
-  // 两道防线：调用方记忆化入参，hook 自身在「本来就没有闪烁」时不写状态。
+  // 调用方记忆化入参；hook 根据实际数值变化推导状态，引用变化不重播闪烁。
   assert.match(page, /const currentAll = useMemo\(/);
   assert.match(hook, /setFlashes\(\(current\) =>/);
-  assert.match(hook, /Object\.keys\(current\)\.length === 0 \? current : next/);
+  assert.match(hook, /previous\.get\(key\) !== value/);
+  assert.match(hook, /current === flashes \? \{\} : current/);
 });

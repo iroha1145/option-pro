@@ -3,9 +3,11 @@
  * 右侧/底部面板用 `.t-panel-slide`（open 400ms / close 350ms + 交叉模糊）。
  * 移动端变全屏 bottom sheet；ESC/点背板关闭。
  */
-import { useEffect, useRef } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
+import { isTopFocusScope } from '@/lib/focusScope';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import Icon from '@/components/icons';
@@ -34,24 +36,28 @@ export default function Drawer({ open, onClose, title, label, children, width = 
      layoutId 也在两棵树里撞名；DOM 中还同时存在两个 aria-modal dialog。
      现在由 useIsMobile（matchMedia 同步初值）选择唯一形态。 */
   const isMobile = useIsMobile();
+  const overlayId = useId();
+  const titleId = useId();
   const panelsRef = useRef<HTMLDivElement>(null);
   const closeMs = readRootDurationMs('--panel-close-dur', 350);
   const phase = useOverlayPhase(open, closeMs);
   const mounted = overlayVisible(open, phase);
   useFocusTrap(panelsRef, open);
+  useBodyScrollLock(mounted);
 
   useEffect(() => {
-    if (!mounted) return;
+    if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key !== 'Escape' || e.defaultPrevented || e.isComposing || e.keyCode === 229 || !isTopFocusScope(panelsRef.current)) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      onClose();
     };
     document.addEventListener('keydown', onKey);
-    document.body.style.overflow = 'hidden';
     return () => {
       document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = '';
     };
-  }, [mounted, onClose]);
+  }, [open, onClose]);
 
   if (!mounted) return null;
 
@@ -60,13 +66,16 @@ export default function Drawer({ open, onClose, title, label, children, width = 
       <div
         className={cn('t-backdrop fixed inset-0 z-[70] bg-[rgba(13,22,38,.45)] backdrop-blur-[2px]', phase === 'open' && 'is-open')}
         onClick={onClose}
+        data-focus-backdrop={overlayId}
         aria-hidden="true"
       />
       <div ref={panelsRef} className="contents">
         <aside
           role="dialog"
           aria-modal="true"
-          aria-label={label}
+          data-focus-overlay={overlayId}
+          aria-label={label ?? (title == null ? t('详情面板') : undefined)}
+          aria-labelledby={!label && title != null ? titleId : undefined}
           data-open={overlayDataOpen(phase)}
           className={cn(
             't-panel-slide fixed z-[71] flex flex-col bg-card shadow-sh-3',
@@ -87,10 +96,11 @@ export default function Drawer({ open, onClose, title, label, children, width = 
               isMobile ? 'px-4 py-3' : 'px-6 py-4',
             )}
           >
-            <div className="min-w-0 flex-1">{title}</div>
+            <div id={titleId} className="min-w-0 flex-1">{title}</div>
             <button
+              type="button"
               onClick={onClose}
-              className="rounded-sm p-1.5 text-ink-400 transition-[transform,color,background-color] duration-fast hover:bg-paper-2 hover:text-ink-600 active:scale-95"
+              className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-sm p-1.5 text-ink-400 transition-[transform,color,background-color] duration-fast hover:bg-paper-2 hover:text-ink-600 active:scale-95"
               aria-label={t('关闭抽屉')}
             >
               <Icon name="x" size={16} />

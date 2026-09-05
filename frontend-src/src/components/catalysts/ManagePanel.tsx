@@ -16,7 +16,7 @@ import {
   type WorkerHealth,
 } from '@/api/modules/admin';
 import { useAccess } from '@/hooks/useAccess';
-import { useToast } from '@/components/Toast';
+import { useToast } from '@/hooks/useToast';
 import { Led } from './bits';
 import Icon from '@/components/icons';
 import { cn } from '@/lib/utils';

@@ -494,7 +494,11 @@ def _contract_mark(contract: Mapping[str, Any]) -> float | None:
     return None
 
 
-def compute_straddle_move(snapshot: Mapping[str, Any]) -> dict[str, Any] | None:
+def compute_straddle_move(
+    snapshot: Mapping[str, Any],
+    *,
+    today: date | None = None,
+) -> dict[str, Any] | None:
     """从一份真实链快照算 ATM call+put 直跨式涨跌幅（%）。"""
 
     if not isinstance(snapshot, Mapping):
@@ -502,39 +506,69 @@ def compute_straddle_move(snapshot: Mapping[str, Any]) -> dict[str, Any] | None:
     underlying = _positive(snapshot.get("underlying_price"))
     if underlying is None:
         return None
-    calls: dict[float, float] = {}
-    for row in snapshot.get("calls") or []:
-        strike = _positive(row.get("strike")) if isinstance(row, Mapping) else None
-        mark = _contract_mark(row) if isinstance(row, Mapping) else None
-        if strike is not None and mark is not None:
-            calls[strike] = mark
-    puts: dict[float, float] = {}
-    for row in snapshot.get("puts") or []:
-        strike = _positive(row.get("strike")) if isinstance(row, Mapping) else None
-        mark = _contract_mark(row) if isinstance(row, Mapping) else None
-        if strike is not None and mark is not None:
-            puts[strike] = mark
+    def quotes(side: str) -> dict[float, tuple[float, Any]]:
+        out: dict[float, tuple[float, Any]] = {}
+        for row in snapshot.get(side) or []:
+            if not isinstance(row, Mapping):
+                continue
+            strike = _positive(row.get("strike"))
+            mark = _contract_mark(row)
+            # A timestamp from another strike cannot validate this quote.
+            # Providers with per-contract times explicitly include the field,
+            # even when absent, so a missing time cannot inherit the chain's.
+            observed_at = row.get("quote_as_of", snapshot.get("as_of"))
+            if today is not None and not _quote_is_fresh(observed_at, today):
+                continue
+            if strike is not None and mark is not None:
+                out[strike] = (mark, observed_at)
+        return out
+
+    calls = quotes("calls")
+    puts = quotes("puts")
     common = set(calls).intersection(puts)
     if not common:
         return None
     strike = min(common, key=lambda value: abs(value - underlying))
-    move = (calls[strike] + puts[strike]) / underlying * 100
+    move = (calls[strike][0] + puts[strike][0]) / underlying * 100
     if not math.isfinite(move) or move <= 0 or move > 200:
         return None
-    return {
+    result = {
         "move_pct": round(move, 2),
         "strike": strike,
         "underlying_price": underlying,
     }
+    if today is not None:
+        result["observed_at"] = min(
+            (calls[strike][1], puts[strike][1]),
+            key=_quote_datetime,
+        )
+    return result
 
 
-def _quote_is_fresh(observed_at: Any, today: date) -> bool:
+def _quote_epoch_iso(value: Any) -> str | None:
+    epoch = _positive(value)
+    if epoch is None:
+        return None
+    try:
+        return datetime.fromtimestamp(epoch, timezone.utc).isoformat()
+    except (OverflowError, OSError, ValueError):
+        return None
+
+
+def _quote_datetime(observed_at: Any) -> datetime | None:
     try:
         observed = datetime.fromisoformat(str(observed_at))
     except (TypeError, ValueError):
-        return False
+        return None
     if observed.tzinfo is None:
         observed = observed.replace(tzinfo=timezone.utc)
+    return observed
+
+
+def _quote_is_fresh(observed_at: Any, today: date) -> bool:
+    observed = _quote_datetime(observed_at)
+    if observed is None:
+        return False
     return (
         datetime.combine(today, datetime.min.time(), tzinfo=timezone.utc) - observed
     ) <= timedelta(days=_MAX_QUOTE_AGE_DAYS)
@@ -563,7 +597,7 @@ def _success(
         "expected_move_pct": move["move_pct"],
         "expected_move_expiration": expiration,
         "expected_move_source": source,
-        "expected_move_observed_at": observed_at,
+        "expected_move_observed_at": move.get("observed_at") or observed_at,
         "expected_move_underlying_price": round(float(move["underlying_price"]), 4),
         "expected_move_method": EXPECTED_MOVE_METHOD,
         "expected_move_status": "active",
@@ -610,7 +644,7 @@ def _massive_expected_move(
         return _failure("no_quote_time")
     if not _quote_is_fresh(observed_at, today):
         return _failure("stale_quote")
-    move = compute_straddle_move(snapshot)
+    move = compute_straddle_move(snapshot, today=today)
     if move is None:
         return _failure("no_usable_straddle")
     return _success(
@@ -691,6 +725,7 @@ def _marketdata_expected_move(
             "strike": _finite(strikes[index]),
             "bid": _finite(bids[index]),
             "ask": _finite(asks[index]),
+            "quote_as_of": _quote_epoch_iso(updated[index]) if index < len(updated) else None,
         }
         side = str(sides[index] or "").lower()
         if side == "call":
@@ -701,21 +736,17 @@ def _marketdata_expected_move(
         (value for value in underlying_prices if _positive(value) is not None),
         None,
     )
-    latest_epoch = max(
-        (value for value in updated if _finite(value) is not None),
+    observed_at = max(
+        (row["quote_as_of"] for row in calls + puts if row["quote_as_of"] is not None),
         default=None,
-    )
-    observed_at = (
-        datetime.fromtimestamp(float(latest_epoch), timezone.utc).isoformat()
-        if latest_epoch is not None
-        else None
     )
     if observed_at is None:
         return _failure("no_quote_time")
     if not _quote_is_fresh(observed_at, today):
         return _failure("stale_quote")
     move = compute_straddle_move(
-        {"underlying_price": underlying, "calls": calls, "puts": puts}
+        {"underlying_price": underlying, "calls": calls, "puts": puts},
+        today=today,
     )
     if move is None:
         return _failure("no_usable_straddle")
@@ -759,7 +790,7 @@ def _yahoo_expected_move(
         return _failure("no_quote_time")
     if not _quote_is_fresh(observed_at, today):
         return _failure("stale_quote")
-    move = compute_straddle_move(chain)
+    move = compute_straddle_move(chain, today=today)
     if move is None:
         return _failure("no_usable_straddle")
     return _success(

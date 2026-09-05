@@ -38,9 +38,9 @@ export default function SectorList({
             <span className="flex size-6 items-center justify-center rounded-xs bg-brand-50 text-brand-700">
               <Icon name="layers" size={13} />
             </span>
-            <span className="text-body-s font-semibold text-ink-800">
+            <button type="button" onClick={() => onSelect(row.id)} aria-pressed={selectedId === row.id} className="rounded-sm py-1 text-body-s font-semibold text-ink-800 hover:text-brand-700 hover:underline">
               {row.name}
-            </span>
+            </button>
           </span>
         ),
       },
@@ -55,7 +55,7 @@ export default function SectorList({
             <span
               className={cn(
                 'font-mono text-data-m font-semibold tnum',
-                row.avgReturn >= 0 ? 'text-up-700' : 'text-down-700',
+                row.avgReturn === 0 ? 'text-ink-500' : row.avgReturn > 0 ? 'text-up-700' : 'text-down-700',
               )}
             >
               {fmtPct(row.avgReturn)}
@@ -69,14 +69,10 @@ export default function SectorList({
       },
       {
         key: 'strength',
-        title: (
-          <>
-            {t('平均强度')}
-            <InfoHint hint={SCORE_HINTS.avgStrength} side="bottom" size={11} />
-          </>
-        ),
+        title: t('平均强度'),
+        hint: <InfoHint hint={SCORE_HINTS.avgStrength} side="bottom" size={11} />,
         sortable: true,
-        sortValue: (row) => row.avgStrength ?? -1,
+        sortValue: (row) => row.avgStrength ?? Number.NaN,
         render: (row) =>
           row.avgStrength !== null ? (
             <StrengthBar score={row.avgStrength} width={72} />
@@ -88,15 +84,11 @@ export default function SectorList({
         // 与平均强度**并列**，不混进它。两者不一致的板块（技术强但宏观逆风、
         // 宏观先改善而价格没跟上）才是这张表值得看的地方，合成一个数正好藏掉。
         key: 'macroFit',
-        title: (
-          <>
-            {t('宏观适配')}
-            <InfoHint hint={macroShadowHint()} side="bottom" size={11} />
-          </>
-        ),
+        title: t('宏观适配'),
+        hint: <InfoHint hint={macroShadowHint()} side="bottom" size={11} />,
         sortable: true,
         // 没读到排最后（与平均强度同一约定）。不当 50 处理：那是一个断言。
-        sortValue: (row) => row.macroFit ?? -1,
+        sortValue: (row) => row.macroFit ?? Number.NaN,
         render: (row) => {
           const quadrant = macroQuadrant(row.avgStrength, row.macroFit);
           return (
@@ -118,7 +110,7 @@ export default function SectorList({
         title: t('统计覆盖'),
         align: 'right',
         sortable: true,
-        sortValue: (row) => row.coveredCount ?? -1,
+        sortValue: (row) => row.coveredCount ?? Number.NaN,
         render: (row) => (
           <span className="font-mono text-data-m text-ink-600 tnum">
             {row.coveredCount ?? '—'} / {row.memberCount}
@@ -148,7 +140,7 @@ export default function SectorList({
           ),
       },
     ],
-    [],
+    [onSelect, selectedId],
   );
 
   return (

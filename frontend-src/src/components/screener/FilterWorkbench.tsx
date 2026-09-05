@@ -1,6 +1,6 @@
 /**
  * B1 筛选工作台（screener.md）
- * 行1 分档 Segmented（带数量徽标）+ 预设策略 chips（spring-pop 1.04）
+ * 行1 分档 Segmented（带数量徽标）+ 预设策略按钮（浅品牌底选中）
  * 行2 周期 / 偏好 / Top N
  * 行3 板块多选（折叠 +N）· 价格区间 · 成交额下限 · 开始扫描（真实等待态）
  * 行 stagger 60ms；过滤器变更主按钮脉冲（box-shadow 呼吸 1.2s ×2）
@@ -11,6 +11,7 @@ import type { SectorOption, StrengthProfile } from '@/api/types';
 import { cn } from '@/lib/utils';
 import Icon from '@/components/icons';
 import Segmented from '@/components/shared/Segmented';
+import FilterButton from '@/components/shared/FilterButton';
 import MenuSelect from '@/components/shared/MenuSelect';
 import {
   DOLLAR_VOL_OPTIONS,
@@ -25,7 +26,6 @@ import {
 import { t as __t } from '../../i18n/core.ts';
 
 const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
-const SPRING_POP = { type: 'spring', stiffness: 520, damping: 32 } as const;
 
 /* ---------------- 分档 Segmented（共享件 + Mono 11 数量徽标） ---------------- */
 const TIER_OPTIONS: { value: TierFilter; label: string }[] = [
@@ -275,7 +275,7 @@ export default function FilterWorkbench({
           ) : presets === null ? (
             <div className="flex gap-2" aria-hidden="true">
               {Array.from({ length: 3 }, (_, i) => (
-                <span key={i} className="skeleton-shimmer h-8 w-20 rounded-pill" />
+                <span key={i} className="skeleton-shimmer h-8 w-20 rounded-md" />
               ))}
             </div>
           ) : (
@@ -283,23 +283,15 @@ export default function FilterWorkbench({
               {presets.map((p) => {
                 const active = draft.presetId === p.id;
                 return (
-                  <motion.button
+                  <FilterButton
                     key={p.id}
                     onClick={() => applyPreset(p.id)}
-                    animate={{ scale: active ? 1.04 : 1 }}
-                    transition={SPRING_POP}
                     title={p.description}
-                    aria-pressed={active}
-                    className={cn(
-                      'flex h-8 items-center gap-1.5 rounded-pill border px-3 text-caption transition-colors duration-fast',
-                      active
-                        ? 'border-brand-400 bg-brand-100 text-brand-700 shadow-chip'
-                        : 'border-line bg-card text-ink-500 hover:border-brand-400/60 hover:text-brand-600',
-                    )}
+                    active={active}
                   >
                     <Icon name="spark-ai" size={13} className={active ? 'text-brand-600' : 'text-ink-300'} />
                     {p.name}
-                  </motion.button>
+                  </FilterButton>
                 );
               })}
             </div>
@@ -353,21 +345,14 @@ export default function FilterWorkbench({
               {visibleSectors.map((s) => {
                 const active = draft.sectors.includes(s.id);
                 return (
-                  <motion.button
+                  <FilterButton
                     key={s.id}
                     onClick={() => toggleSector(s.id)}
-                    animate={{ scale: active ? 1.04 : 1 }}
-                    transition={SPRING_POP}
-                    aria-pressed={active}
-                    className={cn(
-                      'flex h-7 shrink-0 items-center whitespace-nowrap rounded-xs border px-2 text-caption transition-colors duration-fast',
-                      active
-                        ? 'border-brand-400 bg-brand-100 text-brand-700 shadow-chip'
-                        : 'border-line bg-card text-ink-500 hover:border-brand-400/60 hover:text-brand-600',
-                    )}
+                    active={active}
+                    className="shrink-0"
                   >
                     {s.name}
-                  </motion.button>
+                  </FilterButton>
                 );
               })}
               {hiddenCount > 0 && (

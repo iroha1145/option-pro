@@ -7,7 +7,7 @@ import { motion } from 'framer-motion';
 import type { ApiError } from '@/api/client';
 import type { MarketRegime } from './api';
 import { cn } from '@/lib/utils';
-import { strengthBarClass } from '@/components/shared/StrengthBar';
+import { strengthBarClass } from '@/lib/strengthColor';
 import EmptyState from '@/components/shared/EmptyState';
 import InfoHint from '@/components/shared/InfoHint';
 import { SCORE_HINTS, type ScoreHint } from '@/lib/scoreHints';
@@ -36,11 +36,7 @@ const DIMS: { key: keyof MarketRegime; label: string; tip: string; hint: ScoreHi
 const DIMS_SOURCE_NOTE =
   t('六维算自同一篮固定基准：SPY / QQQ / IWM / RSP、11 个行业 ETF、VIX、HYG / IEF / TLT / 10 年期、GLD、SOXX / SMH —— 是全市场读数，不区分指数。');
 
-function regimeMean(r: MarketRegime): number {
-  return DIMS.reduce((s, d) => s + r[d.key], 0) / DIMS.length;
-}
-
-export { regimeMean };
+import { regimeMean } from '@/lib/regime';
 
 export default function RegimePanel({
   data,

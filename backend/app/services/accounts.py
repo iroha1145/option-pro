@@ -45,9 +45,23 @@ OWNER_USER_ID = "own_local"
 OWNER_ACCOUNT_USERNAME = "admin"
 
 USERNAME_MAX_LENGTH = 32
+REGISTRATION_PASSWORD_MIN_LENGTH = 15
 PASSWORD_MAX_LENGTH = 256
 WATCHLIST_MAX_TICKERS = 50
 SESSION_SECONDS = 30 * 24 * 60 * 60
+SESSIONS_PER_ACCOUNT_MAX = 20
+
+# Whole-password comparisons only: do not reject ordinary words inside a long
+# passphrase or require punctuation/case combinations. This deliberately small
+# local list is not a complete compromised-password database.
+_COMMON_REGISTRATION_PASSWORDS = frozenset({
+    "123456789012345", "1234567890123456", "12345678901234567",
+    "123456789012345678", "1234567890123456789", "12345678901234567890",
+    "123456789123456789", "qwertyuiopasdfgh", "qwertyuiopasdfghjkl",
+    "asdfghjklqwertyuiop", "password123456789", "passwordpassword",
+    "passwordpasswordpassword", "letmeinletmeinletmein",
+    "111111111111111", "000000000000000", "aaaaaaaaaaaaaaa",
+})
 
 DRAWING_KINDS = frozenset(
     {"horizontal", "segment", "ray", "channel", "rectangle", "fibonacci", "text"}
@@ -185,13 +199,7 @@ class SessionResult:
 
 
 def hash_account_password(password: str, *, salt: bytes | None = None) -> str:
-    """Hash with the owner's PBKDF2 parameters but no length floor.
-
-    Customer passwords carry no complexity requirement by product decision, so
-    only characters that would corrupt storage or headers are rejected. The
-    work factor stays identical to the owner hash: a weak password must not
-    also get weak stretching.
-    """
+    """Preserve legacy hash compatibility; registration applies its own policy."""
 
     validate_password(password)
     resolved_salt = salt or secrets.token_bytes(16)
@@ -235,7 +243,7 @@ def verify_account_password(password: str, encoded_hash: str) -> bool:
 
 
 def validate_password(password: str) -> str:
-    """No length or complexity floor — only reject unstorable characters."""
+    """Storage validation shared with legacy password-hash utilities."""
 
     if not password:
         raise AccountError("password_required")
@@ -243,6 +251,18 @@ def validate_password(password: str) -> str:
         raise AccountError("password_too_long")
     if any(character in password for character in ("\x00", "\r", "\n")):
         raise AccountError("password_invalid_characters")
+    return password
+
+
+def validate_registration_password(password: str) -> str:
+    """Apply the new-account policy without rejecting existing login hashes."""
+
+    validate_password(password)
+    if len(password) < REGISTRATION_PASSWORD_MIN_LENGTH:
+        raise AccountError("password_too_short")
+    normalized = password.strip().casefold()
+    if not normalized or normalized in _COMMON_REGISTRATION_PASSWORDS:
+        raise AccountError("password_too_common")
     return password
 
 
@@ -568,6 +588,7 @@ class AccountStore:
 
     def register(self, username: str, password: str) -> SessionResult:
         display, key = normalize_username(username)
+        validate_registration_password(password)
         password_hash = hash_account_password(password)
         self.initialize()
         now_iso = _utcnow_iso()
@@ -688,6 +709,9 @@ class AccountStore:
         digest = hashlib.sha256(token.encode("utf-8")).hexdigest()
         expires_at = float(self._clock()) + SESSION_SECONDS
         with self._connect() as connection:
+            # Serialize issuance and eviction across workers too, so concurrent
+            # successful logins cannot exceed the retained-session bound.
+            connection.execute("BEGIN IMMEDIATE")
             connection.execute(
                 """INSERT OR REPLACE INTO account_sessions
                        (token_sha256, user_id, created_at, expires_at)
@@ -697,6 +721,15 @@ class AccountStore:
             connection.execute(
                 "DELETE FROM account_sessions WHERE expires_at<=?",
                 (float(self._clock()),),
+            )
+            connection.execute(
+                """DELETE FROM account_sessions
+                   WHERE user_id=? AND token_sha256 NOT IN (
+                       SELECT token_sha256 FROM account_sessions
+                       WHERE user_id=?
+                       ORDER BY rowid DESC LIMIT ?
+                   )""",
+                (account.user_id, account.user_id, SESSIONS_PER_ACCOUNT_MAX),
             )
             connection.commit()
         return SessionResult(token=token, expires_at=expires_at, account=account)

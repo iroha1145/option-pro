@@ -101,10 +101,10 @@ function inThrow(node) {
  * TYPE_DISCRIMINANTS 第 2 类）。行号来自这些 mock 拼接语句。
  */
 const KNOWN_TEMPLATE_EXEMPT_LINES = new Set([
-  'components/detail/api.ts:399',
-  'components/detail/api.ts:538',
+  'components/detail/api.ts:400',
   'components/detail/api.ts:539',
   'components/detail/api.ts:540',
+  'components/detail/api.ts:541',
 ]);
 
 // ── 收集 dict/*.ts 里的全部词条（跳过 types.ts / index.ts 本身） ────────────
@@ -146,7 +146,6 @@ test('dict/*.ts 词条之间没有同 msgid 不同译文的冲突', () => {
  *
  * 1. 字面量联合类型的判别值——TS 类型系统要求精确匹配某个具体字符串，t() 返回
  *    宽泛 string 会让类型检查失败；真正的展示翻译发生在各自的渲染处（已验证）：
- *    - CommandPalette.tsx 的 `group` 字段 → 渲染处 `{__t(g.name)}`（line 312）
  *    - detail/api.ts 的 TrendBiasLabel 内部值 → TrendBiasPanel.tsx 用 `{t(label)}` 渲染
  *    - Market.tsx 的 TrendBias['label'] 内部值 → SignalsReading.tsx 用 `{t(bias.label)}` 渲染
  *
@@ -158,30 +157,22 @@ test('dict/*.ts 词条之间没有同 msgid 不同译文的冲突', () => {
  * 而不是放宽通用规则掩盖真正遗漏的包裹。
  */
 const KNOWN_TYPE_DISCRIMINANTS = new Set([
-  'components/CommandPalette.tsx:161 股票',
-  'components/CommandPalette.tsx:171 最近',
-  'components/CommandPalette.tsx:176 功能',
-  'components/CommandPalette.tsx:190 功能',
-  'components/CommandPalette.tsx:201 功能',
-  // 客户账号退出/登录条目（#18）：group 判别字段，同上由渲染处 __t 包裹
-  'components/CommandPalette.tsx:215 功能',
-  'components/CommandPalette.tsx:227 功能',
-  'components/detail/api.ts:461 数据不足',
-  'components/detail/api.ts:463 偏多',
-  'components/detail/api.ts:465 偏空',
-  'components/detail/api.ts:466 中性',
+  'components/detail/api.ts:462 数据不足',
+  'components/detail/api.ts:464 偏多',
+  'components/detail/api.ts:466 偏空',
+  'components/detail/api.ts:467 中性',
   // 等待占位哨兵：对照后端落库的中文字面量，绝不能 __t（译文永不命中，防御失效）
   'components/catalysts/api.ts:132 中文标题等待生成',
   'components/catalysts/api.ts:132 中文摘要等待生成',
   'components/catalysts/api.ts:132 热点标题等待中文分析',
-  'pages/Market.tsx:68 偏多',
-  'pages/Market.tsx:68 偏空',
-  'pages/Market.tsx:68 中性',
-  'components/detail/api.ts:536 偏贵',
-  'components/detail/api.ts:536 相对便宜',
-  'components/detail/api.ts:536 中性',
-  'components/detail/api.ts:541 近端观察 MA20 附近的量能配合与突破延续性；若量价背离放大，偏向读数将快速回落。',
-  'components/detail/api.ts:542 以上为方向性研究结论，非收益预测。',
+  'pages/Market.tsx:69 偏多',
+  'pages/Market.tsx:69 偏空',
+  'pages/Market.tsx:69 中性',
+  'components/detail/api.ts:537 偏贵',
+  'components/detail/api.ts:537 相对便宜',
+  'components/detail/api.ts:537 中性',
+  'components/detail/api.ts:542 近端观察 MA20 附近的量能配合与突破延续性；若量价背离放大，偏向读数将快速回落。',
+  'components/detail/api.ts:543 以上为方向性研究结论，非收益预测。',
   // `t(macroMissingReason(status) ?? '暂无宏观读数')` — the literal is the right
   // operand of `??`, not itself t()'s direct argument, so the classifier can't see
   // that the whole expression is covered by the outer call. It is (verified by hand).

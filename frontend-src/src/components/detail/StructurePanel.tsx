@@ -10,7 +10,7 @@
  */
 import InfoHint from '@/components/shared/InfoHint';
 import { STRUCTURE_HINTS } from '@/lib/structureHints';
-import { strengthBarClass } from '@/components/shared/StrengthBar';
+import { strengthBarClass } from '@/lib/strengthColor';
 import { fmtPrice } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { TechBaseState, TechnicalStructure } from '@/api/types';

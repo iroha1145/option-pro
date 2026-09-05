@@ -10,6 +10,8 @@ import { ApiError } from '@/api/client';
 import { stocksApi } from '@/api/modules/stocks';
 import { useAccess } from '@/hooks/useAccess';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
+import { isTopFocusScope } from '@/lib/focusScope';
 import { cn } from '@/lib/utils';
 import {
   overlayClassName,
@@ -32,7 +34,7 @@ interface PaletteProps {
 
 interface Entry {
   id: string;
-  group: '股票' | '功能' | '最近';
+  group: string;
   no?: string;
   title: string;
   mono?: boolean;
@@ -91,6 +93,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
   const closeMs = readRootDurationMs('--modal-close-dur', 150);
   const phase = useOverlayPhase(open, closeMs);
   const mounted = overlayVisible(open, phase);
+  useBodyScrollLock(mounted);
 
   /* 归零放在**收起之后**而不是打开时：打开时才清会让面板先按上一次的 active
      渲染一帧、随后再被重置成 0，滑行高亮因此要落两次笔——第二次同批同元素，
@@ -105,13 +108,15 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
 
   /* 全局快捷键 ⌘K / Ctrl+K 由 Layout 绑定；此处只负责打开后把焦点交给输入框 */
   useEffect(() => {
-    if (open) requestAnimationFrame(() => inputRef.current?.focus());
+    if (!open) return;
+    const frame = requestAnimationFrame(() => inputRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
   }, [open]);
 
   /* 防抖 200ms 搜索 */
   useEffect(() => {
     const q = query.trim();
-    if (!q) {
+    if (!open || !q) {
       setResults([]);
       setSearching(false);
       setSearchError(null);
@@ -141,7 +146,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
       cancelled = true;
       clearTimeout(t);
     };
-  }, [query]);
+  }, [query, open]);
 
   const pickTicker = useCallback(
     (t: string) => {
@@ -158,7 +163,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
       results.forEach((r) =>
         list.push({
           id: `s-${r.ticker}`,
-          group: '股票',
+          group: __t('股票'),
           title: r.ticker,
           mono: true,
           hint: `${r.name} · ${r.sector}`,
@@ -168,12 +173,12 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
       );
     } else {
       readRecent().forEach((t) =>
-        list.push({ id: `r-${t}`, group: '最近', title: t, mono: true, hint: __t('最近查看'), icon: 'clock-ny', action: () => pickTicker(t) }),
+        list.push({ id: `r-${t}`, group: __t('最近'), title: t, mono: true, hint: __t('最近查看'), icon: 'clock-ny', action: () => pickTicker(t) }),
       );
       NAV_ITEMS.forEach((n) =>
         list.push({
           id: `f-${n.path}`,
-          group: '功能',
+          group: __t('功能'),
           no: n.no,
           title: n.label,
           hint: __t('前往{label}页', { label: n.label }),
@@ -187,7 +192,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
       if (isOwner) {
         list.push({
           id: 'f-refresh',
-          group: '功能',
+          group: __t('功能'),
           title: __t('强制刷新自选'),
           hint: __t('重新获取自选行情'),
           icon: 'refresh',
@@ -198,7 +203,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
         });
         list.push({
           id: 'f-logout',
-          group: '功能',
+          group: __t('功能'),
           title: __t('退出 Owner 登录'),
           hint: __t('结束本机会话'),
           icon: 'shield',
@@ -212,7 +217,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
         // 客户会话在整个 UI 里无处退出）
         list.push({
           id: 'f-logout',
-          group: '功能',
+          group: __t('功能'),
           title: username ? __t('退出 {name}', { name: username }) : __t('退出登录'),
           hint: __t('结束本机会话'),
           icon: 'shield',
@@ -224,7 +229,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
       } else {
         list.push({
           id: 'f-login',
-          group: '功能',
+          group: __t('功能'),
           title: __t('登录'),
           hint: __t('Owner 或客户账号'),
           icon: 'shield',
@@ -245,13 +250,13 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
     /* 输入法组词期间一律不接管按键：组词中的回车/上下键属于候选窗，
        抢过来会把「英伟达」这类中文名搜索的确认键变成「打开当前高亮项」，
        组词内容当场丢失（zh 是默认语言，空态文案自己就在教用户输中文名）。 */
-    if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
+    if (e.defaultPrevented || e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229 || !isTopFocusScope(panelRef.current)) return;
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setActive((a) => (flat.length ? (a + 1) % flat.length : 0));
+      setActive(flat.length ? (clampedActive + 1) % flat.length : 0);
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      setActive((a) => (flat.length ? (a - 1 + flat.length) % flat.length : 0));
+      setActive(flat.length ? (clampedActive - 1 + flat.length) % flat.length : 0);
     } else if (e.key === 'Enter') {
       /* 原生交互元素（清除钮/结果行按钮）让浏览器派发原生 click——面板级
          Enter 只服务输入框。否则 preventDefault 会吃掉清除钮的点击行为，
@@ -311,15 +316,6 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
     glideBatch.current = entries;
   }, [mounted, clampedActive, entries]);
 
-  /* 面板打开时锁背景滚动（审计 2.2.14）：与 Drawer 同口径，滚轮不再穿透
-     到背后的页面。关闭动画期间仍锁，避免背后页面跟着滚。 */
-  useEffect(() => {
-    if (!mounted) return;
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [mounted]);
 
   /* 分组渲染 */
   const groups: { name: string; items: (Entry & { idx: number })[] }[] = [];
@@ -337,6 +333,8 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
           <div
             className={cn('t-backdrop fixed inset-0 z-[80] bg-[rgba(13,22,38,.28)] backdrop-blur-[2px]', phase === 'open' && 'is-open')}
             onClick={onClose}
+            data-focus-backdrop="command-palette"
+            aria-hidden="true"
           />
           {/* 居中交给外层 translate，避免 t-modal 的 scale 顶掉 -translate-x-1/2；
               外壳 pointer-events-none：关闭动画期间不挡背板点击（面板自身由
@@ -346,6 +344,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
             ref={panelRef}
             role="dialog"
             aria-modal="true"
+            data-focus-overlay="command-palette"
             aria-label={__t("命令面板")}
             /* 键盘逻辑挂在面板上（审计 2.2.13）：焦点 Tab 进结果按钮后，
                ↑↓/Enter/Esc 依然生效（事件冒泡到这里统一处理）。 */
@@ -367,9 +366,10 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
                   setActive(0);
                 }}
                 placeholder={__t("搜索股票代码、名称或功能…")}
-                className="h-full flex-1 bg-transparent text-body text-ink-800 outline-none placeholder:text-ink-300 focus-visible:!shadow-none"
+                className="h-full min-w-0 w-0 flex-1 bg-transparent text-body text-ink-800 outline-none placeholder:text-ink-300 focus-visible:!shadow-none"
                 role="combobox"
-                aria-expanded={flat.length > 0}
+                aria-expanded={open}
+                aria-autocomplete="list"
                 aria-controls="command-palette-listbox"
                 aria-activedescendant={flat.length ? `command-palette-option-${clampedActive}` : undefined}
                 aria-label={__t("搜索股票或功能")}
@@ -387,7 +387,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
                     setActive(0);
                     inputRef.current?.focus();
                   }}
-                  className="anim-fade-in flex size-6 shrink-0 items-center justify-center rounded-full text-ink-400 transition-colors duration-fast hover:bg-line/70 hover:text-ink-800"
+                  className="anim-fade-in flex size-6 shrink-0 items-center justify-center rounded-md text-ink-400 transition-colors duration-fast hover:bg-line/70 hover:text-ink-800"
                 >
                   <Icon name="x" size={12} />
                 </button>
@@ -451,7 +451,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
                 <div key={g.name}>
                   {/* 分组标题也要抬到滑块之上：高亮块是不透明的 brand-50 底，
                       跨组滑行时会从标题上碾过去，只抬按钮会让标题文字闪掉。 */}
-                  <p className="eyebrow relative z-10 px-4 pb-1 pt-2.5">{__t(g.name)}</p>
+                  <p className="eyebrow relative z-10 px-4 pb-1 pt-2.5">{g.name}</p>
                   {g.items.map((e) => (
                     <button
                       key={e.id}
@@ -479,7 +479,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
                       >
                         {e.title}
                       </span>
-                      {e.hint && <span className="ml-auto shrink-0 truncate text-micro text-ink-400">{e.hint}</span>}
+                      {e.hint && <span className="ml-auto min-w-0 max-w-[55%] truncate text-micro text-ink-400">{e.hint}</span>}
                     </button>
                   ))}
                 </div>

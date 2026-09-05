@@ -2,11 +2,12 @@
  * 价格标尺（breakouts.md B3/B4 核心组件）
  * 轨道：失效价 ──●── 目标价，三段渐变 down-600 → ink-300 → up-600
  * markers：shield 失效 / flag 触发 / target 目标；现价菱形游标 brand-600 + 2px 白描边
- * 首绘游标自触发位滑至现价位 700ms ease-paper；轮询变化 400ms 过渡 + tick-flash
+ * 首绘游标对应真实现价；后续位置变化使用共享短过渡与更新反馈。
  */
-import { useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
+import { usePrefersReducedMotion } from '@/hooks/usePrefersReducedMotion';
 import { cn } from '@/lib/utils';
+import { DUR_UI, EASE_PAPER } from '@/lib/motion';
 import { fmtPrice } from '@/lib/format';
 import Icon from '@/components/icons';
 import type { IconName } from '@/components/icons';
@@ -41,11 +42,7 @@ const edgeAnchor = (pct: number): string =>
 const FLAG_POLE_ANCHOR = (12 - 5.4) / 24;
 
 export default function PriceScale({ invalidation, trigger, target, current, large = false, flash = null, className }: PriceScaleProps) {
-  /* 首绘 700ms / 轮询 400ms（hooks 必须在任何 early return 之前） */
-  const mounted = useRef(false);
-  useEffect(() => {
-    mounted.current = true;
-  }, []);
+  const reduced = usePrefersReducedMotion();
 
   const known = [invalidation, trigger, target, current].filter(fin);
   /* 已知价位不足两个：画不出标尺，诚实空态 */
@@ -65,7 +62,6 @@ export default function PriceScale({ invalidation, trigger, target, current, lar
   const min = lo - pad;
   const max = hi + pad;
   const x = (v: number) => Math.min(100, Math.max(0, ((v - min) / (max - min)) * 100));
-  const cursorFrom = fin(trigger) ? trigger : current;
 
   const markers: MarkerDef[] = [
     { key: 'invalid', label: t('失效'), icon: 'shield' as const, value: invalidation as number, iconCls: 'text-down-600' },
@@ -117,9 +113,9 @@ export default function PriceScale({ invalidation, trigger, target, current, lar
           />
         ))}
         <motion.span
-          initial={{ left: `${x(cursorFrom)}%` }}
+          initial={false}
           animate={{ left: `${x(current)}%` }}
-          transition={{ duration: mounted.current ? 0.4 : 0.7, ease: [0.16, 1, 0.3, 1] }}
+          transition={{ duration: reduced ? 0 : DUR_UI, ease: EASE_PAPER }}
           className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2"
         >
           <span className="block size-2.5 rotate-45 rounded-[2px] bg-brand-600 shadow-[0_0_0_2px_#fff,0_1px_3px_rgba(16,24,40,.35)]" aria-hidden="true" />
@@ -135,9 +131,9 @@ export default function PriceScale({ invalidation, trigger, target, current, lar
             </span>
           ))}
           <motion.span
-            initial={{ left: `${x(cursorFrom)}%` }}
+            initial={false}
             animate={{ left: `${x(current)}%` }}
-            transition={{ duration: mounted.current ? 0.4 : 0.7, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: reduced ? 0 : DUR_UI, ease: EASE_PAPER }}
             /* whitespace-nowrap：贴右缘时 abspos 盒的收缩宽度被「left 到容器右缘
                的剩余空间」卡住，-translate-x-full 是布局后才平移救不回宽度——
                「触发 / 现价」会被折成两行、价格顶到第三行，与对侧标注错层。 */
@@ -160,9 +156,9 @@ export default function PriceScale({ invalidation, trigger, target, current, lar
       ) : (
         <div className="relative mt-1.5 h-4">
           <motion.span
-            initial={{ left: `${x(cursorFrom)}%` }}
+            initial={false}
             animate={{ left: `${x(current)}%` }}
-            transition={{ duration: mounted.current ? 0.4 : 0.7, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: reduced ? 0 : DUR_UI, ease: EASE_PAPER }}
             className={cn('absolute whitespace-nowrap', edgeAnchor(x(current)))}
           >
             <span

@@ -536,7 +536,7 @@ test.describe("macro conditions colour scheme and motion", () => {
   test.use({
     viewport: { width: 1440, height: 1200 },
     colorScheme: "dark",
-    reducedMotion: "reduce",
+    contextOptions: { reducedMotion: "reduce" },
   });
 
   test("renders under a dark colour-scheme preference without breaking", async ({ page }) => {
@@ -555,14 +555,14 @@ test.describe("macro conditions colour scheme and motion", () => {
   });
 
   test("reduced motion is respected: the score settles at its real value", async ({ page }) => {
-    // playwright.config.mjs 全局 reducedMotion: "reduce"
+    // playwright.config.mjs 全局 contextOptions.reducedMotion: "reduce"
     await stubApi(page, { conditions: conditions(), history: history() });
     await openMarket(page);
-    // 断言可观察结果而不是 matchMedia：本版 Playwright 的 reducedMotion emulation
-    // 不反映到页面的 matchMedia，探测它只能测到 harness 而不是应用行为。
-    // useCountUp 的 reduced-motion 分支由 macro-conditions-contract.test.mjs 在源码层守护。
+    expect(await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches)).toBe(true);
     const composite = page.getByRole("region", { name: "宏观环境综合分", exact: true });
-    await expect(composite.locator("span.text-data-xxl")).not.toHaveText("0.0");
-    await expect(composite.locator("span.text-data-xxl")).toHaveText(/^\d+\.\d$/);
+    const expectedScore = conditions().composite.score.toFixed(1);
+    const score = composite.locator("span.text-data-xxl");
+    await expect(score.locator('[aria-hidden="true"]')).toHaveText(expectedScore);
+    await expect(score.locator(".sr-only")).toHaveText(expectedScore);
   });
 });

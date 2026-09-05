@@ -22,6 +22,7 @@ from zoneinfo import ZoneInfo
 import httpx
 
 from app.config import get_settings
+from app.services.symbols import quote_symbol
 
 _NEW_YORK = ZoneInfo("America/New_York")
 
@@ -69,7 +70,7 @@ def configured() -> bool:
 def to_symbol(ticker: str) -> str | None:
     """Yahoo 风格代码 → Massive 代码;不支持的形态返回 None(回落 Yahoo)。"""
 
-    symbol = (ticker or "").strip().upper()
+    symbol = quote_symbol(ticker or "")
     if not symbol:
         return None
     if symbol.startswith("^"):
@@ -593,7 +594,7 @@ def option_chain_snapshot(ticker: str, expiration: str) -> dict[str, Any]:
     if not isinstance(results, list):
         raise MassiveError("unexpected options snapshot shape", code="protocol")
     underlying_price: float | None = None
-    observed_at: str | None = None
+    quote_times: list[str] = []
     calls: list[dict[str, Any]] = []
     puts: list[dict[str, Any]] = []
     for row in results:
@@ -608,10 +609,6 @@ def option_chain_snapshot(ticker: str, expiration: str) -> dict[str, Any]:
         )
         if underlying_price is None:
             underlying_price = _finite(asset.get("price"))
-        if observed_at is None:
-            observed_at = _epoch_iso(quote.get("last_updated")) or _epoch_iso(
-                row.get("last_updated")
-            )
         strike = _finite(details.get("strike_price"))
         bid = _finite(quote.get("bid"))
         ask = _finite(quote.get("ask"))
@@ -623,14 +620,17 @@ def option_chain_snapshot(ticker: str, expiration: str) -> dict[str, Any]:
             "bid": bid,
             "ask": ask,
             "midpoint": round((bid + ask) / 2, 4),
+            "quote_as_of": _epoch_iso(quote.get("last_updated")),
         }
+        if contract["quote_as_of"] is not None:
+            quote_times.append(contract["quote_as_of"])
         if side == "call":
             calls.append(contract)
         elif side == "put":
             puts.append(contract)
     return {
         "underlying_price": underlying_price,
-        "as_of": observed_at,
+        "as_of": max(quote_times) if quote_times else None,
         "calls": calls,
         "puts": puts,
     }

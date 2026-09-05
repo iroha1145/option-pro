@@ -6,7 +6,7 @@
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useCountUp } from '@/hooks/useCountUp';
-import { strengthBarClass } from '@/components/shared/StrengthBar';
+import { strengthBarClass } from '@/lib/strengthColor';
 import ChangeBadge from '@/components/shared/ChangeBadge';
 import InfoHint from '@/components/shared/InfoHint';
 import { SCORE_HINTS_MACRO } from '@/lib/scoreHints';
@@ -49,7 +49,7 @@ export default function CompositeCard({
   dataThrough: string | null;
 }) {
   const hasScore = typeof composite.score === 'number' && Number.isFinite(composite.score);
-  const animated = useCountUp(hasScore ? (composite.score as number) : 0);
+  const animated = useCountUp(hasScore ? (composite.score as number) : Number.NaN);
   const shown = hasScore ? animated : null;
 
   return (
@@ -68,7 +68,8 @@ export default function CompositeCard({
 
       <div className="mt-4 flex flex-wrap items-end gap-x-4 gap-y-2">
         <span className="font-mono text-data-xxl text-ink-900 tnum">
-          {shown === null ? '—' : shown.toFixed(1)}
+          <span className="sr-only">{hasScore ? (composite.score as number).toFixed(1) : '—'}</span>
+          <span aria-hidden="true">{shown === null ? '—' : shown.toFixed(1)}</span>
         </span>
         <div className="flex flex-col gap-1 pb-1.5">
           {composite.regime ? (

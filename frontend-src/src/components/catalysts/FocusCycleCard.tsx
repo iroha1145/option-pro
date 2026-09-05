@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAccess } from '@/hooks/useAccess';
 import { usePolling } from '@/hooks/usePolling';
-import { useToast } from '@/components/Toast';
+import { useToast } from '@/hooks/useToast';
 import { catalystsContract } from './api';
 import type { FocusCycleJob, MarketFocusCycle, NewsClassification } from './api';
 import { ImpactValue, Led } from './bits';

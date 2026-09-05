@@ -1,12 +1,11 @@
 /**
  * 个股整页 S0 头部（原 StockDrawerBody 抽屉头，抽屉撤除后由整页独占）
- * TickerLogo/名称/大价格 Data-XXL(count-up + tick-flash)/ChangeBadge/时段 chip/quote_as_of
+ * TickerLogo/名称/真实价格与更新反馈/ChangeBadge/时段 chip/quote_as_of
  */
 import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { marketApi } from '@/api/modules/market';
 import { usePolling } from '@/hooks/usePolling';
-import { useCountUp } from '@/hooks/useCountUp';
 import { cn } from '@/lib/utils';
 import { fmtCompact, fmtPrice, fmtTimeHHMMSS } from '@/lib/format';
 import TickerLogo from '@/components/shared/TickerLogo';
@@ -24,7 +23,6 @@ const compactOr = (v: number | null | undefined): string => (isNum(v) ? fmtCompa
 
 export default function PriceHeader({ detail }: { detail: StockDetail }) {
   const { data: market } = usePolling(() => marketApi.status(), 60_000, []);
-  const shown = useCountUp(detail.price);
   const prevPrice = useRef(detail.price);
   const [flash, setFlash] = useState<'up' | 'down' | null>(null);
 
@@ -50,10 +48,10 @@ export default function PriceHeader({ detail }: { detail: StockDetail }) {
       <div className="flex flex-wrap items-center gap-3">
         <TickerLogo ticker={detail.ticker} size={40} />
         <div className="min-w-0">
-          <p className="flex flex-wrap items-baseline gap-x-2.5">
+          <h1 className="flex flex-wrap items-baseline gap-x-2.5">
             <span className="font-display text-[22px] leading-[28px] font-bold text-ink-900">{detail.ticker}</span>
             <span className="text-body-s text-ink-500">{detail.name}</span>
-          </p>
+          </h1>
           <div className="mt-1 flex flex-wrap items-center gap-2">
             <span className="rounded-xs border border-line-strong bg-card-warm px-1.5 py-px text-micro text-ink-500">
               {detail.sector}
@@ -83,7 +81,7 @@ export default function PriceHeader({ detail }: { detail: StockDetail }) {
         >
           <InsightValue
             size="xl"
-            value={`$${fmtPrice(shown)}`}
+            value={isNum(detail.price) ? `$${fmtPrice(detail.price)}` : '—'}
             changePct={detail.changePct}
             change={isNum(detail.change) ? detail.change : null}
             basis={__t('vs 昨收')}

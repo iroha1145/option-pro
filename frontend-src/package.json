@@ -8,11 +8,13 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test:visual": "playwright test --config=playwright.config.mjs"
+    "test:visual": "playwright test --config=playwright.config.mjs",
+    "test:review": "playwright test --config=playwright.review.config.mjs"
   },
   "dependencies": {
+    "@radix-ui/react-select": "^2.3.7",
     "clsx": "^2.1.1",
-    "echarts": "^5.6.0",
+    "echarts": "^6.1.0",
     "framer-motion": "^12.42.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

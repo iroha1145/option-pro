@@ -13,7 +13,7 @@ import { motion, useReducedMotion } from 'framer-motion';
 import { useAccess } from '@/hooks/useAccess';
 import { accessApi } from '@/api/modules/access';
 import { ApiError } from '@/api/client';
-import { useToast } from '@/components/Toast';
+import { useToast } from '@/hooks/useToast';
 import { cn } from '@/lib/utils';
 import { DUR_SECTION } from '@/lib/motion';
 import { useCatalogShake } from '@/lib/transitions';
@@ -189,8 +189,8 @@ export default function Login() {
   /* catalog 12 一个实例管一块字段：哪个字段出错抖哪个，服务端失败抖密码框
      （凭证类错误）但不带行内文案——那份文案由底部 aria-live 状态行独占，
      避免同一段话在两处同时出现。 */
-  const userShake = useCatalogShake(1200);
-  const pwShake = useCatalogShake(1200);
+  const { inputRef: userInputRef, ...userShake } = useCatalogShake(1200);
+  const { inputRef: passwordInputRef, ...pwShake } = useCatalogShake(1200);
   const [serviceDown, setServiceDown] = useState(false);
 
 
@@ -237,6 +237,8 @@ export default function Login() {
 
   const mapError = (e: unknown): { text: string; tone: 'error' | 'warn' } => {
     if (e instanceof ApiError) {
+      if (e.bizCode === 'password_too_short') return { text: t('新密码至少需要 15 个字符'), tone: 'error' };
+      if (e.bizCode === 'password_too_common') return { text: t('这个密码过于常见，请换一个较长的短语'), tone: 'error' };
       if (e.bizCode === 'login_cooldown') return { text: t('连续登录失败，请稍后再试'), tone: 'warn' };
       if (e.bizCode === 'registration_rate_limited') {
         return { text: e.message || t('注册过于频繁，请稍后再试'), tone: 'warn' };
@@ -266,6 +268,11 @@ export default function Login() {
     if (!password.trim()) {
       setStatusMsg({ text: t('请输入密码'), tone: 'error' });
       pwShake.play({ message: true });
+      return;
+    }
+    if (mode === 'register' && Array.from(password).length < 15) {
+      setStatusMsg({ text: t('新密码至少需要 15 个字符'), tone: 'error' });
+      pwShake.play();
       return;
     }
     setState('verifying');
@@ -466,7 +473,7 @@ export default function Login() {
               <label className="block">
                 <span className="mb-1.5 block text-caption font-medium text-ink-500">{t('用户名')}</span>
                 <div
-                  ref={userShake.inputRef}
+                  ref={userInputRef}
                   className={cn(
                     't-input flex h-12 items-center gap-2 rounded-sm border bg-card px-3',
                     'transition-[box-shadow,border-color] duration-fast',
@@ -505,7 +512,7 @@ export default function Login() {
               <label className="block">
                 <span className="mb-1.5 block text-caption font-medium text-ink-500">{t('密码')}</span>
                 <div
-                  ref={pwShake.inputRef}
+                  ref={passwordInputRef}
                   className={cn(
                     't-input flex h-12 items-center gap-2 rounded-sm border bg-card px-3 transition-[box-shadow,border-color] duration-fast',
                     'focus-within:border-brand-600 focus-within:shadow-focus-ring',
@@ -528,6 +535,7 @@ export default function Login() {
                     className="h-full min-w-0 flex-1 bg-transparent font-mono text-[16px] text-ink-800 outline-none placeholder:text-ink-300 disabled:opacity-60"
                     autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
                     aria-label={t("密码")}
+                    aria-describedby={mode === 'register' ? 'registration-password-hint' : undefined}
                   />
                   <button
                     type="button"
@@ -539,6 +547,11 @@ export default function Login() {
                   </button>
                 </div>
               </label>
+              {mode === 'register' && (
+                <p id="registration-password-hint" className="mt-2 text-caption text-ink-500">
+                  {t('至少 15 个字符，可使用一句容易记住的长短语')}
+                </p>
+              )}
               <div className="t-error-track">
                 <div className="t-error-clip">
                   <p className="t-error-msg text-caption text-down-700">{t('请输入密码')}</p>
@@ -585,7 +598,7 @@ export default function Login() {
                   升为 assertive。 */}
               <p
                 className={cn(
-                  'mt-3 h-5 text-caption',
+                  'mt-3 min-h-5 text-caption',
                   statusMsg?.tone === 'warn' ? 'text-warn-600' : 'text-down-700',
                   !statusMsg && 'opacity-0',
                 )}

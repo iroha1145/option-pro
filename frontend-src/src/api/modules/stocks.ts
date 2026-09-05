@@ -1,5 +1,6 @@
 /** 股票域：watchlist / detail / signals / chart / search */
 import { mockOr, post } from '../client';
+import { quoteSymbol } from '@/lib/quoteSymbol';
 import { marketGet, resetMarketReadPaths } from '../marketRead';
 import { asRec, pickN, pickS, pickLabel, unwrap, type Rec } from '../live';
 import { mapMacroFitDrivers } from '../macroFields';
@@ -35,6 +36,7 @@ export function mapBar<T extends Candle = Candle>(b: Rec): T {
     // 盘前盘后与仅报价 bar 要一路带到图表层：均线等常规时段指标按它剔除
     ...(b.ext === true ? { ext: true } : {}),
     ...(b.quote_only === true ? { quote_only: true } : {}),
+    ...(typeof b.closed === 'boolean' ? { closed: b.closed } : {}),
   } as T;
 }
 
@@ -66,7 +68,7 @@ export function mapChart(body: unknown, ticker: string, range: StockChart['range
  * spark[≤7],quote_as_of,quote_session}]}]} → 扁平 UI WatchlistItem[]
  * 契约无 sector/strengthScore/signals —— 不编造：strengthScore 置 null（UI 按缺失处理），signals 空数组。
  */
-function mapWatchlist(body: unknown): WatchlistItem[] {
+export function mapWatchlist(body: unknown): WatchlistItem[] {
   /* 同一 ticker 可属多个分组（生产 231 行 / 唯一 214）：按 ticker 去重，
      保留首次出现的行情行，分组名合并进 sector（UI 仅作展示文案，无按组过滤） */
   const byTicker = new Map<string, { item: WatchlistItem; groups: string[] }>();
@@ -93,6 +95,7 @@ function mapWatchlist(body: unknown): WatchlistItem[] {
         sparkline: unwrap(s, 'spark', 'sparkline')
           .map((x) => pickN(x as Rec, 'c') ?? (typeof x === 'number' ? x : null))
           .filter((x): x is number => x !== null),
+        dailyTrend: mapDailyTrend(s.daily_trend),
         strengthScore: pickN(s, 'strength_score', 'strengthScore') ?? (null as unknown as number),
         signals: [],
         updatedAt: pickS(s, 'quote_as_of', 'updatedAt') ?? '',
@@ -101,6 +104,26 @@ function mapWatchlist(body: unknown): WatchlistItem[] {
     }
   }
   return [...byTicker.values()].map((v) => v.item);
+}
+
+/** 不把旧 7 点 spark 或无日期数组伪装成长期走势。 */
+export function mapDailyTrend(body: unknown): WatchlistItem['dailyTrend'] {
+  const data = asRec(body);
+  if (data.interval !== '1d' || data.adjustment !== 'raw') return undefined;
+  const points = unwrap(data, 'points');
+  if (points.length < 2 || points.length > 30) return undefined;
+  const out: { date: string; close: number }[] = [];
+  for (const rawPoint of points) {
+    const point = asRec(rawPoint);
+    const date = pickS(point, 'date');
+    const close = pickN(point, 'close');
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date) || close === null || close <= 0) return undefined;
+    const parsed = new Date(`${date}T00:00:00Z`);
+    if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) return undefined;
+    if (out.length && date <= out[out.length - 1].date) return undefined;
+    out.push({ date, close });
+  }
+  return out;
 }
 
 /**
@@ -212,7 +235,7 @@ export const stocksApi = {
     mockOr(
       () => fx.getStockDetail(ticker),
       () =>
-        marketGet(`/stocks/${encodeURIComponent(ticker)}`, {
+        marketGet(`/stocks/${encodeURIComponent(quoteSymbol(ticker))}`, {
           ttlMs: 15_000,
           staleMs: 30 * 60_000,
           force,
@@ -222,7 +245,7 @@ export const stocksApi = {
     mockOr(
       () => fx.getStockSignals(ticker),
       () =>
-        marketGet(`/stocks/${encodeURIComponent(ticker)}/signals`, {
+        marketGet(`/stocks/${encodeURIComponent(quoteSymbol(ticker))}/signals`, {
           ttlMs: 60_000,
           staleMs: 30 * 60_000,
         }),
@@ -240,9 +263,9 @@ export const stocksApi = {
       () => {
         void adjustment;
         return marketGet(
-          `/stocks/${encodeURIComponent(ticker)}/chart?range=${range}&adjustment=raw`,
+          `/stocks/${encodeURIComponent(quoteSymbol(ticker))}/chart?range=${range}&adjustment=raw`,
           { ttlMs: 60_000, staleMs: 60 * 60_000, force },
-        ).then((d) => mapChart(d, ticker, range));
+        ).then((d) => mapChart(d, quoteSymbol(ticker), range));
       },
     ),
   search: (q: string): Promise<StockSearchResult[]> =>
@@ -287,7 +310,7 @@ export const stocksApi = {
         };
       },
       async () => {
-        const t = ticker.toUpperCase();
+        const t = quoteSymbol(ticker);
         const encoded = encodeURIComponent(t);
         const result = mapPull(await post(`/stocks/${encoded}/pull`, {}));
         resetMarketReadPaths([

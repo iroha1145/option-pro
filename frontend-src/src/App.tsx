@@ -1,5 +1,6 @@
 import { Suspense, lazy } from 'react';
 import { MotionConfig } from 'framer-motion';
+import { usePrefersReducedMotion } from '@/hooks/usePrefersReducedMotion';
 import { Route, Routes } from 'react-router';
 import Layout from '@/components/Layout';
 import { AccessProvider } from '@/hooks/useAccess';
@@ -22,6 +23,7 @@ const Market = lazy(() => import('@/pages/Market'));
 const CtaTrend = lazy(() => import('@/pages/CtaTrend'));
 
 export default function App() {
+  const reducedMotion = usePrefersReducedMotion();
   return (
     /* 顶级边界必须在 AccessProvider 之外：身份 Provider、命令面板与全局抽屉都在
        路由错误边界的作用范围之外，它们抛异常时旧结构会整站白屏（审计 P1-09）。 */
@@ -29,7 +31,7 @@ export default function App() {
       {/* framer 动画全局尊重系统「减少动态效果」（审计 2.5.2）：index.css 的
           prefers-reduced-motion 块只覆盖 CSS 动画，覆盖不到 framer 写入的
           内联 transform/opacity——整页转场、抽屉滑入、逐行 stagger 都要靠它。 */}
-      <MotionConfig reducedMotion="user">
+      <MotionConfig reducedMotion={reducedMotion ? 'always' : 'never'}>
       <AccessProvider>
         <ToastProvider>
           <Suspense fallback={<PageFallback />}>

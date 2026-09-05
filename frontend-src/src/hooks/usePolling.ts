@@ -42,9 +42,11 @@ export function usePolling<T>(
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
   const fetcherRef = useRef(fetcher);
-  fetcherRef.current = fetcher;
   const restoreRef = useRef(options?.restore);
-  restoreRef.current = options?.restore;
+  useEffect(() => {
+    fetcherRef.current = fetcher;
+    restoreRef.current = options?.restore;
+  }, [fetcher, options?.restore]);
   const generationRef = useRef(0);
   const activeGenerationsRef = useRef(new Set<number>());
   const inFlightGenerationsRef = useRef(new Set<number>());
@@ -109,11 +111,11 @@ export function usePolling<T>(
     void tick(true, generation);
     if (intervalMs && intervalMs > 0) {
       timer = setInterval(() => {
-        if (document.visibilityState === 'visible') void tick(false, generation);
+        if (document.visibilityState === 'visible') void tick(false);
       }, intervalMs);
     }
     const onVisible = () => {
-      if (document.visibilityState === 'visible' && intervalMs && intervalMs > 0) void tick(false, generation);
+      if (document.visibilityState === 'visible' && intervalMs && intervalMs > 0) void tick(false);
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => {

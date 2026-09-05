@@ -2,7 +2,7 @@
  * §03 突破雷达（原版布局 · Paper Terminal 皮肤）
  * 页头带：§03 眉题 + 衬线大标 + 副标（仅流程句）+ 右侧紧凑状态条
  *        （扫描启用 LED / 快照与活跃条数 / 最近扫描 / 市场时段 chip / Worker / 下次扫描倒计时 · 只看自选）
- * 筛选行：状态 fchip 胶囊组 + 评分胶囊组 + ticker 聚焦 chip + owner「刷新快照」
+ * 筛选行：状态与评分分组 + ticker 聚焦清除 + owner「立即扫描」
  * 当日信号：左 7/12 lead 压缩大卡（不动）+ 右 5/12 吸顶 HistoryRail「历史事件回溯」压缩面板
  * 其下：SignalCards 个股小卡网格（当日其余事件，3 列 / 移动单列，V3 小卡结构恢复）
  * 事件详情模态保留 · status/current 30s 轮询 · 空态/骨架/503/移动端单列
@@ -17,10 +17,11 @@ import { usePolling } from '@/hooks/usePolling';
 import { useTickFlash } from '@/hooks/useTickFlash';
 import { useNow } from '@/hooks/useNow';
 import { useAccess } from '@/hooks/useAccess';
-import { useToast } from '@/components/Toast';
-import { useShell } from '@/components/Layout';
+import { useToast } from '@/hooks/useToast';
+import { useShell } from '@/hooks/useShell';
 import { cn } from '@/lib/utils';
 import Switch from '@/components/shared/Switch';
+import FilterButton from '@/components/shared/FilterButton';
 import { fmtTimeHHMMSS } from '@/lib/format';
 import EmptyState from '@/components/shared/EmptyState';
 import SourceNote from '@/components/shared/SourceNote';
@@ -39,7 +40,7 @@ import type {
 } from '@/components/breakouts/types';
 import { t as __t } from '../i18n/core.ts';
 
-/* ---------------- 筛选维度（fchip 胶囊组） ---------------- */
+/* ---------------- 筛选维度 ---------------- */
 type StatusFilter = 'ALL' | LifecycleState;
 const STATUS_CAPS: { value: StatusFilter; label: string }[] = [
   { value: 'ALL', label: __t('全部') },
@@ -55,25 +56,6 @@ const SCORE_CAPS = [
   { value: 65, label: __t('65 分以上') },
   { value: 80, label: __t('80 分以上') },
 ];
-
-/* ---------------- fchip 胶囊（选中 spring-pop 1.04） ---------------- */
-function FChip({ active, onClick, children, ariaLabel }: { active: boolean; onClick: () => void; children: string; ariaLabel?: string }) {
-  return (
-    <button
-      onClick={onClick}
-      aria-pressed={active}
-      aria-label={ariaLabel}
-      className={cn(
-        'relative rounded-pill border px-2.5 py-1 text-micro font-medium transition-[transform,color,background-color,border-color] duration-fast before:absolute before:-inset-1.5 before:content-[""] sm:before:hidden',
-        active
-          ? 'scale-[1.04] border-brand-600 bg-brand-600 text-white shadow-chip'
-          : 'border-line bg-card text-ink-500 hover:border-brand-400 hover:text-brand-600',
-      )}
-    >
-      {children}
-    </button>
-  );
-}
 
 /* ---------------- 只看自选开关（toggle，knob 260ms） ---------------- */
 function WatchOnlyToggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
@@ -376,39 +358,43 @@ export default function Breakouts() {
         </div>
       </motion.header>
 
-      {/* 筛选行：状态 fchip 组 · 评分胶囊组 · ticker 聚焦 chip · owner 立即扫描 */}
-      <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line pb-4">
-        <span className="flex items-center gap-1.5 text-caption text-ink-400">
-          <Icon name="filter-funnel" size={13} />
-          {__t('筛选')}
-        </span>
-        <div className="flex flex-wrap items-center gap-1" role="group" aria-label={__t("状态筛选")}>
-          {STATUS_CAPS.map((c) => (
-            <FChip key={c.value} active={statusFilter === c.value} onClick={() => setStatusFilter(c.value)}>
-              {c.label}
-            </FChip>
-          ))}
+      {/* 同一工具栏内明确区分两个筛选维度；窄屏按组换行，触控目标不互相覆盖。 */}
+      <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-3 border-b border-line pb-4" data-breakout-filters="">
+        <div className="flex max-w-full flex-wrap items-center gap-2">
+          <span className="flex items-center gap-1.5 text-caption text-ink-500">
+            <Icon name="filter-funnel" size={13} />
+            {__t('状态')}
+          </span>
+          <div className="filter-group" role="group" aria-label={__t("状态筛选")}>
+            {STATUS_CAPS.map((c) => (
+              <FilterButton key={c.value} active={statusFilter === c.value} onClick={() => setStatusFilter(c.value)}>
+                {c.label}
+              </FilterButton>
+            ))}
+          </div>
         </div>
-        <span className="hidden h-4 w-px bg-line-strong sm:block" aria-hidden="true" />
-        <div className="flex items-center gap-1" role="group" aria-label={__t("评分筛选")}>
-          <span className="mr-0.5 text-caption text-ink-400">{__t('评分')}</span>
-          {SCORE_CAPS.map((c) => (
-            <FChip key={c.value} active={minScore === c.value} onClick={() => setMinScore(c.value)} ariaLabel={__t('评分{label}', { label: c.label })}>
-              {c.label}
-            </FChip>
-          ))}
+        <div className="flex max-w-full flex-wrap items-center gap-2">
+          <span className="text-caption text-ink-500">{__t('评分')}</span>
+          <div className="filter-group" role="group" aria-label={__t("评分筛选")}>
+            {SCORE_CAPS.map((c) => (
+              <FilterButton key={c.value} active={minScore === c.value} onClick={() => setMinScore(c.value)} aria-label={__t('评分{label}', { label: c.label })}>
+                {c.label}
+              </FilterButton>
+            ))}
+          </div>
         </div>
         {tickerFilter && (
           <button
             onClick={() => setTickerFilter('')}
             aria-label={__t('清除代码聚焦 {ticker}', { ticker: tickerFilter })}
-            className="inline-flex items-center gap-1 rounded-pill border border-brand-400/60 bg-brand-50 px-2.5 py-1 font-mono text-micro font-medium text-brand-600 transition-colors tnum hover:border-brand-600"
+            type="button"
+            className="control-button font-mono tnum"
           >
             {tickerFilter}
             <Icon name="x" size={12} />
           </button>
         )}
-        <span className="ml-auto flex items-center gap-3">
+        <span className="flex flex-wrap items-center gap-3 sm:ml-auto">
           {statusQ.lastUpdatedAt && (
             <span className="font-mono text-micro text-ink-400 tnum">{__t('更新')} {fmtTimeHHMMSS(statusQ.lastUpdatedAt)}</span>
           )}
@@ -417,7 +403,7 @@ export default function Breakouts() {
               onClick={onRefreshSnapshot}
               disabled={scanning}
               title={__t("立即触发一次突破扫描")}
-              className="flex items-center gap-1.5 rounded-md border border-line bg-card px-3 py-1.5 text-caption font-medium text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:opacity-60"
+              className="control-button"
             >
               <Icon name="refresh" size={14} className={scanning ? 'animate-spin-once' : ''} />
               {__t('立即扫描')}

@@ -14,6 +14,7 @@
  * codemod 惯例以 `__t` 别名引入（见 i18n-coverage 的 classify）。
  */
 import { ApiError, mockOr } from '@/api/client';
+import { quoteSymbol } from '@/lib/quoteSymbol';
 import { marketGet } from '@/api/marketRead';
 import { asRec, pickLabel, pickN, pickS, unwrap, type Rec } from '@/api/live';
 import { ma20Of, mapBar } from '@/api/modules/stocks';
@@ -191,7 +192,7 @@ export function mergeMacroFields(
 }
 
 export function getDetail(ticker: string, force = false): Promise<StockDetail> {
-  const symbol = ticker.toUpperCase();
+  const symbol = quoteSymbol(ticker);
   return mockOr(
     () => {
       if (!fx.hasTicker(symbol)) throw new ApiError(404, __t('代码 {ticker} 不存在', { ticker: symbol }));
@@ -261,7 +262,7 @@ export function getDetail(ticker: string, force = false): Promise<StockDetail> {
 }
 
 export function getDetailChart(ticker: string, range: ChartRange, force = false): Promise<StockChartEx> {
-  const symbol = ticker.toUpperCase();
+  const symbol = quoteSymbol(ticker);
   return mockOr(
     () => {
       if (!fx.hasTicker(symbol)) throw new ApiError(404, __t('代码 {ticker} 不存在', { ticker: symbol }));
@@ -509,7 +510,7 @@ export function mapTrendBiasResponse(body: unknown, ticker: string): StockTrendB
 }
 
 export function getTrendBias(ticker: string, force = false): Promise<StockTrendBiasView> {
-  const symbol = ticker.toUpperCase();
+  const symbol = quoteSymbol(ticker);
   return mockOr<StockTrendBiasView>(
     () => {
       if (!fx.hasTicker(symbol)) throw new ApiError(404, __t('代码 {ticker} 不存在', { ticker: symbol }));
@@ -526,7 +527,7 @@ export function getTrendBias(ticker: string, force = false): Promise<StockTrendB
 
 /** signal_analysis 任务（owner）；轮询/取消复用 aiJobsApi.get / cancel */
 export function createSignalAnalysisJob(ticker: string): Promise<AiJob> {
-  const symbol = ticker.toUpperCase();
+  const symbol = quoteSymbol(ticker);
   return mockOr(
     () => {
       if (!fx.hasTicker(symbol)) throw new ApiError(404, __t('代码 {ticker} 不存在', { ticker: symbol }));
@@ -744,7 +745,7 @@ function mapTechnicalStructure(body: unknown): TechnicalStructure {
 }
 
 export function getTechnicalStructure(ticker: string, force = false): Promise<TechnicalStructure> {
-  const symbol = ticker.toUpperCase();
+  const symbol = quoteSymbol(ticker);
   return mockOr(
     () => {
       if (!fx.hasTicker(symbol)) throw new ApiError(404, __t('代码 {ticker} 不存在', { ticker: symbol }));
@@ -766,7 +767,7 @@ export function getTechnicalStructure(ticker: string, force = false): Promise<Te
 }
 
 export function prefetchStockDetailPanels(ticker: string): void {
-  const symbol = ticker.toUpperCase();
+  const symbol = quoteSymbol(ticker);
   void getDetailChart(symbol, DEFAULT_CHART_RANGE).catch(() => {});
   void getTrendBias(symbol).catch(() => {});
   void getTechnicalStructure(symbol).catch(() => {});

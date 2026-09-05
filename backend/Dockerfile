@@ -34,6 +34,7 @@ COPY config/personal.toml /app/config/personal.toml
 COPY frontend /app/frontend
 COPY THIRD_PARTY_NOTICES.md /licenses/THIRD_PARTY_NOTICES.md
 COPY third_party/BreakoutAnalysis-LICENSE /licenses/BreakoutAnalysis-LICENSE
+COPY third_party/ /licenses/third_party/
 RUN python -c "from pathlib import Path; root = Path('/app/frontend'); files = sorted(path.relative_to(root).as_posix() for path in root.rglob('*') if path.is_file()); Path('/app/frontend-manifest.txt').write_text('\\n'.join(files) + '\\n', encoding='utf-8')"
 
 USER app

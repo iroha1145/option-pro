@@ -11,6 +11,7 @@ import pandas as pd
 import yfinance as yf
 
 from app.services import massive
+from app.services.daily_returns import aligned_benchmark_return
 
 _MASSIVE_PERIOD_DAYS = {
     "1y": 405,
@@ -698,7 +699,7 @@ def compute_stock_signals_from_history(
 
     if not spy.empty and "Close" in spy.columns:
         stock_ret = safe(compute_period_return(close, 20))
-        spy_ret = safe(compute_period_return(spy["Close"], 20))
+        spy_ret = safe(_safe_float(aligned_benchmark_return(close, spy["Close"], 20), 6))
         rs = (
             safe((stock_ret - spy_ret) * 100)
             if stock_ret is not None and spy_ret is not None

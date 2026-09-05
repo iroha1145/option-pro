@@ -3,6 +3,7 @@
  * 确定性种子；时间戳相对「当前」动态生成；写操作更新本地 fixture。
  */
 import { Rng, round2, round4 } from './rng';
+import { quoteSymbol } from '@/lib/quoteSymbol';
 import { TICKER_POOL, type TickerInfo } from './data';
 import type {
   Candle,
@@ -34,7 +35,12 @@ const rng = new Rng(20240521);
 export { SIGNAL_LABELS, SIGNAL_TYPES } from '@/lib/signalLabels';
 import { SIGNAL_LABELS, SIGNAL_TYPES } from '@/lib/signalLabels';
 
-const infoOf = (t: string): TickerInfo => TICKER_POOL.find((x) => x.ticker === t) ?? TICKER_POOL[0];
+const infoOf = (ticker: string): TickerInfo => {
+  const symbol = quoteSymbol(ticker);
+  const index = INDEX_DETAIL_BASE.find((item) => item.symbol === symbol);
+  if (index) return { ticker: index.symbol, name: index.name, base: index.base, sector: __t('指数') };
+  return TICKER_POOL.find((item) => item.ticker === symbol) ?? TICKER_POOL[0];
+};
 
 /* ---------------- 指数 tape ---------------- */
 const INDEX_BASE: { code: string; symbol: string; name: string; base: number }[] = [
@@ -46,9 +52,16 @@ const INDEX_BASE: { code: string; symbol: string; name: string; base: number }[]
   { code: 'VIX', symbol: '^VIX', name: __t('波动率指数'), base: 14.86 },
 ];
 
+const INDEX_DETAIL_BASE = [
+  ...INDEX_BASE,
+  { code: 'IXIC', symbol: '^IXIC', name: __t('纳指综合'), base: 18950.3 },
+  { code: 'N225', symbol: '^N225', name: __t('日经225'), base: 38220.1 },
+  { code: 'SSE', symbol: '000001.SS', name: __t('上证综指'), base: 3351.8 },
+];
+
 interface QuoteState { price: number; prevClose: number }
 const indexState = new Map<string, QuoteState>(
-  INDEX_BASE.map((ix): [string, QuoteState] => {
+  INDEX_DETAIL_BASE.map((ix): [string, QuoteState] => {
     const prevClose = ix.base;
     const pct = ix.code === 'VIX' ? rng.float(-4, 5) : rng.float(-1.4, 1.8);
     return [ix.code, { price: round2(prevClose * (1 + pct / 100)), prevClose }];
@@ -121,6 +134,24 @@ function makeSparkline(r: Rng, changePct: number, points = 24): number[] {
   return out;
 }
 
+/** 演示日线独立于当日涨跌：保留回撤和反弹，不把日内涨幅累计放大。 */
+function makeDailyTrend(r: Rng, prevClose: number): NonNullable<WatchlistItem['dailyTrend']> {
+  const dates: string[] = [];
+  const ny = nyNow();
+  const day = new Date(Date.UTC(ny.getFullYear(), ny.getMonth(), ny.getDate()));
+  while (dates.length < 30) {
+    day.setUTCDate(day.getUTCDate() - 1);
+    if (day.getUTCDay() !== 0 && day.getUTCDay() !== 6) dates.unshift(day.toISOString().slice(0, 10));
+  }
+  let close = 100;
+  const closes = dates.map((_, i) => {
+    close *= 1 + r.float(-0.017, 0.017) + Math.sin(i * 0.9) * 0.007;
+    return close;
+  });
+  const scale = prevClose / closes[closes.length - 1];
+  return dates.map((date, i) => ({ date, close: round2(closes[i] * scale) }));
+}
+
 function makeSignals(r: Rng): Signal[] {
   const n = r.int(0, 3);
   const types = [...SIGNAL_TYPES].sort(() => r.float() - 0.5).slice(0, n);
@@ -146,6 +177,7 @@ WATCHLIST_TICKERS.forEach((t, i) => {
     change: round2(price - prevClose),
     changePct,
     sparkline: makeSparkline(r, changePct),
+    dailyTrend: makeDailyTrend(new Rng(76000 + i * 137), prevClose),
     strengthScore,
     signals: makeSignals(r),
     updatedAt: new Date().toISOString(),
@@ -274,12 +306,14 @@ export function getStockDetail(ticker: string): StockDetail {
   const info = infoOf(ticker.toUpperCase());
   const r = new Rng(31000 + Math.max(i, 0) * 977);
   const ws = watchState.get(info.ticker);
+  const index = INDEX_DETAIL_BASE.find((entry) => entry.symbol === info.ticker);
+  const indexQuote = index ? indexState.get(index.code) : null;
   const base = ws?.item ?? (() => {
-    const changePct = round2(r.float(-3, 3.6));
+    const changePct = indexQuote ? round2((indexQuote.price / indexQuote.prevClose - 1) * 100) : round2(r.float(-3, 3.6));
     return {
       ticker: info.ticker, name: info.name, sector: info.sector,
-      price: round2(info.base * (1 + changePct / 100)),
-      change: round2(info.base * changePct / 100), changePct,
+      price: indexQuote?.price ?? round2(info.base * (1 + changePct / 100)),
+      change: indexQuote ? round2(indexQuote.price - indexQuote.prevClose) : round2(info.base * changePct / 100), changePct,
       sparkline: makeSparkline(r, changePct), strengthScore: Math.round(r.normal(62, 15, 30, 96)),
       signals: makeSignals(r), updatedAt: new Date().toISOString(),
     } satisfies WatchlistItem;
@@ -293,8 +327,8 @@ export function getStockDetail(ticker: string): StockDetail {
     prevClose: info.base,
     volume: Math.round(r.float(8, 96) * 1e6),
     avgVolume: Math.round(r.float(10, 80) * 1e6),
-    marketCap: Math.round(info.base * r.float(0.4, 32) * 1e8),
-    pe: r.chance(0.85) ? round2(r.float(12, 68)) : null,
+    marketCap: index ? (null as unknown as number) : Math.round(info.base * r.float(0.4, 32) * 1e8),
+    pe: !index && r.chance(0.85) ? round2(r.float(12, 68)) : null,
     ivPercentile: Math.round(r.float(20, 80)),
     range52w: [round2(info.base * r.float(0.45, 0.8)), round2(info.base * r.float(1.15, 2.1))],
   };
@@ -328,6 +362,15 @@ function buildCandles(ticker: string, range: StockChart['range']): { candles: Ca
     candles.push({ t: new Date(start + k * stepMs).toISOString(), o: round2(o), h: round2(h), l: round2(l), c: round2(c), v });
     price = c;
   }
+  const index = INDEX_DETAIL_BASE.find((entry) => entry.symbol === info.ticker);
+  if (index) {
+    const latestPrice = indexState.get(index.code)?.price ?? index.base;
+    const scale = latestPrice / candles[candles.length - 1].c;
+    for (const bar of candles) {
+      bar.o = round2(bar.o * scale); bar.h = round2(bar.h * scale);
+      bar.l = round2(bar.l * scale); bar.c = round2(bar.c * scale);
+    }
+  }
   const ma20: (number | null)[] = candles.map((_, k) => {
     if (k < 19) return null;
     let s = 0;
@@ -339,7 +382,7 @@ function buildCandles(ticker: string, range: StockChart['range']): { candles: Ca
 
 export function getStockChart(ticker: string, range: StockChart['range']): StockChart {
   const { candles, ma20 } = buildCandles(ticker.toUpperCase(), range);
-  return { ticker: ticker.toUpperCase(), range, candles, ma20 };
+  return { ticker: quoteSymbol(ticker), range, candles, ma20 };
 }
 
 export function getStockSignals(ticker: string): Signal[] {
@@ -351,7 +394,8 @@ export function getStockSignals(ticker: string): Signal[] {
 
 /** 代码池内是否存在该标的（mock 下用于 404 判定） */
 export function hasTicker(ticker: string): boolean {
-  return TICKER_POOL.some((x) => x.ticker === ticker.toUpperCase());
+  const symbol = quoteSymbol(ticker);
+  return TICKER_POOL.some((x) => x.ticker === symbol) || INDEX_DETAIL_BASE.some((x) => x.symbol === symbol);
 }
 
 /** ChartBar{t,o,h,l,c,v,quote_only} + as_of/_stale（契约 §stocks chart） */
@@ -371,7 +415,7 @@ export interface StockChartEx {
 }
 
 export function getStockChartEx(ticker: string, range: StockChart['range']): StockChartEx {
-  const t = ticker.toUpperCase();
+  const t = quoteSymbol(ticker);
   const { candles, ma20 } = buildCandles(t, range);
   const bars: ChartBarEx[] = candles.map((c) => ({ ...c }));
   // 盘中末根为「仅报价」实时 bar（quote_only）
@@ -710,7 +754,7 @@ export interface StockTrendBias {
 }
 
 export function getStockTrendBias(ticker: string): StockTrendBias {
-  const t = ticker.toUpperCase();
+  const t = quoteSymbol(ticker);
   const i = Math.max(0, TICKER_POOL.findIndex((x) => x.ticker === t));
   const r = new Rng(93100 + i * 733);
   const ws = watchState.get(t);

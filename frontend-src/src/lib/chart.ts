@@ -250,13 +250,22 @@ export function insightLineFade(color: string): unknown {
   ]);
 }
 
+/** 自定义图表提示返回 HTML，文本必须转义后再进入模板。 */
+export function escapeTooltipText(value: unknown): string {
+  return echarts.format.encodeHTML(value == null ? '' : String(value));
+}
+
 /** Insight tooltip 数值行：8px 圆点 + 可选标签 + 加粗数值 */
 export function insightDotRow(color: string, label: string, value: string): string {
+  // Tooltip formatters return raw HTML, unlike React text children. Keep
+  // snapshot labels/values as text and accept only literal palette colors.
+  const safeColor = /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(color)
+    ? color : CH.brand500;
   return (
     `<span style="display:inline-flex;align-items:center;gap:6px">` +
-    `<span style="width:8px;height:8px;border-radius:50%;background:${color};flex:0 0 8px"></span>` +
-    (label ? `<span style="color:${CH.ink400}">${label}</span>` : '') +
-    `<span style="font-weight:600">${value}</span></span>`
+    `<span style="width:8px;height:8px;border-radius:50%;background:${safeColor};flex:0 0 8px"></span>` +
+    (label ? `<span style="color:${CH.ink400}">${escapeTooltipText(label)}</span>` : '') +
+    `<span style="font-weight:600">${escapeTooltipText(value)}</span></span>`
   );
 }
 
@@ -267,9 +276,9 @@ export function insightDotRow(color: string, label: string, value: string): stri
  */
 export function insightTooltipBody(header: string, rows: string[], meta = ''): string {
   return (
-    `<div style="color:${CH.ink400};font-size:11px;margin-bottom:4px">${header}</div>` +
+    `<div style="color:${CH.ink400};font-size:11px;margin-bottom:4px">${escapeTooltipText(header)}</div>` +
     `<div style="display:flex;flex-wrap:wrap;gap:4px 12px">${rows.join('')}</div>` +
-    (meta ? `<div style="color:${CH.ink400};font-size:11px;margin-top:4px">${meta}</div>` : '')
+    (meta ? `<div style="color:${CH.ink400};font-size:11px;margin-top:4px">${escapeTooltipText(meta)}</div>` : '')
   );
 }
 

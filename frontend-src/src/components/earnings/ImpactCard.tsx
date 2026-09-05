@@ -22,8 +22,8 @@ import type {
   EarningsReportAnalysis,
 } from '@/api/modules/earnings';
 import { useAccess } from '@/hooks/useAccess';
-import { useToast } from '@/components/Toast';
-import { useShell } from '@/components/Layout';
+import { useToast } from '@/hooks/useToast';
+import { useShell } from '@/hooks/useShell';
 import { cn } from '@/lib/utils';
 import Icon from '@/components/icons';
 import SourceNote from '@/components/shared/SourceNote';

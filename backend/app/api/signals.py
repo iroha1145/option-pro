@@ -34,6 +34,7 @@ from app.public_home_snapshot import (
 )
 from app.services.ai_jobs.models import StrictModel
 from app.services.scoring import compute_market_scores, compute_stock_scores
+from app.services.symbols import quote_symbol
 from app.services.signal_context import CONTEXT_BLOCK_KEYS, build_signal_context
 from app.services.signals import (
     cached_stock_signals,
@@ -125,7 +126,7 @@ def _signal_analysis_payload(
 
 
 def _normalize_ticker(ticker: str) -> str:
-    symbol = ticker.upper().strip()
+    symbol = quote_symbol(ticker)
     if not _TICKER_PATTERN.fullmatch(symbol):
         raise HTTPException(status_code=400, detail="Invalid ticker symbol")
     return symbol

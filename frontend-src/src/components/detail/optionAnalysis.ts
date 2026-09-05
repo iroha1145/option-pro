@@ -37,10 +37,9 @@ export function midpoint(
 }
 
 /**
- * 量持比的四种状态（GPT-5.6-Pro 审计 P1-03）。
- * 旧实现把「持仓量为 0」折叠成比值 0，于是新挂牌合约、隔夜持仓量归零、大量新开仓
- * 这类最值得关注的情况永远无法触发 ratio > 3。这里把它们分开：
- * ratio 只在持仓量为正时有值，持仓量为 0 且有成交是独立的「新开仓候选」。
+ * 量持比的四种状态。持仓量为 0 时不能计算比值；有成交仍值得单独观察。
+ * 持仓量按清算结果更新，不能据此判断当日成交属于开仓还是平仓。
+ * new_opening 仅保留历史类型名以兼容调用方，含义是「零持仓有成交」。
  */
 export type VolOiState =
   | { kind: 'ratio'; ratio: number }
@@ -114,10 +113,10 @@ function buildLeg(
     severity += 4;
     reasons.push(t('成交量/持仓量 {ratio} 倍', { ratio: ratio.toFixed(1) }));
   }
-  // 持仓量为 0 而当日有成交：全部是新开仓，量持比无穷大而不是 0。
+  // 零持仓有成交不等于全部新开仓：缺少逐笔开平仓与更新后的持仓信息。
   if (state.kind === 'new_opening') {
     severity += 4;
-    reasons.push(t('持仓量为 0 且成交 {volume} 张，全部为新开仓（量持比不适用）', { volume }));
+    reasons.push(t('持仓量为 0 且成交 {volume} 张，开平仓性质待确认（量持比不适用）', { volume }));
   }
   if (volume >= 5_000) {
     severity += 3;
@@ -185,7 +184,7 @@ export function buildOptionAlertEvidence(
       )
       .filter((item): item is RankedAlert => item !== null),
   );
-  // 量持比缺失（新开仓或持仓量不可用）在同分位排在有比值的后面，而不是当成 0
+  // 量持比缺失（零持仓或持仓量不可用）在同分位排在有比值的后面，而不是当成 0
   // 参与大小比较 —— 后者会把「无比值」排到所有真实低比值之前。
   const ratioRank = (item: RankedAlert): number =>
     item.ratio === null ? -1 : item.ratio;

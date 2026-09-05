@@ -229,7 +229,7 @@ test.describe("command palette glide highlight (#113 blocker 1+2)", () => {
 });
 
 test.describe("spring tabs glide (#113 blocker 3+4)", () => {
-  test.use({ reducedMotion: "no-preference" });
+  test.use({ contextOptions: { reducedMotion: "no-preference" } });
 
   async function openScreener(page) {
     await page.goto("/", { waitUntil: "domcontentloaded" });
@@ -387,11 +387,12 @@ test.describe("spring tabs glide (#113 blocker 3+4)", () => {
 });
 
 test.describe("spring tabs under reduced motion", () => {
-  /* playwright.config 全局 reducedMotion: "reduce"：GlidePill 自持的
+  /* playwright.config 全局 contextOptions.reducedMotion: "reduce"：GlidePill 自持的
      useReducedMotion 把 transition 归零，滑块瞬切不做弹簧。
      headless 软渲染会饿死 rAF，落点用 poll 等而不是定死 100ms。 */
   test("pill lands on the active tab without spring travel", async ({ page }) => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
+    expect(await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches)).toBe(true);
     await page.getByRole("link", { name: "选股", exact: true }).first().click();
     await expect(page).toHaveURL(/\/screener$/);
     const list = page.locator('[role="tablist"][aria-label^="强度分档"]');

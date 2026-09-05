@@ -17,7 +17,7 @@ import Icon from '@/components/icons';
 import SignalLines from '@/components/shared/SignalLines';
 import Sparkline from '@/components/charts/Sparkline';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
-import { strengthBarClass } from '@/components/shared/StrengthBar';
+import { strengthBarClass } from '@/lib/strengthColor';
 import InfoHint from '@/components/shared/InfoHint';
 import MacroFitPanel from '@/components/shared/MacroFitPanel';
 import { SCORE_HINTS, type ScoreHint } from '@/lib/scoreHints';

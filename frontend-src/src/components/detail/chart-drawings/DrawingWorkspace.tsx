@@ -1,6 +1,7 @@
 import { useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { cn } from '@/lib/utils';
 import {
   overlayClassName,
@@ -43,6 +44,7 @@ export default function DrawingWorkspace({
   const phase = useOverlayPhase(open, reducedMotion ? 0 : closeMs);
   const mounted = overlayVisible(open, phase);
   useFocusTrap(panelRef, open);
+  useBodyScrollLock(mounted);
   if (!mounted) return <>{children}</>;
   const panel = (
     <div

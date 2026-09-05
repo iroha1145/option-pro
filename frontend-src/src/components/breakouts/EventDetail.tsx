@@ -10,6 +10,9 @@ import { catalystsApi } from '@/api/modules/catalysts';
 import type { NewsItem } from '@/api/types';
 import { usePolling } from '@/hooks/usePolling';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
+import { overlayVisible, useOverlayPhase } from '@/lib/transitions';
+import { isTopFocusScope } from '@/lib/focusScope';
 import { cn } from '@/lib/utils';
 import { fmtNyHHmm, fmtPrice, fmtRelative } from '@/lib/format';
 import Icon from '@/components/icons';
@@ -198,18 +201,21 @@ export default function EventDetail({
   /* 焦点圈定 + 关闭后归还焦点（审计 P3-2 同一口径） */
   const panelRef = useRef<HTMLDivElement>(null);
   useFocusTrap(panelRef, event !== null);
+  const phase = useOverlayPhase(event !== null, 200);
+  useBodyScrollLock(overlayVisible(event !== null, phase));
 
   /* ESC 关闭 + 锁定滚动 */
   useEffect(() => {
     if (!event) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key !== 'Escape' || e.defaultPrevented || e.isComposing || e.keyCode === 229 || !isTopFocusScope(panelRef.current)) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      onClose();
     };
     document.addEventListener('keydown', onKey);
-    document.body.style.overflow = 'hidden';
     return () => {
       document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = '';
     };
   }, [event, onClose]);
 

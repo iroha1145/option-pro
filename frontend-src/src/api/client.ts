@@ -7,6 +7,7 @@
  */
 
 import { t } from '../i18n/core.ts';
+import { apiHeaders, fetchBuffered, parseRetryAfter, ResponseLimitError, TransportTimeoutError } from './transport.ts';
 export type ApiMode = 'mock' | 'live';
 
 export const API_MODE: ApiMode =
@@ -74,32 +75,6 @@ export function notifyPrincipalInvalid(): void {
  */
 export const REQUEST_TIMEOUT_MS = 20_000;
 
-/** 组合调用方 signal 与超时；返回的 dispose 必须在请求结束后调用。 */
-function withTimeout(
-  external: AbortSignal | null | undefined,
-  timeoutMs: number,
-): { signal: AbortSignal; dispose: () => void; timedOut: () => boolean } {
-  const controller = new AbortController();
-  let timedOut = false;
-  const timer = setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, timeoutMs);
-  const onExternalAbort = () => controller.abort();
-  if (external) {
-    if (external.aborted) controller.abort();
-    else external.addEventListener('abort', onExternalAbort);
-  }
-  return {
-    signal: controller.signal,
-    dispose: () => {
-      clearTimeout(timer);
-      if (external) external.removeEventListener('abort', onExternalAbort);
-    },
-    timedOut: () => timedOut,
-  };
-}
-
 function pick(obj: unknown, ...keys: string[]): unknown {
   if (obj && typeof obj === 'object') {
     for (const k of keys) {
@@ -143,31 +118,31 @@ export async function requestRaw(path: string, init?: RequestOptions): Promise<R
   const isWrite = method !== 'GET' && method !== 'HEAD';
   const { timeoutMs, acceptNotModified, signal: callerSignal, ...rest } = init ?? {};
   const budget = timeoutMs ?? REQUEST_TIMEOUT_MS;
-  const timeout = budget > 0 ? withTimeout(callerSignal, budget) : null;
   let res: Response;
   try {
-    res = await fetch(`${BASE}${path}`, {
+    // This API adapter is JSON/non-streaming. Keep the deadline alive until
+    // the complete body has arrived, including unsuccessful proxy responses.
+    res = await fetchBuffered(`${BASE}${path}`, {
+      ...rest,
       credentials: 'include',
       redirect: 'error',
-      ...rest,
-      ...(timeout ? { signal: timeout.signal } : callerSignal ? { signal: callerSignal } : {}),
-      headers: {
-        'Content-Type': 'application/json',
-        // 后端 require_same_origin_json：写操作必须带自定义头
-        ...(isWrite ? { 'X-Optix-Action': '1' } : {}),
-        ...(init?.headers ?? {}),
-      },
-    });
+      signal: callerSignal,
+      headers: apiHeaders(init?.headers, isWrite),
+    }, budget);
   } catch (error) {
-    if (timeout?.timedOut()) {
+    if (error instanceof TransportTimeoutError) {
       throw new ApiError(408, t('请求超时，请重试'), {
         bizCode: 'request_timeout',
         retryable: true,
       });
     }
+    if (error instanceof ResponseLimitError) {
+      throw new ApiError(502, t('请求失败'), {
+        bizCode: 'response_too_large',
+        retryable: false,
+      });
+    }
     throw error;
-  } finally {
-    timeout?.dispose();
   }
   if (res.status === 304 && acceptNotModified) {
     return res;
@@ -176,7 +151,7 @@ export async function requestRaw(path: string, init?: RequestOptions): Promise<R
     let message = res.statusText || t('请求失败');
     let bizCode: string | undefined;
     let retryable: boolean | undefined;
-    let retryAfter: number | undefined;
+    let retryAfter = parseRetryAfter(res.headers.get('Retry-After'));
     let payload: unknown;
     try {
       const body = (await res.json()) as Record<string, unknown>;
@@ -188,11 +163,13 @@ export async function requestRaw(path: string, init?: RequestOptions): Promise<R
       ) || undefined;
       const msg = pick(errObj, 'message') ?? pick(body, 'message') ?? (detail ? pick(detail, 'message') : undefined);
       if (typeof msg === 'string' && msg) message = msg;
-      const r = pick(errObj, 'retryable');
+      const r = pick(errObj, 'retryable') ?? pick(detail, 'retryable') ?? pick(body, 'retryable');
       if (typeof r === 'boolean') retryable = r;
-      const ra = pick(errObj, 'retry_after_seconds') ?? pick(errObj, 'retry_after') ?? res.headers.get('Retry-After');
-      const raNum = typeof ra === 'string' ? Number(ra) : (ra as number | undefined);
-      if (typeof raNum === 'number' && Number.isFinite(raNum)) retryAfter = raNum;
+      // A malformed body field must not erase a valid header or nested value.
+      retryAfter = [errObj, detail, body].flatMap((row) => [
+        parseRetryAfter(pick(row, 'retry_after_seconds')),
+        parseRetryAfter(pick(row, 'retry_after')),
+      ]).find((value) => value !== undefined) ?? retryAfter;
     } catch {
       /* ignore */
     }
@@ -224,7 +201,7 @@ export async function postCreate<T = unknown>(
   });
   const location = res.headers.get('Location');
   const ra = res.headers.get('Retry-After');
-  const retryAfter = ra !== null && Number.isFinite(Number(ra)) ? Number(ra) : null;
+  const retryAfter = parseRetryAfter(ra) ?? null;
   let data: T | undefined;
   try {
     data = (await res.json()) as T;
@@ -237,8 +214,10 @@ export async function postCreate<T = unknown>(
 /** 从 Location 头提取末段 id（/api/ai/jobs/{id} → {id}） */
 export function idFromLocation(location: string | null): string | null {
   if (!location) return null;
-  const seg = location.split('?')[0].split('/').filter(Boolean);
-  return seg.length ? decodeURIComponent(seg[seg.length - 1]) : null;
+  const seg = location.split(/[?#]/)[0].split('/').filter(Boolean);
+  if (!seg.length) return null;
+  try { return decodeURIComponent(seg[seg.length - 1]); }
+  catch { return null; } // malformed Location must not crash a successful job submission
 }
 
 /* 便捷封装一律透传 options：调用方需要能传 signal 与 timeoutMs，否则超时与

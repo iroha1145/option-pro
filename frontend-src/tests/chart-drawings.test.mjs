@@ -696,7 +696,12 @@ test('autoPatternsToMarks maps a 4-anchor triangle to two rails and a box to a r
   assert.equal(triGeom.segments.length, 2);
   assert.equal(triGeom.fill.length, 4);
   const triMarks = autoPatternsToMarks([triangle], ctx, 70);
-  assert.equal(triMarks.lines.length, 2);
+  const observedRails = triMarks.lines.filter(line => line[0].lineStyle.type === 'solid');
+  const projectedRails = triMarks.lines.filter(line => Array.isArray(line[0].lineStyle.type));
+  assert.equal(observedRails.length, 2);
+  assert.ok(projectedRails.length <= 2);
+  assert.ok(triMarks.lines.every(line => line[1].coord[0] <= ctx.xMax));
+  assert.ok(projectedRails.every(line => line[1].coord[0] < 10 + 1 / 3), 'projection stops before the triangle apex');
   assert.equal(triMarks.polygons.length, 1);
   assert.equal(triMarks.polygons[0].vertices.length, 4);
 
@@ -2013,37 +2018,44 @@ test('pattern rails carry per-kind color and a single end label', async (t) => {
       color: '#3B59F2', label: '上升通道',
     },
   ], ctx, 0);
-  // 此前所有形态线同一根淡灰虚线且无名，图上支撑/阻力/通道边完全分不出来。
+  // 支撑/阻力使用固定语义色，观察段实线，延伸段虚线且只挂一个末端标签。
   const support = marks.lines[0][0];
-  assert.equal(support.lineStyle.color, '#0E9F6E');
-  assert.equal(support.label.show, true);
-  assert.equal(support.label.formatter, '上升支撑');
+  assert.equal(support.lineStyle.color, '#087EA4');
+  assert.equal(support.lineStyle.type, 'solid');
+  assert.equal(support.label.show, false);
+  const supportTail = marks.lines[1][0];
+  assert.deepEqual(supportTail.lineStyle.type, [7, 4]);
+  assert.equal(supportTail.label.show, true);
+  assert.equal(supportTail.label.formatter, '上升支撑 · 127');
   // 标签留在绘图区内（insideEnd*），绝不用 'end'——那会画进 y 轴槽骑在刻度上；
   // 白底药丸保证跨在蜡烛上也读得清（用户截图：「水平箱体」压 190、多形态互叠）。
-  assert.equal(support.label.position, 'insideEndTop');
-  assert.equal(support.label.backgroundColor, 'rgba(255,255,255,0.88)');
-  // 通道两条边同色，但标签只挂第一段——第二条边不重复报名
-  const chanA = marks.lines[1][0];
-  const chanB = marks.lines[2][0];
-  assert.equal(chanA.lineStyle.color, '#3B59F2');
-  assert.equal(chanB.lineStyle.color, '#3B59F2');
-  assert.equal(chanA.label.show, true);
+  assert.equal(supportTail.label.position, 'insideEndTop');
+  assert.equal(supportTail.label.backgroundColor, 'rgba(255,255,255,0.96)');
+  // 通道下边表示支撑、上边表示阻力；整个通道只有一个标签。
+  const chanA = marks.lines[2][0];
+  const chanB = marks.lines[4][0];
+  assert.equal(chanA.lineStyle.color, '#087EA4');
+  assert.equal(chanB.lineStyle.color, '#B423B9');
+  assert.equal(chanA.label.show, false);
   assert.equal(chanB.label.show, false);
+  assert.equal(marks.lines[3][0].label.show, true);
+  assert.equal(marks.lines.filter(line => line[0].label.show).length, 2);
   // 防叠不在本函数里做（手绘标签也要一起排），由合并点的 deconflictEndLabels 负责：
-  // 两个形态落点同价（118），同价带内顺次换侧。
+  // 两个形态延伸终点同价（127），同价带内顺次换侧。
   const spread = deconflictEndLabels(marks.lines, 90, 140);
-  assert.equal(spread[0][0].label.position, 'insideEndTop');
-  assert.equal(spread[1][0].label.position, 'insideEndBottom');
-  assert.equal(spread[2][0].label.show, false, '第二条通道边仍无标签');
+  assert.equal(spread[1][0].label.position, 'insideEndTop');
+  assert.equal(spread[3][0].label.position, 'insideEndBottom');
+  assert.equal(spread[5][0].label.show, false, '第二条通道边仍无标签');
   // 填充也跟线色（不再是灰蒙一层）
   const poly = (marks.polygons ?? [])[0];
   assert.ok(poly, 'channel 应产出填充多边形');
-  assert.equal(poly.color, '#3B59F2');
-  // 没给 color/label 的形态维持旧行为：灰线、无标签
+  assert.equal(poly.color, '#4F46E5');
+  assert.equal(poly.opacity, 0.035);
+  // 未指定标签仍然无标签；自动线色由其角色决定，不采用旧涨跌颜色。
   const bare = autoPatternsToMarks([
     { id: 'p3', kind: 'support_trend', confidence: 60, status: 'forming', anchors: [anchorAt(2, 100), anchorAt(20, 118)] },
   ], ctx, 0);
-  assert.equal(bare.lines[0][0].lineStyle.color, '#5A6788');
+  assert.equal(bare.lines[0][0].lineStyle.color, '#087EA4');
   assert.equal(bare.lines[0][0].label.show, false);
 });
 

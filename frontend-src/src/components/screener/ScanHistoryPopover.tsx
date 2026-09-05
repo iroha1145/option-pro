@@ -7,6 +7,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { fmtTimeHHMMSS } from '@/lib/format';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
+import { isTopFocusScope } from '@/lib/focusScope';
 import Icon from '@/components/icons';
 import type { ScanHistoryEntry } from './types';
 import { t } from '../../i18n/core.ts';
@@ -25,7 +26,10 @@ export default function ScanHistoryPopover({ history }: { history: ScanHistoryEn
       if (!ref.current?.contains(e.target as Node)) setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
+      if (e.key !== 'Escape' || e.defaultPrevented || e.isComposing || e.keyCode === 229 || !isTopFocusScope(popoverRef.current)) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      setOpen(false);
     };
     document.addEventListener('mousedown', onDoc);
     document.addEventListener('keydown', onKey);

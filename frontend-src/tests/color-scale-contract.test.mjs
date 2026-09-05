@@ -6,10 +6,19 @@ import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { strengthBarClass } from '../src/lib/strengthColor.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '..');
 const srcDir = path.join(root, 'src');
+
+test('shared strength color helper preserves score thresholds after moving out of the component', () => {
+  for (const [score, expected] of [
+    [0, 'bg-ink-300'], [49.9, 'bg-ink-300'], [50, 'bg-brand-400'],
+    [69.9, 'bg-brand-400'], [70, 'bg-brand-600'], [84.9, 'bg-brand-600'],
+    [85, 'bg-up-600'], [100, 'bg-up-600'],
+  ]) assert.equal(strengthBarClass(score), expected);
+});
 
 async function walk(dir) {
   const out = [];

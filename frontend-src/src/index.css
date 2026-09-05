@@ -21,7 +21,7 @@
     --ink-700: #2A3550;
     --ink-600: #3D4A68;
     --ink-500: #5A6788;
-    --ink-400: #6F7B9E;
+    --ink-400: #626F8B;
     --ink-300: #B7BFD3;
     /* §1.3 发丝线（v8 更淡；v8.1 随纸面降温——冷纸面配暖灰线会显脏，同族蓝灰 hue≈218°） */
     --line: #E9ECF1;
@@ -74,8 +74,8 @@
     --accent-foreground: 232 74% 53%;
     --destructive: 359 75% 59%;
     --destructive-foreground: 0 0% 98%;
-    --border: 45 15% 90%;
-    --input: 43 13% 83%;
+    --border: 220 22% 89%;
+    --input: 220 18% 80%;
     --ring: 232 74% 53%;
     --radius: 12px; /* v8 圆角回暖：r-lg 8→12 */
     /* Catalog paint 重映射只有一份，在 transitions-catalog.css 的适配区——
@@ -122,7 +122,8 @@
 
   /* 聚焦环即时出现：禁过渡动画（polish-brief §B/§C.8） */
   :focus-visible {
-    outline: none;
+    outline: 2px solid var(--brand-600);
+    outline-offset: 3px;
     box-shadow: 0 0 0 3px rgba(46, 70, 224, .18);
     border-radius: 6px;
     transition: none;
@@ -135,6 +136,42 @@
 }
 
 @layer components {
+  .skip-link {
+    position: fixed;
+    top: .75rem;
+    left: 1rem;
+    z-index: 100;
+    transform: translateY(-200%);
+    border-radius: 8px;
+    padding: .75rem 1rem;
+    background: var(--ink-900);
+    color: white;
+  }
+  .skip-link:focus { transform: none; }
+
+  /* shadcn Select portal: origin follows the collision-resolved placement.
+     Same entry/exit clock as transitions.dev menus, without a hidden focus tail. */
+  .select-surface {
+    transform-origin: var(--radix-select-content-transform-origin);
+    max-height: min(20rem, var(--radix-select-content-available-height));
+    min-width: var(--radix-select-trigger-width);
+    max-width: calc(100vw - 24px);
+  }
+  .select-surface[data-state="open"] {
+    animation: select-enter var(--dropdown-open-dur, 200ms) var(--ease-paper);
+  }
+  .select-surface[data-state="closed"] {
+    pointer-events: none;
+    animation: select-exit var(--dropdown-close-dur, 150ms) ease-in;
+  }
+  @keyframes select-enter {
+    from { opacity: 0; transform: scale(.97); }
+    to { opacity: 1; transform: scale(1); }
+  }
+  @keyframes select-exit {
+    to { opacity: 0; transform: scale(.98); }
+  }
+
   /* 发丝线工具类 */
   .hairline-b { border-bottom: 1px solid var(--line); }
   .hairline-t { border-top: 1px solid var(--line); }
@@ -319,6 +356,74 @@
   .tick-flash-down { background-color: var(--down-50); transition: none; }
 }
 
+/* 紧凑选择控件：白底分组、6px 操作圆角，选中项用浅品牌色。
+   参照 Stripe Button 的主次层级，筛选不使用主操作的实心强调色。
+   t-tabs 仍保留 transitions.dev 原始目录，组合选择器负责项目外观适配。 */
+.control-button {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--ink-600);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  white-space: nowrap;
+  transition: color 150ms var(--ease-snap), background-color 150ms var(--ease-snap), border-color 150ms var(--ease-snap);
+}
+.control-button[aria-pressed="true"] {
+  border-color: var(--brand-100);
+  background: var(--brand-50);
+  color: var(--brand-700);
+  font-weight: 600;
+}
+.control-button:disabled { cursor: not-allowed; opacity: .5; }
+.control-button:focus-visible {
+  outline: 2px solid var(--brand-600);
+  outline-offset: 2px;
+}
+.filter-group {
+  display: inline-flex;
+  max-width: 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--card);
+}
+.filter-group .control-button {
+  min-height: 28px;
+  padding: 3px 9px;
+  border-color: transparent;
+  border-radius: 4px;
+}
+.filter-group .control-button[aria-pressed="true"] { border-color: var(--brand-100); }
+.t-tabs.selection-group { border-color: var(--line-strong); background: var(--card); }
+.t-tabs.selection-group .t-tab {
+  height: auto;
+  min-height: 28px;
+  border-radius: 4px;
+  padding: 4px 10px;
+  color: var(--ink-600);
+}
+.t-tabs.selection-group .t-tab[aria-selected="true"] { color: var(--brand-700); font-weight: 600; }
+@media (hover: hover) and (pointer: fine) {
+  .control-button:not(:disabled):not([aria-pressed="true"]):hover { background: var(--paper-2); border-color: var(--ink-300); color: var(--ink-800); }
+  .filter-group .control-button:not(:disabled):not([aria-pressed="true"]):hover { border-color: transparent; }
+  .t-tabs.selection-group .t-tab:not([aria-selected="true"]):hover { color: var(--ink-900); background: var(--paper-2); }
+}
+@media (pointer: coarse) {
+  .control-button, .filter-group .control-button, .t-tabs.selection-group .t-tab { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) { .control-button { transition: none; } }
+
 /* §3.6 按钮立体层级的全局状态物理（token 见 tailwind.config boxShadow.btn/btn-hi/
    chip/track）：按下阴影收拢成内凹、禁用摊平，调用点只写一个 shadow-* 类即可，
    不必逐个补 active:/disabled: 变体。选择器特异度 (0,3,0) 稳压工具类。 */
@@ -466,5 +571,14 @@
   }
   *, *::before, *::after {
     transition-duration: 160ms !important;
+  }
+}
+
+/* Keep keyboard focus visible when the operating system replaces page colors. */
+@media (forced-colors: active) {
+  :focus-visible {
+    outline: 2px solid Highlight !important;
+    outline-offset: 3px;
+    box-shadow: none !important;
   }
 }

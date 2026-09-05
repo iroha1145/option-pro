@@ -245,6 +245,48 @@ async function screenshot(page, name) {
   await captureEvidence(page, name);
 }
 
+test('registration explains its password length without blocking legacy login', async ({ page }) => {
+  await installLocalDataFixtures(page);
+  let registrations = 0;
+  await page.route('**/api/account/register', async (route) => {
+    registrations += 1;
+    await route.continue();
+  });
+  await page.goto(`${PASSWORD_BASE_URL}/login`);
+  await page.getByRole('button', { name: '注册', exact: true }).click();
+  const username = page.getByLabel('用户名');
+  const password = page.getByLabel('密码', { exact: true });
+  const submit = page.locator('form button[type="submit"]');
+  await expect(password).toHaveAccessibleDescription('至少 15 个字符，可使用一句容易记住的长短语');
+  await username.fill('review-password-policy');
+  // Eight supplementary Unicode characters are eight characters, not sixteen.
+  await password.fill('🌲🌳🌴🌵🌶🌷🌸🌹');
+  await submit.click();
+  await expect(page.getByRole('alert')).toHaveText('新密码至少需要 15 个字符');
+  expect(registrations).toBe(0);
+
+  // Login must still send a short legacy password for server verification.
+  await page.getByRole('button', { name: '登录', exact: true }).first().click();
+  await expect(password).not.toHaveAttribute('aria-describedby', 'registration-password-hint');
+  await username.fill(OWNER_USERNAME);
+  await password.fill('1');
+  const failedLogin = page.waitForResponse((response) =>
+    new URL(response.url()).pathname === '/api/access/login' && response.request().method() === 'POST');
+  await submit.click();
+  expect((await failedLogin).status()).toBe(401);
+  await expect(page.getByRole('alert')).toHaveText('用户名或密码不正确');
+
+  await page.getByRole('button', { name: '注册', exact: true }).click();
+  await username.fill('review-password-policy');
+  await password.fill('review forest lantern 2026');
+  const registration = page.waitForResponse((response) =>
+    new URL(response.url()).pathname === '/api/account/register' && response.request().method() === 'POST');
+  await submit.click();
+  expect((await registration).status()).toBe(201);
+  await expect(page).toHaveURL(`${PASSWORD_BASE_URL}/watchlist`);
+  expect(registrations).toBe(1);
+});
+
 
 test("password mode keeps public research readable and reserves owner controls for the owner", async ({ page, context }) => {
   test.setTimeout(120_000);

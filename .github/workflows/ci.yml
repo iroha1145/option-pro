@@ -86,11 +86,17 @@ jobs:
       - name: Run frontend production assertions
         run: node frontend-src/tests/static_assertions.mjs
 
+      - name: Check frontend code
+        run: npm --prefix frontend-src run lint
+
       - name: Install locked browser-test dependencies
         shell: bash
         run: |
           cd frontend-src
           npx playwright install --with-deps chromium
+
+      - name: Verify offline UI and keyboard behavior
+        run: npm --prefix frontend-src run test:review
 
       - name: Check shell script syntax
         run: bash -n setup.sh personal.sh scripts/compose.sh scripts/deploy.sh scripts/lock-dependencies.sh
@@ -297,6 +303,10 @@ jobs:
             frontend-src/test-results/visual-evidence/*.png
             frontend-src/test-results/report/**
             frontend-src/test-results/playwright/**
+            frontend-src/test-results/review-evidence/*.png
+            frontend-src/test-results/feedback-evidence/*.png
+            frontend-src/test-results/review-report/**
+            frontend-src/test-results/review/**
           if-no-files-found: error
           retention-days: 14
 

@@ -48,14 +48,12 @@ export function SkeletonReveal({
   className?: string;
 }) {
   const [state, setState] = useState<'loading' | 'reveal' | 'done'>(loading ? 'loading' : 'done');
-
-  useEffect(() => {
-    if (loading) {
-      setState('loading');
-      return;
-    }
-    setState((prev) => (prev === 'loading' ? 'reveal' : prev));
-  }, [loading]);
+  const [previousLoading, setPreviousLoading] = useState(loading);
+  // 在同次渲染中派生加载切换，避免先提交旧内容再由 effect 补一次状态。
+  if (previousLoading !== loading) {
+    setPreviousLoading(loading);
+    setState(loading ? 'loading' : 'reveal');
+  }
 
   useEffect(() => {
     if (state !== 'reveal') return;

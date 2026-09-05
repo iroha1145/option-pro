@@ -43,7 +43,11 @@ function mapUnusual(body: unknown): UnusualOption[] {
   return rows;
 }
 
-/** 契约 calls/puts 单腿字段（snake/camel 容错）；上游未给的字段保持 null。 */
+/**
+ * 契约 calls/puts 单腿字段（snake/camel 容错）；上游未给的字段保持 null。
+ * 隐含波动率统一保留小数单位：0.32 表示 32%，只在展示时转成百分比。
+ * 后端可能使用 Yahoo 原值或模型回算，目前没有逐腿的计算来源标识。
+ */
 function legRow(leg: unknown, prefix: 'call' | 'put'): Partial<OptionChainRow> {
   const r = asRec(leg);
   return {

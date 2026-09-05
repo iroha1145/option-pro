@@ -1,11 +1,10 @@
 /**
  * 期权链（stock-detail.md T3 · UI 重构版）
- * 顶部摘要条（总量/总比/权利金流/异动数）→ Calls ｜ 行权价 ｜ Puts 三带数据条表
- * （量/持水位条全链归一、ATM 居中高亮、异动行 warn 底 + 倍数/∞ 胶囊）；md 以下
- * 切紧凑卡片流（同一份归一基准）。判定语义与数据契约不变，展示子组件见 options/。
+ * 已知成交量 → 成交关注 → 单份合约列表，默认现价附近，支持类型及异动筛选。
+ * 完整术语、精确行权价、独立报价明细；移动端按同一数据重排。
  * owner：「AI 期权解读」（option_alerts 任务 + 轮询 + 确认费用）；visitor 隐藏
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { isMock } from '@/api/client';
 import { optionsApi } from '@/api/modules/options';
 import { aiJobsApi } from '@/api/modules/ai-jobs';
@@ -26,10 +25,8 @@ import {
   parseOptionAlertResult,
   type OptionAlertResult,
 } from './optionAnalysis';
-import ChainTable from './options/ChainTable.tsx';
-import ChainCards from './options/ChainCards.tsx';
+import ChainBrowser from './options/ChainBrowser.tsx';
 import SummaryTiles from './options/SummaryTiles.tsx';
-import { rowMeta, summarizeChain } from './options/chainMetrics.ts';
 import type { OptionChain } from '@/api/types';
 import { t } from '../../i18n/core.ts';
 
@@ -299,38 +296,6 @@ function AiOptionInsight({
   );
 }
 
-/* ---------------- 图例 ---------------- */
-function ChainLegend() {
-  return (
-    <div className="mt-2.5 flex flex-wrap items-center gap-x-3.5 gap-y-1.5 text-micro text-ink-400">
-      <span className="inline-flex items-center gap-1.5">
-        <span className="flex h-2 w-6 overflow-hidden rounded-xs" aria-hidden="true">
-          <span className="h-full w-1/2 bg-up-600/20" />
-          <span className="h-full w-1/2 bg-down-600/20" />
-        </span>
-        {t('占比条按全链最大量归一')}
-      </span>
-      <span className="inline-flex items-center gap-1.5">
-        <span className="size-2.5 rounded-xs border border-line bg-paper-2" aria-hidden="true" />
-        {t('浅底为价内侧')}
-      </span>
-      <span className="inline-flex items-center gap-1.5">
-        <span className="rounded-pill bg-warn-600 px-1.5 text-[10px] font-semibold leading-4 text-white" aria-hidden="true">
-          3.2×
-        </span>
-        {t('成交异动')}
-      </span>
-      <span className="inline-flex items-center gap-1.5">
-        <span className="rounded-pill border border-warn-600 px-1.5 text-[10px] font-semibold leading-4 text-warn-700" aria-hidden="true">
-          ∞
-        </span>
-        {t('全部新开仓')}
-      </span>
-      <span>{t('「—」表示数据缺失')}</span>
-    </div>
-  );
-}
-
 /* ---------------- 链主体 ---------------- */
 export default function OptionsPanel({ ticker }: { ticker: string }) {
   // 支持名单只属于 mock 数据集;live 由真实接口自证(到期日为空 → 诚实空态)
@@ -378,52 +343,6 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
   /* 链必须匹配当前 (ticker, exp) 才能上屏：轮询在切换后仍保留上一条链 */
   const shownChain =
     chain && chain.ticker === ticker && chain.expiration === exp ? chain : null;
-
-  /* 派生指标（纯展示层）：摘要条合计 + 水位条归一基准 + 异动腿数 */
-  const totals = useMemo(
-    () => (shownChain ? summarizeChain(shownChain) : null),
-    [shownChain],
-  );
-  const alertCount = useMemo(() => {
-    if (!shownChain) return 0;
-    return shownChain.rows.reduce((n, r) => {
-      const m = rowMeta(r);
-      return n + (m.callAlert ? 1 : 0) + (m.putAlert ? 1 : 0);
-    }, 0);
-  }, [shownChain]);
-
-  const atmRef = useRef<HTMLElement | null>(null);
-  /* 桌面表与移动卡片同时挂载（另一套被断点 hidden）：display:none 的元素
-     offsetParent 为 null，不允许它抢走 ATM 居中锚点。 */
-  const setAtmRef = useCallback((el: HTMLElement | null) => {
-    if (el === null || el.offsetParent === null) return;
-    atmRef.current = el;
-  }, []);
-  // 标的现价缺失时不猜平值行：旧实现把 spot 当 0，平值高亮会落在最低行权价上。
-  const atmStrike = useMemo(() => {
-    if (!shownChain || shownChain.rows.length === 0) return null;
-    const spot = shownChain.spot;
-    if (spot === null) return null;
-    return shownChain.rows.reduce((best, r) =>
-      Math.abs(r.strike - spot) < Math.abs(best - spot) ? r.strike : best,
-    shownChain.rows[0].strike);
-  }, [shownChain]);
-
-  useEffect(() => {
-    /* 只滚动链表自己的 max-h 容器（审计 2.2.18）：scrollIntoView 会连带滚动
-       所有可滚动祖先——抽屉的 overflow-y-auto 和整页文档都会被拽去把平值行
-       居中，用户正在看的价格头部/K 线被顶出视野。 */
-    const row = atmRef.current;
-    if (!row) return;
-    const scroller = row.closest<HTMLElement>('[data-options-scroll]');
-    if (!scroller) return;
-    const target =
-      row.offsetTop - scroller.clientHeight / 2 + row.offsetHeight / 2;
-    scroller.scrollTo({
-      top: Math.max(0, target),
-      behavior: 'smooth',
-    });
-  }, [atmStrike, exp]);
 
   if (!supported) {
     return (
@@ -515,7 +434,7 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
           ariaLabel={t('选择到期日')}
           value={exp ?? expList[0]}
           onChange={setExpiration}
-          options={expList.map((x) => ({ value: x, label: `${x} · DTE ${dte(x)}` }))}
+          options={expList.map((x) => ({ value: x, label: t('{date} · {days} 天后到期', { date: x, days: dte(x) }) }))}
           triggerClassName="h-9 border-line-strong pl-3 text-ink-800"
         />
         {shownChain && (
@@ -525,7 +444,7 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
               {dash(shownChain.spot, (n) => fmtPrice(n))}
             </span>
             {shownChain.spot === null && (
-              <span className="ml-1.5 text-ink-400">{t('· 标的现价不可用，价内侧与平值行未标注')}</span>
+              <span className="ml-1.5 text-ink-400">{t('· 标的现价不可用')}</span>
             )}
           </p>
         )}
@@ -539,18 +458,13 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
         />
       )}
 
-      {/* 顶部摘要条：总量 / C/P 比 / 估算权利金流 / 异动数（当前链派生） */}
-      {shownChain && totals && (
-        <SummaryTiles
-          key={`${shownChain.ticker}-${shownChain.expiration}`}
-          totals={totals}
-          alertCount={alertCount}
-        />
+      {shownChain && <SummaryTiles chain={shownChain} />}
+      {chainError && shownChain && (
+        <p role="status" className="mt-3 rounded-md border border-warn-600/20 bg-warn-50 p-3 text-caption text-warn-700">
+          {t('本次刷新失败，当前仍为上一次的期权数据。')}
+        </p>
       )}
-
-      {/* 三带数据条表（md+）/ 紧凑卡片流（<md），共用滚动容器与 ATM 居中 */}
-      <div data-options-scroll className="relative mt-3 max-h-[420px] overflow-auto rounded-lg border border-line">
-        {chainError && !shownChain ? (
+      {chainError && !shownChain ? (
           <div className="flex flex-col items-center gap-2.5 px-4 py-10 text-center">
             <p className="text-body-s font-medium text-ink-700">{t('该到期日的期权链暂不可用')}</p>
             <p className="text-caption text-ink-400">
@@ -567,42 +481,20 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
               {chainRefreshing ? t('正在重试') : t('重试该到期日')}
             </button>
           </div>
-        ) : chainLoading || !shownChain || !totals || !exp ? (
-          <SkeletonRows rows={8} />
-        ) : (
-          <>
-            <div className="hidden md:block">
-              <ChainTable
-                chain={shownChain}
-                totals={totals}
-                atmStrike={atmStrike}
-                exp={exp}
-                setAtmRef={setAtmRef}
-              />
-            </div>
-            <div className="md:hidden">
-              <ChainCards
-                chain={shownChain}
-                totals={totals}
-                atmStrike={atmStrike}
-                exp={exp}
-                setAtmRef={setAtmRef}
-              />
-            </div>
-          </>
-        )}
-      </div>
-
-      <ChainLegend />
-
-      <p className="mt-2 text-micro text-ink-400">
-        {t('「—」表示上游未提供该字段，不代表 0 · 权利金按买卖中价估算 · 非收益承诺')}
+      ) : chainLoading || !shownChain || !exp ? (
+        <div className="mt-4"><SkeletonRows rows={6} /></div>
+      ) : (
+        <ChainBrowser key={`chain:${ticker}-${exp}`} chain={shownChain} />
+      )}
+      <p className="mt-3 text-micro text-ink-500">
+        {t('数据为当前到期日快照，更新时间不代表逐笔成交时间。')}
       </p>
 
       {/* key 强制重挂：切标的/到期日后旧 job（含已生成的付费解读）不得残留，
           否则正文是 8/21 的解读、脚注却标着 9/18，且「生成解读」入口被 job
-          占位不再渲染。 */}
-      <AiOptionInsight key={`${ticker}-${exp ?? 'none'}`} ticker={ticker} expiration={exp} chain={shownChain} />
+          占位不再渲染。与同级 ChainBrowser 的 key 使用不同前缀，避免重名
+          导致 React 在切换时遗留旧链；返回 null 的组件也占用其 key。 */}
+      <AiOptionInsight key={`insight:${ticker}-${exp ?? 'none'}`} ticker={ticker} expiration={exp} chain={shownChain} />
     </div>
   );
 }

@@ -192,9 +192,9 @@ test('缺买价或缺卖价时不产生 0 中间价', () => {
   assert.equal(midpoint(0, 0.2), 0.1, '真实的 0 买价仍参与中间价');
 });
 
-/* ---------------- P1-03：持仓量为 0 的新开仓不再被过滤 ---------------- */
+/* ---------------- 零持仓有成交与持仓量缺失严格区分 ---------------- */
 
-test('量持比四态：有比值 / 新开仓 / 无成交 / 不可用', () => {
+test('量持比四态：有比值 / 零持仓有成交 / 无成交 / 不可用', () => {
   assert.deepEqual(volOiState(500, 100), { kind: 'ratio', ratio: 5 });
   assert.deepEqual(volOiState(500, 0), { kind: 'new_opening' });
   assert.deepEqual(volOiState(0, 0), { kind: 'no_activity' });
@@ -222,7 +222,7 @@ test('持仓量为 0 且当日有成交的合约进入异动证据', () => {
     21,
   );
 
-  assert.equal(evidence.length, 1, '成交量 200 张、持仓量 0 的新挂牌合约必须被发现');
+  assert.equal(evidence.length, 1, '成交量 200 张、持仓量 0 的合约仍应进入观察证据');
   const [alert] = evidence;
   assert.equal(alert.type, 'call');
   assert.equal(alert.open_interest, 0, '真实为 0 的持仓量要如实发送');
@@ -232,9 +232,13 @@ test('持仓量为 0 且当日有成交的合约进入异动证据', () => {
     '持仓量为 0 时没有量持比，不能发送 0',
   );
   assert.ok(
-    alert.reasons.some((reason) => reason.includes('新开仓')),
-    `理由中应说明是新开仓，实际为 ${JSON.stringify(alert.reasons)}`,
+    alert.reasons.some((reason) => reason.includes('开平仓性质待确认')),
+    `理由中不能断言成交都是新开仓，实际为 ${JSON.stringify(alert.reasons)}`,
   );
+  assert.doesNotMatch(alert.reasons.join(' '), /全部.*新开仓/);
+  assert.equal(alert.direction, 'unknown');
+  assert.equal(alert.direction_status, 'unavailable_without_trade_side');
+  assert.equal(alert.direction_confidence, 0);
 });
 
 test('持仓量不可用时不发送 open_interest', () => {

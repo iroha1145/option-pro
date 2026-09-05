@@ -21,7 +21,7 @@ import { breakoutsApi } from '@/api/modules/breakouts';
 import { earningsApi } from '@/api/modules/earnings';
 import { stocksApi } from '@/api/modules/stocks';
 import { marketPulseApi } from '@/components/market/api';
-import { regimeMean } from '@/components/market/RegimePanel';
+import { regimeMean } from '@/lib/regime';
 import { getIndexIntraday } from '@/mocks/marketPulse';
 import { usePolling } from '@/hooks/usePolling';
 import { useNow } from '@/hooks/useNow';
@@ -743,11 +743,12 @@ function EarningsAnchorRow({ item: it, todayKey }: { item: EarningsItem; todayKe
   );
 }
 
-/** 自选异动迷你卡：Ticker+名称+涨跌 / 大价+sparkline（缺失不渲染）/ 强度条+首条信号 */
+/** 自选异动：当日涨跌与最长 30 交易日日线分开标明，长期图仅取真实日线。 */
 function WatchlistMoverCard({ item, index: i }: { item: WatchlistItem; index: number }) {
-  const hasChange = Number.isFinite(item.changePct);
   const hasPrice = Number.isFinite(item.price) && item.price > 0;
-  const spark = Array.isArray(item.sparkline) && item.sparkline.length > 1 ? item.sparkline : null;
+  const trend = item.dailyTrend && item.dailyTrend.length > 1 ? item.dailyTrend : null;
+  const spark = trend?.map((point) => point.close) ?? null;
+  const periodChange = spark ? (spark[spark.length - 1] / spark[0] - 1) * 100 : null;
   const signalLabel = item.signals?.[0]?.label ?? null;
   return (
     <motion.div
@@ -755,21 +756,33 @@ function WatchlistMoverCard({ item, index: i }: { item: WatchlistItem; index: nu
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: staggerDelay(i) }}
     >
-      <Link to={`/stock/${encodeURIComponent(item.ticker)}`} className="card-surface card-hover block rounded-lg p-3">
+      <Link to={`/stock/${encodeURIComponent(item.ticker)}`} className="card-surface card-hover block overflow-hidden rounded-lg p-4" data-testid="watchlist-mover-card">
         <div className="flex items-center gap-2">
           <TickerLogo ticker={item.ticker} size={24} />
           <span className="shrink-0 font-mono text-caption font-semibold text-ink-800">{item.ticker}</span>
           <span className="min-w-0 flex-1 truncate text-caption text-ink-500">{item.name}</span>
-          <ChangeBadge value={item.changePct} size="sm" className="shrink-0" />
+          <span className="flex shrink-0 items-center gap-1.5">
+            <span className="text-micro text-ink-400">{t('当日')}</span>
+            <ChangeBadge value={item.changePct} size="sm" />
+          </span>
         </div>
         <div className="mt-2 flex items-end justify-between gap-2">
           <span className="font-mono text-data-l text-ink-900 tnum">
             {hasPrice ? fmtPrice(item.price) : '—'}
           </span>
-          {spark && (
-            <Sparkline data={spark} width={96} height={24} change={hasChange ? item.changePct : 0} />
-          )}
+          <span className="text-micro text-ink-400">{trend ? t('近 {count} 个交易日', { count: trend.length }) : t('日线走势')}</span>
         </div>
+        {spark && trend && periodChange !== null ? (
+          <figure className="mt-3" data-testid="watchlist-daily-trend" aria-label={t('{ticker} 日线走势，{start} 至 {end}，区间涨跌 {change}%', { ticker: item.ticker, start: trend[0].date, end: trend[trend.length - 1].date, change: periodChange.toFixed(2) })}>
+            <Sparkline data={spark} width={320} height={88} change={periodChange} variant="area" stretch className="h-[88px] w-full" />
+            <figcaption className="mt-1 flex items-center justify-between gap-2 font-mono text-micro text-ink-400 tnum">
+              <span>{trend[0].date.slice(5)} — {trend[trend.length - 1].date.slice(5)}</span>
+              <span className="flex items-center gap-1.5"><span className="font-sans">{t('区间')}</span><ChangeBadge value={periodChange} size="sm" /></span>
+            </figcaption>
+          </figure>
+        ) : (
+          <div className="mt-3 flex h-[112px] items-center justify-center rounded-sm bg-paper-2 px-4 text-center text-caption text-ink-400">{t('暂无日线走势，打开详情后可更新')}</div>
+        )}
         <div className="mt-2 flex items-center justify-between gap-2">
           <StrengthBar score={item.strengthScore} width={56} />
           {signalLabel && <span className="truncate text-micro text-ink-400">{signalLabel}</span>}
@@ -806,12 +819,12 @@ function SignalGridSkeleton({ cards }: { cards: number }) {
   );
 }
 
-/** 自选迷你卡骨架：2 列镜像真实卡（logo+徽标 / 大价+sparkline / 强度条） */
+/** 自选卡骨架：镜像完整日线图区，加载前后保持卡片高度。 */
 function MoverGridSkeleton({ cards }: { cards: number }) {
   return (
     <div className="grid grid-cols-1 gap-2.5 px-4 pb-4 pt-3 sm:grid-cols-2 md:px-5 md:pb-5" aria-hidden="true">
       {Array.from({ length: cards }, (_, i) => (
-        <div key={i} className="card-surface rounded-lg p-3">
+        <div key={i} className="card-surface rounded-lg p-4">
           <div className="flex items-center gap-2">
             <SkeletonBlock className="size-6 rounded-sm" />
             <SkeletonBlock className="h-3 w-12" />
@@ -822,6 +835,7 @@ function MoverGridSkeleton({ cards }: { cards: number }) {
             <SkeletonBlock className="h-6 w-24" />
             <SkeletonBlock className="h-6 w-24" />
           </div>
+          <SkeletonBlock className="mt-3 h-[112px] w-full rounded-sm" />
           <SkeletonBlock className="mt-2.5 h-[3px] w-14 rounded-pill" />
         </div>
       ))}

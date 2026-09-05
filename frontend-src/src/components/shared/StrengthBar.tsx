@@ -3,14 +3,8 @@
  * 轨道 line 色 3px 圆角，填充 grow-bar；色阶 <50 ink-300 / 50–69 brand-400 / 70–84 brand-600 / ≥85 up-600
  */
 import { cn } from '@/lib/utils';
+import { strengthBarClass } from '@/lib/strengthColor';
 import { t } from '../../i18n/core.ts';
-
-export function strengthBarClass(score: number): string {
-  if (score >= 85) return 'bg-up-600';
-  if (score >= 70) return 'bg-brand-600';
-  if (score >= 50) return 'bg-brand-400';
-  return 'bg-ink-300';
-}
 
 export default function StrengthBar({
   score,

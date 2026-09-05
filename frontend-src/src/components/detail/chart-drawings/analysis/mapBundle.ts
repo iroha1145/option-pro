@@ -89,6 +89,7 @@ export interface CanonicalBar {
   v?: number;
   ext?: boolean;
   quote_only?: boolean;
+  closed?: boolean;
 }
 
 function epochOfStamp(value: string): number {
@@ -316,7 +317,11 @@ export function closedBarsForFingerprint<T extends CanonicalBar & { t: string }>
   range: string,
   opts?: { dropLast?: boolean; fromDate?: string | null; throughDate?: string | null },
 ): T[] {
-  let rows = bars.filter((bar) => bar.ext !== true && bar.quote_only !== true);
+  const regular = bars.filter((bar) => bar.ext !== true && bar.quote_only !== true);
+  const minute = range === '5m' || range === '15m' || range === '1h';
+  // A matching fingerprint is not a close-time guarantee. Minute snapshots must
+  // carry the server's completion flag; elapsed client time cannot upgrade them.
+  let rows = regular.filter(bar => minute ? bar.closed === true : bar.closed !== false);
   if (opts?.fromDate || opts?.throughDate) {
     // 日期字符串只算一遍：nyDateFromEpoch 走 Intl，500 根算两遍就是几十毫秒。
     let stamps = rows.map((bar) => barStampForRange(bar.t, range));
@@ -333,7 +338,7 @@ export function closedBarsForFingerprint<T extends CanonicalBar & { t: string }>
       if (last >= 0) return rows.slice(0, last + 1);
     }
   }
-  if (opts?.dropLast && rows.length) rows = rows.slice(0, -1);
+  if (opts?.dropLast && rows.length && rows[rows.length - 1] === regular[regular.length - 1]) rows = rows.slice(0, -1);
   return rows;
 }
 
@@ -434,7 +439,7 @@ export function labelBudget(overlays: AnalysisOverlay[], settings: LayerSettings
     Math.max(0, Math.round(settings.maxLabels * density)),
   );
   return overlays
-    .filter((overlay) => isPatternKind(overlay.kind))
+    .filter((overlay) => isPatternKind(overlay.kind) || overlay.kind === 'level')
     .sort((a, b) => b.displayPriority - a.displayPriority)
     .slice(0, cap);
 }

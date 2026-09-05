@@ -167,11 +167,6 @@ def record_login_failure(request: Request) -> None:
         _login_failures[key] = (count, started_at, blocked_until)
 
 
-def clear_login_failures(request: Request) -> None:
-    with _rate_lock:
-        _login_failures.pop(_client_key(request), None)
-
-
 def reset_rate_limits() -> None:
     """Test seam."""
 
@@ -223,6 +218,8 @@ _ERROR_MESSAGE = {
     "username_reserved": "该用户名已被保留，请换一个",
     "username_taken": "该用户名已被占用",
     "password_required": "请填写密码",
+    "password_too_short": "新密码至少需要 15 个字符，可使用容易记住的长短语",
+    "password_too_common": "该密码过于常见，请换一个更难猜测的长短语",
     "password_too_long": "密码过长",
     "password_invalid_characters": "密码包含不支持的字符",
     "registration_closed": "注册名额已满",

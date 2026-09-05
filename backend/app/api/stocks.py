@@ -38,9 +38,13 @@ from app.public_home_snapshot import (
     breakout_lead_chart_parameters,
     public_home_resource_parameters,
     read_owner_public_home_entry_async,
+    read_public_home_resource,
     read_public_home_resource_async,
 )
 from app.services.yfinance_batch import download_in_bounded_batches
+from app.services.market_calendar import early_close_minutes, is_trading_day
+from app.services.symbols import quote_symbol
+from app.services.watchlist_trend import daily_trend
 from app.services.request_security import request_client_ip
 from app.stock_pull_snapshot import (
     STOCK_PULL_RESOURCE_FRESH_SECONDS,
@@ -1678,6 +1682,58 @@ def _watchlist_cache_key(tickers: list[str] | None) -> str:
     return f"watchlist:set:{digest}"
 
 
+async def _with_watchlist_daily_trends(payload: Any) -> Any:
+    """Attach at most 30 cached daily bars, with no per-card provider request.
+
+    This also enriches persisted watchlists created before the trend field
+    existed. The original quote/spark cache is never mutated. Durable manual
+    pulls share a parsed document cache, so all symbols reuse one disk read.
+    """
+    if not isinstance(payload, dict) or not isinstance(payload.get("groups"), list):
+        return payload
+
+    def project() -> dict[str, Any]:
+        now = time.time()
+        trends: dict[str, Any] = {}
+        groups = []
+        for group in payload["groups"]:
+            if not isinstance(group, dict) or not isinstance(group.get("stocks"), list):
+                groups.append(group)
+                continue
+            rows = []
+            for row in group.get("stocks", []):
+                symbol = row.get("ticker", "")
+                if symbol not in trends:
+                    entry = _endpoint_cache.get(f"chart:{symbol}:1d:raw")
+                    if entry is not None and entry.stale_until <= now:
+                        entry = None
+                    chart = entry.value if entry is not None else None
+                    persisted = read_stock_pull_resource(symbol, "daily_chart", now=now)
+                    if persisted is not None and (entry is None or persisted["saved_at"] > entry.fetched_at):
+                        chart = persisted["payload"]
+                    if chart is None:
+                        # The worker's public focus / breakout charts are also
+                        # valid daily caches, including before any manual pull.
+                        chart = read_public_home_resource(
+                            "focus_chart",
+                            parameters={"ticker": symbol, "range": "1d", "adjustment": "raw"},
+                            now=now,
+                        )
+                    if chart is None:
+                        try:
+                            parameters = breakout_lead_chart_parameters(symbol)
+                        except ValueError:
+                            parameters = None
+                        if parameters is not None:
+                            chart = read_public_home_resource("breakout_lead_chart", parameters=parameters, now=now)
+                    trends[symbol] = daily_trend(chart, market_timezone=_watchlist_market_timezone(symbol))
+                rows.append({**row, "daily_trend": trends[symbol]} if trends[symbol] is not None else row)
+            groups.append({**group, "stocks": rows})
+        return {**payload, "groups": groups}
+
+    return await asyncio.to_thread(project)
+
+
 @router.get("/watchlist")
 async def watchlist(
     tickers: Annotated[
@@ -1721,10 +1777,10 @@ async def watchlist(
                             max(now - owner_entry.fetched_at, 0.0),
                             1,
                         )
-                    return result
+                    return await _with_watchlist_daily_trends(result)
             else:
                 _load_watchlist_snapshot_once(now)
-            return await _stale_while_revalidate_endpoint(
+            result = await _stale_while_revalidate_endpoint(
                 cache_key,
                 _WATCHLIST_FRESH_TTL_SECONDS,
                 _WATCHLIST_MAX_SNAPSHOT_AGE_SECONDS,
@@ -1732,13 +1788,15 @@ async def watchlist(
                 _persist_watchlist_snapshot,
                 allow_refresh=allow_refresh,
             )
-        return await _cached_endpoint(
+            return await _with_watchlist_daily_trends(result)
+        result = await _cached_endpoint(
             cache_key,
             _WATCHLIST_FRESH_TTL_SECONDS,
             loader,
             stale_ttl=_WATCHLIST_TARGETED_STALE_TTL_SECONDS,
             allow_refresh=allow_refresh,
         )
+        return await _with_watchlist_daily_trends(result)
     except HTTPException:
         raise
     except Exception as exc:
@@ -2270,7 +2328,7 @@ async def search_stocks(q: str = Query(..., min_length=1, max_length=50)):
 async def _build_stock_signals(ticker: str) -> dict[str, Any]:
     """Compute live technical signals without consulting either cache layer."""
 
-    symbol = ticker.upper().strip()
+    symbol = quote_symbol(ticker)
     if not _WATCHLIST_TICKER_PATTERN.fullmatch(symbol):
         raise ValueError("Invalid ticker symbol")
 
@@ -2444,7 +2502,7 @@ async def _build_stock_signals(ticker: str) -> dict[str, Any]:
 async def stock_signals(ticker: str):
     """Compute RSI, MACD, EMA/SMA signals from 100d daily data."""
 
-    symbol = ticker.upper().strip()
+    symbol = quote_symbol(ticker)
     if not _WATCHLIST_TICKER_PATTERN.fullmatch(symbol):
         raise HTTPException(status_code=400, detail="Invalid ticker symbol")
 
@@ -2487,7 +2545,7 @@ async def stock_signals(ticker: str):
 
 @router.get("/{ticker}/logo")
 async def stock_logo(ticker: str):
-    symbol = ticker.upper().strip()
+    symbol = quote_symbol(ticker)
     variants = _logo_symbol_variants(symbol)
     if not variants:
         raise HTTPException(status_code=404, detail="Invalid ticker")
@@ -2657,7 +2715,7 @@ async def _index_overview_from_public_snapshot(
 @router.get("/{ticker}")
 async def stock_overview(ticker: str):
     owner = current_request_is_owner()
-    symbol = ticker.upper().strip()
+    symbol = quote_symbol(ticker)
     key = f"stock:{symbol}"
     await _hydrate_stock_pull_resource(symbol, "overview", key)
     if owner and symbol == "NVDA":
@@ -2678,7 +2736,7 @@ async def stock_overview(ticker: str):
                 key,
                 60,
                 30 * 60,
-                lambda: _stock_overview_impl(ticker),
+                lambda: _stock_overview_impl(symbol),
                 allow_refresh=owner,
             ),
         )
@@ -2743,7 +2801,7 @@ async def _stock_overview_impl(ticker: str):
             return None
 
     def _work():
-        symbol = ticker.upper().strip()
+        symbol = quote_symbol(ticker)
         if not _WATCHLIST_TICKER_PATTERN.fullmatch(symbol):
             raise RuntimeError("Invalid ticker symbol")
 
@@ -2995,7 +3053,7 @@ async def stock_chart(
     adjustment: str = Query("raw", pattern="^(raw|adjusted)$"),
 ):
     owner = current_request_is_owner()
-    symbol = ticker.upper().strip()
+    symbol = quote_symbol(ticker)
     key = f"chart:{symbol}:{range}:{adjustment}"
     if range == "1d" and adjustment == "raw":
         await _hydrate_stock_pull_resource(
@@ -3019,7 +3077,7 @@ async def stock_chart(
             key,
             _CHART_TTL.get(range, 600),
             _CHART_MAX_AGE.get(range, 60 * 60),
-            lambda: _load_stock_chart(ticker, range, adjustment),
+            lambda: _load_stock_chart(symbol, range, adjustment),
             allow_refresh=owner,
         )
     except HTTPException as exc:
@@ -3069,6 +3127,9 @@ async def _load_stock_chart(
     snapshot hydrated above, remains the last usable value.
     """
 
+    # Capture BEFORE the provider call. A fetch spanning an interval boundary
+    # may still contain its earlier partial bar when the response arrives.
+    observed_at = datetime.now(timezone.utc)
     payload = await _stock_chart_impl(ticker, range_key, adjustment)
     if range_key == "1d":
         bars = payload.get("bars") if isinstance(payload, dict) else None
@@ -3076,18 +3137,20 @@ async def _load_stock_chart(
             raise RuntimeError("Daily stock chart provider returned no bars")
     if range_key in {"5m", "15m", "1h"} and isinstance(payload, dict):
         bars = payload.get("bars") if isinstance(payload.get("bars"), list) else []
-        if bars:
-            from app.services.technical.chart_analysis import assemble_intraday_analysis
+        from app.services.technical.chart_analysis import assemble_intraday_analysis, mark_intraday_closed
 
-            try:
-                payload["chart_analysis"] = assemble_intraday_analysis(
-                    bars,
-                    ticker=ticker,
-                    chart_range=range_key,
-                    adjustment=adjustment,
-                )
-            except Exception:
-                payload["chart_analysis"] = None
+        marked_bars = mark_intraday_closed(bars, range_key, now=observed_at)
+        payload = {**payload, "bars": marked_bars}
+        try:
+            payload["chart_analysis"] = assemble_intraday_analysis(
+                marked_bars,
+                ticker=ticker,
+                chart_range=range_key,
+                adjustment=adjustment,
+                now=observed_at,
+            )
+        except Exception:
+            payload["chart_analysis"] = None
     return payload
 
 
@@ -3194,7 +3257,7 @@ async def stock_technical(ticker: str):
     chart endpoint serves (base band, invalidation, swings, RSI/MACD family)."""
 
     owner = current_request_is_owner()
-    symbol = ticker.upper().strip()
+    symbol = quote_symbol(ticker)
     key = f"technical:{symbol}"
     try:
         return await _stale_while_revalidate_endpoint(
@@ -3304,7 +3367,7 @@ async def _stock_chart_impl(ticker: str, range: str, adjustment: str = "raw"):
             "1w":  ("5y",   "1wk", False, 104),    # 周K线, fetch 5 years
         }
         yf_period, interval, prepost, visible = config.get(range, ("1y", "1d", False, 120))
-        symbol = ticker.upper()
+        symbol = quote_symbol(ticker)
         auto_adjust = adjustment == "adjusted"
 
         def response_metadata(
@@ -3429,7 +3492,9 @@ async def _stock_chart_impl(ticker: str, range: str, adjustment: str = "raw"):
                 hour_min = b.pop("_ny_min", None)
                 if hour_min is None:
                     continue
-                is_regular = 570 <= hour_min < 960  # 9:30 to 16:00 ET
+                day = datetime.fromtimestamp(b["t"], tz=_NEW_YORK_TZ).date()
+                close_minute = early_close_minutes(day) or 16 * 60
+                is_regular = is_trading_day(day) and 570 <= hour_min < close_minute
                 has_valid_price = all(math.isfinite(float(b[k])) and float(b[k]) > 0 for k in ("o", "h", "l", "c"))
                 if not has_valid_price:
                     continue
@@ -3549,7 +3614,7 @@ async def pull_stock_data(
     valid quote or daily chart.
     """
 
-    symbol = ticker.upper().strip()
+    symbol = quote_symbol(ticker)
     if not _WATCHLIST_TICKER_PATTERN.fullmatch(symbol):
         raise HTTPException(
             status_code=400,

@@ -134,10 +134,10 @@ test('SignalCards / FeedPanel 不再把可交互嵌进 role=button 的 article',
   assert.match(feed, /getSelection\(\)/);
 });
 
-test('MobileDock 已登录走退出，Escape 拦住冒泡', async () => {
+test('MobileDock 已登录走退出', async () => {
   const dock = codeOf(await source('components/MobileDock.tsx'));
   assert.match(dock, /logout\(\)/);
-  assert.match(dock, /e\.stopPropagation\(\)/);
+  // Escape isolation is exercised with real stacked dialogs in overlay-behavior.spec.mjs.
   assert.match(dock, /t\('退出登录'\)/);
 });
 
@@ -164,9 +164,8 @@ test('Navbar 与 MobileDock 用边界匹配，文字高亮不跟 NavLink isActiv
   assert.doesNotMatch(dock, /location\.pathname\.startsWith/);
 });
 
-test('图层菜单与回撤尺 Escape 对齐 overlay 守卫', async () => {
-  const menu = codeOf(await source('components/detail/chart-drawings/LayerMenu.tsx'));
-  assert.match(menu, /e\.stopPropagation\(\)/);
+test('图表键盘尊重弹层守卫', async () => {
+  // LayerMenu / DrawingWorkspace Escape behavior runs in overlay-behavior.spec.mjs.
   const chart = codeOf(await source('components/detail/KlineChart.tsx'));
   assert.match(chart, /escapeHandledByOverlay/);
   assert.match(chart, /public_snapshot_unavailable/);

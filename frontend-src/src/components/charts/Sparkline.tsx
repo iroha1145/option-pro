@@ -13,6 +13,7 @@ interface SparklineProps {
   height?: number;
   change: number;         // 决定着色（涨绿跌红）
   variant?: 'line' | 'area';
+  stretch?: boolean;
   className?: string;
 }
 
@@ -54,7 +55,7 @@ function smoothPath(pts: Pt[], tension = 0.5): string {
   return d;
 }
 
-const Sparkline = memo(function Sparkline({ data, width = 48, height = 20, change, variant = 'line', className }: SparklineProps) {
+const Sparkline = memo(function Sparkline({ data, width = 48, height = 20, change, variant = 'line', stretch = false, className }: SparklineProps) {
   const id = useId().replace(/[^a-zA-Z0-9]/g, '');
   const isArea = variant === 'area';
   /* 面积版留够边距，末点的实心圆 + 白环（半径合计 ~3.8px）才不会被裁掉 */
@@ -81,6 +82,7 @@ const Sparkline = memo(function Sparkline({ data, width = 48, height = 20, chang
       width={width}
       height={height}
       viewBox={`0 0 ${width} ${height}`}
+      preserveAspectRatio={stretch ? 'none' : undefined}
       className={className}
       aria-hidden="true"
       role="presentation"
@@ -103,6 +105,7 @@ const Sparkline = memo(function Sparkline({ data, width = 48, height = 20, chang
       {isArea && <path d={area} fill={`url(#fill-${id})`} stroke="none" />}
       <path
         d={line}
+        pathLength={1}
         fill="none"
         stroke={isArea ? `url(#stroke-${id})` : lineColor}
         strokeWidth={isArea ? 2.25 : 1.5}
@@ -110,7 +113,9 @@ const Sparkline = memo(function Sparkline({ data, width = 48, height = 20, chang
         strokeLinejoin="round"
         className="spark-draw"
         /* 首绘 500ms（覆盖 index.css 的 700ms；reduced-motion 下 CSS !important 仍然生效） */
-        style={{ strokeDasharray: 300, strokeDashoffset: 300, animationDuration: '500ms' }}
+        // Normalize the dash to the whole path; a fixed 300px dash leaves gaps
+        // when a wider daily curve is longer than 300px.
+        style={{ strokeDasharray: 1, strokeDashoffset: 1, animationDuration: '500ms' }}
       />
       {isArea && last && (
         /* 末点读数落点：实心圆 + 白环，和大图的 insightEndpointMark 同一套语言 */

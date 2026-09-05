@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { EChartsInstance } from '@/lib/chart';
 import { barKeyOf, nudgeAnchors, snapBarIndex } from './projection.ts';
 import { drawingErrorCode, drawingErrorStatus, drawingsApi } from './api.ts';
@@ -38,7 +38,7 @@ import {
   type HistoryState,
 } from './history.ts';
 import { hitTestDrawings, isLockedDragBlocked, type PointerKind, type ProjectedDrawing } from './hitTest.ts';
-import { ohlcCandidates, snapPointer, type SnapCandidate } from './snap.ts';
+import { ohlcCandidates, snapPointer, visiblePriceToY, type SnapCandidate } from './snap.ts';
 import { quotaRollbackDrawings, type ServerSnapshot } from './merge.ts';
 import {
   addDraftPoint,
@@ -150,6 +150,8 @@ export function useDrawingController(args: {
   const localSaveRef = useRef<{ key: string; list: ChartDrawing[]; timer: ReturnType<typeof setTimeout> } | null>(null);
   const coalesceRef = useRef<{ id: string; at: number } | null>(null);
   const drawingsRef = useRef(drawings);
+  const drainRef = useRef<(drawingId: string) => Promise<void>>(async () => {});
+  const loadScopeRef = useRef<(generation: number) => Promise<void>>(async () => {});
   const outboxRef = useRef(new DrawingOutbox());
   const lastServerRef = useRef<ServerSnapshot | null>(null);
   const conflictServerRef = useRef<{
@@ -162,6 +164,14 @@ export function useDrawingController(args: {
   const storageKey = signedIn
     ? drawingsStorageKey(args.identity.key, args.ticker, args.range, adjustment)
     : anonymousStorageKey(args.ticker, args.range, adjustment);
+  const [interactionScope, setInteractionScope] = useState(storageKey);
+  if (interactionScope !== storageKey) {
+    setInteractionScope(storageKey);
+    setRejectedImport(null);
+    setSelectedId(null);
+    setFocusAnchor(null);
+    setInProgress(null);
+  }
 
   useEffect(() => {
     drawingsRef.current = drawings;
@@ -354,8 +364,7 @@ export function useDrawingController(args: {
     }
   }, [adjustment, applyJobResult, args.range, args.ticker, signedIn, writeLocal]);
 
-  const drainRef = useRef(drain);
-  drainRef.current = drain;
+  useLayoutEffect(() => { drainRef.current = drain; }, [drain]);
 
   const enqueue = useCallback((job: Omit<PersistJob, 'generation' | 'scopeGeneration' | 'scope'>) => {
     if (!signedIn) return;
@@ -442,8 +451,7 @@ export function useDrawingController(args: {
     }
   }, [adjustment, args.range, args.ticker, signedIn, storageKey, writeLocal]);
 
-  const loadScopeRef = useRef(loadScope);
-  loadScopeRef.current = loadScope;
+  useLayoutEffect(() => { loadScopeRef.current = loadScope; }, [loadScope]);
 
   /** 把防抖窗口里的编辑立刻入队（只入队不发送），再清空计时器。 */
   const flushPendingEdits = useCallback(() => {
@@ -472,10 +480,6 @@ export function useDrawingController(args: {
     lastServerRef.current = null;
     revisionsRef.current.clear();
     conflictServerRef.current = null;
-    setRejectedImport(null);
-    setSelectedId(null);
-    setFocusAnchor(null);
-    setInProgress(null);
     dragPreviewRef.current = null;
     if (autoRetryTimer.current) {
       clearTimeout(autoRetryTimer.current);
@@ -574,7 +578,7 @@ export function useDrawingController(args: {
       adjustment,
       kind,
       anchors: points.map((point) => ({ time: point.time, barKey: point.barKey, price: point.price })),
-      style: { color: '#2E46E0', width: 2, dash: 'solid', fillOpacity: kind === 'channel' || kind === 'rectangle' ? 0.12 : undefined },
+      style: { color: '#2E46E0', width: 3, dash: 'solid', fillOpacity: kind === 'channel' || kind === 'rectangle' ? 0.06 : undefined },
       locked: false,
       hidden: false,
       zOrder: (drawingsRef.current[drawingsRef.current.length - 1]?.zOrder ?? 0) + 1,
@@ -800,7 +804,7 @@ export function useDrawingController(args: {
     };
     const color = preview ? resolvePaintColor(preview.style.color) : '#2E46E0';
     chart.setOption(
-      { graphic: graphicFromOverlay(overlay, toPixel, color, { solid: Boolean(preview) }) },
+      { graphic: graphicFromOverlay(overlay, toPixel, color, { solid: Boolean(preview), width: preview ? Math.max(3, preview.style.width) : 2.5 }) },
       { lazyUpdate: true, replaceMerge: ['graphic'] },
     );
   }, [inProgress, selectedId]);
@@ -828,15 +832,14 @@ export function useDrawingController(args: {
       const barIndex = snapBarIndex(converted[0], bars.length);
       if (barIndex === null) return null;
       const bar = bars[barIndex];
-      const pixelOf = (price: number) => {
-        const px = chart.convertToPixel({ gridIndex: 0 }, [barIndex, price]) as number[];
-        return px?.[1] ?? 0;
-      };
+      const pixelOf = (price: number) => visiblePriceToY(chart, barIndex, price);
       const candidates = [
         ...ohlcCandidates(bar),
         ...(args.ma20?.[barIndex] != null ? [{ price: args.ma20[barIndex] as number, kind: 'ma20' as const }] : []),
         ...(args.snapCandidates ?? []),
-        ...drawingsRef.current.flatMap((item) => item.anchors.map((anchor) => ({ price: anchor.price, kind: 'anchor' as const }))),
+        ...drawingsRef.current.filter(item => !item.hidden).flatMap((item) => item.anchors
+          .filter(anchor => anchor.barKey === barKeyOf(bar, args.range) || item.kind === 'horizontal')
+          .map((anchor) => ({ price: anchor.price, kind: 'anchor' as const }))),
       ];
       const snapped = snapPointer({
         x: converted[0],

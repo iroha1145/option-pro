@@ -73,8 +73,6 @@ export const WIRED: Dict = {
   '期权数据暂时获取不到': ['Options data is temporarily unavailable', 'オプションデータを一時的に取得できません'],
   '期权数据为延迟数据': ['Options data is delayed', 'オプションデータは遅延配信です'],
   ' · 更新于 {time}': [' · Updated {time}', ' · {time} 更新'],
-  '成交异动 {badge}': ['Unusual activity {badge}', '出来高異常 {badge}'],
-  ' · 权利金流约 ${amount}（估算）': [' · Premium flow ~${amount} (est.)', ' · 権利金フロー 約${amount}（推定）'],
   '趋势偏向分 {score}，{label}': ['Trend bias score {score}, {label}', 'トレンドバイアススコア {score}、{label}'],
 
   // ── 财报（earnings）──────────────────────────────────────────────────
@@ -132,7 +130,6 @@ export const WIRED: Dict = {
 
   // ── 期权异动证据（detail/optionAnalysis）────────────────────────────
   '成交量/持仓量 {ratio} 倍': ['Volume/OI {ratio}×', '出来高/建玉 {ratio}倍'],
-  '持仓量为 0 且成交 {volume} 张，全部为新开仓（量持比不适用）': ['Open interest is 0 with {volume} contracts traded — all new positions (Vol/OI not applicable)', '建玉0で出来高 {volume}枚、すべて新規建て（出来高/建玉は適用外）'],
   '成交量 {volume} 张': ['Volume {volume} contracts', '出来高 {volume}枚'],
   '按买卖中价估算权利金 {premium} 美元': ['Premium ~${premium} at the mid price', '仲値ベースの推定権利金 {premium}ドル'],
   '深度虚值约 {pct}%': ['Deep OTM, ~{pct}%', 'ディープOTM 約{pct}%'],

@@ -75,7 +75,7 @@ const SURFACES = [
   ['components/CommandPalette.tsx', /['"]t-modal/, 't-modal (command palette)'],
   ['components/catalysts/ConfirmDialog.tsx', /['"]t-modal/, 't-modal (confirm)'],
   ['components/LanguageSwitcher.tsx', /t-dropdown/, 't-dropdown'],
-  ['components/shared/MenuSelect.tsx', /t-dropdown/, 't-dropdown (menu select)'],
+  ['components/shared/MenuSelect.tsx', /select-surface/, 'portal select (menu select)'],
   ['components/screener/FilterWorkbench.tsx', /<MenuSelect/, 'MenuSelect (screener)'],
   ['components/detail/OptionsPanel.tsx', /<MenuSelect/, 'MenuSelect (expirations)'],
   ['pages/Watchlist.tsx', /<MenuSelect/, 'MenuSelect (watchlist sort)'],
@@ -210,7 +210,7 @@ test('chrome sources wire documented t-* hooks and drop stacked framer enter/exi
   const workbench = await source('components/screener/FilterWorkbench.tsx');
   assert.match(workbench, /<MenuSelect/);
   const menu = await source('components/shared/MenuSelect.tsx');
-  assert.match(menu, /aria-haspopup="listbox"/);
+  assert.match(menu, /<Select.Trigger/);
   assert.doesNotMatch(menu, /<select[\s>]/);
 });
 
@@ -311,9 +311,11 @@ test('tabs ride the beui spring indicator with Paper Terminal geometry, focus ri
   assert.match(motion, /mass: 1\.2/);
   const pill = await code('components/shared/GlidePill.tsx');
   assert.doesNotMatch(pill, /layout="position"/, 'position-only 投影让宽度瞬跳');
-  assert.match(pill, /shadow-btn/);
+  assert.match(pill, /bg-brand-50/);
+  assert.match(pill, /ring-brand-100/);
+  assert.doesNotMatch(pill, /shadow-btn/, '筛选选中项用浅底和细边，不使用抬起阴影');
   /* 弹簧与归零只此一份：调用点不该再各自包 MotionConfig */
-  assert.match(pill, /useReducedMotion\(\)/);
+  assert.match(pill, /usePrefersReducedMotion\(\)/);
   const segmented = await code('components/shared/Segmented.tsx');
   assert.match(segmented, /focus-visible:ring-2/);
   assert.doesNotMatch(segmented, /MotionConfig/, '滑块自持 transition，调用点不再包 MotionConfig');
@@ -328,18 +330,8 @@ test('tabs ride the beui spring indicator with Paper Terminal geometry, focus ri
   assert.doesNotMatch(workbench, /MotionConfig/);
 });
 
-test('MenuSelect keeps the native-select keyboard contract it replaced', async () => {
-  const menu = await source('components/shared/MenuSelect.tsx');
-  assert.match(menu, /ArrowDown/);
-  assert.match(menu, /ArrowUp/);
-  assert.match(menu, /'Home'/);
-  assert.match(menu, /'End'/);
-  /* Esc / 选中后焦点回触发器；Tab 移出即收起 */
-  assert.match(menu, /triggerRef\.current\?\.focus\(\)/);
-  assert.match(menu, /relatedTarget/);
-  /* 展开后把焦点放到当前选中项 */
-  assert.match(menu, /\[role="option"\]\[aria-selected="true"\]/);
-});
+// Keyboard, focus restoration and collision handling now run against a real
+// browser in visual-tests/ui-review.spec.mjs; Radix owns the key handlers.
 
 test('overlayClassName / overlayVisible drive the documented state classes', () => {
   assert.equal(overlayClassName('open'), 'is-open');

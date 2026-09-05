@@ -3,7 +3,7 @@ import { ApiError } from '@/api/client';
 import { adminApi, type RuntimeDoc, type WorkerHealth } from '@/api/modules/admin';
 import { runtimeApi, type WorkerAction } from '@/api/modules/runtime';
 import { useAccess } from '@/hooks/useAccess';
-import { useToast } from '@/components/Toast';
+import { useToast } from '@/hooks/useToast';
 import Icon from '@/components/icons';
 import { cn } from '@/lib/utils';
 import { t } from '../../i18n/core.ts';

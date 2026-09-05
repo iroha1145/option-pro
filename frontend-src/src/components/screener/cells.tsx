@@ -7,7 +7,7 @@ import type { ScreenerRow } from '@/api/types';
 import { cn } from '@/lib/utils';
 import { fmtRelative } from '@/lib/format';
 import Icon from '@/components/icons';
-import { strengthBarClass } from '@/components/shared/StrengthBar';
+import { strengthBarClass } from '@/lib/strengthColor';
 import {
   screenerStrengthPresentation,
   subscoreDimsOf,

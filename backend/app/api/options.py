@@ -10,7 +10,11 @@ from typing import Literal
 import yfinance as yf
 from fastapi import APIRouter, HTTPException, Query, Request
 
-from app.access import current_request_is_owner, public_snapshot_unavailable
+from app.access import (
+    current_request_is_owner,
+    public_snapshot_unavailable,
+    request_allows_visitor_live_pulls,
+)
 from app.services import yahoo
 from app.services.cache import cache
 from app.services.utils import sanitize
@@ -187,19 +191,22 @@ async def _cached_yahoo_option_resource(
     key: str,
     ttl: int,
     loader,
+    *,
+    allow_live: bool,
 ):
     """Load one Yahoo option resource behind shared cache and failure cooling.
 
-    Massive Stocks Starter does not include option chains.  Yahoo/yfinance is
-    therefore the real provider for this path rather than a placeholder behind
-    an owner-only cold-cache gate.  ``cache.get_or_set`` coalesces concurrent
-    callers for the same ticker/expiration; the Yahoo service adds a second
-    per-key lock for callers outside this API module.
+    Only owners or explicitly enabled visitor pulls may populate a cold key.
+    Other visitors can reuse an unexpired result without spending provider
+    budget. ``cache.get_or_set`` coalesces authorized callers for the same key.
     """
 
     cached = cache.get(key)
     if cached is not None:
         return cached
+
+    if not allow_live:
+        raise public_snapshot_unavailable(key)
 
     failure = _option_failure_error(key)
     if failure is not None:
@@ -488,7 +495,7 @@ async def _unusual_activity_impl(type: str, min_vol_oi: float):
 
 
 @router.get("/{ticker}/expirations")
-async def expirations(ticker: str):
+async def expirations(ticker: str, request: Request = None):
     symbol = _option_symbol(ticker)
     key = f"options:expirations:{symbol}"
 
@@ -497,6 +504,10 @@ async def expirations(ticker: str):
             key,
             _OPTION_EXPIRATIONS_TTL,
             lambda: _load_expirations_snapshot(symbol),
+            allow_live=(
+                current_request_is_owner()
+                or request_allows_visitor_live_pulls(request)
+            ),
         )
         return {
             **snapshot,
@@ -513,37 +524,49 @@ async def expirations(ticker: str):
 
 
 @router.get("/{ticker}/chain")
-async def option_chain(ticker: str, expiration: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$")):
+async def option_chain(
+    ticker: str,
+    expiration: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    request: Request = None,
+):
     symbol = _option_symbol(ticker)
     key = f"options:chain:{symbol}:{expiration}"
     _validate_expiration_date(expiration, failure_key=key)
+    allow_live = current_request_is_owner() or request_allows_visitor_live_pulls(request)
 
     try:
         from app.api.stocks import _sanitize
 
-        expiration_snapshot = await _cached_yahoo_option_resource(
-            f"options:expirations:{symbol}",
-            _OPTION_EXPIRATIONS_TTL,
-            lambda: _load_expirations_snapshot(symbol),
-        )
-        available_expirations = expiration_snapshot.get("expirations")
-        if (
-            not isinstance(available_expirations, list)
-            or expiration not in available_expirations
-        ):
-            raise _record_option_failure(
-                key,
-                status_code=400,
-                detail={
-                    "code": "invalid_option_expiration",
-                    "message": "该股票没有这个期权到期日",
-                },
+        # A chain is validated before it enters this cache and has its own TTL.
+        # Its expiration-list entry may have been loaded earlier and already
+        # expired; serving the still-fresh chain must not require another pull.
+        payload = cache.get(key)
+        if payload is None:
+            expiration_snapshot = await _cached_yahoo_option_resource(
+                f"options:expirations:{symbol}",
+                _OPTION_EXPIRATIONS_TTL,
+                lambda: _load_expirations_snapshot(symbol),
+                allow_live=allow_live,
             )
-        payload = await _cached_yahoo_option_resource(
-            key,
-            _OPTION_CHAIN_TTL,
-            lambda: yahoo.get_option_chain(symbol, expiration),
-        )
+            available_expirations = expiration_snapshot.get("expirations")
+            if (
+                not isinstance(available_expirations, list)
+                or expiration not in available_expirations
+            ):
+                raise _record_option_failure(
+                    key,
+                    status_code=400,
+                    detail={
+                        "code": "invalid_option_expiration",
+                        "message": "该股票没有这个期权到期日",
+                    },
+                )
+            payload = await _cached_yahoo_option_resource(
+                key,
+                _OPTION_CHAIN_TTL,
+                lambda: yahoo.get_option_chain(symbol, expiration),
+                allow_live=allow_live,
+            )
         return _sanitize(
             {
                 **payload,

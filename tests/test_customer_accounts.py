@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ipaddress
+import sqlite3
 
 import pytest
 from fastapi import FastAPI
@@ -58,7 +59,7 @@ def _register(client: TestClient, username: str, password: str):
 
 
 def test_passwords_are_hashed_with_owner_grade_stretching() -> None:
-    """No complexity floor, but a weak password still gets strong stretching."""
+    """Legacy short-password hashes keep their original verification behavior."""
 
     encoded = hash_account_password("a")
     algorithm, iterations, salt, digest = encoded.split("$")
@@ -85,18 +86,75 @@ def test_unstorable_passwords_are_refused(password: str) -> None:
         hash_account_password(password)
 
 
-def test_short_and_simple_passwords_are_accepted(store: AccountStore) -> None:
-    """The product decision is no complexity requirement — honour it."""
+@pytest.mark.parametrize("password", ["1", "x" * 14])
+def test_new_accounts_reject_short_passwords_before_hashing(store, monkeypatch, password):
+    def forbidden_hash(_password):
+        raise AssertionError("short new passwords must be rejected before expensive hashing")
 
-    session = store.register("shorty", "1")
-    assert session.account.username == "shorty"
+    monkeypatch.setattr("app.services.accounts.hash_account_password", forbidden_hash)
+    with pytest.raises(AccountError) as captured:
+        store.register("shorty", password)
+    assert captured.value.code == "password_too_short"
+    assert store.account_count() == 0
+
+
+@pytest.mark.parametrize("password", ["a short phrase!", "all lowercase password", "春江潮水连海平海上明月共潮生啊", "x" * 256])
+def test_registration_accepts_long_phrases_without_character_class_requirements(store, password):
+    session = store.register("phrase-user", password)
+    assert store.authenticate("phrase-user", password).account == session.account
+
+
+@pytest.mark.parametrize("password, code", [
+    ("x" * 257, "password_too_long"),
+    ("passwordpassword", "password_too_common"),
+    ("PasswordPassword", "password_too_common"),
+    ("123456789012345", "password_too_common"),
+    (" " * 15, "password_too_common"),
+])
+def test_registration_policy_rejects_oversize_and_known_common_passwords(store, password, code):
+    with pytest.raises(AccountError) as captured:
+        store.register("weak-password", password)
+    assert captured.value.code == code
+    assert store.account_count() == 0
+
+
+def test_existing_short_password_account_can_still_log_in(client, store):
+    account = store.register("legacy-user", "original-long-password").account
+    # Model a row created before the registration policy changed. Do not weaken
+    # the production registration path merely to create this legacy fixture.
+    with sqlite3.connect(store.path) as connection:
+        connection.execute(
+            "UPDATE accounts SET password_hash=? WHERE user_id=?",
+            (hash_account_password("1"), account.user_id),
+        )
+    response = client.post(
+        "/api/access/login",
+        json={"username": "legacy-user", "password": "1"},
+        headers=HEADERS,
+    )
+    assert response.status_code == 200
+    assert response.json()["account"]["username"] == "legacy-user"
+    assert client.get("/api/account/me").json()["logged_in"] is True
+
+
+@pytest.mark.parametrize("password, code", [
+    ("1", "password_too_short"),
+    ("passwordpassword", "password_too_common"),
+])
+def test_registration_http_returns_clear_password_policy_error(client, store, password, code):
+    response = _register(client, "new-user", password)
+    assert response.status_code == 400
+    assert response.json()["detail"]["code"] == code
+    assert response.json()["detail"]["message"]
+    assert accounts_api.ACCOUNT_COOKIE_NAME not in response.cookies
+    assert store.account_count() == 0
 
 
 # ---------------- registration ----------------
 
 
 def test_register_signs_in_and_sets_an_httponly_cookie(client: TestClient) -> None:
-    response = _register(client, "alice", "pw")
+    response = _register(client, "alice", "fixture-password-for-tests")
     assert response.status_code == 201
     assert response.json()["username"] == "alice"
     cookie = response.headers["set-cookie"]
@@ -110,12 +168,12 @@ def test_register_signs_in_and_sets_an_httponly_cookie(client: TestClient) -> No
 
 
 def test_usernames_are_unique_case_and_width_insensitively(client: TestClient) -> None:
-    assert _register(client, "Alice", "pw").status_code == 201
-    clash = _register(client, "alice", "other")
+    assert _register(client, "Alice", "fixture-password-for-tests").status_code == 201
+    clash = _register(client, "alice", "another-fixture-password")
     assert clash.status_code == 409
     assert clash.json()["detail"]["code"] == "username_taken"
     # Full-width characters normalise to the same key.
-    assert _register(client, "ａlice", "other").status_code == 409
+    assert _register(client, "ａlice", "another-fixture-password").status_code == 409
 
 
 @pytest.mark.parametrize("username", ["admin", "Admin", "ADMIN", "owner", "root"])
@@ -123,24 +181,24 @@ def test_reserved_usernames_cannot_be_registered(
     client: TestClient,
     username: str,
 ) -> None:
-    response = _register(client, username, "pw")
+    response = _register(client, username, "fixture-password-for-tests")
     assert response.status_code == 400
     assert response.json()["detail"]["code"] == "username_reserved"
 
 
 def test_registration_is_rate_limited_per_client(client: TestClient) -> None:
     for index in range(5):
-        assert _register(client, f"user{index}", "pw").status_code == 201
-    blocked = _register(client, "user5", "pw")
+        assert _register(client, f"user{index}", "fixture-password-for-tests").status_code == 201
+    blocked = _register(client, "user5", "fixture-password-for-tests")
     assert blocked.status_code == 429
     assert blocked.json()["detail"]["code"] == "registration_rate_limited"
 
 
 def test_account_cap_closes_registration(tmp_path) -> None:
     small = AccountStore(tmp_path / "accounts.db", max_accounts=1)
-    small.register("first", "pw")
+    small.register("first", "fixture-password-for-tests")
     with pytest.raises(AccountError) as excinfo:
-        small.register("second", "pw")
+        small.register("second", "fixture-password-for-tests")
     assert excinfo.value.code == "registration_closed"
 
 
@@ -151,10 +209,10 @@ def test_customer_signs_in_through_the_shared_login_endpoint(
     client: TestClient,
     store: AccountStore,
 ) -> None:
-    store.register("bob", "pw")
+    store.register("bob", "fixture-password-for-tests")
     response = client.post(
         "/api/access/login",
-        json={"username": "bob", "password": "pw"},
+        json={"username": "bob", "password": "fixture-password-for-tests"},
         headers={**HEADERS, "Content-Type": "application/json"},
     )
     assert response.status_code == 200
@@ -170,10 +228,10 @@ def test_customer_session_never_grants_owner_access(
     client: TestClient,
     store: AccountStore,
 ) -> None:
-    store.register("carol", "pw")
+    store.register("carol", "fixture-password-for-tests")
     client.post(
         "/api/access/login",
-        json={"username": "carol", "password": "pw"},
+        json={"username": "carol", "password": "fixture-password-for-tests"},
         headers={**HEADERS, "Content-Type": "application/json"},
     )
     from app.access import OWNER_COOKIE_NAME
@@ -189,7 +247,7 @@ def test_wrong_password_and_unknown_user_are_indistinguishable(
     client: TestClient,
     store: AccountStore,
 ) -> None:
-    store.register("dave", "pw")
+    store.register("dave", "fixture-password-for-tests")
     wrong = client.post(
         "/api/access/login",
         json={"username": "dave", "password": "nope"},
@@ -208,7 +266,7 @@ def test_repeated_failures_trigger_a_cooldown(
     client: TestClient,
     store: AccountStore,
 ) -> None:
-    store.register("erin", "pw")
+    store.register("erin", "fixture-password-for-tests")
     for _ in range(10):
         client.post(
             "/api/access/login",
@@ -217,18 +275,46 @@ def test_repeated_failures_trigger_a_cooldown(
         )
     blocked = client.post(
         "/api/access/login",
-        json={"username": "erin", "password": "pw"},
+        json={"username": "erin", "password": "fixture-password-for-tests"},
         headers={**HEADERS, "Content-Type": "application/json"},
     )
     assert blocked.status_code == 429
     assert blocked.json()["detail"]["code"] == "login_cooldown"
 
 
+def test_own_account_login_cannot_reset_guesses_against_another_account(
+    client: TestClient,
+    store: AccountStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store.register("target", "correct-password")
+    store.register("self", "known-password-for-self")
+    clock = [1000.0]
+    monkeypatch.setattr(accounts_api.time, "time", lambda: clock[0])
+
+    def login(username: str, password: str):
+        return client.post(
+            "/api/access/login",
+            json={"username": username, "password": password},
+            headers=HEADERS,
+        )
+
+    for _ in range(9):
+        assert login("target", "wrong").status_code == 401
+    assert login("self", "known-password-for-self").status_code == 200
+    assert login("target", "wrong").status_code == 401
+    assert login("target", "correct-password").status_code == 429
+
+    # The failed attempts still expire; users are not permanently locked out.
+    clock[0] += accounts_api._LOGIN_FAILURE_WINDOW_SECONDS + 1
+    assert login("target", "correct-password").status_code == 200
+
+
 def test_logout_revokes_the_session(client: TestClient, store: AccountStore) -> None:
-    store.register("frank", "pw")
+    store.register("frank", "fixture-password-for-tests")
     client.post(
         "/api/access/login",
-        json={"username": "frank", "password": "pw"},
+        json={"username": "frank", "password": "fixture-password-for-tests"},
         headers={**HEADERS, "Content-Type": "application/json"},
     )
     assert client.get("/api/account/me").json()["logged_in"] is True
@@ -237,7 +323,7 @@ def test_logout_revokes_the_session(client: TestClient, store: AccountStore) -> 
 
 
 def test_revoked_token_stops_resolving(store: AccountStore) -> None:
-    session = store.register("grace", "pw")
+    session = store.register("grace", "fixture-password-for-tests")
     assert store.resolve_session(session.token) is not None
     store.revoke_session(session.token)
     assert store.resolve_session(session.token) is None
@@ -246,7 +332,7 @@ def test_revoked_token_stops_resolving(store: AccountStore) -> None:
 def test_expired_session_is_rejected(tmp_path) -> None:
     now = [1_000.0]
     aging = AccountStore(tmp_path / "accounts.db", clock=lambda: now[0])
-    session = aging.register("heidi", "pw")
+    session = aging.register("heidi", "fixture-password-for-tests")
     assert aging.resolve_session(session.token) is not None
     now[0] += 31 * 24 * 60 * 60
     assert aging.resolve_session(session.token) is None
@@ -260,7 +346,7 @@ def test_watchlist_requires_a_session(client: TestClient) -> None:
 
 
 def test_watchlist_round_trips_and_keeps_order(client: TestClient) -> None:
-    _register(client, "ivan", "pw")
+    _register(client, "ivan", "fixture-password-for-tests")
     add = client.post(
         "/api/account/watchlist",
         json={"ticker": "nvda"},
@@ -282,7 +368,7 @@ def test_watchlist_round_trips_and_keeps_order(client: TestClient) -> None:
 
 
 def test_watchlist_rejects_malformed_tickers(client: TestClient) -> None:
-    _register(client, "judy", "pw")
+    _register(client, "judy", "fixture-password-for-tests")
     response = client.post(
         "/api/account/watchlist",
         json={"ticker": "not a ticker"},
@@ -293,7 +379,7 @@ def test_watchlist_rejects_malformed_tickers(client: TestClient) -> None:
 
 
 def test_watchlist_is_capped(store: AccountStore) -> None:
-    session = store.register("ken", "pw")
+    session = store.register("ken", "fixture-password-for-tests")
     for index in range(WATCHLIST_MAX_TICKERS):
         store.add_ticker(session.account.user_id, f"T{index:04d}")
     with pytest.raises(AccountError) as excinfo:
@@ -302,8 +388,8 @@ def test_watchlist_is_capped(store: AccountStore) -> None:
 
 
 def test_watchlists_are_isolated_between_accounts(store: AccountStore) -> None:
-    first = store.register("leo", "pw")
-    second = store.register("mia", "pw")
+    first = store.register("leo", "fixture-password-for-tests")
+    second = store.register("mia", "fixture-password-for-tests")
     store.add_ticker(first.account.user_id, "NVDA")
     store.add_ticker(second.account.user_id, "TSLA")
     assert store.watchlist(first.account.user_id) == ["NVDA"]
@@ -314,7 +400,7 @@ def test_watchlists_are_isolated_between_accounts(store: AccountStore) -> None:
 
 
 def test_replace_watchlist_deduplicates_and_normalises(store: AccountStore) -> None:
-    session = store.register("nina", "pw")
+    session = store.register("nina", "fixture-password-for-tests")
     result = store.replace_watchlist(
         session.account.user_id,
         ["msft", "MSFT", " aapl ", "^GSPC"],
@@ -405,7 +491,7 @@ def test_owner_and_customer_watchlists_stay_separate(
 
     # A customer cookie on the same client wins over the owner session, so the
     # list a signed-in customer edits is always the one they can see.
-    assert _register(owner_client, "dana", "pw-for-dana").status_code == 201
+    assert _register(owner_client, "dana", "fixture-password-for-dana").status_code == 201
     customer = owner_client.get("/api/account/watchlist")
     assert customer.status_code == 200
     assert customer.json()["tickers"] == []
@@ -497,7 +583,7 @@ def test_rate_limit_key_follows_the_trusted_proxy_chain(
     def register_as(address: str, name: str):
         return proxied.post(
             "/api/account/register",
-            json={"username": name, "password": "pw"},
+            json={"username": name, "password": "fixture-password-for-tests"},
             headers={**HEADERS, "Content-Type": "application/json", "X-Forwarded-For": address},
         )
 

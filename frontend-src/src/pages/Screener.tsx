@@ -17,8 +17,8 @@ import { ApiError, isMock } from '@/api/client';
 import type { ScreenerRow, SectorOption, StrengthProfile } from '@/api/types';
 import { usePolling } from '@/hooks/usePolling';
 import { useAccess } from '@/hooks/useAccess';
-import { useToast } from '@/components/Toast';
-import { useShell } from '@/components/Layout';
+import { useToast } from '@/hooks/useToast';
+import { useShell } from '@/hooks/useShell';
 import { cn } from '@/lib/utils';
 import { fmtCompact, fmtLocaleDateTime, fmtTimeHHMMSS } from '@/lib/format';
 import {
@@ -30,6 +30,7 @@ import {
 import Icon from '@/components/icons';
 import PageHeader from '@/components/shared/PageHeader';
 import Segmented from '@/components/shared/Segmented';
+import FilterButton from '@/components/shared/FilterButton';
 import EmptyState from '@/components/shared/EmptyState';
 import { SkeletonCard, SkeletonRows } from '@/components/shared/Skeleton';
 import FilterWorkbench from '@/components/screener/FilterWorkbench';
@@ -645,9 +646,8 @@ export default function Screener() {
             )}
             <div className="ml-auto flex flex-wrap items-center gap-2">
               {/* 可选列开关。关掉时同时清掉宏观筛选：否则行会按一个看不见的条件被筛掉。 */}
-              <button
-                type="button"
-                aria-pressed={showMacro}
+              <FilterButton
+                active={showMacro}
                 onClick={() => {
                   setShowMacro((on) => {
                     if (on) setMacroToneFilter('all');
@@ -656,16 +656,10 @@ export default function Screener() {
                   setPage(1);
                 }}
                 title={__t('{title}：{body}{note}', { title: __t(MACRO_SHADOW_HINT.title), body: __t(MACRO_SHADOW_HINT.body), note: __t(MACRO_SHADOW_HINT.note) })}
-                className={cn(
-                  'flex h-8 items-center gap-1.5 rounded-pill border px-3 text-caption shadow-btn transition-colors duration-fast',
-                  showMacro
-                    ? 'border-brand-600 bg-brand-100 font-medium text-brand-700'
-                    : 'border-line bg-card text-ink-500 hover:border-line-strong hover:text-ink-800',
-                )}
               >
                 <Icon name="layers" size={13} />
                 {__t('宏观适配')}
-              </button>
+              </FilterButton>
               {showMacro && (
                 <Segmented<MacroTone | 'all'>
                   options={[
@@ -722,7 +716,7 @@ export default function Screener() {
                             <button
                               key={p.id}
                               onClick={() => onPresetQuick(p.id)}
-                              className="flex h-8 items-center gap-1.5 rounded-pill border border-line bg-card px-3 text-caption text-ink-500 shadow-btn transition-colors duration-fast hover:border-brand-400/60 hover:text-brand-600"
+                              className="control-button"
                             >
                               <Icon name="spark-ai" size={13} className="text-ink-300" />
                               {p.name}
@@ -1010,7 +1004,7 @@ function SuggestButton({ label, onClick }: { label: string; onClick: () => void 
   return (
     <button
       onClick={onClick}
-      className="flex h-8 items-center rounded-pill border border-line bg-card px-3 text-caption text-ink-500 shadow-btn transition-colors duration-fast hover:border-brand-400/60 hover:text-brand-600"
+      className="control-button"
     >
       {label}
     </button>

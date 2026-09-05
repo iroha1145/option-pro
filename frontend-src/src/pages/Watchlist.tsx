@@ -4,7 +4,7 @@
  * 轮询 60s · 空态 / 骨架 / 503 · 响应式
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { motion } from 'framer-motion';
 import { stocksApi } from '@/api/modules/stocks';
 import { accountApi } from '@/api/modules/account';
@@ -19,8 +19,8 @@ import { sortWatchlistItems } from './watchlistSort';
 import { useTickFlash } from '@/hooks/useTickFlash';
 import { useAccess } from '@/hooks/useAccess';
 import { useNow } from '@/hooks/useNow';
-import { useToast } from '@/components/Toast';
-import { useShell } from '@/components/Layout';
+import { useToast } from '@/hooks/useToast';
+import { useShell } from '@/hooks/useShell';
 import { cn } from '@/lib/utils';
 import { fmtCountdown, fmtNyTime, fmtPrice, fmtTimeHHMMSS } from '@/lib/format';
 import type { MarketSignalsSnapshot, WatchlistItem } from '@/api/types';
@@ -535,7 +535,11 @@ export default function Watchlist() {
           <span className="flex items-center gap-3">
             <TickerLogo ticker={r.ticker} />
             <span>
-              <span className="block font-mono text-body-s font-semibold text-ink-800">{r.ticker}</span>
+              <Link
+                to={`/stock/${encodeURIComponent(r.ticker)}`}
+                aria-label={t('打开 {ticker} 详情', { ticker: r.ticker })}
+                className="block w-fit rounded-sm font-mono text-body-s font-semibold text-ink-800 hover:text-brand-700 hover:underline"
+              >{r.ticker}</Link>
               <span className="block max-w-[140px] truncate text-micro text-ink-400">{r.name} · {r.sector}</span>
             </span>
           </span>

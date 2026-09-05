@@ -819,7 +819,8 @@ export function getUnusualOptions(): UnusualOption[] {
       volume: Math.round(r.float(2, 48) * 1000),
       openInterest: Math.round(r.float(4, 90) * 1000),
       premium: round2(r.float(12, 480)),
-      sentiment: side === 'call' ? ('positive' as const) : ('negative' as const),
+      // 合约类型不代表成交主动方；演示和真实接口使用相同的未知方向口径。
+      sentiment: 'neutral' as const,
       at: new Date(Date.now() - r.int(5, 240) * 60_000).toISOString(),
     };
   }).sort((a, b) => (a.at < b.at ? 1 : -1));
@@ -847,12 +848,13 @@ export function getOptionChain(ticker: string, expiration?: string): OptionChain
       strike,
       callOi: Math.round(r.float(1, 60) * 1000),
       callVol: Math.round(r.float(0.2, 22) * 1000),
-      callIv: round2(baseIv * 100 + r.float(-3, 3)),
+      // 与真实链统一为小数单位：0.32 = 32%。
+      callIv: round4(baseIv + r.float(-0.03, 0.03)),
       callBid: round2(Math.max(0.05, spot - strike) + r.float(0.2, 4)),
       callAsk: 0,
       putOi: Math.round(r.float(1, 60) * 1000),
       putVol: Math.round(r.float(0.2, 22) * 1000),
-      putIv: round2(baseIv * 100 + r.float(-3, 3)),
+      putIv: round4(baseIv + r.float(-0.03, 0.03)),
       putBid: round2(Math.max(0.05, strike - spot) + r.float(0.2, 4)),
       putAsk: 0,
     };
