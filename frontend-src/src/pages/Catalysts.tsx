@@ -3,7 +3,7 @@
  * 状态 hero · 热点带 · 市场焦点周期 · 标签页（feed/stocks/calendar/sources，URL 同步）
  * 过滤器条（URL query）· 新闻详情抽屉（AI 分析任务状态机）· 空态/骨架/503/移动端
  */
-import { useCallback, useMemo, useState } from 'react';
+import { startTransition, useCallback, useMemo, useOptimistic, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import PageHeader from '@/components/shared/PageHeader';
 import Segmented from '@/components/shared/Segmented';
@@ -82,6 +82,9 @@ export default function Catalysts() {
     return TABS.some((x) => x.id === t) ? (t as TabId) : 'feed';
   }, [searchParams]);
   const filters = useMemo(() => parseFilters(searchParams), [searchParams]);
+  // 输入须立即回显；地址导航可能延后提交，不能用旧参数覆盖正在键入的字符。
+  // 列表仍读取已提交的地址参数，输入反馈随同一次导航自动收敛。
+  const [inputFilters, setInputFilters] = useOptimistic(filters);
 
   const syncUrl = useCallback(
     (f: CatalystFilters, t: TabId) => {
@@ -100,9 +103,14 @@ export default function Catalysts() {
     [setSearchParams],
   );
 
-  const setTab = useCallback((t: TabId) => syncUrl(filters, t), [filters, syncUrl]);
-  const setFilters = useCallback((f: CatalystFilters) => syncUrl(f, tab), [tab, syncUrl]);
-  const clearFilters = useCallback(() => syncUrl({ ...DEFAULT_FILTERS }, tab), [tab, syncUrl]);
+  const setTab = useCallback((t: TabId) => syncUrl(inputFilters, t), [inputFilters, syncUrl]);
+  const setFilters = useCallback((f: CatalystFilters) => {
+    startTransition(() => {
+      setInputFilters(f);
+      syncUrl(f, tab);
+    });
+  }, [setInputFilters, syncUrl, tab]);
+  const clearFilters = useCallback(() => setFilters({ ...DEFAULT_FILTERS }), [setFilters]);
 
   /* 页头刷新 */
   const [refreshToken, setRefreshToken] = useState(0);
@@ -191,7 +199,7 @@ export default function Catalysts() {
 
       {/* 过滤器条（feed / stocks 共享，写入 URL query） */}
       {(tab === 'feed' || tab === 'stocks') && (
-        <FilterBar filters={filters} onChange={setFilters} total={tab === 'feed' ? total : null} filtered={JSON.stringify(filters) !== JSON.stringify(DEFAULT_FILTERS)} />
+        <FilterBar filters={inputFilters} onChange={setFilters} total={tab === 'feed' ? total : null} filtered={JSON.stringify(inputFilters) !== JSON.stringify(DEFAULT_FILTERS)} />
       )}
 
       {/* 面板 */}

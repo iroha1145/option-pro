@@ -96,12 +96,27 @@ for (const width of [390, 1440]) {
 
       if (width < 768) await page.getByRole('button', { name: '筛选', exact: true }).click();
       const tickerFilter = page.getByPlaceholder('代码过滤');
-      await tickerFilter.focus();
-      // 按真实输入节奏逐字输入，筛选条件写入地址时不能抢走键盘焦点。
-      await page.keyboard.type('NVDA', { delay: 60 });
-      await expect(tickerFilter).toHaveValue('NVDA');
-      await expect(tickerFilter).toBeFocused();
-      await expect(page).toHaveURL(/ticker=NVDA/);
+      const slowDevice = await page.context().newCDPSession(page);
+      try {
+        // 模拟较慢的设备：地址更新不能造成丢字，也不能抢走输入焦点。
+        await slowDevice.send('Emulation.setCPUThrottlingRate', { rate: 8 });
+        await tickerFilter.focus();
+        await page.keyboard.type('NVDA', { delay: 60 });
+        await expect(tickerFilter).toHaveValue('NVDA');
+        await expect(tickerFilter).toBeFocused();
+        await expect(page).toHaveURL(/ticker=NVDA/);
+        await page.getByRole('button', { name: '清除代码过滤', exact: true }).click();
+        await expect(tickerFilter).toHaveValue('');
+        await expect(page).not.toHaveURL(/ticker=/);
+        await tickerFilter.focus();
+        await page.keyboard.type('nvda');
+        await expect(tickerFilter).toHaveValue('NVDA');
+        await expect(tickerFilter).toBeFocused();
+        await expect(page).toHaveURL(/ticker=NVDA/);
+      } finally {
+        await slowDevice.send('Emulation.setCPUThrottlingRate', { rate: 1 });
+        await slowDevice.detach();
+      }
       const views = page.getByRole('tablist', { name: '催化剂视图', exact: true });
       await views.getByRole('tab', { name: '新闻流', exact: true }).focus();
       await page.keyboard.press('ArrowRight');
