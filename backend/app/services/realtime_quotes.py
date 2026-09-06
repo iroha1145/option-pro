@@ -39,6 +39,7 @@ MAX_CLIENT_SYMBOLS = 200
 MAX_CLIENTS = 256
 MAX_CACHED_QUOTES = 2048
 MAX_RADAR_EVENTS = 512
+RADAR_MAX_RETRY_SECONDS = 30.0
 _SYMBOL = re.compile(r"^[A-Z][A-Z0-9.-]{0,14}$")
 _US_CLASS_ALIAS = re.compile(r"^([A-Z]{1,10})-([A-Z])$")
 # Finnhub's official websocket documentation links this condition table:
@@ -168,6 +169,8 @@ class QuoteHub:
         self._radar_event_sequences: dict[str, int] = {}
         self._radar_sequence = 0
         self._radar_events_loaded = False
+        self._radar_failures = 0
+        self._radar_events_failures = 0
         self._desired_symbols: list[str] = []
         self._signal_symbols: dict[str, list[str]] = {}
         self._sent_symbols: set[str] = set()
@@ -422,6 +425,16 @@ class QuoteHub:
             self._trim_cache()
             await asyncio.sleep(1)
 
+    @staticmethod
+    def _retry_delay(failures: int) -> float:
+        """Poll every second while healthy; back off while a read keeps failing.
+
+        A missing or unreadable radar database stays broken for as long as it
+        takes an operator to notice. Retrying it every second would also repeat
+        every failure side effect every second.
+        """
+        return 1.0 if failures <= 0 else min(RADAR_MAX_RETRY_SECONDS, 2.0 ** min(failures, 8))
+
     async def _radar_loop(self) -> None:
         while self._running:
             self._radar_refresh.clear()
@@ -429,7 +442,8 @@ class QuoteHub:
             try:
                 # Inventory reads are local and cheap. A newly committed
                 # five-minute scan should enter monitoring within one second.
-                await asyncio.wait_for(self._radar_refresh.wait(), timeout=1)
+                await asyncio.wait_for(self._radar_refresh.wait(),
+                                       timeout=self._retry_delay(self._radar_failures))
             except TimeoutError:
                 pass
 
@@ -440,7 +454,8 @@ class QuoteHub:
             # complete-bar worker commit must reach an idle browser as well.
             await self._poll_radar_events()
             try:
-                await asyncio.wait_for(self._radar_events_refresh.wait(), timeout=1)
+                await asyncio.wait_for(self._radar_events_refresh.wait(),
+                                       timeout=self._retry_delay(self._radar_events_failures))
             except TimeoutError:
                 pass
 
@@ -455,10 +470,13 @@ class QuoteHub:
                 except ValueError:
                     continue
             self._radar_symbols = list(dict.fromkeys(symbols))
+            self._radar_failures = 0
             self._allocate()
         except Exception:
+            if self._last_error != "radar_refresh_failed":
+                self._status_dirty = True
+            self._radar_failures += 1
             self._last_error = "radar_refresh_failed"
-            self._status_dirty = True
 
     async def _poll_radar_events(self) -> None:
         started_sequence = self._radar_sequence
@@ -468,6 +486,7 @@ class QuoteHub:
                 raise ValueError("Invalid radar update inventory")
             self._publish_radar_updates(rows[:MAX_RADAR_EVENTS])
             self._radar_events_loaded = True
+            self._radar_events_failures = 0
             if self._last_error == "radar_events_refresh_failed":
                 self._last_error = None
                 self._signals_resync_required = False
@@ -479,12 +498,20 @@ class QuoteHub:
                 if event_id not in current_ids and self._radar_event_sequences[event_id] <= started_sequence:
                     self._forget_radar_event(event_id)
         except Exception:
+            # Re-arming every open stream on every repeated failure makes each
+            # browser refetch the durable radar state again, so an outage that
+            # lasts turns into a refetch storm. Announce the transition once;
+            # a stream opened during the outage still resyncs when it starts.
+            first_failure = self._radar_events_failures == 0
+            self._radar_events_failures += 1
             self._radar_events_loaded = False
+            if first_failure or self._last_error != "radar_events_refresh_failed":
+                self._status_dirty = True
             self._last_error = "radar_events_refresh_failed"
             self._signals_resync_required = True
-            self._status_dirty = True
-            for client in self._clients.values():
-                client.resync_required = True
+            if first_failure:
+                for client in self._clients.values():
+                    client.resync_required = True
 
     def _forget_radar_event(self, event_id: str) -> None:
         self._radar_events.pop(event_id, None)
@@ -734,14 +761,23 @@ class QuoteHub:
                     if updates:
                         changes.extend(updates if isinstance(updates, list) else [updates])
             except Exception:
+                # Announce the transition into degraded signals, not one resync
+                # per failing trade: a radar store that stays unreadable during
+                # the session would otherwise make every browser refetch the
+                # durable state, and re-read that store, on every tick. Recovery
+                # republishes what the stream missed, and a stream opened while
+                # signals are degraded still resyncs when it starts.
+                announce = not self._signals_resync_required
+                if announce or self._last_error != "radar_trade_failed":
+                    self._status_dirty = True
                 self._last_error = "radar_trade_failed"
-                self._status_dirty = True
                 self._signals_resync_required = True
-                self._radar_refresh.set()
-                self._radar_events_refresh.set()
-                for client in self._clients.values():
-                    if symbol in client.provider_symbols:
-                        client.resync_required = True
+                if announce:
+                    self._radar_refresh.set()
+                    self._radar_events_refresh.set()
+                    for client in self._clients.values():
+                        if symbol in client.provider_symbols:
+                            client.resync_required = True
                 return
             self._signals_resync_required = False
             if changes:
