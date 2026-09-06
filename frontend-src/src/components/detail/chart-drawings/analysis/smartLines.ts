@@ -1,4 +1,4 @@
-import { normalizePatternSegments } from '../linePresentation.ts';
+import { selectStructuralOverlays } from './structuralOverlays.ts';
 
 /**
  * Bounded, deterministic chart annotations. NOT a trading signal or a probability.
@@ -52,13 +52,10 @@ interface Rail {
   status: string;
   tolerance: number;
 }
-interface RailGeometry { start: number; end: number; slope: number; intercept: number }
-export const SMART_LINES_VERSION = 'optix-smart-lines-v2';
+export const SMART_LINES_VERSION = 'optix-smart-lines-v3';
 export const SMART_MAX_BARS = 360;
 // Preserve all bounded candidates until the user's layer/quality/status gates.
 export const SMART_MAX_PROPOSALS = 1024;
-const PATTERNS = new Set(['support_trend', 'resistance_trend', 'channel', 'triangle', 'wedge']);
-const PAIRED = new Set(['channel', 'triangle', 'wedge']);
 const BROKEN = new Set(['invalidated', 'broken_up', 'broken_down', 'failed', 'expired']);
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
 const finite = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n);
@@ -341,77 +338,7 @@ export function detectSmartLines(input: readonly SmartBar[]): SmartOverlay[] {
   return proposals.slice(0, SMART_MAX_PROPOSALS);
 }
 
-function railsOf(overlay: SmartOverlay, byKey: Map<string, number>): RailGeometry[] {
-  const g = overlay.geometry;
-  if (overlay.kind === 'level' && finite(g.price) && g.price > 0) {
-    const xs = [...byKey.values()];
-    return [{ start: Math.min(...xs), end: Math.max(...xs), slope: 0, intercept: g.price }];
-  }
-  const pairs = Array.isArray(g.supportRail) && Array.isArray(g.resistanceRail)
-    ? [g.supportRail, g.resistanceRail]
-    : [Array.isArray(g.fitAnchors) ? g.fitAnchors : g.anchors];
-  const segments: Array<{ a: { x: number; y: number }; b: { x: number; y: number } }> = [];
-  for (const raw of pairs) {
-    if (!Array.isArray(raw)) return [];
-    const groups = raw.length >= 4 ? [raw.slice(0, 2), raw.slice(2, 4)] : [raw];
-    for (const pair of groups) {
-      const a = pair[0], b = pair[1];
-      if (!a || !b || !finite(a.price) || !finite(b.price) || a.price <= 0 || b.price <= 0) return [];
-      const ax = byKey.get(a.barKey), bx = byKey.get(b.barKey);
-      if (ax === undefined || bx === undefined) return [];
-      segments.push({ a: { x: ax, y: a.price }, b: { x: bx, y: b.price } });
-    }
-  }
-  return normalizePatternSegments(segments, overlay.kind).map(({ a, b }) => {
-    const slope = (b.y - a.y) / (b.x - a.x);
-    return { start: a.x, end: b.x, slope, intercept: a.y - slope * a.x };
-  });
-}
-
-/** Must run AFTER the layer/quality/status gates, BEFORE the pattern count cap. */
+/** Layer/quality/status filtering must precede semantic deduplication and caps. */
 export function selectSmartOverlays(overlays: readonly SmartOverlay[], bars: readonly SmartBar[], maxPatterns: number): SmartOverlay[] {
-  if (!bars.length) return [...overlays];
-  const cap = finite(maxPatterns) ? clamp(Math.floor(maxPatterns), 0, 64) : 0;
-  const byKey = new Map(bars.map((b, i) => [b.key, chartX(bars, i)]));
-  const positions = new Map(bars.map((b, i) => [b.key, i]));
-  const lastPosition = bars.length - 1, lastIndex = chartX(bars, lastPosition), close = bars[lastPosition].c;
-  const tolerance = smartTolerance(bars);
-  const other: SmartOverlay[] = [];
-  const ranked = overlays.flatMap((o) => {
-    if (!PATTERNS.has(o.kind) && o.kind !== 'level') { other.push(o); return []; }
-    if (!finite(o.shapeQuality) || o.shapeQuality < 0 || o.shapeQuality > 1 || !finite(o.displayPriority)) return [];
-    const rails = railsOf(o, byKey);
-    if (!rails.length) return [];
-    const distance = Math.min(...rails.map(r => Math.abs(at(r, lastIndex) - close)));
-    const end = positions.get(o.formationEnd) ?? lastPosition;
-    const touchIndices = (Array.isArray(o.geometry.touchAnchors) ? o.geometry.touchAnchors : [])
-      .map(a => a && typeof a === 'object' ? positions.get(a.barKey) : undefined)
-      .filter((x): x is number => x !== undefined);
-    const lastTouch = touchIndices.length ? Math.max(...touchIndices) : end;
-    const touchCount = finite(o.evidence.touches) ? o.evidence.touches : 0;
-    const score = 35 * clamp(o.shapeQuality, 0, 1)
-      + 20 * Math.exp(-Math.max(0, lastPosition - lastTouch) / 48)
-      + 25 / (1 + distance / Math.max(tolerance * 4, close * 0.01))
-      + 10 * Math.min(1, touchCount / 6)
-      + (PAIRED.has(o.kind) ? 12 : 0) - (BROKEN.has(o.status) ? 35 : 0);
-    return [{ overlay: o, rails, score }];
-  }).sort((a, b) => b.score - a.score || a.overlay.id.localeCompare(b.overlay.id, 'en'));
-  const kept: typeof ranked = [];
-  let patterns = 0, levels = 0;
-  const matches = (a: RailGeometry, b: RailGeometry) => {
-    const start = Math.max(a.start, b.start), end = Math.min(a.end, b.end);
-    const overlap = end - start;
-    if (overlap < 8) return false;
-    return Math.abs(at(a, end) - at(b, end)) <= tolerance * 1.5
-      && Math.abs(at(a, start) - at(b, start)) <= tolerance * 2;
-  };
-  for (const item of ranked) {
-    const level = item.overlay.kind === 'level';
-    if (level ? levels >= 4 : patterns >= cap) continue;
-    // A selected channel already represents its two rails. Do not draw each again.
-    if (kept.some(old => item.rails.every(r => old.rails.some(s => matches(r, s))))) continue;
-    kept.push(item);
-    if (level) levels++; else patterns++;
-  }
-  return [...kept.map(({ overlay, score }) => ({ ...overlay, displayPriority: score })), ...other];
+  return selectStructuralOverlays(overlays, bars, maxPatterns);
 }

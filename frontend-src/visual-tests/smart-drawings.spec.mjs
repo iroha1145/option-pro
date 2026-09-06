@@ -15,6 +15,8 @@ test.beforeAll(async () => {
     stdin: { contents: `
       export { buildOption, autoPatternName } from './components/detail/KlineChart.tsx';
       export { overlaysToMarks } from './components/detail/chart-drawings/analysis/overlaysToMarks.ts';
+      export { clippedLineSeries } from './components/detail/chart-drawings/clippedLines.ts';
+      export { detectPriceGaps } from './components/detail/chart-drawings/analysis/priceGaps.ts';
       export { closedBarsForFingerprint, filterOverlays, labelBudget } from './components/detail/chart-drawings/analysis/mapBundle.ts';
       export { detectSmartLines, selectSmartOverlays, withChartIndices } from './components/detail/chart-drawings/analysis/smartLines.ts';
       export { railCandidatesFromOverlays, candidatesAtBar } from './components/detail/chart-drawings/railSnap.ts';
@@ -73,10 +75,10 @@ async function harness(page, locale = 'zh') {
       chart.setOption(option, { notMerge: true }); chart.getZr().flush();
       const display = chart.getZr().storage.getDisplayList(true);
       return {
-        lines: display.filter(item => ['line', 'ec-line'].includes(item.type) && ['#087EA4', '#B423B9'].includes(item.style?.stroke))
+        lines: display.filter(item => ['line', 'ec-line'].includes(item.type) && ['#0E647F', '#8D299B'].includes(item.style?.stroke) && item.style?.lineWidth >= 1)
           .map(item => ({ color: item.style.stroke, width: item.style.lineWidth, dash: item.style.lineDash, opacity: item.style.opacity, shape: { ...item.shape } })),
         labels: display.filter(item => item.type === 'tspan' && item.style?.text?.includes('Review')).map(item => item.style.text),
-        polygons: display.filter(item => item.type === 'polygon' && item.style?.opacity === 0.035).length,
+        polygons: display.filter(item => item.type === 'polygon' && item.style?.opacity === 0.04).length,
         zoom: chart.getOption().dataZoom[0],
       };
     };
@@ -107,19 +109,19 @@ for (const width of [1440, 390]) {
         levelSnaps: R.snapCandidatesFromOverlays([level]), paired, projectedMidpoint, zoomed, entirelyInside };
     });
     expect(result.active.lines).toHaveLength(2);
-    expect(result.active.lines[0].width).toBe(2.5);
+    expect(result.active.lines[0].width).toBe(2.4);
     expect(result.active.lines[1].dash).toEqual([7, 4]);
     expect(result.active.labels).toHaveLength(1);
     expect(result.broken.lines).toHaveLength(1);
-    expect(result.broken.lines[0]).toMatchObject({ opacity: 0.38, dash: [2, 4] });
+    expect(result.broken.lines[0]).toMatchObject({ opacity: 0.3, dash: [2, 4] });
     expect(result.historicalLevel.lines).toHaveLength(1);
-    expect(result.historicalLevel.lines[0]).toMatchObject({ opacity: 0.38, dash: [2, 4] });
+    expect(result.historicalLevel.lines[0]).toMatchObject({ opacity: 0.3, dash: [2, 4] });
     expect(result.levelCoordinates).toEqual([[8, 100], [40, 100]]);
     expect(result.levelSnaps).toEqual([]);
     expect(result.paired.lines).toHaveLength(4);
     expect(result.paired.polygons).toBe(1);
-    expect(new Set(result.paired.lines.map(line => line.color))).toEqual(new Set(['#087EA4', '#B423B9']));
-    const extension = result.paired.lines.find(line => line.color === '#087EA4' && line.dash?.[0] === 7);
+    expect(new Set(result.paired.lines.map(line => line.color))).toEqual(new Set(['#0E647F', '#8D299B']));
+    const extension = result.paired.lines.find(line => line.color === '#0E647F' && line.dash?.[0] === 7);
     expect(extension.shape.x2).toBeCloseTo(result.projectedMidpoint, 6);
     expect(result.zoomed.zoom).toMatchObject({ startValue: 20, endValue: 55 });
     expect(result.zoomed.lines.length).toBeGreaterThanOrEqual(2);
@@ -186,9 +188,9 @@ for (const width of [1440, 390]) {
 }
 
 for (const [locale, support, resistance, description] of [
-  ['zh', '支撑', '阻力', '实线为水平价位；淡色点线为已失效价位'],
-  ['en', 'Support', 'Resistance', 'Solid: horizontal level; faint dotted: broken level'],
-  ['ja', 'サポート', 'レジスタンス', '実線：水平水準、薄い点線：無効化された水準'],
+  ['zh', '支撑', '阻力', '深色为主要边界，细线为参考；虚线为延伸，淡色点线为历史结构'],
+  ['en', 'Support', 'Resistance', 'Dark: primary; thin: secondary; dashed: extension; faint dotted: historical'],
+  ['ja', 'サポート', 'レジスタンス', '濃色：主要境界、細線：参考、破線：延長、薄い点線：過去の構造'],
 ]) test(`level-only legend is visible and translated in ${locale}`, async ({ page }) => {
   const errors = await harness(page, locale);
   await page.evaluate(() => DrawingsReview.renderLegend([{ kind: 'level' }], false));
@@ -239,4 +241,121 @@ test('a nearby price beyond the real plot edge cannot attract snapping', async (
   expect(result.inside.snapped).toBe(true);
   expect(result.inside.price).toBe(result.visiblePrice);
   expect(errors).toEqual([]);
+});
+
+for (const width of [390, 1440]) {
+  test(`crowded labels avoid manual text and moving quotes through zoom and resize at ${width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 850 });
+    const errors = await harness(page);
+    const initial = await page.evaluate(() => {
+      const R = DrawingsReview;
+      const auto = Array.from({ length: 7 }, (_, i) => [
+        { coord: [20, 110 + i * 0.24], clipToPlot: true,
+          lineStyle: { color: '#0E647F', width: 2.4, opacity: 0.9 },
+          label: { show: true, formatter: `ReviewAuto ${i}`, fontSize: 11, lineHeight: 14,
+            priority: 100 - i, color: '#0E647F', backgroundColor: '#fff' } },
+        { coord: [159, 110 + i * 0.24] },
+      ]);
+      const manual = [
+        { coord: [120, 110.6], lineStyle: { color: '#f97316', width: 1.6 },
+          label: { show: true, formatter: 'ReviewManual', position: 'insideEndTop', distance: 4,
+            fontSize: 11, lineHeight: 14, color: '#f97316', backgroundColor: '#fff', padding: [2, 5] } },
+        { coord: [159, 110.6] },
+      ];
+      window.packedMarks = { lines: [...auto, manual], points: [], areas: [], polygons: [] };
+      window.originalMarks = JSON.stringify(packedMarks);
+      paint(packedMarks);
+      window.updateReference = price => {
+        const text = `ReviewQuote $${price.toFixed(2)}`;
+        chart.setOption({ series: [R.clippedLineSeries(packedMarks.lines, { price, text }), {
+          id: 'realtime-price-reference', type: 'line', xAxisIndex: 0, yAxisIndex: 0,
+          data: [[159, price]], showSymbol: false, lineStyle: { opacity: 0 }, silent: true, animation: false,
+          markLine: { symbol: 'none', animation: false, data: [{ yAxis: price }],
+            label: { show: true, formatter: text, position: 'insideEndTop', fontSize: 10 },
+            lineStyle: { color: '#2E46E0', type: 'dashed', width: 1 } },
+        }] }, { notMerge: false, lazyUpdate: false });
+        chart.getZr().flush();
+      };
+      window.inspectPacked = () => {
+        const labels = chart.getZr().storage.getDisplayList(true)
+          .filter(item => item.type === 'tspan' && /^Review(Auto|Manual|Quote)/.test(item.style?.text ?? ''))
+          .map(item => {
+            const rect = item.getBoundingRect().clone();
+            rect.applyTransform(item.getComputedTransform());
+            // Include the real text padding, beyond the glyph rectangle.
+            const quote = item.style.text.startsWith('ReviewQuote');
+            return { text: item.style.text, x: rect.x - (quote ? 0 : 5), y: rect.y - (quote ? 0 : 2),
+              width: rect.width + (quote ? 0 : 10), height: rect.height + (quote ? 0 : 4) };
+          });
+        const grid = chart.getModel().getComponent('grid', 0).coordinateSystem.getRect();
+        return { labels, grid: { x: grid.x, y: grid.y, width: grid.width, height: grid.height },
+          zoom: chart.getOption().dataZoom[0], unchanged: originalMarks === JSON.stringify(packedMarks) };
+      };
+      updateReference(111);
+      return inspectPacked();
+    });
+    const moved = await page.evaluate(() => { updateReference(108.5); return inspectPacked(); });
+    const zoomed = await page.evaluate(() => {
+      chart.dispatchAction({ type: 'dataZoom', startValue: 100, endValue: 159 });
+      chart.getZr().flush(); return inspectPacked();
+    });
+    await page.setViewportSize({ width: width === 390 ? 768 : 390, height: 850 });
+    const resized = await page.evaluate(() => { chart.resize(); chart.getZr().flush(); return inspectPacked(); });
+    await testInfo.attach('label-bounds', { body: JSON.stringify({ initial, moved, zoomed, resized }, null, 2), contentType: 'application/json' });
+    const overlaps = (a, b) => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+    for (const snapshot of [initial, moved, zoomed, resized]) {
+      const auto = snapshot.labels.filter(label => label.text.startsWith('ReviewAuto'));
+      const obstacles = snapshot.labels.filter(label => !label.text.startsWith('ReviewAuto'));
+      expect(auto.length).toBeGreaterThanOrEqual(3);
+      expect(obstacles.map(label => label.text.split(' ')[0]).sort()).toEqual(['ReviewManual', 'ReviewQuote']);
+      for (let i = 0; i < auto.length; i++) {
+        for (const other of [...auto.slice(i + 1), ...obstacles]) expect(overlaps(auto[i], other), `${auto[i].text} overlaps ${other.text}`).toBe(false);
+        expect(auto[i].x).toBeGreaterThanOrEqual(snapshot.grid.x);
+        expect(auto[i].x + auto[i].width).toBeLessThanOrEqual(snapshot.grid.x + snapshot.grid.width);
+        expect(auto[i].y).toBeGreaterThanOrEqual(snapshot.grid.y);
+        expect(auto[i].y + auto[i].height).toBeLessThanOrEqual(snapshot.grid.y + snapshot.grid.height);
+      }
+      expect(snapshot.unchanged).toBe(true);
+    }
+    expect(moved.zoom).toMatchObject({ startValue: 0, endValue: 159 });
+    expect(zoomed.zoom).toMatchObject({ startValue: 100, endValue: 159 });
+    expect(resized.zoom).toMatchObject({ startValue: 100, endValue: 159 });
+    expect(initial.labels.find(label => label.text === 'ReviewManual')).toEqual(moved.labels.find(label => label.text === 'ReviewManual'));
+    expect(errors).toEqual([]);
+    await page.screenshot({ path: testInfo.outputPath(`packed-labels-${width}.png`) });
+  });
+}
+
+test('partially filled daily gap paints only its remaining interval below the candles', async ({ page }, testInfo) => {
+  const errors = await harness(page);
+  const result = await page.evaluate(() => {
+    const R = DrawingsReview, input = [];
+    for (let day = 0; input.length < 32; day++) {
+      const date = new Date(Date.UTC(2026, 0, 5 + day, 21));
+      if ([0, 6].includes(date.getUTCDay())) continue;
+      const t = date.toISOString();
+      input.push({ t, key: t.slice(0, 10), o: 100, h: 101, l: 99, c: 100, v: 1000, closed: true });
+    }
+    Object.assign(input[30], { o: 107, h: 108, l: 106, c: 107 });
+    Object.assign(input[31], { o: 107, h: 108, l: 104.5, c: 105 });
+    const detected = R.detectPriceGaps(input, '1d');
+    const marks = R.overlaysToMarks(detected, { bars: input, range: '1d', xMin: 0, xMax: 31, yMin: 95, yMax: 110 });
+    paint(marks, input);
+    const display = chart.getZr().storage.getDisplayList(true);
+    const gaps = display.filter(item => item.style?.fill === 'rgba(184,120,33,0.10)');
+    const candles = chart.getModel().getSeries().find(series => series.subType === 'candlestick');
+    const low = chart.convertToPixel({ xAxisIndex: 0, yAxisIndex: 0 }, [31, 101])[1];
+    const high = chart.convertToPixel({ xAxisIndex: 0, yAxisIndex: 0 }, [31, 104.5])[1];
+    return { detected: detected.map(row => ({ status: row.status, intervals: row.geometry.remainingIntervals })),
+      gaps: gaps.map(item => ({ type: item.type, z: item.z, points: item.shape.points, fill: item.style.fill })),
+      candleZ: candles.get('z'), low, high };
+  });
+  await testInfo.attach('gap-bounds', { body: JSON.stringify(result, null, 2), contentType: 'application/json' });
+  expect(result.detected).toEqual([{ status: 'testing', intervals: [{ low: 101, high: 104.5 }] }]);
+  expect(result.gaps).toHaveLength(1);
+  expect(Math.min(...result.gaps[0].points.map(point => point[1]))).toBeCloseTo(result.high, 3);
+  expect(Math.max(...result.gaps[0].points.map(point => point[1]))).toBeCloseTo(result.low, 3);
+  expect(result.gaps[0].z).toBeLessThan(result.candleZ);
+  expect(errors).toEqual([]);
+  await page.screenshot({ path: testInfo.outputPath('partial-gap.png') });
 });

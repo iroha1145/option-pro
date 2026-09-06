@@ -1,7 +1,7 @@
 /** Chart ink is independent of the candle up/down preference. Values are CSS pixels. */
 export const LINE_INK = Object.freeze({
-  support: '#087EA4', resistance: '#B423B9', channel: '#4F46E5',
-  neutral: '#52617A', manual: '#2E46E0', surface: '#FFFFFF',
+  support: '#0E647F', resistance: '#8D299B', channel: '#4F46E5',
+  neutral: '#52617A', manual: '#2E46E0', surface: '#FFFFFF', gap: '#B87821',
 });
 interface Point { x: number; y: number }
 interface Segment { a: Point; b: Point }
@@ -14,6 +14,9 @@ export interface PatternInkInput {
   hidden?: boolean;
   label?: string;
   color?: string;
+  tier?: 'primary' | 'secondary' | 'context' | 'historical';
+  observedEnds?: Array<number | null>;
+  labelPriority?: number;
 }
 export interface PatternInkMarks {
   lines: object[];
@@ -98,7 +101,17 @@ export function isSupportLevel(geometry: Record<string, unknown>, lastClose: num
   return price <= (typeof lastClose === 'number' && Number.isFinite(lastClose) ? lastClose : price);
 }
 
-/** The observed boundary is solid; its unobserved continuation is dashed. No stroke animations. */
+/** Strong foreground boundaries, quiet background structures. Manual ink stays separate. */
+export function automaticLineInk(tier: PatternInkInput['tier'], broken = false) {
+  if (broken || tier === 'historical') return { width: 1.25, opacity: 0.3, extensionOpacity: 0, labelPriority: 10 };
+  if (tier === 'context') return { width: 1.2, opacity: 0.35, extensionOpacity: 0.24, labelPriority: 20 };
+  if (tier === 'secondary') return { width: 1.5, opacity: 0.58, extensionOpacity: 0.4, labelPriority: 50 };
+  return { width: 2.4, opacity: 1, extensionOpacity: 0.72, labelPriority: 100 };
+}
+
+/** Solids stop at the last confirmed touch when supplied. A dashed continuation
+ * is a geometric extension, not evidence of repeated testing. No stroke animation.
+ */
 export function renderPatternInk(
   pattern: PatternInkInput,
   geometry: { segments: Segment[]; fill: Point[] | null },
@@ -108,49 +121,74 @@ export function renderPatternInk(
   if (pattern.hidden || !Number.isFinite(pattern.confidence) || pattern.confidence < 0 || pattern.confidence > 100) return out;
   const segments = normalizePatternSegments(geometry.segments, pattern.kind);
   if (!segments.length) return out;
-  let fill = geometry.fill;
+  const broken = BROKEN.has(pattern.status), baseColor = autoLineColor(pattern.kind);
+  if (pattern.kind === 'box') {
+    const fill = geometry.fill;
+    if (!fill?.length || !fill.every(valid)) return out;
+    const xs = fill.map(p => p.x), ys = fill.map(p => p.y);
+    out.areas.push([
+      { xAxis: Math.min(...xs), yAxis: Math.min(...ys),
+        itemStyle: { color: LINE_INK.neutral, opacity: broken ? 0.025 : 0.075 },
+        label: { show: Boolean(pattern.label), formatter: pattern.label ?? '', position: 'insideTopLeft',
+          color: LINE_INK.neutral, fontSize: 10 } },
+      { xAxis: Math.max(...xs), yAxis: Math.max(...ys) },
+    ]);
+    for (const segment of segments) out.lines.push([
+      { coord: [segment.a.x, segment.a.y], clipToPlot: true,
+        lineStyle: { color: LINE_INK.neutral, width: 0.9, opacity: broken ? 0.18 : 0.3,
+          type: broken ? [2, 4] : [4, 4] }, label: { show: false } },
+      { coord: [segment.b.x, segment.b.y] },
+    ]);
+    return out;
+  }
   const paired = PAIRED.has(pattern.kind) && segments.length === 2;
   if (PAIRED.has(pattern.kind) && !paired) return out;
-  if (paired) {
-    fill = [segments[0].a, segments[0].b, segments[1].b, segments[1].a];
-  }
-  const broken = BROKEN.has(pattern.status);
-  const baseColor = autoLineColor(pattern.kind);
+  const ink = automaticLineInk(pattern.tier, broken);
+  const observed = segments.map((s, i) => {
+    const raw = pattern.observedEnds?.[i];
+    const end = !broken && typeof raw === 'number' && Number.isFinite(raw) && raw > s.a.x
+      ? Math.max(s.a.x + 1, Math.min(s.b.x, raw)) : s.b.x;
+    return { a: s.a, b: { x: end, y: value(s, end) } };
+  });
   const projections = projectPatternRails(segments, pattern.kind, pattern.status, ctx);
   const meanY = (s: Segment) => (s.a.y + s.b.y) / 2;
   const lower = paired && meanY(segments[0]) > meanY(segments[1]) ? 1 : 0;
   const priceText = (price: number) => price.toLocaleString('en-US', { maximumFractionDigits: price < 1 ? 4 : 2 });
-  segments.forEach((segment, i) => {
+  observed.forEach((segment, i) => {
     const color = paired ? i === lower ? LINE_INK.support : LINE_INK.resistance : baseColor;
-    const extension = projections.find(p => p.a.x === segment.b.x && p.a.y === segment.b.y);
+    const original = segments[i];
+    const beyond = projections.find(p => p.a.x === original.b.x && p.a.y === original.b.y);
+    const target = beyond?.b ?? original.b;
+    // Split ink, not geometry: snapping continues to target exactly the same rail.
+    const extension = target.x > segment.b.x + 0.01 ? { a: segment.b, b: target } : undefined;
     const label = (tail: Point) => i === 0 && pattern.label ? {
       show: true, formatter: `${pattern.label} · ${priceText(tail.y)}`,
-      position: 'insideEndTop', distance: 4, fontSize: 11, lineHeight: 12,
-      color, backgroundColor: 'rgba(255,255,255,0.96)', borderColor: color,
-      borderWidth: 0.6, borderRadius: 4, padding: [1, 4],
+      position: 'insideEndTop', distance: 4, fontSize: 11, lineHeight: 14,
+      priority: (pattern.labelPriority ?? 0) + ink.labelPriority,
+      color, backgroundColor: 'rgba(255,255,255,0.97)', borderColor: color,
+      borderWidth: 0.5, borderRadius: 4, padding: [2, 5],
     } : { show: false };
     out.lines.push([
       { coord: [segment.a.x, segment.a.y], clipToPlot: true,
-        lineStyle: { ...manualLineInk(color, paired ? 2.7 : 2.5, broken ? [2, 4] : 'solid'), opacity: broken ? 0.38 : 1 },
+        lineStyle: { ...manualLineInk(color, ink.width, broken ? [2, 4] : 'solid'), opacity: ink.opacity },
         label: extension ? { show: false } : label(segment.b) },
       { coord: [segment.b.x, segment.b.y] },
     ]);
     if (extension) out.lines.push([
       { coord: [extension.a.x, extension.a.y], clipToPlot: true,
-        lineStyle: { ...manualLineInk(color, 2, [7, 4]), opacity: 0.8 }, label: label(extension.b) },
+        lineStyle: { ...manualLineInk(color, Math.max(1, ink.width - 0.6), [7, 4]), opacity: ink.extensionOpacity },
+        label: label(extension.b) },
       { coord: [extension.b.x, extension.b.y] },
     ]);
   });
+  const fill = paired ? [segments[0].a, segments[0].b, segments[1].b, segments[1].a] : geometry.fill;
   if (!broken && fill?.length && fill.every(valid)) {
-    // A faint band conveys the channel without hiding candle bodies or volume.
     const xs = fill.map(p => p.x), ys = fill.map(p => p.y);
-    if (new Set(xs).size === 2 && new Set(ys).size === 2) {
-      // Preserve the existing axis-aligned markArea contract for horizontal boxes.
-      out.areas.push([
-        { xAxis: Math.min(...xs), yAxis: Math.min(...ys), itemStyle: { color: baseColor, opacity: 0.035 } },
-        { xAxis: Math.max(...xs), yAxis: Math.max(...ys) },
-      ]);
-    } else out.polygons.push({ vertices: fill, color: baseColor, opacity: 0.035 });
+    if (new Set(xs).size === 2 && new Set(ys).size === 2) out.areas.push([
+      { xAxis: Math.min(...xs), yAxis: Math.min(...ys), itemStyle: { color: baseColor, opacity: 0.04 } },
+      { xAxis: Math.max(...xs), yAxis: Math.max(...ys) },
+    ]);
+    else out.polygons.push({ vertices: fill, color: baseColor, opacity: 0.04 });
   }
   return out;
 }

@@ -2,7 +2,9 @@
 
 import { autoPatternsToMarks, type DrawingMarks, type RenderContext } from '../renderer.ts';
 import { resolveAnchor, barKeyOf } from '../projection.ts';
-import { LINE_INK, manualLineInk, isSupportLevel } from '../linePresentation.ts';
+import { LINE_INK, manualLineInk, isSupportLevel, automaticLineInk } from '../linePresentation.ts';
+import { semanticLabel, overlayTier, gapAreas } from './semanticPresentation.ts';
+import { t } from '../../../../i18n/core.ts';
 import { barStampForRange, isPatternKind, type AnalysisOverlay, type AnalysisPane } from './mapBundle.ts';
 
 export interface OverlaySeriesLine {
@@ -147,8 +149,13 @@ export function overlaysToMarks(
       status: overlay.status,
       anchors,
       color: PATTERN_LINE_COLORS[overlay.kind],
+      tier: overlayTier(overlay),
+      labelPriority: overlay.displayPriority,
+      observedEnds: Array.isArray(overlay.geometry.observedEndKeys)
+        ? overlay.geometry.observedEndKeys.map(key => typeof key === 'string'
+          ? ctx.bars.findIndex(bar => barKeyOf(bar, ctx.range) === key) : null) : undefined,
       label: patternLabel && (!labelIds || labelIds.has(overlay.id))
-        ? patternLabel(overlay.kind, subtype) ?? undefined : undefined,
+        ? semanticLabel(patternLabel(overlay.kind, subtype), overlay, t) : undefined,
     };
   });
   const patternMarks = autoPatternsToMarks(patterns, ctx, 0);
@@ -157,13 +164,14 @@ export function overlaysToMarks(
   areas.push(...patternMarks.areas);
   polygons.push(...(patternMarks.polygons ?? []));
 
-  const pushLevel = (price: number, color: string = LINE_INK.neutral, label?: string, historical?: { start: number; end: number }) => {
+  const pushLevel = (price: number, color: string = LINE_INK.neutral, label?: string, historical?: { start: number; end: number }, display?: AnalysisOverlay) => {
     if (price <= 0) return;
+    const ink = automaticLineInk(display ? overlayTier(display) : undefined, Boolean(historical));
     lines.push([
       { coord: [historical?.start ?? ctx.xMin, price], clipToPlot: true,
-        lineStyle: { ...manualLineInk(color, 2, historical ? [2, 4] : 'solid'), opacity: historical ? 0.38 : 1 },
+        lineStyle: { ...manualLineInk(color, ink.width, historical ? [2, 4] : 'solid'), opacity: ink.opacity },
         label: label ? { show: true, formatter: `${label} · ${price.toLocaleString('en-US', { maximumFractionDigits: price < 1 ? 4 : 2 })}`,
-          position: 'insideEndTop', fontSize: 11, lineHeight: 12, color,
+          position: 'insideEndTop', fontSize: 11, lineHeight: 14, color, priority: ink.labelPriority + (display?.displayPriority ?? 0),
           backgroundColor: 'rgba(255,255,255,0.96)', padding: [1, 4], borderRadius: 3 } : { show: false } },
       { coord: [historical?.end ?? ctx.xMax, price] },
     ]);
@@ -188,6 +196,10 @@ export function overlaysToMarks(
       }
       continue;
     }
+    if (overlay.kind === 'gap') {
+      areas.push(...gapAreas(overlay, key => ctx.bars.findIndex(bar => barKeyOf(bar, ctx.range) === key), t));
+      continue;
+    }
     if (overlay.kind === 'level') {
       const price = asNumber(overlay.geometry.price);
       if (price !== null) {
@@ -201,7 +213,7 @@ export function overlaysToMarks(
           if (start < 0 || end <= start) continue;
           historical = { start, end };
         }
-        pushLevel(price, support ? LINE_INK.support : LINE_INK.resistance, label, historical);
+        pushLevel(price, support ? LINE_INK.support : LINE_INK.resistance, semanticLabel(label, overlay, t), historical, overlay);
       }
       continue;
     }

@@ -204,7 +204,7 @@ test('broken horizontal levels end at their historical boundary and are not snap
   assert.equal(marks.lines.length, 1);
   assert.deepEqual(marks.lines[0].map(point => point.coord), [[20, 100], [100, 100]]);
   assert.deepEqual(marks.lines[0][0].lineStyle.type, [2, 4]);
-  assert.equal(marks.lines[0][0].lineStyle.opacity, 0.38);
+  assert.equal(marks.lines[0][0].lineStyle.opacity, 0.3);
   assert.deepEqual(snapCandidatesFromOverlays([row]), []);
   assert.deepEqual(snapCandidatesFromOverlays([{ kind: 'level', geometry: { price: '100' } }]), []);
 });
