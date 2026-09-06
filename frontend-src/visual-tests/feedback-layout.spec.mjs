@@ -95,18 +95,30 @@ for (const width of [390, 1440]) {
       await expect(page.getByRole('dialog')).toHaveCount(0);
 
       if (width < 768) await page.getByRole('button', { name: '筛选', exact: true }).click();
-      await page.getByPlaceholder('代码过滤').fill('NVDA');
+      const tickerFilter = page.getByPlaceholder('代码过滤');
+      await tickerFilter.focus();
+      // 按真实输入节奏逐字输入，筛选条件写入地址时不能抢走键盘焦点。
+      await page.keyboard.type('NVDA', { delay: 60 });
+      await expect(tickerFilter).toHaveValue('NVDA');
+      await expect(tickerFilter).toBeFocused();
       await expect(page).toHaveURL(/ticker=NVDA/);
       const views = page.getByRole('tablist', { name: '催化剂视图', exact: true });
       await views.getByRole('tab', { name: '新闻流', exact: true }).focus();
       await page.keyboard.press('ArrowRight');
       await expect(views.getByRole('tab', { name: '股票影响', exact: true })).toHaveAttribute('aria-selected', 'true');
+      await expect(views.getByRole('tab', { name: '股票影响', exact: true })).toBeFocused();
       await expect(page).toHaveURL(/tab=stocks/);
       await expect(page).toHaveURL(/ticker=NVDA/);
       await page.keyboard.press('End');
       await expect(views.getByRole('tab', { name: '数据源', exact: true })).toHaveAttribute('aria-selected', 'true');
+      await expect(views.getByRole('tab', { name: '数据源', exact: true })).toBeFocused();
       await expect(page).toHaveURL(/tab=sources/);
       await noPageOverflow(page);
+      // 切换到另一页面时仍应返回页头，筛选焦点修复不能影响正常导航。
+      await page.getByRole('link', { name: 'Optix Pro 首页', exact: true }).click();
+      await expect(page).toHaveURL(/\/$/);
+      await expect(page.locator('#main-content')).toBeFocused();
+      await expect.poll(() => page.evaluate(() => scrollY)).toBe(0);
       expect(errors).toEqual([]);
     });
 
