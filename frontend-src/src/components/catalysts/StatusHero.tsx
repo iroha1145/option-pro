@@ -175,13 +175,12 @@ export default function StatusHero({ refreshToken = 0 }: { refreshToken?: number
             </p>
           )}
           {newsQ.data && (
-            <p className="mt-0.5 font-mono text-micro text-ink-400 tnum">
-              {t('已分析')} <span className="text-ink-600">{newsQ.data.analyzed}</span> {t('条')}
+            <p className="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 font-mono text-micro text-ink-400 tnum">
+              <span className="whitespace-nowrap">{t('已分析')} <span className="text-ink-600">{newsQ.data.analyzed}</span> {t('条')}</span>
               {newsQ.data.pending > 0 && (
-                <>
-                  {' · '}
+                <span className="whitespace-nowrap">
                   {t('待中文')} <span className="text-ink-600">{newsQ.data.pending}</span>
-                </>
+                </span>
               )}
             </p>
           )}
