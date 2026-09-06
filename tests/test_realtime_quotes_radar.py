@@ -5,6 +5,8 @@ from datetime import datetime, timedelta, timezone
 import json
 from types import SimpleNamespace
 
+import httpx
+
 from app.services import realtime_quotes as quotes
 from app.services.breakouts.config import BreakoutSettings
 from app.services.breakouts.realtime import BreakoutRealtimeAdapter
@@ -201,5 +203,176 @@ def test_missing_or_failed_radar_bootstrap_requests_resync_and_keeps_cache_bound
         assert len(hub._clients[client_id].radar_versions) == 2
         assert len(hub._radar_event_sequences) == 2
         await stream.aclose()
+
+    asyncio.run(scenario())
+
+
+def test_persistent_radar_read_failure_announces_once_and_backs_off(tmp_path):
+    """A durable radar outage must not resync every open browser every second."""
+
+    async def scenario():
+        attempts = []
+
+        async def loader():
+            attempts.append(True)
+            raise OSError("private repository error")
+
+        hub = quotes.QuoteHub(_hub_settings(tmp_path), radar_event_loader=loader)
+        hub._running = True
+        client_id = await hub.subscribe(["AAPL"])
+        client = hub._clients[client_id]
+
+        await hub._poll_radar_events()
+        assert client.resync_required is True
+        assert hub._signals_resync_required is True
+        assert hub._retry_delay(hub._radar_events_failures) == 2
+
+        # The browser consumed its resync; the ongoing outage must not re-arm it.
+        client.resync_required = False
+        for _ in range(4):
+            await hub._poll_radar_events()
+        assert client.resync_required is False
+        assert hub._status()["last_error"] == "radar_events_refresh_failed"
+        assert hub._retry_delay(hub._radar_events_failures) == quotes.RADAR_MAX_RETRY_SECONDS
+
+        # A stream opened while the radar is unreadable still resyncs on start.
+        late = hub.events(await hub.subscribe(["AAPL"]))
+        assert (await anext(late))["event"] == "quotes"
+        assert (await anext(late))["data"]["resync_required"] is True
+        await late.aclose()
+        assert len(attempts) == 5
+
+    asyncio.run(scenario())
+
+
+def test_recovered_radar_read_clears_degraded_status_and_resets_backoff(tmp_path):
+    async def scenario():
+        rows: list[list[dict[str, object]]] = [None]
+
+        async def loader():
+            if rows[0] is None:
+                raise OSError("private repository error")
+            return rows[0]
+
+        hub = quotes.QuoteHub(_hub_settings(tmp_path), radar_event_loader=loader)
+        hub._running = True
+        client_id = await hub.subscribe(["AAPL"])
+        for _ in range(3):
+            await hub._poll_radar_events()
+        assert hub._radar_events_failures == 3
+
+        rows[0] = [{"event_id": "radar-AAPL", "symbol": "AAPL", "state_version": 1,
+                    "lifecycle_state": "TRIGGERED"}]
+        await hub._poll_radar_events()
+        assert hub._radar_events_failures == 0
+        assert hub._retry_delay(hub._radar_events_failures) == 1
+        assert hub._radar_events_loaded is True
+        assert hub._signals_resync_required is False
+        assert hub._status()["last_error"] is None
+        # Recovery republishes the durable state the degraded stream never sent.
+        pushed = hub._clients[client_id].queue.get_nowait()
+        assert pushed["data"]["events"][0]["lifecycle_state"] == "TRIGGERED"
+
+    asyncio.run(scenario())
+
+
+def test_recovered_inventory_read_stops_reporting_its_own_past_failure(tmp_path):
+    """A healthy radar must not keep advertising an error it already recovered from."""
+
+    async def scenario():
+        symbols: list[list[str]] = [None]
+
+        async def inventory():
+            if symbols[0] is None:
+                raise OSError("private repository error")
+            return symbols[0]
+
+        async def events():
+            return []
+
+        hub = quotes.QuoteHub(_hub_settings(tmp_path), radar_loader=inventory,
+                              radar_event_loader=events)
+        await hub._poll_radar_inventory()
+        await hub._poll_radar_events()
+        assert hub._status()["last_error"] == "radar_refresh_failed"
+
+        symbols[0] = ["AAPL"]
+        await hub._poll_radar_inventory()
+        assert hub._radar_symbols == ["AAPL"]
+        assert "AAPL" in hub._desired_symbols
+        assert hub._status()["last_error"] is None
+        # The inventory error must not keep the independent signal path pinned
+        # to degraded once the radar event read has been succeeding all along.
+        assert hub._status()["signals_resync_required"] is False
+
+    asyncio.run(scenario())
+
+
+def test_a_latched_write_fault_does_not_hide_a_newer_transport_fault(tmp_path, monkeypatch):
+    """last_error reports the newest fault still in effect, from either side."""
+    monkeypatch.setattr(quotes, "_utcnow", lambda: NOW)
+
+    async def scenario():
+        rest_healthy = [False]
+
+        async def failing_trade(trade):
+            raise RuntimeError("radar store write unavailable")
+
+        async def reserve(key, **kwargs):
+            return True
+
+        def transport(request):
+            if not rest_healthy[0]:
+                raise httpx.ConnectError("fixture upstream down")
+            return httpx.Response(200, json={"c": 100, "pc": 95, "t": int(NOW.timestamp())})
+
+        monkeypatch.setattr(quotes, "async_reserve_finnhub_request", reserve)
+        hub = quotes.QuoteHub(_hub_settings(tmp_path), trade_handler=failing_trade)
+        await hub.subscribe(["AAPL"])
+        await hub._process_trade({"s": "AAPL", "p": 101, "t": int(NOW.timestamp() * 1000),
+                                  "v": 100, "c": ["1"]})
+        assert hub._status()["last_error"] == "radar_trade_failed"
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as client:
+            hub._http = client
+            # A write fault clears only on a later durable commit for that
+            # symbol, so it must not sit on top of the provider being
+            # unreachable for the rest of the session.
+            await hub._warm_symbol("AAPL")
+            assert hub._status()["last_error"] == "rest_quote_unavailable"
+            assert hub._status()["signals_resync_required"] is True
+
+            rest_healthy[0] = True
+            hub._rest_attempts.clear()
+            await hub._warm_symbol("AAPL")
+        assert hub._status()["last_error"] == "radar_trade_failed"
+        assert hub._status()["signals_resync_required"] is True
+
+    asyncio.run(scenario())
+
+
+def test_repeated_trade_commit_failures_resync_a_browser_once(tmp_path, monkeypatch):
+    monkeypatch.setattr(quotes, "_utcnow", lambda: NOW)
+
+    async def scenario():
+        async def handler(trade):
+            raise RuntimeError("radar store unavailable")
+
+        hub = quotes.QuoteHub(_hub_settings(tmp_path), trade_handler=handler)
+        client_id = await hub.subscribe(["AAPL"])
+        client = hub._clients[client_id]
+        for index in range(6):
+            at = NOW + timedelta(seconds=index)
+            await hub._process_trade({"s": "AAPL", "p": 101 + index,
+                                      "t": int(at.timestamp() * 1000), "v": 100, "c": ["1"]})
+            if index == 0:
+                # The first failure is the transition an open browser must see.
+                assert client.resync_required is True
+                client.resync_required = False
+        assert client.resync_required is False
+        assert hub._signals_resync_required is True
+        assert hub._status()["last_error"] == "radar_trade_failed"
+        # Prices keep flowing while only the derived signals are degraded.
+        assert hub._quotes["AAPL"]["price"] == 106
 
     asyncio.run(scenario())

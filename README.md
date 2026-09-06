@@ -260,10 +260,14 @@ v1 只用于展示与研究，**不写入任何正式股票评分**。
 bash -n setup.sh personal.sh scripts/compose.sh scripts/deploy.sh scripts/lock-dependencies.sh
 ./scripts/compose.sh config -q
 PYTHONPATH=backend python -m pytest -q
-node --test frontend/tests/*.test.mjs
-node frontend/tests/static_assertions.mjs
-npm --prefix frontend run test:visual
+node --experimental-strip-types --test frontend-src/tests/*.test.mjs
+node frontend-src/tests/static_assertions.mjs
+npm --prefix frontend-src run lint
+npm --prefix frontend-src run test:review
+npm --prefix frontend-src run test:quotes
 ```
+
+界面源码与浏览器用例都在 `frontend-src/`，`frontend/` 只保存构建产物。`test:review` 与 `test:quotes` 自带本地开发服务器与模拟接口；`npm --prefix frontend-src run test:visual` 另外需要 `OPTIX_VISUAL_BASE_URL` 指向一个已经在运行的部署。
 
 持续集成（CI）只使用本地夹具和模拟连接，不访问真实 OpenAI、新闻源、行情源或生产数据库。检查通过只说明该提交通过测试与容器验证，不代表生产服务器已经更新。
 

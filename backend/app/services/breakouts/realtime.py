@@ -6,6 +6,7 @@ import asyncio
 import logging
 import math
 import sqlite3
+import time
 from datetime import datetime, timezone
 from typing import Any, Callable, Mapping
 
@@ -18,6 +19,22 @@ logger = logging.getLogger(__name__)
 
 class RealtimeRadarError(RuntimeError):
     """Sanitized failure: the hub must not mistake missing evidence for success."""
+
+
+class RadarInventoryUnavailable(RealtimeRadarError):
+    """Shared inventory retry state; a failed read is not a failed write."""
+
+    def __init__(self, failures: int, retry_after: float) -> None:
+        super().__init__("Radar inventory is unavailable")
+        self.failures = failures
+        self.retry_after = max(0.0, retry_after)
+
+
+def _consume_task_exception(task: asyncio.Task[Any]) -> None:
+    # A timed-out caller may not return before shutdown. Observing a task's
+    # exception here does not prevent the next caller from awaiting it.
+    if not task.cancelled():
+        task.exception()
 
 
 def _time(value: Any) -> datetime:
@@ -40,6 +57,7 @@ class BreakoutRealtimeAdapter:
         self, settings: BreakoutSettings | None = None,
         repository: BreakoutRepository | None = None,
         *, now: Callable[[], datetime] | None = None,
+        monotonic: Callable[[], float] | None = None,
     ) -> None:
         self.settings = settings or get_breakout_settings()
         self.repository = repository or BreakoutRepository(self.settings.db_path)
@@ -49,20 +67,53 @@ class BreakoutRealtimeAdapter:
         self._loaded = False
         self._serial = asyncio.Lock()
         self._clock = MarketClock()
+        self._monotonic = monotonic or time.monotonic
+        self._inventory_failures = 0
+        self._inventory_retry_at = 0.0
+        self._inventory_task: asyncio.Task[list[dict[str, Any]]] | None = None
 
     async def radar_symbols(self) -> list[str]:
-        """Read-only inventory; triggered events first, then existing scan rank."""
+        """Serialize inventory replacement with trade commits, without reentry."""
+        async with self._serial:
+            return await self._refresh_inventory_locked()
+
+    def _inventory_failed(self) -> RadarInventoryUnavailable:
+        self._inventory_failures = min(self._inventory_failures + 1, 8)
+        delay = min(30.0, 2.0 ** self._inventory_failures)
+        self._inventory_retry_at = self._monotonic() + delay
+        return RadarInventoryUnavailable(self._inventory_failures, delay)
+
+    async def _refresh_inventory_locked(self) -> list[str]:
+        """All entry points share one deadline, one read, and one state swap.
+
+        The caller owns _serial. No-op trades cannot bypass a known failed read
+        or turn it into a successful empty scan. A cancelled waiter leaves the
+        read task alive, so a slow SQLite read is not duplicated in new threads.
+        """
         if not self.settings.enabled:
             return []
+        remaining = self._inventory_retry_at - self._monotonic()
+        if self._inventory_failures and remaining > 0:
+            raise RadarInventoryUnavailable(self._inventory_failures, remaining)
+        if self._inventory_task is None:
+            self._inventory_task = asyncio.create_task(asyncio.to_thread(self._load_events))
+            self._inventory_task.add_done_callback(_consume_task_exception)
         try:
-            events = await asyncio.to_thread(self._load_events)
-        except (FileNotFoundError, OSError, sqlite3.Error, BreakoutRepositoryError, ValueError):
-            # Keep the last valid inventory and let QuoteHub report/retry the
-            # failed read. An empty result means a successful empty scan.
-            raise RealtimeRadarError("Radar inventory is unavailable") from None
-        self._events = {}
-        for event in events:
-            self._events.setdefault(str(event["ticker"]), []).append(event)
+            events = await asyncio.shield(self._inventory_task)
+            inventory: dict[str, list[dict[str, Any]]] = {}
+            for event in events:
+                inventory.setdefault(str(event["ticker"]), []).append(event)
+        except asyncio.CancelledError:
+            self._inventory_failed()
+            raise
+        except (OSError, sqlite3.Error, BreakoutRepositoryError, ValueError, TypeError, KeyError):
+            self._inventory_task = None
+            # Keep the last good inventory; never publish a partial replacement.
+            raise self._inventory_failed() from None
+        self._inventory_task = None
+        self._inventory_failures = 0
+        self._inventory_retry_at = 0.0
+        self._events = inventory
         self._watermarks = {symbol: value for symbol, value in self._watermarks.items() if symbol in self._events}
         self._loaded = True
         return list(self._events)
@@ -158,8 +209,8 @@ class BreakoutRealtimeAdapter:
                 if self._watermarks.get(symbol, trade_at) > trade_at:
                     return []
                 self._watermarks[symbol] = trade_at
-                if not self._loaded:
-                    await self.radar_symbols()
+                if not self._loaded or self._inventory_failures:
+                    await self._refresh_inventory_locked()
                 changes = []
                 for attempt in range(2):
                     conflicted = False
@@ -196,7 +247,7 @@ class BreakoutRealtimeAdapter:
                     # Re-evaluate this same observed trade once against the
                     # current candidate; a later below-threshold tick cannot
                     # recover a missed crossing. A second conflict is final.
-                    if symbol not in await self.radar_symbols():
+                    if symbol not in await self._refresh_inventory_locked():
                         break
                 return changes
             except (KeyError, TypeError, ValueError):

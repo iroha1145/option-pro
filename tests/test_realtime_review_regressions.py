@@ -241,8 +241,13 @@ def test_same_trade_retry_stops_after_a_second_candidate_conflict(seeded, monkey
     asyncio.run(run())
 
 
-@pytest.mark.parametrize("failure", ["reload", "second_commit"])
-def test_same_trade_retry_storage_failures_still_reach_hub(seeded, monkeypatch, tmp_path, failure):
+# The conflict-retry reload is an inventory read, so it now reports the read
+# fault and shares the inventory retry budget instead of latching a per-symbol
+# write fault that only a later durable commit could clear.
+@pytest.mark.parametrize("failure,reported", [
+    ("reload", "radar_refresh_failed"), ("second_commit", "radar_trade_failed"),
+])
+def test_same_trade_retry_storage_failures_still_reach_hub(seeded, monkeypatch, tmp_path, failure, reported):
     _, repo, adapter = seeded
     monkeypatch.setattr(quotes, "_utcnow", lambda: AT + timedelta(seconds=20))
     commits = []
@@ -270,7 +275,7 @@ def test_same_trade_retry_storage_failures_still_reach_hub(seeded, monkeypatch, 
         await hub._process_trade({"s": "AAPL", "p": 105, "t": int((AT + timedelta(seconds=10)).timestamp() * 1000), "v": 100, "c": ["1"]})
         assert hub._quotes["AAPL"]["price"] == 105
         assert hub._signals_resync_required is True
-        assert hub._status()["last_error"] == "radar_trade_failed"
+        assert hub._status()["last_error"] == reported
         assert hub._clients[client_id].resync_required is True
         assert repo.recent_live_events(as_of=AT + timedelta(seconds=20)) == []
         if failure == "second_commit":
