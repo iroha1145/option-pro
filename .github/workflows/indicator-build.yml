@@ -1,0 +1,70 @@
+name: Build and verify indicator-only change
+on:
+  push:
+    branches: [fix/indicator-panes-only-20260906]
+    paths: [.github/workflows/indicator-build.yml]
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: fix/indicator-panes-only-20260906
+          fetch-depth: 2
+      - name: Apply the reviewed plain-text source diff
+        run: |
+          tar -czf /tmp/indicator-base-frontend.tar.gz frontend
+          git apply --check .review/indicator-panes.patch
+          git apply .review/indicator-panes.patch
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('frontend-src/src/components/detail/chart-indicators/layout.ts')
+          text = path.read_text()
+          assert text.count('header(narrow ? 60 : 44)') == 1
+          path.write_text(text.replace('header(narrow ? 60 : 44)', 'header(narrow ? 60 : 52)'))
+          path = Path('frontend-src/visual-tests/indicator-panes.spec.mjs')
+          text = path.read_text()
+          assert text.count("name: '展开绘图工作区'") == 1
+          path.write_text(text.replace("name: '展开绘图工作区'", "name: '展开图表'"))
+          PY
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22.17.1"
+      - name: Build and check frontend
+        run: |
+          npm ci --prefix frontend-src --ignore-scripts --no-audit --no-fund
+          VITE_API_MODE=live npm run build --prefix frontend-src
+          rsync -a --delete frontend-src/dist/ frontend/
+          node --experimental-strip-types --test frontend-src/tests/*.test.mjs > /tmp/indicator-units.log
+          npm --prefix frontend-src run lint
+          node frontend-src/tests/static_assertions.mjs
+      - name: Commit sources and matching production assets on this branch only
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm .review/indicator-panes.patch .github/workflows/indicator-build.yml
+          git add frontend-src frontend
+          git diff --cached --check -- . ':(top,exclude)frontend'
+          test -z "$(git diff --cached --name-only -- backend frontend-src/src/components/detail/chart-drawings)"
+          git commit -m 'fix(chart): keep indicator panes readable without changing drawings'
+          git push origin HEAD:fix/indicator-panes-only-20260906
+          git archive --format=tar.gz -o /tmp/indicator-fixed-source.tar.gz HEAD
+      - name: Install browser
+        run: cd frontend-src && npx playwright install --with-deps chromium
+      - name: Test indicator layout and existing drawing interactions
+        run: npm --prefix frontend-src run test:review 2>&1 | tee /tmp/indicator-browser.log
+      - name: Test live quote integration
+        if: success() || failure()
+        run: npm --prefix frontend-src run test:quotes 2>&1 | tee /tmp/indicator-quotes.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: indicator-only-evidence
+          path: |
+            /tmp/indicator-*.log
+            /tmp/indicator-*.tar.gz
+            frontend-src/test-results/
+          retention-days: 2
