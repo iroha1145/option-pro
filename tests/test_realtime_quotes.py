@@ -428,6 +428,43 @@ def test_successful_rest_snapshot_clears_the_rest_error_without_a_reconnect(tmp_
     asyncio.run(scenario())
 
 
+@pytest.mark.parametrize("source,error", [
+    ("inventory", "radar_refresh_failed"), ("stream", "upstream_unavailable"),
+])
+def test_repeated_malformed_rest_response_does_not_outrank_a_newer_fault(tmp_path, monkeypatch, source, error):
+    monkeypatch.setattr(quotes, "_utcnow", lambda: NOW)
+
+    async def scenario():
+        healthy = [False]
+
+        async def reserve(*args, **kwargs):
+            return True
+
+        def transport(request):
+            if not healthy[0]:
+                return httpx.Response(200, content=b"{broken-json")
+            return httpx.Response(200, json={"c": 100, "pc": 95, "t": int(NOW.timestamp())})
+
+        monkeypatch.setattr(quotes, "async_reserve_finnhub_request", reserve)
+        hub = quotes.QuoteHub(settings(tmp_path))
+        await hub.subscribe(["AAPL"])
+        async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as client:
+            hub._http = client
+            await hub._warm_symbol("AAPL")
+            hub._set_error(source, error)
+            hub._status_dirty = False
+            await hub._warm_symbol("AAPL")
+            assert hub._status()["last_error"] == error
+            assert not hub._status_dirty
+            healthy[0] = True
+            await hub._warm_symbol("AAPL")
+        assert hub._status()["last_error"] == error
+        assert "rest" not in hub._errors
+        assert hub._quotes["AAPL"]["price"] == 100
+
+    asyncio.run(scenario())
+
+
 def test_inflight_rest_response_does_not_cache_evicted_subscription(tmp_path, monkeypatch):
     async def scenario():
         hub = quotes.QuoteHub(settings(tmp_path))

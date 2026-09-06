@@ -106,7 +106,10 @@ class BreakoutRealtimeAdapter:
         except asyncio.CancelledError:
             self._inventory_failed()
             raise
-        except (OSError, sqlite3.Error, BreakoutRepositoryError, ValueError, TypeError, KeyError):
+        except Exception:
+            # A completed failure must never become the next caller's cached
+            # result, including a transient executor/thread startup failure.
+            # Only cancellation of a waiter keeps the shared read alive above.
             self._inventory_task = None
             # Keep the last good inventory; never publish a partial replacement.
             raise self._inventory_failed() from None
