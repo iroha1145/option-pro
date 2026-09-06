@@ -164,6 +164,12 @@ def test_logo_response_sandboxes_svg_and_rejects_private_redirect_targets(monkey
     assert stocks._safe_logo_url(
         "https://financialmodelingprep.com/image-stock/AAPL.png"
     ) is True
+    assert stocks._safe_logo_url(
+        "https://storage.googleapis.com/iex/api/logos/AAPL.png"
+    ) is True
+    assert stocks._safe_logo_url(
+        "https://storage.googleapis.com/evil/AAPL.png"
+    ) is False
 
 
 def test_logo_invalid_variants_cannot_bypass_the_canonical_negative_cache(monkeypatch):

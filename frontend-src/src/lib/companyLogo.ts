@@ -5,7 +5,7 @@ export function companySymbol(ticker: string): string {
   return quoteSymbol(ticker.trim().toUpperCase().replace(/^US\./, ''));
 }
 
-/** Demo images stay local; live symbols use the existing same-origin image cache. */
+/** Demo images stay local; live symbols use the same-origin image cache (disk + racing CDNs). */
 export function companyLogoSources(ticker: string, mock: boolean): string[] {
   const symbol = companySymbol(ticker);
   if (!/^[A-Z0-9][A-Z0-9.-]{0,15}$/.test(symbol) || /[.-]$|\.\.|--/.test(symbol)) return [];

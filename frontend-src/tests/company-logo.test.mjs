@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { companyLogoSources, companySymbol } from '../src/lib/companyLogo.ts';
+
+const srcDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../src');
 
 test('公司标识识别规范化股票代码，指数不误取公司图片', () => {
   assert.equal(companySymbol(' us.tsla '), 'TSLA');
@@ -20,4 +25,14 @@ test('无效代码不会成为图片地址或路径', () => {
   for (const value of ['', '../TSLA', 'TSLA?', 'TSLA/..', 'A--B', 'A..B', 'A.', 'https://example.com']) {
     assert.deepEqual(companyLogoSources(value, false), [], value);
   }
+});
+
+test('加载中先显示字母，首页首屏标识不懒加载', () => {
+  const logo = readFileSync(path.join(srcDir, 'components/shared/TickerLogo.tsx'), 'utf8');
+  const home = readFileSync(path.join(srcDir, 'pages/Home.tsx'), 'utf8');
+  assert.match(logo, /const fallback = ticker\.replace/);
+  assert.match(logo, /loaded && source && 'invisible'/);
+  assert.match(logo, /loading=\{priority \? 'eager' : 'lazy'\}/);
+  assert.equal([...home.matchAll(/<TickerLogo /g)].length, 3);
+  assert.equal([...home.matchAll(/<TickerLogo [^/>]*\bpriority/g)].length, 3);
 });

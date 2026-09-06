@@ -18,7 +18,7 @@ import tempfile
 import threading
 import time
 from typing import Annotated, Any, Optional
-from urllib.parse import urljoin, urlparse
+from urllib.parse import unquote, urljoin, urlparse
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -596,12 +596,15 @@ _LOGO_NOT_FOUND = {"not_found": True}
 _LOGO_UNAVAILABLE = {"unavailable": True}
 _LOGO_ALLOWED_HOSTS = frozenset(
     {
-        "financialmodelingprep.com",
+        "storage.googleapis.com",
         "static2.finnhub.io",
+        "financialmodelingprep.com",
         "eodhd.com",
         "logo.clearbit.com",
     }
 )
+_LOGO_PUBLIC_URL_LIMIT = 8
+_IEX_LOGO_PATH_PREFIX = "/iex/api/logos/"
 _LOGO_TICKER_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9.-]{0,15}$")
 
 
@@ -638,17 +641,22 @@ def _logo_symbol_variants(symbol: str) -> list[str]:
 
 
 def _logo_urls(symbol: str, website: str | None = None) -> list[str]:
-    candidates = []
-    for variant in _logo_symbol_variants(symbol):
-        candidates.extend([
-            f"https://financialmodelingprep.com/image-stock/{variant}.png",
-            f"https://static2.finnhub.io/file/publicdatany/finnhubimage/stock_logo/{variant}.png",
-            f"https://eodhd.com/img/logos/US/{variant}.png",
-        ])
+    # IEX GCS is typically the fastest public PNG. Race that host first, then
+    # keep the existing vendor CDNs as backups. Source-major order lets the two
+    # fetch workers try both class-share spellings on the fast host before the
+    # slower ones. Public snapshots reject more than eight logo_urls.
+    variants = _logo_symbol_variants(symbol)
+    templates = (
+        "https://storage.googleapis.com/iex/api/logos/{}.png",
+        "https://static2.finnhub.io/file/publicdatany/finnhubimage/stock_logo/{}.png",
+        "https://financialmodelingprep.com/image-stock/{}.png",
+        "https://eodhd.com/img/logos/US/{}.png",
+    )
+    candidates = [template.format(variant) for template in templates for variant in variants]
     host = _website_host(website)
     if host:
         candidates.append(f"https://logo.clearbit.com/{host}")
-    return list(dict.fromkeys(candidates))
+    return list(dict.fromkeys(candidates))[:_LOGO_PUBLIC_URL_LIMIT]
 
 
 def _new_logo_client() -> httpx.AsyncClient:
@@ -767,6 +775,15 @@ def _safe_logo_url(value: str) -> bool:
         hostname = parsed.hostname.strip("[]").lower().rstrip(".")
         if hostname not in _LOGO_ALLOWED_HOSTS:
             return False
+        if hostname == "storage.googleapis.com":
+            path = unquote(parsed.path or "")
+            name = (
+                path[len(_IEX_LOGO_PATH_PREFIX) : -4]
+                if path.startswith(_IEX_LOGO_PATH_PREFIX) and path.endswith(".png")
+                else ""
+            )
+            if not name or "/" in name or ".." in path:
+                return False
         try:
             address = ipaddress.ip_address(hostname)
         except ValueError:

@@ -703,7 +703,7 @@ function RadarSignalCard({ signal: s, index: i }: { signal: BreakoutSignal; inde
     >
       <Link to={`/stock/${encodeURIComponent(s.ticker)}`} className="card-surface card-hover block rounded-lg p-3">
         <div className="flex items-center gap-2">
-          <TickerLogo ticker={s.ticker} size={24} />
+          <TickerLogo ticker={s.ticker} size={24} priority />
           <span className="shrink-0 font-mono text-caption font-semibold text-ink-800">{s.ticker}</span>
           <span className="min-w-0 truncate rounded-md bg-paper-2 px-2 py-1 text-micro font-medium text-ink-600">
             {s.label}
@@ -751,7 +751,7 @@ function EarningsAnchorRow({ item: it, todayKey }: { item: EarningsItem; todayKe
         </span>
         <span className="block text-micro text-ink-400">{anchor?.monthShort ?? ''}</span>
       </span>
-      <TickerLogo ticker={it.ticker} size={28} />
+      <TickerLogo ticker={it.ticker} size={28} priority />
       <p className="min-w-0 flex-1 truncate">
         <span className="font-mono text-caption font-semibold text-ink-800">{it.ticker}</span>
         <span className="ml-2 text-caption text-ink-500">{it.name}</span>
@@ -785,7 +785,7 @@ function WatchlistMoverCard({ item, index: i, preparation, statusReadFailed }: {
     >
       <Link to={`/stock/${encodeURIComponent(item.ticker)}`} className="card-surface card-hover block overflow-hidden rounded-lg p-4" data-testid="watchlist-mover-card">
         <div className="flex items-center gap-2">
-          <TickerLogo ticker={item.ticker} size={24} />
+          <TickerLogo ticker={item.ticker} size={24} priority />
           <span className="shrink-0 font-mono text-caption font-semibold text-ink-800">{item.ticker}</span>
           <span className="min-w-0 flex-1 truncate text-caption text-ink-500">{item.name}</span>
           <span className="flex shrink-0 items-center gap-1.5">
