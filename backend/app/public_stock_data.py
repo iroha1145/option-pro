@@ -265,9 +265,9 @@ def read_public_stock_status(
 
 
 def _default_tickers() -> list[str]:
-    from app.services.sectors import SECTORS
+    from app.services.watchlist_scope import collection_watchlist_tickers
 
-    return _symbols(ticker for sector in SECTORS.values() for ticker in sector.get("tickers", []))
+    return collection_watchlist_tickers()
 
 
 def _prune_inactive_storage(root: Path | None, protected: set[str], now: float) -> None:

@@ -6,11 +6,13 @@ import { LivePrice, LiveChange } from '@/components/shared/LiveQuote';
  * 轮询 60s · 空态 / 骨架 / 503 · 响应式
  */
 import SoftBadge from '@/components/shared/SoftBadge';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { motion } from 'framer-motion';
 import { stocksApi } from '@/api/modules/stocks';
-import { accountApi } from '@/api/modules/account';
+import { usePersonalWatchlist } from '@/hooks/usePersonalWatchlist';
+import { DEFAULT_WATCHLIST_TICKERS, personalWatchlistRows } from '@/lib/personalWatchlist';
+import WatchlistManager from '@/components/shared/WatchlistManager';
 import { signalsApi } from '@/api/modules/signals';
 import { strengthApi } from '@/api/modules/strength';
 import { marketApi } from '@/api/modules/market';
@@ -296,7 +298,7 @@ function WatchCard({
            内联 transform:none 会压掉同元素上的 CSS hover 位移。 */
         className="card-surface card-lift flex w-full flex-col p-4 text-left"
       >
-      <div className="flex items-center gap-2.5">
+      <div className={cn("flex items-center gap-2.5", onRemove && "pr-9")}>
         <TickerLogo ticker={item.ticker} />
         <div className="min-w-0 flex-1">
           <p className="font-mono text-body-s font-semibold text-ink-800">{item.ticker}</p>
@@ -308,6 +310,7 @@ function WatchCard({
         <p className="metric-value text-data-l text-ink-900 tnum"><LivePrice symbol={item.ticker} fallback={item.price} fallbackAt={item.updatedAt} /></p>
         {item.sector && <SoftBadge className="max-w-[60%]" title={item.sector}><span className="truncate">{item.sector}</span></SoftBadge>}
       </div>
+      {!Number.isFinite(item.price) && <p className="mt-2 text-caption text-ink-400">{t('暂无行情')}</p>}
       <div className="mt-2">
         <Sparkline data={item.sparkline} width={230} height={56} change={item.changePct} variant="area" className="w-full" />
       </div>
@@ -338,7 +341,7 @@ function WatchCard({
           /* opacity-0 不影响命中测试：必须同步 pointer-events-none，否则这颗
              压在整卡按钮之上的隐形 × 会把「点卡片开详情」变成静默删除。
              触屏没有 hover，永远进不了 group-hover —— 无 hover 环境改为常驻可见。 */
-          className="pointer-events-none absolute right-2 top-2 z-10 inline-flex size-6 cursor-pointer items-center justify-center rounded-xs text-ink-300 opacity-0 outline-none transition-[opacity,color] duration-fast hover:bg-paper-2 hover:text-down-700 focus-visible:pointer-events-auto focus-visible:opacity-100 group-hover/card:pointer-events-auto group-hover/card:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100 [@media(hover:none)]:text-ink-400"
+          className="pointer-events-none absolute right-1 top-1 z-10 inline-flex size-11 cursor-pointer items-center justify-center rounded-xs text-ink-300 opacity-0 outline-none transition-[opacity,color] duration-fast hover:bg-paper-2 hover:text-down-700 focus-visible:pointer-events-auto focus-visible:opacity-100 group-hover/card:pointer-events-auto group-hover/card:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100 [@media(hover:none)]:text-ink-400"
         >
           <Icon name="x" size={13} />
         </button>
@@ -350,7 +353,7 @@ function WatchCard({
 /* ================= 页面主体 ================= */
 export default function Watchlist() {
   const { isVisitor, isOwner, canManageWatchlist, username } = useAccess();
-  const { openPalette, openTicker } = useShell();
+  const { openTicker } = useShell();
   const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -358,96 +361,38 @@ export default function Watchlist() {
   const [sort, setSort] = useState<SortState | null>(null);
   const [forceRefreshing, setForceRefreshing] = useState(false);
 
-  /* 登录客户读自己那份自选；未登录仍是站点默认列表。 */
-  const [myTickers, setMyTickers] = useState<string[] | null>(null);
-  /**
-   * 个人自选的读取状态。
-   *
-   * 只有 'ready' 且 tickers 为空才是「真的没有自选」；'loading' 期间不能先摆出
-   * 默认池冒充这个人的列表，'error' 也不能降级成空列表。
-   */
-  const [personalState, setPersonalState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
-  const [personalReloadToken, setPersonalReloadToken] = useState(0);
-  const [maxTickers, setMaxTickers] = useState(50);
-  const [addInput, setAddInput] = useState('');
-  const [savingTicker, setSavingTicker] = useState(false);
-  const [removingTickers, setRemovingTickers] = useState<Set<string>>(() => new Set());
-  const removingRef = useRef(new Set<string>());
-
-  useEffect(() => {
-    if (!canManageWatchlist) {
-      setMyTickers(null);
-      setPersonalState('idle');
-      return;
-    }
-    let alive = true;
-    setPersonalState('loading');
-    accountApi
-      .watchlist()
-      .then((data) => {
-        if (!alive) return;
-        setMyTickers(data.tickers);
-        setMaxTickers(data.maxTickers);
-        setPersonalState('ready');
-      })
-      .catch(() => {
-        // 失败不能写成空列表。旧写法 setMyTickers([]) 让一次请求失败长得和
-        // 「这个人还没建过自选」一模一样：横幅会说「你还没有自己的自选」，
-        // 下面照常摆出默认池 —— 把读不到说成了一个事实。
-        if (!alive) return;
-        setMyTickers(null);
-        setPersonalState('error');
-      });
-    return () => {
-      alive = false;
-    };
-  }, [canManageWatchlist, personalReloadToken]);
-
-  /**
-   * 始终读站点默认自选（已缓存、对访客免费），个人列表在前端做筛选。
-   * 不能改用 ?tickers=：那条路径对非管理员只读已有快照，任意代码组合都拿不到
-   * 快照而返回 503，而让它去实时抓取等于把供应商开销对所有注册用户敞开。
-   */
-  const fetchWatchlist = useCallback(() => stocksApi.watchlist(), []);
-
-  const wl = usePolling(fetchWatchlist, 60_000);
+  const personal = usePersonalWatchlist();
+  const { tickers: myTickers, maxTickers, edit: editPersonal } = personal;
+  const [managerKey, setManagerKey] = useState<string | null>(null);
+  const closeManager = useCallback(() => setManagerKey(null), []);
+  useEffect(() => setManagerKey(null), [personal.key]);
+  const selectedTickers = useMemo(() => canManageWatchlist ? myTickers ?? [] : DEFAULT_WATCHLIST_TICKERS, [canManageWatchlist, myTickers]);
+  const selectionKey = selectedTickers.join(',');
+  const fetchWatchlist = useCallback(() => {
+    if (personal.loading || personal.error) return Promise.resolve([]);
+    return canManageWatchlist ? stocksApi.watchlistFor(myTickers ?? []) : stocksApi.watchlist();
+  }, [canManageWatchlist, myTickers, personal.loading, personal.error]);
+  const wl = usePolling(fetchWatchlist, 60_000, [personal.key, selectionKey, personal.loading, personal.error]);
   const refreshWatchlist = wl.refresh;
-
-  const onAddTicker = useCallback(async () => {
-    const symbol = addInput.trim().toUpperCase();
-    if (!symbol || savingTicker) return;
-    setSavingTicker(true);
+  const items = useMemo(() => {
+    if (personal.loading || personal.error) return [];
+    return canManageWatchlist
+      ? personalWatchlistRows(myTickers ?? [], wl.data ?? [])
+      : (wl.data ?? []).filter((row) => DEFAULT_WATCHLIST_TICKERS.includes(row.ticker));
+  }, [wl.data, canManageWatchlist, myTickers, personal.loading, personal.error]);
+  const onRemoveTicker = useCallback(async (symbol: string) => {
     try {
-      const next = await accountApi.add(symbol);
-      setMyTickers(next.tickers);
-      setMaxTickers(next.maxTickers);
-      setAddInput('');
-      toast.success(t('已加入自选'), symbol);
+      await editPersonal([], [symbol]);
+      toast.info(t('已移出自选'), symbol);
     } catch (error) {
-      toast.error(t('加入失败'), error instanceof ApiError ? error.message : t('请稍后再试'));
-    } finally {
-      setSavingTicker(false);
+      toast.error(t('移除失败'), error instanceof Error ? error.message : t('请稍后再试'));
     }
-  }, [addInput, savingTicker, toast]);
-
-  const onRemoveTicker = useCallback(
-    async (symbol: string) => {
-      if (removingRef.current.has(symbol)) return;
-      removingRef.current.add(symbol);
-      setRemovingTickers(new Set(removingRef.current));
-      try {
-        const next = await accountApi.remove(symbol);
-        setMyTickers(next.tickers);
-        toast.info(t('已移出自选'), symbol);
-      } catch (error) {
-        toast.error(t('移除失败'), error instanceof ApiError ? error.message : t('请稍后再试'));
-      } finally {
-        removingRef.current.delete(symbol);
-        setRemovingTickers(new Set(removingRef.current));
-      }
-    },
-    [toast],
-  );
+  }, [editPersonal, toast]);
+  const savePersonal = useCallback(async (add: string[], remove: string[]) => {
+    await editPersonal(add, remove);
+    refreshWatchlist({ force: true });
+    toast.success(t('自选已保存'));
+  }, [editPersonal, refreshWatchlist, toast]);
   const signalsQ = usePolling(() => signalsApi.market(), 60_000);
   const strengthQ = usePolling(() => strengthApi.market(), 60_000);
   const statusQ = usePolling(() => marketApi.status(), 60_000);
@@ -468,7 +413,7 @@ export default function Watchlist() {
       }
       // worker 原子写入后绕过浏览器短缓存读取一次同一路径；不再发送
       // 后端从未支持的 ?force=1 占位参数。
-      await stocksApi.watchlist(true);
+      await stocksApi.watchlistFor(selectedTickers, true);
       refreshWatchlist();
       toast.success(t('自选已更新'), t('已读取最新行情数据'));
     } catch (error) {
@@ -479,7 +424,7 @@ export default function Watchlist() {
     } finally {
       setForceRefreshing(false);
     }
-  }, [forceRefreshing, isOwner, refreshWatchlist, toast]);
+  }, [forceRefreshing, isOwner, refreshWatchlist, selectedTickers, toast]);
 
   /* 命令面板「强制刷新自选」→ 真实 worker focus_refresh */
   useEffect(() => {
@@ -497,26 +442,25 @@ export default function Watchlist() {
   }, [onForceRefresh, searchParams, setSearchParams]);
 
   /* 涨跌 tick-flash：定时器由 useTickFlash 单独持有，避免闪烁态永久残留（审计 P2-5） */
-  const flashes = useTickFlash(wl.data, watchKey, watchPrice);
+  const flashes = useTickFlash(items, watchKey, watchPrice);
 
   /* 平盘单独计数：changePct >= 0 会把持平股票算进上涨家数（审计 P2-4）。
      涨跌幅缺失的行也不能算进任何一侧。 */
   const aggregates = useMemo(() => {
-    const items = wl.data ?? [];
     const known = items.filter((x) => Number.isFinite(x.changePct));
     return {
       advancers: known.filter((x) => x.changePct > 0).length,
       decliners: known.filter((x) => x.changePct < 0).length,
       unchanged: known.filter((x) => x.changePct === 0).length,
     };
-  }, [wl.data]);
+  }, [items]);
   const rowStrengthAvailable = useMemo(
-    () => (wl.data ?? []).some((item) => Number.isFinite(item.strengthScore)),
-    [wl.data],
+    () => items.some((item) => Number.isFinite(item.strengthScore)),
+    [items],
   );
   const rowSignalsAvailable = useMemo(
-    () => (wl.data ?? []).some((item) => item.signals.length > 0),
-    [wl.data],
+    () => items.some((item) => item.signals.length > 0),
+    [items],
   );
 
   /* 表格列（watchlist.md B2） */
@@ -618,7 +562,7 @@ export default function Watchlist() {
                 type="button"
                 title={t('从自选移除 {ticker}', { ticker: r.ticker })}
                 aria-label={t('从自选移除 {ticker}', { ticker: r.ticker })}
-                disabled={removingTickers.has(r.ticker)}
+                disabled={personal.busy}
                 onClick={(event) => {
                   // 行本身是「打开详情」的点击目标，删除必须先拦住冒泡。
                   event.stopPropagation();
@@ -636,45 +580,21 @@ export default function Watchlist() {
         ),
       },
     ],
-    [flashes, rowSignalsAvailable, rowStrengthAvailable, canManageWatchlist, onRemoveTicker, removingTickers],
+    [flashes, rowSignalsAvailable, rowStrengthAvailable, canManageWatchlist, onRemoveTicker, personal.busy],
   );
 
-  // 个人自选还没读回来时同样算加载中：先摆出默认池、再换成个人列表，
-  // 等于让登录用户短暂看到一份不属于他的清单。
-  const loading = wl.loading || (canManageWatchlist && personalState === 'loading');
-  const personalFailed = canManageWatchlist && personalState === 'error';
+  const loading = personal.loading || (wl.loading && !wl.data);
+  const personalFailed = Boolean(personal.error);
   const err = wl.error;
-  /**
-   * 个人自选为空时展示站点默认关注池，并由横幅明说这是默认池。
-   *
-   * 空列表直接渲染成空白页会让「还没添加过」和「加载失败」长得一模一样；
-   * 而不加标注地展示默认池，又等于把系统的池子冒充成用户自己的选择。
-   */
-  // 只有成功读到空列表才是「还没建过自选」。读失败时 myTickers 为 null，
-  // 这里必须为 false，否则失败会被写成一句关于用户的事实。
-  const showingDefaultPool =
-    canManageWatchlist && personalState === 'ready' && myTickers !== null && myTickers.length === 0;
-  const items = useMemo(() => {
-    const all = wl.data ?? [];
-    if (!canManageWatchlist || !myTickers || myTickers.length === 0) return all;
-    const bySymbol = new Map(all.map((row) => [row.ticker, row]));
-    // 按用户自己的排序输出；覆盖范围外的代码留到下方单独提示，不静默丢弃
-    return myTickers.map((symbol) => bySymbol.get(symbol)).filter((row): row is WatchlistItem => !!row);
-  }, [wl.data, canManageWatchlist, myTickers]);
-
-  /** 用户加了但默认行情覆盖不到的代码——如实说明，不假装它不存在 */
-  const uncoveredTickers = useMemo(() => {
-    if (!canManageWatchlist || !myTickers) return [];
-    const covered = new Set((wl.data ?? []).map((row) => row.ticker));
-    return myTickers.filter((symbol) => !covered.has(symbol));
-  }, [wl.data, canManageWatchlist, myTickers]);
+  const showingDefaultPool = !canManageWatchlist && !personal.loading && !personalFailed;
+  const uncoveredTickers = items.filter((row) => !Number.isFinite(row.price)).map((row) => row.ticker);
   // 唯一排序实现见 watchlistSort：卡片、表格与渐进切片必须消费同一份排序结果，
   // 否则「先切片再排序」会把局部样本冒充成完整结果。
   const cardItems = useMemo(() => sortWatchlistItems(items, sort), [items, sort]);
   useQuoteSymbols(cardItems.map(item => item.ticker));
   /* 「上涨/下跌」卡读的是 wl（自选行情），骨架条件必须包含它——否则
      signals/strength 先返回时会把还没读到的自选渲染成「0 / 0」（审计 2.2.11）。 */
-  const statsLoading = signalsQ.loading || strengthQ.loading || (wl.loading && !wl.data);
+  const statsLoading = signalsQ.loading || strengthQ.loading || loading;
 
   /**
    * 渲染分批，数据不分批。
@@ -713,6 +633,9 @@ export default function Watchlist() {
 
   return (
     <div>
+      {managerKey === personal.key && personal.enabled && myTickers !== null && (
+        <WatchlistManager key={personal.key} tickers={myTickers} maxTickers={maxTickers} busy={personal.busy} onSave={savePersonal} onClose={closeManager} />
+      )}
       {/* B0 页头带 */}
       <PageHeader
         section="01"
@@ -776,7 +699,7 @@ export default function Watchlist() {
                   <p className="eyebrow">{t('上涨 / 下跌')}</p>
                   <Icon name="candle" size={18} className="text-ink-400" />
                 </div>
-                {wl.data === null ? (
+                {personalFailed || (wl.error && !wl.data) ? (
                   /* 自选行情读取失败：0/0 看起来像全体持平（审计 2.2.11） */
                   <p className="mt-4 text-caption text-ink-400">{t('自选行情读取失败，涨跌家数不可用')}</p>
                 ) : (
@@ -829,31 +752,15 @@ export default function Watchlist() {
                 onChange={setView}
               />
               <SortDropdown sort={sort} onChange={setSort} />
-              {canManageWatchlist && (
-                <form
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    void onAddTicker();
-                  }}
-                  className="flex items-center gap-1.5"
-                >
-                  <input
-                    value={addInput}
-                    onChange={(event) => setAddInput(event.target.value)}
-                    placeholder={t("加自选")}
-                    maxLength={12}
-                    aria-label={t("添加自选股票代码")}
-                    className="h-8 w-[92px] rounded-sm border border-line-strong bg-card px-2 font-mono text-caption uppercase text-ink-800 outline-none transition-[border-color,box-shadow] duration-fast placeholder:font-sans placeholder:normal-case placeholder:text-ink-300 focus:border-brand-600 focus:shadow-focus-ring"
-                  />
-                  <button
-                    type="submit"
-                    disabled={savingTicker || !addInput.trim()}
-                    className="flex h-8 items-center gap-1 rounded-sm border border-line-strong bg-card px-2.5 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <Icon name="plus" size={13} />
-                    {t('添加')}
-                  </button>
-                </form>
+              {canManageWatchlist ? (
+                <button type="button" onClick={() => setManagerKey(personal.key)} disabled={personal.loading || personal.busy || myTickers === null}
+                  className="inline-flex min-h-11 items-center gap-1.5 rounded-md bg-brand-600 px-3 text-caption font-medium text-white shadow-btn-hi hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50">
+                  <Icon name="plus" size={15} />{t('管理自选')}
+                </button>
+              ) : (
+                <Link to="/login" state={{ from: '/watchlist' }} className="inline-flex min-h-11 items-center gap-1.5 rounded-md border border-line-strong bg-card px-3 text-caption text-ink-600 hover:border-brand-400 hover:text-brand-600">
+                  <Icon name="plus" size={15} />{t('登录后管理自选')}
+                </Link>
               )}
             </div>
             <p className="w-full text-right text-caption text-ink-400 sm:w-auto">
@@ -869,7 +776,13 @@ export default function Watchlist() {
             </p>
           </div>
 
-          {uncoveredTickers.length > 0 && (
+          {err && canManageWatchlist && items.length > 0 && (
+            <p className="mt-3 flex flex-wrap items-center gap-2 text-caption text-ink-500" role="status">
+              <SoftBadge tone="warn" className="whitespace-normal">{t('行情暂时读取失败，自选名单已保留。')}</SoftBadge>
+              <button className="control-button" disabled={wl.refreshing} onClick={() => wl.refresh({ force: true })}>{t('重试')}</button>
+            </p>
+          )}
+          {!err && uncoveredTickers.length > 0 && (
             <p className="mt-3 flex flex-wrap items-center gap-1.5 text-caption text-ink-500" role="status">
               <SoftBadge tone="warn" className="whitespace-normal">{t('暂无行情：')}{uncoveredTickers.join('、')}</SoftBadge>
               <span className="ml-1 text-ink-500">{t('（不在当前覆盖范围内，可在个股页手动获取）')}</span>
@@ -881,10 +794,10 @@ export default function Watchlist() {
               className="mt-3 flex flex-wrap items-center gap-2 text-caption text-ink-500"
               role="status"
             >
-              <SoftBadge tone="warn" className="whitespace-normal">{t('读不到你的自选列表，下面显示的是系统默认关注池。')}</SoftBadge>
+              <SoftBadge tone="warn" className="whitespace-normal">{t('暂时读不到你的自选列表，请重试。')}</SoftBadge>
               <button
                 type="button"
-                onClick={() => setPersonalReloadToken((n) => n + 1)}
+                onClick={() => void personal.refresh()}
                 className="control-button"
               >
                 {t('重试')}
@@ -897,8 +810,8 @@ export default function Watchlist() {
               className="mt-3 flex flex-wrap items-center gap-1.5 text-caption text-ink-500"
               role="status"
             >
-              <SoftBadge className="whitespace-normal">{t('你还没有自己的自选，下面是系统默认关注池。')}</SoftBadge>
-              <span className="ml-1 text-ink-400">{t('上方输入代码即可开始建立自己的列表。')}</span>
+              <SoftBadge className="whitespace-normal">{t('默认关注 AAPL、MSFT、NVDA、SPY，共 4 只。')}</SoftBadge>
+              <span className="ml-1 text-ink-400">{t('登录后可保存自己的自选列表。')}</span>
             </p>
           )}
 
@@ -918,7 +831,9 @@ export default function Watchlist() {
                 </div>
               }
             >
-            {err && !wl.data ? (
+            {personalFailed ? (
+              <div className="card-surface"><EmptyState variant="error" image="/empty-watchlist.svg" title={t('自选读取失败')} description={personal.error ?? ''} /></div>
+            ) : err && !wl.data && !canManageWatchlist ? (
               /* 失败但还有上一轮数据时不整块换错误页：一次 408/断网就把
                  「214 只标的」的统计和涨跌家数换成加载失败，同屏自相矛盾 */
               <div className="card-surface">
@@ -939,16 +854,6 @@ export default function Watchlist() {
                   }
                 />
               </div>
-            ) : items.length === 0 && myTickers && myTickers.length > 0 ? (
-              /* 有自选、但全部在行情覆盖范围外：上方黄条已列出代码，这里不能再说
-                 「清单还是空的」——同屏自相矛盾。 */
-              <div className="card-surface">
-                <EmptyState
-                  image="/empty-chart.svg"
-                  title={t('自选暂时都不在行情覆盖范围内')}
-                  description={t('上方列出的代码已保存在账号里，行情覆盖后会自动出现')}
-                />
-              </div>
             ) : items.length === 0 ? (
               <div className="card-surface">
                 <EmptyState
@@ -956,25 +861,25 @@ export default function Watchlist() {
                   title={t("清单还是空的")}
                   description={
                     canManageWatchlist
-                      ? t('在上方输入股票代码，加入你的第一只自选')
+                      ? t('点击管理自选，添加股票或一次导入多个代码。')
                       : t('登录后可以把自选股保存在账号里，换设备也还在')
                   }
                   footnote={
                     canManageWatchlist
-                      ? t('自选保存在账号 {username} 下', { username })
+                      ? t('自选保存在账号 {username} 下', { username: username ?? 'admin' })
                       : isVisitor
                         ? t('当前为访客只读模式')
                         : undefined
                   }
-                  action={
+                  action={canManageWatchlist ? (
                     <button
-                      onClick={openPalette}
+                      onClick={() => setManagerKey(personal.key)}
                       className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105"
                     >
-                      <Icon name="search" size={14} />
-                      {t('搜索代码')}
+                      <Icon name="plus" size={14} />
+                      {t('管理自选')}
                     </button>
-                  }
+                  ) : <Link to="/login" className="control-button">{t('登录后管理自选')}</Link>}
                 />
               </div>
             ) : view === 'table' ? (
@@ -1000,7 +905,7 @@ export default function Watchlist() {
                       animateIn={i < FIRST_BATCH}
                       onClick={() => openTicker(it.ticker)}
                       onRemove={canManageWatchlist ? () => void onRemoveTicker(it.ticker) : undefined}
-                      removing={removingTickers.has(it.ticker)}
+                      removing={personal.busy}
                       showStrength={rowStrengthAvailable}
                       showSignals={rowSignalsAvailable}
                     />
@@ -1017,7 +922,7 @@ export default function Watchlist() {
                     animateIn={i < FIRST_BATCH}
                     onClick={() => openTicker(it.ticker)}
                     onRemove={canManageWatchlist ? () => void onRemoveTicker(it.ticker) : undefined}
-                    removing={removingTickers.has(it.ticker)}
+                    removing={personal.busy}
                     showStrength={rowStrengthAvailable}
                     showSignals={rowSignalsAvailable}
                   />

@@ -116,7 +116,7 @@ test('DataTable 的 hint 在排序按钮外，Watchlist 强度列不再把 InfoH
   assert.match(table, /\{c\.hint\}/);
   const watchlist = codeOf(await source('pages/Watchlist.tsx'));
   assert.match(watchlist, /hint: <InfoHint/);
-  assert.match(watchlist, /removingTickers/);
+  assert.match(watchlist, /disabled=\{personal\.busy\}/);
 });
 
 test('SignalCards / FeedPanel 不再把可交互嵌进 role=button 的 article', async () => {

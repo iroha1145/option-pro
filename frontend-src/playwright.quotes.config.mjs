@@ -1,6 +1,6 @@
 import { defineConfig } from '@playwright/test';
 export default defineConfig({
-  testDir: './visual-tests', testMatch: 'realtime-quotes.spec.mjs',
+  testDir: './visual-tests', testMatch: ['realtime-quotes.spec.mjs', 'watchlist-management.spec.mjs'],
   outputDir: './test-results/quotes', workers: 1, timeout: 30_000,
   expect: { timeout: 8_000 }, reporter: [['list']],
   webServer: {

@@ -151,7 +151,10 @@ def test_public_cold_cache_never_calls_market_data_providers(
     async def scenario() -> None:
         with request_owner_access_context(False):
             await _expect_unavailable(stocks.watchlist(None))
-            await _expect_unavailable(stocks.watchlist("AAPL,MSFT"))
+            selected = await stocks.watchlist("AAPL,MSFT")
+            assert selected["groups"] == []
+            assert selected["failed_tickers"] == ["AAPL", "MSFT"]
+            assert selected["attempted"] == 2 and selected["succeeded"] == 0
             with pytest.raises(HTTPException) as captured:
                 await stocks.search_stocks("ZZZZUNLISTED")
             assert captured.value.status_code == 503

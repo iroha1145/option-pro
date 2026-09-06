@@ -341,6 +341,49 @@ def test_expired_session_is_rejected(tmp_path) -> None:
 # ---------------- watchlist ----------------
 
 
+def test_batch_edit_is_atomic_and_preserves_concurrent_membership(client, store):
+    _register(client, "batch-editor", "fixture-password-for-tests")
+    client.put("/api/account/watchlist", json={"tickers": ["AAPL", "NVDA"]}, headers=HEADERS)
+    # Another page adds AMD after the editor opened its original draft.
+    client.post("/api/account/watchlist", json={"ticker": "AMD"}, headers=HEADERS)
+    response = client.patch("/api/account/watchlist", json={"add": ["msft", "ＭＳＦＴ"], "remove": ["NVDA"]}, headers=HEADERS)
+    assert response.status_code == 200
+    assert response.json()["tickers"] == ["AAPL", "AMD", "MSFT"]
+    bad = client.patch("/api/account/watchlist", json={"add": ["SPY", "BAD!"], "remove": ["AAPL"]}, headers=HEADERS)
+    assert bad.status_code == 400
+    assert client.get("/api/account/watchlist").json()["tickers"] == ["AAPL", "AMD", "MSFT"]
+    empty = client.patch("/api/account/watchlist", json={"remove": ["AAPL", "AMD", "MSFT"]}, headers=HEADERS)
+    assert empty.json()["tickers"] == []
+    assert client.get("/api/account/watchlist").json()["tickers"] == []
+
+
+def test_batch_cap_rolls_back_removals_and_retains_other_accounts(store):
+    first = store.register("first-editor", "fixture-password-for-tests").account.user_id
+    second = store.register("second-editor", "fixture-password-for-tests").account.user_id
+    original = [f"T{i}" for i in range(WATCHLIST_MAX_TICKERS)]
+    store.replace_watchlist(first, original)
+    store.add_ticker(second, "AAPL")
+    with pytest.raises(AccountError, match="watchlist_full"):
+        store.edit_watchlist(first, add=["AAPL", "MSFT"], remove=["T0"])
+    assert store.watchlist(first) == original
+    assert store.edit_watchlist(first, add=["NVDA"], remove=["T0"])[-1] == "NVDA"
+    assert store.watchlist(second) == ["AAPL"]
+
+
+def test_batch_edit_requires_account_and_same_origin_json(client):
+    assert client.patch("/api/account/watchlist", json={"add": ["AAPL"]}, headers=HEADERS).status_code == 401
+    _register(client, "origin-editor", "fixture-password-for-tests")
+    assert client.patch("/api/account/watchlist", json={"add": ["AAPL"]}, headers={**HEADERS, "Origin": "https://elsewhere.test"}).status_code == 403
+    assert client.get("/api/account/watchlist").json()["tickers"] == []
+
+
+def test_owner_batch_can_delete_last_ticker_without_reseeding(owner_client):
+    _owner_login(owner_client)
+    assert owner_client.patch("/api/account/watchlist", json={"add": ["AAPL"]}, headers=HEADERS).json()["tickers"] == ["AAPL"]
+    assert owner_client.delete("/api/account/watchlist/AAPL", headers=HEADERS).json()["tickers"] == []
+    assert owner_client.get("/api/account/watchlist").json()["tickers"] == []
+
+
 def test_watchlist_requires_a_session(client: TestClient) -> None:
     assert client.get("/api/account/watchlist").status_code == 401
 

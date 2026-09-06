@@ -194,6 +194,13 @@ class WatchlistRequest(BaseModel):
     tickers: list[str] = Field(default_factory=list, max_length=WATCHLIST_MAX_TICKERS)
 
 
+class WatchlistEditRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    add: list[str] = Field(default_factory=list, max_length=WATCHLIST_MAX_TICKERS)
+    remove: list[str] = Field(default_factory=list, max_length=WATCHLIST_MAX_TICKERS)
+
+
 # 绘图相关的码全部落在这里：客户端按 code 分支，不按状态码。409 上挤着配额和
 # 版本冲突两类语义，只有 revision_conflict 才是「别的设备改过了」，配额满不能走
 # 重载对话框那条路——那条路会重放注定失败的创建。
@@ -393,6 +400,24 @@ def replace_watchlist(
         tickers = get_account_store().replace_watchlist(
             account.user_id,
             payload.tickers,
+        )
+    except AccountError as exc:
+        raise account_http_error(exc) from exc
+    return JSONResponse(
+        {"tickers": tickers, "max_tickers": WATCHLIST_MAX_TICKERS},
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@router.patch("/watchlist", dependencies=[Depends(require_same_origin_json)])
+def edit_watchlist(
+    request: Request,
+    payload: Annotated[WatchlistEditRequest, Body()],
+) -> Response:
+    account = require_watchlist_account(request)
+    try:
+        tickers = get_account_store().edit_watchlist(
+            account.user_id, add=payload.add, remove=payload.remove,
         )
     except AccountError as exc:
         raise account_http_error(exc) from exc

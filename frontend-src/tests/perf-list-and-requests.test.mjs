@@ -50,7 +50,7 @@ test('自选页在完整列表上排序与统计，只对渲染切片分批', as
   const page = codeOf(await source('pages/Watchlist.tsx'));
 
   // 统计口径必须仍然来自完整数据
-  assert.match(page, /const items = wl\.data \?\? \[\]/);
+  assert.match(page, /const known = items\.filter/);
   assert.match(page, /advancers: known\.filter/);
   // 排序在 cardItems 上完成，分批发生在排序之后
   assert.match(page, /const cardItems = useMemo/);
@@ -335,17 +335,17 @@ test('个人自选读取失败不能冒充成空自选', async () => {
   // 旧写法 .catch(() => setMyTickers([])) 让请求失败长得和「还没建过自选」
   // 一模一样：横幅说「你还没有自己的自选」，下面照常摆默认池。
   assert.doesNotMatch(page, /if \(alive\) setMyTickers\(\[\]\);/);
-  assert.match(page, /setPersonalState\('error'\)/);
-  // 只有成功读到空列表才算「还没建过」
-  assert.match(page, /personalState === 'ready' && myTickers !== null && myTickers\.length === 0/);
+  assert.match(page, /const personalFailed = Boolean\(personal\.error\)/);
+  // 系统默认列表只面向访客；个人空列表不能重新显示默认股票。
+  assert.match(page, /!canManageWatchlist && !personal\.loading && !personalFailed/);
   // 失败要说出来并可重试
   assert.match(page, /读不到你的自选列表/);
-  assert.match(page, /setPersonalReloadToken/);
+  assert.match(page, /personal\.refresh\(\)/);
 });
 
 test('个人自选还没读回来时算加载中，不先摆默认池', async () => {
   const page = codeOf(await source('pages/Watchlist.tsx'));
-  assert.match(page, /wl\.loading \|\| \(canManageWatchlist && personalState === 'loading'\)/);
+  assert.match(page, /const loading = personal\.loading \|\|/);
 });
 
 /* ---------- 打印挂载全部 ---------- */
