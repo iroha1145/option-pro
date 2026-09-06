@@ -133,7 +133,7 @@ test('tiny indicator values remain distinguishable, empty panes do not invent a 
 
 test('expanded workspace scrolls tall indicators instead of squeezing them', async ({ page }) => {
   const errors = await open(page);
-  await page.getByRole('button', { name: '展开绘图工作区', exact: true }).click();
+  await page.getByRole('button', { name: '展开图表', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '绘图工作区' });
   await expect(dialog).toBeVisible();
   await dialog.getByRole('tab', { name: '全部展开', exact: true }).click();

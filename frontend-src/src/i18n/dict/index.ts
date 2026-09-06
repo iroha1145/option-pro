@@ -7,6 +7,7 @@
  * 全部用完整扩展名导入：node --experimental-strip-types 跑测试时按 ES 模块规范
  * 解析相对路径，不会像 Vite 那样自动补 .ts。
  */
+import { INDICATOR_PANES } from './indicatorPanes.ts';
 import { QUOTES } from './quotes.ts';
 import { CHROME } from './chrome.ts';
 import { HINTS } from './hints.ts';
@@ -30,6 +31,7 @@ import { STOCK_DATA } from './stockData.ts';
 import type { Dict } from './types.ts';
 
 export const DICT: Dict = {
+  ...INDICATOR_PANES,
   ...QUOTES,
   ...CHROME,
   ...HINTS,

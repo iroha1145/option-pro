@@ -30,7 +30,7 @@ export function indicatorLayout(minimumHeight: number, paneCount: number, narrow
     headers.push({ top: cursor, height });
     cursor += height;
   };
-  header(narrow ? 60 : 44);
+  header(narrow ? 60 : 52);
   grid(72);
   for (let index = 0; index < count; index++) {
     header(narrow ? 80 : 56);

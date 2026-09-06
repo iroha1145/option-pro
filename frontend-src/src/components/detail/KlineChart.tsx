@@ -1,3 +1,5 @@
+import IndicatorReadouts from './chart-indicators/IndicatorReadouts';
+import { indicatorLayout, selectIndicatorPanes, formatIndicatorValue, type IndicatorLayout, type IndicatorView } from './chart-indicators/layout.ts';
 import { useLiveQuote, useQuoteStatus } from '@/hooks/useLiveQuote';
 import { displayedQuoteLabel, preferLiveQuote } from '@/lib/liveQuotes';
 /**
@@ -13,6 +15,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import ReactECharts from '@/components/charts/ReactECharts';
 import Segmented from '@/components/shared/Segmented';
+import MenuSelect from '@/components/shared/MenuSelect';
 import EmptyState from '@/components/shared/EmptyState';
 import InfoHint from '@/components/shared/InfoHint';
 import ManualStockPull from '@/components/detail/ManualStockPull';
@@ -185,7 +188,7 @@ function buildOption(
   prevClose?: number,
   overlay?: MeasureOverlay | null,
   extra?: { lines: object[]; points: object[]; areas: object[]; polygons?: { vertices: { x: number; y: number }[]; color: string; opacity: number }[] } | null,
-  analysis?: { showMa20?: boolean; extraMa?: { name: string; data: (number | null)[] }[]; panes?: PanePlot[] } | null,
+  analysis?: { showMa20?: boolean; extraMa?: { name: string; data: (number | null)[] }[]; panes?: PanePlot[]; layout?: IndicatorLayout } | null,
   zoom?: ZoomWindow | null,
   colorMode: ColorMode = getColorMode(),
 ): ChartOption {
@@ -327,7 +330,7 @@ function buildOption(
   }));
 
   const panes = analysis?.panes ?? [];
-  const grids = analysisLayout(panes.length);
+  const grids = analysis?.layout?.grids ?? analysisLayout(panes.length);
   const axisIndexes = grids.map((_, index) => index);
   const paneSeries = panes.flatMap((pane, paneIndex) => {
     const axis = paneIndex + 2;
@@ -366,7 +369,7 @@ function buildOption(
       axisLine: { show: false },
       axisTick: { show: false },
       axisLabel: index === grids.length - 1
-        ? { color: CH.ink400, fontSize: 11, fontFamily: CHART_MONO_FONT }
+        ? { color: CH.ink400, fontSize: 11, fontFamily: CHART_MONO_FONT, hideOverlap: true }
         : { show: false },
     })),
     yAxis: grids.map((_, index) => {
@@ -380,9 +383,11 @@ function buildOption(
         position: 'right' as const,
         axisLine: { show: false },
         axisTick: { show: false },
-        axisLabel: index === 0 || pane
+        splitNumber: index === 0 ? 5 : 3,
+        axisLabel: index === 0
           ? { color: CH.ink400, fontSize: 11, fontFamily: CHART_MONO_FONT }
-          : { show: false },
+          : { color: CH.ink400, fontSize: 10, fontFamily: CHART_MONO_FONT, hideOverlap: true,
+              formatter: formatIndicatorValue, margin: 8 },
         splitLine: index === 0
           ? { lineStyle: { color: CH.lineChart, width: 1 } }
           : { show: false },
@@ -437,7 +442,7 @@ function buildOption(
           panes.flatMap((pane) => pane.series.map((series) => {
             const value = series.data[idx];
             if (value == null) return '';
-            return row(series.name, Number(value).toFixed(series.name === 'OBV' ? 0 : 2));
+            return row(series.name, formatIndicatorValue(value));
           })).join('') +
           `</div>`
         );
@@ -587,6 +592,11 @@ export default function KlineChart({
   const [mode, setMode] = useState<ChartMode>('candle');
   // Per-chart view preference; never rewrites saved hand drawings or backend scores.
   const [smartDrawingEnabled, setSmartDrawingEnabled] = useState(true);
+  const [indicatorView, setIndicatorView] = useState<IndicatorView>('single');
+  const [selectedIndicator, setSelectedIndicator] = useState('macd');
+  const plotRef = useRef<HTMLDivElement>(null);
+  const [narrowIndicators, setNarrowIndicators] = useState(false);
+
   const seenRefreshVersion = useRef(refreshVersion);
   const { data, error, loading, refresh } = usePolling(
     () => {
@@ -791,6 +801,16 @@ export default function KlineChart({
   });
 
   useEffect(() => {
+    const node = plotRef.current;
+    if (!node) return;
+    const observer = new ResizeObserver(([entry]) => {
+      setNarrowIndicators(entry.contentRect.width < 520);
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [drawing.expanded]);
+
+  useEffect(() => {
     if (!measureActive) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
@@ -844,13 +864,13 @@ export default function KlineChart({
     // 副图必须和 MA 走同一条按日期对齐的路：分析序列可能只覆盖 series_break_at
     // 之后的一段（长度 M < 图上 N 根），直接当成从索引 0 开始的裸数组，
     // 会把最近的动量值画到 N−M 根之前的老蜡烛底下。
-    const compact = !drawing.expanded;
-    const limited = compact ? visiblePanes.slice(0, 1) : visiblePanes;
+    const limited = selectIndicatorPanes(visiblePanes, indicatorView, selectedIndicator);
     const panes = analysisOk && data && mode === 'candle'
       ? panesToOption(limited, data.bars, range)
       : [];
-    return { showMa20: mode === 'candle' && showMa20, extraMa: mode === 'candle' ? extraMa : [], panes };
-  }, [analysisOk, data, drawing.expanded, mode, range, visibleOverlays, visiblePanes, layerSettings]);
+    return { showMa20: mode === 'candle' && showMa20, extraMa: mode === 'candle' ? extraMa : [], panes,
+      layout: indicatorLayout(drawing.expanded ? Math.max(540, height) : height, panes.length, narrowIndicators) };
+  }, [analysisOk, data, drawing.expanded, mode, range, visibleOverlays, visiblePanes, layerSettings, indicatorView, selectedIndicator, height, narrowIndicators]);
 
   const option = useMemo(
     () => {
@@ -896,7 +916,7 @@ export default function KlineChart({
 
   const chartBody = (
     <section
-      className={cn(className, drawing.expanded && 'flex h-full min-h-0 flex-col')}
+      className={cn(className, drawing.expanded && 'flex h-full min-h-0 flex-col overflow-y-auto')}
       aria-label={t('{ticker} K 线图', { ticker })}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1033,7 +1053,25 @@ export default function KlineChart({
         </p>
       )}
 
-      <div className="relative mt-3 min-h-0" style={{ height: drawing.expanded ? '100%' : height }}>
+      {mode === 'candle' && analysisOk && (
+        <div className="mt-3 flex shrink-0 flex-wrap items-center gap-2" data-indicator-controls>
+          <span className="text-micro text-ink-500">{t('副图')}</span>
+          {visiblePanes.length > 0 ? <>
+            <Segmented ariaLabel={t('副图显示方式')}
+              options={[{ value: 'single' as const, label: t('单项切换') }, { value: 'all' as const, label: t('全部展开') }]}
+              value={indicatorView} onChange={setIndicatorView} />
+            {indicatorView === 'single' && visiblePanes.length > 1 && <MenuSelect
+              ariaLabel={t('选择副图指标')} value={analysisOption.panes[0]?.id ?? ''}
+              options={visiblePanes.map(pane => ({ value: pane.id, label: pane.label }))}
+              onChange={setSelectedIndicator} className="min-w-0 max-w-full" />}
+          </> : <span className="text-micro text-ink-400">{t('未启用指标副图')}</span>}
+          <button type="button" className="ml-auto text-micro text-brand-600 underline-offset-2 hover:underline" onClick={() => setLayersOpen(true)}>
+            {t('选择指标图层')}
+          </button>
+        </div>
+      )}
+      <div ref={plotRef} className="relative mt-3 min-h-0 shrink-0" data-indicator-chart
+        style={{ height: mode === 'candle' ? analysisOption.layout.height : drawing.expanded ? Math.max(height, 540) : height }}>
         <AnimatePresence mode="wait">
           {loading ? (
             <motion.div
@@ -1089,6 +1127,8 @@ export default function KlineChart({
                 className={measureActive || drawing.tool !== 'select' ? 'cursor-crosshair' : undefined}
                 ariaLabel={t('{ticker} {range} {mode}图', { ticker, range, mode: mode === 'candle' ? t('K 线') : t('面积') })}
               />
+              {mode === 'candle' && data && <IndicatorReadouts key={`${ticker}|${range}`} chart={chartInst}
+                bars={data.bars} range={range} panes={analysisOption.panes} layout={analysisOption.layout} />}
             </motion.div>
           )}
         </AnimatePresence>
