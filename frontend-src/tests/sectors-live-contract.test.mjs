@@ -287,6 +287,13 @@ test('板块组件不再消费无后端依据的趋势、资金流和相关性�
   assert.match(ivPanel, /板块排位是同板块成分之间的横向比较/);
   /* stale 提示必须留着：数据没刷新要让人看见 */
   assert.match(ivPanel, /meta\.stale/);
+  const sideRail = fs.readFileSync(
+    path.join(sourceRoot, 'components', 'sectors', 'SideRail.tsx'),
+    'utf8',
+  );
+  assert.match(sideRail, /SoftBadge/);
+  assert.match(sideRail, /SOURCE_STATUS_CN/);
+  assert.equal(sideRail.includes('border-warn-600/25'), false);
 });
 
 test('IV 排名等待真实板块目录，首屏不再请求旧占位编号', () => {

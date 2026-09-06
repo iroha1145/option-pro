@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { cn } from '@/lib/utils';
 import { fmtRelative } from '@/lib/format';
 import Icon from '@/components/icons';
+import SoftBadge from '@/components/shared/SoftBadge';
 import { SkeletonBlock, SkeletonCard } from '@/components/shared/Skeleton';
 import type { IvMetaVm, IvRowVm, SectorVm } from './model';
 import {
@@ -161,16 +161,19 @@ function CoverageCard({
           <p className="eyebrow">{t('IV 数据覆盖')}</p>
           <h3 className="mt-1 text-h3 text-ink-800">{sector?.name ?? t('所选板块')}</h3>
         </div>
-        <span
-          className={cn(
-            'rounded-xs border px-1.5 py-0.5 text-micro',
-            meta.status === 'active'
-              ? 'border-up-600/20 bg-up-50 text-up-700'
-              : 'border-warn-600/25 bg-warn-50 text-warn-600',
-          )}
+        <SoftBadge
+          tone={
+            error
+              ? 'down'
+              : meta.status === 'active'
+                ? 'up'
+                : meta.status === 'insufficient_data'
+                  ? 'down'
+                  : 'warn'
+          }
         >
           {statusLabel}
-        </span>
+        </SoftBadge>
       </div>
 
       <dl className="mt-4 divide-y divide-line">
