@@ -41,6 +41,8 @@ MAX_CLIENTS = 256
 MAX_CACHED_QUOTES = 2048
 MAX_RADAR_EVENTS = 512
 RADAR_MAX_RETRY_SECONDS = 30.0
+# Fault sources that describe reaching the provider, not the radar's own state.
+TRANSPORT_SOURCES = frozenset({"stream", "rest"})
 _SYMBOL = re.compile(r"^[A-Z][A-Z0-9.-]{0,14}$")
 _US_CLASS_ALIAS = re.compile(r"^([A-Z]{1,10})-([A-Z])$")
 # Finnhub's official websocket documentation links this condition table:
@@ -184,14 +186,13 @@ class QuoteHub:
         self._subscription_changed = asyncio.Event()
         self._radar_refresh = asyncio.Event()
         self._radar_events_refresh = asyncio.Event()
-        self._radar_errors: dict[str, str] = {}
+        self._errors: OrderedDict[str, str] = OrderedDict()
         self._tasks: list[asyncio.Task[Any]] = []
         self._lock_file: Any = None
         self._http: httpx.AsyncClient | None = None
         self._running = False
         self._connected = False
         self._connection_status = "disabled" if not self._active else "unconfigured" if not self._api_key else "stopped"
-        self._last_error: str | None = None
         self._reconnect_count = 0
         self._last_message_at: str | None = None
 
@@ -202,13 +203,22 @@ class QuoteHub:
     @property
     def _signals_resync_required(self) -> bool:
         # Inventory, event reads and each saved-symbol write recover separately.
-        return bool(self._radar_errors)
+        return any(source not in TRANSPORT_SOURCES for source in self._errors)
+
+    @property
+    def _last_error(self) -> str | None:
+        """The newest fault still in effect, whichever subsystem it came from.
+
+        Transport and radar faults are independent and each clears itself, so
+        neither may permanently hide the other behind a fixed precedence.
+        """
+        return next(reversed(self._errors.values()), None)
 
     def _client_radar_degraded(self, client: _Client) -> bool:
         return any(
             source in {"inventory", "events"}
             or (source.startswith("trade:") and _provider_symbol(source[6:]) in client.provider_symbols)
-            for source in self._radar_errors
+            for source in self._errors
         )
 
     def _update_radar_notices(self) -> None:
@@ -220,12 +230,16 @@ class QuoteHub:
             # re-arming those already notified during this continuous outage.
             client.radar_outage_notified = affected
 
-    def _set_radar_error(self, source: str, error: str | None) -> None:
+    def _set_error(self, source: str, error: str | None) -> None:
         if error is None:
-            changed = self._radar_errors.pop(source, None) is not None
+            changed = self._errors.pop(source, None) is not None
         else:
-            changed = self._radar_errors.get(source) != error
-            self._radar_errors[source] = error
+            changed = self._errors.get(source) != error
+            self._errors[source] = error
+            # Order by the newest transition, so an unchanged ongoing fault
+            # cannot keep outranking one that started after it.
+            if changed:
+                self._errors.move_to_end(source)
         if changed:
             self._status_dirty = True
             self._update_radar_notices()
@@ -334,7 +348,7 @@ class QuoteHub:
             "market_session": market_session(_utcnow()),
             "last_message_at": self._last_message_at,
             "reconnect_count": self._reconnect_count,
-            "last_error": next(reversed(self._radar_errors.values()), self._last_error),
+            "last_error": self._last_error,
             "signals_resync_required": self._signals_resync_required,
             "as_of": _iso(_utcnow()),
         }
@@ -513,16 +527,16 @@ class QuoteHub:
                     continue
             self._radar_symbols = list(dict.fromkeys(symbols))
             self._radar_failures = 0
-            self._set_radar_error("inventory", None)
+            self._set_error("inventory", None)
             self._allocate()
         except RadarInventoryUnavailable as exc:
             # The adapter also serves trade-triggered initial/conflict reads;
             # suppressed retries must not count as new physical read failures.
             self._radar_failures = exc.failures
-            self._set_radar_error("inventory", "radar_refresh_failed")
+            self._set_error("inventory", "radar_refresh_failed")
         except Exception:
             self._radar_failures = min(self._radar_failures + 1, 8)
-            self._set_radar_error("inventory", "radar_refresh_failed")
+            self._set_error("inventory", "radar_refresh_failed")
 
     async def _poll_radar_events(self) -> None:
         started_sequence = self._radar_sequence
@@ -539,11 +553,11 @@ class QuoteHub:
                     self._forget_radar_event(event_id)
             self._radar_events_loaded = True
             self._radar_events_failures = 0
-            self._set_radar_error("events", None)
+            self._set_error("events", None)
         except Exception:
             self._radar_events_failures = min(self._radar_events_failures + 1, 8)
             self._radar_events_loaded = False
-            self._set_radar_error("events", "radar_events_refresh_failed")
+            self._set_error("events", "radar_events_refresh_failed")
 
     def _forget_radar_event(self, event_id: str) -> None:
         self._radar_events.pop(event_id, None)
@@ -680,7 +694,7 @@ class QuoteHub:
                     ) as socket:
                         self._connected = True
                         connected_at = time.monotonic()
-                        self._last_error = None
+                        self._set_error("stream", None)
                         self._sent_symbols.clear()
                         self._set_connection_status("connected")
                         self._subscription_changed.set()
@@ -700,7 +714,7 @@ class QuoteHub:
                             task.result()
                 except Exception:
                     # Never propagate provider payloads, URLs, or key text.
-                    self._last_error = "upstream_unavailable"
+                    self._set_error("stream", "upstream_unavailable")
                 finally:
                     children = [task for task in (sender, receiver) if task is not None]
                     for task in children:
@@ -791,11 +805,11 @@ class QuoteHub:
                     updates = await self._trade_handler({**trade, "symbol": original})
                 except RadarInventoryUnavailable as exc:
                     self._radar_failures = exc.failures
-                    self._set_radar_error("inventory", "radar_refresh_failed")
+                    self._set_error("inventory", "radar_refresh_failed")
                     break
                 except Exception:
-                    first_failure = source not in self._radar_errors
-                    self._set_radar_error(source, "radar_trade_failed")
+                    first_failure = source not in self._errors
+                    self._set_error(source, "radar_trade_failed")
                     if first_failure:
                         self._radar_refresh.set()
                         self._radar_events_refresh.set()
@@ -804,7 +818,7 @@ class QuoteHub:
                     # Only a durable revision from this saved symbol proves a
                     # failed write recovered. Unrelated/under-threshold no-ops
                     # must never clear the fault or re-arm its notifications.
-                    self._set_radar_error(source, None)
+                    self._set_error(source, None)
                     changes.extend(updates if isinstance(updates, list) else [updates])
             if changes:
                 self._radar_refresh.set()
@@ -866,15 +880,16 @@ class QuoteHub:
             if response.status_code == 429:
                 await asyncio.to_thread(mark_finnhub_rate_limited, self._api_key,
                                         retry_after=response.headers.get("Retry-After", "60"), db_path=self._budget_path)
-                self._last_error = "rest_rate_limited"
-                self._status_dirty = True
+                self._set_error("rest", "rest_rate_limited")
                 return
             response.raise_for_status()
+            # A completed snapshot ends the REST fault; a websocket reconnect is
+            # no longer the only thing that can clear it.
+            self._set_error("rest", None)
             if symbol in self._desired_symbols:
                 self._apply_rest_quote(symbol, response.json())
         except Exception:
-            self._last_error = "rest_quote_unavailable"
-            self._status_dirty = True
+            self._set_error("rest", "rest_quote_unavailable")
 
     def _apply_rest_quote(self, symbol: str, payload: Any) -> None:
         symbol = _provider_symbol(symbol)

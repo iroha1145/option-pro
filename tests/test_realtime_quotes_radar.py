@@ -5,6 +5,8 @@ from datetime import datetime, timedelta, timezone
 import json
 from types import SimpleNamespace
 
+import httpx
+
 from app.services import realtime_quotes as quotes
 from app.services.breakouts.config import BreakoutSettings
 from app.services.breakouts.realtime import BreakoutRealtimeAdapter
@@ -302,6 +304,49 @@ def test_recovered_inventory_read_stops_reporting_its_own_past_failure(tmp_path)
         # The inventory error must not keep the independent signal path pinned
         # to degraded once the radar event read has been succeeding all along.
         assert hub._status()["signals_resync_required"] is False
+
+    asyncio.run(scenario())
+
+
+def test_a_latched_write_fault_does_not_hide_a_newer_transport_fault(tmp_path, monkeypatch):
+    """last_error reports the newest fault still in effect, from either side."""
+    monkeypatch.setattr(quotes, "_utcnow", lambda: NOW)
+
+    async def scenario():
+        rest_healthy = [False]
+
+        async def failing_trade(trade):
+            raise RuntimeError("radar store write unavailable")
+
+        async def reserve(key, **kwargs):
+            return True
+
+        def transport(request):
+            if not rest_healthy[0]:
+                raise httpx.ConnectError("fixture upstream down")
+            return httpx.Response(200, json={"c": 100, "pc": 95, "t": int(NOW.timestamp())})
+
+        monkeypatch.setattr(quotes, "async_reserve_finnhub_request", reserve)
+        hub = quotes.QuoteHub(_hub_settings(tmp_path), trade_handler=failing_trade)
+        await hub.subscribe(["AAPL"])
+        await hub._process_trade({"s": "AAPL", "p": 101, "t": int(NOW.timestamp() * 1000),
+                                  "v": 100, "c": ["1"]})
+        assert hub._status()["last_error"] == "radar_trade_failed"
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as client:
+            hub._http = client
+            # A write fault clears only on a later durable commit for that
+            # symbol, so it must not sit on top of the provider being
+            # unreachable for the rest of the session.
+            await hub._warm_symbol("AAPL")
+            assert hub._status()["last_error"] == "rest_quote_unavailable"
+            assert hub._status()["signals_resync_required"] is True
+
+            rest_healthy[0] = True
+            hub._rest_attempts.clear()
+            await hub._warm_symbol("AAPL")
+        assert hub._status()["last_error"] == "radar_trade_failed"
+        assert hub._status()["signals_resync_required"] is True
 
     asyncio.run(scenario())
 

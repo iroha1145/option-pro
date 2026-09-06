@@ -397,6 +397,37 @@ def test_rest_warming_uses_budget_and_429_keeps_last_price(tmp_path, monkeypatch
     asyncio.run(scenario())
 
 
+def test_successful_rest_snapshot_clears_the_rest_error_without_a_reconnect(tmp_path, monkeypatch):
+    monkeypatch.setattr(quotes, "_utcnow", lambda: NOW)
+
+    async def scenario():
+        healthy = [False]
+
+        async def reserve(key, **kwargs):
+            return True
+
+        def transport(request):
+            if not healthy[0]:
+                raise httpx.ConnectError("fixture upstream down")
+            return httpx.Response(200, json={"c": 100, "pc": 95, "t": int(NOW.timestamp())})
+
+        monkeypatch.setattr(quotes, "async_reserve_finnhub_request", reserve)
+        hub = quotes.QuoteHub(settings(tmp_path))
+        await hub.subscribe(["AAPL"])
+        async with httpx.AsyncClient(transport=httpx.MockTransport(transport)) as client:
+            hub._http = client
+            await hub._warm_symbol("AAPL")
+            assert hub._status()["last_error"] == "rest_quote_unavailable"
+            # Recovery must not depend on a websocket reconnect happening to
+            # reset the field; the snapshot that succeeded is the evidence.
+            healthy[0] = True
+            await hub._warm_symbol("AAPL")
+        assert hub._status()["last_error"] is None
+        assert hub._quotes["AAPL"]["price"] == 100
+
+    asyncio.run(scenario())
+
+
 def test_inflight_rest_response_does_not_cache_evicted_subscription(tmp_path, monkeypatch):
     async def scenario():
         hub = quotes.QuoteHub(settings(tmp_path))
