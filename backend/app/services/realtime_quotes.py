@@ -27,6 +27,7 @@ import httpx
 from websockets.asyncio.client import connect
 
 from app.data_paths import get_data_paths
+from app.services.breakouts.realtime import RadarInventoryUnavailable
 from app.services.finnhub_budget import (
     async_reserve_finnhub_request,
     mark_finnhub_rate_limited,
@@ -126,6 +127,7 @@ class _Client:
     last_seen: float
     queue: asyncio.Queue[dict[str, Any]] = field(default_factory=lambda: asyncio.Queue(maxsize=8))
     resync_required: bool = False
+    radar_outage_notified: bool = False
     radar_versions: dict[str, int] = field(default_factory=dict)
     provider_symbols: set[str] = field(init=False)
 
@@ -182,7 +184,7 @@ class QuoteHub:
         self._subscription_changed = asyncio.Event()
         self._radar_refresh = asyncio.Event()
         self._radar_events_refresh = asyncio.Event()
-        self._trade_signals_failed = False
+        self._radar_errors: dict[str, str] = {}
         self._tasks: list[asyncio.Task[Any]] = []
         self._lock_file: Any = None
         self._http: httpx.AsyncClient | None = None
@@ -199,13 +201,34 @@ class QuoteHub:
 
     @property
     def _signals_resync_required(self) -> bool:
-        """Derive degraded signals from each source so neither pins the other.
+        # Inventory, event reads and each saved-symbol write recover separately.
+        return bool(self._radar_errors)
 
-        Reading the radar and committing a trade fail independently. Recovering
-        one of them must not report the other as healthy, and must not leave a
-        recovered path advertised as degraded for the rest of the session.
-        """
-        return self._trade_signals_failed or self._radar_events_failures > 0
+    def _client_radar_degraded(self, client: _Client) -> bool:
+        return any(
+            source in {"inventory", "events"}
+            or (source.startswith("trade:") and _provider_symbol(source[6:]) in client.provider_symbols)
+            for source in self._radar_errors
+        )
+
+    def _update_radar_notices(self) -> None:
+        for client in self._clients.values():
+            affected = self._client_radar_degraded(client)
+            if affected and not client.radar_outage_notified:
+                client.resync_required = True
+            # An overlapping fault must notify newly affected clients without
+            # re-arming those already notified during this continuous outage.
+            client.radar_outage_notified = affected
+
+    def _set_radar_error(self, source: str, error: str | None) -> None:
+        if error is None:
+            changed = self._radar_errors.pop(source, None) is not None
+        else:
+            changed = self._radar_errors.get(source) != error
+            self._radar_errors[source] = error
+        if changed:
+            self._status_dirty = True
+            self._update_radar_notices()
 
     async def start(self) -> None:
         if self._running:
@@ -247,6 +270,7 @@ class QuoteHub:
             raise ValueError("Too many quote connections")
         client_id = uuid.uuid4().hex
         self._clients[client_id] = _Client(symbols, focused, time.monotonic())
+        self._update_radar_notices()
         self._allocate()
         self._radar_refresh.set()
         self._radar_events_refresh.set()
@@ -265,12 +289,16 @@ class QuoteHub:
             return
         try:
             client.last_seen = time.monotonic()
+            initial_resync = client.resync_required or bool(self._radar_event_loader and not self._radar_events_loaded)
+            if initial_resync:
+                client.resync_required = False
             yield {"event": "quotes", "data": await self.snapshot(client.symbols)}
-            if self._radar_event_loader:
-                if self._radar_events_loaded:
-                    self._emit_radar(client, list(self._radar_events.values()))
-                else:
-                    yield {"event": "status", "data": {**self._status(), "resync_required": True}}
+            if initial_resync:
+                # Consume only the notice present before the first yield. Any
+                # subsequent overflow still needs a fresh full price snapshot.
+                yield {"event": "status", "data": {**self._status(), "resync_required": True}}
+            if self._radar_event_loader and self._radar_events_loaded:
+                self._emit_radar(client, list(self._radar_events.values()))
             while client_id in self._clients and self._running:
                 client.last_seen = time.monotonic()
                 if client.resync_required:
@@ -306,7 +334,7 @@ class QuoteHub:
             "market_session": market_session(_utcnow()),
             "last_message_at": self._last_message_at,
             "reconnect_count": self._reconnect_count,
-            "last_error": self._last_error,
+            "last_error": next(reversed(self._radar_errors.values()), self._last_error),
             "signals_resync_required": self._signals_resync_required,
             "as_of": _iso(_utcnow()),
         }
@@ -452,8 +480,10 @@ class QuoteHub:
             try:
                 # Inventory reads are local and cheap. A newly committed
                 # five-minute scan should enter monitoring within one second.
-                await asyncio.wait_for(self._radar_refresh.wait(),
-                                       timeout=self._retry_delay(self._radar_failures))
+                if self._radar_failures:
+                    await asyncio.sleep(self._retry_delay(self._radar_failures))
+                else:
+                    await asyncio.wait_for(self._radar_refresh.wait(), timeout=1)
             except TimeoutError:
                 pass
 
@@ -464,8 +494,10 @@ class QuoteHub:
             # complete-bar worker commit must reach an idle browser as well.
             await self._poll_radar_events()
             try:
-                await asyncio.wait_for(self._radar_events_refresh.wait(),
-                                       timeout=self._retry_delay(self._radar_events_failures))
+                if self._radar_events_failures:
+                    await asyncio.sleep(self._retry_delay(self._radar_events_failures))
+                else:
+                    await asyncio.wait_for(self._radar_events_refresh.wait(), timeout=1)
             except TimeoutError:
                 pass
 
@@ -481,17 +513,16 @@ class QuoteHub:
                     continue
             self._radar_symbols = list(dict.fromkeys(symbols))
             self._radar_failures = 0
-            if self._last_error == "radar_refresh_failed":
-                # A recovered inventory read must stop reporting its own past
-                # failure; leaving it set makes every later status dishonest.
-                self._last_error = None
-                self._status_dirty = True
+            self._set_radar_error("inventory", None)
             self._allocate()
+        except RadarInventoryUnavailable as exc:
+            # The adapter also serves trade-triggered initial/conflict reads;
+            # suppressed retries must not count as new physical read failures.
+            self._radar_failures = exc.failures
+            self._set_radar_error("inventory", "radar_refresh_failed")
         except Exception:
-            if self._last_error != "radar_refresh_failed":
-                self._status_dirty = True
-            self._radar_failures += 1
-            self._last_error = "radar_refresh_failed"
+            self._radar_failures = min(self._radar_failures + 1, 8)
+            self._set_radar_error("inventory", "radar_refresh_failed")
 
     async def _poll_radar_events(self) -> None:
         started_sequence = self._radar_sequence
@@ -500,34 +531,19 @@ class QuoteHub:
             if not isinstance(rows, list):
                 raise ValueError("Invalid radar update inventory")
             self._publish_radar_updates(rows[:MAX_RADAR_EVENTS])
-            self._radar_events_loaded = True
-            if self._radar_events_failures:
-                self._radar_events_failures = 0
-                self._status_dirty = True
-            if self._last_error == "radar_events_refresh_failed":
-                self._last_error = None
-                self._status_dirty = True
             current_ids = {str(row.get("event_id")) for row in rows[:MAX_RADAR_EVENTS] if isinstance(row, dict)}
             # Remove events outside the repository's recent window. Preserve
             # callbacks committed while this (possibly older) read was running.
             for event_id in list(self._radar_events):
                 if event_id not in current_ids and self._radar_event_sequences[event_id] <= started_sequence:
                     self._forget_radar_event(event_id)
+            self._radar_events_loaded = True
+            self._radar_events_failures = 0
+            self._set_radar_error("events", None)
         except Exception:
-            # Re-arming every open stream on every repeated failure makes each
-            # browser refetch the durable radar state again, so an outage that
-            # lasts turns into a refetch storm. Announce the transition once;
-            # a stream opened during the outage still resyncs when it starts.
-            announce = not self._signals_resync_required
-            first_failure = self._radar_events_failures == 0
-            self._radar_events_failures += 1
+            self._radar_events_failures = min(self._radar_events_failures + 1, 8)
             self._radar_events_loaded = False
-            if first_failure or self._last_error != "radar_events_refresh_failed":
-                self._status_dirty = True
-            self._last_error = "radar_events_refresh_failed"
-            if announce:
-                for client in self._clients.values():
-                    client.resync_required = True
+            self._set_radar_error("events", "radar_events_refresh_failed")
 
     def _forget_radar_event(self, event_id: str) -> None:
         self._radar_events.pop(event_id, None)
@@ -768,41 +784,33 @@ class QuoteHub:
         if previous is None or at >= previous["_trade_time"]:
             self._store_quote(symbol, price, at, received, "finnhub_websocket")
         if self.signals_enabled and self._trade_handler and conditions and volume > 0 and session != "closed" and (received - at).total_seconds() <= 60:
-            try:
-                # Match the exact symbols saved by the radar worker while
-                # sharing one physical quote/subscription across aliases.
-                changes = []
-                for original in self._signal_symbols.get(symbol, [symbol]):
+            changes = []
+            for original in self._signal_symbols.get(symbol, [symbol]):
+                source = f"trade:{original}"
+                try:
                     updates = await self._trade_handler({**trade, "symbol": original})
-                    if updates:
-                        changes.extend(updates if isinstance(updates, list) else [updates])
-            except Exception:
-                # Announce the transition into degraded signals, not one resync
-                # per failing trade: a radar store that stays unreadable during
-                # the session would otherwise make every browser refetch the
-                # durable state, and re-read that store, on every tick. Recovery
-                # republishes what the stream missed, and a stream opened while
-                # signals are degraded still resyncs when it starts.
-                announce = not self._signals_resync_required
-                if announce or self._last_error != "radar_trade_failed":
-                    self._status_dirty = True
-                self._last_error = "radar_trade_failed"
-                self._trade_signals_failed = True
-                if announce:
-                    self._radar_refresh.set()
-                    self._radar_events_refresh.set()
-                    for client in self._clients.values():
-                        if symbol in client.provider_symbols:
-                            client.resync_required = True
-                return
-            if self._trade_signals_failed:
-                self._trade_signals_failed = False
-                self._status_dirty = True
+                except RadarInventoryUnavailable as exc:
+                    self._radar_failures = exc.failures
+                    self._set_radar_error("inventory", "radar_refresh_failed")
+                    break
+                except Exception:
+                    first_failure = source not in self._radar_errors
+                    self._set_radar_error(source, "radar_trade_failed")
+                    if first_failure:
+                        self._radar_refresh.set()
+                        self._radar_events_refresh.set()
+                    continue
+                if updates:
+                    # Only a durable revision from this saved symbol proves a
+                    # failed write recovered. Unrelated/under-threshold no-ops
+                    # must never clear the fault or re-arm its notifications.
+                    self._set_radar_error(source, None)
+                    changes.extend(updates if isinstance(updates, list) else [updates])
             if changes:
                 self._radar_refresh.set()
                 self._radar_events_refresh.set()
-                events = changes if isinstance(changes, list) else [changes]
-                self._publish_radar_updates(events, fallback_symbol=symbol)
+                # Earlier aliases may have committed before a later one failed.
+                self._publish_radar_updates(changes, fallback_symbol=symbol)
 
     def _store_quote(self, symbol: str, price: float, at: datetime, received: datetime, source: str) -> None:
         symbol = _provider_symbol(symbol)
