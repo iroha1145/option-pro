@@ -3,7 +3,7 @@ import { mkdir } from 'node:fs/promises';
 const at = '2026-09-04T15:00:00Z';
 const status = { enabled: true, configured: true, allowed: true, public_enabled: true, connected: true, connection_status: 'connected', market_session: 'regular' };
 const price = (symbol, value = 100, extra = {}) => ({ symbol, price: value, previous_close: 99, change: value - 99, change_pct: (value / 99 - 1) * 100, trade_at: at, received_at: at, source: 'finnhub', session: 'regular', freshness: 'live', subscription_status: 'live', ...extra });
-async function fixture(page, enabled = true) {
+async function fixture(page, enabled = true, personal = false) {
   const state = { requests: [], errors: [], completeDetail: false, quoteDelayMs: 0, radar: { event_id: 'live-event', ticker: 'AAPL', name: 'Apple', session: 'regular', setup_type: 'DAILY_BASE_BREAKOUT', lifecycle_state: 'WATCHING', state_version: 0, event_at: at, current_price: 100, event_price: 100, invalidation_price: 90, target_price: 120, session_change_pct: 1, intrinsic_strength_score: 80 }, transitions: [{ state: 'WATCHING', at }] };
   page.on('pageerror', error => state.errors.push(error.message));
   await page.addInitScript(() => {
@@ -20,7 +20,8 @@ async function fixture(page, enabled = true) {
   await page.route('**/*', route => ['127.0.0.1', 'localhost'].includes(new URL(route.request().url()).hostname) ? route.continue() : route.abort());
   await page.route('**/api/**', async route => {
     const url = new URL(route.request().url()); if (!url.pathname.startsWith('/api/')) return route.continue(); state.requests.push(url.pathname + url.search);
-    if (url.pathname === '/api/access/status') return route.fulfill({ json: { access_mode: 'password', logged_in: false, account: null } });
+    if (url.pathname === '/api/access/status') return route.fulfill({ json: { access_mode: 'password', logged_in: false, account: personal ? { logged_in: true, username: 'watchlist-test' } : null } });
+    if (url.pathname === '/api/account/watchlist') return route.fulfill({ json: { tickers: Array.from({ length: 32 }, (_, i) => i === 0 ? 'AAPL' : `S${String(i).padStart(3, '0')}`), max_tickers: 50 } });
     if (url.pathname === '/api/quotes') {
       if (state.quoteDelayMs) await new Promise(resolve => setTimeout(resolve, state.quoteDelayMs));
       return route.fulfill({ json: { quotes: enabled ? (url.searchParams.get('symbols') ?? '').split(',').filter(Boolean).map(symbol => price(symbol)) : [], status: { ...status, allowed: enabled } } });
@@ -57,7 +58,7 @@ async function emitEvent(page, type, data) {
 const emit = (page, symbol, value, extra = {}) => emitEvent(page, 'quotes', { quotes: [price(symbol, value, extra)] });
 
 test('watchlist subscribes offscreen rows, pushes prices without reordering, and releases on navigation', async ({ page }) => {
-  const state = await fixture(page); await page.goto('/watchlist');
+  const state = await fixture(page, true, true); await page.goto('/watchlist');
   await expect.poll(() => latestSymbols(page)).toContain('S031');
   await expect.poll(() => latestSymbols(page)).toContain('SPY');
   const before = await page.locator('main [data-quote-symbol]').evaluateAll(rows => rows.map(row => row.dataset.quoteSymbol));
@@ -186,7 +187,12 @@ test('detail labels a retained price as reconnecting, never live, after a stream
   const state = await fixture(page); await page.goto('/stock/AAPL');
   await emit(page, 'AAPL', 105.27);
   await expect(page.locator('main [aria-label="$105.27"]').first()).toBeVisible();
-  await page.evaluate(() => window.quoteStreams.filter(row => !row.closed).at(-1).onerror());
+  await expect.poll(() => page.evaluate(() => {
+    const stream = window.quoteStreams.filter(row => !row.closed).at(-1);
+    if (typeof stream?.onerror !== 'function') return false;
+    stream.onerror();
+    return true;
+  })).toBe(true);
   await expect(page.locator('main header').first()).toContainText('行情重连中');
   await expect(page.locator('main [aria-label="$105.27"]').first()).toBeVisible();
   expect(state.errors).toEqual([]);

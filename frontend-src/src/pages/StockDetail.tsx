@@ -17,6 +17,7 @@ import { Link, useNavigate, useParams } from 'react-router';
 import { usePolling } from '@/hooks/usePolling';
 import EmptyState from '@/components/shared/EmptyState';
 import SourceNote from '@/components/shared/SourceNote';
+import WatchlistToggle from '@/components/shared/WatchlistToggle';
 import MacroFitPanel from '@/components/shared/MacroFitPanel';
 import { SkeletonBlock, SkeletonText } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
@@ -108,8 +109,8 @@ export default function StockDetail() {
   if (loading && !detail) {
     return (
       <div className="space-y-5" aria-busy="true">
-        <div className="flex items-center justify-between">
-          {backButton}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">{backButton}<WatchlistToggle ticker={symbol} /></div>
           <span className="eyebrow">STOCK · ${symbol}</span>
         </div>
         <PriceHeader symbol={symbol} />
@@ -128,8 +129,8 @@ export default function StockDetail() {
     const manualRecovery = publicSnapshotMissing || (!error && !detail);
     return (
       <div>
-        <div className="mb-6 flex items-center justify-between">
-          {backButton}
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">{backButton}<WatchlistToggle ticker={symbol} /></div>
           <span className="eyebrow">STOCK · ${symbol}</span>
         </div>
         <PriceHeader symbol={symbol} />
@@ -238,8 +239,8 @@ export default function StockDetail() {
   return (
     <div>
       {/* 行0 */}
-      <div className="mb-6 flex items-center justify-between">
-        {backButton}
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2">{backButton}<WatchlistToggle ticker={symbol} /></div>
         <span className="eyebrow">STOCK · ${symbol}</span>
       </div>
       <PriceHeader detail={detail} />

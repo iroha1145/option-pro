@@ -1446,11 +1446,20 @@ class PublicHomeTask:
             fetched_at = getattr(watchlist, "fetched_at", None)
             payload = getattr(watchlist, "value", None)
             if isinstance(fetched_at, (int, float)) and isinstance(payload, dict):
+                from app.services.watchlist_scope import DEFAULT_WATCHLIST_TICKERS, scope_watchlist
+
                 result["watchlist"] = {
-                    "payload": payload,
+                    "payload": scope_watchlist(payload, DEFAULT_WATCHLIST_TICKERS),
                     "saved_at": float(fetched_at),
                     "parameters": {"tickers": None},
                 }
+        elif isinstance(result.get("watchlist"), dict):
+            from app.services.watchlist_scope import DEFAULT_WATCHLIST_TICKERS, scope_watchlist
+
+            result["watchlist"] = {
+                **result["watchlist"],
+                "payload": scope_watchlist(result["watchlist"].get("payload"), DEFAULT_WATCHLIST_TICKERS),
+            }
         return result
 
     async def _publish_entry(

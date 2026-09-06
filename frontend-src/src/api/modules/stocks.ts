@@ -1,6 +1,7 @@
 /** 股票域：watchlist / detail / signals / chart / search */
 import { get, mockOr, post } from '../client';
 import { quoteSymbol } from '@/lib/quoteSymbol';
+import { DEFAULT_WATCHLIST_TICKERS } from '@/lib/personalWatchlist';
 import { mapStockDataStatus, normalizeStatusTickers, type StockDataStatus } from '@/lib/stockDataStatus';
 import { marketGet, resetMarketReadPaths } from '../marketRead';
 import { asRec, pickN, pickS, pickLabel, unwrap, type Rec } from '../live';
@@ -90,9 +91,9 @@ export function mapWatchlist(body: unknown): WatchlistItem[] {
         ticker,
         name: pickLabel(s, 'name') ?? '',
         sector: pickLabel(s, 'sector') ?? groupName, // 契约无板块字段，回退分组名
-        price: pickN(s, 'price') ?? 0,
-        change: pickN(s, 'change') ?? 0,
-        changePct: pickN(s, 'change_percent', 'changePct') ?? 0,
+        price: pickN(s, 'price') ?? NaN,
+        change: pickN(s, 'change') ?? NaN,
+        changePct: pickN(s, 'change_percent', 'changePct') ?? NaN,
         sparkline: unwrap(s, 'spark', 'sparkline')
           .map((x) => pickN(x as Rec, 'c') ?? (typeof x === 'number' ? x : null))
           .filter((x): x is number => x !== null),
@@ -236,23 +237,22 @@ export const stocksApi = {
   invalidatePreparedDaily: (ticker?: string): void => resetMarketReadPaths([
     ticker ? `/stocks/${encodeURIComponent(quoteSymbol(ticker))}/chart?range=1d&adjustment=raw` : '/stocks/watchlist',
   ]),
-  /**
-   * 站点默认自选（覆盖全部板块成分）。
-   *
-   * 刻意不走 `?tickers=`：那条路径对非管理员只读已有快照，任意代码组合都
-   * 命不中快照而返回 503；让它去实时抓取又等于把供应商开销对所有注册用户
-   * 敞开。登录客户的个人自选改为在前端按本结果筛选。
-   */
+  /** Shared default view stays small; personal combinations reuse cached stock data. */
   watchlist: (force = false): Promise<WatchlistItem[]> =>
     mockOr(
-      () => fx.getWatchlist(force),
-      () =>
-        marketGet('/stocks/watchlist', {
-          ttlMs: 5_000,
-          staleMs: 10 * 60_000,
-          force,
-        }).then(mapWatchlist),
+      () => fx.getWatchlist(force).filter((row) => DEFAULT_WATCHLIST_TICKERS.includes(row.ticker)),
+      () => marketGet('/stocks/watchlist', { ttlMs: 5_000, staleMs: 10 * 60_000, force }).then(mapWatchlist),
     ),
+  watchlistFor: (tickers: string[], force = false): Promise<WatchlistItem[]> => {
+    if (!tickers.length) return Promise.resolve([]);
+    const symbols = [...new Set(tickers)].sort();
+    return mockOr(
+      () => fx.getWatchlist(force).filter((row) => symbols.includes(row.ticker)),
+      () => marketGet(`/stocks/watchlist?tickers=${encodeURIComponent(symbols.join(','))}`, {
+        ttlMs: 5_000, staleMs: 10 * 60_000, force,
+      }).then(mapWatchlist),
+    );
+  },
   detail: (ticker: string, force = false): Promise<StockDetail> =>
     mockOr(
       () => fx.getStockDetail(ticker),

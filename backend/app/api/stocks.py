@@ -47,6 +47,11 @@ from app.services.yfinance_batch import download_in_bounded_batches
 from app.services.market_calendar import early_close_minutes, is_trading_day
 from app.services.symbols import quote_symbol
 from app.services.watchlist_trend import daily_trend
+from app.services.watchlist_scope import (
+    DEFAULT_WATCHLIST_TICKERS,
+    collection_watchlist_tickers,
+    scope_watchlist,
+)
 from app.services.request_security import request_client_ip
 from app.public_stock_data import read_public_stock_status
 from app.stock_data_reads import read_latest_stock_resource as read_stock_pull_resource
@@ -1952,7 +1957,7 @@ async def watchlist(
                             max(now - owner_entry.fetched_at, 0.0),
                             1,
                         )
-                    return await _with_watchlist_daily_trends(result)
+                    return await _with_watchlist_daily_trends(scope_watchlist(result, DEFAULT_WATCHLIST_TICKERS))
             else:
                 _load_watchlist_snapshot_once(now)
             result = await _stale_while_revalidate_endpoint(
@@ -1963,14 +1968,11 @@ async def watchlist(
                 _persist_watchlist_snapshot,
                 allow_refresh=allow_refresh,
             )
-            return await _with_watchlist_daily_trends(result)
-        result = await _cached_endpoint(
-            cache_key,
-            _WATCHLIST_FRESH_TTL_SECONDS,
-            loader,
-            stale_ttl=_WATCHLIST_TARGETED_STALE_TTL_SECONDS,
-            allow_refresh=allow_refresh,
-        )
+            return await _with_watchlist_daily_trends(scope_watchlist(result, DEFAULT_WATCHLIST_TICKERS))
+        # Personal combinations read per-symbol cached data. Merely changing
+        # membership must not start another full provider batch or require an
+        # already-existing cache entry for that exact combination.
+        result = await asyncio.to_thread(_cached_selected_watchlist, requested_tickers)
         return await _with_watchlist_daily_trends(result)
     except HTTPException:
         raise
@@ -1978,14 +1980,61 @@ async def watchlist(
         raise HTTPException(status_code=503, detail="Yahoo watchlist data is currently unavailable") from exc
 
 
+def _cached_selected_watchlist(tickers: list[str]) -> dict[str, Any]:
+    now = time.time()
+    wanted = set(tickers)
+    rows: dict[str, dict[str, Any]] = {}
+    saved: dict[str, float] = {}
+    entries = [
+        entry for entry in (
+            _read_watchlist_snapshot(_WATCHLIST_SNAPSHOT_PATH, now=now),
+            _usable_hit("watchlist", now),
+            _usable_hit(_watchlist_cache_key(tickers), now),
+        ) if entry is not None
+    ]
+    for entry in sorted(entries, key=lambda item: item.fetched_at):
+        payload = entry.value
+        if not isinstance(payload, dict):
+            continue
+        for group in payload.get("groups", []):
+            for row in group.get("stocks", []) if isinstance(group, dict) else []:
+                symbol = row.get("ticker") if isinstance(row, dict) else None
+                if symbol in wanted:
+                    rows[symbol] = {**row, "sector": row.get("sector") or group.get("name", "")}
+                    saved[symbol] = entry.fetched_at
+    for symbol in tickers:
+        entry = read_stock_pull_resource(symbol, "overview", now=now)
+        if entry is None or float(entry["saved_at"]) <= saved.get(symbol, 0):
+            continue
+        overview = entry["payload"]
+        price = overview.get("price")
+        if isinstance(price, bool) or not isinstance(price, (int, float)) or not math.isfinite(price) or price <= 0:
+            continue
+        previous = rows.get(symbol, {})
+        rows[symbol] = {
+            **previous,
+            "ticker": symbol,
+            "name": overview.get("name") or previous.get("name") or symbol,
+            "sector": overview.get("sector") or previous.get("sector", ""),
+            "price": price,
+            "change": overview.get("change"),
+            "change_percent": overview.get("change_percent"),
+            "quote_as_of": overview.get("quote_as_of") or "",
+        }
+        saved[symbol] = float(entry["saved_at"])
+    payload = {
+        "groups": [{"id": "personal", "name": "", "stocks": [rows[ticker] for ticker in tickers if ticker in rows]}],
+        "cached": True,
+        "_stale": any(stamp + _WATCHLIST_FRESH_TTL_SECONDS <= now for stamp in saved.values()),
+    }
+    return scope_watchlist(payload, tickers)
+
+
 async def _build_watchlist(requested_tickers: list[str] | None = None):
     from app.services.sectors import SECTORS
 
     if requested_tickers is None:
-        all_tickers = []
-        for sec in SECTORS.values():
-            all_tickers.extend(sec["tickers"])
-        all_tickers = list(dict.fromkeys(all_tickers))
+        all_tickers = collection_watchlist_tickers()
     else:
         all_tickers = requested_tickers
 
@@ -2294,34 +2343,20 @@ async def _build_watchlist(requested_tickers: list[str] | None = None):
         raise RuntimeError(f"watchlist mostly failed ({len(price_map)}/{len(all_tickers)} succeeded)")
 
     groups = []
-    if requested_tickers is None:
-        # Preserve the full-watchlist response exactly, including symbols that
-        # intentionally appear in more than one sector.
-        for sec_id, sec in SECTORS.items():
-            items = [price_map[t] for t in sec["tickers"] if t in price_map]
-            if items:
-                groups.append({"id": sec_id, "name": sec["name"], "stocks": items})
-    else:
-        # A targeted response contains each requested ticker at most once.
-        # Assign known symbols to their first matching sector, then retain
-        # arbitrary valid Yahoo symbols in a custom group.
-        requested_set = set(requested_tickers)
-        assigned: set[str] = set()
-        for sec_id, sec in SECTORS.items():
-            items = []
-            for ticker in sec["tickers"]:
-                if ticker in requested_set and ticker in price_map and ticker not in assigned:
-                    items.append(price_map[ticker])
-                    assigned.add(ticker)
-            if items:
-                groups.append({"id": sec_id, "name": sec["name"], "stocks": items})
-        custom_items = [
-            price_map[ticker]
-            for ticker in requested_tickers
-            if ticker in price_map and ticker not in assigned
-        ]
-        if custom_items:
-            groups.append({"id": "custom", "name": "自定义", "stocks": custom_items})
+    # Preserve selected symbols outside the sector catalogue, including ETFs.
+    selected = set(all_tickers)
+    assigned: set[str] = set()
+    for sec_id, sec in SECTORS.items():
+        items = []
+        for ticker in sec["tickers"]:
+            if ticker in selected and ticker in price_map and ticker not in assigned:
+                items.append(price_map[ticker])
+                assigned.add(ticker)
+        if items:
+            groups.append({"id": sec_id, "name": sec["name"], "stocks": items})
+    custom_items = [price_map[ticker] for ticker in all_tickers if ticker in price_map and ticker not in assigned]
+    if custom_items:
+        groups.append({"id": "custom", "name": "自定义", "stocks": custom_items})
 
     return _sanitize({
         "groups": groups,

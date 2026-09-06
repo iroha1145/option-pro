@@ -4,8 +4,10 @@
  * 与管理员（admin）通道完全分开：这里的会话只能读写自己那份自选，
  * 拿不到任何管理员能力。登录复用 /access/login（用户名不是 admin 即走客户表）。
  */
-import { del, get, post, put } from '../client';
+import { ApiError, del, get, post, put, request } from '../client';
 import { asRec, pickS } from '../live';
+import { parseWatchlistInput } from '@/lib/personalWatchlist';
+import { t } from '@/i18n/core';
 
 export interface AccountWatchlist {
   tickers: string[];
@@ -14,11 +16,18 @@ export interface AccountWatchlist {
 
 function normalizeWatchlist(body: unknown): AccountWatchlist {
   const row = asRec(body);
-  const raw = Array.isArray(row.tickers) ? row.tickers : [];
+  const raw = row.tickers;
   const maxRaw = Number(row.max_tickers ?? row.maxTickers);
+  if (!Array.isArray(raw) || !raw.every((value) => typeof value === 'string'
+    && parseWatchlistInput(value).tickers.length === 1
+    && parseWatchlistInput(value).tickers[0] === value)
+    || !Number.isInteger(maxRaw) || maxRaw < 1 || raw.length > maxRaw
+    || new Set(raw).size !== raw.length) {
+    throw new ApiError(502, t('自选列表返回异常，请重试'));
+  }
   return {
-    tickers: raw.map((value) => String(value).toUpperCase()).filter(Boolean),
-    maxTickers: Number.isFinite(maxRaw) && maxRaw > 0 ? Math.floor(maxRaw) : 50,
+    tickers: raw,
+    maxTickers: maxRaw,
   };
 }
 
@@ -48,4 +57,9 @@ export const accountApi = {
 
   replace: (tickers: string[]): Promise<AccountWatchlist> =>
     put('/account/watchlist', { tickers }).then(normalizeWatchlist),
+
+  edit: (add: string[], remove: string[]): Promise<AccountWatchlist> =>
+    request('/account/watchlist', {
+      method: 'PATCH', body: JSON.stringify({ add, remove }),
+    }).then(normalizeWatchlist),
 };

@@ -424,7 +424,7 @@ def test_full_watchlist_returns_stale_immediately_then_atomically_replaces_it(mo
             expires_at=clock[0] - 1,
             stale_until=clock[0] + 1_000,
             fetched_at=clock[0] - 600,
-            value={"groups": [{"id": "old"}], "attempted": 1},
+            value={"groups": [{"id": "old", "stocks": [{"ticker": "AAPL", "price": 100.0}]}], "attempted": 1},
         )
         stocks._endpoint_cache["watchlist"] = old_entry
         started = asyncio.Event()
@@ -433,12 +433,12 @@ def test_full_watchlist_returns_stale_immediately_then_atomically_replaces_it(mo
         async def refreshed_watchlist():
             started.set()
             await release.wait()
-            return {"groups": [{"id": "new"}], "attempted": 2}
+            return {"groups": [{"id": "new", "stocks": [{"ticker": "AAPL", "price": 101.0}]}], "attempted": 2}
 
         monkeypatch.setattr(stocks, "_build_watchlist", refreshed_watchlist)
 
         result = await asyncio.wait_for(stocks.watchlist(None), timeout=0.5)
-        assert result["groups"] == [{"id": "old"}]
+        assert result["groups"] == [{"id": "old", "stocks": [{"ticker": "AAPL", "price": 100.0}]}]
         assert result["_stale"] is True
         assert result["stale_reason"] == "background_refresh_pending"
         assert result["stale_age_seconds"] == 600.0
@@ -454,13 +454,13 @@ def test_full_watchlist_returns_stale_immediately_then_atomically_replaces_it(mo
 
         replacement = stocks._endpoint_cache["watchlist"]
         assert replacement is not old_entry
-        assert replacement.value["groups"] == [{"id": "new"}]
+        assert replacement.value["groups"] == [{"id": "new", "stocks": [{"ticker": "AAPL", "price": 101.0}]}]
         assert replacement.expires_at == clock[0] + 300
         assert replacement.stale_until == clock[0] + 24 * 60 * 60
         assert "watchlist" not in stocks._endpoint_refresh_tasks
 
         fresh = await stocks.watchlist(None)
-        assert fresh["groups"] == [{"id": "new"}]
+        assert fresh["groups"] == [{"id": "new", "stocks": [{"ticker": "AAPL", "price": 101.0}]}]
         assert fresh["_stale"] is False
 
     asyncio.run(scenario())
@@ -477,7 +477,7 @@ def test_full_watchlist_stale_requests_share_one_background_refresh(monkeypatch)
             expires_at=now - 1,
             stale_until=now + 1_000,
             fetched_at=now - 600,
-            value={"groups": [{"id": "old"}]},
+            value={"groups": [{"id": "old", "stocks": [{"ticker": "AAPL", "price": 100.0}]}]},
         )
         started = asyncio.Event()
         release = asyncio.Event()
@@ -488,7 +488,7 @@ def test_full_watchlist_stale_requests_share_one_background_refresh(monkeypatch)
             calls += 1
             started.set()
             await release.wait()
-            return {"groups": [{"id": "new"}]}
+            return {"groups": [{"id": "new", "stocks": [{"ticker": "AAPL", "price": 101.0}]}]}
 
         monkeypatch.setattr(stocks, "_build_watchlist", refreshed_watchlist)
 
@@ -496,7 +496,7 @@ def test_full_watchlist_stale_requests_share_one_background_refresh(monkeypatch)
         await asyncio.wait_for(started.wait(), timeout=0.5)
 
         assert calls == 1
-        assert all(result["groups"] == [{"id": "old"}] for result in results)
+        assert all(result["groups"] == [{"id": "old", "stocks": [{"ticker": "AAPL", "price": 100.0}]}] for result in results)
         assert len(stocks._endpoint_refresh_tasks) == 1
 
         refresh_task = stocks._endpoint_refresh_tasks["watchlist"]
@@ -520,7 +520,7 @@ def test_full_watchlist_failed_refresh_keeps_only_bounded_stale_snapshot(monkeyp
             expires_at=clock[0] - 1,
             stale_until=clock[0] + 60,
             fetched_at=clock[0] - 600,
-            value={"groups": [{"id": "old"}]},
+            value={"groups": [{"id": "old", "stocks": [{"ticker": "AAPL", "price": 100.0}]}]},
         )
         stocks._endpoint_cache["watchlist"] = old_entry
         calls = 0
@@ -536,7 +536,7 @@ def test_full_watchlist_failed_refresh_keeps_only_bounded_stale_snapshot(monkeyp
         monkeypatch.setattr(stocks, "_build_watchlist", failed_watchlist)
 
         stale = await stocks.watchlist(None)
-        assert stale["groups"] == [{"id": "old"}]
+        assert stale["groups"] == [{"id": "old", "stocks": [{"ticker": "AAPL", "price": 100.0}]}]
         refresh_task = stocks._endpoint_refresh_tasks["watchlist"]
         release_refresh.set()
         await asyncio.gather(refresh_task, return_exceptions=True)
@@ -923,48 +923,23 @@ def test_watchlist_cache_key_is_stable_for_the_same_ticker_set():
     assert stocks._watchlist_cache_key(None) == "watchlist"
 
 
-def test_targeted_watchlist_uses_normalized_tickers_and_isolated_cache_keys(monkeypatch):
+def test_targeted_watchlist_uses_normalized_tickers_without_provider_fetches(monkeypatch):
     requested_calls = []
-    cache_keys = []
 
-    async def targeted_builder(requested):
+    def cached(requested):
         requested_calls.append(requested)
         return {"groups": [], "attempted": len(requested)}
 
-    async def uncached(
-        key,
-        _ttl,
-        loader,
-        *,
-        stale_ttl=None,
-        allow_refresh=True,
-    ):
-        assert allow_refresh is True
-        cache_keys.append((key, stale_ttl))
-        return await loader()
+    async def forbidden(*args, **kwargs):
+        raise AssertionError("personal list reads must not start provider collection")
 
-    monkeypatch.setattr(stocks, "_build_watchlist", targeted_builder)
-    monkeypatch.setattr(stocks, "_cached_endpoint", uncached)
-
-    async def unexpected_background_cache(*_args, **_kwargs):
-        raise AssertionError("targeted watchlists must keep the synchronous cache path")
-
-    monkeypatch.setattr(
-        stocks,
-        "_stale_while_revalidate_endpoint",
-        unexpected_background_cache,
-    )
-
-    first = asyncio.run(stocks.watchlist(" msft,AAPL,msft "))
-    second = asyncio.run(stocks.watchlist("AAPL,MSFT"))
-    third = asyncio.run(stocks.watchlist("AAPL,NVDA"))
-
-    assert first["attempted"] == 2
-    assert second["attempted"] == 2
-    assert requested_calls == [["MSFT", "AAPL"], ["AAPL", "MSFT"], ["AAPL", "NVDA"]]
-    assert cache_keys[0][0] == cache_keys[1][0]
-    assert cache_keys[0][0] != cache_keys[2][0]
-    assert all(stale_ttl == 900 for _, stale_ttl in cache_keys)
+    monkeypatch.setattr(stocks, "_cached_selected_watchlist", cached)
+    monkeypatch.setattr(stocks, "_build_watchlist", forbidden)
+    monkeypatch.setattr(stocks, "_cached_endpoint", forbidden)
+    monkeypatch.setattr(stocks, "_stale_while_revalidate_endpoint", forbidden)
+    assert asyncio.run(stocks.watchlist(" msft,AAPL,msft "))["attempted"] == 2
+    assert asyncio.run(stocks.watchlist("AAPL,MSFT"))["attempted"] == 2
+    assert requested_calls == [["MSFT", "AAPL"], ["AAPL", "MSFT"]]
 
 
 def test_targeted_watchlist_downloads_only_requested_tickers(monkeypatch):
@@ -1119,6 +1094,7 @@ def test_watchlist_omits_ticker_without_latest_quote_and_marks_batch_degraded(mo
 
 
 def test_full_watchlist_partial_latest_batch_fails_closed_per_ticker(monkeypatch):
+    monkeypatch.setattr(stocks, "collection_watchlist_tickers", lambda: ["AAPL", "MSFT", "NVDA"])
     monkeypatch.setattr(
         sector_service,
         "SECTORS",

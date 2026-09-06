@@ -95,10 +95,13 @@ def test_untrusted_symlink_cannot_redirect_demand_writes(tmp_path):
     assert not list(outside.iterdir())
 
 
-def test_all_default_stocks_get_real_daily_bundles_without_evicting_manual_pulls(tmp_path):
+def test_all_default_stocks_get_real_daily_bundles_without_evicting_manual_pulls(tmp_path, monkeypatch):
+    from app.services.accounts import AccountStore
+    store = AccountStore(tmp_path / "accounts.db")
+    monkeypatch.setattr("app.services.accounts.get_account_store", lambda: store)
     async def run():
         defaults = public._default_tickers()
-        assert len(defaults) > 200
+        assert defaults == ["AAPL", "MSFT", "NVDA", "SPY"]
         manual = tmp_path / "stock-pull-snapshots-v1.json"
         _write_bundle(manual, "MANUAL", NOW)
         original = manual.read_bytes()

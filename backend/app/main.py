@@ -361,7 +361,7 @@ def _is_account_api_request(path: str, method: str) -> bool:
         _ACCOUNT_API_PREFIX + "/"
     ):
         return False
-    return method.upper() in {"GET", "HEAD", "POST", "PUT", "DELETE"}
+    return method.upper() in {"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"}
 
 
 def _is_public_read_api_path(path: str) -> bool:

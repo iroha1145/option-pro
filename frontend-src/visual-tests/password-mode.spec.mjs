@@ -227,7 +227,7 @@ async function installLocalDataFixtures(page) {
 
 // 访客壳断言：Navbar 出现「登录」链接，无「退出」按钮、无 AI 徽标
 async function expectVisitorShell(page) {
-  await expect(page.getByRole("link", { name: "登录" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "登录", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "退出" })).toHaveCount(0);
   await expect(page.getByTitle("分析服务可用")).toHaveCount(0);
 }
@@ -237,7 +237,7 @@ async function expectVisitorShell(page) {
 async function expectOwnerShell(page) {
   await expect(page.getByRole("button", { name: "退出" })).toBeVisible();
   await expect(page.getByTitle("分析服务可用")).toBeVisible();
-  await expect(page.getByRole("link", { name: "登录" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "登录", exact: true })).toHaveCount(0);
 }
 
 
@@ -338,7 +338,7 @@ test("password mode keeps public research readable and reserves owner controls f
   await screenshot(page, "password-visitor-catalysts");
 
   // ── 登录 ─────────────────────────────────────────────────────────────────
-  await page.getByRole("link", { name: "登录" }).click();
+  await page.getByRole("link", { name: "登录", exact: true }).click();
   await expect(page).toHaveURL(`${PASSWORD_BASE_URL}/login`);
   await expect(page.getByRole("heading", { name: "进入终端" })).toBeVisible();
 

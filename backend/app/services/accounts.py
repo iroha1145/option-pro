@@ -838,15 +838,42 @@ class AccountStore:
         return [*current, symbol]
 
     def remove_ticker(self, user_id: str, ticker: str) -> list[str]:
-        symbol = normalize_ticker(ticker)
+        return self.edit_watchlist(user_id, add=[], remove=[ticker])
+
+    def edit_watchlist(
+        self, user_id: str, *, add: Iterable[str], remove: Iterable[str]
+    ) -> list[str]:
+        """Apply one atomic edit to the current list, preserving other-tab additions."""
+        additions = list(dict.fromkeys(normalize_ticker(value) for value in add))
+        removals = set(normalize_ticker(value) for value in remove)
+        if removals.intersection(additions):
+            raise AccountError("invalid_payload")
         self.initialize()
         with self._connect() as connection:
-            connection.execute(
+            connection.execute("BEGIN IMMEDIATE")
+            rows = connection.execute(
+                """SELECT ticker FROM account_watchlist
+                    WHERE user_id=? ORDER BY position, ticker""",
+                (user_id,),
+            ).fetchall()
+            current = [str(row["ticker"]) for row in rows]
+            result = [symbol for symbol in current if symbol not in removals]
+            result.extend(symbol for symbol in additions if symbol not in result)
+            if len(result) > WATCHLIST_MAX_TICKERS:
+                raise AccountError("watchlist_full")
+            connection.executemany(
                 "DELETE FROM account_watchlist WHERE user_id=? AND ticker=?",
-                (user_id, symbol),
+                [(user_id, symbol) for symbol in removals],
+            )
+            now_iso = _utcnow_iso()
+            connection.executemany(
+                """INSERT INTO account_watchlist (user_id, ticker, position, added_at)
+                   VALUES (?,?,?,?) ON CONFLICT(user_id, ticker)
+                   DO UPDATE SET position=excluded.position""",
+                [(user_id, symbol, index, now_iso) for index, symbol in enumerate(result)],
             )
             connection.commit()
-        return self.watchlist(user_id)
+        return result
 
     # ---------------- chart drawings ----------------
 

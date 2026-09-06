@@ -173,7 +173,7 @@ def test_same_snapshot_updates_freshness_when_market_phase_changes(monkeypatch):
 
 def test_existing_home_watchlist_gets_new_public_daily_curve_without_quote_refresh(monkeypatch):
     now = time.time()
-    original = {"groups": [{"stocks": [{"ticker": "AAOI", "price": 999}]}]}
+    original = {"groups": [{"stocks": [{"ticker": "NVDA", "price": 999}]}]}
     stocks._endpoint_cache["watchlist"] = stocks._EndpointCacheEntry(
         expires_at=now + 300, stale_until=now + 1800,
         fetched_at=now, value=original,
@@ -187,8 +187,8 @@ def test_existing_home_watchlist_gets_new_public_daily_curve_without_quote_refre
     with request_owner_access_context(False):
         before = asyncio.run(stocks.watchlist(None))
     assert "daily_trend" not in before["groups"][0]["stocks"][0]
-    write_stock_pull_resources("AAOI", {"daily_chart": (_chart(), now)},
-                               path=public_stock_snapshot_path("AAOI"))
+    write_stock_pull_resources("NVDA", {"daily_chart": ({**_chart(), "ticker": "NVDA"}, now)},
+                               path=public_stock_snapshot_path("NVDA"))
     with request_owner_access_context(False):
         after = asyncio.run(stocks.watchlist(None))
     points = after["groups"][0]["stocks"][0]["daily_trend"]["points"]
