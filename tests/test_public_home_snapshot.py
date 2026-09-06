@@ -34,6 +34,7 @@ from app.public_home_snapshot import (
     public_home_resource_parameters,
     read_public_home_entries,
     read_public_home_resource,
+    reset_public_home_read_cache,
     validate_public_home_payload,
     write_public_home_snapshot,
 )
@@ -468,6 +469,11 @@ def test_snapshot_rejects_corruption_version_expiry_and_parameter_drift(
 
     document["version"] = PUBLIC_HOME_SNAPSHOT_VERSION + 1
     path.write_text(json.dumps(document), encoding="utf-8")
+    # Parsed documents are cached under (inode, mtime_ns, size). The worker
+    # publishes with os.replace, so a real revision always changes the inode;
+    # rewriting one digit in place inside a single clock tick does not, and
+    # would assert against the previous parse instead of the version check.
+    reset_public_home_read_cache()
     assert read_public_home_entries(path, now=now + 1) == {}
 
     write_public_home_snapshot(path, _entries(now), now=now)
