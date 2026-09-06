@@ -6,7 +6,7 @@
  * v2：个股详情从右侧抽屉改为 /stock/:ticker 全屏整页（参考日股工作台），
  * openTicker 一律导航——抽屉基座与 StockDrawerBody 已随之撤除。
  */
-import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Outlet, useLocation, useNavigate, useNavigationType } from 'react-router';
 import Navbar from '@/components/Navbar';
 import IndexTape from '@/components/IndexTape';
@@ -25,6 +25,7 @@ export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
   const navigationType = useNavigationType();
+  const previousPathname = useRef(location.pathname);
   const [paletteOpen, setPaletteOpen] = useState(false);
 
   const openPalette = useCallback(() => setPaletteOpen(true), []);
@@ -35,9 +36,11 @@ export default function Layout() {
   }, [navigate]);
 
   useEffect(() => {
-    if (navigationType === 'POP') return;
+    const pageChanged = previousPathname.current !== location.pathname;
+    previousPathname.current = location.pathname;
+    if (!pageChanged || navigationType === 'POP') return;
     // A new page starts at its heading, even when opened from a long table.
-    // Back/forward keep the browser's own restoration behavior.
+    // Query-only filters keep focus; back/forward keep browser restoration.
     window.scrollTo({ top: 0, behavior: 'instant' });
     document.getElementById('main-content')?.focus({ preventScroll: true });
   }, [location.pathname, navigationType]);

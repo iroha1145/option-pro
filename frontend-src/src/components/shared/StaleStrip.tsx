@@ -3,7 +3,7 @@
  * 绝不清空已有内容（GPT-5.6-Pro 审计：指数带 / CTA 带 / 聚合状态卡此前
  * 只有列表卡执行这条纪律，其余区块静默显示旧数据）。
  */
-import { cn } from '@/lib/utils';
+import StatusNotice from './StatusNotice';
 import { t } from '../../i18n/core.ts';
 
 export default function StaleStrip({
@@ -19,20 +19,20 @@ export default function StaleStrip({
   label?: string;
 }) {
   return (
-    <p
-      className={cn(
-        'flex items-center justify-between gap-2 rounded-sm bg-warn-50 px-2.5 py-1.5 text-micro text-warn-700',
-        className,
-      )}
+    <StatusNotice
+      className={className}
+      action={
+        <button
+          type="button"
+          onClick={onRetry}
+          disabled={refreshing}
+          className="min-h-9 rounded-md px-2 text-caption font-medium text-brand-600 underline-offset-2 hover:bg-brand-50 hover:underline disabled:opacity-60"
+        >
+          {t('重试')}
+        </button>
+      }
     >
       {label ?? t('刷新失败，显示上次成功的结果')}
-      <button
-        onClick={onRetry}
-        disabled={refreshing}
-        className="shrink-0 font-medium underline-offset-2 hover:underline disabled:opacity-60"
-      >
-        {t('重试')}
-      </button>
-    </p>
+    </StatusNotice>
   );
 }

@@ -137,6 +137,8 @@ export const CATALYSTS: Dict = {
   '请稍后刷新页面': ['Please refresh the page shortly', 'しばらくしてからページを更新してください'],
   '提交失败': ['Submission failed', '送信に失敗しました'],
   '市场焦点周期': ['Market focus cycle', '市場フォーカスサイクル'],
+  '逐股评估': ['Stock assessments', '銘柄別評価'],
+  '数据与分析说明': ['Data and analysis notes', 'データと分析について'],
   'FOCUS CYCLE · 市场焦点周期': ['FOCUS CYCLE · Market focus cycle', 'FOCUS CYCLE · 市場フォーカスサイクル'],
   '周期计算中': ['Computing cycle', 'サイクル計算中'],
   '重试焦点周期': ['Retry focus cycle', 'フォーカスサイクルを再試行'],
