@@ -10,6 +10,12 @@ async function open(page, scenario = '') {
   await page.waitForTimeout(400); // Initial layout/observer and chart-entry animation settle.
   return errors;
 }
+async function settleChart(page) {
+  // The project keeps its original 300 ms chart animations. Capture finished
+  // geometry, not an intermediate transition with old ticks still moving.
+  await expect.poll(() => page.evaluate(() => indicatorTest.getChart()?.getZr().animation.isFinished())).toBe(true);
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
 async function geometry(page) {
   return page.evaluate(() => {
     const chart = window.indicatorTest.getChart(), option = chart.getOption();
@@ -35,6 +41,7 @@ for (const width of [320, 390, 768, 1440]) {
     expect(single.grids).toHaveLength(3);
     await page.getByRole('tab', { name: '全部展开', exact: true }).click();
     await expect(page.locator('[data-indicator-header]')).toHaveCount(7);
+    await settleChart(page);
     const all = await geometry(page);
     expect(all.grids).toHaveLength(8);
     expect(all.grids[0]).toEqual(single.grids[0]);
@@ -52,6 +59,7 @@ for (const width of [320, 390, 768, 1440]) {
     await page.getByRole('option', { name: 'OBV', exact: true }).click();
     await expect(page.locator('[data-indicator-header="obv"]')).toBeVisible();
     await expect(page.locator('[data-indicator-header="macd"]')).toHaveCount(0);
+    await settleChart(page);
     await page.screenshot({ path: info.outputPath(`indicators-single-${width}.png`), fullPage: true });
     expect(errors).toEqual([]);
   });
