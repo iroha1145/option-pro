@@ -187,7 +187,12 @@ test('detail labels a retained price as reconnecting, never live, after a stream
   const state = await fixture(page); await page.goto('/stock/AAPL');
   await emit(page, 'AAPL', 105.27);
   await expect(page.locator('main [aria-label="$105.27"]').first()).toBeVisible();
-  await page.evaluate(() => window.quoteStreams.filter(row => !row.closed).at(-1).onerror());
+  await expect.poll(() => page.evaluate(() => {
+    const stream = window.quoteStreams.filter(row => !row.closed).at(-1);
+    if (typeof stream?.onerror !== 'function') return false;
+    stream.onerror();
+    return true;
+  })).toBe(true);
   await expect(page.locator('main header').first()).toContainText('行情重连中');
   await expect(page.locator('main [aria-label="$105.27"]').first()).toBeVisible();
   expect(state.errors).toEqual([]);
