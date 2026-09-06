@@ -172,7 +172,7 @@ def test_conditional_browser_cache_has_correct_age_and_three_day_lifetime(monkey
 def test_racing_fallback_finishes_without_waiting_for_slow_primary(monkeypatch):
     cancelled = asyncio.Event()
     async def transport(request):
-        if request.url.host == "financialmodelingprep.com":
+        if request.url.host == "storage.googleapis.com":
             try:
                 await asyncio.Event().wait()
             finally:
@@ -246,10 +246,36 @@ def test_disk_image_cannot_be_used_after_the_bounded_stale_window(monkeypatch):
     assert disk.read("AAPL", now) is None
 
 
+def test_logo_urls_try_iex_cdn_before_slower_vendor_hosts():
+    urls = stocks._logo_urls("NKE")
+    assert urls[0] == "https://storage.googleapis.com/iex/api/logos/NKE.png"
+    assert urls[1].startswith("https://static2.finnhub.io/")
+    assert any("financialmodelingprep.com" in url for url in urls)
+    assert any("eodhd.com" in url for url in urls)
+
+
+def test_class_share_logo_candidates_stay_within_public_snapshot_limit():
+    urls = stocks._logo_urls("BRK.B", "https://www.berkshirehathaway.com")
+    assert urls[0] == "https://storage.googleapis.com/iex/api/logos/BRK.B.png"
+    assert urls[1] == "https://storage.googleapis.com/iex/api/logos/BRK-B.png"
+    assert len(urls) <= 8
+    assert len(urls) == len(set(urls))
+
+
+def test_iex_gcs_logo_path_must_stay_on_the_logo_prefix():
+    assert stocks._safe_logo_url("https://storage.googleapis.com/iex/api/logos/AAPL.png")
+    assert not stocks._safe_logo_url("https://storage.googleapis.com/evil/AAPL.png")
+    assert not stocks._safe_logo_url("https://storage.googleapis.com/iex/api/logos/../secret.png")
+    assert not stocks._safe_logo_url("https://storage.googleapis.com/iex/api/logos/%2e%2e/secret.png")
+    assert not stocks._safe_logo_url("https://storage.googleapis.com/iex/api/logos/foo/bar.png")
+
+
 def test_racing_fetch_rejects_oversized_wrong_type_and_private_redirects(monkeypatch):
     visited = []
     async def transport(request):
         visited.append(request.url.host)
+        if request.url.host == "storage.googleapis.com":
+            return httpx.Response(404)
         if request.url.host == "financialmodelingprep.com":
             return httpx.Response(302, headers={"location": "https://127.0.0.1/internal"})
         if request.url.host == "static2.finnhub.io":
