@@ -1,5 +1,5 @@
 import SoftBadge from '@/components/shared/SoftBadge';
-/** B1 热点主题带：横滑 snap 卡片列（flame-line + 热度计 + 代表新闻 + 代码 chips），点击打开代表新闻抽屉 */
+/** Shared card surfaces, with the existing heat, source and news interactions. */
 import { motion } from 'framer-motion';
 import { usePolling } from '@/hooks/usePolling';
 import { catalystsContract } from './api';
@@ -17,27 +17,19 @@ function HotspotCard({ h, index, onOpen }: { h: HotspotGroup; index: number; onO
   const openable = !!h.representative?.newsId;
   return (
     <motion.button
-      initial={{ opacity: 0, x: 24 }}
-      animate={{ opacity: 1, x: 0 }}
+      type="button"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
       transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1], delay: Math.min(index * 0.05, 0.4) }}
-      /* hover 上浮 -3px/240ms 走 whileHover（framer 入场后内联 transform:none 会压掉 CSS hover 位移），阴影用 CSS */
-      whileHover={openable ? { y: -3, transition: { duration: 0.24, ease: 'easeOut' } } : undefined}
       onClick={onOpen}
       disabled={!openable}
-      className={`group relative flex w-[260px] shrink-0 snap-start flex-col overflow-hidden rounded-lg border border-line bg-card p-4 pt-3 text-left shadow-sh-1 transition-shadow duration-240 ease-out sm:w-[300px] ${
-        openable ? 'hover:shadow-sh-2' : 'cursor-default'
+      data-hotspot-card
+      className={`card-surface group relative flex w-[260px] shrink-0 snap-start flex-col overflow-hidden p-4 text-left sm:w-[300px] sm:p-5 ${
+        openable ? 'card-hover' : 'cursor-default'
       }`}
     >
-      {/* 顶边热度条：父级 overflow-hidden + rounded-lg 裁掉圆角外的直角 */}
-      <span
-        aria-hidden="true"
-        className="absolute inset-x-0 top-0 h-[2px]"
-        /* v8.1：撤跨色渐变（违反自家「禁跨色渐变」纪律）。热度=温度，单一暖色即语义；
-           强度仍由 opacity 编码，数值另有 HeatMeter 承担。 */
-        style={{ background: '#E8930C', opacity: Math.min(1, 0.3 + h.heat / 140) }}
-      />
-      <div className="flex items-center gap-2">
-        <span className="flex size-7 shrink-0 items-center justify-center rounded-sm bg-warn-50 text-warn-600">
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-warn-50 text-warn-700">
           <Icon name="flame-line" size={15} />
         </span>
         {h.eventType && (
@@ -47,8 +39,8 @@ function HotspotCard({ h, index, onOpen }: { h: HotspotGroup; index: number; onO
         )}
         <HeatMeter level={h.heatLevel} heat={h.heat} className="ml-auto" />
       </div>
-      <p className="mt-2.5 line-clamp-2 min-h-[40px] text-body-s font-medium text-ink-800">{h.theme}</p>
-      <div className="mt-2.5 flex items-center gap-1.5">
+      <p className="mt-4 line-clamp-2 min-h-12 text-body font-semibold leading-6 text-ink-800">{h.theme}</p>
+      <div className="mt-3 flex flex-wrap items-center gap-1.5">
         {h.tickers.slice(0, 3).map((t) => (
           <TickerChip key={t} ticker={t} />
         ))}
@@ -56,7 +48,7 @@ function HotspotCard({ h, index, onOpen }: { h: HotspotGroup; index: number; onO
           {h.newsCount} {h.countKind === 'sources' ? __t('源') : __t('条')}
         </span>
       </div>
-      <div className="mt-2 flex items-center justify-between gap-2 border-t border-line pt-2">
+      <div className="mt-4 flex items-center justify-between gap-2 border-t border-line pt-3">
         <span className="flex min-w-0 flex-wrap gap-1">
           {h.keywords.slice(0, 2).map((k) => (
             <SoftBadge key={k} className="truncate">
@@ -65,7 +57,7 @@ function HotspotCard({ h, index, onOpen }: { h: HotspotGroup; index: number; onO
           ))}
         </span>
         {openable && (
-          <span className="flex shrink-0 items-center gap-0.5 text-micro text-ink-300 group-hover:text-brand-600">
+          <span className="flex shrink-0 items-center gap-0.5 text-micro text-ink-500 transition-colors group-hover:text-brand-600">
             {__t('查看代表新闻')}
             <Icon name="chevron-right" size={12} />
           </span>
@@ -77,7 +69,7 @@ function HotspotCard({ h, index, onOpen }: { h: HotspotGroup; index: number; onO
 
 function HotspotSkeleton({ i }: { i: number }) {
   return (
-    <div key={i} className="w-[260px] shrink-0 snap-start rounded-lg border border-line bg-card p-4 sm:w-[300px]" aria-hidden="true">
+    <div key={i} className="card-surface w-[260px] shrink-0 snap-start p-4 sm:w-[300px] sm:p-5" aria-hidden="true">
       <div className="flex items-center gap-2">
         <SkeletonBlock className="size-7" />
         <SkeletonBlock className="h-4 w-24" />
@@ -107,15 +99,15 @@ export default function HotspotsStrip({ onOpenNews, refreshToken = 0 }: { onOpen
 
   return (
     <section className="mt-6" aria-label={__t("热点主题带")}>
-      <div className="flex items-baseline justify-between">
-        <div className="flex items-baseline gap-3">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="min-w-0">
           <p className="eyebrow">
             {__t('HOT THEMES · 热点带')}
             <InfoHint hint={SCORE_HINTS.hotScore} side="bottom" size={12} className="ml-1" />
           </p>
-          <h2 className="text-h2 text-ink-900">{__t('市场在交易什么故事')}</h2>
+          <h2 className="mt-1 text-h2 text-ink-900">{__t('市场在交易什么故事')}</h2>
         </div>
-        <span className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           {listStale && (
             <SoftBadge tone="warn" className="whitespace-normal">
               {__t('已过期 · 刷新失败，展示上次结果')}
@@ -127,7 +119,7 @@ export default function HotspotsStrip({ onOpenNews, refreshToken = 0 }: { onOpen
               {__t('热点扫描')} {statusQ.data.scanning ? __t('活跃') : __t('已暂停')} · {fmtRelative(statusQ.data.updatedAt)}
             </p>
           )}
-        </span>
+        </div>
       </div>
 
       {/* 8 张 260px 的卡合计约 2200px，一定溢出。滚动条是藏起来的，触屏能划，
@@ -143,7 +135,7 @@ export default function HotspotsStrip({ onOpenNews, refreshToken = 0 }: { onOpen
             [0, 1, 2].map((i) => <HotspotSkeleton key={i} i={i} />)
           ) : computing ? (
             /* hotspots/status 计算中：带首卡替换为状态卡 */
-            <div className="flex w-[260px] shrink-0 snap-start flex-col items-center justify-center rounded-lg border border-dashed border-line-strong bg-card-warm p-4 text-center sm:w-[300px]">
+            <div className="card-surface flex min-h-44 w-[260px] shrink-0 snap-start flex-col items-center justify-center p-5 text-center sm:w-[300px]">
               <span className="size-5 animate-spin rounded-full border-2 border-brand-100 border-t-brand-600" aria-hidden="true" />
               <p className="mt-2.5 text-body-s font-medium text-ink-800">{__t('热点计算中…')}</p>
               <p className="mt-1 font-mono text-micro text-ink-400 tnum">
@@ -152,7 +144,7 @@ export default function HotspotsStrip({ onOpenNews, refreshToken = 0 }: { onOpen
             </div>
           ) : null}
           {!listQ.loading && !computing && listFailed && (
-            <div className="flex w-full flex-col items-center justify-center rounded-lg border border-dashed border-line-strong bg-card-warm py-8 text-center">
+            <div className="card-surface flex w-full flex-col items-center justify-center px-5 py-8 text-center">
               <p className="text-body-s text-ink-500">{__t('热点数据读取失败')}</p>
               <p className="mt-1 text-micro text-ink-400">{__t('是读取失败，不代表市场没有热点')}</p>
               <button
@@ -164,7 +156,7 @@ export default function HotspotsStrip({ onOpenNews, refreshToken = 0 }: { onOpen
             </div>
           )}
           {!listQ.loading && !computing && !listFailed && items.length === 0 && (
-            <div className="flex w-full flex-col items-center justify-center rounded-lg border border-dashed border-line-strong bg-card-warm py-8 text-center">
+            <div className="card-surface flex w-full flex-col items-center justify-center px-5 py-8 text-center">
               <p className="text-body-s text-ink-500">{__t('当前窗口暂无热点分组')}</p>
             </div>
           )}

@@ -11,6 +11,7 @@ import { fmtRelative, fmtTimeHHMMSS } from '@/lib/format';
 import PageHeader from '@/components/shared/PageHeader';
 import Segmented from '@/components/shared/Segmented';
 import EmptyState from '@/components/shared/EmptyState';
+import StatusNotice from '@/components/shared/StatusNotice';
 import { SkeletonRows } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
 import HeatMatrix, {
@@ -168,11 +169,18 @@ export default function Sectors() {
       </div>
 
       {strengthQ.error && !catalogQ.error && (
-        <div
-          className="mt-4 flex items-start gap-2 rounded-md border border-warn-600/25 bg-warn-50 px-3 py-2 text-caption text-warn-600"
-          role="status"
+        <StatusNotice
+          className="mt-4"
+          action={
+            <button
+              type="button"
+              onClick={() => strengthQ.refresh()}
+              className="min-h-9 rounded-md px-2 text-caption font-medium text-brand-600 hover:bg-brand-50"
+            >
+              {t('重试')}
+            </button>
+          }
         >
-          <Icon name="flag" size={14} className="mt-0.5 shrink-0" />
           <span>
             {/* 横幅必须与页面事实一致（审计 2.2.10）：usePolling 失败不清空旧数据，
               * 有旧快照时下面显示的是上次成功的数值，要说「已过期」而不是「留空」。 */}
@@ -184,14 +192,7 @@ export default function Sectors() {
                 })
               : t('板块目录已加载，但收益与强度聚合暂不可用；缺失位置保持为空。')}
           </span>
-          <button
-            type="button"
-            onClick={() => strengthQ.refresh()}
-            className="ml-auto shrink-0 font-medium text-warn-600 underline decoration-warn-600/40 underline-offset-2"
-          >
-            {t('重试')}
-          </button>
-        </div>
+        </StatusNotice>
       )}
 
       <section className="mt-6" aria-label={t("板块总览")}>

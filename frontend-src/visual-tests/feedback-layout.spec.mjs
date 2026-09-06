@@ -65,6 +65,72 @@ for (const width of [390, 1440]) {
       contextOptions: { reducedMotion: 'reduce' },
     });
 
+    test('catalyst cards retain news, history and keyboard view navigation', async ({ page }) => {
+      const errors = [];
+      page.on('pageerror', error => errors.push(error.message));
+      await page.goto('/catalysts');
+      const notes = page.getByText('数据与分析说明', { exact: true });
+      await notes.click();
+      await expect(page.getByText(/新闻与经济日历持续收录/)).toBeVisible();
+      await notes.click();
+      const focus = page.getByRole('region', { name: '市场焦点周期', exact: true });
+      await expect(focus.getByRole('heading', { name: '逐股评估', exact: true })).toBeVisible();
+      await expect(focus).toContainText('证据不足');
+      await noPageOverflow(page);
+      await capture(page, `catalyst-focus-${width}`, focus);
+
+      const history = focus.getByRole('button', { name: /与上一成功周期对照/ });
+      await history.click();
+      await expect(history).toHaveAttribute('aria-expanded', 'true');
+      await expect(focus.getByRole('heading', { name: '降息交易回摆', exact: true })).toBeVisible();
+      await noPageOverflow(page);
+      await history.click();
+
+      const hotspot = page.getByRole('region', { name: '热点主题带', exact: true })
+        .getByRole('button', { name: /查看代表新闻/ }).first();
+      await hotspot.focus();
+      await page.keyboard.press('Enter');
+      await expect(page.getByRole('dialog')).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+
+      if (width < 768) await page.getByRole('button', { name: '筛选', exact: true }).click();
+      await page.getByPlaceholder('代码过滤').fill('NVDA');
+      await expect(page).toHaveURL(/ticker=NVDA/);
+      const views = page.getByRole('tablist', { name: '催化剂视图', exact: true });
+      await views.getByRole('tab', { name: '新闻流', exact: true }).focus();
+      await page.keyboard.press('ArrowRight');
+      await expect(views.getByRole('tab', { name: '股票影响', exact: true })).toHaveAttribute('aria-selected', 'true');
+      await expect(page).toHaveURL(/tab=stocks/);
+      await expect(page).toHaveURL(/ticker=NVDA/);
+      await page.keyboard.press('End');
+      await expect(views.getByRole('tab', { name: '数据源', exact: true })).toHaveAttribute('aria-selected', 'true');
+      await expect(page).toHaveURL(/tab=sources/);
+      await noPageOverflow(page);
+      expect(errors).toEqual([]);
+    });
+
+    test('stale sector surfaces preserve cached rows, sorting and retry feedback', async ({ page }) => {
+      const errors = [];
+      page.on('pageerror', error => errors.push(error.message));
+      await page.goto('/visual-tests/support/status-notice-harness.html');
+      await expect(page.getByText('数据过期', { exact: true })).toBeVisible();
+      await expect(page.getByRole('status').filter({ hasText: '数据暂未刷新' })).toContainText('以下为最近一次结果');
+      const table = page.getByRole('table', { name: '板块 IV 横截面排名表', exact: true });
+      await expect(table.locator('tbody tr')).toHaveCount(2);
+      await expect(table.locator('tbody tr').first()).toContainText('AAPL');
+      await page.getByRole('button', { name: /切换排序/ }).click();
+      await expect(table.locator('tbody tr').first()).toContainText('MSFT');
+      await noPageOverflow(page);
+      await capture(page, `sector-stale-notices-${width}`, page.getByText('数据过期', { exact: true }));
+      const retry = page.getByRole('status').filter({ hasText: '刷新失败' }).getByRole('button', { name: '重试', exact: true });
+      await retry.click();
+      await expect(retry).toBeDisabled();
+      await expect(page.getByLabel('刷新状态')).toHaveText('刷新中');
+      await expect(table.locator('tbody tr')).toHaveCount(2);
+      expect(errors).toEqual([]);
+    });
+
     test('breakout status and score filters retain independent pressed states and compact corners', async ({ page }) => {
       await page.goto('/breakouts');
       const toolbar = page.locator('[data-breakout-filters]');

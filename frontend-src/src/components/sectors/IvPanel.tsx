@@ -2,13 +2,14 @@ import { useQuoteSymbols } from '@/hooks/useLiveQuote';
 import { LivePrice } from '@/components/shared/LiveQuote';
 /** 当前 ATM IV 在所选板块成分中的真实横截面排名。 */
 import { useMemo, useState } from 'react';
-import { cn } from '@/lib/utils';
 import { fmtRelative } from '@/lib/format';
 import type { ApiError } from '@/api/client';
 import TickerLogo from '@/components/shared/TickerLogo';
 import EmptyState from '@/components/shared/EmptyState';
 import SourceNote from '@/components/shared/SourceNote';
 import InfoHint from '@/components/shared/InfoHint';
+import SoftBadge from '@/components/shared/SoftBadge';
+import StatusNotice from '@/components/shared/StatusNotice';
 import { SCORE_HINTS } from '@/lib/scoreHints';
 import { SkeletonRows } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
@@ -21,17 +22,10 @@ import { SOURCE_STATUS_CN, ivRankColor } from './model';
 /* ---------- source_status 徽标 ---------- */
 function SourceStatusBadge({ status }: { status: keyof typeof SOURCE_STATUS_CN }) {
   return (
-    <span
-      className={cn(
-        'inline-flex items-center gap-1 rounded-xs border px-1.5 py-0.5 text-micro',
-        status === 'insufficient_data'
-          ? 'border-down-600/25 bg-down-50 text-down-700'
-          : 'border-warn-600/25 bg-warn-50 text-warn-600',
-      )}
-    >
+    <SoftBadge tone={status === 'insufficient_data' ? 'down' : 'warn'}>
       <Icon name="flag" size={10} />
       {SOURCE_STATUS_CN[status]}
-    </span>
+    </SoftBadge>
   );
 }
 
@@ -87,7 +81,7 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, meta,
     <div className="card-surface p-4 md:p-6">
       {/* 头：标题 + 徽标 + 排序 */}
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <div className="flex items-center gap-2.5">
+        <div className="flex min-w-0 flex-wrap items-center gap-2.5">
           <h2 className="text-h3 text-ink-800">{t('板块 IV 横截面排名')}</h2>
           {meta.status !== 'active' && <SourceStatusBadge status={meta.status} />}
         </div>
@@ -115,10 +109,9 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, meta,
 
       {/* 数据未刷新横幅 */}
       {meta.stale && !loading && !error && (
-        <div className="mt-3 flex items-center gap-2 rounded-md border border-warn-600/25 bg-warn-50 px-3 py-2 text-caption text-warn-600" role="status">
-          <Icon name="clock-ny" size={14} />
+        <StatusNotice className="mt-3">
           {t('数据暂未刷新，以下为最近一次结果')}
-        </div>
+        </StatusNotice>
       )}
 
       {/* 表 / 骨架 / 空态 */}
