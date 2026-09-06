@@ -129,9 +129,11 @@ test('non-finite pattern quality is rejected rather than ranked first',()=>{
  const bars=series();const p=overlay(bars,'support_trend',[100,130],{quality:NaN});
  assert.deepEqual(selectSmartOverlays([p],bars,3),[]);
 });
-test('selection only changes copied display priority, never backend evidence or stored geometry',()=>{
+test('selection adds display metadata without changing source evidence counts or geometry',()=>{
  const bars=series();const p=freeze(overlay(bars,'support_trend',[100,130]));const result=selectSmartOverlays([p],bars,3);
- assert.equal(p.displayPriority,80);assert.equal(result[0].geometry,p.geometry);assert.equal(result[0].evidence,p.evidence);
+ assert.equal(p.displayPriority,80);assert.equal(result[0].geometry,p.geometry);
+ assert.deepEqual(p.evidence,{touches:5});assert.equal(result[0].evidence.touches,p.evidence.touches);
+ assert.equal(result[0].shapeQuality,p.shapeQuality);assert.equal(result[0].evidence.selectionVersion,'structural-v3');
 });
 test('manual strokes preserve explicit saved widths and clamp invalid extremes',()=>{
  for(const w of [1,2,3,4]) assert.equal(manualLineInk('#123456',w).width,w);
@@ -140,7 +142,7 @@ test('manual strokes preserve explicit saved widths and clamp invalid extremes',
 test('observed boundaries are solid and distinct from dashed extensions',()=>{
  const out=renderPatternInk(inkPattern(),{segments:[segment(10,70,60,90)],fill:null},ctx);
  assert.equal(out.lines.length,2);assert.equal(stroke(out.lines[0]).type,'solid');assert.deepEqual(stroke(out.lines[1]).type,[7,4]);
- assert.ok(stroke(out.lines[0]).width>=2.5);assert.equal(out.lines[0][0].label.show,false);assert.equal(out.lines[1][0].label.show,true);
+ assert.ok(stroke(out.lines[0]).width>=2);assert.equal(out.lines[0][0].label.show,false);assert.equal(out.lines[1][0].label.show,true);
 });
 test('support and resistance use fixed non-candle semantic colors',()=>{
  const geom={segments:[segment(10,70,60,90)],fill:null};
@@ -152,11 +154,11 @@ test('a paired channel uses support color on its actual lower rail',()=>{
  const out=renderPatternInk(inkPattern({kind:'channel'}),{segments:[segment(10,100,60,120),segment(10,80,60,100)],fill:null},ctx);
  assert.equal(stroke(out.lines[0]).color,LINE_INK.resistance);
  assert.equal(stroke(out.lines.find(l=>l[0].coord[1]===80)).color,LINE_INK.support);
- assert.equal(out.polygons[0].opacity,0.035);
+ assert.equal(out.polygons[0].opacity,0.04);
 });
 for(const status of ['broken_up','broken_down','invalidated','failed','expired']) test(`${status} structures fade without extending or filling`,()=>{
  const out=renderPatternInk(inkPattern({status}),{segments:[segment(10,70,60,90)],fill:[{x:10,y:60},{x:60,y:80},{x:60,y:90}]},ctx);
- assert.equal(out.lines.length,1);assert.equal(out.polygons.length,0);assert.equal(stroke(out.lines[0]).opacity,0.38);
+ assert.equal(out.lines.length,1);assert.equal(out.polygons.length,0);assert.equal(stroke(out.lines[0]).opacity,0.3);
  assert.deepEqual(stroke(out.lines[0]).type,[2,4]);
 });
 test('hidden, NaN, and invalid confidence values cannot produce visible patterns',()=>{

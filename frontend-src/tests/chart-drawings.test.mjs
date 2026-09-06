@@ -2020,7 +2020,7 @@ test('pattern rails carry per-kind color and a single end label', async (t) => {
   ], ctx, 0);
   // 支撑/阻力使用固定语义色，观察段实线，延伸段虚线且只挂一个末端标签。
   const support = marks.lines[0][0];
-  assert.equal(support.lineStyle.color, '#087EA4');
+  assert.equal(support.lineStyle.color, '#0E647F');
   assert.equal(support.lineStyle.type, 'solid');
   assert.equal(support.label.show, false);
   const supportTail = marks.lines[1][0];
@@ -2030,12 +2030,12 @@ test('pattern rails carry per-kind color and a single end label', async (t) => {
   // 标签留在绘图区内（insideEnd*），绝不用 'end'——那会画进 y 轴槽骑在刻度上；
   // 白底药丸保证跨在蜡烛上也读得清（用户截图：「水平箱体」压 190、多形态互叠）。
   assert.equal(supportTail.label.position, 'insideEndTop');
-  assert.equal(supportTail.label.backgroundColor, 'rgba(255,255,255,0.96)');
+  assert.equal(supportTail.label.backgroundColor, 'rgba(255,255,255,0.97)');
   // 通道下边表示支撑、上边表示阻力；整个通道只有一个标签。
   const chanA = marks.lines[2][0];
   const chanB = marks.lines[4][0];
-  assert.equal(chanA.lineStyle.color, '#087EA4');
-  assert.equal(chanB.lineStyle.color, '#B423B9');
+  assert.equal(chanA.lineStyle.color, '#0E647F');
+  assert.equal(chanB.lineStyle.color, '#8D299B');
   assert.equal(chanA.label.show, false);
   assert.equal(chanB.label.show, false);
   assert.equal(marks.lines[3][0].label.show, true);
@@ -2050,12 +2050,12 @@ test('pattern rails carry per-kind color and a single end label', async (t) => {
   const poly = (marks.polygons ?? [])[0];
   assert.ok(poly, 'channel 应产出填充多边形');
   assert.equal(poly.color, '#4F46E5');
-  assert.equal(poly.opacity, 0.035);
+  assert.equal(poly.opacity, 0.04);
   // 未指定标签仍然无标签；自动线色由其角色决定，不采用旧涨跌颜色。
   const bare = autoPatternsToMarks([
     { id: 'p3', kind: 'support_trend', confidence: 60, status: 'forming', anchors: [anchorAt(2, 100), anchorAt(20, 118)] },
   ], ctx, 0);
-  assert.equal(bare.lines[0][0].lineStyle.color, '#087EA4');
+  assert.equal(bare.lines[0][0].lineStyle.color, '#0E647F');
   assert.equal(bare.lines[0][0].label.show, false);
 });
 

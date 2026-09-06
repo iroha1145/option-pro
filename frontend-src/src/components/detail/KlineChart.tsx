@@ -32,6 +32,9 @@ import { snapCandidatesFromOverlays } from './chart-drawings/snap.ts';
 import { railCandidatesFromOverlays } from './chart-drawings/railSnap.ts';
 import { barKeyOf } from './chart-drawings/projection.ts';
 import { detectSmartLines, selectSmartOverlays, withChartIndices } from './chart-drawings/analysis/smartLines.ts';
+import { prepareStructuralOverlays } from './chart-drawings/analysis/structuralOverlays.ts';
+import { detectPriceGaps } from './chart-drawings/analysis/priceGaps.ts';
+import { semanticLabel } from './chart-drawings/analysis/semanticPresentation.ts';
 import { isSupportLevel } from './chart-drawings/linePresentation.ts';
 import AnalysisLegend from './chart-drawings/AnalysisLegend';
 import { clippedLineSeries, isClippedLine } from './chart-drawings/clippedLines';
@@ -211,7 +214,7 @@ function buildOption(
         silent: true,
         xAxisIndex: 0,
         yAxisIndex: 0,
-        z: 5,
+        z: 2,
         data: polygons,
         renderItem: (params: { dataIndex: number }, api: { coord: (value: number[]) => number[] }) => {
           const poly = polygons[params.dataIndex];
@@ -764,16 +767,26 @@ export default function KlineChart({
       || !layerSettings.enabled.some(id => id === 'auto_patterns' || id === 'support_resistance')) return [];
     return detectSmartLines(smartBars);
   }, [analysisOk, smartDrawingEnabled, smartBars, layerSettings.enabled]);
+  // Gap recognition is separately controlled by its layer, not the smart-line toggle.
+  const gapProposals = useMemo(() => {
+    if (!analysisOk || !layerSettings.enabled.includes('gaps')) return [];
+    return detectPriceGaps(smartBars, range);
+  }, [analysisOk, smartBars, range, layerSettings.enabled]);
   const visibleOverlays = useMemo(() => {
     if (!analysisOk || !analysisBundle) return [];
-    if (!smartDrawingEnabled) return filterOverlays(analysisBundle.overlays, layerSettings);
+    if (!smartDrawingEnabled) {
+      const filtered = filterOverlays([...analysisBundle.overlays, ...gapProposals], layerSettings);
+      const gaps = filtered.filter(row => row.kind === 'gap')
+        .sort((a, b) => b.displayPriority - a.displayPriority || a.id.localeCompare(b.id, 'en')).slice(0, 4);
+      return [...filtered.filter(row => row.kind !== 'gap'), ...gaps];
+    }
     // Filter enabled layers/status/quality BEFORE geometric deduplication. An invisible
     // channel must never suppress a visible trendline; apply the count cap afterwards.
-    const candidates = filterOverlays([...analysisBundle.overlays, ...smartProposals], {
+    const candidates = filterOverlays(prepareStructuralOverlays([...analysisBundle.overlays, ...smartProposals, ...gapProposals], smartBars), {
       ...layerSettings, maxPatterns: 64,
     });
     return selectSmartOverlays(candidates, smartBars, layerSettings.maxPatterns);
-  }, [analysisOk, analysisBundle, layerSettings, smartDrawingEnabled, smartProposals, smartBars]);
+  }, [analysisOk, analysisBundle, layerSettings, smartDrawingEnabled, smartProposals, smartBars, gapProposals]);
   const drawingSnapCandidates = useMemo(() => [
     ...snapCandidatesFromOverlays(visibleOverlays),
     ...railCandidatesFromOverlays(visibleOverlays, chartKeys),
@@ -844,9 +857,9 @@ export default function KlineChart({
       yMin,
       yMax,
     }, autoPatternName, new Set(visibleLabels.map(item => item.id)));
-    // 自动形态与手绘线的线端标签在这里汇合，防叠必须在汇合后做（见 deconflictEndLabels）。
+    // 手绘维持原有标签排版；自动标签由 clippedLineSeries 在像素空间避开手绘和现价。
     return {
-      lines: deconflictEndLabels([...auto.lines, ...hand.lines], yMin, yMax),
+      lines: [...auto.lines, ...deconflictEndLabels(hand.lines, yMin, yMax)],
       points: [...auto.points, ...hand.points],
       areas: [...auto.areas, ...hand.areas],
       polygons: [...(auto.polygons ?? []), ...(hand.polygons ?? [])],
@@ -891,13 +904,16 @@ export default function KlineChart({
   const referenceBarCount = bars?.length ?? 0;
   useEffect(() => {
     if (!chartInst || chartInst.isDisposed() || !option) return;
-    chartInst.setOption({ series: [{ id: 'realtime-price-reference', data: referencePrice !== null && referenceBarCount ? [[referenceBarCount - 1, referencePrice]] : [], markLine: {
+    // Repack only the small rail series when the quote moves. Do not rerun the
+    // detector, fingerprint calculation, candlesticks or indicator layout.
+    const rails = clippedLineSeries(extraMarks.lines, { price: referencePrice, text: referenceLabel });
+    chartInst.setOption({ series: [...(rails ? [rails] : []), { id: 'realtime-price-reference', data: referencePrice !== null && referenceBarCount ? [[referenceBarCount - 1, referencePrice]] : [], markLine: {
       symbol: 'none', silent: true, animation: false,
       lineStyle: { type: 'dashed', width: 1, color: CH.brand500 },
       label: { show: true, position: 'insideEndTop', formatter: referenceLabel, color: CH.brand500, fontSize: 10 },
       data: referencePrice !== null ? [{ yAxis: referencePrice }] : [],
     } }] }, { notMerge: false, lazyUpdate: true, silent: true });
-  }, [chartInst, option, referencePrice, referenceLabel, referenceBarCount]);
+  }, [chartInst, option, referencePrice, referenceLabel, referenceBarCount, extraMarks.lines]);
 
   // The chart calls this from its commit effect. A scroll never rebuilds the
   // option, and an abandoned render cannot reset the live chart's viewport.
@@ -1211,16 +1227,19 @@ export default function KlineChart({
       {analysisOk && visibleLabels.length > 0 && (
         <p className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-micro text-ink-400">
           {visibleLabels.map((overlayRow) => {
-            const name = autoPatternName(
+            const baseName = autoPatternName(
               overlayRow.kind === 'level' ? (isSupportLevel(overlayRow.geometry, data?.bars[data.bars.length - 1]?.c) ? 'support_trend' : 'resistance_trend') : overlayRow.kind,
               overlayRow.kind === 'level' ? 'horizontal' : typeof overlayRow.geometry.subtype === 'string' ? overlayRow.geometry.subtype : null,
             );
+            const name = semanticLabel(baseName, overlayRow, t);
             if (!name) return null;
             const touches = overlayRow.evidence.touches;
+            const collapsed = overlayRow.evidence.collapsedCandidates;
             return (
               <span key={overlayRow.id} title={t('几何质量不是胜率')}>
                 {t('形态 · {name} · 几何质量 {n}', { name, n: Math.round(overlayRow.shapeQuality * 100) })}
                 {typeof touches === 'number' && touches > 0 ? ` · ${t('触碰 {n} 次', { n: touches })}` : ''}
+                {typeof collapsed === 'number' && collapsed > 0 ? ` · ${t('合并 {n} 个相近候选', { n: collapsed })}` : ''}
               </span>
             );
           })}

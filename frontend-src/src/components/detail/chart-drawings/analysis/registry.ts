@@ -23,6 +23,7 @@ export const LAYERS: LayerDef[] = [
   { id: 'swings', group: 'price', kind: 'swing', label: t('摆动点') },
   { id: 'support_resistance', group: 'price', kind: 'level', label: t('支撑阻力') },
   { id: 'bases', group: 'price', kind: 'box', label: t('整理区') },
+  { id: 'gaps', group: 'price', kind: 'gap', label: t('价格缺口（日线）') },
   { id: 'pivots', group: 'price', kind: 'pivot', label: t('pivot/invalidation') },
   { id: 'auto_patterns', group: 'price', kind: 'pattern', label: t('自动趋势线/通道/三角形/楔形') },
   { id: 'candles', group: 'event', kind: 'candle', label: t('K线形态') },
@@ -68,7 +69,7 @@ export const PRESETS: Record<Exclude<PresetId, 'custom'>, PresetDef> = {
   },
   structure: {
     label: t('结构分析'),
-    enabled: ['swings', 'support_resistance', 'bases', 'pivots', 'auto_patterns', 'candles', 'traps'],
+    enabled: ['swings', 'support_resistance', 'bases', 'gaps', 'pivots', 'auto_patterns', 'candles', 'traps'],
     maxPatterns: 8,
     maxLabels: 10,
     minShapeQuality: 0.45,
@@ -78,7 +79,7 @@ export const PRESETS: Record<Exclude<PresetId, 'custom'>, PresetDef> = {
   },
   breakout: {
     label: t('突破交易'),
-    enabled: ['bases', 'pivots', 'breakouts', 'auto_patterns', 'obv', 'clv'],
+    enabled: ['bases', 'gaps', 'pivots', 'breakouts', 'auto_patterns', 'obv', 'clv'],
     maxPatterns: 6,
     maxLabels: 8,
     minShapeQuality: 0.45,
@@ -123,6 +124,7 @@ export const OVERLAY_LAYER_BY_KIND: Record<string, string> = {
   swing: 'swings',
   level: 'support_resistance',
   box: 'bases',
+  gap: 'gaps',
   pivot: 'pivots',
   support_trend: 'auto_patterns',
   resistance_trend: 'auto_patterns',

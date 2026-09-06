@@ -42,6 +42,15 @@ for (const viewport of VIEWPORTS) {
     test.use({ viewport });
 
     test("dock, screener and catalyst tabs stay inside the viewport", async ({ page }) => {
+      let feedRetryAt = null;
+      page.on("response", (response) => {
+        const url = new URL(response.url());
+        if (url.pathname !== "/api/catalysts/feed" || url.searchParams.get("limit") !== "12") return;
+        if (response.status() === 429) {
+          const seconds = Number(response.headers()["retry-after"]);
+          if (Number.isFinite(seconds) && seconds > 0) feedRetryAt = Date.now() + seconds * 1000;
+        } else if (response.ok()) feedRetryAt = null;
+      });
       await page.goto("/", { waitUntil: "domcontentloaded" });
       const dock = page.getByRole("navigation", { name: "移动端导航" });
       await expect(dock).toBeVisible();
@@ -103,7 +112,25 @@ for (const viewport of VIEWPORTS) {
       await expect(firstTab).toHaveAttribute("aria-selected", "true");
       await expect(lastTab).toHaveAttribute("aria-selected", "false");
       const filterRow = page.getByRole("button", { name: "筛选", exact: true }).locator("..");
-      await expect(filterRow.getByText(/^\d+\s*条$/)).toBeVisible();
+      const count = filterRow.getByText(/^\d+\s*条$/);
+      let recoveredFeed = false;
+      // Earlier real-backend tests share the request bucket. Honor an observed
+      // Retry-After and use the page's recovery action before asserting layout.
+      await expect.poll(async () => {
+        if (await count.isVisible()) return true;
+        if (feedRetryAt !== null && Date.now() >= feedRetryAt) {
+          const retry = page.getByRole("button", { name: "重试", exact: true });
+          if (await retry.isVisible()) {
+            feedRetryAt = null;
+            await retry.click({ timeout: 1_000 }).catch(() => {});
+            recoveredFeed = true;
+          }
+        }
+        return false;
+      }, { timeout: 20_000 }).toBe(true);
+      if (recoveredFeed) await firstTab.click();
+      await expect(firstTab).toBeFocused();
+      await expect(count).toBeVisible();
       await expect(tabs.getByText(/^\d+\s*条$/)).toHaveCount(0);
       let previousWidth = -1;
       let stableWidths = 0;

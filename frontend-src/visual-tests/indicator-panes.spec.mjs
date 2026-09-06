@@ -153,3 +153,27 @@ test('expanded workspace scrolls tall indicators instead of squeezing them', asy
   await expect(dialog.locator('[data-indicator-header="range_persistence"]')).toBeInViewport();
   expect(errors).toEqual([]);
 });
+
+test('hiding automatic structures does not reposition a nearby hand-drawn label', async ({ page }) => {
+  const errors = await open(page);
+  await page.getByRole('button', { name: '水平线', exact: true }).click();
+  const spot = await page.evaluate(() => {
+    const chart = indicatorTest.getChart(), p = chart.convertToPixel({ gridIndex: 0 }, [150, 236]);
+    const r = chart.getDom().getBoundingClientRect();
+    return { x: r.left + p[0], y: r.top + p[1] };
+  });
+  await page.mouse.click(spot.x, spot.y);
+  await page.keyboard.press('Escape');
+  const marks = () => page.evaluate(() => indicatorTest.getChart().getOption().series[0].markLine?.data ?? []);
+  await expect.poll(async () => (await marks()).length).toBe(1);
+  const before = await marks();
+  await page.getByRole('button', { name: '算法与图层', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: '算法与图层', exact: true });
+  const auto = dialog.getByRole('switch', { name: '自动趋势线/通道/三角形/楔形', exact: true });
+  await expect(auto).toHaveAttribute('aria-checked', 'true');
+  await auto.click();
+  await page.keyboard.press('Escape');
+  await settleChart(page);
+  expect(await marks()).toEqual(before);
+  expect(errors).toEqual([]);
+});
