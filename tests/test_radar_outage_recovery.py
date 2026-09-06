@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 import threading
 
 import pytest
@@ -9,6 +10,98 @@ import pytest
 from app.services import realtime_quotes as quotes
 from app.services.breakouts.realtime import RadarInventoryUnavailable
 from test_pr135_review_regressions import NOW, bootstrap, fixture, settings, tick
+
+
+def test_inventory_recovers_after_one_worker_thread_start_failure(tmp_path, monkeypatch):
+    _, adapter, _, _, _, _ = fixture(tmp_path, monkeypatch)
+    monotonic = [0.0]
+    adapter._monotonic = lambda: monotonic[0]
+    original_start = threading.Thread.start
+    failures = []
+
+    def start(thread):
+        if not failures:
+            failures.append(True)
+            raise RuntimeError("can't start new thread")
+        return original_start(thread)
+
+    async def run():
+        # Use a fresh real executor, so an idle worker cannot bypass Thread.start.
+        asyncio.get_running_loop().set_default_executor(ThreadPoolExecutor(max_workers=1))
+        with monkeypatch.context() as patch:
+            patch.setattr(threading.Thread, "start", start)
+            with pytest.raises(RadarInventoryUnavailable):
+                await adapter.radar_symbols()
+            with pytest.raises(RadarInventoryUnavailable):
+                await adapter.radar_symbols()
+            monotonic[0] = 2.1
+            assert await adapter.radar_symbols() == ["AAPL"]
+        assert failures == [True]
+        assert adapter._inventory_failures == 0
+
+    asyncio.run(run())
+
+
+def test_recovery_resyncs_an_open_stream_even_without_a_new_event_version(tmp_path):
+    failed = [False]
+
+    async def events():
+        if failed[0]:
+            raise OSError("temporarily unavailable")
+        return [{"event_id": "AAPL", "symbol": "AAPL", "state_version": 7}]
+
+    async def run():
+        hub = quotes.QuoteHub(settings(tmp_path), radar_event_loader=events)
+        await hub._poll_radar_events()
+        hub._running = True
+        client_id = await hub.subscribe(["AAPL"])
+        client = hub._clients[client_id]
+        stream = hub.events(client_id)
+        try:
+            assert (await anext(stream))["event"] == "quotes"
+            assert (await anext(stream))["event"] == "radar"
+            failed[0] = True
+            await hub._poll_radar_events()
+            assert (await anext(stream))["data"]["resync_required"]
+            assert (await anext(stream))["event"] == "quotes"
+            # The browser's outage-time history/detail reload may have failed.
+            failed[0] = False
+            await hub._poll_radar_events()
+            assert client.resync_required
+            hub._publish_pending()
+            await anext(stream)  # the status/price frame awaiting delivery
+            recovered = await anext(stream)
+            assert recovered["event"] == "status"
+            assert recovered["data"]["resync_required"]
+            assert not recovered["data"]["signals_resync_required"]
+            assert (await anext(stream))["event"] == "quotes"
+            # Same-version healthy polls must not create another resync loop.
+            await hub._poll_radar_events()
+            assert not client.resync_required
+        finally:
+            await stream.aclose()
+            hub._running = False
+
+    asyncio.run(run())
+
+
+def test_overlapping_faults_resync_only_clients_that_have_recovered(tmp_path):
+    async def run():
+        hub = quotes.QuoteHub(settings(tmp_path))
+        aapl = hub._clients[await hub.subscribe(["AAPL"])]
+        msft = hub._clients[await hub.subscribe(["MSFT"])]
+        hub._set_error("trade:AAPL", "radar_trade_failed")
+        hub._set_error("events", "radar_events_refresh_failed")
+        aapl.resync_required = msft.resync_required = False
+        hub._set_error("events", None)
+        assert msft.resync_required
+        assert not aapl.resync_required
+        msft.resync_required = False
+        hub._set_error("trade:AAPL", None)
+        assert aapl.resync_required
+        assert not msft.resync_required
+
+    asyncio.run(run())
 
 
 def test_overlapping_sources_notify_each_affected_client_once(tmp_path, monkeypatch):

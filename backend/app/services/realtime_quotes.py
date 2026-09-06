@@ -224,10 +224,12 @@ class QuoteHub:
     def _update_radar_notices(self) -> None:
         for client in self._clients.values():
             affected = self._client_radar_degraded(client)
-            if affected and not client.radar_outage_notified:
+            if affected != client.radar_outage_notified:
                 client.resync_required = True
             # An overlapping fault must notify newly affected clients without
             # re-arming those already notified during this continuous outage.
+            # Once all of a client's faults recover, reload once more: its
+            # history/detail fetch at the start of the outage may have failed.
             client.radar_outage_notified = affected
 
     def _set_error(self, source: str, error: str | None) -> None:
@@ -883,11 +885,13 @@ class QuoteHub:
                 self._set_error("rest", "rest_rate_limited")
                 return
             response.raise_for_status()
-            # A completed snapshot ends the REST fault; a websocket reconnect is
-            # no longer the only thing that can clear it.
-            self._set_error("rest", None)
+            payload = response.json()
             if symbol in self._desired_symbols:
-                self._apply_rest_quote(symbol, response.json())
+                self._apply_rest_quote(symbol, payload)
+            # A completed snapshot ends the REST fault; a websocket reconnect is
+            # no longer the only thing that can clear it. A malformed response
+            # remains the same fault, without resetting its transition order.
+            self._set_error("rest", None)
         except Exception:
             self._set_error("rest", "rest_quote_unavailable")
 
