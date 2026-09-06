@@ -97,17 +97,14 @@ for (const viewport of VIEWPORTS) {
       await expect(lastTab).toHaveAttribute("aria-selected", "true");
       await expectNoDocumentOverflow(page);
 
-      // Every tab remains reachable with the keyboard, including beyond the rail's edge.
+      // The count belongs to the filter row and must not resize the focused tab rail.
       await firstTab.click();
       await expect(firstTab).toBeFocused();
+      await expect(firstTab).toHaveAttribute("aria-selected", "true");
       await expect(lastTab).toHaveAttribute("aria-selected", "false");
-      for (let index = 1; index < await tabButtons.count(); index += 1) {
-        await page.keyboard.press("Tab");
-        await expect(tabButtons.nth(index)).toBeFocused();
-      }
-      await expectLastTabWithinViewport();
-      // The feed count arrives asynchronously and must not squeeze the focused tab.
-      await expect(tabViewport.locator("..").getByText(/^\d+\s*条$/)).toBeVisible();
+      const filterRow = page.getByRole("button", { name: "筛选", exact: true }).locator("..");
+      await expect(filterRow.getByText(/^\d+\s*条$/)).toBeVisible();
+      await expect(tabs.getByText(/^\d+\s*条$/)).toHaveCount(0);
       let previousWidth = -1;
       let stableWidths = 0;
       await expect.poll(async () => {
@@ -116,12 +113,22 @@ for (const viewport of VIEWPORTS) {
         previousWidth = width;
         return stableWidths;
       }).toBeGreaterThanOrEqual(2);
-      await expect(lastTab).toBeFocused();
+      await expect(firstTab).toBeFocused();
+
+      // Shared tabs have one Tab stop; arrows select and reveal every tab.
+      for (let index = 1; index < await tabButtons.count(); index += 1) {
+        await page.keyboard.press("ArrowRight");
+        await expect(tabButtons.nth(index)).toBeFocused();
+        await expect(tabButtons.nth(index)).toHaveAttribute("aria-selected", "true");
+      }
+      await expect(tabs.locator('[role="tab"][tabindex="0"]')).toHaveCount(1);
       await expectLastTabWithinViewport();
       await page.keyboard.press("Enter");
       await expect(lastTab).toHaveAttribute("aria-selected", "true");
       await expectLastTabWithinViewport();
       await expectNoDocumentOverflow(page);
+      await page.keyboard.press("Tab");
+      await expect.poll(() => tabs.evaluate((node) => node.contains(document.activeElement))).toBe(false);
     });
   });
 }
