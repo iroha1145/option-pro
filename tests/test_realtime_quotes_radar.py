@@ -274,6 +274,38 @@ def test_recovered_radar_read_clears_degraded_status_and_resets_backoff(tmp_path
     asyncio.run(scenario())
 
 
+def test_recovered_inventory_read_stops_reporting_its_own_past_failure(tmp_path):
+    """A healthy radar must not keep advertising an error it already recovered from."""
+
+    async def scenario():
+        symbols: list[list[str]] = [None]
+
+        async def inventory():
+            if symbols[0] is None:
+                raise OSError("private repository error")
+            return symbols[0]
+
+        async def events():
+            return []
+
+        hub = quotes.QuoteHub(_hub_settings(tmp_path), radar_loader=inventory,
+                              radar_event_loader=events)
+        await hub._poll_radar_inventory()
+        await hub._poll_radar_events()
+        assert hub._status()["last_error"] == "radar_refresh_failed"
+
+        symbols[0] = ["AAPL"]
+        await hub._poll_radar_inventory()
+        assert hub._radar_symbols == ["AAPL"]
+        assert "AAPL" in hub._desired_symbols
+        assert hub._status()["last_error"] is None
+        # The inventory error must not keep the independent signal path pinned
+        # to degraded once the radar event read has been succeeding all along.
+        assert hub._status()["signals_resync_required"] is False
+
+    asyncio.run(scenario())
+
+
 def test_repeated_trade_commit_failures_resync_a_browser_once(tmp_path, monkeypatch):
     monkeypatch.setattr(quotes, "_utcnow", lambda: NOW)
 

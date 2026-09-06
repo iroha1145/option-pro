@@ -182,7 +182,7 @@ class QuoteHub:
         self._subscription_changed = asyncio.Event()
         self._radar_refresh = asyncio.Event()
         self._radar_events_refresh = asyncio.Event()
-        self._signals_resync_required = False
+        self._trade_signals_failed = False
         self._tasks: list[asyncio.Task[Any]] = []
         self._lock_file: Any = None
         self._http: httpx.AsyncClient | None = None
@@ -196,6 +196,16 @@ class QuoteHub:
     @property
     def _active(self) -> bool:
         return self.enabled or self.signals_enabled
+
+    @property
+    def _signals_resync_required(self) -> bool:
+        """Derive degraded signals from each source so neither pins the other.
+
+        Reading the radar and committing a trade fail independently. Recovering
+        one of them must not report the other as healthy, and must not leave a
+        recovered path advertised as degraded for the rest of the session.
+        """
+        return self._trade_signals_failed or self._radar_events_failures > 0
 
     async def start(self) -> None:
         if self._running:
@@ -471,6 +481,11 @@ class QuoteHub:
                     continue
             self._radar_symbols = list(dict.fromkeys(symbols))
             self._radar_failures = 0
+            if self._last_error == "radar_refresh_failed":
+                # A recovered inventory read must stop reporting its own past
+                # failure; leaving it set makes every later status dishonest.
+                self._last_error = None
+                self._status_dirty = True
             self._allocate()
         except Exception:
             if self._last_error != "radar_refresh_failed":
@@ -486,10 +501,11 @@ class QuoteHub:
                 raise ValueError("Invalid radar update inventory")
             self._publish_radar_updates(rows[:MAX_RADAR_EVENTS])
             self._radar_events_loaded = True
-            self._radar_events_failures = 0
+            if self._radar_events_failures:
+                self._radar_events_failures = 0
+                self._status_dirty = True
             if self._last_error == "radar_events_refresh_failed":
                 self._last_error = None
-                self._signals_resync_required = False
                 self._status_dirty = True
             current_ids = {str(row.get("event_id")) for row in rows[:MAX_RADAR_EVENTS] if isinstance(row, dict)}
             # Remove events outside the repository's recent window. Preserve
@@ -502,14 +518,14 @@ class QuoteHub:
             # browser refetch the durable radar state again, so an outage that
             # lasts turns into a refetch storm. Announce the transition once;
             # a stream opened during the outage still resyncs when it starts.
+            announce = not self._signals_resync_required
             first_failure = self._radar_events_failures == 0
             self._radar_events_failures += 1
             self._radar_events_loaded = False
             if first_failure or self._last_error != "radar_events_refresh_failed":
                 self._status_dirty = True
             self._last_error = "radar_events_refresh_failed"
-            self._signals_resync_required = True
-            if first_failure:
+            if announce:
                 for client in self._clients.values():
                     client.resync_required = True
 
@@ -771,7 +787,7 @@ class QuoteHub:
                 if announce or self._last_error != "radar_trade_failed":
                     self._status_dirty = True
                 self._last_error = "radar_trade_failed"
-                self._signals_resync_required = True
+                self._trade_signals_failed = True
                 if announce:
                     self._radar_refresh.set()
                     self._radar_events_refresh.set()
@@ -779,7 +795,9 @@ class QuoteHub:
                         if symbol in client.provider_symbols:
                             client.resync_required = True
                 return
-            self._signals_resync_required = False
+            if self._trade_signals_failed:
+                self._trade_signals_failed = False
+                self._status_dirty = True
             if changes:
                 self._radar_refresh.set()
                 self._radar_events_refresh.set()
