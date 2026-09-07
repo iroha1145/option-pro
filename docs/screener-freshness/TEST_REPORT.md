@@ -98,7 +98,7 @@
 | F02 | 1440 / 390 live 任务链 | PASS |
 | F03 | review + quotes + audit | PASS（visual 未跑） |
 | F04 | live 构建 + `diff -r` | PASS（本工作区） |
-| F05 | 完整 CI / 镜像 | BLOCKED / 等 GitHub Actions |
+| F05 | 完整 CI / 镜像 | `bc8c5eda` 容器阶段已过；`test:visual` 因误跑隔离选股失败。排除后等下一轮 CI |
 
 ## 5. 三条证据链
 
@@ -111,7 +111,7 @@
 ## 6. 已知局限
 
 - 本地 Python/Node 微版本低于 CI 钉版本。
-- 本环境无 Docker：`test:visual` 与 compose 镜像/WAL/离线 smoke 未跑，记 BLOCKED。
-- A07/A08/C06 浏览器已在隔离 live API 上通过；完整容器/`test:visual` 仍等 GitHub CI。
+- 本环境无 Docker：compose / 镜像 / WAL 以 GitHub CI `bc8c5eda` 为准（已通过）。`test:visual` 在该 SHA 因误收集隔离选股用例失败。
+- A07/A08/C06 浏览器已在隔离 live API 与 CI `test:screener` 通过。
 - 未进行外部供应商实测，不能写成「线上行情源已验证」。
 - 浏览器为视口模拟，不是真机。
