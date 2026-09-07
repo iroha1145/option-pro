@@ -21,7 +21,7 @@ export function useCatalystResource<T>(
   const key = JSON.stringify(['catalysts-v1', API_MODE, commit, localeTag(), access.role, access.username, resourceKey]);
   // Freeze the loader per key. A mutable ref shared across filter changes could
   // make an old subscribed cache entry fetch the NEW filter under the OLD key.
-  const load = useCallback((previous: T | null) => loader(previous), [key]); // eslint-disable-line react-hooks/exhaustive-deps
+  const load = useCallback((previous: T | null) => loader(previous), [key]); // eslint-disable-line react-hooks/exhaustive-deps, react-hooks/preserve-manual-memoization
   const subscribe = useCallback((listener: () => void) => enabled
     ? catalystResources.subscribe(key, policy, listener) : () => {}, [enabled, key, policy]);
   const getSnapshot = useCallback(() => enabled

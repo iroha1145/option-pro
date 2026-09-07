@@ -109,7 +109,7 @@ test('首页指数后插入经济日历，普通午夜事件不再标成全天',
   assert.match(panel, /impact === 'holiday' && t\.getHours\(\) === 0 && t\.getMinutes\(\) === 0/);
   const stocks = await source('components/catalysts/StocksPanel.tsx');
   assert.match(stocks, /t\(r\.sector\)/);
-  const status = await source('components/catalysts/CatalystCacheStatus.tsx');
+  const status = await source('components/catalysts/cacheStatusProps.ts');
   assert.match(status, /export function cacheStatusProps/);
   for (const file of [
     'components/catalysts/EconomicCalendarCard.tsx',

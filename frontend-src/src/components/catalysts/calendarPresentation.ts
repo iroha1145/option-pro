@@ -1,13 +1,21 @@
 import { getLocale } from '../../i18n/core.ts';
 
 /** Country display never depends on OS emoji rendering. */
+function isRegionalIndicator(cp: number): boolean {
+  return cp >= 0x1f1e6 && cp <= 0x1f1ff;
+}
+function isFlagMarkup(cp: number): boolean {
+  return isRegionalIndicator(cp)
+    || cp === 0x1f3f3 || cp === 0x1f3f4 || cp === 0xfe0f || cp === 0x200d
+    || (cp >= 0xe0020 && cp <= 0xe007f);
+}
 export function flatCountry(value: string): string {
-  const flags = [...value].filter((c) => /^[\u{1F1E6}-\u{1F1FF}]$/u.test(c));
-  const text = value.replace(/[\u{1F1E6}-\u{1F1FF}\u{1F3F3}\u{1F3F4}\u{E0020}-\u{E007F}\uFE0F\u200D]/gu, '')
-    .replace(/\s+/g, ' ').trim();
+  const chars = [...value];
+  const flags = chars.filter((c) => isRegionalIndicator(c.codePointAt(0) ?? 0));
+  const text = chars.filter((c) => !isFlagMarkup(c.codePointAt(0) ?? 0)).join('').replace(/\s+/g, ' ').trim();
   if (text) return text;
   return flags.length === 2
-    ? flags.map((c) => String.fromCharCode(c.codePointAt(0)! - 0x1f1e6 + 65)).join('') : '—';
+    ? flags.map((c) => String.fromCharCode((c.codePointAt(0) ?? 0) - 0x1f1e6 + 65)).join('') : '—';
 }
 export function localDay(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -25,7 +33,7 @@ export function calendarInterval(items: readonly CalendarRecord[] | null, now = 
     && Date.parse(item.scheduledAt) - now <= 15 * 60_000 && Date.parse(item.scheduledAt) - now >= -60 * 60_000);
   return nearRelease ? 60_000 : 300_000;
 }
-export function calendarCopy(locale = getLocale()) {
+export function calendarCopy(locale: string = getLocale()) {
   const en = {
     title: 'Economic calendar', today: 'Today', next: 'Upcoming', all: 'Full calendar',
     local: 'Local time', empty: 'No economic events in this window', forecast: 'Forecast',

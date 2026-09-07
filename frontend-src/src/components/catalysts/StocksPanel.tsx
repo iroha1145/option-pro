@@ -15,7 +15,8 @@ import { fmtRelative } from '@/lib/format';
 import { t } from '../../i18n/core.ts';
 
 import { useStocksResource } from './useStocksResource';
-import CatalystCacheStatus, { cacheStatusProps } from './CatalystCacheStatus';
+import CatalystCacheStatus from './CatalystCacheStatus';
+import { cacheStatusProps } from './cacheStatusProps';
 
 const RANGE = 5; // 净影响映射区间 ±5
 

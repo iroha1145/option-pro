@@ -2,19 +2,6 @@ import { localeTag } from '@/i18n/core';
 import { fmtLocaleDate, fmtLocaleTime } from '@/lib/format';
 import { calendarCopy } from './calendarPresentation';
 
-export function cacheStatusProps(q: {
-  data: unknown; error: unknown; refreshing: boolean; restored: boolean; validatedAt: number; refresh: () => void;
-}) {
-  return {
-    data: q.data,
-    error: q.error,
-    refreshing: q.refreshing,
-    restored: q.restored,
-    validatedAt: q.validatedAt,
-    refresh: q.refresh,
-  };
-}
-
 export default function CatalystCacheStatus({ data, error, refreshing, restored, validatedAt, refresh }: {
   data: unknown; error: unknown; refreshing: boolean; restored: boolean; validatedAt: number; refresh: () => void;
 }) {

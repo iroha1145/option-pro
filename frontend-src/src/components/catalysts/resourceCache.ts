@@ -43,11 +43,18 @@ const empty = <T>(): ResourceSnapshot<T> => ({
 
 export class ResourceCache {
   private entries = new Map<string, Entry<unknown>>();
+  private persistence?: ResourcePersistence;
+  private now: () => number;
+  private maxEntries: number;
   constructor(
-    private persistence?: ResourcePersistence,
-    private now: () => number = Date.now,
-    private maxEntries = 48,
-  ) {}
+    persistence?: ResourcePersistence,
+    now: () => number = Date.now,
+    maxEntries = 48,
+  ) {
+    this.persistence = persistence;
+    this.now = now;
+    this.maxEntries = maxEntries;
+  }
 
   private entry<T>(key: string, policy: ResourcePolicy<T>): Entry<T> {
     let entry = this.entries.get(key) as Entry<T> | undefined;

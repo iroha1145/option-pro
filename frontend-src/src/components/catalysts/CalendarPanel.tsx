@@ -2,7 +2,8 @@
 import { useMemo } from 'react';
 import { useCalendarResource } from './useCalendarResource';
 import { flatCountry, localDay } from './calendarPresentation';
-import CatalystCacheStatus, { cacheStatusProps } from './CatalystCacheStatus';
+import CatalystCacheStatus from './CatalystCacheStatus';
+import { cacheStatusProps } from './cacheStatusProps';
 import type { EconomicEvent } from './api';
 import EmptyState from '@/components/shared/EmptyState';
 import SoftBadge, { type BadgeTone } from '@/components/shared/SoftBadge';
@@ -34,7 +35,8 @@ function ImpactChip({ ev }: { ev: EconomicEvent }) {
   );
 }
 
-export default function CalendarPanel(_props: { refreshToken: number }) {
+export default function CalendarPanel({ refreshToken }: { refreshToken: number }) {
+  void refreshToken;
   const q = useCalendarResource();
 
   const groups = useMemo(() => {

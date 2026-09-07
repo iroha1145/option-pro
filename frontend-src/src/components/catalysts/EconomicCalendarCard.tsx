@@ -7,7 +7,8 @@ import Segmented from '@/components/shared/Segmented';
 import { SkeletonRows } from '@/components/shared/Skeleton';
 import { calendarCopy, flatCountry, selectCalendarEvents } from './calendarPresentation';
 import { useCalendarResource } from './useCalendarResource';
-import CatalystCacheStatus, { cacheStatusProps } from './CatalystCacheStatus';
+import CatalystCacheStatus from './CatalystCacheStatus';
+import { cacheStatusProps } from './cacheStatusProps';
 
 const BARS = { high: 'bg-down-600', medium: 'bg-warn-600', low: 'bg-brand-400', holiday: 'bg-ink-300' };
 export default function EconomicCalendarCard() {
