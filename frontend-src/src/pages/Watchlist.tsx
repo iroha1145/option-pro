@@ -588,6 +588,10 @@ export default function Watchlist() {
   const personalFailed = Boolean(personal.error);
   const err = wl.error;
   const showingDefaultPool = !canManageWatchlist && !personal.loading && !personalFailed;
+  // 访客行情未到时 items 仍是 []，计数不能先写成「0 只（默认关注池）」再跳到 4。
+  const displayedCount = canManageWatchlist
+    ? (personal.loading ? null : items.length)
+    : (loading ? DEFAULT_WATCHLIST_TICKERS.length : items.length);
   const uncoveredTickers = items.filter((row) => !Number.isFinite(row.price)).map((row) => row.ticker);
   // 唯一排序实现见 watchlistSort：卡片、表格与渐进切片必须消费同一份排序结果，
   // 否则「先切片再排序」会把局部样本冒充成完整结果。
@@ -765,8 +769,12 @@ export default function Watchlist() {
               )}
             </div>
             <p className="w-full text-right text-caption text-ink-400 sm:w-auto">
-              <span className="font-mono tnum">{items.length}</span>{' '}
-              {showingDefaultPool ? t('只（默认关注池）', { n: items.length }) : t('只标的', { n: items.length })}
+              {displayedCount !== null && (
+                <>
+                  <span className="font-mono tnum">{displayedCount}</span>{' '}
+                  {showingDefaultPool ? t('只（默认关注池）', { n: displayedCount }) : t('只标的', { n: displayedCount })}
+                </>
+              )}
               {/* 默认池是站点的池子：拿它的规模对照「上限 50」等于把它冒充成用户自选 */}
               {canManageWatchlist && !showingDefaultPool && (
                 <span className="ml-1 text-ink-300">{t('/ 上限')} {maxTickers}</span>

@@ -27,6 +27,7 @@ export const WATCHLIST: Dict = {
   "自选修改尚未确认，请重试": ["Watchlist changes could not be confirmed. Please retry.", "自選の変更を確認できませんでした。再試行してください。"],
   "请等待当前操作完成": ["Please wait for the current operation to finish.", "処理が終わるまでお待ちください。"],
   "身份暂时无法确认，请稍后重试": ["Unable to confirm your sign-in status. Please retry shortly.", "ログイン状態を確認できません。しばらくしてから再試行してください。"],
+  "请先登录": ["Please sign in first.", "先にログインしてください。"],
   "登录后加入自选": ["Sign in to add to watchlist", "ログインして自選に追加"],
   "正在读取自选…": ["Loading watchlist…", "自選を読み込み中…"],
   "重试读取自选": ["Retry watchlist", "自選の読み込みを再試行"],
