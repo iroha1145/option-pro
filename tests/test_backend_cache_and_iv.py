@@ -172,10 +172,10 @@ def test_expiration_snapshot_and_stock_iv_snapshot_expose_freshness(monkeypatch:
     assert expirations["_stale"] is False
     assert expirations["source_status"] == "active"
 
-    yahoo._cache["stock_iv:TEST"] = (
+    yahoo._cache["stock_iv:v2:TEST"] = (
         now - timedelta(seconds=1),
         now - timedelta(seconds=60),
-        0.35,
+        {"atm_iv": 0.35, "method_version": 2, "iv_method": "vendor_call"},
     )
     monkeypatch.setattr(yahoo, "_get_ticker", lambda symbol: (_ for _ in ()).throw(RuntimeError("down")))
     iv = yahoo.get_stock_iv_snapshot("test")
