@@ -222,7 +222,8 @@ def test_anonymous_cold_options_never_contact_provider(monkeypatch, account_cook
         for path in ["/api/options/AAPL/expirations", "/api/options/AAPL/chain?expiration=2030-08-16"]:
             response = client.get(path)
             assert response.status_code == 503
-            assert response.json()["detail"]["code"] == "public_snapshot_unavailable"
+            assert response.json()["detail"]["code"] == "public_option_snapshot_pending"
+            assert response.headers["retry-after"] == "30"
     assert calls == []
 
 
@@ -236,7 +237,7 @@ def test_authorized_option_cold_reads_populate_cache_for_visitors(monkeypatch, v
 
     def chain(symbol, expiration):
         calls.append((symbol, "chain"))
-        return {"ticker": symbol, "expiration": expiration, "calls": [], "puts": []}
+        return {"ticker": symbol, "expiration": expiration, "calls": [{"strike": 100}], "puts": []}
 
     monkeypatch.setattr(options.yahoo, "get_expirations_snapshot", expirations)
     monkeypatch.setattr(options.yahoo, "get_option_chain", chain)
@@ -265,7 +266,7 @@ def test_visitor_can_read_fresh_chain_after_earlier_expiration_list_expires(monk
         calls.append((symbol, "chain"))
         return {
             "ticker": symbol, "expiration": expiration,
-            "underlying_price": float("nan"), "calls": [], "puts": [],
+            "underlying_price": float("nan"), "calls": [{"strike": 100}], "puts": [],
         }
 
     monkeypatch.setattr(options.yahoo, "get_expirations_snapshot", expirations)
@@ -290,10 +291,15 @@ def test_visitor_can_read_fresh_chain_after_earlier_expiration_list_expires(monk
         assert response.json()["underlying_price"] is None
         assert calls == [("AAPL", "expirations"), ("AAPL", "chain")]
 
-        # Once the chain itself expires, the anonymous cold-query gate still
-        # applies; this fix cannot keep serving an expired result or call Yahoo.
+        # The memory TTL is not the retention limit. A restart-safe saved chain
+        # remains public, explicitly stale, without contacting the provider.
         now[0] += 241
+        retained = client.get("/api/options/AAPL/chain?expiration=2030-08-16")
+        assert retained.status_code == 200
+        assert retained.json()["cache_stale"] is True
+        assert retained.json()["underlying_price"] is None
+        now[0] += 7 * 86400 + 1
         unavailable = client.get("/api/options/AAPL/chain?expiration=2030-08-16")
         assert unavailable.status_code == 503
-        assert unavailable.json()["detail"]["code"] == "public_snapshot_unavailable"
+        assert unavailable.json()["detail"]["code"] == "public_option_snapshot_pending"
         assert calls == [("AAPL", "expirations"), ("AAPL", "chain")]

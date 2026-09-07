@@ -15,7 +15,6 @@ import { motion } from 'framer-motion';
 import { ApiError } from '@/api/client';
 import { breakoutsApi } from '@/api/modules/breakouts';
 import { runtimeApi } from '@/api/modules/runtime';
-import { stocksApi } from '@/api/modules/stocks';
 import { usePolling } from '@/hooks/usePolling';
 import { useStockDataStatus } from '@/hooks/useStockDataStatus';
 import { dailyDataVersion } from '@/lib/stockDataStatus';
@@ -24,6 +23,8 @@ import StockDataCoverage from '@/components/shared/StockDataCoverage';
 import { useTickFlash } from '@/hooks/useTickFlash';
 import { useNow } from '@/hooks/useNow';
 import { useAccess } from '@/hooks/useAccess';
+import { usePersonalWatchlist } from '@/hooks/usePersonalWatchlist';
+import { DEFAULT_WATCHLIST_TICKERS } from '@/lib/personalWatchlist';
 import { useToast } from '@/hooks/useToast';
 import { useShell } from '@/hooks/useShell';
 import { cn } from '@/lib/utils';
@@ -141,7 +142,7 @@ export default function Breakouts() {
       setHistoryLoadingMore(false);
     }
   }, [historyCursor, historyLoadingMore]);
-  const watchQ = usePolling(() => stocksApi.watchlist(), null);
+  const personal = usePersonalWatchlist();
 
   const status = asFullStatus(statusQ.data);
   /* 必须记忆化：useTickFlash 以这个数组为依赖，每次渲染都换新引用会让效应无限重跑。 */
@@ -178,11 +179,10 @@ export default function Breakouts() {
 
   /* 只看自选 */
   const [onlyWatch, setOnlyWatch] = useState(false);
-  /* 自选还没到位时不能把它当成空集合（审计 P2-18）：watchQ 的 loading 与 error
-     被忽略、数据缺失回落为空 Set，开启「只看自选」会先给出一个假空态。 */
-  const watchReady = watchQ.data !== null;
-  const watchFailed = watchQ.error !== null && watchQ.data === null;
-  const watchSet = useMemo(() => new Set((watchQ.data ?? []).map((w) => w.ticker)), [watchQ.data]);
+  // 已登录主体使用自己的成员列表；访客使用公开默认池，不靠行情有无推断成员。
+  const watchReady = !personal.loading && !personal.error && (!personal.enabled || personal.tickers !== null);
+  const watchFailed = personal.error !== null;
+  const watchSet = useMemo(() => new Set(personal.enabled ? personal.tickers ?? [] : DEFAULT_WATCHLIST_TICKERS), [personal.enabled, personal.tickers]);
   const watchFilterPending = onlyWatch && !watchReady;
   const matchWatch = (ticker: string) => !onlyWatch || !watchReady || watchSet.has(ticker);
   const current = useMemo(

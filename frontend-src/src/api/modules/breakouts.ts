@@ -73,10 +73,16 @@ export function normalizeBreakoutTransitions(v: unknown): { state: string; at: s
       from: pickS(t, 'from_state'),
       to: pickS(t, 'to_state', 'state') ?? '',
       at: pickS(t, 'evidence_at', 'at') ?? '',
+      sequence: pickN(t, 'transition_sequence'),
       note: pickS(t, 'reason', 'note') ?? undefined,
     }))
     .filter((t) => t.to)
-    .sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
+    .sort((a, b) => {
+      const aTime = Date.parse(a.at), bTime = Date.parse(b.at);
+      const timeOrder = Number.isFinite(aTime) && Number.isFinite(bTime)
+        ? aTime - bTime : a.at < b.at ? -1 : a.at > b.at ? 1 : 0;
+      return timeOrder || (a.sequence !== null && b.sequence !== null ? a.sequence - b.sequence : 0);
+    });
   if (!sorted.length) return [];
   const out: { state: string; at: string; note?: string }[] = [];
   if (sorted[0].from) out.push({ state: sorted[0].from, at: sorted[0].at });
@@ -169,6 +175,10 @@ export function normalizeBreakoutEvent(raw: unknown): BreakoutSignal & BreakoutE
     state_version: pickN(r, 'state_version') ?? 0,
     evidence_at: pickS(r, 'evidence_at'),
     trigger_source: pickS(r, 'trigger_source'),
+    event_anchor: r.event_anchor == null ? null : {
+      kind: pickS(asRec(r.event_anchor), 'kind'),
+      status: pickS(asRec(r.event_anchor), 'status'),
+    },
     exchange: pickS(r, 'exchange'),
     sector: pickLabel(r, 'sector') ?? '',
     session: sessionRaw && (SESSIONS as readonly string[]).includes(sessionRaw) ? sessionRaw : 'closed',

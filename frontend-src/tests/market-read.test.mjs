@@ -292,3 +292,32 @@ test('manual invalidation detaches an older in-flight response and starts a fres
     resetMarketReadState();
   }
 });
+
+test('identity reset rejects old cache writes after the new identity has already loaded the same URL', async () => {
+  resetMarketReadState(); const originalFetch = globalThis.fetch; const releases = [];
+  globalThis.fetch = () => new Promise(resolve => releases.push(resolve));
+  const response = value => new Response(JSON.stringify(value), { headers: { 'Content-Type': 'application/json' } });
+  try {
+    const old = marketGet('/stocks/AAOI', { ttlMs: 60_000 });
+    resetMarketReadState();
+    const current = marketGet('/stocks/AAOI', { ttlMs: 60_000 });
+    releases[1](response({ principal: 'current', price: 90 })); await current;
+    releases[0](response({ principal: 'old', price: 100 })); await old;
+    assert.deepEqual(await marketGet('/stocks/AAOI'), { principal: 'current', price: 90 });
+    assert.equal(releases.length, 2);
+  } finally { globalThis.fetch = originalFetch; resetMarketReadState(); }
+});
+
+test('a previous identity late 429 cannot impose a shared backoff on the new identity', async () => {
+  resetMarketReadState(); const originalFetch = globalThis.fetch; let release;
+  globalThis.fetch = () => new Promise(resolve => { release = resolve; });
+  try {
+    const old = marketGet('/stocks/AAOI'); const rejected = assert.rejects(old, error => error.code === 429);
+    resetMarketReadState();
+    release(new Response(JSON.stringify({ message: 'old limit' }), { status: 429, headers: { 'Content-Type': 'application/json', 'Retry-After': '300' } }));
+    await rejected;
+    let requests = 0;
+    globalThis.fetch = async () => { requests++; return new Response(JSON.stringify({ price: 42 })); };
+    assert.deepEqual(await marketGet('/stocks/NEW'), { price: 42 }); assert.equal(requests, 1);
+  } finally { globalThis.fetch = originalFetch; resetMarketReadState(); }
+});

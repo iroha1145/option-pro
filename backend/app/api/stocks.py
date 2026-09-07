@@ -1980,6 +1980,41 @@ async def watchlist(
         raise HTTPException(status_code=503, detail="Yahoo watchlist data is currently unavailable") from exc
 
 
+def _quote_as_of(value: Any) -> str | None:
+    """Normalize provider quote instants without inventing a timezone."""
+    if isinstance(value, datetime):
+        stamp = value
+        if stamp.tzinfo is None:
+            return None
+        return stamp.astimezone(timezone.utc).isoformat()
+    if isinstance(value, str):
+        try:
+            stamp = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        if stamp.tzinfo is None:
+            return None
+        return stamp.astimezone(timezone.utc).isoformat()
+    if isinstance(value, bool):
+        return None
+    try:
+        epoch = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if not math.isfinite(epoch) or epoch <= 0:
+        return None
+    if epoch >= 1e17:
+        epoch /= 1_000_000_000
+    elif epoch >= 1e14:
+        epoch /= 1_000_000
+    elif epoch >= 1e11:
+        epoch /= 1_000
+    try:
+        return datetime.fromtimestamp(epoch, timezone.utc).isoformat()
+    except (OverflowError, OSError, ValueError):
+        return None
+
+
 def _watchlist_sector_label(value: Any) -> str:
     if not isinstance(value, str):
         return ""
@@ -1992,6 +2027,49 @@ def _cached_selected_watchlist(tickers: list[str]) -> dict[str, Any]:
     wanted = set(tickers)
     rows: dict[str, dict[str, Any]] = {}
     saved: dict[str, float] = {}
+    stale: dict[str, bool] = {}
+
+    def quote_time(row: dict[str, Any]) -> str | None:
+        return _quote_as_of(row.get("quote_as_of")) or _quote_as_of(row.get("as_of"))
+
+    def valid_price(row: dict[str, Any]) -> bool:
+        price = row.get("price")
+        return (
+            not isinstance(price, bool) and isinstance(price, (int, float))
+            and math.isfinite(price) and price > 0
+        )
+
+    def merge_quote(symbol: str, candidate: dict[str, Any], saved_at: float, source_stale: bool) -> None:
+        previous = rows.get(symbol, {})
+        # Profile enrichment cannot refresh the age of an unchanged quote.
+        sector = _watchlist_sector_label(previous.get("sector")) or candidate.get("sector", "")
+        if previous and sector:
+            previous = {**previous, "sector": sector}
+            rows[symbol] = previous
+        if not valid_price(candidate):
+            return
+        incoming_at, previous_at = quote_time(candidate), quote_time(previous)
+        if valid_price(previous):
+            if previous_at is not None:
+                if incoming_at is None or incoming_at <= previous_at:
+                    return
+            elif incoming_at is None and saved_at <= saved.get(symbol, 0):
+                return
+        updated = {
+            **previous, **candidate, "ticker": symbol, "sector": sector,
+            "name": candidate.get("name") or previous.get("name") or symbol,
+            "change": candidate.get("change"),
+            "change_percent": candidate.get("change_percent"),
+            "quote_as_of": incoming_at or candidate.get("quote_as_of") or "",
+        }
+        # Quote provenance belongs to the selected price, not the previous row.
+        for field in ("quote_session", "previous_close_source", "price_provider", "quote_delayed"):
+            if field not in candidate:
+                updated.pop(field, None)
+        rows[symbol] = updated
+        saved[symbol] = saved_at
+        stale[symbol] = source_stale
+
     entries = [
         entry for entry in (
             _read_watchlist_snapshot(_WATCHLIST_SNAPSHOT_PATH, now=now),
@@ -2007,48 +2085,38 @@ def _cached_selected_watchlist(tickers: list[str]) -> dict[str, Any]:
             for row in group.get("stocks", []) if isinstance(group, dict) else []:
                 symbol = row.get("ticker") if isinstance(row, dict) else None
                 if symbol in wanted:
-                    rows[symbol] = {
+                    candidate = {
                         **row,
                         "sector": _watchlist_sector_label(row.get("sector"))
                         or _watchlist_sector_label(group.get("name")),
                     }
-                    saved[symbol] = entry.fetched_at
+                    if symbol in payload.get("delayed_tickers", []):
+                        candidate["quote_delayed"] = True
+                    merge_quote(symbol, candidate, entry.fetched_at, bool(payload.get("_stale")) or entry.expires_at <= now)
     for symbol in tickers:
         entry = read_stock_pull_resource(symbol, "overview", now=now)
         if entry is None:
             continue
         overview = entry["payload"]
-        previous = rows.get(symbol, {})
-        sector = _watchlist_sector_label(previous.get("sector")) or next(
+        sector = next(
             (label for field in ("industry", "sic_description", "sector")
              if (label := _watchlist_sector_label(overview.get(field)))),
             "",
         )
-        # A newer price does not invalidate an older company's industry label.
-        # Enrich metadata independently; only newer valid quotes replace prices.
-        if previous and sector:
-            previous = {**previous, "sector": sector}
-            rows[symbol] = previous
-        if float(entry["saved_at"]) <= saved.get(symbol, 0):
-            continue
-        price = overview.get("price")
-        if isinstance(price, bool) or not isinstance(price, (int, float)) or not math.isfinite(price) or price <= 0:
-            continue
-        rows[symbol] = {
-            **previous,
-            "ticker": symbol,
-            "name": overview.get("name") or previous.get("name") or symbol,
-            "sector": sector,
-            "price": price,
-            "change": overview.get("change"),
-            "change_percent": overview.get("change_percent"),
-            "quote_as_of": overview.get("quote_as_of") or "",
+        candidate = {
+            field: overview.get(field)
+            for field in ("name", "price", "change", "change_percent")
         }
-        saved[symbol] = float(entry["saved_at"])
+        candidate.update(sector=sector, quote_as_of=quote_time(overview) or "")
+        for field in ("quote_session", "previous_close_source", "price_provider", "quote_delayed"):
+            if field in overview:
+                candidate[field] = overview[field]
+        merge_quote(symbol, candidate, float(entry["saved_at"]), bool(overview.get("_stale")))
     payload = {
         "groups": [{"id": "personal", "name": "", "stocks": [rows[ticker] for ticker in tickers if ticker in rows]}],
         "cached": True,
-        "_stale": any(stamp + _WATCHLIST_FRESH_TTL_SECONDS <= now for stamp in saved.values()),
+        "_stale": any(stale.values()) or any(stamp + _WATCHLIST_FRESH_TTL_SECONDS <= now for stamp in saved.values()),
+        "delayed_tickers": [symbol for symbol in tickers if rows.get(symbol, {}).get("quote_delayed")],
     }
     return scope_watchlist(payload, tickers)
 
@@ -3006,37 +3074,6 @@ async def _stock_overview_impl(ticker: str):
             return None
         minimum_ok = number >= 0 if allow_zero else number > 0
         return number if math.isfinite(number) and minimum_ok else None
-
-    def _quote_as_of(value: Any) -> str | None:
-        if isinstance(value, datetime):
-            stamp = value
-            if stamp.tzinfo is None:
-                stamp = stamp.replace(tzinfo=timezone.utc)
-            return stamp.astimezone(timezone.utc).isoformat()
-        if isinstance(value, str):
-            try:
-                stamp = datetime.fromisoformat(value.replace("Z", "+00:00"))
-            except ValueError:
-                return None
-            if stamp.tzinfo is None:
-                return None
-            return stamp.astimezone(timezone.utc).isoformat()
-        try:
-            epoch = float(value)
-        except (TypeError, ValueError, OverflowError):
-            return None
-        if not math.isfinite(epoch) or epoch <= 0:
-            return None
-        if epoch >= 1e17:
-            epoch /= 1_000_000_000
-        elif epoch >= 1e14:
-            epoch /= 1_000_000
-        elif epoch >= 1e11:
-            epoch /= 1_000
-        try:
-            return datetime.fromtimestamp(epoch, timezone.utc).isoformat()
-        except (OverflowError, OSError, ValueError):
-            return None
 
     def _work():
         symbol = quote_symbol(ticker)

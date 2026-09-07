@@ -185,3 +185,17 @@ test('手动拉取与手机工具栏保持可点击且不溢出', async () => {
   assert.match(watchlist, /min-h-11 flex-wrap/);
   assert.match(watchlist, /w-full text-right[\s\S]*sm:w-auto/);
 });
+
+test('old invalid vendor_raw IV never re-enters contract display or analysis while valid model inversion is retained', async () => {
+  const api = loadOptionsModule(async () => ({ underlying_price: 100, calls: [
+    { strike: 90, iv: 0.00001, iv_source: 'vendor_raw', volume: 6000, open_interest: 100 },
+    { strike: 100, iv: 0.02, iv_source: 'model_inversion', volume: 6000, open_interest: 100 },
+    { strike: 110, iv: 0.4, iv_source: 'vendor' },
+  ], puts: [{ strike: 100, iv: 0.3, iv_source: 'missing' }], cache_stale: true, source_status: 'stale' }));
+  const chain = await api.chain('AAPL', '2030-08-23');
+  assert.equal(chain.rows[0].callIv, null);
+  assert.equal(chain.rows[1].callIv, 0.02);
+  assert.equal(chain.rows[2].callIv, 0.4);
+  assert.equal(chain.rows[1].putIv, null);
+  assert.equal(chain.stale, true);
+});

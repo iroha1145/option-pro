@@ -765,13 +765,48 @@ def _public_calendar_title(value: Any) -> str:
     except ValueError:
         pass
     folded = re.sub(r"\s+", " ", raw.casefold())
+    # A release's qualifiers identify the statistic. Never turn core/overall
+    # and monthly/yearly CPI into four indistinguishable rows (audit Q-11).
+    qualifier_rules = (
+        (r"\b(?:cpi|consumer price index)\b", "消费者价格指数"),
+        (r"\b(?:ppi|producer price index)\b", "生产者价格指数"),
+        (r"\b(?:pce|personal consumption expenditure(?:s)?)\b", "个人消费支出价格指数"),
+        (r"\b(?:gdp|gross domestic product)\b", "国内生产总值"),
+    )
+    for pattern, label in qualifier_rules:
+        if not re.search(pattern, folded):
+            continue
+        # For related but distinct releases, preserve the source rather than
+        # accidentally relabeling a deflator/expectation as the headline index.
+        if any(word in folded for word in ("deflator", "expectation", "median", "trimmed", "weighted")):
+            return f"原文事件：{raw}"
+        title = f"核心{label}" if re.search(r"\bcore\b", folded) else label
+        qualifiers = []
+        if re.search(r"\b(?:m/m|mom|month[ -]on[ -]month)\b", folded):
+            qualifiers.append("环比")
+        if re.search(r"\b(?:y/y|yoy|year[ -]on[ -]year)\b", folded):
+            qualifiers.append("同比")
+        if re.search(r"\b(?:q/q|qoq|quarter[ -]on[ -]quarter)\b", folded):
+            qualifiers.append("季环比")
+        if "annualiz" in folded or "annualis" in folded:
+            qualifiers.append("年化")
+        if any(word in folded for word in ("prelim", "preliminary", "flash", "advance")):
+            qualifiers.append("初值")
+        elif "final" in folded:
+            qualifiers.append("终值")
+        elif "revised" in folded:
+            qualifiers.append("修正值")
+        # Keep explicit source periods/regions and unfamiliar modifiers. The
+        # bilingual original is useful here and avoids inventing a translation.
+        return f"{title}{' · ' + '·'.join(qualifiers) if qualifiers else ''}（{raw}）"
     for needles, title in _CALENDAR_TITLE_RULES:
         if any(needle in folded for needle in needles):
+            qualified = bool(re.search(r"\bcore\b|\d|m/m|y/y|q/q|excluding|ex-", folded))
             if "prelim" in folded or "preliminary" in folded or "flash" in folded:
-                return f"{title}初值"
-            if "final" in folded:
-                return f"{title}终值"
-            return title
+                title = f"{title}初值"
+            elif "final" in folded:
+                title = f"{title}终值"
+            return f"{title}（{raw}）" if qualified else title
     acronyms = [
         match.group(1)
         for match in _CALENDAR_INITIALISM_RE.finditer(raw)
@@ -813,7 +848,15 @@ def _public_calendar_title(value: Any) -> str:
         category = "制造业数据"
     else:
         category = "经济数据"
-    return f"{acronym}{category}"
+    return f"{category}（{raw}）"
+
+
+def _hotspot_source_reasons(value: Any, source_count: int) -> list[str]:
+    """Correct stored legacy explanations too, without rewriting score history."""
+    reasons = value if isinstance(value, list) else []
+    label = "单一来源" if source_count == 1 else "多个来源报道"
+    return [label if reason in {"多来源交叉出现", "单一来源", "多个来源报道"} else reason
+            for reason in reasons if isinstance(reason, str)]
 
 
 def _cursor_encode(offset: int, anchor: str, query_hash: str) -> str:
@@ -3410,7 +3453,8 @@ class LocalCatalystIntelligence:
             components["recency"] = (max(0.0, 100.0 - age_hours * 2.0), 0.35, "发布时间较近")
         source_count = int(row.get("source_count") or 0)
         if source_count > 0:
-            components["source_breadth"] = (min(100.0, 30.0 + 18.0 * source_count), 0.20, "多来源交叉出现")
+            reason = "单一来源" if source_count == 1 else "多个来源报道"
+            components["source_breadth"] = (min(100.0, 30.0 + 18.0 * source_count), 0.20, reason)
         tickers = list(row.get("canonical_tickers") or [])
         if tickers:
             components["ticker_breadth"] = (min(100.0, 45.0 + 12.0 * len(tickers)), 0.15, "关联本地正式股票代码")
@@ -4657,7 +4701,7 @@ class LocalCatalystIntelligence:
                 "gate_version": SCHEMA_VERSION,
                 "hot_score": float(row["hot_score"]),
                 "component_scores": _loads(row["component_scores_json"], {}),
-                "reasons": _loads(row["reasons_json"], []),
+                "reasons": _hotspot_source_reasons(_loads(row["reasons_json"], []), int(row["source_count"])),
                 "status": "prepared",
                 "prepared_at": prepared_at,
                 "representative_title": str(

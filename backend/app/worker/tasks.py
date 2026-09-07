@@ -1170,6 +1170,7 @@ class PublicHomeTask:
         watchlist_path: Path | None = None,
         breakout_lead_ticker_reader: Callable[..., Any] | None = None,
         stock_data_refresh: Any | None = None,
+        option_data_refresh: Any | None = None,
         clock: Callable[[], float] = time.time,
     ) -> None:
         self._config = config
@@ -1183,6 +1184,8 @@ class PublicHomeTask:
         self._breakout_lead_ticker_reader = breakout_lead_ticker_reader
         self._stock_data_refresh = stock_data_refresh
         self._stock_data_error = False
+        self._option_data_refresh = option_data_refresh
+        self._option_data_error = False
         self._clock = clock
         self._failures: dict[str, _PublicHomeFailure] = {}
         self._inflight: dict[str, _PublicHomeInflight] = {}
@@ -1627,13 +1630,19 @@ class PublicHomeTask:
             details["stock_data"] = dict(self._stock_data_refresh.summary())
             if self._stock_data_error:
                 details["stock_data"]["error_code"] = "public_stock_queue_unavailable"
-        degraded = bool(self._failures or in_flight or failed or unavailable or self._stock_data_error)
+        if self._option_data_refresh is not None:
+            details["option_data"] = dict(self._option_data_refresh.summary())
+            if self._option_data_error:
+                details["option_data"]["error_code"] = "public_option_queue_unavailable"
+        degraded = bool(self._failures or in_flight or failed or unavailable or self._stock_data_error or self._option_data_error)
         if failed:
             error_code = "public_home_refresh_failed"
         elif in_flight:
             error_code = "public_home_refresh_in_flight"
         elif self._stock_data_error:
             error_code = "public_stock_queue_unavailable"
+        elif self._option_data_error:
+            error_code = "public_option_queue_unavailable"
         elif degraded:
             error_code = (
                 "public_home_snapshot_unavailable"
@@ -1750,6 +1759,12 @@ class PublicHomeTask:
             for resource in resource_order
         }
         entries = await self._read_entries(path, watchlist_path, now=observed)
+        if self._option_data_refresh is not None:
+            try:
+                await self._option_data_refresh.poll(entries)
+                self._option_data_error = False
+            except Exception:
+                self._option_data_error = True
         if self._stock_data_refresh is not None:
             try:
                 # This only updates a bounded queue. The two consumers carry on
@@ -1940,6 +1955,10 @@ class PublicHomeTask:
         )
 
     async def aclose(self) -> None:
+        option_drain = (
+            asyncio.create_task(self._option_data_refresh.aclose())
+            if self._option_data_refresh is not None else None
+        )
         stock_drain = (
             asyncio.create_task(self._stock_data_refresh.aclose())
             if self._stock_data_refresh is not None
@@ -1954,10 +1973,23 @@ class PublicHomeTask:
                 await asyncio.gather(*tasks, return_exceptions=True)
         finally:
             self._inflight.clear()
-            if stock_drain is not None:
-                # The stock queue drains even when shutdown itself is cancelled;
-                # its close method shields already-running provider/disk work.
-                await stock_drain
+            # Every queue must finish before the worker lock can be released,
+            # even if another close raises or shutdown itself is cancelled.
+            drains = [task for task in (stock_drain, option_drain) if task is not None]
+            if drains:
+                drain = asyncio.gather(*drains, return_exceptions=True)
+                cancelled = None
+                while not drain.done():
+                    try:
+                        await asyncio.shield(drain)
+                    except asyncio.CancelledError as exc:
+                        cancelled = exc
+                results = drain.result()
+                if cancelled is not None:
+                    raise cancelled
+                for result in results:
+                    if isinstance(result, BaseException):
+                        raise result
 
 
 class StrengthRefreshTask:
@@ -2529,9 +2561,11 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
     )
     retention = RetentionTask(owner_id, retention_backup)
     from app.public_stock_data import PublicStockDataRefresh
+    from app.public_option_data import PublicOptionDataRefresh
 
     public_home = PublicHomeTask(
         config.public_home, stock_data_refresh=PublicStockDataRefresh(),
+        option_data_refresh=PublicOptionDataRefresh(),
     )
     stock_directory = StockDirectoryTask()
     earnings_analysis = EarningsAnalysisTask(

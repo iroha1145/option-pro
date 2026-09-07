@@ -485,8 +485,10 @@ def get_option_chain(ticker: str, expiration: str) -> dict[str, Any]:
                 )
                 if inverted_iv_acceptable(computed):
                     return computed, "model_inversion"
-            raw = _safe_float(row.get("impliedVolatility"))
-            return raw, "vendor_raw" if raw is not None else "missing"
+            # A rejected empty-quote placeholder is not a usable fallback.
+            # Keep it missing if no credible two-sided quote can be inverted,
+            # so contract display, Greeks and unusual-activity evidence agree.
+            return None, "missing"
 
         def _greeks_for(strike, iv, is_call):
             if not (price and price > 0 and iv and iv > 0):
@@ -623,6 +625,7 @@ def get_option_chain(ticker: str, expiration: str) -> dict[str, Any]:
                     "open_interest": oi,
                     "last_price": lp,
                     "implied_volatility": iv,
+                    "iv_source": contract.get("iv_source", "missing"),
                     "premium_flow": round(premium, 0) if premium is not None else None,
                     "premium_basis": mark["basis"],
                     "premium_kind": "estimated_notional",

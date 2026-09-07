@@ -124,6 +124,8 @@ export function AccessProvider({ children }: { children: ReactNode }) {
       if (retryTimerRef.current !== null) window.clearTimeout(retryTimerRef.current);
       retryTimerRef.current = window.setTimeout(() => {
         retryTimerRef.current = null;
+        if (generation !== generationRef.current) return;
+        generationRef.current += 1;
         void readInto(generationRef.current).catch(() => undefined);
       }, delay);
       throw error;
@@ -133,6 +135,12 @@ export function AccessProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refresh = useCallback(async () => {
+    // 焦点与可见性可能同时核验；只有最后发出的请求可以确定当前身份。
+    generationRef.current += 1;
+    if (retryTimerRef.current !== null) {
+      window.clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
     await readInto(generationRef.current);
   }, [readInto]);
 
@@ -151,6 +159,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void refresh().catch(() => undefined);
     return () => {
+      generationRef.current += 1;
       if (retryTimerRef.current !== null) {
         window.clearTimeout(retryTimerRef.current);
         retryTimerRef.current = null;

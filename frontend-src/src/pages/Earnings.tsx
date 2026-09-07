@@ -12,9 +12,9 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { invalidateQueryPaths } from '@/api/queryRegistry';
 import { earningsApi, restoreUpcomingFromCache } from '@/api/modules/earnings';
 import type { EarningsReportAnalysis } from '@/api/modules/earnings';
-import { accountApi } from '@/api/modules/account';
 import { ApiError } from '@/api/client';
 import { useAccess } from '@/hooks/useAccess';
+import { usePersonalWatchlist } from '@/hooks/usePersonalWatchlist';
 import { useNow } from '@/hooks/useNow';
 import { usePolling } from '@/hooks/usePolling';
 import { useToast } from '@/hooks/useToast';
@@ -55,7 +55,7 @@ function reportAnalysisKey(ticker: string, reportDate: string): string {
 }
 
 export default function Earnings() {
-  const { isOwner, aiEnabled, aiAvailable, aiReason, canManageWatchlist } = useAccess();
+  const { isOwner, aiEnabled, aiAvailable, aiReason } = useAccess();
   const toast = useToast();
   const now = useNow(1000);
 
@@ -67,14 +67,10 @@ export default function Earnings() {
   });
   /* 账号自选进入重点公司（账号上下文，只在本端合并，不进公共快照）。
      访客/未登录 resolve(null)：不发任何请求。 */
-  const watchlistQ = usePolling(
-    () => (canManageWatchlist ? accountApi.watchlist() : Promise.resolve(null)),
-    null,
-    [canManageWatchlist],
-  );
+  const personal = usePersonalWatchlist();
   const personalTickers = useMemo(
-    () => new Set((watchlistQ.data?.tickers ?? []).map((v) => v.toUpperCase())),
-    [watchlistQ.data],
+    () => new Set((personal.tickers ?? []).map((v) => v.toUpperCase())),
+    [personal.tickers],
   );
   const [reportAnalysisStates, setReportAnalysisStates] = useState<Record<string, EarningsReportAnalysis>>({});
   const items = useMemo(

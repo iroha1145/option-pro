@@ -82,7 +82,7 @@ function AiOptionInsight({
   chain: OptionChain | null;
 }) {
   const { isOwner } = useAccess();
-  const { job, error, starting, start, cancel, reset } = useAiJob();
+  const { job, error, queryIssue, starting, start, cancel, resume, reset } = useAiJob();
   const [confirming, setConfirming] = useState(false);
   /* 提交那一刻的到期日与证据数快照：结果脚注只认它。轮询会刷新 chain、
      父层切换会换 expiration——用渲染期的值标注既成结果，会把已付费的
@@ -191,7 +191,7 @@ function AiOptionInsight({
           <div className="flex items-center justify-between text-caption text-ink-500">
             <span className="flex items-center gap-1.5">
               <span className="size-1.5 animate-led-pulse rounded-full bg-ai-600" />
-              {job.status === 'queued'
+              {queryIssue === 'paused' || queryIssue === 'blocked' ? t('任务状态待确认') : job.status === 'queued'
                 ? t('排队中…')
                 : job.progress === null
                   ? t('模型正在处理 · 暂无进度百分比')
@@ -210,7 +210,11 @@ function AiOptionInsight({
         </div>
       )}
 
-      {error && <p className="mt-2.5 text-caption text-down-700">{t('任务失败：')}{error}</p>}
+      {error && <p role="status" className="mt-2.5 text-caption text-down-700">
+        {error}
+        {queryIssue === 'retrying' && <span className="ml-2">{t('正在重新查询原任务')}</span>}
+        {(queryIssue === 'paused' || queryIssue === 'blocked') && <button onClick={resume} className="ml-2 font-medium text-ai-600">{t('继续查询原任务')}</button>}
+      </p>}
 
       {job?.status === 'succeeded' && result && (
         <div className="mt-3 border-t border-ai-600/20 pt-3">
@@ -382,6 +386,7 @@ function LiveOptionsPanel({ ticker }: { ticker: string }) {
   if (expError) {
     const loginExpired = expError.code === 401;
     const rateLimited = expError.code === 429;
+    const preparing = expError.bizCode === 'public_option_snapshot_pending';
     const retrying = expRefreshing || chainRefreshing;
     return (
       <EmptyState
@@ -391,12 +396,12 @@ function LiveOptionsPanel({ ticker }: { ticker: string }) {
             ? t('登录状态已失效')
             : rateLimited
               ? t('期权链请求较频繁')
-              : t('期权数据暂不可用')
+              : preparing ? t('期权数据准备中') : t('期权数据暂不可用')
         }
         description={
           loginExpired
             ? t('请重新登录后查看期权数据')
-            : `${t('期权数据暂时获取不到')}${
+            : `${preparing ? t('后台正在准备期权数据，稍后可重新读取') : t('期权数据暂时获取不到')}${
                 retrySeconds > 0 ? t(' · {n} 秒后可重试', { n: retrySeconds }) : ''
               }`
         }
@@ -439,11 +444,15 @@ function LiveOptionsPanel({ ticker }: { ticker: string }) {
           canRetry ? (
             <button
               type="button"
-              onClick={() => refreshExpirations()}
+              onClick={() => {
+                forceExpirationsRef.current = true;
+                refreshExpirations({ force: true });
+              }}
+              disabled={expRefreshing}
               className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter,opacity] hover:brightness-105"
             >
               <Icon name="refresh" size={14} />
-              {t('重新拉取')}
+              {expRefreshing ? t('正在重试') : t('重新拉取')}
             </button>
           ) : null
         }
@@ -496,9 +505,9 @@ function LiveOptionsPanel({ ticker }: { ticker: string }) {
       )}
       {chainError && !shownChain ? (
           <div className="flex flex-col items-center gap-2.5 px-4 py-10 text-center">
-            <p className="text-body-s font-medium text-ink-700">{t('该到期日的期权链暂不可用')}</p>
+            <p className="text-body-s font-medium text-ink-700">{chainError.bizCode === 'public_option_snapshot_pending' ? t('期权数据准备中') : t('该到期日的期权链暂不可用')}</p>
             <p className="text-caption text-ink-400">
-              {t('其它到期日不受影响，可直接切换')}
+              {chainError.bizCode === 'public_option_snapshot_pending' ? t('后台正在准备期权数据，稍后可重新读取') : t('其它到期日不受影响，可直接切换')}
               {retrySeconds > 0 ? t(' · {n} 秒后可重试', { n: retrySeconds }) : ''}
             </p>
             <button

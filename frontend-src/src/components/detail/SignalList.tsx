@@ -13,6 +13,7 @@ import { SkeletonText } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
 import { cn } from '@/lib/utils';
 import { fmtPrice, fmtRelative } from '@/lib/format';
+import { isIndexSymbol } from '@/lib/quoteSymbol';
 import ManualStockPull from './ManualStockPull';
 import { t } from '../../i18n/core.ts';
 
@@ -32,12 +33,13 @@ export default function SignalList({
   /** 快照缺失 CTA 拉取成功后的整页刷新回调（StockDetail.handlePulled） */
   onPulled?: () => void;
 }) {
+  const index = isIndexSymbol(ticker);
   const signalsQ = usePolling(
     () => signalsApi.stock(ticker),
     null,
     [ticker, refreshVersion],
   );
-  const eventsQ = usePolling(() => breakoutsApi.byTicker(ticker), null, [ticker]);
+  const eventsQ = usePolling(() => index ? Promise.resolve([]) : breakoutsApi.byTicker(ticker), null, [ticker, index]);
   const signals = signalsQ.data;
   const events = eventsQ.data;
 
@@ -81,8 +83,8 @@ export default function SignalList({
     return (
       <div className="flex flex-col items-center rounded-md border border-line bg-card-warm px-4 py-8 text-center">
         <Icon name="radar" size={28} className="text-ink-300" />
-        <p className="mt-3 text-body-s font-medium text-ink-600">{t('近期无信号 · 雷达仍在盯')}</p>
-        <p className="mt-1 text-caption text-ink-400">{t('突破 / 放量 / 回踩等触发后将在此出现')}</p>
+        <p className="mt-3 text-body-s font-medium text-ink-600">{index ? t('暂无技术信号') : t('近期无信号 · 雷达仍在盯')}</p>
+        <p className="mt-1 text-caption text-ink-400">{index ? t('股票雷达暂不覆盖指数，指数行情与技术研究仍可查看。') : t('突破 / 放量 / 回踩等触发后将在此出现')}</p>
       </div>
     );
   }

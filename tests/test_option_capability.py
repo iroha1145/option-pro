@@ -496,14 +496,20 @@ def test_capability_declaration_change_is_recoverable(monkeypatch):
     assert snapshot["expirations"] == ["2030-08-16"]
 
 
-def test_visitor_cannot_probe_unknown_but_can_read_declared_unsupported(monkeypatch):
+def test_visitor_cannot_probe_unknown_but_can_read_declared_unsupported(monkeypatch, isolated_option_accounts):
     monkeypatch.setattr(options.yahoo, "get_expirations_snapshot", _forbidden_ticker)
     monkeypatch.setattr(options.yahoo, "get_option_chain", _forbidden_ticker)
     runtime = _runtime(visitor_live_pulls=False)
     with TestClient(_option_app(runtime), base_url="https://testserver") as client:
         denied = client.get("/api/options/AAPL/expirations")
         assert denied.status_code == 503
-        assert denied.json()["detail"]["code"] == "public_snapshot_unavailable"
+        # AAPL is in the trusted default collection: only bounded local worker
+        # preparation is queued. The HTTP reader still cannot call Yahoo.
+        assert denied.json()["detail"]["code"] == "public_option_snapshot_pending"
+        assert denied.headers["retry-after"] == "30"
+        unknown = client.get("/api/options/AUDITUNKNOWN/expirations")
+        assert unknown.status_code == 503
+        assert unknown.json()["detail"]["code"] == "public_snapshot_unavailable"
 
         allowed = client.get("/api/options/%5EGSPC/expirations")
         assert allowed.status_code == 200

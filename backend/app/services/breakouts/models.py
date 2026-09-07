@@ -7,7 +7,7 @@ import math
 import re
 from datetime import date, datetime
 from enum import Enum
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import (
     AwareDatetime,
@@ -254,6 +254,32 @@ class BreakoutScores(_StrictModel):
     details: dict[str, ScoreResult] = Field(default_factory=dict)
 
 
+class BreakoutEventAnchor(_StrictModel):
+    """Levels belonging to the event, independent of its daily background base."""
+
+    kind: Literal["opening_range"] = "opening_range"
+    trading_date: date
+    pivot_price: Optional[float] = Field(default=None, gt=0, allow_inf_nan=False)
+    invalidation_price: Optional[float] = Field(default=None, gt=0, allow_inf_nan=False)
+    status: Literal["active", "partial", "unavailable"]
+    source: Literal["completed_opening_range", "legacy_opening_range", "legacy_pivot_id", "unavailable"]
+    method_version: Literal["orb-anchor-v1"] = "orb-anchor-v1"
+
+    @model_validator(mode="after")
+    def validate_levels(self) -> "BreakoutEventAnchor":
+        if self.invalidation_price is not None and (
+            self.pivot_price is None or self.invalidation_price > self.pivot_price
+        ):
+            raise ValueError("opening range low must not exceed its high")
+        expected = (
+            "active" if self.pivot_price is not None and self.invalidation_price is not None
+            else "partial" if self.pivot_price is not None else "unavailable"
+        )
+        if self.status != expected:
+            raise ValueError("event anchor status must match its available levels")
+        return self
+
+
 class BreakoutEvent(_StrictModel):
     event_id: str = Field(min_length=8, max_length=128)
     trading_date: date
@@ -281,6 +307,7 @@ class BreakoutEvent(_StrictModel):
     previous_state: Optional[BreakoutLifecycleState] = None
     transition_reason: Optional[str] = Field(default=None, max_length=120)
     structure: Optional[BreakoutStructure] = None
+    event_anchor: Optional[BreakoutEventAnchor] = None
     scores: BreakoutScores = Field(default_factory=BreakoutScores)
     data_quality: dict[str, Any] = Field(default_factory=dict)
     versions: dict[str, str] = Field(default_factory=dict)

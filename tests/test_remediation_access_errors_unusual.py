@@ -83,6 +83,7 @@ def test_ac06_thread_does_not_inherit_owner() -> None:
 
 def test_ac07_visitor_without_snapshot_does_not_call_yahoo(
     monkeypatch: pytest.MonkeyPatch,
+    isolated_option_accounts,
 ) -> None:
     calls = 0
 
@@ -96,7 +97,8 @@ def test_ac07_visitor_without_snapshot_does_not_call_yahoo(
     with request_owner_access_context(False), pytest.raises(HTTPException) as captured:
         asyncio.run(options.option_chain("AAPL", "2030-08-16"))
     assert captured.value.status_code == 503
-    assert captured.value.detail["code"] == "public_snapshot_unavailable"
+    assert captured.value.detail["code"] == "public_option_snapshot_pending"
+    assert captured.value.headers["Retry-After"] == "30"
     assert calls == 0
 
 

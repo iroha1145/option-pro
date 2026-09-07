@@ -8,9 +8,21 @@ import { usePolling } from '@/hooks/usePolling';
 import { fmtPrice, fmtRelative } from '@/lib/format';
 import SignalChip from '@/components/shared/SignalChip';
 import Icon from '@/components/icons';
+import { isIndexSymbol } from '@/lib/quoteSymbol';
 import { t as __t } from '../../i18n/core.ts';
 
 export default function SidebarEvents({ ticker }: { ticker: string }) {
+  if (isIndexSymbol(ticker)) {
+    return <div className="card-surface p-5">
+      <p className="eyebrow">BREAKOUT EVENTS</p>
+      <h3 className="mt-1.5 text-h3 text-ink-900">{__t('相关突破事件')}</h3>
+      <p className="mt-3 text-body-s text-ink-400">{__t('股票雷达暂不覆盖指数，指数行情与技术研究仍可查看。')}</p>
+    </div>;
+  }
+  return <StockSidebarEvents key={ticker} ticker={ticker} />;
+}
+
+function StockSidebarEvents({ ticker }: { ticker: string }) {
   const { data, loading, error, refresh } = usePolling(() => breakoutsApi.byTicker(ticker), null, [ticker]);
   const items = (data ?? []).slice(0, 3);
   return (

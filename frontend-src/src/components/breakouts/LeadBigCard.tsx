@@ -720,6 +720,7 @@ export default function LeadBigCard({ ev: initialEvent, flash, locate, onOpen, d
               {t('失效位置')}
             </p>
             <p className="mt-0.5 font-mono text-data-l text-ink-900 tnum">{invalid !== null ? fmtPrice(invalid) : '—'}</p>
+            {e.event_anchor?.kind === 'opening_range' && e.event_anchor.status === 'partial' && <p className="mt-1 text-micro text-ink-400">{t('开盘区间低点缺失，暂无失效位')}</p>}
           </div>
         </div>
         <div className="radar-value-cell radar-priority-cell flex flex-col items-center justify-center gap-1.5 px-3 py-1.5">

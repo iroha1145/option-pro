@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Mapping
 
 from app.services.breakouts.clock import MarketClock
+from app.services.breakouts.anchors import resolve_event_anchor
 from app.services.breakouts.config import BreakoutSettings, get_breakout_settings
 from app.services.breakouts.repository import BreakoutRepository, BreakoutRepositoryError
 
@@ -185,7 +186,8 @@ class BreakoutRealtimeAdapter:
                 return False
             resistance = _finite((structure.get("resistance_zone") or {}).get("high"))
         elif setup == "OPENING_RANGE_BREAKOUT" and features.get("opening_range_complete"):
-            resistance = _finite(features.get("opening_range_high"))
+            anchor = resolve_event_anchor(event)
+            resistance = anchor.pivot_price if anchor is not None else None
         else:
             # Premarket gaps, unstructured movers and retests retain their
             # existing completed-bar classification and eligibility rules.
@@ -230,6 +232,9 @@ class BreakoutRealtimeAdapter:
                             "features": {**dict(event.get("features") or {}), "current_price": price,
                                          "realtime_received_at": received_at.isoformat()},
                         }
+                        anchor = resolve_event_anchor(event)
+                        if anchor is not None:
+                            updated["event_anchor"] = anchor.model_dump(mode="json")
                         try:
                             committed = await asyncio.to_thread(
                                 self.repository.commit_live_trigger, updated,

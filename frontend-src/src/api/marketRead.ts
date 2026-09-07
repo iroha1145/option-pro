@@ -25,6 +25,8 @@ const inFlight = new Map<string, Promise<unknown>>();
 const pathVersions = new Map<string, number>();
 const forceBackoffExemptions = new Set<string>();
 let marketBackoffUntil = 0;
+// 独立于逐路径版本：清空映射不能让旧主体的 version 0 重新变成有效。
+let stateGeneration = 0;
 
 function prune(now: number): void {
   for (const [key, entry] of cache) {
@@ -85,13 +87,14 @@ export function marketGet<T>(
   const ttlMs = Math.max(0, options.ttlMs ?? DEFAULT_TTL_MS);
   const staleMs = Math.max(ttlMs, options.staleMs ?? DEFAULT_STALE_MS);
   const requestVersion = pathVersions.get(path) ?? 0;
+  const requestGeneration = stateGeneration;
   const request = get<T>(path)
     .then((value) => {
       const completedAt = Date.now();
       // A completed manual pull may invalidate an older GET while that GET is
       // still in flight. Never let the older response overwrite the newly
       // fetched provider result.
-      if ((pathVersions.get(path) ?? 0) === requestVersion) {
+      if (requestGeneration === stateGeneration && (pathVersions.get(path) ?? 0) === requestVersion) {
         cache.set(path, {
           value,
           expiresAt: completedAt + ttlMs,
@@ -103,6 +106,8 @@ export function marketGet<T>(
       return value;
     })
     .catch((error: unknown) => {
+      // 旧主体的错误也不能给新主体施加退避，或复用新主体的缓存。
+      if (requestGeneration !== stateGeneration) throw error;
       const failedAt = Date.now();
       if (error instanceof ApiError && error.code === 429) {
         const retrySeconds = Math.min(
@@ -152,8 +157,9 @@ export function resetMarketReadPaths(paths: string[]): void {
   }
 }
 
-/** Test-only reset; production callers should rely on bounded expiry. */
+/** 身份切换时作废所有旧请求的写回能力，并清空缓存与退避状态。 */
 export function resetMarketReadState(): void {
+  stateGeneration += 1;
   cache.clear();
   inFlight.clear();
   pathVersions.clear();

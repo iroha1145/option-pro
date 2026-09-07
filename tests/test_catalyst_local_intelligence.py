@@ -3113,7 +3113,7 @@ def test_hot_score_reweights_missing_factors_instead_of_inventing_neutral_values
 
     assert score == 48.0
     assert components == {"source_breadth": 48.0}
-    assert reasons == ["多来源交叉出现"]
+    assert reasons == ["单一来源"]
 
 
 def test_clustering_requires_approximate_title_and_intersecting_validated_ticker(
@@ -5992,9 +5992,9 @@ def test_market_focus_snapshot_includes_bounded_calendar_evidence(tmp_path, monk
     payload = _job_payload(ai, cycle["job_id"])
 
     calendar_items = [item for item in payload["events"] if item["event_type"] == "calendar"]
-    assert public_calendar["items"][0]["title"] == "EIA能源库存数据"
+    assert public_calendar["items"][0]["title"] == "能源库存数据（EIA Crude Oil Inventories）"
     assert public_calendar["items"][0]["country"] == "未知地区"
-    assert "EIA Crude Oil Inventories" not in json.dumps(
+    assert "EIA Crude Oil Inventories" in json.dumps(
         public_calendar,
         ensure_ascii=False,
     )
@@ -6007,14 +6007,14 @@ def test_market_focus_snapshot_includes_bounded_calendar_evidence(tmp_path, monk
 @pytest.mark.parametrize(
     ("source_title", "public_title"),
     [
-        ("EIA Crude Oil Inventories USA", "EIA能源库存数据"),
+        ("EIA Crude Oil Inventories USA", "能源库存数据（EIA Crude Oil Inventories USA）"),
         ("Unemployment Rate", "失业率"),
         ("Employment Change", "就业人数变动"),
         ("Monetary Policy Statement", "货币政策声明"),
         ("Main Refinancing Rate", "欧洲央行主要再融资利率"),
         ("Unemployment Claims", "初请失业金人数"),
         ("Claimant Count Change", "失业金申领人数变动"),
-        ("Average Earnings Index 3m/y", "平均工资指数"),
+        ("Average Earnings Index 3m/y", "平均工资指数（Average Earnings Index 3m/y）"),
         ("ECB Press Conference", "新闻发布会"),
         ("RETAIL SALES", "零售销售"),
         ("NONFARM PAYROLLS", "非农就业人数变动"),

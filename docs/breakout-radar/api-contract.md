@@ -78,6 +78,16 @@ effective_weights、contribution_breakdown、penalties、missing_components、sc
 market_shape（含 state、confidence、transition_risk、eligibility 和 rules）、
 warnings、source_status、provenance、versions。
 
+开盘区间事件另含 `event_anchor`（`kind=opening_range`、`trading_date`、
+`pivot_price`、`invalidation_price`、`status`、`source`、`method_version`）。
+顶层 `pivot_price`、支撑/阻力区与失效位始终描述该事件本身；详情中的
+`structure` 保留日线背景。旧事件证据只能恢复高点时，锚位状态为 `partial`，
+失效位和支撑区为 null；两者均不可恢复时为 `unavailable`。
+
+详情 `transitions` 按证据时间升序返回；同刻用持久化的真实插入顺序
+`transition_sequence` 保序。该整数只用于同一事件轨迹内比较，允许不连续，
+不代表状态等级。实时轨迹使用自身的持久状态版本作为次序。
+
 数值只能是有限数或 null；分数范围为 0 至 100，置信度为 0 至 1。
 
 三种年龄分别锚定首次触发或首次发现、最近状态变化、最近成功复核。普通续扫只会
