@@ -7,7 +7,7 @@ import Segmented from '@/components/shared/Segmented';
 import { SkeletonRows } from '@/components/shared/Skeleton';
 import { calendarCopy, flatCountry, selectCalendarEvents } from './calendarPresentation';
 import { useCalendarResource } from './useCalendarResource';
-import CatalystCacheStatus from './CatalystCacheStatus';
+import CatalystCacheStatus, { cacheStatusProps } from './CatalystCacheStatus';
 
 const BARS = { high: 'bg-down-600', medium: 'bg-warn-600', low: 'bg-brand-400', holiday: 'bg-ink-300' };
 export default function EconomicCalendarCard() {
@@ -28,7 +28,7 @@ export default function EconomicCalendarCard() {
         <Link to="/catalysts?tab=calendar" className="text-caption font-medium text-brand-600 hover:underline">{copy.all} →</Link>
       </div>
     </div>
-    <CatalystCacheStatus {...q} />
+    <CatalystCacheStatus {...cacheStatusProps(q)} />
     {q.loading && !q.data ? <SkeletonRows rows={3} /> : q.error && !q.data ?
       <div className="px-5 py-7 text-center text-caption text-ink-500">{q.error.message}
         <button type="button" onClick={q.refresh} className="ml-3 text-brand-600 underline">{copy.retry}</button></div>

@@ -15,7 +15,7 @@ import { fmtRelative } from '@/lib/format';
 import { t } from '../../i18n/core.ts';
 
 import { useStocksResource } from './useStocksResource';
-import CatalystCacheStatus from './CatalystCacheStatus';
+import CatalystCacheStatus, { cacheStatusProps } from './CatalystCacheStatus';
 
 const RANGE = 5; // 净影响映射区间 ±5
 
@@ -184,7 +184,7 @@ export default function StocksPanel({ filters }: { filters: CatalystFilters; ref
 
   return (
     <div className="card-surface overflow-hidden">
-      <CatalystCacheStatus {...q} />
+      <CatalystCacheStatus {...cacheStatusProps(q)} />
       <div className="hidden grid-cols-none items-center border-b border-line px-5 py-2.5 sm:flex">
         <p className="w-40 eyebrow">{t('代码')}</p>
         <p className="min-w-[180px] flex-1 eyebrow">

@@ -15,7 +15,7 @@ import { SCORE_HINTS } from '@/lib/scoreHints';
 import { catalystsContract } from './api';
 import { useFeedResource } from './useFeedResource';
 import { appendFeedPage, visibleFeedPage } from './feedSnapshot';
-import CatalystCacheStatus from './CatalystCacheStatus';
+import CatalystCacheStatus, { cacheStatusProps } from './CatalystCacheStatus';
 import type { CatalystNewsItem } from './api';
 import type { CatalystFilters } from './filters';
 import { toFeedQuery } from './filters';
@@ -258,7 +258,7 @@ export default function FeedPanel({ filters, onOpenNews, patches, onFeedResult, 
 
   return (
     <div className="card-surface overflow-hidden">
-      <CatalystCacheStatus {...q} />
+      <CatalystCacheStatus {...cacheStatusProps(q)} />
       {phase === 'loading' ? (
         <FeedSkeleton />
       ) : phase === 'error' ? (

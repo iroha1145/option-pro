@@ -2,7 +2,7 @@
 import { useMemo } from 'react';
 import { useCalendarResource } from './useCalendarResource';
 import { flatCountry, localDay } from './calendarPresentation';
-import CatalystCacheStatus from './CatalystCacheStatus';
+import CatalystCacheStatus, { cacheStatusProps } from './CatalystCacheStatus';
 import type { EconomicEvent } from './api';
 import EmptyState from '@/components/shared/EmptyState';
 import SoftBadge, { type BadgeTone } from '@/components/shared/SoftBadge';
@@ -103,7 +103,7 @@ export default function CalendarPanel(_props: { refreshToken: number }) {
 
   return (
     <div className="card-surface overflow-hidden">
-      <CatalystCacheStatus {...q} />
+      <CatalystCacheStatus {...cacheStatusProps(q)} />
       {groups.map(([date, events], gi) => {
         const isToday = date === todayKey;
         return (

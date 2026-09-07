@@ -109,4 +109,16 @@ test('首页指数后插入经济日历，普通午夜事件不再标成全天',
   assert.match(panel, /impact === 'holiday' && t\.getHours\(\) === 0 && t\.getMinutes\(\) === 0/);
   const stocks = await source('components/catalysts/StocksPanel.tsx');
   assert.match(stocks, /t\(r\.sector\)/);
+  const status = await source('components/catalysts/CatalystCacheStatus.tsx');
+  assert.match(status, /export function cacheStatusProps/);
+  for (const file of [
+    'components/catalysts/EconomicCalendarCard.tsx',
+    'components/catalysts/CalendarPanel.tsx',
+    'components/catalysts/FeedPanel.tsx',
+    'components/catalysts/StocksPanel.tsx',
+  ]) {
+    const src = await source(file);
+    assert.doesNotMatch(src, /<CatalystCacheStatus \{\.\.\.q\}/, `${file} 不得把资源 key 展开进 JSX`);
+    assert.match(src, /cacheStatusProps\(q\)/);
+  }
 });
