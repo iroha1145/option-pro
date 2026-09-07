@@ -1,12 +1,23 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, time as datetime_time, timedelta, timezone
 import math
 import threading
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from app.config import get_settings
 from app.services.market_calendar import options_close_minutes
+from app.services.option_capability import (
+    CAPABILITY_VERSION,
+    PROVIDER_YAHOO,
+    UnsupportedOptionsError,
+    canonicalize_option_symbol,
+    is_declared_unsupported,
+    resolve_option_capability,
+)
+from app.services.yahoo_option_io import run_yahoo_option_io
 from app.services.quote_quality import (
     estimated_premium,
     inverted_iv_acceptable,
@@ -77,6 +88,15 @@ PRICING_ASSUMPTIONS = {
     "day_count": "calendar_365",
     "model": "european_black_scholes",
 }
+
+
+@dataclass(frozen=True)
+class _DerivedCacheValue:
+    """A calculation keeps the original quote's age and refresh deadline."""
+
+    value: Any
+    fetched_at: datetime
+    stale: bool
 
 
 def _purge_cache(now: datetime) -> None:
@@ -182,6 +202,9 @@ def _cached(
             load_error = None
             load_failed = False
 
+        derived = value if isinstance(value, _DerivedCacheValue) else None
+        if derived is not None:
+            value = derived.value
         valid = not load_failed and (is_valid(value) if is_valid is not None else True)
         if not valid and hit:
             _, fetched_at, stale_value = hit
@@ -201,18 +224,25 @@ def _cached(
             assert load_error is not None
             raise load_error
 
-        fetched_at = datetime.now(timezone.utc)
+        cache_now = datetime.now(timezone.utc)
+        fetched_at = derived.fetched_at if derived is not None else cache_now
         # Negative results get a short cache to avoid hammering the provider
         # while still recovering quickly when a transient empty payload clears.
         effective_ttl = ttl_seconds if valid else min(ttl_seconds, 30)
+        expires_at = fetched_at + timedelta(seconds=effective_ttl)
+        if derived is not None and derived.stale:
+            expires_at = min(expires_at, cache_now)
+        stale = expires_at <= cache_now
         with _cache_lock:
-            _purge_cache(fetched_at)
-            _cache[key] = (fetched_at + timedelta(seconds=effective_ttl), fetched_at, value)
+            _purge_cache(cache_now)
+            _cache[key] = (expires_at, fetched_at, value)
         metadata = {
-            "_stale": False,
+            "_stale": stale,
             "as_of": fetched_at.isoformat(),
-            "source_status": "active" if valid else "insufficient_data",
+            "source_status": "stale" if stale else "active" if valid else "insufficient_data",
         }
+        if stale:
+            metadata["stale_age_seconds"] = round(max((cache_now - fetched_at).total_seconds(), 0.0), 1)
         return _cache_value(value, metadata, with_metadata)
     finally:
         _release_key_lock(key, key_lock)
@@ -276,41 +306,89 @@ def _get_ticker(symbol: str) -> yf.Ticker:
     return yf.Ticker(symbol.upper())
 
 
+def _unsupported_expiration_snapshot(symbol: str) -> dict[str, Any]:
+    capability = resolve_option_capability(symbol)
+    return {
+        "expirations": [],
+        **capability.as_payload(),
+        "_stale": False,
+        "as_of": datetime.now(timezone.utc).isoformat(),
+        "source_status": "unsupported_by_provider",
+    }
+
+
+def _expiration_status(expirations: list[str]) -> str:
+    return "supported" if expirations else "empty_unconfirmed"
+
+
+def _annotate_expiration_snapshot(
+    symbol: str,
+    expirations: list[str],
+    metadata: dict[str, Any],
+) -> dict[str, Any]:
+    status = _expiration_status(expirations)
+    return {
+        "expirations": expirations,
+        "ticker": symbol,
+        "provider": PROVIDER_YAHOO,
+        "options_status": status,
+        "retryable": status != "supported",
+        "capability_version": CAPABILITY_VERSION,
+        **metadata,
+    }
+
+
 def _get_expirations_cached(ticker: str, *, with_metadata: bool = False) -> Any:
-    symbol = ticker.upper()
+    symbol = canonicalize_option_symbol(ticker)
+    if is_declared_unsupported(symbol):
+        metadata = {
+            "_stale": False,
+            "as_of": datetime.now(timezone.utc).isoformat(),
+            "source_status": "unsupported_by_provider",
+        }
+        return _cache_value([], metadata, with_metadata)
+    empty_ttl = int(get_settings().option_empty_discovery_seconds)
     return _cached(
         f"expirations:{symbol}",
-        300,
-        lambda: list(_get_ticker(symbol).options),
+        empty_ttl,
+        lambda: run_yahoo_option_io(lambda: list(_get_ticker(symbol).options)),
         with_metadata=with_metadata,
-        is_valid=bool,
+        is_valid=lambda value: isinstance(value, list),
     )
 
 
 def get_expirations(ticker: str) -> list[str]:
     """Get available option expiration dates (compatibility list form)."""
-    return _get_expirations_cached(ticker, with_metadata=False)
+    symbol = canonicalize_option_symbol(ticker)
+    if is_declared_unsupported(symbol):
+        return []
+    return _get_expirations_cached(symbol, with_metadata=False)
 
 
 def get_expirations_snapshot(ticker: str) -> dict[str, Any]:
-    """Get expirations with explicit cache freshness metadata."""
-    expirations, metadata = _get_expirations_cached(ticker, with_metadata=True)
-    return {"expirations": expirations, **metadata}
+    """Get expirations with explicit cache freshness and capability metadata."""
+    symbol = canonicalize_option_symbol(ticker)
+    if is_declared_unsupported(symbol):
+        return _unsupported_expiration_snapshot(symbol)
+    expirations, metadata = _get_expirations_cached(symbol, with_metadata=True)
+    return _annotate_expiration_snapshot(symbol, expirations, metadata)
 
 
 def get_cached_expirations_snapshot(ticker: str) -> dict[str, Any] | None:
     """Read expiration data already held by this process without refreshing."""
 
-    symbol = ticker.upper()
+    symbol = canonicalize_option_symbol(ticker)
+    if is_declared_unsupported(symbol):
+        return _unsupported_expiration_snapshot(symbol)
     cached = _read_cached(
         f"expirations:{symbol}",
         with_metadata=True,
-        is_valid=bool,
+        is_valid=lambda value: isinstance(value, list),
     )
     if cached is None:
         return None
     expirations, metadata = cached
-    return {"expirations": expirations, **metadata}
+    return _annotate_expiration_snapshot(symbol, expirations, metadata)
 
 
 def _option_moneyness(
@@ -363,18 +441,20 @@ def _deep_otm_fraction(
 
 def get_option_chain(ticker: str, expiration: str) -> dict[str, Any]:
     """Get full option chain for a ticker and expiration date."""
-    symbol = ticker.upper()
+    symbol = canonicalize_option_symbol(ticker)
+    if is_declared_unsupported(symbol):
+        raise UnsupportedOptionsError(symbol)
 
     def load() -> dict[str, Any]:
-        t = _get_ticker(symbol)
+        def fetch():
+            t = _get_ticker(symbol)
+            try:
+                price = _safe_float(t.fast_info.last_price)
+            except Exception:
+                price = None
+            return price, t.option_chain(expiration)
 
-        # Get current stock price
-        try:
-            price = _safe_float(t.fast_info.last_price)
-        except Exception:
-            price = None
-
-        chain = t.option_chain(expiration)
+        price, chain = run_yahoo_option_io(fetch)
         expiry = option_expiry_metrics(expiration)
         dte = expiry["dte"]
         T = expiry["time_to_expiry_years"]
@@ -599,7 +679,9 @@ def get_cached_option_chain(
 ) -> dict[str, Any] | None:
     """Read an existing option chain without contacting the provider."""
 
-    symbol = ticker.upper()
+    symbol = canonicalize_option_symbol(ticker)
+    if is_declared_unsupported(symbol):
+        return None
     return _read_cached(
         f"chain:{symbol}:{expiration}",
         is_valid=lambda value: bool(value.get("calls") or value.get("puts")),
@@ -661,10 +743,9 @@ def _select_iv_expiration(
     return None, None, "missing", None
 
 
-def _call_rows_nearest_strikes(calls, price: float, limit: int = 5) -> list[dict[str, Any]]:
+def _call_rows_nearest_strikes(calls: list[dict[str, Any]], price: float, limit: int = 5) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
-    for nt in calls.itertuples(index=False):
-        row = nt._asdict() if hasattr(nt, "_asdict") else dict(nt._asdict())
+    for row in calls:
         strike = _safe_float(row.get("strike"))
         if strike is None or strike <= 0:
             continue
@@ -675,19 +756,23 @@ def _call_rows_nearest_strikes(calls, price: float, limit: int = 5) -> list[dict
 
 def _get_stock_iv_cached(ticker: str, *, with_metadata: bool = False) -> Any:
     """Near-month / target-tenor ATM call IV. Not a constant 30-day interpolation."""
-    symbol = ticker.upper()
+    symbol = canonicalize_option_symbol(ticker)
+    if is_declared_unsupported(symbol):
+        metadata = {
+            "_stale": False,
+            "as_of": datetime.now(timezone.utc).isoformat(),
+            "source_status": "unsupported_by_provider",
+        }
+        return _cache_value(
+            _empty_stock_iv_payload(**resolve_option_capability(symbol).as_payload()),
+            metadata,
+            with_metadata,
+        )
 
-    def load() -> dict[str, Any]:
-        t = _get_ticker(symbol)
-        exps = list(t.options or [])
+    def load() -> dict[str, Any] | _DerivedCacheValue:
+        discovery = get_expirations_snapshot(symbol)
+        exps = list(discovery.get("expirations") or [])
         if not exps:
-            return _empty_stock_iv_payload()
-
-        try:
-            price = float(t.fast_info.last_price)
-        except Exception:
-            return _empty_stock_iv_payload()
-        if not math.isfinite(price) or price <= 0:
             return _empty_stock_iv_payload()
 
         now_ny = datetime.now(NEW_YORK_TZ)
@@ -695,15 +780,28 @@ def _get_stock_iv_cached(ticker: str, *, with_metadata: bool = False) -> Any:
         if not target_exp or expiry is None:
             return _empty_stock_iv_payload()
 
-        chain = t.option_chain(target_exp)
-        candidates = _call_rows_nearest_strikes(chain.calls, price)
-        T = expiry["time_to_expiry_years"]
+        chain = get_option_chain(symbol, target_exp)
+        price = _safe_float(chain.get("underlying_price"))
+        if price is None or price <= 0:
+            return _empty_stock_iv_payload()
+        candidates = _call_rows_nearest_strikes(chain.get("calls") or [], price)
+
+        def from_chain(**fields: Any) -> _DerivedCacheValue:
+            # Both fresh cache hits and stale fallbacks retain their quote time.
+            # Recomputing a number does not constitute a new provider fetch.
+            observed = datetime.fromisoformat(str(chain["as_of"]).replace("Z", "+00:00"))
+            if observed.tzinfo is None:
+                observed = observed.replace(tzinfo=timezone.utc)
+            return _DerivedCacheValue(
+                _empty_stock_iv_payload(**fields), observed, bool(chain.get("_stale")),
+            )
+
         fallback_reason = None
         for index, row in enumerate(candidates):
             strike = row["strike"]
-            quoted = vendor_iv(row.get("impliedVolatility"))
+            quoted = vendor_iv(row.get("implied_volatility")) if row.get("iv_source") == "vendor" else None
             if quoted is not None:
-                return _empty_stock_iv_payload(
+                return from_chain(
                     atm_iv=round(quoted, 4),
                     iv_method="vendor_call",
                     iv_source="vendor",
@@ -719,17 +817,12 @@ def _get_stock_iv_cached(ticker: str, *, with_metadata: bool = False) -> Any:
 
         for index, row in enumerate(candidates):
             strike = row["strike"]
-            mark = option_mark(
-                bid=row.get("bid"),
-                ask=row.get("ask"),
-                last=row.get("lastPrice"),
-                allow_last_for_estimate=False,
-            )
-            if not mark["usable_for_inversion"]:
+            # The shared chain has already applied the quality-mid policy.
+            if row.get("iv_source") != "model_inversion":
                 continue
-            computed = compute_iv(mark["value"], price, strike, T, r=0.05, is_call=True)
+            computed = row.get("implied_volatility")
             if inverted_iv_acceptable(computed):
-                return _empty_stock_iv_payload(
+                return from_chain(
                     atm_iv=round(float(computed), 4),
                     iv_method="model_inversion",
                     iv_source="model_inversion",

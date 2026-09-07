@@ -98,11 +98,12 @@ test('首页辅助读数直接展示，不再默认收进 details', async () => 
   assert.doesNotMatch(home, /group\/readings/);
 });
 
-test('首页指数后插入经济日历，普通午夜事件不再标成全天', async () => {
+test('首页经济日历位于 CTA 资金前，普通午夜事件不再标成全天', async () => {
   const home = await source('pages/Home.tsx');
   const calendarIdx = home.indexOf('<EconomicCalendarCard');
   const marketIdx = home.indexOf('行2：市场状态 + 雷达信号');
-  assert.ok(calendarIdx > 0 && marketIdx > calendarIdx, '经济日历应在市场状态之前');
+  const ctaIdx = home.indexOf("aria-label={t('CTA 趋势资金')}");
+  assert.ok(marketIdx > 0 && calendarIdx > marketIdx && ctaIdx > calendarIdx, '经济日历应在市场状态之后、CTA 资金之前');
   const card = await source('components/catalysts/EconomicCalendarCard.tsx');
   assert.match(card, /data-testid="home-economic-calendar"/);
   const panel = await source('components/catalysts/CalendarPanel.tsx');

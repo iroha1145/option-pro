@@ -22,7 +22,17 @@ from app.services.quote_quality import (
     option_mark,
 )
 from app.services.cache import cache
+from app.services.option_capability import (
+    canonicalize_option_symbol,
+    is_declared_unsupported,
+    unsupported_payload,
+)
 from app.services.utils import sanitize
+from app.services.yahoo_option_io import (
+    YahooOptionBusy,
+    YahooOptionTimeout,
+    run_yahoo_option_io,
+)
 from app.public_home_snapshot import (
     read_owner_public_home_entry_async,
     read_public_home_resource_async,
@@ -157,8 +167,8 @@ def _record_option_failure(
 
 
 def _option_symbol(ticker: str) -> str:
-    symbol = ticker.upper().strip()
-    if not _OPTION_TICKER_PATTERN.fullmatch(symbol):
+    raw = ticker.upper().strip()
+    if not _OPTION_TICKER_PATTERN.fullmatch(raw):
         raise HTTPException(
             status_code=400,
             detail={
@@ -166,7 +176,7 @@ def _option_symbol(ticker: str) -> str:
                 "message": "股票代码格式无效",
             },
         )
-    return symbol
+    return canonicalize_option_symbol(raw)
 
 
 def _validate_expiration_date(expiration: str, *, failure_key: str) -> None:
@@ -239,6 +249,15 @@ async def _cached_yahoo_option_resource(
                 status_code=exc.status_code,
                 detail=exc.detail,
             ) from exc
+        except (YahooOptionBusy, YahooOptionTimeout) as exc:
+            raise _record_option_failure(
+                key,
+                status_code=503,
+                detail={
+                    "code": "yahoo_options_unavailable",
+                    "message": "Yahoo/yfinance 期权数据暂不可用",
+                },
+            ) from exc
         except Exception as exc:
             raise _record_option_failure(
                 key,
@@ -257,8 +276,18 @@ async def _cached_yahoo_option_resource(
 def _load_expirations_snapshot(symbol: str) -> dict:
     snapshot = yahoo.get_expirations_snapshot(symbol)
     expirations = snapshot.get("expirations")
-    if not isinstance(expirations, list) or not expirations:
+    if not isinstance(expirations, list):
         raise RuntimeError("Yahoo returned no option expirations")
+    if snapshot.get("options_status") == "unsupported_by_provider":
+        return snapshot
+    if not expirations:
+        snapshot = {
+            **snapshot,
+            "options_status": snapshot.get("options_status") or "empty_unconfirmed",
+            "retryable": True,
+            "ticker": symbol,
+            "provider": snapshot.get("provider") or "Yahoo/yfinance",
+        }
     return snapshot
 
 
@@ -374,7 +403,7 @@ async def _unusual_activity_impl(type: str, min_vol_oi: float):
         rows = []
         try:
             t = yf.Ticker(symbol)
-            exps = list(t.options[:2])
+            exps = run_yahoo_option_io(lambda: list(t.options[:2]))
             if not exps:
                 return {"symbol": symbol, "ok": False, "rows": [], "reason": "no_expirations"}
             try:
@@ -387,7 +416,7 @@ async def _unusual_activity_impl(type: str, min_vol_oi: float):
             chain_failures = 0
             for exp in exps:
                 try:
-                    chain = t.option_chain(exp)
+                    chain = run_yahoo_option_io(lambda current=exp: t.option_chain(current))
                 except Exception:
                     chain_failures += 1
                     continue
@@ -523,6 +552,8 @@ async def _unusual_activity_impl(type: str, min_vol_oi: float):
 @router.get("/{ticker}/expirations")
 async def expirations(ticker: str, request: Request = None):
     symbol = _option_symbol(ticker)
+    if is_declared_unsupported(symbol):
+        return unsupported_payload(symbol)
     key = f"options:expirations:{symbol}"
 
     try:
@@ -556,6 +587,15 @@ async def option_chain(
     request: Request = None,
 ):
     symbol = _option_symbol(ticker)
+    if is_declared_unsupported(symbol):
+        return {
+            **unsupported_payload(symbol),
+            "expiration": expiration,
+            "underlying_price": None,
+            "calls": [],
+            "puts": [],
+            "alerts": [],
+        }
     key = f"options:chain:{symbol}:{expiration}"
     _validate_expiration_date(expiration, failure_key=key)
     allow_live = current_request_is_owner() or request_allows_visitor_live_pulls(request)

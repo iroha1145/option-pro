@@ -74,6 +74,9 @@ function loadOptionsModule(marketGet) {
         getOptionChain: () => ({}),
       };
     }
+    if (id === '@/lib/optionCapability') {
+      return { isDeclaredUnsupported: () => false };
+    }
     throw new Error(`unexpected import: ${id}`);
   };
   vm.runInNewContext(compiled, {
@@ -96,8 +99,12 @@ test('期权链保留真实来源并按 Retry-After 冷却重试', async () => {
   assert.match(panel, /disabled=\{retrySeconds > 0 \|\| retrying\}/);
   assert.match(panel, /期权数据暂时获取不到/);
   assert.doesNotMatch(panel, /yfinance|Massive Stocks Starter/);
+  assert.match(panel, /isDeclaredUnsupported\(ticker\)/);
+  assert.match(panel, /function LiveOptionsPanel/);
+  assert.match(panel, /当前数据源未提供该指数的期权数据/);
   assert.match(panel, /expError\.code === 400[\s\S]*forceExpirationsRef\.current = true;[\s\S]*refreshExpirations\(\);[\s\S]*return;/);
   assert.match(api, /force:\s*readOptions\.force/);
+  assert.match(api, /isDeclaredUnsupported\(ticker\)/);
 });
 
 test('旧到期日返回 400 后强制刷新新列表并恢复期权链', async () => {
@@ -134,15 +141,15 @@ test('旧到期日返回 400 后强制刷新新列表并恢复期权链', async 
   const optionsApi = loadOptionsModule(marketGet);
 
   const oldList = await optionsApi.expirations('AAOI');
-  assert.deepEqual(Array.from(oldList), ['2030-08-16']);
+  assert.deepEqual(oldList.expirations, ['2030-08-16']);
   await assert.rejects(
-    optionsApi.chain('AAOI', oldList[0]),
+    optionsApi.chain('AAOI', oldList.expirations[0]),
     (error) => error.code === 400,
   );
 
   const newList = await optionsApi.expirations('AAOI', { force: true });
-  assert.deepEqual(Array.from(newList), ['2030-08-23']);
-  const recovered = await optionsApi.chain('AAOI', newList[0]);
+  assert.deepEqual(newList.expirations, ['2030-08-23']);
+  const recovered = await optionsApi.chain('AAOI', newList.expirations[0]);
 
   assert.equal(recovered.expiration, '2030-08-23');
   assert.equal(recovered.provider, 'Yahoo/yfinance');
@@ -166,6 +173,7 @@ test('详情错误只在明确缺失快照时显示手动拉取', async () => {
   // refresh 的签名带可选 options（force 世代），事件处理器一律箭头包装，
   // 防止 MouseEvent 流进 options 位。
   assert.match(drawer, /onClick=\{\(\) => refresh\(\)\}/);
+  assert.match(drawer, /<OptionsPanel key=\{detail\.ticker\} ticker=\{detail\.ticker\} \/>/);
 });
 
 test('手动拉取与手机工具栏保持可点击且不溢出', async () => {

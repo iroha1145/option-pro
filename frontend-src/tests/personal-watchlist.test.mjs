@@ -11,6 +11,8 @@ const bundle = await build({
     export { accountApi, watchlistErrorMessage } from './src/api/modules/account.ts';
     export { ApiError } from './src/api/client.ts';
     export { mapWatchlist, stocksApi } from './src/api/modules/stocks.ts';
+    export { industryLabel } from './src/lib/industryLabel.ts';
+    export { getLocale, setLocale } from './src/i18n/core.ts';
     export {
       login as mockLogin,
       logout as mockLogout,
@@ -53,6 +55,45 @@ test('reading an empty watchlist makes no market request and equivalent combinat
     await Promise.all([api.stocksApi.watchlistFor(['MSFT', 'AAPL']), api.stocksApi.watchlistFor(['AAPL', 'MSFT'])]);
     assert.deepEqual(paths, ['/api/stocks/watchlist?tickers=AAPL%2CMSFT']);
   } finally { globalThis.fetch = original; }
+});
+
+test('watchlist industry labels use company metadata instead of the custom group', () => {
+  const rows = api.mapWatchlist({ groups: [{ name: '自定义', stocks: [
+    { ticker: 'BE', sector: 'Electrical Equipment & Parts' },
+    { ticker: 'NBIS', sector: '自定义', sic_description: 'Internet Content & Information' },
+    { ticker: 'UNKNOWN' },
+  ] }, { name: '半导体', stocks: [{ ticker: 'NVDA' }] },
+  { name: '宽基 ETF', stocks: [{ ticker: 'GLD' }] }] });
+  assert.deepEqual(rows.map((row) => [row.ticker, row.sector]), [
+    ['BE', '电气设备及零部件'], ['NBIS', '互联网内容与信息'],
+    ['UNKNOWN', ''], ['NVDA', '半导体'], ['GLD', '宽基 ETF'],
+  ]);
+});
+
+test('duplicate groups cannot replace a known industry and later metadata can fill it', () => {
+  const rows = api.mapWatchlist({ groups: [
+    { name: '自定义', stocks: [{ ticker: 'BE', price: 100 }, { ticker: 'NBIS', sector: 'Internet Content & Information' }] },
+    { name: '关注', stocks: [{ ticker: 'BE', price: 99, sector: 'Electrical Equipment & Parts' }, { ticker: 'NBIS' }] },
+  ] });
+  assert.deepEqual(rows.map((row) => row.sector), ['电气设备及零部件', '互联网内容与信息']);
+  assert.equal(rows[0].price, 100);
+});
+
+test('provider industry labels follow the selected interface language', () => {
+  const previous = api.getLocale();
+  try {
+    for (const [locale, expected] of [
+      ['zh', ['电气设备及零部件', '互联网内容与信息']],
+      ['en', ['Electrical Equipment & Parts', 'Internet Content & Information']],
+      ['ja', ['電気機器・部品', 'インターネット・コンテンツ・情報']],
+    ]) {
+      api.setLocale(locale);
+      assert.deepEqual([
+        api.industryLabel('Electrical Equipment & Parts'),
+        api.industryLabel('Internet Content & Information'),
+      ], expected);
+    }
+  } finally { api.setLocale(previous); }
 });
 
 test('watchlist API failures map to locale copy instead of leftover Chinese', () => {

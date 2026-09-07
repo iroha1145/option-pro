@@ -1980,6 +1980,13 @@ async def watchlist(
         raise HTTPException(status_code=503, detail="Yahoo watchlist data is currently unavailable") from exc
 
 
+def _watchlist_sector_label(value: Any) -> str:
+    if not isinstance(value, str):
+        return ""
+    label = value.strip()
+    return "" if label.casefold() in {"", "自定义", "custom"} else label
+
+
 def _cached_selected_watchlist(tickers: list[str]) -> dict[str, Any]:
     now = time.time()
     wanted = set(tickers)
@@ -2000,22 +2007,38 @@ def _cached_selected_watchlist(tickers: list[str]) -> dict[str, Any]:
             for row in group.get("stocks", []) if isinstance(group, dict) else []:
                 symbol = row.get("ticker") if isinstance(row, dict) else None
                 if symbol in wanted:
-                    rows[symbol] = {**row, "sector": row.get("sector") or group.get("name", "")}
+                    rows[symbol] = {
+                        **row,
+                        "sector": _watchlist_sector_label(row.get("sector"))
+                        or _watchlist_sector_label(group.get("name")),
+                    }
                     saved[symbol] = entry.fetched_at
     for symbol in tickers:
         entry = read_stock_pull_resource(symbol, "overview", now=now)
-        if entry is None or float(entry["saved_at"]) <= saved.get(symbol, 0):
+        if entry is None:
             continue
         overview = entry["payload"]
+        previous = rows.get(symbol, {})
+        sector = _watchlist_sector_label(previous.get("sector")) or next(
+            (label for field in ("industry", "sic_description", "sector")
+             if (label := _watchlist_sector_label(overview.get(field)))),
+            "",
+        )
+        # A newer price does not invalidate an older company's industry label.
+        # Enrich metadata independently; only newer valid quotes replace prices.
+        if previous and sector:
+            previous = {**previous, "sector": sector}
+            rows[symbol] = previous
+        if float(entry["saved_at"]) <= saved.get(symbol, 0):
+            continue
         price = overview.get("price")
         if isinstance(price, bool) or not isinstance(price, (int, float)) or not math.isfinite(price) or price <= 0:
             continue
-        previous = rows.get(symbol, {})
         rows[symbol] = {
             **previous,
             "ticker": symbol,
             "name": overview.get("name") or previous.get("name") or symbol,
-            "sector": overview.get("sector") or previous.get("sector", ""),
+            "sector": sector,
             "price": price,
             "change": overview.get("change"),
             "change_percent": overview.get("change_percent"),

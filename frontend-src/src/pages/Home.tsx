@@ -395,8 +395,6 @@ export default function Home() {
         )}
       </section>
 
-      <EconomicCalendarCard />
-
       {/* 行2：市场状态 + 雷达信号 */}
       <div className="mt-8 grid grid-cols-1 items-start gap-6 lg:grid-cols-3">
         <MarketStatusPanel
@@ -480,6 +478,8 @@ export default function Home() {
           </ListBody>
         </SectionCard>
       </div>
+
+      <EconomicCalendarCard />
 
       {/* 行4：CTA 趋势资金联动带。区块常驻：加载给骨架、失败给错误行、
           快照未发布给说明——整块消失会让「本来没有」与「没读到」不可分辨，
