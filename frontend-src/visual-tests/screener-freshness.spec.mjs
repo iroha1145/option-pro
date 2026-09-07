@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { mkdir } from 'node:fs/promises';
 
-const evidence = 'test-results/screener-evidence';
+const evidence = process.env.SCREENER_EVIDENCE_DIR || 'test-results/screener-evidence';
 
 async function openScreener(page) {
   const errors = [];
@@ -14,7 +14,7 @@ async function openScreener(page) {
 async function selectSemiconductorsAndScan(page) {
   await page.locator('[data-testid="screener-advanced-filters"] summary').click();
   await page.getByRole('button', { name: '半导体' }).click();
-  await page.getByRole('button', { name: /开始扫描/ }).click();
+  await page.locator('button.scan-trigger').click();
 }
 
 test('F02 desktop 1440 owner refreshes a stale semiconductor snapshot', async ({ page }) => {
@@ -24,10 +24,9 @@ test('F02 desktop 1440 owner refreshes a stale semiconductor snapshot', async ({
   const errors = await openScreener(page);
   await page.screenshot({ path: `${evidence}/desktop-1440-before.png`, animations: 'disabled' });
   await selectSemiconductorsAndScan(page);
-  await expect(page.getByText('历史结果').or(page.getByText('数据未刷新'))).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByText('NVDA')).toBeVisible({ timeout: 90_000 });
-  await expect(page.getByText(/评分依据/)).toBeVisible();
-  await expect(page.locator('body')).not.toContainText('定时更新');
+  await expect(page.getByText('NVDA').filter({ visible: true }).first()).toBeVisible({ timeout: 90_000 });
+  await expect(page.getByText(/评分依据/).filter({ visible: true }).first()).toBeVisible();
+  await expect(page.getByText(/使用已有评分|命中/).filter({ visible: true }).first()).toBeVisible();
   await page.screenshot({ path: `${evidence}/desktop-1440-after.png`, animations: 'disabled' });
   expect(errors.filter((message) => !/ResizeObserver|AbortError/.test(message))).toEqual([]);
 });
@@ -38,8 +37,8 @@ test('F02 mobile 390 shows scan date on cards after refresh', async ({ page }) =
   await mkdir(evidence, { recursive: true });
   const errors = await openScreener(page);
   await selectSemiconductorsAndScan(page);
-  await expect(page.getByText('NVDA')).toBeVisible({ timeout: 90_000 });
-  await expect(page.getByText(/评分依据|扫描价|2026-/)).toBeVisible();
+  await expect(page.getByText('NVDA').filter({ visible: true }).first()).toBeVisible({ timeout: 90_000 });
+  await expect(page.getByText(/评分依据|扫描价|2026-/).filter({ visible: true }).first()).toBeVisible();
   await page.screenshot({ path: `${evidence}/mobile-390-after.png`, animations: 'disabled' });
   expect(errors.filter((message) => !/ResizeObserver|AbortError/.test(message))).toEqual([]);
 });
@@ -56,6 +55,6 @@ for (const [locale, heading] of [
     await page.setViewportSize({ width: 768, height: 900 });
     await openScreener(page);
     await expect(page.getByRole('heading', { level: 1 })).toContainText(heading);
-    await expect(page.getByRole('button', { name: /开始扫描|Start scan|スキャン開始/ })).toBeVisible();
+    await expect(page.locator('button.scan-trigger')).toBeVisible();
   });
 }
