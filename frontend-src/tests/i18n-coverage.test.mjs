@@ -300,6 +300,8 @@ test('watchlist and smart-drawing copy stays natural in EN/JA', () => {
   const low = merged.get('最低价');
   assert.equal(low?.en, 'Low');
   assert.equal(low?.ja, '安値');
+  assert.equal(merged.get('前往{label}')?.en, 'Go to {label}');
+  assert.equal(merged.get('价格行为')?.en, 'Price action');
 });
 
 test('LanguageSwitcher is wired into the navbar', async () => {

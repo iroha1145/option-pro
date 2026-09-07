@@ -14,7 +14,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
-import { computeScrollEdges } from '../src/lib/scrollEdges.ts';
+import { computeScrollEdges, scrollLeftToCenterChild } from '../src/lib/scrollEdges.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const src = path.resolve(here, '..', 'src');
@@ -41,6 +41,10 @@ test('滚到最右：只提示左边，不再画一个点了没反应的右箭�
   assert.deepEqual(computeScrollEdges(maxScroll, 2540, 1269), { left: true, right: false });
   // 差 1px 也算到底（惯性滚动经常停在小数上）
   assert.deepEqual(computeScrollEdges(maxScroll - 0.5, 2540, 1269), { left: true, right: false });
+});
+
+test('横向居中只改 scrollLeft，不依赖 scrollIntoView', () => {
+  assert.equal(scrollLeftToCenterChild(0, 0, 200, 300, 40), 220);
 });
 
 test('热点带的真实尺寸：8 张 260px 卡一定溢出桌面视口', () => {
@@ -86,7 +90,9 @@ test('板块选择复用 Segmented 键盘行为，真实滚动层提供布局偏
   // tablist 留在共享分段控件上，外层只管理滚动和自动显示当前项。
   assert.match(chips, /<Segmented/);
   assert.match(chips, /ariaLabel=\{t\('板块切换'\)\}/);
+  assert.match(chips, /scrollLeftToCenterChild/);
   assert.match(chips, /behavior: 'instant'/);
+  assert.doesNotMatch(chips, /scrollIntoView/);
   const scroller = await source('components/shared/HorizontalScroller.tsx');
   assert.match(scroller, /<motion\.div\s+layoutScroll\s+ref=\{ref\}/);
   // 原来那层裸的 overflow-x-auto 不该再留着
