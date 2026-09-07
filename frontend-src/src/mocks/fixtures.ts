@@ -861,7 +861,15 @@ export function getStockTrendBias(ticker: string): StockTrendBias {
     trend_bias_score: score,
     trend_bias_label: label,
     trend_bias_status: status,
-    scores,
+    scores: Object.assign({}, scores, {
+      data_quality: 72,
+      coverage: {
+        top_ratio: 0.67,
+        bottom_ratio: 0.55,
+        top_missing_components: ['options_crowding', 'earnings_reaction'],
+        bottom_missing_components: ['short_covering'],
+      },
+    }),
     factors,
     as_of: new Date(Date.now() - 15 * 60_000).toISOString(),
   };
