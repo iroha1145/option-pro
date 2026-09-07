@@ -136,6 +136,8 @@ interface EarningsListProps {
   /** 重点模式把非重点公司滤掉了：空态要说清是「被模式过滤」而非「没有财报」 */
   featuredFilteredEmpty?: boolean;
   onShowAll?: () => void;
+  /** 首屏自动选中不要滚页面；只有用户点日历/行时才把选中行滚进视口。 */
+  autoSelected?: boolean;
 }
 
 export default function EarningsList({
@@ -146,13 +148,15 @@ export default function EarningsList({
   filteredByDay,
   featuredFilteredEmpty = false,
   onShowAll,
+  autoSelected = false,
 }: EarningsListProps) {
   /* 从日历点入非重点公司时选中行可能在视口外：温和地滚到就近可见位置。
-     hooks 必须先于任何提前 return。 */
+     hooks 必须先于任何提前 return。自动选中不滚，否则首屏标题会被顶出视口。 */
   const selectedRowRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
+    if (autoSelected) return;
     selectedRowRef.current?.scrollIntoView({ block: 'nearest' });
-  }, [selectedTicker]);
+  }, [selectedTicker, autoSelected]);
 
   if (items.length === 0) {
     if (featuredFilteredEmpty) {
