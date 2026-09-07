@@ -45,7 +45,7 @@ export const WATCHLIST: Dict = {
   '暂无日线走势，打开详情后可更新': ['No daily trend yet. Open details to update.', '日足データがありません。詳細画面から更新できます。'],
   '{ticker} 日线走势，{start} 至 {end}，区间涨跌 {change}%': ['{ticker} daily trend, {start} to {end}, period change {change}%', '{ticker} の日足、{start}〜{end}、期間騰落率 {change}%'],
 
-  '只（默认关注池）': ['tickers (default pool)', '銘柄（デフォルト注目プール）'],
+  '只（默认关注池）': ['tickers (default pool)', '銘柄（既定の注目プール）'],
   '自选暂时都不在行情覆盖范围内': ['None of your watchlist is covered by quotes yet', 'ウォッチリストの銘柄はまだ相場データの対象外です'],
   '上方列出的代码已保存在账号里，行情覆盖后会自动出现': ['The tickers listed above are saved to your account and will appear once covered', '上に列挙したティッカーはアカウントに保存済みで、対象になり次第表示されます'],
   /* ---------------- B0 页头带 ---------------- */
@@ -129,7 +129,7 @@ export const WATCHLIST: Dict = {
     'サインインすると自選銘柄がアカウントに保存され、別の端末でも引き継がれます。',
   ],
   '搜索代码': ['Search tickers', 'ティッカーを検索'],
-  '还有': ['Another', 'あと'],
+  '还有 {n} 只': ['{n} more', 'あと {n} 銘柄'],
 
   /* ---------------- 表格列标题 ---------------- */
   '最新价': ['Last price', '現在値'],

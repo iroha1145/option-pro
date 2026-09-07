@@ -2108,10 +2108,10 @@ export function getTechnicalStructure(ticker: string): TechnicalStructure {
 /* ---------------- CTA 趋势资金代理估算（大盘页 mock） ---------------- */
 
 const CTA_SPECS = [
-  { instrument: 'sp500', label: '标普 500', proxy: 'SPY', index: '^GSPC', px: 642 },
-  { instrument: 'nasdaq100', label: '纳斯达克 100', proxy: 'QQQ', index: '^NDX', px: 575 },
-  { instrument: 'russell2000', label: '罗素 2000', proxy: 'IWM', index: '^RUT', px: 231 },
-  { instrument: 'dow', label: '道琼斯', proxy: 'DIA', index: '^DJI', px: 541 },
+  { instrument: 'sp500', label: __t('标普 500'), proxy: 'SPY', index: '^GSPC', px: 642 },
+  { instrument: 'nasdaq100', label: __t('纳斯达克 100'), proxy: 'QQQ', index: '^NDX', px: 575 },
+  { instrument: 'russell2000', label: __t('罗素 2000'), proxy: 'IWM', index: '^RUT', px: 231 },
+  { instrument: 'dow', label: __t('道琼斯'), proxy: 'DIA', index: '^DJI', px: 541 },
 ];
 
 export function getCtaTrend(): CtaTrendPayload {

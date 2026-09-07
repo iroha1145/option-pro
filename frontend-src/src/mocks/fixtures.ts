@@ -46,7 +46,7 @@ const infoOf = (ticker: string): TickerInfo => {
 const INDEX_BASE: { code: string; symbol: string; name: string; base: number }[] = [
   { code: 'SPX', symbol: '^GSPC', name: __t('标普 500'), base: 5972.4 },
   { code: 'NDX', symbol: '^NDX', name: __t('纳指 100'), base: 21468.2 },
-  { code: 'DJI', symbol: '^DJI', name: '道琼斯', base: 43828.1 },
+  { code: 'DJI', symbol: '^DJI', name: __t('道琼斯'), base: 43828.1 },
   { code: 'RUT', symbol: '^RUT', name: __t('罗素 2000'), base: 2382.6 },
   { code: 'SOX', symbol: '^SOX', name: '费城半导体', base: 5124.7 },
   { code: 'VIX', symbol: '^VIX', name: __t('波动率指数'), base: 14.86 },
@@ -288,10 +288,10 @@ export function runStrengthScan(): ScreenerRow[] {
               macroTailwind: fit >= 65 ? '顺风' : fit <= 35 ? '逆风' : '中性',
               macroFitConfidence: round2(r.float(0.62, 1)),
               macroSupporting: [
-                { factor_id: 'fed_net_liquidity', label: '联储净流动性' },
+                { factor_id: 'fed_net_liquidity', label: __t('联储净流动性') },
                 { factor_id: 'risk_vs_safe', label: __t('风险资产相对避险') },
               ],
-              macroOpposing: [{ factor_id: 'real_rate_level', label: '实际利率水平' }],
+              macroOpposing: [{ factor_id: 'real_rate_level', label: __t('实际利率水平') }],
               macroTechnicalGap: round2(r.float(-28, 28)),
             };
           })()),

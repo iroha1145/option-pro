@@ -939,7 +939,7 @@ export default function Watchlist() {
                 >
                   {t('加载更多')}
                   <span className="font-mono text-micro text-ink-400 tnum">
-                    {t('还有')} {progressive.remaining} {t('只')}
+                    {t('还有 {n} 只', { n: progressive.remaining })}
                   </span>
                 </button>
               </div>
