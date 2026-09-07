@@ -28,6 +28,7 @@ import httpx
 
 from app.config import get_settings
 from app.data_paths import get_data_paths
+from app.services.quote_quality import quality_mid
 
 # ── 常量 ─────────────────────────────────────────────────────
 
@@ -470,28 +471,21 @@ def featured_flags(
 # ── 预期波动：ATM straddle 数学（共享） ──────────────────────
 
 
+def _contract_observed_at(row: Mapping[str, Any]) -> Any:
+    """Per-contract quote time only. Chain fetch time is never inherited."""
+
+    if "quote_as_of" in row:
+        return row.get("quote_as_of")
+    return None
+
+
 def _contract_mark(contract: Mapping[str, Any]) -> float | None:
-    """报价中值；只认 bid/ask 派生的 midpoint/mid，last price 不算报价。"""
+    """报价中值；只认经过检查的 bid/ask 中间价。last / 未证明 mid 都不算报价。"""
 
     if not isinstance(contract, Mapping):
         return None
-    bid = _finite(contract.get("bid"))
-    ask = _finite(contract.get("ask"))
-    if bid is not None and ask is not None:
-        if bid <= 0 or ask < bid:
-            return None
-        mid = (bid + ask) / 2
-        if mid <= 0:
-            return None
-        # 宽价差是低质量报价：中值不可信，宁缺毋滥。
-        if (ask - bid) > max(_MAX_SPREAD_RATIO * mid, 0.05):
-            return None
-        return mid
-    for field in ("midpoint", "mid"):
-        value = _positive(contract.get(field))
-        if value is not None:
-            return value
-    return None
+    mid, _reason = quality_mid(contract.get("bid"), contract.get("ask"))
+    return mid
 
 
 def compute_straddle_move(
@@ -516,7 +510,7 @@ def compute_straddle_move(
             # A timestamp from another strike cannot validate this quote.
             # Providers with per-contract times explicitly include the field,
             # even when absent, so a missing time cannot inherit the chain's.
-            observed_at = row.get("quote_as_of", snapshot.get("as_of"))
+            observed_at = _contract_observed_at(row)
             if today is not None and not _quote_is_fresh(observed_at, today):
                 continue
             if strike is not None and mark is not None:
@@ -569,9 +563,12 @@ def _quote_is_fresh(observed_at: Any, today: date) -> bool:
     observed = _quote_datetime(observed_at)
     if observed is None:
         return False
-    return (
-        datetime.combine(today, datetime.min.time(), tzinfo=timezone.utc) - observed
-    ) <= timedelta(days=_MAX_QUOTE_AGE_DAYS)
+    reference = datetime.combine(today, datetime.min.time(), tzinfo=timezone.utc)
+    age = reference - observed
+    # Small clock skew is allowed; far-future stamps are not "very fresh".
+    if age < timedelta(0):
+        return age >= timedelta(hours=-12)
+    return age <= timedelta(days=_MAX_QUOTE_AGE_DAYS)
 
 
 def _expiration_window(
@@ -592,6 +589,7 @@ def _success(
     expiration: str,
     source: str,
     observed_at: str,
+    status: str = "active",
 ) -> dict[str, Any]:
     return {
         "expected_move_pct": move["move_pct"],
@@ -600,7 +598,7 @@ def _success(
         "expected_move_observed_at": move.get("observed_at") or observed_at,
         "expected_move_underlying_price": round(float(move["underlying_price"]), 4),
         "expected_move_method": EXPECTED_MOVE_METHOD,
-        "expected_move_status": "active",
+        "expected_move_status": status,
     }
 
 
@@ -785,19 +783,20 @@ def _yahoo_expected_move(
         return _failure("provider_error")
     if bool(chain.get("_stale")) or chain.get("source_status") not in {None, "active"}:
         return _failure("stale_quote")
-    observed_at = chain.get("as_of")
-    if not isinstance(observed_at, str) or not observed_at:
-        return _failure("no_quote_time")
-    if not _quote_is_fresh(observed_at, today):
-        return _failure("stale_quote")
-    move = compute_straddle_move(chain, today=today)
+    # Yahoo only has chain fetch time. Do not use it to prove per-contract
+    # freshness; keep the straddle as a degraded reference when marks exist.
+    fetch_at = chain.get("as_of")
+    move = compute_straddle_move(chain)
     if move is None:
         return _failure("no_usable_straddle")
+    if not isinstance(fetch_at, str) or not fetch_at:
+        return _failure("no_quote_time")
     return _success(
         move=move,
         expiration=expiration,
         source="Yahoo/yfinance options",
-        observed_at=observed_at,
+        observed_at=fetch_at,
+        status="degraded:chain_fetch_time_only",
     )
 
 

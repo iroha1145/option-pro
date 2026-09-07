@@ -13,6 +13,7 @@ export interface EarningsRow extends EarningsItem {
   marketCap?: number | null;
   sector?: string;
   expectedMovePct?: number | null;
+  expectedMoveStatus?: string | null;
   impactReady?: boolean;
   /** 后端公共重点标注（市值门槛 / 公共关注池）；账号自选在前端合并 */
   publicFeatured?: boolean;
@@ -176,7 +177,7 @@ export function exNum(
 }
 export function exStr(
   row: EarningsRow,
-  camel: 'sector' | 'releaseStatus' | 'analysisStage' | 'reportId',
+  camel: 'sector' | 'releaseStatus' | 'analysisStage' | 'reportId' | 'expectedMoveStatus',
 ): string | null {
   const record = row as unknown as Record<string, unknown>;
   const snake = camel.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);

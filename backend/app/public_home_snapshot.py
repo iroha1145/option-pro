@@ -203,8 +203,12 @@ _EARNINGS_EXPECTED_MOVE_SOURCES = {
     "Massive options",
 }
 _EARNINGS_EXPECTED_MOVE_STATUS_PATTERN = re.compile(
-    r"^(?:not_enriched|unavailable:[a-z_]+)$"
+    r"^(?:not_enriched|unavailable:[a-z_]+|degraded:[a-z_]+)$"
 )
+_EARNINGS_EXPECTED_MOVE_SUCCESS_STATUSES = {
+    "active",
+    "degraded:chain_fetch_time_only",
+}
 _EARNINGS_FEATURED_REASONS = {"market_cap", "earnings_pool"}
 _UNUSUAL_ROW_FIELDS = {
     "ticker",
@@ -219,6 +223,8 @@ _UNUSUAL_ROW_FIELDS = {
     "vol_oi_ratio",
     "vol_oi",
     "premium",
+    "premium_basis",
+    "premium_kind",
     "last_price",
     "implied_volatility",
     "underlying_price",
@@ -985,7 +991,8 @@ def _validate_earnings(payload: Mapping[str, Any]) -> bool:
                         minimum=0.0000001,
                     )
                     or row.get("expected_move_method") != "atm_straddle_mid"
-                    or row.get("expected_move_status") != "active"
+                    or row.get("expected_move_status")
+                    not in _EARNINGS_EXPECTED_MOVE_SUCCESS_STATUSES
                 )
             )
             or (
@@ -1047,8 +1054,14 @@ def _validate_unusual(payload: Mapping[str, Any]) -> bool:
             "source_status",
             "attempted",
             "succeeded",
+            "planned_tickers",
+            "successful_tickers",
             "failed_symbols",
             "partial_symbols",
+            "expiration_window",
+            "result_limit",
+            "premium_kind",
+            "contract_multiplier",
             "as_of",
         }
         and isinstance(rows, list)
@@ -1058,6 +1071,12 @@ def _validate_unusual(payload: Mapping[str, Any]) -> bool:
         and isinstance(succeeded, int)
         and not isinstance(succeeded, bool)
         and 1 <= succeeded <= attempted <= 1_000
+        and payload.get("planned_tickers") == attempted
+        and payload.get("successful_tickers") == succeeded
+        and payload.get("expiration_window") == "nearest_2"
+        and payload.get("result_limit") == 50
+        and payload.get("premium_kind") == "estimated_notional"
+        and payload.get("contract_multiplier") == 100
         and _valid_iso_timestamp(payload.get("as_of"))
         and isinstance(payload.get("data_limited"), bool)
         and payload.get("source_status") in {"active", "degraded"}
@@ -1104,6 +1123,8 @@ def _validate_unusual(payload: Mapping[str, Any]) -> bool:
             or not isinstance(row.get("signal"), str)
             or not isinstance(row.get("inferred_direction"), str)
             or not isinstance(row.get("direction_deprecated"), bool)
+            or row.get("premium_kind") not in {None, "estimated_notional"}
+            or row.get("premium_basis") not in {None, "quality_mid", "last_price"}
         ):
             return False
     return True

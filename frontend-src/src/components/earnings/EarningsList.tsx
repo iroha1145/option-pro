@@ -73,11 +73,15 @@ export function TimingBadge({ timing, className }: { timing: EarningsRow['timing
 }
 
 /* ---------------- 预期波动微条（0–15% 映射 ai-600） ---------------- */
-function ExpectedMoveCell({ pct, index }: { pct: number | null; index: number }) {
+function ExpectedMoveCell({ pct, index, status }: { pct: number | null; index: number; status?: string | null }) {
   if (pct == null) return <span aria-hidden="true" />;
+  const unverified = typeof status === 'string' && status.startsWith('degraded:');
   return (
     <span className="block">
       <span className="font-mono text-data-m text-ink-800 tnum">±{pct.toFixed(1)}%</span>
+      {unverified && (
+        <span className="mt-0.5 block text-[10px] leading-4 text-ink-400">{t('获取时间，非逐合约已验证报价')}</span>
+      )}
       <span className="mt-1 block h-1 w-16 strength-track overflow-hidden rounded-pill bg-line" aria-hidden="true">
         <motion.span
           className="block h-full origin-left rounded-pill bg-ai-600"
@@ -279,6 +283,7 @@ export default function EarningsList({
               // 市值必须是数据源提供的正数；0/负数是缺失占位，不展示成 $0。
               const marketCap = exNum(row, 'marketCap');
               const move = exNum(row, 'expectedMovePct');
+              const moveStatus = exStr(row, 'expectedMoveStatus');
               return (
                 <div key={row.ticker} ref={rowRef}>
                   {/* 桌面行 */}
@@ -338,7 +343,7 @@ export default function EarningsList({
                     <span className="hidden font-mono text-data-m text-ink-600 tnum 2xl:block">
                       {marketCap != null ? `$${fmtCompact(marketCap)}` : '—'}
                     </span>
-                    {hasExpectedMove && <ExpectedMoveCell pct={move} index={i} />}
+                    {hasExpectedMove && <ExpectedMoveCell pct={move} index={i} status={moveStatus} />}
                     {/* AI 影响 */}
                     <span className="flex justify-end">
                       <ImpactAction row={row} onSelect={() => onSelectTicker(row.ticker)} />
@@ -383,7 +388,7 @@ export default function EarningsList({
                           </span>
                         </span>
                       </span>
-                      {hasExpectedMove && <ExpectedMoveCell pct={move} index={i} />}
+                      {hasExpectedMove && <ExpectedMoveCell pct={move} index={i} status={moveStatus} />}
                     </span>
                   </motion.button>
                 </div>

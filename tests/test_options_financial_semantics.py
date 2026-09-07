@@ -122,20 +122,20 @@ def test_unusual_total_failure_uses_short_negative_cache(
     monkeypatch.setattr(options.yf, "Ticker", broken_ticker)
     monkeypatch.setattr(options.time, "monotonic", lambda: now[0])
 
-    with pytest.raises(HTTPException) as first:
+    with request_owner_access_context(True), pytest.raises(HTTPException) as first:
         asyncio.run(options.unusual_activity(_areq(), "all", 1.0))
     assert first.value.status_code == 503
     assert first.value.headers == {"Retry-After": "30"}
     assert calls == 2
 
-    with pytest.raises(HTTPException) as cooled:
+    with request_owner_access_context(True), pytest.raises(HTTPException) as cooled:
         asyncio.run(options.unusual_activity(_areq(), "all", 1.0))
     assert cooled.value.status_code == 503
     assert cooled.value.headers == {"Retry-After": "30"}
     assert calls == 2
 
     now[0] += 31
-    with pytest.raises(HTTPException):
+    with request_owner_access_context(True), pytest.raises(HTTPException):
         asyncio.run(options.unusual_activity(_areq(), "all", 1.0))
     assert calls == 4
 
@@ -154,10 +154,11 @@ def test_concurrent_total_failures_share_one_negative_result(
     monkeypatch.setattr(options.yf, "Ticker", broken_ticker)
 
     async def scenario():
-        return await asyncio.gather(
-            *[options.unusual_activity(_areq(), "all", 1.0) for _ in range(5)],
-            return_exceptions=True,
-        )
+        with request_owner_access_context(True):
+            return await asyncio.gather(
+                *[options.unusual_activity(_areq(), "all", 1.0) for _ in range(5)],
+                return_exceptions=True,
+            )
 
     results = asyncio.run(scenario())
 
@@ -272,7 +273,7 @@ def test_owner_option_failure_is_cooled_without_repeating_provider_calls(
     assert calls == 1
 
     now[0] += 31
-    with pytest.raises(HTTPException):
+    with request_owner_access_context(True), pytest.raises(HTTPException):
         asyncio.run(options.option_chain("aaoi", "2030-08-16"))
     assert calls == 2
 
@@ -299,7 +300,7 @@ def test_option_chain_rejects_invalid_inputs_before_provider_work(
 
     monkeypatch.setattr(yahoo, "get_expirations_snapshot", unexpected)
 
-    with pytest.raises(HTTPException) as captured:
+    with request_owner_access_context(True), pytest.raises(HTTPException) as captured:
         asyncio.run(options.option_chain(ticker, expiration))
 
     assert captured.value.status_code == 400
@@ -328,7 +329,7 @@ def test_option_chain_rejects_expiration_outside_ticker_membership_and_cools(
     monkeypatch.setattr(yahoo, "get_option_chain", unexpected_chain)
 
     for _ in range(2):
-        with pytest.raises(HTTPException) as captured:
+        with request_owner_access_context(True), pytest.raises(HTTPException) as captured:
             asyncio.run(options.option_chain("AAOI", "2030-08-23"))
         assert captured.value.status_code == 400
         assert captured.value.detail["code"] == "invalid_option_expiration"

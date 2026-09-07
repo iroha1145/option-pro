@@ -727,9 +727,8 @@ def _normalize_earnings_output_row(value: Mapping[str, Any]) -> dict[str, Any]:
             else None
         ),
         "expected_move_status": (
-            "active"
-            if expected_move is not None
-            else value.get("expected_move_status")
+            value.get("expected_move_status")
+            or ("active" if expected_move is not None else None)
         ),
     }
     return {field: normalized[field] for field in _EARNINGS_OUTPUT_FIELDS}
