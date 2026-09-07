@@ -23,7 +23,7 @@ export function QuoteIndicator({ symbol, className, usingFallback = false, fallb
   return (
     <span
       className={cn('text-[10px] font-normal text-ink-400', className)}
-      title={[stamp && t('成交时间 {time}', { time: stamp }), day && t('评分依据 {date}', { date: day }), !usingFallback && quote.source, !usingFallback && quote.previous_close != null && t('昨收 ${price}', { price: fmtPrice(quote.previous_close) })].filter(Boolean).join(' · ')}
+      title={[stamp && t('成交时间 {time}', { time: stamp }), day && t('评分依据 {date}', { date: day }), !usingFallback && quote?.source, !usingFallback && quote?.previous_close != null && t('昨收 ${price}', { price: fmtPrice(quote.previous_close) })].filter(Boolean).join(' · ')}
     >
       {label}
       {day ? <span className="ml-1 font-mono tnum">{day}</span> : null}
