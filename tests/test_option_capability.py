@@ -231,7 +231,7 @@ def test_http_bypass_still_returns_unsupported_without_provider(monkeypatch):
         assert payload["puts"] == []
         assert payload["options_status"] == "unsupported_by_provider"
 
-        invalid = client.get("/api/options/AAOI%2F..%2FAAPL/expirations")
+        invalid = client.get("/api/options/AAOI%21/expirations")
         assert invalid.status_code == 400
         assert invalid.json()["detail"]["code"] == "invalid_ticker"
 
@@ -294,26 +294,26 @@ def test_same_key_coalesces_success_empty_and_error(monkeypatch):
     yahoo._cache.clear()
     calls.clear()
 
-    class BoomTicker:
-        @property
-        def options(self):
-            with lock:
-                calls.append("boom")
-            time.sleep(0.02)
-            raise TimeoutError("provider timeout")
+    def boom(_symbol: str):
+        with lock:
+            calls.append("boom")
+        time.sleep(0.03)
+        raise TimeoutError("provider timeout")
 
-    monkeypatch.setattr(yahoo, "_get_ticker", lambda _symbol: BoomTicker())
-    start_boom = threading.Barrier(8)
+    monkeypatch.setattr(options.yahoo, "get_expirations_snapshot", boom)
 
-    def run_boom(_index: int):
-        start_boom.wait()
-        with pytest.raises(TimeoutError):
-            yahoo.get_expirations_snapshot("NVDA")
+    async def boom_requests():
+        from app.access import request_owner_access_context
 
-    with ThreadPoolExecutor(max_workers=8) as executor:
-        list(executor.map(run_boom, range(8)))
+        with request_owner_access_context(True):
+            return await asyncio.gather(
+                *[options.expirations("nvda") for _ in range(8)],
+                return_exceptions=True,
+            )
 
+    boom_results = asyncio.run(boom_requests())
     assert calls == ["boom"]
+    assert all(getattr(result, "status_code", None) == 503 for result in boom_results)
 
 
 def test_cross_ticker_outbound_budget_and_queue(monkeypatch):

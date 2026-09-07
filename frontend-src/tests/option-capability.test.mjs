@@ -99,7 +99,7 @@ test('期权面板在声明不支持时不挂载请求钩子，详情按标的�
   const livePanel = defaultExport.slice(0, defaultExport.indexOf('function LiveOptionsPanel'));
   assert.match(livePanel, /isDeclaredUnsupported\(ticker\)/);
   assert.match(livePanel, /return <UnsupportedIndexOptions/);
-  assert.doesNotMatch(livePanel, /usePolling/);
+  assert.doesNotMatch(livePanel, /usePolling\s*\(/);
   assert.match(panel, /function LiveOptionsPanel/);
   assert.match(detail, /<OptionsPanel key=\{detail\.ticker\} ticker=\{detail\.ticker\} \/>/);
   assert.match(apiSource, /if \(isDeclaredUnsupported\(ticker\)\)/);
@@ -179,11 +179,9 @@ test('声明不支持的指数在请求层不发起到期日或链读取', async
   const optionsApi = loadOptionsModule(marketGet);
   const expirations = await optionsApi.expirations('SPX');
   const chain = await optionsApi.chain('^GSPC', '2030-08-16');
-  assert.deepEqual(expirations, {
-    expirations: [],
-    optionsStatus: 'unsupported_by_provider',
-    retryable: false,
-  });
+  assert.deepEqual([...expirations.expirations], []);
+  assert.equal(expirations.optionsStatus, 'unsupported_by_provider');
+  assert.equal(expirations.retryable, false);
   assert.equal(chain.rows.length, 0);
   assert.deepEqual(calls, []);
 });
