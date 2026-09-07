@@ -349,7 +349,7 @@ export default function StockDetail() {
       <div className="card-surface mt-6 p-5">
         <p className="eyebrow">OPTIONS CHAIN</p>
         <h3 className="mb-4 mt-1.5 text-h3 text-ink-900">{__t('期权链')}</h3>
-        <OptionsPanel ticker={detail.ticker} />
+        <OptionsPanel key={detail.ticker} ticker={detail.ticker} />
       </div>
 
       {/* 行5: 相关新闻 */}

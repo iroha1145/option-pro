@@ -3,6 +3,7 @@ import { get, mockOr, toQuery } from '../client';
 import { marketGet } from '../marketRead';
 import { asRec, pickN, pickS, unwrap } from '../live';
 import * as fx2 from '@/mocks/fixtures2';
+import { isDeclaredUnsupported } from '@/lib/optionCapability';
 import type { OptionChain, OptionChainRow, UnusualOption } from '../types';
 
 export interface UnusualParams {
@@ -13,6 +14,12 @@ export interface UnusualParams {
 
 export interface OptionExpirationReadOptions {
   force?: boolean;
+}
+
+export interface OptionExpirationsRead {
+  expirations: string[];
+  optionsStatus: string | null;
+  retryable: boolean | null;
 }
 
 /**
@@ -113,27 +120,57 @@ export const optionsApi = {
   expirations: (
     ticker: string,
     readOptions: OptionExpirationReadOptions = {},
-  ): Promise<string[]> =>
-    mockOr(
-      () => fx2.getOptionExpirations(ticker),
+  ): Promise<OptionExpirationsRead> => {
+    if (isDeclaredUnsupported(ticker)) {
+      return Promise.resolve({
+        expirations: [],
+        optionsStatus: 'unsupported_by_provider',
+        retryable: false,
+      });
+    }
+    return mockOr(
+      () => ({
+        expirations: fx2.getOptionExpirations(ticker),
+        optionsStatus: null,
+        retryable: true,
+      }),
       () =>
         marketGet(`/options/${encodeURIComponent(ticker)}/expirations`, {
           ttlMs: 5 * 60_000,
           staleMs: 30 * 60_000,
           force: readOptions.force,
-        }).then((d) =>
-          unwrap(d, 'expirations')
-            .map((x) => pickS(asRec(x), 'date', 'expiration') ?? (typeof x === 'string' ? x : null))
-            .filter((x): x is string => x !== null),
-        ),
-    ),
-  chain: (ticker: string, expiration?: string): Promise<OptionChain> =>
-    mockOr(
+        }).then((d) => {
+          const rec = asRec(d);
+          const retryable = rec.retryable;
+          return {
+            expirations: unwrap(d, 'expirations')
+              .map((x) => pickS(asRec(x), 'date', 'expiration') ?? (typeof x === 'string' ? x : null))
+              .filter((x): x is string => x !== null),
+            optionsStatus: pickS(rec, 'options_status', 'optionsStatus'),
+            retryable: typeof retryable === 'boolean' ? retryable : null,
+          };
+        }),
+    );
+  },
+  chain: (ticker: string, expiration?: string): Promise<OptionChain> => {
+    if (isDeclaredUnsupported(ticker)) {
+      return Promise.resolve({
+        ticker,
+        expiration: expiration ?? '',
+        spot: null,
+        rows: [],
+        provider: null,
+        asOf: null,
+        stale: false,
+      });
+    }
+    return mockOr(
       () => fx2.getOptionChain(ticker, expiration),
       () =>
         marketGet(
           `/options/${encodeURIComponent(ticker)}/chain${expiration ? `?expiration=${encodeURIComponent(expiration)}` : ''}`,
           { ttlMs: 60_000, staleMs: 30 * 60_000 },
         ).then((d) => mapChain(d, ticker, expiration ?? '')),
-    ),
+    );
+  },
 };

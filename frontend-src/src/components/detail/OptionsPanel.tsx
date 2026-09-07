@@ -19,6 +19,7 @@ import Icon from '@/components/icons';
 import { cn } from '@/lib/utils';
 import { fmtPrice, fmtRelative } from '@/lib/format';
 import { OPTION_SUPPORTED_LIST, optionsSupported } from '@/mocks/fixtures2';
+import { isDeclaredUnsupported } from '@/lib/optionCapability';
 import { AI_DISCLAIMER, useAiJob } from './useAiJob';
 import {
   buildOptionAlertEvidence,
@@ -296,14 +297,42 @@ function AiOptionInsight({
   );
 }
 
+function UnsupportedIndexOptions() {
+  return (
+    <EmptyState
+      icon="doc-quote"
+      title={t('当前数据源未提供该指数的期权数据')}
+      description={t('指数行情与研究功能仍可使用，不会用其他标的的期权代替。')}
+      className="py-8"
+    />
+  );
+}
+
 /* ---------------- 链主体 ---------------- */
 export default function OptionsPanel({ ticker }: { ticker: string }) {
-  // 支持名单只属于 mock 数据集;live 由真实接口自证(到期日为空 → 诚实空态)
+  // 请求抑制发生在挂载层：声明不支持时不挂载带 usePolling 的子树。
+  if (isDeclaredUnsupported(ticker)) {
+    return <UnsupportedIndexOptions />;
+  }
   const supported = !isMock || optionsSupported(ticker);
+  if (!supported) {
+    return (
+      <EmptyState
+        icon="doc-quote"
+        title={t('该标的暂无期权数据')}
+        description={t('支持标的：{list}', { list: OPTION_SUPPORTED_LIST })}
+        className="py-8"
+      />
+    );
+  }
+  return <LiveOptionsPanel ticker={ticker} />;
+}
+
+function LiveOptionsPanel({ ticker }: { ticker: string }) {
   const [expiration, setExpiration] = useState<string | null>(null);
   const forceExpirationsRef = useRef(false);
   const {
-    data: expirations,
+    data: expirationRead,
     loading: expLoading,
     error: expError,
     refreshing: expRefreshing,
@@ -316,11 +345,12 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
     },
     null,
     [ticker],
-    );
+  );
+  const expirationDates = expirationRead?.expirations ?? [];
   const exp =
-    expiration && expirations?.includes(expiration)
+    expiration && expirationDates.includes(expiration)
       ? expiration
-      : expirations?.[0] ?? null;
+      : expirationDates[0] ?? null;
   const {
     data: chain,
     loading: chainLoading,
@@ -344,15 +374,8 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
   const shownChain =
     chain && chain.ticker === ticker && chain.expiration === exp ? chain : null;
 
-  if (!supported) {
-    return (
-      <EmptyState
-        icon="doc-quote"
-        title={t("该标的暂无期权数据")}
-        description={t('支持标的：{list}', { list: OPTION_SUPPORTED_LIST })}
-        className="py-8"
-      />
-    );
+  if (expirationRead?.optionsStatus === 'unsupported_by_provider') {
+    return <UnsupportedIndexOptions />;
   }
 
   if (expLoading) return <SkeletonRows rows={6} />;
@@ -404,22 +427,25 @@ export default function OptionsPanel({ ticker }: { ticker: string }) {
       />
     );
   }
-  const expList = Array.from(new Set(expirations ?? []));
+  const expList = Array.from(new Set(expirationDates));
   if (expList.length === 0) {
+    const canRetry = expirationRead?.retryable !== false;
     return (
       <EmptyState
         icon="doc-quote"
         title={t("暂无到期日数据")}
         description={t("暂未获取到该标的的期权到期日")}
         action={
-          <button
-            type="button"
-            onClick={() => refreshExpirations()}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter,opacity] hover:brightness-105"
-          >
-            <Icon name="refresh" size={14} />
-            {t('重新拉取')}
-          </button>
+          canRetry ? (
+            <button
+              type="button"
+              onClick={() => refreshExpirations()}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter,opacity] hover:brightness-105"
+            >
+              <Icon name="refresh" size={14} />
+              {t('重新拉取')}
+            </button>
+          ) : null
         }
         className="py-8"
       />

@@ -208,6 +208,13 @@ class Settings(BaseSettings):
     yahoo_option_max_dte: int = Field(default=60, alias="YAHOO_OPTION_MAX_DTE")
     yahoo_option_strike_window_pct: float = Field(default=0.16, alias="YAHOO_OPTION_STRIKE_WINDOW_PCT")
     yahoo_options_failure_limit: int = Field(default=8, alias="YAHOO_OPTIONS_FAILURE_LIMIT")
+    # Process-local Yahoo options I/O budget. Multi-worker deployments
+    # multiply this cap by the worker count.
+    yahoo_option_max_in_flight: int = Field(default=3, ge=1, le=8, alias="YAHOO_OPTION_MAX_IN_FLIGHT")
+    yahoo_option_max_queue: int = Field(default=8, ge=1, le=32, alias="YAHOO_OPTION_MAX_QUEUE")
+    yahoo_option_queue_wait_seconds: float = Field(default=8.0, ge=0.5, le=60, alias="YAHOO_OPTION_QUEUE_WAIT_SECONDS")
+    yahoo_option_call_timeout_seconds: float = Field(default=20.0, ge=2, le=60, alias="YAHOO_OPTION_CALL_TIMEOUT_SECONDS")
+    option_empty_discovery_seconds: int = Field(default=900, ge=30, le=86_400, alias="OPTION_EMPTY_DISCOVERY_SECONDS")
     massive_api_key: str = Field(default="", alias="MASSIVE_API_KEY")
     massive_base_url: str = Field(default="https://api.massive.com", alias="MASSIVE_BASE_URL")
     # FMP（Financial Modeling Prep）是可选的第二财报日历来源 + 批量市值来源。

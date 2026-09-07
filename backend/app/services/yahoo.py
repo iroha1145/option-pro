@@ -6,7 +6,17 @@ import threading
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from app.config import get_settings
 from app.services.market_calendar import options_close_minutes
+from app.services.option_capability import (
+    CAPABILITY_VERSION,
+    PROVIDER_YAHOO,
+    UnsupportedOptionsError,
+    canonicalize_option_symbol,
+    is_declared_unsupported,
+    resolve_option_capability,
+)
+from app.services.yahoo_option_io import run_yahoo_option_io
 
 import logging
 import warnings as _warnings
@@ -260,41 +270,89 @@ def _get_ticker(symbol: str) -> yf.Ticker:
     return yf.Ticker(symbol.upper())
 
 
+def _unsupported_expiration_snapshot(symbol: str) -> dict[str, Any]:
+    capability = resolve_option_capability(symbol)
+    return {
+        "expirations": [],
+        **capability.as_payload(),
+        "_stale": False,
+        "as_of": datetime.now(timezone.utc).isoformat(),
+        "source_status": "unsupported_by_provider",
+    }
+
+
+def _expiration_status(expirations: list[str]) -> str:
+    return "supported" if expirations else "empty_unconfirmed"
+
+
+def _annotate_expiration_snapshot(
+    symbol: str,
+    expirations: list[str],
+    metadata: dict[str, Any],
+) -> dict[str, Any]:
+    status = _expiration_status(expirations)
+    return {
+        "expirations": expirations,
+        "ticker": symbol,
+        "provider": PROVIDER_YAHOO,
+        "options_status": status,
+        "retryable": status != "supported",
+        "capability_version": CAPABILITY_VERSION,
+        **metadata,
+    }
+
+
 def _get_expirations_cached(ticker: str, *, with_metadata: bool = False) -> Any:
-    symbol = ticker.upper()
+    symbol = canonicalize_option_symbol(ticker)
+    if is_declared_unsupported(symbol):
+        metadata = {
+            "_stale": False,
+            "as_of": datetime.now(timezone.utc).isoformat(),
+            "source_status": "unsupported_by_provider",
+        }
+        return _cache_value([], metadata, with_metadata)
+    empty_ttl = int(get_settings().option_empty_discovery_seconds)
     return _cached(
         f"expirations:{symbol}",
-        300,
-        lambda: list(_get_ticker(symbol).options),
+        empty_ttl,
+        lambda: run_yahoo_option_io(lambda: list(_get_ticker(symbol).options)),
         with_metadata=with_metadata,
-        is_valid=bool,
+        is_valid=lambda value: isinstance(value, list),
     )
 
 
 def get_expirations(ticker: str) -> list[str]:
     """Get available option expiration dates (compatibility list form)."""
-    return _get_expirations_cached(ticker, with_metadata=False)
+    symbol = canonicalize_option_symbol(ticker)
+    if is_declared_unsupported(symbol):
+        return []
+    return _get_expirations_cached(symbol, with_metadata=False)
 
 
 def get_expirations_snapshot(ticker: str) -> dict[str, Any]:
-    """Get expirations with explicit cache freshness metadata."""
-    expirations, metadata = _get_expirations_cached(ticker, with_metadata=True)
-    return {"expirations": expirations, **metadata}
+    """Get expirations with explicit cache freshness and capability metadata."""
+    symbol = canonicalize_option_symbol(ticker)
+    if is_declared_unsupported(symbol):
+        return _unsupported_expiration_snapshot(symbol)
+    expirations, metadata = _get_expirations_cached(symbol, with_metadata=True)
+    return _annotate_expiration_snapshot(symbol, expirations, metadata)
 
 
 def get_cached_expirations_snapshot(ticker: str) -> dict[str, Any] | None:
     """Read expiration data already held by this process without refreshing."""
 
-    symbol = ticker.upper()
+    symbol = canonicalize_option_symbol(ticker)
+    if is_declared_unsupported(symbol):
+        return _unsupported_expiration_snapshot(symbol)
     cached = _read_cached(
         f"expirations:{symbol}",
         with_metadata=True,
-        is_valid=bool,
+        is_valid=lambda value: isinstance(value, list),
     )
     if cached is None:
         return None
     expirations, metadata = cached
-    return {"expirations": expirations, **metadata}
+    return _annotate_expiration_snapshot(symbol, expirations, metadata)
 
 
 def _option_moneyness(
@@ -347,18 +405,20 @@ def _deep_otm_fraction(
 
 def get_option_chain(ticker: str, expiration: str) -> dict[str, Any]:
     """Get full option chain for a ticker and expiration date."""
-    symbol = ticker.upper()
+    symbol = canonicalize_option_symbol(ticker)
+    if is_declared_unsupported(symbol):
+        raise UnsupportedOptionsError(symbol)
 
     def load() -> dict[str, Any]:
-        t = _get_ticker(symbol)
+        def fetch():
+            t = _get_ticker(symbol)
+            try:
+                price = _safe_float(t.fast_info.last_price)
+            except Exception:
+                price = None
+            return price, t.option_chain(expiration)
 
-        # Get current stock price
-        try:
-            price = _safe_float(t.fast_info.last_price)
-        except Exception:
-            price = None
-
-        chain = t.option_chain(expiration)
+        price, chain = run_yahoo_option_io(fetch)
         expiry = option_expiry_metrics(expiration)
         dte = expiry["dte"]
         T = expiry["time_to_expiry_years"]
@@ -555,76 +615,95 @@ def get_cached_option_chain(
 ) -> dict[str, Any] | None:
     """Read an existing option chain without contacting the provider."""
 
-    symbol = ticker.upper()
+    symbol = canonicalize_option_symbol(ticker)
+    if is_declared_unsupported(symbol):
+        return None
     return _read_cached(
         f"chain:{symbol}:{expiration}",
         is_valid=lambda value: bool(value.get("calls") or value.get("puts")),
     )
 
 
+def _pick_iv_expiration(expirations: list[str]) -> str | None:
+    now_ny = datetime.now(NEW_YORK_TZ)
+
+    def _parse_exp(value: str):
+        try:
+            return option_expiry_metrics(value, now=now_ny)
+        except (ValueError, TypeError):
+            return None
+
+    for exp in expirations:
+        expiry = _parse_exp(exp)
+        if expiry and 20 <= expiry["dte"] <= 60:
+            return exp
+    for exp in expirations:
+        expiry = _parse_exp(exp)
+        if expiry and expiry["dte"] > 7:
+            return exp
+    return expirations[-1] if expirations else None
+
+
+def _atm_iv_from_chain(chain: dict[str, Any]) -> float | None:
+    price = _safe_float(chain.get("underlying_price"))
+    calls = chain.get("calls") or []
+    if price is None or price <= 0 or not calls:
+        return None
+    ranked = sorted(
+        calls,
+        key=lambda row: abs((_safe_float(row.get("strike")) or 0.0) - price),
+    )[:5]
+    for row in ranked:
+        iv = _safe_float(row.get("implied_volatility"))
+        if iv is not None and iv > 0.10:
+            return round(iv, 4)
+    expiry = None
+    raw_expiration = chain.get("expiration")
+    if isinstance(raw_expiration, str):
+        try:
+            expiry = option_expiry_metrics(raw_expiration)
+        except (ValueError, TypeError):
+            expiry = None
+    if not expiry:
+        return None
+    T = expiry["time_to_expiry_years"]
+    for row in ranked:
+        last = _safe_float(row.get("last_price"))
+        strike = _safe_float(row.get("strike"))
+        if last and last > 0.01 and strike:
+            computed = compute_iv(last, price, strike, T, r=0.05, is_call=True)
+            if computed and 0.05 < computed < 3.0:
+                return round(computed, 4)
+    return None
+
+
 def _get_stock_iv_cached(ticker: str, *, with_metadata: bool = False) -> Any:
-    """Get meaningful ATM implied volatility using an expiration 20-60 days out."""
-    symbol = ticker.upper()
+    """ATM IV from the shared expiration discovery + chain cache."""
+    symbol = canonicalize_option_symbol(ticker)
+    if is_declared_unsupported(symbol):
+        metadata = {
+            "_stale": False,
+            "as_of": datetime.now(timezone.utc).isoformat(),
+            "source_status": "unsupported_by_provider",
+        }
+        return _cache_value(None, metadata, with_metadata)
 
     def load() -> float | None:
-        t = _get_ticker(symbol)
-        exps = t.options
-        if not exps:
+        snapshot = get_expirations_snapshot(symbol)
+        if snapshot.get("options_status") == "unsupported_by_provider":
             return None
-
-        price = float(t.fast_info.last_price)
-
-        # Very near-term expirations often have unusable/zero IV. Prefer an
-        # expiration around one month out for sector/stock displays.
-        target_exp = None
-        now_ny = datetime.now(NEW_YORK_TZ)
-
-        def _parse_exp(s):
-            try:
-                return option_expiry_metrics(s, now=now_ny)
-            except (ValueError, TypeError):
-                return None
-
-        for exp in exps:
-            expiry = _parse_exp(exp)
-            if not expiry:
-                continue
-            days_out = expiry["dte"]
-            if 20 <= days_out <= 60:
-                target_exp = exp
-                break
+        expirations = [
+            value
+            for value in (snapshot.get("expirations") or [])
+            if isinstance(value, str) and value
+        ]
+        if not expirations:
+            return None
+        target_exp = _pick_iv_expiration(expirations)
         if not target_exp:
-            for exp in exps:
-                expiry = _parse_exp(exp)
-                if expiry and expiry["dte"] > 7:
-                    target_exp = exp
-                    break
-        if not target_exp and exps:
-            target_exp = exps[-1]
-
-        chain = t.option_chain(target_exp)
-        calls = chain.calls
-        atm_calls = calls.iloc[(calls["strike"] - price).abs().argsort()[:5]]
-
-        # 1) Try yfinance IV first (must be >10% to be realistic for stocks)
-        for _, row in atm_calls.iterrows():
-            iv = _safe_float(row.get("impliedVolatility"))
-            if iv is not None and iv > 0.10:
-                return round(iv, 4)
-
-        # 2) Fallback: compute IV from last_price via Black-Scholes
-        expiry = _parse_exp(target_exp)
-        if not expiry:
             return None
-        T = expiry["time_to_expiry_years"]
-        for _, row in atm_calls.iterrows():
-            last = _safe_float(row.get("lastPrice"))
-            strike = _safe_float(row.get("strike"))
-            if last and last > 0.01 and strike:
-                computed = compute_iv(last, price, strike, T, r=0.05, is_call=True)
-                if computed and 0.05 < computed < 3.0:
-                    return round(computed, 4)
-        return None
+        chain = get_option_chain(symbol, target_exp)
+        return _atm_iv_from_chain(chain)
 
     return _cached(
         f"stock_iv:{symbol}",

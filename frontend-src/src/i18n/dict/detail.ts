@@ -116,6 +116,8 @@ export const DETAIL: Dict = {
   '分析已完成，但没有返回可展示的结果。': ['Analysis finished, but returned no displayable result.', '分析は完了しましたが、表示可能な結果が返されませんでした。'],
   '任务': ['Task ', 'ジョブ'],
   '该标的暂无期权数据': ['No options data for this ticker', 'この銘柄のオプションデータはありません'],
+  '当前数据源未提供该指数的期权数据': ['This data source does not provide options data for this index', 'このデータソースでは当該指数のオプションデータを提供していません'],
+  '指数行情与研究功能仍可使用，不会用其他标的的期权代替。': ['Index quotes and research tools remain available. Other underlyings are not used as a substitute.', '指数の相場と調査機能は引き続き利用できます。他銘柄のオプションで代替しません。'],
   '期权链请求较频繁': ['Too many options-chain requests', 'オプションチェーンのリクエストが多すぎます'],
   '期权数据暂不可用': ['Options data temporarily unavailable', 'オプションデータは一時的に利用できません'],
   '请重新登录后查看期权数据': ['Sign in again to view options data', 'オプションデータを見るには、もう一度サインインしてください'],
