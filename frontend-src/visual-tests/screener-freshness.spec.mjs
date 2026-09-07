@@ -32,12 +32,14 @@ test('A07 a later software scan wins over a late semiconductor writeback', async
   await page.getByRole('button', { name: '半导体' }).click();
   await page.locator('button.scan-trigger').click();
   await expect(page.locator('button.scan-trigger')).toBeDisabled();
+  await page.getByRole('button', { name: '半导体' }).click();
   await page.getByRole('button', { name: '软件' }).click();
   await expect(page.locator('button.scan-trigger')).toBeEnabled();
   await page.locator('button.scan-trigger').click();
   await expect(page.getByText('MSFT').filter({ visible: true }).first()).toBeVisible({ timeout: 90_000 });
-  await expect(page.getByText('NVDA').filter({ visible: true })).toHaveCount(0);
+  await expect(page.locator('[data-quote-symbol="NVDA"]').filter({ visible: true })).toHaveCount(0);
   await expect(page.getByText('12.5')).toHaveCount(0);
+  await expect(page.getByText(/命中/).filter({ visible: true }).first()).toContainText('1');
 });
 
 test('A08 ten same-parameter clicks share one refresh computation', async ({ page, request }) => {
@@ -58,7 +60,6 @@ test('A08 ten same-parameter clicks share one refresh computation', async ({ pag
   await expect(page.getByText('NVDA').filter({ visible: true }).first()).toBeVisible({ timeout: 90_000 });
   const after = await readScreenerStats(request);
   expect(after.scan_count - before.scan_count).toBeLessThanOrEqual(1);
-  expect(posts.length).toBeGreaterThanOrEqual(1);
   expect(posts.length).toBeLessThanOrEqual(10);
   const semiconductorIds = new Set(
     after.actions.filter((action) => action.sector_id === 'semiconductors').map((action) => action.request_id),

@@ -8,7 +8,7 @@
 |---|---|
 | run_id | local-isolated-20260907 |
 | base_sha | `55419c8e0f5822457f140761de98c4aa90e10c6a` |
-| tested_sha | `39f96ce2ad6bf133b28ff5cdccaf2824aaa4b14b`（本工作区最后一次选股 Playwright / 构建同步后的 HEAD） |
+| tested_sha | 以推送后的 PR #148 HEAD 为准；本轮本地已包含 A07/A08/C06 浏览器与 795 前端单测 |
 | pr_head_sha | 以 GitHub PR #148 为准；撰写时与 `tested_sha` 相同 |
 | CI merge SHA | 无；完整容器阶段等 GitHub Actions |
 | UTC | 2026-09-07（隔离 Cloud Agent 环境） |
@@ -18,7 +18,7 @@
 | 是否接触生产服务或密钥 | 否 |
 | 真实供应商只读实测 | 未进行 |
 | 真实手机 | 未进行；浏览器为视口模拟 |
-| 前端入口摘要 | `frontend/index.html` sha256 `deeb94f126a1cf6484042e70a77a5bca922dbdee74c3c677e5c30acd0bd340c8` |
+| 前端入口摘要 | `frontend/index.html` sha256 `15861ace5c6f72dc0f2519b82eadc02ec46c910e4b3b7800e2a42018c05027fc` |
 
 解释器与 CI 钉版本不完全一致。若最终 GitHub CI 与本地数字冲突，以 CI 日志为准。提交后又改源码则旧日志不能冒充新 SHA。
 
@@ -40,10 +40,10 @@
 |---|---|---|---|
 | Python 全量 | `PYTHONPATH=backend python -m pytest -q` | 0 | **3289 passed, 6 skipped**（含 C03） |
 | Python 编译 | `python -m compileall -q backend/app` | 0 | 通过 |
-| 前端行为测试 | `node --experimental-strip-types --test frontend-src/tests/*.test.mjs` | 0 | **792 passed** |
+| 前端行为测试 | `node --experimental-strip-types --test frontend-src/tests/*.test.mjs` | 0 | **795 passed** |
 | 静态断言 | `node frontend-src/tests/static_assertions.mjs` | 0 | 通过（`frontend/` 与 live dist 一致） |
 | 代码规范 | `npm --prefix frontend-src run lint` | 0 | 0 error；2 个既有 warning（`FeedPanel.tsx`） |
-| 选股 Playwright | `npm --prefix frontend-src run test:screener` | 0 | **14 + 1 passed**（F01 12 组合；F02 1440/390；C01） |
+| 选股 Playwright | `npm --prefix frontend-src run test:screener` | 0 | **18 + 1 passed**（A07/A08/C06 + F01 12 组合；F02 1440/390；C01） |
 | 既有 review | `npm --prefix frontend-src run test:review` | 0 | 72 + 10 passed |
 | 既有 quotes | `npm --prefix frontend-src run test:quotes` | 0 | **21 passed** |
 | 既有 audit | `npm --prefix frontend-src run test:audit` | 0 | **6 passed** |
@@ -65,8 +65,8 @@
 | A04 | 前端 visitors never submit；`test_a04_*` | PASS |
 | A05 | A05 单元 + market-read 身份世代 | PASS（逻辑） |
 | A06 | `test_manual_action_reports_active_and_cooldown_states` | PASS（既有 API） |
-| A07 | `shouldCommitScanGeneration` / `shouldLockScanTrigger` + Playwright 半导体→软件 | 逻辑 PASS；浏览器待本轮 `test:screener` |
-| A08 | 生产 API 10 次 POST 合流 + Playwright 10 次点击 / 双标签 | API PASS；浏览器待本轮 `test:screener` |
+| A07 | `shouldCommitScanGeneration` / `shouldLockScanTrigger` + Playwright 半导体→软件 | PASS |
+| A08 | 生产 API 10 次 POST 合流 + Playwright 10 次点击 / 双标签 | PASS |
 | A09 | A09 sessionStorage 恢复 | PASS |
 | B01 | `test_b01_*` | PASS |
 | B02 | `test_b02_*`；E01 `universe_count` | PASS |
@@ -84,7 +84,7 @@
 | C03 | `test_c03_etag_304_does_not_invent_a_new_data_date` | PASS |
 | C04 | `manual path invalidation keeps the shared provider backoff` | PASS |
 | C05 | `shouldDiscoverPublishedScan` 单元；Screener 45s + visibility | PASS（逻辑）；浏览器隐藏计数未做 |
-| C06 | 失败/非法时钟不发明扫描时间；Playwright 断网后恢复 | 时钟 PASS；浏览器待本轮 `test:screener` |
+| C06 | 失败/非法时钟不发明扫描时间；Playwright 断网后恢复 | PASS |
 | D01–D05 | `live-quotes-behavior.test.mjs` | PASS（单元） |
 | D06 | 评分日期与报价标签独立 | PASS |
 | D07 | F02 390 卡片「扫描价 2026-09-04」 | PASS（视口模拟） |
@@ -112,6 +112,6 @@
 
 - 本地 Python/Node 微版本低于 CI 钉版本。
 - 本环境无 Docker：`test:visual` 与 compose 镜像/WAL/离线 smoke 未跑，记 BLOCKED。
-- A07/A08 浏览器竞态计数、C06 断网、部分 E02–E06 未做完整浏览器证明。
+- A07/A08/C06 浏览器已在隔离 live API 上通过；完整容器/`test:visual` 仍等 GitHub CI。
 - 未进行外部供应商实测，不能写成「线上行情源已验证」。
 - 浏览器为视口模拟，不是真机。
