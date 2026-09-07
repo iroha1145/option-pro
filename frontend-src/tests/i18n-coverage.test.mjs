@@ -293,6 +293,13 @@ test('watchlist and smart-drawing copy stays natural in EN/JA', () => {
   assert.equal(legend?.en, 'Dark: main boundary; thin: reference; dashed: extension; faint dotted: historical structure');
   const formerUp = merged.get('原{label} · 突破已确认');
   assert.equal(formerUp?.ja, '元の{label} · 上抜け確認');
+  // 个股关键数据的最高/最低不能复用选股筛选的「上限/下限」
+  const high = merged.get('最高价');
+  assert.equal(high?.en, 'High');
+  assert.equal(high?.ja, '高値');
+  const low = merged.get('最低价');
+  assert.equal(low?.en, 'Low');
+  assert.equal(low?.ja, '安値');
 });
 
 test('LanguageSwitcher is wired into the navbar', async () => {

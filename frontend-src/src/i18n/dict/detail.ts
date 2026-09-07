@@ -47,6 +47,8 @@ export const DETAIL: Dict = {
   /* src/components/detail/KeyStats.tsx */
   '今开': ['Open', '始値'],
   '昨收': ['Prev Close', '前日終値'],
+  '最高价': ['High', '高値'],
+  '最低价': ['Low', '安値'],
   '均量': ['Avg Vol', '平均出来高'],
   '市盈率': ['P/E', 'PER'],
   'IV 百分位': ['IV Percentile', 'IV パーセンタイル'],
