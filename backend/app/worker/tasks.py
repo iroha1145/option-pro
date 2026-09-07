@@ -11,6 +11,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
+from app.access import bind_trusted_system_task
 from app.data_paths import get_data_paths
 from app.execution_limits import BREAKOUT_TASK_TIMEOUT_SECONDS
 from app.personal_config import get_personal_config
@@ -177,6 +178,7 @@ class AIJobsTask:
         self._settings = settings
         self._repository: Any = None
 
+    @bind_trusted_system_task
     async def __call__(self) -> TaskResult:
         if self._repository is None:
             from app.services.ai_jobs.repository import AIJobRepository
@@ -601,12 +603,14 @@ class EarningsAnalysisTask:
             )
         return TaskResult(status="idle", details=details)
 
+    @bind_trusted_system_task
     async def run_for_actions(
         self,
         _actions: list[dict[str, Any]],
     ) -> TaskResult:
         return await self._run(manual=True)
 
+    @bind_trusted_system_task
     async def __call__(self) -> TaskResult:
         return await self._run(manual=False)
 
@@ -905,6 +909,7 @@ class CatalystSyncTask:
             return TaskResult(status="disabled", next_delay_seconds=30.0)
         return await self._run_personal()
 
+    @bind_trusted_system_task
     async def __call__(self) -> TaskResult:
         try:
             return await self._run_once()
@@ -1032,6 +1037,7 @@ class FocusTask:
             next_delay_seconds=delay,
         )
 
+    @bind_trusted_system_task
     async def __call__(self) -> TaskResult:
         if self._initial_sync_complete is not None:
             await self._initial_sync_complete.wait()
@@ -1062,6 +1068,7 @@ class FocusRefreshTask:
         self._snapshot_path = snapshot_path
         self._clock = clock
 
+    @bind_trusted_system_task
     async def __call__(self) -> TaskResult:
         from app.api import stocks
 
@@ -1095,6 +1102,7 @@ class FocusRefreshTask:
 class StockDirectoryTask:
     """Warm and persist the complete Massive U.S. stock directory."""
 
+    @bind_trusted_system_task
     async def __call__(self) -> TaskResult:
         from app.api import stocks
 
@@ -1641,6 +1649,7 @@ class PublicHomeTask:
             next_delay_seconds=float(self._config.poll_seconds),
         )
 
+    @bind_trusted_system_task
     async def run_for_actions(self, actions: list[dict[str, Any]]) -> TaskResult:
         """Owner 手动财报刷新（审计 P2-04）：动作路径立即重建并发布 earnings。
 
@@ -1691,6 +1700,7 @@ class PublicHomeTask:
             next_delay_seconds=2.0,
         )
 
+    @bind_trusted_system_task
     async def __call__(self) -> TaskResult:
         from app.public_home_snapshot import (
             PUBLIC_HOME_OPTIONAL_RESOURCE_ORDER,
@@ -2022,6 +2032,7 @@ class StrengthRefreshTask:
             },
         )
 
+    @bind_trusted_system_task
     async def run_for_actions(self, actions: list[dict[str, Any]]) -> TaskResult:
         from app.api.strength import (
             DEFAULT_STRENGTH_SCAN_PARAMETERS,
@@ -2053,6 +2064,7 @@ class StrengthRefreshTask:
             error_code=result.error_code,
         )
 
+    @bind_trusted_system_task
     async def __call__(self) -> TaskResult:
         from app.api.strength import DEFAULT_STRENGTH_SCAN_PARAMETERS
 
@@ -2089,6 +2101,7 @@ class BreakoutTask:
             return float(self._settings.scan_interval_regular_seconds)
         return float(self._settings.scan_interval_closed_seconds)
 
+    @bind_trusted_system_task
     async def __call__(self) -> TaskResult:
         if not await self._prepare():
             return TaskResult(status="disabled", next_delay_seconds=30.0)
@@ -2298,9 +2311,11 @@ class MacroConditionsTask:
             next_delay_seconds=self._next_delay(),
         )
 
+    @bind_trusted_system_task
     async def __call__(self) -> TaskResult:
         return await self._run("scheduled")
 
+    @bind_trusted_system_task
     async def run_for_actions(self, actions: Sequence[Mapping[str, Any]]) -> TaskResult:
         """Owner-requested refresh. Shares this task and its exclusion lock."""
 
@@ -2319,6 +2334,7 @@ class MaintenanceTask:
         self.destination = destination
         self.keep = keep
 
+    @bind_trusted_system_task
     async def __call__(self) -> TaskResult:
         from app.tools.sqlite_backup import BackupError, backup_database
 
@@ -2374,6 +2390,7 @@ class RetentionTask:
         self._repository_factory = repository_factory
         self._now = now or (lambda: datetime.now(timezone.utc))
 
+    @bind_trusted_system_task
     async def __call__(self) -> TaskResult:
         backup_result = await self.backup()
         if not isinstance(backup_result, TaskResult):

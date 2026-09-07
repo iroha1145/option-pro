@@ -13,8 +13,8 @@ import time
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
-from functools import lru_cache
-from typing import AsyncIterator, Callable, Iterator, Literal
+from functools import lru_cache, wraps
+from typing import Any, AsyncIterator, Awaitable, Callable, Iterator, Literal, TypeVar
 from urllib.parse import urlsplit
 
 from fastapi import HTTPException, Request, status
@@ -73,6 +73,22 @@ def current_request_is_owner() -> bool:
 
     owner_access = _REQUEST_OWNER_ACCESS.get()
     return False if owner_access is None else owner_access
+
+
+_T = TypeVar("_T")
+
+
+def bind_trusted_system_task(
+    func: Callable[..., Awaitable[_T]],
+) -> Callable[..., Awaitable[_T]]:
+    """Bind owner access around one verified worker or CLI task entry."""
+
+    @wraps(func)
+    async def wrapper(*args: Any, **kwargs: Any) -> _T:
+        with request_owner_access_context(True):
+            return await func(*args, **kwargs)
+
+    return wrapper
 
 
 def public_snapshot_unavailable(resource: str) -> HTTPException:

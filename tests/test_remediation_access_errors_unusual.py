@@ -1,20 +1,29 @@
 from __future__ import annotations
 
 import asyncio
+import sqlite3
 import threading
 from datetime import datetime, timezone
+from pathlib import Path
 from types import SimpleNamespace
 
+import httpx
 import pandas as pd
 import pytest
 from fastapi import HTTPException
+from pydantic import SecretStr
 
-from app.access import current_request_is_owner, request_owner_access_context
+from app.access import (
+    bind_trusted_system_task,
+    current_request_is_owner,
+    request_owner_access_context,
+)
 from app.api import options
 from app.services import yahoo
 from app.worker.lock import ProcessFileLock
 from app.worker.runtime import TaskResult, TaskSpec, WorkerSupervisor
 from app.worker.state import WorkerStateRepository
+from app.worker.tasks import CatalystSyncTask
 from tests.http_response_support import anonymous_get_request as _areq
 
 
@@ -364,3 +373,96 @@ def test_ac04_worker_task_gets_explicit_owner_context(tmp_path) -> None:
     asyncio.run(supervisor.run_once())
     assert seen == [True]
     assert current_request_is_owner() is False
+
+
+def test_ac04_trusted_entry_restores_missing_context() -> None:
+    @bind_trusted_system_task
+    async def entry() -> str:
+        assert current_request_is_owner() is True
+        raise RuntimeError("trusted-entry-boom")
+
+    assert current_request_is_owner() is False
+    with pytest.raises(RuntimeError, match="trusted-entry-boom"):
+        asyncio.run(entry())
+    assert current_request_is_owner() is False
+
+
+def _empty_etl_page(path: str) -> dict:
+    as_of = "2026-07-16T00:00:00Z"
+    payload = {
+        "items": [],
+        "has_more": False,
+        "next_cursor": None,
+        "next_updated_after": as_of,
+        "next_after_sequence": 0,
+        "watermark": {"sequence": 0, "as_of": as_of},
+    }
+    if path.endswith("/calendar"):
+        payload["watermark"]["snapshot_token"] = None
+        payload["data_through"] = None
+        payload["is_stale"] = False
+    return payload
+
+
+def test_ac04_direct_catalyst_cli_entry_writes_without_outer_owner(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_empty_etl_page(request.url.path))
+
+    cache_path = tmp_path / "catalyst-cache.db"
+    ai_path = tmp_path / "ai-jobs.db"
+    seen_owner: list[bool] = []
+    monkeypatch.setenv("INTERNAL_API_TOKEN", "owner-token")
+    monkeypatch.setenv("MACROLENS_URL", "https://macrolens.fixture")
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+
+    from app.services.catalysts.local_intelligence import LocalCatalystIntelligence
+
+    original_initialize = LocalCatalystIntelligence.initialize
+
+    def _record_owner(self: LocalCatalystIntelligence) -> None:
+        seen_owner.append(current_request_is_owner())
+        return original_initialize(self)
+
+    monkeypatch.setattr(LocalCatalystIntelligence, "initialize", _record_owner)
+    task = CatalystSyncTask(
+        "container-catalyst-smoke",
+        settings=SimpleNamespace(
+            internal_api_token=SecretStr("owner-token"),
+            macrolens_url="https://macrolens.fixture",
+            macrolens_ca_bundle="",
+            macrolens_cache_db_path=cache_path,
+            openai_job_db_path=ai_path,
+            personal_etl_enabled=True,
+        ),
+        personal_config=SimpleNamespace(
+            catalyst=SimpleNamespace(sync_seconds=37),
+            features=SimpleNamespace(catalyst_mode="read"),
+            ai=SimpleNamespace(model="gpt-5.6-terra", reasoning="max"),
+        ),
+        etl_transport=httpx.MockTransport(handler),
+    )
+    assert current_request_is_owner() is False
+
+    async def run() -> TaskResult:
+        try:
+            return await task()
+        finally:
+            await task.aclose()
+
+    result = asyncio.run(run())
+    assert current_request_is_owner() is False
+    assert result.status == "idle"
+    assert seen_owner
+    assert all(seen_owner)
+    with sqlite3.connect(cache_path) as connection:
+        tables = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+    assert "catalyst_local_schema" in tables
+    assert "macrolens_etl_state" in tables
