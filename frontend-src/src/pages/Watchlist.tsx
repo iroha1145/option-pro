@@ -6,7 +6,7 @@ import { LivePrice, LiveChange } from '@/components/shared/LiveQuote';
  * 轮询 60s · 空态 / 骨架 / 503 · 响应式
  */
 import SoftBadge from '@/components/shared/SoftBadge';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { motion } from 'framer-motion';
 import { stocksApi } from '@/api/modules/stocks';
@@ -368,11 +368,14 @@ export default function Watchlist() {
   const closeManager = useCallback(() => setManagerKey(null), []);
   useEffect(() => setManagerKey(null), [personal.key]);
   const selectedTickers = useMemo(() => canManageWatchlist ? myTickers ?? [] : DEFAULT_WATCHLIST_TICKERS, [canManageWatchlist, myTickers]);
+  const selectedTickersRef = useRef(selectedTickers);
+  selectedTickersRef.current = selectedTickers;
   const selectionKey = selectedTickers.join(',');
   const fetchWatchlist = useCallback(() => {
     if (personal.loading || personal.error) return Promise.resolve([]);
-    return canManageWatchlist ? stocksApi.watchlistFor(myTickers ?? []) : stocksApi.watchlist();
-  }, [canManageWatchlist, myTickers, personal.loading, personal.error]);
+    const tickers = selectedTickersRef.current;
+    return canManageWatchlist ? stocksApi.watchlistFor(tickers) : stocksApi.watchlist();
+  }, [canManageWatchlist, personal.loading, personal.error]);
   const wl = usePolling(fetchWatchlist, 60_000, [personal.key, selectionKey, personal.loading, personal.error]);
   const refreshWatchlist = wl.refresh;
   const items = useMemo(() => {
@@ -390,7 +393,8 @@ export default function Watchlist() {
     }
   }, [editPersonal, maxTickers, toast]);
   const savePersonal = useCallback(async (add: string[], remove: string[]) => {
-    await editPersonal(add, remove);
+    const next = await editPersonal(add, remove);
+    selectedTickersRef.current = next.tickers;
     refreshWatchlist({ force: true });
     toast.success(t('自选已保存'));
   }, [editPersonal, refreshWatchlist, toast]);

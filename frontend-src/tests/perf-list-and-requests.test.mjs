@@ -64,6 +64,7 @@ test('自选页在完整列表上排序与统计，只对渲染切片分批', as
   assert.match(page, /加载更多/);
   assert.match(page, /\{t\('还有 \{n\} 只', \{ n: progressive\.remaining \}\)\}/);
   assert.match(page, /const displayedCount = canManageWatchlist/, '访客行情未到时不能把默认池计数写成 0');
+  assert.match(page, /selectedTickersRef\.current = next\.tickers/, '保存后强制刷新必须先写入最新名单，否则会把空行情写进页面');
 });
 
 test('mock quote pool includes every default watchlist ticker', async () => {
