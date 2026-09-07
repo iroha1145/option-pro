@@ -92,7 +92,7 @@ test('日历文案按 locale 分枝，中英日都有界面词', () => {
   assert.equal(calendarCopy('ja').holiday, '休場');
 });
 
-test('同 key 并发读取合并，重挂不重复打网', async () => {
+async function loadResourceCache() {
   const source = await readFile(path.join(here, '../src/components/catalysts/resourceCache.ts'), 'utf8');
   const compiled = ts.transpileModule(source, {
     compilerOptions: {
@@ -104,7 +104,11 @@ test('同 key 并发读取合并，重挂不重复打网', async () => {
   const module = { exports: {} };
   const fn = new Function('exports', 'module', 'require', compiled);
   fn(module.exports, module, require);
-  const { ResourceCache } = module.exports;
+  return module.exports.ResourceCache;
+}
+
+test('同 key 并发读取合并，重挂不重复打网', async () => {
+  const ResourceCache = await loadResourceCache();
   let now = 100;
   let calls = 0;
   const cache = new ResourceCache(undefined, () => now);
@@ -121,4 +125,67 @@ test('同 key 并发读取合并，重挂不重复打网', async () => {
   assert.equal(calls, 1);
   assert.equal(cache.snapshot('a', policy), old);
   assert.equal(old.validatedAt, 100);
+});
+
+for (const [label, retryAfter, delay] of [
+  ['服务器指定的重试期限', 120, 120_000],
+  ['请求失败后的退避期限', undefined, 15_000],
+]) {
+  test(`后台失效通知保留${label}，到期后恢复读取`, async () => {
+    const ResourceCache = await loadResourceCache();
+    let now = 1000;
+    let calls = 0;
+    let recovered = false;
+    const old = { version: 1 };
+    const fresh = { version: 2 };
+    const cache = new ResourceCache(undefined, () => now);
+    const policy = { freshMs: 1000, retainMs: 300_000 };
+    const unsubscribe = cache.subscribe('feed', policy, () => {});
+    const load = async () => {
+      calls += 1;
+      if (calls === 1) return old;
+      if (recovered) return fresh;
+      const error = new Error('temporarily unavailable');
+      error.retryAfter = retryAfter;
+      throw error;
+    };
+    await cache.ensure('feed', policy, load);
+    now = 2000;
+    await cache.ensure('feed', policy, load);
+    assert.equal(calls, 2);
+    now += delay - 1;
+    cache.invalidate();
+    cache.tick();
+    await cache.ensure('feed', policy, load);
+    assert.equal(calls, 2, '后台通知不得提前重试');
+    assert.equal(cache.snapshot('feed', policy).data, old, '等待期间保留上次数据');
+    recovered = true;
+    now += 1;
+    cache.tick();
+    await cache.ensure('feed', policy, load);
+    assert.equal(calls, 3);
+    assert.equal(cache.snapshot('feed', policy).data, fresh);
+    assert.equal(cache.snapshot('feed', policy).error, null);
+    unsubscribe();
+  });
+}
+
+test('保留重试期限后，失效前的旧响应仍不能覆盖新数据', async () => {
+  const ResourceCache = await loadResourceCache();
+  let calls = 0;
+  let resolveOld;
+  const oldResponse = new Promise((resolve) => { resolveOld = resolve; });
+  const fresh = { version: 2 };
+  const cache = new ResourceCache();
+  const policy = { freshMs: 1000, retainMs: 10_000 };
+  const load = async () => (++calls === 1 ? oldResponse : fresh);
+  const first = cache.ensure('feed', policy, load);
+  await Promise.resolve();
+  assert.equal(calls, 1);
+  cache.invalidate();
+  await cache.ensure('feed', policy, load);
+  resolveOld({ version: 1 });
+  await first;
+  assert.equal(cache.snapshot('feed', policy).data, fresh);
+  assert.equal(cache.snapshot('feed', policy).refreshing, false);
 });

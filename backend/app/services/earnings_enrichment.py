@@ -491,7 +491,7 @@ def _contract_mark(contract: Mapping[str, Any]) -> float | None:
 def compute_straddle_move(
     snapshot: Mapping[str, Any],
     *,
-    today: date | None = None,
+    now: datetime | None = None,
 ) -> dict[str, Any] | None:
     """从一份真实链快照算 ATM call+put 直跨式涨跌幅（%）。"""
 
@@ -511,7 +511,7 @@ def compute_straddle_move(
             # Providers with per-contract times explicitly include the field,
             # even when absent, so a missing time cannot inherit the chain's.
             observed_at = _contract_observed_at(row)
-            if today is not None and not _quote_is_fresh(observed_at, today):
+            if now is not None and not _quote_is_fresh(observed_at, now):
                 continue
             if strike is not None and mark is not None:
                 out[strike] = (mark, observed_at)
@@ -531,7 +531,7 @@ def compute_straddle_move(
         "strike": strike,
         "underlying_price": underlying,
     }
-    if today is not None:
+    if now is not None:
         result["observed_at"] = min(
             (calls[strike][1], puts[strike][1]),
             key=_quote_datetime,
@@ -559,11 +559,12 @@ def _quote_datetime(observed_at: Any) -> datetime | None:
     return observed
 
 
-def _quote_is_fresh(observed_at: Any, today: date) -> bool:
+def _quote_is_fresh(observed_at: Any, now: datetime) -> bool:
     observed = _quote_datetime(observed_at)
     if observed is None:
         return False
-    reference = datetime.combine(today, datetime.min.time(), tzinfo=timezone.utc)
+    # Freshness is elapsed time, not an offset from the calendar day's midnight.
+    reference = now if now.tzinfo is not None else now.replace(tzinfo=timezone.utc)
     age = reference - observed
     # Small clock skew is allowed; far-future stamps are not "very fresh".
     if age < timedelta(0):
@@ -640,9 +641,10 @@ def _massive_expected_move(
     observed_at = snapshot.get("as_of")
     if not isinstance(observed_at, str) or not observed_at:
         return _failure("no_quote_time")
-    if not _quote_is_fresh(observed_at, today):
+    now = datetime.now(timezone.utc)
+    if not _quote_is_fresh(observed_at, now):
         return _failure("stale_quote")
-    move = compute_straddle_move(snapshot, today=today)
+    move = compute_straddle_move(snapshot, now=now)
     if move is None:
         return _failure("no_usable_straddle")
     return _success(
@@ -740,11 +742,12 @@ def _marketdata_expected_move(
     )
     if observed_at is None:
         return _failure("no_quote_time")
-    if not _quote_is_fresh(observed_at, today):
+    now = datetime.now(timezone.utc)
+    if not _quote_is_fresh(observed_at, now):
         return _failure("stale_quote")
     move = compute_straddle_move(
         {"underlying_price": underlying, "calls": calls, "puts": puts},
-        today=today,
+        now=now,
     )
     if move is None:
         return _failure("no_usable_straddle")

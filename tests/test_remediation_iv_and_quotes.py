@@ -360,13 +360,13 @@ def test_tm01_unrelated_fresh_strike_does_not_validate_stale_atm() -> None:
                 },
             ],
         },
-        today=datetime(2026, 9, 4).date(),
+        now=datetime(2026, 9, 4, tzinfo=timezone.utc),
     )
     assert move is None
 
 
 def test_tm02_missing_none_and_invalid_quote_times_do_not_gain_trust() -> None:
-    today = datetime(2026, 9, 4).date()
+    now = datetime(2026, 9, 4, tzinfo=timezone.utc)
     base = {
         "underlying_price": 100,
         "as_of": "2026-09-03T20:00:00+00:00",
@@ -375,7 +375,7 @@ def test_tm02_missing_none_and_invalid_quote_times_do_not_gain_trust() -> None:
     assert (
         enrich.compute_straddle_move(
             {**base, "calls": [{"strike": 100, "bid": 3.8, "ask": 4.2}]},
-            today=today,
+            now=now,
         )
         is None
     )
@@ -385,7 +385,7 @@ def test_tm02_missing_none_and_invalid_quote_times_do_not_gain_trust() -> None:
                 **base,
                 "calls": [{"strike": 100, "bid": 3.8, "ask": 4.2, "quote_as_of": None}],
             },
-            today=today,
+            now=now,
         )
         is None
     )
@@ -395,7 +395,7 @@ def test_tm02_missing_none_and_invalid_quote_times_do_not_gain_trust() -> None:
                 **base,
                 "calls": [{"strike": 100, "bid": 3.8, "ask": 4.2, "quote_as_of": "not-a-time"}],
             },
-            today=today,
+            now=now,
         )
         is None
     )
@@ -427,5 +427,6 @@ def test_tm03_yahoo_fetch_time_is_not_verified_quote_time(
 
 
 def test_tm07_far_future_timestamp_is_not_fresh() -> None:
-    assert enrich._quote_is_fresh("2099-01-01T00:00:00+00:00", datetime(2026, 9, 4).date()) is False
-    assert enrich._quote_is_fresh("2026-09-03T20:00:00+00:00", datetime(2026, 9, 4).date()) is True
+    now = datetime(2026, 9, 4, tzinfo=timezone.utc)
+    assert enrich._quote_is_fresh("2099-01-01T00:00:00+00:00", now) is False
+    assert enrich._quote_is_fresh("2026-09-03T20:00:00+00:00", now) is True

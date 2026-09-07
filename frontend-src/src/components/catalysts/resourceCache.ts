@@ -190,7 +190,7 @@ export class ResourceCache {
       entry.generation += 1;
       entry.pending = null;
       entry.stale = true;
-      entry.retryAt = 0;
+      // Background hints must not cancel a server or failure-backoff deadline.
       if (entry.snapshot.refreshing) this.publish(entry, { ...entry.snapshot, refreshing: false });
     }
   }
