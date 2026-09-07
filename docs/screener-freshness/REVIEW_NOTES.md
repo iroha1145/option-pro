@@ -39,6 +39,7 @@ C01 必须使用**未注册** `page.route` / `context.route` 的上下文。用�
 ## 未完成 / 需在最终 SHA 上重跑
 
 - F05：本环境无 Docker。完整镜像、离线 smoke、WAL、`test:visual` 依赖 GitHub Actions `CI / test`。
+- GitHub CI `21a86f03` 在 `test:screener` 因隔离 API 写死 `.venv` 路径失败；其后步骤（compose/镜像）被跳过。已改为 CI 上的 `python3` 回退。
 - C06 / A07 / A08 浏览器用例已加入 `screener-freshness.spec.mjs`；最终 SHA 上的 `test:screener` 日志为准。
 - 未做外部供应商实测；视口模拟不是真机。
 
