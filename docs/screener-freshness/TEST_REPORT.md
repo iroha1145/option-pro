@@ -8,8 +8,8 @@
 |---|---|
 | run_id | local-isolated-20260907 |
 | base_sha | `55419c8e0f5822457f140761de98c4aa90e10c6a` |
-| tested_sha | 以推送后的 PR #148 HEAD 为准；本轮本地已包含 A07/A08/C06 浏览器与 795 前端单测 |
-| pr_head_sha | 以 GitHub PR #148 为准；撰写时与 `tested_sha` 相同 |
+| tested_sha | `13493c7a77675148afa50bbe2c39d36a93820b6e` |
+| pr_head_sha | 推送后应与 `13493c7a77675148afa50bbe2c39d36a93820b6e` 对齐 |
 | CI merge SHA | 无；完整容器阶段等 GitHub Actions |
 | UTC | 2026-09-07（隔离 Cloud Agent 环境） |
 | 系统 | Linux x86_64，Ubuntu 24.04 系 |
