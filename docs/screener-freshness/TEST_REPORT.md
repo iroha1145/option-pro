@@ -47,7 +47,7 @@
 | 既有 review | `npm --prefix frontend-src run test:review` | 0 | 72 + 10 passed |
 | 既有 quotes | `npm --prefix frontend-src run test:quotes` | 0 | **21 passed** |
 | 既有 audit | `npm --prefix frontend-src run test:audit` | 0 | **6 passed** |
-| 既有 visual | `npm --prefix frontend-src run test:visual` | — | NOT_RUN（需要 compose :2000；本环境无 Docker） |
+| 既有 visual | `npm --prefix frontend-src run test:visual` | 1 | CI `bc8c5eda` 误收集隔离选股用例失败（79 passed / 4 failed）；已从 visual 套件排除，待下一轮 CI |
 | 生产构建与产物 | `VITE_API_MODE=live npm run build --prefix frontend-src` 后 `diff -r` | 0 | 已同步 |
 | 锁文件源哈希 | CI 第 6 节两条 `grep -qx` | 0 | runtime / ci 锁匹配 |
 | pip_audit | `pip_audit --require-hashes --disable-pip -r backend/requirements.txt` | 0 | No known vulnerabilities |
