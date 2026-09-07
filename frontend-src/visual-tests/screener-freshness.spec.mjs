@@ -44,7 +44,7 @@ test('F02 mobile 390 shows scan date on cards after refresh', async ({ page }) =
   await expect(scanPrice).toBeVisible();
   await expect(page.getByText(/上次扫描/).filter({ visible: true }).first()).toBeVisible();
   await scanPrice.scrollIntoViewIfNeeded();
-  await page.locator('[data-quote-symbol="NVDA"]').first().screenshot({
+  await page.locator('[data-quote-symbol="NVDA"]').filter({ visible: true }).first().screenshot({
     path: `${evidence}/mobile-390-nvda-card.png`,
     animations: 'disabled',
   });
