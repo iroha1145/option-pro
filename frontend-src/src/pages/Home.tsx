@@ -651,13 +651,10 @@ function MarketStatusPanel({
         <MiniStat label={t('平盘')} value={breadth.flat} tone="flat" />
       </div>
 
-      {/* 辅助指标按需展开；缺失读数仍遵守原有数据纪律，不补零。 */}
+      {/* 辅助读数直接展示，不收进折叠。缺失读数仍遵守原有数据纪律，不补零。 */}
       {(strength?.aggregateAvailable === true || (signalMetrics && signalMetrics.length > 0)) && (
-        <details className="group/readings mt-4 border-t border-line/70 pt-3" data-testid="home-supporting-metrics">
-          <summary className="disclosure-trigger flex cursor-pointer list-none items-center justify-between gap-2 rounded-md py-1 text-caption font-medium text-ink-600 outline-none hover:text-ink-800 focus-visible:ring-2 focus-visible:ring-brand-400/40 [&::-webkit-details-marker]:hidden">
-            <span>{t('辅助读数')}</span>
-            <Icon name="chevron-down" size={13} className="text-ink-400 transition-transform group-open/readings:rotate-180" />
-          </summary>
+        <div className="mt-4 border-t border-line/70 pt-3" data-testid="home-supporting-metrics">
+          <p className="text-caption font-medium text-ink-600">{t('辅助读数')}</p>
           <div className="mt-2 rounded-lg bg-paper-2/60 p-3">
             {strength?.aggregateAvailable === true && (
               <p className="text-caption text-ink-600">
@@ -677,7 +674,7 @@ function MarketStatusPanel({
               </div>
             )}
           </div>
-        </details>
+        </div>
       )}
       {auxError && (
         <StaleStrip
