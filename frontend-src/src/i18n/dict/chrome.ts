@@ -104,7 +104,7 @@ export const CHROME: Dict = {
   '登录状态已失效，请重新登录': ['Your session has expired. Please sign in again.', 'セッションの有効期限が切れました。もう一度サインインしてください。'],
   '股票目录暂不可用，请稍后重试': ['The ticker directory is unavailable. Please try again shortly.', '銘柄リストを取得できません。しばらくしてから再試行してください。'],
   '股票搜索失败，请稍后重试': ['Ticker search failed. Please try again shortly.', '銘柄検索に失敗しました。しばらくしてから再試行してください。'],
-  '前往{label}页': ['Go to {label}', '{label}へ移動'],
+  '前往{label}': ['Go to {label}', '{label}へ移動'],
 
   /* 页脚 / 数据来源声明 */
   '行情为延迟数据 · 仅供研究参考，不构成投资建议': [

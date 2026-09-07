@@ -43,6 +43,15 @@ const PRESET_ORDER: Exclude<PresetId, 'custom'>[] = [
 
 const FOCUS_RING = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30';
 
+const FAMILY_LABELS = {
+  short: t('短线'),
+  mid: t('中线'),
+  long: t('长线'),
+  trend: t('趋势'),
+  breakout: t('突破'),
+  price_action: t('价格行为'),
+} as const;
+
 
 /**
  * 读数徽章（02-number-pop-in）：值变了才 pop，首帧不动——弹窗开场已有
@@ -408,9 +417,9 @@ export default function LayerMenu({
               <Card title={t('选股上下文')} className="mt-3">
                 <p className="mb-2 px-1.5 text-ink-400">{t('几何质量不是胜率')}</p>
                 <dl className="grid grid-cols-2 gap-x-4 gap-y-1 px-1.5">
-                  {['short', 'mid', 'long', 'trend', 'breakout', 'price_action'].map((name) => (
+                  {(['short', 'mid', 'long', 'trend', 'breakout', 'price_action'] as const).map((name) => (
                     <div key={name} className="flex items-center justify-between gap-2">
-                      <dt className="truncate text-ink-500">{name}</dt>
+                      <dt className="truncate text-ink-500">{FAMILY_LABELS[name]}</dt>
                       <dd className="font-mono text-ink-700 tnum">
                         {families[name]?.score == null ? '—' : families[name]?.score}
                       </dd>
