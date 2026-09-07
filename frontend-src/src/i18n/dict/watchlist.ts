@@ -20,6 +20,8 @@ export const WATCHLIST: Dict = {
   "正在保存…": ["Saving…", "保存中…"],
   "保存自选": ["Save watchlist", "自選を保存"],
   "代码格式不正确：{tickers}": ["Invalid ticker format: {tickers}", "コードの形式が正しくありません：{tickers}"],
+  "股票代码格式不正确": ["Invalid ticker format.", "銘柄コードの形式が正しくありません。"],
+  "请求无法完成": ["The request could not be completed.", "リクエストを完了できませんでした。"],
   "最多保存 {count} 只股票，请先移除一些代码": ["Up to {count} stocks. Remove some tickers first.", "上限は {count} 銘柄です。先に一部のコードを削除してください。"],
   "自选列表返回异常，请重试": ["Invalid watchlist response. Please retry.", "自選データの応答が正しくありません。再試行してください。"],
   "自选修改尚未确认，请重试": ["Watchlist changes could not be confirmed. Please retry.", "自選の変更を確認できませんでした。再試行してください。"],

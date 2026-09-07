@@ -7,7 +7,8 @@ const root = fileURLToPath(new URL('..', import.meta.url));
 const bundle = await build({
   stdin: { contents: `
     export * from './src/lib/personalWatchlist.ts';
-    export { accountApi } from './src/api/modules/account.ts';
+    export { accountApi, watchlistErrorMessage } from './src/api/modules/account.ts';
+    export { ApiError } from './src/api/client.ts';
     export { mapWatchlist, stocksApi } from './src/api/modules/stocks.ts';
   `, resolveDir: root },
   bundle: true, write: false, platform: 'node', format: 'esm',
@@ -44,6 +45,22 @@ test('reading an empty watchlist makes no market request and equivalent combinat
     await Promise.all([api.stocksApi.watchlistFor(['MSFT', 'AAPL']), api.stocksApi.watchlistFor(['AAPL', 'MSFT'])]);
     assert.deepEqual(paths, ['/api/stocks/watchlist?tickers=AAPL%2CMSFT']);
   } finally { globalThis.fetch = original; }
+});
+
+test('watchlist API failures map to locale copy instead of leftover Chinese', () => {
+  assert.equal(
+    api.watchlistErrorMessage(new api.ApiError(409, '自选最多 50 只股票', { bizCode: 'watchlist_full' }), 50),
+    '最多保存 50 只股票，请先移除一些代码',
+  );
+  assert.equal(
+    api.watchlistErrorMessage(new api.ApiError(400, '股票代码格式不正确', { bizCode: 'invalid_ticker' })),
+    '股票代码格式不正确',
+  );
+  assert.equal(
+    api.watchlistErrorMessage(new api.ApiError(400, '请求无法完成', { bizCode: 'invalid_payload' })),
+    '请求无法完成',
+  );
+  assert.equal(api.watchlistErrorMessage(new Error('保存失败，请重试')), '保存失败，请重试');
 });
 
 test('a malformed successful write cannot be mistaken for deleting the entire watchlist', async () => {

@@ -2,6 +2,7 @@ import { Link, useLocation } from 'react-router';
 import { usePersonalWatchlist } from '@/hooks/usePersonalWatchlist';
 import { useAccess } from '@/hooks/useAccess';
 import { useToast } from '@/hooks/useToast';
+import { watchlistErrorMessage } from '@/api/modules/account';
 import { parseWatchlistInput } from '@/lib/personalWatchlist';
 import Icon from '@/components/icons';
 import { t } from '@/i18n/core';
@@ -22,7 +23,7 @@ export default function WatchlistToggle({ ticker }: { ticker: string }) {
       await personal.edit(selected ? [] : [ticker], selected ? [ticker] : []);
       toast.success(selected ? t('已移出自选') : t('已加入自选'), ticker);
     } catch (error) {
-      toast.error(selected ? t('移除失败') : t('加入失败'), error instanceof Error ? error.message : t('请稍后再试'));
+      toast.error(selected ? t('移除失败') : t('加入失败'), watchlistErrorMessage(error, personal.maxTickers));
     }
   };
   return <button className={style} aria-pressed={selected} disabled={personal.loading || personal.busy || !parseWatchlistInput(ticker).tickers.length}

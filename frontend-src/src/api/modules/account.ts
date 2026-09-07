@@ -7,7 +7,29 @@
 import { ApiError, del, get, post, put, request } from '../client';
 import { asRec, pickS } from '../live';
 import { parseWatchlistInput } from '@/lib/personalWatchlist';
-import { t } from '@/i18n/core';
+import { getLocale, t } from '@/i18n/core';
+
+const CJK = /[\u4e00-\u9fff]/;
+
+/** Map watchlist API failures to the current locale. Backend messages are Chinese. */
+export function watchlistErrorMessage(error: unknown, maxTickers = 50): string {
+  if (error instanceof ApiError) {
+    if (error.bizCode === 'watchlist_full') {
+      return t('最多保存 {count} 只股票，请先移除一些代码', { count: maxTickers });
+    }
+    if (error.bizCode === 'invalid_ticker') {
+      return t('股票代码格式不正确');
+    }
+    if (error.bizCode === 'invalid_payload') {
+      return t('请求无法完成');
+    }
+  }
+  if (error instanceof Error && error.message) {
+    if (getLocale() !== 'zh' && CJK.test(error.message)) return t('请稍后再试');
+    return error.message;
+  }
+  return t('请稍后再试');
+}
 
 export interface AccountWatchlist {
   tickers: string[];

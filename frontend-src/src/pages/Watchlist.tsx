@@ -11,6 +11,7 @@ import { Link, useSearchParams } from 'react-router';
 import { motion } from 'framer-motion';
 import { stocksApi } from '@/api/modules/stocks';
 import { usePersonalWatchlist } from '@/hooks/usePersonalWatchlist';
+import { watchlistErrorMessage } from '@/api/modules/account';
 import { DEFAULT_WATCHLIST_TICKERS, personalWatchlistRows } from '@/lib/personalWatchlist';
 import WatchlistManager from '@/components/shared/WatchlistManager';
 import { signalsApi } from '@/api/modules/signals';
@@ -385,9 +386,9 @@ export default function Watchlist() {
       await editPersonal([], [symbol]);
       toast.info(t('已移出自选'), symbol);
     } catch (error) {
-      toast.error(t('移除失败'), error instanceof Error ? error.message : t('请稍后再试'));
+      toast.error(t('移除失败'), watchlistErrorMessage(error, maxTickers));
     }
-  }, [editPersonal, toast]);
+  }, [editPersonal, maxTickers, toast]);
   const savePersonal = useCallback(async (add: string[], remove: string[]) => {
     await editPersonal(add, remove);
     refreshWatchlist({ force: true });
@@ -765,7 +766,7 @@ export default function Watchlist() {
             </div>
             <p className="w-full text-right text-caption text-ink-400 sm:w-auto">
               <span className="font-mono tnum">{items.length}</span>{' '}
-              {showingDefaultPool ? t('只（默认关注池）') : t('只标的')}
+              {showingDefaultPool ? t('只（默认关注池）', { n: items.length }) : t('只标的', { n: items.length })}
               {/* 默认池是站点的池子：拿它的规模对照「上限 50」等于把它冒充成用户自选 */}
               {canManageWatchlist && !showingDefaultPool && (
                 <span className="ml-1 text-ink-300">{t('/ 上限')} {maxTickers}</span>

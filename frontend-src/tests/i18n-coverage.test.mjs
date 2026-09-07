@@ -277,6 +277,24 @@ test('exempt paths (src/mocks/, import-free files) have no untracked untranslate
 });
 
 // ── 语言切换器确实挂在导航上 ─────────────────────────────────────────────
+test('watchlist and smart-drawing copy stays natural in EN/JA', () => {
+  const remaining = merged.get('还有 {n} 只');
+  assert.equal(remaining?.en, '{n} more');
+  assert.equal(remaining?.ja, 'あと {n} 銘柄');
+  const historical = merged.get('{label} · 历史结构');
+  assert.equal(historical?.en, '{label} · historical structure');
+  const reference = merged.get('{label} · 参考');
+  assert.equal(reference?.en, '{label} · reference');
+  const unfilled = merged.get('价格缺口 · 未回补');
+  assert.equal(unfilled?.ja, '価格ギャップ · 未埋め');
+  const filled = merged.get('价格缺口 · 已回补');
+  assert.equal(filled?.ja, '価格ギャップ · 窓埋め済み');
+  const legend = merged.get('深色为主要边界，细线为参考；虚线为延伸，淡色点线为历史结构');
+  assert.equal(legend?.en, 'Dark: main boundary; thin: reference; dashed: extension; faint dotted: historical structure');
+  const formerUp = merged.get('原{label} · 突破已确认');
+  assert.equal(formerUp?.ja, '元の{label} · 上抜け確認');
+});
+
 test('LanguageSwitcher is wired into the navbar', async () => {
   const navbar = await readFile(path.join(srcDir, 'components', 'Navbar.tsx'), 'utf8');
   assert.match(navbar, /LanguageSwitcher/, 'Navbar.tsx must render <LanguageSwitcher />');
