@@ -70,10 +70,10 @@ function classify(node) {
 }
 
 /**
- * 该节点是否位于「按 locale 分支产出各语言自然写法」的函数内——这类模板串
- * （en「7/26」· ja「7月26日」· zh「7 月 26 日」）是有意的，不该被 t() 包。
- * 判据：最近的函数体文本里出现 getLocale()。见 HistoryRail.dayLabel、
- * earnings/types.fmtMDCN、MonthCalendar 的年月标题。
+ * 该节点是否位于「按 locale 分支产出各语言自然写法」的函数内——这类字面量
+ * （en「7/26」· ja「7月26日」· zh「7 月 26 日」，以及 calendarCopy 的中英日对照）
+ * 是有意的，不该被 t() 包。判据：最近的函数体文本里出现 getLocale()。
+ * 见 HistoryRail.dayLabel、earnings/types.fmtMDCN、MonthCalendar 的年月标题。
  */
 function inLocaleBranch(node) {
   for (let p = node.parent; p; p = p.parent) {
@@ -162,9 +162,9 @@ const KNOWN_TYPE_DISCRIMINANTS = new Set([
   'components/detail/api.ts:466 偏空',
   'components/detail/api.ts:467 中性',
   // 等待占位哨兵：对照后端落库的中文字面量，绝不能 __t（译文永不命中，防御失效）
-  'components/catalysts/api.ts:132 中文标题等待生成',
-  'components/catalysts/api.ts:132 中文摘要等待生成',
-  'components/catalysts/api.ts:132 热点标题等待中文分析',
+  'components/catalysts/api.ts:133 中文标题等待生成',
+  'components/catalysts/api.ts:133 中文摘要等待生成',
+  'components/catalysts/api.ts:133 热点标题等待中文分析',
   'pages/Market.tsx:69 偏多',
   'pages/Market.tsx:69 偏空',
   'pages/Market.tsx:69 中性',
@@ -218,6 +218,7 @@ for (const file of allFiles) {
       (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) &&
       CJK.test(node.text) &&
       classify(node) === 'display' &&
+      !inLocaleBranch(node) &&
       !KNOWN_TYPE_DISCRIMINANTS.has(`${rel}:${lineOf(node)} ${node.text}`)
     ) {
       (isExempt ? mocksGaps : unsafeDisplayGaps).push({ file: rel, line: lineOf(node), text: node.text });

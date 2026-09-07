@@ -26,23 +26,22 @@ test('国家展示去掉区旗，只留文字或两位代码', () => {
 });
 
 test('今日窗口按本地自然日，即将公布按当前时刻', () => {
-  const now = new Date('2026-09-07T12:00:00+09:00');
+  const iso = (y, m, d, h, min) => new Date(y, m - 1, d, h, min, 0, 0).toISOString();
+  const now = new Date(2026, 8, 7, 12, 0, 0, 0);
+  const yesterday = iso(2026, 9, 6, 23, 30);
+  const morning = iso(2026, 9, 7, 8, 30);
+  const evening = iso(2026, 9, 7, 21, 0);
+  const tomorrow = iso(2026, 9, 8, 8, 30);
   const items = [
-    { scheduledAt: '2026-09-06T23:30:00+09:00', impact: 'low', actual: '1' },
-    { scheduledAt: '2026-09-07T08:30:00+09:00', impact: 'high', actual: null },
-    { scheduledAt: '2026-09-07T21:00:00+09:00', impact: 'medium', actual: null },
-    { scheduledAt: '2026-09-08T08:30:00+09:00', impact: 'medium', actual: null },
+    { scheduledAt: yesterday, impact: 'low', actual: '1' },
+    { scheduledAt: morning, impact: 'high', actual: null },
+    { scheduledAt: evening, impact: 'medium', actual: null },
+    { scheduledAt: tomorrow, impact: 'medium', actual: null },
   ];
   const today = selectCalendarEvents(items, now, false).map((item) => item.scheduledAt);
   const next = selectCalendarEvents(items, now, true).map((item) => item.scheduledAt);
-  assert.deepEqual(today, [
-    '2026-09-07T08:30:00+09:00',
-    '2026-09-07T21:00:00+09:00',
-  ]);
-  assert.deepEqual(next, [
-    '2026-09-07T21:00:00+09:00',
-    '2026-09-08T08:30:00+09:00',
-  ]);
+  assert.deepEqual(today, [morning, evening]);
+  assert.deepEqual(next, [evening, tomorrow]);
   assert.equal(localDay(now), '2026-09-07');
 });
 

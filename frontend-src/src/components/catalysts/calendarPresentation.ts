@@ -1,4 +1,4 @@
-import { getLocale } from '@/i18n/core';
+import { getLocale } from '../../i18n/core.ts';
 
 /** Country display never depends on OS emoji rendering. */
 export function flatCountry(value: string): string {

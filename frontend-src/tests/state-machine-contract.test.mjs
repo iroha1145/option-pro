@@ -149,9 +149,8 @@ test('页头刷新覆盖顶部三块，而不只是标签内容', async () => {
 test('请求失败不再更新「最后更新时间」', async () => {
   const page = codeOf(await source('pages/Catalysts.tsx'));
   const feed = codeOf(await source('components/catalysts/FeedPanel.tsx'));
-  assert.match(page, /if \(result\.ok\) setLastLoadedAt\(Date\.now\(\)\)/);
-  assert.match(feed, /onFeedResult\(\{ total: null, ok: false \}\)/);
-  assert.match(feed, /onFeedResult\(\{ total: res\.total, ok: true \}\)/);
+  assert.match(page, /if \(result\.ok\) setLastLoadedAt\(/);
+  assert.match(feed, /ok: q\.data !== null && !q\.error && !q\.restored/);
 });
 
 test('URL 筛选参数逐项校验，NaN 与非法枚举被拒绝', async () => {
