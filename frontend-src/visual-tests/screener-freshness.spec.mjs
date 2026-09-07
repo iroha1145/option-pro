@@ -37,10 +37,12 @@ test('F02 mobile 390 shows scan date on cards after refresh', async ({ page }) =
   await mkdir(evidence, { recursive: true });
   const errors = await openScreener(page);
   await selectSemiconductorsAndScan(page);
-  await expect(page.getByText('NVDA').filter({ visible: true }).first()).toBeVisible({ timeout: 90_000 });
+  const nvda = page.getByText('NVDA').filter({ visible: true }).first();
+  await expect(nvda).toBeVisible({ timeout: 90_000 });
   await expect(page.getByText(/评分依据/).filter({ visible: true }).first()).toBeVisible();
   await expect(page.getByText(/扫描价/).filter({ visible: true }).first()).toBeVisible();
   await expect(page.getByText(/上次扫描/).filter({ visible: true }).first()).toBeVisible();
+  await nvda.scrollIntoViewIfNeeded();
   await page.screenshot({ path: `${evidence}/mobile-390-after.png`, animations: 'disabled' });
   expect(errors.filter((message) => !/ResizeObserver|AbortError/.test(message))).toEqual([]);
 });
