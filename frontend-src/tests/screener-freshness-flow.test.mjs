@@ -9,6 +9,7 @@ import {
   parseScanClock,
   readPendingStrengthTask,
   scanDisplayTimes,
+  shouldDiscoverPublishedScan,
   shouldSubmitStrengthRefresh,
   strengthParametersMatch,
   strengthScanPath,
@@ -201,6 +202,13 @@ test('A09 pending task is recovered instead of blindly posting again', () => {
   clearPendingStrengthTask();
 });
 
+test('C05 hidden pages do not discover published scans', () => {
+  assert.equal(shouldDiscoverPublishedScan({ scanState: 'done', visibilityState: 'visible', isMock: false }), true);
+  assert.equal(shouldDiscoverPublishedScan({ scanState: 'done', visibilityState: 'hidden', isMock: false }), false);
+  assert.equal(shouldDiscoverPublishedScan({ scanState: 'scanning', visibilityState: 'visible', isMock: false }), false);
+  assert.equal(shouldDiscoverPublishedScan({ scanState: 'done', visibilityState: 'visible', isMock: true }), false);
+});
+
 test('D06 score date and quote label stay independent', () => {
   const times = scanDisplayTimes({
     queryCheckedAt: 1_789_100_000_000,
@@ -226,4 +234,8 @@ test('production screener click path still uses the live worker for stale 200s',
   assert.match(page, /resetMarketReadPaths\(\[scanPath\]\)/);
   assert.match(cards, /fallbackAt=\{r\.priceAsOf \?\? r\.dailyDataThrough\}/);
   assert.match(table, /fallbackAt=\{r\.priceAsOf \?\? r\.dailyDataThrough\}/);
+  const quote = await readFile(path.join(src, 'components', 'shared', 'LiveQuote.tsx'), 'utf8');
+  assert.match(quote, /if \(!quote && !usingFallback\) return null/);
+  assert.match(quote, /fallbackQuoteLabel\(fallbackAt\)/);
+  assert.match(page, /shouldDiscoverPublishedScan/);
 });

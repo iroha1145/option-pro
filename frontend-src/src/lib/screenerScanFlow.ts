@@ -116,6 +116,14 @@ export function strengthParametersMatch(
   );
 }
 
+export function shouldDiscoverPublishedScan(input: {
+  scanState: string;
+  visibilityState: string;
+  isMock: boolean;
+}): boolean {
+  return input.scanState === 'done' && !input.isMock && input.visibilityState === 'visible';
+}
+
 export function workerActionPhase(action: Pick<WorkerAction, 'status'>): StrengthScanPhase {
   const status = action.status;
   if (status === 'queued' || status === 'accepted') return 'queued';

@@ -47,6 +47,7 @@ import {
   clearPendingStrengthTask,
   readPendingStrengthTask,
   scanDisplayTimes,
+  shouldDiscoverPublishedScan,
   shouldSubmitStrengthRefresh,
   strengthParametersMatch,
   strengthScanPath,
@@ -329,7 +330,7 @@ export default function Screener() {
     if (scanState !== 'done' || isMock) return;
     const { apiParams: params } = buildStrengthScanRequest(applied);
     const tick = async () => {
-      if (document.visibilityState !== 'visible') return;
+      if (!shouldDiscoverPublishedScan({ scanState: 'done', visibilityState: document.visibilityState, isMock })) return;
       try {
         const latest = await strengthApi.scanEnvelope(params);
         if (scanSeq.current === 0) return;
@@ -661,7 +662,7 @@ export default function Screener() {
         description={__t("按真实行情扫描主题股票池，可查看扫描时间与股票池规模。")}
         meta={
           <>
-            <span className="hidden text-right sm:block">
+            <span className="text-right">
               <span className="block text-micro text-ink-400">{__t('上次扫描')}</span>
               <span className="font-mono text-caption text-ink-600 tnum" suppressHydrationWarning>
                 {lastScanAt ? fmtTimeHHMMSS(lastScanAt) : '—'}
