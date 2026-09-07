@@ -5,6 +5,9 @@ import json
 import sqlite3
 from datetime import datetime, timezone
 
+import pytest
+
+from app.access import request_owner_access_context
 from app.services.ai_jobs import runtime
 from app.services.ai_jobs.repository import AIJobRepository
 from app.services.catalysts.local_intelligence import (
@@ -12,6 +15,12 @@ from app.services.catalysts.local_intelligence import (
     LocalCatalystIntelligence,
 )
 from app.services.catalysts.personal_service import PersonalCatalystService
+
+
+@pytest.fixture(autouse=True)
+def _owner_request_context():
+    with request_owner_access_context(True):
+        yield
 
 
 NOW = datetime(2026, 7, 23, 14, 5, tzinfo=timezone.utc)

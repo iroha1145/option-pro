@@ -26,6 +26,12 @@ from app.services.catalysts.local_intelligence import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _owner_request_context():
+    with request_owner_access_context(True):
+        yield
+
+
 def _iso(value: datetime) -> str:
     return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -3926,10 +3932,11 @@ def test_hotspot_planning_does_not_block_market_focus_intent(
         return original_cluster_rows(rows)
 
     def reconcile_in_background():
-        try:
-            intelligence.reconcile()
-        except BaseException as error:
-            errors.append(error)
+        with request_owner_access_context(True):
+            try:
+                intelligence.reconcile()
+            except BaseException as error:
+                errors.append(error)
 
     monkeypatch.setattr(local_module, "_cluster_rows", blocking_cluster_rows)
     thread = threading.Thread(target=reconcile_in_background, daemon=True)
@@ -3983,10 +3990,11 @@ def test_stale_hotspot_plan_cannot_replace_a_newer_snapshot(
         return plan
 
     def run_old_reconcile():
-        try:
-            old_results.append(intelligence.reconcile())
-        except BaseException as error:
-            errors.append(error)
+        with request_owner_access_context(True):
+            try:
+                old_results.append(intelligence.reconcile())
+            except BaseException as error:
+                errors.append(error)
 
     monkeypatch.setattr(intelligence, "_plan_hotspots", coordinated_plan)
     old_thread = threading.Thread(
@@ -4085,10 +4093,11 @@ def test_newer_hotspot_plan_retries_after_older_plan_commits_first(
         return plan
 
     def run_reconcile(results):
-        try:
-            results.append(intelligence.reconcile())
-        except BaseException as error:
-            errors.append(error)
+        with request_owner_access_context(True):
+            try:
+                results.append(intelligence.reconcile())
+            except BaseException as error:
+                errors.append(error)
 
     monkeypatch.setattr(intelligence, "_plan_hotspots", coordinated_plan)
     old_thread = threading.Thread(
@@ -6283,13 +6292,14 @@ def test_scheduled_slot_is_claimed_before_work_under_concurrency(
     errors: list[BaseException] = []
 
     def run(label: str) -> None:
-        try:
-            outputs[label] = intelligence.run_scheduled(
-                scheduled_times_et=("08:00",),
-                now=now,
-            )
-        except BaseException as error:  # pragma: no cover - surfaced below
-            errors.append(error)
+        with request_owner_access_context(True):
+            try:
+                outputs[label] = intelligence.run_scheduled(
+                    scheduled_times_et=("08:00",),
+                    now=now,
+                )
+            except BaseException as error:  # pragma: no cover - surfaced below
+                errors.append(error)
 
     first = threading.Thread(target=run, args=("first",))
     second = threading.Thread(target=run, args=("second",))

@@ -69,10 +69,10 @@ def request_owner_access_context(owner_access: bool) -> Iterator[None]:
 
 
 def current_request_is_owner() -> bool:
-    """Return the gateway decision, preserving direct-call test behavior."""
+    """Return the gateway decision. Missing context is not owner access."""
 
     owner_access = _REQUEST_OWNER_ACCESS.get()
-    return True if owner_access is None else owner_access
+    return False if owner_access is None else owner_access
 
 
 def public_snapshot_unavailable(resource: str) -> HTTPException:

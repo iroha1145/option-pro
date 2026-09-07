@@ -10,6 +10,12 @@ from app.api import signals
 from tests.http_response_support import anonymous_get_request as _areq
 
 
+@pytest.fixture(autouse=True)
+def _owner_request_context():
+    with request_owner_access_context(True):
+        yield
+
+
 def test_signal_api_rejects_invalid_ticker_before_provider_call(monkeypatch):
     called = False
 

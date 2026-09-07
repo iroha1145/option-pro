@@ -18,6 +18,7 @@ import pytest
 from pydantic import SecretStr
 
 from app import runtime_environment
+from app.access import request_owner_access_context
 from app.worker import tasks as worker_tasks
 from app.worker.__main__ import _load_worker_settings, main
 from app.worker.lock import ProcessFileLock
@@ -37,6 +38,12 @@ from app.worker.tasks import (
     StrengthRefreshTask,
     build_default_tasks,
 )
+
+
+@pytest.fixture(autouse=True)
+def _owner_request_context():
+    with request_owner_access_context(True):
+        yield
 
 
 SCHEDULED_TASK_NAMES = {
