@@ -13,6 +13,14 @@ if str(BACKEND_ROOT) not in sys.path:
 
 
 @pytest.fixture(autouse=True)
+def _isolated_public_option_store(monkeypatch, tmp_path):
+    """HTTP and worker option snapshots must never leak between tests."""
+    from app import public_option_data
+
+    monkeypatch.setattr(public_option_data, "default_option_root", lambda: tmp_path / "public-options")
+
+
+@pytest.fixture(autouse=True)
 def _isolated_finnhub_budget(monkeypatch, tmp_path):
     """Provider mocks share the real limiter, with a fresh per-test database."""
     from app.services import finnhub_budget

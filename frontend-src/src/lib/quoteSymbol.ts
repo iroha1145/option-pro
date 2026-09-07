@@ -9,3 +9,9 @@ export function quoteSymbol(value: string): string {
   const symbol = value.trim().toUpperCase();
   return INDEX_ALIASES[symbol] ?? symbol;
 }
+
+/** 公司新闻与股票雷达不接受指数；行情、日线和技术信号仍使用原指数代码。 */
+export function isIndexSymbol(value: string): boolean {
+  const symbol = quoteSymbol(value);
+  return symbol.startsWith('^') || symbol === '000001.SS';
+}

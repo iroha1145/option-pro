@@ -101,6 +101,9 @@ jobs:
       - name: Verify real-time quote UI with local simulated trades
         run: npm --prefix frontend-src run test:quotes
 
+      - name: Verify audit recovery paths with isolated accounts and jobs
+        run: npm --prefix frontend-src run test:audit
+
       - name: Check shell script syntax
         run: bash -n setup.sh personal.sh scripts/compose.sh scripts/deploy.sh scripts/lock-dependencies.sh
 
@@ -312,6 +315,7 @@ jobs:
             frontend-src/test-results/feedback-evidence/*.png
             frontend-src/test-results/review-report/**
             frontend-src/test-results/review/**
+            frontend-src/test-results/audit/**
           if-no-files-found: error
           retention-days: 14
 

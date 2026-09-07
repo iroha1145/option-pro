@@ -4,6 +4,7 @@ import { stocksApi } from '@/api/modules/stocks';
 import type { StockPullResource, StockPullResult } from '@/api/types';
 import Icon from '@/components/icons';
 import { cn } from '@/lib/utils';
+import { isIndexSymbol } from '@/lib/quoteSymbol';
 import { t } from '../../i18n/core.ts';
 
 const RESOURCE_LABELS: Array<{
@@ -159,7 +160,7 @@ export default function ManualStockPull({
 
       {!running && !result && !error && (
         <p className="text-micro text-ink-500">
-          {t('获取该股票的最新价格、日线与技术指标')}
+          {isIndexSymbol(ticker) ? t('获取该指数的最新价格、日线与技术指标') : t('获取该股票的最新价格、日线与技术指标')}
         </p>
       )}
 

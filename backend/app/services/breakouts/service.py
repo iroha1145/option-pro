@@ -18,6 +18,7 @@ from app.services.breakouts.adapters import (
     YahooPriceDataAdapter,
 )
 from app.services.breakouts.base_detector import detect_base
+from app.services.breakouts.anchors import anchor_levels, resolve_event_anchor
 from app.services.breakouts.breakout_detector import detect_breakout
 from app.services.breakouts.config import BreakoutSettings, get_breakout_settings
 from app.services.breakouts.errors import BreakoutStageError
@@ -37,6 +38,7 @@ from app.services.breakouts.lifecycle import (
 from app.services.breakouts.models import (
     BreakoutCandidate,
     BreakoutEvent,
+    BreakoutEventAnchor,
     BreakoutLifecycleState,
     BreakoutSetupType,
     BreakoutStructure,
@@ -391,10 +393,15 @@ class BreakoutRadarService:
         features: Mapping[str, Any],
         structure: Any,
         daily: pd.DataFrame,
+        *,
+        event_anchor: BreakoutEventAnchor | None = None,
     ) -> dict[str, Any]:
         close = _finite(features.get("event_price"))
         atr = _finite(features.get("atr20"))
-        resistance = structure.resistance_zone.high if structure is not None else None
+        resistance = (
+            event_anchor.pivot_price if event_anchor is not None
+            else structure.resistance_zone.high if structure is not None else None
+        )
         distance = (
             (close - resistance) / atr
             if close is not None and resistance is not None and atr and atr > 0
@@ -412,7 +419,10 @@ class BreakoutRadarService:
             "close_above_zone_quality": _quality(distance, low=0, high=1.0),
             "rvol_time_of_day_quality": _quality(rvol, low=0.5, high=3.0),
             "close_location_quality": _quality(clv, low=-1.0, high=1.0),
-            "hold_quality": _quality(features.get("hold_bars_above_pivot"), low=0, high=3),
+            "hold_quality": _quality(
+                features.get("hold_bars_above_opening_range" if event_anchor is not None else "hold_bars_above_pivot"),
+                low=0, high=3,
+            ),
             "candle_body_quality": _quality(body, low=0, high=0.8),
             "upper_wick_quality": (
                 100.0 - _quality(upper, low=0, high=0.5)
@@ -659,6 +669,9 @@ class BreakoutRadarService:
         """Publish an unchanged event when this scan cannot safely re-evaluate it."""
 
         prior = BreakoutEvent.model_validate(prior_value)
+        event_anchor = resolve_event_anchor(prior.model_dump(mode="python"))
+        if event_anchor is not None:
+            prior = prior.model_copy(update={"event_anchor": event_anchor})
         feature_warnings = list((prior.features or {}).get("warnings") or [])
         feature_warnings.append(reason)
         features = {
@@ -741,6 +754,15 @@ class BreakoutRadarService:
         """Re-evaluate one already-published event with completed local bars."""
 
         prior = BreakoutEvent.model_validate(prior_value)
+        event_anchor = resolve_event_anchor(prior.model_dump(mode="python"))
+        if event_anchor is not None:
+            prior = prior.model_copy(update={"event_anchor": event_anchor})
+            prior_value = prior.model_dump(mode="python")
+            if event_anchor.pivot_price is None and not expired_due:
+                return self._unreviewed_carryover(
+                    prior_value, observed_at=observed_at,
+                    reason="opening_range_anchor_unavailable", versions=versions,
+                )
         prior_features = dict(prior.features or {})
         live_evidence_at = prior.evidence_at
         live_intraday: pd.DataFrame | None = None
@@ -750,7 +772,8 @@ class BreakoutRadarService:
             else None
         )
         origin_setup = (
-            prior.origin_setup_type
+            BreakoutSetupType.OPENING_RANGE_BREAKOUT if event_anchor is not None
+            else prior.origin_setup_type
             or BreakoutSetupType(
                 str(prior_features.get("origin_setup_type") or prior.setup_type.value)
             )
@@ -834,6 +857,14 @@ class BreakoutRadarService:
                         _finite(features.get("atr20")),
                     )
                 )
+                if event_anchor is not None:
+                    # A continuation keeps the event's original session range,
+                    # even when the next snapshot contains another day's ORB.
+                    features.update({
+                        "opening_range_high": event_anchor.pivot_price,
+                        "opening_range_low": event_anchor.invalidation_price,
+                        "opening_range_complete": event_anchor.pivot_price is not None,
+                    })
                 features.update(
                     self._opening_range_confirmation_features(
                         intraday_frame,
@@ -872,6 +903,8 @@ class BreakoutRadarService:
             intraday_snapshot=None if expired_due else intraday_snapshot,
         )
         features.update(self._base_features(structure))
+        if event_anchor is not None:
+            features.update(anchor_levels(event_anchor))
 
         if self.settings.range_persistence_mode == "disabled":
             features.update(
@@ -897,10 +930,12 @@ class BreakoutRadarService:
         price = _finite(features.get("event_price"))
         atr = _finite(features.get("atr20"))
         resistance_high = (
-            structure.resistance_zone.high if structure is not None else None
+            event_anchor.pivot_price if event_anchor is not None
+            else structure.resistance_zone.high if structure is not None else None
         )
         invalidation = (
-            structure.invalidation_price if structure is not None else None
+            event_anchor.invalidation_price if event_anchor is not None
+            else structure.invalidation_price if structure is not None else None
         )
         bar_evidence = (
             self._continuation_bar_evidence(
@@ -1025,7 +1060,9 @@ class BreakoutRadarService:
             }
         )
         if not daily.empty:
-            features.update(self._confirmation_features(features, structure, daily))
+            features.update(self._confirmation_features(
+                features, structure, daily, event_anchor=event_anchor,
+            ))
         candidate = BreakoutCandidate(
             ticker=prior.ticker,
             exchange=prior.exchange,
@@ -1041,8 +1078,9 @@ class BreakoutRadarService:
         )
         detection = detect_breakout(
             candidate,
-            structure,
-            features,
+            None if event_anchor is not None else structure,
+            {**features, "opening_range_complete": False}
+            if origin_setup is BreakoutSetupType.DAILY_BASE_BREAKOUT else features,
             cutoff,
             self.settings,
         )
@@ -1344,6 +1382,7 @@ class BreakoutRadarService:
                 else setup_reason
             ),
             structure=structure,
+            event_anchor=event_anchor,
             scores=scores,
             data_quality={
                 **prior.data_quality,
@@ -1621,6 +1660,7 @@ class BreakoutRadarService:
                 "state_changed_at": state_changed_at,
                 "last_seen_at": observed_at,
                 "pivot_id": secondary_pivot_id,
+                "event_anchor": None,
                 "previous_state": initial_state,
                 "transition_reason": (
                     event_transitions[-1]["reason"]
@@ -2412,6 +2452,22 @@ class BreakoutRadarService:
                     base_confirmation_bars=self.settings.confirmation_bars,
                 )
             setup = detection["setup_type"]
+            # A simultaneous daily-base event retains its own confirmation and
+            # distance inputs before the primary ORB applies opening levels.
+            secondary_features = dict(features)
+            event_anchor = resolve_event_anchor({
+                "ticker": candidate.ticker,
+                "trading_date": observed_trading_date,
+                "setup_type": setup,
+                "features": features,
+                "last_seen_at": observed_at,
+            })
+            if event_anchor is not None:
+                event_anchor = event_anchor.model_copy(update={"source": "completed_opening_range"})
+                features.update(anchor_levels(event_anchor))
+                features.update(self._confirmation_features(
+                    features, structure, daily, event_anchor=event_anchor,
+                ))
             market_fit = market_fit_for_setup(market_payload, setup)
             market_eligibility = eligibility_for_setup(market_payload, setup)
             features.update(
@@ -2546,11 +2602,18 @@ class BreakoutRadarService:
                 else observed_at
             )
             prior_features = dict((prior or {}).get("features") or {})
+            if prior is not None and event_anchor is not None:
+                event_anchor = resolve_event_anchor(prior) or event_anchor
+                features.update(anchor_levels(event_anchor))
             price = _finite(features.get("event_price"))
             resistance_high = (
-                structure.resistance_zone.high if structure is not None else None
+                event_anchor.pivot_price if event_anchor is not None
+                else structure.resistance_zone.high if structure is not None else None
             )
-            invalidation = structure.invalidation_price if structure is not None else None
+            invalidation = (
+                event_anchor.invalidation_price if event_anchor is not None
+                else structure.invalidation_price if structure is not None else None
+            )
             buffer = max(
                 (price or 0.0) * self.settings.break_buffer_pct,
                 (_finite(features.get("atr20")) or 0.0)
@@ -2671,6 +2734,7 @@ class BreakoutRadarService:
                     else detection.get("transition_reason")
                 ),
                 structure=structure,
+                event_anchor=event_anchor,
                 scores=scores,
                 data_quality={
                     "discovery_source": candidate.source,
@@ -2757,7 +2821,7 @@ class BreakoutRadarService:
                     self._secondary_new_event(
                         primary=event,
                         detection=secondary_detection,
-                        features=features,
+                        features=secondary_features,
                         market=market,
                         prior_by_ticker=prior_by_ticker,
                         observed_at=observed_at,

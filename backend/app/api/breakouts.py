@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 from app.services.breakouts.clock import MarketClock
+from app.services.breakouts.anchors import anchor_levels, resolve_event_anchor
 from app.services.breakouts.config import BreakoutSettings, get_breakout_settings
 from app.services.breakouts.health import BreakoutReadState, assess_breakout_read_state
 from app.services.breakouts.models import (
@@ -82,6 +83,7 @@ class BreakoutEventResponse(_ResponseModel):
     gap_pct: Optional[float] = None
     rvol_time_of_day: Optional[float] = None
     pivot_price: Optional[float] = None
+    event_anchor: Optional[dict[str, Any]] = None
     support_zone: Optional[PriceZoneResponse] = None
     resistance_zone: Optional[PriceZoneResponse] = None
     invalidation_price: Optional[float] = None
@@ -330,6 +332,9 @@ def _public_event(
 ) -> BreakoutEventResponse:
     features = dict(stored.get("features") or {})
     structure = dict(stored.get("structure") or {})
+    event_anchor = resolve_event_anchor(stored)
+    if event_anchor is not None:
+        structure.update(anchor_levels(event_anchor))
     scores = dict(stored.get("scores") or {})
     details = dict(scores.get("details") or {})
     priority = dict(details.get("alert_priority") or {})
@@ -400,6 +405,7 @@ def _public_event(
         gap_pct=_finite(features.get("gap_pct")),
         rvol_time_of_day=_finite(features.get("rvol_time_of_day")),
         pivot_price=_finite(structure.get("pivot_price")),
+        event_anchor=event_anchor.model_dump(mode="json") if event_anchor is not None else None,
         support_zone=structure.get("support_zone"),
         resistance_zone=structure.get("resistance_zone"),
         invalidation_price=_finite(structure.get("invalidation_price")),

@@ -3,7 +3,9 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timezone
 import math
+import logging
 import re
+import sqlite3
 import time
 from typing import Literal
 
@@ -20,6 +22,7 @@ from app.services.quote_quality import (
     STANDARD_CONTRACT_MULTIPLIER,
     estimated_premium,
     option_mark,
+    vendor_iv,
 )
 from app.services.cache import cache
 from app.services.option_capability import (
@@ -38,9 +41,17 @@ from app.public_home_snapshot import (
     read_public_home_resource_async,
 )
 from app.personal_config import get_personal_config
+from app.public_option_data import (
+    read_option_snapshot,
+    option_preparation_status,
+    option_snapshot_payload_valid,
+    request_option_snapshot,
+    write_option_snapshot,
+)
 from app.services.http_read_cache import respond_with_snapshot, snapshot_version_key
 
 router = APIRouter(prefix="/api/options", tags=["options"])
+logger = logging.getLogger(__name__)
 POPULAR_TICKERS = ["NVDA", "TSLA", "AAPL", "AMD", "AMZN", "META", "MSFT", "SPY", "QQQ", "GOOGL"]
 
 _UNUSUAL_TTL = 120  # seconds; the scan costs ~30 Yahoo calls, never run it per request
@@ -220,11 +231,38 @@ async def _cached_yahoo_option_resource(
     if cached is not None:
         return cached
 
+    parts = key.split(":", 3)
+    symbol = parts[2]
+    expiration = parts[3] if len(parts) == 4 else ""
+    saved = await asyncio.to_thread(read_option_snapshot, symbol, expiration)
     if not allow_live:
+        try:
+            pending = await asyncio.to_thread(request_option_snapshot, symbol, expiration)
+        except (OSError, ValueError, RuntimeError, sqlite3.Error):
+            pending = False
+        if saved is not None:
+            return saved
+        if pending:
+            try:
+                preparation = await asyncio.to_thread(option_preparation_status, symbol, expiration)
+            except (OSError, ValueError, sqlite3.Error):
+                preparation = {"status": "pending", "retry_after_seconds": 30}
+            cooling = preparation["status"] == "cooling"
+            raise HTTPException(
+                status_code=503,
+                detail={"code": "yahoo_options_unavailable" if cooling else "public_option_snapshot_pending", "retryable": True,
+                        "message": "期权数据暂未取得，后台将继续重试" if cooling else "后台正在准备期权数据，稍后可重新读取"},
+                headers={"Retry-After": str(preparation["retry_after_seconds"])},
+            )
         raise public_snapshot_unavailable(key)
+
+    if saved is not None and not saved["cache_stale"]:
+        return saved
 
     failure = _option_failure_error(key)
     if failure is not None:
+        if saved is not None:
+            return {**saved, "cache_stale": True, "_stale": True, "source_status": "stale"}
         raise failure
 
     async def produce():
@@ -232,7 +270,12 @@ async def _cached_yahoo_option_resource(
         if locked_failure is not None:
             raise locked_failure
         try:
-            return await asyncio.to_thread(loader)
+            payload = await asyncio.to_thread(loader)
+            if not option_snapshot_payload_valid(symbol, expiration, payload):
+                raise ValueError("provider returned an unusable option snapshot")
+            if not expiration and not payload["expirations"] and saved and saved["expirations"]:
+                raise ValueError("empty discovery cannot replace a usable saved expiration list")
+            return payload
         except ValueError as exc:
             # Provider parse/format errors are not user expiration mistakes.
             raise _record_option_failure(
@@ -268,7 +311,20 @@ async def _cached_yahoo_option_resource(
                 },
             ) from exc
 
-    payload = await cache.get_or_set(key, ttl, produce)
+    try:
+        payload = await cache.get_or_set(key, ttl, produce)
+    except HTTPException:
+        if saved is not None:
+            return {**saved, "cache_stale": True, "_stale": True, "source_status": "stale"}
+        raise
+    # Persist successful authorized reads too. The worker and HTTP process use
+    # the same bounded store, so one process restart cannot erase public data.
+    try:
+        await asyncio.to_thread(write_option_snapshot, symbol, sanitize(payload), expiration)
+    except (OSError, ValueError, RuntimeError, sqlite3.Error):
+        # A storage failure must not turn a valid authorized response into a
+        # failed provider query; periodic worker preparation will retry it.
+        logger.warning("Could not persist public option snapshot for %s", symbol, exc_info=True)
     _option_failure_cache.pop(key, None)
     return payload
 
@@ -439,7 +495,7 @@ async def _unusual_activity_impl(type: str, min_vol_oi: float):
                         if strike is None or strike <= 0:
                             continue
                         lp = _finite(row.get("lastPrice"), minimum=0.0)
-                        iv = _finite(row.get("impliedVolatility"), minimum=0.0)
+                        iv = vendor_iv(row.get("impliedVolatility"))
                         mark = option_mark(
                             bid=row.get("bid"),
                             ask=row.get("ask"),
@@ -468,6 +524,7 @@ async def _unusual_activity_impl(type: str, min_vol_oi: float):
                             "premium_kind": "estimated_notional",
                             "last_price": lp,
                             "implied_volatility": iv,
+                            "iv_source": "vendor" if iv is not None else "missing",
                             "underlying_price": price,
                             "in_the_money": _in_the_money(
                                 side,
@@ -607,6 +664,15 @@ async def option_chain(
         # Its expiration-list entry may have been loaded earlier and already
         # expired; serving the still-fresh chain must not require another pull.
         payload = cache.get(key)
+        if payload is None:
+            saved = await asyncio.to_thread(read_option_snapshot, symbol, expiration)
+            if saved is not None and (not allow_live or not saved["cache_stale"]):
+                if not allow_live:
+                    try:
+                        await asyncio.to_thread(request_option_snapshot, symbol, expiration)
+                    except (OSError, ValueError, RuntimeError, sqlite3.Error):
+                        logger.warning("Could not request public option preparation for %s", symbol, exc_info=True)
+                payload = saved
         if payload is None:
             expiration_snapshot = await _cached_yahoo_option_resource(
                 f"options:expirations:{symbol}",

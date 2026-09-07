@@ -773,10 +773,14 @@ class BreakoutRepository:
                     continue
                 if with_transitions:
                     transitions = connection.execute(
-                        "SELECT transition_json FROM breakout_live_transitions WHERE event_id=? ORDER BY state_version",
+                        "SELECT state_version,transition_json FROM breakout_live_transitions WHERE event_id=? ORDER BY state_version",
                         (str(event["event_id"]),),
                     ).fetchall()
-                    live["transitions"] = [_json_loads(item["transition_json"], {}) for item in transitions]
+                    live["transitions"] = [
+                        {**_json_loads(item["transition_json"], {}),
+                         "transition_sequence": int(item["state_version"])}
+                        for item in transitions
+                    ]
                 result[index] = live
             return result
         finally:
@@ -3282,13 +3286,20 @@ class BreakoutRepository:
             event = _json_loads(row["event_json"], {})
             transition_rows = connection.execute(
                 """
-                SELECT transition_json FROM breakout_transitions
-                WHERE event_id=? ORDER BY evidence_at,transition_id
+                SELECT rowid AS transition_sequence,transition_json FROM breakout_transitions
+                WHERE event_id=? ORDER BY evidence_at,rowid
                 """,
                 (str(event_id),),
             ).fetchall()
             event["transitions"] = [
-                _json_loads(item["transition_json"], {}) for item in transition_rows
+                {
+                    **_json_loads(item["transition_json"], {}),
+                    # The hash ID identifies the edge, not its place in the
+                    # causal chain. Existing rows retain their insertion
+                    # order, including same-time retries and state retreats.
+                    "transition_sequence": int(item["transition_sequence"]),
+                }
+                for item in transition_rows
             ]
             connection.commit()
             return event

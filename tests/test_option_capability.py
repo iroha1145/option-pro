@@ -503,7 +503,13 @@ def test_visitor_cannot_probe_unknown_but_can_read_declared_unsupported(monkeypa
     with TestClient(_option_app(runtime), base_url="https://testserver") as client:
         denied = client.get("/api/options/AAPL/expirations")
         assert denied.status_code == 503
-        assert denied.json()["detail"]["code"] == "public_snapshot_unavailable"
+        # AAPL is in the trusted default collection: only bounded local worker
+        # preparation is queued. The HTTP reader still cannot call Yahoo.
+        assert denied.json()["detail"]["code"] == "public_option_snapshot_pending"
+        assert denied.headers["retry-after"] == "30"
+        unknown = client.get("/api/options/AUDITUNKNOWN/expirations")
+        assert unknown.status_code == 503
+        assert unknown.json()["detail"]["code"] == "public_snapshot_unavailable"
 
         allowed = client.get("/api/options/%5EGSPC/expirations")
         assert allowed.status_code == 200

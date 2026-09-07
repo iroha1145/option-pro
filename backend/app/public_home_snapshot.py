@@ -1091,7 +1091,8 @@ def _validate_unusual(payload: Mapping[str, Any]) -> bool:
     for row in rows:
         if (
             not isinstance(row, dict)
-            or set(row) != _UNUSUAL_ROW_FIELDS
+            or set(row) not in (_UNUSUAL_ROW_FIELDS, _UNUSUAL_ROW_FIELDS | {"iv_source"})
+            or ("iv_source" in row and row["iv_source"] not in {"vendor", "missing"})
             or not isinstance(row.get("ticker"), str)
             or not isinstance(row.get("contract_ticker"), str)
             or row.get("contract_type") not in {"call", "put"}
@@ -1192,7 +1193,18 @@ def validate_public_home_payload(resource: str, payload: Any) -> dict[str, Any]:
         raise ValueError("unknown public home resource")
     if not isinstance(payload, dict) or not _valid_json_tree(payload) or not validator(payload):
         raise ValueError(f"invalid public home payload: {resource}")
-    return dict(payload)
+    result = dict(payload)
+    if resource == "unusual":
+        from app.services.quote_quality import vendor_iv
+
+        # Read-time compatibility for snapshots saved before Q-04 was fixed.
+        # A provider placeholder must not remain visible for another weekend.
+        result["results"] = [
+            {**row, "implied_volatility": iv, "iv_source": "vendor" if iv is not None else "missing"}
+            for row in payload["results"]
+            for iv in [vendor_iv(row.get("implied_volatility"))]
+        ]
+    return result
 
 
 def _valid_parameters(resource: str, parameters: Any) -> bool:

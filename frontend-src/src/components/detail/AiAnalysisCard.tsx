@@ -11,11 +11,12 @@ import Icon from '@/components/icons';
 import { createSignalAnalysisJob } from './api';
 import { AI_DISCLAIMER, useAiJob } from './useAiJob';
 import { aiJobResultSummary } from '@/api/modules/ai-jobs';
+import { isIndexSymbol } from '@/lib/quoteSymbol';
 import { t } from '../../i18n/core.ts';
 
 export default function AiAnalysisCard({ ticker }: { ticker: string }) {
   const { isOwner, loading } = useAccess();
-  const { job, error, starting, start, cancel, reset } = useAiJob();
+  const { job, error, queryIssue, starting, start, cancel, resume, reset } = useAiJob();
   const [confirming, setConfirming] = useState(false);
 
   const running =
@@ -31,7 +32,7 @@ export default function AiAnalysisCard({ ticker }: { ticker: string }) {
       <div className="flex items-center justify-between gap-3">
         <p className="flex items-center gap-2 text-h3 text-ink-900">
           <Icon name="spark-ai" size={16} className="text-ai-600" />
-          {t('AI 股票分析')}
+          {isIndexSymbol(ticker) ? t('AI 指数分析') : t('AI 股票分析')}
         </p>
         {isOwner && !job && !starting && !confirming && (
           <button
@@ -71,7 +72,9 @@ export default function AiAnalysisCard({ ticker }: { ticker: string }) {
           >
             <div className="mt-3 rounded-md bg-ai-50 px-3 py-2.5">
               <p className="text-caption text-ink-600">
-                {t('将综合')} {ticker} {t('的技术信号、大盘与宏观环境、期权链和相关新闻生成分析报告，消耗 1 次 AI 额度，是否继续？')}
+                {isIndexSymbol(ticker)
+                  ? t('将根据该指数的技术信号与可用市场资料生成分析，消耗 1 次 AI 额度，是否继续？')
+                  : <>{t('将综合')} {ticker} {t('的技术信号、大盘与宏观环境、期权链和相关新闻生成分析报告，消耗 1 次 AI 额度，是否继续？')}</>}
               </p>
               <div className="mt-2 flex gap-2">
                 <button
@@ -108,7 +111,7 @@ export default function AiAnalysisCard({ ticker }: { ticker: string }) {
               <div className="flex items-center justify-between text-caption text-ink-500">
                 <span className="flex items-center gap-1.5">
                   <span className="size-1.5 animate-led-pulse rounded-full bg-ai-600" aria-hidden="true" />
-                  {job.status === 'queued'
+                  {queryIssue === 'paused' || queryIssue === 'blocked' ? t('任务状态待确认') : job.status === 'queued'
                     ? t('排队中…')
                     : job.progress === null
                       ? t('模型正在处理 · 暂无进度百分比')
@@ -166,10 +169,9 @@ export default function AiAnalysisCard({ ticker }: { ticker: string }) {
                 : job?.status === 'cancelled'
                   ? t('任务已取消')
                   : t('任务已完成，但未返回可显示的结构化摘要'))}{' '}
-            ·{' '}
-            <button onClick={reset} className="font-medium text-ai-600">
-              {t('重试')}
-            </button>
+            {queryIssue === 'retrying' && <span>{t('正在重新查询原任务')}</span>}
+            {(queryIssue === 'paused' || queryIssue === 'blocked') && <button onClick={resume} className="ml-2 font-medium text-ai-600">{t('继续查询原任务')}</button>}
+            {!running && <button onClick={reset} className="ml-2 font-medium text-ai-600">{t('重试')}</button>}
             {job?.status === 'failed' && job.errorDetail && (
               /* owner 排障线索（非 owner 后端置空不渲染）：命中的校验规则/字段 */
               <span className="mt-1 block break-all font-mono text-micro text-ink-400">

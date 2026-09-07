@@ -4,6 +4,20 @@
 import type { Dict } from './types';
 
 export const DETAIL: Dict = {
+  '暂无技术信号': ['No technical signals available', 'テクニカルシグナルはありません'],
+  '开盘区间低点缺失，暂无失效位': ['Opening-range low is missing; no invalidation level is available', '寄り付きレンジの安値が不明なため、無効化水準は表示できません'],
+  '股票雷达暂不覆盖指数，指数行情与技术研究仍可查看。': ['Stock radar does not cover indices. Index quotes and technical research remain available.', '株式レーダーは指数を対象としていません。指数の相場とテクニカル分析は引き続き確認できます。'],
+  '指数不适用公司新闻与财报摘要': ['Company news and earnings summaries do not apply to indices', '指数には企業ニュースと決算サマリーは適用されません'],
+  '当前新闻按公司归集；市场新闻可在催化剂页查看。': ['News is grouped by company. Browse market news on the Catalysts page.', 'ニュースは企業別に集計されます。市場ニュースはカタリストページで確認できます。'],
+  '获取该指数的最新价格、日线与技术指标': ['Fetch this index’s latest quote, daily bars and technical indicators', 'この指数の最新相場・日足・テクニカル指標を取得します'],
+  'AI 指数分析': ['AI index analysis', 'AI 指数分析'],
+  '将根据该指数的技术信号与可用市场资料生成分析，消耗 1 次 AI 额度，是否继续？': ['Analyze this index using its technical signals and available market data, using 1 AI credit. Continue?', 'この指数のテクニカルシグナルと利用可能な市場データから分析します。AI クレジットを1回使用します。続行しますか？'],
+  '期权数据准备中': ['Preparing option data', 'オプションデータを準備中'],
+  '后台正在准备期权数据，稍后可重新读取': ['Option data is being prepared in the background. Try reading it again shortly.', 'バックグラウンドでオプションデータを準備しています。しばらくして再取得してください。'],
+  '暂时无法读取任务状态，任务可能仍在后台运行': ['Task status is temporarily unavailable. The task may still be running in the background.', '一時的にタスクの状態を取得できません。バックグラウンドで処理が続いている可能性があります。'],
+  '任务状态待确认': ['Task status needs confirmation', 'タスクの状態を確認する必要があります'],
+  '正在重新查询原任务': ['Retrying the same task', '同じタスクを再確認中'],
+  '继续查询原任务': ['Resume checking this task', 'このタスクの確認を再開'],
   /* src/components/StockDrawerBody.tsx */
   '成交量': ['Volume', '出来高'],
   'vs 昨收': ['vs prev close', '前日終値比'],

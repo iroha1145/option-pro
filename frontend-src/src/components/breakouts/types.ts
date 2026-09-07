@@ -133,6 +133,7 @@ export interface BreakoutTransition {
 
 /** 契约 BreakoutEvent 全字段（历史事件 / 事件详情） */
 export interface BreakoutEventFull extends BreakoutEventDetail {
+  event_anchor?: { kind: string | null; status: string | null } | null;
   event_id: string;
   state_version?: number;
   evidence_at?: string | null;

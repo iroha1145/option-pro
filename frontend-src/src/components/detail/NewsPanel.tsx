@@ -13,6 +13,7 @@ import { SkeletonText } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
 import { cn } from '@/lib/utils';
 import { fmtRelative } from '@/lib/format';
+import { isIndexSymbol } from '@/lib/quoteSymbol';
 import type { NewsItem, NewsSentiment } from '@/api/types';
 import { t } from '../../i18n/core.ts';
 
@@ -26,6 +27,16 @@ const WINDOW_MS = 72 * 3600_000;
 const MAX_ITEMS = 5;
 
 export default function NewsPanel({ ticker }: { ticker: string }) {
+  if (isIndexSymbol(ticker)) {
+    return <EmptyState icon="doc-quote" title={t('指数不适用公司新闻与财报摘要')}
+      description={t('当前新闻按公司归集；市场新闻可在催化剂页查看。')}
+      action={<Link to="/catalysts" className="text-caption font-medium text-brand-600">{t('去催化剂页浏览新闻流')}</Link>}
+      className="py-8" />;
+  }
+  return <StockNewsPanel key={ticker} ticker={ticker} />;
+}
+
+function StockNewsPanel({ ticker }: { ticker: string }) {
   const { isOwner } = useAccess();
   const newsQ = usePolling(() => catalystsApi.byTicker(ticker), null, [ticker]);
   const { data: news, loading, error } = newsQ;

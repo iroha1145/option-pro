@@ -57,10 +57,14 @@ function mapUnusual(body: unknown): UnusualOption[] {
  */
 function legRow(leg: unknown, prefix: 'call' | 'put'): Partial<OptionChainRow> {
   const r = asRec(leg);
+  // 兼容旧快照：vendor_raw 是供应商值未通过校验且反推失败，不是有效 IV。
+  const ivSource = pickS(r, 'iv_source');
+  const iv = ivSource === 'vendor_raw' || ivSource === 'missing'
+    ? null : pickN(r, 'iv', 'implied_volatility', `${prefix}Iv`);
   return {
     [`${prefix}Oi`]: pickN(r, 'oi', 'open_interest', `${prefix}Oi`),
     [`${prefix}Vol`]: pickN(r, 'vol', 'volume', `${prefix}Vol`),
-    [`${prefix}Iv`]: pickN(r, 'iv', 'implied_volatility', `${prefix}Iv`),
+    [`${prefix}Iv`]: iv,
     [`${prefix}Bid`]: pickN(r, 'bid', `${prefix}Bid`),
     [`${prefix}Ask`]: pickN(r, 'ask', `${prefix}Ask`),
   };
@@ -103,7 +107,7 @@ function mapChain(body: unknown, ticker: string, expiration: string): OptionChai
     rows,
     provider: pickS(r, 'provider'),
     asOf: pickS(r, 'as_of', 'asOf'),
-    stale: r._stale === true || r.stale === true,
+    stale: r._stale === true || r.stale === true || r.cache_stale === true || r.source_status === 'stale',
     quoteTimeKind: pickS(r, 'quote_time_kind', 'quoteTimeKind'),
     perContractQuoteTime: r.per_contract_quote_time === true || r.perContractQuoteTime === true,
   };
