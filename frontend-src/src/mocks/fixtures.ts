@@ -349,6 +349,9 @@ export function getStockDetail(ticker: string): StockDetail {
   };
 }
 
+/** 图表与分析包共用同一时钟，两次 buildCandles 必须得到同一套时间戳。 */
+export const MOCK_CANDLE_NOW_MS = Date.parse('2026-09-04T20:00:00.000Z');
+
 function buildCandles(ticker: string, range: StockChart['range']): { candles: Candle[]; ma20: (number | null)[] } {
   const i = Math.max(0, TICKER_POOL.findIndex((x) => x.ticker === ticker.toUpperCase()));
   const r = new Rng(55000 + i * 613 + range.length * 17);
@@ -365,7 +368,8 @@ function buildCandles(ticker: string, range: StockChart['range']): { candles: Ca
   const daily = stepMs >= 86_400_000;
   const vol = daily ? 0.022 : 0.0022;
   let price = info.base * (1 + r.float(-0.06, 0.02));
-  const start = Date.now() - points * stepMs;
+  // /chart 与 /technical 各生成一次；用调用时刻作锚会让两套时间戳永久对不上，日线分析闸门永远关死。
+  const start = MOCK_CANDLE_NOW_MS - points * stepMs;
   const candles: Candle[] = [];
   for (let k = 0; k < points; k++) {
     const drift = r.float(-vol, vol) + Math.sin(k / 17) * vol * 0.18;

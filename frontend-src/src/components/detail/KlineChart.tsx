@@ -49,6 +49,7 @@ import {
   labelBudget,
   fingerprintForBundle,
   fingerprintDiagnosis,
+  fingerprintWindowOpts,
   closedBarsForFingerprint,
 } from './chart-drawings/analysis/mapBundle.ts';
 import { overlaysToMarks, overlaysToSeries, analysisLayout, panesToOption, type PanePlot } from './chart-drawings/analysis/overlaysToMarks.ts';
@@ -735,11 +736,10 @@ export default function KlineChart({
     [data, range, analysisBundle, fingerprintOpts],
   );
   const gatedBars = useMemo(
-    () => (data?.bars?.length ? closedBarsForFingerprint(data.bars, range, {
-      ...fingerprintOpts,
-      throughDate: analysisBundle?.lastBarDate ?? null,
-    }) : []),
-    [analysisBundle?.lastBarDate, data, fingerprintOpts, range],
+    () => (data?.bars?.length
+      ? closedBarsForFingerprint(data.bars, range, fingerprintWindowOpts(analysisBundle, fingerprintOpts))
+      : []),
+    [analysisBundle, data, fingerprintOpts, range],
   );
   const gateReason = analysisGate(analysisBundle, {
     range,
@@ -1217,10 +1217,12 @@ export default function KlineChart({
       )}
       {analysisDrift && (
         <p className="mt-1 text-micro text-warn-600" role="status">
-          {t('分析图层与当前 K 线不同版本（图上 {n} 根 / 分析 {m} 根），已暂隐，刷新后恢复', {
-            n: analysisDrift.bars,
-            m: analysisDrift.expected ?? analysisDrift.bars,
-          })}
+          {analysisDrift.sameWindow && analysisDrift.expected != null && analysisDrift.bars === analysisDrift.expected
+            ? t('分析图层与当前 K 线数值对不上（同窗口 {n} 根），已暂隐', { n: analysisDrift.bars })
+            : t('分析图层与当前 K 线不同版本（图上 {n} 根 / 分析 {m} 根），已暂隐，刷新后恢复', {
+                n: analysisDrift.bars,
+                m: analysisDrift.expected ?? analysisDrift.bars,
+              })}
         </p>
       )}
       {analysisOk && <AnalysisLegend overlays={visibleOverlays} smartEnabled={smartDrawingEnabled} />}

@@ -355,6 +355,18 @@ export function barFingerprintFromBars<T extends CanonicalBar & { t: string }>(
  * technical.series_break_at 猜。后端声明它哈希了哪一段，前端就哈希同一段——
  * series_break_at 之类的口径差不再表现为「整块分析静默消失」。
  */
+/** 指纹、根数闸门、诊断必须切同一段，否则会出现「120/120 却说不同版本」。 */
+export function fingerprintWindowOpts(
+  bundle: ChartAnalysisBundle | null,
+  opts?: { dropLast?: boolean; fromDate?: string | null },
+): { dropLast?: boolean; fromDate: string | null; throughDate: string | null } {
+  return {
+    dropLast: opts?.dropLast,
+    fromDate: bundle?.firstBarDate ?? opts?.fromDate ?? null,
+    throughDate: bundle?.lastBarDate ?? null,
+  };
+}
+
 export function fingerprintForBundle<T extends CanonicalBar & { t: string }>(
   bundle: ChartAnalysisBundle | null,
   bars: T[],
@@ -362,11 +374,7 @@ export function fingerprintForBundle<T extends CanonicalBar & { t: string }>(
   opts?: { dropLast?: boolean; fromDate?: string | null },
 ): string | null {
   if (!bundle || !bars.length) return null;
-  return barFingerprintFromBars(bars, range, {
-    dropLast: opts?.dropLast,
-    fromDate: bundle.firstBarDate ?? opts?.fromDate ?? null,
-    throughDate: bundle.lastBarDate,
-  });
+  return barFingerprintFromBars(bars, range, fingerprintWindowOpts(bundle, opts));
 }
 
 /** 指纹对不上时，元数据能说清是「根数不同」还是「同一段但数值有出入」。 */
@@ -377,11 +385,7 @@ export function fingerprintDiagnosis<T extends CanonicalBar & { t: string }>(
   opts?: { dropLast?: boolean; fromDate?: string | null },
 ): { bars: number; expected: number | null; sameWindow: boolean } | null {
   if (!bundle) return null;
-  const rows = closedBarsForFingerprint(bars, range, {
-    dropLast: opts?.dropLast,
-    fromDate: bundle.firstBarDate ?? opts?.fromDate ?? null,
-    throughDate: bundle.lastBarDate,
-  });
+  const rows = closedBarsForFingerprint(bars, range, fingerprintWindowOpts(bundle, opts));
   const first = rows.length ? barStampForRange(rows[0].t, range) : null;
   const last = rows.length ? barStampForRange(rows[rows.length - 1].t, range) : null;
   return {
