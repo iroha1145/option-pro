@@ -349,7 +349,7 @@ export function preferLiveQuote(quote: LiveQuote | undefined, hasFallback: boole
   if (quote.subscription_status === 'live' && (quote.freshness === 'live' || (quote.freshness === 'stale' && !fallbackAt))) return true;
   // A disconnected stream retains its subscription, not its authority over a
   // newer periodic quote. Keep the last trade only while the fallback is older.
-  return Boolean(fallbackAt && timestamp(quote.trade_at) > timestamp(fallbackAt));
+  return Boolean(fallbackAt && timestamp(quote.trade_at) >= timestamp(fallbackAt));
 }
 
 export function fallbackQuoteLabel(fallbackAt?: string | null): string {

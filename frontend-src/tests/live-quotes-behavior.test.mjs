@@ -270,6 +270,7 @@ test('pending quotes keep price and change fallbacks; evicted symbols accept new
   assert.equal(h.quoteLabel(quote('AAPL', null, 0, { freshness: 'missing', subscription_status: 'unavailable' })), '暂无实时行情 · 定时更新');
   const evicted = quote('AAPL', 105, 10, { freshness: 'snapshot', subscription_status: 'limited' });
   assert.equal(h.preferLiveQuote(evicted, true, quote('AAPL', 100, 0).trade_at), true, 'a known older page snapshot does not rewind the last price');
+  assert.equal(h.preferLiveQuote(evicted, true, evicted.trade_at), true, 'the same trade clock is the same quote session');
   assert.equal(h.preferLiveQuote(evicted, true, quote('AAPL', 108, 20).trade_at), false, 'new periodic snapshots replace an evicted cached quote');
   assert.equal(h.preferLiveQuote(evicted, true), false, 'untimestamped periodic lists remain able to refresh after eviction');
   assert.equal(h.preferLiveQuote(quote('AAPL', 105, 10), true), true, 'active live trades remain authoritative over untimestamped list data');

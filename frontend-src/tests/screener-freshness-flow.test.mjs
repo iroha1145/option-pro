@@ -106,6 +106,29 @@ test('unknown fallback time prefers a timestamped quote without inventing a fall
   }, false, '2026-08-01'), '扫描价 · 日线');
 });
 
+test('equal trade and fallback times keep the quote, not the scan-price label', () => {
+  const quote = {
+    symbol: 'AAPL',
+    price: 1234.56,
+    previous_close: 99,
+    change: 1135.56,
+    change_pct: 1147,
+    trade_at: '2026-09-04T15:00:00.000Z',
+    received_at: '2026-09-04T15:00:00.000Z',
+    session: 'regular',
+    source: 'finnhub',
+    freshness: 'snapshot',
+    subscription_status: 'limited',
+  };
+  const status = {
+    enabled: true, configured: true, public_enabled: true, connected: true, connection_status: 'connected',
+  };
+  assert.equal(preferLiveQuote(quote, true, '2026-09-04T15:00:00Z'), true);
+  assert.equal(displayedQuoteLabel(quote, status, true, '2026-09-04T15:00:00Z'), '定时更新');
+  assert.equal(preferLiveQuote(quote, true, '2026-09-04'), false, 'intraday must not beat the complete daily session');
+  assert.equal(preferLiveQuote({ ...quote, trade_at: '2026-09-04T20:00:00.000Z' }, true, '2026-09-04'), true);
+});
+
 test('worker action mapping keeps reuse and phase, and pending tasks are recovered', () => {
   const memory = new Map();
   globalThis.sessionStorage = {
