@@ -1,7 +1,7 @@
 import { t } from '../../i18n/core.ts';
 import { useLiveQuote, useQuoteStatus } from '@/hooks/useLiveQuote';
 import { useTickFlash } from '@/hooks/useTickFlash';
-import { displayedQuoteLabel, preferLiveQuote } from '@/lib/liveQuotes';
+import { displayedQuoteLabel, fallbackQuoteLabel, preferLiveQuote } from '@/lib/liveQuotes';
 import { visibleScanDate } from '@/lib/screenerScanFlow';
 import { fmtPrice } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -11,13 +11,15 @@ import ChangeBadge from './ChangeBadge';
 export function QuoteIndicator({ symbol, className, usingFallback = false, fallbackAt }: { symbol: string; className?: string; usingFallback?: boolean; fallbackAt?: string | null }) {
   const status = useQuoteStatus();
   const quote = useLiveQuote(symbol);
-  if (!quote) return null;
-  const at = usingFallback ? fallbackAt : quote.trade_at;
+  if (!quote && !usingFallback) return null;
+  const at = usingFallback ? fallbackAt : quote?.trade_at;
   const stamp = at && !/^\d{4}-\d{2}-\d{2}$/.test(at.trim())
     ? new Date(at).toLocaleTimeString('zh-CN', { hour12: false })
     : null;
   const day = visibleScanDate(at);
-  const label = displayedQuoteLabel(quote, status, !usingFallback, fallbackAt);
+  const label = quote
+    ? displayedQuoteLabel(quote, status, !usingFallback, fallbackAt)
+    : fallbackQuoteLabel(fallbackAt);
   return (
     <span
       className={cn('text-[10px] font-normal text-ink-400', className)}
