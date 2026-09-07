@@ -68,6 +68,7 @@ export const EARNINGS: Dict = {
   'EPS 预期 vs 实际': ["EPS est. vs. actual", "EPS予想 vs 実績"],
   '营收预期': ["Revenue estimate", "売上高予想"],
   '预期波动': ["Expected move", "予想変動幅"],
+  '获取时间，非逐合约已验证报价': ['Fetch time — not a verified per-contract quote time', '取得時刻であり、契約ごとの検証済み気配時刻ではありません'],
   '未公布': ["Not reported", "未発表"],
 
   // ---------------- EpsHatchChart.tsx ----------------

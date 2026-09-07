@@ -1,7 +1,9 @@
 /** calendar 面板：经济日历（impact 分级色条 + impact_zh + forecast/previous/actual，按日期分组） */
 import { useMemo } from 'react';
-import { usePolling } from '@/hooks/usePolling';
-import { browserCalendarQuery, catalystsContract } from './api';
+import { useCalendarResource } from './useCalendarResource';
+import { flatCountry, localDay } from './calendarPresentation';
+import CatalystCacheStatus from './CatalystCacheStatus';
+import { cacheStatusProps } from './cacheStatusProps';
 import type { EconomicEvent } from './api';
 import EmptyState from '@/components/shared/EmptyState';
 import SoftBadge, { type BadgeTone } from '@/components/shared/SoftBadge';
@@ -34,11 +36,8 @@ function ImpactChip({ ev }: { ev: EconomicEvent }) {
 }
 
 export default function CalendarPanel({ refreshToken }: { refreshToken: number }) {
-  const q = usePolling(
-    () => catalystsContract.calendar(browserCalendarQuery()),
-    300_000,
-    [refreshToken],
-  );
+  void refreshToken;
+  const q = useCalendarResource();
 
   const groups = useMemo(() => {
     const map = new Map<string, EconomicEvent[]>();
@@ -60,10 +59,7 @@ export default function CalendarPanel({ refreshToken }: { refreshToken: number }
       ] as const);
   }, [q.data]);
 
-  const todayKey = useMemo(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  }, []);
+  const todayKey = localDay(q.now);
 
   if (q.loading && !q.data) {
     return (
@@ -72,7 +68,7 @@ export default function CalendarPanel({ refreshToken }: { refreshToken: number }
       </div>
     );
   }
-  if (q.error) {
+  if (q.error && !q.data) {
     return (
       <div className="card-surface">
         <EmptyState
@@ -109,6 +105,7 @@ export default function CalendarPanel({ refreshToken }: { refreshToken: number }
 
   return (
     <div className="card-surface overflow-hidden">
+      <CatalystCacheStatus {...cacheStatusProps(q)} />
       {groups.map(([date, events], gi) => {
         const isToday = date === todayKey;
         return (
@@ -126,7 +123,7 @@ export default function CalendarPanel({ refreshToken }: { refreshToken: number }
               {events.map((ev) => {
                 const s = IMPACT_STYLE[ev.impact];
                 const t = new Date(ev.scheduledAt);
-                const allDay = t.getHours() === 0 && t.getMinutes() === 0;
+                const allDay = ev.impact === 'holiday' && t.getHours() === 0 && t.getMinutes() === 0;
                 return (
                   <div
                     key={ev.eventId}
@@ -134,11 +131,11 @@ export default function CalendarPanel({ refreshToken }: { refreshToken: number }
                   >
                     {/* 重要度分级色条 */}
                     <span className={cn('w-[3px] shrink-0 rounded-full', s.bar)} aria-hidden="true" />
-                    <div className="flex w-12 shrink-0 flex-col justify-center">
+                    <div className="flex w-16 shrink-0 flex-col justify-center">
                       <span className="font-mono text-[11px] leading-[14px] text-ink-500 tnum">
                         {allDay ? __t('全天') : fmtLocaleTime(ev.scheduledAt)}
                       </span>
-                      <span className="text-[10px] leading-[14px] text-ink-300">{ev.country}</span>
+                      <span className="mt-1 self-start break-words rounded border border-line bg-paper-2 px-1.5 py-0.5 text-[10px] leading-[14px] text-ink-500">{flatCountry(ev.country)}</span>
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
@@ -152,7 +149,7 @@ export default function CalendarPanel({ refreshToken }: { refreshToken: number }
                           {__t('实际')}{' '}
                           {ev.actual !== null ? (
                             <SoftBadge tone="brand">{ev.actual}</SoftBadge>
-                          ) : ev.releaseStatus === 'awaiting_source' ? (
+                          ) : (ev.releaseStatus === 'awaiting_source' || Date.parse(ev.scheduledAt) <= q.now.getTime()) ? (
                             <SoftBadge tone="warn">{__t('数据源未回填')}</SoftBadge>
                           ) : (
                             <span className="text-ink-300">{__t('待公布')}</span>

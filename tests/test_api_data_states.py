@@ -10,8 +10,17 @@ import pandas as pd
 import pytest
 from fastapi import HTTPException
 
+from app.access import request_owner_access_context
 from app.api import earnings, options, stocks
 from app.services import sectors as sector_service
+
+
+@pytest.fixture(autouse=True)
+def _owner_direct_route_calls() -> None:
+    """These tests invoke owner cache/refresh routes without the HTTP gateway."""
+
+    with request_owner_access_context(True):
+        yield
 
 
 def _watchlist_payload(label: str, *, succeeded: int = 1):
@@ -153,7 +162,8 @@ def test_logo_response_sandboxes_svg_and_rejects_private_redirect_targets(monkey
         }
 
     monkeypatch.setattr(stocks, "_cached_company_logo", svg)
-    response = asyncio.run(stocks.stock_logo("AAPL"))
+    with request_owner_access_context(True):
+        response = asyncio.run(stocks.stock_logo("AAPL"))
 
     assert response.headers["content-security-policy"].startswith("sandbox")
     assert response.headers["x-content-type-options"] == "nosniff"
@@ -252,7 +262,10 @@ def test_expirations_route_preserves_freshness_metadata(monkeypatch):
         },
     )
 
-    result = asyncio.run(options.expirations("aapl"))
+    from app.access import request_owner_access_context
+
+    with request_owner_access_context(True):
+        result = asyncio.run(options.expirations("aapl"))
     assert result["ticker"] == "AAPL"
     assert result["expirations"] == ["2026-08-21"]
     assert result["_stale"] is True

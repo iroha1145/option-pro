@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
+from app.access import request_owner_access_context
 from app.api import earnings
 from app.public_home_snapshot import validate_public_home_payload
 from tests.http_response_support import anonymous_get_request as _areq, response_payload as _rp
@@ -75,12 +76,12 @@ def test_expected_move_uses_nearest_at_the_money_real_straddle() -> None:
         "underlying_price": 100,
         "calls": [
             {"strike": 95, "midpoint": 7.2},
-            {"strike": 100, "bid": 3.8, "ask": 4.2, "midpoint": 4.0},
+            {"strike": 100, "bid": 3.8, "ask": 4.2},
             {"strike": 105, "midpoint": 1.9},
         ],
         "puts": [
             {"strike": 95, "midpoint": 1.8},
-            {"strike": 100, "midpoint": 3.5},
+            {"strike": 100, "bid": 3.4, "ask": 3.6},
             {"strike": 105, "midpoint": 6.8},
         ],
     }
@@ -105,8 +106,8 @@ def test_expected_move_keeps_real_chain_provenance_and_rejects_stale_data(
         "source_status": "active",
         "as_of": "2026-07-23T20:15:00Z",
         "underlying_price": 100,
-        "calls": [{"strike": 100, "midpoint": 4.0}],
-        "puts": [{"strike": 100, "midpoint": 3.5}],
+        "calls": [{"strike": 100, "bid": 3.8, "ask": 4.2}],
+        "puts": [{"strike": 100, "bid": 3.4, "ask": 3.6}],
     }
     monkeypatch.setattr(
         yahoo_provider,
@@ -129,7 +130,7 @@ def test_expected_move_keeps_real_chain_provenance_and_rejects_stale_data(
         "expected_move_observed_at": "2026-07-23T20:15:00Z",
         "expected_move_underlying_price": 100.0,
         "expected_move_method": "atm_straddle_mid",
-        "expected_move_status": "active",
+        "expected_move_status": "degraded:chain_fetch_time_only",
     }
 
     monkeypatch.setattr(
@@ -1102,9 +1103,10 @@ def test_explicit_refresh_is_bounded_and_replaces_the_cached_snapshot(
     monkeypatch.setattr(earnings, "_build_upcoming_earnings", build)
     monkeypatch.setattr(earnings.time, "monotonic", lambda: clock[0])
 
-    initial = _rp(asyncio.run(earnings.upcoming_earnings(_areq())))
-    refreshed = asyncio.run(earnings.refresh_upcoming_earnings())
-    cooled = asyncio.run(earnings.refresh_upcoming_earnings())
+    with request_owner_access_context(True):
+        initial = _rp(asyncio.run(earnings.upcoming_earnings(_areq())))
+        refreshed = asyncio.run(earnings.refresh_upcoming_earnings())
+        cooled = asyncio.run(earnings.refresh_upcoming_earnings())
 
     assert initial["earnings"] == [{"ticker": "T1"}]
     assert refreshed["earnings"] == [{"ticker": "T2"}]
@@ -1135,8 +1137,9 @@ def test_failed_explicit_refresh_preserves_cached_data(
     monkeypatch.setattr(earnings, "_build_upcoming_earnings", build)
     monkeypatch.setattr(earnings.time, "monotonic", lambda: 200.0)
 
-    initial = _rp(asyncio.run(earnings.upcoming_earnings(_areq())))
-    stale = asyncio.run(earnings.refresh_upcoming_earnings())
+    with request_owner_access_context(True):
+        initial = _rp(asyncio.run(earnings.upcoming_earnings(_areq())))
+        stale = asyncio.run(earnings.refresh_upcoming_earnings())
 
     assert initial["earnings"] == [{"ticker": "SAFE"}]
     assert stale["earnings"] == [{"ticker": "SAFE"}]
@@ -1175,8 +1178,9 @@ def test_degraded_explicit_refresh_cannot_replace_complete_same_day_cache(
     monkeypatch.setattr(earnings, "_build_upcoming_earnings", build)
     monkeypatch.setattr(earnings.time, "monotonic", lambda: 300.0)
 
-    initial = _rp(asyncio.run(earnings.upcoming_earnings(_areq())))
-    stale = asyncio.run(earnings.refresh_upcoming_earnings())
+    with request_owner_access_context(True):
+        initial = _rp(asyncio.run(earnings.upcoming_earnings(_areq())))
+        stale = asyncio.run(earnings.refresh_upcoming_earnings())
     persisted = earnings.cache.get(key)
 
     assert initial["earnings"] == [{"ticker": "COMPLETE"}]

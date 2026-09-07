@@ -6,11 +6,12 @@ import { LivePrice, LiveChange } from '@/components/shared/LiveQuote';
  * 轮询 60s · 空态 / 骨架 / 503 · 响应式
  */
 import SoftBadge from '@/components/shared/SoftBadge';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { motion } from 'framer-motion';
 import { stocksApi } from '@/api/modules/stocks';
 import { usePersonalWatchlist } from '@/hooks/usePersonalWatchlist';
+import { watchlistErrorMessage } from '@/api/modules/account';
 import { DEFAULT_WATCHLIST_TICKERS, personalWatchlistRows } from '@/lib/personalWatchlist';
 import WatchlistManager from '@/components/shared/WatchlistManager';
 import { signalsApi } from '@/api/modules/signals';
@@ -45,7 +46,7 @@ import SessionLED, { SessionDot } from '@/components/shared/SessionLED';
 import { SkeletonCard, SkeletonReveal, SkeletonRows } from '@/components/shared/Skeleton';
 import Sparkline from '@/components/charts/Sparkline';
 import Icon from '@/components/icons';
-import { t } from '../i18n/core.ts';
+import { getLocale, t } from '../i18n/core.ts';
 
 /* ---------------- B1 小件：涨跌宽度比条 ---------------- */
 function AdvanceDeclineBar({
@@ -308,7 +309,7 @@ function WatchCard({
       </div>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
         <p className="metric-value text-data-l text-ink-900 tnum"><LivePrice symbol={item.ticker} fallback={item.price} fallbackAt={item.updatedAt} /></p>
-        {item.sector && <SoftBadge className="max-w-[60%]" title={item.sector}><span className="truncate">{item.sector}</span></SoftBadge>}
+        {item.sector && <SoftBadge className="max-w-[60%]" title={t(item.sector)}><span className="truncate">{t(item.sector)}</span></SoftBadge>}
       </div>
       {!Number.isFinite(item.price) && <p className="mt-2 text-caption text-ink-400">{t('暂无行情')}</p>}
       <div className="mt-2">
@@ -367,11 +368,14 @@ export default function Watchlist() {
   const closeManager = useCallback(() => setManagerKey(null), []);
   useEffect(() => setManagerKey(null), [personal.key]);
   const selectedTickers = useMemo(() => canManageWatchlist ? myTickers ?? [] : DEFAULT_WATCHLIST_TICKERS, [canManageWatchlist, myTickers]);
+  const selectedTickersRef = useRef(selectedTickers);
+  selectedTickersRef.current = selectedTickers;
   const selectionKey = selectedTickers.join(',');
   const fetchWatchlist = useCallback(() => {
     if (personal.loading || personal.error) return Promise.resolve([]);
-    return canManageWatchlist ? stocksApi.watchlistFor(myTickers ?? []) : stocksApi.watchlist();
-  }, [canManageWatchlist, myTickers, personal.loading, personal.error]);
+    const tickers = selectedTickersRef.current;
+    return canManageWatchlist ? stocksApi.watchlistFor(tickers) : stocksApi.watchlist();
+  }, [canManageWatchlist, personal.loading, personal.error]);
   const wl = usePolling(fetchWatchlist, 60_000, [personal.key, selectionKey, personal.loading, personal.error]);
   const refreshWatchlist = wl.refresh;
   const items = useMemo(() => {
@@ -385,11 +389,12 @@ export default function Watchlist() {
       await editPersonal([], [symbol]);
       toast.info(t('已移出自选'), symbol);
     } catch (error) {
-      toast.error(t('移除失败'), error instanceof Error ? error.message : t('请稍后再试'));
+      toast.error(t('移除失败'), watchlistErrorMessage(error, maxTickers));
     }
-  }, [editPersonal, toast]);
+  }, [editPersonal, maxTickers, toast]);
   const savePersonal = useCallback(async (add: string[], remove: string[]) => {
-    await editPersonal(add, remove);
+    const next = await editPersonal(add, remove);
+    selectedTickersRef.current = next.tickers;
     refreshWatchlist({ force: true });
     toast.success(t('自选已保存'));
   }, [editPersonal, refreshWatchlist, toast]);
@@ -481,7 +486,7 @@ export default function Watchlist() {
                   aria-label={t('打开 {ticker} 详情', { ticker: r.ticker })}
                   className="block w-fit rounded-sm font-mono text-body-s font-semibold text-ink-800 hover:text-brand-700 hover:underline"
                 >{r.ticker}</Link>
-                {r.sector && <SoftBadge className="max-w-[7.5rem]" title={r.sector}><span className="truncate">{r.sector}</span></SoftBadge>}
+                {r.sector && <SoftBadge className="max-w-[7.5rem]" title={t(r.sector)}><span className="truncate">{t(r.sector)}</span></SoftBadge>}
               </span>
               <span className="block max-w-[140px] truncate text-micro text-ink-400" title={r.name}>{r.name}</span>
             </span>
@@ -587,6 +592,10 @@ export default function Watchlist() {
   const personalFailed = Boolean(personal.error);
   const err = wl.error;
   const showingDefaultPool = !canManageWatchlist && !personal.loading && !personalFailed;
+  // 访客行情未到时 items 仍是 []，计数不能先写成「0 只（默认关注池）」再跳到 4。
+  const displayedCount = canManageWatchlist
+    ? (personal.loading ? null : items.length)
+    : (loading ? DEFAULT_WATCHLIST_TICKERS.length : items.length);
   const uncoveredTickers = items.filter((row) => !Number.isFinite(row.price)).map((row) => row.ticker);
   // 唯一排序实现见 watchlistSort：卡片、表格与渐进切片必须消费同一份排序结果，
   // 否则「先切片再排序」会把局部样本冒充成完整结果。
@@ -764,8 +773,12 @@ export default function Watchlist() {
               )}
             </div>
             <p className="w-full text-right text-caption text-ink-400 sm:w-auto">
-              <span className="font-mono tnum">{items.length}</span>{' '}
-              {showingDefaultPool ? t('只（默认关注池）') : t('只标的')}
+              {displayedCount !== null && (
+                <>
+                  <span className="font-mono tnum">{displayedCount}</span>{' '}
+                  {showingDefaultPool ? t('只（默认关注池）', { n: displayedCount }) : t('只标的', { n: displayedCount })}
+                </>
+              )}
               {/* 默认池是站点的池子：拿它的规模对照「上限 50」等于把它冒充成用户自选 */}
               {canManageWatchlist && !showingDefaultPool && (
                 <span className="ml-1 text-ink-300">{t('/ 上限')} {maxTickers}</span>
@@ -784,7 +797,7 @@ export default function Watchlist() {
           )}
           {!err && uncoveredTickers.length > 0 && (
             <p className="mt-3 flex flex-wrap items-center gap-1.5 text-caption text-ink-500" role="status">
-              <SoftBadge tone="warn" className="whitespace-normal">{t('暂无行情：')}{uncoveredTickers.join('、')}</SoftBadge>
+              <SoftBadge tone="warn" className="whitespace-normal">{t('暂无行情：')}{uncoveredTickers.join(getLocale() === 'en' ? ', ' : '、')}</SoftBadge>
               <span className="ml-1 text-ink-500">{t('（不在当前覆盖范围内，可在个股页手动获取）')}</span>
             </p>
           )}
@@ -939,7 +952,7 @@ export default function Watchlist() {
                 >
                   {t('加载更多')}
                   <span className="font-mono text-micro text-ink-400 tnum">
-                    {t('还有')} {progressive.remaining} {t('只')}
+                    {t('还有 {n} 只', { n: progressive.remaining })}
                   </span>
                 </button>
               </div>

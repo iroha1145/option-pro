@@ -3,9 +3,10 @@ import { createPortal } from 'react-dom';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { isTopFocusScope } from '@/lib/focusScope';
+import { watchlistErrorMessage } from '@/api/modules/account';
 import { DEFAULT_WATCHLIST_TICKERS, parseWatchlistInput, watchlistDelta } from '@/lib/personalWatchlist';
 import Icon from '@/components/icons';
-import { t } from '@/i18n/core';
+import { getLocale, t } from '@/i18n/core';
 
 interface Props {
   tickers: string[];
@@ -41,7 +42,7 @@ export default function WatchlistManager({ tickers, maxTickers, busy, onSave, on
   const append = (raw: string, clearInput = true): string[] | null => {
     const parsed = parseWatchlistInput(raw);
     if (parsed.invalid.length) {
-      setError(t('代码格式不正确：{tickers}', { tickers: parsed.invalid.join('、') }));
+      setError(t('代码格式不正确：{tickers}', { tickers: parsed.invalid.join(getLocale() === 'en' ? ', ' : '、') }));
       return null;
     }
     const next = [...new Set([...draft, ...parsed.tickers])];
@@ -63,7 +64,7 @@ export default function WatchlistManager({ tickers, maxTickers, busy, onSave, on
       await onSave(changes.add, changes.remove);
       onClose();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : t('请稍后再试'));
+      setError(watchlistErrorMessage(reason, maxTickers));
     }
   };
   const delta = watchlistDelta(original, draft);

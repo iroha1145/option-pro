@@ -28,3 +28,15 @@ export function computeScrollEdges(
     right: scrollLeft < maxScroll - 1,
   };
 }
+
+/** 把子项滚到横向容器中央，不碰纵向 scrollY。 */
+export function scrollLeftToCenterChild(
+  scrollLeft: number,
+  containerLeft: number,
+  containerWidth: number,
+  childLeft: number,
+  childWidth: number,
+): number {
+  const delta = childLeft + childWidth / 2 - (containerLeft + containerWidth / 2);
+  return scrollLeft + delta;
+}

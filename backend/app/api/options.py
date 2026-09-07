@@ -16,6 +16,11 @@ from app.access import (
     request_allows_visitor_live_pulls,
 )
 from app.services import yahoo
+from app.services.quote_quality import (
+    STANDARD_CONTRACT_MULTIPLIER,
+    estimated_premium,
+    option_mark,
+)
 from app.services.cache import cache
 from app.services.utils import sanitize
 from app.public_home_snapshot import (
@@ -219,12 +224,13 @@ async def _cached_yahoo_option_resource(
         try:
             return await asyncio.to_thread(loader)
         except ValueError as exc:
+            # Provider parse/format errors are not user expiration mistakes.
             raise _record_option_failure(
                 key,
-                status_code=400,
+                status_code=503,
                 detail={
-                    "code": "invalid_option_expiration",
-                    "message": "期权到期日无效",
+                    "code": "yahoo_options_unavailable",
+                    "message": "Yahoo/yfinance 期权数据暂不可用",
                 },
             ) from exc
         except HTTPException as exc:
@@ -405,10 +411,16 @@ async def _unusual_activity_impl(type: str, min_vol_oi: float):
                             continue
                         lp = _finite(row.get("lastPrice"), minimum=0.0)
                         iv = _finite(row.get("impliedVolatility"), minimum=0.0)
-                        premium = (
-                            _finite(lp * vol * 100, minimum=0.0)
-                            if lp is not None
-                            else None
+                        mark = option_mark(
+                            bid=row.get("bid"),
+                            ask=row.get("ask"),
+                            last=lp,
+                            allow_last_for_estimate=True,
+                        )
+                        premium = estimated_premium(
+                            mark["value"],
+                            vol,
+                            multiplier=STANDARD_CONTRACT_MULTIPLIER,
                         )
                         rows.append({
                             "ticker": symbol,
@@ -423,6 +435,8 @@ async def _unusual_activity_impl(type: str, min_vol_oi: float):
                             "vol_oi_ratio": round(ratio, 2),
                             "vol_oi": round(ratio, 2),
                             "premium": round(premium, 2) if premium is not None else None,
+                            "premium_basis": mark["basis"],
+                            "premium_kind": "estimated_notional",
                             "last_price": lp,
                             "implied_volatility": iv,
                             "underlying_price": price,
@@ -479,7 +493,13 @@ async def _unusual_activity_impl(type: str, min_vol_oi: float):
             status_code=503,
             detail="Yahoo options data is currently unavailable",
         )
-    results.sort(key=lambda r: (r["vol_oi_ratio"], r.get("premium") or 0), reverse=True)
+    results.sort(
+        key=lambda r: (
+            r["vol_oi_ratio"],
+            r["premium"] if r.get("premium") is not None else float("-inf"),
+        ),
+        reverse=True,
+    )
     return sanitize({
         "results": results[:50],
         "data_limited": bool(failed_symbols or partial_symbols),
@@ -488,8 +508,14 @@ async def _unusual_activity_impl(type: str, min_vol_oi: float):
         ),
         "attempted": len(POPULAR_TICKERS),
         "succeeded": succeeded,
+        "planned_tickers": len(POPULAR_TICKERS),
+        "successful_tickers": succeeded,
         "failed_symbols": failed_symbols,
         "partial_symbols": partial_symbols,
+        "expiration_window": "nearest_2",
+        "result_limit": 50,
+        "premium_kind": "estimated_notional",
+        "contract_multiplier": STANDARD_CONTRACT_MULTIPLIER,
         "as_of": datetime.now(timezone.utc).isoformat(),
     })
 

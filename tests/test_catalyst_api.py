@@ -7,8 +7,15 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.access import request_owner_access_context
 from app.api import catalysts as catalyst_api
 from app.services.catalysts.errors import CatalystError, InvalidCursorError
+
+
+@pytest.fixture(autouse=True)
+def _owner_request_context():
+    with request_owner_access_context(True):
+        yield
 
 
 NOW = "2026-07-15T04:00:00Z"

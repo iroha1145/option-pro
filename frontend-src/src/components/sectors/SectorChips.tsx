@@ -5,6 +5,7 @@
 import { useEffect, useRef } from 'react';
 import HorizontalScroller from '@/components/shared/HorizontalScroller';
 import Segmented from '@/components/shared/Segmented';
+import { scrollLeftToCenterChild } from '@/lib/scrollEdges';
 import { t } from '../../i18n/core.ts';
 
 interface SectorChipsProps {
@@ -18,9 +19,22 @@ export default function SectorChips({ sectors, value, onChange, className }: Sec
   /* 热力砖联动切板块时，选中 chip 可能在滚动条藏起的 1400px 里：滚入视口，
      否则 tablist 看起来「没有选中任何项」。 */
   const listRef = useRef<HTMLDivElement | null>(null);
+  const seenValue = useRef(false);
   useEffect(() => {
-    const active = listRef.current?.querySelector<HTMLElement>('[aria-selected="true"]');
-    active?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
+    const list = listRef.current;
+    const active = list?.querySelector<HTMLElement>('[aria-selected="true"]');
+    const scroller = list?.closest<HTMLElement>('.overflow-x-auto');
+    if (!active || !scroller) return;
+    if (!seenValue.current) {
+      seenValue.current = true;
+      return;
+    }
+    const box = scroller.getBoundingClientRect();
+    const chip = active.getBoundingClientRect();
+    scroller.scrollTo({
+      left: Math.max(0, scrollLeftToCenterChild(scroller.scrollLeft, box.left, box.width, chip.left, chip.width)),
+      behavior: 'instant',
+    });
   }, [value]);
   /* 11 个板块在窄容器里会溢出（实测 2117px 轨道 / 643px 视口，藏掉 1474px），
      而滚动条是隐藏的 —— 和热点带同一个问题：桌面端鼠标无从滚动，也看不出右边

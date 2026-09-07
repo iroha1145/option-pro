@@ -16,7 +16,7 @@ export interface OptionAlertResult {
 interface RankedAlert {
   alert: OptionAlertInput;
   severity: number;
-  premium: number;
+  premium: number | null;
   /** 量持比；持仓量为 0 或不可用时没有比值可言，恒为 null（不是 0）。 */
   ratio: number | null;
 }
@@ -100,7 +100,7 @@ function buildLeg(
   const state = volOiState(volume, openInterest);
   const ratio = state.kind === 'ratio' ? state.ratio : null;
   const mid = midpoint(bid, ask);
-  const premium = mid === null ? 0 : volume * mid * 100;
+  const premium = mid === null ? null : volume * mid * 100;
   const legMoneyness = moneyness(type, strike, spot);
   const distance =
     spot !== null && Number.isFinite(spot) && spot > 0
@@ -122,7 +122,7 @@ function buildLeg(
     severity += 3;
     reasons.push(t('成交量 {volume} 张', { volume }));
   }
-  if (premium >= 500_000) {
+  if (premium !== null && premium >= 500_000) {
     severity += 2;
     reasons.push(t('按买卖中价估算权利金 {premium} 美元', { premium: Math.round(premium) }));
   }
@@ -153,7 +153,7 @@ function buildLeg(
     ...(impliedVolatility !== null && impliedVolatility <= 100
       ? { implied_volatility: impliedVolatility }
       : {}),
-    ...(premium > 0 ? { premium_flow: Math.round(premium) } : {}),
+    ...(premium !== null && premium > 0 ? { premium_flow: Math.round(premium) } : {}),
     ...(ratio !== null ? { vol_oi_ratio: Number(ratio.toFixed(2)) } : {}),
     reasons,
     signal: 'unknown',
@@ -188,11 +188,13 @@ export function buildOptionAlertEvidence(
   // 参与大小比较 —— 后者会把「无比值」排到所有真实低比值之前。
   const ratioRank = (item: RankedAlert): number =>
     item.ratio === null ? -1 : item.ratio;
+  const premiumRank = (item: RankedAlert): number =>
+    item.premium === null ? Number.NEGATIVE_INFINITY : item.premium;
   ranked.sort(
     (left, right) =>
       right.severity - left.severity ||
       ratioRank(right) - ratioRank(left) ||
-      right.premium - left.premium ||
+      premiumRank(right) - premiumRank(left) ||
       right.alert.volume - left.alert.volume ||
       left.alert.strike - right.alert.strike ||
       left.alert.type.localeCompare(right.alert.type),

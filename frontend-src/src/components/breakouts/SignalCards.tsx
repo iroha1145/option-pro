@@ -118,7 +118,7 @@ function SignalCard({ ev: initialEvent, index, flash, locate, onOpen }: SignalCa
           </button>
           <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
             <p className="min-w-0 truncate text-micro text-ink-400">{ev.name}</p>
-            {ev.sector && <SoftBadge size="sm" tone="neutral">{ev.sector}</SoftBadge>}
+            {ev.sector && <SoftBadge size="sm" tone="neutral">{t(ev.sector)}</SoftBadge>}
           </div>
         </div>
         <span className="shrink-0 font-mono text-micro text-ink-400 tnum">{fmtRelative(ev.triggered_at)}</span>

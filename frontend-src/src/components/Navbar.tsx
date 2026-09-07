@@ -187,9 +187,6 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
             <SessionDot session={session} />
             <NyClock />
           </span>
-          <span className="flex items-center gap-1.5 md:hidden">
-            <SessionDot session={session} />
-          </span>
 
           {isOwner && (
             <span

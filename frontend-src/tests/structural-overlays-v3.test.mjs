@@ -237,6 +237,19 @@ test('pending and reference labels are explicit rather than silently recoloured'
   assert.equal(semanticLabel('阻力', { status: 'forming', evidence: { displayTier: 'secondary' } }), '阻力 · 参考');
   assert.equal(overlayTier({ evidence: { displayTier: 'unknown' } }), undefined);
 });
+test('semantic labels interpolate through the injected translator', () => {
+  const translate = (message, variables) => {
+    const table = {
+      '原{label} · 突破已确认': 'Former {label} · breakout confirmed',
+      '{label} · 参考': '{label} · reference',
+    };
+    return (table[message] ?? message).replace(/\{(\w+)\}/g, (whole, key) => (
+      variables?.[key] === undefined || variables?.[key] === null ? whole : String(variables[key])
+    ));
+  };
+  assert.equal(semanticLabel('Resistance', { status: 'broken_up', evidence: {} }, translate), 'Former Resistance · breakout confirmed');
+  assert.equal(semanticLabel('Resistance', { status: 'forming', evidence: { displayTier: 'secondary' } }, translate), 'Resistance · reference');
+});
 test('primary, secondary and context boundaries have distinct visual weights', () => {
   const ink = ['primary', 'secondary', 'context'].map(tier => renderPatternInk(pattern({ tier }), geometry, ctx).lines[0][0].lineStyle);
   assert.equal(ink[0].opacity, 1); assert.ok(ink[0].width > ink[1].width && ink[1].width > ink[2].width);

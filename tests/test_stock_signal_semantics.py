@@ -233,6 +233,21 @@ def test_stock_data_quality_is_derived_from_model_signal_schema() -> None:
     ) / 2
     assert partial["data_quality"] == round(91 * partial_coverage)
     assert partial["data_quality"] < partial["signal_data_quality"]
+    assert "options_crowding" in complete["coverage"]["top_missing_components"]
+    assert "options_panic_falling" in complete["coverage"]["bottom_missing_components"]
+
+
+def test_sc03_stock_score_values_stay_stable_for_the_same_inputs() -> None:
+    payload = {
+        key: _scored_signal()
+        for key in scoring.STOCK_SCORE_SIGNAL_KEYS
+    }
+    first = scoring.compute_stock_scores(payload)
+    second = scoring.compute_stock_scores(payload)
+    assert first["top_score"] == second["top_score"]
+    assert first["bottom_score"] == second["bottom_score"]
+    assert first["data_quality"] == second["data_quality"]
+    assert first["coverage"] == second["coverage"]
 
 
 def test_atr_does_not_masquerade_as_an_iv_rank_component() -> None:

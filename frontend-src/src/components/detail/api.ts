@@ -292,6 +292,13 @@ export interface StockTrendBiasView {
   scores: Record<TrendBiasScoreKey, number | null>;
   factors: TrendBiasFactor[];
   as_of: string;
+  modelCoverage: {
+    dataQuality: number | null;
+    topRatio: number | null;
+    bottomRatio: number | null;
+    topMissing: string[];
+    bottomMissing: string[];
+  } | null;
 }
 
 const SCORE_KEYS: TrendBiasScoreKey[] = ['trend', 'momentum', 'volume', 'volatility'];
@@ -506,6 +513,20 @@ export function mapTrendBiasResponse(body: unknown, ticker: string): StockTrendB
       return factor ? [factor] : [];
     }),
     as_of: pickS(raw, 'as_of') ?? '',
+    modelCoverage: (() => {
+      const coverage = asRec(rawScores.coverage);
+      const topMissing = Array.isArray(coverage.top_missing_components)
+        ? coverage.top_missing_components.filter((value): value is string => typeof value === 'string')
+        : [];
+      const bottomMissing = Array.isArray(coverage.bottom_missing_components)
+        ? coverage.bottom_missing_components.filter((value): value is string => typeof value === 'string')
+        : [];
+      const dataQuality = boundedScore(pickN(rawScores, 'data_quality', 'dataQuality'));
+      const topRatio = pickN(coverage, 'top_ratio');
+      const bottomRatio = pickN(coverage, 'bottom_ratio');
+      if (dataQuality === null && topRatio === null && bottomRatio === null) return null;
+      return { dataQuality, topRatio, bottomRatio, topMissing, bottomMissing };
+    })(),
   };
 }
 

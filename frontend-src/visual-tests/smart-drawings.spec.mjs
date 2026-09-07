@@ -189,7 +189,7 @@ for (const width of [1440, 390]) {
 
 for (const [locale, support, resistance, description] of [
   ['zh', '支撑', '阻力', '深色为主要边界，细线为参考；虚线为延伸，淡色点线为历史结构'],
-  ['en', 'Support', 'Resistance', 'Dark: primary; thin: secondary; dashed: extension; faint dotted: historical'],
+  ['en', 'Support', 'Resistance', 'Dark: main boundary; thin: reference; dashed: extension; faint dotted: historical structure'],
   ['ja', 'サポート', 'レジスタンス', '濃色：主要境界、細線：参考、破線：延長、薄い点線：過去の構造'],
 ]) test(`level-only legend is visible and translated in ${locale}`, async ({ page }) => {
   const errors = await harness(page, locale);

@@ -76,6 +76,39 @@ test('mapTrendBiasResponse derives available subscores from the real signal enve
     mapped.factors.map((factor) => factor.key),
     ['trend', 'momentum', 'volume', 'volatility'],
   );
+  assert.equal(mapped.modelCoverage, null);
+});
+
+test('SC-01 maps stock score coverage without changing trend scores', async (t) => {
+  const { mapTrendBiasResponse } = await loadMapper(t);
+  const mapped = mapTrendBiasResponse(
+    {
+      ticker: 'MSFT',
+      trend_bias_score: 50,
+      trend_bias_label: '中性',
+      trend_bias_status: 'ok',
+      trend_bias_coverage: 1,
+      trend_bias_missing_components: [],
+      scores: {
+        top_score: 40,
+        bottom_score: 20,
+        data_quality: 46,
+        coverage: {
+          top_ratio: 0.5,
+          bottom_ratio: 0.43,
+          top_missing_components: ['options_crowding', 'earnings_reaction'],
+          bottom_missing_components: ['short_covering'],
+        },
+      },
+      signals: {},
+      as_of: '2026-09-07T00:00:00Z',
+    },
+    'MSFT',
+  );
+  assert.equal(mapped.modelCoverage.dataQuality, 46);
+  assert.equal(mapped.modelCoverage.topRatio, 0.5);
+  assert.deepEqual(mapped.modelCoverage.topMissing, ['options_crowding', 'earnings_reaction']);
+  assert.equal(mapped.trend_bias_score, 50);
 });
 
 test('mapTrendBiasResponse keeps insufficient data nullable and never reads absent factors', async (t) => {

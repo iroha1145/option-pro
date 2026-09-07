@@ -651,7 +651,7 @@ export default function LeadBigCard({ ev: initialEvent, flash, locate, onOpen, d
         {/* lg 以上：meta 并入 chips 行（空格分隔 inline 项，不再用 · 串） */}
         <span className="hidden items-center gap-3 text-micro text-ink-500 lg:inline-flex">
           {exchange && <span>{exchange}</span>}
-          <SoftBadge size="sm" tone="neutral">{e.sector}</SoftBadge>
+          <SoftBadge size="sm" tone="neutral">{t(e.sector)}</SoftBadge>
           <span className="font-mono tnum">{t('跳空')} {gap !== null ? `${gap >= 0 ? '+' : ''}${gap.toFixed(2)}%` : '—'}</span>
           <span className="font-mono tnum">{t('量能')} {rvol !== null ? `${rvol.toFixed(1)}×` : '—'}</span>
           <span className="font-mono tnum">{fmtEventTime(e.event_at)} {t('美东')}</span>
@@ -676,7 +676,7 @@ export default function LeadBigCard({ ev: initialEvent, flash, locate, onOpen, d
         </h3>
         <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-caption text-ink-500 lg:hidden">
           {exchange && <span>{exchange}</span>}
-          <SoftBadge size="sm" tone="neutral">{e.sector}</SoftBadge>
+          <SoftBadge size="sm" tone="neutral">{t(e.sector)}</SoftBadge>
           <span className="font-mono tnum">{t('跳空')} {gap !== null ? `${gap >= 0 ? '+' : ''}${gap.toFixed(2)}%` : '—'}</span>
           <span className="font-mono tnum">{t('同时段量能')} {rvol !== null ? `${rvol.toFixed(1)}×` : '—'}</span>
           <span className="font-mono tnum">{t('事件时间')} {fmtEventTime(e.event_at)} {t('美东')}</span>

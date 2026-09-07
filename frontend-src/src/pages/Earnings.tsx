@@ -669,6 +669,7 @@ export default function Earnings() {
               <EarningsList
                 items={visibleItems}
                 selectedTicker={selectedTicker}
+                autoSelected={selectedTicker !== null && selectedTicker === autoPickedTicker}
                 onSelectTicker={onSelectTickerFromRow}
                 onNextWeek={() => onWeekChange(1)}
                 filteredByDay={selectedDay != null}

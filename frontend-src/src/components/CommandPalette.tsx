@@ -187,7 +187,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
           group: __t('功能'),
           no: n.no,
           title: n.label,
-          hint: __t('前往{label}页', { label: n.label }),
+          hint: __t('前往{label}', { label: n.label }),
           icon: 'chevron-right',
           action: () => {
             onClose();
@@ -488,7 +488,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
                       {(e.hint || e.sector) && (
                         <span className="ml-auto flex min-w-0 max-w-[58%] items-center gap-1.5">
                           {e.hint && <span className="min-w-0 truncate text-micro text-ink-400">{e.hint}</span>}
-                          {e.sector && <SoftBadge className="max-w-[7rem] shrink-0" title={e.sector}><span className="truncate">{e.sector}</span></SoftBadge>}
+                          {e.sector && <SoftBadge className="max-w-[7rem] shrink-0" title={t(e.sector)}><span className="truncate">{t(e.sector)}</span></SoftBadge>}
                         </span>
                       )}
                     </button>

@@ -91,6 +91,39 @@ test('演示异动不从看涨或看跌合约类型推断交易方向', async ()
   assert.ok(rows.every(row => row.sentiment === 'neutral'));
 });
 
+test('链映射保留获取时间语义，不把链时间标成逐合约已验证报价', async () => {
+  const chain = await optionsRuntime({
+    underlying_price: 100,
+    quote_time_kind: 'chain_fetch',
+    per_contract_quote_time: false,
+    calls: [{ strike: 100, implied_volatility: 0.2 }],
+    puts: [],
+  }).chain('NVDA', '2030-08-16');
+  assert.equal(chain.quoteTimeKind, 'chain_fetch');
+  assert.equal(chain.perContractQuoteTime, false);
+});
+
+test('缺少中间价时权利金保持缺失，排序不把缺失当成 0', () => {
+  const alerts = buildOptionAlertEvidence({
+    ticker: 'NVDA', expiration: '2030-08-16', spot: 100,
+    rows: [
+      {
+        strike: 100,
+        callVol: 8000, callOi: 2000, callIv: 0.3, callBid: null, callAsk: null,
+        putVol: null, putOi: null, putIv: null, putBid: null, putAsk: null,
+      },
+      {
+        strike: 105,
+        callVol: 6000, callOi: 1000, callIv: 0.3, callBid: 2, callAsk: 2.2,
+        putVol: null, putOi: null, putIv: null, putBid: null, putAsk: null,
+      },
+    ],
+  }, '2030-08-16', 10);
+  assert.equal(alerts[0].strike, 105);
+  assert.equal(alerts[0].premium_flow, 1_260_000);
+  assert.equal('premium_flow' in alerts[1], false);
+});
+
 test('3倍量持比进入观察证据，但不产生看涨买入或开仓结论', () => {
   const [alert] = buildOptionAlertEvidence({
     ticker: 'NVDA', expiration: '2030-08-16', spot: 102.5,

@@ -49,7 +49,7 @@ export default function PriceHeader({ detail, symbol: requestedSymbol }: { detai
           </h1>
           <div className="mt-1 flex flex-wrap items-center gap-2">
             <SoftBadge>
-              {detail?.sector ?? t('个股行情')}
+              {detail?.sector ? t(detail.sector) : t('个股行情')}
             </SoftBadge>
             {market && <SessionLED session={quoteSession === 'postmarket' ? 'afterhours' : quoteSession ?? market.session} label={priceLabel ?? t('{label} · 延迟 15 分钟', { label: market.label })} />}
           </div>

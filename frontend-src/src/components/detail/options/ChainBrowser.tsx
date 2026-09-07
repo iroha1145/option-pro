@@ -53,6 +53,7 @@ function ContractDetail({ contract: c, onClose }: { contract: ChainContract; onC
     </dl>
     <p className="mt-3 text-caption text-ink-600">{reason(c)}</p>
     <p className="mt-2 text-micro leading-relaxed text-ink-500">{t('参考价为买卖报价中值，不保证成交；金额按中价 × 成交量 × 100 估算，不是实际资金流入。隐含波动率可能包含模型估算。')}</p>
+    <p className="mt-1 text-micro leading-relaxed text-ink-500">{t('利率 5% 与未计股息是定价假设，不是当前市场利率或已确认股息为零。')}</p>
   </section>;
 }
 
@@ -152,6 +153,7 @@ export default function ChainBrowser({ chain }: { chain: OptionChain }) {
           <div><dt className="font-medium text-ink-800">{t('成交量与持仓量')}</dt><dd className="mt-1 leading-relaxed">{t('成交量是当日累计交易张数；持仓量是上次更新时尚未了结的张数，两者时间口径不同。')}</dd></div>
           <div><dt className="font-medium text-ink-800">{t('关注规则')}</dt><dd className="mt-1 leading-relaxed">{t('成交量至少为持仓量的 3 倍、零持仓有成交、成交至少 5,000 张，或估算成交金额至少 50 万美元。规则只帮助筛选，不判断买卖方向。')}</dd></div>
           <div><dt className="font-medium text-ink-800">{t('缺失与估算')}</dt><dd className="mt-1 leading-relaxed">{t('「—」表示缺失，不是零。零持仓无法计算倍数，也不能说明全部是新开仓。报价为延迟数据。')}</dd></div>
+          <div><dt className="font-medium text-ink-800">{t('覆盖范围')}</dt><dd className="mt-1 leading-relaxed">{t('本页异动只看当前标的与所选到期日，不是全市场扫描。')}</dd></div>
         </dl>
       </details>
     </section>

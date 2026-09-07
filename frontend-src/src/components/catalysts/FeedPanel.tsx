@@ -13,6 +13,10 @@ import { cn } from '@/lib/utils';
 import { fmtLocaleDate, fmtLocaleTime, fmtRelative } from '@/lib/format';
 import { SCORE_HINTS } from '@/lib/scoreHints';
 import { catalystsContract } from './api';
+import { useFeedResource } from './useFeedResource';
+import { appendFeedPage, visibleFeedPage } from './feedSnapshot';
+import CatalystCacheStatus from './CatalystCacheStatus';
+import { cacheStatusProps } from './cacheStatusProps';
 import type { CatalystNewsItem } from './api';
 import type { CatalystFilters } from './filters';
 import { toFeedQuery } from './filters';
@@ -169,117 +173,80 @@ function FeedSkeleton({ rows = 6 }: { rows?: number }) {
   );
 }
 
-type Phase = 'loading' | 'ready' | 'error';
-
 interface FeedPanelProps {
   filters: CatalystFilters;
   onOpenNews: (id: string) => void;
   patches: Record<string, CatalystNewsItem>;
   refreshToken: number;
-  /** 一轮加载的结果；ok=false 时父级不得更新「最后更新时间」（审计 P2-22）。 */
-  onFeedResult: (result: { total: number | null; ok: boolean }) => void;
+  onFeedResult: (result: { total: number | null; ok: boolean; validatedAt?: number }) => void;
   onClearFilters: () => void;
 }
 
-export default function FeedPanel({ filters, onOpenNews, patches, refreshToken, onFeedResult, onClearFilters }: FeedPanelProps) {
-  const [items, setItems] = useState<CatalystNewsItem[]>([]);
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
-  const [hiddenUnanalyzed, setHiddenUnanalyzed] = useState(0);
-  const [phase, setPhase] = useState<Phase>('loading');
-  const [error, setError] = useState<ApiError | null>(null);
+export default function FeedPanel({ filters, onOpenNews, patches, onFeedResult, onClearFilters }: FeedPanelProps) {
+  const q = useFeedResource(filters);
+  const items = q.data?.items ?? [];
+  const nextCursor = q.data?.nextCursor ?? null;
+  const hiddenUnanalyzed = q.data?.hiddenUnanalyzed ?? 0;
+  const error = q.error;
+  const phase = q.data !== null ? 'ready' : error ? 'error' : 'loading';
+  const fading = false;
+  const fetchFirst = q.refresh;
   const [loadingMore, setLoadingMore] = useState(false);
-  const [fading, setFading] = useState(false);
-  const reqRef = useRef(0);
-  const filtersKey = JSON.stringify(filters);
-  const filtersRef = useRef(filters);
-  filtersRef.current = filters;
-
-  /* 合并抽屉回写的分析结果 */
-  useEffect(() => {
-    const keys = Object.keys(patches);
-    if (!keys.length) return;
-    setItems((prev) => prev.map((it) => patches[it.newsId] ?? it));
-  }, [patches]);
-
-  const fetchFirst = useCallback(async () => {
-    const reqId = ++reqRef.current;
-    setPhase('loading');
-    setError(null);
-    try {
-      const query = { ...toFeedQuery(filtersRef.current), limit: PAGE_SIZE };
-      let res = await catalystsContract.feed(query);
-      let hidden = res.hiddenUnanalyzed ?? 0;
-      let hops = 0;
-      while (res.items.length === 0 && res.nextCursor && hops < 8) {
-        hops += 1;
-        const more = await catalystsContract.feed({ ...query, cursor: res.nextCursor });
-        hidden += more.hiddenUnanalyzed ?? 0;
-        res = { ...more, total: res.total, hiddenUnanalyzed: hidden };
-      }
-      if (reqRef.current !== reqId) return;
-      if (res.items.length === 0 && hidden === 0) {
-        try {
-          const today = await catalystsContract.newsToday();
-          hidden = today.pending ?? 0;
-        } catch {
-          hidden = 0;
-        }
-      }
-      if (reqRef.current !== reqId) return;
-      setItems(res.items);
-      setNextCursor(res.nextCursor);
-      setHiddenUnanalyzed(hidden);
-      onFeedResult({ total: res.total, ok: true });
-      setPhase('ready');
-    } catch (e) {
-      if (reqRef.current !== reqId) return;
-      setError(e instanceof ApiError ? e : new ApiError(500, __t('加载失败')));
-      setPhase('error');
-      onFeedResult({ total: null, ok: false });
-    }
-  }, [onFeedResult]);
-
-  /* 过滤变更：淡出 200ms → 骨架 → 新列表（呼吸式刷新） */
-  const firstRun = useRef(true);
-  useEffect(() => {
-    if (firstRun.current) {
-      firstRun.current = false;
-      void fetchFirst();
-      return;
-    }
-    setFading(true);
-    const t = window.setTimeout(() => {
-      setFading(false);
-      void fetchFirst();
-    }, 200);
-    return () => window.clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtersKey]);
-
-  /* 页头刷新钮 */
-  useEffect(() => {
-    if (refreshToken > 0) void fetchFirst();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshToken]);
-
   const [moreError, setMoreError] = useState<ApiError | null>(null);
+  const keyRef = useRef(q.key);
+  keyRef.current = q.key;
+  const pendingMore = useRef(false);
+  const generation = useRef(0);
+
+  useEffect(() => {
+    generation.current += 1;
+    pendingMore.current = false;
+    setLoadingMore(false);
+    setMoreError(null);
+    return () => { generation.current += 1; };
+  }, [q.key]);
+
+  useEffect(() => {
+    onFeedResult({ total: q.data?.total ?? null, ok: q.data !== null && !q.error && !q.restored,
+      validatedAt: q.validatedAt || undefined });
+  }, [q.data, q.error, q.restored, q.validatedAt, onFeedResult]);
+
+  useEffect(() => {
+    if (!Object.keys(patches).length) return;
+    q.update((previous) => {
+      if (!previous) return previous;
+      let changed = false;
+      const revised = previous.items.map((item) => {
+        if (!patches[item.newsId] || patches[item.newsId] === item) return item;
+        changed = true;
+        return patches[item.newsId];
+      });
+      return changed ? { ...previous, items: revised } : previous;
+    });
+  }, [patches, q.update]);
+
   const loadMore = useCallback(async () => {
-    if (!nextCursor || loadingMore) return;
-    const reqId = reqRef.current;
+    if (!q.data || !q.data.nextCursor || pendingMore.current || q.refreshing) return;
+    const previous = q.data;
+    const key = q.key;
+    const requestGeneration = generation.current;
+    pendingMore.current = true;
     setLoadingMore(true);
+    setMoreError(null);
     try {
-      const res = await catalystsContract.feed({ ...toFeedQuery(filtersRef.current), limit: PAGE_SIZE, cursor: nextCursor });
-      if (reqRef.current !== reqId) return;
-      setItems((prev) => [...prev, ...res.items.filter((n) => !prev.some((p) => p.newsId === n.newsId))]);
-      setNextCursor(res.nextCursor);
-      setMoreError(null);
-    } catch (error) {
-      // 增量请求的异常此前被吞掉，用户只会觉得按钮没有反应（审计 P2-24）。
-      setMoreError(error instanceof ApiError ? error : new ApiError(500, __t('加载更多失败')));
+      const page = await visibleFeedPage((cursor) => catalystsContract.feed({ ...toFeedQuery(filters), limit: PAGE_SIZE, cursor }), previous.nextCursor!);
+      if (keyRef.current !== key || generation.current !== requestGeneration) return;
+      q.update((current) => current ? appendFeedPage(current, page) : current, previous);
+    } catch (cause) {
+      if (keyRef.current !== key || generation.current !== requestGeneration) return;
+      setMoreError(cause instanceof ApiError ? cause : new ApiError(500, __t('加载更多失败')));
     } finally {
-      setLoadingMore(false);
+      if (keyRef.current === key && generation.current === requestGeneration) {
+        pendingMore.current = false;
+        setLoadingMore(false);
+      }
     }
-  }, [nextCursor, loadingMore]);
+  }, [q.data, q.key, q.refreshing, q.update, filters]);
 
   const hasFilters =
     filters.ticker !== '' ||
@@ -292,6 +259,7 @@ export default function FeedPanel({ filters, onOpenNews, patches, refreshToken, 
 
   return (
     <div className="card-surface overflow-hidden">
+      <CatalystCacheStatus {...cacheStatusProps(q)} />
       {phase === 'loading' ? (
         <FeedSkeleton />
       ) : phase === 'error' ? (
@@ -350,7 +318,7 @@ export default function FeedPanel({ filters, onOpenNews, patches, refreshToken, 
           >
             {items.map((it, i) => (
               /* 游标分页追加的项不再播放入场 */
-              <NewsRow key={it.newsId} item={it} index={i} animate={i < PAGE_SIZE} onOpen={onOpenNews} />
+              <NewsRow key={it.newsId} item={it} index={i} animate={false} onOpen={onOpenNews} />
             ))}
           </div>
           {/* 游标分页 */}

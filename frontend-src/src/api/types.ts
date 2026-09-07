@@ -649,7 +649,7 @@ export interface UnusualOption {
   expiration: string;
   volume: number | null;
   openInterest: number | null;
-  premium: number | null;      // 万美元
+  premium: number | null;      // 估算名义权利金（美元），不是资金流
   sentiment: NewsSentiment;
   at: string;
 }
@@ -669,6 +669,8 @@ export interface OptionChain {
   provider?: string | null;
   asOf?: string | null;
   stale?: boolean;
+  quoteTimeKind?: string | null;
+  perContractQuoteTime?: boolean;
 }
 
 /* ---------- AI 任务 ---------- */
