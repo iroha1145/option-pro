@@ -38,7 +38,9 @@ test('F02 mobile 390 shows scan date on cards after refresh', async ({ page }) =
   const errors = await openScreener(page);
   await selectSemiconductorsAndScan(page);
   await expect(page.getByText('NVDA').filter({ visible: true }).first()).toBeVisible({ timeout: 90_000 });
-  await expect(page.getByText(/评分依据|扫描价|2026-/).filter({ visible: true }).first()).toBeVisible();
+  await expect(page.getByText(/评分依据/).filter({ visible: true }).first()).toBeVisible();
+  await expect(page.getByText(/扫描价/).filter({ visible: true }).first()).toBeVisible();
+  await expect(page.getByText(/上次扫描/).filter({ visible: true }).first()).toBeVisible();
   await page.screenshot({ path: `${evidence}/mobile-390-after.png`, animations: 'disabled' });
   expect(errors.filter((message) => !/ResizeObserver|AbortError/.test(message))).toEqual([]);
 });
@@ -48,13 +50,22 @@ for (const [locale, heading] of [
   ['en', 'Screener'],
   ['ja', 'スクリーナー'],
 ]) {
-  test(`F01 ${locale} 768 keeps the start-scan control visible`, async ({ page }) => {
-    await page.addInitScript((code) => {
-      localStorage.setItem('optix:locale', code);
-    }, locale);
-    await page.setViewportSize({ width: 768, height: 900 });
-    await openScreener(page);
-    await expect(page.getByRole('heading', { level: 1 })).toContainText(heading);
-    await expect(page.locator('button.scan-trigger')).toBeVisible();
-  });
+  for (const [width, height] of [
+    [320, 720],
+    [390, 844],
+    [768, 900],
+    [1440, 900],
+  ]) {
+    test(`F01 ${locale} ${width} keeps the start-scan control visible`, async ({ page }) => {
+      await page.addInitScript((code) => {
+        localStorage.setItem('optix:locale', code);
+      }, locale);
+      await page.setViewportSize({ width, height });
+      await openScreener(page);
+      await expect(page.getByRole('heading', { level: 1 })).toContainText(heading);
+      await expect(page.locator('button.scan-trigger')).toBeVisible();
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1);
+      expect(overflow, `${locale} ${width} must not clip horizontally`).toBeTruthy();
+    });
+  }
 }
