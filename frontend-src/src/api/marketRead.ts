@@ -22,6 +22,7 @@ const DEFAULT_STALE_MS = 5 * 60_000;
 const MAX_ENTRIES = 256;
 const cache = new Map<string, MarketReadEntry>();
 const inFlight = new Map<string, Promise<unknown>>();
+const inFlightForce = new Set<string>();
 const pathVersions = new Map<string, number>();
 const forceBackoffExemptions = new Set<string>();
 let marketBackoffUntil = 0;
@@ -61,10 +62,12 @@ export function marketGet<T>(
     return Promise.resolve(hit.value as T);
   }
   const pending = inFlight.get(path);
-  // Path invalidation explicitly detaches work that predates an owner pull.
-  // Any request still registered here started after the latest invalidation,
-  // so forced readers should share it instead of duplicating provider calls.
-  if (pending) return pending as Promise<T>;
+  // Ordinary readers share the in-flight GET. A forced read after a worker
+  // publish must not join a pre-refresh GET: that body can be the stale
+  // snapshot, and browsers may also satisfy it from HTTP cache.
+  if (pending && (!options.force || inFlightForce.has(path))) {
+    return pending as Promise<T>;
+  }
 
   // A completed owner pull grants the exact refreshed URL one follow-up read.
   // Consume the grant when that force read starts, even when no pause is
@@ -88,7 +91,7 @@ export function marketGet<T>(
   const staleMs = Math.max(ttlMs, options.staleMs ?? DEFAULT_STALE_MS);
   const requestVersion = pathVersions.get(path) ?? 0;
   const requestGeneration = stateGeneration;
-  const request = get<T>(path)
+  const request = get<T>(path, options.force ? { cache: 'reload' } : undefined)
     .then((value) => {
       const completedAt = Date.now();
       // A completed manual pull may invalidate an older GET while that GET is
@@ -134,8 +137,10 @@ export function marketGet<T>(
     })
     .finally(() => {
       if (inFlight.get(path) === request) inFlight.delete(path);
+      if (options.force) inFlightForce.delete(path);
     });
   inFlight.set(path, request);
+  if (options.force) inFlightForce.add(path);
   return request;
 }
 
@@ -152,6 +157,7 @@ export function resetMarketReadPaths(paths: string[]): void {
     // responses may still resolve for their original caller, but versioning
     // below prevents them from repopulating this cache.
     inFlight.delete(path);
+    inFlightForce.delete(path);
     pathVersions.set(path, (pathVersions.get(path) ?? 0) + 1);
     forceBackoffExemptions.add(path);
   }
@@ -162,6 +168,7 @@ export function resetMarketReadState(): void {
   stateGeneration += 1;
   cache.clear();
   inFlight.clear();
+  inFlightForce.clear();
   pathVersions.clear();
   forceBackoffExemptions.clear();
   marketBackoffUntil = 0;

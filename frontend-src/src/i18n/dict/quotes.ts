@@ -23,4 +23,7 @@ export const QUOTES: Dict = {
   '个股行情': ['Stock price', '個別株価'],
   '成交时间 {time}': ['Trade time {time}', '約定時刻 {time}'],
   '昨收 ${price}': ['Previous close ${price}', '前日終値 ${price}'],
+  '扫描价': ['Scan price', 'スキャン価格'],
+  '扫描价 · 日线': ['Scan price · daily bar', 'スキャン価格 · 日足'],
+  '评分依据 {date}': ['Scored through {date}', 'スコア根拠 {date}'],
 };

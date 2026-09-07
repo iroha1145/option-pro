@@ -61,7 +61,15 @@ export const MARKET_FUNDS = ['SPY', 'QQQ', 'DIA', 'IWM'];
 export function normalizeQuoteSymbols(symbols: readonly string[]): string[] {
   return [...new Set(symbols.map(s => s.trim().toUpperCase()).filter(s => /^[A-Z][A-Z0-9]{0,9}(?:[.-][A-Z0-9]{1,4})?$/.test(s)))];
 }
-const timestamp = (value: string | null) => value ? Date.parse(value) || 0 : 0;
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+const timestamp = (value: string | null) => {
+  if (!value) return 0;
+  if (DATE_ONLY.test(value.trim())) {
+    const parsed = Date.parse(`${value.trim()}T20:00:00.000Z`);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return Date.parse(value) || 0;
+};
 type Listener = () => void;
 type Stream = Pick<EventSource, 'addEventListener' | 'close' | 'onerror'>;
 interface QuoteRuntime {
@@ -344,9 +352,20 @@ export function preferLiveQuote(quote: LiveQuote | undefined, hasFallback: boole
   return Boolean(fallbackAt && timestamp(quote.trade_at) > timestamp(fallbackAt));
 }
 
+export function fallbackQuoteLabel(fallbackAt?: string | null): string {
+  if (!fallbackAt) return t('扫描价');
+  if (DATE_ONLY.test(fallbackAt.trim())) return t('扫描价 · 日线');
+  return t('扫描价');
+}
+
 /** The label describes the price actually rendered, not a superseded cache. */
-export function displayedQuoteLabel(quote: LiveQuote, status: QuoteStatus, usesLive: boolean): string {
-  if (!usesLive) return t('定时更新');
+export function displayedQuoteLabel(
+  quote: LiveQuote,
+  status: QuoteStatus,
+  usesLive: boolean,
+  fallbackAt?: string | null,
+): string {
+  if (!usesLive) return fallbackQuoteLabel(fallbackAt);
   if (!status.connected && quote.subscription_status === 'live') return t('行情重连中');
   return quoteLabel(quote, status.market_session);
 }

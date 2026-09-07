@@ -104,6 +104,9 @@ jobs:
       - name: Verify audit recovery paths with isolated accounts and jobs
         run: npm --prefix frontend-src run test:audit
 
+      - name: Verify screener freshness flows and native HTTP cache
+        run: npm --prefix frontend-src run test:screener
+
       - name: Check shell script syntax
         run: bash -n setup.sh personal.sh scripts/compose.sh scripts/deploy.sh scripts/lock-dependencies.sh
 

@@ -30,6 +30,10 @@ export interface WorkerAction {
   status: string;
   errorCode: string | null;
   details: Record<string, unknown>;
+  reused: boolean | null;
+  reason: string | null;
+  completedAt: string | null;
+  requestedAt: string | null;
 }
 
 function mapWorkerAction(d: unknown): WorkerAction {
@@ -40,6 +44,10 @@ function mapWorkerAction(d: unknown): WorkerAction {
     status: String(r.status ?? ''),
     errorCode: typeof r.error_code === 'string' ? r.error_code : null,
     details: asRec(r.details),
+    reused: typeof r.reused === 'boolean' ? r.reused : null,
+    reason: typeof r.reason === 'string' ? r.reason : null,
+    completedAt: typeof r.completed_at === 'string' ? r.completed_at : null,
+    requestedAt: typeof r.requested_at === 'string' ? r.requested_at : null,
   };
 }
 
@@ -94,14 +102,14 @@ export const runtimeApi = {
     mockOr(
       async () => {
         await fx2.postWorkerAction(action);
-        return { requestId: `mock-${Date.now()}`, action, status: 'completed', errorCode: null, details: parameters ? { parameters } : {} };
+        return { requestId: `mock-${Date.now()}`, action, status: 'completed', errorCode: null, details: parameters ? { parameters } : {}, reused: false, reason: 'queued', completedAt: null, requestedAt: null };
       },
       () =>
         post(`/worker/actions/${encodeURIComponent(action)}`, parameters ? { parameters } : {}).then(mapWorkerAction),
     ),
   workerActionStatus: (requestId: string): Promise<WorkerAction> =>
     mockOr(
-      () => Promise.resolve({ requestId, action: '', status: 'completed', errorCode: null, details: {} }),
+      () => Promise.resolve({ requestId, action: '', status: 'completed', errorCode: null, details: {}, reused: null, reason: null, completedAt: null, requestedAt: null }),
       () => get(`/worker/actions/${encodeURIComponent(requestId)}`).then(mapWorkerAction),
     ),
   waitForWorkerAction: async (requestId: string, timeoutMs = 1_200_000): Promise<WorkerAction> => {

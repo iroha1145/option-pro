@@ -308,6 +308,42 @@ test('identity reset rejects old cache writes after the new identity has already
   } finally { globalThis.fetch = originalFetch; resetMarketReadState(); }
 });
 
+test('force read does not join a pre-refresh GET and uses cache reload', async () => {
+  resetMarketReadState();
+  const originalFetch = globalThis.fetch;
+  const inits = [];
+  const releases = [];
+  globalThis.fetch = (_url, init) => {
+    inits.push(init);
+    return new Promise((resolve) => {
+      releases.push((price) =>
+        resolve(
+          new Response(JSON.stringify({ ticker: 'NVDA', price }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        ),
+      );
+    });
+  };
+  try {
+    const stale = marketGet('/strength/scan?sector_id=semiconductors', { ttlMs: 60_000 });
+    const forced = marketGet('/strength/scan?sector_id=semiconductors', {
+      ttlMs: 60_000,
+      force: true,
+    });
+    assert.equal(releases.length, 2);
+    assert.equal(inits[1].cache, 'reload');
+    releases[1](180);
+    assert.equal((await forced).price, 180);
+    releases[0](12);
+    assert.equal((await stale).price, 12);
+  } finally {
+    globalThis.fetch = originalFetch;
+    resetMarketReadState();
+  }
+});
+
 test('a previous identity late 429 cannot impose a shared backoff on the new identity', async () => {
   resetMarketReadState(); const originalFetch = globalThis.fetch; let release;
   globalThis.fetch = () => new Promise(resolve => { release = resolve; });

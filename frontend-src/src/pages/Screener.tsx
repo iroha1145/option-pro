@@ -14,7 +14,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { strengthApi, type StrengthScanEnvelope } from '@/api/modules/strength';
 import { catalystsApi } from '@/api/modules/catalysts';
 import { signalsApi } from '@/api/modules/signals';
-import { runtimeApi, type StrengthRefreshParameters } from '@/api/modules/runtime';
+import { runtimeApi } from '@/api/modules/runtime';
+import { resetMarketReadPaths } from '@/api/marketRead';
 import { ApiError, isMock } from '@/api/client';
 import type { ScreenerRow, SectorOption, StrengthProfile } from '@/api/types';
 import { usePolling } from '@/hooks/usePolling';
@@ -42,6 +43,18 @@ import ResultCards from '@/components/screener/ResultCards';
 import ScanHistoryPopover from '@/components/screener/ScanHistoryPopover';
 import { MethodCard, TierHistogram } from '@/components/screener/SideCards';
 import { buildStrengthScanRequest } from '@/components/screener/scanRequest';
+import {
+  clearPendingStrengthTask,
+  readPendingStrengthTask,
+  scanDisplayTimes,
+  shouldSubmitStrengthRefresh,
+  strengthParametersMatch,
+  strengthScanPath,
+  visibleScanDate,
+  workerActionPhase,
+  writePendingStrengthTask,
+  type StrengthScanPhase,
+} from '@/lib/screenerScanFlow';
 import {
   DEFAULT_FILTERS,
   DOLLAR_VOL_OPTIONS,
@@ -85,21 +98,6 @@ function withPreset(base: ScanFilters, id: string): ScanFilters {
 
 function filtersEqual(a: ScanFilters, b: ScanFilters): boolean {
   return JSON.stringify(a) === JSON.stringify(b);
-}
-
-function strengthParametersMatch(actual: unknown, expected: StrengthRefreshParameters): boolean {
-  if (!actual || typeof actual !== 'object') return false;
-  const value = actual as Record<string, unknown>;
-  return (
-    value.universe === expected.universe &&
-    value.timeframe === expected.timeframe &&
-    value.profile === expected.profile &&
-    value.top === expected.top &&
-    value.sector_id === expected.sector_id &&
-    value.min_price === expected.min_price &&
-    value.min_avg_dollar_volume === expected.min_avg_dollar_volume &&
-    value.include_options === expected.include_options
-  );
 }
 
 export default function Screener() {
@@ -154,6 +152,9 @@ export default function Screener() {
   const [scanError, setScanError] = useState<ApiError | null>(null);
   const [scanMeta, setScanMeta] = useState<StrengthScanEnvelope | null>(null);
   const [lastScanAt, setLastScanAt] = useState<number | null>(null);
+  const [queryCheckedAt, setQueryCheckedAt] = useState<number | null>(null);
+  const [scanPhase, setScanPhase] = useState<StrengthScanPhase | null>(null);
+  const [reusedExisting, setReusedExisting] = useState(false);
   const [scanDurationMs, setScanDurationMs] = useState(0);
   const [history, setHistory] = useState<ScanHistoryEntry[]>([]);
   const [sortMode, setSortMode] = useState<SortMode>('deterministic');
@@ -190,8 +191,12 @@ export default function Screener() {
     try {
       const { apiParams: params, refreshParameters: requested } = buildStrengthScanRequest(filters);
 
+      const scanPath = strengthScanPath(params);
       const refreshSnapshot = async () => {
-        const action = await runtimeApi.workerAction('strength_refresh', requested);
+        const pending = readPendingStrengthTask();
+        const action = pending && strengthParametersMatch(pending.parameters, requested)
+          ? await runtimeApi.workerActionStatus(pending.requestId)
+          : await runtimeApi.workerAction('strength_refresh', requested);
         if (!strengthParametersMatch(action.details.parameters, requested)) {
           throw new ApiError(409, __t('另一组筛选条件正在扫描或冷却，请稍后重试'), {
             bizCode: 'strength_parameters_busy',
@@ -199,30 +204,85 @@ export default function Screener() {
           });
         }
         if (!action.requestId) throw new ApiError(502, __t('扫描任务未能启动'));
-        if (action.status !== 'completed') await runtimeApi.waitForWorkerAction(action.requestId);
+        writePendingStrengthTask({
+          requestId: action.requestId,
+          parameters: requested,
+          storedAt: Date.now(),
+        });
+        setScanPhase(workerActionPhase(action));
+        if (action.status !== 'completed') {
+          const finished = await runtimeApi.waitForWorkerAction(action.requestId);
+          if (!strengthParametersMatch(finished.details.parameters, requested)) {
+            throw new ApiError(409, __t('另一组筛选条件正在扫描或冷却，请稍后重试'), {
+              bizCode: 'strength_parameters_busy',
+              payload: finished,
+            });
+          }
+          setScanPhase(workerActionPhase(finished));
+        }
+        setScanPhase('verifying');
+        resetMarketReadPaths([scanPath]);
+        clearPendingStrengthTask();
       };
 
-      // 普通“扫描”只读取后台已生成的精确参数快照。仅在该快照确实缺失时，
-      // Owner 才补触发一次 worker；“刷新强度分”按钮则明确执行强制刷新。
-      if (isOwner && !isMock && options.forceRefresh) {
+      let submittedRefresh = Boolean(options.forceRefresh);
+      if (shouldSubmitStrengthRefresh({
+        isOwner,
+        isMock,
+        forceRefresh: Boolean(options.forceRefresh),
+        snapshotMissing: false,
+        snapshotStale: false,
+      }).submit) {
         await refreshSnapshot();
+        submittedRefresh = true;
       }
       let result: StrengthScanEnvelope;
       try {
-        result = await strengthApi.scanEnvelope(params, Boolean(options.forceRefresh));
+        setScanPhase((current) => current ?? 'reading');
+        result = await strengthApi.scanEnvelope(params, submittedRefresh);
       } catch (error) {
         const snapshotMissing =
           error instanceof ApiError
           && error.code === 503
           && error.bizCode === 'strength_snapshot_unavailable';
-        if (!isOwner || isMock || options.forceRefresh || !snapshotMissing) throw error;
+        const decision = shouldSubmitStrengthRefresh({
+          isOwner,
+          isMock,
+          forceRefresh: Boolean(options.forceRefresh),
+          snapshotMissing,
+          snapshotStale: false,
+        });
+        if (!decision.submit || !snapshotMissing) throw error;
         await refreshSnapshot();
+        submittedRefresh = true;
+        result = await strengthApi.scanEnvelope(params, true);
+      }
+      const followUp = shouldSubmitStrengthRefresh({
+        isOwner,
+        isMock,
+        forceRefresh: false,
+        snapshotMissing: false,
+        snapshotStale: result.stale,
+        sourceStatus: result.sourceStatus,
+      });
+      if (followUp.submit && !submittedRefresh) {
+        await refreshSnapshot();
+        submittedRefresh = true;
         result = await strengthApi.scanEnvelope(params, true);
       }
       const elapsed = Date.now() - startedAt;
       if (elapsed < minMs) await new Promise((r) => setTimeout(r, minMs - elapsed));
       if (scanSeq.current !== seq) return;
       const durationMs = Date.now() - startedAt;
+      const checkedAt = Date.now();
+      const times = scanDisplayTimes({
+        queryCheckedAt: checkedAt,
+        snapshotSavedAt: result.snapshotSavedAt,
+        scanCompletedAt: result.scanCompletedAt,
+        scoreDataThrough: result.scoreDataThrough,
+        stale: result.stale,
+        submittedRefresh,
+      });
       setRows((prev) => {
         if (prev) {
           const prevMap = new Map(prev.map((r) => [r.ticker, r.price]));
@@ -246,20 +306,68 @@ export default function Screener() {
       setDetails(detailsRef.current);
       setApplied(filters);
       setDraft(filters);
-      setLastScanAt(Date.now());
+      setQueryCheckedAt(times.queryCheckedAt);
+      setLastScanAt(times.scanCompletedAt);
+      setReusedExisting(times.reusedExisting);
+      setScanPhase(times.reusedExisting ? 'reused' : 'done');
       setScanDurationMs(durationMs);
       setPage(1);
       setExpanded(null);
       setScanState('done');
-      setHistory((h) => [{ at: Date.now(), count: result.rows.length, durationMs, summary: summarizeFilters(filters) }, ...h].slice(0, 5));
+      setHistory((h) => [{ at: times.scanCompletedAt ?? checkedAt, count: result.rows.length, durationMs, summary: summarizeFilters(filters) }, ...h].slice(0, 5));
       return true;
     } catch (e) {
       if (scanSeq.current !== seq) return;
       setScanError(e instanceof ApiError ? e : new ApiError(500, e instanceof Error ? e.message : __t('扫描失败')));
       setScanState('error');
+      setScanPhase('failed');
       return false;
     }
   }, [isOwner]);
+
+  useEffect(() => {
+    if (scanState !== 'done' || isMock) return;
+    const { apiParams: params } = buildStrengthScanRequest(applied);
+    const tick = async () => {
+      if (document.visibilityState !== 'visible') return;
+      try {
+        const latest = await strengthApi.scanEnvelope(params);
+        if (scanSeq.current === 0) return;
+        setScanMeta((current) => {
+          if (!current) return latest;
+          if (
+            current.snapshotSavedAt === latest.snapshotSavedAt
+            && current.stale === latest.stale
+            && current.sourceStatus === latest.sourceStatus
+          ) {
+            return current;
+          }
+          setRows(latest.rows);
+          setQueryCheckedAt(Date.now());
+          const times = scanDisplayTimes({
+            queryCheckedAt: Date.now(),
+            snapshotSavedAt: latest.snapshotSavedAt,
+            scanCompletedAt: latest.scanCompletedAt,
+            scoreDataThrough: latest.scoreDataThrough,
+            stale: latest.stale,
+            submittedRefresh: false,
+          });
+          setLastScanAt(times.scanCompletedAt);
+          setReusedExisting(times.reusedExisting);
+          return latest;
+        });
+      } catch {
+        // Discovery reads stay silent; the next visible tick retries.
+      }
+    };
+    const timer = window.setInterval(() => { void tick(); }, 45_000);
+    const onVisible = () => { if (document.visibilityState === 'visible') void tick(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [applied, scanState]);
 
   /* 成交额直接使用后端 avg_dollar_volume_20d，不再逐股请求并用当日成交额冒充。 */
 
@@ -558,6 +666,11 @@ export default function Screener() {
               <span className="font-mono text-caption text-ink-600 tnum" suppressHydrationWarning>
                 {lastScanAt ? fmtTimeHHMMSS(lastScanAt) : '—'}
               </span>
+              {queryCheckedAt ? (
+                <span className="block text-micro text-ink-400">
+                  {__t('读取')} {fmtTimeHHMMSS(queryCheckedAt)}
+                </span>
+              ) : null}
             </span>
             <ScanHistoryPopover history={history} />
             {isOwner && (
@@ -599,6 +712,9 @@ export default function Screener() {
               <span className="flex items-center gap-2 text-body-s text-ink-500">
                 <span className="size-3.5 animate-spin rounded-full border-2 border-brand-600/25 border-t-brand-600" aria-hidden="true" />
                 {__t('正在扫描…')}
+                {scanPhase === 'queued' ? ` · ${__t('排队中')}` : ''}
+                {scanPhase === 'running' ? ` · ${__t('后台计算中')}` : ''}
+                {scanPhase === 'verifying' ? ` · ${__t('正在核验发布')}` : ''}
               </span>
             ) : scanState === 'done' || (scanState === 'error' && rows) ? (
               <>
@@ -606,6 +722,17 @@ export default function Screener() {
                   {__t('命中')} <span className="font-mono tnum">{hitCount}</span> {__t('只')}
                 </h2>
                 <span className="font-mono text-caption text-ink-400 tnum">{__t('耗时')} {(scanDurationMs / 1000).toFixed(1)}s</span>
+                {scanPhase === 'queued' && <SoftBadge>{__t('排队中')}</SoftBadge>}
+                {scanPhase === 'running' && <SoftBadge>{__t('后台计算中')}</SoftBadge>}
+                {scanPhase === 'verifying' && <SoftBadge>{__t('正在核验发布')}</SoftBadge>}
+                {reusedExisting && scanState === 'done' && (
+                  <SoftBadge>{__t('使用已有评分')}</SoftBadge>
+                )}
+                {scanMeta?.scoreDataThrough && (
+                  <SoftBadge className="whitespace-normal">
+                    {__t('评分依据：{date} 完整日线', { date: visibleScanDate(scanMeta.scoreDataThrough) ?? scanMeta.scoreDataThrough })}
+                  </SoftBadge>
+                )}
                 {scanMeta && (
                   <span className="font-mono text-micro text-ink-400 tnum">
                     {__t('股票池')} {scanMeta.universeCount} {__t('/ 已评分')} {scanMeta.screenedCount}
@@ -626,6 +753,12 @@ export default function Screener() {
                     <span className="size-2.5 animate-spin rounded-full border-[1.5px] border-brand-600/25 border-t-brand-600" aria-hidden="true" />
                     {__t('正在准备排序数据 · 剩余')} {missingCatalystTickers.length}
                   </SoftBadge>
+                )}
+                {scanMeta?.sourceStatus === 'unknown' && !scanMeta.stale && (
+                  <SoftBadge tone="warn">{__t('数据时间待核验')}</SoftBadge>
+                )}
+                {scanMeta?.sourceStatus === 'historical' && (
+                  <SoftBadge tone="warn">{__t('历史结果')}</SoftBadge>
                 )}
                 {scanMeta?.stale && (
                   <SoftBadge tone="warn" className="whitespace-normal">

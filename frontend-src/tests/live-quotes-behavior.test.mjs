@@ -321,7 +321,8 @@ test('a malformed radar row cannot suppress valid revisions in the same frame', 
 test('price labels distinguish a rendered fallback from the disconnected cached quote', () => {
   const h = harness(); const disconnected = { ...enabled, connected: false };
   const stale = quote('AAPL', 105, 10, { freshness: 'stale' });
-  assert.equal(h.displayedQuoteLabel(stale, disconnected, false), '定时更新');
+  assert.equal(h.displayedQuoteLabel(stale, disconnected, false), '扫描价');
+  assert.equal(h.displayedQuoteLabel(stale, disconnected, false, '2026-08-01'), '扫描价 · 日线');
   assert.equal(h.displayedQuoteLabel(stale, disconnected, true), '行情重连中');
   assert.equal(h.displayedQuoteLabel(quote('AAPL', 105), enabled, true), '实时');
 });
