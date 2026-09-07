@@ -73,8 +73,11 @@ def test_default_scan_reads_fresh_worker_snapshot_without_network(
     assert result["snapshot_source"] == "worker"
     assert result["_cached"] is True
     assert result["_stale"] is False
-    assert result["source_status"] == "active"
+    assert result["source_status"] == "unknown"
+    assert result["stale_reason"] == "missing_score_data_through"
+    assert result["input_time_status"] == "unknown"
     assert result["snapshot_saved_at"].endswith("+00:00")
+    assert result["scan_completed_at"] == result["snapshot_saved_at"]
 
 
 @pytest.mark.parametrize(

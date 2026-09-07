@@ -20,6 +20,12 @@ from app.personal_config import get_personal_config
 from app.services.http_read_cache import respond_with_snapshot, snapshot_version_key
 from app.services.sectors import SECTORS
 from app.services.snapshot_read_cache import FingerprintedFileCache
+from app.services.strength.freshness import (
+    evaluate_strength_snapshot_freshness,
+    extract_score_data_through,
+    should_replace_published_snapshot,
+    strength_payload_is_publishable,
+)
 from app.services.strength.scanner import (
     PROFILES,
     TIMEFRAMES,
@@ -197,6 +203,55 @@ def _prune_strength_snapshot_variants(
             candidate.unlink()
         except OSError:
             continue
+
+
+def list_recent_strength_variant_parameters(
+    base_path: Path | None = None,
+    *,
+    limit: int = 4,
+) -> list[dict[str, Any]]:
+    """Recently touched non-default variants, newest first, hard-capped."""
+
+    base = base_path or _STRENGTH_SNAPSHOT_PATH
+    keep = max(0, min(int(limit), 4))
+    if keep == 0:
+        return []
+    pattern = f"{base.stem}-*{base.suffix}"
+    variant_name = re.compile(
+        rf"^{re.escape(base.stem)}-[0-9a-f]{{20}}{re.escape(base.suffix)}$"
+    )
+    ranked: list[tuple[int, dict[str, Any]]] = []
+    try:
+        candidates = list(base.parent.glob(pattern))
+    except OSError:
+        return []
+    for candidate in candidates:
+        try:
+            if (
+                not variant_name.fullmatch(candidate.name)
+                or candidate.is_symlink()
+                or not candidate.is_file()
+            ):
+                continue
+            document = json.loads(candidate.read_bytes().decode("utf-8"))
+            parameters = normalize_strength_scan_parameters(document.get("parameters"))
+            if _parameters_match(parameters, DEFAULT_STRENGTH_SCAN_PARAMETERS, exact=True):
+                continue
+            ranked.append((candidate.stat().st_mtime_ns, parameters))
+        except (OSError, UnicodeError, ValueError, TypeError, json.JSONDecodeError):
+            continue
+    ranked.sort(key=lambda item: item[0], reverse=True)
+    unique: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for _mtime, parameters in ranked:
+        digest = strength_scan_parameters_hash(parameters)
+        if digest in seen:
+            continue
+        seen.add(digest)
+        unique.append(parameters)
+        if len(unique) >= keep:
+            break
+    return unique
 
 
 def _reject_duplicate_json_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -411,11 +466,50 @@ def _read_strength_snapshot(
     if document is None:
         return None
     saved_at = float(document["saved_at"])
+    payload = document["payload"]
+    scoring_version = None
+    if isinstance(payload, dict):
+        raw_version = payload.get("score_version") or payload.get("scoring_version")
+        if isinstance(raw_version, str) and raw_version.strip():
+            scoring_version = raw_version.strip()
+    verdict = evaluate_strength_snapshot_freshness(
+        saved_at=saved_at,
+        payload=payload,
+        now=now,
+        ttl_seconds=_STRENGTH_SNAPSHOT_TTL_SECONDS,
+        scoring_version=scoring_version,
+    )
     return {
         "saved_at": saved_at,
-        "stale": saved_at + _STRENGTH_SNAPSHOT_TTL_SECONDS <= now,
-        "payload": document["payload"],
+        "stale": verdict.stale,
+        "source_status": verdict.source_status,
+        "stale_reason": verdict.stale_reason,
+        "score_data_through": verdict.score_data_through,
+        "expected_session": verdict.expected_session,
+        "input_lag_sessions": verdict.input_lag_sessions,
+        "unknown_input_time": verdict.unknown_input_time,
+        "payload": payload,
     }
+
+
+def _existing_strength_saved_at(path: Path) -> float | None:
+    try:
+        if path.is_symlink() or not path.is_file():
+            return None
+        document = json.loads(path.read_bytes().decode("utf-8"))
+    except (OSError, UnicodeError, ValueError, json.JSONDecodeError):
+        return None
+    if not isinstance(document, dict):
+        return None
+    saved_at = document.get("saved_at")
+    if (
+        isinstance(saved_at, bool)
+        or not isinstance(saved_at, (int, float))
+        or not math.isfinite(float(saved_at))
+        or float(saved_at) <= 0
+    ):
+        return None
+    return float(saved_at)
 
 
 def _write_strength_snapshot(
@@ -425,7 +519,7 @@ def _write_strength_snapshot(
     payload: Any,
     saved_at: float,
     base_path: Path | None = None,
-) -> None:
+) -> str:
     parameters = normalize_strength_scan_parameters(parameters)
     base = base_path or (
         path
@@ -443,6 +537,14 @@ def _write_strength_snapshot(
         raise ValueError("strength snapshot payload is invalid")
     if not math.isfinite(saved_at) or saved_at <= 0:
         raise ValueError("strength snapshot saved_at is invalid")
+    publishable, publish_reason = strength_payload_is_publishable(cleaned)
+    if not publishable:
+        raise ValueError(publish_reason or "strength snapshot is not publishable")
+    if not should_replace_published_snapshot(
+        existing_saved_at=_existing_strength_saved_at(path),
+        incoming_saved_at=saved_at,
+    ):
+        return "kept_newer_publish"
     encoded = json.dumps(
         {
             "version": _STRENGTH_SNAPSHOT_VERSION,
@@ -476,6 +578,7 @@ def _write_strength_snapshot(
         except FileNotFoundError:
             pass
         raise
+    return "written"
 
 
 async def _scan_snapshot_payload(
@@ -531,11 +634,17 @@ async def _scan_snapshot_payload(
     saved_at = float(snapshot["saved_at"])
     stale = bool(snapshot["stale"])
     payload = dict(snapshot["payload"])
+    source_status = str(snapshot.get("source_status") or ("stale" if stale else "active"))
+    stale_reason = snapshot.get("stale_reason")
+    score_data_through = snapshot.get("score_data_through")
+    if not isinstance(score_data_through, str) or not score_data_through.strip():
+        extracted = extract_score_data_through(payload)
+        score_data_through = extracted.isoformat() if extracted is not None else None
     payload.update(
         {
             "_cached": True,
             "_stale": stale,
-            "source_status": "stale" if stale else "active",
+            "source_status": source_status,
             "cache_ttl_seconds": _STRENGTH_SNAPSHOT_TTL_SECONDS,
             "cache_expires_at": datetime.fromtimestamp(
                 saved_at + _STRENGTH_SNAPSHOT_TTL_SECONDS,
@@ -546,12 +655,33 @@ async def _scan_snapshot_payload(
                 saved_at,
                 timezone.utc,
             ).isoformat(),
+            "scan_completed_at": datetime.fromtimestamp(
+                saved_at,
+                timezone.utc,
+            ).isoformat(),
         }
     )
-    if stale:
-        # Keep stale bodies byte-stable for ETag/304: expose the reason and
-        # the fixed snapshot_saved_at; clients derive the age themselves.
-        payload["stale_reason"] = "worker_snapshot_expired"
+    if score_data_through:
+        payload["score_data_through"] = score_data_through
+    if snapshot.get("expected_session"):
+        payload["expected_complete_session"] = snapshot["expected_session"]
+    if snapshot.get("unknown_input_time"):
+        payload["input_time_status"] = "unknown"
+    if stale or source_status in {"stale", "historical", "unknown"}:
+        # Keep stale/unknown bodies byte-stable for ETag/304: expose the
+        # reason and the fixed snapshot_saved_at; clients derive the age.
+        if isinstance(stale_reason, str) and stale_reason:
+            payload["stale_reason"] = stale_reason
+        elif stale:
+            payload["stale_reason"] = "worker_snapshot_expired"
+    try:
+        path = _strength_snapshot_path(parameters)
+        # Only an owner read marks a variant as recently used. Visitor/customer
+        # GETs stay read-only and must not rewrite filesystem metadata.
+        if path != _STRENGTH_SNAPSHOT_PATH and current_request_is_owner():
+            os.utime(path, None)
+    except OSError:
+        pass
     return sanitize(payload), saved_at, stale
 
 
@@ -585,6 +715,9 @@ async def scan(
             "strength_scan",
             saved_at,
             stale,
+            payload.get("source_status"),
+            payload.get("stale_reason"),
+            payload.get("score_data_through"),
             universe,
             timeframe,
             profile,
