@@ -120,6 +120,7 @@ function loadCatalystsModule(responses = {}) {
       };
     }
     if (id === '../../i18n/core.ts') return { t: stubT };
+    if (id === './resourceSignals') return { notifyCatalystReadsInvalidated: () => {} };
     throw new Error(`unexpected import: ${id}`);
   };
   vm.runInNewContext(compiled, {
@@ -346,12 +347,15 @@ test('经济日历按浏览器本地自然日请求前三天并传递时区偏�
   assert.deepEqual(events, []);
   assert.deepEqual(loaded.calls, [queryPath]);
 
+  const hook = fs.readFileSync(
+    path.join(sourceRoot, 'components', 'catalysts', 'useCalendarResource.ts'),
+    'utf8',
+  );
+  assert.match(hook, /browserCalendarQuery\(now\)/);
+  assert.match(hook, /catalystsContract\.calendar\(query\)/);
   const panel = fs.readFileSync(
     path.join(sourceRoot, 'components', 'catalysts', 'CalendarPanel.tsx'),
     'utf8',
   );
-  assert.match(
-    panel,
-    /catalystsContract\.calendar\(browserCalendarQuery\(\)\)/,
-  );
+  assert.match(panel, /useCalendarResource\(\)/);
 });

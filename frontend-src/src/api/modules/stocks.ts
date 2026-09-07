@@ -1,6 +1,7 @@
 /** 股票域：watchlist / detail / signals / chart / search */
 import { get, mockOr, post } from '../client';
 import { quoteSymbol } from '@/lib/quoteSymbol';
+import { industryLabel } from '@/lib/industryLabel';
 import { DEFAULT_WATCHLIST_TICKERS } from '@/lib/personalWatchlist';
 import { mapStockDataStatus, normalizeStatusTickers, type StockDataStatus } from '@/lib/stockDataStatus';
 import { marketGet, resetMarketReadPaths } from '../marketRead';
@@ -68,29 +69,40 @@ export function mapChart(body: unknown, ticker: string, range: StockChart['range
 /**
  * 契约 {groups:[{id,name,stocks:[{ticker,name,price,change,change_percent,
  * spark[≤7],quote_as_of,quote_session}]}]} → 扁平 UI WatchlistItem[]
- * 契约无 sector/strengthScore/signals —— 不编造：strengthScore 置 null（UI 按缺失处理），signals 空数组。
+ * 行业元信息可选；strengthScore 缺失时置 null（UI 按缺失处理），signals 空数组。
  */
+function stockIndustry(row: Rec): string {
+  return ['sector', 'industry', 'sic_description']
+    .map((key) => industryLabel(pickS(row, key)))
+    .find(Boolean) ?? '';
+}
+
 export function mapWatchlist(body: unknown): WatchlistItem[] {
-  /* 同一 ticker 可属多个分组（生产 231 行 / 唯一 214）：按 ticker 去重，
-     保留首次出现的行情行，分组名合并进 sector（UI 仅作展示文案，无按组过滤） */
-  const byTicker = new Map<string, { item: WatchlistItem; groups: string[] }>();
+  /* 同一 ticker 可属多个分组：保留首次行情，明确行业优先；
+     没有行业时才合并普通分组名，“自定义”不作为行业。 */
+  const byTicker = new Map<string, { item: WatchlistItem; groups: string[]; hasIndustry: boolean }>();
   for (const g of unwrap(body, 'groups')) {
-    const groupName = pickLabel(g, 'name') ?? '';
+    const groupName = industryLabel(pickS(g, 'name'));
     for (const s of unwrap(g, 'stocks')) {
       const ticker = pickS(s, 'ticker') ?? '';
       if (!ticker) continue;
+      const sector = stockIndustry(s);
       const seen = byTicker.get(ticker);
       if (seen) {
+        if (sector && !seen.hasIndustry) {
+          seen.item.sector = sector;
+          seen.hasIndustry = true;
+        }
         if (groupName && !seen.groups.includes(groupName)) {
           seen.groups.push(groupName);
-          if (!pickS(s as Rec, 'sector')) seen.item.sector = seen.groups.join(' / ');
+          if (!seen.hasIndustry) seen.item.sector = seen.groups.join(' / ');
         }
         continue;
       }
       const item: WatchlistItem = {
         ticker,
         name: pickLabel(s, 'name') ?? '',
-        sector: pickLabel(s, 'sector') ?? groupName, // 契约无板块字段，回退分组名
+        sector: sector || groupName,
         price: pickN(s, 'price') ?? NaN,
         change: pickN(s, 'change') ?? NaN,
         changePct: pickN(s, 'change_percent', 'changePct') ?? NaN,
@@ -102,7 +114,7 @@ export function mapWatchlist(body: unknown): WatchlistItem[] {
         signals: [],
         updatedAt: pickS(s, 'quote_as_of', 'updatedAt') ?? '',
       };
-      byTicker.set(ticker, { item, groups: groupName ? [groupName] : [] });
+      byTicker.set(ticker, { item, groups: groupName ? [groupName] : [], hasIndustry: Boolean(sector) });
     }
   }
   return [...byTicker.values()].map((v) => v.item);
@@ -141,7 +153,7 @@ function mapStockDetail(body: unknown): StockDetail {
   return {
     ticker: pickS(r, 'ticker') ?? '',
     name: pickLabel(r, 'name') ?? '',
-    sector: pickLabel(r, 'sector', 'sic_description') ?? '',
+    sector: stockIndustry(r),
     price: pickN(r, 'price') ?? 0,
     change: pickN(r, 'change') ?? (null as unknown as number),
     changePct: pickN(r, 'changePct', 'change_percent') ?? (null as unknown as number),

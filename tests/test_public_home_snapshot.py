@@ -371,6 +371,8 @@ def _payload(resource: str, now: float, *, price: float = 100.0) -> dict:
                     "vol_oi_ratio": 2.0,
                     "vol_oi": 2.0,
                     "premium": 20_000.0,
+                    "premium_basis": "last_price",
+                    "premium_kind": "estimated_notional",
                     "last_price": 1.0,
                     "implied_volatility": 0.5,
                     "underlying_price": price,
@@ -388,8 +390,14 @@ def _payload(resource: str, now: float, *, price: float = 100.0) -> dict:
             "source_status": "active",
             "attempted": 1,
             "succeeded": 1,
+            "planned_tickers": 1,
+            "successful_tickers": 1,
             "failed_symbols": [],
             "partial_symbols": [],
+            "expiration_window": "nearest_2",
+            "result_limit": 50,
+            "premium_kind": "estimated_notional",
+            "contract_multiplier": 100,
             "as_of": _iso(now),
         }
     raise AssertionError(resource)

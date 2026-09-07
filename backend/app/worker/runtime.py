@@ -14,6 +14,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal
 
+from app.access import request_owner_access_context
+
 from .lock import ProcessFileLock
 from .state import (
     WorkerAlreadyRunning,
@@ -336,15 +338,19 @@ class WorkerSupervisor:
         manual_request_ids = [item["request_id"] for item in manual_actions]
         try:
             action_runner = getattr(task.runner, "run_for_actions", None)
-            operation = _maybe_await(
-                action_runner(manual_actions)
-                if manual_actions and callable(action_runner)
-                else task.runner()
-            )
-            if task.timeout_seconds is None:
-                result = await operation
-            else:
-                result = await asyncio.wait_for(operation, timeout=task.timeout_seconds)
+            # Trusted worker entry: bind owner explicitly for this task only.
+            with request_owner_access_context(True):
+                operation = _maybe_await(
+                    action_runner(manual_actions)
+                    if manual_actions and callable(action_runner)
+                    else task.runner()
+                )
+                if task.timeout_seconds is None:
+                    result = await operation
+                else:
+                    result = await asyncio.wait_for(
+                        operation, timeout=task.timeout_seconds
+                    )
             if not isinstance(result, TaskResult):
                 raise TypeError("worker task must return TaskResult")
         except asyncio.CancelledError:

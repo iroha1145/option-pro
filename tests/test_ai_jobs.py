@@ -14,6 +14,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import SecretStr, ValidationError
 
+from app.access import request_owner_access_context
 from app.api import ai
 from app.config import Settings
 from app.services.ai_jobs import runtime, worker as ai_worker
@@ -21,6 +22,12 @@ from app.services.ai_jobs.models import validate_result
 from app.services.ai_jobs.repository import AIJobRepository
 from app.services.ai_jobs.worker import health_payload, process_job
 from app.tools import recover_ai_schema_results as recovery_tool
+
+
+@pytest.fixture(autouse=True)
+def _owner_request_context():
+    with request_owner_access_context(True):
+        yield
 
 
 def _settings(path):

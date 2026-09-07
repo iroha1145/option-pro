@@ -20,6 +20,7 @@ import type {
   WatchlistItem,
 } from '@/api/types';
 import { t as __t } from '../i18n/core.ts';
+import { DEFAULT_WATCHLIST_TICKERS } from '@/lib/personalWatchlist';
 // 指纹/日期口径与运行时同一份实现：mock 自己再写一遍，闸门就会在本地静默关掉
 import {
   FINGERPRINT_ALGORITHM,
@@ -46,7 +47,7 @@ const infoOf = (ticker: string): TickerInfo => {
 const INDEX_BASE: { code: string; symbol: string; name: string; base: number }[] = [
   { code: 'SPX', symbol: '^GSPC', name: __t('标普 500'), base: 5972.4 },
   { code: 'NDX', symbol: '^NDX', name: __t('纳指 100'), base: 21468.2 },
-  { code: 'DJI', symbol: '^DJI', name: '道琼斯', base: 43828.1 },
+  { code: 'DJI', symbol: '^DJI', name: __t('道琼斯'), base: 43828.1 },
   { code: 'RUT', symbol: '^RUT', name: __t('罗素 2000'), base: 2382.6 },
   { code: 'SOX', symbol: '^SOX', name: '费城半导体', base: 5124.7 },
   { code: 'VIX', symbol: '^VIX', name: __t('波动率指数'), base: 14.86 },
@@ -115,8 +116,11 @@ export function getMarketStatus(): MarketStatus {
   return { session, label, nyTime: ny.toISOString(), nextEvent };
 }
 
-/* ---------------- 自选股（12 只） ---------------- */
-export const WATCHLIST_TICKERS = ['NVDA', 'TSLA', 'AAPL', 'AMD', 'MSFT', 'META', 'AMZN', 'AVGO', 'SMCI', 'PLTR', 'COIN', 'QQQ'];
+/* ---------------- 自选股（默认 4 只必须在池内，避免访客横幅与卡片对不上） ---------------- */
+export const WATCHLIST_TICKERS = [...new Set([
+  ...DEFAULT_WATCHLIST_TICKERS,
+  'NVDA', 'TSLA', 'AAPL', 'AMD', 'MSFT', 'META', 'AMZN', 'AVGO', 'SMCI', 'PLTR', 'COIN', 'QQQ',
+])];
 
 interface WatchState extends QuoteState { item: WatchlistItem }
 const watchState = new Map<string, WatchState>();
@@ -288,10 +292,10 @@ export function runStrengthScan(): ScreenerRow[] {
               macroTailwind: fit >= 65 ? '顺风' : fit <= 35 ? '逆风' : '中性',
               macroFitConfidence: round2(r.float(0.62, 1)),
               macroSupporting: [
-                { factor_id: 'fed_net_liquidity', label: '联储净流动性' },
+                { factor_id: 'fed_net_liquidity', label: __t('联储净流动性') },
                 { factor_id: 'risk_vs_safe', label: __t('风险资产相对避险') },
               ],
-              macroOpposing: [{ factor_id: 'real_rate_level', label: '实际利率水平' }],
+              macroOpposing: [{ factor_id: 'real_rate_level', label: __t('实际利率水平') }],
               macroTechnicalGap: round2(r.float(-28, 28)),
             };
           })()),
@@ -345,6 +349,9 @@ export function getStockDetail(ticker: string): StockDetail {
   };
 }
 
+/** 图表与分析包共用同一时钟，两次 buildCandles 必须得到同一套时间戳。 */
+export const MOCK_CANDLE_NOW_MS = Date.parse('2026-09-04T20:00:00.000Z');
+
 function buildCandles(ticker: string, range: StockChart['range']): { candles: Candle[]; ma20: (number | null)[] } {
   const i = Math.max(0, TICKER_POOL.findIndex((x) => x.ticker === ticker.toUpperCase()));
   const r = new Rng(55000 + i * 613 + range.length * 17);
@@ -361,7 +368,8 @@ function buildCandles(ticker: string, range: StockChart['range']): { candles: Ca
   const daily = stepMs >= 86_400_000;
   const vol = daily ? 0.022 : 0.0022;
   let price = info.base * (1 + r.float(-0.06, 0.02));
-  const start = Date.now() - points * stepMs;
+  // /chart 与 /technical 各生成一次；用调用时刻作锚会让两套时间戳永久对不上，日线分析闸门永远关死。
+  const start = MOCK_CANDLE_NOW_MS - points * stepMs;
   const candles: Candle[] = [];
   for (let k = 0; k < points; k++) {
     const drift = r.float(-vol, vol) + Math.sin(k / 17) * vol * 0.18;
@@ -381,6 +389,24 @@ function buildCandles(ticker: string, range: StockChart['range']): { candles: Ca
       bar.o = round2(bar.o * scale); bar.h = round2(bar.h * scale);
       bar.l = round2(bar.l * scale); bar.c = round2(bar.c * scale);
     }
+  }
+  const quotePrice = getStockDetail(ticker).price;
+  const lastClose = candles[candles.length - 1]?.c;
+  if (
+    candles.length
+    && Number.isFinite(quotePrice)
+    && quotePrice > 0
+    && Number.isFinite(lastClose)
+    && lastClose > 0
+  ) {
+    const scale = quotePrice / lastClose;
+    for (const bar of candles) {
+      bar.o = round2(bar.o * scale);
+      bar.h = round2(bar.h * scale);
+      bar.l = round2(bar.l * scale);
+      bar.c = round2(bar.c * scale);
+    }
+    candles[candles.length - 1].c = round2(quotePrice);
   }
   const ma20: (number | null)[] = candles.map((_, k) => {
     if (k < 19) return null;
@@ -835,7 +861,15 @@ export function getStockTrendBias(ticker: string): StockTrendBias {
     trend_bias_score: score,
     trend_bias_label: label,
     trend_bias_status: status,
-    scores,
+    scores: Object.assign({}, scores, {
+      data_quality: 72,
+      coverage: {
+        top_ratio: 0.67,
+        bottom_ratio: 0.55,
+        top_missing_components: ['options_crowding', 'earnings_reaction'],
+        bottom_missing_components: ['short_covering'],
+      },
+    }),
     factors,
     as_of: new Date(Date.now() - 15 * 60_000).toISOString(),
   };

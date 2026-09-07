@@ -47,6 +47,8 @@ export const DETAIL: Dict = {
   /* src/components/detail/KeyStats.tsx */
   '今开': ['Open', '始値'],
   '昨收': ['Prev Close', '前日終値'],
+  '最高价': ['High', '高値'],
+  '最低价': ['Low', '安値'],
   '均量': ['Avg Vol', '平均出来高'],
   '市盈率': ['P/E', 'PER'],
   'IV 百分位': ['IV Percentile', 'IV パーセンタイル'],
@@ -135,10 +137,10 @@ export const DETAIL: Dict = {
   /* OptionsPanel UI 重构：摘要条 / 三带数据条表 / 移动卡片 / 图例 */
   '总成交量': ['Total volume', '総出来高'],
   '总持仓量': ['Total open interest', '総建玉'],
-  '估算权利金流': ['Estimated premium flow', '推定プレミアムフロー'],
+  '估算权利金流': ['Estimated notional premium', '推定名目プレミアム'],
   '缺买卖价，不可估算': ['Not estimable — missing bid/ask', '気配値がなく推定不可'],
   '异动合约': ['Unusual contracts', '取引急増の銘柄'],
-  '量持比 > 3 或全部新开仓': ['Vol/OI > 3 or entirely new positions', '出来高/建玉比 > 3 または全て新規建玉'],
+  '量持比 > 3 或全部新开仓': ['Vol/OI > 3, or volume with zero open interest (opening/closing unconfirmed)', '出来高/建玉比 > 3、または建玉ゼロで約定（新規・決済は未確認）'],
   '看涨 CALLS': ['Calls', 'コール'],
   '看跌 PUTS': ['Puts', 'プット'],
   'CALLS': ['CALLS', 'コール'],
@@ -147,15 +149,15 @@ export const DETAIL: Dict = {
   '持': ['OI', '建玉'],
   '占比条按全链最大量归一': ['Bars normalized to the chain-wide max', 'バーはチェーン全体の最大値で正規化'],
   '浅底为价内侧': ['Shaded background = the ITM side', '薄い背景はITM側'],
-  '全部新开仓': ['Entirely new positions', '全て新規建玉'],
+  '全部新开仓': ['Volume with zero open interest — opening/closing unconfirmed', '建玉ゼロで約定 — 新規・決済は未確認'],
   '已知成交量（数据不完整）': ['Known volume (incomplete data)', '既知の出来高（データ不完全）'],
   '已知持仓量（数据不完整）': ['Known open interest (incomplete data)', '既知の建玉（データ不完全）'],
   '已知权利金流（数据不完整）': ['Known premium flow (incomplete data)', '既知のプレミアムフロー（データ不完全）'],
   '「—」表示数据缺失': ['"—" means data unavailable', '「—」はデータなしを示す'],
   '「—」表示上游未提供该字段，不代表 0 · 权利金按买卖中价估算 · 非收益承诺': ['"—" means the upstream feed didn\'t provide this field — it isn\'t 0 · premium is estimated from the bid/ask midpoint · not a promise of returns', '「—」は上流フィードがこの項目を提供しなかったことを示し、0を意味しません · プレミアムは買値・売値の中値で推定 · リターンを約束するものではありません'],
   '浅底为价内（ITM）侧 · 异动标注 vol/oi > 3（倍数为该侧比值）；持仓量为 0 而当日有成交标 ∞（全部新开仓）· 「—」表示上游未提供该字段，不代表 0 · 权利金按买卖中价估算 · 非收益承诺': [
-    'Shaded background = the in-the-money (ITM) side · unusual-activity flag when vol/oi > 3 (the multiple is that side\'s ratio); open interest of 0 with same-day trading is flagged ∞ (entirely new positions) · "—" means the upstream feed didn\'t provide this field — it isn\'t 0 · premium is estimated from the bid/ask midpoint · not a promise of returns',
-    '背景が薄い方がイン・ザ・マネー（ITM）側 · 出来高/建玉比が3倍を超えると取引急増マーク（倍率はその側の比率）。建玉が0で当日約定があれば∞（すべて新規建玉）· 「—」は上流フィードがこの項目を提供しなかったことを示し、0を意味しません · プレミアムは買値・売値の中値で推定 · リターンを約束するものではありません',
+    'Shaded background = the in-the-money (ITM) side · unusual-activity flag when vol/oi > 3 (the multiple is that side\'s ratio); open interest of 0 with same-day trading is flagged ∞ (opening/closing unconfirmed) · "—" means the upstream feed didn\'t provide this field — it isn\'t 0 · premium is an estimated notional (mark × volume × 100), not cash flow · not a promise of returns',
+    '背景が薄い方がイン・ザ・マネー（ITM）側 · 出来高/建玉比が3倍を超えると取引急増マーク（倍率はその側の比率）。建玉が0で当日約定があれば∞（新規・決済は未確認）· 「—」は上流フィードがこの項目を提供しなかったことを示し、0を意味しません · プレミアムは名目推定（気配×出来高×100）であり資金流入ではありません · リターンを約束するものではありません',
   ],
 
   /* src/components/detail/SignalList.tsx */

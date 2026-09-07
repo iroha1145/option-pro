@@ -30,6 +30,12 @@ from app.worker.state import WorkerStateRepository
 from app.worker.tasks import CatalystSyncTask, FocusTask
 
 
+@pytest.fixture(autouse=True)
+def _owner_request_context():
+    with request_owner_access_context(True):
+        yield
+
+
 NOW = datetime(2026, 7, 15, 4, 0, tzinfo=timezone.utc)
 _OWNER_ACTION_HEADERS = {
     "Content-Type": "application/json",

@@ -97,8 +97,11 @@ export default function IndexTape() {
           {useFunds ? MARKET_FUNDS.map(symbol => <FundTapeItem key={symbol} symbol={symbol} onOpen={() => navigate(`/stock/${symbol}`)} />) : <TapeRow items={items} flashes={flashes} onOpen={openMarket} />}
         </div>
       </div>
-      <span className="glass absolute right-0 top-0 z-10 flex h-full items-center border-l border-line px-3 text-micro font-medium text-ink-400">
-        {useFunds ? (quoteStatus.connected ? t('基金行情 · 美元') : t('行情连接中')) : t('延迟行情')}
+      <span className="absolute inset-y-0 right-0 z-10 flex items-stretch">
+        <span className="pointer-events-none w-8 bg-gradient-to-r from-transparent to-paper-2" aria-hidden="true" />
+        <span className="glass flex items-center border-l border-line bg-paper-2/95 px-3 text-micro font-medium text-ink-400">
+          {useFunds ? (quoteStatus.connected ? t('基金行情 · 美元') : t('行情连接中')) : t('延迟行情')}
+        </span>
       </span>
     </div>
   );

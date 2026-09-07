@@ -70,10 +70,10 @@ function classify(node) {
 }
 
 /**
- * 该节点是否位于「按 locale 分支产出各语言自然写法」的函数内——这类模板串
- * （en「7/26」· ja「7月26日」· zh「7 月 26 日」）是有意的，不该被 t() 包。
- * 判据：最近的函数体文本里出现 getLocale()。见 HistoryRail.dayLabel、
- * earnings/types.fmtMDCN、MonthCalendar 的年月标题。
+ * 该节点是否位于「按 locale 分支产出各语言自然写法」的函数内——这类字面量
+ * （en「7/26」· ja「7月26日」· zh「7 月 26 日」，以及 calendarCopy 的中英日对照）
+ * 是有意的，不该被 t() 包。判据：最近的函数体文本里出现 getLocale()。
+ * 见 HistoryRail.dayLabel、earnings/types.fmtMDCN、MonthCalendar 的年月标题。
  */
 function inLocaleBranch(node) {
   for (let p = node.parent; p; p = p.parent) {
@@ -101,10 +101,10 @@ function inThrow(node) {
  * TYPE_DISCRIMINANTS 第 2 类）。行号来自这些 mock 拼接语句。
  */
 const KNOWN_TEMPLATE_EXEMPT_LINES = new Set([
-  'components/detail/api.ts:400',
-  'components/detail/api.ts:539',
-  'components/detail/api.ts:540',
-  'components/detail/api.ts:541',
+  'components/detail/api.ts:407',
+  'components/detail/api.ts:560',
+  'components/detail/api.ts:561',
+  'components/detail/api.ts:562',
 ]);
 
 // ── 收集 dict/*.ts 里的全部词条（跳过 types.ts / index.ts 本身） ────────────
@@ -157,22 +157,22 @@ test('dict/*.ts 词条之间没有同 msgid 不同译文的冲突', () => {
  * 而不是放宽通用规则掩盖真正遗漏的包裹。
  */
 const KNOWN_TYPE_DISCRIMINANTS = new Set([
-  'components/detail/api.ts:462 数据不足',
-  'components/detail/api.ts:464 偏多',
-  'components/detail/api.ts:466 偏空',
-  'components/detail/api.ts:467 中性',
+  'components/detail/api.ts:469 数据不足',
+  'components/detail/api.ts:471 偏多',
+  'components/detail/api.ts:473 偏空',
+  'components/detail/api.ts:474 中性',
   // 等待占位哨兵：对照后端落库的中文字面量，绝不能 __t（译文永不命中，防御失效）
-  'components/catalysts/api.ts:132 中文标题等待生成',
-  'components/catalysts/api.ts:132 中文摘要等待生成',
-  'components/catalysts/api.ts:132 热点标题等待中文分析',
+  'components/catalysts/api.ts:133 中文标题等待生成',
+  'components/catalysts/api.ts:133 中文摘要等待生成',
+  'components/catalysts/api.ts:133 热点标题等待中文分析',
   'pages/Market.tsx:69 偏多',
   'pages/Market.tsx:69 偏空',
   'pages/Market.tsx:69 中性',
-  'components/detail/api.ts:537 偏贵',
-  'components/detail/api.ts:537 相对便宜',
-  'components/detail/api.ts:537 中性',
-  'components/detail/api.ts:542 近端观察 MA20 附近的量能配合与突破延续性；若量价背离放大，偏向读数将快速回落。',
-  'components/detail/api.ts:543 以上为方向性研究结论，非收益预测。',
+  'components/detail/api.ts:558 偏贵',
+  'components/detail/api.ts:558 相对便宜',
+  'components/detail/api.ts:558 中性',
+  'components/detail/api.ts:563 近端观察 MA20 附近的量能配合与突破延续性；若量价背离放大，偏向读数将快速回落。',
+  'components/detail/api.ts:564 以上为方向性研究结论，非收益预测。',
   // `t(macroMissingReason(status) ?? '暂无宏观读数')` — the literal is the right
   // operand of `??`, not itself t()'s direct argument, so the classifier can't see
   // that the whole expression is covered by the outer call. It is (verified by hand).
@@ -218,6 +218,7 @@ for (const file of allFiles) {
       (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) &&
       CJK.test(node.text) &&
       classify(node) === 'display' &&
+      !inLocaleBranch(node) &&
       !KNOWN_TYPE_DISCRIMINANTS.has(`${rel}:${lineOf(node)} ${node.text}`)
     ) {
       (isExempt ? mocksGaps : unsafeDisplayGaps).push({ file: rel, line: lineOf(node), text: node.text });
@@ -277,6 +278,33 @@ test('exempt paths (src/mocks/, import-free files) have no untracked untranslate
 });
 
 // ── 语言切换器确实挂在导航上 ─────────────────────────────────────────────
+test('watchlist and smart-drawing copy stays natural in EN/JA', () => {
+  const remaining = merged.get('还有 {n} 只');
+  assert.equal(remaining?.en, '{n} more');
+  assert.equal(remaining?.ja, 'あと {n} 銘柄');
+  const historical = merged.get('{label} · 历史结构');
+  assert.equal(historical?.en, '{label} · historical structure');
+  const reference = merged.get('{label} · 参考');
+  assert.equal(reference?.en, '{label} · reference');
+  const unfilled = merged.get('价格缺口 · 未回补');
+  assert.equal(unfilled?.ja, '価格ギャップ · 未埋め');
+  const filled = merged.get('价格缺口 · 已回补');
+  assert.equal(filled?.ja, '価格ギャップ · 窓埋め済み');
+  const legend = merged.get('深色为主要边界，细线为参考；虚线为延伸，淡色点线为历史结构');
+  assert.equal(legend?.en, 'Dark: main boundary; thin: reference; dashed: extension; faint dotted: historical structure');
+  const formerUp = merged.get('原{label} · 突破已确认');
+  assert.equal(formerUp?.ja, '元の{label} · 上抜け確認');
+  // 个股关键数据的最高/最低不能复用选股筛选的「上限/下限」
+  const high = merged.get('最高价');
+  assert.equal(high?.en, 'High');
+  assert.equal(high?.ja, '高値');
+  const low = merged.get('最低价');
+  assert.equal(low?.en, 'Low');
+  assert.equal(low?.ja, '安値');
+  assert.equal(merged.get('前往{label}')?.en, 'Go to {label}');
+  assert.equal(merged.get('价格行为')?.en, 'Price action');
+});
+
 test('LanguageSwitcher is wired into the navbar', async () => {
   const navbar = await readFile(path.join(srcDir, 'components', 'Navbar.tsx'), 'utf8');
   assert.match(navbar, /LanguageSwitcher/, 'Navbar.tsx must render <LanguageSwitcher />');

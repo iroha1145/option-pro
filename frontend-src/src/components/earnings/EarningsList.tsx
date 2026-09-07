@@ -73,11 +73,15 @@ export function TimingBadge({ timing, className }: { timing: EarningsRow['timing
 }
 
 /* ---------------- 预期波动微条（0–15% 映射 ai-600） ---------------- */
-function ExpectedMoveCell({ pct, index }: { pct: number | null; index: number }) {
+function ExpectedMoveCell({ pct, index, status }: { pct: number | null; index: number; status?: string | null }) {
   if (pct == null) return <span aria-hidden="true" />;
+  const unverified = typeof status === 'string' && status.startsWith('degraded:');
   return (
     <span className="block">
       <span className="font-mono text-data-m text-ink-800 tnum">±{pct.toFixed(1)}%</span>
+      {unverified && (
+        <span className="mt-0.5 block text-[10px] leading-4 text-ink-400">{t('获取时间，非逐合约已验证报价')}</span>
+      )}
       <span className="mt-1 block h-1 w-16 strength-track overflow-hidden rounded-pill bg-line" aria-hidden="true">
         <motion.span
           className="block h-full origin-left rounded-pill bg-ai-600"
@@ -136,6 +140,8 @@ interface EarningsListProps {
   /** 重点模式把非重点公司滤掉了：空态要说清是「被模式过滤」而非「没有财报」 */
   featuredFilteredEmpty?: boolean;
   onShowAll?: () => void;
+  /** 首屏自动选中不要滚页面；只有用户点日历/行时才把选中行滚进视口。 */
+  autoSelected?: boolean;
 }
 
 export default function EarningsList({
@@ -146,13 +152,15 @@ export default function EarningsList({
   filteredByDay,
   featuredFilteredEmpty = false,
   onShowAll,
+  autoSelected = false,
 }: EarningsListProps) {
   /* 从日历点入非重点公司时选中行可能在视口外：温和地滚到就近可见位置。
-     hooks 必须先于任何提前 return。 */
+     hooks 必须先于任何提前 return。自动选中不滚，否则首屏标题会被顶出视口。 */
   const selectedRowRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
+    if (autoSelected) return;
     selectedRowRef.current?.scrollIntoView({ block: 'nearest' });
-  }, [selectedTicker]);
+  }, [selectedTicker, autoSelected]);
 
   if (items.length === 0) {
     if (featuredFilteredEmpty) {
@@ -275,6 +283,7 @@ export default function EarningsList({
               // 市值必须是数据源提供的正数；0/负数是缺失占位，不展示成 $0。
               const marketCap = exNum(row, 'marketCap');
               const move = exNum(row, 'expectedMovePct');
+              const moveStatus = exStr(row, 'expectedMoveStatus');
               return (
                 <div key={row.ticker} ref={rowRef}>
                   {/* 桌面行 */}
@@ -334,7 +343,7 @@ export default function EarningsList({
                     <span className="hidden font-mono text-data-m text-ink-600 tnum 2xl:block">
                       {marketCap != null ? `$${fmtCompact(marketCap)}` : '—'}
                     </span>
-                    {hasExpectedMove && <ExpectedMoveCell pct={move} index={i} />}
+                    {hasExpectedMove && <ExpectedMoveCell pct={move} index={i} status={moveStatus} />}
                     {/* AI 影响 */}
                     <span className="flex justify-end">
                       <ImpactAction row={row} onSelect={() => onSelectTicker(row.ticker)} />
@@ -379,7 +388,7 @@ export default function EarningsList({
                           </span>
                         </span>
                       </span>
-                      {hasExpectedMove && <ExpectedMoveCell pct={move} index={i} />}
+                      {hasExpectedMove && <ExpectedMoveCell pct={move} index={i} status={moveStatus} />}
                     </span>
                   </motion.button>
                 </div>

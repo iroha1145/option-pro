@@ -197,6 +197,17 @@ export default function TrendBiasPanel({
         </p>
       )}
 
+      {data.modelCoverage && (
+        <p className="mt-4 text-micro text-ink-400" data-testid="stock-score-coverage">
+          {t('个股评分覆盖')}
+          <InfoHint hint={SCORE_HINTS.stockScoreCoverage} size={11} className="mx-0.5" />
+          {` · ${t('数据质量')} ${data.modelCoverage.dataQuality ?? '—'} · ${t('顶部风险')} ${
+            data.modelCoverage.topRatio == null ? '—' : `${Math.round(data.modelCoverage.topRatio * 100)}%`
+          } / ${t('底部修复')} ${
+            data.modelCoverage.bottomRatio == null ? '—' : `${Math.round(data.modelCoverage.bottomRatio * 100)}%`
+          }`}
+        </p>
+      )}
       <p className="mt-4 text-micro text-ink-400">
         {t('分项由该股实测信号换算')}
         <InfoHint hint={SCORE_HINTS.trendBiasFactors} size={11} className="mx-0.5" />

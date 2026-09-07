@@ -15,8 +15,8 @@ export default function KeyStats({ detail }: { detail: StockDetail }) {
   const rows: [string, string][] = [
     [t('今开'), priceOr(detail.open)],
     [t('昨收'), priceOr(detail.prevClose)],
-    [t('最高'), priceOr(detail.high)],
-    [t('最低'), priceOr(detail.low)],
+    [t('最高价'), priceOr(detail.high)],
+    [t('最低价'), priceOr(detail.low)],
     [t('成交量'), compactOr(detail.volume)],
     [t('均量'), compactOr(detail.avgVolume)],
     [t('市值'), isNum(detail.marketCap) ? `$${fmtCompact(detail.marketCap)}` : '—'],

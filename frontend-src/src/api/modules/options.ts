@@ -104,6 +104,8 @@ function mapChain(body: unknown, ticker: string, expiration: string): OptionChai
     provider: pickS(r, 'provider'),
     asOf: pickS(r, 'as_of', 'asOf'),
     stale: r._stale === true || r.stale === true,
+    quoteTimeKind: pickS(r, 'quote_time_kind', 'quoteTimeKind'),
+    perContractQuoteTime: r.per_contract_quote_time === true || r.perContractQuoteTime === true,
   };
 }
 

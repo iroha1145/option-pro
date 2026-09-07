@@ -480,7 +480,11 @@ function LiveOptionsPanel({ ticker }: { ticker: string }) {
           className="mt-2"
           text={`${t('期权数据为延迟数据')}${
             shownChain.asOf ? t(' · 更新于 {time}', { time: fmtRelative(shownChain.asOf) }) : ''
-          }${shownChain.stale ? t(' · 暂未刷新，显示最近一次结果') : ''}`}
+          }${shownChain.stale ? t(' · 暂未刷新，显示最近一次结果') : ''}${
+            shownChain.perContractQuoteTime
+              ? ''
+              : ` · ${t('获取时间，非逐合约已验证报价')}`
+          }`}
         />
       )}
 

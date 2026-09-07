@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, time as datetime_time, timedelta, timezone
 import math
 import threading
@@ -17,6 +18,12 @@ from app.services.option_capability import (
     resolve_option_capability,
 )
 from app.services.yahoo_option_io import run_yahoo_option_io
+from app.services.quote_quality import (
+    estimated_premium,
+    inverted_iv_acceptable,
+    option_mark,
+    vendor_iv,
+)
 
 import logging
 import warnings as _warnings
@@ -71,6 +78,25 @@ _MAX_STALE_SECONDS = 30 * 60
 
 NEW_YORK_TZ = ZoneInfo("America/New_York")
 _SECONDS_PER_YEAR = 365.0 * 24 * 60 * 60
+STOCK_IV_METHOD_VERSION = 2
+STOCK_IV_TARGET_DTE = 30.0
+PRICING_ASSUMPTIONS = {
+    "risk_free_rate": 0.05,
+    "risk_free_rate_kind": "model_assumption",
+    "dividend_yield": None,
+    "dividend_yield_kind": "unmodeled",
+    "day_count": "calendar_365",
+    "model": "european_black_scholes",
+}
+
+
+@dataclass(frozen=True)
+class _DerivedCacheValue:
+    """A calculation keeps the original quote's age and refresh deadline."""
+
+    value: Any
+    fetched_at: datetime
+    stale: bool
 
 
 def _purge_cache(now: datetime) -> None:
@@ -176,6 +202,9 @@ def _cached(
             load_error = None
             load_failed = False
 
+        derived = value if isinstance(value, _DerivedCacheValue) else None
+        if derived is not None:
+            value = derived.value
         valid = not load_failed and (is_valid(value) if is_valid is not None else True)
         if not valid and hit:
             _, fetched_at, stale_value = hit
@@ -195,18 +224,25 @@ def _cached(
             assert load_error is not None
             raise load_error
 
-        fetched_at = datetime.now(timezone.utc)
+        cache_now = datetime.now(timezone.utc)
+        fetched_at = derived.fetched_at if derived is not None else cache_now
         # Negative results get a short cache to avoid hammering the provider
         # while still recovering quickly when a transient empty payload clears.
         effective_ttl = ttl_seconds if valid else min(ttl_seconds, 30)
+        expires_at = fetched_at + timedelta(seconds=effective_ttl)
+        if derived is not None and derived.stale:
+            expires_at = min(expires_at, cache_now)
+        stale = expires_at <= cache_now
         with _cache_lock:
-            _purge_cache(fetched_at)
-            _cache[key] = (fetched_at + timedelta(seconds=effective_ttl), fetched_at, value)
+            _purge_cache(cache_now)
+            _cache[key] = (expires_at, fetched_at, value)
         metadata = {
-            "_stale": False,
+            "_stale": stale,
             "as_of": fetched_at.isoformat(),
-            "source_status": "active" if valid else "insufficient_data",
+            "source_status": "stale" if stale else "active" if valid else "insufficient_data",
         }
+        if stale:
+            metadata["stale_age_seconds"] = round(max((cache_now - fetched_at).total_seconds(), 0.0), 1)
         return _cache_value(value, metadata, with_metadata)
     finally:
         _release_key_lock(key, key_lock)
@@ -424,18 +460,33 @@ def get_option_chain(ticker: str, expiration: str) -> dict[str, Any]:
         T = expiry["time_to_expiry_years"]
 
         def _resolve_iv(row, strike, last_price, stock_price, is_call=True):
-            """Use yfinance IV if meaningful, else compute from last_price via BS.
-            Threshold rationale: a truly traded option has IV >= 0.5% always.
-            0.0001/0/NaN means yfinance returned no quote (after-hours, etc).
+            """Prefer vendor IV; invert only from a quality bid/ask mid.
+
+            lastPrice may be returned as a last trade but is never treated as
+            the current quote used for a silent inversion.
             """
-            iv = _safe_float(row.get("impliedVolatility"))
-            if iv is not None and iv > 0.005:
-                return iv
-            if last_price and last_price > 0.01 and stock_price and stock_price > 0:
-                computed = compute_iv(last_price, stock_price, strike, T, r=0.05, is_call=is_call)
-                if computed and 0.01 < computed < 3.0:
-                    return computed
-            return iv  # return raw even if low
+            quoted = vendor_iv(row.get("impliedVolatility"))
+            if quoted is not None:
+                return quoted, "vendor"
+            mark = option_mark(
+                bid=row.get("bid"),
+                ask=row.get("ask"),
+                last=last_price,
+                allow_last_for_estimate=False,
+            )
+            if (
+                mark["usable_for_inversion"]
+                and stock_price
+                and stock_price > 0
+                and strike
+            ):
+                computed = compute_iv(
+                    mark["value"], stock_price, strike, T, r=0.05, is_call=is_call
+                )
+                if inverted_iv_acceptable(computed):
+                    return computed, "model_inversion"
+            raw = _safe_float(row.get("impliedVolatility"))
+            return raw, "vendor_raw" if raw is not None else "missing"
 
         def _greeks_for(strike, iv, is_call):
             if not (price and price > 0 and iv and iv > 0):
@@ -450,7 +501,7 @@ def get_option_chain(ticker: str, expiration: str) -> dict[str, Any]:
             if strike is None or strike <= 0:
                 continue
             last_price = _safe_float(row.get("lastPrice"))
-            iv = _resolve_iv(row, strike, last_price, price, is_call=True)
+            iv, iv_source = _resolve_iv(row, strike, last_price, price, is_call=True)
             greeks = _greeks_for(strike, iv, True)
             break_even = strike + last_price if last_price is not None else None
             calls.append(
@@ -471,6 +522,7 @@ def get_option_chain(ticker: str, expiration: str) -> dict[str, Any]:
                     "volume": _safe_int(row.get("volume")),
                     "open_interest": _safe_int(row.get("openInterest")),
                     "implied_volatility": iv,
+                    "iv_source": iv_source,
                     "in_the_money": _option_in_the_money(
                         "call", strike, price, row.get("inTheMoney")
                     ),
@@ -488,7 +540,7 @@ def get_option_chain(ticker: str, expiration: str) -> dict[str, Any]:
             if strike is None or strike <= 0:
                 continue
             last_price = _safe_float(row.get("lastPrice"))
-            iv = _resolve_iv(row, strike, last_price, price, is_call=False)
+            iv, iv_source = _resolve_iv(row, strike, last_price, price, is_call=False)
             greeks = _greeks_for(strike, iv, False)
             break_even = strike - last_price if last_price is not None else None
             puts.append(
@@ -509,6 +561,7 @@ def get_option_chain(ticker: str, expiration: str) -> dict[str, Any]:
                     "volume": _safe_int(row.get("volume")),
                     "open_interest": _safe_int(row.get("openInterest")),
                     "implied_volatility": iv,
+                    "iv_source": iv_source,
                     "in_the_money": _option_in_the_money(
                         "put", strike, price, row.get("inTheMoney")
                     ),
@@ -539,14 +592,20 @@ def get_option_chain(ticker: str, expiration: str) -> dict[str, Any]:
             if vol >= 5000:
                 reasons.append(f"高成交量 {vol:,}")
 
-            # Rule 3: Large premium flow (volume × price × 100 > $500K)
-            premium = vol * lp * 100 if lp is not None and lp > 0 else None
+            # Rule 3: Estimated notional premium, not cash flow.
+            mark = option_mark(
+                bid=contract.get("bid"),
+                ask=contract.get("ask"),
+                last=lp,
+                allow_last_for_estimate=True,
+            )
+            premium = estimated_premium(mark["value"], vol)
             if premium is not None and premium >= 500_000:
-                reasons.append(f"大额权利金 ${premium:,.0f}")
+                reasons.append(f"估算名义权利金 ${premium:,.0f}（标记价×成交量×100）")
 
-            # Rule 4: Volume spike with low OI (new position building)
-            if vol >= 1000 and oi < 500:
-                reasons.append("可能新仓，待OI确认")
+            # Rule 4: Volume high vs open interest — observation only.
+            if vol >= 1000 and 0 < oi < 500:
+                reasons.append("成交量/未平仓量比值较高；无法据此确认开仓或平仓")
 
             # Rule 5: Deep OTM with high volume (speculative)
             otm_pct = _deep_otm_fraction(side, strike, price)
@@ -565,6 +624,8 @@ def get_option_chain(ticker: str, expiration: str) -> dict[str, Any]:
                     "last_price": lp,
                     "implied_volatility": iv,
                     "premium_flow": round(premium, 0) if premium is not None else None,
+                    "premium_basis": mark["basis"],
+                    "premium_kind": "estimated_notional",
                     "vol_oi_ratio": round(vol / oi, 2) if oi > 0 else None,
                     "reasons": reasons,
                     "moneyness": contract.get("moneyness")
@@ -599,6 +660,9 @@ def get_option_chain(ticker: str, expiration: str) -> dict[str, Any]:
             "grouped_by_strike": grouped,
             "alerts": alerts[:10],  # top 10 unusual activity alerts
             "data_limited": False,
+            "quote_time_kind": "chain_fetch",
+            "per_contract_quote_time": False,
+            "pricing_assumptions": dict(PRICING_ASSUMPTIONS),
         }
 
     return _cached(
@@ -624,61 +688,74 @@ def get_cached_option_chain(
     )
 
 
-def _pick_iv_expiration(expirations: list[str]) -> str | None:
-    now_ny = datetime.now(NEW_YORK_TZ)
+def _empty_stock_iv_payload(**overrides: Any) -> dict[str, Any]:
+    payload = {
+        "atm_iv": None,
+        "iv_method": "missing",
+        "iv_side": "call",
+        "iv_source": None,
+        "target_dte": STOCK_IV_TARGET_DTE,
+        "selected_expiration": None,
+        "selected_dte": None,
+        "expiration_selection": "missing",
+        "selected_strike": None,
+        "strike_distance": None,
+        "strike_fallback_reason": None,
+        "provider": "Yahoo/yfinance",
+        "inverted_from": None,
+        "method_version": STOCK_IV_METHOD_VERSION,
+        "pricing_assumptions": dict(PRICING_ASSUMPTIONS),
+    }
+    payload.update(overrides)
+    return payload
 
-    def _parse_exp(value: str):
+
+def _select_iv_expiration(
+    expirations: list[str],
+    now: datetime,
+) -> tuple[str | None, float | None, str, dict[str, Any] | None]:
+    """Target 30-day DTE inside the 20–60 window; earlier expiry wins ties."""
+
+    parsed: list[tuple[str, float, dict[str, Any]]] = []
+    for raw in expirations:
         try:
-            return option_expiry_metrics(value, now=now_ny)
+            metrics = option_expiry_metrics(str(raw), now=now)
         except (ValueError, TypeError):
-            return None
+            continue
+        dte = metrics["dte"]
+        if dte <= 0:
+            continue
+        parsed.append((str(raw), float(dte), metrics))
+    if not parsed:
+        return None, None, "missing", None
 
-    for exp in expirations:
-        expiry = _parse_exp(exp)
-        if expiry and 20 <= expiry["dte"] <= 60:
-            return exp
-    for exp in expirations:
-        expiry = _parse_exp(exp)
-        if expiry and expiry["dte"] > 7:
-            return exp
-    return expirations[-1] if expirations else None
+    def _rank(items: list[tuple[str, float, dict[str, Any]]]):
+        return sorted(items, key=lambda item: (abs(item[1] - STOCK_IV_TARGET_DTE), item[0]))
+
+    primary = _rank([item for item in parsed if 20 <= item[1] <= 60])
+    if primary:
+        chosen = primary[0]
+        return chosen[0], chosen[1], "primary_20_60", chosen[2]
+    fallback = _rank([item for item in parsed if item[1] > 7])
+    if fallback:
+        chosen = fallback[0]
+        return chosen[0], chosen[1], "fallback_gt_7", chosen[2]
+    return None, None, "missing", None
 
 
-def _atm_iv_from_chain(chain: dict[str, Any]) -> float | None:
-    price = _safe_float(chain.get("underlying_price"))
-    calls = chain.get("calls") or []
-    if price is None or price <= 0 or not calls:
-        return None
-    ranked = sorted(
-        calls,
-        key=lambda row: abs((_safe_float(row.get("strike")) or 0.0) - price),
-    )[:5]
-    for row in ranked:
-        iv = _safe_float(row.get("implied_volatility"))
-        if iv is not None and iv > 0.10:
-            return round(iv, 4)
-    expiry = None
-    raw_expiration = chain.get("expiration")
-    if isinstance(raw_expiration, str):
-        try:
-            expiry = option_expiry_metrics(raw_expiration)
-        except (ValueError, TypeError):
-            expiry = None
-    if not expiry:
-        return None
-    T = expiry["time_to_expiry_years"]
-    for row in ranked:
-        last = _safe_float(row.get("last_price"))
+def _call_rows_nearest_strikes(calls: list[dict[str, Any]], price: float, limit: int = 5) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for row in calls:
         strike = _safe_float(row.get("strike"))
-        if last and last > 0.01 and strike:
-            computed = compute_iv(last, price, strike, T, r=0.05, is_call=True)
-            if computed and 0.05 < computed < 3.0:
-                return round(computed, 4)
-    return None
+        if strike is None or strike <= 0:
+            continue
+        rows.append({**row, "strike": strike, "_distance": abs(strike - price)})
+    rows.sort(key=lambda item: (item["_distance"], item["strike"]))
+    return rows[:limit]
 
 
 def _get_stock_iv_cached(ticker: str, *, with_metadata: bool = False) -> Any:
-    """ATM IV from the shared expiration discovery + chain cache."""
+    """Near-month / target-tenor ATM call IV. Not a constant 30-day interpolation."""
     symbol = canonicalize_option_symbol(ticker)
     if is_declared_unsupported(symbol):
         metadata = {
@@ -686,43 +763,109 @@ def _get_stock_iv_cached(ticker: str, *, with_metadata: bool = False) -> Any:
             "as_of": datetime.now(timezone.utc).isoformat(),
             "source_status": "unsupported_by_provider",
         }
-        return _cache_value(None, metadata, with_metadata)
+        return _cache_value(
+            _empty_stock_iv_payload(**resolve_option_capability(symbol).as_payload()),
+            metadata,
+            with_metadata,
+        )
 
-    def load() -> float | None:
-        snapshot = get_expirations_snapshot(symbol)
-        if snapshot.get("options_status") == "unsupported_by_provider":
-            return None
-        expirations = [
-            value
-            for value in (snapshot.get("expirations") or [])
-            if isinstance(value, str) and value
-        ]
-        if not expirations:
-            return None
-        target_exp = _pick_iv_expiration(expirations)
-        if not target_exp:
-            return None
+    def load() -> dict[str, Any] | _DerivedCacheValue:
+        discovery = get_expirations_snapshot(symbol)
+        exps = list(discovery.get("expirations") or [])
+        if not exps:
+            return _empty_stock_iv_payload()
+
+        now_ny = datetime.now(NEW_YORK_TZ)
+        target_exp, selected_dte, selection, expiry = _select_iv_expiration(exps, now_ny)
+        if not target_exp or expiry is None:
+            return _empty_stock_iv_payload()
+
         chain = get_option_chain(symbol, target_exp)
-        return _atm_iv_from_chain(chain)
+        price = _safe_float(chain.get("underlying_price"))
+        if price is None or price <= 0:
+            return _empty_stock_iv_payload()
+        candidates = _call_rows_nearest_strikes(chain.get("calls") or [], price)
+
+        def from_chain(**fields: Any) -> _DerivedCacheValue:
+            # Both fresh cache hits and stale fallbacks retain their quote time.
+            # Recomputing a number does not constitute a new provider fetch.
+            observed = datetime.fromisoformat(str(chain["as_of"]).replace("Z", "+00:00"))
+            if observed.tzinfo is None:
+                observed = observed.replace(tzinfo=timezone.utc)
+            return _DerivedCacheValue(
+                _empty_stock_iv_payload(**fields), observed, bool(chain.get("_stale")),
+            )
+
+        fallback_reason = None
+        for index, row in enumerate(candidates):
+            strike = row["strike"]
+            quoted = vendor_iv(row.get("implied_volatility")) if row.get("iv_source") == "vendor" else None
+            if quoted is not None:
+                return from_chain(
+                    atm_iv=round(quoted, 4),
+                    iv_method="vendor_call",
+                    iv_source="vendor",
+                    selected_expiration=target_exp,
+                    selected_dte=selected_dte,
+                    expiration_selection=selection,
+                    selected_strike=strike,
+                    strike_distance=row["_distance"],
+                    strike_fallback_reason=None if index == 0 else "nearest_invalid",
+                )
+            if index == 0:
+                fallback_reason = "nearest_invalid"
+
+        for index, row in enumerate(candidates):
+            strike = row["strike"]
+            # The shared chain has already applied the quality-mid policy.
+            if row.get("iv_source") != "model_inversion":
+                continue
+            computed = row.get("implied_volatility")
+            if inverted_iv_acceptable(computed):
+                return from_chain(
+                    atm_iv=round(float(computed), 4),
+                    iv_method="model_inversion",
+                    iv_source="model_inversion",
+                    inverted_from="quality_mid",
+                    selected_expiration=target_exp,
+                    selected_dte=selected_dte,
+                    expiration_selection=selection,
+                    selected_strike=strike,
+                    strike_distance=row["_distance"],
+                    strike_fallback_reason=fallback_reason
+                    if index > 0 or fallback_reason
+                    else None,
+                )
+        return _empty_stock_iv_payload(
+            expiration_selection=selection,
+            selected_expiration=target_exp,
+            selected_dte=selected_dte,
+            strike_fallback_reason=fallback_reason or "no_qualified_call",
+        )
 
     return _cached(
-        f"stock_iv:{symbol}",
+        f"stock_iv:v{STOCK_IV_METHOD_VERSION}:{symbol}",
         300,
         load,
         with_metadata=with_metadata,
-        is_valid=lambda value: value is not None,
+        is_valid=lambda value: isinstance(value, dict) and value.get("atm_iv") is not None,
     )
 
 
 def get_stock_iv(ticker: str) -> float | None:
     """Return current ATM IV as a decimal (for example, ``0.325`` = 32.5%)."""
-    return _get_stock_iv_cached(ticker, with_metadata=False)
+    payload = _get_stock_iv_cached(ticker, with_metadata=False)
+    if isinstance(payload, dict):
+        iv = payload.get("atm_iv")
+        return float(iv) if isinstance(iv, (int, float)) else None
+    return payload
 
 
 def get_stock_iv_snapshot(ticker: str) -> dict[str, Any]:
-    """Return current ATM IV together with cache freshness metadata."""
-    iv, metadata = _get_stock_iv_cached(ticker, with_metadata=True)
-    return {"atm_iv": iv, **metadata}
+    """Return current ATM IV together with cache freshness and method metadata."""
+    payload, metadata = _get_stock_iv_cached(ticker, with_metadata=True)
+    body = dict(payload) if isinstance(payload, dict) else {"atm_iv": payload}
+    return {**body, **metadata}
 
 
 def get_last_price(ticker: str) -> float | None:
@@ -826,7 +969,12 @@ def compute_iv(option_price, S, K, T, r=0.05, is_call=True):
             hi, f_hi = mid, f_mid
         else:
             lo, f_lo = mid, f_mid
-    return round((lo + hi) / 2, 4)
+    # Do not treat a truncated bracket midpoint as a solved IV.
+    candidate = (lo + hi) / 2
+    residual = abs(_bs_price(S, K, T, r, candidate, is_call) - option_price)
+    if residual < 0.001 or residual / max(option_price, 1e-6) < 0.01:
+        return round(candidate, 4)
+    return None
 
 
 def compute_greeks(S, K, T, r, sigma, is_call=True):

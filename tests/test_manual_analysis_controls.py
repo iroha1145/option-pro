@@ -8,10 +8,17 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
+from app.access import request_owner_access_context
 from app.api import ai, signals
 from app.services.ai_jobs import runtime
 from app.services.ai_jobs import worker as ai_worker
 from app.services.ai_jobs.repository import AIJobRepository
+
+
+@pytest.fixture(autouse=True)
+def _owner_request_context():
+    with request_owner_access_context(True):
+        yield
 
 
 class _CopyableSettings(SimpleNamespace):

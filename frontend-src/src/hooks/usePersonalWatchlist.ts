@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { accountApi, type AccountWatchlist } from '@/api/modules/account';
+import { accountApi, watchlistErrorMessage, type AccountWatchlist } from '@/api/modules/account';
 import { ApiError } from '@/api/client';
 import { useAccess } from './useAccess';
 import { t } from '@/i18n/core';
@@ -27,7 +27,7 @@ export function usePersonalWatchlist() {
       }
     } catch (error) {
       if (life.current.alive && life.current.key === key && life.current.generation === generation) {
-        setSnapshot((current) => ({ key, data: current.key === key ? current.data : null, error: error instanceof Error ? error.message : t('请稍后再试'), ready: true }));
+        setSnapshot((current) => ({ key, data: current.key === key ? current.data : null, error: watchlistErrorMessage(error), ready: true }));
       }
     }
   }, [enabled, key]);

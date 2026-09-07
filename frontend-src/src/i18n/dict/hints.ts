@@ -201,9 +201,14 @@ export const HINTS: Dict = {
   ],
 
   '数据质量（0–100%）': ['Data quality (0–100%)', 'データ品質（0–100%）'],
-  '本次解读中有真实读数的指标占比。缺数据的指标不参与聚合也不冒充中性，占比低时应降低整套解读的参考权重。': [
-    'The share of indicators in this reading that have real values. Indicators without data are left out of the aggregate rather than passed off as neutral; when the share is low, give the whole reading less weight.',
-    '今回の解釈のうち、実データが取れた指標の比率です。データのない指標は集約に加えず、中立として扱うこともしません。比率が低いときは、解釈全体の参考度合いを下げてください。',
+  '数据质量 = 有真实读数的信号占比 × 模型覆盖率。未接入的分类（例如个股期权拥挤、财报反应）保持缺失，不补 0 或 50，也不表示胜率或顶部/底部发生概率。占比低时应降低整套解读的参考权重。': [
+    'Data quality = share of signals with real readings × model coverage. Unimplemented categories (for example stock options crowding or earnings reaction) stay missing — they are not filled with 0 or 50, and the score is not a win rate or a probability that a top or bottom occurs. When the share is low, give the whole reading less weight.',
+    'データ品質＝実測シグナルの比率×モデルカバレッジ。未接続の分類（個別オプション混雑や決算反応など）は欠測のままです。0や50で埋めず、勝率や天井・底の発生確率でもありません。比率が低いときは解釈全体の参考度を下げてください。',
+  ],
+  '个股评分覆盖': ['Stock score coverage', '個別スコアのカバレッジ'],
+  '分母是顶部/底部模型分类的配置权重，不是「全部因子都已实现」。未接入项与临时缺数都会降低覆盖率；分数不是胜率。': [
+    'The denominator is the configured weight of top/bottom model categories, not “every factor is implemented.” Unimplemented items and temporarily missing inputs both lower coverage. The score is not a win rate.',
+    '分母は天井・底モデル分類の設定ウェイトであり、「全因子が実装済み」ではありません。未接続項目と一時欠測の両方がカバレッジを下げます。スコアは勝率ではありません。',
   ],
 
   '四因子子分（0–100）': ['Four-factor sub-scores (0–100)', '4ファクターのサブスコア（0–100）'],
@@ -225,9 +230,9 @@ export const HINTS: Dict = {
   ],
 
   'ATM IV（%）': ['ATM IV (%)', 'ATM IV（%）'],
-  '最接近现价的期权（平值）的隐含波动率年化值。数值越高，说明期权市场预期这只股票后市波动越大。': [
-    'The annualized implied volatility of the option closest to the current price (at the money). The higher it is, the more movement the options market expects from this stock.',
-    '現在値に最も近い（アット・ザ・マネーの）オプションのインプライド・ボラティリティを年率換算した値です。高いほど、オプション市場がこの銘柄の今後の変動を大きく見込んでいることを意味します。',
+  '近月／目标约 30 天窗口内、最近合格看涨行权价的供应商隐含波动率（必要时才用合格买卖中间价反解）。这不是期限插值后的恒定 30 天 IV；利率 5% 与未计股息是模型假设。': [
+    'Vendor implied volatility for the nearest qualified call strike in the near-month / target ~30-day window (inverted from a quality bid/ask mid only when needed). This is not a constant 30-day interpolated IV. The 5% rate and unmodeled dividends are model assumptions.',
+    '目標約30日・20–60日ウィンドウ内の最も近い適格コール行使価格のベンダーIVです（必要な場合のみ適格な売買中値から逆算）。期限補間した「固定30日IV」ではありません。金利5%と配当未計上はモデル仮定です。',
   ],
 
   /* 顶底证据指标逐条口径 */

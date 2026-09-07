@@ -35,6 +35,8 @@ export const COMPANIES: Dict = {
   '电信': ['Telecom', '通信'],
   '工业制造': ['Industrials', '資本財'],
   '宽基 ETF': ['Broad-Market ETFs', '広範 ETF'],
+  '电气设备及零部件': ['Electrical Equipment & Parts', '電気機器・部品'],
+  '互联网内容与信息': ['Internet Content & Information', 'インターネット・コンテンツ・情報'],
 
   /* 86 家公司：展示名 */
   '英伟达': ['NVIDIA', 'エヌビディア'],
