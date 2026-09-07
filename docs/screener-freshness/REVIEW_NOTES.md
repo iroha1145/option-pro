@@ -27,7 +27,7 @@
 
 ## 缓存穿透
 
-C01 必须使用**未注册** `page.route` / `context.route` 的上下文。用例：`frontend-src/visual-tests/screener-http-cache.spec.mjs`，配置 `playwright.screener-cache.config.mjs`。
+C01 必须使用**未注册** `page.route` / `context.route` 的上下文。用例：`frontend-src/visual-tests/screener-http-cache.spec.mjs`，配置 `playwright.screener-cache.config.mjs`。本工作区已通过：先证明 `max-age=60` 命中（服务端计数不变），再 `cache:'reload'` 打到服务端。
 
 ## 红绿与全链
 

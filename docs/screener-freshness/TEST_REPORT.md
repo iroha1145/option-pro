@@ -42,9 +42,11 @@
 | 前端行为测试 | `node --experimental-strip-types --test frontend-src/tests/*.test.mjs` | 0 | 789 passed, 1 skipped |
 | 静态断言 | `node frontend-src/tests/static_assertions.mjs` | 0 | 通过（检查的是当时已提交的 `frontend/`） |
 | 代码规范 | `npm --prefix frontend-src run lint` | 0 | 0 error；2 个既有 warning（`FeedPanel.tsx`） |
-| 选股 Playwright | `npm --prefix frontend-src run test:screener` | — | NOT_RUN（撰写本表时尚未跑完） |
-| 既有 review/quotes/audit/visual | 各 npm script | — | NOT_RUN |
-| 生产构建与 `diff -r frontend-src/dist frontend` | `VITE_API_MODE=live npm run build --prefix frontend-src` | — | NOT_RUN |
+| 选股 Playwright | `npx playwright test --config=playwright.screener.config.mjs` | 0 | 5 passed（F01 768 zh/en/ja；F02 1440/390 live 任务链） |
+| 原生 HTTP 缓存 | `npx playwright test --config=playwright.screener-cache.config.mjs` | 0 | 1 passed（先命中 max-age，再 `cache:reload`） |
+| 既有 review（含 indicators） | `npm --prefix frontend-src run test:review` | 0 | 72 + 10 passed |
+| 既有 quotes/audit/visual | 各 npm script | — | NOT_RUN |
+| 生产构建与 `diff -r frontend-src/dist frontend` | `VITE_API_MODE=live npm run build --prefix frontend-src` 后同步 `frontend/` | 0 | 已同步，`diff -r` 无差异 |
 | 依赖锁 / pip_audit | CI 第 6 节 | — | NOT_RUN |
 | 容器 / compose / 离线 smoke | CI 后半 | — | NOT_RUN |
 | 外部供应商实测 | 可选 | — | 未进行 |
@@ -73,7 +75,7 @@
 | B09 | `test_b09_corrupt_and_mismatched_snapshots_stay_unavailable`；`test_b09_unknown_snapshot_does_not_invent_now` | PASS |
 | B10 | E01 第二次 `run_for_actions` 分数/日期相同 | PASS |
 | B11 | `test_late_write_cannot_replace_newer_publish` | PASS |
-| C01 | `screener-http-cache.spec.mjs` | NOT_RUN |
+| C01 | `screener-http-cache.spec.mjs` `cached GET is reused, then cache:reload reaches the server` | PASS |
 | C02 | `market-read.test.mjs` 旧 in-flight 不回写 | PASS（内存层） |
 | C03 | ETag `version_key` 含 source_status / score_data_through | 部分（实现+既有 snapshot 测试） |
 | C04 | `manual path invalidation keeps the shared provider backoff` | PASS |
@@ -83,19 +85,20 @@
 | E01 | `test_e01_real_action_real_scanner_publish_and_read` | PASS |
 | E02 | 既有 worker action 状态测试 | 部分 |
 | E03–E06 | 参数不匹配 409；发布闸 | 部分 / NOT_RUN |
-| F01–F02 | `screener-freshness.spec.mjs` | NOT_RUN |
-| F03 | 未改共享报价以外的页面逻辑；既有 review 未跑 | NOT_RUN |
-| F04 | 生产构建与产物 diff | NOT_RUN |
+| F01–F02 | `screener-freshness.spec.mjs`（视口模拟，非真机） | PASS |
+| F03 | `ui-review.spec.mjs` 全研究页 390/768/1440 | PASS（mock 布局）；quotes/audit 未跑 |
+| F04 | 生产构建与产物 diff | PASS（本工作区）；须以最终 SHA 的 CI 复核 |
 | F05 | 完整 CI / 镜像 | NOT_RUN |
 
 ## 5. 三条证据链
 
-1. **管理员旧半导体**：pytest E01 真实任务链 + B01 文件场景。浏览器点击链待 `test:screener`。
+1. **管理员旧半导体**：pytest E01 真实任务链 + B01 文件场景 + Playwright F02（live Vite → 隔离 API → 真实 `scan_strength`，供应商替身）。
 2. **上游失败**：`test_failed_provider_does_not_publish_empty_fresh_snapshot` 不写新鲜空文件，任务 `degraded`。
 3. **休市/输入不变**：`test_closed_market_with_matching_session_is_fresh`；E01 重算分数不变。
 
 ## 6. 已知局限
 
 - 本地 Python/Node 微版本低于 CI 钉版本。
-- 浏览器、容器、产物同步和完整 CI 必须在最终 SHA 上补跑，并回填本表与 `review_manifest.json`。
+- 既有 `test:review` / `test:quotes` / `test:audit` / `test:visual` 与容器阶段仍须在最终 SHA 的 GitHub CI 上留下日志。
+- `review_manifest.json` 完整机器清单尚未从本工作区导出到附件包。
 - 未进行外部供应商实测，不能写成「线上行情源已验证」。
