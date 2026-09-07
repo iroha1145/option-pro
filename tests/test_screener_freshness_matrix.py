@@ -152,3 +152,48 @@ def test_b06_tokyo_and_new_york_share_the_session_date() -> None:
     tokyo = parsed.astimezone(ZoneInfo("Asia/Tokyo"))
     assert tokyo.date().isoformat() in {"2026-07-03"}
     assert session_date_of(parsed).isoformat() == "2026-07-02"
+
+
+def test_c03_etag_304_does_not_invent_a_new_data_date(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = tmp_path / "strength-snapshot-v1.json"
+    through = "2026-09-03T20:00:00+00:00"
+    strength._write_strength_snapshot(
+        path,
+        parameters=dict(strength.DEFAULT_STRENGTH_SCAN_PARAMETERS),
+        payload=_payload(through=through),
+        saved_at=NOW - 60,
+    )
+    monkeypatch.setattr(strength, "_STRENGTH_SNAPSHOT_PATH", path)
+    clock = {"now": NOW}
+    monkeypatch.setattr(strength.time, "time", lambda: clock["now"])
+
+    async def scenario() -> None:
+        first = await strength.scan(_areq(), **strength.DEFAULT_STRENGTH_SCAN_PARAMETERS)
+        assert first.status_code == 200
+        etag = first.headers["etag"]
+        body = _rp(first)
+        assert body["score_data_through"]
+        assert body["_stale"] is False
+        first_through = body["score_data_through"]
+
+        replay = await strength.scan(
+            _areq(headers={"If-None-Match": etag}),
+            **strength.DEFAULT_STRENGTH_SCAN_PARAMETERS,
+        )
+        assert replay.status_code == 304
+        assert not replay.body
+        assert replay.headers["etag"] == etag
+
+        clock["now"] = NOW + 27 * 60 * 60
+        stale = await strength.scan(_areq(), **strength.DEFAULT_STRENGTH_SCAN_PARAMETERS)
+        assert stale.status_code == 200
+        stale_body = _rp(stale)
+        assert stale.headers["etag"] != etag
+        assert stale_body["_stale"] is True
+        assert stale_body["score_data_through"] == first_through
+        assert stale_body["scan_completed_at"] == body["scan_completed_at"]
+
+    asyncio.run(scenario())
