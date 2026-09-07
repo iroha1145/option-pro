@@ -43,7 +43,7 @@
 | 前端行为测试 | `node --experimental-strip-types --test frontend-src/tests/*.test.mjs` | 0 | **795 passed** |
 | 静态断言 | `node frontend-src/tests/static_assertions.mjs` | 0 | 通过（`frontend/` 与 live dist 一致） |
 | 代码规范 | `npm --prefix frontend-src run lint` | 0 | 0 error；2 个既有 warning（`FeedPanel.tsx`） |
-| 选股 Playwright | `npm --prefix frontend-src run test:screener` | 0 | **18 + 1 passed**（A07/A08/C06 + F01 12 组合；F02 1440/390；C01） |
+| 选股 Playwright | `npm --prefix frontend-src run test:screener` | 0 | **18 + 1 passed**（本工作区）；CI `21a86f03` 因硬编码 `../.venv/bin/python` 失败，已改为与 `playwright.config.mjs` 相同的 venv/python3 回退 |
 | 既有 review | `npm --prefix frontend-src run test:review` | 0 | 72 + 10 passed |
 | 既有 quotes | `npm --prefix frontend-src run test:quotes` | 0 | **21 passed** |
 | 既有 audit | `npm --prefix frontend-src run test:audit` | 0 | **6 passed** |
