@@ -40,7 +40,7 @@
 |---|---|---|---|
 | Python 全量 | `PYTHONPATH=backend python -m pytest -q` | 0 | **3289 passed, 6 skipped**（含 C03） |
 | Python 编译 | `python -m compileall -q backend/app` | 0 | 通过 |
-| 前端行为测试 | `node --experimental-strip-types --test frontend-src/tests/*.test.mjs` | 0 | **791 passed** |
+| 前端行为测试 | `node --experimental-strip-types --test frontend-src/tests/*.test.mjs` | 0 | **792 passed** |
 | 静态断言 | `node frontend-src/tests/static_assertions.mjs` | 0 | 通过（`frontend/` 与 live dist 一致） |
 | 代码规范 | `npm --prefix frontend-src run lint` | 0 | 0 error；2 个既有 warning（`FeedPanel.tsx`） |
 | 选股 Playwright | `npm --prefix frontend-src run test:screener` | 0 | **14 + 1 passed**（F01 12 组合；F02 1440/390；C01） |

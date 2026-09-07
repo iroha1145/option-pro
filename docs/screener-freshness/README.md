@@ -10,3 +10,6 @@
 | `REVIEW_NOTES.md` | 给二次审查的要点与未完成项 |
 
 用户原截图只作为本地输入，不提交到公开仓库。
+
+本轮隔离证据包（日志、截图、`review_manifest.json`、`commands.jsonl`）在
+`/opt/cursor/artifacts/screener-freshness-review/`，不进入 Git 历史。
