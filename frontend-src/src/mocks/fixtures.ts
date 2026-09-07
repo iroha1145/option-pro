@@ -390,6 +390,24 @@ function buildCandles(ticker: string, range: StockChart['range']): { candles: Ca
       bar.l = round2(bar.l * scale); bar.c = round2(bar.c * scale);
     }
   }
+  const quotePrice = getStockDetail(ticker).price;
+  const lastClose = candles[candles.length - 1]?.c;
+  if (
+    candles.length
+    && Number.isFinite(quotePrice)
+    && quotePrice > 0
+    && Number.isFinite(lastClose)
+    && lastClose > 0
+  ) {
+    const scale = quotePrice / lastClose;
+    for (const bar of candles) {
+      bar.o = round2(bar.o * scale);
+      bar.h = round2(bar.h * scale);
+      bar.l = round2(bar.l * scale);
+      bar.c = round2(bar.c * scale);
+    }
+    candles[candles.length - 1].c = round2(quotePrice);
+  }
   const ma20: (number | null)[] = candles.map((_, k) => {
     if (k < 19) return null;
     let s = 0;
