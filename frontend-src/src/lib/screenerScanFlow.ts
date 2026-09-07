@@ -124,6 +124,34 @@ export function shouldDiscoverPublishedScan(input: {
   return input.scanState === 'done' && !input.isMock && input.visibilityState === 'visible';
 }
 
+export function shouldCommitScanGeneration(started: number, current: number): boolean {
+  return started === current;
+}
+
+export function shouldLockScanTrigger(input: {
+  scanning: boolean;
+  draftMatchesInFlight: boolean;
+}): boolean {
+  return input.scanning && input.draftMatchesInFlight;
+}
+
+export function workerWaitDecision(status: string): 'done' | 'failed' | 'poll' {
+  if (status === 'completed') return 'done';
+  if (status === 'failed' || status === 'cancelled' || status === 'canceled') return 'failed';
+  return 'poll';
+}
+
+export function workerWaitHasTimedOut(nowMs: number, deadlineMs: number): boolean {
+  return nowMs >= deadlineMs;
+}
+
+export function refreshActionMatchesRequest(
+  action: { details?: { parameters?: unknown } },
+  expected: StrengthRefreshParameters,
+): boolean {
+  return strengthParametersMatch(action.details?.parameters, expected);
+}
+
 export function workerActionPhase(action: Pick<WorkerAction, 'status'>): StrengthScanPhase {
   const status = action.status;
   if (status === 'queued' || status === 'accepted') return 'queued';

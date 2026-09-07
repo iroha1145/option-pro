@@ -47,7 +47,10 @@ import {
   clearPendingStrengthTask,
   readPendingStrengthTask,
   scanDisplayTimes,
+  refreshActionMatchesRequest,
+  shouldCommitScanGeneration,
   shouldDiscoverPublishedScan,
+  shouldLockScanTrigger,
   shouldSubmitStrengthRefresh,
   strengthParametersMatch,
   strengthScanPath,
@@ -167,6 +170,7 @@ export default function Screener() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [flashes, setFlashes] = useState<Record<string, 'up' | 'down'>>({});
   const [refreshingStrength, setRefreshingStrength] = useState(false);
+  const [inFlightFilters, setInFlightFilters] = useState<ScanFilters | null>(null);
 
   const [details, setDetails] = useState<DetailCache>({});
   const detailsRef = useRef<DetailCache>({});
@@ -177,6 +181,10 @@ export default function Screener() {
   const scanSeq = useRef(0);
 
   const dirty = scanState === 'done' && !filtersEqual(draft, applied);
+  const scanTriggerLocked = shouldLockScanTrigger({
+    scanning: scanState === 'scanning',
+    draftMatchesInFlight: inFlightFilters != null && filtersEqual(draft, inFlightFilters),
+  });
 
   /* ---------------- 执行扫描 ---------------- */
   const runScan = useCallback(async (
@@ -184,6 +192,7 @@ export default function Screener() {
     options: { forceRefresh?: boolean } = {},
   ) => {
     const seq = ++scanSeq.current;
+    setInFlightFilters(filters);
     setScanState('scanning');
     setScanError(null);
     const startedAt = Date.now();
@@ -198,7 +207,7 @@ export default function Screener() {
         const action = pending && strengthParametersMatch(pending.parameters, requested)
           ? await runtimeApi.workerActionStatus(pending.requestId)
           : await runtimeApi.workerAction('strength_refresh', requested);
-        if (!strengthParametersMatch(action.details.parameters, requested)) {
+        if (!refreshActionMatchesRequest(action, requested)) {
           throw new ApiError(409, __t('另一组筛选条件正在扫描或冷却，请稍后重试'), {
             bizCode: 'strength_parameters_busy',
             payload: action,
@@ -213,7 +222,7 @@ export default function Screener() {
         setScanPhase(workerActionPhase(action));
         if (action.status !== 'completed') {
           const finished = await runtimeApi.waitForWorkerAction(action.requestId);
-          if (!strengthParametersMatch(finished.details.parameters, requested)) {
+          if (!refreshActionMatchesRequest(finished, requested)) {
             throw new ApiError(409, __t('另一组筛选条件正在扫描或冷却，请稍后重试'), {
               bizCode: 'strength_parameters_busy',
               payload: finished,
@@ -273,7 +282,7 @@ export default function Screener() {
       }
       const elapsed = Date.now() - startedAt;
       if (elapsed < minMs) await new Promise((r) => setTimeout(r, minMs - elapsed));
-      if (scanSeq.current !== seq) return;
+      if (!shouldCommitScanGeneration(seq, scanSeq.current)) return;
       const durationMs = Date.now() - startedAt;
       const checkedAt = Date.now();
       const times = scanDisplayTimes({
@@ -318,7 +327,7 @@ export default function Screener() {
       setHistory((h) => [{ at: times.scanCompletedAt ?? checkedAt, count: result.rows.length, durationMs, summary: summarizeFilters(filters) }, ...h].slice(0, 5));
       return true;
     } catch (e) {
-      if (scanSeq.current !== seq) return;
+      if (!shouldCommitScanGeneration(seq, scanSeq.current)) return;
       setScanError(e instanceof ApiError ? e : new ApiError(500, e instanceof Error ? e.message : __t('扫描失败')));
       setScanState('error');
       setScanPhase('failed');
@@ -698,7 +707,7 @@ export default function Screener() {
           sectorOptions={sectorOptions}
           presets={profiles}
           presetsFailed={!!profilesQ.error}
-          scanning={scanState === 'scanning'}
+          scanning={scanTriggerLocked}
           dirty={dirty}
           onScan={onScanClick}
         />

@@ -5,6 +5,7 @@ import * as session from '@/mocks/session';
 import * as fx2 from '@/mocks/fixtures2';
 import type { RuntimeHistoryEntry, RuntimeSettings, WorkerTask } from '../types';
 import { t } from '../../i18n/core.ts';
+import { workerWaitDecision, workerWaitHasTimedOut } from '../../lib/screenerScanFlow.ts';
 
 /** 契约 GET /api/runtime-settings → {version, settings:{ai,catalyst}, updated_at} */
 interface LiveSettingsEnvelope {
@@ -114,10 +115,11 @@ export const runtimeApi = {
     ),
   waitForWorkerAction: async (requestId: string, timeoutMs = 1_200_000): Promise<WorkerAction> => {
     const deadline = Date.now() + timeoutMs;
-    while (Date.now() < deadline) {
+    while (!workerWaitHasTimedOut(Date.now(), deadline)) {
       const action = await runtimeApi.workerActionStatus(requestId);
-      if (action.status === 'completed') return action;
-      if (action.status === 'failed' || action.status === 'cancelled' || action.status === 'canceled') {
+      const decision = workerWaitDecision(action.status);
+      if (decision === 'done') return action;
+      if (decision === 'failed') {
         throw new ApiError(503, action.errorCode ?? t('后台扫描失败'), { bizCode: action.errorCode ?? undefined, payload: action });
       }
       await new Promise((resolve) => window.setTimeout(resolve, 1_500));

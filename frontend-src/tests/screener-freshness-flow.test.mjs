@@ -9,8 +9,13 @@ import {
   parseScanClock,
   readPendingStrengthTask,
   scanDisplayTimes,
+  refreshActionMatchesRequest,
+  shouldCommitScanGeneration,
   shouldDiscoverPublishedScan,
+  shouldLockScanTrigger,
   shouldSubmitStrengthRefresh,
+  workerWaitDecision,
+  workerWaitHasTimedOut,
   strengthParametersMatch,
   strengthScanPath,
   visibleScanDate,
@@ -182,6 +187,52 @@ test('A07 later generation must win: scan path is parameter-specific', () => {
   assert.notEqual(first, second);
   assert.match(first, /semiconductors/);
   assert.match(second, /software/);
+  assert.equal(shouldCommitScanGeneration(1, 1), true);
+  assert.equal(shouldCommitScanGeneration(1, 2), false, 'a later click must drop the earlier generation');
+  assert.equal(shouldLockScanTrigger({ scanning: true, draftMatchesInFlight: true }), true);
+  assert.equal(shouldLockScanTrigger({ scanning: true, draftMatchesInFlight: false }), false, 'switching filters must unlock a new scan');
+  assert.equal(shouldLockScanTrigger({ scanning: false, draftMatchesInFlight: true }), false);
+});
+
+test('E02 worker phases distinguish accepted, running, failed, cancelled, and timeout', () => {
+  assert.equal(workerActionPhase({ status: 'accepted' }), 'queued');
+  assert.equal(workerActionPhase({ status: 'started' }), 'running');
+  assert.equal(workerActionPhase({ status: 'failed' }), 'failed');
+  assert.equal(workerActionPhase({ status: 'cancelled' }), 'failed');
+  assert.equal(workerActionPhase({ status: 'canceled' }), 'failed');
+  assert.equal(workerWaitDecision('completed'), 'done');
+  assert.equal(workerWaitDecision('failed'), 'failed');
+  assert.equal(workerWaitDecision('cancelled'), 'failed');
+  assert.equal(workerWaitDecision('canceled'), 'failed');
+  assert.equal(workerWaitDecision('running'), 'poll');
+  assert.equal(workerWaitHasTimedOut(10, 10), true);
+  assert.equal(workerWaitHasTimedOut(9, 10), false);
+});
+
+test('E03 a completed action for other parameters is not this scan', () => {
+  const requested = {
+    universe: 'themes', timeframe: 'all', profile: 'balanced', top: 20,
+    sector_id: 'semiconductors', min_price: 5, min_avg_dollar_volume: 10_000_000, include_options: true,
+  };
+  assert.equal(refreshActionMatchesRequest({
+    details: { parameters: { ...requested, sector_id: 'software' } },
+  }, requested), false);
+  assert.equal(refreshActionMatchesRequest({ details: { parameters: requested } }, requested), true);
+});
+
+test('C06 a failed read does not invent a scan clock from the click time', () => {
+  const prior = scanDisplayTimes({
+    queryCheckedAt: 1_789_200_000_000,
+    snapshotSavedAt: '2026-08-02T11:01:00+00:00',
+    scanCompletedAt: '2026-08-02T11:01:00+00:00',
+    scoreDataThrough: '2026-08-01',
+    stale: true,
+    submittedRefresh: false,
+  });
+  assert.equal(prior.scanCompletedAt, Date.parse('2026-08-02T11:01:00+00:00'));
+  assert.notEqual(prior.scanCompletedAt, prior.queryCheckedAt);
+  assert.equal(parseScanClock('not-a-clock'), null);
+  assert.ok(parseScanClock('2099-01-01T00:00:00Z') == null, 'anomalous future clocks stay unknown');
 });
 
 test('A09 pending task is recovered instead of blindly posting again', () => {
@@ -238,4 +289,13 @@ test('production screener click path still uses the live worker for stale 200s',
   assert.match(quote, /if \(!quote && !usingFallback\) return null/);
   assert.match(quote, /fallbackQuoteLabel\(fallbackAt\)/);
   assert.match(page, /shouldDiscoverPublishedScan/);
+  assert.match(page, /shouldCommitScanGeneration/);
+  assert.match(page, /shouldLockScanTrigger/);
+  assert.match(page, /refreshActionMatchesRequest/);
+  assert.match(page, /strength_parameters_busy/);
+  assert.doesNotMatch(page, /setLastScanAt\(checkedAt\)/);
+  const runtime = await readFile(path.join(src, 'api', 'modules', 'runtime.ts'), 'utf8');
+  assert.match(runtime, /workerWaitDecision/);
+  assert.match(runtime, /workerWaitHasTimedOut/);
+  assert.match(runtime, /worker_action_timeout/);
 });
