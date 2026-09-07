@@ -9,6 +9,7 @@ import ReactECharts from '@/components/charts/ReactECharts';
 import HatchLegend from '@/components/shared/HatchLegend';
 import { CH, baseAnimation, baseGrid, categoryAxis, glassTooltip, hatchDecal, valueAxis, type ChartOption } from '@/lib/chart';
 import type { EarningsRow } from './types';
+import { fmtMMDD } from './types';
 import { t } from '../../i18n/core.ts';
 
 interface EpsHatchChartProps {
@@ -27,13 +28,18 @@ export default function EpsHatchChart({ items, title = t('EPS 预期 vs 实际')
   const option = useMemo<ChartOption>(() => {
     const ests = rows.map((r) => r.epsEstimate ?? null);
     const acts = rows.map((r) => r.epsActual ?? null);
+    const repeats = new Map<string, number>();
+    for (const row of rows) repeats.set(row.ticker, (repeats.get(row.ticker) ?? 0) + 1);
+    const labels = rows.map((row) => (
+      (repeats.get(row.ticker) ?? 0) > 1 ? `${row.ticker} ${fmtMMDD(row.date)}` : row.ticker
+    ));
     return {
       ...baseAnimation,
       grid: baseGrid({ top: 20, bottom: 4 }),
       tooltip: glassTooltip({
         valueFormatter: (v: unknown) => (typeof v === 'number' ? `$${v.toFixed(2)}` : t('未公布')),
       }),
-      xAxis: categoryAxis(rows.map((r) => r.ticker)),
+      xAxis: categoryAxis(labels),
       yAxis: valueAxis(),
       series: [
         {

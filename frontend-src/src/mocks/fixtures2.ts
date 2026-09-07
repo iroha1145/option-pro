@@ -536,7 +536,7 @@ const analyzedAt = new Map<string, string>();
  * 生成范围：上月 1 日 ~ 下月月末（覆盖月历「上月/本月/下月」三月视图）。
  * 工作日每天 0–4 条（按日期确定性种子，当日 ticker 不重复）；周末留白。
  * 过去日期视为已公布（eps/rev 实际值大概率回填，days_until 由页面侧算得为负）；
- * 今日/未来多数未公布。字段与既有 EarningsItem 完全一致，不破坏现有消费者。
+ * 今日/未来一律未公布，避免列表出现「尚未发生的财报却有实际值」。
  */
 const earningsList: EarningsItem[] = (() => {
   const names = [...WATCHLIST_TICKERS, 'TSM', 'NFLX', 'CRM', 'ORCL', 'JPM', 'UNH', 'COST'].slice(0, 18);
@@ -553,7 +553,7 @@ const earningsList: EarningsItem[] = (() => {
   const mkItem = (r: Rng, ticker: string, date: string): EarningsItem => {
     const info = TICKER_POOL.find((x) => x.ticker === ticker) ?? TICKER_POOL[0];
     const epsEst = round2(r.float(0.2, 6.4));
-    const reported = date < todayIso ? r.chance(0.9) : r.chance(0.15);
+    const reported = date < todayIso ? r.chance(0.9) : false;
     return {
       ticker: info.ticker,
       name: info.name,
@@ -1852,8 +1852,7 @@ export function getHotspotThemeName(themeId: string): string {
 /*
  * 结构与摆动点从 mock 日线**真实推导**（同款分形规则：左严格右容平、span 3），
  * 保证叠加线落在图上正确的位置；量价/形态等无法从合成K线可信推导的字段按
- * 代码种子生成。两次调用的 bar 时间戳可能相差几毫秒（buildCandles 以调用时
- * 刻为锚），图表侧按「精确 t → 日历日」两级匹配。
+ * 代码种子生成。buildCandles 使用固定时钟，/chart 与 /technical 的时间戳一致。
  */
 
 const PA_STRUCTURE_META: Record<string, { label: string; score: number }> = {
