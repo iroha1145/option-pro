@@ -3,6 +3,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { createRequire } from 'node:module';
@@ -23,6 +24,30 @@ test('国家展示去掉区旗，只留文字或两位代码', () => {
   assert.equal(flatCountry('🇺🇸 美国'), '美国');
   assert.equal(flatCountry('🇯🇵'), 'JP');
   assert.equal(flatCountry(''), '—');
+});
+
+test('UI-09 东京与纽约本地日期不被 UTC 字符串截断', () => {
+  const moduleUrl = new URL('../src/components/catalysts/calendarPresentation.ts', import.meta.url).href;
+  const script = `
+    const { localDay } = await import(${JSON.stringify(moduleUrl)});
+    const d1 = new Date('2026-09-07T15:30:00Z');
+    const d2 = new Date('2026-09-08T00:30:00Z');
+    const clock = (d) => [String(d.getHours()).padStart(2, '0'), String(d.getMinutes()).padStart(2, '0')].join(':');
+    console.log(localDay(d1), clock(d1));
+    console.log(localDay(d2), clock(d2));
+  `;
+  const run = (tz) => spawnSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', script], {
+    encoding: 'utf8',
+    env: { ...process.env, TZ: tz },
+  });
+  const tokyo = run('Asia/Tokyo');
+  const newYork = run('America/New_York');
+  assert.equal(tokyo.status, 0, tokyo.stderr);
+  assert.equal(newYork.status, 0, newYork.stderr);
+  const [tokyoA] = tokyo.stdout.trim().split('\n');
+  const [, newYorkB] = newYork.stdout.trim().split('\n');
+  assert.equal(tokyoA, '2026-09-08 00:30');
+  assert.equal(newYorkB, '2026-09-07 20:30');
 });
 
 test('今日窗口按本地自然日，即将公布按当前时刻', () => {
