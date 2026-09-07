@@ -20,6 +20,16 @@ def _isolated_public_option_store(monkeypatch, tmp_path):
     monkeypatch.setattr(public_option_data, "default_option_root", lambda: tmp_path / "public-options")
 
 
+@pytest.fixture
+def isolated_option_accounts(monkeypatch, tmp_path):
+    """Exercise trusted option coverage without opening the runtime account DB."""
+    from app.services import accounts
+
+    store = accounts.AccountStore(tmp_path / "option-accounts.sqlite")
+    monkeypatch.setattr(accounts, "_store", store)
+    return store
+
+
 @pytest.fixture(autouse=True)
 def _isolated_finnhub_budget(monkeypatch, tmp_path):
     """Provider mocks share the real limiter, with a fresh per-test database."""

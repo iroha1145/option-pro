@@ -496,7 +496,7 @@ def test_capability_declaration_change_is_recoverable(monkeypatch):
     assert snapshot["expirations"] == ["2030-08-16"]
 
 
-def test_visitor_cannot_probe_unknown_but_can_read_declared_unsupported(monkeypatch):
+def test_visitor_cannot_probe_unknown_but_can_read_declared_unsupported(monkeypatch, isolated_option_accounts):
     monkeypatch.setattr(options.yahoo, "get_expirations_snapshot", _forbidden_ticker)
     monkeypatch.setattr(options.yahoo, "get_option_chain", _forbidden_ticker)
     runtime = _runtime(visitor_live_pulls=False)

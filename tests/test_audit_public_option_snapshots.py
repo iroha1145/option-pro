@@ -359,7 +359,7 @@ def test_concurrent_option_writers_preserve_the_latest_source_timestamp(tmp_path
     assert result["as_of"] == public._iso(NOW + 4)
 
 
-def test_an_authorized_manual_stock_snapshot_qualifies_for_bounded_option_preparation(tmp_path, monkeypatch):
+def test_an_authorized_manual_stock_snapshot_qualifies_for_bounded_option_preparation(tmp_path, monkeypatch, isolated_option_accounts):
     from app.stock_pull_snapshot import write_stock_pull_resources
     monkeypatch.setattr(public, "_trusted_symbol", _real_trusted_symbol)
     write_stock_pull_resources("AUDIT", {"overview": ({"ticker": "AUDIT", "price": 100}, NOW)},

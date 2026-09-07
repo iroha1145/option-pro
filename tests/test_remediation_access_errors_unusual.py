@@ -83,6 +83,7 @@ def test_ac06_thread_does_not_inherit_owner() -> None:
 
 def test_ac07_visitor_without_snapshot_does_not_call_yahoo(
     monkeypatch: pytest.MonkeyPatch,
+    isolated_option_accounts,
 ) -> None:
     calls = 0
 
