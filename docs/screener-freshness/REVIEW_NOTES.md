@@ -7,7 +7,7 @@
 ## 最危险的共享模块
 
 - `frontend-src/src/api/marketRead.ts`：个股抽屉、选股读回共用。force 不再合流旧 GET，并加 `cache:'reload'`。429 退避与身份世代隔离保留；精确失效只用 `resetMarketReadPaths`。
-- `frontend-src/src/lib/liveQuotes.ts` / `LiveQuote.tsx`：全站报价标签与比价。备用价不再显示「定时更新」。
+- `frontend-src/src/lib/liveQuotes.ts` / `LiveQuote.tsx`：全站报价标签与比价。备用价不再显示「定时更新」。成交时间等于备用时间时采用报价（自选 `updatedAt` 与 `trade_at` 对齐）；日期-only 日线按 NYSE 收盘比较，盘中价不能压过当日完整日线。无 store 报价时仍显示「扫描价」和日期。
 - `backend/app/worker/tasks.py` `StrengthRefreshTask`：定时路径现在额外刷最多 4 个变体；变体异常被吞并计数，默认定时结果仍返回。
 
 ## 新鲜度政策
@@ -27,16 +27,22 @@
 
 ## 缓存穿透
 
-C01 必须使用**未注册** `page.route` / `context.route` 的上下文。用例：`frontend-src/visual-tests/screener-http-cache.spec.mjs`，配置 `playwright.screener-cache.config.mjs`。本工作区已通过：先证明 `max-age=60` 命中（服务端计数不变），再 `cache:'reload'` 打到服务端。
+C01 必须使用**未注册** `page.route` / `context.route` 的上下文。用例：`frontend-src/visual-tests/screener-http-cache.spec.mjs`。本工作区已通过：先证明 `max-age=60` 命中，再 `cache:'reload'` 打到服务端。
 
 ## 红绿与全链
 
 - 基线源码缺陷：`BASELINE_FINDINGS.md` + `git show 55419c8e:...`
-- 修复后行为：`tests/test_screener_freshness_task_chain.py::test_e01_real_action_real_scanner_publish_and_read`（真实 POST + `scan_strength` + 发布 + GET，只替供应商下载）
-- 浏览器 live：`npm --prefix frontend-src run test:screener`（独立 FastAPI + Vite live；供应商边界仍是替身）
+- 修复后行为：`tests/test_screener_freshness_task_chain.py::test_e01_real_action_real_scanner_publish_and_read`
+- 浏览器 live：`npm --prefix frontend-src run test:screener`
+- 既有 quotes/audit/review 已在本工作区通过；`test:visual` 与容器阶段未跑
 
 ## 未完成 / 需在最终 SHA 上重跑
 
-见 `TEST_REPORT.md`。生产构建同步 `frontend/`、完整既有 Playwright（review/quotes/audit/visual）、容器镜像与离线 smoke，必须在最终候选提交上留下日志。提交后又改源码则旧日志作废。
+- F05：本环境无 Docker。完整镜像、离线 smoke、WAL、`test:visual` 依赖 GitHub Actions `CI / test`。
+- C06 断网恢复未测。
+- A08 浏览器 10 次点击计数未测（API 合流已有）。
+- 未做外部供应商实测；视口模拟不是真机。
+
+附件包（不进 Git）：`/opt/cursor/artifacts/screener-freshness-review/`。
 
 **只提交 PR，不合并，不开启自动合并，不部署。**
