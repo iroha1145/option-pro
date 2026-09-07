@@ -46,7 +46,7 @@ import SessionLED, { SessionDot } from '@/components/shared/SessionLED';
 import { SkeletonCard, SkeletonReveal, SkeletonRows } from '@/components/shared/Skeleton';
 import Sparkline from '@/components/charts/Sparkline';
 import Icon from '@/components/icons';
-import { t } from '../i18n/core.ts';
+import { getLocale, t } from '../i18n/core.ts';
 
 /* ---------------- B1 小件：涨跌宽度比条 ---------------- */
 function AdvanceDeclineBar({
@@ -309,7 +309,7 @@ function WatchCard({
       </div>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
         <p className="metric-value text-data-l text-ink-900 tnum"><LivePrice symbol={item.ticker} fallback={item.price} fallbackAt={item.updatedAt} /></p>
-        {item.sector && <SoftBadge className="max-w-[60%]" title={item.sector}><span className="truncate">{item.sector}</span></SoftBadge>}
+        {item.sector && <SoftBadge className="max-w-[60%]" title={t(item.sector)}><span className="truncate">{t(item.sector)}</span></SoftBadge>}
       </div>
       {!Number.isFinite(item.price) && <p className="mt-2 text-caption text-ink-400">{t('暂无行情')}</p>}
       <div className="mt-2">
@@ -482,7 +482,7 @@ export default function Watchlist() {
                   aria-label={t('打开 {ticker} 详情', { ticker: r.ticker })}
                   className="block w-fit rounded-sm font-mono text-body-s font-semibold text-ink-800 hover:text-brand-700 hover:underline"
                 >{r.ticker}</Link>
-                {r.sector && <SoftBadge className="max-w-[7.5rem]" title={r.sector}><span className="truncate">{r.sector}</span></SoftBadge>}
+                {r.sector && <SoftBadge className="max-w-[7.5rem]" title={t(r.sector)}><span className="truncate">{t(r.sector)}</span></SoftBadge>}
               </span>
               <span className="block max-w-[140px] truncate text-micro text-ink-400" title={r.name}>{r.name}</span>
             </span>
@@ -785,7 +785,7 @@ export default function Watchlist() {
           )}
           {!err && uncoveredTickers.length > 0 && (
             <p className="mt-3 flex flex-wrap items-center gap-1.5 text-caption text-ink-500" role="status">
-              <SoftBadge tone="warn" className="whitespace-normal">{t('暂无行情：')}{uncoveredTickers.join('、')}</SoftBadge>
+              <SoftBadge tone="warn" className="whitespace-normal">{t('暂无行情：')}{uncoveredTickers.join(getLocale() === 'en' ? ', ' : '、')}</SoftBadge>
               <span className="ml-1 text-ink-500">{t('（不在当前覆盖范围内，可在个股页手动获取）')}</span>
             </p>
           )}

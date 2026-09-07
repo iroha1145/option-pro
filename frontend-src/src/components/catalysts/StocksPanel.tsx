@@ -171,8 +171,8 @@ export default function StocksPanel({ filters, refreshToken }: { filters: Cataly
                       <span className="min-w-0 truncate text-micro text-ink-400" title={r.name}>{r.name}</span>
                     )}
                     {r.sector && (
-                      <SoftBadge className={cn('shrink-0', r.name !== r.ticker && 'max-w-[48%]')} title={r.sector}>
-                        <span className="truncate">{r.sector}</span>
+                      <SoftBadge className={cn('shrink-0', r.name !== r.ticker && 'max-w-[48%]')} title={t(r.sector)}>
+                        <span className="truncate">{t(r.sector)}</span>
                       </SoftBadge>
                     )}
                   </span>

@@ -20,6 +20,7 @@ import type {
   WatchlistItem,
 } from '@/api/types';
 import { t as __t } from '../i18n/core.ts';
+import { DEFAULT_WATCHLIST_TICKERS } from '@/lib/personalWatchlist';
 // 指纹/日期口径与运行时同一份实现：mock 自己再写一遍，闸门就会在本地静默关掉
 import {
   FINGERPRINT_ALGORITHM,
@@ -115,8 +116,11 @@ export function getMarketStatus(): MarketStatus {
   return { session, label, nyTime: ny.toISOString(), nextEvent };
 }
 
-/* ---------------- 自选股（12 只） ---------------- */
-export const WATCHLIST_TICKERS = ['NVDA', 'TSLA', 'AAPL', 'AMD', 'MSFT', 'META', 'AMZN', 'AVGO', 'SMCI', 'PLTR', 'COIN', 'QQQ'];
+/* ---------------- 自选股（默认 4 只必须在池内，避免访客横幅与卡片对不上） ---------------- */
+export const WATCHLIST_TICKERS = [...new Set([
+  ...DEFAULT_WATCHLIST_TICKERS,
+  'NVDA', 'TSLA', 'AAPL', 'AMD', 'MSFT', 'META', 'AMZN', 'AVGO', 'SMCI', 'PLTR', 'COIN', 'QQQ',
+])];
 
 interface WatchState extends QuoteState { item: WatchlistItem }
 const watchState = new Map<string, WatchState>();

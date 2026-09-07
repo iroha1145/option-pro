@@ -65,6 +65,11 @@ test('自选页在完整列表上排序与统计，只对渲染切片分批', as
   assert.match(page, /\{t\('还有 \{n\} 只', \{ n: progressive\.remaining \}\)\}/);
 });
 
+test('mock quote pool includes every default watchlist ticker', async () => {
+  const fixtures = await source('mocks/fixtures.ts');
+  assert.match(fixtures, /DEFAULT_WATCHLIST_TICKERS/);
+});
+
 test('桌面表格与移动卡片流用同一批次', async () => {
   const page = codeOf(await source('pages/Watchlist.tsx'));
   assert.match(page, /rows=\{renderedRows\}/);
