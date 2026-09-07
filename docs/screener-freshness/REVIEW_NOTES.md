@@ -34,15 +34,13 @@ C01 必须使用**未注册** `page.route` / `context.route` 的上下文。用�
 - 基线源码缺陷：`BASELINE_FINDINGS.md` + `git show 55419c8e:...`
 - 修复后行为：`tests/test_screener_freshness_task_chain.py::test_e01_real_action_real_scanner_publish_and_read`
 - 浏览器 live：`npm --prefix frontend-src run test:screener`
-- 既有 quotes/audit/review 已在本工作区通过；`test:visual` 与容器阶段未跑
+- 既有 quotes/audit/review 已在本工作区通过。
+- 完整 F05：GitHub Actions `9d92fb15` 通过（push 34145844172，PR 34145846308），含 `test:screener`、compose/镜像/WAL、`test:visual`。
 
-## 未完成 / 需在最终 SHA 上重跑
+## 审查时仍须知道
 
-- F05：本环境无 Docker。完整镜像、离线 smoke、WAL、`test:visual` 依赖 GitHub Actions `CI / test`。
-- GitHub CI `21a86f03` 在 `test:screener` 因隔离 API 写死 `.venv` 路径失败；已改为 `python3` 回退。
-- GitHub CI `bc8c5eda` 已通过 pytest、构建、review/quotes/audit、`test:screener`、compose/镜像/WAL；`test:visual` 误跑了隔离选股用例（依赖 :8765）。已把 `screener-freshness.spec.mjs` / `screener-http-cache.spec.mjs` 从默认 visual 套件排除。
-- C06 / A07 / A08 浏览器用例已加入 `screener-freshness.spec.mjs`；最终 SHA 上的 `test:screener` 日志为准。
 - 未做外部供应商实测；视口模拟不是真机。
+- 隔离选股 Playwright 只走 `test:screener`，不要再放进默认 `test:visual`。
 
 附件包（不进 Git）：`/opt/cursor/artifacts/screener-freshness-review/`。
 

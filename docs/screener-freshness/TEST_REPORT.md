@@ -1,6 +1,6 @@
 # 选股数据新鲜度修复：测试报告
 
-**状态：部分执行。未跑完的强制项保持 NOT_RUN / BLOCKED，不记作通过。**
+**状态：GitHub CI `9d92fb15411808e7eab8a74e825401610cb9e6b9` 的完整 `CI / test` 已通过（含容器与 `test:visual`）。未做外部供应商实测，视口不是真机。**
 
 ## 1. 本次运行身份
 
@@ -8,9 +8,9 @@
 |---|---|
 | run_id | local-isolated-20260907 |
 | base_sha | `55419c8e0f5822457f140761de98c4aa90e10c6a` |
-| tested_sha | `13493c7a77675148afa50bbe2c39d36a93820b6e` |
-| pr_head_sha | 推送后应与 `13493c7a77675148afa50bbe2c39d36a93820b6e` 对齐 |
-| CI merge SHA | 无；完整容器阶段等 GitHub Actions |
+| tested_sha | `9d92fb15411808e7eab8a74e825401610cb9e6b9` |
+| pr_head_sha | 以 GitHub PR #148 HEAD 为准；完整 CI 日志对应 `9d92fb15` |
+| CI merge SHA | 无；检查跑在 PR HEAD，不是 merge queue |
 | UTC | 2026-09-07（隔离 Cloud Agent 环境） |
 | 系统 | Linux x86_64，Ubuntu 24.04 系 |
 | Python / Node | Python 3.12.3（CI 钉 3.12.13）；Node 22.14.0（CI 钉 22.17.1）；npm 10.9.7 |
@@ -43,16 +43,16 @@
 | 前端行为测试 | `node --experimental-strip-types --test frontend-src/tests/*.test.mjs` | 0 | **795 passed** |
 | 静态断言 | `node frontend-src/tests/static_assertions.mjs` | 0 | 通过（`frontend/` 与 live dist 一致） |
 | 代码规范 | `npm --prefix frontend-src run lint` | 0 | 0 error；2 个既有 warning（`FeedPanel.tsx`） |
-| 选股 Playwright | `npm --prefix frontend-src run test:screener` | 0 | **18 + 1 passed**（本工作区）；CI `21a86f03` 因硬编码 `../.venv/bin/python` 失败，已改为与 `playwright.config.mjs` 相同的 venv/python3 回退 |
+| 选股 Playwright | `npm --prefix frontend-src run test:screener` | 0 | 本工作区 **18 + 1 passed**；CI `9d92fb15` 通过 |
 | 既有 review | `npm --prefix frontend-src run test:review` | 0 | 72 + 10 passed |
 | 既有 quotes | `npm --prefix frontend-src run test:quotes` | 0 | **21 passed** |
 | 既有 audit | `npm --prefix frontend-src run test:audit` | 0 | **6 passed** |
-| 既有 visual | `npm --prefix frontend-src run test:visual` | 1 | CI `bc8c5eda` 误收集隔离选股用例失败（79 passed / 4 failed）；已从 visual 套件排除，待下一轮 CI |
+| 既有 visual | `npm --prefix frontend-src run test:visual` | 0 | CI `9d92fb15` 通过（隔离选股用例已从该套件排除，仍由 `test:screener` 覆盖） |
 | 生产构建与产物 | `VITE_API_MODE=live npm run build --prefix frontend-src` 后 `diff -r` | 0 | 已同步 |
 | 锁文件源哈希 | CI 第 6 节两条 `grep -qx` | 0 | runtime / ci 锁匹配 |
 | pip_audit | `pip_audit --require-hashes --disable-pip -r backend/requirements.txt` | 0 | No known vulnerabilities |
 | 脚本语法 | `bash -n setup.sh personal.sh scripts/compose.sh scripts/deploy.sh scripts/lock-dependencies.sh` | 0 | 通过 |
-| 容器 / compose | CI 后半 | — | BLOCKED（本环境无 Docker）；等 GitHub CI |
+| 容器 / compose | CI 后半 | 0 | CI `9d92fb15` 通过：compose、镜像、Personal CLI、就绪、突破/催化/宏观 smoke、非 root、只读根、WAL、`test:visual`。日志：https://github.com/iroha1145/option-pro/actions/runs/34145844172 |
 | 外部供应商实测 | 可选 | — | 未进行 |
 
 ## 4. 强制矩阵映射
@@ -96,9 +96,9 @@
 | E06 | 参数哈希同时出现在变体路径与落盘 parameters | PASS |
 | F01 | 320/390/768/1440 × zh/en/ja | PASS（视口模拟） |
 | F02 | 1440 / 390 live 任务链 | PASS |
-| F03 | review + quotes + audit | PASS（visual 未跑） |
-| F04 | live 构建 + `diff -r` | PASS（本工作区） |
-| F05 | 完整 CI / 镜像 | `bc8c5eda` 容器阶段已过；`test:visual` 因误跑隔离选股失败。排除后等下一轮 CI |
+| F03 | review + quotes + audit + visual | PASS（CI `9d92fb15`） |
+| F04 | live 构建 + `diff -r` | PASS（本工作区与 CI） |
+| F05 | 完整 CI / 镜像 | PASS（push https://github.com/iroha1145/option-pro/actions/runs/34145844172 ；PR https://github.com/iroha1145/option-pro/actions/runs/34145846308 ） |
 
 ## 5. 三条证据链
 
@@ -111,7 +111,7 @@
 ## 6. 已知局限
 
 - 本地 Python/Node 微版本低于 CI 钉版本。
-- 本环境无 Docker：compose / 镜像 / WAL 以 GitHub CI `bc8c5eda` 为准（已通过）。`test:visual` 在该 SHA 因误收集隔离选股用例失败。
+- 本环境无 Docker。compose / 镜像 / WAL / `test:visual` 以 GitHub CI `9d92fb15` 为准（已通过）。
 - A07/A08/C06 浏览器已在隔离 live API 与 CI `test:screener` 通过。
 - 未进行外部供应商实测，不能写成「线上行情源已验证」。
 - 浏览器为视口模拟，不是真机。
