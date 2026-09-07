@@ -38,6 +38,7 @@
 - `sessionStorage` 保存已受理任务；同参数先查状态，不盲重 POST。
 - 任务完成后 `resetMarketReadPaths` + `marketGet(..., { force: true })`，force 使用 `cache: 'reload'`，且不与非 force 在途 GET 合流。
 - 可见页 45s 只读轮询发现新发布；`document.hidden` 时暂停。
+- 扫描中若草稿仍是当前在飞参数，主按钮保持锁定；改成另一组条件后解锁，新点击提升世代，迟到的 A 写回被丢弃。
 - `lastScanAt` = 快照完成时间；`queryCheckedAt` = 本轮确认时间。
 - 备用价标签为「扫描价」/「扫描价 · 日线」，不再写「定时更新」。
 - 涨跌幅只在同一路报价可用时使用；不把另一时点的涨跌幅粘到新价格上。

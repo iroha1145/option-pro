@@ -65,8 +65,8 @@
 | A04 | 前端 visitors never submit；`test_a04_*` | PASS |
 | A05 | A05 单元 + market-read 身份世代 | PASS（逻辑） |
 | A06 | `test_manual_action_reports_active_and_cooldown_states` | PASS（既有 API） |
-| A07 | A07 路径按参数隔离 + `scanSeq` | PASS（逻辑）；浏览器迟到写回未单独 E2E |
-| A08 | `test_manual_actions_queue_and_reuse_the_same_minute` | PASS（API）；10 次点击浏览器计数未做 |
+| A07 | `shouldCommitScanGeneration` / `shouldLockScanTrigger` + Playwright 半导体→软件 | 逻辑 PASS；浏览器待本轮 `test:screener` |
+| A08 | 生产 API 10 次 POST 合流 + Playwright 10 次点击 / 双标签 | API PASS；浏览器待本轮 `test:screener` |
 | A09 | A09 sessionStorage 恢复 | PASS |
 | B01 | `test_b01_*` | PASS |
 | B02 | `test_b02_*`；E01 `universe_count` | PASS |
@@ -84,16 +84,16 @@
 | C03 | `test_c03_etag_304_does_not_invent_a_new_data_date` | PASS |
 | C04 | `manual path invalidation keeps the shared provider backoff` | PASS |
 | C05 | `shouldDiscoverPublishedScan` 单元；Screener 45s + visibility | PASS（逻辑）；浏览器隐藏计数未做 |
-| C06 | 断网恢复 | NOT_RUN |
+| C06 | 失败/非法时钟不发明扫描时间；Playwright 断网后恢复 | 时钟 PASS；浏览器待本轮 `test:screener` |
 | D01–D05 | `live-quotes-behavior.test.mjs` | PASS（单元） |
 | D06 | 评分日期与报价标签独立 | PASS |
 | D07 | F02 390 卡片「扫描价 2026-09-04」 | PASS（视口模拟） |
 | E01 | `test_e01_real_action_real_scanner_publish_and_read` + F02 | PASS |
-| E02 | 既有 worker action 状态测试 | 部分 |
-| E03 | 前端参数不匹配 409 | 部分（源码路径） |
-| E04 | 原子写 + 变体上限既有逻辑 | 部分 |
-| E05 | 访客 GET 不 utime / 不 POST | 部分（pytest，非压测） |
-| E06 | E01 / F02 参数哈希与页面日期可对应 | 部分 |
+| E02 | 缺失 404/400、失败终态、`workerWaitDecision` 超时 | PASS |
+| E03 | `refreshActionMatchesRequest` 拒绝其他参数 | PASS（逻辑） |
+| E04 | 替换前读者仍见完整旧文件；变体上限既有 | PASS |
+| E05 | `test_e05_visitor_get_storm_does_not_call_scanner_or_touch_mtime` | PASS（20 次 GET，无扫描、无 utime） |
+| E06 | 参数哈希同时出现在变体路径与落盘 parameters | PASS |
 | F01 | 320/390/768/1440 × zh/en/ja | PASS（视口模拟） |
 | F02 | 1440 / 390 live 任务链 | PASS |
 | F03 | review + quotes + audit | PASS（visual 未跑） |
