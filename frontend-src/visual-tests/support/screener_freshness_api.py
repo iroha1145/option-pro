@@ -8,6 +8,7 @@ action so the page can force-read the new snapshot.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import sys
 import tempfile
@@ -38,6 +39,9 @@ from app.worker.tasks import StrengthRefreshTask  # noqa: E402
 SNAPSHOT = DATA_DIR / "strength-snapshot-v1.json"
 NOW = datetime(2026, 9, 4, 16, 30, tzinfo=timezone.utc).timestamp()
 ACTIONS: dict[str, dict] = {}
+ACTIONS_BY_HASH: dict[str, dict] = {}
+POST_COUNT = 0
+SCAN_COUNT = 0
 
 
 def _history(*, slope: float, offset: float = 0.0, size: int = 320) -> pd.DataFrame:
@@ -189,6 +193,25 @@ def health() -> PlainTextResponse:
     return PlainTextResponse("ok")
 
 
+@app.get("/debug/screener-stats")
+def screener_stats() -> dict:
+    return {
+        "post_count": POST_COUNT,
+        "scan_count": SCAN_COUNT,
+        "unique_request_ids": sorted({action["request_id"] for action in ACTIONS.values()}),
+        "actions": [
+            {
+                "request_id": action["request_id"],
+                "status": action["status"],
+                "reused": action.get("reused"),
+                "parameters_hash": (action.get("details") or {}).get("parameters_hash"),
+                "sector_id": ((action.get("details") or {}).get("parameters") or {}).get("sector_id"),
+            }
+            for action in ACTIONS.values()
+        ],
+    }
+
+
 @app.get("/api/access/status")
 def access_status() -> dict:
     return {
@@ -243,25 +266,55 @@ def worker_action_status(request_id: str) -> dict:
 
 @app.post("/api/worker/actions/strength_refresh")
 async def strength_refresh(request: Request) -> JSONResponse:
+    global POST_COUNT, SCAN_COUNT
+    POST_COUNT += 1
     body = await request.json()
     raw = body.get("parameters") or dict(strength.DEFAULT_STRENGTH_SCAN_PARAMETERS)
     parameters = strength.normalize_strength_scan_parameters(raw)
-    request_id = str(uuid.uuid4())
-    result = await StrengthRefreshTask(snapshot_path=SNAPSHOT).run_for_actions(
-        [{"details": {"parameters": parameters, "parameters_hash": strength.strength_scan_parameters_hash(parameters)}}]
-    )
+    parameters_hash = strength.strength_scan_parameters_hash(parameters)
+    existing = ACTIONS_BY_HASH.get(parameters_hash)
+    if existing and existing.get("status") in {"queued", "running", "accepted", "started", "completed"}:
+        reused = dict(existing)
+        reused["reused"] = True
+        reused["reason"] = "already_active" if existing.get("status") != "completed" else "idempotent"
+        return JSONResponse(reused, status_code=200)
+
+    request_id = f"act_{uuid.uuid4().hex}"
     action = {
         "request_id": request_id,
         "action_type": "strength_refresh",
-        "status": "completed" if result.status == "idle" else "failed",
-        "error_code": result.error_code,
-        "details": dict(result.details),
+        "status": "queued",
+        "error_code": None,
+        "details": {"parameters": parameters, "parameters_hash": parameters_hash},
         "reused": False,
         "reason": "queued",
-        "completed_at": result.details.get("completed_at"),
+        "completed_at": None,
         "requested_at": datetime.now(timezone.utc).isoformat(),
     }
     ACTIONS[request_id] = action
+    ACTIONS_BY_HASH[parameters_hash] = action
+
+    async def run() -> None:
+        global SCAN_COUNT
+        action["status"] = "running"
+        SCAN_COUNT += 1
+        try:
+            result = await StrengthRefreshTask(snapshot_path=SNAPSHOT).run_for_actions(
+                [{"details": {"parameters": parameters, "parameters_hash": parameters_hash}}]
+            )
+            details = dict(result.details)
+            details.setdefault("parameters", parameters)
+            details.setdefault("parameters_hash", parameters_hash)
+            action["status"] = "completed" if result.status == "idle" else "failed"
+            action["error_code"] = result.error_code
+            action["details"] = details
+            action["completed_at"] = details.get("completed_at")
+        except Exception as exc:  # pragma: no cover - fixture safety net
+            action["status"] = "failed"
+            action["error_code"] = "strength_refresh_failed"
+            action["details"] = {**action["details"], "error": str(exc)}
+
+    asyncio.create_task(run())
     return JSONResponse(action, status_code=202)
 
 

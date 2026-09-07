@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import pytest
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
+
+from app.worker.state import WorkerStateRepository
 
 from app.access import (
     OwnerAccessRuntime,
@@ -197,3 +200,173 @@ def test_c03_etag_304_does_not_invent_a_new_data_date(
         assert stale_body["scan_completed_at"] == body["scan_completed_at"]
 
     asyncio.run(scenario())
+
+
+def _strength_action_repo(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[WorkerStateRepository, int]:
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    repository = WorkerStateRepository(tmp_path / "optix-worker.db")
+    observed = datetime.now(timezone.utc)
+    repository.initialize(now=observed)
+    token = repository.acquire("test-worker", lease_seconds=300, now=observed)
+    assert token is not None
+    repository.record_task(
+        "test-worker",
+        token,
+        "strength_refresh",
+        enabled=True,
+        status="idle",
+        now=observed,
+    )
+    return repository, token
+
+
+def test_a08_ten_identical_posts_share_one_strength_action(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _strength_action_repo(tmp_path, monkeypatch)
+    parameters = {**strength.DEFAULT_STRENGTH_SCAN_PARAMETERS, "sector_id": "semiconductors"}
+    app = FastAPI()
+    app.include_router(worker_actions.router)
+    request_ids: list[str] = []
+    with TestClient(app) as client:
+        for _ in range(10):
+            response = client.post(
+                "/api/worker/actions/strength_refresh",
+                json={"parameters": parameters},
+            )
+            assert response.status_code in {200, 202}
+            request_ids.append(response.json()["request_id"])
+    assert len(set(request_ids)) == 1
+    assert request_ids[0]
+
+
+def test_e02_missing_action_is_not_found(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _strength_action_repo(tmp_path, monkeypatch)
+    app = FastAPI()
+    app.include_router(worker_actions.router)
+    with TestClient(app) as client:
+        missing = client.get("/api/worker/actions/act_00000000000000000000000000000000")
+        invalid = client.get("/api/worker/actions/not-a-valid-id")
+    assert missing.status_code == 404
+    assert missing.json()["detail"]["code"] == "action_not_found"
+    assert invalid.status_code == 400
+    assert invalid.json()["detail"]["code"] == "invalid_request_id"
+
+
+def test_e05_visitor_get_storm_does_not_call_scanner_or_touch_mtime(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    base = tmp_path / "strength-snapshot-v1.json"
+    params = {**strength.DEFAULT_STRENGTH_SCAN_PARAMETERS, "sector_id": "semiconductors"}
+    variant = strength._strength_snapshot_path(params, base_path=base)
+    strength._write_strength_snapshot(
+        variant,
+        base_path=base,
+        parameters=params,
+        payload=_payload(params, ticker="NVDA", through="2026-09-03T20:00:00+00:00"),
+        saved_at=NOW - 30,
+    )
+    before = variant.stat().st_mtime_ns
+    monkeypatch.setattr(strength, "_STRENGTH_SNAPSHOT_PATH", base)
+    monkeypatch.setattr(strength.time, "time", lambda: NOW)
+    monkeypatch.setattr(strength, "current_request_is_owner", lambda: False)
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("visitor GET must not start a live scan")
+
+    monkeypatch.setattr("app.services.strength.scanner.scan_strength", forbidden)
+    for _ in range(20):
+        _rp(asyncio.run(strength.scan(_areq(), **params)))
+    assert variant.stat().st_mtime_ns == before
+
+
+def test_e02_failed_action_is_terminal_and_not_success(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository, token = _strength_action_repo(tmp_path, monkeypatch)
+    app = FastAPI()
+    app.include_router(worker_actions.router)
+    parameters = {**strength.DEFAULT_STRENGTH_SCAN_PARAMETERS, "sector_id": "semiconductors"}
+    with TestClient(app) as client:
+        queued = client.post("/api/worker/actions/strength_refresh", json={"parameters": parameters})
+        assert queued.status_code in {200, 202}
+        request_id = queued.json()["request_id"]
+        claimed = repository.claim_actions("test-worker", token, "strength_refresh")
+        assert claimed
+        repository.finish_actions(
+            "test-worker",
+            token,
+            [item["request_id"] for item in claimed],
+            succeeded=False,
+            error_code="strength_input_unavailable",
+        )
+        failed = client.get(f"/api/worker/actions/{request_id}")
+    assert failed.status_code == 200
+    body = failed.json()
+    assert body["status"] == "failed"
+    assert body["error_code"] == "strength_input_unavailable"
+    assert body["status"] != "completed"
+
+
+def test_e04_reader_keeps_complete_snapshot_until_atomic_replace(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    base = tmp_path / "strength-snapshot-v1.json"
+    params = dict(strength.DEFAULT_STRENGTH_SCAN_PARAMETERS)
+    strength._write_strength_snapshot(
+        base,
+        parameters=params,
+        payload=_payload(params, ticker="AAPL", through="2026-09-03T20:00:00+00:00"),
+        saved_at=NOW - 60,
+    )
+    seen_before_replace: list[str] = []
+    real_replace = os.replace
+
+    def wrapped_replace(src: str | os.PathLike[str], dst: str | os.PathLike[str]) -> None:
+        document = json.loads(Path(dst).read_text(encoding="utf-8"))
+        seen_before_replace.append(document["payload"]["rows"][0]["ticker"])
+        assert not str(src).endswith(".json") or Path(src).name.startswith(".")
+        real_replace(src, dst)
+
+    monkeypatch.setattr(os, "replace", wrapped_replace)
+    strength._write_strength_snapshot(
+        base,
+        parameters=params,
+        payload=_payload(params, ticker="MSFT", through="2026-09-03T20:00:00+00:00"),
+        saved_at=NOW,
+    )
+    assert seen_before_replace == ["AAPL"]
+    published = json.loads(base.read_text(encoding="utf-8"))
+    assert published["payload"]["rows"][0]["ticker"] == "MSFT"
+    leftovers = list(tmp_path.glob(".strength-snapshot-v1.*.tmp"))
+    assert leftovers == []
+
+
+def test_e06_parameter_hash_links_variant_path_and_published_payload(
+    tmp_path: Path,
+) -> None:
+    base = tmp_path / "strength-snapshot-v1.json"
+    params = {**strength.DEFAULT_STRENGTH_SCAN_PARAMETERS, "sector_id": "semiconductors"}
+    digest = strength.strength_scan_parameters_hash(params)
+    variant = strength._strength_snapshot_path(params, base_path=base)
+    assert digest in variant.name
+    strength._write_strength_snapshot(
+        variant,
+        base_path=base,
+        parameters=params,
+        payload=_payload(params, ticker="NVDA", through="2026-09-03T20:00:00+00:00"),
+        saved_at=NOW - 30,
+    )
+    document = json.loads(variant.read_text(encoding="utf-8"))
+    assert document["parameters"]["sector_id"] == "semiconductors"
+    assert strength.strength_scan_parameters_hash(document["parameters"]) == digest
