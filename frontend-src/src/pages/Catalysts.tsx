@@ -131,9 +131,9 @@ export default function Catalysts() {
   }, []);
   /* 只有真正成功的一轮才更新时间戳（审计 P2-22）：旧实现在失败分支也调用
      onTotalChange(null)，于是用户看到一个很新的更新时间，而本轮数据根本没加载成功。 */
-  const onFeedResult = useCallback((result: { total: number | null; ok: boolean }) => {
+  const onFeedResult = useCallback((result: { total: number | null; ok: boolean; validatedAt?: number }) => {
     setTotal(result.total);
-    if (result.ok) setLastLoadedAt(Date.now());
+    if (result.ok) setLastLoadedAt(result.validatedAt ?? Date.now());
   }, []);
 
   /* 新闻详情抽屉 */

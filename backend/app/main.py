@@ -300,6 +300,7 @@ _PUBLIC_READ_API_PATHS = {
     "/api/catalysts/status",
     "/api/catalysts/feed",
     "/api/catalysts/calendar",
+    "/api/catalysts/updates",
     "/api/catalysts/hotspots/status",
     "/api/catalysts/hotspots",
     "/api/catalysts/market-focus-cycles/latest",

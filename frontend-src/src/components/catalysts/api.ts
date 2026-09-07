@@ -35,6 +35,7 @@ import {
   focusCyclePollPath,
 } from '@/components/catalysts/focusCycleRequest';
 import { t as __t } from '../../i18n/core.ts';
+import { notifyCatalystReadsInvalidated } from './resourceSignals';
 
 export type {
   CatalystFeedQuery,
@@ -633,6 +634,7 @@ const readCache = new Map<string, { at: number; promise: Promise<unknown> }>();
 
 export function clearCatalystReadCache(): void {
   readCache.clear();
+  notifyCatalystReadsInvalidated();
 }
 
 function cachedFetch<T>(key: string, run: () => Promise<T>, ttlMs: number): Promise<T> {
@@ -892,8 +894,8 @@ export const catalystsContract = {
                 analysisStatus: 'completed',
                 limit: 50,
               })}`,
-            ).catch(() => null),
-            cachedGet('/catalysts/hotspots?limit=20').catch(() => null),
+            ),
+            cachedGet('/catalysts/hotspots?limit=20'),
           ]);
           const candidateScores = new Map<string, number>();
           const addCandidate = (value: unknown, score: number) => {

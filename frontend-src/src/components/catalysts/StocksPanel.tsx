@@ -1,12 +1,8 @@
 /** stocks 面板：按股票的影响汇总（batch：净影响渐变条 / 最新时间 / 来源数 / count），点行进 /stock/:t */
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import { motion } from 'framer-motion';
-import { ApiError } from '@/api/client';
-import { catalystsContract } from './api';
-import type { TickerImpactSummary } from './api';
 import type { CatalystFilters } from './filters';
-import { toFeedQuery } from './filters';
 import EmptyState from '@/components/shared/EmptyState';
 import TickerLogo from '@/components/shared/TickerLogo';
 import InfoHint from '@/components/shared/InfoHint';
@@ -17,6 +13,9 @@ import Icon from '@/components/icons';
 import { cn } from '@/lib/utils';
 import { fmtRelative } from '@/lib/format';
 import { t } from '../../i18n/core.ts';
+
+import { useStocksResource } from './useStocksResource';
+import CatalystCacheStatus from './CatalystCacheStatus';
 
 const RANGE = 5; // 净影响映射区间 ±5
 
@@ -85,35 +84,12 @@ function NetImpactBar({ value, analyzed }: { value: number; analyzed: number }) 
   );
 }
 
-export default function StocksPanel({ filters, refreshToken }: { filters: CatalystFilters; refreshToken: number }) {
+export default function StocksPanel({ filters }: { filters: CatalystFilters; refreshToken: number }) {
   const navigate = useNavigate();
-  const [rows, setRows] = useState<TickerImpactSummary[] | null>(null);
-  const [error, setError] = useState<ApiError | null>(null);
-  const [loading, setLoading] = useState(true);
-  const filtersKey = JSON.stringify(filters);
-  const filtersRef = useMemo(() => filters, [filtersKey]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    let dead = false;
-    setLoading(true);
-    setError(null);
-    catalystsContract
-      .tickerSummaries({ ...toFeedQuery(filtersRef) })
-      .then((res) => {
-        if (dead) return;
-        setRows(res);
-        setLoading(false);
-      })
-      .catch((e) => {
-        if (dead) return;
-        setError(e instanceof ApiError ? e : new ApiError(500, t('加载失败')));
-        setLoading(false);
-      });
-    return () => {
-      dead = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtersKey, refreshToken]);
+  const q = useStocksResource(filters);
+  const rows = q.data;
+  const error = q.error;
+  const loading = q.loading;
 
   /* 只显示有实际影响的：已完成分析且存在非中性方向；无分析/纯中性不上榜 */
   const impactful = useMemo(
@@ -126,7 +102,7 @@ export default function StocksPanel({ filters, refreshToken }: { filters: Cataly
 
   const content = useMemo(() => {
     if (loading && !rows) return <SkeletonRows rows={7} />;
-    if (error) {
+    if (error && !rows) {
       return (
         <EmptyState
           variant="error"
@@ -208,6 +184,7 @@ export default function StocksPanel({ filters, refreshToken }: { filters: Cataly
 
   return (
     <div className="card-surface overflow-hidden">
+      <CatalystCacheStatus {...q} />
       <div className="hidden grid-cols-none items-center border-b border-line px-5 py-2.5 sm:flex">
         <p className="w-40 eyebrow">{t('代码')}</p>
         <p className="min-w-[180px] flex-1 eyebrow">

@@ -34,6 +34,7 @@ import { cn } from '@/lib/utils';
 import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import { fmtCountdown, fmtNyTime, fmtPrice, fmtRelative, fmtTimeHHMMSS } from '@/lib/format';
 import { instrumentName, signed } from '@/components/cta/ctaMeta';
+import EconomicCalendarCard from '@/components/catalysts/EconomicCalendarCard';
 import PageHeader from '@/components/shared/PageHeader';
 import StaleStrip from '@/components/shared/StaleStrip';
 import StockDataCoverage from '@/components/shared/StockDataCoverage';
@@ -394,6 +395,8 @@ export default function Home() {
         )}
       </section>
 
+      <EconomicCalendarCard />
+
       {/* 行2：市场状态 + 雷达信号 */}
       <div className="mt-8 grid grid-cols-1 items-start gap-6 lg:grid-cols-3">
         <MarketStatusPanel
@@ -651,7 +654,7 @@ function MarketStatusPanel({
         <MiniStat label={t('平盘')} value={breadth.flat} tone="flat" />
       </div>
 
-      {/* 辅助读数直接展示，不收进折叠。缺失读数仍遵守原有数据纪律，不补零。 */}
+      {/* 辅助读数直接展示；缺失读数仍遵守原有数据纪律，不补零。 */}
       {(strength?.aggregateAvailable === true || (signalMetrics && signalMetrics.length > 0)) && (
         <div className="mt-4 border-t border-line/70 pt-3" data-testid="home-supporting-metrics">
           <p className="text-caption font-medium text-ink-600">{t('辅助读数')}</p>

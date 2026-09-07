@@ -97,3 +97,16 @@ test('首页辅助读数直接展示，不再默认收进 details', async () => 
   assert.doesNotMatch(home, /<details[^>]*data-testid="home-supporting-metrics"/);
   assert.doesNotMatch(home, /group\/readings/);
 });
+
+test('首页指数后插入经济日历，普通午夜事件不再标成全天', async () => {
+  const home = await source('pages/Home.tsx');
+  const calendarIdx = home.indexOf('<EconomicCalendarCard');
+  const marketIdx = home.indexOf('行2：市场状态 + 雷达信号');
+  assert.ok(calendarIdx > 0 && marketIdx > calendarIdx, '经济日历应在市场状态之前');
+  const card = await source('components/catalysts/EconomicCalendarCard.tsx');
+  assert.match(card, /data-testid="home-economic-calendar"/);
+  const panel = await source('components/catalysts/CalendarPanel.tsx');
+  assert.match(panel, /impact === 'holiday' && t\.getHours\(\) === 0 && t\.getMinutes\(\) === 0/);
+  const stocks = await source('components/catalysts/StocksPanel.tsx');
+  assert.match(stocks, /t\(r\.sector\)/);
+});
