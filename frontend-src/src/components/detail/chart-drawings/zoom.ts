@@ -7,7 +7,20 @@ export interface ZoomWindow {
   pinnedEnd: boolean;
 }
 
-const DEFAULT_ZOOM_BARS: Partial<Record<ChartRange, number>> = { '1d': 126, '1w': 104 };
+/**
+ * Default visible bar count. Daily / weekly keep the existing product windows.
+ * 5m / 15m / 1h previously omitted a window, so ECharts never attached
+ * inside dataZoom and the full history rendered as hairline candles.
+ * 80 matches the backend chart `visible` field and is slightly tighter than
+ * the daily 126-bar default, so those candles start a bit larger.
+ */
+const DEFAULT_ZOOM_BARS: Partial<Record<ChartRange, number>> = {
+  '5m': 80,
+  '15m': 80,
+  '1h': 80,
+  '1d': 126,
+  '1w': 104,
+};
 
 export function insideZoom(
   range: ChartRange,

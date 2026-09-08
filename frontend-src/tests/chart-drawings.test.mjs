@@ -2455,6 +2455,44 @@ test('datazoom record survives a later setOption rebuild', async (t) => {
   assert.equal(rebuilt[0].endValue, first[0].endValue);
 });
 
+test('intraday ranges use an inside zoom window like daily and weekly', async (t) => {
+  const { insideZoom } = await loadDrawings(t);
+  for (const range of ['5m', '15m', '1h']) {
+    const zoom = insideZoom(range, 390, [0, 1]);
+    assert.ok(zoom, `${range} should attach inside dataZoom`);
+    assert.equal(zoom[0].type, 'inside');
+    assert.equal(zoom[0].startValue, 390 - 80);
+    assert.equal(zoom[0].endValue, 389);
+    assert.deepEqual(zoom[0].xAxisIndex, [0, 1]);
+    assert.equal(zoom[0].minValueSpan, 15);
+  }
+});
+
+test('daily and weekly default windows stay unchanged', async (t) => {
+  const { insideZoom } = await loadDrawings(t);
+  const daily = insideZoom('1d', 500, [0]);
+  assert.equal(daily[0].startValue, 500 - 126);
+  assert.equal(daily[0].endValue, 499);
+  const weekly = insideZoom('1w', 260, [0]);
+  assert.equal(weekly[0].startValue, 260 - 104);
+  assert.equal(weekly[0].endValue, 259);
+  assert.equal(insideZoom('1d', 126, [0]), undefined);
+  assert.equal(insideZoom('1w', 104, [0]), undefined);
+  assert.equal(insideZoom('5m', 80, [0]), undefined);
+});
+
+test('intraday saved zoom window survives a later setOption rebuild', async (t) => {
+  const { insideZoom, zoomFromOption } = await loadDrawings(t);
+  const saved = { start: 40, end: 140, pinnedEnd: false };
+  const first = insideZoom('15m', 400, [0], saved);
+  assert.equal(first[0].startValue, 40);
+  assert.equal(first[0].endValue, 140);
+  const recorded = zoomFromOption({ dataZoom: first }, 400);
+  const rebuilt = insideZoom('5m', 400, [0], recorded);
+  assert.equal(rebuilt[0].startValue, first[0].startValue);
+  assert.equal(rebuilt[0].endValue, first[0].endValue);
+});
+
 test('persisted barrier order survives reload hydrate', async (t) => {
   const { DrawingOutbox, SCOPE_JOB_ID, parsePersistJobs, outboxStorageKey } = await loadDrawings(t);
   const store = memStore();
