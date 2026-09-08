@@ -508,25 +508,30 @@ def _read_strength_snapshot(
     }
 
 
-def _existing_strength_publication(path: Path) -> tuple[float | None, Any]:
+def _existing_strength_publication(
+    path: Path,
+    *,
+    parameters: dict[str, Any] | None = None,
+) -> tuple[float | None, Any]:
+    """Use only a bounded, valid publication as the replacement baseline."""
+
     try:
         if path.is_symlink() or not path.is_file():
             return None, None
-        document = json.loads(path.read_bytes().decode("utf-8"))
-    except (OSError, UnicodeError, ValueError, json.JSONDecodeError):
+        with path.open("rb") as handle:
+            raw = handle.read(_STRENGTH_SNAPSHOT_MAX_BYTES + 1)
+        if len(raw) > _STRENGTH_SNAPSHOT_MAX_BYTES:
+            return None, None
+        document = json.loads(raw.decode("utf-8"))
+        if not isinstance(document, dict):
+            return None, None
+        expected = parameters or normalize_strength_scan_parameters(document.get("parameters"))
+        parsed = _parse_strength_snapshot_document(raw, parameters=expected, now=time.time())
+        if parsed is None:
+            return None, None
+        return float(parsed["saved_at"]), parsed["payload"]
+    except (OSError, UnicodeError, ValueError, TypeError, RecursionError):
         return None, None
-    if not isinstance(document, dict):
-        return None, None
-    saved_at = document.get("saved_at")
-    if (
-        isinstance(saved_at, bool)
-        or not isinstance(saved_at, (int, float))
-        or not math.isfinite(float(saved_at))
-        or float(saved_at) <= 0
-    ):
-        return None, None
-    payload = document.get("payload")
-    return float(saved_at), payload if isinstance(payload, dict) else None
 
 
 def _existing_strength_saved_at(path: Path) -> float | None:
@@ -562,7 +567,9 @@ def _write_strength_snapshot(
     publishable, publish_reason = strength_payload_is_publishable(cleaned)
     if not publishable:
         raise ValueError(publish_reason or "strength snapshot is not publishable")
-    existing_saved_at, existing_payload = _existing_strength_publication(path)
+    existing_saved_at, existing_payload = _existing_strength_publication(
+        path, parameters=parameters,
+    )
     decision = decide_published_snapshot_replacement(
         existing_saved_at=existing_saved_at,
         incoming_saved_at=saved_at,
