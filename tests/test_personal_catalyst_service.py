@@ -1649,6 +1649,9 @@ def test_analysis_capacity_errors_keep_their_http_and_retry_semantics(
             return {
                 "concurrency_available": True,
                 "cooldown_complete": True,
+                # A previous provider error must never override the real local
+                # budget or cooldown gate when the owner retries after funding.
+                "provider_credit_exhausted": True,
                 **capacity,
             }
 
@@ -1687,6 +1690,36 @@ def test_analysis_capacity_errors_keep_their_http_and_retry_semantics(
         assert "Retry-After" not in response.headers
     else:
         assert response.headers["Retry-After"] == str(retry_after)
+
+
+@pytest.mark.parametrize(
+    ("path", "payload"),
+    (
+        ("/api/catalysts/news/101/analysis", {}),
+        ("/api/catalysts/market-focus-cycles", {"expected_prepared_revision": 3}),
+    ),
+)
+def test_previous_credit_failure_allows_owner_to_retry_after_funding(
+    path, payload, monkeypatch,
+):
+    class CreditRepository(FakeAIRepository):
+        def budget_snapshot(self, **_kwargs):
+            return {"provider_credit_exhausted": True}
+
+    runtime_settings = SimpleNamespace(ai=SimpleNamespace(
+        manual_analysis_enabled=True, daily_max_jobs=4, daily_budget_usd=2.0,
+        daily_token_limit=10_000_000, manual_analysis_cooldown_seconds=0,
+    ))
+    monkeypatch.setattr(
+        "app.services.catalysts.personal_service.get_effective_runtime_settings",
+        lambda: runtime_settings,
+    )
+    service = _service("manual", repository=CreditRepository())
+    client = _api_client(service)
+    assert service.analysis_availability()["reason"] == "provider_credit_exhausted"
+    response = client.post(path, json=payload, headers=_OWNER_ACTION_HEADERS)
+    assert response.status_code == 202, response.json()
+    assert len(service.intelligence.actions) == 1
 
 
 def test_real_local_intelligence_does_not_relabel_source_english_as_chinese(

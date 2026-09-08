@@ -332,15 +332,16 @@ class PersonalCatalystService:
             reason = "not_configured"
         elif not worker_healthy:
             reason = "worker_unavailable"
-        elif capacity.get("provider_credit_exhausted"):
-            # 余额耗尽优先于本地预算文案：它不会随日期翻转自愈，需要充值
-            reason = "provider_credit_exhausted"
         elif not capacity["token_budget_available"]:
             reason = "daily_token_limit"
         elif not capacity["concurrency_available"]:
             reason = "analysis_in_progress"
         elif not capacity["cooldown_complete"]:
             reason = "cooldown_active"
+        elif capacity.get("provider_credit_exhausted"):
+            # Historical credit failures are retryable after funding, but
+            # must never mask the current local capacity gates above.
+            reason = "provider_credit_exhausted"
         enabled = reason == "available"
         return {
             "enabled": enabled,
@@ -384,6 +385,9 @@ class PersonalCatalystService:
             # Daily and cooldown gates can be reported immediately because they
             # do not describe queue capacity.
             "analysis_in_progress",
+            # Balance changes happen outside this app. A confirmed owner
+            # request must be able to retry so the provider can prove recovery.
+            "provider_credit_exhausted",
         }:
             return
         reason = str(availability["reason"])

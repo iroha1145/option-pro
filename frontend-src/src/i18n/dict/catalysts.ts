@@ -260,7 +260,7 @@ export const CATALYSTS: Dict = {
   '后台服务暂不可用': ['Background service unavailable', 'バックグラウンド処理を利用できません'],
   '今日模型用量已达上限': ['Today’s model usage limit has been reached', '本日のモデル利用上限に達しました'],
   '今日预算已用完': ["Today's budget is used up", '本日の予算を使い切りました'],
-  '分析服务余额不足，需管理员充值': ['Analysis service credits are depleted; an administrator needs to add credits', '分析サービスの残高が不足しています。管理者による入金が必要です'],
+  '上次分析余额不足，充值后可重试': ['The last analysis failed due to insufficient credits. Retry after adding credits.', '前回の分析は残高不足で失敗しました。入金後に再試行できます。'],
   '分析任务进行中': ['Analysis job in progress', '分析ジョブを実行中'],
   '催化剂模块未启用': ['Catalysts module disabled', 'カタリストモジュールが無効です'],
   '模型分析不可用': ['Model analysis unavailable', 'モデル分析を利用できません'],

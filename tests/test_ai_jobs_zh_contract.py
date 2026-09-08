@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -2052,6 +2052,43 @@ def test_failed_jobs_without_usage_release_daily_token_budget(tmp_path):
     )
     assert snapshot["provider_credit_exhausted"] is True
     assert snapshot["token_budget_used_tokens"] < 200_000
+
+
+def test_provider_credit_warning_recovers_after_success_and_returns_on_new_failure(
+    tmp_path, monkeypatch,
+):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    clock = [datetime(2026, 9, 8, 8, 0, tzinfo=timezone.utc)]
+    monkeypatch.setattr("app.services.ai_jobs.repository._utcnow", lambda: clock[0])
+
+    def finish(ticker, *, credit_failure=False):
+        job = _create_job(repository, ticker)
+        owner = "credit-recovery-test"
+        assert repository.claim_due(owner, 60)["job_id"] == job["job_id"]
+        assert repository.mark_submission_started(job["job_id"], owner) == "started"
+        repository.link_background_response(job["job_id"], owner, "resp_" + ticker)
+        clock[0] += timedelta(seconds=10)
+        if credit_failure:
+            repository.fail(job["job_id"], owner, "provider_credit_exhausted")
+        else:
+            repository.complete(job["job_id"], owner, {}, {"total_tokens": 100})
+        return job
+
+    def snapshot():
+        return repository.budget_snapshot(daily_limit=0, daily_budget_usd=0, now=clock[0])
+
+    finish("OLD")
+    finish("EMPTY", credit_failure=True)
+    assert snapshot()["provider_credit_exhausted"] is True
+    clock[0] += timedelta(minutes=5)
+    finish("FUNDED")
+    assert snapshot()["provider_credit_exhausted"] is False
+    finish("EMPTYAGAIN", credit_failure=True)
+    assert snapshot()["provider_credit_exhausted"] is True
+    _create_job(repository, "PENDING")
+    assert snapshot()["provider_credit_exhausted"] is True
+    clock[0] += timedelta(hours=2, seconds=1)
+    assert snapshot()["provider_credit_exhausted"] is False
 
 
 def test_global_concurrency_limit_defers_a_second_paid_submission(tmp_path):

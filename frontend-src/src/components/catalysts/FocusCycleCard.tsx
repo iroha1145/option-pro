@@ -207,7 +207,10 @@ function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; com
   );
 }
 
-export default function FocusCycleCard({ refreshToken = 0 }: { refreshToken?: number } = {}) {
+export default function FocusCycleCard({ refreshToken = 0, onDataRefreshed }: {
+  refreshToken?: number;
+  onDataRefreshed?: () => void;
+} = {}) {
   const { isOwner } = useAccess();
   const toast = useToast();
   /* refreshToken 参与依赖：页头「刷新」必须真的刷新焦点周期（审计 P2-21）。 */
@@ -251,6 +254,7 @@ export default function FocusCycleCard({ refreshToken = 0 }: { refreshToken?: nu
         );
       const j = await catalystsContract.triggerFocusCycle(failedCycleId);
       setJob(j);
+      onDataRefreshed?.();
       toast.info(t('焦点周期计算已提交'), t('完成后自动刷新'));
       abandonPoll();
       if (!j.cycleId) {
@@ -284,6 +288,8 @@ export default function FocusCycleCard({ refreshToken = 0 }: { refreshToken?: nu
              cancelled/cancel_requested 分支永远不可达，还被 grep 测试钉住了死字串。 */
           if (next.status === 'completed' || next.status === 'failed') {
             stopPoll();
+            // Update availability and history with the settled provider result.
+            onDataRefreshed?.();
             if (next.status === 'completed') {
               toast.success(t('新焦点周期已生成'));
             } else {
@@ -315,7 +321,7 @@ export default function FocusCycleCard({ refreshToken = 0 }: { refreshToken?: nu
     } finally {
       submittingRef.current = false;
     }
-  }, [abandonPoll, latestQ, stopPoll, toast]);
+  }, [abandonPoll, latestQ, onDataRefreshed, stopPoll, toast]);
 
   const running = job && (job.status === 'queued' || job.status === 'in_progress');
 
