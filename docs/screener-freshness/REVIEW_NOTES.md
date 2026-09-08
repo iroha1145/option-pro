@@ -38,6 +38,7 @@ C01 必须使用**未注册** `page.route` / `context.route` 的上下文。用�
 - 浏览器 live：`npm --prefix frontend-src run test:screener`
 - 既有 quotes/audit/review 已在本工作区通过。
 - 完整 F05：GitHub Actions `9d92fb15` 通过（push 34145844172，PR 34145846308），含 `test:screener`、compose/镜像/WAL、`test:visual`。
+- R1/R2 候选 `68740a31` 完整检查通过（push 34185808856，PR 34185810827），后端 3325、前端 822、浏览器 193。
 
 ## 审查时仍须知道
 
