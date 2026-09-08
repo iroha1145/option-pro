@@ -179,7 +179,7 @@ export default function Catalysts() {
 
       {/* B2 市场焦点周期卡 */}
       <div className="mt-6">
-        <FocusCycleCard refreshToken={refreshToken} />
+        <FocusCycleCard refreshToken={refreshToken} onDataRefreshed={onRefresh} />
       </div>
 
       {/* B2.5 管理面板（owner 专属：数据刷新 / 后台任务 / 运行设置） */}

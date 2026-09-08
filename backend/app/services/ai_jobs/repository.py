@@ -2562,14 +2562,30 @@ class AIJobRepository:
                    WHERE submission_started_at>=? AND submission_started_at<?""",
                 (_iso(day_start_dt), _iso(day_end_dt)),
             ).fetchall()
-            # 供应商余额耗尽的滑动窗口信号：2h 内出现过即置位。充值后重试
-            # 成功、窗口滑走即自愈；据此给前端专属状态而不是误导性的
-            # 「今日预算已用完」（2026-08-14 生产事故）。
+            # This is a recent failure signal, not a live balance lookup. A
+            # later successful paid result confirms recovery after funding;
+            # pending jobs and local-only completions cannot confirm it.
             credit_exhausted_recent = connection.execute(
-                """SELECT 1 FROM ai_jobs
-                   WHERE error_code='provider_credit_exhausted'
-                     AND updated_at>=? LIMIT 1""",
-                (_iso(observed - timedelta(hours=2)),),
+                """WITH failure AS (
+                       SELECT MAX(updated_at) AS last_failed_at FROM ai_jobs
+                       WHERE error_code='provider_credit_exhausted'
+                         AND updated_at>=? AND updated_at<=?
+                   )
+                   SELECT 1 FROM failure
+                   WHERE failure.last_failed_at IS NOT NULL
+                     AND NOT EXISTS (
+                         SELECT 1 FROM ai_jobs AS success
+                         WHERE success.status='completed'
+                           AND success.submission_started_at IS NOT NULL
+                           AND success.completed_at>failure.last_failed_at
+                           AND success.completed_at<=?
+                     )
+                   LIMIT 1""",
+                (
+                    _iso(observed - timedelta(hours=2)),
+                    _iso(observed),
+                    _iso(observed),
+                ),
             ).fetchone() is not None
             active = connection.execute(
                 """
