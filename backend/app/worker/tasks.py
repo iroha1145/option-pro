@@ -1995,6 +1995,9 @@ class PublicHomeTask:
 class StrengthRefreshTask:
     """Refresh the daily default snapshot and exact owner-requested variants."""
 
+    VARIANT_RETRY_SECONDS = 300.0
+    MAX_VARIANT_RETRIES_PER_CYCLE = 1
+
     def __init__(
         self,
         *,
@@ -2010,6 +2013,8 @@ class StrengthRefreshTask:
         self._clock = clock
         self._scheduled_interval_seconds = float(scheduled_interval_seconds)
         self._last_scheduled_at: float | None = None
+        self._last_default_result: TaskResult | None = None
+        self._variant_retries_this_cycle = 0
 
     def _next_scheduled_delay(self) -> float:
         if self._last_scheduled_at is None:
@@ -2022,13 +2027,17 @@ class StrengthRefreshTask:
 
     async def _run(self, parameters: dict[str, Any]) -> TaskResult:
         from app.api.strength import (
+            _existing_strength_publication,
             _strength_snapshot_path,
             _write_strength_snapshot,
             normalize_strength_scan_parameters,
             strength_scan_parameters_hash,
         )
-        from app.services.strength.freshness import strength_payload_is_publishable
-        from app.services.strength.scanner import scan_strength
+        from app.services.strength.freshness import (
+            decide_published_snapshot_replacement,
+            strength_payload_is_publishable,
+        )
+        from app.services.strength.scanner import STRENGTH_SCORE_VERSION, scan_strength
         from app.services.utils import sanitize
 
         scanner = self._scanner or scan_strength
@@ -2043,6 +2052,8 @@ class StrengthRefreshTask:
                 force_refresh=True,
             )
         )
+        digest = strength_scan_parameters_hash(parameters)
+        through = payload.get("score_data_through") if isinstance(payload, dict) else None
         publishable, publish_reason = strength_payload_is_publishable(payload)
         if not publishable:
             return TaskResult(
@@ -2053,15 +2064,48 @@ class StrengthRefreshTask:
                     "reason": publish_reason,
                     "snapshot": path.name,
                     "parameters": parameters,
-                    "parameters_hash": strength_scan_parameters_hash(parameters),
-                    "score_data_through": (
-                        payload.get("score_data_through")
-                        if isinstance(payload, dict)
-                        else None
-                    ),
+                    "parameters_hash": digest,
+                    "score_data_through": through,
+                    "published": False,
                 },
             )
         saved_at = float(self._clock())
+        existing_saved_at, existing_payload = _existing_strength_publication(path)
+        decision = decide_published_snapshot_replacement(
+            existing_saved_at=existing_saved_at,
+            incoming_saved_at=saved_at,
+            existing_payload=existing_payload,
+            incoming_payload=payload,
+            expected_scoring_version=STRENGTH_SCORE_VERSION,
+        )
+        if not decision.replace:
+            keep = decision.keep_result or "kept_previous_snapshot"
+            if keep == "kept_newer_publish":
+                return TaskResult(
+                    status="idle",
+                    details={
+                        "result": keep,
+                        "reason": decision.reason,
+                        "snapshot": path.name,
+                        "parameters": parameters,
+                        "parameters_hash": digest,
+                        "score_data_through": through,
+                        "published": False,
+                    },
+                )
+            return TaskResult(
+                status="degraded",
+                error_code="strength_input_unavailable",
+                details={
+                    "result": "kept_previous_snapshot",
+                    "reason": decision.reason,
+                    "snapshot": path.name,
+                    "parameters": parameters,
+                    "parameters_hash": digest,
+                    "score_data_through": through,
+                    "published": False,
+                },
+            )
         outcome = await _call_local(
             writer,
             path,
@@ -2071,25 +2115,52 @@ class StrengthRefreshTask:
             base_path=base_path,
         )
         count = int(payload.get("count") or 0) if isinstance(payload, dict) else 0
-        published = outcome != "kept_newer_publish"
+        published = outcome == "written"
+        if not published:
+            keep = outcome or "kept_previous_snapshot"
+            if keep == "kept_newer_publish":
+                return TaskResult(
+                    status="idle",
+                    details={
+                        "result": keep,
+                        "snapshot": path.name,
+                        "count": max(0, count),
+                        "parameters": parameters,
+                        "parameters_hash": digest,
+                        "completed_at": _timestamp_text(saved_at),
+                        "score_data_through": through,
+                        "published": False,
+                    },
+                )
+            return TaskResult(
+                status="degraded",
+                error_code="strength_input_unavailable",
+                details={
+                    "result": "kept_previous_snapshot",
+                    "reason": keep,
+                    "snapshot": path.name,
+                    "count": max(0, count),
+                    "parameters": parameters,
+                    "parameters_hash": digest,
+                    "completed_at": _timestamp_text(saved_at),
+                    "score_data_through": through,
+                    "published": False,
+                },
+            )
         return TaskResult(
             status="idle",
             details={
-                "result": "refreshed" if published else "kept_newer_publish",
+                "result": "refreshed",
                 "snapshot": path.name,
                 "count": max(0, count),
                 "parameters": parameters,
-                "parameters_hash": strength_scan_parameters_hash(parameters),
+                "parameters_hash": digest,
                 "completed_at": _timestamp_text(saved_at),
-                "score_data_through": (
-                    payload.get("score_data_through")
-                    if isinstance(payload, dict)
-                    else None
-                ),
+                "score_data_through": through,
                 "score_version": (
                     payload.get("score_version") if isinstance(payload, dict) else None
                 ),
-                "published": published,
+                "published": True,
             },
         )
 
@@ -2130,12 +2201,28 @@ class StrengthRefreshTask:
         from app.api.strength import (
             DEFAULT_STRENGTH_SCAN_PARAMETERS,
             list_recent_strength_variant_parameters,
+            normalize_strength_scan_parameters,
+            strength_scan_parameters_hash,
         )
 
-        result = await self._run(dict(DEFAULT_STRENGTH_SCAN_PARAMETERS))
-        self._last_scheduled_at = float(self._clock())
+        now = float(self._clock())
+        due = (
+            self._last_scheduled_at is None
+            or now >= self._last_scheduled_at + self._scheduled_interval_seconds
+        )
+        if (
+            due
+            or self._last_default_result is None
+            or self._last_default_result.status != "idle"
+        ):
+            result = await self._run(dict(DEFAULT_STRENGTH_SCAN_PARAMETERS))
+            self._last_default_result = result
+        else:
+            result = self._last_default_result
+        if due:
+            self._last_scheduled_at = now
+            self._variant_retries_this_cycle = 0
         extras: list[dict[str, Any]] = []
-        variant_errors: list[str] = []
         try:
             extras = list_recent_strength_variant_parameters(
                 self._snapshot_path,
@@ -2143,21 +2230,90 @@ class StrengthRefreshTask:
             )
         except (OSError, TypeError, ValueError):
             extras = []
+        published_count = 0
+        kept_count = 0
+        failed_count = 0
+        variant_errors: list[dict[str, Any]] = []
         for parameters in extras:
             try:
-                await self._run(parameters)
+                digest = strength_scan_parameters_hash(
+                    normalize_strength_scan_parameters(parameters)
+                )
+            except (TypeError, ValueError):
+                digest = None
+            try:
+                variant = await self._run(parameters)
             except Exception as exc:
-                variant_errors.append(type(exc).__name__)
-                if len(variant_errors) >= 4:
-                    break
+                failed_count += 1
+                variant_errors.append(
+                    {
+                        "parameters_hash": digest,
+                        "error_code": "strength_variant_exception",
+                        "reason": type(exc).__name__,
+                    }
+                )
+                continue
+            details = variant.details if isinstance(variant.details, Mapping) else {}
+            variant_hash = details.get("parameters_hash") or digest
+            outcome = details.get("result")
+            if variant.status == "degraded" or variant.error_code:
+                failed_count += 1
+                if outcome in {"kept_previous_snapshot", "kept_newer_publish"}:
+                    kept_count += 1
+                variant_errors.append(
+                    {
+                        "parameters_hash": variant_hash,
+                        "error_code": variant.error_code or "strength_variant_degraded",
+                        "reason": details.get("reason") or outcome or variant.status,
+                    }
+                )
+            elif outcome == "kept_newer_publish":
+                kept_count += 1
+            elif details.get("published") or outcome == "refreshed":
+                published_count += 1
+            else:
+                failed_count += 1
+                variant_errors.append(
+                    {
+                        "parameters_hash": variant_hash,
+                        "error_code": "strength_variant_degraded",
+                        "reason": outcome or "unrecognized_variant_result",
+                    }
+                )
         details = dict(result.details)
         details["variant_refresh_attempted"] = len(extras)
+        details["variant_refresh_published"] = published_count
+        details["variant_refresh_kept"] = kept_count
+        details["variant_refresh_failed"] = failed_count
         details["variant_refresh_errors"] = variant_errors
+        if result.status != "idle" or result.error_code:
+            return TaskResult(
+                status=result.status,
+                details=details,
+                next_delay_seconds=result.next_delay_seconds,
+                error_code=result.error_code,
+            )
+        if failed_count:
+            remaining = self._next_scheduled_delay()
+            if (
+                self._variant_retries_this_cycle < self.MAX_VARIANT_RETRIES_PER_CYCLE
+                and remaining > 0
+            ):
+                self._variant_retries_this_cycle += 1
+                delay = min(self.VARIANT_RETRY_SECONDS, remaining)
+            else:
+                delay = remaining
+            return TaskResult(
+                status="degraded",
+                details=details,
+                next_delay_seconds=delay,
+                error_code="strength_variant_refresh_failed",
+            )
         return TaskResult(
-            status=result.status,
+            status="idle",
             details=details,
-            next_delay_seconds=result.next_delay_seconds,
-            error_code=result.error_code,
+            next_delay_seconds=self._next_scheduled_delay(),
+            error_code=None,
         )
 
 

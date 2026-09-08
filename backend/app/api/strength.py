@@ -21,8 +21,8 @@ from app.services.http_read_cache import respond_with_snapshot, snapshot_version
 from app.services.sectors import SECTORS
 from app.services.snapshot_read_cache import FingerprintedFileCache
 from app.services.strength.freshness import (
+    decide_published_snapshot_replacement,
     evaluate_strength_snapshot_freshness,
-    should_replace_published_snapshot,
     strength_payload_is_publishable,
 )
 from app.services.strength.scanner import (
@@ -508,15 +508,15 @@ def _read_strength_snapshot(
     }
 
 
-def _existing_strength_saved_at(path: Path) -> float | None:
+def _existing_strength_publication(path: Path) -> tuple[float | None, Any]:
     try:
         if path.is_symlink() or not path.is_file():
-            return None
+            return None, None
         document = json.loads(path.read_bytes().decode("utf-8"))
     except (OSError, UnicodeError, ValueError, json.JSONDecodeError):
-        return None
+        return None, None
     if not isinstance(document, dict):
-        return None
+        return None, None
     saved_at = document.get("saved_at")
     if (
         isinstance(saved_at, bool)
@@ -524,8 +524,14 @@ def _existing_strength_saved_at(path: Path) -> float | None:
         or not math.isfinite(float(saved_at))
         or float(saved_at) <= 0
     ):
-        return None
-    return float(saved_at)
+        return None, None
+    payload = document.get("payload")
+    return float(saved_at), payload if isinstance(payload, dict) else None
+
+
+def _existing_strength_saved_at(path: Path) -> float | None:
+    saved_at, _payload = _existing_strength_publication(path)
+    return saved_at
 
 
 def _write_strength_snapshot(
@@ -556,11 +562,16 @@ def _write_strength_snapshot(
     publishable, publish_reason = strength_payload_is_publishable(cleaned)
     if not publishable:
         raise ValueError(publish_reason or "strength snapshot is not publishable")
-    if not should_replace_published_snapshot(
-        existing_saved_at=_existing_strength_saved_at(path),
+    existing_saved_at, existing_payload = _existing_strength_publication(path)
+    decision = decide_published_snapshot_replacement(
+        existing_saved_at=existing_saved_at,
         incoming_saved_at=saved_at,
-    ):
-        return "kept_newer_publish"
+        existing_payload=existing_payload,
+        incoming_payload=cleaned,
+        expected_scoring_version=STRENGTH_SCORE_VERSION,
+    )
+    if not decision.replace:
+        return decision.keep_result or "kept_previous_snapshot"
     encoded = json.dumps(
         {
             "version": _STRENGTH_SNAPSHOT_VERSION,

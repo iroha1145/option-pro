@@ -215,11 +215,141 @@ def strength_payload_is_publishable(payload: Any) -> tuple[bool, str | None]:
     return True, None
 
 
+@dataclass(frozen=True)
+class SnapshotReplaceDecision:
+    """Whether a candidate may replace the published snapshot, and why not."""
+
+    replace: bool
+    reason: str | None
+    keep_result: str | None
+
+
+EXPLICIT_SNAPSHOT_DOWNGRADE_REASONS = frozenset(
+    {
+        "scoring_version_migration",
+        "corporate_action_revision",
+        "explicit_downgrade",
+    }
+)
+
+
+def extract_scoring_version(payload: Any) -> str | None:
+    if not isinstance(payload, dict):
+        return None
+    raw = payload.get("score_version") or payload.get("scoring_version")
+    if isinstance(raw, str) and raw.strip():
+        return raw.strip()
+    return None
+
+
+def extract_usable_input_coverage(payload: Any) -> int | None:
+    """Count scored rows that still carry a known daily input clock."""
+
+    if not isinstance(payload, dict):
+        return None
+    rows = payload.get("rows")
+    if not isinstance(rows, list):
+        return None
+    dated = 0
+    for row in rows:
+        if isinstance(row, dict) and parse_aware_datetime(row.get("daily_data_through")):
+            dated += 1
+    return dated
+
+
+def decide_published_snapshot_replacement(
+    *,
+    existing_saved_at: float | None,
+    incoming_saved_at: float,
+    existing_payload: Any = None,
+    incoming_payload: Any = None,
+    expected_scoring_version: str | None = None,
+    allow_reason: str | None = None,
+) -> SnapshotReplaceDecision:
+    """Compare publish clocks, conservative input time, version, and coverage.
+
+    A later file time is not enough to overwrite an earlier market session.
+    Same-session recomputes with equal or better coverage may replace. Version
+    migration or an explicit downgrade must pass ``allow_reason`` or land on
+    the current expected scoring version.
+    """
+
+    def _keep(reason: str, keep_result: str) -> SnapshotReplaceDecision:
+        if allow_reason in EXPLICIT_SNAPSHOT_DOWNGRADE_REASONS:
+            return SnapshotReplaceDecision(
+                replace=True,
+                reason=allow_reason,
+                keep_result=None,
+            )
+        return SnapshotReplaceDecision(
+            replace=False,
+            reason=reason,
+            keep_result=keep_result,
+        )
+
+    if existing_saved_at is None:
+        return SnapshotReplaceDecision(True, None, None)
+    if float(incoming_saved_at) < float(existing_saved_at):
+        return SnapshotReplaceDecision(False, "newer_publish", "kept_newer_publish")
+    if existing_payload is None:
+        return SnapshotReplaceDecision(True, None, None)
+
+    existing_through = extract_score_data_through(existing_payload)
+    incoming_through = extract_score_data_through(incoming_payload)
+    if existing_through is not None and incoming_through is None:
+        return _keep("unknown_score_data", "kept_previous_snapshot")
+    if (
+        existing_through is not None
+        and incoming_through is not None
+        and incoming_through < existing_through
+    ):
+        return _keep("older_score_data", "kept_previous_snapshot")
+
+    existing_version = extract_scoring_version(existing_payload)
+    incoming_version = extract_scoring_version(incoming_payload)
+    if existing_version and not incoming_version:
+        return _keep("missing_scoring_version", "kept_previous_snapshot")
+    if (
+        existing_version
+        and incoming_version
+        and incoming_version != existing_version
+        and incoming_version != expected_scoring_version
+    ):
+        return _keep("scoring_version_mismatch", "kept_previous_snapshot")
+
+    existing_coverage = extract_usable_input_coverage(existing_payload)
+    incoming_coverage = extract_usable_input_coverage(incoming_payload)
+    incoming_newer_input = (
+        existing_through is None and incoming_through is not None
+    ) or (
+        existing_through is not None
+        and incoming_through is not None
+        and incoming_through > existing_through
+    )
+    if (
+        existing_coverage is not None
+        and incoming_coverage is not None
+        and incoming_coverage < existing_coverage
+        and not incoming_newer_input
+    ):
+        return _keep("coverage_regressed", "kept_previous_snapshot")
+    return SnapshotReplaceDecision(True, None, None)
+
+
 def should_replace_published_snapshot(
     *,
     existing_saved_at: float | None,
     incoming_saved_at: float,
+    existing_payload: Any = None,
+    incoming_payload: Any = None,
+    expected_scoring_version: str | None = None,
+    allow_reason: str | None = None,
 ) -> bool:
-    if existing_saved_at is None:
-        return True
-    return float(incoming_saved_at) >= float(existing_saved_at)
+    return decide_published_snapshot_replacement(
+        existing_saved_at=existing_saved_at,
+        incoming_saved_at=incoming_saved_at,
+        existing_payload=existing_payload,
+        incoming_payload=incoming_payload,
+        expected_scoring_version=expected_scoring_version,
+        allow_reason=allow_reason,
+    ).replace
