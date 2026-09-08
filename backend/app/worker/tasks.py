@@ -2015,8 +2015,17 @@ class StrengthRefreshTask:
         self._last_scheduled_at: float | None = None
         self._last_default_result: TaskResult | None = None
         self._variant_retries_this_cycle = 0
+        self._variant_retry_at: float | None = None
+        self._pending_variant_parameters: dict[str, dict[str, Any]] = {}
+        self._pending_variant_errors: dict[str, dict[str, Any]] = {}
 
     def _next_scheduled_delay(self) -> float:
+        delay = self._next_default_delay()
+        if self._variant_retry_at is not None:
+            delay = min(delay, max(0.0, self._variant_retry_at - float(self._clock())))
+        return delay
+
+    def _next_default_delay(self) -> float:
         if self._last_scheduled_at is None:
             return 0.0
         due_at = self._last_scheduled_at + self._scheduled_interval_seconds
@@ -2070,7 +2079,9 @@ class StrengthRefreshTask:
                 },
             )
         saved_at = float(self._clock())
-        existing_saved_at, existing_payload = _existing_strength_publication(path)
+        existing_saved_at, existing_payload = await _call_local(
+            _existing_strength_publication, path, parameters=parameters,
+        )
         decision = decide_published_snapshot_replacement(
             existing_saved_at=existing_saved_at,
             incoming_saved_at=saved_at,
@@ -2189,6 +2200,14 @@ class StrengthRefreshTask:
         result = await self._run(
             selected or dict(DEFAULT_STRENGTH_SCAN_PARAMETERS)
         )
+        if result.status == "idle" and not result.error_code:
+            digest = strength_scan_parameters_hash(
+                selected or dict(DEFAULT_STRENGTH_SCAN_PARAMETERS)
+            )
+            self._pending_variant_parameters.pop(digest, None)
+            self._pending_variant_errors.pop(digest, None)
+            if not self._pending_variant_parameters:
+                self._variant_retry_at = None
         return TaskResult(
             status=result.status,
             details=result.details,
@@ -2219,17 +2238,25 @@ class StrengthRefreshTask:
             self._last_default_result = result
         else:
             result = self._last_default_result
+        extras: list[dict[str, Any]] = []
         if due:
             self._last_scheduled_at = now
             self._variant_retries_this_cycle = 0
-        extras: list[dict[str, Any]] = []
-        try:
-            extras = list_recent_strength_variant_parameters(
-                self._snapshot_path,
-                limit=4,
-            )
-        except (OSError, TypeError, ValueError):
-            extras = []
+            self._variant_retry_at = None
+            self._pending_variant_parameters.clear()
+            self._pending_variant_errors.clear()
+            try:
+                extras = list_recent_strength_variant_parameters(
+                    self._snapshot_path,
+                    limit=4,
+                )
+            except (OSError, TypeError, ValueError):
+                extras = []
+        elif self._variant_retry_at is not None and now >= self._variant_retry_at:
+            # Retry exactly the failed set, even if reads or successful writes
+            # have changed the recent-file ordering since the scheduled round.
+            extras = list(self._pending_variant_parameters.values())[:4]
+            self._variant_retry_at = None
         published_count = 0
         kept_count = 0
         failed_count = 0
@@ -2241,6 +2268,8 @@ class StrengthRefreshTask:
                 )
             except (TypeError, ValueError):
                 digest = None
+            if digest is not None:
+                self._pending_variant_parameters[digest] = dict(parameters)
             try:
                 variant = await self._run(parameters)
             except Exception as exc:
@@ -2252,6 +2281,8 @@ class StrengthRefreshTask:
                         "reason": type(exc).__name__,
                     }
                 )
+                if digest is not None:
+                    self._pending_variant_errors[digest] = variant_errors[-1]
                 continue
             details = variant.details if isinstance(variant.details, Mapping) else {}
             variant_hash = details.get("parameters_hash") or digest
@@ -2267,10 +2298,16 @@ class StrengthRefreshTask:
                         "reason": details.get("reason") or outcome or variant.status,
                     }
                 )
-            elif outcome == "kept_newer_publish":
+                if digest is not None:
+                    self._pending_variant_errors[digest] = variant_errors[-1]
+            elif variant.status == "idle" and outcome == "kept_newer_publish":
                 kept_count += 1
-            elif details.get("published") or outcome == "refreshed":
+                self._pending_variant_parameters.pop(digest, None)
+                self._pending_variant_errors.pop(digest, None)
+            elif variant.status == "idle" and details.get("published") is True:
                 published_count += 1
+                self._pending_variant_parameters.pop(digest, None)
+                self._pending_variant_errors.pop(digest, None)
             else:
                 failed_count += 1
                 variant_errors.append(
@@ -2280,12 +2317,28 @@ class StrengthRefreshTask:
                         "reason": outcome or "unrecognized_variant_result",
                     }
                 )
+                if digest is not None:
+                    self._pending_variant_errors[digest] = variant_errors[-1]
+        unresolved = list(self._pending_variant_errors.values())
+        unresolved.extend(error for error in variant_errors if error["parameters_hash"] is None)
+        remaining = self._next_default_delay()
+        if (
+            self._pending_variant_parameters
+            and self._variant_retry_at is None
+            and self._variant_retries_this_cycle < self.MAX_VARIANT_RETRIES_PER_CYCLE
+            and remaining > 0
+        ):
+            self._variant_retries_this_cycle += 1
+            self._variant_retry_at = float(self._clock()) + min(
+                self.VARIANT_RETRY_SECONDS, remaining,
+            )
         details = dict(result.details)
         details["variant_refresh_attempted"] = len(extras)
         details["variant_refresh_published"] = published_count
         details["variant_refresh_kept"] = kept_count
         details["variant_refresh_failed"] = failed_count
-        details["variant_refresh_errors"] = variant_errors
+        details["variant_refresh_errors"] = unresolved
+        details["variant_refresh_pending"] = len(self._pending_variant_parameters)
         if result.status != "idle" or result.error_code:
             return TaskResult(
                 status=result.status,
@@ -2293,20 +2346,11 @@ class StrengthRefreshTask:
                 next_delay_seconds=result.next_delay_seconds,
                 error_code=result.error_code,
             )
-        if failed_count:
-            remaining = self._next_scheduled_delay()
-            if (
-                self._variant_retries_this_cycle < self.MAX_VARIANT_RETRIES_PER_CYCLE
-                and remaining > 0
-            ):
-                self._variant_retries_this_cycle += 1
-                delay = min(self.VARIANT_RETRY_SECONDS, remaining)
-            else:
-                delay = remaining
+        if unresolved:
             return TaskResult(
                 status="degraded",
                 details=details,
-                next_delay_seconds=delay,
+                next_delay_seconds=self._next_scheduled_delay(),
                 error_code="strength_variant_refresh_failed",
             )
         return TaskResult(

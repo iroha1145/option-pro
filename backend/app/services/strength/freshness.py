@@ -134,7 +134,7 @@ def evaluate_strength_snapshot_freshness(
     through = extract_score_data_through(payload)
     unknown = through is None
     # A clock in the future is not evidence; treat it as unverified.
-    if through is not None and through > observed + _FUTURE_SLACK:
+    if _has_future_input(payload, observed):
         through = None
         unknown = True
     input_lag = 0
@@ -243,18 +243,49 @@ def extract_scoring_version(payload: Any) -> str | None:
 
 
 def extract_usable_input_coverage(payload: Any) -> int | None:
-    """Count scored rows that still carry a known daily input clock."""
+    """Count usable canonical inputs, never the filtered/top-N output rows.
+
+    The scanner increments these two mutually exclusive skip counters before
+    filtering. Legacy payloads without the full counters have unknown coverage;
+    their output length cannot prove a provider failure.
+    """
 
     if not isinstance(payload, dict):
         return None
-    rows = payload.get("rows")
-    if not isinstance(rows, list):
+    skipped = payload.get("skipped")
+    if not isinstance(skipped, dict):
         return None
-    dated = 0
-    for row in rows:
-        if isinstance(row, dict) and parse_aware_datetime(row.get("daily_data_through")):
-            dated += 1
-    return dated
+    pool = payload.get("universe_count")
+    errors = skipped.get("data_error")
+    insufficient = skipped.get("insufficient_history")
+    if any(
+        isinstance(value, bool) or not isinstance(value, int) or value < 0
+        for value in (pool, errors, insufficient)
+    ):
+        return None
+    if pool <= 0 or errors + insufficient > pool:
+        return None
+    return pool - errors - insufficient
+
+
+def _row_input_times(payload: Any) -> dict[str, datetime | None]:
+    if not isinstance(payload, dict) or not isinstance(payload.get("rows"), list):
+        return {}
+    return {
+        row["ticker"]: parse_aware_datetime(row.get("daily_data_through"))
+        for row in payload["rows"]
+        if isinstance(row, dict) and isinstance(row.get("ticker"), str)
+    }
+
+
+def _has_future_input(payload: Any, observed: datetime) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    times = [
+        parse_aware_datetime(payload.get("score_data_through")),
+        *_row_input_times(payload).values(),
+    ]
+    return any(value is not None and value > observed + _FUTURE_SLACK for value in times)
 
 
 def decide_published_snapshot_replacement(
@@ -269,8 +300,8 @@ def decide_published_snapshot_replacement(
     """Compare publish clocks, conservative input time, version, and coverage.
 
     A later file time is not enough to overwrite an earlier market session.
-    Same-session recomputes with equal or better coverage may replace. Version
-    migration or an explicit downgrade must pass ``allow_reason`` or land on
+    Same-session recomputes with equal or better input coverage may replace.
+    Version migration or an explicit downgrade must pass ``allow_reason`` or land on
     the current expected scoring version.
     """
 
@@ -294,7 +325,15 @@ def decide_published_snapshot_replacement(
     if existing_payload is None:
         return SnapshotReplaceDecision(True, None, None)
 
-    existing_through = extract_score_data_through(existing_payload)
+    observed = datetime.fromtimestamp(incoming_saved_at, tz=timezone.utc)
+    if _has_future_input(incoming_payload, observed):
+        return SnapshotReplaceDecision(False, "future_score_data", "kept_previous_snapshot")
+    # A legacy future timestamp is not a trustworthy lower bound. Do not let
+    # an unverified snapshot permanently lock out valid provider recovery.
+    existing_has_future = _has_future_input(existing_payload, observed)
+    existing_through = (
+        None if existing_has_future else extract_score_data_through(existing_payload)
+    )
     incoming_through = extract_score_data_through(incoming_payload)
     if existing_through is not None and incoming_through is None:
         return _keep("unknown_score_data", "kept_previous_snapshot")
@@ -317,6 +356,19 @@ def decide_published_snapshot_replacement(
     ):
         return _keep("scoring_version_mismatch", "kept_previous_snapshot")
 
+    # An already-old pool minimum cannot conceal regression in another symbol.
+    # Compare only common displayed members; changing the filtered membership
+    # itself is not evidence of data loss.
+    existing_rows = _row_input_times(existing_payload)
+    for ticker, incoming_time in _row_input_times(incoming_payload).items():
+        existing_time = existing_rows.get(ticker)
+        if existing_time is None or existing_time > observed + _FUTURE_SLACK:
+            continue
+        if incoming_time is None:
+            return _keep("unknown_row_score_data", "kept_previous_snapshot")
+        if incoming_time < existing_time:
+            return _keep("older_row_score_data", "kept_previous_snapshot")
+
     existing_coverage = extract_usable_input_coverage(existing_payload)
     incoming_coverage = extract_usable_input_coverage(incoming_payload)
     incoming_newer_input = (
@@ -327,7 +379,12 @@ def decide_published_snapshot_replacement(
         and incoming_through > existing_through
     )
     if (
-        existing_coverage is not None
+        not existing_has_future
+        and isinstance(existing_payload, dict)
+        and isinstance(incoming_payload, dict)
+        and existing_payload.get("universe_version") == incoming_payload.get("universe_version")
+        and existing_payload.get("universe_count") == incoming_payload.get("universe_count")
+        and existing_coverage is not None
         and incoming_coverage is not None
         and incoming_coverage < existing_coverage
         and not incoming_newer_input
