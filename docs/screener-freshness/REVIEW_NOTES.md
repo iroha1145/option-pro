@@ -10,7 +10,7 @@
 
 - `frontend-src/src/api/marketRead.ts`：个股抽屉、选股读回共用。force 不再合流旧 GET，并加 `cache:'reload'`。429 退避与身份世代隔离保留；精确失效只用 `resetMarketReadPaths`。
 - `frontend-src/src/lib/liveQuotes.ts` / `LiveQuote.tsx`：全站报价标签与比价。选股备用显示「扫描价」，其他页面显示「参考价」。准确成交时间相等时采用报价；只有日线日期时按纽约日期保守比较，不推算固定收盘时刻。
-- `backend/app/worker/tasks.py` `StrengthRefreshTask`：定时路径现在额外刷最多 4 个变体；变体异常被吞并计数，默认定时结果仍返回。
+- `backend/app/worker/tasks.py` `StrengthRefreshTask`：定时路径额外刷最多 4 个变体；变体降级与异常都进入错误列表和部分失败状态，默认定时截止时间不变。
 
 ## 新鲜度政策
 
