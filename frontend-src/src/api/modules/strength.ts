@@ -46,8 +46,14 @@ export interface StrengthScanEnvelope {
   /** 后端统计的整池分档；旧快照没有这个字段时为 null。 */
   tierDistribution: TierDistribution | null;
   stale: boolean;
+  sourceStatus: string | null;
+  staleReason: string | null;
   asOf: string | null;
+  scoreDataThrough: string | null;
+  scoreVersion: string | null;
+  scanCompletedAt: string | null;
   snapshotSavedAt: string | null;
+  cacheExpiresAt: string | null;
   priceProvider: string | null;
 }
 
@@ -117,6 +123,8 @@ function mapScanRow(r: Record<string, unknown>): ScreenerRow | null {
     sector: pickLabel(r, 'sector_name', 'primary_sector_name', 'sector') ?? '',
     sectorId: pickS(r, 'sector_id', 'primary_sector_id') ?? undefined,
     price,
+    priceAsOf: pickS(r, 'price_as_of', 'quote_as_of', 'daily_data_through'),
+    dailyDataThrough: pickS(r, 'daily_data_through'),
     // 契约键为 change_pct；缺失如实为 null（UI 显「—」，不显 +0.00%）
     changePct: pickN(r, 'changePct', 'change_pct', 'change_percent'),
     strengthScore: score,
@@ -157,7 +165,9 @@ function liveScan(params: ScanParams, force = false): Promise<StrengthScanEnvelo
   });
   return marketGet(`/strength/scan${qs ? `?${qs}` : ''}`, {
     ttlMs: 30_000,
-    staleMs: 15 * 60_000,
+    // The cached body embeds freshness metadata. Reusing it after its TTL on
+    // a failed GET would falsely confirm old scores as newly checked/fresh.
+    staleMs: 30_000,
     force,
   }).then((d) => {
     const env = asRec(d);
@@ -171,8 +181,14 @@ function liveScan(params: ScanParams, force = false): Promise<StrengthScanEnvelo
       screenedCount: pickN(env, 'screened_count', 'screenedCount') ?? rows.length,
       tierDistribution: mapTierDistribution(env.tier_distribution ?? env.tierDistribution),
       stale: pickB(env, '_stale', 'stale') ?? false,
+      sourceStatus: pickS(env, 'source_status'),
+      staleReason: pickS(env, 'stale_reason'),
       asOf: pickS(env, 'as_of', 'score_data_through', 'data_through'),
+      scoreDataThrough: pickS(env, 'score_data_through'),
+      scoreVersion: pickS(env, 'score_version', 'scoring_version'),
+      scanCompletedAt: pickS(env, 'scan_completed_at', 'snapshot_saved_at'),
       snapshotSavedAt: pickS(env, 'snapshot_saved_at'),
+      cacheExpiresAt: pickS(env, 'cache_expires_at'),
       priceProvider: pickS(asRec(sources.prices), 'provider'),
     };
   });
@@ -324,8 +340,14 @@ export const strengthApi = {
           screenedCount: all.length,
           tierDistribution: { ...counts, unscored: 0, scored: all.length, total: all.length },
           stale: false,
+          sourceStatus: 'active',
+          staleReason: null,
           asOf: null,
+          scoreDataThrough: null,
+          scoreVersion: null,
+          scanCompletedAt: null,
           snapshotSavedAt: null,
+          cacheExpiresAt: null,
           priceProvider: 'mock fixtures',
         };
       },

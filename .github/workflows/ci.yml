@@ -104,6 +104,9 @@ jobs:
       - name: Verify audit recovery paths with isolated accounts and jobs
         run: npm --prefix frontend-src run test:audit
 
+      - name: Verify screener freshness flows and native HTTP cache
+        run: npm --prefix frontend-src run test:screener
+
       - name: Check shell script syntax
         run: bash -n setup.sh personal.sh scripts/compose.sh scripts/deploy.sh scripts/lock-dependencies.sh
 
@@ -316,6 +319,10 @@ jobs:
             frontend-src/test-results/review-report/**
             frontend-src/test-results/review/**
             frontend-src/test-results/audit/**
+            frontend-src/test-results/screener/**
+            frontend-src/test-results/screener-report/**
+            frontend-src/test-results/screener-evidence/**
+            frontend-src/test-results/screener-cache/**
           if-no-files-found: error
           retention-days: 14
 

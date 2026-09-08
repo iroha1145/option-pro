@@ -1733,6 +1733,7 @@ def _scan_sync(
                 if actual_data_through is not None
                 else None
             )
+            range_context[ticker]["price_as_of"] = range_context[ticker]["daily_data_through"]
         except Exception:
             skipped["data_error"] += 1
 
@@ -1823,8 +1824,17 @@ def _scan_sync(
     # the row-level shadow fields provably describe the same snapshot read.
     sector_rows = _sector_strength(scored, reader=macro_reader)
     options_status = _combined_options_status(yahoo_options_status, marketdata_status)
+    throughs = [
+        str(item.get("daily_data_through"))
+        for item in scored
+        if isinstance(item.get("daily_data_through"), str) and item.get("daily_data_through")
+    ]
+    # Every score and canonical rank depends on this pool. One fresh symbol
+    # must not hide stale inputs in the same published scoring snapshot.
+    score_data_through = min(throughs) if throughs else None
     return {
         "as_of": _now_iso(),
+        "score_data_through": score_data_through,
         "params": {
             "universe": universe,
             "timeframe": timeframe,

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, time as datetime_time, timedelta
+from datetime import date, datetime, time as datetime_time, timedelta, timezone
 from functools import lru_cache
 from zoneinfo import ZoneInfo
 
@@ -123,6 +123,48 @@ def next_trading_day(start: date, *, include_start: bool = False) -> date:
     raise RuntimeError("Unable to determine the next US trading day")
 
 
+def previous_trading_day(start: date, *, include_start: bool = False) -> date:
+    candidate = start if include_start else start - timedelta(days=1)
+    for _ in range(15):
+        if is_trading_day(candidate):
+            return candidate
+        candidate -= timedelta(days=1)
+    raise RuntimeError("Unable to determine the previous US trading day")
+
+
+def last_completed_trading_day(now: datetime | None = None) -> date:
+    """Latest NYSE session whose regular (or early) close has already passed."""
+
+    observed = (now or datetime.now(timezone.utc)).astimezone(ET)
+    today = observed.date()
+    candidate = today
+    for _ in range(14):
+        if is_trading_day(candidate):
+            if candidate < today:
+                return candidate
+            close_minutes = early_close_minutes(candidate) or 16 * 60
+            if observed.hour * 60 + observed.minute >= close_minutes:
+                return candidate
+        candidate -= timedelta(days=1)
+    return candidate
+
+
+def trading_days_between(start: date, end: date) -> int:
+    """Count completed NYSE sessions in (start, end]. Zero when end <= start."""
+
+    if end <= start:
+        return 0
+    count = 0
+    cursor = start
+    for _ in range(400):
+        cursor += timedelta(days=1)
+        if cursor > end:
+            return count
+        if is_trading_day(cursor):
+            count += 1
+    return count
+
+
 def market_datetime(value: date, minutes: int) -> datetime:
     return datetime.combine(
         value,
@@ -144,8 +186,11 @@ __all__ = [
     "ET",
     "early_close_minutes",
     "is_trading_day",
+    "last_completed_trading_day",
     "market_datetime",
     "market_holidays",
     "next_trading_day",
     "options_close_minutes",
+    "previous_trading_day",
+    "trading_days_between",
 ]

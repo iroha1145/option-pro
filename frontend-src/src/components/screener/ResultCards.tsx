@@ -84,7 +84,7 @@ export default function ResultCards({
                   </span>
                   <span className="block truncate text-micro text-ink-400" title={r.name}>{r.name}</span>
                 </span>
-                <LiveChange symbol={r.ticker} fallback={r.changePct} size="sm" />
+                <LiveChange symbol={r.ticker} fallback={r.changePct} fallbackPrice={r.price} fallbackAt={r.priceAsOf ?? r.dailyDataThrough} size="sm" />
                 <Icon
                   name="chevron-down"
                   size={14}
@@ -103,7 +103,7 @@ export default function ResultCards({
                   </span>
                 </span>
                 <span className="pb-0.5 text-right">
-                  <span className="block metric-value text-data-m text-ink-800 tnum"><LivePrice symbol={r.ticker} fallback={r.price} /></span>
+                  <span className="block metric-value text-data-m text-ink-800 tnum"><LivePrice symbol={r.ticker} fallback={r.price} fallbackAt={r.priceAsOf ?? r.dailyDataThrough} fallbackKind="scan" /></span>
                 </span>
               </span>
               <span

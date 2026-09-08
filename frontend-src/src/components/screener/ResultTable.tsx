@@ -181,10 +181,10 @@ export default function ResultTable({
                         flashes[r.ticker] === 'down' && 'tick-flash-down',
                       )}
                     >
-                      <LivePrice symbol={r.ticker} fallback={r.price} />
+                      <LivePrice symbol={r.ticker} fallback={r.price} fallbackAt={r.priceAsOf ?? r.dailyDataThrough} fallbackKind="scan" />
                     </span>
                     <span className="ml-1.5 align-middle">
-                      <LiveChange symbol={r.ticker} fallback={r.changePct} size="sm" />
+                      <LiveChange symbol={r.ticker} fallback={r.changePct} fallbackPrice={r.price} fallbackAt={r.priceAsOf ?? r.dailyDataThrough} size="sm" />
                     </span>
                   </td>
                   {/* 催化剂 72h */}

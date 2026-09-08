@@ -133,6 +133,10 @@ export interface ScreenerRow {
   /** live 契约 sector_id（板块过滤下发用）；mock 无 id，过滤回退 sector 名 */
   sectorId?: string;
   price: number;
+  /** 扫描采用的报价/日线时间；缺失时不编造。 */
+  priceAsOf?: string | null;
+  /** 参与评分的完整日线截至时间。 */
+  dailyDataThrough?: string | null;
   /** 契约 change_pct；缺失如实为 null（ChangeBadge 显「—」，不显 +0.00%） */
   changePct: number | null;
   strengthScore: number;

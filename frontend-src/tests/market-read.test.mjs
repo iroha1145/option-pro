@@ -308,6 +308,42 @@ test('identity reset rejects old cache writes after the new identity has already
   } finally { globalThis.fetch = originalFetch; resetMarketReadState(); }
 });
 
+test('force read does not join a pre-refresh GET and uses cache reload', async () => {
+  resetMarketReadState();
+  const originalFetch = globalThis.fetch;
+  const inits = [];
+  const releases = [];
+  globalThis.fetch = (_url, init) => {
+    inits.push(init);
+    return new Promise((resolve) => {
+      releases.push((price) =>
+        resolve(
+          new Response(JSON.stringify({ ticker: 'NVDA', price }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        ),
+      );
+    });
+  };
+  try {
+    const stale = marketGet('/strength/scan?sector_id=semiconductors', { ttlMs: 60_000 });
+    const forced = marketGet('/strength/scan?sector_id=semiconductors', {
+      ttlMs: 60_000,
+      force: true,
+    });
+    assert.equal(releases.length, 2);
+    assert.equal(inits[1].cache, 'reload');
+    releases[1](180);
+    assert.equal((await forced).price, 180);
+    releases[0](12);
+    assert.equal((await stale).price, 12);
+  } finally {
+    globalThis.fetch = originalFetch;
+    resetMarketReadState();
+  }
+});
+
 test('a previous identity late 429 cannot impose a shared backoff on the new identity', async () => {
   resetMarketReadState(); const originalFetch = globalThis.fetch; let release;
   globalThis.fetch = () => new Promise(resolve => { release = resolve; });
@@ -320,4 +356,46 @@ test('a previous identity late 429 cannot impose a shared backoff on the new ide
     globalThis.fetch = async () => { requests++; return new Response(JSON.stringify({ price: 42 })); };
     assert.deepEqual(await marketGet('/stocks/NEW'), { price: 42 }); assert.equal(requests, 1);
   } finally { globalThis.fetch = originalFetch; resetMarketReadState(); }
+});
+
+test('late ordinary read cannot overwrite a newer forced response', async () => {
+  resetMarketReadState();
+  const originalFetch = globalThis.fetch;
+  const releases = [];
+  globalThis.fetch = () => new Promise((resolve) => releases.push((price) => resolve(new Response(JSON.stringify({ price }), { headers: { 'Content-Type': 'application/json' } }))));
+  try {
+    const old = marketGet('/strength/scan?top=20');
+    const fresh = marketGet('/strength/scan?top=20', { force: true });
+    releases[1](180);
+    await fresh;
+    releases[0](120);
+    await old;
+    assert.equal((await marketGet('/strength/scan?top=20')).price, 180);
+  } finally {
+    globalThis.fetch = originalFetch;
+    resetMarketReadState();
+  }
+});
+
+test('a detached forced request cannot remove the newer forced request sharing marker', async () => {
+  resetMarketReadState();
+  const originalFetch = globalThis.fetch;
+  const releases = [];
+  globalThis.fetch = () => new Promise((resolve) => releases.push(() => resolve(new Response('{}', { headers: { 'Content-Type': 'application/json' } }))));
+  try {
+    const old = marketGet('/strength/scan', { force: true });
+    resetMarketReadPaths(['/strength/scan']);
+    const fresh = marketGet('/strength/scan', { force: true });
+    releases[0]();
+    await old;
+    const shared = marketGet('/strength/scan', { force: true });
+    const count = releases.length;
+    for (const release of releases.slice(1)) release();
+    await Promise.all([fresh, shared]);
+    assert.equal(count, 2);
+    assert.equal(fresh, shared);
+  } finally {
+    globalThis.fetch = originalFetch;
+    resetMarketReadState();
+  }
 });
