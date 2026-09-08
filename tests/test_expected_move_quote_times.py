@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -12,6 +12,20 @@ TODAY = date(2026, 9, 4)
 EXPIRATION = "2026-09-11"
 FRESH = "2026-09-03T20:00:00+00:00"
 STALE = "2026-08-01T20:00:00+00:00"
+
+
+@pytest.fixture(autouse=True)
+def _anchor_quote_observation_clock(monkeypatch: pytest.MonkeyPatch) -> None:
+    # These provider fixtures use fixed contract dates. Keep the observation
+    # clock on their trading day so fresh quotes do not age out with the CI run.
+    observed = datetime(TODAY.year, TODAY.month, TODAY.day, 12, tzinfo=timezone.utc)
+
+    class FixtureDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return observed.astimezone(tz) if tz else observed.replace(tzinfo=None)
+
+    monkeypatch.setattr(enrich, "datetime", FixtureDatetime)
 
 
 def _epoch(timestamp: str | None) -> float | None:

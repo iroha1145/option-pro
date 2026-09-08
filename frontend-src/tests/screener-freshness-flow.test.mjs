@@ -92,6 +92,21 @@ test('date-only labels do not fabricate a scan completion clock or shift in Asia
   }
 });
 
+test('real ISO closing times display the New York score date in Tokyo and UTC', () => {
+  const previous = process.env.TZ;
+  try {
+    for (const timezone of ['Asia/Tokyo', 'UTC']) {
+      process.env.TZ = timezone;
+      assert.equal(visibleScanDate('2026-09-04T20:00:00Z'), '2026-09-04', timezone);
+      assert.equal(visibleScanDate('2026-01-02T21:00:00Z'), '2026-01-02', timezone);
+      assert.equal(visibleScanDate('2026-09-05T00:30:00Z'), '2026-09-04', timezone);
+    }
+  } finally {
+    if (previous === undefined) delete process.env.TZ;
+    else process.env.TZ = previous;
+  }
+});
+
 test('unknown fallback time prefers a timestamped quote without inventing a fallback clock', () => {
   const quote = {
     symbol: 'NVDA',

@@ -182,6 +182,9 @@ test('F02 desktop 1440 owner refreshes a stale semiconductor snapshot', async ({
   expect(errors.filter((message) => !/ResizeObserver|AbortError/.test(message))).toEqual([]);
 });
 
+test.describe('Tokyo trading dates', () => {
+test.use({ timezoneId: 'Asia/Tokyo' });
+
 test('F02 mobile 390 shows scan date on cards after refresh', async ({ page, request }) => {
   test.setTimeout(120_000);
   await page.setViewportSize({ width: 390, height: 844 });
@@ -204,6 +207,7 @@ test('F02 mobile 390 shows scan date on cards after refresh', async ({ page, req
   });
   await page.screenshot({ path: `${evidence}/mobile-390-after.png`, animations: 'disabled', fullPage: true });
   expect(errors.filter((message) => !/ResizeObserver|AbortError/.test(message))).toEqual([]);
+});
 });
 
 for (const [locale, heading] of [
