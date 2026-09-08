@@ -28,7 +28,7 @@ export default defineConfig({
       },
     },
     {
-      command: 'npm run dev -- --host 127.0.0.1 --port 3033 --strictPort',
+      command: 'npm run preview -- --host 127.0.0.1 --port 3033 --strictPort',
       url: 'http://127.0.0.1:3033',
       reuseExistingServer: false,
       env: {
@@ -43,7 +43,7 @@ export default defineConfig({
     locale: 'zh-CN',
     timezoneId: 'America/New_York',
     contextOptions: { reducedMotion: 'reduce' },
-    trace: 'retain-on-failure',
+    trace: 'on',
     screenshot: 'only-on-failure',
   },
 });

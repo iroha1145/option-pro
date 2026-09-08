@@ -103,9 +103,7 @@ def extract_score_data_through(payload: Any) -> datetime | None:
     if not isinstance(payload, dict):
         return None
     direct = parse_aware_datetime(payload.get("score_data_through"))
-    if direct is not None:
-        return direct
-    throughs: list[datetime] = []
+    throughs: list[datetime] = [direct] if direct is not None else []
     rows = payload.get("rows")
     if isinstance(rows, list):
         for row in rows:
@@ -115,7 +113,9 @@ def extract_score_data_through(payload: Any) -> datetime | None:
             if parsed is not None:
                 throughs.append(parsed)
     if throughs:
-        return max(throughs)
+        # A newer symbol (or an older aggregate computed with max()) cannot
+        # certify that every displayed score used equally recent daily bars.
+        return min(throughs)
     return None
 
 
@@ -150,6 +150,7 @@ def evaluate_strength_snapshot_freshness(
         and scoring_version
         and scoring_version != expected_scoring_version
     )
+    unknown_version = bool(expected_scoring_version and not scoring_version)
     stale = bool(ttl_expired or input_stale or version_mismatch)
     if historical:
         status = "historical"
@@ -166,6 +167,9 @@ def evaluate_strength_snapshot_freshness(
     elif unknown:
         status = "unknown"
         reason = "missing_score_data_through"
+    elif unknown_version:
+        status = "unknown"
+        reason = "missing_scoring_version"
     else:
         status = "active"
         reason = None
@@ -199,8 +203,9 @@ def strength_payload_is_publishable(payload: Any) -> tuple[bool, str | None]:
     skipped = payload.get("skipped") if isinstance(payload.get("skipped"), dict) else {}
     universe_count = payload.get("universe_count")
     data_errors = skipped.get("data_error") if isinstance(skipped, dict) else 0
+    insufficient = skipped.get("insufficient_history") if isinstance(skipped, dict) else 0
     try:
-        error_count = int(data_errors or 0)
+        error_count = int(data_errors or 0) + int(insufficient or 0)
         pool = int(universe_count or 0)
     except (TypeError, ValueError):
         error_count = 0

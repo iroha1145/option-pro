@@ -26,6 +26,7 @@ def _payload(parameters: dict | None = None, *, ticker: str = "AAPL", through: s
         row["price_as_of"] = through
     return {
         "as_of": "2026-09-04T20:30:00+00:00",
+        "score_version": strength.STRENGTH_SCORE_VERSION,
         "score_data_through": through,
         "params": {key: value for key, value in canonical.items() if key != "include_options"},
         "count": 1,

@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 import http from 'node:http';
+import { build } from 'esbuild';
+import { fileURLToPath } from 'node:url';
 
 function listen(server) {
   return new Promise((resolve) => {
@@ -14,14 +16,30 @@ test.describe('C01 native HTTP cache without Playwright routes', () => {
   let apiHits = 0;
 
   test.beforeAll(async () => {
+    const bundled = await build({
+      stdin: {
+        contents: "import { marketGet } from './src/api/marketRead.ts'; window.readMarket = marketGet;",
+        resolveDir: fileURLToPath(new URL('../', import.meta.url)),
+      },
+      bundle: true,
+      format: 'iife',
+      platform: 'browser',
+      write: false,
+      define: { 'import.meta.env': '{"VITE_API_MODE":"live"}' },
+    });
     server = http.createServer((request, response) => {
       const url = request.url || '/';
       if (url === '/' || url === '/index.html') {
         response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-        response.end('<!doctype html><html><body><p>screener cache fixture</p></body></html>');
+        response.end('<!doctype html><html><body><p>screener cache fixture</p><script src="/market-read.js"></script></body></html>');
         return;
       }
-      if (url.startsWith('/strength/scan')) {
+      if (url === '/market-read.js') {
+        response.writeHead(200, { 'Content-Type': 'text/javascript' });
+        response.end(bundled.outputFiles[0].text);
+        return;
+      }
+      if (url.startsWith('/api/strength/scan')) {
         apiHits += 1;
         response.writeHead(200, {
           'Content-Type': 'application/json',
@@ -43,24 +61,15 @@ test.describe('C01 native HTTP cache without Playwright routes', () => {
 
   test('cached GET is reused, then cache:reload reaches the server', async ({ page }) => {
     await page.goto(`http://127.0.0.1:${port}/`);
-    const first = await page.evaluate(async () => {
-      const response = await fetch('/strength/scan?sector_id=semiconductors');
-      return response.json();
-    });
+    const first = await page.evaluate(() => window.readMarket('/strength/scan?sector_id=semiconductors', { ttlMs: 0, staleMs: 0 }));
     expect(first.version).toBe(1);
     expect(apiHits).toBe(1);
 
-    const cached = await page.evaluate(async () => {
-      const response = await fetch('/strength/scan?sector_id=semiconductors');
-      return response.json();
-    });
+    const cached = await page.evaluate(() => window.readMarket('/strength/scan?sector_id=semiconductors', { ttlMs: 0, staleMs: 0 }));
     expect(cached.version).toBe(1);
     expect(apiHits).toBe(1);
 
-    const reloaded = await page.evaluate(async () => {
-      const response = await fetch('/strength/scan?sector_id=semiconductors', { cache: 'reload' });
-      return response.json();
-    });
+    const reloaded = await page.evaluate(() => window.readMarket('/strength/scan?sector_id=semiconductors', { force: true }));
     expect(reloaded.version).toBe(2);
     expect(reloaded.source_status).toBe('active');
     expect(apiHits).toBe(2);

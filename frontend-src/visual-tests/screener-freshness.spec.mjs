@@ -24,19 +24,50 @@ async function readScreenerStats(request) {
   return response.json();
 }
 
-test('A07 a later software scan wins over a late semiconductor writeback', async ({ page }) => {
+test.beforeEach(async ({ request }) => {
+  const response = await request.post(`${isolatedApi}/debug/reset`, { data: {} });
+  expect(response.ok()).toBeTruthy();
+});
+
+test.afterEach(async ({ request }, testInfo) => {
+  await testInfo.attach('worker-and-provider-summary', {
+    body: JSON.stringify(await readScreenerStats(request), null, 2),
+    contentType: 'application/json',
+  });
+});
+
+async function expectPublishedSemiconductors(request) {
+  await expect.poll(async () => {
+    const stats = await readScreenerStats(request);
+    return stats.actions.find((action) => action.sector_id === 'semiconductors')?.status;
+  }).toBe('completed');
+  const stats = await readScreenerStats(request);
+  const action = stats.actions.find((item) => item.sector_id === 'semiconductors');
+  expect(stats.scan_count).toBe(1);
+  expect(action.result.published).toBe(true);
+  expect(action.result.parameters_hash).toBe(action.parameters_hash);
+  expect(action.result.score_data_through).toContain(stats.score_data_through);
+  return stats;
+}
+
+test('A07 a later valid software view wins over a late semiconductor refresh', async ({ page, request }) => {
   test.setTimeout(120_000);
+  await request.post(`${isolatedApi}/debug/reset`, {
+    data: { software_fresh: true, provider_delay: 1.5 },
+  });
   await page.setViewportSize({ width: 1440, height: 900 });
   await openScreener(page);
   await page.locator('[data-testid="screener-advanced-filters"] summary').click();
   await page.getByRole('button', { name: '半导体' }).click();
   await page.locator('button.scan-trigger').click();
   await expect(page.locator('button.scan-trigger')).toBeDisabled();
+  await expect.poll(async () => (await readScreenerStats(request)).post_count).toBe(1);
   await page.getByRole('button', { name: '半导体' }).click();
   await page.getByRole('button', { name: '软件' }).click();
   await expect(page.locator('button.scan-trigger')).toBeEnabled();
   await page.locator('button.scan-trigger').click();
   await expect(page.getByText('MSFT').filter({ visible: true }).first()).toBeVisible({ timeout: 90_000 });
+  await expectPublishedSemiconductors(request);
   await expect(page.locator('[data-quote-symbol="NVDA"]').filter({ visible: true })).toHaveCount(0);
   await expect(page.getByText('12.5')).toHaveCount(0);
   await expect(page.getByText(/命中/).filter({ visible: true }).first()).toContainText('1');
@@ -54,13 +85,13 @@ test('A08 ten same-parameter clicks share one refresh computation', async ({ pag
   await openScreener(page);
   await page.locator('[data-testid="screener-advanced-filters"] summary').click();
   await page.getByRole('button', { name: '半导体' }).click();
-  for (let index = 0; index < 10; index += 1) {
-    await page.locator('button.scan-trigger').click();
-  }
+  await page.locator('button.scan-trigger').evaluate((button) => {
+    for (let index = 0; index < 10; index += 1) button.click();
+  });
   await expect(page.getByText('NVDA').filter({ visible: true }).first()).toBeVisible({ timeout: 90_000 });
-  const after = await readScreenerStats(request);
-  expect(after.scan_count - before.scan_count).toBeLessThanOrEqual(1);
-  expect(posts.length).toBeLessThanOrEqual(10);
+  const after = await expectPublishedSemiconductors(request);
+  expect(after.scan_count - before.scan_count).toBe(1);
+  expect(posts.length).toBe(1);
   const semiconductorIds = new Set(
     after.actions.filter((action) => action.sector_id === 'semiconductors').map((action) => action.request_id),
   );
@@ -86,8 +117,8 @@ test('A08 two tabs coalesce onto one semiconductor action', async ({ browser, re
   ]);
   await expect(pageA.getByText('NVDA').filter({ visible: true }).first()).toBeVisible({ timeout: 90_000 });
   await expect(pageB.getByText('NVDA').filter({ visible: true }).first()).toBeVisible({ timeout: 90_000 });
-  const after = await readScreenerStats(request);
-  expect(after.scan_count - before.scan_count).toBeLessThanOrEqual(1);
+  const after = await expectPublishedSemiconductors(request);
+  expect(after.scan_count - before.scan_count).toBe(1);
   const semiconductorIds = new Set(
     after.actions.filter((action) => action.sector_id === 'semiconductors').map((action) => action.request_id),
   );
@@ -115,7 +146,26 @@ test('C06 offline failure does not invent a scan clock, then one reconnect scan 
   await expect(page.getByText(/评分依据/).filter({ visible: true }).first()).toBeVisible();
 });
 
-test('F02 desktop 1440 owner refreshes a stale semiconductor snapshot', async ({ page }) => {
+test('E02 provider failure keeps prior rows and timestamps without publishing', async ({ page, request }) => {
+  await request.post(`${isolatedApi}/debug/reset`, { data: { provider_failure: true } });
+  const before = await readScreenerStats(request);
+  await openScreener(page);
+  await page.locator('button.scan-trigger').click();
+  await expect(page.getByText('AAPL').filter({ visible: true }).first()).toBeVisible();
+  const lastScan = page.getByText('上次扫描').locator('xpath=following-sibling::span[1]');
+  const previousTime = await lastScan.textContent();
+  await selectSemiconductorsAndScan(page);
+  await expect(page.getByText('扫描数据不可用').filter({ visible: true }).first()).toBeVisible();
+  await expect(page.getByText('AAPL').filter({ visible: true }).first()).toBeVisible();
+  await expect(lastScan).toHaveText(previousTime);
+  const after = await readScreenerStats(request);
+  expect(after.scan_count).toBe(1);
+  expect(after.actions).toHaveLength(1);
+  expect(after.actions[0].status).toBe('failed');
+  expect(after.snapshot_hashes).toEqual(before.snapshot_hashes);
+});
+
+test('F02 desktop 1440 owner refreshes a stale semiconductor snapshot', async ({ page, request }) => {
   test.setTimeout(120_000);
   await page.setViewportSize({ width: 1440, height: 900 });
   await mkdir(evidence, { recursive: true });
@@ -125,11 +175,14 @@ test('F02 desktop 1440 owner refreshes a stale semiconductor snapshot', async ({
   await expect(page.getByText('NVDA').filter({ visible: true }).first()).toBeVisible({ timeout: 90_000 });
   await expect(page.getByText(/评分依据/).filter({ visible: true }).first()).toBeVisible();
   await expect(page.getByText(/使用已有评分|命中/).filter({ visible: true }).first()).toBeVisible();
+  const stats = await expectPublishedSemiconductors(request);
+  await expect(page.getByText(/评分依据/).filter({ visible: true }).first()).toContainText(stats.score_data_through);
+  await expect(page.locator('[data-quote-symbol="NVDA"]').filter({ visible: true }).first()).not.toContainText('12.5');
   await page.screenshot({ path: `${evidence}/desktop-1440-after.png`, animations: 'disabled' });
   expect(errors.filter((message) => !/ResizeObserver|AbortError/.test(message))).toEqual([]);
 });
 
-test('F02 mobile 390 shows scan date on cards after refresh', async ({ page }) => {
+test('F02 mobile 390 shows scan date on cards after refresh', async ({ page, request }) => {
   test.setTimeout(120_000);
   await page.setViewportSize({ width: 390, height: 844 });
   await mkdir(evidence, { recursive: true });
@@ -141,6 +194,9 @@ test('F02 mobile 390 shows scan date on cards after refresh', async ({ page }) =
   const scanPrice = page.getByText(/扫描价/).filter({ visible: true }).first();
   await expect(scanPrice).toBeVisible();
   await expect(page.getByText(/上次扫描/).filter({ visible: true }).first()).toBeVisible();
+  const stats = await expectPublishedSemiconductors(request);
+  await expect(page.getByText(/评分依据/).filter({ visible: true }).first()).toContainText(stats.score_data_through);
+  await expect(page.locator('[data-quote-symbol="NVDA"]').filter({ visible: true }).first()).not.toContainText('12.5');
   await scanPrice.scrollIntoViewIfNeeded();
   await page.locator('[data-quote-symbol="NVDA"]').filter({ visible: true }).first().screenshot({
     path: `${evidence}/mobile-390-nvda-card.png`,

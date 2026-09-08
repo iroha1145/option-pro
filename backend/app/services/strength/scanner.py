@@ -1829,7 +1829,9 @@ def _scan_sync(
         for item in scored
         if isinstance(item.get("daily_data_through"), str) and item.get("daily_data_through")
     ]
-    score_data_through = max(throughs) if throughs else None
+    # Every score and canonical rank depends on this pool. One fresh symbol
+    # must not hide stale inputs in the same published scoring snapshot.
+    score_data_through = min(throughs) if throughs else None
     return {
         "as_of": _now_iso(),
         "score_data_through": score_data_through,

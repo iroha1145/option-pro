@@ -113,10 +113,17 @@ export const runtimeApi = {
       () => Promise.resolve({ requestId, action: '', status: 'completed', errorCode: null, details: {}, reused: null, reason: null, completedAt: null, requestedAt: null }),
       () => get(`/worker/actions/${encodeURIComponent(requestId)}`).then(mapWorkerAction),
     ),
-  waitForWorkerAction: async (requestId: string, timeoutMs = 1_200_000): Promise<WorkerAction> => {
+  waitForWorkerAction: async (
+    requestId: string,
+    timeoutMs = 1_200_000,
+    options: { onProgress?: (action: WorkerAction) => void; shouldContinue?: () => boolean } = {},
+  ): Promise<WorkerAction> => {
     const deadline = Date.now() + timeoutMs;
     while (!workerWaitHasTimedOut(Date.now(), deadline)) {
+      if (options.shouldContinue && !options.shouldContinue()) throw new DOMException('Scan superseded', 'AbortError');
       const action = await runtimeApi.workerActionStatus(requestId);
+      if (options.shouldContinue && !options.shouldContinue()) throw new DOMException('Scan superseded', 'AbortError');
+      options.onProgress?.(action);
       const decision = workerWaitDecision(action.status);
       if (decision === 'done') return action;
       if (decision === 'failed') {

@@ -14,6 +14,7 @@ function harness() {
   const clear = id => { timers.delete(id); intervals.delete(id); };
   const exports = {};
   const context = vm.createContext({ exports, require: () => ({ t: text => text }), AbortController, URLSearchParams, console,
+    Date: class extends Date { static now() { return Date.UTC(2026, 8, 8) + now; } },
     setTimeout: schedule, clearTimeout: clear,
     setInterval(fn, delay) { const id = ++serial; intervals.add(id); const repeat = () => { fn(); if (intervals.has(id)) timers.set(id, { fn: repeat, at: now + delay }); }; timers.set(id, { fn: repeat, at: now + delay }); return id; },
     clearInterval: clear,
@@ -322,10 +323,45 @@ test('a malformed radar row cannot suppress valid revisions in the same frame', 
 test('price labels distinguish a rendered fallback from the disconnected cached quote', () => {
   const h = harness(); const disconnected = { ...enabled, connected: false };
   const stale = quote('AAPL', 105, 10, { freshness: 'stale' });
-  assert.equal(h.displayedQuoteLabel(stale, disconnected, false), '扫描价');
-  assert.equal(h.displayedQuoteLabel(stale, disconnected, false, '2026-08-01'), '扫描价 · 日线');
+  assert.equal(h.displayedQuoteLabel(stale, disconnected, false), '参考价');
+  assert.equal(h.displayedQuoteLabel(stale, disconnected, false, '2026-08-01', 'scan'), '扫描价 · 日线');
   assert.equal(h.displayedQuoteLabel(stale, disconnected, true), '行情重连中');
   assert.equal(h.displayedQuoteLabel(quote('AAPL', 105), enabled, true), '实时');
+});
+
+test('daily scan prices are ordered by New York date without inventing a closing clock', () => {
+  const h = harness();
+  const snapshot = at => quote('AAPL', 100, 0, { trade_at: at, freshness: 'snapshot', subscription_status: 'limited' });
+  assert.equal(h.preferLiveQuote(snapshot('2026-01-02T20:30:00Z'), true, '2026-01-02'), false, '15:30 New York is before the winter close');
+  assert.equal(h.preferLiveQuote(snapshot('2026-07-02T18:00:00Z'), true, '2026-07-02'), false, 'an early-close day still lacks an exact fallback timestamp');
+  assert.equal(h.preferLiveQuote(snapshot('2026-09-05T00:30:00Z'), true, '2026-09-04'), false, 'UTC midnight is still the preceding New York date');
+  assert.equal(h.preferLiveQuote(snapshot('2026-09-07T13:30:00Z'), true, '2026-09-04'), true);
+  assert.equal(h.preferLiveQuote(snapshot('2026-09-04T20:30:00Z'), true, '2026-09-04T20:00:00Z'), true, 'actual timestamps remain precisely comparable');
+  assert.equal(h.preferLiveQuote(quote('AAPL', 100), true, '2026-09-04T15:00:00Z'), false, 'the live flag cannot make an older trade newer');
+  assert.equal(h.preferLiveQuote(snapshot('2026-09-04T20:30:00Z'), true, '2030-01-01'), true, 'an impossible future fallback date has no ordering authority');
+  assert.equal(h.preferLiveQuote(snapshot('2026-09-04T20:30:00Z'), true, '2030-01-01T20:00:00Z'), true);
+});
+
+test('an impossible future trade cannot poison ordering or suppress subsequent valid trades', async () => {
+  const h = harness(); h.store.register(['AAPL']); h.store.start(false); await h.tick(1000);
+  h.streams[0].emit('quotes', { quotes: [quote('AAPL', 999, 0, { trade_at: '2030-01-01T00:00:00Z', received_at: '2030-01-01T00:00:00Z' })] });
+  await h.tick(250);
+  assert.equal(h.store.getQuote('AAPL').price, 100);
+  h.streams[0].emit('quotes', { quotes: [quote('AAPL', 101, 2)] }); await h.tick(250);
+  assert.equal(h.store.getQuote('AAPL').price, 101);
+  assert.equal(h.preferLiveQuote(quote('AAPL', 999, 0, { trade_at: '2030-01-01T00:00:00Z' }), false), false);
+  assert.equal(h.preferLiveQuote(quote('AAPL', 999, 0, { trade_at: null }), false), false);
+  h.store.stop();
+});
+
+test('invalid change fields are cleared while the valid new price remains usable', async () => {
+  const h = harness(); h.store.register(['AAPL']); h.store.start(false); await h.tick(1000);
+  h.streams[0].emit('quotes', { quotes: [quote('AAPL', 110, 2, { previous_close: 100, change: 20, change_pct: 20 })] });
+  await h.tick(250);
+  assert.equal(h.store.getQuote('AAPL').price, 110);
+  assert.equal(h.store.getQuote('AAPL').change, null);
+  assert.equal(h.store.getQuote('AAPL').change_pct, null);
+  h.store.stop();
 });
 
 test('volatile server timestamps do not invalidate every status subscriber', async () => {

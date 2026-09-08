@@ -29,6 +29,11 @@ let marketBackoffUntil = 0;
 // 独立于逐路径版本：清空映射不能让旧主体的 version 0 重新变成有效。
 let stateGeneration = 0;
 
+/** Capture the same identity boundary used to invalidate shared market reads. */
+export function getMarketReadGeneration(): number {
+  return stateGeneration;
+}
+
 function prune(now: number): void {
   for (const [key, entry] of cache) {
     if (entry.staleUntil <= now) cache.delete(key);
@@ -89,6 +94,11 @@ export function marketGet<T>(
 
   const ttlMs = Math.max(0, options.ttlMs ?? DEFAULT_TTL_MS);
   const staleMs = Math.max(ttlMs, options.staleMs ?? DEFAULT_STALE_MS);
+  if (options.force && pending) {
+    // The older ordinary GET may still resolve for its caller, but it must
+    // lose permission to replace this forced read in the shared cache.
+    pathVersions.set(path, (pathVersions.get(path) ?? 0) + 1);
+  }
   const requestVersion = pathVersions.get(path) ?? 0;
   const requestGeneration = stateGeneration;
   const request = get<T>(path, options.force ? { cache: 'reload' } : undefined)
@@ -136,8 +146,10 @@ export function marketGet<T>(
       throw error;
     })
     .finally(() => {
-      if (inFlight.get(path) === request) inFlight.delete(path);
-      if (options.force) inFlightForce.delete(path);
+      if (inFlight.get(path) === request) {
+        inFlight.delete(path);
+        inFlightForce.delete(path);
+      }
     });
   inFlight.set(path, request);
   if (options.force) inFlightForce.add(path);

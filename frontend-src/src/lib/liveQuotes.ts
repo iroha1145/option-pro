@@ -63,13 +63,38 @@ export function normalizeQuoteSymbols(symbols: readonly string[]): string[] {
 }
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 const timestamp = (value: string | null) => {
-  if (!value) return 0;
-  if (DATE_ONLY.test(value.trim())) {
-    const parsed = Date.parse(`${value.trim()}T20:00:00.000Z`);
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-  return Date.parse(value) || 0;
+  if (!value || DATE_ONLY.test(value.trim())) return 0;
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 };
+// Allow one minute of client/server clock skew, but never let a future trade
+// become the ordering watermark and block all subsequent valid prices.
+const MAX_CLOCK_SKEW_MS = 60_000;
+const reliableTimestamp = (value: string | null) => {
+  const parsed = timestamp(value);
+  return parsed && parsed <= Date.now() + MAX_CLOCK_SKEW_MS ? parsed : 0;
+};
+const quoteDateFormat = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' });
+export function visibleQuoteDate(value?: string | null): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (DATE_ONLY.test(trimmed)) {
+    const parsed = Date.parse(`${trimmed}T00:00:00Z`);
+    return Number.isFinite(parsed) && new Date(parsed).toISOString().slice(0, 10) === trimmed ? trimmed : null;
+  }
+  const parsed = reliableTimestamp(trimmed);
+  return parsed ? quoteDateFormat.format(parsed) : null;
+}
+
+/** Never combine a new price with a percentage from a different baseline.
+ * A 0.05 percentage-point tolerance accommodates rounded provider fields. */
+export function liveQuoteChangePct(quote: LiveQuote | undefined): number | null {
+  if (quote?.price == null || !Number.isFinite(quote.price) || quote.price <= 0
+    || quote.previous_close == null || !Number.isFinite(quote.previous_close) || quote.previous_close <= 0
+    || quote.change_pct == null || !Number.isFinite(quote.change_pct)) return null;
+  const expected = (quote.price / quote.previous_close - 1) * 100;
+  return Math.abs(quote.change_pct - expected) <= 0.05 ? quote.change_pct : null;
+}
 type Listener = () => void;
 type Stream = Pick<EventSource, 'addEventListener' | 'close' | 'onerror'>;
 interface QuoteRuntime {
@@ -304,11 +329,18 @@ export class QuoteStore {
       if (!raw || typeof raw.symbol !== 'string') continue;
       const symbol = raw.symbol.toUpperCase();
       if (raw.price != null && (!Number.isFinite(raw.price) || raw.price <= 0)) continue;
+      if (raw.price != null && !reliableTimestamp(raw.trade_at)) continue;
+      if (raw.received_at && !reliableTimestamp(raw.received_at)) continue;
       const previous = this.pending.get(symbol) ?? this.quotes.get(symbol);
       // Subscription state may change with an older REST price; keep newest price fields.
       const quote = previous && (timestamp(raw.trade_at) < timestamp(previous.trade_at) || (kind === 'snapshot' && previous.price != null && timestamp(raw.trade_at) === timestamp(previous.trade_at)))
         ? { ...previous, subscription_status: raw.subscription_status, freshness: raw.subscription_status === 'live' && raw.freshness === 'snapshot' ? previous.freshness : raw.freshness }
-        : { ...raw, symbol };
+        : { ...raw, symbol,
+          change_pct: liveQuoteChangePct(raw),
+          change: raw.price != null && raw.previous_close != null && raw.previous_close > 0
+            && raw.change != null && Number.isFinite(raw.change)
+            && Math.abs(raw.change - (raw.price - raw.previous_close)) <= 0.01 ? raw.change : null,
+        };
       this.pending.set(symbol, quote);
     }
     if (!this.flushTimer) this.flushTimer = setTimeout(() => {
@@ -345,14 +377,28 @@ export function quoteLabel(quote: LiveQuote, currentSession = quote.session): st
  * periodic data wins; while live, an older page snapshot cannot rewind trades. */
 export function preferLiveQuote(quote: LiveQuote | undefined, hasFallback: boolean, fallbackAt?: string | null): boolean {
   if (quote?.price == null || !Number.isFinite(quote.price) || quote.price <= 0) return false;
+  const tradeAt = reliableTimestamp(quote.trade_at);
+  if (!tradeAt) return false;
   if (!hasFallback) return true;
+  if (fallbackAt && DATE_ONLY.test(fallbackAt.trim())) {
+    const fallbackDay = visibleQuoteDate(fallbackAt);
+    if (fallbackDay && fallbackDay > quoteDateFormat.format(Date.now())) return true;
+    // A daily bar has a trading date, not a reliable instant. Same-day quotes
+    // cannot be ordered against it, including half-days and daylight savings.
+    return Boolean(fallbackDay && quoteDateFormat.format(tradeAt) > fallbackDay);
+  }
+  if (fallbackAt && timestamp(fallbackAt) > Date.now() + MAX_CLOCK_SKEW_MS) return true;
+  const fallbackTime = fallbackAt ? reliableTimestamp(fallbackAt) : 0;
+  if (fallbackTime) return tradeAt >= fallbackTime;
   if (quote.subscription_status === 'live' && (quote.freshness === 'live' || (quote.freshness === 'stale' && !fallbackAt))) return true;
   // A disconnected stream retains its subscription, not its authority over a
   // newer periodic quote. Keep the last trade only while the fallback is older.
-  return Boolean(fallbackAt && timestamp(quote.trade_at) >= timestamp(fallbackAt));
+  return false;
 }
 
-export function fallbackQuoteLabel(fallbackAt?: string | null): string {
+export type FallbackQuoteKind = 'reference' | 'scan';
+export function fallbackQuoteLabel(fallbackAt?: string | null, fallbackKind: FallbackQuoteKind = 'scan'): string {
+  if (fallbackKind === 'reference') return t('参考价');
   if (!fallbackAt) return t('扫描价');
   if (DATE_ONLY.test(fallbackAt.trim())) return t('扫描价 · 日线');
   return t('扫描价');
@@ -364,8 +410,10 @@ export function displayedQuoteLabel(
   status: QuoteStatus,
   usesLive: boolean,
   fallbackAt?: string | null,
+  fallbackKind: FallbackQuoteKind = 'reference',
 ): string {
-  if (!usesLive) return fallbackQuoteLabel(fallbackAt);
+  if (!usesLive) return fallbackQuoteLabel(fallbackAt, fallbackKind);
+  if (!preferLiveQuote(quote, false)) return t('等待报价');
   if (!status.connected && quote.subscription_status === 'live') return t('行情重连中');
   return quoteLabel(quote, status.market_session);
 }

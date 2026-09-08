@@ -50,8 +50,10 @@ export interface StrengthScanEnvelope {
   staleReason: string | null;
   asOf: string | null;
   scoreDataThrough: string | null;
+  scoreVersion: string | null;
   scanCompletedAt: string | null;
   snapshotSavedAt: string | null;
+  cacheExpiresAt: string | null;
   priceProvider: string | null;
 }
 
@@ -163,7 +165,9 @@ function liveScan(params: ScanParams, force = false): Promise<StrengthScanEnvelo
   });
   return marketGet(`/strength/scan${qs ? `?${qs}` : ''}`, {
     ttlMs: 30_000,
-    staleMs: 15 * 60_000,
+    // The cached body embeds freshness metadata. Reusing it after its TTL on
+    // a failed GET would falsely confirm old scores as newly checked/fresh.
+    staleMs: 30_000,
     force,
   }).then((d) => {
     const env = asRec(d);
@@ -181,8 +185,10 @@ function liveScan(params: ScanParams, force = false): Promise<StrengthScanEnvelo
       staleReason: pickS(env, 'stale_reason'),
       asOf: pickS(env, 'as_of', 'score_data_through', 'data_through'),
       scoreDataThrough: pickS(env, 'score_data_through'),
+      scoreVersion: pickS(env, 'score_version', 'scoring_version'),
       scanCompletedAt: pickS(env, 'scan_completed_at', 'snapshot_saved_at'),
       snapshotSavedAt: pickS(env, 'snapshot_saved_at'),
+      cacheExpiresAt: pickS(env, 'cache_expires_at'),
       priceProvider: pickS(asRec(sources.prices), 'provider'),
     };
   });
@@ -338,8 +344,10 @@ export const strengthApi = {
           staleReason: null,
           asOf: null,
           scoreDataThrough: null,
+          scoreVersion: null,
           scanCompletedAt: null,
           snapshotSavedAt: null,
+          cacheExpiresAt: null,
           priceProvider: 'mock fixtures',
         };
       },

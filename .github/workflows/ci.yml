@@ -319,6 +319,10 @@ jobs:
             frontend-src/test-results/review-report/**
             frontend-src/test-results/review/**
             frontend-src/test-results/audit/**
+            frontend-src/test-results/screener/**
+            frontend-src/test-results/screener-report/**
+            frontend-src/test-results/screener-evidence/**
+            frontend-src/test-results/screener-cache/**
           if-no-files-found: error
           retention-days: 14
 

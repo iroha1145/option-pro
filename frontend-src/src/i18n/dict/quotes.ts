@@ -21,9 +21,10 @@ export const QUOTES: Dict = {
   '时间待更新': ['Time pending', '時刻の更新待ち'],
   '状态版本': ['State version', '状態バージョン'],
   '个股行情': ['Stock price', '個別株価'],
-  '成交时间 {time}': ['Trade time {time}', '約定時刻 {time}'],
   '昨收 ${price}': ['Previous close ${price}', '前日終値 ${price}'],
   '扫描价': ['Scan price', 'スキャン価格'],
+  '参考价': ['Reference price', '参考価格'],
+  '报价日期 {date}': ['Price date {date}', '価格日付 {date}'],
+  '报价时间 {time}（纽约）': ['Price time {time} (New York)', '価格時刻 {time}（ニューヨーク）'],
   '扫描价 · 日线': ['Scan price · daily bar', 'スキャン価格 · 日足'],
-  '评分依据 {date}': ['Scored through {date}', 'スコア根拠 {date}'],
 };

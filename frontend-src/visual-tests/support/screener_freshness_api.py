@@ -1,20 +1,22 @@
 #!/usr/bin/env python3
 """Isolated FastAPI for live screener freshness browser tests.
 
-GET /strength/scan reads published snapshots only. POST strength_refresh runs
-the real StrengthRefreshTask against provider stubs, then returns the finished
-action so the page can force-read the new snapshot.
+The production action router, durable queue, WorkerSupervisor and scanner run
+against synthetic provider inputs. Only this loopback test server exposes reset
+and diagnostic endpoints; it does not exercise production authentication.
 """
 
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import os
 import sys
 import tempfile
-import uuid
+import time
+from contextlib import asynccontextmanager
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import numpy as np
@@ -27,25 +29,35 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "backend"))
 
 DATA_DIR = Path(os.environ.get("SCREENER_FRESHNESS_DATA", tempfile.mkdtemp(prefix="screener-freshness-")))
-os.environ.setdefault("DATA_DIR", str(DATA_DIR))
+# Never inherit a developer's application data directory into this fixture.
+os.environ["DATA_DIR"] = str(DATA_DIR)
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-from app.api import strength  # noqa: E402
+from app.api import strength, worker_actions  # noqa: E402
+from app.access import request_owner_access_context  # noqa: E402
 from app.services.breakouts.config import BreakoutSettings  # noqa: E402
 from app.services.strength import scanner  # noqa: E402
 from app.services.strength.market_regime import MARKET_BENCHMARKS  # noqa: E402
 from app.worker.tasks import StrengthRefreshTask  # noqa: E402
+from app.worker.runtime import TaskSpec, WorkerSupervisor  # noqa: E402
+from app.worker.state import WorkerStateRepository  # noqa: E402
+from app.services.strength.freshness import expected_complete_session  # noqa: E402
 
 SNAPSHOT = DATA_DIR / "strength-snapshot-v1.json"
-NOW = datetime(2026, 9, 4, 16, 30, tzinfo=timezone.utc).timestamp()
-ACTIONS: dict[str, dict] = {}
-ACTIONS_BY_HASH: dict[str, dict] = {}
+NOW = time.time()
+DATA_THROUGH = expected_complete_session(datetime.now(timezone.utc)).isoformat()
+REPOSITORY: WorkerStateRepository | None = None
+SUPERVISOR: WorkerSupervisor | None = None
+WORKER_RUN: asyncio.Task | None = None
+PROVIDER_DELAY = 0.25
+PROVIDER_FAILURE = False
+worker_actions._repository = lambda: REPOSITORY
 POST_COUNT = 0
 SCAN_COUNT = 0
 
 
 def _history(*, slope: float, offset: float = 0.0, size: int = 320) -> pd.DataFrame:
-    index = pd.bdate_range(end="2026-09-04", periods=size, tz="America/New_York")
+    index = pd.bdate_range(end=DATA_THROUGH, periods=size, tz="America/New_York")
     step = np.arange(size, dtype=float)
     close = 40.0 + offset + step * slope + np.sin(step / 9.0)
     return pd.DataFrame(
@@ -102,7 +114,15 @@ def _install_provider_boundary() -> None:
     }
 
     scanner._theme_universe = lambda sector_id=None: (["NVDA", "AAPL", "MSFT"], deepcopy(metadata))
-    scanner._download_history = lambda symbols, period="2y": panel
+    def download(symbols, period="2y"):
+        global SCAN_COUNT
+        SCAN_COUNT += 1
+        time.sleep(PROVIDER_DELAY)
+        if PROVIDER_FAILURE:
+            raise RuntimeError("synthetic_provider_failure")
+        return panel
+
+    scanner._download_history = download
     scanner.enrich_rows_with_yahoo_options = lambda rows, display_top: {
         "provider": "Yahoo/yfinance",
         "status": "skipped",
@@ -129,6 +149,7 @@ def _row(ticker: str, score: float, price: float, through: str, sector_id: str, 
         "score": score,
         "final_score": score,
         "price": price,
+        "avg_dollar_volume_20d": 50_000_000.0,
         "daily_data_through": through,
         "price_as_of": through,
         "sector_id": sector_id,
@@ -138,13 +159,14 @@ def _row(ticker: str, score: float, price: float, through: str, sector_id: str, 
 
 def _seed_snapshots() -> None:
     strength._STRENGTH_SNAPSHOT_PATH = SNAPSHOT
-    through = "2026-09-03T20:00:00+00:00"
+    through = DATA_THROUGH
     default_row = _row("AAPL", 80.0, 190.0, through, "hardware", "硬件")
     strength._write_strength_snapshot(
         SNAPSHOT,
         parameters=dict(strength.DEFAULT_STRENGTH_SCAN_PARAMETERS),
         payload={
-            "as_of": "2026-09-03T20:30:00+00:00",
+            "as_of": datetime.now(timezone.utc).isoformat(),
+            "score_version": scanner.STRENGTH_SCORE_VERSION,
             "score_data_through": through,
             "params": {
                 key: value
@@ -161,31 +183,103 @@ def _seed_snapshots() -> None:
         saved_at=NOW - 60,
     )
     variant_params = {**strength.DEFAULT_STRENGTH_SCAN_PARAMETERS, "sector_id": "semiconductors"}
-    old = "2026-07-02T20:00:00+00:00"
+    old = (datetime.fromisoformat(DATA_THROUGH) - timedelta(days=60)).date().isoformat()
     old_row = _row("NVDA", 91.0, 12.5, old, "semiconductors", "半导体")
     strength._write_strength_snapshot(
         strength._strength_snapshot_path(variant_params, base_path=SNAPSHOT),
         base_path=SNAPSHOT,
         parameters=variant_params,
         payload={
-            "as_of": "2026-07-02T15:01:00+00:00",
+            "as_of": f"{old}T20:00:00+00:00",
+            "score_version": scanner.STRENGTH_SCORE_VERSION,
             "score_data_through": old,
             "params": {key: value for key, value in variant_params.items() if key != "include_options"},
             "count": 1,
             "rows": [old_row],
             "results": [old_row],
             "universe_count": 3,
-            "screened_count": 1,
+            "screened_count": 3,
             "data_sources": {"prices": {"status": "active", "provider": "legacy-snapshot"}},
         },
         saved_at=NOW - 30,
     )
 
 
-_install_provider_boundary()
-_seed_snapshots()
+async def _stop_worker() -> None:
+    if SUPERVISOR is not None and WORKER_RUN is not None:
+        SUPERVISOR.request_stop()
+        await WORKER_RUN
 
-app = FastAPI()
+
+async def _reset(*, provider_delay: float = 0.25, provider_failure: bool = False,
+                 software_fresh: bool = False) -> None:
+    global REPOSITORY, SUPERVISOR, WORKER_RUN, SNAPSHOT, NOW
+    global POST_COUNT, SCAN_COUNT, PROVIDER_DELAY, PROVIDER_FAILURE
+    await _stop_worker()
+    scenario = Path(tempfile.mkdtemp(prefix="scenario-", dir=DATA_DIR))
+    os.environ["DATA_DIR"] = str(scenario)
+    SNAPSHOT = scenario / "strength-snapshot-v1.json"
+    NOW = time.time()
+    POST_COUNT = SCAN_COUNT = 0
+    PROVIDER_DELAY = provider_delay
+    PROVIDER_FAILURE = provider_failure
+    _install_provider_boundary()
+    _seed_snapshots()
+    if software_fresh:
+        parameters = {**strength.DEFAULT_STRENGTH_SCAN_PARAMETERS, "sector_id": "software"}
+        row = _row("MSFT", 85.0, 95.0, DATA_THROUGH, "software", "软件")
+        strength._write_strength_snapshot(
+            strength._strength_snapshot_path(parameters, base_path=SNAPSHOT),
+            base_path=SNAPSHOT, parameters=parameters, saved_at=NOW - 60,
+            payload={"as_of": datetime.now(timezone.utc).isoformat(),
+                     "score_version": scanner.STRENGTH_SCORE_VERSION,
+                     "score_data_through": DATA_THROUGH, "count": 1,
+                     "rows": [row], "results": [row], "universe_count": 3,
+                     "screened_count": 3,
+                     "params": {k: v for k, v in parameters.items() if k != "include_options"},
+                     "data_sources": {"prices": {"status": "active", "provider": "synthetic-fixture"}}},
+        )
+    REPOSITORY = WorkerStateRepository(scenario / "worker.db")
+    SUPERVISOR = WorkerSupervisor(
+        REPOSITORY,
+        [TaskSpec("strength_refresh", StrengthRefreshTask(snapshot_path=SNAPSHOT),
+                  interval_seconds=86_400, timeout_seconds=30, manual_only=True)],
+        owner_id="screener-browser-fixture", shutdown_grace_seconds=5,
+    )
+    WORKER_RUN = asyncio.create_task(SUPERVISOR.run_forever())
+    for _ in range(200):
+        if WORKER_RUN.done():
+            await WORKER_RUN
+            raise RuntimeError("fixture_worker_stopped")
+        try:
+            health = await asyncio.to_thread(REPOSITORY.health)
+            if health.get("healthy") and health.get("tasks"):
+                return
+        except (OSError, RuntimeError):
+            pass
+        await asyncio.sleep(0.01)
+    raise RuntimeError("fixture_worker_start_timeout")
+
+
+@asynccontextmanager
+async def lifespan(app):
+    await _reset()
+    try:
+        yield
+    finally:
+        await _stop_worker()
+
+
+app = FastAPI(lifespan=lifespan)
+
+
+@app.middleware("http")
+async def fixture_owner(request: Request, call_next):
+    global POST_COUNT
+    if request.method == "POST" and request.url.path == "/api/worker/actions/strength_refresh":
+        POST_COUNT += 1
+    with request_owner_access_context(True):
+        return await call_next(request)
 
 
 @app.get("/health")
@@ -193,21 +287,34 @@ def health() -> PlainTextResponse:
     return PlainTextResponse("ok")
 
 
+@app.post("/debug/reset")
+async def reset(request: Request) -> dict:
+    options = await request.json()
+    await _reset(
+        provider_delay=float(options.get("provider_delay", 0.25)),
+        provider_failure=bool(options.get("provider_failure", False)),
+        software_fresh=bool(options.get("software_fresh", False)),
+    )
+    return {"status": "ready", "score_data_through": DATA_THROUGH}
+
+
 @app.get("/debug/screener-stats")
 def screener_stats() -> dict:
+    actions = REPOSITORY.action_requests(limit=100)
     return {
         "post_count": POST_COUNT,
         "scan_count": SCAN_COUNT,
-        "unique_request_ids": sorted({action["request_id"] for action in ACTIONS.values()}),
+        "score_data_through": DATA_THROUGH,
+        "snapshot_hashes": {
+            path.name: hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in SNAPSHOT.parent.glob("strength-snapshot-v1*.json")
+        },
         "actions": [
-            {
-                "request_id": action["request_id"],
-                "status": action["status"],
-                "reused": action.get("reused"),
-                "parameters_hash": (action.get("details") or {}).get("parameters_hash"),
-                "sector_id": ((action.get("details") or {}).get("parameters") or {}).get("sector_id"),
-            }
-            for action in ACTIONS.values()
+            {"request_id": item["request_id"], "status": item["status"],
+             "parameters_hash": item["details"].get("parameters_hash"),
+             "sector_id": item["details"].get("parameters", {}).get("sector_id"),
+             "result": item["details"].get("result")}
+            for item in actions
         ],
     }
 
@@ -251,71 +358,7 @@ def runtime_settings() -> dict:
     return {"version": 1, "settings": {"ai": {"manual_analysis_enabled": False}}}
 
 
-@app.get("/api/worker/status")
-def worker_status() -> dict:
-    return {"healthy": True, "status": "idle", "tasks": [{"name": "strength_refresh", "enabled": True}]}
-
-
-@app.get("/api/worker/actions/{request_id}")
-def worker_action_status(request_id: str) -> dict:
-    action = ACTIONS.get(request_id)
-    if action is None:
-        return JSONResponse({"detail": {"code": "action_not_found"}}, status_code=404)
-    return action
-
-
-@app.post("/api/worker/actions/strength_refresh")
-async def strength_refresh(request: Request) -> JSONResponse:
-    global POST_COUNT, SCAN_COUNT
-    POST_COUNT += 1
-    body = await request.json()
-    raw = body.get("parameters") or dict(strength.DEFAULT_STRENGTH_SCAN_PARAMETERS)
-    parameters = strength.normalize_strength_scan_parameters(raw)
-    parameters_hash = strength.strength_scan_parameters_hash(parameters)
-    existing = ACTIONS_BY_HASH.get(parameters_hash)
-    if existing and existing.get("status") in {"queued", "running", "accepted", "started", "completed"}:
-        reused = dict(existing)
-        reused["reused"] = True
-        reused["reason"] = "already_active" if existing.get("status") != "completed" else "idempotent"
-        return JSONResponse(reused, status_code=200)
-
-    request_id = f"act_{uuid.uuid4().hex}"
-    action = {
-        "request_id": request_id,
-        "action_type": "strength_refresh",
-        "status": "queued",
-        "error_code": None,
-        "details": {"parameters": parameters, "parameters_hash": parameters_hash},
-        "reused": False,
-        "reason": "queued",
-        "completed_at": None,
-        "requested_at": datetime.now(timezone.utc).isoformat(),
-    }
-    ACTIONS[request_id] = action
-    ACTIONS_BY_HASH[parameters_hash] = action
-
-    async def run() -> None:
-        global SCAN_COUNT
-        action["status"] = "running"
-        SCAN_COUNT += 1
-        try:
-            result = await StrengthRefreshTask(snapshot_path=SNAPSHOT).run_for_actions(
-                [{"details": {"parameters": parameters, "parameters_hash": parameters_hash}}]
-            )
-            details = dict(result.details)
-            details.setdefault("parameters", parameters)
-            details.setdefault("parameters_hash", parameters_hash)
-            action["status"] = "completed" if result.status == "idle" else "failed"
-            action["error_code"] = result.error_code
-            action["details"] = details
-            action["completed_at"] = details.get("completed_at")
-        except Exception as exc:  # pragma: no cover - fixture safety net
-            action["status"] = "failed"
-            action["error_code"] = "strength_refresh_failed"
-            action["details"] = {**action["details"], "error": str(exc)}
-
-    asyncio.create_task(run())
-    return JSONResponse(action, status_code=202)
+app.include_router(worker_actions.router)
 
 
 @app.api_route("/api/{rest:path}", methods=["GET", "POST", "PUT", "DELETE"])

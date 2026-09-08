@@ -18,6 +18,7 @@ import {
   workerWaitHasTimedOut,
   strengthParametersMatch,
   strengthScanPath,
+  strengthPublicationMatches,
   visibleScanDate,
   workerActionPhase,
   writePendingStrengthTask,
@@ -79,14 +80,16 @@ test('scan display times do not use the click clock as the scan clock', () => {
   assert.equal(visibleScanDate('2026-08-01'), '2026-08-01');
 });
 
-test('date-only clocks are not UTC midnight', () => {
-  const clock = parseScanClock('2026-07-02');
-  assert.ok(clock);
-  const date = new Date(clock);
-  assert.equal(date.getUTCFullYear(), 2026);
-  assert.equal(date.getUTCMonth() + 1, 7);
-  assert.equal(date.getUTCDate(), 2);
-  assert.equal(date.getUTCHours(), 20);
+test('date-only labels do not fabricate a scan completion clock or shift in Asia', () => {
+  assert.equal(parseScanClock('2026-07-02'), null);
+  const previous = process.env.TZ;
+  try {
+    process.env.TZ = 'Asia/Tokyo';
+    assert.equal(visibleScanDate('2026-07-02'), '2026-07-02');
+  } finally {
+    if (previous === undefined) delete process.env.TZ;
+    else process.env.TZ = previous;
+  }
 });
 
 test('unknown fallback time prefers a timestamped quote without inventing a fallback clock', () => {
@@ -109,7 +112,7 @@ test('unknown fallback time prefers a timestamped quote without inventing a fall
   assert.equal(fallbackQuoteLabel('2026-08-01'), '扫描价 · 日线');
   assert.equal(displayedQuoteLabel(quote, {
     enabled: true, configured: true, public_enabled: true, connected: true, connection_status: 'connected',
-  }, false, '2026-08-01'), '扫描价 · 日线');
+  }, false, '2026-08-01', 'scan'), '扫描价 · 日线');
 });
 
 test('equal trade and fallback times keep the quote, not the scan-price label', () => {
@@ -132,7 +135,7 @@ test('equal trade and fallback times keep the quote, not the scan-price label', 
   assert.equal(preferLiveQuote(quote, true, '2026-09-04T15:00:00Z'), true);
   assert.equal(displayedQuoteLabel(quote, status, true, '2026-09-04T15:00:00Z'), '定时更新');
   assert.equal(preferLiveQuote(quote, true, '2026-09-04'), false, 'intraday must not beat the complete daily session');
-  assert.equal(preferLiveQuote({ ...quote, trade_at: '2026-09-04T20:00:00.000Z' }, true, '2026-09-04'), true);
+  assert.equal(preferLiveQuote({ ...quote, trade_at: '2026-09-04T20:00:00.000Z' }, true, '2026-09-04'), false);
 });
 
 test('worker action mapping keeps reuse and phase, and pending tasks are recovered', () => {
@@ -155,7 +158,7 @@ test('worker action mapping keeps reuse and phase, and pending tasks are recover
     min_avg_dollar_volume: 10_000_000,
     include_options: true,
   };
-  writePendingStrengthTask({ requestId: 'req-1', parameters, storedAt: 1 });
+  writePendingStrengthTask({ requestId: 'req-1', parameters, storedAt: Date.now() });
   const pending = readPendingStrengthTask();
   assert.equal(pending.requestId, 'req-1');
   assert.equal(strengthParametersMatch(pending.parameters, parameters), true);
@@ -246,7 +249,7 @@ test('A09 pending task is recovered instead of blindly posting again', () => {
     universe: 'themes', timeframe: 'all', profile: 'balanced', top: 20,
     sector_id: 'semiconductors', min_price: 5, min_avg_dollar_volume: 10_000_000, include_options: true,
   };
-  writePendingStrengthTask({ requestId: 'accepted-1', parameters, storedAt: 10 });
+  writePendingStrengthTask({ requestId: 'accepted-1', parameters, storedAt: Date.now() });
   const pending = readPendingStrengthTask();
   assert.equal(pending.requestId, 'accepted-1');
   assert.equal(strengthParametersMatch(pending.parameters, parameters), true);
@@ -287,7 +290,7 @@ test('production screener click path still uses the live worker for stale 200s',
   assert.match(table, /fallbackAt=\{r\.priceAsOf \?\? r\.dailyDataThrough\}/);
   const quote = await readFile(path.join(src, 'components', 'shared', 'LiveQuote.tsx'), 'utf8');
   assert.match(quote, /if \(!quote && !usingFallback\) return null/);
-  assert.match(quote, /fallbackQuoteLabel\(fallbackAt\)/);
+  assert.match(quote, /fallbackQuoteLabel\(fallbackAt, fallbackKind\)/);
   assert.match(page, /shouldDiscoverPublishedScan/);
   assert.match(page, /shouldCommitScanGeneration/);
   assert.match(page, /shouldLockScanTrigger/);
@@ -298,4 +301,53 @@ test('production screener click path still uses the live worker for stale 200s',
   assert.match(runtime, /workerWaitDecision/);
   assert.match(runtime, /workerWaitHasTimedOut/);
   assert.match(runtime, /worker_action_timeout/);
+});
+
+
+test('disabled session storage never breaks task submission or completion', () => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'sessionStorage');
+  Object.defineProperty(globalThis, 'sessionStorage', { configurable: true, get: () => { throw new Error('Storage disabled'); } });
+  try {
+    assert.equal(readPendingStrengthTask(), null);
+    assert.doesNotThrow(() => writePendingStrengthTask({ requestId: 'task', parameters: {}, storedAt: Date.now() }));
+    assert.doesNotThrow(() => clearPendingStrengthTask());
+  } finally {
+    if (original) Object.defineProperty(globalThis, 'sessionStorage', original);
+    else delete globalThis.sessionStorage;
+  }
+});
+
+test('pending task recovery is bounded, identity scoped, and cleared by request id', () => {
+  const memory = new Map();
+  const original = globalThis.sessionStorage;
+  globalThis.sessionStorage = {
+    getItem: (key) => memory.get(key) ?? null,
+    setItem: (key, value) => memory.set(key, value),
+    removeItem: (key) => memory.delete(key),
+  };
+  try {
+    const task = { requestId: 'current', parameters: {}, storedAt: Date.now(), principal: 'owner:' };
+    writePendingStrengthTask(task);
+    assert.equal(readPendingStrengthTask('visitor:'), null);
+    assert.equal(readPendingStrengthTask('owner:').requestId, 'current');
+    clearPendingStrengthTask('old');
+    assert.equal(readPendingStrengthTask().requestId, 'current');
+    clearPendingStrengthTask('current');
+    assert.equal(readPendingStrengthTask(), null);
+    writePendingStrengthTask({ ...task, storedAt: Date.now() - 86400001 });
+    assert.equal(readPendingStrengthTask('owner:'), null);
+  } finally {
+    globalThis.sessionStorage = original;
+  }
+});
+
+test('publication verification uses real nested worker results and rejects stale or mismatched versions', () => {
+  const snapshot = { snapshotSavedAt: '2026-09-04T21:00:00Z', scoreVersion: 'v2', stale: false, sourceStatus: 'active' };
+  const task = { details: { result: { completed_at: snapshot.snapshotSavedAt, score_version: 'v2' } } };
+  assert.equal(strengthPublicationMatches(snapshot, task), true);
+  assert.equal(strengthPublicationMatches({ ...snapshot, scoreVersion: 'v1' }, task), false);
+  assert.equal(strengthPublicationMatches({ ...snapshot, stale: true }, task), false);
+  assert.equal(strengthPublicationMatches({ ...snapshot, sourceStatus: 'unknown' }, task), false);
+  assert.equal(strengthPublicationMatches({ ...snapshot, snapshotSavedAt: '2026-09-03T21:00:00Z' }, task), false);
+  assert.equal(strengthPublicationMatches({ ...snapshot, snapshotSavedAt: '2026-09-05T21:00:00Z', scoreVersion: 'v3' }, task), true);
 });

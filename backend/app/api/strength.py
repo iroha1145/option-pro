@@ -22,12 +22,12 @@ from app.services.sectors import SECTORS
 from app.services.snapshot_read_cache import FingerprintedFileCache
 from app.services.strength.freshness import (
     evaluate_strength_snapshot_freshness,
-    extract_score_data_through,
     should_replace_published_snapshot,
     strength_payload_is_publishable,
 )
 from app.services.strength.scanner import (
     PROFILES,
+    STRENGTH_SCORE_VERSION,
     TIMEFRAMES,
     UNIVERSES,
     market_strength,
@@ -231,14 +231,29 @@ def list_recent_strength_variant_parameters(
                 not variant_name.fullmatch(candidate.name)
                 or candidate.is_symlink()
                 or not candidate.is_file()
+                or candidate.stat().st_size > _STRENGTH_SNAPSHOT_MAX_BYTES
             ):
                 continue
-            document = json.loads(candidate.read_bytes().decode("utf-8"))
+            # Bound the read itself as well as stat(): an atomic replacement
+            # between those operations must not bypass the snapshot limit.
+            with candidate.open("rb") as handle:
+                raw = handle.read(_STRENGTH_SNAPSHOT_MAX_BYTES + 1)
+            if len(raw) > _STRENGTH_SNAPSHOT_MAX_BYTES:
+                continue
+            document = json.loads(raw.decode("utf-8"))
+            if not isinstance(document, dict):
+                continue
             parameters = normalize_strength_scan_parameters(document.get("parameters"))
             if _parameters_match(parameters, DEFAULT_STRENGTH_SCAN_PARAMETERS, exact=True):
                 continue
+            if _strength_snapshot_path(parameters, base_path=base) != candidate:
+                continue
+            if _parse_strength_snapshot_document(
+                raw, parameters=parameters, now=time.time(),
+            ) is None:
+                continue
             ranked.append((candidate.stat().st_mtime_ns, parameters))
-        except (OSError, UnicodeError, ValueError, TypeError, json.JSONDecodeError):
+        except (OSError, UnicodeError, ValueError, TypeError, RecursionError):
             continue
     ranked.sort(key=lambda item: item[0], reverse=True)
     unique: list[dict[str, Any]] = []
@@ -478,6 +493,7 @@ def _read_strength_snapshot(
         now=now,
         ttl_seconds=_STRENGTH_SNAPSHOT_TTL_SECONDS,
         scoring_version=scoring_version,
+        expected_scoring_version=STRENGTH_SCORE_VERSION,
     )
     return {
         "saved_at": saved_at,
@@ -637,9 +653,6 @@ async def _scan_snapshot_payload(
     source_status = str(snapshot.get("source_status") or ("stale" if stale else "active"))
     stale_reason = snapshot.get("stale_reason")
     score_data_through = snapshot.get("score_data_through")
-    if not isinstance(score_data_through, str) or not score_data_through.strip():
-        extracted = extract_score_data_through(payload)
-        score_data_through = extracted.isoformat() if extracted is not None else None
     payload.update(
         {
             "_cached": True,
@@ -661,8 +674,9 @@ async def _scan_snapshot_payload(
             ).isoformat(),
         }
     )
-    if score_data_through:
-        payload["score_data_through"] = score_data_through
+    # Use only the policy-validated timestamp, including None for a rejected
+    # future clock. The original payload must not restore unverified input.
+    payload["score_data_through"] = score_data_through
     if snapshot.get("expected_session"):
         payload["expected_complete_session"] = snapshot["expected_session"]
     if snapshot.get("unknown_input_time"):

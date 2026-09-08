@@ -14,8 +14,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { strengthApi, type StrengthScanEnvelope } from '@/api/modules/strength';
 import { catalystsApi } from '@/api/modules/catalysts';
 import { signalsApi } from '@/api/modules/signals';
-import { runtimeApi } from '@/api/modules/runtime';
-import { resetMarketReadPaths } from '@/api/marketRead';
+import { runtimeApi, type WorkerAction } from '@/api/modules/runtime';
+import { getMarketReadGeneration, resetMarketReadPaths } from '@/api/marketRead';
 import { ApiError, isMock } from '@/api/client';
 import type { ScreenerRow, SectorOption, StrengthProfile } from '@/api/types';
 import { usePolling } from '@/hooks/usePolling';
@@ -45,6 +45,7 @@ import { MethodCard, TierHistogram } from '@/components/screener/SideCards';
 import { buildStrengthScanRequest } from '@/components/screener/scanRequest';
 import {
   clearPendingStrengthTask,
+  expireStrengthSnapshot,
   readPendingStrengthTask,
   scanDisplayTimes,
   refreshActionMatchesRequest,
@@ -53,6 +54,8 @@ import {
   shouldLockScanTrigger,
   shouldSubmitStrengthRefresh,
   strengthParametersMatch,
+  strengthPublicationMatches,
+  workerWaitDecision,
   strengthScanPath,
   visibleScanDate,
   workerActionPhase,
@@ -105,7 +108,8 @@ function filtersEqual(a: ScanFilters, b: ScanFilters): boolean {
 }
 
 export default function Screener() {
-  const { isOwner } = useAccess();
+  const { isOwner, username } = useAccess();
+  const principal = `${isOwner ? 'owner' : 'visitor'}:${username ?? ''}`;
   const { openTicker } = useShell();
   const toast = useToast();
 
@@ -180,6 +184,13 @@ export default function Screener() {
   const signalsRef = useRef<Record<string, RowSignalsState>>({});
   const scanSeq = useRef(0);
 
+  useEffect(() => {
+    // Identity changes and unmounting revoke all older UI/worker continuations.
+    // A changed principal cannot keep an abandoned task's loading state.
+    setScanState((current) => current === 'scanning' ? 'idle' : current);
+    return () => { scanSeq.current += 1; };
+  }, [principal]);
+
   const dirty = scanState === 'done' && !filtersEqual(draft, applied);
   const scanTriggerLocked = shouldLockScanTrigger({
     scanning: scanState === 'scanning',
@@ -192,9 +203,16 @@ export default function Screener() {
     options: { forceRefresh?: boolean } = {},
   ) => {
     const seq = ++scanSeq.current;
+    const identityGeneration = getMarketReadGeneration();
+    const isCurrent = () => shouldCommitScanGeneration(seq, scanSeq.current)
+      && identityGeneration === getMarketReadGeneration();
+    const requireCurrent = () => {
+      if (!isCurrent()) throw new DOMException('Scan superseded', 'AbortError');
+    };
     setInFlightFilters(filters);
     setScanState('scanning');
     setScanError(null);
+    setScanPhase('reading');
     const startedAt = Date.now();
     // 仅演示数据保留可见扫描过程；真实接口完成后立即呈现结果。
     const minMs = isMock ? 800 + Math.random() * 700 : 0;
@@ -202,11 +220,30 @@ export default function Screener() {
       const { apiParams: params, refreshParameters: requested } = buildStrengthScanRequest(filters);
 
       const scanPath = strengthScanPath(params);
+      let completedAction: WorkerAction | null = null;
       const refreshSnapshot = async () => {
-        const pending = readPendingStrengthTask();
-        const action = pending && strengthParametersMatch(pending.parameters, requested)
-          ? await runtimeApi.workerActionStatus(pending.requestId)
-          : await runtimeApi.workerAction('strength_refresh', requested);
+        requireCurrent();
+        const pending = readPendingStrengthTask(principal);
+        let action: WorkerAction | null = null;
+        if (pending && strengthParametersMatch(pending.parameters, requested)) {
+          try {
+            action = await runtimeApi.workerActionStatus(pending.requestId);
+            requireCurrent();
+            if (workerWaitDecision(action.status) === 'failed') {
+              clearPendingStrengthTask(pending.requestId);
+              action = null;
+            }
+          } catch (error) {
+            requireCurrent();
+            if (!(error instanceof ApiError) || error.code !== 404) throw error;
+            clearPendingStrengthTask(pending.requestId);
+          }
+        }
+        if (!action) {
+          requireCurrent();
+          action = await runtimeApi.workerAction('strength_refresh', requested);
+          requireCurrent();
+        }
         if (!refreshActionMatchesRequest(action, requested)) {
           throw new ApiError(409, __t('另一组筛选条件正在扫描或冷却，请稍后重试'), {
             bizCode: 'strength_parameters_busy',
@@ -214,28 +251,57 @@ export default function Screener() {
           });
         }
         if (!action.requestId) throw new ApiError(502, __t('扫描任务未能启动'));
-        writePendingStrengthTask({
-          requestId: action.requestId,
-          parameters: requested,
-          storedAt: Date.now(),
-        });
-        setScanPhase(workerActionPhase(action));
+        const requestId = action.requestId;
+        writePendingStrengthTask({ requestId, parameters: requested, storedAt: Date.now(), principal });
+        const onProgress = (progress: WorkerAction) => {
+          requireCurrent();
+          setScanPhase(workerActionPhase(progress));
+          if (workerWaitDecision(progress.status) === 'failed') clearPendingStrengthTask(requestId);
+        };
+        onProgress(action);
         if (action.status !== 'completed') {
-          const finished = await runtimeApi.waitForWorkerAction(action.requestId);
-          if (!refreshActionMatchesRequest(finished, requested)) {
+          action = await runtimeApi.waitForWorkerAction(requestId, undefined, {
+            shouldContinue: isCurrent, onProgress,
+          });
+          requireCurrent();
+          if (!refreshActionMatchesRequest(action, requested)) {
+            clearPendingStrengthTask(requestId);
             throw new ApiError(409, __t('另一组筛选条件正在扫描或冷却，请稍后重试'), {
-              bizCode: 'strength_parameters_busy',
-              payload: finished,
+              bizCode: 'strength_parameters_busy', payload: action,
             });
           }
-          setScanPhase(workerActionPhase(finished));
         }
+        completedAction = action;
         setScanPhase('verifying');
         resetMarketReadPaths([scanPath]);
-        clearPendingStrengthTask();
+      };
+      const readSnapshot = async (force: boolean): Promise<StrengthScanEnvelope> => {
+        // A task can finish just before its publication becomes visible on a
+        // read replica. Retry that read only, without submitting another task.
+        for (let attempt = 0; ; attempt += 1) {
+          requireCurrent();
+          try {
+            const snapshot = expireStrengthSnapshot(await strengthApi.scanEnvelope(params, force));
+            requireCurrent();
+            if (!completedAction || strengthPublicationMatches(snapshot, completedAction)) return snapshot;
+            throw new ApiError(409, __t('数据未刷新'), { bizCode: 'strength_publication_unverified' });
+          } catch (error) {
+            requireCurrent();
+            const notPublished = error instanceof ApiError && (
+              error.bizCode === 'strength_publication_unverified'
+              || error.bizCode === 'strength_snapshot_unavailable'
+            );
+            if (!completedAction || !notPublished) throw error;
+            if (attempt >= 2) {
+              clearPendingStrengthTask(completedAction.requestId);
+              throw error;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 500));
+          }
+        }
       };
 
-      let submittedRefresh = Boolean(options.forceRefresh);
+      let submittedRefresh = false;
       if (shouldSubmitStrengthRefresh({
         isOwner,
         isMock,
@@ -248,8 +314,7 @@ export default function Screener() {
       }
       let result: StrengthScanEnvelope;
       try {
-        setScanPhase((current) => current ?? 'reading');
-        result = await strengthApi.scanEnvelope(params, submittedRefresh);
+        result = await readSnapshot(submittedRefresh);
       } catch (error) {
         const snapshotMissing =
           error instanceof ApiError
@@ -262,10 +327,10 @@ export default function Screener() {
           snapshotMissing,
           snapshotStale: false,
         });
-        if (!decision.submit || !snapshotMissing) throw error;
+        if (submittedRefresh || !decision.submit || !snapshotMissing) throw error;
         await refreshSnapshot();
         submittedRefresh = true;
-        result = await strengthApi.scanEnvelope(params, true);
+        result = await readSnapshot(true);
       }
       const followUp = shouldSubmitStrengthRefresh({
         isOwner,
@@ -278,11 +343,12 @@ export default function Screener() {
       if (followUp.submit && !submittedRefresh) {
         await refreshSnapshot();
         submittedRefresh = true;
-        result = await strengthApi.scanEnvelope(params, true);
+        result = await readSnapshot(true);
       }
       const elapsed = Date.now() - startedAt;
       if (elapsed < minMs) await new Promise((r) => setTimeout(r, minMs - elapsed));
-      if (!shouldCommitScanGeneration(seq, scanSeq.current)) return;
+      if (!isCurrent()) return;
+      if (completedAction) clearPendingStrengthTask((completedAction as WorkerAction).requestId);
       const durationMs = Date.now() - startedAt;
       const checkedAt = Date.now();
       const times = scanDisplayTimes({
@@ -327,57 +393,67 @@ export default function Screener() {
       setHistory((h) => [{ at: times.scanCompletedAt ?? checkedAt, count: result.rows.length, durationMs, summary: summarizeFilters(filters) }, ...h].slice(0, 5));
       return true;
     } catch (e) {
-      if (!shouldCommitScanGeneration(seq, scanSeq.current)) return;
+      if (!isCurrent()) return;
       setScanError(e instanceof ApiError ? e : new ApiError(500, e instanceof Error ? e.message : __t('扫描失败')));
       setScanState('error');
       setScanPhase('failed');
       return false;
     }
-  }, [isOwner]);
+  }, [isOwner, principal]);
 
   useEffect(() => {
     if (scanState !== 'done' || isMock) return;
     const { apiParams: params } = buildStrengthScanRequest(applied);
+    const seq = scanSeq.current;
+    const identityGeneration = getMarketReadGeneration();
+    let disposed = false;
+    let pending = false;
+    const isCurrent = () => !disposed && shouldCommitScanGeneration(seq, scanSeq.current)
+      && identityGeneration === getMarketReadGeneration();
     const tick = async () => {
-      if (!shouldDiscoverPublishedScan({ scanState: 'done', visibilityState: document.visibilityState, isMock })) return;
+      if (!isCurrent() || pending || !shouldDiscoverPublishedScan({ scanState: 'done', visibilityState: document.visibilityState, isMock })) return;
+      pending = true;
+      setScanMeta((current) => current ? expireStrengthSnapshot(current) : current);
       try {
-        const latest = await strengthApi.scanEnvelope(params);
-        if (scanSeq.current === 0) return;
-        setScanMeta((current) => {
-          if (!current) return latest;
-          if (
-            current.snapshotSavedAt === latest.snapshotSavedAt
-            && current.stale === latest.stale
-            && current.sourceStatus === latest.sourceStatus
-          ) {
-            return current;
-          }
-          setRows(latest.rows);
-          setQueryCheckedAt(Date.now());
-          const times = scanDisplayTimes({
-            queryCheckedAt: Date.now(),
-            snapshotSavedAt: latest.snapshotSavedAt,
-            scanCompletedAt: latest.scanCompletedAt,
-            scoreDataThrough: latest.scoreDataThrough,
-            stale: latest.stale,
-            submittedRefresh: false,
-          });
-          setLastScanAt(times.scanCompletedAt);
-          setReusedExisting(times.reusedExisting);
-          return latest;
+        const latest = expireStrengthSnapshot(await strengthApi.scanEnvelope(params));
+        if (!isCurrent()) return;
+        setScanMeta(latest);
+        setRows(latest.rows);
+        const times = scanDisplayTimes({
+          queryCheckedAt: Date.now(),
+          snapshotSavedAt: latest.snapshotSavedAt,
+          scanCompletedAt: latest.scanCompletedAt,
+          scoreDataThrough: latest.scoreDataThrough,
+          stale: latest.stale,
+          submittedRefresh: false,
         });
+        setQueryCheckedAt(times.queryCheckedAt);
+        setLastScanAt(times.scanCompletedAt);
+        setReusedExisting(times.reusedExisting);
       } catch {
-        // Discovery reads stay silent; the next visible tick retries.
+        if (!isCurrent()) return;
+        // Keep the last rows and successful clocks, but do not claim that an
+        // offline page has just verified their freshness.
+        setScanMeta((current) => current ? {
+          ...current,
+          stale: true,
+          sourceStatus: current.sourceStatus === 'historical' ? 'historical' : 'unknown',
+          staleReason: 'snapshot_read_failed',
+        } : current);
+        setReusedExisting(false);
+      } finally {
+        pending = false;
       }
     };
     const timer = window.setInterval(() => { void tick(); }, 45_000);
     const onVisible = () => { if (document.visibilityState === 'visible') void tick(); };
     document.addEventListener('visibilitychange', onVisible);
     return () => {
+      disposed = true;
       window.clearInterval(timer);
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [applied, scanState]);
+  }, [applied, scanState, principal]);
 
   /* 成交额直接使用后端 avg_dollar_volume_20d，不再逐股请求并用当日成交额冒充。 */
 
@@ -567,6 +643,7 @@ export default function Screener() {
     setRefreshingStrength(true);
     try {
       const ok = await runScan(applied, { forceRefresh: true });
+      if (ok === undefined) return;
       if (!ok) {
         toast.error(__t('刷新失败'), __t('扫描未完成，请查看结果区的错误提示'));
         return;

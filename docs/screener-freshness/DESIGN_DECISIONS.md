@@ -25,7 +25,8 @@
 - 落后超过 7 个交易日 → `historical` / `score_data_too_old`。
 - 无 `score_data_through`：不填 `Date.now()`；TTL 内 `_stale=false` 且 `source_status=unknown`。
 - 文件今天写入不能掩盖旧日线。
-- 全部供应商失败或整池 `data_error`：不可发布，保留上一份快照（`kept_previous_snapshot`）。
+- 全部供应商失败或整池 `data_error` / `insufficient_history`：不可发布，保留上一份快照（`kept_previous_snapshot`）。
+- 汇总日期反映评分池中最早的输入，读取时也核查各行日期；旧或缺失评分版本不能标为当前结果。
 - 迟到写入的 `saved_at` 更旧时 `kept_newer_publish`。
 - 合法休市且输入覆盖期望交易日：可以 `active`，价格/分数不变是合法结果。
 
@@ -40,7 +41,8 @@
 - 可见页 45s 只读轮询发现新发布；`document.hidden` 时暂停。
 - 扫描中若草稿仍是当前在飞参数，主按钮保持锁定；改成另一组条件后解锁，新点击提升世代，迟到的 A 写回被丢弃。
 - `lastScanAt` = 快照完成时间；`queryCheckedAt` = 本轮确认时间。
-- 备用价标签为「扫描价」/「扫描价 · 日线」，不再写「定时更新」。
+- 选股备用价标签为「扫描价」/「扫描价 · 日线」；共享组件在其他页面显示「参考价」。
+- 报价只有交易日期时按纽约日期保守比较；有准确时刻则比较时刻，不固定推算为 20:00 UTC。
 - 涨跌幅只在同一路报价可用时使用；不把另一时点的涨跌幅粘到新价格上。
 
 ## 权限与不变项

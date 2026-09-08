@@ -1,5 +1,5 @@
 import { toQuery } from '../api/client.ts';
-import type { ScanParams } from '../api/modules/strength.ts';
+import type { ScanParams, StrengthScanEnvelope } from '../api/modules/strength.ts';
 import type { StrengthRefreshParameters, WorkerAction } from '../api/modules/runtime.ts';
 import { fallbackQuoteLabel } from './liveQuotes.ts';
 
@@ -68,11 +68,8 @@ export function parseScanClock(value: string | null | undefined): number | null 
   if (!value || typeof value !== 'string') return null;
   const trimmed = value.trim();
   if (!trimmed) return null;
-  const dateOnly = DATE_ONLY.exec(trimmed);
-  if (dateOnly) {
-    const parsed = Date.parse(`${dateOnly[1]}T20:00:00.000Z`);
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-  }
+  // A trading-day label does not identify a scan completion instant.
+  if (DATE_ONLY.test(trimmed)) return null;
   const parsed = Date.parse(trimmed);
   if (!Number.isFinite(parsed) || parsed <= 0) return null;
   if (parsed > Date.now() + 2 * 86_400_000) return null;
@@ -96,6 +93,14 @@ export function scanDisplayTimes(input: {
     scoreDataThrough: input.scoreDataThrough ?? null,
     reusedExisting: !input.submittedRefresh && !input.stale,
   };
+}
+
+/** An HTTP-cached body cannot remain fresh after its server-provided expiry. */
+export function expireStrengthSnapshot(snapshot: StrengthScanEnvelope, nowMs = Date.now()): StrengthScanEnvelope {
+  if (snapshot.stale || !snapshot.cacheExpiresAt) return snapshot;
+  const expiresAt = Date.parse(snapshot.cacheExpiresAt);
+  if (!Number.isFinite(expiresAt) || expiresAt > nowMs) return snapshot;
+  return { ...snapshot, stale: true, sourceStatus: 'stale', staleReason: 'worker_snapshot_expired' };
 }
 
 export function strengthParametersMatch(
@@ -146,10 +151,15 @@ export function workerWaitHasTimedOut(nowMs: number, deadlineMs: number): boolea
 }
 
 export function refreshActionMatchesRequest(
-  action: { details?: { parameters?: unknown } },
+  action: { details?: { parameters?: unknown; result?: unknown } },
   expected: StrengthRefreshParameters,
 ): boolean {
-  return strengthParametersMatch(action.details?.parameters, expected);
+  if (!strengthParametersMatch(action.details?.parameters, expected)) return false;
+  const result = action.details?.result;
+  if (result && typeof result === 'object' && 'parameters' in result) {
+    return strengthParametersMatch(result.parameters, expected);
+  }
+  return true;
 }
 
 export function workerActionPhase(action: Pick<WorkerAction, 'status'>): StrengthScanPhase {
@@ -162,6 +172,8 @@ export function workerActionPhase(action: Pick<WorkerAction, 'status'>): Strengt
 }
 
 export function visibleScanDate(value: string | null | undefined): string | null {
+  // Keep a trading-day label in its original calendar, including in Asia.
+  if (value && DATE_ONLY.test(value.trim())) return value.trim();
   const clock = parseScanClock(value);
   if (clock == null) {
     if (value && DATE_ONLY.test(value.trim())) return value.trim();
@@ -177,16 +189,19 @@ export interface PendingStrengthTask {
   requestId: string;
   parameters: StrengthRefreshParameters;
   storedAt: number;
+  principal?: string;
 }
 
-export function readPendingStrengthTask(): PendingStrengthTask | null {
-  if (typeof sessionStorage === 'undefined') return null;
+export function readPendingStrengthTask(principal?: string): PendingStrengthTask | null {
   try {
+    if (typeof sessionStorage === 'undefined') return null;
     const raw = sessionStorage.getItem(PENDING_STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as PendingStrengthTask;
     if (!parsed || typeof parsed.requestId !== 'string' || !parsed.requestId) return null;
     if (!parsed.parameters || typeof parsed.parameters !== 'object') return null;
+    if (principal !== undefined && parsed.principal !== principal) return null;
+    if (!Number.isFinite(parsed.storedAt) || Date.now() - parsed.storedAt > 86_400_000) return null;
     return parsed;
   } catch {
     return null;
@@ -194,11 +209,36 @@ export function readPendingStrengthTask(): PendingStrengthTask | null {
 }
 
 export function writePendingStrengthTask(task: PendingStrengthTask): void {
-  if (typeof sessionStorage === 'undefined') return;
-  sessionStorage.setItem(PENDING_STORAGE_KEY, JSON.stringify(task));
+  try {
+    if (typeof sessionStorage === 'undefined') return;
+    sessionStorage.setItem(PENDING_STORAGE_KEY, JSON.stringify(task));
+  } catch {
+    // Storage can be disabled or full; the accepted task is still valid.
+  }
 }
 
-export function clearPendingStrengthTask(): void {
-  if (typeof sessionStorage === 'undefined') return;
-  sessionStorage.removeItem(PENDING_STORAGE_KEY);
+export function clearPendingStrengthTask(requestId?: string): void {
+  try {
+    if (typeof sessionStorage === 'undefined') return;
+    if (requestId && readPendingStrengthTask()?.requestId !== requestId) return;
+    sessionStorage.removeItem(PENDING_STORAGE_KEY);
+  } catch {
+    // Failure to save recovery state must not turn a successful scan into an error.
+  }
+}
+
+/** A completed queue record alone is not proof that this publication is readable. */
+export function strengthPublicationMatches(
+  snapshot: Pick<StrengthScanEnvelope, 'snapshotSavedAt' | 'scoreVersion' | 'stale' | 'sourceStatus'>,
+  action: WorkerAction,
+): boolean {
+  const result = action.details.result;
+  if (!result || typeof result !== 'object') return false;
+  const published = result as Record<string, unknown>;
+  const completedAt = parseScanClock(typeof published.completed_at === 'string' ? published.completed_at : null);
+  const savedAt = parseScanClock(snapshot.snapshotSavedAt);
+  if (completedAt == null || savedAt == null || savedAt < completedAt) return false;
+  if (snapshot.stale || snapshot.sourceStatus !== 'active') return false;
+  if (savedAt > completedAt) return true; // A later valid publication may supersede this task.
+  return typeof published.score_version === 'string' && snapshot.scoreVersion === published.score_version;
 }
