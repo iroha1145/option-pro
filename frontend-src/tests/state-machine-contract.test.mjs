@@ -136,7 +136,7 @@ test('页头刷新覆盖顶部三块，而不只是标签内容', async () => {
   const page = codeOf(await source('pages/Catalysts.tsx'));
   assert.match(page, /<StatusHero refreshToken=\{refreshToken\} \/>/);
   assert.match(page, /<HotspotsStrip onOpenNews=\{setSelectedNewsId\} refreshToken=\{refreshToken\} \/>/);
-  assert.match(page, /<FocusCycleCard refreshToken=\{refreshToken\} \/>/);
+  assert.match(page, /<FocusCycleCard\b[^>]*\brefreshToken=\{refreshToken\}/);
   for (const file of [
     'components/catalysts/StatusHero.tsx',
     'components/catalysts/HotspotsStrip.tsx',
