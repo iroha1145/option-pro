@@ -184,7 +184,7 @@ export const SCREENER: Dict = {
   '命中': ['Matched', 'ヒット'],
   '耗时': ['Elapsed', '所要時間'],
   '股票池': ['Universe', 'ユニバース'],
-  '/ 已评分': ['/ scored', '／評価済み'],
+  '/ 条件通过': ['/ matched', '／条件一致'],
   '仅在强度前': ['Filtering to just the top', '強度上位'],
   '名内筛选': ['by strength', '位に絞り込み中'],
   '正在准备排序数据 · 剩余': ['Preparing sort data · remaining:', '並び替えデータを準備中 · 残り'],

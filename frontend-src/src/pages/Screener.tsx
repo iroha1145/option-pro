@@ -822,7 +822,7 @@ export default function Screener() {
                 )}
                 {scanMeta && (
                   <span className="font-mono text-micro text-ink-400 tnum">
-                    {__t('股票池')} {scanMeta.universeCount} {__t('/ 已评分')} {scanMeta.screenedCount}
+                    {__t('股票池')} {scanMeta.universeCount} {__t('/ 条件通过')} {scanMeta.screenedCount}
                   </span>
                 )}
                 {/* 客户端条件只作用在后端返回的强度前 N 名上（审计 P1-05）：
