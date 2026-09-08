@@ -326,7 +326,7 @@ test("password mode keeps public research readable and reserves owner controls f
   await expect(page.getByText("英伟达", { exact: true }).first()).toBeVisible();
   await expectVisitorShell(page);
   // Owner 专属「强制刷新」对访客禁用（Watchlist.tsx L88-107）
-  await expect(page.getByTitle("登录 Owner 后可强制刷新")).toBeDisabled();
+  await expect(page.getByTitle("管理员登录后可更新数据")).toBeDisabled();
   await screenshot(page, "password-visitor-watchlist");
 
   // 应用内导航到催化页（http 文档不再变化，走 BrowserRouter 客户端路由）
@@ -412,11 +412,11 @@ test("password mode keeps public research readable and reserves owner controls f
   // ── Owner 壳与 owner 专属控件 ─────────────────────────────────────────────
   await expectOwnerShell(page);
   // Owner 专属控件：Watchlist 页头的「强制刷新」。title 随身份切换
-  // （Owner「重新计算完整自选数据」/ 访客「登录 Owner 后可强制刷新」），
+  // （Owner「更新自选行情与评分」/ 访客「管理员登录后可更新数据」），
   // 因此这里同时断言按钮可用与 Owner 版提示，等于验证了那条身份边界。
   const forceRefresh = page.getByRole("button", { name: "强制刷新" });
   await expect(forceRefresh).toBeEnabled();
-  await expect(forceRefresh).toHaveAttribute("title", "重新计算完整自选数据");
+  await expect(forceRefresh).toHaveAttribute("title", "更新自选行情与评分");
   await screenshot(page, "password-owner-watchlist");
 
   await page.getByRole("link", { name: /催化/ }).click();
