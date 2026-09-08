@@ -181,6 +181,3 @@ export function useAiJob() {
 
   return { job, error, queryIssue, starting, start, cancel, resume, reset };
 }
-
-/** AI 输出纪律脚注：影响分非收益 · 置信度非胜率 */
-export const AI_DISCLAIMER = t('AI 输出仅供研究 · 影响分为方向性估计 · 非收益预测 · 置信度非胜率');

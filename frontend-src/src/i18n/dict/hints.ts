@@ -5,10 +5,7 @@
 import type { Dict } from './types';
 
 export const HINTS: Dict = {
-  '数据缺失的分项不会按中性 50 计入，而是移出权重重新归一，并压低置信度。': [
-    'Components with missing data are not scored as a neutral 50 — they are dropped from the weighting, the remaining weights are renormalized, and confidence is lowered.',
-    'データが欠けている項目は中立の50点としては扱わず、ウェイトから外して残りを再正規化し、信頼度を引き下げます。',
-  ],
+  "缺失项不计入评分，其余项重新分配权重；数据越少，置信度越低。": ["Missing components are excluded and the remaining weights are rescaled. Less data means lower confidence.", "欠測項目を除き、残りの項目で重みを調整します。データが少ないほど信頼度は下がります。"],
 
   '综合评分（0–100）': ['Composite score (0–100)', '総合スコア（0–100）'],
   '排序分 = 个股自身强度 78% + 市场契合 8% + 风格契合 14%。个股自身强度只用该股价格/量能与对 SPY 的相对表现，由六个族加权：中期 24% / 短期 16% / 趋势 16% / 长期 14% / 突破质量 15% / 价格行为 15%。': [
@@ -47,10 +44,7 @@ export const HINTS: Dict = {
   ],
 
   '置信度（0–100%）': ['Confidence (0–100%)', '信頼度（0–100%）'],
-  '不是另一种「好坏分」，而是数据覆盖率：配置权重中有多少被真实数据支撑。缺特征、缺历史都会直接压低它。': [
-    'This is not a second "good or bad" score — it is data coverage: how much of the configured weighting is backed by real data. Missing features or missing history lower it directly.',
-    'これは良し悪しを示す別のスコアではなく、データのカバレッジです。設定したウェイトのうち、どれだけが実データで裏付けられているかを表します。指標や履歴が欠けていれば、その分だけ直接下がります。',
-  ],
+  "表示评分所需数据的完整程度，按配置权重计算。指标或历史数据缺失时会降低。": ["Data completeness, measured against the configured scoring weights. Missing indicators or history lower this value.", "設定された採点の重みに対するデータの充足度です。指標や過去データが欠けると低下します。"],
 
   '市场环境分（0–100）': ['Market environment score (0–100)', '市場環境スコア（0–100）'],
   '六维加权：指数趋势 30% + 动量 20% + 宽度 20% + 量能 10% + 攻防价差 10% + 风险偏好 10%，再减去风险罚分×0.35。≥75 强风险偏好、≥60 温和偏强、≥40 中性震荡、<40 弱势高风险；核心数据缺失时不出正式分。': [
@@ -151,10 +145,7 @@ export const HINTS: Dict = {
     'Every indicator emits two independent evidence scores. The top score is how strongly that indicator supports "overheated / near a top"; the bottom score is how strongly it supports "oversold / near a bottom". The two are not mutually exclusive — a volume surge, for instance, is a signal at tops and bottoms alike, and very weak breadth flags risk while also hinting that a bottom is near.',
     '各指標は2つの証拠スコアを独立に出します。「天井スコア」はその指標が「過熱・天井圏」を支持する強さ、「底スコア」は「売られ過ぎ・底値圏」を支持する強さです。両者は排他ではありません。たとえば出来高の急増は天井でも底でもシグナルになり、市場の広がりが極端に弱い状態はリスクを示すと同時に底が近いことも示唆します。',
   ],
-  '证据分只反映单一指标的读数映射，不构成买卖建议。': [
-    "An evidence score only reflects how a single indicator's reading is mapped; it is not a buy or sell recommendation.",
-    '証拠スコアは単一指標の読み値をマッピングしたものにすぎず、売買の推奨ではありません。',
-  ],
+  "证据分由指标读数换算，表示信号强弱。": ["Evidence scores convert indicator readings into signal strength.", "指標の値をシグナルの強さに換算したスコアです。"],
 
   '热点分（0–100）': ['Hotspot score (0–100)', '注目度スコア（0–100）'],
   '事件组热度 = 时效 35%（发布每过 1 小时衰减 2 分）+ 来源广度 20%（30 + 18×来源数）+ 代码关联 15%（45 + 12×关联代码数）+ AI 市场相关性 30%。只加权有证据的分项，证据不足不补中性分。': [
@@ -163,14 +154,8 @@ export const HINTS: Dict = {
   ],
 
   '影响分（−5 ～ +5）': ['Impact score (−5 to +5)', 'インパクトスコア（−5 〜 +5）'],
-  'AI 分析对单只股票的方向×强度估计：模型输出 −100～+100，界面按 ÷20 显示为 ±5。正=利多、负=利空，绝对值代表预期影响幅度；它是模型判断，不是量价计算，更不是收益预测。': [
-    'The AI analysis’s estimate of direction × strength for a single stock. The model outputs −100 to +100; the interface divides by 20 and shows ±5. Positive is bullish, negative is bearish, and the absolute value is the expected size of the impact. This is a model judgment, not a price/volume calculation, and certainly not a return forecast.',
-    'AI 分析による個別銘柄の方向×強さの推定です。モデルの出力は −100〜+100 で、画面では20で割って ±5 で表示します。プラスは好材料、マイナスは悪材料で、絶対値は想定されるインパクトの大きさを表します。これはモデルの判断であり、価格・出来高の計算でも、リターンの予測でもありません。',
-  ],
-  'AI 模型对自身这次判断的把握程度（模型输出 0–100）。低置信度通常意味着新闻信息量不足或含糊，应降低参考权重。': [
-    'How confident the AI model is in this particular judgment (the model outputs 0–100). Low confidence usually means the news carried little or ambiguous information, so it deserves less weight.',
-    '今回の判断に対する AI モデル自身の確度です（モデル出力は0–100）。信頼度が低い場合、ニュースの情報量が乏しいか曖昧であることが多く、参考度合いを下げるべきです。',
-  ],
+  "模型判断新闻对个股的影响，显示为 −5～+5：正值偏利多，负值偏利空，绝对值越大，判断的影响越强。分数不表示股价涨跌幅。": ["The model rates a news item’s impact on a stock from −5 to +5. Positive is bullish, negative is bearish; a larger absolute value means a stronger assessed impact. The score is not a price-change percentage.", "ニュースが銘柄に与える影響をモデルが−5〜+5で評価します。プラスは好材料、マイナスは悪材料で、絶対値が大きいほど影響が強いという判断です。株価の騰落率を表すものではありません。"],
+  "模型对本次判断的把握程度，范围 0–100。信息较少或含糊时，置信度通常较低。": ["The model’s confidence in this assessment, from 0 to 100. Sparse or ambiguous information usually lowers confidence.", "今回の判断に対するモデルの確信度を0〜100で示します。情報が少ない場合や曖昧な場合は、通常低くなります。"],
 
   '净影响（−5 ～ +5）': ['Net impact (−5 to +5)', 'ネット・インパクト（−5 〜 +5）'],
   '它是新闻面的方向倾向，不是收益预测。': [
@@ -189,27 +174,15 @@ export const HINTS: Dict = {
   ],
 
   '顶部风险分（0–100）': ['Topping-risk score (0–100)', '天井リスク・スコア（0–100）'],
-  '把各指标的「顶部证据分」按六类因子加权聚合：价格过热（均线距离/RSI/20 日涨幅）、宽度背离、期权情绪（VIX 及分位）、波动拐点、利率压力、信用风险。分档解读：<20 顶部风险低，40+ 需要停止追高，60+ 阶段性顶部风险高，80+ 极端过热。': [
-    'Aggregates each indicator’s top-evidence score across six factor groups: price overheating (MA distance / RSI / 20-day gain), breadth divergence, options sentiment (VIX and its percentile), volatility inflection, rate pressure, and credit risk. Reading the bands: below 20 topping risk is low, 40+ means stop chasing, 60+ means an interim top is a real risk, and 80+ is extreme overheating.',
-    '各指標の「天井証拠スコア」を6つの因子グループで加重集約します：価格の過熱（移動平均との乖離／RSI／20日上昇率）、市場の広がりのダイバージェンス、オプション・センチメント（VIX とそのパーセンタイル）、ボラティリティの転換、金利の圧力、クレジットリスク。目安：20未満は天井リスクが低い、40以上は高値追いを控えるべき水準、60以上は当面の天井リスクが高い、80以上は極端な過熱です。',
-  ],
+  "综合六类顶部信号：价格过热、市场宽度背离、期权情绪、波动变化、利率压力和信用风险。低于 20 表示顶部证据少，40 以上开始增多，60 以上较强，80 以上反映明显过热。": ["Combines six groups of topping signals: price overheating, breadth divergence, options sentiment, volatility shifts, rate pressure and credit risk. Below 20 means little evidence; evidence builds at 40 or higher, is strong at 60 or higher, and suggests marked overheating at 80 or higher.", "価格の過熱、騰落の広がりの乖離、オプション心理、変動率の変化、金利圧力、信用リスクの6分類を集計します。20未満は天井を示す材料が少なく、40以上で増加、60以上で強まり、80以上は顕著な過熱を示します。"],
 
   '底部修复分（0–100）': ['Bottom-formation score (0–100)', '底打ちスコア（0–100）'],
-  '各指标「底部证据分」的加权聚合：恐慌释放（VIX）、技术收复（均线/RSI）、宽度修复、波动回落等。分档解读：<20 没有底部迹象，40+ 开始出现底部条件，60+ 阶段性底部概率较高，80+ 恐慌释放充分（仍需价格确认）。': [
-    'A weighted aggregate of each indicator’s bottom-evidence score: panic washout (VIX), technical recovery (MA / RSI), breadth repair, cooling volatility, and so on. Reading the bands: below 20 there is no sign of a bottom, 40+ the conditions are starting to appear, 60+ an interim bottom is fairly likely, and 80+ panic has been fully flushed out — price confirmation is still required.',
-    '各指標の「底証拠スコア」を加重集約します：パニック売りの一巡（VIX）、テクニカルの回復（移動平均／RSI）、市場の広がりの改善、ボラティリティの低下など。目安：20未満は底の兆しなし、40以上は底の条件が出始めた状態、60以上は当面の底である可能性が高い、80以上はパニック売りが出尽くした状態です（それでも価格による確認は必要）。',
-  ],
+  "综合恐慌缓解、技术指标回升、市场宽度修复和波动回落等底部信号。低于 20 表示底部证据少，40 以上开始增多，60 以上较强，80 以上反映恐慌已明显释放。分数表示证据强度，底部是否形成仍需观察价格。": ["Combines bottoming signals such as easing panic, improving technical indicators, recovering breadth and falling volatility. Below 20 means little evidence; evidence builds at 40 or higher, is strong at 60 or higher, and indicates substantial panic unwinding at 80 or higher. The score measures evidence strength; price action still needs to confirm a bottom.", "パニックの緩和、テクニカル指標の改善、上昇銘柄の広がり、変動率の低下などを集計します。20未満は底を示す材料が少なく、40以上で増加、60以上で強まり、80以上はパニックの大幅な解消を示します。材料の強さを表すスコアであり、底の形成は値動きで確認する必要があります。"],
 
   '数据质量（0–100%）': ['Data quality (0–100%)', 'データ品質（0–100%）'],
-  '数据质量 = 有真实读数的信号占比 × 模型覆盖率。未接入的分类（例如个股期权拥挤、财报反应）保持缺失，不补 0 或 50，也不表示胜率或顶部/底部发生概率。占比低时应降低整套解读的参考权重。': [
-    'Data quality = share of signals with real readings × model coverage. Unimplemented categories (for example stock options crowding or earnings reaction) stay missing — they are not filled with 0 or 50, and the score is not a win rate or a probability that a top or bottom occurs. When the share is low, give the whole reading less weight.',
-    'データ品質＝実測シグナルの比率×モデルカバレッジ。未接続の分類（個別オプション混雑や決算反応など）は欠測のままです。0や50で埋めず、勝率や天井・底の発生確率でもありません。比率が低いときは解釈全体の参考度を下げてください。',
-  ],
+  "数据质量 = 有读数的信号占比 × 模型覆盖率。未接入的分类和缺失数据不补分。数值越低，当前分析使用的数据越不完整。": ["Data quality = the share of signals with readings × model coverage. Unavailable categories and missing data receive no substitute score. A lower value means the analysis uses less complete data.", "データ品質＝値のあるシグナルの割合×モデルのカバー率。未対応の分類や欠測データには代わりの点数を入れません。値が低いほど、分析に使うデータが不完全です。"],
   '个股评分覆盖': ['Stock score coverage', '個別スコアのカバレッジ'],
-  '分母是顶部/底部模型分类的配置权重，不是「全部因子都已实现」。未接入项与临时缺数都会降低覆盖率；分数不是胜率。': [
-    'The denominator is the configured weight of top/bottom model categories, not “every factor is implemented.” Unimplemented items and temporarily missing inputs both lower coverage. The score is not a win rate.',
-    '分母は天井・底モデル分類の設定ウェイトであり、「全因子が実装済み」ではありません。未接続項目と一時欠測の両方がカバレッジを下げます。スコアは勝率ではありません。',
-  ],
+  "按顶部和底部模型的配置权重计算覆盖率。尚未接入的指标和临时缺失的数据都会降低覆盖率。": ["Coverage is measured against the configured weights of the top and bottom models. Unsupported indicators and temporarily missing data both lower coverage.", "天井・底のモデルに設定された重みを基準にカバー率を計算します。未対応の指標と一時的な欠測データのどちらもカバー率を下げます。"],
 
   '四因子子分（0–100）': ['Four-factor sub-scores (0–100)', '4ファクターのサブスコア（0–100）'],
   '把该股全部信号按 趋势 / 动量 / 量能 / 波动 四组分别聚合出的 0–100 分，用于看偏向分的构成来源。各组内同样只聚合有真实读数的指标。': [
@@ -369,10 +342,7 @@ export const HINTS: Dict = {
     'Factors that are missing or stale are not scored as a neutral 50 — they are dropped from the weighting, the rest are renormalized, and confidence is lowered; a module publishes no score at all once too few of its factors are valid.',
     'データが欠けている、または古くなったファクターは中立の50点として扱わず、ウェイトから外して残りを再正規化し、信頼度を引き下げます。有効なファクターが閾値を下回るモジュールはスコアを出しません。',
   ],
-  '分数是过去 5 年的历史分位，不是预测概率，也不构成买入、卖出、仓位或目标价建议。': [
-    'The score is a five-year historical percentile, not a predicted probability, and it is not a buy, sell, position-sizing, or price-target recommendation.',
-    'このスコアは過去5年間のヒストリカル・パーセンタイルであり、予測確率ではありません。売買、ポジションサイズ、目標株価の推奨でもありません。',
-  ],
+  "分数表示当前读数在过去 5 年中的相对位置。": ["The score shows where the current reading sits within the past 5 years.", "現在の値が過去5年間のどの位置にあるかを示すスコアです。"],
   '宏观环境综合分（0–100 分）': ['Macro composite score (0–100)', 'マクロ環境総合スコア（0–100点）'],
   '综合分 = 7 个模块中有效模块分数的等权均值，至少 5 个模块有效才出正式分。分数越高表示当前金融环境相对过去 5 年更支持风险资产，不代表市场一定上涨。': [
     'Composite = the equal-weighted average of whichever of the 7 modules are valid; at least 5 modules must be valid before an official score is published. A higher score means current financial conditions are more supportive of risk assets relative to the past five years — it does not mean the market will necessarily rise.',
@@ -389,10 +359,7 @@ export const HINTS: Dict = {
     '総合スコアで区分します：30未満は「明確に引き締め的」、30〜45は「やや引き締め的」、45〜55は「中立」、55〜70は「やや緩和的」、70以上は「明確に緩和的」。このラベルは過去と比べた環境の緩さ・引き締まりを説明するものです。',
   ],
   '历史基础': ['History basis', '履歴データの種別'],
-  '「按当前修订值回算」表示这段历史用今天能看到的最新修订数据回算，不是当时市场已知的分数；「本地点时快照」表示功能上线后本地实际抓取形成的不可变快照。': [
-    '"Recomputed on latest revisions" means this stretch of history is calculated from today\'s latest revised data, not the score the market actually knew at the time. "Local point-in-time snapshot" means an immutable snapshot actually captured locally after this feature went live.',
-    '「最新修正値による遡及計算」は、この履歴が本日時点で参照できる最新の修正済みデータを使って再計算されたものであり、当時市場が知っていたスコアではないことを意味します。「ローカル時点スナップショット」は、本機能の稼働後にローカルで実際に取得された不変のスナップショットを指します。',
-  ],
+  "「按当前修订值回算」使用最新修订的数据重新计算历史分数；「当时记录的数据」保留功能上线后各次采集的原始结果。": ["“Recalculated with current revisions” uses the latest revised data to recompute historical scores. “Data recorded at the time” preserves the original results collected since this feature launched.", "「最新の改定値で再計算」は、最新データで過去のスコアを計算し直したものです。「当時記録したデータ」は、この機能の公開後に取得した各時点の結果を保存したものです。"],
   '流动性 · LIQUIDITY（0–100 分）': ['Liquidity (0–100)', '流動性 · LIQUIDITY（0–100点）'],
   '模块分 = 该模块内有效因子分数的等权均值，共 5 个因子，至少 3 个有效才出分。': [
     'Module score = the equal-weighted average of its valid factor scores. This module has 5 factors and needs at least 3 valid to publish a score.',
@@ -588,27 +555,12 @@ export const HINTS: Dict = {
 
   /* ── 焦点周期逐股评估（偏向 + 置信合并说明，main #84 引入） ── */
   '偏向与置信（AI 判断）': ['Bias & confidence (AI judgment)', 'バイアスと信頼度（AI 判断）'],
-  '偏向是模型对这只股票的方向 × 强度估计，界面按 ±5 显示：正=利多、负=利空，绝对值代表预期影响幅度。置信是模型对自己这次判断的把握程度（0–100），置信低通常意味着新闻信息量不足或含糊，应降低参考权重。': [
-    "Bias is the model's direction × strength estimate for this stock, shown on a ±5 scale: positive = bullish, negative = bearish, and the magnitude reflects the expected impact. Confidence is how sure the model is about this particular judgment (0–100); low confidence usually means the news was thin or ambiguous, so give it less weight.",
-    'バイアスはこの銘柄に対するモデルの方向×強度の推定で、±5 スケールで表示します：プラス=強気、マイナス=弱気、絶対値は想定インパクトの大きさです。信頼度はモデルが今回の判断にどれだけ確信を持っているか（0–100）で、低い場合はニュースの情報量が乏しい・曖昧であることが多く、参考度を下げるべきです。',
-  ],
-  '两者都是模型判断，不是量价计算：偏向不是收益预测，置信不是胜率。': [
-    'Both are model judgments, not price/volume computations: the bias is not a return forecast, and the confidence is not a win rate.',
-    'どちらもモデルの判断であり、価格・出来高からの計算値ではありません：バイアスはリターン予測ではなく、信頼度は勝率ではありません。',
-  ],
+  "偏向表示模型对该股的方向判断（−5～+5）：正值偏利多，负值偏利空，绝对值越大，判断的影响越强。置信度表示模型对本次判断的把握程度（0–100）。": ["Bias is the model’s directional assessment for the stock (−5 to +5): positive is bullish, negative is bearish, and a larger absolute value means a stronger assessed impact. Confidence is its certainty in this assessment (0–100).", "方向性はモデルによる銘柄の評価（−5〜+5）です。プラスは好材料、マイナスは悪材料で、絶対値が大きいほど影響が強いという判断です。確信度は今回の判断に対するモデルの確かさ（0〜100）を示します。"],
+  "偏向不表示股价涨跌幅；置信度是模型自评，不是胜率。": ["Bias is not a price-change percentage. Confidence is the model’s own assessment, not a win rate.", "方向性は株価の騰落率を表しません。確信度はモデル自身の評価であり、勝率ではありません。"],
 
   /* ── 新闻流逐条评估（置信 + 影响合并说明，「· 非胜率」「· 非收益」后缀收进 ⓘ） ── */
   '置信与影响（AI 判断）': ['Confidence & impact (AI judgment)', '信頼度とインパクト（AI 判断）'],
-  '置信是模型对自己这次判断的把握程度（0–100），置信低通常意味着新闻信息量不足或含糊，应降低参考权重。影响分是模型对相关个股的方向 × 强度估计，界面按 ±5 显示：正=利多、负=利空，绝对值代表预期影响幅度。': [
-    "Confidence is how sure the model is about this particular judgment (0–100); low confidence usually means the news was thin or ambiguous, so give it less weight. The impact score is the model's direction × strength estimate for the affected stock, shown on a ±5 scale: positive = bullish, negative = bearish, and the magnitude reflects the expected impact.",
-    '信頼度はモデルが今回の判断にどれだけ確信を持っているか（0–100）で、低い場合はニュースの情報量が乏しい・曖昧であることが多く、参考度を下げるべきです。インパクトスコアは関連銘柄に対するモデルの方向×強度の推定で、±5 スケールで表示します：プラス=強気、マイナス=弱気、絶対値は想定インパクトの大きさです。',
-  ],
-  '两者都是模型判断，不是量价计算：置信不是胜率，影响分不是收益预测。': [
-    'Both are model judgments, not price/volume computations: the confidence is not a win rate, and the impact score is not a return forecast.',
-    'どちらもモデルの判断であり、価格・出来高からの計算値ではありません：信頼度は勝率ではなく、インパクトスコアはリターン予測ではありません。',
-  ],
-  '它是模型对自己判断的把握，不是胜率。': [
-    "It is how sure the model is about its own judgment, not a win rate.",
-    'モデルが自らの判断にどれだけ確信を持っているかであり、勝率ではありません。',
-  ],
+  "置信度表示模型对本次判断的把握程度（0–100）。影响分表示模型判断的新闻影响（−5～+5）：正值偏利多，负值偏利空，绝对值越大，判断的影响越强。": ["Confidence is the model’s certainty in this assessment (0–100). Impact is its assessment of the news (−5 to +5): positive is bullish, negative is bearish, and a larger absolute value means a stronger assessed impact.", "確信度は今回の判断に対するモデルの確かさ（0〜100）です。影響スコアはニュースへの評価（−5〜+5）で、プラスは好材料、マイナスは悪材料、絶対値が大きいほど影響が強いという判断です。"],
+  "置信度是模型自评，不是胜率；影响分不表示股价涨跌幅。": ["Confidence is the model’s own assessment, not a win rate. Impact is not a price-change percentage.", "確信度はモデル自身の評価であり、勝率ではありません。影響スコアは株価の騰落率を表しません。"],
+  "置信度是模型的自评，不是胜率。": ["Confidence is the model’s own assessment, not a win rate.", "確信度はモデル自身の評価であり、勝率ではありません。"],
 };

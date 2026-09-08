@@ -189,7 +189,7 @@ export default function IndexCards({
         <EmptyState
           image="/empty-chart.svg"
           title={t('暂无指数数据')}
-          description={t('接口返回了空列表，稍后刷新再试')}
+          description={t('暂未取得指数行情，请稍后重试')}
           action={
             <button
               onClick={onRetry}

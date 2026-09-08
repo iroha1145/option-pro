@@ -125,15 +125,15 @@ def test_every_module_has_a_hint_stating_its_real_factor_count_and_floor(
             assert "EMA(" not in entry["body"], module.module_id
 
 
-def test_the_composite_hint_states_the_real_module_floor_and_the_disclaimer() -> None:
+def test_the_composite_hint_states_the_real_module_floor_and_percentile_meaning() -> None:
     from app.services.macro_conditions.registry import (
         COMPOSITE_MINIMUM_VALID_MODULES,
     )
 
     text = HINTS_PATH.read_text(encoding="utf-8")
     assert f"至少 {COMPOSITE_MINIMUM_VALID_MODULES} 个模块有效才出正式分" in text
-    assert "不是预测概率" in text
-    assert "不构成买入、卖出、仓位或目标价建议" in text
+    assert "分数表示当前读数在过去 5 年中的相对位置。" in text
+    assert "分数越高表示当前金融环境相对过去 5 年更支持风险资产" in text
     assert "不代表市场一定上涨" in text
 
 

@@ -111,7 +111,7 @@ test('分档计数取后端整池分布，缺失时如实标注范围', async ()
 
   assert.match(page, /universeQ\.data\?\.tierDistribution \?\? null/);
   assert.match(page, /tierCountsCoverPool: distribution !== null/);
-  assert.match(workbench, /coversPool \? __t\('已评分候选池'\) : __t\('当前快照返回的行'\)/);
+  assert.match(workbench, /coversPool \? __t\('已评分候选池'\) : __t\('当前结果中的股票'\)/);
 });
 
 test('分档分布任一档缺失即整体判为不可用', async () => {

@@ -22,10 +22,7 @@ export const SMART_DRAWINGS: Dict = {
     "Smart lines",
     "スマート描画"
   ],
-  "基于已收盘 K 线补充识别、合并重复线；不改变后端信号评分": [
-    "Detect and deduplicate on closed bars; backend signal scores are unchanged",
-    "確定足で補助検出・重複除去。サーバー側のシグナル評価は変更しません"
-  ],
+  "根据已收盘 K 线识别支撑、阻力和形态，并合并相近线条": ["Find support, resistance and patterns in closed bars, merging similar lines", "確定足からサポート・レジスタンス・パターンを検出し、近い線をまとめます"],
   "实线为结构边界，虚线为延伸；淡色点线为已失效结构": [
     "Solid: fitted boundary; dashed: extension; faint dotted: broken structure",
     "実線：構造境界、破線：延長、薄い点線：無効化された構造"

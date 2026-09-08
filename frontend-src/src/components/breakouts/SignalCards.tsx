@@ -154,10 +154,10 @@ function SignalCard({ ev: initialEvent, index, flash, locate, onOpen }: SignalCa
         flash={flash}
       />
 
-      {/* 评分套组迷你条 */}
+      {/* 各项评分迷你条 */}
       <details className="radar-disclosure mt-3">
         <summary>
-          <span>{t('评分套组')}</span>
+          <span>{t('各项评分')}</span>
           <Icon name="chevron-down" size={14} className="radar-disclosure-arrow" />
         </summary>
         <ScoreBarsMini event={ev} className="pb-3 pt-1" />

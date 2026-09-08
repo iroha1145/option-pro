@@ -48,7 +48,7 @@ function StockSidebarEvents({ ticker }: { ticker: string }) {
       ) : items.length === 0 ? (
         <p className="mt-3 flex items-center gap-2 text-body-s text-ink-400">
           <Icon name="radar" size={16} className="text-ink-300" />
-          {__t('暂无突破事件记录 · 雷达仍在盯')}
+          {__t('暂无突破事件记录')}
         </p>
       ) : (
         <ul className="mt-3 space-y-2.5">

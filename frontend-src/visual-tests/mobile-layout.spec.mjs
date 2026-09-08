@@ -61,7 +61,7 @@ for (const viewport of VIEWPORTS) {
 
       await page.getByRole("link", { name: "选股" }).click();
       await expect(page).toHaveURL(/\/screener$/);
-      const workbench = page.locator('[aria-label="筛选工作台"]');
+      const workbench = page.locator('[aria-label="筛选条件"]');
       await expect(workbench).toBeVisible();
       await expect
         .poll(() => workbench.evaluate((node) => getComputedStyle(node).position))

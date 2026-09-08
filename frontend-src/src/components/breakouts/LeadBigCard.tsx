@@ -75,7 +75,7 @@ const SESSION_DOT: Record<BreakoutSession, string> = {
   closed: 'bg-ink-400',
 };
 
-/* ---------------- 宏观影子优先级 ---------------- */
+/* ---------------- 宏观参考优先级 ---------------- */
 /**
  * 「如果宏观接入正式评分，这个提醒优先级会变成多少」。
  *
@@ -94,9 +94,9 @@ function MacroPriorityShadow({ ev }: { ev: BreakoutEventFull }) {
   return (
     <span
       className="flex items-center gap-1 text-micro text-ink-400"
-      title={t('宏观适配 {fit}（{tone}）。影子优先级 = 生产优先级 {sign} {delta}，上限 ±4。不改变突破质量分与事件生命周期。', { fit: fit.toFixed(1), tone: tone ? t(MACRO_TONE_LABEL[tone]) : '—', sign: delta >= 0 ? '+' : '−', delta: Math.abs(delta).toFixed(1) })}
+      title={t('宏观适配 {fit}（{tone}）。加入宏观因素后的参考优先级：原优先级 {sign} {delta}，最多调整 4 分；当前排序保持不变。', { fit: fit.toFixed(1), tone: tone ? t(MACRO_TONE_LABEL[tone]) : '—', sign: delta >= 0 ? '+' : '−', delta: Math.abs(delta).toFixed(1) })}
     >
-      <span>{t('宏观影子')}</span>
+      <span>{t('宏观参考')}</span>
       <span className="font-mono tnum text-ink-600">{shadow.toFixed(1)}</span>
       <span
         className={cn(
@@ -379,7 +379,7 @@ function MiniKline({ ticker, dailyVersion, preparation, statusReadFailed }: { ti
       setPullError(
         cause instanceof ApiError
           ? cause.bizCode === 'account_login_required' || cause.bizCode === 'owner_login_required'
-            ? t('拉取需要登录；未登录只读已保存的快照')
+            ? t('登录后可更新行情；当前可查看已有数据')
             : `${cause.message}${cause.retryAfter ? t(' · {n} 秒后可重试', { n: cause.retryAfter }) : ''}`
           : t('拉取失败，请稍后重试'),
       );
@@ -403,8 +403,8 @@ function MiniKline({ ticker, dailyVersion, preparation, statusReadFailed }: { ti
           <p className="text-micro text-ink-400">
             {statusReadFailed ? t('暂无日线走势，准备状态读取失败')
               : preparation?.resources.dailyChart.available ? t('日线读取失败，请稍后重试')
-                : preparation?.status === 'failed' || preparation?.refreshStatus === 'failed' ? t('日线准备失败，后台将稍后重试')
-                  : t('后台正在准备日线，完成后自动显示')}
+                : preparation?.status === 'failed' || preparation?.refreshStatus === 'failed' ? t('日线获取失败，稍后自动重试')
+                  : t('正在获取日线，完成后自动显示')}
           </p>
           {pullError && (
             <p role="alert" className="text-micro text-down-700">
@@ -519,7 +519,7 @@ function ContributionBar({ ev }: { ev: BreakoutEventFull }) {
   }
 
   return (
-    <div aria-label={t("评分贡献分解")}>
+    <div aria-label={t("评分构成")}>
       <div className="flex radar-bar-track h-[5px] overflow-hidden rounded-pill bg-line">
         {parts.map((p, i) => (
           <motion.div
@@ -725,7 +725,7 @@ export default function LeadBigCard({ ev: initialEvent, flash, locate, onOpen, d
         </div>
         <div className="radar-value-cell radar-priority-cell flex flex-col items-center justify-center gap-1.5 px-3 py-1.5">
           <PriorityRing score={num(e.alert_priority_score)} />
-          {/* 宏观影子：显示的是「如果接入，优先级会变成多少」，环上的分数不变。
+          {/* 宏观参考：显示的是「如果接入，优先级会变成多少」，环上的分数不变。
               上限 ±4；突破质量、确认、流动性、追高风险和事件生命周期一律不动。 */}
           <MacroPriorityShadow ev={e} />
         </div>

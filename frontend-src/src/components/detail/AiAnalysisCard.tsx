@@ -9,7 +9,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useAccess } from '@/hooks/useAccess';
 import Icon from '@/components/icons';
 import { createSignalAnalysisJob } from './api';
-import { AI_DISCLAIMER, useAiJob } from './useAiJob';
+import { useAiJob } from './useAiJob';
 import { aiJobResultSummary } from '@/api/modules/ai-jobs';
 import { isIndexSymbol } from '@/lib/quoteSymbol';
 import { t } from '../../i18n/core.ts';
@@ -73,8 +73,8 @@ export default function AiAnalysisCard({ ticker }: { ticker: string }) {
             <div className="mt-3 rounded-md bg-ai-50 px-3 py-2.5">
               <p className="text-caption text-ink-600">
                 {isIndexSymbol(ticker)
-                  ? t('将根据该指数的技术信号与可用市场资料生成分析，消耗 1 次 AI 额度，是否继续？')
-                  : <>{t('将综合')} {ticker} {t('的技术信号、大盘与宏观环境、期权链和相关新闻生成分析报告，消耗 1 次 AI 额度，是否继续？')}</>}
+                  ? t('分析该指数的技术信号和市场资料，使用 1 次分析额度。')
+                  : t('分析 {ticker} 的技术信号、市场环境、期权和新闻，使用 1 次分析额度。', { ticker })}
               </p>
               <div className="mt-2 flex gap-2">
                 <button
@@ -114,7 +114,7 @@ export default function AiAnalysisCard({ ticker }: { ticker: string }) {
                   {queryIssue === 'paused' || queryIssue === 'blocked' ? t('任务状态待确认') : job.status === 'queued'
                     ? t('排队中…')
                     : job.progress === null
-                      ? t('模型正在处理 · 暂无进度百分比')
+                      ? t('模型分析中…')
                       : t('模型分析中 {pct}%', { pct: Math.round(job.progress) })}
                 </span>
                 <button onClick={() => void cancel()} className="text-ink-400 transition-colors hover:text-ink-600">
@@ -144,7 +144,6 @@ export default function AiAnalysisCard({ ticker }: { ticker: string }) {
           >
             <div className="mt-3 rounded-md border border-ai-600/25 bg-ai-50 px-3.5 py-3">
               <p className="text-body-s leading-relaxed text-ink-800">{resultSummary}</p>
-              <p className="mt-2 text-micro text-ink-400">{AI_DISCLAIMER}</p>
               <button onClick={reset} className="mt-2 text-caption font-medium text-ai-600 hover:text-ai-600/80">
                 {t('重新分析')}
               </button>
@@ -168,7 +167,7 @@ export default function AiAnalysisCard({ ticker }: { ticker: string }) {
                 ? t('分析任务失败')
                 : job?.status === 'cancelled'
                   ? t('任务已取消')
-                  : t('任务已完成，但未返回可显示的结构化摘要'))}{' '}
+                  : t('分析已完成，暂无摘要'))}{' '}
             {queryIssue === 'retrying' && <span>{t('正在重新查询原任务')}</span>}
             {(queryIssue === 'paused' || queryIssue === 'blocked') && <button onClick={resume} className="ml-2 font-medium text-ai-600">{t('继续查询原任务')}</button>}
             {!running && <button onClick={reset} className="ml-2 font-medium text-ai-600">{t('重试')}</button>}

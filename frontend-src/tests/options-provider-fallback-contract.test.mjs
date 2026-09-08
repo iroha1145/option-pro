@@ -94,7 +94,7 @@ test('期权链保留真实来源并按 Retry-After 冷却重试', async () => {
 
   assert.match(api, /provider:\s*pickS\(r,\s*'provider'\)/);
   assert.match(api, /asOf:\s*pickS\(r,\s*'as_of',\s*'asOf'\)/);
-  assert.match(panel, /shownChain\.asOf \? t\(' · 更新于 \{time\}', \{ time: fmtRelative\(shownChain\.asOf\) \}\)/);
+  assert.match(panel, /shownChain\.asOf \? t\(' · 数据获取于 \{time\}', \{ time: fmtRelative\(shownChain\.asOf\) \}\)/);
   assert.match(panel, /providerError\?\.retryAfter/);
   assert.match(panel, /disabled=\{retrySeconds > 0 \|\| retrying\}/);
   assert.match(panel, /期权数据暂时获取不到/);

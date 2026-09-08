@@ -90,10 +90,10 @@ export default function MacroFitPanel({
           </>
         ) : (
           <p className="text-caption text-ink-400">
-            {t(macroMissingReason(status) ?? '暂无宏观读数')} {t('· 不按中性计')}
+            {t(macroMissingReason(status) ?? '暂无宏观读数')}
           </p>
         )}
-        <p className="text-micro text-ink-300">{t('影子字段 · 不参与排名')}</p>
+        <p className="text-micro text-ink-300">{t('宏观评分单独展示')}</p>
       </div>
     </div>
   );

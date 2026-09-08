@@ -29,7 +29,7 @@ export const FLOW_META: Record<string, string> = {
   short_cover: t('空头回补'),
   rebuilding: t('重新建多'),
   reducing: t('转向减持'),
-  steady: t('边际持稳'),
+  steady: t('仓位基本不变'),
 };
 
 /* v3：标签由区间前后**真实状态迁移**生成（后端下发 position_before/after）——

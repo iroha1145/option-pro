@@ -16,7 +16,6 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { usePolling } from '@/hooks/usePolling';
 import EmptyState from '@/components/shared/EmptyState';
-import SourceNote from '@/components/shared/SourceNote';
 import WatchlistToggle from '@/components/shared/WatchlistToggle';
 import MacroFitPanel from '@/components/shared/MacroFitPanel';
 import { SkeletonBlock, SkeletonText } from '@/components/shared/Skeleton';
@@ -220,7 +219,7 @@ export default function StockDetail() {
   const techRetryRow = (
     <p className="mt-3 flex items-center gap-2 text-body-s text-ink-400">
       <Icon name="doc-quote" size={16} className="text-ink-300" />
-      {__t('技术结构读取失败 · 不代表该股没有结构')}
+      {__t('技术结构读取失败，请重试')}
       <button
         onClick={() => techQ.refresh()}
         className="ml-auto rounded-md border border-line px-2 py-0.5 text-micro text-ink-600 shadow-btn transition-colors hover:border-brand-400 hover:text-brand-600"
@@ -229,12 +228,6 @@ export default function StockDetail() {
       </button>
     </p>
   );
-
-  const providerNote = [
-    __t('行情为延迟数据'),
-    __t('影响分表示新闻方向，不是收益预测'),
-    __t('置信度是模型的把握程度，不是胜率'),
-  ].join(' · ');
 
   return (
     <div>
@@ -359,7 +352,6 @@ export default function StockDetail() {
         <NewsPanel ticker={detail.ticker} />
       </div>
 
-      <SourceNote className="mt-8" text={providerNote} />
     </div>
   );
 }

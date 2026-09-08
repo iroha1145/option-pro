@@ -22,7 +22,7 @@ export default function PageStub({ section, eyebrow, title, description, icon, h
         </span>
         <h3 className="mt-4 text-h3 text-ink-800">{title} {t('· 建设中')}</h3>
         <p className="mt-1.5 max-w-[380px] text-body-s text-ink-500">{hint}</p>
-        <p className="mt-3 font-mono text-micro text-ink-300">§{section} {t('· 设计文档已就绪，数据层已对接 mock')}</p>
+        <p className="mt-3 font-mono text-micro text-ink-300">§{section} {t('· 功能开发中')}</p>
       </div>
     </div>
   );

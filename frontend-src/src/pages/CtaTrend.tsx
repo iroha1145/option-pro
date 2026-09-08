@@ -1,6 +1,6 @@
 /**
  * §CTA CTA 趋势资金（/cta，从大盘页 B4.5 剥离为独立页面）
- * B1 跨标的总览卡带 · B2 单标的深读（仓位读数/历史/情景曲线/触发阶梯/模型分解）
+ * B1 指数总览卡带 · B2 指数详情（仓位读数/历史/情景曲线/触发阶梯/模型分解）
  * 轮询：ctaTrend 300s（worker 快照只读，日频模型）· regime 300s（仅并排联动解释）
  *
  * 语义纪律：代理估算，不是任何机构的真实仓位披露，不输出美元流量；CTA 读数
@@ -15,7 +15,6 @@ import { fmtTimeHHMMSS } from '@/lib/format';
 import PageHeader from '@/components/shared/PageHeader';
 import StaleStrip from '@/components/shared/StaleStrip';
 import EmptyState from '@/components/shared/EmptyState';
-import SourceNote from '@/components/shared/SourceNote';
 import Icon from '@/components/icons';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
 import CtaOverviewStrip from '@/components/cta/CtaOverviewStrip';
@@ -49,7 +48,7 @@ export default function CtaTrend() {
         section="CTA"
         eyebrow="CTA TREND FLOW · PROXY"
         title={t('CTA 趋势资金')}
-        description={t('趋势跟踪模型群的机械仓位代理估算——不是任何机构的真实仓位披露，也不输出美元流量。')}
+        description={t('根据价格趋势与波动率，估算趋势策略的仓位及其变化。')}
         meta={
           <>
             {ctaQ.data?.method_version && (
@@ -82,7 +81,7 @@ export default function CtaTrend() {
         </div>
       ) : snapshotMissing ? (
         <p className="mt-6 rounded-md border border-line bg-card-warm px-3 py-4 text-caption text-ink-500">
-          {t('CTA 估算快照尚未发布：Worker 完成首次计算后自动出现，无需手动操作')}
+          {t('CTA 估算尚未生成，首次计算完成后自动显示')}
         </p>
       ) : ctaQ.error && !ctaQ.data ? (
         <div className="card-surface mt-6">
@@ -112,8 +111,8 @@ export default function CtaTrend() {
           {ctaQ.error && (
             <StaleStrip onRetry={() => ctaQ.refresh()} refreshing={ctaQ.refreshing} className="mt-6" />
           )}
-          {/* B1 跨标的总览 */}
-          <section className="mt-6" aria-label={t('跨标的总览')}>
+          {/* B1 指数总览 */}
+          <section className="mt-6" aria-label={t('指数总览')}>
             <CtaOverviewStrip
               rows={rows}
               selected={row.instrument}
@@ -121,8 +120,8 @@ export default function CtaTrend() {
             />
           </section>
 
-          {/* B2 单标的深读 */}
-          <section className="mt-8" aria-label={t('单标的深读')}>
+          {/* B2 指数详情 */}
+          <section className="mt-8" aria-label={t('指数详情')}>
             <div ref={mainRef} className="scroll-mt-20">
               <CtaDeepDive
                 data={ctaQ.data}
@@ -133,8 +132,6 @@ export default function CtaTrend() {
               />
             </div>
           </section>
-
-          <SourceNote className="mt-8" text={t('代理模型估算 · 仅供研究参考')} />
         </>
       )}
     </div>

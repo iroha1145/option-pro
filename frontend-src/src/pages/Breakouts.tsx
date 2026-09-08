@@ -33,7 +33,6 @@ import FilterButton from '@/components/shared/FilterButton';
 import SelectionViewport from '@/components/shared/SelectionViewport';
 import { fmtTimeHHMMSS } from '@/lib/format';
 import EmptyState from '@/components/shared/EmptyState';
-import SourceNote from '@/components/shared/SourceNote';
 import { SkeletonCard } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
 import LeadBigCard from '@/components/breakouts/LeadBigCard';
@@ -331,7 +330,7 @@ export default function Breakouts() {
             <span className="eyebrow">BREAKOUT RADAR · INTRADAY</span>
           </p>
           <h1 className="mt-2 font-display text-display-l text-ink-900">{__t('突破雷达')}</h1>
-          <p className="mt-1.5 text-body-s text-ink-500">{__t('全市场粗筛 → 点时复核 → 生命周期跟踪')}</p>
+          <p className="mt-1.5 text-body-s text-ink-500">{__t('发现突破机会，跟踪确认与回踩过程。')}</p>
         </div>
         {/* 紧凑状态条：启用 LED · 快照与活跃条数（副标合并至此去重）· 最近扫描 · 时段 chip · 扫描服务 · 下次扫描倒计时 · 查看范围 */}
         <div className="radar-status flex flex-wrap items-center justify-end gap-x-4 gap-y-2 pb-1 text-caption text-ink-500">
@@ -501,7 +500,7 @@ export default function Breakouts() {
             <div className="card-surface">
               <EmptyState
                 image="/empty-radar.svg"
-                title={statusFilter !== 'ALL' || minScore > 0 || tickerFilter ? __t('没有符合筛选的信号') : __t('雷达在转，信号还没来')}
+                title={statusFilter !== 'ALL' || minScore > 0 || tickerFilter ? __t('没有符合筛选的信号') : __t('本轮暂无突破信号')}
                 description={
                   statusFilter !== 'ALL' || minScore > 0 || tickerFilter
                     ? __t('放宽筛选条件，或清除代码聚焦试试')
@@ -573,8 +572,6 @@ export default function Breakouts() {
           </>
         )}
       </section>
-
-      <SourceNote className="mt-8" text={__t("突破扫描结果 · 行情为延迟数据")} />
 
       {/* 事件详情模态（保留） */}
       <EventDetail

@@ -13,9 +13,10 @@ import { fmtCompact } from '@/lib/format';
 import Icon from '@/components/icons';
 import TickerLogo from '@/components/shared/TickerLogo';
 import EmptyState from '@/components/shared/EmptyState';
+import InfoHint from '@/components/shared/InfoHint';
 import SoftBadge from '@/components/shared/SoftBadge';
 import type { EarningsRow } from './types';
-import { daysUntil, exBool, exNum, exStr, fmtMDCN, relativeDayCN, weekdayCN } from './types';
+import { daysUntil, earningsSectorLabel, exBool, exNum, exStr, fmtMDCN, relativeDayCN, weekdayCN } from './types';
 import { t } from '../../i18n/core.ts';
 
 /* ---------------- 迷你斜纹柱对（48px，预估 45° 斜纹 / 实际实心） ---------------- */
@@ -78,10 +79,12 @@ function ExpectedMoveCell({ pct, index, status }: { pct: number | null; index: n
   const unverified = typeof status === 'string' && status.startsWith('degraded:');
   return (
     <span className="block">
-      <span className="font-mono text-data-m text-ink-800 tnum">±{pct.toFixed(1)}%</span>
-      {unverified && (
-        <span className="mt-0.5 block text-[10px] leading-4 text-ink-400">{t('获取时间，非逐合约已验证报价')}</span>
-      )}
+      <span className="inline-flex items-center gap-1">
+        <span className="font-mono text-data-m text-ink-800 tnum">±{pct.toFixed(1)}%</span>
+        {unverified && (
+          <InfoHint hint={{ title: t('预期波动'), body: t('按期权报价估算，部分合约未提供报价时间。') }} size={11} />
+        )}
+      </span>
       <span className="mt-1 block h-1 w-16 strength-track overflow-hidden rounded-pill bg-line" aria-hidden="true">
         <motion.span
           className="block h-full origin-left rounded-pill bg-ai-600"
@@ -169,7 +172,7 @@ export default function EarningsList({
           <EmptyState
             image="/empty-chart.svg"
             title={filteredByDay ? t('当日没有重点公司财报') : t('当前范围内没有重点公司财报')}
-            description={t('财报仍在——切到「全部公司」查看全市场日历。')}
+            description={t('切换到「全部公司」查看其他公司的财报。')}
             action={
               onShowAll ? (
                 <button
@@ -192,7 +195,7 @@ export default function EarningsList({
           /* 默认列表覆盖的是「近 3 天到未来 30 天」滚动窗口（审计 2.3.4）：
              写「本周清淡 · 跳到下周看看」会让用户以为还有下周数据没查。 */
           title={filteredByDay ? t('当日无财报') : t('近一个月暂无财报')}
-          description={filteredByDay ? t('选中的日期没有财报安排，切换日格或查看下周。') : t('未来 30 天没有已安排的财报，稍后再来看看。')}
+          description={filteredByDay ? t('当日没有财报安排，可查看其他日期。') : t('未来 30 天没有已安排的财报，稍后再来看看。')}
           action={
             onNextWeek ? (
               <button
@@ -279,7 +282,7 @@ export default function EarningsList({
               const rowRef = selected ? selectedRowRef : undefined;
               const est = row.epsEstimate;
               const act = row.epsActual;
-              const sector = exStr(row, 'sector');
+              const sector = earningsSectorLabel(exStr(row, 'sector'));
               // 市值必须是数据源提供的正数；0/负数是缺失占位，不展示成 $0。
               const marketCap = exNum(row, 'marketCap');
               const move = exNum(row, 'expectedMovePct');

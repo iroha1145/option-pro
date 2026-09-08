@@ -6,47 +6,32 @@
 import type { Dict } from './types';
 
 export const ACCOUNT: Dict = {
-  /* ---------------- L1 大标（CharStagger 逐字入场，按源码顺序拆成三段）---------------- */
-  /* 原文「把市场讲给你听。」拆成 把 / 市场（marker 高亮）/ 讲给你听。三段相邻渲染，
-     中间无空格（中文本身不需要）。英文单词间必须有空格，故在「把」的译文尾部嵌入
-     一个普通空格作为词间分隔，避免 "The" 和 "market" 连读成 "Themarket"。 */
-  '把': ['The ', 'この'],
-  '市场': ['market,', '市場を'],
-  '讲给你听。': ['decoded.', '読み解く。'],
+  "用户名过长，请缩短后重试": ["Username is too long. Use a shorter one.", "ユーザー名が長すぎます。短くして再入力してください。"],
+  "用户名包含不支持的字符，请重新输入": ["Username contains unsupported characters. Please re-enter it.", "ユーザー名に使えない文字が含まれています。再入力してください。"],
+  "该用户名不可用，请换一个": ["This username is unavailable. Choose another.", "このユーザー名は使えません。別の名前を入力してください。"],
+  "该用户名已被使用，请换一个": ["This username is already taken. Choose another.", "このユーザー名は使用されています。別の名前を入力してください。"],
+  "密码过长，请缩短后重试": ["Password is too long. Use a shorter one.", "パスワードが長すぎます。短くして再入力してください。"],
+  "密码包含不支持的字符，请重新输入": ["Password contains unsupported characters. Please re-enter it.", "パスワードに使えない文字が含まれています。再入力してください。"],
+  "注册名额已满，暂不接受新账号": ["Registration is full. New accounts are not being accepted.", "登録数が上限に達しているため、新規登録を受け付けていません。"],
+
+  /* 登录页标题 */
+  '美股研究': ['US stock research', '米国株リサーチ'],
+  '从这里开始。': ['Start here.', 'ここから始める。'],
 
   /* ---------------- L1 特性三行（FEATURES：突破雷达 / 板块透视 / 财报 AI）---------------- */
   /* 突破雷达、板块透视两个 title 已由 market.ts 统一定义（Breakout radar / Sector X-ray），
      此处只覆盖本页新增的「财报 AI」标题与三条 desc。 */
-  '价格越界的瞬间，已经在你的雷达上。': [
-    "The instant it breaks out, it's already on your radar.",
-    '価格がブレイクした瞬間、もうレーダーに映っている。',
-  ],
-  '热力、强度、IV 排名，一屏定位资金方向。': [
-    "Heat, strength, and IV rankings on one screen — see where the money's moving.",
-    'ヒート・強度・IVランキングを一画面に。資金の向かう先が見える。',
-  ],
+  "追踪价格突破、回踩与成交量变化。": ["Track breakouts, pullbacks and volume changes.", "価格のブレイク、リテスト、出来高の変化を確認。"],
+  "比较板块涨跌、股票强弱与期权波动率。": ["Compare sector returns, stock strength and implied option volatility.", "セクターの騰落率、銘柄の強弱、オプションの予想変動率を比較。"],
   '财报 AI': ['Earnings AI', '決算 AI'],
-  '财报落地前，先看清涟漪往哪传。': [
-    'Before earnings land, see where the ripples spread.',
-    '決算が出る前に、その波紋の広がる先を見る。',
-  ],
+  "查看财报日程、市场预期与相关公司的影响分析。": ["Explore earnings dates, expectations and effects on related companies.", "決算日程、市場予想、関連企業への影響を確認。"],
 
   /* ---------------- L1 副文 / 脚注免责声明 ---------------- */
-  '突破雷达、强度选股、板块透视、财报 AI、新闻催化剂 —— 一套终端，看懂今晚的美股。数据延迟 15 分钟，仅供研究参考。': [
-    "Breakout radar, strength screener, sector X-ray, earnings AI, news catalysts — one terminal to make sense of tonight's US market. Quotes delayed 15 minutes, for research purposes only.",
-    'ブレイクアウト・レーダー、強度スクリーナー、セクター透視、決算 AI、ニュース・カタリスト——1つの端末で今晩の米国株を読み解く。データは15分遅延、調査参考用です。',
-  ],
-  '交互研究版 · 延迟行情 · 不构成投资建议 ◆': [
-    'Interactive research edition · Delayed quotes · Not investment advice ◆',
-    'インタラクティブ・リサーチ版 · 遅延データ · 投資助言ではありません ◆',
-  ],
+  "汇集行情、选股、财报与新闻，帮助你跟踪美股市场。": ["Follow the US market with quotes, screening, earnings and news in one place.", "株価、銘柄スクリーニング、決算、ニュースで米国市場の動きを確認。"],
 
   /* ---------------- L2 登录卡：标题 / 切换 / 表单 ---------------- */
-  '进入终端': ['Enter the terminal', '端末に入る'],
-  '登录后自选股保存在账号里 · 访客可只读浏览': [
-    'Sign in to save your watchlist to your account · Guests get read-only access',
-    'サインインすると自選銘柄がアカウントに保存されます · ゲストは閲覧のみ',
-  ],
+  "登录研究工作台": ["Sign in to your research desk", "リサーチ画面にログイン"],
+  "登录以保存自选股，也可作为访客浏览": ["Sign in to save your watchlist, or browse as a guest", "ログインしてウォッチリストを保存、またはゲストとして閲覧"],
   '注册': ['Sign up', '新規登録'],
   '无法连接服务，登录暂不可用': [
     "Can't reach the service. Sign-in is temporarily unavailable.",
@@ -72,14 +57,8 @@ export const ACCOUNT: Dict = {
   '注册并登录': ['Sign up & sign in', '登録してサインイン'],
   '或': ['or', 'または'],
   '以访客身份浏览（只读）': ['Browse as a guest (read-only)', 'ゲストとして利用（閲覧のみ）'],
-  '账号只用于保存你的自选股，不改变数据权限': [
-    "Your account only saves your watchlist — it doesn't change your data access.",
-    'アカウントは自選銘柄の保存だけに使い、データへのアクセス権限は変わりません。',
-  ],
-  '登录即同意研究用途条款 · 登录状态保留 30 天': [
-    "By signing in, you agree to the research-use terms · You'll stay signed in for 30 days",
-    'サインインすることで、調査目的利用規約に同意したものとみなします · サインイン状態を30日間保持します',
-  ],
+  "注册后可保存自选股，在不同设备上查看": ["Save your watchlist and access it across devices", "ウォッチリストを保存し、別の端末でも確認できます"],
+  "登录状态保留 30 天": ["Stay signed in for 30 days", "ログイン状態を30日間保持します"],
   '返回公开研究页面': ['Back to the public research page', '公開リサーチページに戻る'],
 
   /* ---------------- 校验 / 错误映射（mapError） ---------------- */
@@ -109,9 +88,6 @@ export const ACCOUNT: Dict = {
   '当前会话': ['Current session', '現在のセッション'],
   '继续浏览': ['Keep browsing', 'このまま閲覧を続ける'],
   '退出并换账号': ['Sign out & switch account', 'サインアウトしてアカウントを切り替え'],
-  /* 「管理员已登录」只在用户名字面等于 admin 时出现，属于该演示账号的彩蛋文案；
-     产品里对应的角色概念就是 Owner，按术语表不译成 Administrator / 管理者。 */
-  '管理员已登录': ['Owner signed in', 'オーナーとしてサインインしました'],
   '加载中': ['Loading', '読み込み中'],
 
   /* ---------------- 404（NotFound.tsx） ---------------- */
@@ -120,8 +96,5 @@ export const ACCOUNT: Dict = {
 
   /* ---------------- 建设中占位页（_PageStub.tsx） ---------------- */
   '· 建设中': ['· Under construction', '· 準備中'],
-  '· 设计文档已就绪，数据层已对接 mock': [
-    '· Design spec ready, data layer wired to mocks',
-    '· 設計ドキュメント準備済み、データ層はモック接続済み',
-  ],
+  "· 功能开发中": ["· Feature in development", "· 開発中の機能です"],
 };

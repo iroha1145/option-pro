@@ -171,7 +171,7 @@ export default function FactorDetails({
                     </>
                   )}
                   {!state.loading && !state.error && state.factors.length === 0 && (
-                    <p className="py-2 text-body-s text-ink-400">{t('该模块暂无因子快照。')}</p>
+                    <p className="py-2 text-body-s text-ink-400">{t('该类指标暂无数据。')}</p>
                   )}
                 </>
               )}

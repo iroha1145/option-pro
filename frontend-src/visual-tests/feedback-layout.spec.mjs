@@ -71,7 +71,7 @@ for (const width of [390, 1440]) {
       await page.goto('/catalysts');
       const notes = page.getByText('数据与分析说明', { exact: true });
       await notes.click();
-      await expect(page.getByText(/新闻与经济日历持续收录/)).toBeVisible();
+      await expect(page.getByText(/新闻保留原始来源；影响分与置信度由模型估算/)).toBeVisible();
       await notes.click();
       const focus = page.getByRole('region', { name: '市场焦点周期', exact: true });
       await expect(focus.getByRole('heading', { name: '逐股评估', exact: true })).toBeVisible();
@@ -143,7 +143,7 @@ for (const width of [390, 1440]) {
       await page.goto('/visual-tests/support/status-notice-harness.html');
       await expect(page.getByText('数据过期', { exact: true })).toBeVisible();
       await expect(page.getByRole('status').filter({ hasText: '数据暂未刷新' })).toContainText('以下为最近一次结果');
-      const table = page.getByRole('table', { name: '板块 IV 横截面排名表', exact: true });
+      const table = page.getByRole('table', { name: '板块隐含波动率排名表', exact: true });
       await expect(table.locator('tbody tr')).toHaveCount(2);
       await expect(table.locator('tbody tr').first()).toContainText('AAPL');
       await page.getByRole('button', { name: /切换排序/ }).click();

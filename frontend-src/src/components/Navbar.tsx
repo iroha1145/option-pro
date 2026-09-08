@@ -101,7 +101,7 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
     try {
       await logout();
       toast.info(
-        isOwner ? t('已退出 Owner 模式') : t('已退出登录'),
+        isOwner ? t('已退出管理员账号') : t('已退出登录'),
         t('当前为访客只读模式'),
       );
       navigate('/watchlist');

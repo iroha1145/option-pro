@@ -72,7 +72,7 @@ export default function MacroTechnicalMatrix({
         <InfoHint hint={MATRIX_HINT} side="bottom" size={11} className="ml-1" />
       </p>
       <h3 className="mt-1.5 text-h3 text-ink-900">
-        {quadrant ? t(MACRO_QUADRANT_LABEL[quadrant]) : t('暂无二维读数')}
+        {quadrant ? t(MACRO_QUADRANT_LABEL[quadrant]) : t('暂无技术与宏观对照数据')}
       </h3>
       {quadrant ? (
         <>

@@ -560,8 +560,7 @@ export function createSignalAnalysisJob(ticker: string): Promise<AiJob> {
         `${symbol} 模型分析完成：趋势偏向分 ${b.trend_bias_score}（${b.trend_bias_label}），` +
         `分项读数 趋势 ${b.scores.trend} / 动量 ${b.scores.momentum} / 量能 ${b.scores.volume} / 波动 ${b.scores.volatility}。` +
         `现价 ${d.price.toFixed(2)} 美元，IV 百分位 ${d.ivPercentile}%，期权定价${ivTone}。` +
-        `近端观察 MA20 附近的量能配合与突破延续性；若量价背离放大，偏向读数将快速回落。` +
-        `以上为方向性研究结论，非收益预测。`;
+        `近端观察 MA20 附近的量能配合与突破延续性；若量价背离放大，偏向读数将快速回落。`;
       return fx2.createAiJob('signal-analysis' as AiJob['kind'], text);
     },
     // 契约：owner+SO → 202 + Location（job_id 可能仅在 Location 头）

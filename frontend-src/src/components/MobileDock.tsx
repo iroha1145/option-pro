@@ -252,12 +252,12 @@ function MobileDockContent() {
                   </span>
                   <span className="flex-1">
                     <span className="block text-body-s font-medium text-ink-800">
-                      {isOwner ? t('Owner 已登录') : isSignedIn ? t('已登录 {name}', { name: username ?? '' }) : t('访客只读模式')}
+                      {isOwner ? t('管理员已登录') : isSignedIn ? t('已登录 {name}', { name: username ?? '' }) : t('访客只读模式')}
                     </span>
                     <span className="block text-micro text-ink-400">
                       {isOwner || isSignedIn
                         ? (loggingOut ? t('正在退出…') : t('退出登录'))
-                        : t('登录后可用个人自选与手动拉取')}
+                        : t('登录后可保存自选股、手动更新数据')}
                     </span>
                   </span>
                 </button>

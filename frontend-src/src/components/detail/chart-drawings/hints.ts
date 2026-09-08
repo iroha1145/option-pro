@@ -25,7 +25,7 @@ export const TOOL_HINTS: Record<string, ScoreHint> = {
   },
   ray: {
     title: t('射线'),
-    body: t('两点定斜率，向右无限延伸，并裁剪在可见的价格网格内。'),
+    body: t('点击两点确定方向，线条向右延伸至图表边缘。'),
   },
   channel: {
     title: t('平行通道'),
@@ -33,7 +33,7 @@ export const TOOL_HINTS: Record<string, ScoreHint> = {
   },
   rectangle: {
     title: t('矩形'),
-    body: t('两点定一个区域，用来框住整理区或事件窗口；反向拖动会自动规范化。'),
+    body: t('点击两个对角，框出整理区或事件所在的范围。'),
   },
   fibonacci: {
     title: t('斐波那契'),
@@ -51,7 +51,7 @@ export const LAYER_HINTS: Record<string, ScoreHint> = {
   ma200: { title: t('MA200'), body: t('200 日收盘均线，看长期方向；前 199 根没有读数，曲线从第 200 根才开始。') },
   swings: {
     title: t('摆动点'),
-    body: t('已确认的局部高低点，并由相邻两点比较标出 HH/HL/LH/LL。是逐点比较的结果，不是给整段行情下一个结论。'),
+    body: t('标出已确认的高低点，并比较相邻同类点：高点抬升（HH）、低点抬升（HL）、高点降低（LH）、低点降低（LL）。'),
   },
   support_resistance: {
     title: t('支撑阻力'),
@@ -59,16 +59,16 @@ export const LAYER_HINTS: Record<string, ScoreHint> = {
   },
   bases: {
     title: t('整理区'),
-    body: t('识别出的横盘箱体，给出阻力带、支撑带与窗口区间。整理区的判定只有这一个来源，图上别处不会重复检测。'),
+    body: t('标出横盘整理的阻力带、支撑带和形成时间。'),
   },
   pivots: {
     title: t('pivot / invalidation'),
-    body: t('整理区的关键触发价（pivot）与失效价（invalidation）：前者是突破参考位，后者是该结构被证伪的位置。'),
+    body: t('突破参考价（pivot）是整理区的上沿；失效价（invalidation）表示该整理结构不再成立的价位。'),
   },
   auto_patterns: {
     title: t('自动趋势线 / 通道 / 三角形 / 楔形'),
-    body: t('从摆动点自动拟合的形态：两点只作候选，最终轨线由触点的 Theil–Sen 稳健回归定出，触点需满足最少数量与时间间隔。'),
-    note: t('标注的「几何质量」只衡量形状拟合得有多干净，不是上涨或下跌的概率。'),
+    body: t('根据已确认的高低点绘制趋势线、通道、三角形和楔形；触碰次数和间隔达到要求后才显示。'),
+    note: t('几何质量表示形状的吻合程度，不代表涨跌概率。'),
   },
   candles: {
     title: t('K线形态'),
@@ -76,11 +76,11 @@ export const LAYER_HINTS: Record<string, ScoreHint> = {
   },
   traps: {
     title: t('Spring / Upthrust'),
-    body: t('假突破标记：Spring 是向下破位后迅速收回，Upthrust 是向上破位后迅速回落，两者都指向被证伪的突破。'),
+    body: t('假跌破收回（Spring）：跌破后迅速回到区间内。假突破回落（Upthrust）：突破后迅速跌回区间内。'),
   },
   breakouts: {
     title: t('突破触发 / 测试 / 失败'),
-    body: t('由整理区状态映射出的突破生命周期：触发、回踩测试、以及失败。'),
+    body: t('显示突破后的进展：已触发、回踩测试或突破失败。'),
   },
   rsi: {
     title: t('RSI'),
@@ -88,7 +88,7 @@ export const LAYER_HINTS: Record<string, ScoreHint> = {
   },
   macd: {
     title: t('MACD'),
-    body: t('12/26 快慢均线之差与其 9 日信号线及柱状图。前 35 根是预热期不出读数，避免用种子值冒充真实读数。'),
+    body: t('显示 12/26 快慢均线之差、9 日信号线和柱状图；前 35 根用于计算初始值，暂不显示读数。'),
   },
   obv: {
     title: t('OBV'),
@@ -104,6 +104,6 @@ export const LAYER_HINTS: Record<string, ScoreHint> = {
   },
   spy_rs: {
     title: t('SPY Relative Strength'),
-    body: t('相对标普 500 的强弱。只有能按日期对齐 SPY 收盘时才下发，否则这条副图整体省略而不是补空值。'),
+    body: t('比较该股与标普 500 指数基金（SPY）的表现；缺少同日收盘价时不显示。'),
   },
 };

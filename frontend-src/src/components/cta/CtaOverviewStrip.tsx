@@ -1,7 +1,7 @@
 /**
- * 跨标的总览卡带（/cta B1）：一行看全 4 个指数代理的估算仓位。
+ * 指数总览卡带（/cta B1）：一行看全 4 个指数代理的估算仓位。
  * 每张卡：标的名/代理 ETF、position_label 胶囊、目标仓位大数+相对前值箭头、
- * 今日边际流（趋势/波动率拆分小字）、120 日仓位 sparkline、最近触发位距离。
+ * 今日仓位变化（趋势/波动率拆分小字）、120 日仓位 sparkline、最近触发位距离。
  * 点卡=选中该标的（父级负责平滑滚动到主区）；选中态 brand 边/浅底。
  */
 import { motion } from 'framer-motion';
@@ -73,7 +73,7 @@ function OverviewCard({
             )}
           </span>
           <span className="mt-1 block">
-            <span className="text-micro text-ink-400">{t('今日边际流')} </span>
+            <span className="text-micro text-ink-400">{t('今日仓位变化')} </span>
             <span className={cn('font-mono text-caption tnum', (row.flow_score ?? 0) >= 0 ? 'text-up-700' : 'text-down-700')}>
               {signed(row.flow_score)}
             </span>

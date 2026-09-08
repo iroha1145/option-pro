@@ -1,5 +1,5 @@
 /**
- * B1 筛选工作台（screener.md）
+ * B1 筛选条件（screener.md）
  * 常驻：分档 / 周期 / 偏好 / 返回数量 / 扫描
  * 更多筛选：预设、板块、价格与成交额；折叠时仍展示当前约束
  * 行 stagger 60ms；过滤器变更主按钮脉冲（box-shadow 呼吸 1.2s ×2）
@@ -49,7 +49,7 @@ function TierSegmented({
   coversPool: boolean;
   onChange: (v: TierFilter) => void;
 }) {
-  const scopeNote = coversPool ? __t('已评分候选池') : __t('当前快照返回的行');
+  const scopeNote = coversPool ? __t('已评分候选池') : __t('当前结果中的股票');
   /* 只剩三处真实差异：徽标标签、aria/title 文案、可横向滚动（滚动条投影用
      layoutScroll）。键盘/结构/指示器全部复用共享件——两份抄写在本 PR 里已经
      各自跑偏过一次（审计 2.5.9）。 */
@@ -190,7 +190,7 @@ interface FilterWorkbenchProps {
   onChange: (f: ScanFilters) => void;
   universe: {
     tierCounts: Record<TierFilter, number>;
-    /** 计数是否覆盖整个候选池；false 时只描述当前快照返回的行（审计 P2-10）。 */
+    /** 计数是否覆盖整个候选池；false 时只描述当前结果中的股票（审计 P2-10）。 */
     tierCountsCoverPool: boolean;
     sectors: string[];
     count: number;
@@ -272,7 +272,7 @@ export default function FilterWorkbench({
       animate="show"
       variants={{ show: { transition: { staggerChildren: 0.06 } } }}
       className="card-surface p-4 sm:p-5"
-      aria-label={__t("筛选工作台")}
+      aria-label={__t("筛选条件")}
       data-testid="screener-filter-workbench"
     >
       <motion.div variants={row} className="flex min-w-0 flex-wrap items-end gap-x-5 gap-y-4">
@@ -305,7 +305,7 @@ export default function FilterWorkbench({
         </div>
         <div>
           <FieldLabel>{__t('返回数量')}</FieldLabel>
-          <MenuSelect ariaLabel={__t("返回数量 Top N")} value={draft.topN} onChange={(topN) => patch({ topN })} options={TOPN_OPTIONS} />
+          <MenuSelect ariaLabel={__t("最多显示数量")} value={draft.topN} onChange={(topN) => patch({ topN })} options={TOPN_OPTIONS} />
         </div>
         <ScanButton scanning={scanning} dirty={dirty} universeCount={universe.count} onScan={onScan} className="w-full sm:ml-auto sm:w-auto" />
       </motion.div>

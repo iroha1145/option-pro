@@ -12,7 +12,6 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { invalidateQueryPaths } from '@/api/queryRegistry';
 import { earningsApi, restoreUpcomingFromCache } from '@/api/modules/earnings';
 import type { EarningsReportAnalysis } from '@/api/modules/earnings';
-import { ApiError } from '@/api/client';
 import { useAccess } from '@/hooks/useAccess';
 import { usePersonalWatchlist } from '@/hooks/usePersonalWatchlist';
 import { useNow } from '@/hooks/useNow';
@@ -150,7 +149,7 @@ export default function Earnings() {
         window.clearInterval(timer);
         setRefreshStatus(null);
         setRefreshing(false);
-        followToastRef.current.info(t('刷新仍在后台进行，完成后日历会自动更新'));
+        followToastRef.current.info(t('日历仍在更新，完成后自动显示'));
         return;
       }
       invalidateQueryPaths(['/earnings/upcoming'], { reload: true });
@@ -165,7 +164,7 @@ export default function Earnings() {
       setRefreshStatus('refreshed');
       setRefreshing(false);
       setFlashSignal((s) => s + 1);
-      followToastRef.current.success(t('财报日历已在后台完成刷新'));
+      followToastRef.current.success(t('财报日历已更新'));
     }
   }, [refreshStatus, refreshBaselineAsOf, currentAsOf]);
 
@@ -233,7 +232,7 @@ export default function Earnings() {
         following = true;
         setRefreshBaselineAsOf(q.data?.asOf ?? null);
         setRefreshStatus('queued');
-        toast.info(t('已排入后台刷新，完成后自动更新'));
+        toast.info(t('已安排更新，完成后自动显示'));
         return;
       }
       /* 硬失效（删 IndexedDB 旧记录 + 下一发打穿浏览器缓存）+ 强制世代
@@ -242,7 +241,7 @@ export default function Earnings() {
       q.refresh({ force: true });
       if (fresh.refreshStatus === 'failed_stale') {
         setRefreshStatus('failed_stale');
-        toast.info(t('上游刷新失败，继续使用上一次完整日历'));
+        toast.info(t('更新失败，显示上次完整日历'));
         return;
       }
       if (fresh.refreshStatus === 'cooldown') {
@@ -253,12 +252,12 @@ export default function Earnings() {
       setRefreshStatus('refreshed');
       setFlashSignal((s) => s + 1);
       toast.success(t('日历已更新 · {n} 条', { n: fresh.items.length }));
-    } catch (e) {
+    } catch {
       // 失败且带缓存 → _stale 横幅（failed_stale）；无缓存走 503 空态
       if (q.data) {
         setRefreshStatus('failed_stale');
       } else {
-        toast.error(t('刷新失败'), e instanceof ApiError ? e.message : undefined);
+        toast.error(t('刷新失败'), t('操作未完成，请稍后重试'));
       }
     } finally {
       if (!following) setRefreshing(false);
@@ -416,7 +415,7 @@ export default function Earnings() {
         )}
       </SoftBadge>
       {q.loading && q.data && (
-        <span className="font-mono text-micro text-ink-400">{t('正在确认最新数据…')}</span>
+        <span className="font-mono text-micro text-ink-400">{t('正在检查更新…')}</span>
       )}
       {!q.loading && q.error && q.data && (
         <span className="font-mono text-micro text-warn-600">{t('刷新失败 · 显示已有数据')}</span>
@@ -455,7 +454,7 @@ export default function Earnings() {
         section="05"
         eyebrow="EARNINGS · AI IMPACT"
         title={t("财报日历")}
-        description={t("一份财报落地，涟漪会沿着供应链传开。")}
+        description={t("查看财报日程、业绩预期及对相关公司的影响。")}
         meta={headerMeta}
       />
 
@@ -465,7 +464,7 @@ export default function Earnings() {
       {refreshStatus !== 'failed_stale' && q.error && items.length > 0 && (
         <div className="mt-4 flex items-center justify-between gap-3 rounded-md border border-warn-600/30 bg-warn-50 px-4 py-2.5">
           <p className="text-caption text-warn-600">
-            {t('自动刷新失败，当前显示的是上一次的数据，可能已经过时。')}
+            {t('自动更新失败，显示上次数据。')}
           </p>
           <button
             onClick={() => q.refresh()}
@@ -479,7 +478,7 @@ export default function Earnings() {
       {/* failed_stale：失败带缓存 → _stale 横幅 */}
       {refreshStatus === 'failed_stale' && (
         <div className="mt-4 flex items-center justify-between gap-3 rounded-md border border-warn-600/30 bg-warn-50 px-4 py-2.5">
-          <p className="text-caption text-warn-600">{t('刷新失败，当前显示的是上一次的数据，可能已经过时。')}</p>
+          <p className="text-caption text-warn-600">{t('更新失败，显示上次数据。')}</p>
           <button
             onClick={() => void onRefresh()}
             className="shrink-0 rounded-sm border border-warn-600/40 px-2 py-1 text-caption text-warn-600 transition-colors hover:bg-warn-600 hover:text-white"
@@ -497,7 +496,7 @@ export default function Earnings() {
           <div>
             <p className="text-caption font-medium text-warn-600">{t('财报数据暂时不完整')}</p>
             <p className="mt-0.5 text-micro text-ink-500">
-              {t('当前只显示已取到的')} {items.length} {t('家公司；缺失的公司不会用估算值顶替。')}
+              {t('当前显示 {n} 家公司的财报，部分公司数据缺失。', { n: items.length })}
             </p>
           </div>
         </div>
@@ -527,7 +526,7 @@ export default function Earnings() {
               variant="error"
               image="/empty-chart.svg"
               title={t("日历数据不可用")}
-              description={q.error?.message || t('稍后刷新再试')}
+              description={t('稍后刷新再试')}
               action={
                 <button
                   onClick={() => q.refresh()}

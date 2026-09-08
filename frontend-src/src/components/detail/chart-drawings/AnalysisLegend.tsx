@@ -4,7 +4,7 @@ import { LINE_INK } from './linePresentation.ts';
 const RAIL_KINDS = new Set(['support_trend', 'resistance_trend', 'channel', 'triangle', 'wedge']);
 
 /** Describe only the layers actually present; a gap-only view has its own legend. */
-export default function AnalysisLegend({ overlays, smartEnabled }: {
+export default function AnalysisLegend({ overlays }: {
   overlays: readonly { kind: string }[];
   smartEnabled: boolean;
 }) {
@@ -21,7 +21,6 @@ export default function AnalysisLegend({ overlays, smartEnabled }: {
       </>}
       {hasBox && <span className="inline-flex items-center gap-1"><span aria-hidden="true" className="h-2.5 w-4 rounded-sm border" style={{ backgroundColor: 'rgba(82,97,122,0.075)', borderColor: 'rgba(82,97,122,0.3)' }} />{t('整理区')}</span>}
       {hasGap && <span className="inline-flex items-center gap-1"><span aria-hidden="true" className="h-2.5 w-4 rounded-sm border border-dashed" style={{ backgroundColor: 'rgba(184,120,33,0.10)', borderColor: 'rgba(184,120,33,0.3)' }} />{t('价格缺口（日线）')}</span>}
-      {smartEnabled && <span>{t('智能标注仅辅助读图，不是买卖信号')}</span>}
     </p>
   );
 }

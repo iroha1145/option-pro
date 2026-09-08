@@ -49,20 +49,9 @@ export default class AppErrorBoundary extends Component<Props, State> {
           textAlign: 'center',
         }}
       >
-        <p style={{ fontSize: '18px', fontWeight: 600 }}>{t('应用启动中断')}</p>
-        <p
-          style={{
-            marginTop: '.5rem',
-            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-            fontSize: '12px',
-            color: '#6b6b76',
-            wordBreak: 'break-all',
-          }}
-        >
-          {error.name}: {error.message}
-        </p>
+        <p style={{ fontSize: '18px', fontWeight: 600 }}>{t('页面无法打开')}</p>
         <p style={{ marginTop: '.25rem', fontSize: '12px', color: '#8a8a95' }}>
-          {t('已拦截为错误卡以避免白屏；完整堆栈保留在控制台。若反复出现，可清除本站的本地存储后重试。')}
+          {t('请先重新加载。若仍无法打开，可清除此设备的网站数据；本地绘图、未同步修改和显示偏好将被删除。')}
         </p>
         <div
           style={{
@@ -110,7 +99,7 @@ export default class AppErrorBoundary extends Component<Props, State> {
               boxShadow: '0 1px 2px rgba(16,24,40,.08), 0 2px 6px -2px rgba(16,24,40,.06), inset 0 1px 0 rgba(255,255,255,.75)',
             }}
           >
-            {t('清除本地存储并重载')}
+            {t('清除本地数据并重新加载')}
           </button>
         </div>
       </div>

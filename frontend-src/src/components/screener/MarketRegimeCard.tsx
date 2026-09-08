@@ -7,7 +7,6 @@
  */
 import SoftBadge from '@/components/shared/SoftBadge';
 import type { MarketRegimeDims, MarketRegimeInfo, MarketStrength } from '@/api/types';
-import SourceNote from '@/components/shared/SourceNote';
 import InfoHint from '@/components/shared/InfoHint';
 import { SCORE_HINTS, type ScoreHintKey } from '@/lib/scoreHints';
 import { t, getLocale } from '../../i18n/core.ts';
@@ -153,10 +152,6 @@ export default function MarketRegimeCard({ market }: { market: MarketStrength })
           ))}
         </ul>
       )}
-      <SourceNote
-        className="mt-4"
-        text={regime ? t('综合大盘趋势、动量与风险指标 · 每 5 分钟更新') : t('由全市场强度分布推导 · 每 5 分钟更新')}
-      />
     </div>
   );
 }

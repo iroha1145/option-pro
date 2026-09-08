@@ -1,5 +1,5 @@
 import SoftBadge from '@/components/shared/SoftBadge';
-/** sources 面板：数据源健康卡（采集状态 + 数据新鲜度 + 最近抓取 + 近 24h 条数） */
+/** sources 面板：数据数据源状态卡（采集状态 + 数据新鲜度 + 最近抓取 + 近 24h 条数） */
 import { motion } from 'framer-motion';
 import { usePolling } from '@/hooks/usePolling';
 import { catalystsContract } from './api';
@@ -98,7 +98,7 @@ export default function SourcesPanel({ refreshToken }: { refreshToken: number })
       </motion.div>
       <SourceNote
         className="mt-4"
-        text={t("滞后表示数据更新到了什么时候，不是页面加载速度；条数按最近 24 小时收录的新闻与经济事件统计")}
+        text={t("滞后时间表示数据的新旧程度；条数统计最近 24 小时收录的新闻与经济事件。")}
       />
     </div>
   );

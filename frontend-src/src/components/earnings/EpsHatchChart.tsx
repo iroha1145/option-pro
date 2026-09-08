@@ -84,7 +84,7 @@ export default function EpsHatchChart({ items, title = t('EPS 预期 vs 实际')
         />
       </div>
       <p className="mt-2 border-t border-line pt-2.5 text-micro text-ink-400">
-        {hasActual ? t('斜纹为共识预估，实心为已公布实际值；未公布标的实际列留空。') : t('本组标的均待公布，实际值披露后以实心柱呈现。')}
+        {hasActual ? t('斜纹柱表示市场预期，实心柱表示已公布业绩。') : t('这些公司尚未公布业绩。')}
       </p>
     </section>
   );

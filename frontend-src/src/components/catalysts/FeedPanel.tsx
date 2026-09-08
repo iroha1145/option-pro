@@ -290,9 +290,9 @@ export default function FeedPanel({ filters, onOpenNews, patches, onFeedResult, 
           }
           description={
             hasFilters
-              ? __t('放宽过滤条件，或清除后查看全量新闻流')
+              ? __t('可放宽筛选条件，或清除条件查看全部新闻')
               : hiddenUnanalyzed > 0
-                ? __t('新闻已入库，中文标题与摘要生成后会显示在这里')
+                ? __t('新闻已收录，中文标题与摘要生成后自动显示')
                 : __t('新闻采集恢复后将自动出现在这里')
           }
           action={

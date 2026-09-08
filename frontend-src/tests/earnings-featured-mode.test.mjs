@@ -18,6 +18,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import vm from 'node:vm';
+import { t, getLocale, setLocale } from '../src/i18n/core.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const src = path.resolve(here, '..', 'src');
@@ -59,6 +60,27 @@ function loadTypesModule(globalOverrides = {}) {
 }
 
 const earnings = loadTypesModule();
+
+test('provider sector labels use the selected language and preserve unknown names', () => {
+  const localized = loadTypesModule({ require: () => ({ t, getLocale }) });
+  const before = getLocale();
+  try {
+    for (const [locale, technology, healthcare, semiconductor] of [
+      ['zh', '信息技术', '医疗保健', '半导体'],
+      ['en', 'Information Technology', 'Healthcare', 'Semiconductors'],
+      ['ja', '情報技術', 'ヘルスケア', '半導体'],
+    ]) {
+      setLocale(locale);
+      assert.equal(localized.earningsSectorLabel('Technology'), technology);
+      assert.equal(localized.earningsSectorLabel('  Healthcare  '), healthcare);
+      assert.equal(localized.earningsSectorLabel('半导体'), semiconductor);
+      assert.equal(localized.earningsSectorLabel('Unlisted sector'), 'Unlisted sector');
+      assert.equal(localized.earningsSectorLabel(null), null);
+    }
+  } finally {
+    setLocale(before);
+  }
+});
 const {
   addDays,
   computeEarningsListState,

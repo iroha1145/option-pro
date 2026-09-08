@@ -125,7 +125,7 @@ test('详情与加载更多的失败都会显示出来', async () => {
   const detail = codeOf(await source('components/breakouts/EventDetail.tsx'));
   const feed = codeOf(await source('components/catalysts/FeedPanel.tsx'));
   assert.doesNotMatch(page, /\.catch\(\(\) => undefined\);/);
-  assert.match(detail, /补充详情未能加载/);
+  assert.match(detail, /详情加载失败，暂显示列表中的信息/);
   assert.doesNotMatch(feed, /catch \{\s*\n\s*\} finally/);
   assert.match(feed, /\{__t\('加载更多失败：'\)\}\{moreError\.message\}/);
 });
@@ -200,7 +200,7 @@ test('自动选中的财报股票消失后会重选，手动选择不受影响',
 test('自动轮询失败且有旧数据时显示过期横幅', async () => {
   const page = codeOf(await source('pages/Earnings.tsx'));
   assert.match(page, /refreshStatus !== 'failed_stale' && q\.error && items\.length > 0/);
-  assert.match(page, /自动刷新失败，当前显示的是上一次的数据/);
+  assert.match(page, /自动更新失败，显示上次数据。/);
 });
 
 test('缺股票代码或财报日期的行被丢弃', async () => {

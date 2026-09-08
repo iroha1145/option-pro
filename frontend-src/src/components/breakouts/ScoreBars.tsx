@@ -1,5 +1,5 @@
 /**
- * 评分套组条（§6-5 强度色阶 + grow-bar 700ms）
+ * 各项评分条（§6-5 强度色阶 + grow-bar 700ms）
  * mini：信号卡 3×3 迷你格；full：详情面板整行条组。
  * 追高风险反向着色（riskBarClass）。
  * live 契约评分可空：值缺失显「—」+ 空轨道（留空优于编造）。
@@ -20,7 +20,7 @@ const disp = (v: unknown): string => (fin(v) ? String(Math.round(v)) : '—');
 
 export function ScoreBarsMini({ event, className }: { event: BreakoutEventFull; className?: string }) {
   return (
-    <div className={cn('radar-score-grid grid grid-cols-3 gap-x-3 gap-y-2.5', className)} aria-label={t("评分套组")}>
+    <div className={cn('radar-score-grid grid grid-cols-3 gap-x-3 gap-y-2.5', className)} aria-label={t("各项评分")}>
       {SCORE_DEFS.map((d, i) => {
         const v = event[d.key];
         return (
@@ -50,7 +50,7 @@ export function ScoreBarsMini({ event, className }: { event: BreakoutEventFull; 
 
 export function ScoreBarsFull({ event, className }: { event: BreakoutEventFull; className?: string }) {
   return (
-    <div className={cn('grid grid-cols-[max-content_minmax(0,1fr)_max-content] gap-y-2', className)} aria-label={t("评分套组")}>
+    <div className={cn('grid grid-cols-[max-content_minmax(0,1fr)_max-content] gap-y-2', className)} aria-label={t("各项评分")}>
       {SCORE_DEFS.map((d, i) => {
         const v = event[d.key];
         return (

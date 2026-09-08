@@ -46,17 +46,17 @@ export const CHROME: Dict = {
   'CTA': ['CTA', 'CTA'],
   '趋势资金 · 触发位': ['Trend money · trigger levels', 'トレンド資金 · トリガー水準'],
   '退出': ['Sign out', 'サインアウト'],
-  'Owner 已登录': ['Signed in as Owner', 'オーナーとしてサインイン中'],
+  "管理员已登录": ["Administrator signed in", "管理者としてログイン中"],
   '访客只读模式': ['Guest · read-only', 'ゲスト · 閲覧のみ'],
   '可执行写操作': ['Write actions enabled', '書き込み操作が可能'],
-  '登录后可用个人自选与手动拉取': ['Sign in for a personal watchlist and on-demand pulls', 'サインインで個人ウォッチリストと手動取得が利用可能'],
-  '已退出 Owner 模式': ['Signed out of Owner mode', 'オーナーモードからサインアウトしました'],
+  "登录后可保存自选股、手动更新数据": ["Sign in to save your watchlist and update data", "ログインしてウォッチリストを保存し、データを手動更新"],
+  "已退出管理员账号": ["Signed out of the administrator account", "管理者アカウントからログアウトしました"],
   '当前为访客只读模式': ['Now browsing as a read-only guest', '現在はゲストの閲覧のみモードです'],
 
   /* AI 状态胶囊 */
   '分析服务可用': ['Analysis service available', '分析サービスは利用可能'],
   '分析任务处理中': ['Analysis job in progress', '分析ジョブを実行中'],
-  '分析服务暂不可用': ['Analysis service temporarily unavailable', '分析サービスは一時的に利用できません'],
+  "分析服务暂不可用": ["Analysis is temporarily unavailable", "分析は一時的に利用できません"],
   '分析服务未开启': ['Analysis service is off', '分析サービスは無効です'],
 
   /* 命令面板 */
@@ -85,15 +85,15 @@ export const CHROME: Dict = {
   '关闭通知': ['Dismiss notification', '通知を閉じる'],
   '强制刷新自选': ['Force-refresh the watchlist', 'ウォッチリストを強制更新'],
   '重新获取自选行情': ['Re-fetch watchlist quotes', 'ウォッチリストの相場を再取得'],
-  '退出 Owner 登录': ['Sign out of Owner mode', 'オーナーからサインアウト'],
+  "退出管理员账号": ["Sign out of admin account", "管理者アカウントからログアウト"],
   '退出 {name}': ['Sign out {name}', '{name} からサインアウト'],
   '退出登录': ['Sign out', 'サインアウト'],
   '正在退出…': ['Signing out…', 'サインアウト中…'],
   '已退出登录': ['Signed out', 'サインアウトしました'],
   '退出失败': ['Sign-out failed', 'サインアウトに失敗しました'],
-  'Owner 或客户账号': ['Owner or customer account', 'オーナーまたは顧客アカウント'],
+  "管理员或个人账号": ["Admin or personal account", "管理者または個人アカウント"],
   '自选保存在账号里': ['Watchlist is saved to your account', 'ウォッチリストはアカウントに保存されます'],
-  '结束本机会话': ['End the session on this device', 'この端末のセッションを終了'],
+  "退出此设备上的登录": ["Sign out on this device", "この端末からログアウト"],
   '登录 Owner': ['Sign in as Owner', 'オーナーとしてサインイン'],
   '解锁写操作与 AI 分析': ['Unlock write actions and AI analysis', '書き込み操作と AI 分析を解除'],
   '搜索请求较多，请稍后重试': ['Too many searches. Please try again shortly.', '検索リクエストが多すぎます。しばらくしてから再試行してください。'],
@@ -107,12 +107,8 @@ export const CHROME: Dict = {
   '前往{label}': ['Go to {label}', '{label}へ移動'],
 
   /* 页脚 / 数据来源声明 */
-  '行情为延迟数据 · 仅供研究参考，不构成投资建议': [
-    'Quotes are delayed · for research purposes only, not investment advice',
-    '相場データは遅延しています · 調査目的のみで、投資助言ではありません',
-  ],
-  '行情为延迟数据 · 仅供研究参考': ['Quotes are delayed · for research purposes only', '相場データは遅延 · 調査目的のみ'],
-  '延迟行情': ['Delayed quotes', '遅延データ'],
+  '内容仅供研究参考': ['For research purposes', '調査・分析用の情報です'],
+  "延迟行情": ["Delayed quotes", "遅延気配値"],
   '查看大盘强弱 · {code}': ['View market strength · {code}', '市場の強弱を見る · {code}'],
   '查看大盘强弱，{code} 最新价 {price}，{flat}': [
     'View market strength, {code} latest price {price}, {flat}',
@@ -212,17 +208,11 @@ export const CHROME: Dict = {
   '下降': ['Down', '下落'],
 
   /* 应用级错误边界 */
-  '应用启动中断': ['The app failed to start', 'アプリの起動が中断されました'],
-  '已拦截为错误卡以避免白屏；完整堆栈保留在控制台。若反复出现，可清除本站的本地存储后重试。': [
-    "Caught and shown as an error card instead of a blank screen; the full stack trace is in the console. If this keeps happening, try clearing this site's local storage and reloading.",
-    '白画面にせずエラーカードとして表示しています。完全なスタックトレースはコンソールに出力済みです。繰り返し発生する場合は、このサイトのローカルストレージを消去してから再試行してください。',
-  ],
-  '清除本地存储并重载': ['Clear local storage and reload', 'ローカルストレージを消去して再読み込み'],
-  '页面渲染中断': ['This page stopped rendering', 'このページの表示が中断されました'],
-  '已拦截为错误卡以避免白屏；重新加载即可恢复，完整堆栈保留在控制台。': [
-    'Caught and shown as an error card instead of a blank screen; reload to recover, and the full stack trace is in the console.',
-    '白画面にせずエラーカードとして表示しています。再読み込みで復帰できます。完全なスタックトレースはコンソールに出力済みです。',
-  ],
+  "页面无法打开": ["Unable to open the app", "ページを開けません"],
+  "请先重新加载。若仍无法打开，可清除此设备的网站数据；本地绘图、未同步修改和显示偏好将被删除。": ["Try reloading first. If the app still does not open, clear its data on this device. Local drawings, unsynced edits and display preferences will be deleted.", "まず再読み込みしてください。開けない場合は、この端末のサイトデータを削除できます。端末内の描画、未同期の変更、表示設定が削除されます。"],
+  "清除本地数据并重新加载": ["Clear local data and reload", "端末内のデータを削除して再読み込み"],
+  "页面显示失败": ["Unable to display this page", "ページを表示できません"],
+  "请重新加载页面。若仍无法显示，请稍后再试。": ["Reload the page. If it still does not load, try again later.", "ページを再読み込みしてください。表示されない場合は、時間をおいてお試しください。"],
   '加载中…': ['Loading…', '読み込み中…'],
 
   /* 横向滚动条 */
@@ -241,8 +231,5 @@ export const CHROME: Dict = {
   '语言': ['Language', '言語'],
   '界面语言': ['Interface language', '表示言語'],
   '切换界面语言': ['Change interface language', '表示言語を変更'],
-  '切换语言后页面会重新加载，以保证全站文案一致': [
-    'The page reloads after switching so every label matches the chosen language.',
-    '全体の表記をそろえるため、切り替え後にページを再読み込みします。',
-  ],
+  "切换语言后将重新加载页面": ["Changing the language reloads the page", "言語を変更するとページを再読み込みします"],
 };

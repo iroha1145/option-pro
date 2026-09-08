@@ -99,7 +99,7 @@ function StockNewsPanel({ ticker }: { ticker: string }) {
         <EmptyState
           image="/empty-news.svg"
           title={t("72 小时内无相关新闻")}
-          description={t("新的催化剂出现后将在电报纸上呈现")}
+          description={t("有相关新闻时会在此显示")}
           action={
             <Link
               to={`/catalysts?ticker=${encodeURIComponent(ticker)}`}

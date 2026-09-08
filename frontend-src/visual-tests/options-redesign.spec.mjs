@@ -73,7 +73,7 @@ test('合约明细显示32%隐波与对应买卖报价，缺失值不变成零',
   await expect(detail.getByText('32.0%', { exact: true })).toBeVisible();
   await expect(detail.getByText('$1.20', { exact: true })).toBeVisible();
   await expect(detail.getByText('$1.40', { exact: true })).toBeVisible();
-  await expect(detail).toContainText('不是实际资金流入');
+  await expect(detail).toContainText('成交金额按参考价 × 成交张数 × 100 估算');
   await expect(detail).toContainText('成交量为持仓量的 3.0 倍');
   await detail.getByRole('button', { name: '收起合约明细', exact: true }).click();
 
@@ -108,8 +108,8 @@ test('摘要指出同侧部分合约缺成交量，异动计数包含3倍边界'
   await openHarness(page);
   const summary = page.getByRole('region', { name: '期权成交摘要', exact: true });
   await expect(summary.getByText('看涨期权成交', { exact: true })).toBeVisible();
-  await expect(summary.getByText('已知 3/4 份合约 · 数据不完整', { exact: true })).toBeVisible();
-  await expect(summary.getByText('来自 2 份已知合约', { exact: true })).toBeVisible();
+  await expect(summary.getByText('已取得 3/4 份合约的成交量', { exact: true })).toBeVisible();
+  await expect(summary.getByText('合计 2 份合约', { exact: true })).toBeVisible();
   await expect(summary.getByText('6.4K', { exact: false })).toBeVisible();
   await expect(summary.getByText('需关注合约', { exact: true })).toBeVisible();
   await expect(summary.getByText('3份', { exact: true })).toBeVisible();
@@ -122,7 +122,7 @@ test('390px下展示单合约卡片，筛选和报价明细不造成整页横向
   await expect(list.getByRole('listitem')).toHaveCount(6);
   await expect(table(page)).toBeHidden();
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
-  await expect(page.getByText('已知 3/4 份合约 · 数据不完整', { exact: true })).toBeVisible();
+  await expect(page.getByText('已取得 3/4 份合约的成交量', { exact: true })).toBeVisible();
 
   await range(page).getByRole('button', { name: '仅看异动', exact: true }).click();
   await side(page).getByRole('button', { name: '看涨（Call）', exact: true }).click();

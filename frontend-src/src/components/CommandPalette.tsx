@@ -210,8 +210,8 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
         list.push({
           id: 'f-logout',
           group: __t('功能'),
-          title: __t('退出 Owner 登录'),
-          hint: __t('结束本机会话'),
+          title: __t('退出管理员账号'),
+          hint: __t('退出此设备上的登录'),
           icon: 'shield',
           action: () => {
             onClose();
@@ -225,7 +225,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
           id: 'f-logout',
           group: __t('功能'),
           title: username ? __t('退出 {name}', { name: username }) : __t('退出登录'),
-          hint: __t('结束本机会话'),
+          hint: __t('退出此设备上的登录'),
           icon: 'shield',
           action: () => {
             onClose();
@@ -237,7 +237,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
           id: 'f-login',
           group: __t('功能'),
           title: __t('登录'),
-          hint: __t('Owner 或客户账号'),
+          hint: __t('管理员或个人账号'),
           icon: 'shield',
           action: () => {
             onClose();

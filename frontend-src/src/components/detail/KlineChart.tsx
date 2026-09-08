@@ -955,7 +955,7 @@ export default function KlineChart({
             type="button"
             aria-pressed={smartDrawingEnabled}
             disabled={!analysisOk || !layerSettings.enabled.some(id => id === 'auto_patterns' || id === 'support_resistance')}
-            title={t('基于已收盘 K 线补充识别、合并重复线；不改变后端信号评分')}
+            title={t('根据已收盘 K 线识别支撑、阻力和形态，并合并相近线条')}
             onClick={() => setSmartDrawingEnabled(value => !value)}
             className={cn(toggleButtonCls(smartDrawingEnabled), 'min-h-8 disabled:cursor-not-allowed disabled:opacity-50')}
           >
@@ -1238,7 +1238,7 @@ export default function KlineChart({
             const touches = overlayRow.evidence.touches;
             const collapsed = overlayRow.evidence.collapsedCandidates;
             return (
-              <span key={overlayRow.id} title={t('几何质量不是胜率')}>
+              <span key={overlayRow.id} title={t('几何质量衡量形状的吻合程度')}>
                 {t('形态 · {name} · 几何质量 {n}', { name, n: Math.round(overlayRow.shapeQuality * 100) })}
                 {typeof touches === 'number' && touches > 0 ? ` · ${t('触碰 {n} 次', { n: touches })}` : ''}
                 {typeof collapsed === 'number' && collapsed > 0 ? ` · ${t('合并 {n} 个相近候选', { n: collapsed })}` : ''}
