@@ -1,0 +1,24 @@
+name: PR148 isolated review source
+on:
+  push:
+    branches: [codex/pr148-final-review-20260908]
+    paths: [.github/workflows/pr148-review-source.yml]
+permissions:
+  contents: read
+jobs:
+  source:
+    if: github.ref == 'refs/heads/codex/pr148-final-review-20260908'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - name: Archive tracked source only
+        run: git archive --format=zip --output=pr148-review-source.zip HEAD
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: pr148-isolated-review-source
+          path: pr148-review-source.zip
+          retention-days: 1
+          if-no-files-found: error
