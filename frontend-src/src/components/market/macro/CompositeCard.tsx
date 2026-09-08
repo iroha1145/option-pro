@@ -15,7 +15,7 @@ import { t } from '../../../i18n/core.ts';
 
 const HISTORY_BASIS_LABEL: Record<string, string> = {
   latest_revised_backfill: t('历史区间按当前修订值回算'),
-  local_point_in_time: t('本地点时快照'),
+  local_point_in_time: t('当时记录的数据'),
   mixed: t('混合：部分区间按当前修订值回算'),
 };
 
@@ -125,7 +125,6 @@ export default function CompositeCard({
       </div>
 
       <p className="mt-4 border-t border-line pt-3 text-micro leading-relaxed text-ink-400">
-        {t('分数是过去 5 年的历史分位，不是预测。高分表示当前金融环境相对历史更支持风险资产， 不代表市场一定上涨，也不构成买入、卖出、仓位或目标价建议。')}
         {historyBasis && (
           <>
             {' '}

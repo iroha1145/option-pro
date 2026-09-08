@@ -225,13 +225,13 @@ test('财报发布后显示自动重分析、进度和最终锁定状态', () =>
     'earnings_finalization_in_progress',
     'earnings_analysis_locked',
     'post_release_final',
-    '正在分析第 1 / 1 条',
-    '模型处理中',
+    '正在分析财报',
+    '正在生成分析',
     'role="progressbar"',
-    '财报已发布，正在自动重分析',
-    '自动重分析中',
-    '已锁定 · 最终分析',
-    '最终分析已锁定',
+    '财报已公布，正在更新分析',
+    '正在更新分析',
+    '最终分析',
+    '已完成最终分析',
   ]) {
     assert.equal(card.includes(required), true, `状态界面缺少 ${required}`);
   }

@@ -47,7 +47,7 @@ export function TierHistogram({
 
   return (
     <div className="card-surface p-5">
-      <p className="eyebrow">{__t('强度剖面 · 分档命中')}</p>
+      <p className="eyebrow">{__t('强度分布 · 筛选结果')}</p>
       <div className="mt-4 flex h-28 items-end gap-2.5">
         {TIERS.map((t) => {
           const hit = hits?.[t] ?? 0;

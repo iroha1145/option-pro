@@ -280,11 +280,14 @@ test('板块组件不再消费无后端依据的趋势、资金流和相关性�
   assert.equal(ivPanel.includes('ivChange30d'), false);
   assert.equal(ivPanel.includes('基于 252 个交易日'), false);
   /* 供应商名与内部来源标记不再印给普通读者。字段本身仍由 api 层如实保留
-     （见上方 mapper 断言），面板只呈现「板块内横向比较 + 延迟数据」这一条口径。 */
+     （见上方 mapper 断言），板块内横向比较放入现有帮助，延迟说明沿用全站页脚。 */
   assert.equal(ivPanel.includes('meta.providers'), false);
   assert.equal(ivPanel.includes('priceProvider'), false);
   assert.equal(ivPanel.includes('meta.snapshotSource'), false);
-  assert.match(ivPanel, /板块排位是同板块成分之间的横向比较/);
+  assert.match(ivPanel, /InfoHint hint=\{SCORE_HINTS\.sectorIvRank\}/);
+  const scoreHints = fs.readFileSync(path.join(sourceRoot, 'lib', 'scoreHints.ts'), 'utf8');
+  assert.match(scoreHints, /本板块成分股中的百分位/);
+  assert.match(scoreHints, /不是该股自己的历史高低位/);
   /* stale 提示必须留着：数据没刷新要让人看见 */
   assert.match(ivPanel, /meta\.stale/);
 });

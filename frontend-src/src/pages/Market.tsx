@@ -25,7 +25,6 @@ import SignalsReading, { type TrendBias } from '@/components/market/SignalsReadi
 import BreadthHistogram from '@/components/market/BreadthHistogram';
 import LinkCards from '@/components/market/LinkCards';
 import MacroConditionsPanel from '@/components/market/macro/MacroConditionsPanel';
-import SourceNote from '@/components/shared/SourceNote';
 import { t } from '../i18n/core.ts';
 
 const MARKET_TO_SESSION: Record<string, MarketSession> = {
@@ -83,7 +82,7 @@ export default function Market() {
         section="MKT"
         eyebrow="MARKET PULSE · INDEX & BREADTH"
         title={t("大盘强弱")}
-        description={t("指数、形态与广度的全景。")}
+        description={t("查看主要指数、市场趋势与个股强弱分布。")}
         meta={
           <>
             {session ? (
@@ -162,7 +161,7 @@ export default function Market() {
               <span className="eyebrow">CTA TREND FLOW</span>
             </span>
             <span className="mt-1 block text-caption text-ink-500">
-              {t('系统性趋势资金的代理仓位估算与模型触发位，已拆分为独立页面。')}
+              {t('查看趋势模型估算的仓位变化，以及可能引起调整的价位。')}
             </span>
           </span>
           <span className="ml-auto flex shrink-0 items-center gap-1 text-caption font-medium text-brand-600">
@@ -218,8 +217,6 @@ export default function Market() {
         <p className="eyebrow mb-3">{t('联动视图 · DRILL DOWN')}</p>
         <LinkCards />
       </section>
-
-      <SourceNote className="mt-8" />
     </div>
   );
 }

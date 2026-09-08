@@ -6,7 +6,6 @@ import { fmtRelative } from '@/lib/format';
 import type { ApiError } from '@/api/client';
 import TickerLogo from '@/components/shared/TickerLogo';
 import EmptyState from '@/components/shared/EmptyState';
-import SourceNote from '@/components/shared/SourceNote';
 import InfoHint from '@/components/shared/InfoHint';
 import SoftBadge from '@/components/shared/SoftBadge';
 import StatusNotice from '@/components/shared/StatusNotice';
@@ -82,7 +81,7 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, meta,
       {/* 头：标题 + 徽标 + 排序 */}
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <div className="flex min-w-0 flex-wrap items-center gap-2.5">
-          <h2 className="text-h3 text-ink-800">{t('板块 IV 横截面排名')}</h2>
+          <h2 className="text-h3 text-ink-800">{t('板块隐含波动率（IV）排名')}</h2>
           {meta.status !== 'active' && <SourceStatusBadge status={meta.status} />}
         </div>
         <div className="flex items-center gap-3">
@@ -101,7 +100,7 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, meta,
         </div>
       </div>
       <p className="mt-1 text-caption text-ink-400">
-        {desc ? t('当前 ATM IV 较高的成分在前') : t('当前 ATM IV 较低的成分在前')}
+        {desc ? t('按平值期权的隐含波动率从高到低排列') : t('按平值期权的隐含波动率从低到高排列')}
       </p>
 
       {/* 板块 pills（随 B1 联动，可手动改） */}
@@ -156,7 +155,7 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, meta,
             }
           />
         ) : (
-          <table className="min-w-[420px] w-full border-collapse" aria-label={t("板块 IV 横截面排名表")}>
+          <table className="min-w-[420px] w-full border-collapse" aria-label={t("板块隐含波动率排名表")}>
             <thead>
               <tr className="border-b border-line text-left text-eyebrow font-sans uppercase tracking-[0.14em] text-ink-400">
                 <th className="py-2.5 pr-2 font-sans">{t('代码')}</th>
@@ -222,11 +221,6 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, meta,
           </table>
         )}
       </div>
-
-      <SourceNote
-        className="mt-4"
-        text={t("板块排位是同板块成分之间的横向比较，不是该股自己的历史高低位；期权与价格均为延迟数据")}
-      />
     </div>
   );
 }

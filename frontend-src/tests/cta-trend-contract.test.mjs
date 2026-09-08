@@ -39,7 +39,8 @@ const backendConfig = readFileSync(
 );
 
 test('措辞红线：代理估算语义在场，禁用词绝迹', () => {
-  assert.match(panel, /代理模型估算，非任何机构真实仓位披露/);
+  assert.match(hints, /结果是模型估算，不代表任何机构的实际持仓或资金金额/);
+  assert.match(panel, /InfoHint hint=\{CTA_HINTS\.overview\}/);
   assert.match(panel, /基于 ETF 趋势的代理估算/);
   for (const forbidden of ['必买', '必卖', 'CTA 真实仓位', '确定会买入']) {
     assert.ok(!panel.includes(forbidden), `禁用措辞出现：${forbidden}`);
@@ -54,7 +55,7 @@ test('仓位与资金流分开：拆分展示 + 前值', () => {
 });
 
 test('数据不足诚实空态，不折中性', () => {
-  assert.match(panel, /历史长度不足（\{bars\}\/\{req\} 根），未生成估算——不以中性值代替/);
+  assert.match(panel, /历史数据不足：已有 \{bars\} 根日线，需 \{req\} 根才能估算/);
   assert.ok(!/position_score \?\? 0/.test(marketModule), '仓位 null 不得折 0');
   assert.match(marketModule, /position_score: pickN\(rec, 'position_score'\)/);
 });
@@ -64,14 +65,14 @@ test('断点区需收盘确认，盘中穿越只挂暂定章', () => {
   assert.match(panel, /盘中已穿越 · 待收盘确认/);
   assert.match(panel, /crossed_zone_ids/);
   assert.match(panel, /\.includes\(zone\.id\)/);
-  assert.match(panel, /盘中读数为暂定，不入正式历史/);
+  assert.match(panel, /盘中估算为暂定值，历史记录以收盘为准/);
 });
 
 test('v3 标签 = 真实状态迁移：翻仓键在场，rank 深度标签绝迹', () => {
   for (const key of [
     'short_cover', 'flip_to_long', 'reopen_long', 'add_long',
     'trim_long', 'flip_to_short', 'reopen_short', 'add_short',
-    /* 冲突标签：「转多/转空」只在趋势读数过零时用；饱和途中用 firming/fading */
+    /* 冲突标签：「转多/转空」只在趋势指标过零时用；饱和途中用 firming/fading */
     'trend_up_vol_dominates', 'trend_firming_vol_dominates',
     'trend_down_vol_dominates', 'trend_fading_vol_dominates',
   ]) {
@@ -108,7 +109,7 @@ test('v3 同向计数走后端下发（前端阈值只作旧快照回退）', ()
   assert.match(panel, /active_models/);
   assert.match(panel, /权重 \{p\}%/);
   /* 落后（非「晚于」）于最近交易日的措辞修正 */
-  assert.match(panel, /落后于最近交易日/);
+  assert.match(panel, /尚未更新至最近交易日/);
   assert.ok(!panel.includes('晚于最近交易日'));
   /* 标的名按 instrument 键映射，不再拿后端中文 label 当 i18n 键 */
   assert.match(panel, /instrumentName\(row\.instrument/);
@@ -162,8 +163,8 @@ test('hints 数字与后端 config 一致（镜子）', () => {
   assert.match(backendConfig, /TRIGGER_CLUSTER_ATR = 0\.40/);
   assert.match(backendConfig, /AGREEMENT_DIVERGENT = 0\.55/);
   assert.match(backendConfig, /SUBMODEL_ACTIVE_EPS = 0\.10/);
-  assert.ok(hints.includes('0.4×ATR'));
-  assert.ok(hints.includes('±12%'));
+  assert.ok(hints.includes('0.4 倍平均真实波幅（ATR）'));
+  assert.ok(hints.includes('现价上下 12%'));
   assert.ok(hints.includes('55%'));
   assert.ok(hints.includes('0.1'));
   assert.ok(hints.includes('快 30% / 中 40% / 慢 30%'));

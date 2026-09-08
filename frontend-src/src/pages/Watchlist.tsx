@@ -39,7 +39,6 @@ import Segmented from '@/components/shared/Segmented';
 import MenuSelect from '@/components/shared/MenuSelect';
 import DataTable, { type Column, type SortState } from '@/components/shared/DataTable';
 import EmptyState from '@/components/shared/EmptyState';
-import SourceNote from '@/components/shared/SourceNote';
 import InfoHint from '@/components/shared/InfoHint';
 import { SCORE_HINTS } from '@/lib/scoreHints';
 import SessionLED, { SessionDot } from '@/components/shared/SessionLED';
@@ -122,7 +121,7 @@ function ForceRefreshButton({ onRefresh, spinning }: { onRefresh: () => void; sp
     <button
       onClick={isOwner ? onRefresh : undefined}
       disabled={!isOwner || spinning}
-      title={isOwner ? t('重新计算完整自选数据') : t('登录 Owner 后可强制刷新')}
+      title={isOwner ? t('更新自选行情与评分') : t('管理员登录后可更新数据')}
       className={cn(
         'flex h-9 items-center gap-2 rounded-md border px-3 text-caption shadow-btn transition-colors duration-fast',
         isOwner
@@ -405,11 +404,11 @@ export default function Watchlist() {
 
   const onForceRefresh = useCallback(async () => {
     if (!isOwner || forceRefreshing) {
-      if (!isOwner) toast.info(t('登录 Owner 后可强制刷新'));
+      if (!isOwner) toast.info(t('管理员登录后可更新数据'));
       return;
     }
     setForceRefreshing(true);
-    toast.info(t('正在刷新'), t('正在重新计算完整自选数据'));
+    toast.info(t('正在刷新'), t('正在更新自选行情与评分'));
     try {
       const action = await runtimeApi.workerAction('focus_refresh');
       if (action.status !== 'completed') {
@@ -592,7 +591,7 @@ export default function Watchlist() {
   const personalFailed = Boolean(personal.error);
   const err = wl.error;
   const showingDefaultPool = !canManageWatchlist && !personal.loading && !personalFailed;
-  // 访客行情未到时 items 仍是 []，计数不能先写成「0 只（默认关注池）」再跳到 4。
+  // 访客行情未到时 items 仍是 []，计数不能先写成「0 只（默认关注）」再跳到 4。
   const displayedCount = canManageWatchlist
     ? (personal.loading ? null : items.length)
     : (loading ? DEFAULT_WATCHLIST_TICKERS.length : items.length);
@@ -650,7 +649,7 @@ export default function Watchlist() {
         section="01"
         eyebrow="WATCHLIST"
         title={t("自选观察")}
-        description={t("你盯住的票，今天谁在动。")}
+        description={t("跟踪自选股的价格、走势与市场信号。")}
         meta={
           <>
             {username && (
@@ -776,7 +775,7 @@ export default function Watchlist() {
               {displayedCount !== null && (
                 <>
                   <span className="font-mono tnum">{displayedCount}</span>{' '}
-                  {showingDefaultPool ? t('只（默认关注池）', { n: displayedCount }) : t('只标的', { n: displayedCount })}
+                  {showingDefaultPool ? t('只（默认关注）', { n: displayedCount }) : t('只标的', { n: displayedCount })}
                 </>
               )}
               {/* 默认池是站点的池子：拿它的规模对照「上限 50」等于把它冒充成用户自选 */}
@@ -988,7 +987,6 @@ export default function Watchlist() {
             <SkeletonCard />
           ) : null}
           <MarketClockCard />
-          <SourceNote />
         </aside>
       </div>
     </div>

@@ -48,7 +48,7 @@ test('snapshot-missing panels offer pull-and-analyze instead of a dead-end retry
   }
   assert.match(trend, /趋势偏向读取失败/);
   assert.match(list, /信号数据读取失败/);
-  assert.match(page, /技术结构读取失败 · 不代表该股没有结构/);
+  assert.match(page, /技术结构读取失败，请重试/);
   assert.match(control, /minimal/);
   assert.match(control, /拉取并分析/);
 });

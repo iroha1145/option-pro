@@ -246,7 +246,7 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
         const nextItem = { ...item, analysisStatus: (j.status === 'queued' ? 'queued' : 'in_progress') as CatalystNewsItem['analysisStatus'], analysisJobId: j.jobId };
         setItem(nextItem);
         onUpdate(nextItem);
-        toast.info(__t('分析任务已提交'), force ? __t('强制重新分析') : __t('可在本页查看真实状态'));
+        toast.info(__t('分析任务已提交'), force ? __t('强制重新分析') : __t('可在本页查看进度'));
       } catch (e) {
         toast.error(__t('提交失败'), e instanceof Error ? e.message : undefined);
       } finally {
@@ -421,7 +421,7 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
             {showFailed && (
               <div className="mt-4 rounded-md border border-down-600/20 bg-down-50 p-3.5">
                 <p className="text-body-s font-medium text-down-700">{__t('分析失败')}</p>
-                <p className="mt-1 text-micro text-ink-500">{job?.error ?? __t('模型输出校验失败，可重试')}</p>
+                <p className="mt-1 text-micro text-ink-500">{job?.error ?? __t('分析结果未通过检查，请重试')}</p>
               </div>
             )}
 
@@ -467,7 +467,7 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
       <ConfirmDialog
         open={confirm === 'create'}
         title={__t("生成 AI 分析？")}
-        description={__t("将调用模型对该新闻进行情绪与影响分析，消耗模型预算并计入每日额度与任务上限。")}
+        description={__t("分析这条新闻的市场倾向与可能影响，将消耗模型用量，并计入每日额度和任务数量。")}
         confirmLabel={__t("生成分析")}
         onConfirm={() => void startAnalysis(false)}
         onCancel={() => setConfirm(null)}
@@ -475,7 +475,7 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
       <ConfirmDialog
         open={confirm === 'force'}
         title={__t("强制重新分析？")}
-        description={__t("将忽略既有结果重新调用模型，消耗模型预算并计入每日额度；后台可能因冷却或开关限制而拒绝。")}
+        description={__t("重新生成这条新闻的分析，将再次消耗模型用量并计入每日额度。操作过于频繁或分析功能关闭时无法执行。")}
         confirmLabel={__t("重新分析")}
         onConfirm={() => void startAnalysis(true)}
         onCancel={() => setConfirm(null)}
@@ -483,7 +483,7 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
       <ConfirmDialog
         open={confirm === 'cancel'}
         title={__t("取消分析任务？")}
-        description={__t("任务取消后可重新发起；已产生的排队资源将释放。")}
+        description={__t("取消后可重新发起分析。")}
         confirmLabel={__t("取消任务")}
         danger
         onConfirm={() => void cancelJob()}

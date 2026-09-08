@@ -2,7 +2,7 @@ import { useQuoteSymbols } from '@/hooks/useLiveQuote';
 /**
  * §02 选股扫描（screener.md 完整实现）
  * B0 页头带（上次扫描 / 扫描历史 popover / owner strength_refresh）
- * B1 筛选工作台（周期/偏好/分档/预设/板块/价格/成交额/TopN + 真实等待态扫描钮）
+ * B1 筛选条件（周期/偏好/分档/预设/板块/价格/成交额/TopN + 真实等待态扫描钮）
  * B2 结果区（统计行 + 参数回显 chips + 三态排序 Segmented + 结果表/卡片流 + 行展开）
  * B3 右侧栏（市场形态 6 维 / 强度剖面 / 评分方法 / 空结果引导）
  * 状态：未扫描 empty-scan.svg · 扫描中骨架 · 无命中 · 503 快照不可用（保留上次结果）
@@ -745,7 +745,7 @@ export default function Screener() {
         section="02"
         eyebrow="SCREENER · STRENGTH SCAN"
         title={__t("选股扫描")}
-        description={__t("按真实行情扫描主题股票池，可查看扫描时间与股票池规模。")}
+        description={__t("按强度、板块与成交额筛选股票。")}
         meta={
           <>
             <span className="text-right">
@@ -764,7 +764,7 @@ export default function Screener() {
               <button
                 onClick={() => void onStrengthRefresh()}
                 disabled={refreshingStrength || scanState === 'scanning'}
-                title={__t("手动触发一次强度扫描（需 Owner）")}
+                title={__t("重新计算强度评分（需管理员登录）")}
                 className="flex h-9 items-center gap-2 rounded-md border border-line bg-card px-3 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Icon name="refresh" size={15} className={refreshingStrength ? 'animate-spin-once' : ''} />
@@ -775,7 +775,7 @@ export default function Screener() {
         }
       />
 
-      {/* B1 筛选工作台 */}
+      {/* B1 筛选条件 */}
       <div className="mt-6">
         <FilterWorkbench
           draft={draft}
@@ -801,7 +801,7 @@ export default function Screener() {
                 {__t('正在扫描…')}
                 {scanPhase === 'queued' ? ` · ${__t('排队中')}` : ''}
                 {scanPhase === 'running' ? ` · ${__t('后台计算中')}` : ''}
-                {scanPhase === 'verifying' ? ` · ${__t('正在核验发布')}` : ''}
+                {scanPhase === 'verifying' ? ` · ${__t('正在确认最新结果')}` : ''}
               </span>
             ) : scanState === 'done' || (scanState === 'error' && rows) ? (
               <>
@@ -811,7 +811,7 @@ export default function Screener() {
                 <span className="font-mono text-caption text-ink-400 tnum">{__t('耗时')} {(scanDurationMs / 1000).toFixed(1)}s</span>
                 {scanPhase === 'queued' && <SoftBadge>{__t('排队中')}</SoftBadge>}
                 {scanPhase === 'running' && <SoftBadge>{__t('后台计算中')}</SoftBadge>}
-                {scanPhase === 'verifying' && <SoftBadge>{__t('正在核验发布')}</SoftBadge>}
+                {scanPhase === 'verifying' && <SoftBadge>{__t('正在确认最新结果')}</SoftBadge>}
                 {reusedExisting && scanState === 'done' && (
                   <SoftBadge>{__t('使用已有评分')}</SoftBadge>
                 )}
@@ -830,7 +830,7 @@ export default function Screener() {
                 {truncatedScope && (
                   <SoftBadge
                     tone="warn"
-                    title={__t('价格上限、多板块、分档与最低分是客户端条件，只能作用在后端返回的这 {returned} 行上；已评分候选共 {screened} 只。', { returned: truncatedScope.returned, screened: truncatedScope.screened })}
+                    title={__t('价格、板块、分档与最低分筛选仅适用于已载入的 {returned} 只股票；已评分股票共 {screened} 只。', { returned: truncatedScope.returned, screened: truncatedScope.screened })}
                   >
                     {__t('仅在强度前')} {truncatedScope.returned} {__t('名内筛选')}
                   </SoftBadge>
@@ -911,7 +911,7 @@ export default function Screener() {
           {/* 宏观筛选会排除没有读数的行；数量说清楚，别让人以为那些股票不存在。 */}
           {showMacro && macroToneFilter !== 'all' && macroUnreadCount > 0 && (
             <p className="mt-2 text-micro text-ink-400">
-              {macroUnreadCount} {__t('只无宏观读数，已排除（不按中性计）')}
+              {macroUnreadCount} {__t('只缺少宏观数据，已从当前筛选结果中排除')}
             </p>
           )}
 
@@ -1140,8 +1140,8 @@ export default function Screener() {
                 transition={{ duration: 0.48, ease: EASE_PAPER }}
                 className="card-surface p-5"
               >
-                <p className="eyebrow">{__t('无命中引导')}</p>
-                <p className="mt-2.5 text-body-s text-ink-500">{__t('当前条件过严，没有标的进入结果集。')}</p>
+                <p className="eyebrow">{__t('调整筛选条件')}</p>
+                <p className="mt-2.5 text-body-s text-ink-500">{__t('暂无股票符合当前条件。')}</p>
                 <button
                   onClick={() => patchApplied({ tier: 'all', minScore: null, presetId: null })}
                   className="mt-3 flex items-center gap-1.5 rounded-md bg-brand-600 px-3 py-1.5 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105"

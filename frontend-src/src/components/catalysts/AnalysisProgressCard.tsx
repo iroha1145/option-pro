@@ -40,7 +40,7 @@ function progressHeadline(progress: NewsAnalysisProgress): string {
   if (progress.awaitingValidation > 0 && progress.waiting === 0) {
     return t('{n} 条结果等待简体中文校验', { n: progress.awaitingValidation });
   }
-  return t('任务正在队列中推进');
+  return t('分析任务正在处理');
 }
 
 function OwnerAnalysisProgressCard() {
@@ -74,7 +74,7 @@ function OwnerAnalysisProgressCard() {
       <section aria-label={t("新闻分析进度")} className="card-surface mt-4 px-5 py-4">
         <div className="flex items-center gap-2">
           <Led tone="down" />
-          <p className="text-body-s font-medium text-ink-800">{t('真实分析进度暂不可用')}</p>
+          <p className="text-body-s font-medium text-ink-800">{t('分析进度暂不可用')}</p>
         </div>
         <p className="mt-1 text-micro text-ink-400">{progressQ.error.message}</p>
       </section>
@@ -179,7 +179,7 @@ function OwnerAnalysisProgressCard() {
         )}
         {progress.rejected > 0 && (
           <span className="text-down-700">
-            {t('被拒绝结果未通过简体中文或结构校验，不会进入新闻正文')}
+            {t('部分分析未通过语言或格式检查，暂未发布')}
           </span>
         )}
         {progressQ.error && (

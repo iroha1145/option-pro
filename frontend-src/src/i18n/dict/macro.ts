@@ -34,7 +34,7 @@ export const MACRO: Dict = {
   '国债': ['Treasury', '国債'],
   '利率': ['Rates', '金利'],
   '技术 × 结构性宏观 · TECHNICAL × MACRO': ['Technical × structural macro', 'テクニカル × 構造的マクロ · TECHNICAL × MACRO'],
-  '暂无二维读数': ['No two-axis reading yet', '二軸データなし'],
+  '暂无技术与宏观对照数据': ['No technical–macro comparison data', 'テクニカルとマクロの比較データがありません'],
   '技术形态': ['Technical', 'テクニカル'],
   '结构性宏观': ['Structural macro', '構造的マクロ'],
   '差值': ['Gap', '乖離'],
@@ -49,6 +49,7 @@ export const MACRO: Dict = {
   /* ============ src/components/market/macro/CompositeCard.tsx ============ */
   '历史区间按当前修订值回算': ['Historical range recomputed on latest revisions', '履歴期間は最新修正値による遡及計算'],
   '本地点时快照': ['Local point-in-time snapshot', 'ローカル時点スナップショット'],
+  '当时记录的数据': ['Data recorded at the time', '当時記録したデータ'],
   '混合：部分区间按当前修订值回算': ['Mixed: part of the range is recomputed on latest revisions', '混在：一部区間は最新修正値による遡及計算'],
   '宏观环境综合分': ['Macro conditions composite score', 'マクロ環境総合スコア'],
   '综合分 · COMPOSITE': ['Composite', '総合スコア · COMPOSITE'],
@@ -57,10 +58,7 @@ export const MACRO: Dict = {
   '7 日变化': ['7-day change', '7日間の変化'],
   '有效模块': ['Valid modules', '有効モジュール'],
   '数据截止': ['Data as of', 'データ基準日'],
-  '分数是过去 5 年的历史分位，不是预测。高分表示当前金融环境相对历史更支持风险资产， 不代表市场一定上涨，也不构成买入、卖出、仓位或目标价建议。': [
-    "The score is a historical percentile over the past 5 years, not a forecast. A high score means the current financial environment is more supportive of risk assets relative to history — it doesn't mean the market will necessarily rise, and it is not a buy, sell, position-sizing, or price-target recommendation.",
-    'このスコアは過去5年間のヒストリカル・パーセンタイルであり、予測ではありません。高スコアは現在の金融環境が過去と比べて相対的にリスク資産を支持しやすいことを示すものであり、相場が必ず上昇することを意味せず、買い・売り・ポジション・目標株価のいずれの推奨も構成しません。',
-  ],
+  '分数反映当前金融环境在过去 5 年中的相对位置；分数越高，环境越有利于风险资产。': ['The score places current financial conditions within the past 5 years. Higher scores indicate greater support for risk assets.', '現在の金融環境が過去5年間のどの水準にあるかを示します。高いほど、リスク資産に有利な環境です。'],
 
   /* ============ src/components/market/macro/FactorDetails.tsx ============ */
   '重试': ['Retry', '再試行'],
@@ -71,7 +69,7 @@ export const MACRO: Dict = {
   '7 日分数变化': ['7-day score change', '7日間のスコア変化'],
   '因子详情暂不可用': ['Factor details unavailable', 'ファクターの詳細は利用できません'],
   '因子详情': ['Factor details', 'ファクター詳細'],
-  '该模块暂无因子快照。': ['No factor snapshot for this module yet.', 'このモジュールにはまだファクターのスナップショットがありません。'],
+  '该类指标暂无数据。': ['No data is available for this group of indicators.', 'この指標グループにはまだデータがありません。'],
 
   /* ============ src/components/market/macro/FactorRow.tsx ============ */
   '历史不足': ['Insufficient history', '履歴不足'],
@@ -95,10 +93,7 @@ export const MACRO: Dict = {
   '刷新未成功': ['Refresh failed', '更新に失敗'],
   '宏观数据源尚未配置': ['Macro data source not yet configured', 'マクロデータソース未設定'],
   '宏观环境未启用': ['Macro conditions disabled', 'マクロ環境は無効です'],
-  '需要在服务器上配置 FRED 数据源密钥后，宏观环境才会开始积累快照。': [
-    'Macro conditions will start accumulating snapshots once a FRED data-source key is configured on the server.',
-    'サーバー側で FRED データソースキーを設定すると、マクロ環境のスナップショット蓄積が始まります。',
-  ],
+  '管理员配置经济数据平台（FRED）的访问密钥后，即可开始更新宏观数据。': ['Macro data can start updating once an administrator configures a FRED access key.', '管理者が経済データサービス（FRED）のアクセスキーを設定すると、マクロデータの更新が始まります。'],
   '本功能在配置中处于关闭状态。': ['This feature is turned off in the current configuration.', 'この機能は現在の設定でオフになっています。'],
   '配置只能在服务器端完成；页面不显示任何密钥信息。': [
     'Configuration can only be done server-side; this page never displays key information.',
@@ -106,7 +101,7 @@ export const MACRO: Dict = {
   ],
   '刷新冷却中。': ['Refresh is cooling down.', '更新はクールダウン中です。'],
   '服务器尚未配置宏观数据源密钥。': ['The server has not configured a macro data-source key yet.', 'サーバー側でマクロデータソースキーがまだ設定されていません。'],
-  'Worker 当前不可用，稍后再试。': ['Worker is currently unavailable — try again later.', 'Worker は現在利用できません。しばらくしてから再度お試しください。'],
+  '后台服务暂不可用，请稍后重试。': ['The background service is unavailable. Please try again later.', 'バックグラウンド処理を利用できません。しばらくしてから再度お試しください。'],
   '刷新请求未成功。': ['The refresh request did not succeed.', '更新リクエストは失敗しました。'],
   '宏观环境暂不可用': ['Macro conditions unavailable', 'マクロ環境は利用できません'],
   '宏观环境 · MACRO CONDITIONS': ['Macro conditions', 'マクロ環境 · MACRO CONDITIONS'],
@@ -115,28 +110,16 @@ export const MACRO: Dict = {
     'FRBの流動性・ファンディング・国債・金利・クレジット・リスク・外部ショックに関する過去5年間のヒストリカル・パーセンタイル。',
   ],
   '登录后可手动刷新': ['Sign in to refresh manually', 'ログインすると手動更新が可能です'],
-  '上游告警：': ['Upstream warnings: ', 'アップストリーム警告：'],
-  '。 面板继续显示上一份有效快照。': [
-    '. The panel continues to show the last valid snapshot.',
-    '。パネルには直近の有効なスナップショットが引き続き表示されます。',
-  ],
+  '数据更新提示：': ['Data update notice: ', 'データ更新のお知らせ：'],
+  '。当前显示上次成功更新的数据。': ['. Showing the last successfully updated data.', '。前回正常に更新できたデータを表示しています。'],
   '暂无正式综合分': ['No official composite score', '正式な総合スコアなし'],
-  '有效模块不足 5 个时不输出正式综合分，也不会用 50 或上一次的分数顶替。': [
-    'No official composite score is published when fewer than 5 modules are valid — it is never backfilled with 50 or the previous score.',
-    '有効モジュールが5個未満の場合、正式な総合スコアは出力されません。50点や前回スコアで代用することもありません。',
-  ],
+  '至少需要 5 类有效指标才能计算综合分。': ['At least 5 valid indicator groups are needed to calculate the composite score.', '総合スコアの算出には、少なくとも5つの有効な指標グループが必要です。'],
   '改善最多 · IMPROVING': ['Most improved', '改善幅トップ · IMPROVING'],
   '7 日分数改善最多': ['Biggest 7-day score improvement', '7日間のスコア改善幅トップ'],
-  '暂无可比的 7 日历史快照，或本期没有分数上升的因子。缺少比较对象时这里留空，不显示 0。': [
-    "No comparable 7-day historical snapshot, or no factors improved this period. When there's nothing to compare against, this is left blank rather than shown as 0.",
-    '比較可能な7日前のヒストリカル・スナップショットがないか、今期スコアが上昇したファクターがありません。比較対象がない場合は空欄のままとし、0とは表示しません。',
-  ],
+  '暂无 7 日前的数据可供比较，或本期没有评分上升的指标。': ['No data from 7 days ago is available for comparison, or no indicator scores rose this period.', '7日前の比較データがないか、この期間にスコアが上昇した指標がありません。'],
   '恶化最多 · DETERIORATING': ['Most deteriorated', '悪化幅トップ · DETERIORATING'],
   '7 日分数恶化最多': ['Biggest 7-day score decline', '7日間のスコア悪化幅トップ'],
-  '暂无可比的 7 日历史快照，或本期没有分数下降的因子。缺少比较对象时这里留空，不显示 0。': [
-    "No comparable 7-day historical snapshot, or no factors declined this period. When there's nothing to compare against, this is left blank rather than shown as 0.",
-    '比較可能な7日前のヒストリカル・スナップショットがないか、今期スコアが下落したファクターがありません。比較対象がない場合は空欄のままとし、0とは表示しません。',
-  ],
+  '暂无 7 日前的数据可供比较，或本期没有评分下降的指标。': ['No data from 7 days ago is available for comparison, or no indicator scores fell this period.', '7日前の比較データがないか、この期間にスコアが低下した指標がありません。'],
   '「按当前修订值回算」的历史区间使用今天能看到的最新修订数据，不代表当时市场已知的分数； 本地部署后每次实际抓取形成的快照才具备真实的点时语义。': [
     'Historical ranges labeled "recomputed on latest revisions" use the most recent revised data available today — they do not represent the score as known to the market at the time. Only the snapshots actually captured live after this feature launched carry true point-in-time meaning.',
     '「最新修正値による遡及計算」とラベル表示された履歴期間は、本日時点で参照できる最新の修正済みデータを使って計算したものであり、当時市場が実際に知り得たスコアではありません。本機能の稼働後にローカルで実際に取得して作成されたスナップショットのみが、真の時点データとしての意味を持ちます。',
@@ -144,24 +127,18 @@ export const MACRO: Dict = {
 
   /* ============ src/components/market/macro/MacroHistoryChart.tsx ============ */
   '按当前修订值回算': ['Recomputed on latest revisions', '最新修正値による遡及計算'],
-  '混合基础': ['Mixed basis', '混在ベース'],
+  '含回算与历史记录': ['Recomputed and recorded data', '再計算データと当時の記録'],
   '综合分（回算）': ['Composite (recomputed)', '総合スコア（遡及計算）'],
   '中性 50': ['Neutral 50', '中立 50'],
-  '综合分（本地点时）': ['Composite (local point-in-time)', '総合スコア（ローカル時点）'],
+  '综合分（当时记录）': ['Composite (recorded at the time)', '総合スコア（当時の記録）'],
   '宏观环境历史': ['Macro conditions history', 'マクロ環境の履歴'],
   '综合分历史 · COMPOSITE HISTORY': ['Composite history', '総合スコア履歴 · COMPOSITE HISTORY'],
   '历史区间': ['History range', '履歴期間'],
   '历史数据读取失败：': ['Failed to load historical data: ', '履歴データの読み込みに失敗しました：'],
-  '历史正在积累：本地快照攒够之后这里会显示综合分曲线。': [
-    'History is still accumulating: once enough local snapshots have been captured, the composite score curve will appear here.',
-    '履歴データを蓄積中です。ローカルのスナップショットが十分に蓄積されると、ここに総合スコアの推移曲線が表示されます。',
-  ],
+  '历史数据积累中，记录足够后将显示综合分曲线。': ['The composite chart will appear once enough historical records are available.', '履歴データを蓄積中です。記録がそろうと総合スコアの推移を表示します。'],
   '宏观环境综合分历史曲线': ['Macro conditions composite score history chart', 'マクロ環境総合スコアの推移チャート'],
   '叠加模块线': ['Overlay module lines', 'モジュール別ラインを重ねる'],
-  '虚线段表示该区间按当前修订值回算，不是当时市场已知的分数；实线段来自本地点时快照。': [
-    'Dashed segments indicate that range is recomputed on latest revisions rather than the score as known to the market at the time; solid segments come from local point-in-time snapshots.',
-    '破線区間は最新修正値による遡及計算であり、当時市場が知り得たスコアではないことを示します。実線区間はローカル時点スナップショットによるものです。',
-  ],
+  '虚线按最新修订数据重新计算；实线为当时记录的分数。': ['Dashed lines use the latest revised data; solid lines show scores recorded at the time.', '破線は最新の改定データで再計算した値、実線は当時記録したスコアです。'],
 
   /* ============ src/components/market/macro/ModuleCard.tsx ============ */
   '有效因子 —': ['Valid factors —', '有効ファクター —'],
@@ -277,24 +254,15 @@ export const MACRO: Dict = {
   ' · 价格明显跑在环境前面': [' · Price is clearly running ahead of the backdrop', ' · 価格が環境に明らかに先行'],
   ' · 宏观先行改善，价格未跟上': [" · Macro improving first, price hasn't caught up", ' · マクロが先に改善、価格が追いついていない'],
   '· 不按中性计': ['· not treated as neutral', '· 中立扱いにはしません'],
-  '影子字段 · 不参与排名': ['Shadow field · not included in ranking', 'シャドウフィールド · ランキング対象外'],
+  '宏观评分单独展示': ['Macro score shown separately', 'マクロスコアを別途表示'],
 
   /* ============ MacroConditionsPanel.tsx：刷新状态提示（不在原 msgid 清单里，人工补录） ============ */
-  '刷新仍未在预期时间内完成，面板会在下一次轮询更新。': [
-    "The refresh hasn't finished within the expected time — the panel will update on the next poll.",
-    '想定時間内に更新が完了しませんでした。次回のポーリングでパネルが更新されます。',
-  ],
-  '宏观快照已更新。': ['The macro snapshot has been updated.', 'マクロスナップショットを更新しました。'],
+  '刷新仍在进行，完成后自动显示最新数据。': ['The refresh is still running. Updated data will appear automatically.', '更新処理が続いています。完了後、最新データを自動で表示します。'],
+  '宏观数据已更新。': ['Macro data updated.', 'マクロデータを更新しました。'],
   '刷新冷却中，{n} 秒内只允许一次。': [
     'Refresh is cooling down — only one request is allowed every {n} seconds.',
     '更新はクールダウン中です。{n}秒に1回のみ実行できます。',
   ],
-  '已有一次宏观刷新在进行，本次复用同一任务。': [
-    'A macro refresh is already in progress — this request reuses that same job.',
-    'マクロデータの更新が既に進行中のため、今回のリクエストは同じジョブを再利用します。',
-  ],
-  '已排入 Worker 队列，完成后面板会在下一次轮询更新。': [
-    'Queued on the worker — the panel will update on the next poll once it finishes.',
-    'ワーカーのキューに登録しました。完了後、次回のポーリングでパネルが更新されます。',
-  ],
+  '宏观数据正在刷新，请等待完成。': ['Macro data is already refreshing. Please wait for it to finish.', 'マクロデータを更新中です。完了までお待ちください。'],
+  '刷新请求已提交，完成后自动显示最新数据。': ['Refresh requested. Updated data will appear automatically.', '更新を受け付けました。完了後、最新データを自動で表示します。'],
 };

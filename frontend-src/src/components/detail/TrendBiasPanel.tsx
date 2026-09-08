@@ -26,7 +26,7 @@ const LABEL_STYLE: Record<StockTrendBiasView['trend_bias_label'], string> = {
 const STATUS_META: Record<StockTrendBiasView['trend_bias_status'], { text: string; cls: string } | null> = {
   ok: null,
   degraded: { text: t('部分指标缺失'), cls: 'border-warn-600/40 bg-warn-50 text-warn-600' },
-  insufficient_data: { text: t('数据不足 · 结果仅供参考'), cls: 'border-line-strong bg-card-warm text-ink-500' },
+  insufficient_data: { text: t('数据不足，暂不评分'), cls: 'border-line-strong bg-card-warm text-ink-500' },
 };
 
 const TONE_DOT: Record<TrendBiasFactor['tone'], string> = {
@@ -193,7 +193,7 @@ export default function TrendBiasPanel({
         </ul>
       ) : (
         <p className="mt-5 border-t border-line pt-4 text-center text-body-s text-ink-400">
-          {t('暂无可展示的真实信号因子')}
+          {t('暂无分项信号')}
         </p>
       )}
 
@@ -209,9 +209,9 @@ export default function TrendBiasPanel({
         </p>
       )}
       <p className="mt-4 text-micro text-ink-400">
-        {t('分项由该股实测信号换算')}
+        {t('分项根据该股信号计算')}
         <InfoHint hint={SCORE_HINTS.trendBiasFactors} size={11} className="mx-0.5" />
-        {t(' · 缺项显示 — · 非收益预测 · 更新于 ')}
+        {t(' · 缺失项显示 — · 更新于 ')}
         <span className="font-mono tnum">{fmtTimeHHMMSS(new Date(data.as_of))}</span>
       </p>
     </div>

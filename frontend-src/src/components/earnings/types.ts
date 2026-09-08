@@ -6,6 +6,32 @@
 import type { EarningsImpact, EarningsItem } from '@/api/types';
 import { t, getLocale } from '../../i18n/core.ts';
 
+/** Provider sector names can arrive in English even when company names are localized. */
+export function earningsSectorLabel(value: string | null | undefined): string | null {
+  const name = value?.trim();
+  if (!name) return null;
+  switch (name.toLowerCase()) {
+    case 'technology':
+    case 'information technology': return t('信息技术');
+    case 'healthcare':
+    case 'health care': return t('医疗保健');
+    case 'financial services':
+    case 'financials': return t('金融');
+    case 'consumer cyclical':
+    case 'consumer discretionary': return t('可选消费');
+    case 'consumer defensive':
+    case 'consumer staples': return t('必需消费');
+    case 'communication services': return t('通信服务');
+    case 'industrials': return t('工业');
+    case 'basic materials':
+    case 'materials': return t('原材料');
+    case 'energy': return t('能源');
+    case 'utilities': return t('公用事业');
+    case 'real estate': return t('房地产');
+    default: return t(name);
+  }
+}
+
 /** upcoming 行（契约扩展字段可选，兼容 snake_case 下发） */
 export interface EarningsRow extends EarningsItem {
   epsHigh?: number | null;

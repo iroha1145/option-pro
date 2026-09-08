@@ -39,7 +39,7 @@ function IvHeatCard({
   return (
     <div className="card-surface p-5">
       <div className="flex items-center justify-between">
-        <p className="eyebrow">{t('当前 IV 横截面 · 高位')}</p>
+        <p className="eyebrow">{t('当前隐含波动率较高的股票')}</p>
         <Icon name="flame-line" size={16} className="text-ink-400" />
       </div>
       <div className="mt-4 grid grid-cols-3 gap-2">
@@ -95,7 +95,7 @@ function IvHeatCard({
       {!loading && top.length === 0 && (
         error ? (
           <p className="mt-3 flex items-center gap-2 text-micro text-ink-400">
-            {t('IV 数据读取失败——是读不到，不是该板块没有样本。')}
+            {t('隐含波动率数据加载失败，请重试。')}
             {onRetry && (
               <button
                 onClick={onRetry}
@@ -183,13 +183,13 @@ function CoverageCard({
           </dd>
         </div>
         <div className="flex items-center justify-between py-2.5">
-          <dt className="text-caption text-ink-500">{t('横截面最高')}</dt>
+          <dt className="text-caption text-ink-500">{t('板块内最高')}</dt>
           <dd className="font-mono text-data-m text-ink-800 tnum">
             {highest ? `${highest.ticker} · ${highest.rank.toFixed(1)}` : '—'}
           </dd>
         </div>
         <div className="flex items-center justify-between py-2.5">
-          <dt className="text-caption text-ink-500">{t('横截面最低')}</dt>
+          <dt className="text-caption text-ink-500">{t('板块内最低')}</dt>
           <dd className="font-mono text-data-m text-ink-800 tnum">
             {lowest ? `${lowest.ticker} · ${lowest.rank.toFixed(1)}` : '—'}
           </dd>
@@ -198,7 +198,6 @@ function CoverageCard({
 
       <p className="mt-3 text-micro leading-5 text-ink-400">
         {meta.asOf ? t('数据时间 {time}。', { time: fmtRelative(meta.asOf) }) : t('数据时间暂缺。')}
-        {t('排位只比较当前板块成分的 ATM IV，不代表一年历史百分位。')}
       </p>
     </div>
   );

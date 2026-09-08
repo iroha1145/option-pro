@@ -1,6 +1,6 @@
 /**
  * B2.5 管理面板（owner 专属，移植自旧版 deck 催化剂管理区）
- * 三区：数据刷新（新闻/日历/源健康 → /api/catalysts/refresh）
+ * 三区：数据刷新（新闻/日历/数据源状态 → /api/catalysts/refresh）
  *      后台任务（焦点池/强势/突破 → /api/worker/actions/{type} + worker 健康清单）
  *      运行设置（手动分析/定时分析开关 → /api/runtime-settings，乐观锁 + 回滚）
  * 访客不渲染；所有状态如实呈现（冷却/禁用/版本冲突都给出后端原话）。
@@ -27,7 +27,7 @@ import { t as __t } from '../../i18n/core.ts';
 const REFRESH_OPS: { op: RefreshOperation; label: string }[] = [
   { op: 'news', label: __t('新闻流') },
   { op: 'calendar', label: __t('经济日历') },
-  { op: 'source_health', label: __t('源健康') },
+  { op: 'source_health', label: __t('数据源状态') },
 ];
 
 const WORKER_ACTIONS: { action: WorkerActionType; label: string }[] = [
@@ -182,7 +182,7 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
       try {
         const t = await adminApi.workerAction(action);
         if (t.reason === 'cooldown') toast.info(__t('{label}仍在冷却', { label }), __t('稍后自动执行或重试'));
-        else if (t.reason === 'already_running') toast.info(__t('{label}正在执行', { label }), __t('复用现有任务'));
+        else if (t.reason === 'already_running') toast.info(__t('{label}正在执行', { label }), __t('已有任务正在进行'));
         else toast.success(__t('{label}刷新已入队', { label }));
         adminApi.workerStatus().then(setWorker, () => undefined);
       } catch (e) {
@@ -282,7 +282,7 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
             className="overflow-hidden"
           >
             <div className="grid grid-cols-1 gap-3 border-t border-line px-5 py-4 lg:grid-cols-3">
-              <SectionCard title={__t("数据刷新")} hint={__t("只重拉所选数据，不触发模型任务，不占用 AI 预算")}>
+              <SectionCard title={__t("数据刷新")} hint={__t("更新所选数据，不消耗分析额度")}>
                 <div className="flex flex-wrap gap-2">
                   {REFRESH_OPS.map((o) => (
                     <ActionButton key={o.op} label={o.label} busy={busyOp === `r-${o.op}`} onClick={() => void runRefresh(o.op, o.label)} />
@@ -290,7 +290,7 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
                 </div>
               </SectionCard>
 
-              <SectionCard title={__t("后台任务")} hint={__t("进入统一后台队列；重复点击复用现有任务（30s 冷却）")}>
+              <SectionCard title={__t("后台任务")} hint={__t("任务在后台执行，30 秒内重复点击不会新建任务")}>
                 <div className="flex flex-wrap gap-2">
                   {WORKER_ACTIONS.map((a) => (
                     <ActionButton key={a.action} label={a.label} busy={busyOp === `w-${a.action}`} onClick={() => void runWorkerAction(a.action, a.label)} />
@@ -311,7 +311,7 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
                 ) : null}
               </SectionCard>
 
-              <SectionCard title={__t("运行设置")} hint={doc ? __t('版本 v{version} · 乐观锁保护', { version: doc.version }) : __t('正在读取运行设置')}>
+              <SectionCard title={__t("运行设置")} hint={doc ? __t('设置版本 {version}', { version: doc.version }) : __t('正在读取运行设置')}>
                 {docErr ? (
                   <p className="text-micro text-ink-400">{__t('运行设置不可用 ·')} {docErr}</p>
                 ) : draft ? (

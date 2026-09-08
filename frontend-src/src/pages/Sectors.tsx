@@ -130,7 +130,7 @@ export default function Sectors() {
         section="04"
         eyebrow="SECTORS · LIVE AGGREGATES"
         title={t("板块透视")}
-        description={t("比较真实的板块平均收益、平均强度与成分覆盖。")}
+        description={t("比较各板块的平均涨跌幅、个股强度与数据覆盖情况。")}
         meta={
           <>
             <span className="hidden font-mono text-micro text-ink-400 tnum sm:inline">
@@ -185,12 +185,12 @@ export default function Sectors() {
             {/* 横幅必须与页面事实一致（审计 2.2.10）：usePolling 失败不清空旧数据，
               * 有旧快照时下面显示的是上次成功的数值，要说「已过期」而不是「留空」。 */}
             {strengthQ.data
-              ? t('强度聚合刷新失败：下方显示的是上次成功的数值（已过期{time}）。', {
+              ? t('板块强度更新失败，当前显示上次结果（已过期{time}）。', {
                   time: strengthQ.lastUpdatedAt
                     ? ` · ${fmtTimeHHMMSS(strengthQ.lastUpdatedAt)}`
                     : '',
                 })
-              : t('板块目录已加载，但收益与强度聚合暂不可用；缺失位置保持为空。')}
+              : t('板块列表已加载，涨跌幅与强度数据暂不可用。')}
           </span>
         </StatusNotice>
       )}
@@ -275,7 +275,7 @@ export default function Sectors() {
       </AnimatePresence>
 
       <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-12">
-        <section className="lg:col-span-7" aria-label={t("IV 横截面排名")}>
+        <section className="lg:col-span-7" aria-label={t("当前隐含波动率排名")}>
           {catalogQ.error ? (
             <div className="card-surface">
               <EmptyState
@@ -305,7 +305,7 @@ export default function Sectors() {
               <EmptyState
                 image="/empty-chart.svg"
                 title={t("暂无可查询的板块")}
-                description={t("板块目录没有返回有效编号，未发起 IV 排名请求。")}
+                description={t("板块信息不完整，暂无法查询隐含波动率排名。")}
                 action={
                   <button
                     type="button"
@@ -344,7 +344,7 @@ export default function Sectors() {
                 variant="error"
                 icon="doc-quote"
                 title={t("IV 数据暂不可用")}
-                description={t("板块目录不可用，保持空状态；恢复目录后自动继续。")}
+                description={t("板块信息暂不可用，恢复后将自动更新。")}
                 action={
                   <button
                     type="button"

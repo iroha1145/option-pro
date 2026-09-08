@@ -200,7 +200,7 @@ export default function HistoryRail({
           <EmptyState
             image="/empty-radar.svg"
             title={t("暂无匹配的历史事件")}
-            description={t("放宽页头筛选条件，或等雷达下一轮扫描把事件沉淀到这里")}
+            description={t("可放宽筛选条件，或等待下一轮扫描。")}
             action={
               <button
                 onClick={onRetry}

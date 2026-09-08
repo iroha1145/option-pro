@@ -366,12 +366,12 @@ test('财报日历保留全市场覆盖状态和真实供应方', () => {
   }
   assert.equal(source.includes('mapUpcomingPayload'), true);
   assert.equal(page.includes('财报数据暂时不完整'), true);
-  assert.equal(page.includes('缺失的公司不会用估算值顶替'), true);
+  assert.equal(page.includes('部分公司数据缺失'), true);
   assert.equal(page.includes('const coverageLimited = q.data?.dataLimited === true;'), true);
   assert.equal(page.includes("q.data?.sourceStatus === 'degraded'"), false);
   /* providers 由 mapper 如实保留（上方字段断言），但不印供应商名给普通读者 */
   assert.equal(page.includes("q.data.providers.join(' + ')"), false);
-  assert.equal(page.includes('继续使用上一次完整日历'), true);
+  assert.equal(page.includes('显示上次完整日历'), true);
 });
 
 test('财报影响卡只消费真实分析字段', () => {
@@ -398,7 +398,7 @@ test('财报影响卡只消费真实分析字段', () => {
   }
   assert.equal(source.includes('if (!ticker || !aiEnabled)'), false);
   assert.equal(source.includes("setPhase(!ticker ? 'idle' : 'loading')"), true);
-  assert.equal(source.includes('已有分析仍会照常显示'), true);
+  assert.equal(source.includes('已有分析仍可查看'), true);
 });
 
 test('财报页面保留近期已公布结果并默认收纳长列表', () => {
@@ -513,7 +513,7 @@ test('财报模型使用精确报告级接口、逐条进度和管理员批量�
   ]) {
     assert.equal(card.includes(field), false, `访客请求不应携带客户端财务字段 ${field}`);
   }
-  assert.equal(card.includes('正在分析第 1 / 1 条'), true);
+  assert.equal(card.includes('正在分析财报'), true);
   assert.equal(controls.includes('earningsScheduledAnalysisEnabled'), true);
   assert.equal(controls.includes("runtimeApi.workerAction('earnings_analysis')"), true);
   assert.equal(controls.includes('runtimeApi.waitForWorkerAction(action.requestId)'), true);
@@ -522,7 +522,7 @@ test('财报模型使用精确报告级接口、逐条进度和管理员批量�
     assert.equal(controls.includes(field), true, `批量任务回执缺少 ${field}`);
   }
   assert.equal(controls.includes('自动分析设置已保存，但首次任务失败'), true);
-  assert.equal(controls.includes('最近任务检查'), true);
+  assert.equal(controls.includes('最近检查'), true);
   assert.equal(controls.includes('未来 5 天'), true);
 });
 
@@ -552,7 +552,7 @@ test('财报组件不再伪造 Optix Research 来源', () => {
   assert.equal(density.includes('财报日程 · 以公司公告为准'), true);
   assert.equal(density.includes('slice(0, MAX_TOOLTIP_TICKERS)'), true);
   assert.equal(density.includes('+{n - MAX_TOOLTIP_TICKERS}'), true);
-  assert.equal(card.includes('AI 依据本次财报日程生成'), true);
+  assert.equal(card.includes('AI 生成的财报影响分析'), true);
 });
 
 test('股票搜索失败显示明确错误态，不伪装成空结果', () => {

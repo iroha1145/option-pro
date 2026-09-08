@@ -133,28 +133,36 @@ function LoginMotif({ className }: { className?: string }) {
 
 /* ---------------- 逐字入场大标 ---------------- */
 function CharStagger({ text, className, delayBase = 0 }: { text: string; className?: string; delayBase?: number }) {
+  let characterIndex = 0;
   return (
     <span className={className} aria-label={text} role="text">
-      {Array.from(text).map((ch, i) => (
-        <motion.span
-          key={`${ch}-${i}`}
-          aria-hidden="true"
-          className="inline-block"
-          initial={{ opacity: 0, y: 24 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: delayBase + i * 0.03 }}
-        >
-          {ch}
-        </motion.span>
-      ))}
+      {text.split(/(\s+)/).map((part, wordIndex) => {
+        // Keep English words together while allowing Chinese and Japanese text to wrap.
+        if (/^\s+$/.test(part)) return <span key={wordIndex} aria-hidden="true">{part}</span>;
+        return (
+          <span key={wordIndex} aria-hidden="true" className={/[\u3040-\u30ff\u3400-\u9fff]/u.test(part) ? undefined : 'inline-block whitespace-nowrap'}>
+            {Array.from(part).map((ch, index) => (
+              <motion.span
+                key={index}
+                className="inline-block"
+                initial={{ opacity: 0, y: 24 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: delayBase + characterIndex++ * 0.03 }}
+              >
+                {ch}
+              </motion.span>
+            ))}
+          </span>
+        );
+      })}
     </span>
   );
 }
 
 const FEATURES: { icon: IconName; title: string; desc: string }[] = [
-  { icon: 'radar', title: t('突破雷达'), desc: t('价格越界的瞬间，已经在你的雷达上。') },
-  { icon: 'layers', title: t('板块透视'), desc: t('热力、强度、IV 排名，一屏定位资金方向。') },
-  { icon: 'spark-ai', title: t('财报 AI'), desc: t('财报落地前，先看清涟漪往哪传。') },
+  { icon: 'radar', title: t('突破雷达'), desc: t('追踪价格突破、回踩与成交量变化。') },
+  { icon: 'layers', title: t('板块透视'), desc: t('比较板块涨跌、股票强弱与期权波动率。') },
+  { icon: 'spark-ai', title: t('财报 AI'), desc: t('查看财报日程、市场预期与相关公司的影响分析。') },
 ];
 
 /* ---------------- 眼睛切换（手绘细线，与图标库同工艺） ---------------- */
@@ -222,19 +230,19 @@ export default function Login() {
     return () => document.removeEventListener('visibilitychange', onVis);
   }, []);
 
-  /* 账号相关的错误后端已给出中文说明，直接用；其余保持原有映射。 */
-  const ACCOUNT_ERROR_CODES = new Set([
-    'username_required',
-    'username_too_long',
-    'username_invalid_characters',
-    'username_reserved',
-    'username_taken',
-    'password_required',
-    'password_too_long',
-    'password_invalid_characters',
-    'registration_closed',
-    'invalid_credentials',
-  ]);
+  /* 按业务码选择界面文案，避免将服务器原文显示在其他语言界面。 */
+  const accountErrorMessages: Record<string, string> = {
+    username_required: t("请输入用户名"),
+    username_too_long: t("用户名过长，请缩短后重试"),
+    username_invalid_characters: t("用户名包含不支持的字符，请重新输入"),
+    username_reserved: t("该用户名不可用，请换一个"),
+    username_taken: t("该用户名已被使用，请换一个"),
+    password_required: t("请输入密码"),
+    password_too_long: t("密码过长，请缩短后重试"),
+    password_invalid_characters: t("密码包含不支持的字符，请重新输入"),
+    registration_closed: t("注册名额已满，暂不接受新账号"),
+    invalid_credentials: t("用户名或密码不正确"),
+  };
 
   const mapError = (e: unknown): { text: string; tone: 'error' | 'warn' } => {
     if (e instanceof ApiError) {
@@ -242,11 +250,11 @@ export default function Login() {
       if (e.bizCode === 'password_too_common') return { text: t('这个密码过于常见，请换一个较长的短语'), tone: 'error' };
       if (e.bizCode === 'login_cooldown') return { text: t('连续登录失败，请稍后再试'), tone: 'warn' };
       if (e.bizCode === 'registration_rate_limited') {
-        return { text: e.message || t('注册过于频繁，请稍后再试'), tone: 'warn' };
+        return { text: t('注册过于频繁，请稍后再试'), tone: 'warn' };
       }
-      if (e.bizCode === 'https_required') return { text: e.message || t('登录需要 HTTPS'), tone: 'warn' };
-      if (e.bizCode && ACCOUNT_ERROR_CODES.has(e.bizCode)) {
-        return { text: e.message || t('用户名或密码不正确'), tone: 'error' };
+      if (e.bizCode === 'https_required') return { text: t('登录需要 HTTPS'), tone: 'warn' };
+      if (e.bizCode && Object.hasOwn(accountErrorMessages, e.bizCode)) {
+        return { text: accountErrorMessages[e.bizCode], tone: 'error' };
       }
       if (e.code === 429 || e.code >= 500) return { text: t('服务暂时不可用，稍后重试'), tone: 'warn' };
       if (e.code === 408 || e.code === 0) return { text: t('网络连接超时，请检查网络后重试'), tone: 'warn' };
@@ -314,7 +322,7 @@ export default function Login() {
         <div className="card-surface w-full max-w-[360px] p-6 text-center">
           <p className="eyebrow">{t('当前会话')}</p>
           <p className="mt-2 text-h3 text-ink-800">
-            {isOwner ? t('Owner 已登录') : t('已登录 {name}', { name: signedInName ?? '' })}
+            {isOwner ? t('管理员已登录') : t('已登录 {name}', { name: signedInName ?? '' })}
           </p>
           <div className="mt-5 flex flex-col gap-2.5">
             <button
@@ -368,10 +376,9 @@ export default function Login() {
           </motion.div>
 
           <h1 className="mt-10 font-display text-display-l text-ink-900 lg:text-display-xl">
-            <CharStagger text={t("把")} delayBase={0.1} />
-            <span className="marker"><CharStagger text={t("市场")} delayBase={0.13} /></span>
+            <span className="marker"><CharStagger text={t('美股研究')} delayBase={0.1} /></span>
             <br />
-            <CharStagger text={t("讲给你听。")} className="text-brand-600" delayBase={0.22} />
+            <CharStagger text={t('从这里开始。')} className="text-brand-600" delayBase={0.22} />
           </h1>
 
           <motion.p
@@ -380,7 +387,7 @@ export default function Login() {
             transition={{ duration: 0.56, ease: [0.16, 1, 0.3, 1], delay: 0.3 }}
             className="mt-5 max-w-[460px] text-[15px] leading-[26px] text-ink-600 max-lg:line-clamp-2"
           >
-            {t('突破雷达、强度选股、板块透视、财报 AI、新闻催化剂 —— 一套终端，看懂今晚的美股。数据延迟 15 分钟，仅供研究参考。')}
+            {t('汇集行情、选股、财报与新闻，帮助你跟踪美股市场。')}
           </motion.p>
 
           {/* 特性三行（移动：横滑 chips） */}
@@ -410,7 +417,7 @@ export default function Login() {
             transition={{ duration: 0.56, delay: 0.9 }}
             className="mt-10 border-t border-line pt-4 text-caption text-ink-400"
           >
-            {t('交互研究版 · 延迟行情 · 不构成投资建议 ◆')}
+            {t('内容仅供研究参考')}
           </motion.p>
         </div>
 
@@ -427,8 +434,8 @@ export default function Login() {
                 <Icon name="command" size={20} />
               </span>
               <div>
-                <h2 className="font-display text-h2 text-ink-900">{t('进入终端')}</h2>
-                <p className="mt-0.5 text-caption text-ink-400">{t('登录后自选股保存在账号里 · 访客可只读浏览')}</p>
+                <h2 className="font-display text-h2 text-ink-900">{t('登录研究工作台')}</h2>
+                <p className="mt-0.5 text-caption text-ink-400">{t('登录以保存自选股，也可作为访客浏览')}</p>
               </div>
             </div>
 
@@ -628,8 +635,8 @@ export default function Login() {
 
             <p className="mt-5 text-center text-micro leading-[18px] text-ink-400">
               {mode === 'register'
-                ? t('账号只用于保存你的自选股，不改变数据权限')
-                : t('登录即同意研究用途条款 · 登录状态保留 30 天')}
+                ? t('注册后可保存自选股，在不同设备上查看')
+                : t('登录状态保留 30 天')}
             </p>
 
             <div className="mt-4 border-t border-line pt-3 text-center">

@@ -105,7 +105,7 @@ export default function HotspotsStrip({ onOpenNews, refreshToken = 0 }: { onOpen
             {__t('HOT THEMES · 热点带')}
             <InfoHint hint={SCORE_HINTS.hotScore} side="bottom" size={12} className="ml-1" />
           </p>
-          <h2 className="mt-1 text-h2 text-ink-900">{__t('市场在交易什么故事')}</h2>
+          <h2 className="mt-1 text-h2 text-ink-900">{__t('市场关注的主题')}</h2>
         </div>
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           {listStale && (
@@ -146,7 +146,7 @@ export default function HotspotsStrip({ onOpenNews, refreshToken = 0 }: { onOpen
           {!listQ.loading && !computing && listFailed && (
             <div className="card-surface flex w-full flex-col items-center justify-center px-5 py-8 text-center">
               <p className="text-body-s text-ink-500">{__t('热点数据读取失败')}</p>
-              <p className="mt-1 text-micro text-ink-400">{__t('是读取失败，不代表市场没有热点')}</p>
+              <p className="mt-1 text-micro text-ink-400">{__t('请稍后重试，恢复后将显示热点')}</p>
               <button
                 onClick={() => listQ.refresh()}
                 className="mt-3 rounded-md border border-line px-3 py-1.5 text-caption text-ink-600 shadow-btn transition-colors hover:border-brand-400 hover:text-brand-600"

@@ -26,18 +26,18 @@ function HeroCell({ label, index, children }: { label: string; index: number; ch
 
 /** 分析不可用原因 → 中文（对齐 personal_service.analysis_availability 的真实原因码；未知码给通用文案） */
 const ANALYSIS_REASON_CN: Record<string, { label: string; tone: 'muted' | 'down' | 'warn' }> = {
-  owner_login_required: { label: t('需 Owner 登录'), tone: 'muted' },
+  owner_login_required: { label: t('需管理员登录'), tone: 'muted' },
   not_configured: { label: t('未配置模型密钥'), tone: 'down' },
   ai_not_configured: { label: t('未配置模型密钥'), tone: 'down' },
   settings_unavailable: { label: t('运行设置不可用'), tone: 'down' },
   read_only_mode: { label: t('只读模式'), tone: 'muted' },
   manual_analysis_disabled: { label: t('手动分析已关闭'), tone: 'muted' },
-  worker_unavailable: { label: t('后台 worker 不可用'), tone: 'down' },
-  daily_token_limit: { label: t('今日 Token 预算已用完'), tone: 'warn' },
+  worker_unavailable: { label: t('后台服务暂不可用'), tone: 'down' },
+  daily_token_limit: { label: t('今日模型用量已达上限'), tone: 'warn' },
   daily_budget_usd_reached: { label: t('今日预算已用完'), tone: 'warn' },
   /* 供应商余额耗尽 ≠ 本站预算用完：需要去 OpenAI 充值，等到明天也不会自愈
-     （2026-08-14 生产 155 连败曾被误报成「今日 Token 预算已用完」）。 */
-  provider_credit_exhausted: { label: t('AI 供应商余额耗尽，需充值'), tone: 'down' },
+     （2026-08-14 生产 155 连败曾被误报成「今日模型用量已达上限」）。 */
+  provider_credit_exhausted: { label: t('分析服务余额不足，需管理员充值'), tone: 'down' },
   analysis_in_progress: { label: t('分析任务进行中'), tone: 'warn' },
   cooldown_active: { label: t('冷却中'), tone: 'warn' },
   catalyst_disabled: { label: t('催化剂模块未启用'), tone: 'down' },
@@ -191,7 +191,7 @@ export default function StatusHero({ refreshToken = 0 }: { refreshToken?: number
           {t('数据与分析说明')}
           <Icon name="chevron-down" size={14} className="shrink-0 transition-transform duration-ui group-open:rotate-180 motion-reduce:transition-none" />
         </summary>
-        <SourceNote className="border-0 pb-3 pt-1" text={t("新闻与经济日历持续收录；每条新闻标注原始来源；滞后表示数据更新到了什么时候；影响分与置信度为 AI 估计")} />
+        <SourceNote className="border-0 pb-3 pt-1" text={t("新闻保留原始来源；影响分与置信度由模型估算。数据滞后时间反映来源的更新进度。")} />
       </details>
     </motion.section>
   );

@@ -42,8 +42,8 @@ export type HistoryRangeKey = (typeof HISTORY_RANGES)[number]['key'];
 
 const BASIS_LABEL: Record<string, string> = {
   latest_revised_backfill: t('按当前修订值回算'),
-  local_point_in_time: t('本地点时快照'),
-  mixed: t('混合基础'),
+  local_point_in_time: t('当时记录的数据'),
+  mixed: t('含回算与历史记录'),
 };
 
 /** 模块线共用全站图表调色，不给模块分配固定鲜艳色。每次读取以免锁死涨跌色。 */
@@ -83,7 +83,7 @@ export default function MacroHistoryChart({
     const basisByDate = new Map(points.map((point) => [point.date, point.historyBasis]));
     const regimeByDate = new Map(points.map((point) => [point.date, point.regime]));
 
-    /* 回算区间与本地点时快照区间分成两条线：线型不同，读者一眼可辨。 */
+    /* 回算区间与当时记录的数据区间分成两条线：线型不同，读者一眼可辨。 */
     const revised = points.map((point) =>
       point.historyBasis === 'local_point_in_time' ? null : point.score,
     );
@@ -113,7 +113,7 @@ export default function MacroHistoryChart({
         },
       }),
       insightLine(CH.brand600, {
-        name: t('综合分（本地点时）'),
+        name: t('综合分（当时记录）'),
         data: local,
         connectNulls: false,
       }),
@@ -245,7 +245,7 @@ export default function MacroHistoryChart({
           </div>
         ) : points.length === 0 ? (
           <div className="flex h-full items-center justify-center px-4 text-center text-body-s text-ink-400">
-            {t('历史正在积累：本地快照攒够之后这里会显示综合分曲线。')}
+            {t('历史数据积累中，记录足够后将显示综合分曲线。')}
           </div>
         ) : (
           <ReactECharts option={option} ariaLabel={t("宏观环境综合分历史曲线")} />
@@ -286,7 +286,7 @@ export default function MacroHistoryChart({
       )}
 
       <p className="mt-3 border-t border-line pt-3 text-micro leading-relaxed text-ink-400">
-        {t('虚线段表示该区间按当前修订值回算，不是当时市场已知的分数；实线段来自本地点时快照。')}
+        {t('虚线按最新修订数据重新计算；实线为当时记录的分数。')}
       </p>
     </section>
   );

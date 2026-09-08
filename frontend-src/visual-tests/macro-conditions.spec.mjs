@@ -272,10 +272,13 @@ test.describe("macro conditions desktop", () => {
     for (const module of MODULES) {
       await expect(page.getByRole("article", { name: `${module.zh} 模块`, exact: true })).toBeVisible();
     }
-    // 「历史分位，不是预测」必须在页面上
-    await expect(
-      page.getByText(/分数是过去 5 年的历史分位，不是预测/).first(),
-    ).toBeVisible();
+    // 评分定义收纳在现有帮助中，仍须说明历史位置与预测的区别。
+    const scoreHelp = page.getByRole("button", { name: "宏观环境综合分（0–100 分）：查看说明", exact: true }).first();
+    await scoreHelp.click();
+    const scoreExplanation = page.getByRole("tooltip").filter({ hasText: "分数表示当前读数在过去 5 年中的相对位置。" });
+    await expect(scoreExplanation).toBeVisible();
+    await expect(scoreExplanation).toContainText("不代表市场一定上涨");
+    await page.keyboard.press("Escape");
     // 驱动因素两张卡
     await expect(page.getByRole("region", { name: "7 日分数改善最多", exact: true })).toBeVisible();
     await expect(page.getByRole("region", { name: "7 日分数恶化最多", exact: true })).toBeVisible();
@@ -296,7 +299,7 @@ test.describe("macro conditions desktop", () => {
     }
     await expect(chart.getByRole("img", { name: "宏观环境综合分历史曲线" })).toBeVisible();
     await expect(
-      page.getByText(/虚线段表示该区间按当前修订值回算/),
+      page.getByText(/虚线按最新修订数据重新计算；实线为当时记录的分数/),
     ).toBeVisible();
     await chart.getByRole("button", { name: "5Y" }).click();
     await expect(chart.getByRole("button", { name: "5Y" })).toHaveAttribute(
@@ -408,7 +411,7 @@ test.describe("macro conditions degraded states", () => {
     });
     await openMarket(page);
     await expect(page.getByText("部分数据缺失")).toBeVisible();
-    await expect(page.getByText(/上游告警：/)).toBeVisible();
+    await expect(page.getByText(/数据更新提示：/)).toBeVisible();
     // 图表未被清空，模块卡仍在，缺分模块如实说明门槛
     await expect(page.getByRole("region", { name: "宏观环境历史", exact: true })).toBeVisible();
     await expect(page.getByLabel("风险 模块")).toBeVisible();
@@ -446,7 +449,7 @@ test.describe("macro conditions degraded states", () => {
     });
     await openMarket(page);
     await expect(page.getByText("宏观数据源尚未配置")).toBeVisible();
-    await expect(page.getByText(/配置只能在服务器端完成/)).toBeVisible();
+    await expect(page.getByText(/管理员配置经济数据平台（FRED）的访问密钥后/)).toBeVisible();
     // 页面不得出现任何密钥输入或密钥值
     await expect(page.locator('input[type="password"]')).toHaveCount(0);
     expect(SECRET_PATTERN.test(await page.content())).toBe(false);
@@ -467,10 +470,10 @@ test.describe("macro conditions degraded states", () => {
     await openMarket(page);
     await expect(page.getByText("暂无正式综合分")).toBeVisible();
     await expect(
-      page.getByText(/有效模块不足 5 个时不输出正式综合分/),
+      page.getByText(/至少需要 5 类有效指标才能计算综合分/),
     ).toBeVisible();
     // 历史为空时如实说明正在积累，而不是画一条 0 线
-    await expect(page.getByText(/历史正在积累/)).toBeVisible();
+    await expect(page.getByText(/历史数据积累中/)).toBeVisible();
     await shot(page, "macro-insufficient-1440");
   });
 
@@ -481,7 +484,7 @@ test.describe("macro conditions degraded states", () => {
     });
     await openMarket(page);
     await expect(
-      page.getByText(/暂无可比的 7 日历史快照/).first(),
+      page.getByText(/暂无 7 日前的数据可供比较/).first(),
     ).toBeVisible();
     await expect(page.getByText("0.0 分")).toHaveCount(0);
   });

@@ -318,7 +318,7 @@ export default function Home() {
         section="01"
         eyebrow="OPTIX PRO · DELAYED 15MIN"
         title={t('首页')}
-        description={t('指数、信号与自选的全景。')}
+        description={t('查看主要指数、市场信号与关注股票。')}
         meta={
           <>
             <SessionLED
@@ -427,7 +427,7 @@ export default function Home() {
             refreshing={breakoutsQ.refreshing}
             onRetry={breakoutsQ.refresh}
             isEmpty={breakouts.length === 0}
-            emptyTitle={t('雷达仍在盯')}
+            emptyTitle={t('暂无突破信号')}
             skeleton={<SignalGridSkeleton cards={8} />}
           >
             <div className="grid grid-cols-1 gap-2.5 px-4 pb-4 pt-3 sm:grid-cols-2 md:px-5 md:pb-5 xl:grid-cols-2">
@@ -504,7 +504,7 @@ export default function Home() {
           ) : ctaQ.error && !ctaQ.data ? (
             <p className="mt-3 flex items-center justify-between gap-2 rounded-md bg-paper-2 px-3 py-2.5 text-caption text-ink-500">
               {ctaQ.error.bizCode === 'public_snapshot_unavailable'
-                ? t('CTA 估算快照尚未发布：Worker 完成首次计算后自动出现，无需手动操作')
+                ? t('CTA 估算尚未生成，首次计算完成后自动显示')
                 : t('CTA 估算读取失败')}
               <button
                 onClick={() => ctaQ.refresh()}
@@ -654,10 +654,10 @@ function MarketStatusPanel({
         <MiniStat label={t('平盘')} value={breadth.flat} tone="flat" />
       </div>
 
-      {/* 辅助读数直接展示；缺失读数仍遵守原有数据纪律，不补零。 */}
+      {/* 辅助指标直接展示；缺失读数仍遵守原有数据纪律，不补零。 */}
       {(strength?.aggregateAvailable === true || (signalMetrics && signalMetrics.length > 0)) && (
         <div className="mt-4 border-t border-line/70 pt-3" data-testid="home-supporting-metrics">
-          <p className="text-caption font-medium text-ink-600">{t('辅助读数')}</p>
+          <p className="text-caption font-medium text-ink-600">{t('辅助指标')}</p>
           <div className="mt-2 rounded-lg bg-paper-2/60 p-3">
             {strength?.aggregateAvailable === true && (
               <p className="text-caption text-ink-600">
@@ -810,9 +810,9 @@ function WatchlistMoverCard({ item, index: i, preparation, statusReadFailed }: {
         ) : (
           <div className="mt-3 flex h-[112px] items-center justify-center rounded-sm bg-paper-2 px-4 text-center text-caption text-ink-400">
             {statusReadFailed ? t('暂无日线走势，准备状态读取失败')
-              : preparation?.resources.dailyChart.available ? t('日线已准备，正在更新图表')
-                : preparation?.status === 'failed' || preparation?.refreshStatus === 'failed' ? t('日线准备失败，后台将稍后重试')
-                  : t('后台正在准备日线，完成后自动显示')}
+              : preparation?.resources.dailyChart.available ? t('日线已获取，正在更新图表')
+                : preparation?.status === 'failed' || preparation?.refreshStatus === 'failed' ? t('日线获取失败，稍后自动重试')
+                  : t('正在获取日线，完成后自动显示')}
           </div>
         )}
         <div className="mt-2 flex items-center justify-between gap-2">

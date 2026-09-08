@@ -34,7 +34,7 @@ const DIMS: { key: keyof MarketRegime; label: string; tip: string; hint: ScoreHi
 
 /** 面板级口径：说清这六个数算自什么、以及为什么它不随选中的指数变。 */
 const DIMS_SOURCE_NOTE =
-  t('六维算自同一篮固定基准：SPY / QQQ / IWM / RSP、11 个行业 ETF、VIX、HYG / IEF / TLT / 10 年期、GLD、SOXX / SMH —— 是全市场读数，不区分指数。');
+  t('六项指标共同反映美股市场情况，采用固定的股票指数、行业基金、波动率、债券与黄金数据，不随所选指数变化。');
 
 import { regimeMean } from '@/lib/regime';
 

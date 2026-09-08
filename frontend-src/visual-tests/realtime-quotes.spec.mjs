@@ -110,7 +110,7 @@ test('an open radar detail follows new versions and reconciles missed states aft
   state.radar = { ...state.radar, state_version: 1, lifecycle_state: 'TRIGGERED', trigger_source: 'finnhub', evidence_at: at, triggered_at: at };
   state.transitions.push({ state: 'TRIGGERED', at });
   await emitEvent(page, 'radar', { events: [state.radar] });
-  await expect(dialog.getByRole('list', { name: '生命周期轨迹' })).toContainText('已触发');
+  await expect(dialog.getByRole('list', { name: '信号进展' })).toContainText('已触发');
   state.radar = { ...state.radar, state_version: 2, lifecycle_state: 'CONFIRMED' };
   state.transitions.push({ state: 'CONFIRMED', at });
   // This confirmation is deliberately not pushed. The reconnect must fill the gap.
@@ -120,7 +120,7 @@ test('an open radar detail follows new versions and reconciles missed states aft
     stream.onerror();
     return true;
   })).toBe(true);
-  await expect(dialog.getByRole('list', { name: '生命周期轨迹' })).toContainText('已确认');
+  await expect(dialog.getByRole('list', { name: '信号进展' })).toContainText('已确认');
   await expect(dialog.getByText('已确认', { exact: true }).first()).toBeVisible();
   expect(state.errors).toEqual([]);
 });

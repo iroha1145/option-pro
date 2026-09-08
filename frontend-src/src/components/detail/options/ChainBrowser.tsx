@@ -52,8 +52,8 @@ function ContractDetail({ contract: c, onClose }: { contract: ChainContract; onC
       ].map(([label, value]) => <div key={label}><dt className="text-caption text-ink-500">{label}</dt><dd className="mt-1 font-mono text-body-s text-ink-900 tnum">{value}</dd></div>)}
     </dl>
     <p className="mt-3 text-caption text-ink-600">{reason(c)}</p>
-    <p className="mt-2 text-micro leading-relaxed text-ink-500">{t('参考价为买卖报价中值，不保证成交；金额按中价 × 成交量 × 100 估算，不是实际资金流入。隐含波动率可能包含模型估算。')}</p>
-    <p className="mt-1 text-micro leading-relaxed text-ink-500">{t('利率 5% 与未计股息是定价假设，不是当前市场利率或已确认股息为零。')}</p>
+    <p className="mt-2 text-micro leading-relaxed text-ink-500">{t('参考价取买卖报价中值；成交金额按参考价 × 成交张数 × 100 估算。隐含波动率可能包含模型估算。')}</p>
+    <p className="mt-1 text-micro leading-relaxed text-ink-500">{t('模型估算采用 5% 利率，未计入股息。')}</p>
   </section>;
 }
 
@@ -98,8 +98,8 @@ export default function ChainBrowser({ chain }: { chain: OptionChain }) {
             <span className="col-start-2 row-start-1 row-end-3 text-right sm:col-auto sm:row-auto"><span className="block font-mono text-body-s text-ink-900 tnum">{number(c.volume)}</span><span className="text-micro text-ink-500">{t('成交张数')}</span></span>
           </button>
         </li>)}
-      </ul> : <p className="px-4 py-4 text-caption text-ink-500">{t('当前到期日没有达到关注规则的合约，仍可查看完整期权链。')}</p>}
-      <p className="border-t border-line px-4 py-2.5 text-micro leading-relaxed text-ink-500">{t('标记依据成交量、成交量与持仓量之比及估算金额；看涨、看跌是合约类型，不代表买卖方向。')}</p>
+      </ul> : <p className="px-4 py-4 text-caption text-ink-500">{t('当前到期日暂无异动合约。')}</p>}
+      <p className="border-t border-line px-4 py-2.5 text-micro leading-relaxed text-ink-500">{t('按成交量、持仓量和估算金额筛选。看涨、看跌表示合约类型。')}</p>
     </section>
 
     {selected && <div ref={detailRef} tabIndex={-1} className="scroll-mt-24" onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); closeDetail(); } }}><ContractDetail contract={selected} onClose={closeDetail} /></div>}
@@ -149,11 +149,11 @@ export default function ChainBrowser({ chain }: { chain: OptionChain }) {
       <details className="mt-3 rounded-md border border-line px-3 py-2 text-caption text-ink-500">
         <summary className="cursor-pointer py-1 font-medium text-ink-600">{t('这些数字怎么读？')}</summary>
         <dl className="mt-2 grid gap-3 pb-2 sm:grid-cols-2">
-          <div><dt className="font-medium text-ink-800">{t('行权价')}</dt><dd className="mt-1 leading-relaxed">{t('合约约定的股票交易价格；最接近现价不等于现价本身。')}</dd></div>
-          <div><dt className="font-medium text-ink-800">{t('成交量与持仓量')}</dt><dd className="mt-1 leading-relaxed">{t('成交量是当日累计交易张数；持仓量是上次更新时尚未了结的张数，两者时间口径不同。')}</dd></div>
-          <div><dt className="font-medium text-ink-800">{t('关注规则')}</dt><dd className="mt-1 leading-relaxed">{t('成交量至少为持仓量的 3 倍、零持仓有成交、成交至少 5,000 张，或估算成交金额至少 50 万美元。规则只帮助筛选，不判断买卖方向。')}</dd></div>
-          <div><dt className="font-medium text-ink-800">{t('缺失与估算')}</dt><dd className="mt-1 leading-relaxed">{t('「—」表示缺失，不是零。零持仓无法计算倍数，也不能说明全部是新开仓。报价为延迟数据。')}</dd></div>
-          <div><dt className="font-medium text-ink-800">{t('覆盖范围')}</dt><dd className="mt-1 leading-relaxed">{t('本页异动只看当前标的与所选到期日，不是全市场扫描。')}</dd></div>
+          <div><dt className="font-medium text-ink-800">{t('行权价')}</dt><dd className="mt-1 leading-relaxed">{t('行使期权时，按这个价格买入或卖出股票。')}</dd></div>
+          <div><dt className="font-medium text-ink-800">{t('成交量与持仓量')}</dt><dd className="mt-1 leading-relaxed">{t('成交量是当天累计成交的张数；持仓量是上次更新时尚未平仓的张数。')}</dd></div>
+          <div><dt className="font-medium text-ink-800">{t('关注规则')}</dt><dd className="mt-1 leading-relaxed">{t('满足任一条件即标记：成交量达到持仓量的 3 倍、零持仓有成交、成交至少 5,000 张，或估算金额至少 50 万美元。')}</dd></div>
+          <div><dt className="font-medium text-ink-800">{t('缺失与估算')}</dt><dd className="mt-1 leading-relaxed">{t('「—」表示暂无数据。持仓量为零时，无法计算成交量与持仓量的倍数。')}</dd></div>
+          <div><dt className="font-medium text-ink-800">{t('覆盖范围')}</dt><dd className="mt-1 leading-relaxed">{t('仅统计当前股票、所选到期日的期权合约。')}</dd></div>
         </dl>
       </details>
     </section>

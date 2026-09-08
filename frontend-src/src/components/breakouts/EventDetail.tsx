@@ -3,7 +3,7 @@ import { LiveChange, QuoteIndicator } from '@/components/shared/LiveQuote';
 import { useLiveQuote, useLiveRadarEvent, useQuoteSymbols } from '@/hooks/useLiveQuote';
 /**
  * B4 事件详情模态（breakouts.md；居中 720px，spring-pop 240ms，ESC/背板关闭）
- * 支撑/阻力区带可视化 · 区间持续指标 · transitions 生命周期轨迹
+ * 支撑/阻力区带可视化 · 区间持续指标 · transitions 信号进展
  * 评分条组 · 证据竖向时间线（stagger 30ms）· 内嵌该股催化剂摘要（catalystsApi.byTicker）
  */
 import { useEffect, useMemo, useRef } from 'react';
@@ -106,12 +106,12 @@ function ZoneBand({ ev }: { ev: BreakoutEventFull }) {
   );
 }
 
-/* ---------------- 生命周期轨迹（时间轴） ---------------- */
+/* ---------------- 信号进展（时间轴） ---------------- */
 function LifecycleTrack({ ev }: { ev: BreakoutEventFull }) {
   const list = ev.transitions ?? [];
   if (!list.length) return <p className="text-caption text-ink-400">{__t('暂无轨迹数据')}</p>;
   return (
-    <ol className="no-scrollbar flex items-start gap-0 overflow-x-auto pb-1" aria-label={__t("生命周期轨迹")}>
+    <ol className="no-scrollbar flex items-start gap-0 overflow-x-auto pb-1" aria-label={__t("信号进展")}>
       {list.map((t, i) => {
         const last = i === list.length - 1;
         const tone = LIFECYCLE_TONE[t.state] ?? 'ink';
@@ -252,7 +252,7 @@ export default function EventDetail({
             {detailError && (
               <div className="flex flex-wrap items-center gap-2 border-b border-warn-600/25 bg-warn-50 px-5 py-2 text-caption text-warn-600">
                 <Icon name="flag" size={13} />
-                <span>{__t('补充详情未能加载，以下为列表已有字段。')}</span>
+                <span>{__t('详情加载失败，暂显示列表中的信息。')}</span>
                 {onRetryDetail && (
                   <button
                     type="button"
@@ -323,16 +323,16 @@ export default function EventDetail({
                 </section>
                 <section>
                   <p className="eyebrow mb-2">
-                    {__t('评分套组')}
+                    {__t('各项评分')}
                     <InfoHint hint={SCORE_HINTS.breakoutPriority} size={12} className="ml-1" />
                   </p>
                   <ScoreBarsFull event={event} />
                 </section>
               </div>
 
-              {/* 生命周期轨迹 */}
+              {/* 信号进展 */}
               <section>
-                <p className="eyebrow mb-2">{__t('生命周期轨迹')}</p>
+                <p className="eyebrow mb-2">{__t('信号进展')}</p>
                 <LifecycleTrack ev={event} />
               </section>
 

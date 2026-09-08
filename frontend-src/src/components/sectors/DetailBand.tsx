@@ -148,7 +148,7 @@ export default function DetailBand({
             </div>
             {sector.tickers.length === 0 ? (
               <p className="mt-3 text-body-s text-ink-400">
-                {t('板块目录尚未返回成分代码。')}
+                {t('暂未取得该板块的成分股。')}
               </p>
             ) : (
               <>
@@ -175,15 +175,7 @@ export default function DetailBand({
           </div>
         </div>
 
-        <div
-          className="mt-5 flex items-start gap-2 border-t border-line pt-3 text-micro leading-5 text-ink-400"
-          role="note"
-        >
-          <Icon name="flag" size={13} className="mt-0.5 shrink-0" />
-          <span>
-            {t('本页暂不提供板块资金流、相关性与历史趋势。')}
-          </span>
-        </div>
+
       </div>
     </motion.section>
   );

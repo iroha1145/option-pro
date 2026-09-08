@@ -78,7 +78,7 @@ export const LIFECYCLE_CHIP_CLASS: Record<LifecycleTone, string> = {
   ink: 'radar-chip-neutral bg-card-warm text-ink-500',
 };
 
-/* ---------------- 评分套组 ---------------- */
+/* ---------------- 各项评分 ---------------- */
 export const SCORE_DEFS = [
   { key: 'intrinsic_strength_score', label: t('内在强度') },
   { key: 'base_quality_score', label: t('基底质量') },
@@ -167,7 +167,7 @@ export interface BreakoutEventFull extends BreakoutEventDetail {
   range_persistence: RangePersistence | RangePersistenceLive | null;
   transitions: BreakoutTransition[];
   /**
-   * 宏观影子字段（macro-linkage-v1）。只标注提醒优先级，上限 ±4。
+   * 宏观参考字段（macro-linkage-v1）。只标注提醒优先级，上限 ±4。
    *
    * 上面每一个质量分和事件生命周期都不受它影响 —— 宏观逆风不会删除、不会降级、
    * 也不会推迟一个真实发生的突破事件。null 表示没读到，macro_shadow_status 说明原因。

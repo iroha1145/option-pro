@@ -11,8 +11,8 @@ import { cn } from '@/lib/utils';
 import { t } from '../../i18n/core.ts';
 
 function errorText(error: unknown): string {
-  if (error instanceof ApiError) return error.message;
-  return error instanceof Error ? error.message : t('请求失败');
+  if (error instanceof ApiError && error.code === 401) return t('登录状态已失效，请重新登录');
+  return t('操作未完成，请稍后重试');
 }
 
 interface EarningsRunSummary {
@@ -47,7 +47,7 @@ function readRunSummary(action: WorkerAction): EarningsRunSummary | null {
 }
 
 function summaryText(summary: EarningsRunSummary): string {
-  return t('范围内 {eligible} · 新建 {queued} · 已存在 {existing} · 无效 {invalid}', { eligible: summary.eligible, queued: summary.queued, existing: summary.existing, invalid: summary.invalid });
+  return t('范围内 {eligible} · 新安排 {queued} · 已安排 {existing} · 数据无效 {invalid}', { eligible: summary.eligible, queued: summary.queued, existing: summary.existing, invalid: summary.invalid });
 }
 
 async function requestEarningsAnalysis(): Promise<WorkerAction> {
@@ -100,7 +100,7 @@ export default function EarningsAnalysisControls() {
     const action = await requestEarningsAnalysis();
     const summary = readRunSummary(action);
     setLastRun(summary);
-    setLastRunNote(summary ? null : t('任务已完成，但后台未返回逐项汇总'));
+    setLastRunNote(summary ? null : t('检查已完成，暂无明细'));
     void adminApi.workerStatus().then(setWorker).catch(() => undefined);
     return summary;
   };
@@ -115,10 +115,10 @@ export default function EarningsAnalysisControls() {
       });
       setDoc(next);
       setError(null);
-      toast.success(nextEnabled ? t('每日财报分析已开启') : t('每日财报分析已关闭'), t('范围固定为未来 5 天'));
+      toast.success(nextEnabled ? t('每日财报分析已开启') : t('每日财报分析已关闭'), t('自动分析未来 5 天内的财报'));
     } catch (cause) {
       if (cause instanceof ApiError && cause.code === 409) {
-        toast.error(t('设置版本已变化'), t('已重新读取最新设置'));
+        toast.error(t('设置已更新，请重试'), t('已重新读取最新设置'));
         await load();
       } else {
         const message = errorText(cause);
@@ -136,9 +136,9 @@ export default function EarningsAnalysisControls() {
       const summary = await completeAnalysis();
       setError(null);
       if (summary) {
-        toast.success(t('首次财报任务检查已完成'), summaryText(summary));
+        toast.success(t('已完成首次检查'), summaryText(summary));
       } else {
-        toast.info(t('首次财报任务检查已完成'), t('后台未返回逐项汇总'));
+        toast.info(t('已完成首次检查'), t('暂无检查明细'));
       }
     } catch (cause) {
       const message = errorText(cause);
@@ -155,9 +155,9 @@ export default function EarningsAnalysisControls() {
     try {
       const summary = await completeAnalysis();
       if (summary) {
-        toast.success(t('财报任务检查已完成'), summaryText(summary));
+        toast.success(t('财报检查已完成'), summaryText(summary));
       } else {
-        toast.info(t('财报任务检查已完成'), t('后台未返回逐项汇总'));
+        toast.info(t('财报检查已完成'), t('暂无检查明细'));
       }
       setError(null);
     } catch (cause) {
@@ -185,7 +185,7 @@ export default function EarningsAnalysisControls() {
               </SoftBadge>
             </div>
             <p className="mt-1 text-micro leading-5 text-ink-400">
-              {t('每只新增财报只建立一个持久任务；重复执行会跳过同一代码、同一财报日。')}
+              {t('为未来 5 天内的财报安排分析，同一份财报不会重复安排。')}
             </p>
           </div>
         </div>
@@ -215,7 +215,7 @@ export default function EarningsAnalysisControls() {
             type="button"
             onClick={() => void runNow()}
             disabled={!taskReady || running}
-            title={!taskReady ? t('财报分析后台任务当前不可用') : t('立即分析未来 5 天内尚未建立任务的财报')}
+            title={!taskReady ? t('财报分析服务暂不可用') : t('分析未来 5 天内尚未安排分析的财报')}
             className={cn(
               'inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-caption font-medium shadow-btn transition-[filter]',
               taskReady && !running
@@ -224,24 +224,24 @@ export default function EarningsAnalysisControls() {
             )}
           >
             {running ? <Icon name="refresh" size={14} className="animate-spin" /> : <AnalysisIcon size={14} />}
-            {running ? t('正在检查任务…') : t('立即分析新的财报')}
+            {running ? t('正在检查财报…') : t('立即分析新的财报')}
           </button>
         </div>
 
         <p className="mt-2 font-mono text-micro text-ink-400">
           {running
-            ? t('正在检查并建立未来 5 天内尚未建立的分析任务…')
+            ? t('正在为新增财报安排分析…')
             : loading
-            ? t('读取运行状态…')
+            ? t('正在读取分析状态…')
             : taskReady
               ? enabled
-                ? t('自动任务已开启')
-                : t('自动任务已关闭，仍可手动执行')
-              : t('后台任务不可用')}
+                ? t('每日自动分析已开启')
+                : t('自动分析已关闭，可手动开始')
+              : t('分析服务暂不可用')}
         </p>
         {(lastRun || lastRunNote) && (
           <p className="mt-2 border-t border-line pt-2 text-micro text-ink-500" role="status" aria-live="polite">
-            <span className="mr-2 text-ink-300">{t('最近任务检查')}</span>
+            <span className="mr-2 text-ink-300">{t('最近检查')}</span>
             {lastRun ? summaryText(lastRun) : lastRunNote}
           </p>
         )}

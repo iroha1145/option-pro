@@ -427,7 +427,7 @@ export default function FocusCycleCard({ refreshToken = 0 }: { refreshToken?: nu
       <ConfirmDialog
         open={confirmOpen}
         title={t("触发新的市场焦点周期？")}
-        description={t("将基于当前热点准备区生成一次综合分析，消耗模型预算并计入每日额度；若当前版本已分析过，将明确重算一次。")}
+        description={t("根据当前热点生成新的市场分析，将消耗模型用量并计入每日额度；已有分析也会重新计算。")}
         confirmLabel={t("开始计算")}
         onConfirm={() => void startJob()}
         onCancel={() => setConfirmOpen(false)}

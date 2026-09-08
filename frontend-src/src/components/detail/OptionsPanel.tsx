@@ -20,7 +20,7 @@ import { cn } from '@/lib/utils';
 import { fmtPrice, fmtRelative } from '@/lib/format';
 import { OPTION_SUPPORTED_LIST, optionsSupported } from '@/mocks/fixtures2';
 import { isDeclaredUnsupported } from '@/lib/optionCapability';
-import { AI_DISCLAIMER, useAiJob } from './useAiJob';
+import { useAiJob } from './useAiJob';
 import {
   buildOptionAlertEvidence,
   parseOptionAlertResult,
@@ -129,8 +129,8 @@ function AiOptionInsight({
             disabled={!hasEvidence}
             title={
               hasEvidence
-                ? t('使用当前期权链的 {n} 条异动证据', { n: evidence.length })
-                : t('当前期权链没有达到异动阈值的合约')
+                ? t('使用当前期权链的 {n} 条异动记录', { n: evidence.length })
+                : t('当前期权链暂无符合条件的异动')
             }
             className="rounded-md bg-ai-600 px-3 py-1.5 text-caption font-medium text-white shadow-btn-hi transition-[filter] duration-fast hover:brightness-105 disabled:cursor-not-allowed disabled:bg-ink-300"
           >
@@ -141,18 +141,17 @@ function AiOptionInsight({
 
       {!job && !confirming && chain && evidence.length === 0 && (
         <p className="mt-2.5 text-caption text-ink-500">
-          {t('当前到期日没有达到成交量、成交量/持仓量或估算权利金阈值的合约，未创建付费任务。')}
+          {t('当前到期日没有符合条件的异动，可切换到期日查看。')}
         </p>
       )}
 
       {!job && starting && (
-        <p className="mt-2.5 text-caption text-ink-500">{t('正在创建解读任务…')}</p>
+        <p className="mt-2.5 text-caption text-ink-500">{t('正在准备解读…')}</p>
       )}
       {!job && confirming && (
         <div className="mt-2.5">
           <p className="text-caption text-ink-600">
-            {t('将提交')} {ticker} {t('当前到期日的')} {evidence.length}{' '}
-            {t('条真实异动证据、标的价和到期日，消耗 1 次模型额度，是否继续？')}
+            {t('分析 {ticker} 当前到期日的 {n} 条异动，消耗 1 次分析额度。', { ticker, n: evidence.length })}
           </p>
           <div className="mt-2 flex gap-2">
             <button
@@ -194,7 +193,7 @@ function AiOptionInsight({
               {queryIssue === 'paused' || queryIssue === 'blocked' ? t('任务状态待确认') : job.status === 'queued'
                 ? t('排队中…')
                 : job.progress === null
-                  ? t('模型正在处理 · 暂无进度百分比')
+                  ? t('模型分析中…')
                   : t('解读中 {pct}%', { pct: Math.round(job.progress) })}
             </span>
             <button onClick={() => void cancel()} className="text-ink-400 hover:text-ink-600">{t('取消任务')}</button>
@@ -228,11 +227,11 @@ function AiOptionInsight({
               {DIRECTION_META[result.direction].label}
             </span>
             <span className="rounded-xs bg-card px-1.5 py-0.5 text-micro text-ink-500">
-              {CONFIDENCE_LABEL[result.confidence]} {t('· 非胜率')}
+              {CONFIDENCE_LABEL[result.confidence]}
             </span>
             {result.direction_status === 'unavailable_without_trade_side' && (
               <span className="text-micro text-ink-400">
-                {t('缺少成交主动方，方向不可判定')}
+                {t('无法判断买方还是卖方主动成交')}
               </span>
             )}
           </div>
@@ -260,8 +259,8 @@ function AiOptionInsight({
           </p>
           <p className="mt-2 text-micro text-ink-400">
             {/* 只认提交快照：渲染期的 expiration/evidence 会随切换与轮询漂移 */}
-            {AI_DISCLAIMER} {t('· 到期')} {submitted?.expiration ?? expiration ?? '—'} {t('· 输入证据')}{' '}
-            {submitted?.evidenceCount ?? evidence.length} {t('条')}
+            {t('到期日 {date}', { date: submitted?.expiration ?? expiration ?? '—' })}
+            {t(' · 异动记录 {n} 条', { n: submitted?.evidenceCount ?? evidence.length })}
           </p>
           <button
             onClick={() => {
@@ -306,7 +305,6 @@ function UnsupportedIndexOptions() {
     <EmptyState
       icon="doc-quote"
       title={t('当前数据源未提供该指数的期权数据')}
-      description={t('指数行情与研究功能仍可使用，不会用其他标的的期权代替。')}
       className="py-8"
     />
   );
@@ -401,7 +399,7 @@ function LiveOptionsPanel({ ticker }: { ticker: string }) {
         description={
           loginExpired
             ? t('请重新登录后查看期权数据')
-            : `${preparing ? t('后台正在准备期权数据，稍后可重新读取') : t('期权数据暂时获取不到')}${
+            : `${preparing ? t('期权数据正在更新，请稍后重试') : t('期权数据暂时获取不到')}${
                 retrySeconds > 0 ? t(' · {n} 秒后可重试', { n: retrySeconds }) : ''
               }`
         }
@@ -452,7 +450,7 @@ function LiveOptionsPanel({ ticker }: { ticker: string }) {
               className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter,opacity] hover:brightness-105"
             >
               <Icon name="refresh" size={14} />
-              {expRefreshing ? t('正在重试') : t('重新拉取')}
+              {expRefreshing ? t('正在重试') : t('重新获取')}
             </button>
           ) : null
         }
@@ -487,27 +485,23 @@ function LiveOptionsPanel({ ticker }: { ticker: string }) {
       {shownChain && (
         <SourceNote
           className="mt-2"
-          text={`${t('期权数据为延迟数据')}${
-            shownChain.asOf ? t(' · 更新于 {time}', { time: fmtRelative(shownChain.asOf) }) : ''
-          }${shownChain.stale ? t(' · 暂未刷新，显示最近一次结果') : ''}${
-            shownChain.perContractQuoteTime
-              ? ''
-              : ` · ${t('获取时间，非逐合约已验证报价')}`
-          }`}
+          text={`${t('延迟行情')}${
+            shownChain.asOf ? t(' · 数据获取于 {time}', { time: fmtRelative(shownChain.asOf) }) : ''
+          }${shownChain.stale ? t(' · 暂未刷新，显示最近一次结果') : ''}`}
         />
       )}
 
       {shownChain && <SummaryTiles chain={shownChain} />}
       {chainError && shownChain && (
         <p role="status" className="mt-3 rounded-md border border-warn-600/20 bg-warn-50 p-3 text-caption text-warn-700">
-          {t('本次刷新失败，当前仍为上一次的期权数据。')}
+          {t('更新失败，显示上次期权数据。')}
         </p>
       )}
       {chainError && !shownChain ? (
           <div className="flex flex-col items-center gap-2.5 px-4 py-10 text-center">
             <p className="text-body-s font-medium text-ink-700">{chainError.bizCode === 'public_option_snapshot_pending' ? t('期权数据准备中') : t('该到期日的期权链暂不可用')}</p>
             <p className="text-caption text-ink-400">
-              {chainError.bizCode === 'public_option_snapshot_pending' ? t('后台正在准备期权数据，稍后可重新读取') : t('其它到期日不受影响，可直接切换')}
+              {chainError.bizCode === 'public_option_snapshot_pending' ? t('期权数据正在更新，请稍后重试') : t('可切换到其他到期日查看')}
               {retrySeconds > 0 ? t(' · {n} 秒后可重试', { n: retrySeconds }) : ''}
             </p>
             <button
@@ -525,9 +519,6 @@ function LiveOptionsPanel({ ticker }: { ticker: string }) {
       ) : (
         <ChainBrowser key={`chain:${ticker}-${exp}`} chain={shownChain} />
       )}
-      <p className="mt-3 text-micro text-ink-500">
-        {t('数据为当前到期日快照，更新时间不代表逐笔成交时间。')}
-      </p>
 
       {/* key 强制重挂：切标的/到期日后旧 job（含已生成的付费解读）不得残留，
           否则正文是 8/21 的解读、脚注却标着 9/18，且「生成解读」入口被 job

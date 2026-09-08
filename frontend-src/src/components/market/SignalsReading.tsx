@@ -8,7 +8,6 @@ import type { MarketStatusDetail } from './api';
 import { cn } from '@/lib/utils';
 import { fmtPct, fmtPrice } from '@/lib/format';
 import EmptyState from '@/components/shared/EmptyState';
-import SourceNote from '@/components/shared/SourceNote';
 import InfoHint from '@/components/shared/InfoHint';
 import { MARKET_SIGNAL_HINTS, SCORE_HINTS } from '@/lib/scoreHints';
 import { SkeletonCard } from '@/components/shared/Skeleton';
@@ -40,7 +39,7 @@ function buildReading(
       signals.topScore !== null ? t('顶部风险 {score}', { score: signals.topScore }) : null,
       signals.bottomScore !== null ? t('底部修复 {score}', { score: signals.bottomScore }) : null,
     ].filter(Boolean);
-    parts.push(t('市场信号模型当前评分为{scores}。', { scores: scores.join(t('，')) }));
+    parts.push(t('当前信号评分：{scores}。', { scores: scores.join(t('，')) }));
   }
   const leading = [...signals.metrics]
     .filter((metric) => metric.topScore !== null || metric.bottomScore !== null)
@@ -50,7 +49,7 @@ function buildReading(
     const items = leading
       .map((metric) => t('「{label}」{value}', { label: metric.label, value: metric.value }))
       .join(t('、'));
-    parts.push(t('主要观测项为{items}。', { items }));
+    parts.push(t('主要指标：{items}。', { items }));
   }
   if (indices?.length) {
     /* 平盘不算上涨（审计 P2-4 同一口径）；这段文字会进 AI 上下文，口径必须准。 */
@@ -71,15 +70,13 @@ function buildReading(
   if (regimeMean !== null) {
     parts.push(
       t('六维市场形态均值 {mean}', { mean: regimeMean.toFixed(1) }) +
-        (bias ? t('，形态偏向「{label}」', { label: t(bias.label) }) : '') +
+        (bias ? t('，整体「{label}」', { label: t(bias.label) }) : '') +
         t('。'),
     );
   }
   if (status) {
-    if (status.market === 'open') parts.push(t('盘中关注量能能否延续，追高注意回撤风险。'));
-    else if (status.market === 'premarket') parts.push(t('盘前流动性较薄，信号以开盘后确认为准。'));
-    else if (status.market === 'postmarket') parts.push(t('盘后留意财报与公告对明日开盘的传导。'));
-    else parts.push(t('当前为最近一个交易日的数据，开盘后会重新计算。'));
+    if (status.market === 'premarket') parts.push(t('盘前流动性较薄，信号以开盘后确认为准。'));
+    else if (status.market === 'closed') parts.push(t('当前为最近一个交易日的数据，开盘后会重新计算。'));
   }
   return parts.join('');
 }
@@ -208,17 +205,12 @@ export default function SignalsReading({
               </span>
             </p>
           </div>
-          <p className="mt-1 text-micro text-ink-400">{bias?.basis ?? t('依据不足，暂不给出判断')}</p>
+          <p className="mt-1 text-micro text-ink-400">{bias?.basis ?? t('数据不足，暂无法判断趋势')}</p>
           <blockquote className="mt-4 flex-1 rounded-lg border border-line bg-card-warm p-4">
             <p className="font-quote text-[15px] leading-[26px] text-ink-800">{reading}</p>
           </blockquote>
         </div>
       </div>
-
-      <SourceNote
-        className="mt-5"
-        text={t("根据当前各项指标读数自动生成 · 解读对象为全市场，不区分指数 · 不构成投资建议")}
-      />
     </section>
   );
 }

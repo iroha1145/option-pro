@@ -241,7 +241,7 @@ test.describe("spring tabs glide (#113 blocker 3+4)", () => {
       await page.getByRole("link", { name: "选股", exact: true }).first().click();
     }
     await expect(page).toHaveURL(/\/screener$/);
-    await expect(page.locator('[aria-label="筛选工作台"]')).toBeVisible();
+    await expect(page.locator('[aria-label="筛选条件"]')).toBeVisible();
   }
 
   const TIER_LIST = '[role="tablist"][aria-label^="强度分档"]';
@@ -347,7 +347,7 @@ test.describe("spring tabs glide (#113 blocker 3+4)", () => {
     await expectPillMatchesTab(tierPill(page), first, 4);
 
     /* 移动端窄屏取证（合并门槛 #7） */
-    await captureEvidence(page.locator('[aria-label="筛选工作台"]'), "tier-tabs-scrolled-pill-aligned-390");
+    await captureEvidence(page.locator('[aria-label="筛选条件"]'), "tier-tabs-scrolled-pill-aligned-390");
   });
 
   test("arrow keys, Home and End traverse every tab in both tablists", async ({ page }) => {

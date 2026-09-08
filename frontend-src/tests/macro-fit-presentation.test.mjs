@@ -195,11 +195,11 @@ test('口径说明写明了三件必须说的事', () => {
   const hint = macroFit.MACRO_SHADOW_HINT;
   const all = `${hint.title}${hint.body}${hint.note}`;
   // 一个 0–100 的分数默认会被当成评分的一部分，所以这三句缺一不可。
-  assert.match(all, /影子/, '没说这是影子字段');
-  assert.match(all, /不参与排名/, '没说它不参与排名');
+  assert.match(all, /单独展示/, '没说宏观分数单独展示');
+  assert.match(all, /不影响选股和突破信号排名/, '没说它不改变排名');
   assert.match(all, /板块/, '没说暴露画像是板块级的');
-  assert.match(all, /不是预测/, '没说分数是历史分位而不是预测');
-  assert.match(all, /不按中性 50 计|不按中性/, '没说缺失不按中性处理');
+  assert.match(all, /不预测股价/, '没说明分数不预测股价');
+  assert.match(all, /数据不足时留空/, '没说明数据不足时不评分');
   // 原生 title 属性只能放字符串，两者内容一致。
   assert.equal(typeof macroFit.MACRO_SHADOW_TITLE_ATTR, 'string');
   assert.ok(macroFit.MACRO_SHADOW_TITLE_ATTR.includes(hint.body));

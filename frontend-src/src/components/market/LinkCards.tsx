@@ -12,14 +12,14 @@ const CARDS: { to: string; icon: IconName; title: string; en: string; desc: stri
     title: t('板块透视'),
     en: 'SECTORS',
     /* 后端目录是 24 个可重叠的主题板块，不是 GICS 十一行业（审计 2.1.16） */
-    desc: t('主题板块热力矩阵与 IV 排名，看资金在哪个赛道抱团。'),
+    desc: t('比较板块涨跌、个股强度与期权隐含波动率。'),
   },
   {
     to: '/breakouts',
     icon: 'radar',
     title: t('突破雷达'),
     en: 'BREAKOUT RADAR',
-    desc: t('当日突破信号与事件时间线，追踪生命周期状态迁移。'),
+    desc: t('查看今日突破信号，追踪触发、确认与回踩过程。'),
   },
 ];
 

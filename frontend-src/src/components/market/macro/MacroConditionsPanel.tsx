@@ -64,10 +64,9 @@ function DisabledNotice({ reason }: { reason: string | null }) {
       title={missingKey ? t('宏观数据源尚未配置') : t('宏观环境未启用')}
       description={
         missingKey
-          ? t('需要在服务器上配置 FRED 数据源密钥后，宏观环境才会开始积累快照。')
+          ? t('管理员配置经济数据平台（FRED）的访问密钥后，即可开始更新宏观数据。')
           : t('本功能在配置中处于关闭状态。')
       }
-      footnote={t("配置只能在服务器端完成；页面不显示任何密钥信息。")}
     />
   );
 }
@@ -113,7 +112,7 @@ export default function MacroConditionsPanel({
       if (Date.now() - started > REFRESH_FOLLOW_TIMEOUT_MS) {
         window.clearInterval(timer);
         setRefreshPhase('idle');
-        setRefreshNote(t('刷新仍未在预期时间内完成，面板会在下一次轮询更新。'));
+        setRefreshNote(t('刷新仍在进行，完成后自动显示最新数据。'));
         return;
       }
       /* 硬失效 + 强制世代：跟进轮询必须真的打到后端。普通失效下，
@@ -130,7 +129,7 @@ export default function MacroConditionsPanel({
   if ((refreshPhase === 'queued' || refreshPhase === 'in_progress') && snapshotStamp !== null) {
     if (snapshotStamp !== refreshBaseline) {
       setRefreshPhase('idle');
-      setRefreshNote(t('宏观快照已更新。'));
+      setRefreshNote(t('宏观数据已更新。'));
     }
   }
 
@@ -152,10 +151,10 @@ export default function MacroConditionsPanel({
         );
       } else if (result.reason === 'already_running') {
         setRefreshPhase('in_progress');
-        setRefreshNote(t('已有一次宏观刷新在进行，本次复用同一任务。'));
+        setRefreshNote(t('宏观数据正在刷新，请等待完成。'));
       } else {
         setRefreshPhase('queued');
-        setRefreshNote(t('已排入 Worker 队列，完成后面板会在下一次轮询更新。'));
+        setRefreshNote(t('刷新请求已提交，完成后自动显示最新数据。'));
       }
     } catch (error) {
       setRefreshPhase('failed');
@@ -164,7 +163,7 @@ export default function MacroConditionsPanel({
         code === 'fred_api_key_missing'
           ? t('服务器尚未配置宏观数据源密钥。')
           : code === 'worker_unavailable'
-            ? t('Worker 当前不可用，稍后再试。')
+            ? t('后台服务暂不可用，请稍后重试。')
             : error instanceof ApiError
               ? error.message
               : t('刷新请求未成功。'),
@@ -277,8 +276,8 @@ export default function MacroConditionsPanel({
 
       {data.warnings.length > 0 && status !== 'active' && (
         <p className="rounded-md border border-warn-600 bg-warn-50 px-3 py-2 text-micro leading-relaxed text-warn-600">
-          {t('上游告警：')}{data.warnings.slice(0, 4).join('、')}
-          {data.warnings.length > 4 ? t(' 等 {count} 项', { count: data.warnings.length }) : ''}{t('。 面板继续显示上一份有效快照。')}
+          {t('数据更新提示：')}{data.warnings.slice(0, 4).join('、')}
+          {data.warnings.length > 4 ? t(' 等 {count} 项', { count: data.warnings.length }) : ''}{t('。当前显示上次成功更新的数据。')}
         </p>
       )}
 
@@ -296,7 +295,7 @@ export default function MacroConditionsPanel({
               <EmptyState
                 icon="doc-quote"
                 title={t("暂无正式综合分")}
-                description={t("有效模块不足 5 个时不输出正式综合分，也不会用 50 或上一次的分数顶替。")}
+                description={t("至少需要 5 类有效指标才能计算综合分。")}
               />
             </div>
           )}
@@ -330,13 +329,13 @@ export default function MacroConditionsPanel({
           eyebrow={t("改善最多 · IMPROVING")}
           title={t("7 日分数改善最多")}
           drivers={data.drivers.improving}
-          emptyText={t("暂无可比的 7 日历史快照，或本期没有分数上升的因子。缺少比较对象时这里留空，不显示 0。")}
+          emptyText={t("暂无 7 日前的数据可供比较，或本期没有评分上升的指标。")}
         />
         <DriverList
           eyebrow={t("恶化最多 · DETERIORATING")}
           title={t("7 日分数恶化最多")}
           drivers={data.drivers.deteriorating}
-          emptyText={t("暂无可比的 7 日历史快照，或本期没有分数下降的因子。缺少比较对象时这里留空，不显示 0。")}
+          emptyText={t("暂无 7 日前的数据可供比较，或本期没有评分下降的指标。")}
         />
       </div>
 
@@ -344,11 +343,10 @@ export default function MacroConditionsPanel({
       <FactorDetails modules={data.modules} snapshotKey={snapshotStamp ?? ''} />
 
       {/* G. 来源说明 */}
-      <SourceNote text={MACRO_SOURCE_NOTE} />
-      <p className="-mt-2 text-micro leading-relaxed text-ink-400">
-        {t('「按当前修订值回算」的历史区间使用今天能看到的最新修订数据，不代表当时市场已知的分数； 本地部署后每次实际抓取形成的快照才具备真实的点时语义。')}
-        {data.scoringVersion ? t(' 评分版本 {version}。', { version: data.scoringVersion }) : ''}
-      </p>
+      <details className="group border-t border-line pt-3">
+        <summary className="cursor-pointer text-caption text-ink-500">{t('数据源')}</summary>
+        <SourceNote className="border-0 pt-3" text={MACRO_SOURCE_NOTE + (data.scoringVersion ? t(' 评分版本 {version}。', { version: data.scoringVersion }) : '')} />
+      </details>
     </div>
   );
 }

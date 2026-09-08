@@ -415,7 +415,7 @@ export default function LayerMenu({
 
             {families && (
               <Card title={t('选股上下文')} className="mt-3">
-                <p className="mb-2 px-1.5 text-ink-400">{t('几何质量不是胜率')}</p>
+                <p className="mb-2 px-1.5 text-ink-400">{t('几何质量衡量形状的吻合程度')}</p>
                 <dl className="grid grid-cols-2 gap-x-4 gap-y-1 px-1.5">
                   {(['short', 'mid', 'long', 'trend', 'breakout', 'price_action'] as const).map((name) => (
                     <div key={name} className="flex items-center justify-between gap-2">

@@ -93,7 +93,7 @@ export default function ManualStockPull({
         result: null,
         error: cause instanceof ApiError
           ? cause.bizCode === 'account_login_required' || cause.bizCode === 'owner_login_required'
-            ? t('拉取需要登录；未登录只读已保存的快照')
+            ? t('登录后可更新行情；当前可查看已有数据')
             : `${cause.message}${cause.retryAfter ? t(' · {n} 秒后可重试', { n: cause.retryAfter }) : ''}`
           : t('拉取失败，请稍后重试'),
       });
@@ -129,7 +129,7 @@ export default function ManualStockPull({
           ) : (
             <Icon name="refresh" size={12} />
           )}
-          {running ? t('正在拉取真实数据') : t('拉取并分析')}
+          {running ? t('正在获取行情数据') : t('拉取并分析')}
         </button>
         {error && (
           <p role="alert" className="text-caption text-down-700">
@@ -155,7 +155,7 @@ export default function ManualStockPull({
         ) : (
           <Icon name="refresh" size={13} />
         )}
-        {running ? t('正在拉取真实数据') : result ? t('重新拉取') : t('拉取真实数据')}
+        {running ? t('正在获取行情数据') : result ? t('重新获取') : t('获取行情数据')}
       </button>
 
       {!running && !result && !error && (

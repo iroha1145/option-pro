@@ -1,5 +1,5 @@
 /**
- * 单标的深读主面板（/cta B2）。
+ * 指数详情主面板（/cta B2）。
  *
  * 语义纪律（与后端 cta-proxy 模型一一对应）：
  * - 这是**代理估算**：多周期趋势模型群的机械仓位，不是任何机构的真实仓位
@@ -102,12 +102,12 @@ export default function CtaDeepDive({
   const linkage = useMemo(() => {
     if (regimeMean === null || row.flow_score === null || row.position_score === null) return null;
     if (regimeMean >= 55 && row.flow_score <= -3) {
-      return t('市场环境偏强，但 CTA 代理正在减仓（趋势流 {tf} / 波动率流 {vf}）——机械去杠杆不等于观点转空', {
+      return t('市场整体偏强，模型估算仓位减少。趋势变化贡献 {tf}，波动率调整贡献 {vf}。', {
         tf: signed(row.trend_flow), vf: signed(row.volatility_flow),
       });
     }
     if (regimeMean <= 45 && row.flow_score >= 3) {
-      return t('市场环境偏弱，但 CTA 代理在回补/加仓（趋势流 {tf} / 波动率流 {vf}）——趋势模型的机械变化，非环境判断', {
+      return t('市场整体偏弱，模型估算仓位增加。趋势变化贡献 {tf}，波动率调整贡献 {vf}。', {
         tf: signed(row.trend_flow), vf: signed(row.volatility_flow),
       });
     }
@@ -144,12 +144,12 @@ export default function CtaDeepDive({
         <div className="mt-4 rounded-md border border-line bg-card-warm px-3 py-4">
           <p className="text-caption text-ink-600">
             {row.source_status === 'insufficient_data'
-              ? t('{proxy} 历史长度不足（{bars}/{req} 根），未生成估算——不以中性值代替', {
+              ? t('{proxy} 历史数据不足：已有 {bars} 根日线，需 {req} 根才能估算', {
                   proxy: row.proxy_symbol,
                   bars: row.coverage?.bars ?? 0,
                   req: row.coverage?.required ?? 0,
                 })
-              : t('{proxy} 代理数据暂不可用', { proxy: row.proxy_symbol })}
+              : t('{proxy} 行情暂不可用', { proxy: row.proxy_symbol })}
           </p>
         </div>
       ) : (
@@ -190,7 +190,7 @@ export default function CtaDeepDive({
               <div className="grid grid-cols-2 gap-3">
                 <div className="rounded-md bg-paper-2 px-3 py-2">
                   <p className="flex items-center gap-1 text-micro text-ink-400">
-                    {t('今日边际流')}
+                    {t('今日仓位变化')}
                     <InfoHint hint={CTA_HINTS.flow} size={10} />
                   </p>
                   <p className={cn('mt-0.5 font-mono text-body font-semibold tnum', (row.flow_score ?? 0) >= 0 ? 'text-up-700' : 'text-down-700')}>
@@ -202,7 +202,7 @@ export default function CtaDeepDive({
                 </div>
                 <div className="rounded-md bg-paper-2 px-3 py-2">
                   <p className="flex items-center gap-1 text-micro text-ink-400">
-                    {t('趋势读数')}
+                    {t('趋势指标')}
                     <InfoHint hint={CTA_HINTS.agreement} size={10} />
                   </p>
                   {/* 审计口径：大号 100% 视觉像「高置信度」，实际只表方向同向。
@@ -254,7 +254,7 @@ export default function CtaDeepDive({
                 <InfoHint hint={CTA_HINTS.position} size={10} />
               </p>
               <PositionHistoryChart history={row.history} />
-              <p className="mt-1 text-micro text-ink-400">{t('每日收盘后的同口径估算读数')}</p>
+              <p className="mt-1 text-micro text-ink-400">{t('按相同方法计算的每日收盘估算值')}</p>
             </div>
           </div>
 
@@ -292,11 +292,10 @@ export default function CtaDeepDive({
                 就是最新（GPT-5.6-Pro 审计问题 3 的双状态拆分）。 */}
             {row.market_data_current === true && <span> · {t('已是最新交易日')}</span>}
             {row.market_data_current === false && (
-              <span className="text-warn-600"> · {t('落后于最近交易日，等待快照更新')}</span>
+              <span className="text-warn-600"> · {t('尚未更新至最近交易日')}</span>
             )}
-            {row.intraday?.provisional && <span> · {t('盘中读数为暂定，不入正式历史')}</span>}
+            {row.intraday?.provisional && <span> · {t('盘中估算为暂定值，历史记录以收盘为准')}</span>}
             {' · '}{t('方法 {v} · 代理={p}', { v: data.method_version ?? '—', p: row.proxy_symbol })}
-            {' · '}{t('代理模型估算，非任何机构真实仓位披露')}
           </p>
         </>
       )}
