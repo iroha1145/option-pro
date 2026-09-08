@@ -340,7 +340,7 @@ test("password mode keeps public research readable and reserves owner controls f
   // ── 登录 ─────────────────────────────────────────────────────────────────
   await page.getByRole("link", { name: "登录", exact: true }).click();
   await expect(page).toHaveURL(`${PASSWORD_BASE_URL}/login`);
-  await expect(page.getByRole("heading", { name: "进入终端" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "登录研究工作台" })).toBeVisible();
 
   const username = page.getByLabel("用户名");
   const password = page.getByLabel("密码", { exact: true });

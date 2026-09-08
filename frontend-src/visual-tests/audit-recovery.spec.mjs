@@ -69,7 +69,7 @@ async function fixture(page, options = {}) {
 test('empty expiration retry fetches again and legacy invalid IV stays missing', async ({ page }) => {
   const state = await fixture(page, { readyExpirations: false });
   await page.goto('/stock/AAPL');
-  const retry = page.getByRole('button', { name: '重新拉取', exact: true });
+  const retry = page.getByRole('button', { name: '重新获取', exact: true });
   await expect(retry).toBeVisible();
   expect(state.expiryReads).toBe(1);
   state.readyExpirations = true;
