@@ -19,6 +19,8 @@ import GlidePill from '@/components/shared/GlidePill';
 import { LOCALES, getLocale, setLocale, t } from '../i18n/core.ts';
 import { setColorMode, type ColorMode } from '@/lib/colorPreference.ts';
 import { useColorMode } from '@/hooks/useColorMode.ts';
+import { setThemePreference, type ThemePreference } from '@/lib/themePreference.ts';
+import { useThemePreference } from '@/hooks/useAppearance.ts';
 
 /* setLocale() 整页重载才会切语言，模块级常量在加载期求值一次即可，不需要每次渲染重算 */
 const DOCK_ITEMS: { label: string; path: string; icon: IconName }[] = [
@@ -76,6 +78,7 @@ function MobileDockContent() {
   }, [moreOpen]);
 
   const colorMode = useColorMode();
+  const themePreference = useThemePreference();
 
   const moreActive = MORE_ITEMS.some((m) => isNavPathActive(location.pathname, m.path));
   const dockGlideId = useId();
@@ -141,7 +144,7 @@ function MobileDockContent() {
               transition={{ duration: 0.15 }}
               /* 不用 backdrop-blur：全屏背板的实时模糊在移动 GPU 上是弹出/收起
                  掉帧的最大单项，纯色遮罩视觉上足够。 */
-              className="fixed inset-0 z-[64] bg-[rgba(13,22,38,.32)] xl:hidden"
+              className="fixed inset-0 z-[64] bg-[var(--scrim)] xl:hidden"
               onClick={() => setMoreOpen(false)}
               data-focus-backdrop={overlayId}
               aria-hidden="true"
@@ -195,6 +198,23 @@ function MobileDockContent() {
                     ]}
                     value={colorMode}
                     onChange={setColorMode}
+                  />
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-md px-3 py-3">
+                  <span className="flex items-center gap-3">
+                    <span className="flex size-9 items-center justify-center rounded-md border border-line bg-card-warm text-brand-600">
+                      <Icon name="moon-amc" size={17} />
+                    </span>
+                    <span className="text-body-s font-medium text-ink-800">{t('外观')}</span>
+                  </span>
+                  <Segmented<ThemePreference>
+                    options={[
+                      { value: 'system', label: t('跟随系统') },
+                      { value: 'light', label: t('浅色') },
+                      { value: 'dark', label: t('深色') },
+                    ]}
+                    value={themePreference}
+                    onChange={setThemePreference}
                   />
                 </div>
                 <div className="mx-3 my-2 border-t border-line" />
