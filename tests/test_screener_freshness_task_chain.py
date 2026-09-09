@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import numpy as np
@@ -14,14 +14,15 @@ from fastapi.testclient import TestClient
 
 from app.api import strength, worker_actions
 from app.services.breakouts.config import BreakoutSettings
+from app.services.market_calendar import last_completed_trading_day
 from app.services.strength import scanner
 from app.services.strength.market_regime import MARKET_BENCHMARKS
 from app.worker.state import WorkerStateRepository
 from app.worker.tasks import StrengthRefreshTask
 
 
-def _history(*, slope: float, offset: float = 0.0, size: int = 320) -> pd.DataFrame:
-    index = pd.bdate_range(end="2026-09-04", periods=size, tz="America/New_York")
+def _history(*, end: date, slope: float, offset: float = 0.0, size: int = 320) -> pd.DataFrame:
+    index = pd.bdate_range(end=end, periods=size, tz="America/New_York")
     step = np.arange(size, dtype=float)
     close = 40.0 + offset + step * slope + np.sin(step / 9.0)
     return pd.DataFrame(
@@ -38,6 +39,9 @@ def _history(*, slope: float, offset: float = 0.0, size: int = 320) -> pd.DataFr
 
 def _install_provider_boundary(monkeypatch) -> list[tuple[list[str], str]]:
     requested: list[tuple[list[str], str]] = []
+    # The real freshness check needs current completed-session data, even after
+    # the calendar advances beyond the date this fixture was first written.
+    last_session = last_completed_trading_day(datetime.now(timezone.utc))
     metadata = {
         "NVDA": {
             "sector_id": "semiconductors",
@@ -65,12 +69,12 @@ def _install_provider_boundary(monkeypatch) -> list[tuple[list[str], str]]:
         },
     }
     frames = {
-        "NVDA": _history(slope=0.22),
-        "AAPL": _history(slope=0.10, offset=8.0),
-        "MSFT": _history(slope=0.12, offset=4.0),
+        "NVDA": _history(end=last_session, slope=0.22),
+        "AAPL": _history(end=last_session, slope=0.10, offset=8.0),
+        "MSFT": _history(end=last_session, slope=0.12, offset=4.0),
     }
     for symbol in MARKET_BENCHMARKS:
-        frames.setdefault(symbol, _history(slope=0.06, offset=20.0))
+        frames.setdefault(symbol, _history(end=last_session, slope=0.06, offset=20.0))
     panel = pd.concat(frames, axis=1)
     panel.attrs["price_source"] = {
         "provider": "synthetic-fixture",
