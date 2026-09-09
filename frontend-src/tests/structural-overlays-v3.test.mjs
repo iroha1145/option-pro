@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { prepareStructuralOverlays as prepare, selectStructuralOverlays as select, structuralTolerance, closedStructuralBars } from '../src/components/detail/chart-drawings/analysis/structuralOverlays.ts';
 import { detectPriceGaps, subtractTradedRange } from '../src/components/detail/chart-drawings/analysis/priceGaps.ts';
 import { semanticLabel, gapAreas, overlayTier } from '../src/components/detail/chart-drawings/analysis/semanticPresentation.ts';
-import { packEndLabels, rectanglesOverlap, measureLabel } from '../src/components/detail/chart-drawings/labelLayout.ts';
+import { packLineLabels, rectanglesOverlap, measureLabel } from '../src/components/detail/chart-drawings/labelLayout.ts';
 import { renderPatternInk, manualLineInk, LINE_INK, normalizePatternSegments } from '../src/components/detail/chart-drawings/linePresentation.ts';
 import { clippedLineSeries, clipLineToRect } from '../src/components/detail/chart-drawings/clippedLines.ts';
 
@@ -283,25 +283,25 @@ test('malformed or crossed shapes render nothing', () => {
 const bounds = { x: 10, y: 10, width: 480, height: 300 };
 const requests = [0, 1, 2, 3].map(i => ({ id: String(i), anchorX: 485, anchorY: 150 + i * 2, width: 145, height: 20, priority: 100 - i }));
 test('dense automatic labels pack in pixel coordinates without collisions', () => {
-  const out = packEndLabels(requests, bounds); assert.equal(out.length, 4); noOverlap(out);
+  const out = packLineLabels(requests, bounds); assert.equal(out.length, 4); noOverlap(out);
   assert.ok(out.every(p => p.x >= bounds.x && p.y >= bounds.y && p.x + p.width <= bounds.x + bounds.width && p.y + p.height <= bounds.y + bounds.height));
 });
 test('price-reference and manual label rectangles are respected', () => {
   const obstacles = [{ x: 330, y: 125, width: 160, height: 23 }, { x: 330, y: 168, width: 150, height: 22 }];
-  const out = packEndLabels(requests, bounds, obstacles); noOverlap(out);
+  const out = packLineLabels(requests, bounds, obstacles); noOverlap(out);
   for (const p of out) assert.ok(obstacles.every(o => !rectanglesOverlap(p, o, 0)));
 });
 test('crowded narrow layouts omit low-priority labels rather than changing prices', () => {
   const input = requests.map(r => ({ ...r, anchorX: 190, anchorY: 35 }));
-  const out = packEndLabels(input, { x: 0, y: 0, width: 200, height: 45 });
+  const out = packLineLabels(input, { x: 0, y: 0, width: 200, height: 45 });
   assert.ok(out.length < input.length); assert.equal(out[0].id, '0'); assert.ok(out.every(p => p.anchorY === 35));
 });
 test('pixel layout is independent of renderItem call order', () => {
-  assert.deepEqual(packEndLabels(requests, bounds), packEndLabels([...requests].reverse(), bounds));
+  assert.deepEqual(packLineLabels(requests, bounds), packLineLabels([...requests].reverse(), bounds));
 });
 test('invalid bounds and labels cannot create NaN render positions', () => {
-  assert.deepEqual(packEndLabels(requests, { ...bounds, width: NaN }), []);
-  assert.deepEqual(packEndLabels([{ ...requests[0], anchorY: NaN }], bounds), []);
+  assert.deepEqual(packLineLabels(requests, { ...bounds, width: NaN }), []);
+  assert.deepEqual(packLineLabels([{ ...requests[0], anchorY: NaN }], bounds), []);
 });
 test('Chinese and Latin labels use nonzero measured screen widths', () => {
   assert.ok(measureLabel('下降阻力 · 975.27').width > measureLabel('975').width); assert.ok(measureLabel('参考').height >= 15);
@@ -315,7 +315,7 @@ test('custom rail series reserves the live price label in the same packing pass'
   for (let i = marks.length - 1; i >= 0; i--) series.renderItem({ dataIndex: i, coordSys: bounds, context }, api);
   const size = measureLabel('实时报价 $104.10', 10, 14);
   const obstacle = { x: bounds.x + bounds.width - size.width - 4, y: 270 - 104.1 - size.height - 4, ...size };
-  noOverlap(context.endLabels); assert.ok(context.endLabels.every(p => !rectanglesOverlap(p, obstacle, 0)));
+  noOverlap(context.lineLabels); assert.ok(context.lineLabels.every(p => !rectanglesOverlap(p, obstacle, 0)));
   assert.equal(b.length, 60);
 });
 test('custom clipping keeps offscreen intersections without changing data geometry', () => {
@@ -336,6 +336,6 @@ test('zoom/resize only changes label placement, not the fitted input coordinates
 test('bounded deterministic stress fixture never returns intersecting label boxes', () => {
   for (let run = 0; run < 30; run++) {
     const rows = Array.from({ length: 30 }, (_, i) => ({ id: `${i}`, anchorX: 485, anchorY: 12 + ((i * 37 + run * 13) % 295), width: 100 + i % 5 * 15, height: 18, priority: 100 - i }));
-    noOverlap(packEndLabels(rows, bounds));
+    noOverlap(packLineLabels(rows, bounds));
   }
 });

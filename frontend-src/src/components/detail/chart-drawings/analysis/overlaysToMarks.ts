@@ -171,7 +171,7 @@ export function overlaysToMarks(
       { coord: [historical?.start ?? ctx.xMin, price], clipToPlot: true,
         lineStyle: { ...manualLineInk(color, ink.width, historical ? [2, 4] : 'solid'), opacity: ink.opacity },
         label: label ? { show: true, formatter: `${label} · ${price.toLocaleString('en-US', { maximumFractionDigits: price < 1 ? 4 : 2 })}`,
-          position: 'insideEndTop', fontSize: 11, lineHeight: 14, color, priority: ink.labelPriority + (display?.displayPriority ?? 0),
+          position: 'insideMiddleTop', fontSize: 11, lineHeight: 14, color, priority: ink.labelPriority + (display?.displayPriority ?? 0),
           backgroundColor: 'rgba(255,255,255,0.96)', padding: [1, 4], borderRadius: 3 } : { show: false } },
       { coord: [historical?.end ?? ctx.xMax, price] },
     ]);

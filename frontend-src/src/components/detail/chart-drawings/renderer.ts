@@ -415,7 +415,7 @@ export interface AutoPatternLike {
   hidden?: boolean;
   /** 线色（按 kind 分色）；缺省中性灰。 */
   color?: string;
-  /** 线端标签（如「上升支撑」）；缺省不画。 */
+  /** 线段中央的标签（如「上升支撑」）；缺省不画。 */
   label?: string;
 }
 
