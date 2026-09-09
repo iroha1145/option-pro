@@ -238,7 +238,7 @@ export default function EventDetail({
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
             onClick={onClose}
-            className="absolute inset-0 bg-[rgba(13,22,38,.28)] backdrop-blur-[2px]"
+            className="absolute inset-0 bg-[var(--scrim)] backdrop-blur-[2px]"
             aria-hidden="true"
           />
           <motion.div

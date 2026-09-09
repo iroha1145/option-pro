@@ -13,6 +13,7 @@ import { SCORE_HINTS } from '@/lib/scoreHints';
 import { SkeletonRows } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
 import { useRetryCountdown } from '@/hooks/useRetryCountdown';
+import { useAppearance } from '@/hooks/useAppearance.ts';
 import { t } from '../../i18n/core.ts';
 import SectorChips from './SectorChips';
 import type { IvMetaVm, IvRowVm } from './model';
@@ -30,6 +31,7 @@ function SourceStatusBadge({ status }: { status: keyof typeof SOURCE_STATUS_CN }
 
 /* ---------- IV rank 色阶条（低 up-600 → 中 brand-100 → 高 down-600） ---------- */
 function IvRankBar({ rank, replayKey }: { rank: number; replayKey: string }) {
+  useAppearance();
   return (
     <span className="inline-flex items-center gap-2">
       <span className="w-8 text-right font-mono text-body-s font-semibold text-ink-800 tnum">{rank}</span>

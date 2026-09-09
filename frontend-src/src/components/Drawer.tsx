@@ -64,7 +64,7 @@ export default function Drawer({ open, onClose, title, label, children, width = 
   return (
     <>
       <div
-        className={cn('t-backdrop fixed inset-0 z-[70] bg-[rgba(13,22,38,.45)] backdrop-blur-[2px]', phase === 'open' && 'is-open')}
+        className={cn('t-backdrop fixed inset-0 z-[70] bg-[var(--scrim-strong)] backdrop-blur-[2px]', phase === 'open' && 'is-open')}
         onClick={onClose}
         data-focus-backdrop={overlayId}
         aria-hidden="true"

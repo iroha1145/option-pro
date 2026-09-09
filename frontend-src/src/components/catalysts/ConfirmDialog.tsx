@@ -63,7 +63,7 @@ export default function ConfirmDialog({
   return (
     <>
       <div
-        className={cn('t-backdrop fixed inset-0 z-[85] bg-[rgba(13,22,38,.28)] backdrop-blur-[2px]', phase === 'open' && 'is-open')}
+        className={cn('t-backdrop fixed inset-0 z-[85] bg-[var(--scrim)] backdrop-blur-[2px]', phase === 'open' && 'is-open')}
         onClick={onCancel}
         data-focus-backdrop={overlayId}
         aria-hidden="true"

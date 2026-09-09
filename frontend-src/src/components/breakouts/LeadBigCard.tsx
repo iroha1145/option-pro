@@ -33,6 +33,7 @@ import { fmtNyEventTime, fmtPrice, fmtRelative } from '@/lib/format';
 import { MACRO_TONE_LABEL, macroToneOf } from '@/lib/macroFit';
 import { baseAnimation, CH, CHART_MONO_FONT, glassTooltip, type ChartOption } from '@/lib/chart';
 import { useColorMode } from '@/hooks/useColorMode.ts';
+import { useAppearance } from '@/hooks/useAppearance.ts';
 import {
   asFullDetail,
   LIFECYCLE_CHIP_CLASS,
@@ -352,12 +353,14 @@ function MiniKline({ ticker, dailyVersion, preparation, statusReadFailed }: { ti
     () => stocksApi.chart(ticker, '1d', 'raw', Boolean(dailyVersion)), null, [ticker, dailyVersion],
   );
   const colorMode = useColorMode();
+  const appearance = useAppearance();
   const option = useMemo(() => {
-    // 图表构造器读取 CSS 涨跌色，配色模式变化时需重新取值。
+    // 图表构造器读取涨跌色与浅/深外观，变化时需重新取值。
     void colorMode;
+    void appearance;
     if (!data || data.candles.length <= 1) return null;
     return buildMiniOption(data.candles.slice(-30));
-  }, [data, colorMode]);
+  }, [data, colorMode, appearance]);
   /* 突破标的常不在常规覆盖范围内：503 时可手动拉取（与详情页 ManualStockPull 同一预算通道） */
   const [pulling, setPulling] = useState(false);
   const [pullError, setPullError] = useState<string | null>(null);

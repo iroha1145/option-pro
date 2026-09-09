@@ -27,6 +27,7 @@ import { useAccess } from '@/hooks/useAccess';
 import { baseAnimation, CH, CHART_MONO_FONT, escapeTooltipText, glassTooltip, stippleAreaStyle, withAlpha, type ChartOption, type EChartsInstance } from '@/lib/chart';
 import { directionColors, getColorMode, type ColorMode } from '@/lib/colorPreference.ts';
 import { useColorMode } from '@/hooks/useColorMode.ts';
+import { useAppearance } from '@/hooks/useAppearance.ts';
 import { useDrawingController } from './chart-drawings/useDrawingController.ts';
 import { snapCandidatesFromOverlays } from './chart-drawings/snap.ts';
 import { railCandidatesFromOverlays } from './chart-drawings/railSnap.ts';
@@ -589,6 +590,7 @@ export default function KlineChart({
   const quoteStatus = useQuoteStatus();
   const overlays = technical?.chart_overlays ?? null;
   const colorMode = useColorMode();
+  const appearance = useAppearance();
   // Daily bars are the reliable default covered by Massive Stocks Starter;
   // intraday intervals remain available on demand. The default lives in ./api so
   // the prefetch and this component request the same URL.
@@ -888,11 +890,12 @@ export default function KlineChart({
   const option = useMemo(
     () => {
       if (!data) return null;
+      void appearance;
       const base = buildOption(data.bars, data.ma20, range, mode, prevClose, overlay, extraMarks, analysisOption, null, colorMode);
       const series = Array.isArray(base.series) ? base.series : base.series ? [base.series] : [];
       return { ...base, series: [...series, { id: 'realtime-price-reference', type: 'line', xAxisIndex: 0, yAxisIndex: 0, data: [], showSymbol: false, lineStyle: { opacity: 0 }, silent: true, animation: false, tooltip: { show: false }, markLine: { symbol: 'none', data: [] } }] } as ChartOption;
     },
-    [data, range, mode, prevClose, overlay, extraMarks, analysisOption, colorMode],
+    [data, range, mode, prevClose, overlay, extraMarks, analysisOption, colorMode, appearance],
   );
   // Depend on the visible reference values, not the entire quote: unchanged
   // prices with newer trade timestamps must not call ECharts.setOption again.

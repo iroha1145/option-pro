@@ -74,7 +74,7 @@ export default function WatchlistManager({ tickers, maxTickers, busy, onSave, on
 
   return createPortal(
     <>
-      <div className="fixed inset-0 z-[85] bg-[rgba(13,22,38,.28)] backdrop-blur-[2px]" data-focus-backdrop={id} aria-hidden="true" onClick={() => !busy && onClose()} />
+      <div className="fixed inset-0 z-[85] bg-[var(--scrim)] backdrop-blur-[2px]" data-focus-backdrop={id} aria-hidden="true" onClick={() => !busy && onClose()} />
       <div className="pointer-events-none fixed inset-0 z-[86] flex items-center justify-center p-3 sm:p-6">
         <div ref={panelRef} role="dialog" aria-modal="true" aria-labelledby={`${id}-title`} aria-describedby={`${id}-description`} data-focus-overlay={id}
           className="pointer-events-auto flex max-h-[90dvh] w-full max-w-[640px] flex-col overflow-hidden rounded-xl border border-line bg-card shadow-sh-3">
