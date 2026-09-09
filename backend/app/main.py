@@ -267,6 +267,7 @@ _ROOT_PUBLIC_ASSETS = frozenset({
     "/empty-news.svg",
     "/empty-watchlist.svg",
     "/empty-chart.svg",
+    "/theme-boot.js",
 })
 
 
@@ -339,6 +340,7 @@ _PASSWORD_ENTRY_PATHS = {
     "/api/access/login",
     "/logo.svg",
     "/login-motif.svg",
+    "/theme-boot.js",
 }
 # 登录页所需的构建资产(文件名带内容 hash,按前缀放行)。
 _PASSWORD_ENTRY_PREFIXES = ("/assets/",)

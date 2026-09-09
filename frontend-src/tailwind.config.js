@@ -1,44 +1,47 @@
 /** @type {import('tailwindcss').Config} */
+const token = (name) =>
+  `color-mix(in srgb, var(${name}) calc(100% * <alpha-value>), transparent)`;
+
 module.exports = {
   darkMode: ["class"],
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {
       colors: {
-        /* ---- Optix 纸面终端 tokens（design.md §1 精确 HEX）---- */
+        /* ---- Optix 纸面终端 tokens：从 CSS 变量生成，html.dark 换盘后工具类一起换 ---- */
         paper: {
-          DEFAULT: '#F6F7F9', // --paper 页面主背景（v8 降温：冷灰蓝纸面）
-          2: '#FAFBFC',       // --paper-2 抬升区
+          DEFAULT: token('--paper'),
+          2: token('--paper-2'),
         },
         card: {
-          DEFAULT: '#FFFFFF',
-          warm: '#FBFCFD',
-          foreground: '#0D1626',
+          DEFAULT: token('--card'),
+          warm: token('--card-warm'),
+          foreground: token('--ink-900'),
         },
         ink: {
-          900: '#0D1626',
-          800: '#182338',
+          900: token('--ink-900'),
+          800: token('--ink-800'),
           /* 700：源码里 18 处「比正文重一档」的用法此前落在不存在的档位上，
              类名不生成任何规则、全部退回继承色（审计 2.4.7/3.2）。 */
-          700: '#2A3550',
-          600: '#3D4A68',
-          500: '#5A6788',
-          400: '#626F8B',
-          300: '#B7BFD3',
+          700: token('--ink-700'),
+          600: token('--ink-600'),
+          500: token('--ink-500'),
+          400: token('--ink-400'),
+          300: token('--ink-300'),
         },
         line: {
-          DEFAULT: '#E9ECF1', // v8.1 随纸面降温：冷纸面配暖灰线会显脏，同族蓝灰
-          strong: '#DBE0E8',
-          chart: '#EDF0F4',
+          DEFAULT: token('--line'),
+          strong: token('--line-strong'),
+          chart: token('--line-chart'),
         },
-        /* 群青只做同色相深浅：hover 一律深一档 brand-700（#2338C8），不用更浅的 500/400 */
+        /* 群青只做同色相深浅：hover 一律深一档 brand-700，夜间抬升对比度 */
         brand: {
-          700: '#2338C8', // hover / 按压态
-          600: '#2E46E0', // 主色（主按钮/激活态/关键数据）
-          500: '#3B59F2',
-          400: '#6B82FF',
-          100: '#E4E9FF',
-          50: '#F0F3FF',
+          700: token('--brand-700'),
+          600: token('--brand-600'),
+          500: token('--brand-500'),
+          400: token('--brand-400'),
+          100: token('--brand-100'),
+          50: token('--brand-50'),
         },
         /* 涨跌色走 CSS 变量，html[data-color-mode=asian] 换盘后工具类一起换。
            <alpha-value> 保住 bg-up-600/20 这类透明度变体。 */
@@ -54,15 +57,15 @@ module.exports = {
         },
         warn: {
           /* 700：警示横幅主文案用档（warn-50 底上比 600 重一档，审计 2.4.5） */
-          700: '#B87109',
-          600: '#E8930C',
-          50: '#FCF3E2',
+          700: token('--warn-700'),
+          600: token('--warn-600'),
+          50: token('--warn-50'),
         },
         /* v8.1 弃「AI 紫」：紫+AI 是生成式设计最强签名。青瓷 teal（印刷第二油墨色），
            与群青相距 60°+、与涨绿差 36°，不误读为行情方向。 */
         ai: {
-          600: '#0B7285',
-          50: '#E7F3F6',
+          600: token('--ai-600'),
+          50: token('--ai-50'),
         },
         /* ---- shadcn/ui 兼容令牌（ui/ 基座仍可用）---- */
         border: "hsl(var(--border))",
@@ -107,10 +110,10 @@ module.exports = {
       },
       boxShadow: {
         /* v8 清新：墨色 rgba(16,24,40,*) 三层制，更柔更大；内高光 .7 保持；聚焦环即时出现 */
-        'sh-1': '0 1px 2px rgba(16,24,40,.03)',
-        'sh-2': '0 1px 2px rgba(16,24,40,.03), 0 12px 32px -14px rgba(16,24,40,.10)',
-        'sh-3': '0 2px 4px rgba(16,24,40,.04), 0 24px 56px -16px rgba(16,24,40,.16)',
-        'card': '0 2px 4px rgba(24,43,68,.02), 0 9px 25px -12px rgba(24,43,68,.12)',
+        'sh-1': 'var(--shadow-sh-1)',
+        'sh-2': 'var(--shadow-sh-2)',
+        'sh-3': 'var(--shadow-sh-3)',
+        'card': 'var(--card-shadow)',
         'card-hover': '0 1px 2px rgba(16,24,40,.03), 0 12px 32px -14px rgba(16,24,40,.10), inset 0 1px 0 rgba(255,255,255,.7)',
         'inset-hi': 'inset 0 1px 0 rgba(255,255,255,.7)',
         'focus-ring': '0 0 0 3px rgba(46,70,224,.18)',
