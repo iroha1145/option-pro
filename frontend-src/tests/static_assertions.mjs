@@ -17,11 +17,15 @@ assert.match(index, /<html lang="zh-CN">/, '生产文档语言必须保持简体
 assert.match(index, /<title>Optix Pro — 投资研究工作台<\/title>/, '产品标题必须保持统一');
 assert.match(index, /<div id="root"><\/div>/, 'SPA 挂载点 <div id="root"> 必须存在');
 
-// ── 脚本纪律：不允许内联 <script>，只允许带 src 的 module script ─────────────
+// ── 脚本纪律：不允许内联 <script>；theme-boot 是阻塞脚本，其余必须是 module ──
 const scriptTags = [...index.matchAll(/<script\b[^>]*>/g)].map(match => match[0]);
 assert.ok(scriptTags.length >= 1, 'index.html 必须引用构建脚本');
 for (const tag of scriptTags) {
   assert.match(tag, /\bsrc="[^"]+"/, `不允许内联 <script>（严格 CSP）：${tag}`);
+  if (/src="\/theme-boot\.js"/.test(tag)) {
+    assert.doesNotMatch(tag, /type="module"/, `theme-boot 必须是阻塞脚本才能赶在首屏前贴上 dark：${tag}`);
+    continue;
+  }
   assert.match(tag, /type="module"/, `构建脚本必须是 module script：${tag}`);
 }
 
@@ -31,6 +35,13 @@ for (const tag of scriptTags) {
 const scriptRefs = [...index.matchAll(/<script\b[^>]*\bsrc="([^"]+)"/g)].map(match => match[1]);
 const styleRefs = [...index.matchAll(/<link\s+rel="stylesheet"[^>]*\bhref="([^"]+)"/g)].map(match => match[1]);
 for (const ref of [...scriptRefs, ...styleRefs]) {
+  if (ref === '/theme-boot.js') {
+    await assert.doesNotReject(
+      access(path.join(artifactDir, 'theme-boot.js')),
+      'index.html 引用的 theme-boot.js 必须存在',
+    );
+    continue;
+  }
   assert.match(ref, /^\/assets\//, `脚本/样式引用必须是 /assets/ 绝对根路径：${ref}`);
   await assert.doesNotReject(
     access(path.join(artifactDir, ref.replace(/^\//, ''))),
@@ -56,6 +67,7 @@ for (const svg of [
   'empty-news.svg',
   'empty-watchlist.svg',
   'empty-chart.svg',
+  'theme-boot.js',
 ]) {
   await assert.doesNotReject(access(path.join(artifactDir, svg)), `根部公共资产缺失：${svg}`);
 }
@@ -79,7 +91,12 @@ for (const name of [...jsAssets, ...cssAssets]) {
 }
 const entryJsRefs = scriptRefs.filter(ref => /^\/assets\/index-[^/]+\.js$/.test(ref));
 assert.equal(entryJsRefs.length, 1, `index.html 应恰好引用 1 个 index-*.js 入口，实际：${scriptRefs.join(', ') || '无'}`);
-assert.equal(scriptRefs.length, 1, 'index.html 除入口外不得直接引用其他 js（chunk 走动态 import）');
+assert.ok(scriptRefs.includes('/theme-boot.js'), 'index.html 必须引用 theme-boot.js');
+assert.equal(
+  scriptRefs.filter((ref) => ref !== '/theme-boot.js').length,
+  1,
+  'index.html 除 theme-boot 外不得直接引用其他 js（chunk 走动态 import）',
+);
 assert.equal(styleRefs.length, 1, 'index.html 应恰好引用 1 个样式表');
 assert.match(styleRefs[0], /^\/assets\/index-[^/]+\.css$/, 'CI 就绪探针依赖 index-*.css 命名');
 const builtScripts = await Promise.all(jsAssets.map(name => readFile(path.join(artifactDir, 'assets', name), 'utf8')));
@@ -90,6 +107,7 @@ for (const name of cssAssets) {
   );
 }
 for (const ref of [...scriptRefs, ...styleRefs]) {
+  if (ref === '/theme-boot.js') continue;
   assert.ok(
     assetEntries.includes(ref.replace(/^\/assets\//, '')),
     `index.html 引用必须落在 assets 目录内：${ref}`,

@@ -91,6 +91,20 @@ def test_existing_hashed_asset_and_304_keep_long_cache_policy(tmp_path):
     assert icon.headers["cache-control"] == "public, max-age=300, stale-while-revalidate=60"
 
 
+def test_theme_boot_is_public_and_served_before_login(tmp_path):
+    assert "/theme-boot.js" in main._ROOT_PUBLIC_ASSETS
+    assert "/theme-boot.js" in main._PASSWORD_ENTRY_PATHS
+    (tmp_path / "theme-boot.js").write_text(
+        'document.documentElement.classList.toggle("dark", true);',
+        encoding="utf-8",
+    )
+    with _client(tmp_path) as client:
+        response = client.get("/theme-boot.js")
+    assert response.status_code == 200
+    assert "classList.toggle" in response.text
+    assert response.headers["cache-control"] == "public, max-age=300, stale-while-revalidate=60"
+
+
 @pytest.mark.parametrize("status", [302, 403, 404, 500, 503])
 def test_static_error_overrides_existing_browser_and_cdn_cache_headers(status):
     async def app(_scope, _receive, send):
