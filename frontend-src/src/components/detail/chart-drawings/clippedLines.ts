@@ -1,5 +1,5 @@
 import type { CustomSeriesOption } from 'echarts/charts';
-import { measureLabel, packEndLabels, type LabelRect } from './labelLayout.ts';
+import { measureLabel, packLineLabels, type LabelRect } from './labelLayout.ts';
 
 type Rect = { x: number; y: number; width: number; height: number };
 type Point = [number, number];
@@ -8,7 +8,8 @@ interface LineHead {
   clipToPlot?: boolean;
   lineStyle?: { color?: string; width?: number; type?: string | number[]; opacity?: number; shadowColor?: string; shadowBlur?: number };
   label?: { show?: boolean; formatter?: unknown; position?: string; distance?: number; fontSize?: number; lineHeight?: number;
-    color?: string; backgroundColor?: string; borderColor?: string; borderWidth?: number; borderRadius?: number; padding?: number[]; priority?: number };
+    color?: string; backgroundColor?: string; borderColor?: string; borderWidth?: number; borderRadius?: number; padding?: number[]; priority?: number;
+    span?: [Point, Point] };
 }
 type RailMark = [LineHead, { coord: Point }];
 export interface ReferenceLabel { price: number | null; text: string }
@@ -72,11 +73,10 @@ export function clippedLineSeries(marks: readonly object[], reference?: Referenc
       };
       const a = project(row[0].coord), b = project(row[1].coord);
       const visible = clipLineToRect(a, b, rect);
-      if (!visible) return;
       // ECharts provides a fresh shared context for each render cycle. Compute all
       // labels together so item order, resize and dataZoom cannot change priority.
-      const context = params.context as { endLabels?: ReturnType<typeof packEndLabels> };
-      if (!context.endLabels) {
+      const context = params.context as { lineLabels?: ReturnType<typeof packLineLabels> };
+      if (!context.lineLabels) {
         const obstacles = manualObstacles(marks, project, rect);
         if (reference?.price != null && Number.isFinite(reference.price) && reference.text) {
           const y = project([0, reference.price])[1];
@@ -88,29 +88,35 @@ export function clippedLineSeries(marks: readonly object[], reference?: Referenc
         const requests = rows.flatMap((r, index) => {
           const label = r[0].label;
           if (!label?.show || typeof label.formatter !== 'string' || !label.formatter) return [];
-          const [x, y] = project(r[1].coord);
-          if (x < rect.x || x > rect.x + rect.width || y < rect.y || y > rect.y + rect.height) return [];
+          const span = label.span ?? [r[0].coord, r[1].coord];
+          const clipped = clipLineToRect(project(span[0]), project(span[1]), rect);
+          if (!clipped) return [];
+          const x = (clipped[0][0] + clipped[1][0]) / 2;
+          const y = (clipped[0][1] + clipped[1][1]) / 2;
           const size = measureLabel(label.formatter, label.fontSize ?? 11, label.lineHeight ?? 14);
           return [{ id: String(index), anchorX: x, anchorY: y, ...size,
             priority: label.priority ?? (r[0].lineStyle?.opacity ?? 1) * 100 }];
         });
-        context.endLabels = packEndLabels(requests, { x: rect.x + 4, y: rect.y + 4,
+        context.lineLabels = packLineLabels(requests, { x: rect.x + 4, y: rect.y + 4,
           width: Math.max(0, rect.width - 8), height: Math.max(0, rect.height - 8) }, obstacles);
       }
-      const placement = context.endLabels.find(p => p.id === String(params.dataIndex));
-      const [head, tail] = visible, ink = row[0].lineStyle ?? {}, label = row[0].label;
+      const placement = context.lineLabels.find(p => p.id === String(params.dataIndex));
+      // A label's owning dashed piece may be offscreen while its solid rail is visible.
+      if (!visible && !placement) return;
+      const ink = row[0].lineStyle ?? {}, label = row[0].label;
       const dash = Array.isArray(ink.type) ? ink.type : ink.type === 'dashed' ? [6, 4] : ink.type === 'dotted' ? [2, 3] : undefined;
-      const moved = placement && Math.abs(placement.y + placement.height / 2 - b[1]) > placement.height;
+      const moved = placement && Math.hypot(placement.x + placement.width / 2 - placement.anchorX,
+        placement.y + placement.height / 2 - placement.anchorY) > placement.height;
       return {
         type: 'group', children: [
-          { type: 'line', shape: { x1: head[0], y1: head[1], x2: tail[0], y2: tail[1] },
+          ...(visible ? [{ type: 'line' as const, shape: { x1: visible[0][0], y1: visible[0][1], x2: visible[1][0], y2: visible[1][1] },
             style: { stroke: ink.color, lineWidth: ink.width ?? 2.5, lineDash: dash, opacity: ink.opacity ?? 1,
-              lineCap: 'round', shadowColor: ink.shadowColor, shadowBlur: ink.shadowBlur } },
+              lineCap: 'round' as const, shadowColor: ink.shadowColor, shadowBlur: ink.shadowBlur } }] : []),
           { type: 'line', invisible: !moved,
-            shape: { x1: b[0], y1: b[1], x2: placement ? placement.x + placement.width : b[0],
+            shape: { x1: placement?.anchorX ?? b[0], y1: placement?.anchorY ?? b[1], x2: placement ? placement.x + placement.width / 2 : b[0],
               y2: placement ? placement.y + placement.height / 2 : b[1] },
             style: { stroke: label?.color ?? ink.color, lineWidth: 0.7, opacity: 0.55 } },
-          { type: 'text', invisible: !placement,
+          { type: 'text', z2: 10, invisible: !placement,
             style: { text: placement ? String(label!.formatter) : '',
               // Text uses the same font and padding as its measured outer box.
               x: placement ? placement.x + placement.width / 2 : b[0],

@@ -1995,7 +1995,7 @@ test('keep-local reset removes stale barriers and persists one exact replacement
   assert.equal(parsed[0].origin, 'conflict_keep');
 });
 
-test('pattern rails carry per-kind color and a single end label', async (t) => {
+test('pattern rails carry per-kind color and a single centred label', async (t) => {
   const { autoPatternsToMarks, deconflictEndLabels } = await loadDrawings(t);
   // bar.t 是 ISO 字符串（projection.nySessionDate 直接 slice），沿用 barsFor 的口径
   const bars = Array.from({ length: 30 }, (_, i) => {
@@ -2018,7 +2018,7 @@ test('pattern rails carry per-kind color and a single end label', async (t) => {
       color: '#3B59F2', label: '上升通道',
     },
   ], ctx, 0);
-  // 支撑/阻力使用固定语义色，观察段实线，延伸段虚线且只挂一个末端标签。
+  // 支撑/阻力使用固定语义色，实线和虚线共享一个覆盖完整线段的标签。
   const support = marks.lines[0][0];
   assert.equal(support.lineStyle.color, '#0E647F');
   assert.equal(support.lineStyle.type, 'solid');
@@ -2027,9 +2027,10 @@ test('pattern rails carry per-kind color and a single end label', async (t) => {
   assert.deepEqual(supportTail.lineStyle.type, [7, 4]);
   assert.equal(supportTail.label.show, true);
   assert.equal(supportTail.label.formatter, '上升支撑 · 127');
-  // 标签留在绘图区内（insideEnd*），绝不用 'end'——那会画进 y 轴槽骑在刻度上；
+  // 标签按完整可见线段居中，仍保留绘图区边界和避让规则；
   // 白底药丸保证跨在蜡烛上也读得清（用户截图：「水平箱体」压 190、多形态互叠）。
-  assert.equal(supportTail.label.position, 'insideEndTop');
+  assert.equal(supportTail.label.position, 'insideMiddleTop');
+  assert.deepEqual(supportTail.label.span, [[2, 100], [29, 127]]);
   assert.equal(supportTail.label.backgroundColor, 'rgba(255,255,255,0.97)');
   // 通道下边表示支撑、上边表示阻力；整个通道只有一个标签。
   const chanA = marks.lines[2][0];
@@ -2040,7 +2041,7 @@ test('pattern rails carry per-kind color and a single end label', async (t) => {
   assert.equal(chanB.label.show, false);
   assert.equal(marks.lines[3][0].label.show, true);
   assert.equal(marks.lines.filter(line => line[0].label.show).length, 2);
-  // 防叠不在本函数里做（手绘标签也要一起排），由合并点的 deconflictEndLabels 负责：
+  // 旧的末端布局助手继续保持原契约；自动线在像素渲染层单独居中避让：
   // 两个形态延伸终点同价（127），同价带内顺次换侧。
   const spread = deconflictEndLabels(marks.lines, 90, 140);
   assert.equal(spread[1][0].label.position, 'insideEndTop');

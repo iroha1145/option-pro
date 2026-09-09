@@ -12,7 +12,7 @@ export function rectanglesOverlap(a: LabelRect, b: LabelRect, gap = 3): boolean 
  * rather than covering another label or moving its underlying line. Stable ties
  * mean renderItem invocation order never determines the result.
  */
-export function packEndLabels(requests: readonly LabelRequest[], bounds: LabelRect, obstacles: readonly LabelRect[] = []): LabelPlacement[] {
+export function packLineLabels(requests: readonly LabelRequest[], bounds: LabelRect, obstacles: readonly LabelRect[] = []): LabelPlacement[] {
   if (![bounds.x, bounds.y, bounds.width, bounds.height].every(Number.isFinite) || bounds.width <= 0 || bounds.height <= 0) return [];
   const occupied = obstacles.filter(r => [r.x, r.y, r.width, r.height].every(Number.isFinite) && r.width > 0 && r.height > 0).map(r => ({ ...r }));
   const result: LabelPlacement[] = [];
@@ -20,7 +20,7 @@ export function packEndLabels(requests: readonly LabelRequest[], bounds: LabelRe
     && r.width > 0 && r.height > 0 && r.width <= bounds.width && r.height <= bounds.height)
     .sort((a, b) => b.priority - a.priority || a.anchorY - b.anchorY || a.id.localeCompare(b.id, 'en'));
   for (const r of sorted) {
-    const x = Math.max(bounds.x, Math.min(bounds.x + bounds.width - r.width, r.anchorX - r.width - 5));
+    const x = Math.max(bounds.x, Math.min(bounds.x + bounds.width - r.width, r.anchorX - r.width / 2));
     const desiredY = r.anchorY - r.height - 5;
     const candidates = [desiredY, r.anchorY + 5, bounds.y, bounds.y + bounds.height - r.height];
     // All free interval boundaries are candidates; avoid a fixed four-lane limit.

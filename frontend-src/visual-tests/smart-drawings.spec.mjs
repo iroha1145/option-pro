@@ -78,6 +78,10 @@ async function harness(page, locale = 'zh') {
         lines: display.filter(item => ['line', 'ec-line'].includes(item.type) && ['#0E647F', '#8D299B'].includes(item.style?.stroke) && item.style?.lineWidth >= 1)
           .map(item => ({ color: item.style.stroke, width: item.style.lineWidth, dash: item.style.lineDash, opacity: item.style.opacity, shape: { ...item.shape } })),
         labels: display.filter(item => item.type === 'tspan' && item.style?.text?.includes('Review')).map(item => item.style.text),
+        labelCenters: display.filter(item => item.type === 'tspan' && item.style?.text?.includes('Review')).map(item => {
+          const rect = item.getBoundingRect().clone(); rect.applyTransform(item.getComputedTransform());
+          return rect.x + rect.width / 2;
+        }),
         polygons: display.filter(item => item.type === 'polygon' && item.style?.opacity === 0.04).length,
         zoom: chart.getOption().dataZoom[0],
       };
@@ -112,6 +116,7 @@ for (const width of [1440, 390]) {
     expect(result.active.lines[0].width).toBe(2.4);
     expect(result.active.lines[1].dash).toEqual([7, 4]);
     expect(result.active.labels).toHaveLength(1);
+    expect(result.active.labelCenters[0]).toBeCloseTo((result.active.lines[0].shape.x1 + result.active.lines[1].shape.x2) / 2, 0);
     expect(result.broken.lines).toHaveLength(1);
     expect(result.broken.lines[0]).toMatchObject({ opacity: 0.3, dash: [2, 4] });
     expect(result.historicalLevel.lines).toHaveLength(1);
@@ -288,7 +293,10 @@ for (const width of [390, 1440]) {
               width: rect.width + (quote ? 0 : 10), height: rect.height + (quote ? 0 : 4) };
           });
         const grid = chart.getModel().getComponent('grid', 0).coordinateSystem.getRect();
+        const startX = Math.max(grid.x, chart.convertToPixel({ xAxisIndex: 0, yAxisIndex: 0 }, [20, 110])[0]);
+        const endX = Math.min(grid.x + grid.width, chart.convertToPixel({ xAxisIndex: 0, yAxisIndex: 0 }, [159, 110])[0]);
         return { labels, grid: { x: grid.x, y: grid.y, width: grid.width, height: grid.height },
+          lineCenterX: (startX + endX) / 2,
           zoom: chart.getOption().dataZoom[0], unchanged: originalMarks === JSON.stringify(packedMarks) };
       };
       updateReference(111);
@@ -309,6 +317,7 @@ for (const width of [390, 1440]) {
       expect(auto.length).toBeGreaterThanOrEqual(3);
       expect(obstacles.map(label => label.text.split(' ')[0]).sort()).toEqual(['ReviewManual', 'ReviewQuote']);
       for (let i = 0; i < auto.length; i++) {
+        expect(auto[i].x + auto[i].width / 2).toBeCloseTo(snapshot.lineCenterX, 0);
         for (const other of [...auto.slice(i + 1), ...obstacles]) expect(overlaps(auto[i], other), `${auto[i].text} overlaps ${other.text}`).toBe(false);
         expect(auto[i].x).toBeGreaterThanOrEqual(snapshot.grid.x);
         expect(auto[i].x + auto[i].width).toBeLessThanOrEqual(snapshot.grid.x + snapshot.grid.width);

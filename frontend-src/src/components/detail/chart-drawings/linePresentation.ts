@@ -163,7 +163,9 @@ export function renderPatternInk(
     const extension = target.x > segment.b.x + 0.01 ? { a: segment.b, b: target } : undefined;
     const label = (tail: Point) => i === 0 && pattern.label ? {
       show: true, formatter: `${pattern.label} · ${priceText(tail.y)}`,
-      position: 'insideEndTop', distance: 4, fontSize: 11, lineHeight: 14,
+      // The solid and dashed pieces share one label at the visible rail's centre.
+      span: [[segment.a.x, segment.a.y], [target.x, target.y]],
+      position: 'insideMiddleTop', distance: 4, fontSize: 11, lineHeight: 14,
       priority: (pattern.labelPriority ?? 0) + ink.labelPriority,
       color, backgroundColor: 'rgba(255,255,255,0.97)', borderColor: color,
       borderWidth: 0.5, borderRadius: 4, padding: [2, 5],
