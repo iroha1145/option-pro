@@ -136,9 +136,9 @@ export function ScanButton({
   onScan: () => void;
   className?: string;
 }) {
-  /* 基础立体影 = tailwind shadow-btn-hi。framer 的 dirty 脉冲环走内联 boxShadow，
+  /* 基础立体影 = 读 CSS 变量 --btn-hi-shadow。framer 的 dirty 脉冲环走内联 boxShadow，
      会压掉 class 阴影，只能把基础影并进每一帧动画值（各帧层数一致才可补间）。 */
-  const base = 'inset 0 1px 0 rgba(255,255,255,.12), 0 1px 2px rgba(16,24,40,.12), 0 3px 7px -4px rgba(16,24,40,.24)';
+  const base = 'var(--btn-hi-shadow)';
   return (
     <motion.button
       onClick={onScan}

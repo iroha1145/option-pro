@@ -149,6 +149,16 @@ test('CSS 暗色画布与 Cloud Monitor 令牌一致', async () => {
   }
 });
 
+test('暗色模式下按钮高光变量去除白边，避免夜间模式按钮泛白', async () => {
+  const css = await source('index.css');
+  const darkBlock = css.match(/html\.dark\s*\{([\s\S]*?)\n  \}/);
+  assert.ok(darkBlock, '缺少 html.dark 规则');
+  const darkBody = darkBlock[1];
+  assert.doesNotMatch(darkBody, /--btn-shadow:.*rgba\(255,\s*255,\s*255/);
+  assert.doesNotMatch(darkBody, /--btn-hi-shadow:.*rgba\(255,\s*255,\s*255/);
+  assert.doesNotMatch(darkBody, /--btn-primary-highlight:.*rgba\(255,\s*255,\s*255/);
+});
+
 test('theme-boot 与运行时共用 optix_theme 键，并按系统色决定默认夜间', async () => {
   const boot = await readFile(path.resolve(here, '..', 'public', 'theme-boot.js'), 'utf8');
   assert.match(boot, new RegExp(THEME_KEY));

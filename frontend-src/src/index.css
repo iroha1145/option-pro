@@ -59,6 +59,15 @@
     --shadow-sh-1: 0 1px 2px rgba(16, 24, 40, .03);
     --shadow-sh-2: 0 1px 2px rgba(16, 24, 40, .03), 0 12px 32px -14px rgba(16, 24, 40, .10);
     --shadow-sh-3: 0 2px 4px rgba(16, 24, 40, .04), 0 24px 56px -16px rgba(16, 24, 40, .16);
+    /* 按钮/控件立体阴影（暗色模式下内高光转为极微弱暗部高光或去除，避免白边） */
+    --btn-shadow: 0 1px 2px rgba(16, 24, 40, .07), inset 0 1px 0 rgba(255, 255, 255, .75);
+    --btn-hi-shadow: inset 0 1px 0 rgba(255, 255, 255, .16), 0 1px 2px rgba(16, 24, 40, .18), 0 4px 12px -4px rgba(16, 24, 40, .34);
+    --chip-shadow: inset 0 1px 0 rgba(255, 255, 255, .14), 0 1px 3px -1px rgba(16, 24, 40, .25);
+    --card-hover-shadow: 0 1px 2px rgba(16, 24, 40, .03), 0 12px 32px -14px rgba(16, 24, 40, .10), inset 0 1px 0 rgba(255, 255, 255, .7);
+    --inset-hi-shadow: inset 0 1px 0 rgba(255, 255, 255, .7);
+    --zone-shadow: inset 0 1px 0 rgba(255, 255, 255, .45), 0 1px 2px rgba(16, 24, 40, .10);
+    --btn-primary-highlight: 0 1px 0 rgba(255, 255, 255, .18) inset;
+    --insight-frame-shadow: inset 0 1px 0 rgba(255, 255, 255, .7);
     /* Cloud Monitor 的细节层次，保留 Optix 的纸面与群青。 */
     --control-track: #F2F4F7;
     --control-selected-shadow: 0 2px 4px rgba(24, 43, 68, .045), 0 5px 12px -4px rgba(24, 43, 68, .09);
@@ -143,6 +152,15 @@
     --shadow-sh-1: 0 1px 2px rgba(0, 0, 0, .35);
     --shadow-sh-2: 0 1px 2px rgba(0, 0, 0, .35), 0 12px 32px -14px rgba(0, 0, 0, .55);
     --shadow-sh-3: 0 2px 4px rgba(0, 0, 0, .4), 0 24px 56px -16px rgba(0, 0, 0, .62);
+    /* 按钮/控件立体阴影夜间重定：去除白色内高光白边，使用纯暗部外投影 */
+    --btn-shadow: 0 1px 2px rgba(0, 0, 0, .35);
+    --btn-hi-shadow: 0 1px 2px rgba(0, 0, 0, .45), 0 4px 12px -4px rgba(0, 0, 0, .55);
+    --chip-shadow: 0 1px 3px -1px rgba(0, 0, 0, .4);
+    --card-hover-shadow: 0 1px 2px rgba(0, 0, 0, .35), 0 12px 32px -14px rgba(0, 0, 0, .55);
+    --inset-hi-shadow: none;
+    --zone-shadow: 0 1px 2px rgba(0, 0, 0, .3);
+    --btn-primary-highlight: 0 0 0 transparent;
+    --insight-frame-shadow: none;
     --scrim: rgba(0, 0, 0, .55);
     --scrim-strong: rgba(0, 0, 0, .65);
     --background: 220 12% 11%;
@@ -305,7 +323,7 @@
     font-weight: 500;
     line-height: 1.25;
     color: #fff;
-    box-shadow: var(--shadow-sh-1), 0 1px 0 rgba(255, 255, 255, .18) inset;
+    box-shadow: var(--shadow-sh-1), var(--btn-primary-highlight);
     transition:
       transform var(--duration-quick) var(--ease-smooth-out),
       background-color var(--duration-quick) var(--ease-smooth-out),
@@ -399,7 +417,7 @@
   @media (hover: hover) and (pointer: fine) {
     .card-hover:hover {
       transform: translateY(-2px);
-      box-shadow: var(--shadow-sh-2), inset 0 1px 0 rgba(255, 255, 255, .7);
+      box-shadow: var(--card-hover-shadow);
     }
     .card-lift:hover {
       transform: translateY(-2px);
@@ -598,14 +616,14 @@
   .t-tabs.selection-group .selection-indicator {
     border-radius: 9px;
     background: var(--card);
-    box-shadow: 0 3px 12px rgb(28 42 68 / 7%);
+    box-shadow: var(--control-selected-shadow);
   }
   .filter-group > .control-button[aria-pressed="true"],
   .mobile-selection-rail > button:is([aria-selected="true"], [aria-pressed="true"]),
   .mobile-selection-rail .mobile-selection-option[aria-pressed="true"] {
     background: var(--card);
     color: var(--brand-700);
-    box-shadow: 0 3px 12px rgb(28 42 68 / 7%);
+    box-shadow: var(--control-selected-shadow);
   }
   .mobile-selection-rail [data-selection-decoration] { display: none; }
   .mobile-selection-rail > button:focus-visible,
@@ -647,7 +665,7 @@
 .insight-frame {
   background: var(--paper-2);
   border-radius: 10px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .7);
+  box-shadow: var(--insight-frame-shadow);
 }
 .menu-select-trigger {
   border-radius: 8px;

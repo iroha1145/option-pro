@@ -114,22 +114,22 @@ module.exports = {
         'sh-2': 'var(--shadow-sh-2)',
         'sh-3': 'var(--shadow-sh-3)',
         'card': 'var(--card-shadow)',
-        'card-hover': '0 1px 2px rgba(16,24,40,.03), 0 12px 32px -14px rgba(16,24,40,.10), inset 0 1px 0 rgba(255,255,255,.7)',
-        'inset-hi': 'inset 0 1px 0 rgba(255,255,255,.7)',
+        'card-hover': 'var(--card-hover-shadow)',
+        'inset-hi': 'var(--inset-hi-shadow)',
         'focus-ring': '0 0 0 3px rgba(46,70,224,.18)',
         /* 开关旋钮：小件白色控件在彩色轨道上需要比 sh-1 更实的两层墨影才有层次 */
         knob: '0 1px 3px rgba(16,24,40,.18), 0 1px 1px rgba(16,24,40,.10)',
         /* 区带/轨道色块：内高光 + 一层薄墨影，翻出层次但不打破扁平轨道语言 */
-        zone: 'inset 0 1px 0 rgba(255,255,255,.45), 0 1px 2px rgba(16,24,40,.10)',
+        zone: 'var(--zone-shadow)',
         xs: '0 1px 2px 0 rgba(16,24,40,.05)', // v8.1 纯黑→墨色，与三层制同源
         /* 按钮立体三档（与 sh-* 同族墨影）：btn-hi 实心主按钮 > btn 描边次按钮 >
            幽灵/文字按钮平面。chip 给选中态胶囊/页码/分段滑块（介于两者之间）；
            track 是开关轨道的内凹井。按下收拢/禁用摊平的全局规则在 index.css。 */
         /* v8.2 收小：次按钮/选中胶囊多为 26–36px 小件，2px/6px 晕染层在这个
            尺度上发飘（用户实测反馈）——btn 只留 1px 贴身影，chip 收到 1px/3px。 */
-        btn: '0 1px 2px rgba(16,24,40,.07), inset 0 1px 0 rgba(255,255,255,.75)',
-        'btn-hi': 'inset 0 1px 0 rgba(255,255,255,.16), 0 1px 2px rgba(16,24,40,.18), 0 4px 12px -4px rgba(16,24,40,.34)',
-        chip: 'inset 0 1px 0 rgba(255,255,255,.14), 0 1px 3px -1px rgba(16,24,40,.25)',
+        btn: 'var(--btn-shadow)',
+        'btn-hi': 'var(--btn-hi-shadow)',
+        chip: 'var(--chip-shadow)',
         track: 'inset 0 1px 2px rgba(16,24,40,.16)',
         /* v8.3 悬浮层两档登记（原 CommandPalette/MobileDock 的任意值 shadow，同族墨影） */
         overlay: '0 24px 64px -16px rgba(16,24,40,0.35), 0 6px 20px -8px rgba(16,24,40,0.16)',
