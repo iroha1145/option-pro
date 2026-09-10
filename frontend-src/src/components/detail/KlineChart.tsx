@@ -591,6 +591,7 @@ export default function KlineChart({
   const overlays = technical?.chart_overlays ?? null;
   const colorMode = useColorMode();
   const appearance = useAppearance();
+  const { username, isOwner, isCustomer, canManageWatchlist } = useAccess();
   // Daily bars are the reliable default covered by Massive Stocks Starter;
   // intraday intervals remain available on demand. The default lives in ./api so
   // the prefetch and this component request the same URL.
@@ -608,17 +609,16 @@ export default function KlineChart({
     () => {
       const force = seenRefreshVersion.current !== refreshVersion;
       seenRefreshVersion.current = refreshVersion;
-      return getDetailChart(ticker, range, force);
+      return getDetailChart(ticker, range, force, isCustomer);
     },
     null,
-    [ticker, range, refreshVersion],
+    [ticker, range, refreshVersion, isCustomer],
   );
 
   const [measure, setMeasure] = useState<MeasureState>({ phase: 'idle' });
   const [basis, setBasis] = useState<MeasureBasis>('wick');
   const [chartInst, setChartInst] = useState<EChartsInstance | null>(null);
   const measureActive = measure.phase !== 'idle';
-  const { username, isOwner, isCustomer, canManageWatchlist } = useAccess();
   const reducedMotion = Boolean(useReducedMotion());
   const identityKey = isCustomer && username ? `account:${username}` : isOwner ? 'owner' : 'anonymous';
   const bars = data?.bars;
@@ -1111,17 +1111,19 @@ export default function KlineChart({
                 variant="empty"
                 image="/empty-chart.svg"
                 title={
-                  error?.bizCode === 'public_snapshot_unavailable'
+                  error?.bizCode === 'public_snapshot_unavailable' && range === '1d'
                     ? t('该标的暂无完整数据')
                     : t('K 线暂不可用')
                 }
                 description={
-                  error?.bizCode === 'public_snapshot_unavailable'
+                  error?.code === 429
+                    ? `${error.message}${error.retryAfter ? t(' · {n} 秒后可重试', { n: error.retryAfter }) : ''}`
+                    : error?.bizCode === 'public_snapshot_unavailable' && range === '1d'
                     ? t('该股票暂无数据，可手动获取最新行情、日线与技术指标')
                     : t('{ticker} · {range}数据暂不可用，其他周期仍可切换', { ticker, range: CHART_RANGES.find((item) => item.value === range)?.label ?? range })
                 }
                 action={
-                  error?.bizCode === 'public_snapshot_unavailable' ? (
+                  error?.bizCode === 'public_snapshot_unavailable' && range === '1d' ? (
                     <ManualStockPull ticker={ticker} compact onPulled={() => refresh({ force: true })} />
                   ) : (
                     <button type="button" onClick={() => refresh()} className="btn-primary">

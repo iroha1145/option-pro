@@ -76,7 +76,7 @@ test('manual pull refreshes the open detail, chart, and signal panels immediatel
   const list = await source('components/detail/SignalList.tsx');
   assert.match(drawer, /setDataRevision\(\(value\) => value \+ 1\)/);
   assert.match(drawer, /refreshVersion=\{dataRevision\}/);
-  assert.match(chart, /getDetailChart\(ticker, range, force\)/);
+  assert.match(chart, /getDetailChart\(ticker, range, force, isCustomer\)/);
   assert.match(trend, /\[ticker, refreshVersion\]/);
   assert.match(list, /\[ticker, refreshVersion\]/);
 });

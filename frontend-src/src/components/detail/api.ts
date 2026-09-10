@@ -261,7 +261,9 @@ export function getDetail(ticker: string, force = false): Promise<StockDetail> {
   );
 }
 
-export function getDetailChart(ticker: string, range: ChartRange, force = false): Promise<StockChartEx> {
+export function getDetailChart(
+  ticker: string, range: ChartRange, force = false, allowCustomerPull = false,
+): Promise<StockChartEx> {
   const symbol = quoteSymbol(ticker);
   return mockOr(
     () => {
@@ -269,13 +271,38 @@ export function getDetailChart(ticker: string, range: ChartRange, force = false)
       return fx.getStockChartEx(symbol, range);
     },
     // 契约 range ∈ 5m|15m|1h|1d|1w：界面与后端周期一一对应。
-    () =>
-      marketGet(
-        `/stocks/${encodeURIComponent(symbol)}/chart?range=${range}&adjustment=raw`,
-        { ttlMs: 60_000, staleMs: 60 * 60_000, force },
-      ).then((d) =>
-        mapChartEx(d, symbol, range),
-      ),
+    async () => {
+      const path = `/stocks/${encodeURIComponent(symbol)}/chart?range=${range}&adjustment=raw`;
+      const read = (forceRead: boolean) => marketGet(path, {
+        ttlMs: 60_000, staleMs: 60 * 60_000, force: forceRead,
+      }).then((d) => mapChartEx(d, symbol, range));
+      const pullAndRead = async (period: Exclude<ChartRange, '1d'>) => {
+        try {
+          await stocksApi.pullChart(symbol, period);
+        } catch (error) {
+          // Another customer may have completed the same chart between our
+          // missing GET and POST. Read that result without another provider pull.
+          if (error instanceof ApiError && error.bizCode === 'stock_pull_cooldown') {
+            try { return await read(true); } catch { throw error; }
+          }
+          throw error;
+        }
+        return read(true);
+      };
+      // A signed-in customer may use the existing bounded write action. Public
+      // GETs and background prefetches remain snapshot-only, and a daily pull
+      // keeps its existing overview/signals workflow.
+      if (allowCustomerPull && range !== '1d' && force) {
+        return pullAndRead(range);
+      }
+      try {
+        return await read(force);
+      } catch (error) {
+        if (!allowCustomerPull || range === '1d' || !(error instanceof ApiError)
+          || error.bizCode !== 'public_snapshot_unavailable') throw error;
+        return pullAndRead(range);
+      }
+    },
   );
 }
 

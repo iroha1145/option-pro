@@ -22,15 +22,23 @@ STOCK_PULL_SNAPSHOT_VERSION = 1
 STOCK_PULL_SNAPSHOT_MAX_BYTES = 16 * 1024 * 1024
 STOCK_PULL_SNAPSHOT_MAX_TICKERS = 64
 STOCK_PULL_MAX_CLOCK_SKEW_SECONDS = 5 * 60
+STOCK_CHART_RESOURCE_RANGES = {
+    f"chart_{period}": period for period in ("5m", "15m", "1h", "1w")
+}
 STOCK_PULL_RESOURCE_FRESH_SECONDS = {
     "overview": 60,
     "daily_chart": 5 * 60,
     "signals": 5 * 60,
+    **{resource: 5 * 60 for resource in STOCK_CHART_RESOURCE_RANGES},
 }
 STOCK_PULL_RESOURCE_MAX_AGE_SECONDS = {
     "overview": 24 * 60 * 60,
     "daily_chart": 7 * 24 * 60 * 60,
     "signals": 7 * 24 * 60 * 60,
+    "chart_5m": 30 * 60,
+    "chart_15m": 60 * 60,
+    "chart_1h": 6 * 60 * 60,
+    "chart_1w": 3 * 24 * 60 * 60,
 }
 
 _TICKER_PATTERN = re.compile(
@@ -187,16 +195,19 @@ def _clean_overview(ticker: str, payload: Any) -> dict[str, Any] | None:
     return cleaned if _valid_json_tree(cleaned) else None
 
 
-def _clean_daily_chart(ticker: str, payload: Any) -> dict[str, Any] | None:
+def _clean_chart(
+    ticker: str, payload: Any, *, period: str = "1d",
+) -> dict[str, Any] | None:
     if (
         not isinstance(payload, dict)
         or payload.get("ticker") != ticker
-        or payload.get("range") != "1d"
+        or payload.get("range") != period
         or payload.get("price_adjustment") != "raw"
     ):
         return None
     bars = payload.get("bars")
-    if not isinstance(bars, list) or not bars or len(bars) > 2_000:
+    limit = 2_000 if period == "1d" else 4_096
+    if not isinstance(bars, list) or not bars or len(bars) > limit:
         return None
     last_timestamp = -1
     for bar in bars:
@@ -228,7 +239,9 @@ def _clean_daily_chart(ticker: str, payload: Any) -> dict[str, Any] | None:
             "stale_reason",
         }
     }
-    return cleaned if _valid_json_tree(cleaned) else None
+    # Intraday snapshots also contain the aligned indicator/analysis series.
+    budget = None if period == "1d" else [750_000]
+    return cleaned if _valid_json_tree(cleaned, budget=budget) else None
 
 
 def _clean_signals(_ticker: str, payload: Any) -> dict[str, Any] | None:
@@ -257,7 +270,9 @@ def _clean_resource(
     if resource == "overview":
         return _clean_overview(ticker, payload)
     if resource == "daily_chart":
-        return _clean_daily_chart(ticker, payload)
+        return _clean_chart(ticker, payload)
+    if resource in STOCK_CHART_RESOURCE_RANGES:
+        return _clean_chart(ticker, payload, period=STOCK_CHART_RESOURCE_RANGES[resource])
     if resource == "signals":
         return _clean_signals(ticker, payload)
     return None

@@ -311,6 +311,17 @@ export const stocksApi = {
           staleMs: 24 * 60 * 60_000,
         }).then(mapSearch),
     ),
+  pullChart: (ticker: string, range: Exclude<StockChart['range'], '1d'>): Promise<void> =>
+    mockOr(
+      async () => {},
+      async () => {
+        const encoded = encodeURIComponent(quoteSymbol(ticker));
+        await post(`/stocks/${encoded}/pull?chart_range=${range}`, {});
+        resetMarketReadPaths([
+          `/stocks/${encoded}/chart?range=${range}&adjustment=raw`,
+        ]);
+      },
+    ),
   pull: (ticker: string): Promise<StockPullResult> =>
     mockOr<StockPullResult>(
       async () => {
