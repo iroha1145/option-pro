@@ -119,7 +119,11 @@ for (const viewport of VIEWPORTS) {
       await expect.poll(async () => {
         if (await count.isVisible()) return true;
         if (feedRetryAt !== null && Date.now() >= feedRetryAt) {
-          const retry = page.getByRole("button", { name: "重试", exact: true });
+          // Hotspots have an independent retry action. Recover the feed whose
+          // result count this test is waiting for, even when both requests fail.
+          const retry = page.locator(".card-surface").filter({
+            has: page.getByRole("heading", { name: /^(新闻暂不可用|加载失败)$/ }),
+          }).getByRole("button", { name: "重试", exact: true });
           if (await retry.isVisible()) {
             feedRetryAt = null;
             await retry.click({ timeout: 1_000 }).catch(() => {});
