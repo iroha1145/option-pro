@@ -162,7 +162,7 @@ export default function StockDetail() {
             is404 ? (
               <Link
                 to="/watchlist"
-                className="rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi hover:brightness-105"
+                className="rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi hover:brightness-105"
               >
                 {__t('返回自选')}
               </Link>
@@ -170,7 +170,7 @@ export default function StockDetail() {
               <Link
                 to="/login"
                 state={{ from: `${window.location.pathname}${window.location.search}` }}
-                className="inline-flex min-h-11 items-center justify-center rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi hover:brightness-105"
+                className="inline-flex min-h-11 items-center justify-center rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi hover:brightness-105"
               >
                 {__t('重新登录')}
               </Link>
@@ -181,7 +181,7 @@ export default function StockDetail() {
                 type="button"
                 onClick={() => refresh()}
                 disabled={refreshing}
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter,opacity] hover:brightness-105 disabled:cursor-wait disabled:opacity-60"
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter,opacity] hover:brightness-105 disabled:cursor-wait disabled:opacity-60"
               >
                 <Icon name="refresh" size={14} />
                 {refreshing ? __t('正在重试') : __t('重试')}

@@ -484,7 +484,7 @@ export default function Breakouts() {
                 action={
                   <button
                     onClick={() => currentQ.refresh()}
-                    className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105"
+                    className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105"
                   >
                     {__t('重试')}
                   </button>
@@ -511,7 +511,7 @@ export default function Breakouts() {
                 action={
                   <button
                     onClick={() => railRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                    className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105"
+                    className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105"
                   >
                     <Icon name="clock-ny" size={14} />
                     {__t('看看历史事件')}

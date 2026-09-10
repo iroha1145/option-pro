@@ -19,7 +19,7 @@ export default function EmptyState({ image, icon, title, description, action, fo
   return (
     <div className={cn('flex flex-col items-center px-6 py-12 text-center', className)}>
       {image ? (
-        <img src={image} alt="" width={220} height={165} className="mb-5 h-auto w-[220px] max-w-full opacity-95" loading="lazy" />
+        <img src={image} alt="" width={220} height={165} className="mb-5 h-auto w-[220px] max-w-full opacity-95 dark:brightness-0 dark:invert dark:opacity-60" loading="lazy" />
       ) : (
         <span className="mb-4 flex size-14 items-center justify-center rounded-lg border border-line bg-card-warm text-ink-400">
           <Icon name={icon ?? 'doc-quote'} size={26} />

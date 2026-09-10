@@ -334,7 +334,7 @@ export default function Login() {
           <div className="mt-5 flex flex-col gap-2.5">
             <button
               onClick={() => navigate(fromPath ?? '/watchlist', { replace: true })}
-              className="h-10 rounded-md bg-brand-600 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105"
+              className="h-10 rounded-md bg-brand-600 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105"
             >
               {t('继续浏览')}
             </button>
@@ -463,7 +463,7 @@ export default function Login() {
                     aria-pressed={mode === value}
                     className={cn(
                       'relative h-8 rounded-xs text-caption font-medium transition-colors duration-fast',
-                      mode === value ? 'text-white' : 'text-ink-500 hover:text-ink-800',
+                      mode === value ? 'text-on-accent' : 'text-ink-500 hover:text-ink-800',
                     )}
                   >
                     {mode === value && (
@@ -587,7 +587,7 @@ export default function Login() {
                 type="submit"
                 disabled={serviceDown || state === 'verifying' || state === 'success'}
                 className={cn(
-                  'flex h-12 w-full items-center justify-center gap-2 rounded-md font-mono text-[14px] tracking-[0.02em] text-white shadow-btn-hi',
+                  'flex h-12 w-full items-center justify-center gap-2 rounded-md font-mono text-[14px] tracking-[0.02em] text-on-accent shadow-btn-hi',
                   'transition-[transform,filter,background-color] duration-fast',
                   state === 'success'
                     ? 'bg-up-600'
@@ -597,7 +597,7 @@ export default function Login() {
               >
                 {state === 'verifying' ? (
                   <>
-                    <span className="size-4 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden="true" />
+                    <span className="size-4 animate-spin rounded-full border-2 border-on-accent/40 border-t-on-accent" aria-hidden="true" />
                     {t('验证中…')}
                   </>
                 ) : state === 'success' ? (

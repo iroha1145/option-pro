@@ -372,7 +372,7 @@ export default function EventDetail({
             <div className="flex items-center gap-2 border-t border-line bg-card-warm px-5 py-3">
               <button
                 onClick={() => onOpenTicker(event.ticker)}
-                className="flex items-center gap-1.5 rounded-md bg-brand-600 px-3.5 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105"
+                className="flex items-center gap-1.5 rounded-md bg-brand-600 px-3.5 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105"
               >
                 {__t('查看个股详情')}
                 <Icon name="arrow-up-right" size={13} />

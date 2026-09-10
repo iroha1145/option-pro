@@ -114,7 +114,7 @@ export default function WatchlistManager({ tickers, maxTickers, busy, onSave, on
             <p className="text-caption text-ink-500" aria-live="polite">{t('新增 {add} · 移除 {remove}', { add: delta.add.length, remove: delta.remove.length })}</p>
             <div className="ml-auto flex gap-2">
               <button className={secondary} onClick={onClose} disabled={busy}>{t('取消')}</button>
-              <button className="inline-flex min-h-11 items-center justify-center rounded-md bg-brand-600 px-4 text-caption font-medium text-white shadow-btn-hi hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50" onClick={() => void save()} disabled={busy || !changed}>{busy ? t('正在保存…') : t('保存自选')}</button>
+              <button className="inline-flex min-h-11 items-center justify-center rounded-md bg-brand-600 px-4 text-caption font-medium text-on-accent shadow-btn-hi hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50" onClick={() => void save()} disabled={busy || !changed}>{busy ? t('正在保存…') : t('保存自选')}</button>
             </div>
           </footer>
         </div>

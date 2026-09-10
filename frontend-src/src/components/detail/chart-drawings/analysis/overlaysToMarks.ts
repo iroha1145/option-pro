@@ -3,6 +3,7 @@
 import { autoPatternsToMarks, type DrawingMarks, type RenderContext } from '../renderer.ts';
 import { resolveAnchor, barKeyOf } from '../projection.ts';
 import { LINE_INK, manualLineInk, isSupportLevel, automaticLineInk } from '../linePresentation.ts';
+import { drawingPaint, drawingSurface } from '../drawingAppearance.ts';
 import { semanticLabel, overlayTier, gapAreas } from './semanticPresentation.ts';
 import { t } from '../../../../i18n/core.ts';
 import { barStampForRange, isPatternKind, type AnalysisOverlay, type AnalysisPane } from './mapBundle.ts';
@@ -171,8 +172,8 @@ export function overlaysToMarks(
       { coord: [historical?.start ?? ctx.xMin, price], clipToPlot: true,
         lineStyle: { ...manualLineInk(color, ink.width, historical ? [2, 4] : 'solid'), opacity: ink.opacity },
         label: label ? { show: true, formatter: `${label} · ${price.toLocaleString('en-US', { maximumFractionDigits: price < 1 ? 4 : 2 })}`,
-          position: 'insideMiddleTop', fontSize: 11, lineHeight: 14, color, priority: ink.labelPriority + (display?.displayPriority ?? 0),
-          backgroundColor: 'rgba(255,255,255,0.96)', padding: [1, 4], borderRadius: 3 } : { show: false } },
+          position: 'insideMiddleTop', fontSize: 11, lineHeight: 14, color: drawingPaint(color), priority: ink.labelPriority + (display?.displayPriority ?? 0),
+          backgroundColor: drawingSurface(0.96), padding: [1, 4], borderRadius: 3 } : { show: false } },
       { coord: [historical?.end ?? ctx.xMax, price] },
     ]);
   };
@@ -190,7 +191,7 @@ export function overlaysToMarks(
           symbol: overlay.kind === 'swing' ? 'triangle' : 'diamond',
           symbolRotate: overlay.kind === 'swing' && high ? 180 : 0,
           symbolSize: overlay.kind === 'swing' ? 8 : 7,
-          itemStyle: { color: overlay.kind === 'candle' ? '#5A6788' : (high ? '#BA7517' : '#0B6E99') },
+          itemStyle: { color: drawingPaint(overlay.kind === 'candle' ? '#5A6788' : (high ? '#BA7517' : '#0B6E99')) },
           label: { show: false },
         });
       }

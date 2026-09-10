@@ -171,9 +171,9 @@ export default function IndexCards({
             <button
               onClick={onRetry}
               disabled={refreshing}
-              className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105 disabled:opacity-60"
+              className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105 disabled:opacity-60"
             >
-              {refreshing && <span className="size-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
+              {refreshing && <span className="size-3.5 animate-spin rounded-full border-2 border-on-accent/40 border-t-on-accent" />}
               {t('重试')}
             </button>
           }
@@ -194,9 +194,9 @@ export default function IndexCards({
             <button
               onClick={onRetry}
               disabled={refreshing}
-              className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105 disabled:opacity-60"
+              className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105 disabled:opacity-60"
             >
-              {refreshing && <span className="size-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
+              {refreshing && <span className="size-3.5 animate-spin rounded-full border-2 border-on-accent/40 border-t-on-accent" />}
               {t('重试')}
             </button>
           }

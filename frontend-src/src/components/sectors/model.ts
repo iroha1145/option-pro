@@ -172,13 +172,18 @@ function parseRgb(css: string): Rgb | null {
 }
 
 function luminance([red, green, blue]: Rgb): number {
-  return (0.299 * red + 0.587 * green + 0.114 * blue) / 255;
+  const linear = [red, green, blue].map(value => {
+    const channel = value / 255;
+    return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
 }
 
 export function heatTone(avgReturn: number): { bg: string; dark: boolean } {
   const bg = heatColor(avgReturn);
   const rgb = parseRgb(bg);
-  return { bg, dark: rgb ? luminance(rgb) < 0.55 : false };
+  const light = rgb ? luminance(rgb) : 1;
+  return { bg, dark: 1.05 / (light + 0.05) > (light + 0.05) / 0.05 };
 }
 
 function ivStops(): { value: number; rgb: Rgb }[] {

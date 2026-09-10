@@ -8,6 +8,7 @@ module.exports = {
   theme: {
     extend: {
       colors: {
+        'on-accent': token('--on-accent'),
         /* ---- Optix 纸面终端 tokens：从 CSS 变量生成，html.dark 换盘后工具类一起换 ---- */
         paper: {
           DEFAULT: token('--paper'),

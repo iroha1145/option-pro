@@ -330,7 +330,7 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
                         onClick={() => void saveSettings()}
                         disabled={saving || !dirty}
                         className={cn(
-                          'rounded-md px-3 py-1.5 text-caption font-medium text-white shadow-btn-hi transition-[filter] duration-fast',
+                          'rounded-md px-3 py-1.5 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] duration-fast',
                           dirty ? 'bg-brand-600 hover:brightness-105' : 'bg-ink-300',
                         )}
                       >

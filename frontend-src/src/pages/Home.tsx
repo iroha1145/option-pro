@@ -89,7 +89,7 @@ function RetryButton({ onClick, refreshing }: { onClick: () => void; refreshing:
       disabled={refreshing}
       className="btn-primary"
     >
-      {refreshing && <span className="size-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
+      {refreshing && <span className="size-3.5 animate-spin rounded-full border-2 border-on-accent/40 border-t-on-accent" />}
       {t('重试')}
     </button>
   );

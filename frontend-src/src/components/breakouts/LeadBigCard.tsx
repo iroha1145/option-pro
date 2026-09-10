@@ -299,11 +299,11 @@ function buildMiniOption(bars: MiniBar[]): ChartOption {
         lineStyle: { color: CH.ink300, width: 1, type: [3, 3] as number[] },
         crossStyle: { color: CH.ink300, width: 1, type: [3, 3] as number[] },
         label: {
-          backgroundColor: 'rgba(253,252,249,.92)',
+          backgroundColor: CH.tooltipBg,
           /* DOM 渲染，跟随 --line 令牌 */
           borderColor: 'var(--line)',
           borderWidth: 1,
-          color: '#5A6788',
+          color: CH.tooltipFg,
           fontFamily: MONO,
           fontSize: 10,
         },
@@ -316,7 +316,7 @@ function buildMiniOption(bars: MiniBar[]): ChartOption {
         const color = chg >= 0 ? CH.up600 : CH.down600;
         return (
           `<div style="font-family:${MONO};font-size:12px;line-height:19px">` +
-          `<div style="color:#6F7B9E">${fmtBarTime(b.t)}${b.quote_only ? t(' · 仅报价') : ''}</div>` +
+          `<div style="color:${CH.ink400}">${fmtBarTime(b.t)}${b.quote_only ? t(' · 仅报价') : ''}</div>` +
           `${t('开 {o}', { o: b.o.toFixed(2) })} · ${t('高 {h}', { h: b.h.toFixed(2) })}<br/>${t('低 {l}', { l: b.l.toFixed(2) })} · ` +
           `${t('收 {c}', { c: `<b style="color:${color}">${b.c.toFixed(2)}</b>` })}</div>`
         );
@@ -419,11 +419,11 @@ function MiniKline({ ticker, dailyVersion, preparation, statusReadFailed }: { ti
               <button
                 onClick={() => void pullAndReload()}
                 disabled={pulling}
-                className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 px-2.5 py-1 text-micro font-medium text-white shadow-btn-hi transition-[background-color,opacity] duration-fast hover:bg-brand-700 disabled:cursor-wait disabled:opacity-70"
+                className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 px-2.5 py-1 text-micro font-medium text-on-accent shadow-btn-hi transition-[background-color,opacity] duration-fast hover:bg-brand-700 disabled:cursor-wait disabled:opacity-70"
               >
                 {pulling && (
                   <span
-                    className="size-2.5 animate-spin rounded-full border-2 border-white/35 border-t-white"
+                    className="size-2.5 animate-spin rounded-full border-2 border-on-accent/35 border-t-on-accent"
                     aria-hidden="true"
                   />
                 )}
@@ -787,7 +787,7 @@ export default function LeadBigCard({ ev: initialEvent, flash, locate, onOpen, d
           </button>
           <Link
             to={`/stock/${encodeURIComponent(e.ticker)}`}
-            className="flex items-center gap-1.5 rounded-md bg-brand-600 px-3.5 py-2 text-caption font-medium text-white shadow-btn-hi transition-[transform,background-color] duration-fast hover:bg-brand-700 active:scale-[0.98]"
+            className="flex items-center gap-1.5 rounded-md bg-brand-600 px-3.5 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[transform,background-color] duration-fast hover:bg-brand-700 active:scale-[0.98]"
           >
             {t('打开研究页')}
             <Icon name="arrow-up-right" size={13} />

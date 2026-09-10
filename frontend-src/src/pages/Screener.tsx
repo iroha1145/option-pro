@@ -928,7 +928,7 @@ export default function Screener() {
                     <div className="flex flex-col items-center gap-3">
                       <button
                         onClick={onScanClick}
-                        className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105"
+                        className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105"
                       >
                         <Icon name="crosshair" size={14} />
                         {__t('开始扫描')}
@@ -968,7 +968,7 @@ export default function Screener() {
                     action={
                       <button
                         onClick={() => void runScan(applied)}
-                        className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105"
+                        className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105"
                       >
                         {__t('重试')}
                       </button>
@@ -1144,7 +1144,7 @@ export default function Screener() {
                 <p className="mt-2.5 text-body-s text-ink-500">{__t('暂无股票符合当前条件。')}</p>
                 <button
                   onClick={() => patchApplied({ tier: 'all', minScore: null, presetId: null })}
-                  className="mt-3 flex items-center gap-1.5 rounded-md bg-brand-600 px-3 py-1.5 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105"
+                  className="mt-3 flex items-center gap-1.5 rounded-md bg-brand-600 px-3 py-1.5 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105"
                 >
                   <Icon name="filter-funnel" size={13} />
                   {__t('放宽一档试试')}

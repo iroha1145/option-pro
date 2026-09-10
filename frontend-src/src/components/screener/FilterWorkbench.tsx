@@ -150,7 +150,7 @@ export function ScanButton({
       }
       transition={dirty && !scanning ? { duration: 1.2, repeat: 2 } : { duration: 0.16 }}
       className={cn(
-        'scan-trigger relative h-9 min-w-[168px] overflow-hidden rounded-[9px] bg-brand-600 px-4 text-white shadow-btn-hi transition-[filter] duration-fast',
+        'scan-trigger relative h-9 min-w-[168px] overflow-hidden rounded-[9px] bg-brand-600 px-4 text-on-accent shadow-btn-hi transition-[filter] duration-fast',
         scanning ? 'cursor-wait' : 'hover:brightness-105',
         className,
       )}
@@ -169,14 +169,14 @@ export function ScanButton({
       <span className="relative z-10 flex items-center justify-center gap-2">
         {scanning ? (
           <>
-            <span className="size-[18px] animate-spin rounded-full border-2 border-white/35 border-t-white" aria-hidden="true" />
+            <span className="size-[18px] animate-spin rounded-full border-2 border-on-accent/35 border-t-on-accent" aria-hidden="true" />
             <span className="text-body-s font-medium">{__t('扫描中 · 等待后台结果')}</span>
           </>
         ) : (
           <>
             <Icon name="crosshair" size={16} />
             <span className="text-body-s font-medium">{__t('开始扫描')}</span>
-            <span className="font-mono text-micro text-white/70 tnum">≈{universeCount} {__t('只')}</span>
+            <span className="font-mono text-micro text-on-accent tnum">≈{universeCount} {__t('只')}</span>
           </>
         )}
       </span>

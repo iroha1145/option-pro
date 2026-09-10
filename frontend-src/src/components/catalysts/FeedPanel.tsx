@@ -136,7 +136,7 @@ export function NewsRow({
         <button
           type="button"
           onClick={() => onOpen(item.newsId)}
-          className="flex size-8 items-center justify-center rounded-md bg-ai-600 text-white shadow-btn transition-[filter] duration-fast hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai-600/40 focus-visible:ring-offset-2"
+          className="flex size-8 items-center justify-center rounded-md bg-ai-600 text-on-accent shadow-btn transition-[filter] duration-fast hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai-600/40 focus-visible:ring-offset-2"
           title={__t("查看 / 生成 AI 分析")}
           aria-label={__t("查看 / 生成 AI 分析")}
         >
@@ -271,7 +271,7 @@ export default function FeedPanel({ filters, onOpenNews, patches, onFeedResult, 
           action={
             <button
               onClick={() => void fetchFirst()}
-              className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105"
+              className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105"
             >
               <Icon name="refresh" size={14} />
               {__t('重试')}
@@ -299,7 +299,7 @@ export default function FeedPanel({ filters, onOpenNews, patches, onFeedResult, 
             hasFilters ? (
               <button
                 onClick={onClearFilters}
-                className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105"
+                className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105"
               >
                 <Icon name="x" size={13} />
                 {__t('清除过滤')}

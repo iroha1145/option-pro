@@ -288,7 +288,7 @@ function buildOption(
           const color = chg >= 0 ? upFill : downFill;
           return (
             `<div style="font-family:${CHART_MONO_FONT};font-size:12px;line-height:19px">` +
-            `<div style="color:#6F7B9E">${barTooltipTitle(b.t, range)}${b.quote_only ? t(' · 仅报价') : ''}</div>` +
+            `<div style="color:${CH.ink400}">${barTooltipTitle(b.t, range)}${b.quote_only ? t(' · 仅报价') : ''}</div>` +
             `<div>${t('收 {c}', { c: `<b style="color:${color}">${fmtPrice(b.c)}</b>` })}</div>` +
             `<div>${t('量 {v}', { v: fmtCompact(b.v) })}</div></div>`
           );
@@ -405,10 +405,10 @@ function buildOption(
         lineStyle: { color: CH.ink300, width: 1, type: [3, 3] as number[] },
         crossStyle: { color: CH.ink300, width: 1, type: [3, 3] as number[] },
         label: {
-          backgroundColor: 'rgba(253,252,249,.92)',
-          borderColor: '#E9ECF1', // v8.1 tooltip 边框随 line 降温（原 #E9E7E0 暖灰漏网）
+          backgroundColor: CH.tooltipBg,
+          borderColor: CH.lineChart,
           borderWidth: 1,
-          color: '#5A6788',
+          color: CH.tooltipFg,
           fontFamily: CHART_MONO_FONT,
           fontSize: 10,
         },
@@ -433,10 +433,10 @@ function buildOption(
         const prev = idx > 0 ? bars[idx - 1] : null;
         const gapChg = prev && prev.c > 0 ? b.c - prev.c : null;
         const row = (k: string, v: string) =>
-          `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:#6F7B9E">${escapeTooltipText(k)}</span><span>${v}</span></div>`;
+          `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:${CH.ink400}">${escapeTooltipText(k)}</span><span>${v}</span></div>`;
         return (
           `<div style="font-family:${CHART_MONO_FONT};font-size:12px;line-height:19px;min-width:150px">` +
-          `<div style="color:#6F7B9E;margin-bottom:2px">${barTooltipTitle(b.t, range)}${b.quote_only ? t(' · <span style="color:#E8930C">仅报价</span>') : ''}</div>` +
+          `<div style="color:${CH.ink400};margin-bottom:2px">${barTooltipTitle(b.t, range)}${b.quote_only ? t(' · <span style="color:#E8930C">仅报价</span>') : ''}</div>` +
           row(t('开'), fmtPrice(b.o)) +
           row(t('高'), fmtPrice(b.h)) +
           row(t('低'), fmtPrice(b.l)) +
@@ -846,6 +846,7 @@ export default function KlineChart({
   }, [drawing.expanded, measureActive]);
 
   const extraMarks = useMemo(() => {
+    void appearance;
     const hand = drawing.marks;
     if (!analysisOk || !data) return hand;
     const prices = data.bars.flatMap((bar) => [bar.h, bar.l]);
@@ -866,7 +867,7 @@ export default function KlineChart({
       areas: [...auto.areas, ...hand.areas],
       polygons: [...(auto.polygons ?? []), ...(hand.polygons ?? [])],
     };
-  }, [analysisOk, data, drawing.marks, range, visibleOverlays, visibleLabels]);
+  }, [analysisOk, data, drawing.marks, range, visibleOverlays, visibleLabels, appearance]);
 
   const analysisOption = useMemo(() => {
     const showMa20 = layerSettings.enabled.includes('ma20');

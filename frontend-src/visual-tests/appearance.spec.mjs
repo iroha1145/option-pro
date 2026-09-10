@@ -116,22 +116,31 @@ test('research pages stay usable in dark mode on desktop and phone', async ({ pa
       await expect.poll(() => trigger.evaluate((el) => getComputedStyle(el).boxShadow)).not.toMatch(/255,\s*255,\s*255/);
 
       const whiteEdges = await page.evaluate(() => {
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d', { willReadFrequently: true });
         const nearWhite = (value) => {
           if (!value || value === 'none') return false;
-          for (const match of value.matchAll(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/g)) {
-            const r = Number(match[1]);
-            const g = Number(match[2]);
-            const b = Number(match[3]);
-            const a = match[4] === undefined ? 1 : Number(match[4]);
-            if (a > 0.2 && r >= 230 && g >= 230 && b >= 230) return true;
-          }
-          return false;
+          context.clearRect(0, 0, 1, 1);
+          context.fillStyle = value;
+          context.fillRect(0, 0, 1, 1);
+          const [r, g, b, a] = context.getImageData(0, 0, 1, 1).data;
+          return a > 51 && r >= 230 && g >= 230 && b >= 230;
+        };
+        const whiteShadow = (value) => {
+          // Tailwind rings include a white offset shadow with four zero lengths.
+          // It paints nothing; only inspect shadows with a visible footprint.
+          return value.split(/,(?![^()]*\))/).some((part) => {
+            const color = part.match(/(?:rgba?|color)\([^)]*\)/)?.[0];
+            const lengths = part.replace(color ?? '', '').match(/-?[\d.]+px/g) ?? [];
+            return lengths.some((length) => parseFloat(length) !== 0) && nearWhite(color);
+          });
         };
         return Array.from(document.querySelectorAll('button, [role="button"], .control-button'))
           .filter((el) => {
             const style = getComputedStyle(el);
-            return nearWhite(style.boxShadow)
-              || (parseFloat(style.borderTopWidth) > 0 && nearWhite(style.borderTopColor));
+            return whiteShadow(style.boxShadow)
+              || ['Top', 'Right', 'Bottom', 'Left'].some((side) =>
+                parseFloat(style[`border${side}Width`]) > 0 && nearWhite(style[`border${side}Color`]));
           })
           .map((el) => (el.getAttribute('aria-label') || el.textContent || '').trim().slice(0, 24));
       });

@@ -107,7 +107,7 @@ export default function ConfirmDialog({
             <button
               onClick={onConfirm}
               className={cn(
-                'rounded-md px-3.5 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] duration-fast hover:brightness-105',
+                'rounded-md px-3.5 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] duration-fast hover:brightness-105',
                 danger ? 'bg-down-600' : 'bg-ai-600',
               )}
             >

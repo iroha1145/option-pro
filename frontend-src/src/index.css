@@ -41,6 +41,7 @@
     --down-600: #E5484D;
     --down-700: #C4302B;
     --down-50: #FCECEC;
+    --on-accent: #FFFFFF;
     --warn-700: #B87109;
     --warn-600: #E8930C;
     --warn-50: #FCF3E2;
@@ -140,6 +141,7 @@
     --down-600: #FF8A80;
     --down-700: #FFB4AE;
     --down-50: #3A1618;
+    --on-accent: #191B20;
     --warn-700: #FDE047;
     --warn-600: #FACC15;
     --warn-50: #3A3008;
@@ -322,7 +324,7 @@
     font-size: 13px;
     font-weight: 500;
     line-height: 1.25;
-    color: #fff;
+    color: var(--on-accent);
     box-shadow: var(--shadow-sh-1), var(--btn-primary-highlight);
     transition:
       transform var(--duration-quick) var(--ease-smooth-out),

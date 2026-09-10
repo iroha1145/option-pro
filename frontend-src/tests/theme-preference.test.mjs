@@ -15,6 +15,8 @@ import {
   setColorMode,
 } from '../src/lib/colorPreference.ts';
 import { CH } from '../src/lib/chart.ts';
+import { manualLineInk, renderPatternInk } from '../src/components/detail/chart-drawings/linePresentation.ts';
+import { drawingPaint } from '../src/components/detail/chart-drawings/drawingAppearance.ts';
 import {
   THEME_KEY,
   applyAppearance,
@@ -46,6 +48,35 @@ function codeOf(text) {
 test.afterEach(() => {
   setColorMode('western');
   setThemePreference('system');
+});
+
+test('画线与标签随主题切换，深色没有白色底板或白色光晕', () => {
+  const pattern = { id: 'support', kind: 'support_trend', status: 'active', confidence: 90, label: '支撑' };
+  const geometry = { segments: [{ a: { x: 0, y: 10 }, b: { x: 10, y: 12 } }], fill: null };
+  const context = { xMin: 0, xMax: 10, yMin: 5, yMax: 20 };
+  const render = () => renderPatternInk(pattern, geometry, context).lines[0][0];
+  setThemePreference('light');
+  const light = render();
+  assert.equal(light.label.backgroundColor, 'rgba(255,255,255,0.97)');
+  setThemePreference('dark');
+  const dark = render();
+  assert.equal(dark.label.backgroundColor, 'rgba(36,38,45,0.97)');
+  assert.equal(dark.lineStyle.shadowColor, 'rgba(36,38,45,0.95)');
+  assert.notEqual(dark.lineStyle.color, light.lineStyle.color);
+  setThemePreference('light');
+  assert.deepEqual(render(), light);
+});
+
+test('夜间只调整内置画线颜色的显示，保留自定义颜色与手绘宽度', () => {
+  const saved = { color: '#3D4A68', width: 4 };
+  setThemePreference('dark');
+  const ink = manualLineInk(saved.color, saved.width);
+  assert.equal(ink.color, '#B0B6C0');
+  assert.equal(ink.width, 4);
+  assert.deepEqual(saved, { color: '#3D4A68', width: 4 });
+  assert.equal(drawingPaint('#123ABC'), '#123ABC');
+  setThemePreference('light');
+  assert.equal(manualLineInk(saved.color, saved.width).color, saved.color);
 });
 
 test('未选择时默认跟随系统，resolveAppearance 按设备 color-scheme 解析', () => {

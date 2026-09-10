@@ -257,7 +257,7 @@ export default function ResultTable({
               aria-current={p === page ? 'page' : undefined}
               className={cn(
                 'flex size-7 items-center justify-center rounded-sm border font-mono text-caption tnum transition-colors duration-fast',
-                p === page ? 'border-brand-600 bg-brand-600 text-white shadow-chip' : 'border-line text-ink-500 hover:border-brand-400 hover:text-brand-600',
+                p === page ? 'border-brand-600 bg-brand-600 text-on-accent shadow-chip' : 'border-line text-ink-500 hover:border-brand-400 hover:text-brand-600',
               )}
             >
               {p}

@@ -35,9 +35,9 @@ function HeatTile({
      avgReturn 为 null 的砖底色换成中性纸面+虚线边，一眼可辨「没数据」。 */
   const tone = hasReturn ? heatTone(value) : { bg: 'var(--card-warm, #FBFCFD)', dark: false };
   const leader = sector.leaders[0] ?? null;
-  const textMain = tone.dark ? 'text-white' : 'text-ink-800';
-  const textSub = tone.dark ? 'text-white/75' : 'text-ink-500';
-  const barFill = tone.dark ? 'bg-white/40' : 'bg-ink-900/25';
+  const textMain = !hasReturn ? 'text-ink-800' : tone.dark ? 'text-white' : 'text-black';
+  const textSub = !hasReturn ? 'text-ink-500' : tone.dark ? 'text-white' : 'text-black';
+  const barFill = !hasReturn ? 'bg-ink-900/25' : tone.dark ? 'bg-white/40' : 'bg-black/25';
 
   return (
     <motion.button
