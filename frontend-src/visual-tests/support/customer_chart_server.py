@@ -10,6 +10,7 @@ import shutil
 import sys
 import tempfile
 import time
+from zoneinfo import ZoneInfo
 
 from password_server import _certificate
 
@@ -47,12 +48,28 @@ def main():
         def payload(symbol, period):
             count = counts[period]
             seconds = {"5m": 300, "15m": 900, "1h": 3600, "1d": 86400, "1w": 604800}[period]
-            start = int((datetime.now(timezone.utc) - timedelta(seconds=(count + 2) * seconds)).timestamp())
+            # Fixed completed sessions keep this fixture independent of the
+            # current clock and avoid classifying synthetic overnight bars as
+            # regular-hours data in one analysis path but not another.
+            ny = ZoneInfo("America/New_York")
+            intraday = period in ("5m", "15m", "1h")
+            if intraday:
+                cursor = datetime(2026, 8, 28, 15, {"5m": 55, "15m": 45, "1h": 30}[period], tzinfo=ny)
+            else:
+                cursor = datetime(2026, 8, 24 if period == "1w" else 28, tzinfo=ny)
+            timestamps = []
+            while len(timestamps) < count:
+                regular = cursor.weekday() < 5 and 570 <= cursor.hour * 60 + cursor.minute < 960
+                eligible = regular if intraday else cursor.weekday() < 5
+                if eligible:
+                    timestamps.append(int(cursor.timestamp()))
+                cursor -= timedelta(seconds=seconds)
+            timestamps.reverse()
             return {
                 "ticker": symbol, "name": symbol, "range": period, "price_adjustment": "raw",
                 "price_provider": "Fixture", "source_status": "active", "visible": 80,
-                "exchange_timezone": "America/New_York", "as_of": datetime.now(timezone.utc).isoformat(),
-                "bars": [{"t": start + n * seconds, "o": 100 + n / 10, "h": 102 + n / 10,
+                "exchange_timezone": "America/New_York", "as_of": datetime.fromtimestamp(timestamps[-1], timezone.utc).isoformat(),
+                "bars": [{"t": timestamps[n], "o": 100 + n / 10, "h": 102 + n / 10,
                           "l": 99 + n / 10, "c": 101 + n / 10, "v": 1000 + n, "ext": False} for n in range(count)],
                 "ema20": [], "sma50": [],
             }

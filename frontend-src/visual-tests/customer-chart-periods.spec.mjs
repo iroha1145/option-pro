@@ -8,7 +8,7 @@ for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 1000 });
     await page.request.post('/test/reset');
     const registered = await page.request.post('/api/account/register', {
-      headers, data: { username: `chartuser${width}`, password: 'fixture-customer-password' },
+      headers, data: { username: `chartuser${width}r${info.repeatEachIndex}`, password: 'fixture-customer-password' },
     });
     expect(registered.status()).toBe(201);
     const access = await (await page.request.get('/api/access/status')).json();
@@ -20,6 +20,14 @@ for (const width of [1440, 390]) {
       await page.getByRole('tab', { name: label, exact: true }).click();
       await expect(page.getByRole('img', { name: `NVDA ${range} K 线图`, exact: true })).toBeVisible();
       await expect(page.getByText(new RegExp(`共\\s*${count}\\s*根`))).toBeVisible();
+    }
+    // Switch again while entry fades are still active. Successful data must
+    // become a chart immediately instead of waiting on an old exit animation.
+    for (let cycle = 0; cycle < 2; cycle += 1) {
+      for (const [range, label] of periods) {
+        await page.getByRole('tab', { name: label, exact: true }).click();
+        await expect(page.getByRole('img', { name: `NVDA ${range} K 线图`, exact: true })).toBeVisible();
+      }
     }
     const before = await (await page.request.get('/test/state')).json();
     expect(before.provider_calls.map((call) => call.range).sort()).toEqual(['15m', '1h', '1w', '5m']);
