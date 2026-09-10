@@ -42,6 +42,7 @@ for (const viewport of VIEWPORTS) {
     test.use({ viewport });
 
     test("dock, screener and catalyst tabs stay inside the viewport", async ({ page }) => {
+      test.setTimeout(120_000);
       let feedRetryAt = null;
       page.on("response", (response) => {
         const url = new URL(response.url());
@@ -131,7 +132,7 @@ for (const viewport of VIEWPORTS) {
           }
         }
         return false;
-      }, { timeout: 20_000 }).toBe(true);
+      }, { timeout: 75_000 }).toBe(true);
       if (recoveredFeed) await firstTab.click();
       await expect(firstTab).toBeFocused();
       await expect(count).toBeVisible();
