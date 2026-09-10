@@ -49,6 +49,8 @@ _US_CLASS_SYMBOL_PATTERN = re.compile(r"^[A-Z][A-Z0-9]{0,5}\.[A-Z]$")
 _REFERENCE_PAGE_SIZE = 1_000
 _REFERENCE_MAX_PAGES = 50
 _REFERENCE_NEXT_URL_MAX_LENGTH = 4_096
+_AGGREGATE_MAX_PAGES = 4
+_AGGREGATE_MAX_BARS = 50_000
 
 _client_lock = threading.Lock()
 _client: httpx.Client | None = None
@@ -218,28 +220,77 @@ def ticker_range(
     adjusted: bool = False,
     limit: int = 50_000,
 ) -> list[dict[str, Any]]:
-    """按时间升序返回聚合条;字段 {t(ms),o,h,l,c,v}。"""
+    """Read the complete bounded range, ordered by timestamp.
 
-    payload = _get(
-        f"/v2/aggs/ticker/{symbol}/range/{multiplier}/{timespan}/{start}/{end}",
-        {"adjusted": "true" if adjusted else "false", "sort": "asc", "limit": limit},
-    )
-    bars: list[dict[str, Any]] = []
-    for row in payload.get("results") or []:
-        close = _finite(row.get("c"))
-        if close is None:
-            continue
-        bars.append(
-            {
-                "t": row.get("t"),
+    ``limit`` counts base minute/day aggregates, not the returned candles.
+    A 100-day hourly chart can therefore hit 50,000 after only 850 candles.
+    Follow the provider's next start time instead of publishing that old prefix.
+    Contract: https://massive.com/docs/rest/stocks/aggregates
+    """
+
+    prefix = f"/v2/aggs/ticker/{symbol}/range/{multiplier}/{timespan}/"
+    path = f"{prefix}{start}/{end}"
+    params = {"adjusted": "true" if adjusted else "false", "sort": "asc", "limit": limit}
+    bars: dict[int, dict[str, Any]] = {}
+    visited: set[str] = set()
+    for _ in range(_AGGREGATE_MAX_PAGES):
+        if path in visited:
+            raise MassiveError("aggregate pagination did not advance", code="protocol")
+        visited.add(path)
+        payload = _get(path, params)
+        rows = payload.get("results") or []
+        if not isinstance(rows, list):
+            raise MassiveError("unexpected aggregate results shape", code="protocol")
+        for row in rows:
+            if not isinstance(row, dict):
+                raise MassiveError("unexpected aggregate row shape", code="protocol")
+            close = _finite(row.get("c"))
+            stamp = _finite(row.get("t"))
+            if close is None or stamp is None or not stamp.is_integer():
+                continue
+            timestamp = int(stamp)
+            bars[timestamp] = {
+                "t": timestamp,
                 "o": _finite(row.get("o")),
                 "h": _finite(row.get("h")),
                 "l": _finite(row.get("l")),
                 "c": close,
                 "v": row.get("v"),
             }
-        )
-    return bars
+            if len(bars) > _AGGREGATE_MAX_BARS:
+                raise MassiveError("aggregate result limit exceeded", code="protocol")
+        next_url = payload.get("next_url")
+        if next_url is None or next_url == "":
+            return [bars[timestamp] for timestamp in sorted(bars)]
+        path = _aggregate_page_path(next_url, prefix=prefix, end=end, last_timestamp=max(bars, default=0))
+    raise MassiveError("aggregate pagination limit exceeded", code="protocol")
+
+
+def _aggregate_page_path(next_url: Any, *, prefix: str, end: str, last_timestamp: int) -> str:
+    """Accept only the same series/end date and rebuild a relative request path."""
+
+    if not isinstance(next_url, str) or not next_url or len(next_url) > 4_096:
+        raise MassiveError("unexpected aggregate next_url shape", code="protocol")
+    try:
+        parsed = urlsplit(next_url)
+        expected = urlsplit(get_settings().massive_base_url.rstrip("/"))
+        ports = parsed.port, expected.port
+    except ValueError as exc:
+        raise MassiveError("invalid aggregate next_url", code="protocol") from exc
+    if parsed.username or parsed.password or parsed.fragment:
+        raise MassiveError("unsafe aggregate next_url", code="protocol")
+    if (parsed.scheme or parsed.netloc) and (
+        parsed.scheme.lower() != expected.scheme.lower()
+        or (parsed.hostname or "").lower() != (expected.hostname or "").lower()
+        or ports[0] != ports[1]
+    ):
+        raise MassiveError("unsafe aggregate next_url host", code="protocol")
+    match = re.fullmatch(re.escape(prefix) + r"([0-9]{1,17})/" + re.escape(str(end)), parsed.path)
+    if not match or int(match[1]) <= last_timestamp:
+        raise MassiveError("aggregate pagination did not advance within the requested series", code="protocol")
+    # Reuse the original adjusted/sort/limit parameters. Upstream query strings
+    # (including apiKey) are never forwarded, and absolute URLs are never fetched.
+    return f"{prefix}{match[1]}/{end}"
 
 
 def _reference_page_cursor(next_url: Any) -> str:
