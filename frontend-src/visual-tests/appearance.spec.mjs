@@ -115,6 +115,12 @@ test('research pages stay usable in dark mode on desktop and phone', async ({ pa
       const trigger = page.getByRole('button', { name: /外观/ }).first();
       await expect.poll(() => trigger.evaluate((el) => getComputedStyle(el).boxShadow)).not.toMatch(/255,\s*255,\s*255/);
 
+      const focusCandidate = page.locator('[class*="focus-visible:ring-offset-"]:not(:disabled)').first();
+      if (await focusCandidate.isVisible()) {
+        await page.keyboard.press('Tab');
+        await focusCandidate.focus();
+      }
+
       const whiteEdges = await page.evaluate(() => {
         const canvas = document.createElement('canvas');
         const context = canvas.getContext('2d', { willReadFrequently: true });
@@ -135,7 +141,7 @@ test('research pages stay usable in dark mode on desktop and phone', async ({ pa
             return lengths.some((length) => parseFloat(length) !== 0) && nearWhite(color);
           });
         };
-        return Array.from(document.querySelectorAll('button, [role="button"], .control-button'))
+        return Array.from(document.querySelectorAll('button, [role="button"], .control-button, [class*="ring-offset-"]'))
           .filter((el) => {
             const style = getComputedStyle(el);
             return whiteShadow(style.boxShadow)

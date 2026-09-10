@@ -124,7 +124,7 @@ function ImpactAction({ row, onSelect }: { row: EarningsRow; onSelect: () => voi
         onSelect();
       }}
       title={title}
-      className="inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md bg-ai-600 px-2.5 text-caption font-medium leading-none text-on-accent shadow-btn transition-[filter] duration-fast hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai-600/40 focus-visible:ring-offset-2"
+      className="inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md bg-ai-600 px-2.5 text-caption font-medium leading-none text-on-accent shadow-btn transition-[filter] duration-fast hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai-600/40 focus-visible:ring-offset-2 focus-visible:ring-offset-card"
       aria-label={`${row.ticker} ${title}`}
     >
       <AnalysisIcon size={14} />

@@ -136,7 +136,7 @@ export function NewsRow({
         <button
           type="button"
           onClick={() => onOpen(item.newsId)}
-          className="flex size-8 items-center justify-center rounded-md bg-ai-600 text-on-accent shadow-btn transition-[filter] duration-fast hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai-600/40 focus-visible:ring-offset-2"
+          className="flex size-8 items-center justify-center rounded-md bg-ai-600 text-on-accent shadow-btn transition-[filter] duration-fast hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai-600/40 focus-visible:ring-offset-2 focus-visible:ring-offset-card"
           title={__t("查看 / 生成 AI 分析")}
           aria-label={__t("查看 / 生成 AI 分析")}
         >
