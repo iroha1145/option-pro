@@ -328,9 +328,9 @@ export default function Login() {
         </div>
         <div className="card-surface w-full max-w-[360px] p-6 text-center">
           <p className="eyebrow">{t('当前会话')}</p>
-          <p className="mt-2 text-h3 text-ink-800">
+          <h1 className="mt-2 text-h3 text-ink-800">
             {isOwner ? t('管理员已登录') : t('已登录 {name}', { name: signedInName ?? '' })}
-          </p>
+          </h1>
           <div className="mt-5 flex flex-col gap-2.5">
             <button
               onClick={() => navigate(fromPath ?? '/watchlist', { replace: true })}
