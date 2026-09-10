@@ -11,6 +11,7 @@
     "test:visual": "playwright test --config=playwright.config.mjs",
     "test:review": "playwright test --config=playwright.review.config.mjs && npm run test:indicators",
     "test:quotes": "playwright test --config=playwright.quotes.config.mjs",
+    "test:customer-charts": "playwright test --config=playwright.customer-charts.config.mjs",
     "test:audit": "playwright test --config=playwright.audit.config.mjs",
     "test:indicators": "playwright test --config=playwright.indicators.config.mjs",
     "test:screener": "playwright test --config=playwright.screener.config.mjs && playwright test --config=playwright.screener-cache.config.mjs"

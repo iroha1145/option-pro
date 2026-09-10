@@ -55,6 +55,7 @@ from app.services.watchlist_scope import (
 from app.services.request_security import request_client_ip
 from app.public_stock_data import read_public_stock_status
 from app.stock_data_reads import read_latest_stock_resource as read_stock_pull_resource
+from app.stock_chart_snapshot import write_stock_chart_resource
 from app.stock_pull_snapshot import (
     STOCK_PULL_RESOURCE_FRESH_SECONDS,
     validate_stock_pull_payload,
@@ -98,6 +99,7 @@ _stock_pull_blocking_executor = ThreadPoolExecutor(
     thread_name_prefix="stock-pull",
 )
 _stock_pull_tasks: dict[str, asyncio.Task[dict[str, Any]]] = {}
+_stock_chart_pull_tasks: dict[str, asyncio.Task[dict[str, Any]]] = {}
 _PUBLIC_STOCK_PULL_TICKER_COOLDOWN_SECONDS = 60
 _PUBLIC_STOCK_PULL_CLIENT_WINDOW_SECONDS = 5 * 60
 _PUBLIC_STOCK_PULL_CLIENT_LIMIT = 6
@@ -138,12 +140,15 @@ def _prune_public_stock_pull_limits(now: float) -> None:
             _public_stock_pull_recent.pop(client_id, None)
 
 
-def _reserve_public_stock_pull(client_id: str, ticker: str) -> None:
+def _reserve_public_stock_pull(
+    client_id: str, ticker: str, *, resource_key: str | None = None,
+) -> None:
     """Reserve one real provider refresh before its first await."""
 
     now = time.monotonic()
     _prune_public_stock_pull_limits(now)
-    deadline = _public_stock_pull_ticker_deadlines.get(ticker)
+    cooldown_key = resource_key or ticker
+    deadline = _public_stock_pull_ticker_deadlines.get(cooldown_key)
     if deadline is not None and deadline > now:
         retry_after = max(1, math.ceil(deadline - now))
         raise HTTPException(
@@ -177,7 +182,7 @@ def _reserve_public_stock_pull(client_id: str, ticker: str) -> None:
         )
 
     attempts.append(now)
-    _public_stock_pull_ticker_deadlines[ticker] = (
+    _public_stock_pull_ticker_deadlines[cooldown_key] = (
         now + _PUBLIC_STOCK_PULL_TICKER_COOLDOWN_SECONDS
     )
 
@@ -3330,10 +3335,10 @@ async def stock_chart(
     owner = current_request_is_owner()
     symbol = quote_symbol(ticker)
     key = f"chart:{symbol}:{range}:{adjustment}"
-    if range == "1d" and adjustment == "raw":
+    if adjustment == "raw":
         await _hydrate_stock_pull_resource(
             symbol,
-            "daily_chart",
+            "daily_chart" if range == "1d" else f"chart_{range}",
             key,
         )
     if owner and symbol == "NVDA" and range == "1d" and adjustment == "raw":
@@ -3877,8 +3882,11 @@ async def _coalesced_stock_pull(
 async def pull_stock_data(
     ticker: str,
     request: Request,
+    chart_range: Annotated[
+        str | None, Query(pattern="^(5m|15m|1h|1w)$"),
+    ] = None,
 ):
-    """Refresh overview, daily chart, and derived signals.
+    """Refresh a selected non-daily chart, or the default daily stock bundle.
 
     Password-mode visitors may start this bounded same-origin action so a
     Breakout Radar ticker without a saved snapshot can become readable.
@@ -3886,7 +3894,8 @@ async def pull_stock_data(
     all callers still share the same in-flight task. The refreshed values are
     published into the exact GET cache keys and a restart-safe snapshot. Each
     resource remains independent: a signal-enrichment failure cannot erase a
-    valid quote or daily chart.
+    valid quote or daily chart. chart_range selects a single chart without
+    starting unrelated overview, signal, or option work.
     """
 
     symbol = quote_symbol(ticker)
@@ -3910,10 +3919,76 @@ async def pull_stock_data(
             else request_client_ip(request)
         )
 
+    if chart_range is not None:
+        return await _coalesced_stock_chart_pull(
+            symbol, chart_range, public_client_id=public_client_id,
+        )
     return await _coalesced_stock_pull(
         symbol,
         public_client_id=public_client_id,
     )
+
+
+async def _pull_stock_chart_once(symbol: str, period: str) -> dict[str, Any]:
+    key = f"chart:{symbol}:{period}:raw"
+
+    async def load_valid_chart():
+        payload = await _load_stock_chart(symbol, period, "raw")
+        cleaned = validate_stock_pull_payload(symbol, f"chart_{period}", payload)
+        if cleaned is None:
+            raise ValueError("requested stock chart is unavailable")
+        return cleaned
+
+    try:
+        entry = await _force_replace_endpoint(
+            key, _CHART_TTL[period], _CHART_MAX_AGE[period], load_valid_chart,
+        )
+    except Exception as error:
+        logger.warning("Chart pull failed for %s %s (%s)", symbol, period, type(error).__name__)
+        raise HTTPException(status_code=503, detail={
+            "code": "stock_chart_pull_failed",
+            "message": "该周期行情暂未获取成功，请稍后重试",
+        }) from error
+    try:
+        await _run_stock_pull_blocking(
+            write_stock_chart_resource, symbol, period, entry.value, entry.fetched_at,
+        )
+    except Exception as error:
+        logger.warning("Chart snapshot save failed for %s %s (%s)", symbol, period, type(error).__name__)
+        raise HTTPException(status_code=503, detail={
+            "code": "stock_chart_persistence_failed",
+            "message": "行情已获取，但保存失败，请稍后重试",
+        }) from error
+    return {
+        "ticker": symbol,
+        "range": period,
+        "status": "completed",
+        "persisted": True,
+        "bar_count": len(entry.value["bars"]),
+        "fetched_at": datetime.fromtimestamp(entry.fetched_at, timezone.utc).isoformat(),
+    }
+
+
+async def _coalesced_stock_chart_pull(
+    symbol: str, period: str, *, public_client_id: str | None = None,
+) -> dict[str, Any]:
+    """Pull only the selected chart; share work and the existing account budget."""
+    key = f"chart:{symbol}:{period}:raw"
+    task = _stock_chart_pull_tasks.get(key)
+    if task is None or task.done():
+        if public_client_id is not None:
+            _reserve_public_stock_pull(public_client_id, symbol, resource_key=key)
+        task = asyncio.create_task(_pull_stock_chart_once(symbol, period), name=f"pull:{key}")
+        _stock_chart_pull_tasks[key] = task
+
+        def finish(completed):
+            if _stock_chart_pull_tasks.get(key) is completed:
+                _stock_chart_pull_tasks.pop(key, None)
+            if not completed.cancelled():
+                completed.exception()
+
+        task.add_done_callback(finish)
+    return await asyncio.shield(task)
 
 
 async def _pull_stock_data_once(

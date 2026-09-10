@@ -12,7 +12,7 @@ import { displayedQuoteLabel, preferLiveQuote } from '@/lib/liveQuotes';
  * 锚点按 bar 时间戳存储、静默刷新后重新解析，解析不到判失效
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import ReactECharts from '@/components/charts/ReactECharts';
 import Segmented from '@/components/shared/Segmented';
 import MenuSelect from '@/components/shared/MenuSelect';
@@ -591,6 +591,7 @@ export default function KlineChart({
   const overlays = technical?.chart_overlays ?? null;
   const colorMode = useColorMode();
   const appearance = useAppearance();
+  const { username, isOwner, isCustomer, canManageWatchlist } = useAccess();
   // Daily bars are the reliable default covered by Massive Stocks Starter;
   // intraday intervals remain available on demand. The default lives in ./api so
   // the prefetch and this component request the same URL.
@@ -608,17 +609,16 @@ export default function KlineChart({
     () => {
       const force = seenRefreshVersion.current !== refreshVersion;
       seenRefreshVersion.current = refreshVersion;
-      return getDetailChart(ticker, range, force);
+      return getDetailChart(ticker, range, force, isCustomer);
     },
     null,
-    [ticker, range, refreshVersion],
+    [ticker, range, refreshVersion, isCustomer],
   );
 
   const [measure, setMeasure] = useState<MeasureState>({ phase: 'idle' });
   const [basis, setBasis] = useState<MeasureBasis>('wick');
   const [chartInst, setChartInst] = useState<EChartsInstance | null>(null);
   const measureActive = measure.phase !== 'idle';
-  const { username, isOwner, isCustomer, canManageWatchlist } = useAccess();
   const reducedMotion = Boolean(useReducedMotion());
   const identityKey = isCustomer && username ? `account:${username}` : isOwner ? 'owner' : 'anonymous';
   const bars = data?.bars;
@@ -1092,13 +1092,12 @@ export default function KlineChart({
       )}
       <div ref={plotRef} className="relative mt-3 min-h-0 shrink-0" data-indicator-chart
         style={{ height: mode === 'candle' ? analysisOption.layout.height : drawing.expanded ? Math.max(height, 540) : height }}>
-        <AnimatePresence mode="wait">
+        {/* Data completion must not wait for an older chart/skeleton exit. */}
           {loading ? (
             <motion.div
               key="skeleton"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              exit={{ opacity: 0, transition: { duration: 0.16 } }}
               className="absolute inset-0 flex flex-col gap-2"
               aria-hidden="true"
             >
@@ -1106,22 +1105,24 @@ export default function KlineChart({
               <SkeletonBlock className="h-[18%] w-full rounded-md border border-line-chart" />
             </motion.div>
           ) : error || !option ? (
-            <motion.div key="error" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 overflow-auto">
+            <motion.div key="error" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0 overflow-auto">
               <EmptyState
                 variant="empty"
                 image="/empty-chart.svg"
                 title={
-                  error?.bizCode === 'public_snapshot_unavailable'
+                  error?.bizCode === 'public_snapshot_unavailable' && range === '1d'
                     ? t('该标的暂无完整数据')
                     : t('K 线暂不可用')
                 }
                 description={
-                  error?.bizCode === 'public_snapshot_unavailable'
+                  error?.code === 429
+                    ? `${error.message}${error.retryAfter ? t(' · {n} 秒后可重试', { n: error.retryAfter }) : ''}`
+                    : error?.bizCode === 'public_snapshot_unavailable' && range === '1d'
                     ? t('该股票暂无数据，可手动获取最新行情、日线与技术指标')
                     : t('{ticker} · {range}数据暂不可用，其他周期仍可切换', { ticker, range: CHART_RANGES.find((item) => item.value === range)?.label ?? range })
                 }
                 action={
-                  error?.bizCode === 'public_snapshot_unavailable' ? (
+                  error?.bizCode === 'public_snapshot_unavailable' && range === '1d' ? (
                     <ManualStockPull ticker={ticker} compact onPulled={() => refresh({ force: true })} />
                   ) : (
                     <button type="button" onClick={() => refresh()} className="btn-primary">
@@ -1137,7 +1138,6 @@ export default function KlineChart({
               key={`${range}-${mode}`}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1, transition: { duration: 0.26, ease: [0.16, 1, 0.3, 1] } }}
-              exit={{ opacity: 0, transition: { duration: 0.16 } }}
               className="absolute inset-0"
             >
               <ReactECharts
@@ -1151,7 +1151,6 @@ export default function KlineChart({
                 bars={data.bars} range={range} panes={analysisOption.panes} layout={analysisOption.layout} />}
             </motion.div>
           )}
-        </AnimatePresence>
       </div>
 
       {measureActive && (
