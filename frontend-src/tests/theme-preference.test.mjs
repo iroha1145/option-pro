@@ -154,9 +154,20 @@ test('暗色模式下按钮高光变量去除白边，避免夜间模式按钮�
   const darkBlock = css.match(/html\.dark\s*\{([\s\S]*?)\n  \}/);
   assert.ok(darkBlock, '缺少 html.dark 规则');
   const darkBody = darkBlock[1];
-  assert.doesNotMatch(darkBody, /--btn-shadow:.*rgba\(255,\s*255,\s*255/);
-  assert.doesNotMatch(darkBody, /--btn-hi-shadow:.*rgba\(255,\s*255,\s*255/);
-  assert.doesNotMatch(darkBody, /--btn-primary-highlight:.*rgba\(255,\s*255,\s*255/);
+  for (const token of [
+    '--btn-shadow',
+    '--btn-hi-shadow',
+    '--btn-primary-highlight',
+    '--chip-shadow',
+    '--card-hover-shadow',
+    '--inset-hi-shadow',
+    '--zone-shadow',
+  ]) {
+    assert.doesNotMatch(darkBody, new RegExp(`${token}:.*rgba\\(255,\\s*255,\\s*255`), `${token} 夜间不得再带白高光`);
+  }
+  const tailwind = await source('../tailwind.config.js');
+  assert.match(tailwind, /btn:\s*'var\(--btn-shadow\)'/);
+  assert.match(tailwind, /'btn-hi':\s*'var\(--btn-hi-shadow\)'/);
 });
 
 test('theme-boot 与运行时共用 optix_theme 键，并按系统色决定默认夜间', async () => {

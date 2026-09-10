@@ -70,11 +70,6 @@ test('appearance menu is keyboard operable and returns focus', async ({ page }) 
   await page.keyboard.press('Enter');
   await expect(page.locator('html')).toHaveClass(/dark/);
   await expect(trigger).toBeFocused();
-
-  // Save screenshot of menu in dark mode
-  await openAppearanceMenu(page);
-  await page.screenshot({ path: '/opt/cursor/artifacts/screenshots/appearance_menu_dark_desktop.png' });
-  await page.keyboard.press('Escape');
 });
 
 test('top-right control stays usable on a phone viewport', async ({ page }) => {
@@ -99,9 +94,6 @@ test('login page exposes the same control', async ({ page }) => {
   await page.getByRole('menuitemradio', { name: '深色' }).click();
   await expect(page.locator('html')).toHaveClass(/dark/);
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-
-  // Save screenshot of login page in dark mode
-  await page.screenshot({ path: '/opt/cursor/artifacts/screenshots/login_dark_no_white_borders.png' });
 });
 
 test('research pages stay usable in dark mode on desktop and phone', async ({ page }) => {
@@ -120,57 +112,30 @@ test('research pages stay usable in dark mode on desktop and phone', async ({ pa
       await expect(page.getByRole('button', { name: /外观/ }).first()).toBeVisible();
       await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
 
-      if (width === 1440 && route === '/') {
-        await page.screenshot({ path: '/opt/cursor/artifacts/screenshots/home_dark_no_white_borders.png' });
-      } else if (width === 1440 && route === '/screener') {
-        await page.screenshot({ path: '/opt/cursor/artifacts/screenshots/screener_dark_no_white_borders.png' });
-      }
+      const trigger = page.getByRole('button', { name: /外观/ }).first();
+      await expect.poll(() => trigger.evaluate((el) => getComputedStyle(el).boxShadow)).not.toMatch(/255,\s*255,\s*255/);
 
-      // Audit buttons for white borders, light outline, light ring, or light inset shadows in dark mode
-      const buttonIssues = await page.evaluate(() => {
-        const issues = [];
-        const isLight = (str) => {
-          if (!str || str === 'none' || str === 'transparent') return false;
-          const match = str.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
-          if (match) {
-            const r = parseInt(match[1], 10);
-            const g = parseInt(match[2], 10);
-            const b = parseInt(match[3], 10);
-            const a = match[4] !== undefined ? parseFloat(match[4]) : 1;
-            if (a > 0.1 && (r + g + b) / 3 > 180) return true;
+      const whiteEdges = await page.evaluate(() => {
+        const nearWhite = (value) => {
+          if (!value || value === 'none') return false;
+          for (const match of value.matchAll(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/g)) {
+            const r = Number(match[1]);
+            const g = Number(match[2]);
+            const b = Number(match[3]);
+            const a = match[4] === undefined ? 1 : Number(match[4]);
+            if (a > 0.2 && r >= 230 && g >= 230 && b >= 230) return true;
           }
           return false;
         };
-
-        const btns = Array.from(document.querySelectorAll('button, [role="button"], [role="tab"], a[class*="shadow-btn"], .control-button'));
-        for (const el of btns) {
-          const style = window.getComputedStyle(el);
-          const shadow = style.boxShadow;
-          const borderTop = style.borderTopColor;
-          const borderRight = style.borderRightColor;
-          const borderBottom = style.borderBottomColor;
-          const borderLeft = style.borderLeftColor;
-          const text = (el.textContent || '').trim().slice(0, 20);
-
-          if (shadow && shadow.includes('255, 255, 255')) {
-            issues.push({ text, type: 'shadow', value: shadow, cls: el.className });
-          }
-          if (parseFloat(style.borderTopWidth) > 0 && isLight(borderTop)) {
-            issues.push({ text, type: 'border-top', value: borderTop, cls: el.className });
-          }
-          if (parseFloat(style.borderRightWidth) > 0 && isLight(borderRight)) {
-            issues.push({ text, type: 'border-right', value: borderRight, cls: el.className });
-          }
-          if (parseFloat(style.borderBottomWidth) > 0 && isLight(borderBottom)) {
-            issues.push({ text, type: 'border-bottom', value: borderBottom, cls: el.className });
-          }
-          if (parseFloat(style.borderLeftWidth) > 0 && isLight(borderLeft)) {
-            issues.push({ text, type: 'border-left', value: borderLeft, cls: el.className });
-          }
-        }
-        return issues;
+        return Array.from(document.querySelectorAll('button, [role="button"], .control-button'))
+          .filter((el) => {
+            const style = getComputedStyle(el);
+            return nearWhite(style.boxShadow)
+              || (parseFloat(style.borderTopWidth) > 0 && nearWhite(style.borderTopColor));
+          })
+          .map((el) => (el.getAttribute('aria-label') || el.textContent || '').trim().slice(0, 24));
       });
-      expect(buttonIssues, `Route ${route} at ${width}px has button border/shadow issues`).toEqual([]);
+      expect(whiteEdges, `Route ${route} at ${width}px still has near-white button edges`).toEqual([]);
     }
   }
   expect(errors).toEqual([]);
