@@ -6,6 +6,7 @@ import {
   normalizeRectangle,
 } from './geometry.ts';
 import { barKeyOf, resolveAnchor } from './projection.ts';
+import { drawingPaint, drawingSurface } from './drawingAppearance.ts';
 import { resolvePaintColor } from './schema.ts';
 import { manualLineInk, renderPatternInk } from './linePresentation.ts';
 import { CHART_MONO_FONT } from '@/lib/chartFonts.ts';
@@ -260,7 +261,7 @@ export function graphicFromOverlay(
   options: { solid?: boolean; width?: number } = {},
 ): object[] {
   const elements: object[] = [];
-  const stroke = resolvePaintColor(color);
+  const stroke = drawingPaint(resolvePaintColor(color));
   const lineDash = options.solid ? undefined : [4, 3];
   const lineWidth = options.width ?? (options.solid ? 3 : 2.5);
   overlay.fills.forEach((fill, index) => {
@@ -338,7 +339,7 @@ export function drawingsToMarks(
             lineHeight: 12,
             fontFamily: CHART_MONO_FONT,
             color: lineStyle.color,
-            backgroundColor: 'rgba(255,255,255,0.96)',
+            backgroundColor: drawingSurface(0.96),
             padding: [1, 4],
             borderRadius: 3,
           },

@@ -1,7 +1,10 @@
 /**
  * 涨跌色彩习惯（美股绿涨红跌 / 亚洲红涨绿跌）。
  * CSS 变量、Tailwind up/down 工具类、ECharts CH.up600/down600 共用这一份状态。
+ * 夜间涨跌色取自 Cloud Monitor 的 ok / crit。
  */
+import { getAppearance, subscribeAppearance } from './themePreference.ts';
+
 export type ColorMode = 'western' | 'asian';
 
 const COLOR_MODE_KEY = 'optix_color_mode';
@@ -22,6 +25,25 @@ export const PRICE_COLORS = {
     down600: '#0E9F6E',
     down700: '#0B7A55',
     down50: '#E5F6EF',
+  },
+} as const;
+
+export const PRICE_COLORS_DARK = {
+  western: {
+    up600: '#62D0A5',
+    up700: '#7EE0B8',
+    up50: '#163D34',
+    down600: '#FF8A80',
+    down700: '#FFB4AE',
+    down50: '#3A1618',
+  },
+  asian: {
+    up600: '#FF8A80',
+    up700: '#FFB4AE',
+    up50: '#3A1618',
+    down600: '#62D0A5',
+    down700: '#7EE0B8',
+    down50: '#163D34',
   },
 } as const;
 
@@ -71,7 +93,7 @@ export function getColorMode(): ColorMode {
 }
 
 export function directionColors(mode: ColorMode = getColorMode()) {
-  return PRICE_COLORS[mode];
+  return getAppearance() === 'dark' ? PRICE_COLORS_DARK[mode] : PRICE_COLORS[mode];
 }
 
 export function applyColorMode(mode: ColorMode = getColorMode()): void {
@@ -98,3 +120,8 @@ export function subscribeColorMode(listener: () => void): () => void {
     listeners.delete(listener);
   };
 }
+
+/* 夜间涨跌色与浅色不同：外观一变，CH.up600 / 热力两端也要跟着通知订阅者。 */
+subscribeAppearance(() => {
+  emit();
+});

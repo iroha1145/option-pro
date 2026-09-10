@@ -337,7 +337,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
   return (
         <>
           <div
-            className={cn('t-backdrop fixed inset-0 z-[80] bg-[rgba(13,22,38,.28)] backdrop-blur-[2px]', phase === 'open' && 'is-open')}
+            className={cn('t-backdrop fixed inset-0 z-[80] bg-[var(--scrim)] backdrop-blur-[2px]', phase === 'open' && 'is-open')}
             onClick={onClose}
             data-focus-backdrop="command-palette"
             aria-hidden="true"

@@ -574,7 +574,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
                     <button
                       onClick={() => void startJob()}
                       disabled={submitting}
-                      className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md bg-ai-600 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105 disabled:cursor-wait disabled:opacity-60"
+                      className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md bg-ai-600 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105 disabled:cursor-wait disabled:opacity-60"
                     >
                       <AnalysisIcon size={13} />
                       {submitting ? __t('正在提交…') : __t('生成分析')}
@@ -590,7 +590,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
               ) : (
                 <button
                   onClick={() => setConfirming(true)}
-                  className="mt-4 flex h-9 items-center gap-2 rounded-md bg-ai-600 px-4 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105"
+                  className="mt-4 flex h-9 items-center gap-2 rounded-md bg-ai-600 px-4 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105"
                 >
                   <AnalysisIcon size={14} />
                   {__t('生成分析')}
@@ -632,7 +632,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
               </div>
               <button
                 onClick={() => setPhase('needs-analysis')}
-                className="mt-3 flex h-8 items-center gap-1.5 rounded-md bg-ai-600 px-3 text-caption font-medium text-white shadow-btn transition-[filter] hover:brightness-105"
+                className="mt-3 flex h-8 items-center gap-1.5 rounded-md bg-ai-600 px-3 text-caption font-medium text-on-accent shadow-btn transition-[filter] hover:brightness-105"
               >
                 <Icon name="refresh" size={13} />
                 {__t('重试')}
@@ -654,7 +654,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
                   setPhase('loading');
                   void loadImpact(ticker);
                 }}
-                className="mt-4 flex h-8 items-center gap-1.5 rounded-md bg-ai-600 px-3.5 text-caption font-medium text-white shadow-btn transition-[filter] hover:brightness-105"
+                className="mt-4 flex h-8 items-center gap-1.5 rounded-md bg-ai-600 px-3.5 text-caption font-medium text-on-accent shadow-btn transition-[filter] hover:brightness-105"
               >
                 <Icon name="refresh" size={13} />
                 {__t('重试')}

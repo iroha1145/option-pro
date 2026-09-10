@@ -10,6 +10,7 @@ import {
   ivRankInk,
   ivRankTint,
 } from './model';
+import { useAppearance } from '@/hooks/useAppearance.ts';
 import { t } from '../../i18n/core.ts';
 
 function IvHeatCard({
@@ -28,6 +29,7 @@ function IvHeatCard({
   onOpenTicker: (ticker: string) => void;
   onOpenPalette: () => void;
 }) {
+  useAppearance();
   const top = useMemo(
     () =>
       rows

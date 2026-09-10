@@ -438,7 +438,7 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
                     {(item.analysisStatus === 'pending' || showCancelled) && (
                       <button
                         onClick={() => setConfirm('create')}
-                        className="flex items-center gap-1.5 rounded-md bg-ai-600 px-3.5 py-2 text-caption font-medium text-white shadow-btn transition-[filter] hover:brightness-105"
+                        className="flex items-center gap-1.5 rounded-md bg-ai-600 px-3.5 py-2 text-caption font-medium text-on-accent shadow-btn transition-[filter] hover:brightness-105"
                       >
                         <AnalysisIcon size={13} />
                         {__t('生成 AI 分析')}
@@ -447,7 +447,7 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
                     {(showCompleted || showFailed || showInsufficient) && (
                       <button
                         onClick={() => setConfirm('force')}
-                        className="flex items-center gap-1.5 rounded-md bg-ai-600 px-3.5 py-2 text-caption font-medium text-white shadow-btn transition-[filter] hover:brightness-105"
+                        className="flex items-center gap-1.5 rounded-md bg-ai-600 px-3.5 py-2 text-caption font-medium text-on-accent shadow-btn transition-[filter] hover:brightness-105"
                       >
                         <Icon name="refresh" size={13} />
                         {showFailed || showInsufficient ? __t('重试分析（强制）') : __t('重新分析（强制）')}

@@ -64,6 +64,8 @@ import {
   nextDrainRetryDelayMs,
 } from './sync.ts';
 import { clampDragPoint, dragExceedsThreshold, applyPixelShiftConstraint, dragMove, type DragOrigin } from './drag.ts';
+import { useAppearance } from '../../../hooks/useAppearance.ts';
+import { drawingPaint } from './drawingAppearance.ts';
 import { resolvePaintColor } from './schema.ts';
 
 export type SyncStatus = 'guest' | 'idle' | 'saving' | 'unsynced' | 'load_failed' | 'write_failed' | 'conflict';
@@ -121,6 +123,7 @@ export function useDrawingController(args: {
   onCancelMeasure: () => void;
   reducedMotion?: boolean;
 }) {
+  const appearance = useAppearance();
   const adjustment = args.adjustment ?? 'raw';
   const [tool, setToolState] = useState<DrawingTool>('select');
   const [drawings, setDrawings] = useState<ChartDrawing[]>([]);
@@ -778,13 +781,17 @@ export function useDrawingController(args: {
   }, [args.bars, args.range]);
 
   const marks = useMemo(
-    () => (visibleCtx
-      ? drawingsToMarks(drawings, visibleCtx, { selectedId, inProgress })
-      : { lines: [], areas: [], points: [], polygons: [], unresolvedIds: [] }),
-    [drawings, inProgress, selectedId, visibleCtx],
+    () => {
+      void appearance;
+      return visibleCtx
+        ? drawingsToMarks(drawings, visibleCtx, { selectedId, inProgress })
+        : { lines: [], areas: [], points: [], polygons: [], unresolvedIds: [] };
+    },
+    [drawings, inProgress, selectedId, visibleCtx, appearance],
   );
 
   const refreshGraphic = useCallback((chart: EChartsInstance, ctx: RenderContext | null) => {
+    void appearance;
     if (!chart || chart.isDisposed() || !ctx) return;
     const preview = dragPreviewRef.current;
     const selected = preview
@@ -802,12 +809,12 @@ export function useDrawingController(args: {
       if (!px || !Number.isFinite(px[0]) || !Number.isFinite(px[1])) return null;
       return { x: px[0], y: px[1] };
     };
-    const color = preview ? resolvePaintColor(preview.style.color) : '#2E46E0';
+    const color = drawingPaint(preview ? resolvePaintColor(preview.style.color) : '#2E46E0');
     chart.setOption(
       { graphic: graphicFromOverlay(overlay, toPixel, color, { solid: Boolean(preview), width: preview ? Math.max(3, preview.style.width) : 2.5 }) },
       { lazyUpdate: true, replaceMerge: ['graphic'] },
     );
-  }, [inProgress, selectedId]);
+  }, [inProgress, selectedId, appearance]);
 
   useEffect(() => {
     const chart = args.chart;

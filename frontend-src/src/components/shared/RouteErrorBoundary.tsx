@@ -33,7 +33,7 @@ export default class RouteErrorBoundary extends Component<Props, State> {
         <p className="mt-1 text-micro text-ink-400">{t('请重新加载页面。若仍无法显示，请稍后再试。')}</p>
         <button
           onClick={() => window.location.reload()}
-          className="mt-4 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105"
+          className="mt-4 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105"
         >
           {t('重新加载')}
         </button>

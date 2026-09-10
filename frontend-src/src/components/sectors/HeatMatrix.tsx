@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils';
 import { fmtPct } from '@/lib/format';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
 import { useColorMode } from '@/hooks/useColorMode.ts';
+import { useAppearance } from '@/hooks/useAppearance.ts';
 import type { SectorVm } from './model';
 import { heatTone, periodLabel } from './model';
 import { t } from '../../i18n/core.ts';
@@ -25,6 +26,7 @@ function HeatTile({
      不订阅就只有换盘那一刻不重绘：整块热力矩阵留在旧口径上，与页面其余部分
      （徽章、涨跌幅、K 线）红绿相反，直到别的原因触发一次重渲染才追上。 */
   useColorMode();
+  useAppearance();
   const value = sector.avgReturn ?? 0;
   /* count-up 减量：热力砖涨跌直接呈现终值 */
   const animated = value;
@@ -33,9 +35,9 @@ function HeatTile({
      avgReturn 为 null 的砖底色换成中性纸面+虚线边，一眼可辨「没数据」。 */
   const tone = hasReturn ? heatTone(value) : { bg: 'var(--card-warm, #FBFCFD)', dark: false };
   const leader = sector.leaders[0] ?? null;
-  const textMain = tone.dark ? 'text-white' : 'text-ink-800';
-  const textSub = tone.dark ? 'text-white/75' : 'text-ink-500';
-  const barFill = tone.dark ? 'bg-white/40' : 'bg-ink-900/25';
+  const textMain = !hasReturn ? 'text-ink-800' : tone.dark ? 'text-white' : 'text-black';
+  const textSub = !hasReturn ? 'text-ink-500' : tone.dark ? 'text-white' : 'text-black';
+  const barFill = !hasReturn ? 'bg-ink-900/25' : tone.dark ? 'bg-white/40' : 'bg-black/25';
 
   return (
     <motion.button

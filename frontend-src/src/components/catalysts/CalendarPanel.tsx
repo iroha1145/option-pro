@@ -79,7 +79,7 @@ export default function CalendarPanel({ refreshToken }: { refreshToken: number }
           action={
             <button
               onClick={() => q.refresh()}
-              className="rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105"
+              className="rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105"
             >
               {__t('重试')}
             </button>
@@ -114,7 +114,7 @@ export default function CalendarPanel({ refreshToken }: { refreshToken: number }
             <div className={cn('flex items-center justify-between px-5 py-2.5', isToday ? 'bg-brand-50' : 'bg-card-warm')}>
               <p className={cn('font-mono text-caption font-semibold tnum', isToday ? 'text-brand-700' : 'text-ink-600')}>
                 {fmtLocaleDate(`${date}T00:00:00`, { month: '2-digit', day: '2-digit', weekday: 'short' })}
-                {isToday && <span className="ml-2 rounded-xs bg-brand-600 px-1.5 py-0.5 text-[10px] font-medium text-white">{__t('今日')}</span>}
+                {isToday && <span className="ml-2 rounded-xs bg-brand-600 px-1.5 py-0.5 text-[10px] font-medium text-on-accent">{__t('今日')}</span>}
               </p>
               <span className="font-mono text-micro text-ink-400 tnum">{events.length} {__t('项')}</span>
             </div>

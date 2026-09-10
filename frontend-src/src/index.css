@@ -41,8 +41,12 @@
     --down-600: #E5484D;
     --down-700: #C4302B;
     --down-50: #FCECEC;
+    --on-accent: #FFFFFF;
+    --warn-700: #B87109;
     --warn-600: #E8930C;
     --warn-50: #FCF3E2;
+    --scrim: rgba(13, 22, 38, .32);
+    --scrim-strong: rgba(13, 22, 38, .45);
     /* v8.1：AI 语义色弃紫。「紫 + AI」是 2024–26 最烂大街的生成式设计签名；
        换青瓷 teal（Open Color cyan-8）——纸面印刷的传统第二油墨色，冷调与群青
        同族但相距 60°+，与涨绿（hue 157°）差 36° 不会误读为行情方向。 */
@@ -56,6 +60,15 @@
     --shadow-sh-1: 0 1px 2px rgba(16, 24, 40, .03);
     --shadow-sh-2: 0 1px 2px rgba(16, 24, 40, .03), 0 12px 32px -14px rgba(16, 24, 40, .10);
     --shadow-sh-3: 0 2px 4px rgba(16, 24, 40, .04), 0 24px 56px -16px rgba(16, 24, 40, .16);
+    /* 按钮/控件立体阴影（暗色模式下内高光转为极微弱暗部高光或去除，避免白边） */
+    --btn-shadow: 0 1px 2px rgba(16, 24, 40, .07), inset 0 1px 0 rgba(255, 255, 255, .75);
+    --btn-hi-shadow: inset 0 1px 0 rgba(255, 255, 255, .16), 0 1px 2px rgba(16, 24, 40, .18), 0 4px 12px -4px rgba(16, 24, 40, .34);
+    --chip-shadow: inset 0 1px 0 rgba(255, 255, 255, .14), 0 1px 3px -1px rgba(16, 24, 40, .25);
+    --card-hover-shadow: 0 1px 2px rgba(16, 24, 40, .03), 0 12px 32px -14px rgba(16, 24, 40, .10), inset 0 1px 0 rgba(255, 255, 255, .7);
+    --inset-hi-shadow: inset 0 1px 0 rgba(255, 255, 255, .7);
+    --zone-shadow: inset 0 1px 0 rgba(255, 255, 255, .45), 0 1px 2px rgba(16, 24, 40, .10);
+    --btn-primary-highlight: 0 1px 0 rgba(255, 255, 255, .18) inset;
+    --insight-frame-shadow: inset 0 1px 0 rgba(255, 255, 255, .7);
     /* Cloud Monitor 的细节层次，保留 Optix 的纸面与群青。 */
     --control-track: #F2F4F7;
     --control-selected-shadow: 0 2px 4px rgba(24, 43, 68, .045), 0 5px 12px -4px rgba(24, 43, 68, .09);
@@ -98,7 +111,92 @@
     --down-50: #E5F6EF;
   }
 
+  /* 夜间模式：画布/卡片/墨色取 Cloud Monitor 暗色板，群青品牌只做对比度抬升。 */
+  html.dark {
+    color-scheme: dark;
+    --paper: #191B20;
+    --paper-2: #1D1F24;
+    --card: #24262D;
+    --card-warm: #21242B;
+    --overlay: rgba(25, 27, 32, 0.88);
+    --ink-900: #F1F3F5;
+    --ink-800: #F1F3F5;
+    --ink-700: #B0B6C0;
+    --ink-600: #B0B6C0;
+    --ink-500: #A0A8B5;
+    --ink-400: #A0A8B5;
+    --ink-300: #6B7382;
+    --line: #323640;
+    --line-strong: #454B58;
+    --line-chart: #353944;
+    --brand-700: #8B9CFF;
+    --brand-600: #6B82FF;
+    --brand-500: #8B9CFF;
+    --brand-400: #A8B4FF;
+    --brand-100: #24354C;
+    --brand-50: #25374C;
+    --up-600: #62D0A5;
+    --up-700: #7EE0B8;
+    --up-50: #163D34;
+    --down-600: #FF8A80;
+    --down-700: #FFB4AE;
+    --down-50: #3A1618;
+    --on-accent: #191B20;
+    --warn-700: #FDE047;
+    --warn-600: #FACC15;
+    --warn-50: #3A3008;
+    --ai-600: #4EC4D4;
+    --ai-50: #12353A;
+    --control-track: #21242B;
+    --control-selected-shadow: 0 2px 4px rgba(0, 0, 0, .28), 0 5px 12px -4px rgba(0, 0, 0, .36);
+    --card-shadow: 0 2px 4px rgba(0, 0, 0, .28), 0 9px 25px -12px rgba(0, 0, 0, .45);
+    --popover-shadow: 0 2px 5px rgba(0, 0, 0, .32), 0 10px 28px -10px rgba(0, 0, 0, .5);
+    --shadow-sh-1: 0 1px 2px rgba(0, 0, 0, .35);
+    --shadow-sh-2: 0 1px 2px rgba(0, 0, 0, .35), 0 12px 32px -14px rgba(0, 0, 0, .55);
+    --shadow-sh-3: 0 2px 4px rgba(0, 0, 0, .4), 0 24px 56px -16px rgba(0, 0, 0, .62);
+    /* 按钮/控件立体阴影夜间重定：去除白色内高光白边，使用纯暗部外投影 */
+    --btn-shadow: 0 1px 2px rgba(0, 0, 0, .35);
+    --btn-hi-shadow: 0 1px 2px rgba(0, 0, 0, .45), 0 4px 12px -4px rgba(0, 0, 0, .55);
+    --chip-shadow: 0 1px 3px -1px rgba(0, 0, 0, .4);
+    --card-hover-shadow: 0 1px 2px rgba(0, 0, 0, .35), 0 12px 32px -14px rgba(0, 0, 0, .55);
+    --inset-hi-shadow: none;
+    --zone-shadow: 0 1px 2px rgba(0, 0, 0, .3);
+    --btn-primary-highlight: 0 0 0 transparent;
+    --insight-frame-shadow: none;
+    --scrim: rgba(0, 0, 0, .55);
+    --scrim-strong: rgba(0, 0, 0, .65);
+    --background: 220 12% 11%;
+    --foreground: 210 17% 95%;
+    --card-h: 225 11% 16%;
+    --card-foreground: 210 17% 95%;
+    --popover: 225 11% 16%;
+    --popover-foreground: 210 17% 95%;
+    --primary: 232 100% 71%;
+    --primary-foreground: 220 12% 11%;
+    --secondary: 220 10% 14%;
+    --secondary-foreground: 216 12% 72%;
+    --muted: 225 10% 15%;
+    --muted-foreground: 216 12% 67%;
+    --accent: 213 35% 22%;
+    --accent-foreground: 210 70% 74%;
+    --destructive: 4 100% 75%;
+    --destructive-foreground: 0 0% 10%;
+    --border: 220 13% 22%;
+    --input: 222 13% 31%;
+    --ring: 232 100% 71%;
+  }
+
+  html.dark[data-color-mode="asian"] {
+    --up-600: #FF8A80;
+    --up-700: #FFB4AE;
+    --up-50: #3A1618;
+    --down-600: #62D0A5;
+    --down-700: #7EE0B8;
+    --down-50: #163D34;
+  }
+
   html {
+    color-scheme: light;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
@@ -125,6 +223,19 @@
     color: var(--brand-700);
   }
 
+  html.dark body::before {
+    background-image: radial-gradient(circle, rgba(241, 243, 245, .045) 1px, transparent 1px);
+  }
+  html.dark .skeleton-shimmer::after {
+    background: linear-gradient(90deg, transparent, rgba(241, 243, 245, .08), transparent);
+  }
+  html.dark .card-glare::after {
+    background: linear-gradient(135deg, rgba(241, 243, 245, 0.08), transparent 46%);
+  }
+  html.dark .insight-frame {
+    box-shadow: inset 0 1px 0 rgba(241, 243, 245, .06);
+  }
+
   /* 聚焦环即时出现：禁过渡动画（polish-brief §B/§C.8） */
   :focus-visible {
     outline: 2px solid var(--brand-600);
@@ -149,8 +260,8 @@
     transform: translateY(-200%);
     border-radius: 8px;
     padding: .75rem 1rem;
-    background: var(--ink-900);
-    color: white;
+    background: #0D1626;
+    color: #fff;
   }
   .skip-link:focus { transform: none; }
 
@@ -213,8 +324,8 @@
     font-size: 13px;
     font-weight: 500;
     line-height: 1.25;
-    color: #fff;
-    box-shadow: var(--shadow-sh-1), 0 1px 0 rgba(255, 255, 255, .18) inset;
+    color: var(--on-accent);
+    box-shadow: var(--shadow-sh-1), var(--btn-primary-highlight);
     transition:
       transform var(--duration-quick) var(--ease-smooth-out),
       background-color var(--duration-quick) var(--ease-smooth-out),
@@ -308,7 +419,7 @@
   @media (hover: hover) and (pointer: fine) {
     .card-hover:hover {
       transform: translateY(-2px);
-      box-shadow: var(--shadow-sh-2), inset 0 1px 0 rgba(255, 255, 255, .7);
+      box-shadow: var(--card-hover-shadow);
     }
     .card-lift:hover {
       transform: translateY(-2px);
@@ -507,14 +618,14 @@
   .t-tabs.selection-group .selection-indicator {
     border-radius: 9px;
     background: var(--card);
-    box-shadow: 0 3px 12px rgb(28 42 68 / 7%);
+    box-shadow: var(--control-selected-shadow);
   }
   .filter-group > .control-button[aria-pressed="true"],
   .mobile-selection-rail > button:is([aria-selected="true"], [aria-pressed="true"]),
   .mobile-selection-rail .mobile-selection-option[aria-pressed="true"] {
     background: var(--card);
     color: var(--brand-700);
-    box-shadow: 0 3px 12px rgb(28 42 68 / 7%);
+    box-shadow: var(--control-selected-shadow);
   }
   .mobile-selection-rail [data-selection-decoration] { display: none; }
   .mobile-selection-rail > button:focus-visible,
@@ -548,6 +659,7 @@
 }
 @media (pointer: coarse) {
   .color-mode-control { min-height: 44px; }
+  .theme-switcher-control { min-height: 44px; min-width: 44px; }
 }
 .change-badge { font-family: inherit; font-weight: 500; white-space: nowrap; letter-spacing: -.015em; }
 .strength-track { background: var(--control-track); }
@@ -555,7 +667,7 @@
 .insight-frame {
   background: var(--paper-2);
   border-radius: 10px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .7);
+  box-shadow: var(--insight-frame-shadow);
 }
 .menu-select-trigger {
   border-radius: 8px;
@@ -688,6 +800,10 @@
   .dot-grid-dense {
     background-image: radial-gradient(circle, rgba(13, 22, 38, .04) 1px, transparent 1px);
     background-size: 18px 18px;
+  }
+  html.dark .dot-grid,
+  html.dark .dot-grid-dense {
+    background-image: radial-gradient(circle, rgba(241, 243, 245, .045) 1px, transparent 1px);
   }
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { scrollbar-width: none; }

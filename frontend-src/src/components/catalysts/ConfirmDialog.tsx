@@ -63,7 +63,7 @@ export default function ConfirmDialog({
   return (
     <>
       <div
-        className={cn('t-backdrop fixed inset-0 z-[85] bg-[rgba(13,22,38,.28)] backdrop-blur-[2px]', phase === 'open' && 'is-open')}
+        className={cn('t-backdrop fixed inset-0 z-[85] bg-[var(--scrim)] backdrop-blur-[2px]', phase === 'open' && 'is-open')}
         onClick={onCancel}
         data-focus-backdrop={overlayId}
         aria-hidden="true"
@@ -107,7 +107,7 @@ export default function ConfirmDialog({
             <button
               onClick={onConfirm}
               className={cn(
-                'rounded-md px-3.5 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] duration-fast hover:brightness-105',
+                'rounded-md px-3.5 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] duration-fast hover:brightness-105',
                 danger ? 'bg-down-600' : 'bg-ai-600',
               )}
             >

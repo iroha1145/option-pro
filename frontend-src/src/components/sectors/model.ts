@@ -10,6 +10,7 @@ import type {
   SectorStrengthRow,
 } from '@/api/modules/sectors';
 import { heatColor } from '@/lib/chart';
+import { getAppearance } from '@/lib/themePreference.ts';
 import type { MacroFitDriver } from '@/lib/macroFit';
 import { t } from '../../i18n/core.ts';
 
@@ -171,26 +172,35 @@ function parseRgb(css: string): Rgb | null {
 }
 
 function luminance([red, green, blue]: Rgb): number {
-  return (0.299 * red + 0.587 * green + 0.114 * blue) / 255;
+  const linear = [red, green, blue].map(value => {
+    const channel = value / 255;
+    return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
 }
 
 export function heatTone(avgReturn: number): { bg: string; dark: boolean } {
   const bg = heatColor(avgReturn);
   const rgb = parseRgb(bg);
-  return { bg, dark: rgb ? luminance(rgb) < 0.55 : false };
+  const light = rgb ? luminance(rgb) : 1;
+  return { bg, dark: 1.05 / (light + 0.05) > (light + 0.05) / 0.05 };
 }
 
-const IV_STOPS: { value: number; rgb: Rgb }[] = [
-  { value: 0, rgb: [14, 159, 110] },
-  { value: 50, rgb: [228, 233, 255] },
-  { value: 100, rgb: [229, 72, 77] },
-];
+function ivStops(): { value: number; rgb: Rgb }[] {
+  const mid: Rgb = getAppearance() === 'dark' ? [37, 55, 76] : [228, 233, 255];
+  return [
+    { value: 0, rgb: [14, 159, 110] },
+    { value: 50, rgb: mid },
+    { value: 100, rgb: [229, 72, 77] },
+  ];
+}
 
 export function ivRankColor(rank: number): string {
   const clamped = Math.max(0, Math.min(100, rank));
-  for (let index = 0; index < IV_STOPS.length - 1; index += 1) {
-    const start = IV_STOPS[index];
-    const end = IV_STOPS[index + 1];
+  const stops = ivStops();
+  for (let index = 0; index < stops.length - 1; index += 1) {
+    const start = stops[index];
+    const end = stops[index + 1];
     if (clamped >= start.value && clamped <= end.value) {
       const position = (clamped - start.value) / (end.value - start.value);
       const mixed = start.rgb.map((value, channel) =>
@@ -199,7 +209,8 @@ export function ivRankColor(rank: number): string {
       return `rgb(${mixed[0]},${mixed[1]},${mixed[2]})`;
     }
   }
-  return 'rgb(228,233,255)';
+  const mid = stops[1].rgb;
+  return `rgb(${mid[0]},${mid[1]},${mid[2]})`;
 }
 
 /* v8.3 IV 高位砖去糖果色：满底热色是「AI 生成热力图」签名。砖改为白底 card +
@@ -215,8 +226,8 @@ export function ivRankTint(rank: number): string {
 /** rank 数字墨色：热色与 ink-800(#182338) 按 55% 混色，保证数字在 tint 底上可读。 */
 export function ivRankInk(rank: number): string {
   const rgb = parseRgb(ivRankColor(rank));
-  if (!rgb) return 'rgb(24,35,56)';
-  const ink: Rgb = [24, 35, 56];
+  const ink: Rgb = getAppearance() === 'dark' ? [241, 243, 245] : [24, 35, 56];
+  if (!rgb) return `rgb(${ink[0]},${ink[1]},${ink[2]})`;
   const mixed = rgb.map((value, channel) =>
     Math.round(value * 0.55 + ink[channel] * 0.45),
   ) as Rgb;

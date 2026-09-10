@@ -7,7 +7,8 @@
 import { useMemo } from 'react';
 import ReactECharts from '@/components/charts/ReactECharts';
 import HatchLegend from '@/components/shared/HatchLegend';
-import { CH, baseAnimation, baseGrid, categoryAxis, glassTooltip, hatchDecal, valueAxis, type ChartOption } from '@/lib/chart';
+import { CH, baseAnimation, baseGrid, categoryAxis, glassTooltip, hatchDecal, withAlpha, valueAxis, type ChartOption } from '@/lib/chart';
+import { useAppearance } from '@/hooks/useAppearance.ts';
 import type { EarningsRow } from './types';
 import { fmtMMDD } from './types';
 import { t } from '../../i18n/core.ts';
@@ -20,12 +21,14 @@ interface EpsHatchChartProps {
 const MAX_BARS = 10;
 
 export default function EpsHatchChart({ items, title = t('EPS 预期 vs 实际') }: EpsHatchChartProps) {
+  const appearance = useAppearance();
   const rows = useMemo(
     () => items.filter((r) => r.epsEstimate != null || r.epsActual != null).slice(0, MAX_BARS),
     [items],
   );
 
   const option = useMemo<ChartOption>(() => {
+    void appearance;
     const ests = rows.map((r) => r.epsEstimate ?? null);
     const acts = rows.map((r) => r.epsActual ?? null);
     const repeats = new Map<string, number>();
@@ -49,7 +52,7 @@ export default function EpsHatchChart({ items, title = t('EPS 预期 vs 实际')
           barWidth: 13,
           barGap: '30%',
           itemStyle: {
-            color: 'rgba(46,70,224,.16)',
+            color: withAlpha(CH.brand600, 0.16),
             borderRadius: [2, 2, 0, 0],
             decal: hatchDecal(CH.brand600),
           } as never,
@@ -65,7 +68,7 @@ export default function EpsHatchChart({ items, title = t('EPS 预期 vs 实际')
         },
       ],
     };
-  }, [rows]);
+  }, [rows, appearance]);
 
   if (rows.length === 0) return null;
 

@@ -132,7 +132,7 @@ function AiOptionInsight({
                 ? t('使用当前期权链的 {n} 条异动记录', { n: evidence.length })
                 : t('当前期权链暂无符合条件的异动')
             }
-            className="rounded-md bg-ai-600 px-3 py-1.5 text-caption font-medium text-white shadow-btn-hi transition-[filter] duration-fast hover:brightness-105 disabled:cursor-not-allowed disabled:bg-ink-300"
+            className="rounded-md bg-ai-600 px-3 py-1.5 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] duration-fast hover:brightness-105 disabled:cursor-not-allowed disabled:bg-ink-300"
           >
             {hasEvidence ? t('生成解读') : t('暂无异动')}
           </button>
@@ -171,7 +171,7 @@ function AiOptionInsight({
                   }),
                 );
               }}
-              className="rounded-md bg-ai-600 px-3 py-1.5 text-caption font-medium text-white shadow-btn-hi hover:brightness-105"
+              className="rounded-md bg-ai-600 px-3 py-1.5 text-caption font-medium text-on-accent shadow-btn-hi hover:brightness-105"
             >
               {t('生成解读')}
             </button>
@@ -418,7 +418,7 @@ function LiveOptionsPanel({ ticker }: { ticker: string }) {
                 if (exp) refreshChain();
               }}
               disabled={retrySeconds > 0 || retrying}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white transition-[filter,opacity] hover:brightness-105 disabled:cursor-wait disabled:opacity-60"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent transition-[filter,opacity] hover:brightness-105 disabled:cursor-wait disabled:opacity-60"
             >
               <Icon name="refresh" size={14} />
               {retrying ? t('正在重试') : retrySeconds > 0 ? t('{n} 秒后重试', { n: retrySeconds }) : t('重试')}
@@ -447,7 +447,7 @@ function LiveOptionsPanel({ ticker }: { ticker: string }) {
                 refreshExpirations({ force: true });
               }}
               disabled={expRefreshing}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter,opacity] hover:brightness-105"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter,opacity] hover:brightness-105"
             >
               <Icon name="refresh" size={14} />
               {expRefreshing ? t('正在重试') : t('重新获取')}

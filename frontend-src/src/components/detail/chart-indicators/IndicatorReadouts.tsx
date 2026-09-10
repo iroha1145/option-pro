@@ -1,6 +1,7 @@
 import { memo, useEffect, useState } from 'react';
 import { fmtLocaleDateTime } from '@/lib/format';
 import { CH, type EChartsInstance } from '@/lib/chart';
+import { useAppearance } from '@/hooks/useAppearance.ts';
 import { t } from '../../../i18n/core.ts';
 import type { PanePlot } from '../chart-drawings/analysis/overlaysToMarks.ts';
 import { formatIndicatorValue, indicatorCursorIndex, type IndicatorLayout } from './layout.ts';
@@ -13,6 +14,7 @@ function IndicatorReadouts({ chart, bars, range, panes, layout }: {
   panes: PanePlot[];
   layout: IndicatorLayout;
 }) {
+  useAppearance();
   const [cursor, setCursor] = useState<{ bars: typeof bars; index: number } | null>(null);
   const selected = cursor?.bars === bars ? cursor.index : null;
   const index = selected ?? bars.length - 1;

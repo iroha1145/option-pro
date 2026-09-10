@@ -200,7 +200,7 @@ export default function EarningsAnalysisControls() {
             className={cn(
               'inline-flex h-8 items-center gap-2 rounded-md px-2.5 text-caption font-medium shadow-btn transition-colors',
               enabled
-                ? 'bg-ai-600 text-white'
+                ? 'bg-ai-600 text-on-accent'
                 : 'bg-paper-2 text-ink-600 hover:bg-line',
               (!doc || loading || running) && 'cursor-wait opacity-60',
             )}
@@ -219,7 +219,7 @@ export default function EarningsAnalysisControls() {
             className={cn(
               'inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-caption font-medium shadow-btn transition-[filter]',
               taskReady && !running
-                ? 'bg-ai-600 text-white hover:brightness-105'
+                ? 'bg-ai-600 text-on-accent hover:brightness-105'
                 : 'cursor-not-allowed bg-paper-2 text-ink-400',
             )}
           >

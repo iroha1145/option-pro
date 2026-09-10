@@ -29,6 +29,7 @@ import {
   type MacroModuleId,
 } from '@/api/modules/macro';
 import { useColorMode } from '@/hooks/useColorMode.ts';
+import { useAppearance } from '@/hooks/useAppearance.ts';
 import { t } from '../../../i18n/core.ts';
 
 export const HISTORY_RANGES = [
@@ -75,10 +76,12 @@ export default function MacroHistoryChart({
 }) {
   const [shownModules, setShownModules] = useState<MacroModuleId[]>([]);
   const colorMode = useColorMode();
+  const appearance = useAppearance();
 
   const option = useMemo(() => {
-    // 图表构造器读取 CSS 涨跌色，配色模式变化时需重新取值。
+    // 图表构造器读取涨跌色与浅/深外观，变化时需重新取值。
     void colorMode;
+    void appearance;
     const dates = points.map((point) => point.date);
     const basisByDate = new Map(points.map((point) => [point.date, point.historyBasis]));
     const regimeByDate = new Map(points.map((point) => [point.date, point.regime]));
@@ -177,7 +180,7 @@ export default function MacroHistoryChart({
       yAxis: valueAxis({ min: 0, max: 100, interval: 25 }),
       series,
     };
-  }, [points, modules, shownModules, colorMode]);
+  }, [points, modules, shownModules, colorMode, appearance]);
 
   return (
     <section className="card-surface p-5" aria-label={t("宏观环境历史")}>

@@ -24,6 +24,7 @@ import {
 } from '@/lib/chart';
 import { InsightFrame } from '@/components/shared/InsightCard';
 import { useColorMode } from '@/hooks/useColorMode.ts';
+import { useAppearance } from '@/hooks/useAppearance.ts';
 import { t } from '../../i18n/core.ts';
 import { signed } from './ctaMeta';
 
@@ -108,11 +109,13 @@ function historyOption(history: { date: string; position: number }[]): ChartOpti
 
 export default function PositionHistoryChart({ history }: { history: { date: string; position: number }[] }) {
   const colorMode = useColorMode();
+  const appearance = useAppearance();
   const option = useMemo(() => {
-    // 图表构造器读取 CSS 涨跌色，配色模式变化时需重新取值。
+    // 图表构造器读取涨跌色与浅/深外观，变化时需重新取值。
     void colorMode;
+    void appearance;
     return historyOption(history);
-  }, [history, colorMode]);
+  }, [history, colorMode, appearance]);
   if (!option) return <p className="mt-2 text-caption text-ink-400">{t('暂无数据')}</p>;
   const last = history[history.length - 1];
   return (

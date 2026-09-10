@@ -11,7 +11,7 @@ export type IconName =
   | 'arrow-up-right' | 'arrow-down-right' | 'external' | 'chevron-down' | 'chevron-right'
   | 'dots-grid' | 'flame-line' | 'spark-ai' | 'shield' | 'target' | 'flag' | 'x' | 'plus'
   | 'refresh' | 'wallet-gauge' | 'doc-quote' | 'logout' | 'arrow-up' | 'arrow-down' | 'minus'
-  | 'check' | 'menu' | 'list' | 'cards' | 'languages'
+  | 'check' | 'menu' | 'list' | 'cards' | 'languages' | 'display'
   | 'trend-line' | 'ray-right' | 'channel' | 'rect' | 'fib' | 'text-note'
   | 'lock' | 'unlock' | 'eye' | 'eye-off' | 'undo' | 'redo' | 'expand' | 'compress';
 
@@ -95,6 +95,12 @@ const PATHS: Record<IconName, ReactElement> = {
     <>
       <path d="M19.4 13.9A7.6 7.6 0 1 1 10.1 4.6a6.2 6.2 0 0 0 9.3 9.3Z" />
       <path d="M17.6 3.6l.5 1.3 1.3.5-1.3.5-.5 1.3-.5-1.3-1.3-.5 1.3-.5.5-1.3Z" />
+    </>
+  ),
+  display: (
+    <>
+      <rect x="3.4" y="5" width="17.2" height="11.2" rx="1.8" />
+      <path d="M8.2 19.4h7.6M12 16.2v3.2" />
     </>
   ),
   'arrow-up-right': <path d="M6.8 17.2 17.2 6.8M8.1 6.6h9.3v9.3" />,

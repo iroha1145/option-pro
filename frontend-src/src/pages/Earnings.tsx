@@ -468,7 +468,7 @@ export default function Earnings() {
           </p>
           <button
             onClick={() => q.refresh()}
-            className="shrink-0 rounded-sm border border-warn-600/40 px-2 py-1 text-caption text-warn-600 transition-colors hover:bg-warn-600 hover:text-white"
+            className="shrink-0 rounded-sm border border-warn-600/40 px-2 py-1 text-caption text-warn-600 transition-colors hover:bg-warn-600 hover:text-on-accent"
           >
             {t('重试')}
           </button>
@@ -481,7 +481,7 @@ export default function Earnings() {
           <p className="text-caption text-warn-600">{t('更新失败，显示上次数据。')}</p>
           <button
             onClick={() => void onRefresh()}
-            className="shrink-0 rounded-sm border border-warn-600/40 px-2 py-1 text-caption text-warn-600 transition-colors hover:bg-warn-600 hover:text-white"
+            className="shrink-0 rounded-sm border border-warn-600/40 px-2 py-1 text-caption text-warn-600 transition-colors hover:bg-warn-600 hover:text-on-accent"
           >
             {t('重试')}
           </button>
@@ -531,9 +531,9 @@ export default function Earnings() {
                 <button
                   onClick={() => q.refresh()}
                   disabled={q.refreshing}
-                  className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105 disabled:opacity-60"
+                  className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105 disabled:opacity-60"
                 >
-                  {q.refreshing && <span className="size-3.5 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
+                  {q.refreshing && <span className="size-3.5 animate-spin rounded-full border-2 border-on-accent/40 border-t-on-accent" />}
                   {t('重试')}
                 </button>
               }
@@ -620,7 +620,7 @@ export default function Earnings() {
                   <button
                     onClick={() => q.refresh()}
                     disabled={q.refreshing}
-                    className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105 disabled:opacity-60"
+                    className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105 disabled:opacity-60"
                   >
                     {t('重试')}
                   </button>

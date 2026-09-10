@@ -92,7 +92,7 @@ export default function DensityStrip({ items, onJumpDay }: DensityStripProps) {
                     className={cn(
                       'w-full rounded-t-[2px] transition-colors duration-fast',
                       n > 0 ? 'bg-brand-400 group-hover:bg-brand-600' : 'bg-line',
-                      isToday && 'ring-1 ring-brand-600 ring-offset-1',
+                      isToday && 'ring-1 ring-brand-600 ring-offset-1 ring-offset-card',
                     )}
                     style={{ height: n > 0 ? `${Math.max(12, (n / max) * 100)}%` : '2px' }}
                     initial={{ scaleY: 0, transformOrigin: 'bottom' }}

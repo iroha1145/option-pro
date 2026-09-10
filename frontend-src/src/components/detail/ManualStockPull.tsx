@@ -122,10 +122,10 @@ export default function ManualStockPull({
           type="button"
           onClick={() => void pull()}
           disabled={running}
-          className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 px-3 py-1.5 text-caption font-medium text-white shadow-btn-hi transition-[filter,opacity] duration-fast hover:brightness-105 disabled:cursor-wait disabled:opacity-70"
+          className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 px-3 py-1.5 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter,opacity] duration-fast hover:brightness-105 disabled:cursor-wait disabled:opacity-70"
         >
           {running ? (
-            <span className="size-3 animate-spin rounded-full border-2 border-white/35 border-t-white" aria-hidden="true" />
+            <span className="size-3 animate-spin rounded-full border-2 border-on-accent/35 border-t-on-accent" aria-hidden="true" />
           ) : (
             <Icon name="refresh" size={12} />
           )}
@@ -147,11 +147,11 @@ export default function ManualStockPull({
         onClick={() => void pull()}
         disabled={running}
         className={cn(
-          'inline-flex min-h-11 w-full items-center justify-center gap-2 whitespace-normal rounded-md bg-brand-600 px-3 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter,opacity] duration-fast hover:brightness-105 disabled:cursor-wait disabled:opacity-70 sm:w-auto',
+          'inline-flex min-h-11 w-full items-center justify-center gap-2 whitespace-normal rounded-md bg-brand-600 px-3 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter,opacity] duration-fast hover:brightness-105 disabled:cursor-wait disabled:opacity-70 sm:w-auto',
         )}
       >
         {running ? (
-          <span className="size-3.5 animate-spin rounded-full border-2 border-white/35 border-t-white" aria-hidden="true" />
+          <span className="size-3.5 animate-spin rounded-full border-2 border-on-accent/35 border-t-on-accent" aria-hidden="true" />
         ) : (
           <Icon name="refresh" size={13} />
         )}

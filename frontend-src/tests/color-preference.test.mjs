@@ -10,12 +10,14 @@ import path from 'node:path';
 
 import {
   PRICE_COLORS,
+  PRICE_COLORS_DARK,
   applyColorMode,
   directionColors,
   getColorMode,
   setColorMode,
   subscribeColorMode,
 } from '../src/lib/colorPreference.ts';
+import { setThemePreference } from '../src/lib/themePreference.ts';
 import { CH, heatColor, withAlpha } from '../src/lib/chart.ts';
 import { CHART_MONO_FONT } from '../src/lib/chartFonts.ts';
 
@@ -39,6 +41,7 @@ function codeOf(text) {
 
 test.afterEach(() => {
   setColorMode('western');
+  setThemePreference('system');
 });
 
 test('directionColors 在亚洲习惯下对调涨跌 hex', () => {
@@ -67,6 +70,15 @@ test('CH.up600 / CH.down600 跟随当前色彩习惯', () => {
   applyColorMode('asian');
   assert.equal(CH.up600, PRICE_COLORS.asian.up600);
   assert.equal(CH.down600, PRICE_COLORS.asian.down600);
+});
+
+test('外观切换也会通知涨跌色订阅者', () => {
+  const seen = [];
+  const stop = subscribeColorMode(() => seen.push(directionColors().up600));
+  setThemePreference('dark');
+  assert.equal(directionColors().up600, PRICE_COLORS_DARK.western.up600);
+  assert.deepEqual(seen, [PRICE_COLORS_DARK.western.up600]);
+  stop();
 });
 
 test('heatColor 在亚洲习惯下翻转涨跌两端', () => {
@@ -105,6 +117,9 @@ test('Tailwind up/down 色阶从 CSS 变量生成，而不是编译期写死 hex
   const config = await source('../tailwind.config.js');
   assert.match(config, /up:\s*\{[^}]*var\(--up-600\)/s);
   assert.match(config, /down:\s*\{[^}]*var\(--down-600\)/s);
+  assert.match(config, /token\('--paper'\)/);
+  assert.match(config, /token\('--ink-900'\)/);
+  assert.match(config, /token\('--brand-600'\)/);
   assert.doesNotMatch(config, /up:\s*\{[^}]*#0E9F6E/s);
   assert.doesNotMatch(config, /down:\s*\{[^}]*#E5484D/s);
 });
@@ -123,10 +138,10 @@ test('K 线 / 情景 / 仓位 / 迷你 K 在色彩习惯变化时重建 option',
   const scenario = codeOf(await source('components/cta/ScenarioChart.tsx'));
   const history = codeOf(await source('components/cta/PositionHistoryChart.tsx'));
   const lead = codeOf(await source('components/breakouts/LeadBigCard.tsx'));
-  assert.match(kline, /\[data, range, mode, prevClose, overlay, extraMarks, analysisOption, colorMode\]/);
-  assert.match(scenario, /\[row, colorMode\]/);
-  assert.match(history, /\[history, colorMode\]/);
-  assert.match(lead, /\[data, colorMode\]/);
+  assert.match(kline, /\[data, range, mode, prevClose, overlay, extraMarks, analysisOption, colorMode, appearance\]/);
+  assert.match(scenario, /\[row, colorMode, appearance\]/);
+  assert.match(history, /\[history, colorMode, appearance\]/);
+  assert.match(lead, /\[data, colorMode, appearance\]/);
 });
 
 /* 上一条按名点了四张图；这条是镜子：任何在渲染期读全局涨跌习惯的组件都必须订阅。

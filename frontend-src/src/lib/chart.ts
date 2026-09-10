@@ -27,6 +27,48 @@ import type {
 } from 'echarts/components';
 import { CHART_MONO_FONT, CHART_TEXT_FONT } from './chartFonts.ts';
 import { directionColors, getColorMode } from './colorPreference.ts';
+import { getAppearance, type Appearance } from './themePreference.ts';
+
+const CHART_SURFACE = {
+  light: {
+    ink400: '#626F8B',
+    ink300: '#B7BFD3',
+    lineChart: '#EDF0F4',
+    brand600: '#2E46E0',
+    brand500: '#3B59F2',
+    brand400: '#6B82FF',
+    warn600: '#E8930C',
+    ai600: '#0B7285',
+    tooltipBg: '#FFFFFF',
+    tooltipFg: '#3D4A68',
+    insightTooltipFg: '#2A3550',
+    endpointRing: '#FFFFFF',
+    axisPointer: 'rgba(13,22,38,.26)',
+    stipple: 'rgba(46,70,224,.20)',
+    stippleFill: 'rgba(46,70,224,.10)',
+  },
+  dark: {
+    ink400: '#A0A8B5',
+    ink300: '#6B7382',
+    lineChart: '#353944',
+    brand600: '#6B82FF',
+    brand500: '#8B9CFF',
+    brand400: '#A8B4FF',
+    warn600: '#FACC15',
+    ai600: '#4EC4D4',
+    tooltipBg: '#24262D',
+    tooltipFg: '#B0B6C0',
+    insightTooltipFg: '#F1F3F5',
+    endpointRing: '#24262D',
+    axisPointer: 'rgba(241,243,245,.28)',
+    stipple: 'rgba(107,130,255,.32)',
+    stippleFill: 'rgba(107,130,255,.16)',
+  },
+} as const;
+
+function surface(appearance: Appearance = getAppearance()) {
+  return CHART_SURFACE[appearance];
+}
 
 echarts.use([
   LineChart, BarChart, CandlestickChart, PieChart, CustomChart,
@@ -55,22 +97,26 @@ export type ChartOption = ComposeOption<
 /** echarts.init 返回的实例类型（供交互层 convertFromPixel/zr 事件使用） */
 export type EChartsInstance = ReturnType<typeof echarts.init>;
 
-/* ---------- 调色（与 CSS 变量一致；up/down 随涨跌色彩习惯） ---------- */
+/* ---------- 调色（与 CSS 变量一致；up/down 随涨跌色彩习惯，其余随浅/深外观） ---------- */
 export const CH = {
-  ink400: '#626F8B',
-  ink300: '#B7BFD3',
-  lineChart: '#EDF0F4', // v8.1 随纸面降温
-  brand600: '#2E46E0',
-  brand500: '#3B59F2',
-  brand400: '#6B82FF',
+  get ink400() { return surface().ink400; },
+  get ink300() { return surface().ink300; },
+  get lineChart() { return surface().lineChart; },
+  get brand600() { return surface().brand600; },
+  get brand500() { return surface().brand500; },
+  get brand400() { return surface().brand400; },
   get up600() {
     return directionColors().up600;
   },
   get down600() {
     return directionColors().down600;
   },
-  warn600: '#E8930C',
-  ai600: '#0B7285', // v8.1 弃 AI 紫 → 青瓷 teal（与 CSS 变量一致）
+  get warn600() { return surface().warn600; },
+  get ai600() { return surface().ai600; },
+  get tooltipBg() { return surface().tooltipBg; },
+  get tooltipFg() { return surface().tooltipFg; },
+  get insightTooltipFg() { return surface().insightTooltipFg; },
+  get endpointRing() { return surface().endpointRing; },
 };
 
 /* ---------- 通用配置 ---------- */
@@ -115,12 +161,12 @@ export function glassTooltip(overrides: Record<string, unknown> = {}) {
     trigger: 'axis' as const,
     transitionDuration: 0,
     className: 'cloud-chart-tooltip',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: CH.tooltipBg,
     /* tooltip 为 DOM 渲染：边框跟随 --line 令牌（线条细化后自动同步） */
     borderColor: 'var(--line)',
     borderWidth: 1,
     padding: [8, 12],
-    textStyle: { color: '#3D4A68', fontSize: 12, fontFamily: CHART_TEXT_FONT },
+    textStyle: { color: CH.tooltipFg, fontSize: 12, fontFamily: CHART_TEXT_FONT },
     extraCssText:
       'box-shadow:var(--popover-shadow);border-radius:9px;font-variant-numeric:tabular-nums;transition:opacity 140ms ease-out;',
     axisPointer: {
@@ -219,7 +265,7 @@ export function insightEndpointMark(color: string, index: number, value: number)
     symbolSize: 6,
     silent: true,
     label: { show: false },
-    itemStyle: { color, borderColor: '#FFFFFF', borderWidth: 1.5 },
+    itemStyle: { color, borderColor: CH.endpointRing, borderWidth: 1.5 },
     data: [{ coord: [index, value] }],
   };
 }
@@ -289,11 +335,11 @@ export function insightTooltip(overrides: Record<string, unknown> = {}) {
     trigger: 'axis' as const,
     transitionDuration: 0,
     className: 'cloud-chart-tooltip',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: CH.tooltipBg,
     borderColor: 'var(--line)',
     borderWidth: 1,
     padding: [9, 12],
-    textStyle: { color: '#2A3550', fontSize: 12, fontFamily: CHART_TEXT_FONT },
+    textStyle: { color: CH.insightTooltipFg, fontSize: 12, fontFamily: CHART_TEXT_FONT },
     extraCssText:
       'box-shadow:var(--popover-shadow);border-radius:9px;transition:opacity 140ms ease-out;' +
       'font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1;',
@@ -310,7 +356,7 @@ export function insightTooltip(overrides: Record<string, unknown> = {}) {
     ],
     axisPointer: {
       type: 'line' as const,
-      lineStyle: { color: 'rgba(13,22,38,.26)', width: 1 },
+      lineStyle: { color: surface().axisPointer, width: 1 },
     },
     ...overrides,
   };
@@ -318,19 +364,22 @@ export function insightTooltip(overrides: Record<string, unknown> = {}) {
 
 /* ---------- 点阵面积图 pattern（§6-2） ---------- */
 let stippleCanvas: HTMLCanvasElement | null = null;
+let stippleAppearance: Appearance | null = null;
 export function stipplePattern(): HTMLCanvasElement | null {
   if (typeof document === 'undefined') return null;
-  if (stippleCanvas) return stippleCanvas;
+  const appearance = getAppearance();
+  if (stippleCanvas && stippleAppearance === appearance) return stippleCanvas;
   const c = document.createElement('canvas');
   c.width = 6;
   c.height = 6;
   const ctx = c.getContext('2d');
   if (!ctx) return null;
-  ctx.fillStyle = 'rgba(46,70,224,.20)';
+  ctx.fillStyle = surface(appearance).stipple;
   ctx.beginPath();
   ctx.arc(3, 3, 1.1, 0, Math.PI * 2);
   ctx.fill();
   stippleCanvas = c;
+  stippleAppearance = appearance;
   return c;
 }
 
@@ -339,7 +388,7 @@ export function stippleAreaStyle(): LineSeriesOption['areaStyle'] {
   const pattern = stipplePattern();
   return pattern
     ? { color: { image: pattern, repeat: 'repeat' } as unknown as string, opacity: 1 }
-    : { color: 'rgba(46,70,224,.10)' };
+    : { color: surface().stippleFill };
 }
 
 /* ---------- 斜纹柱 decal（§6-3） ---------- */
@@ -356,28 +405,33 @@ export function hatchDecal(color = CH.brand600) {
 }
 
 /* ---------- 涨跌热力色阶（§1.7 连续映射） ---------- */
-const HEAT_STOPS: { pct: number; rgb: [number, number, number] }[] = [
-  { pct: -3, rgb: [214, 53, 59] },
-  { pct: -1.5, rgb: [240, 131, 127] },
-  { pct: 0, rgb: [241, 239, 232] },
-  { pct: 1.5, rgb: [124, 207, 169] },
-  { pct: 3, rgb: [14, 159, 110] },
-];
+function heatStops(): { pct: number; rgb: [number, number, number] }[] {
+  const mid: [number, number, number] = getAppearance() === 'dark' ? [33, 36, 43] : [241, 239, 232];
+  return [
+    { pct: -3, rgb: [214, 53, 59] },
+    { pct: -1.5, rgb: [240, 131, 127] },
+    { pct: 0, rgb: mid },
+    { pct: 1.5, rgb: [124, 207, 169] },
+    { pct: 3, rgb: [14, 159, 110] },
+  ];
+}
 
 export function heatColor(pct: number): string {
   /* 热力两端是「涨/跌」不是固定绿/红：亚洲习惯下翻转符号，色阶两端对调。 */
   const signed = getColorMode() === 'asian' ? -pct : pct;
   const clamped = Math.max(-3, Math.min(3, signed));
-  for (let i = 0; i < HEAT_STOPS.length - 1; i++) {
-    const a = HEAT_STOPS[i];
-    const b = HEAT_STOPS[i + 1];
+  const stops = heatStops();
+  for (let i = 0; i < stops.length - 1; i++) {
+    const a = stops[i];
+    const b = stops[i + 1];
     if (clamped >= a.pct && clamped <= b.pct) {
       const t = (clamped - a.pct) / (b.pct - a.pct);
       const mix = a.rgb.map((v, k) => Math.round(v + (b.rgb[k] - v) * t));
       return `rgb(${mix[0]},${mix[1]},${mix[2]})`;
     }
   }
-  return 'rgb(241,239,232)';
+  const mid = stops[2].rgb;
+  return `rgb(${mid[0]},${mid[1]},${mid[2]})`;
 }
 
 /** 强度分色阶（§6-5） */

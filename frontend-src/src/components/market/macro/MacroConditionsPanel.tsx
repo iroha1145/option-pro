@@ -202,7 +202,7 @@ export default function MacroConditionsPanel({
                 type="button"
                 onClick={() => conditionsQ.refresh()}
                 disabled={conditionsQ.refreshing}
-                className="rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105 disabled:opacity-60"
+                className="rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105 disabled:opacity-60"
               >
                 {t('重试')}
               </button>

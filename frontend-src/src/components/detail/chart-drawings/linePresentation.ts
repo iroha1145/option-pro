@@ -1,7 +1,14 @@
+import { drawingPaint, drawingSurface } from './drawingAppearance.ts';
+
 /** Chart ink is independent of the candle up/down preference. Values are CSS pixels. */
 export const LINE_INK = Object.freeze({
-  support: '#0E647F', resistance: '#8D299B', channel: '#4F46E5',
-  neutral: '#52617A', manual: '#2E46E0', surface: '#FFFFFF', gap: '#B87821',
+  get support() { return drawingPaint('#0E647F'); },
+  get resistance() { return drawingPaint('#8D299B'); },
+  get channel() { return drawingPaint('#4F46E5'); },
+  get neutral() { return drawingPaint('#52617A'); },
+  get manual() { return drawingPaint('#2E46E0'); },
+  get surface() { return drawingSurface(1); },
+  get gap() { return drawingPaint('#B87821'); },
 });
 interface Point { x: number; y: number }
 interface Segment { a: Point; b: Point }
@@ -48,11 +55,11 @@ export function normalizePatternSegments(input: Segment[], kind: string): Segmen
   return segments;
 }
 
-/** Preserve explicitly saved manual widths. A small white keyline separates intersecting ink. */
+/** Preserve explicitly saved manual widths. A surface-colored halo separates intersecting ink. */
 export function manualLineInk(color: string, width: number, dash: string | number[] = 'solid') {
-  return { color, width: Number.isFinite(width) ? Math.max(1, Math.min(4, width)) : 3,
+  return { color: drawingPaint(color), width: Number.isFinite(width) ? Math.max(1, Math.min(4, width)) : 3,
     type: dash, opacity: 1, cap: 'round' as const, join: 'round' as const,
-    shadowColor: 'rgba(255,255,255,0.95)', shadowBlur: 3 };
+    shadowColor: drawingSurface(0.95), shadowBlur: 3 };
 }
 
 /** Extend only to existing chart bars, never through a wedge apex or into negative prices. */
@@ -167,7 +174,7 @@ export function renderPatternInk(
       span: [[segment.a.x, segment.a.y], [target.x, target.y]],
       position: 'insideMiddleTop', distance: 4, fontSize: 11, lineHeight: 14,
       priority: (pattern.labelPriority ?? 0) + ink.labelPriority,
-      color, backgroundColor: 'rgba(255,255,255,0.97)', borderColor: color,
+      color, backgroundColor: drawingSurface(0.97), borderColor: color,
       borderWidth: 0.5, borderRadius: 4, padding: [2, 5],
     } : { show: false };
     out.lines.push([

@@ -190,7 +190,7 @@ export default function HistoryRail({
             action={
               <button
                 onClick={onRetry}
-                className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105"
+                className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105"
               >
                 {t('重试')}
               </button>
@@ -204,7 +204,7 @@ export default function HistoryRail({
             action={
               <button
                 onClick={onRetry}
-                className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105"
+                className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105"
               >
                 {t('重新加载')}
               </button>

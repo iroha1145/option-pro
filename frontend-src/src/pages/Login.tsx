@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils';
 import { DUR_SECTION } from '@/lib/motion';
 import { useCatalogShake } from '@/lib/transitions';
 import Icon from '@/components/icons';
+import ThemeSwitcher from '@/components/ThemeSwitcher';
 import SelectionViewport from '@/components/shared/SelectionViewport';
 import type { IconName } from '@/components/icons';
 import { t } from '../i18n/core.ts';
@@ -69,7 +70,7 @@ function LoginMotif({ className }: { className?: string }) {
       <svg viewBox="0 0 1200 900" fill="none" className="h-auto w-full">
         <defs>
           <pattern id="login-motif-dots" width="18" height="18" patternUnits="userSpaceOnUse">
-            <circle cx="4" cy="4" r="1.6" fill="#182338" opacity="0.32" />
+            <circle cx="4" cy="4" r="1.6" fill="var(--ink-800)" opacity="0.32" />
           </pattern>
           <clipPath id="login-globe-clip">
             <circle cx="430" cy="430" r="238" />
@@ -78,17 +79,17 @@ function LoginMotif({ className }: { className?: string }) {
 
         <g clipPath="url(#login-globe-clip)">
           <rect x="192" y="192" width="476" height="476" fill="url(#login-motif-dots)" />
-          <g stroke="#182338" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="#F6F7F9">
+          <g stroke="var(--ink-800)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="var(--paper)">
             <path d="M300 300c34-26 84-30 112-12 20 13 14 38-6 48-26 13-20 40-44 52-22 11-52-2-62-26-9-21-18-44 0-62Z" />
             <path d="M430 480c26-10 58 0 64 24 5 22-14 44-38 42-22-2-38-22-36-42 1-10 4-19 10-24Z" />
             <path d="M500 330c30-16 72-12 90 10 14 18 2 42-22 48-28 7-62-6-72-28-5-11-3-23 4-30Z" />
           </g>
         </g>
-        <circle cx="430" cy="430" r="238" stroke="#182338" strokeWidth="1.6" fill="none" />
-        <ellipse cx="430" cy="430" rx="238" ry="96" stroke="#182338" strokeWidth="1.6" fill="none" opacity="0.45" />
-        <path d="M430 192v476" stroke="#182338" strokeWidth="1.6" opacity="0.3" />
+        <circle cx="430" cy="430" r="238" stroke="var(--ink-800)" strokeWidth="1.6" fill="none" />
+        <ellipse cx="430" cy="430" rx="238" ry="96" stroke="var(--ink-800)" strokeWidth="1.6" fill="none" opacity="0.45" />
+        <path d="M430 192v476" stroke="var(--ink-800)" strokeWidth="1.6" opacity="0.3" />
 
-        <g stroke="#182338" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <g stroke="var(--ink-800)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
           <ellipse cx="880" cy="640" rx="118" ry="30" />
           <path d="M762 640v-44M998 640v-44" opacity="0.8" />
           <ellipse cx="880" cy="596" rx="118" ry="30" />
@@ -97,7 +98,7 @@ function LoginMotif({ className }: { className?: string }) {
           <path d="M788 500v-38M972 500v-38" opacity="0.8" />
           <ellipse cx="880" cy="462" rx="92" ry="24" />
         </g>
-        <g stroke="#2E46E0" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        <g stroke="var(--brand-600)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="880" cy="392" r="42" />
           <path d="M880 350l22 24-21 20-23-19 22-25Z" opacity="0.85" />
         </g>
@@ -107,23 +108,23 @@ function LoginMotif({ className }: { className?: string }) {
           className="login-kline-loop"
           d="M150 640 300 560l96 44 120-110 108 56 130-96 120 40 76-60 74-54"
           pathLength={1000}
-          stroke="#2E46E0"
+          stroke="var(--brand-600)"
           strokeWidth="2.2"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
-        <g stroke="#2E46E0" strokeWidth="1.6">
+        <g stroke="var(--brand-600)" strokeWidth="1.6">
           <path d="M486 512v-20M486 556v16" />
-          <rect x="476" y="492" width="20" height="64" rx="3" fill="#F6F7F9" />
+          <rect x="476" y="492" width="20" height="64" rx="3" fill="var(--paper)" />
           <path d="M716 452v-18M716 508v14" />
-          <rect x="706" y="434" width="20" height="74" rx="3" fill="#2E46E0" fillOpacity="0.14" />
+          <rect x="706" y="434" width="20" height="74" rx="3" fill="var(--brand-600)" fillOpacity="0.14" />
         </g>
         {/* 末端 up 绿点缀 + 拖尾涟漪 */}
-        <path d="M1074 340l-2 22M1074 340l-20 6" stroke="#0E9F6E" strokeWidth="2.2" strokeLinecap="round" />
-        <circle cx="1074" cy="340" r="5" fill="#0E9F6E" />
-        <circle className="login-kline-blip" cx="1074" cy="340" r="14" fill="none" stroke="#0E9F6E" strokeWidth="1.6" />
+        <path d="M1074 340l-2 22M1074 340l-20 6" stroke="var(--up-600)" strokeWidth="2.2" strokeLinecap="round" />
+        <circle cx="1074" cy="340" r="5" fill="var(--up-600)" />
+        <circle className="login-kline-blip" cx="1074" cy="340" r="14" fill="none" stroke="var(--up-600)" strokeWidth="1.6" />
 
-        <g stroke="#182338" strokeWidth="1.6" strokeLinecap="round" opacity="0.5">
+        <g stroke="var(--ink-800)" strokeWidth="1.6" strokeLinecap="round" opacity="0.5">
           <path d="M150 760h120M150 778h72" />
         </g>
       </svg>
@@ -308,7 +309,10 @@ export default function Login() {
 
   if (loading) {
     return (
-      <div className="dot-grid-dense flex min-h-[100dvh] items-center justify-center bg-paper">
+      <div className="dot-grid-dense relative flex min-h-[100dvh] items-center justify-center bg-paper">
+        <div className="absolute right-4 top-4 z-20 md:right-8 md:top-6">
+          <ThemeSwitcher />
+        </div>
         <div className="size-8 animate-spin rounded-full border-2 border-brand-100 border-t-brand-600" aria-label={t("加载中")} />
       </div>
     );
@@ -318,16 +322,19 @@ export default function Login() {
     /* 已登录不再无条件弹走：客户账号此前被这里立刻 replace 回 /watchlist，
        整个 UI 没有任何地方能结束会话或换账号。 */
     return (
-      <div className="dot-grid-dense flex min-h-[100dvh] items-center justify-center bg-paper px-4">
+      <div className="dot-grid-dense relative flex min-h-[100dvh] items-center justify-center bg-paper px-4">
+        <div className="absolute right-4 top-4 z-20 md:right-8 md:top-6">
+          <ThemeSwitcher />
+        </div>
         <div className="card-surface w-full max-w-[360px] p-6 text-center">
           <p className="eyebrow">{t('当前会话')}</p>
-          <p className="mt-2 text-h3 text-ink-800">
+          <h1 className="mt-2 text-h3 text-ink-800">
             {isOwner ? t('管理员已登录') : t('已登录 {name}', { name: signedInName ?? '' })}
-          </p>
+          </h1>
           <div className="mt-5 flex flex-col gap-2.5">
             <button
               onClick={() => navigate(fromPath ?? '/watchlist', { replace: true })}
-              className="h-10 rounded-md bg-brand-600 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105"
+              className="h-10 rounded-md bg-brand-600 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105"
             >
               {t('继续浏览')}
             </button>
@@ -345,6 +352,9 @@ export default function Login() {
 
   return (
     <div id="login-root" className="dot-grid-dense relative min-h-[100dvh] overflow-hidden bg-paper">
+      <div className="absolute right-4 top-4 z-20 md:right-8 md:top-6">
+        <ThemeSwitcher />
+      </div>
       {/* v8 清新：顶部右侧极淡 pastel 群青晕染（Tally 感，不动结构） */}
       <div
         className="pointer-events-none absolute inset-0"
@@ -453,7 +463,7 @@ export default function Login() {
                     aria-pressed={mode === value}
                     className={cn(
                       'relative h-8 rounded-xs text-caption font-medium transition-colors duration-fast',
-                      mode === value ? 'text-white' : 'text-ink-500 hover:text-ink-800',
+                      mode === value ? 'text-on-accent' : 'text-ink-500 hover:text-ink-800',
                     )}
                   >
                     {mode === value && (
@@ -577,7 +587,7 @@ export default function Login() {
                 type="submit"
                 disabled={serviceDown || state === 'verifying' || state === 'success'}
                 className={cn(
-                  'flex h-12 w-full items-center justify-center gap-2 rounded-md font-mono text-[14px] tracking-[0.02em] text-white shadow-btn-hi',
+                  'flex h-12 w-full items-center justify-center gap-2 rounded-md font-mono text-[14px] tracking-[0.02em] text-on-accent shadow-btn-hi',
                   'transition-[transform,filter,background-color] duration-fast',
                   state === 'success'
                     ? 'bg-up-600'
@@ -587,7 +597,7 @@ export default function Login() {
               >
                 {state === 'verifying' ? (
                   <>
-                    <span className="size-4 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden="true" />
+                    <span className="size-4 animate-spin rounded-full border-2 border-on-accent/40 border-t-on-accent" aria-hidden="true" />
                     {t('验证中…')}
                   </>
                 ) : state === 'success' ? (

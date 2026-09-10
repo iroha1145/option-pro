@@ -13,6 +13,7 @@ import { SCORE_HINTS } from '@/lib/scoreHints';
 import { SkeletonRows } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
 import { useRetryCountdown } from '@/hooks/useRetryCountdown';
+import { useAppearance } from '@/hooks/useAppearance.ts';
 import { t } from '../../i18n/core.ts';
 import SectorChips from './SectorChips';
 import type { IvMetaVm, IvRowVm } from './model';
@@ -30,6 +31,7 @@ function SourceStatusBadge({ status }: { status: keyof typeof SOURCE_STATUS_CN }
 
 /* ---------- IV rank 色阶条（低 up-600 → 中 brand-100 → 高 down-600） ---------- */
 function IvRankBar({ rank, replayKey }: { rank: number; replayKey: string }) {
+  useAppearance();
   return (
     <span className="inline-flex items-center gap-2">
       <span className="w-8 text-right font-mono text-body-s font-semibold text-ink-800 tnum">{rank}</span>
@@ -131,7 +133,7 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, meta,
                 type="button"
                 onClick={onRetry}
                 disabled={retrySeconds > 0}
-                className="flex min-h-11 items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter,opacity] hover:brightness-105 disabled:cursor-wait disabled:opacity-60"
+                className="flex min-h-11 items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter,opacity] hover:brightness-105 disabled:cursor-wait disabled:opacity-60"
               >
                 <Icon name="refresh" size={14} />
                 {retrySeconds > 0 ? t('{n} 秒后重试', { n: retrySeconds }) : t('重试')}
@@ -147,7 +149,7 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, meta,
               <button
                 type="button"
                 onClick={onRetry}
-                className="flex min-h-11 items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter,opacity] hover:brightness-105"
+                className="flex min-h-11 items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter,opacity] hover:brightness-105"
               >
                 <Icon name="refresh" size={14} />
                 {t('重新加载')}

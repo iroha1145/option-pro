@@ -124,7 +124,7 @@ function ImpactAction({ row, onSelect }: { row: EarningsRow; onSelect: () => voi
         onSelect();
       }}
       title={title}
-      className="inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md bg-ai-600 px-2.5 text-caption font-medium leading-none text-white shadow-btn transition-[filter] duration-fast hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai-600/40 focus-visible:ring-offset-2"
+      className="inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md bg-ai-600 px-2.5 text-caption font-medium leading-none text-on-accent shadow-btn transition-[filter] duration-fast hover:brightness-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai-600/40 focus-visible:ring-offset-2 focus-visible:ring-offset-card"
       aria-label={`${row.ticker} ${title}`}
     >
       <AnalysisIcon size={14} />
@@ -177,7 +177,7 @@ export default function EarningsList({
               onShowAll ? (
                 <button
                   onClick={onShowAll}
-                  className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105"
+                  className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105"
                 >
                   {t('查看全部公司')}
                   <Icon name="chevron-right" size={13} />
@@ -200,7 +200,7 @@ export default function EarningsList({
             onNextWeek ? (
               <button
                 onClick={onNextWeek}
-                className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-white shadow-btn-hi transition-[filter] hover:brightness-105"
+                className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105"
               >
                 {t('查看下周')}
                 <Icon name="chevron-right" size={13} />
@@ -266,7 +266,7 @@ export default function EarningsList({
                   {fmtMDCN(g.date)} · {weekdayCN(g.date)}
                 </span>
                 {isToday && (
-                  <span className="rounded-xs bg-brand-600 px-1.5 py-px text-[10px] font-semibold leading-4 text-white">{t('今天')}</span>
+                  <span className="rounded-xs bg-brand-600 px-1.5 py-px text-[10px] font-semibold leading-4 text-on-accent">{t('今天')}</span>
                 )}
               </p>
               <p className="font-mono text-micro text-ink-400 tnum">
