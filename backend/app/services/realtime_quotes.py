@@ -585,6 +585,12 @@ class QuoteHub:
             self._radar_symbols = list(dict.fromkeys(symbols))
             self._radar_failures = 0
             self._set_error("inventory", None)
+            # A successful inventory read can retire a signal even while its
+            # quote remains subscribed by an open stock page.
+            radar_providers = {_provider_symbol(symbol) for symbol in self._radar_symbols}
+            for source in list(self._errors):
+                if source.startswith("trade:") and _provider_symbol(source[6:]) not in radar_providers:
+                    self._set_error(source, None)
             self._allocate()
         except RadarInventoryUnavailable as exc:
             # The adapter also serves trade-triggered initial/conflict reads;
