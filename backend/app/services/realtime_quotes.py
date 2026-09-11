@@ -11,6 +11,7 @@ import asyncio
 from collections import OrderedDict, deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from functools import lru_cache
 import fcntl
 import hashlib
 import json
@@ -38,20 +39,35 @@ from app.services.market_calendar import ET, early_close_minutes, is_trading_day
 TOP_SYMBOLS = ("SPY", "QQQ", "DIA", "IWM")
 MAX_CLIENT_SYMBOLS = 200
 MAX_CLIENTS = 256
+RESERVED_OWNER_SLOTS = 8
 MAX_CACHED_QUOTES = 2048
 MAX_RADAR_EVENTS = 512
 RADAR_MAX_RETRY_SECONDS = 30.0
+RADAR_IDLE_CLOSED_SECONDS = 30.0
+REST_MIN_BACKOFF = 60.0
+REST_MAX_BACKOFF = 3600.0
 # Fault sources that describe reaching the provider, not the radar's own state.
 TRANSPORT_SOURCES = frozenset({"stream", "rest"})
 _SYMBOL = re.compile(r"^[A-Z][A-Z0-9.-]{0,14}$")
 _US_CLASS_ALIAS = re.compile(r"^([A-Z]{1,10})-([A-Z])$")
+_AUTH_ERROR = re.compile(r"invalid api key|unauthorized|forbidden|authentication", re.I)
+_INVALID_SYMBOL_ERROR = re.compile(r"invalid symbol", re.I)
 # Finnhub's official websocket documentation links this condition table:
 # https://docs.google.com/spreadsheets/d/1PUxiSWPHSODbaTaoL2Vef6DgU-yFtlRGZf19oBb9Hp0
 # Only unconditional consolidated Update Last=Yes conditions qualify. Codes
 # requiring participant history are not safe to infer from a partial feed.
 _LAST_PRICE_CONDITIONS = frozenset({"1", "2", "4", "6", "7", "8", "13", "14", "19", "23", "28", "29", "33", "35"})
+_logger = logging.getLogger(__name__)
 _transport_logger = logging.Logger("option_pro.quotes.transport")
 _transport_logger.disabled = True  # Never log a websocket URL containing a key.
+
+
+def _observe_task(task: asyncio.Task[Any]) -> None:
+    if task.cancelled():
+        return
+    exc = task.exception()
+    if exc is not None:
+        _logger.warning("quotes_task_failed error_type=%s", type(exc).__name__)
 
 
 def _utcnow() -> datetime:
@@ -87,14 +103,30 @@ def market_session(at: datetime) -> str:
     local = at.astimezone(ET)
     if not is_trading_day(local.date()):
         return "closed"
+    close = early_close_minutes(local.date()) or 16 * 60
     minutes = local.hour * 60 + local.minute
     if 4 * 60 <= minutes < 9 * 60 + 30:
         return "premarket"
-    if 9 * 60 + 30 <= minutes < (early_close_minutes(local.date()) or 16 * 60):
+    if 9 * 60 + 30 <= minutes < close:
         return "regular"
-    if (early_close_minutes(local.date()) or 16 * 60) <= minutes < 20 * 60:
+    # The closing print itself is still the regular session. Post-market
+    # starts at the next second so 16:00:00 ET (or 13:00:00 on a half-day)
+    # is not labeled as after-hours.
+    if minutes == close and local.second == 0 and local.microsecond == 0:
+        return "regular"
+    if close <= minutes < 20 * 60:
         return "postmarket"
     return "closed"
+
+
+def _is_official_close_print(at: datetime) -> bool:
+    """True when a REST print can stand in as that day's regular close."""
+    local = at.astimezone(ET)
+    if not is_trading_day(local.date()):
+        return False
+    close = early_close_minutes(local.date()) or 16 * 60
+    minutes = local.hour * 60 + local.minute
+    return close - 2 <= minutes <= close
 
 
 def normalize_symbols(symbols: list[str] | tuple[str, ...], *, limit: int = MAX_CLIENT_SYMBOLS) -> list[str]:
@@ -114,6 +146,7 @@ def normalize_symbols(symbols: list[str] | tuple[str, ...], *, limit: int = MAX_
     return result
 
 
+@lru_cache(maxsize=4096)
 def _provider_symbol(symbol: str) -> str:
     # Yahoo-style US class shares use a hyphen; Finnhub uses a dot. Keep this
     # deliberately narrow so exchange suffixes and preferred-share formats
@@ -166,6 +199,7 @@ class QuoteHub:
         self._quotes: OrderedDict[str, dict[str, Any]] = OrderedDict()
         self._baselines: dict[str, dict[str, Any]] = {}
         self._rest_attempts: dict[str, float] = {}
+        self._rest_backoff: dict[str, float] = {}
         self._recent_trades: dict[str, deque[tuple[Any, ...]]] = {}
         self._provider_unavailable: set[str] = set()
         self._radar_symbols: list[str] = []
@@ -259,6 +293,8 @@ class QuoteHub:
         if self._active and self._api_key:
             self._http = httpx.AsyncClient(timeout=10.0, follow_redirects=False)
             self._tasks.extend([asyncio.create_task(self._connection_loop()), asyncio.create_task(self._warm_loop())])
+        for task in self._tasks:
+            task.add_done_callback(_observe_task)
 
     async def close(self) -> None:
         self._running = False
@@ -276,13 +312,16 @@ class QuoteHub:
             self._emit(client, {"event": "status", "data": self._status()})
         self._clients.clear()
 
-    async def subscribe(self, symbols: list[str], focus: list[str] | None = None) -> str:
+    async def subscribe(self, symbols: list[str], focus: list[str] | None = None, *, owner: bool = False) -> str:
         symbols = normalize_symbols(symbols)
         focused = normalize_symbols(focus or [])
         if not set(focused).issubset(symbols):
             raise ValueError("Focused stocks must be part of the page subscription")
         self._expire_clients()
-        if len(self._clients) >= MAX_CLIENTS:
+        # Tests often shrink MAX_CLIENTS to 1. Only reserve owner seats when
+        # the public cap would still leave at least one public connection.
+        public_cap = MAX_CLIENTS if MAX_CLIENTS <= RESERVED_OWNER_SLOTS else MAX_CLIENTS - RESERVED_OWNER_SLOTS
+        if len(self._clients) >= (MAX_CLIENTS if owner else public_cap):
             raise ValueError("Too many quote connections")
         client_id = uuid.uuid4().hex
         self._clients[client_id] = _Client(symbols, focused, time.monotonic())
@@ -395,7 +434,8 @@ class QuoteHub:
             ordered.extend(client.focus)
         for client in self._clients.values():
             ordered.extend(client.symbols)
-        desired = list(dict.fromkeys(_provider_symbol(symbol) for symbol in ordered))[:self.max_symbols] if self._active and self._api_key else []
+        candidates = list(dict.fromkeys(_provider_symbol(symbol) for symbol in ordered)) if self._active and self._api_key else []
+        desired = [symbol for symbol in candidates if symbol not in self._provider_unavailable][:self.max_symbols]
         radar_aliases: dict[str, list[str]] = {}
         page_aliases: dict[str, list[str]] = {}
         for symbol in self._radar_symbols:
@@ -409,6 +449,14 @@ class QuoteHub:
             provider: list(dict.fromkeys(radar_aliases.get(provider) or page_aliases.get(provider) or [provider]))
             for provider in desired
         }
+        radar_providers = set(radar_aliases)
+        desired_set = set(desired)
+        for source in list(self._errors):
+            if source.startswith("trade:"):
+                original = source[6:]
+                provider = _provider_symbol(original)
+                if provider not in desired_set and provider not in radar_providers:
+                    self._set_error(source, None)
         if desired != self._desired_symbols:
             self._desired_symbols = desired
             self._subscription_changed.set()
@@ -499,7 +547,11 @@ class QuoteHub:
                 if self._radar_failures:
                     await asyncio.sleep(self._retry_delay(self._radar_failures))
                 else:
-                    await asyncio.wait_for(self._radar_refresh.wait(), timeout=1)
+                    idle_closed = not self._clients and market_session(_utcnow()) == "closed"
+                    await asyncio.wait_for(
+                        self._radar_refresh.wait(),
+                        timeout=RADAR_IDLE_CLOSED_SECONDS if idle_closed else 1,
+                    )
             except TimeoutError:
                 pass
 
@@ -536,7 +588,8 @@ class QuoteHub:
             # suppressed retries must not count as new physical read failures.
             self._radar_failures = exc.failures
             self._set_error("inventory", "radar_refresh_failed")
-        except Exception:
+        except Exception as exc:
+            _logger.warning("quotes_radar_failed error_type=%s code=radar_refresh_failed", type(exc).__name__)
             self._radar_failures = min(self._radar_failures + 1, 8)
             self._set_error("inventory", "radar_refresh_failed")
 
@@ -556,7 +609,8 @@ class QuoteHub:
             self._radar_events_loaded = True
             self._radar_events_failures = 0
             self._set_error("events", None)
-        except Exception:
+        except Exception as exc:
+            _logger.warning("quotes_radar_events_failed error_type=%s code=radar_events_refresh_failed", type(exc).__name__)
             self._radar_events_failures = min(self._radar_events_failures + 1, 8)
             self._radar_events_loaded = False
             self._set_error("events", "radar_events_refresh_failed")
@@ -624,10 +678,11 @@ class QuoteHub:
                 self._quotes.pop(symbol, None)
                 self._baselines.pop(symbol, None)
                 self._rest_attempts.pop(symbol, None)
+                self._rest_backoff.pop(symbol, None)
                 self._recent_trades.pop(symbol, None)
                 self._freshness.pop(symbol, None)
         # Failed REST lookups must not accumulate when visitors change pages.
-        for mapping in (self._baselines, self._rest_attempts, self._recent_trades):
+        for mapping in (self._baselines, self._rest_attempts, self._rest_backoff, self._recent_trades):
             for symbol in list(mapping):
                 if symbol not in protected and symbol not in self._quotes:
                     mapping.pop(symbol, None)
@@ -714,8 +769,9 @@ class QuoteHub:
                         completed, _ = await asyncio.wait([sender, receiver], return_when=asyncio.FIRST_COMPLETED)
                         for task in completed:
                             task.result()
-                except Exception:
+                except Exception as exc:
                     # Never propagate provider payloads, URLs, or key text.
+                    _logger.warning("quotes_stream_failed error_type=%s code=upstream_unavailable", type(exc).__name__)
                     self._set_error("stream", "upstream_unavailable")
                 finally:
                     children = [task for task in (sender, receiver) if task is not None]
@@ -743,7 +799,16 @@ class QuoteHub:
             return
         self._last_message_at = _iso(_utcnow())
         if message.get("type") == "error":
-            raise RuntimeError("Quote provider rejected the connection")
+            text = str(message.get("msg") or message.get("message") or "")
+            if _AUTH_ERROR.search(text):
+                _logger.warning("quotes_stream_error error_type=authentication")
+                raise RuntimeError("Quote provider rejected the connection")
+            if _INVALID_SYMBOL_ERROR.search(text):
+                _logger.warning("quotes_stream_error error_type=invalid_symbol")
+                self._mark_unconfirmed_unavailable()
+                return
+            _logger.warning("quotes_stream_error error_type=provider_error")
+            return
         if message.get("type") != "trade" or not isinstance(message.get("data"), list):
             return
         # Do not collapse this array to its last price. A single frame may
@@ -809,7 +874,8 @@ class QuoteHub:
                     self._radar_failures = exc.failures
                     self._set_error("inventory", "radar_refresh_failed")
                     break
-                except Exception:
+                except Exception as exc:
+                    _logger.warning("quotes_radar_trade_failed error_type=%s code=radar_trade_failed", type(exc).__name__)
                     first_failure = source not in self._errors
                     self._set_error(source, "radar_trade_failed")
                     if first_failure:
@@ -828,19 +894,43 @@ class QuoteHub:
                 # Earlier aliases may have committed before a later one failed.
                 self._publish_radar_updates(changes, fallback_symbol=symbol)
 
+    def _mark_unconfirmed_unavailable(self) -> None:
+        """An Invalid-symbol frame does not name the code. Quarantine unknowns."""
+        changed = False
+        for symbol in list(self._sent_symbols):
+            if symbol in self._quotes:
+                continue
+            baseline = self._baselines.get(symbol)
+            if baseline and (
+                _positive(baseline.get("official_close"))
+                or _positive(baseline.get("close"))
+                or _positive(baseline.get("previous_close"))
+            ):
+                continue
+            if symbol not in self._provider_unavailable:
+                self._provider_unavailable.add(symbol)
+                changed = True
+        if changed:
+            self._allocate()
+
     def _store_quote(self, symbol: str, price: float, at: datetime, received: datetime, source: str) -> None:
         symbol = _provider_symbol(symbol)
+        recovered = symbol in self._provider_unavailable
         self._provider_unavailable.discard(symbol)
+        if recovered:
+            self._allocate()
         baseline = self._baselines.get(symbol)
         previous_close = None
         if baseline:
-            # Before the first regular-session quote of a new trading day,
-            # yesterday's REST `c` is today's comparison close; `pc` is older.
             trade_day = at.astimezone(ET).date()
-            if trade_day == baseline["trade_day"]:
-                previous_close = baseline["previous_close"]
-            elif trade_day == next_trading_day(baseline["trade_day"]):
-                previous_close = baseline["close"]
+            official = _positive(baseline.get("official_close"))
+            official_day = baseline.get("official_close_day")
+            if official and official_day == trade_day:
+                previous_close = baseline.get("previous_close")
+            elif official and official_day is not None and trade_day == next_trading_day(official_day):
+                previous_close = official
+            else:
+                previous_close = baseline.get("previous_close")
         change = price - previous_close if previous_close else None
         self._quotes[symbol] = {"symbol": symbol, "price": price, "previous_close": previous_close,
                                 "change": change, "change_pct": change / previous_close * 100 if change is not None else None,
@@ -858,10 +948,19 @@ class QuoteHub:
                 for symbol in list(self._desired_symbols):
                     if symbol not in self._desired_symbols:
                         continue
+                    if symbol in self._provider_unavailable:
+                        continue
                     baseline = self._baselines.get(symbol)
                     if baseline and baseline["fetched_day"] == today and not baseline.get("needs_refresh"):
-                        continue
-                    if time.monotonic() - self._rest_attempts.get(symbol, -1000) < 60:
+                        if baseline.get("official_close") is not None:
+                            continue
+                        now_local = _utcnow().astimezone(ET)
+                        close = early_close_minutes(now_local.date()) or 16 * 60
+                        if now_local.hour * 60 + now_local.minute < close - 2:
+                            continue
+                    last = self._rest_attempts.get(symbol)
+                    delay = self._rest_backoff.get(symbol, REST_MIN_BACKOFF)
+                    if last is not None and time.monotonic() - last < delay:
                         continue
                     await self._warm_symbol(symbol)
             await asyncio.sleep(1)
@@ -882,18 +981,30 @@ class QuoteHub:
             if response.status_code == 429:
                 await asyncio.to_thread(mark_finnhub_rate_limited, self._api_key,
                                         retry_after=response.headers.get("Retry-After", "60"), db_path=self._budget_path)
+                self._note_rest_failure(symbol)
                 self._set_error("rest", "rest_rate_limited")
                 return
             response.raise_for_status()
             payload = response.json()
             if symbol in self._desired_symbols:
                 self._apply_rest_quote(symbol, payload)
-            # A completed snapshot ends the REST fault; a websocket reconnect is
-            # no longer the only thing that can clear it. A malformed response
-            # remains the same fault, without resetting its transition order.
-            self._set_error("rest", None)
-        except Exception:
+            if symbol in self._baselines or symbol in self._quotes or symbol in self._provider_unavailable:
+                self._rest_backoff.pop(symbol, None)
+                # A completed snapshot ends the REST fault; a websocket reconnect is
+                # no longer the only thing that can clear it. A malformed response
+                # remains the same fault, without resetting its transition order.
+                self._set_error("rest", None)
+            else:
+                self._note_rest_failure(symbol)
+                self._set_error("rest", "rest_quote_unavailable")
+        except Exception as exc:
+            _logger.warning("quotes_rest_failed error_type=%s code=rest_quote_unavailable", type(exc).__name__)
+            self._note_rest_failure(symbol)
             self._set_error("rest", "rest_quote_unavailable")
+
+    def _note_rest_failure(self, symbol: str) -> None:
+        previous = self._rest_backoff.get(symbol)
+        self._rest_backoff[symbol] = REST_MIN_BACKOFF if previous is None else min(REST_MAX_BACKOFF, previous * 2)
 
     def _apply_rest_quote(self, symbol: str, payload: Any) -> None:
         symbol = _provider_symbol(symbol)
@@ -904,17 +1015,32 @@ class QuoteHub:
         if price is None and payload.get("c") == 0 and symbol not in self._quotes:
             self._provider_unavailable.add(symbol)
             self._dirty_symbols.add(symbol)
+            self._allocate()
             return
         if price is None or at is None or (at - received).total_seconds() > 10:
             return
         baseline = self._baselines.get(symbol)
-        if baseline is None or at >= baseline["trade_time"]:
-            self._baselines[symbol] = {"close": price, "previous_close": previous_close,
-                                        "trade_day": at.astimezone(ET).date(), "trade_time": at,
-                                        "fetched_day": received.astimezone(ET).date(),
-                                        "needs_refresh": previous_close is None}
+        official = _is_official_close_print(at)
+        if baseline is None or at >= baseline["trade_time"] or official:
+            official_close = price if official else (baseline.get("official_close") if baseline else None)
+            official_close_day = at.astimezone(ET).date() if official else (baseline.get("official_close_day") if baseline else None)
+            trade_time = at if baseline is None or at >= baseline["trade_time"] else baseline["trade_time"]
+            self._baselines[symbol] = {
+                "close": official_close,
+                "previous_close": previous_close if baseline is None or at >= baseline["trade_time"] else baseline.get("previous_close"),
+                "official_close": official_close,
+                "official_close_day": official_close_day,
+                "trade_day": (at if baseline is None or at >= baseline["trade_time"] else baseline["trade_time"]).astimezone(ET).date(),
+                "trade_time": trade_time,
+                "fetched_day": received.astimezone(ET).date(),
+                "needs_refresh": previous_close is None,
+            }
         previous = self._quotes.get(symbol)
-        if previous and (previous["_trade_time"] > at or (previous["_trade_time"] == at and previous["source"] == "finnhub_websocket")):
+        if previous and previous["source"] == "finnhub_websocket":
+            # Websocket last is never replaced by REST, even when REST `t` is newer.
+            self._store_quote(symbol, previous["price"], previous["_trade_time"],
+                              datetime.fromisoformat(previous["received_at"].replace("Z", "+00:00")), previous["source"])
+        elif previous and (previous["_trade_time"] > at or (previous["_trade_time"] == at and previous["source"] == "finnhub_websocket")):
             # Refresh the comparison base but never replace a newer live price
             # with a slower HTTP response, including during reconnection.
             self._store_quote(symbol, previous["price"], previous["_trade_time"],
@@ -923,4 +1049,7 @@ class QuoteHub:
             self._store_quote(symbol, price, at, received, "finnhub_rest")
 
 
-__all__ = ["QuoteHub", "TOP_SYMBOLS", "market_session", "normalize_symbols"]
+__all__ = [
+    "QuoteHub", "TOP_SYMBOLS", "RESERVED_OWNER_SLOTS", "market_session",
+    "normalize_symbols", "_is_official_close_print",
+]

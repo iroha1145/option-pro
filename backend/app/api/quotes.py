@@ -202,7 +202,7 @@ async def quotes_stream(
         raise HTTPException(429, detail={"code": "quote_connection_limit", "message": "Too many quote connections"}, headers={"Retry-After": "30"})
     active[peer] += 1
     try:
-        client_id = await hub.subscribe(requested, focus=focused)
+        client_id = await hub.subscribe(requested, focus=focused, owner=current_request_is_owner())
     except BaseException as error:
         active[peer] -= 1
         if active[peer] <= 0:

@@ -72,11 +72,24 @@ class BreakoutRealtimeAdapter:
         self._inventory_failures = 0
         self._inventory_retry_at = 0.0
         self._inventory_task: asyncio.Task[list[dict[str, Any]]] | None = None
+        self._inventory_revision: tuple[str | None, str | None, str | None] | None = None
 
     async def radar_symbols(self) -> list[str]:
-        """Serialize inventory replacement with trade commits, without reentry."""
+        """Reload only when the cheap revision token changes; swap under lock."""
+        if not self.settings.enabled:
+            return []
+        remaining = self._inventory_retry_at - self._monotonic()
+        if self._inventory_failures and remaining > 0:
+            raise RadarInventoryUnavailable(self._inventory_failures, remaining)
+        try:
+            revision = await asyncio.to_thread(self.repository.inventory_revision)
+        except (FileNotFoundError, OSError, sqlite3.Error, BreakoutRepositoryError, ValueError):
+            raise self._inventory_failed() from None
+        if self._loaded and not self._inventory_failures and revision == self._inventory_revision:
+            return list(self._events)
+        events = await self._load_events_shared(force=revision != self._inventory_revision)
         async with self._serial:
-            return await self._refresh_inventory_locked()
+            return self._install_inventory(events, revision)
 
     def _inventory_failed(self) -> RadarInventoryUnavailable:
         self._inventory_failures = min(self._inventory_failures + 1, 8)
@@ -96,14 +109,21 @@ class BreakoutRealtimeAdapter:
         remaining = self._inventory_retry_at - self._monotonic()
         if self._inventory_failures and remaining > 0:
             raise RadarInventoryUnavailable(self._inventory_failures, remaining)
-        if self._inventory_task is None:
+        events = await self._load_events_shared()
+        try:
+            revision = await asyncio.to_thread(self.repository.inventory_revision)
+        except (FileNotFoundError, OSError, sqlite3.Error, BreakoutRepositoryError, ValueError):
+            revision = self._inventory_revision
+        return self._install_inventory(events, revision)
+
+    async def _load_events_shared(self, *, force: bool = False) -> list[dict[str, Any]]:
+        """Coalesce one SQLite read so a slow reload is not duplicated."""
+        if force or self._inventory_task is None:
             self._inventory_task = asyncio.create_task(asyncio.to_thread(self._load_events))
             self._inventory_task.add_done_callback(_consume_task_exception)
+        task = self._inventory_task
         try:
-            events = await asyncio.shield(self._inventory_task)
-            inventory: dict[str, list[dict[str, Any]]] = {}
-            for event in events:
-                inventory.setdefault(str(event["ticker"]), []).append(event)
+            events = await asyncio.shield(task)
         except asyncio.CancelledError:
             self._inventory_failed()
             raise
@@ -111,15 +131,28 @@ class BreakoutRealtimeAdapter:
             # A completed failure must never become the next caller's cached
             # result, including a transient executor/thread startup failure.
             # Only cancellation of a waiter keeps the shared read alive above.
-            self._inventory_task = None
+            if self._inventory_task is task:
+                self._inventory_task = None
             # Keep the last good inventory; never publish a partial replacement.
             raise self._inventory_failed() from None
-        self._inventory_task = None
+        if self._inventory_task is task:
+            self._inventory_task = None
+        return events
+
+    def _install_inventory(
+        self,
+        events: list[dict[str, Any]],
+        revision: tuple[str | None, str | None, str | None] | None,
+    ) -> list[str]:
+        inventory: dict[str, list[dict[str, Any]]] = {}
+        for event in events:
+            inventory.setdefault(str(event["ticker"]), []).append(event)
         self._inventory_failures = 0
         self._inventory_retry_at = 0.0
         self._events = inventory
         self._watermarks = {symbol: value for symbol, value in self._watermarks.items() if symbol in self._events}
         self._loaded = True
+        self._inventory_revision = revision
         return list(self._events)
 
     @staticmethod
