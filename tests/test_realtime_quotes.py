@@ -289,13 +289,14 @@ def test_premarket_compares_with_last_regular_close_and_form_t_is_labeled(tmp_pa
     async def scenario():
         hub = quotes.QuoteHub(settings(tmp_path))
         await hub.subscribe(["AAPL"])
-        hub._apply_rest_quote("AAPL", {"c": 100, "pc": 95, "t": int((NOW - timedelta(days=1)).timestamp())})
+        hub._apply_rest_quote("AAPL", {"c": 100, "pc": 95, "t": int(datetime(2026, 9, 3, 20, 0, tzinfo=timezone.utc).timestamp())})
         await hub._process_trade(trade(price=102, at=now, c=["24"]))
         view = (await hub.snapshot(["AAPL"]))["quotes"][0]
         assert view["session"] == "premarket"
         assert view["previous_close"] == 100
         assert view["change_pct"] == 2
-        assert quotes.market_session(datetime(2026, 11, 27, 18, 0, tzinfo=timezone.utc)) == "postmarket"
+        assert quotes.market_session(datetime(2026, 11, 27, 18, 0, tzinfo=timezone.utc)) == "regular"
+        assert quotes.market_session(datetime(2026, 11, 27, 18, 0, 1, tzinfo=timezone.utc)) == "postmarket"
         assert quotes.market_session(datetime(2026, 9, 7, 15, 0, tzinfo=timezone.utc)) == "closed"
 
     asyncio.run(scenario())

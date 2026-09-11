@@ -120,6 +120,8 @@ def test_radar_read_failure_is_not_a_successful_empty_inventory(seeded, monkeypa
         original = copy.deepcopy(adapter._events)
         target = "load_carryover_events" if operation == "radar_symbols" else "recent_live_events"
         monkeypatch.setattr(repo, target, fail)
+        if operation == "radar_symbols":
+            monkeypatch.setattr(repo, "inventory_revision", lambda: ("changed", "now", "live"))
         with pytest.raises(RealtimeRadarError):
             await getattr(adapter, operation)()
         assert adapter._events == original
