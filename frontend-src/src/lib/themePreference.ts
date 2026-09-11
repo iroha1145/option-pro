@@ -145,4 +145,3 @@ export function subscribeAppearance(listener: () => void): () => void {
     listeners.delete(listener);
   };
 }
-
