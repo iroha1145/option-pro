@@ -24,11 +24,11 @@ export function useLiveRadarEvent<T extends { event_id: string; state_version?: 
   const snapshot = useCallback(() => quoteStore.getRadarEvent(id), [id]);
   const update = useSyncExternalStore(subscribe, snapshot, snapshot);
   if (!update || Number(update.state_version) <= (event.state_version ?? 0)) return event;
-  const merged = { ...event } as T & Record<string, unknown>;
+  const patch: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(update)) {
-    if (value !== null) merged[key] = value;
+    if (value !== null) patch[key] = value;
   }
-  return merged as T;
+  return { ...event, ...patch } as T;
 }
 
 export function useRadarVersion() { return useSyncExternalStore(quoteStore.subscribeRadarVersion, quoteStore.getRadarVersion, quoteStore.getRadarVersion); }

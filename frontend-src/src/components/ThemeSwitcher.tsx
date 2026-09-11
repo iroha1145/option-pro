@@ -27,12 +27,6 @@ function preferenceLabel(preference: ThemePreference): string {
   return t('跟随系统');
 }
 
-function triggerLabel(preference: ThemePreference): string {
-  if (preference === 'light') return t('外观：浅色');
-  if (preference === 'dark') return t('外观：深色');
-  return t('外观：跟随系统');
-}
-
 export default function ThemeSwitcher({ className }: { className?: string }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
