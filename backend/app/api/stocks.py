@@ -55,7 +55,7 @@ from app.services.watchlist_scope import (
 from app.services.request_security import request_client_ip
 from app.public_stock_data import read_public_stock_status
 from app.stock_data_reads import read_latest_stock_resource as read_stock_pull_resource
-from app.stock_chart_snapshot import write_stock_chart_resource
+from app.stock_chart_snapshot import read_stock_chart_resource, write_stock_chart_resource
 from app.stock_pull_snapshot import (
     STOCK_PULL_RESOURCE_FRESH_SECONDS,
     validate_stock_pull_payload,
@@ -103,10 +103,13 @@ _stock_chart_pull_tasks: dict[str, asyncio.Task[dict[str, Any]]] = {}
 _PUBLIC_STOCK_PULL_TICKER_COOLDOWN_SECONDS = 60
 _PUBLIC_STOCK_PULL_CLIENT_WINDOW_SECONDS = 5 * 60
 _PUBLIC_STOCK_PULL_CLIENT_LIMIT = 6
+_PUBLIC_CHART_PULL_CLIENT_WINDOW_SECONDS = 5 * 60
+_PUBLIC_CHART_PULL_CLIENT_LIMIT = 24
 _PUBLIC_STOCK_PULL_MAX_CLIENTS = 2_048
 _PUBLIC_STOCK_PULL_MAX_TICKERS = 8_192
 _public_stock_pull_ticker_deadlines: dict[str, float] = {}
 _public_stock_pull_recent: dict[str, deque[float]] = {}
+_public_chart_pull_recent: dict[str, deque[float]] = {}
 
 
 def _prune_public_stock_pull_limits(now: float) -> None:
@@ -123,6 +126,12 @@ def _prune_public_stock_pull_limits(now: float) -> None:
             attempts.popleft()
         if not attempts:
             _public_stock_pull_recent.pop(client_id, None)
+    chart_cutoff = now - _PUBLIC_CHART_PULL_CLIENT_WINDOW_SECONDS
+    for client_id, attempts in list(_public_chart_pull_recent.items()):
+        while attempts and attempts[0] <= chart_cutoff:
+            attempts.popleft()
+        if not attempts:
+            _public_chart_pull_recent.pop(client_id, None)
 
     if len(_public_stock_pull_ticker_deadlines) > _PUBLIC_STOCK_PULL_MAX_TICKERS:
         overflow = len(_public_stock_pull_ticker_deadlines) - _PUBLIC_STOCK_PULL_MAX_TICKERS
@@ -131,17 +140,19 @@ def _prune_public_stock_pull_limits(now: float) -> None:
             key=lambda item: item[1],
         )[:overflow]:
             _public_stock_pull_ticker_deadlines.pop(key, None)
-    if len(_public_stock_pull_recent) > _PUBLIC_STOCK_PULL_MAX_CLIENTS:
-        overflow = len(_public_stock_pull_recent) - _PUBLIC_STOCK_PULL_MAX_CLIENTS
-        for client_id, _attempts in sorted(
-            _public_stock_pull_recent.items(),
-            key=lambda item: item[1][-1] if item[1] else float("-inf"),
-        )[:overflow]:
-            _public_stock_pull_recent.pop(client_id, None)
+    for recent in (_public_stock_pull_recent, _public_chart_pull_recent):
+        if len(recent) > _PUBLIC_STOCK_PULL_MAX_CLIENTS:
+            overflow = len(recent) - _PUBLIC_STOCK_PULL_MAX_CLIENTS
+            for client_id, _attempts in sorted(
+                recent.items(),
+                key=lambda item: item[1][-1] if item[1] else float("-inf"),
+            )[:overflow]:
+                recent.pop(client_id, None)
 
 
 def _reserve_public_stock_pull(
     client_id: str, ticker: str, *, resource_key: str | None = None,
+    bucket: str = "manual", skip_client_budget: bool = False,
 ) -> None:
     """Reserve one real provider refresh before its first await."""
 
@@ -161,27 +172,31 @@ def _reserve_public_stock_pull(
             headers={"Retry-After": str(retry_after)},
         )
 
-    attempts = _public_stock_pull_recent.setdefault(client_id, deque())
-    if len(attempts) >= _PUBLIC_STOCK_PULL_CLIENT_LIMIT:
-        retry_after = max(
-            1,
-            math.ceil(
-                attempts[0]
-                + _PUBLIC_STOCK_PULL_CLIENT_WINDOW_SECONDS
-                - now
-            ),
-        )
-        raise HTTPException(
-            status_code=429,
-            detail={
-                "code": "stock_pull_rate_limited",
-                "message": "手动拉取过于频繁，请稍后再试",
-                "retry_after_seconds": retry_after,
-            },
-            headers={"Retry-After": str(retry_after)},
-        )
+    if bucket == "chart":
+        recent = _public_chart_pull_recent
+        limit = _PUBLIC_CHART_PULL_CLIENT_LIMIT
+        window = _PUBLIC_CHART_PULL_CLIENT_WINDOW_SECONDS
+        limited_message = "行情获取过于频繁，请稍后再试"
+    else:
+        recent = _public_stock_pull_recent
+        limit = _PUBLIC_STOCK_PULL_CLIENT_LIMIT
+        window = _PUBLIC_STOCK_PULL_CLIENT_WINDOW_SECONDS
+        limited_message = "手动拉取过于频繁，请稍后再试"
 
-    attempts.append(now)
+    if not skip_client_budget:
+        attempts = recent.setdefault(client_id, deque())
+        if len(attempts) >= limit:
+            retry_after = max(1, math.ceil(attempts[0] + window - now))
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "code": "stock_pull_rate_limited",
+                    "message": limited_message,
+                    "retry_after_seconds": retry_after,
+                },
+                headers={"Retry-After": str(retry_after)},
+            )
+        attempts.append(now)
     _public_stock_pull_ticker_deadlines[cooldown_key] = (
         now + _PUBLIC_STOCK_PULL_TICKER_COOLDOWN_SECONDS
     )
@@ -3972,12 +3987,16 @@ async def _pull_stock_chart_once(symbol: str, period: str) -> dict[str, Any]:
 async def _coalesced_stock_chart_pull(
     symbol: str, period: str, *, public_client_id: str | None = None,
 ) -> dict[str, Any]:
-    """Pull only the selected chart; share work and the existing account budget."""
+    """Pull only the selected chart; use the wider chart bucket, not daily pulls."""
     key = f"chart:{symbol}:{period}:raw"
     task = _stock_chart_pull_tasks.get(key)
     if task is None or task.done():
         if public_client_id is not None:
-            _reserve_public_stock_pull(public_client_id, symbol, resource_key=key)
+            snapshot = read_stock_chart_resource(symbol, period)
+            _reserve_public_stock_pull(
+                public_client_id, symbol, resource_key=key, bucket="chart",
+                skip_client_budget=snapshot is not None,
+            )
         task = asyncio.create_task(_pull_stock_chart_once(symbol, period), name=f"pull:{key}")
         _stock_chart_pull_tasks[key] = task
 

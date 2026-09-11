@@ -1,5 +1,5 @@
 import { useQuoteSymbols } from '@/hooks/useLiveQuote';
-import { LivePrice, LiveChange } from '@/components/shared/LiveQuote';
+import { LivePrice, LiveChange, PeriodicPriceFlash } from '@/components/shared/LiveQuote';
 /**
  * §01 自选观察（watchlist.md 完整实现）
  * B0 页头带 · B1 概览统计（count-up）· B2 可排序表格/卡片（tick-flash）· B3 侧栏（信号/强度分布/市场时钟）
@@ -499,16 +499,15 @@ export default function Watchlist() {
         sortable: true,
         sortValue: (r) => r.price,
         render: (r) => (
-          <span
+          <PeriodicPriceFlash
             key={r.ticker}
-            className={cn(
-              'tick-flash inline-block rounded-xs px-1 font-mono text-[15px] leading-6 text-ink-900 tnum',
-              flashes[r.ticker] === 'up' && 'tick-flash-up',
-              flashes[r.ticker] === 'down' && 'tick-flash-down',
-            )}
+            symbol={r.ticker}
+            fallbackAt={r.updatedAt}
+            flash={flashes[r.ticker] ?? null}
+            className="tick-flash inline-block rounded-xs px-1 font-mono text-[15px] leading-6 text-ink-900 tnum"
           >
             <LivePrice symbol={r.ticker} fallback={r.price} fallbackAt={r.updatedAt} />
-          </span>
+          </PeriodicPriceFlash>
         ),
       },
       {

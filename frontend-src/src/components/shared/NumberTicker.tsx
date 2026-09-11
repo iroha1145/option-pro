@@ -21,7 +21,8 @@ const Digit = memo(function Digit({ char }: { char: string }) {
 const NumberTicker = memo(function NumberTicker({ text, className }: { text: string; className?: string }) {
   const reduce = usePrefersReducedMotion();
   return (
-    <span className={cn('inline-flex items-center align-middle tabular-nums', className)} aria-label={text}>
+    <span className={cn('inline-flex items-center align-middle tabular-nums', className)}>
+      <span className="sr-only">{text}</span>
       <span aria-hidden="true" className="inline-flex items-center">
         {reduce ? text : numberGlyphs(text).map(({ char, key }) => /\d/.test(char)
           ? <Digit key={key} char={char} />

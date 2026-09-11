@@ -378,7 +378,7 @@ export default function Login() {
             transition={{ duration: 0.56, ease: [0.16, 1, 0.3, 1] }}
             className="flex items-center gap-3"
           >
-            <img src="/logo.svg" alt="" className="size-10" />
+            <img src="/logo.svg" alt="" className="size-10 dark:brightness-0 dark:invert" />
             <div>
               <p className="font-display text-h2 font-bold text-ink-900">Optix Pro</p>
               <p className="eyebrow mt-0.5">US EQUITY RESEARCH DESK</p>

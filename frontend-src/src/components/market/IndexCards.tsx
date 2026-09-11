@@ -62,7 +62,7 @@ const IndexCard = memo(function IndexCard({
       className={cn(
         'card-surface card-glare relative block w-full overflow-hidden p-4 text-left',
         'transition-shadow duration-240 ease-out hover:shadow-sh-2',
-        'focus-visible:outline-none focus-visible:shadow-focus-ring',
+        'focus-visible:shadow-focus-ring',
         focused && 'ring-1 ring-brand-100',
       )}
       aria-label={t('{name} {code} 详情', { name: quote.name, code: quote.code })}

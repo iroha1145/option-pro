@@ -2958,6 +2958,32 @@ class BreakoutRepository:
         self._require_schema(connection)
         return connection
 
+    def inventory_revision(self) -> tuple[str | None, str | None, str | None]:
+        """Cheap change token: latest completed scan plus live-event watermark.
+
+        Does not load scan JSON. Radar polling uses this to skip a full reload.
+        """
+        connection = self._read_connection()
+        try:
+            self._require_schema(connection)
+            row = connection.execute(
+                """
+                SELECT scan_run_id, published_at FROM breakout_scan_runs
+                WHERE status='completed'
+                ORDER BY published_at DESC, scan_run_id DESC LIMIT 1
+                """
+            ).fetchone()
+            live = connection.execute(
+                "SELECT MAX(updated_at) AS updated_at FROM breakout_live_events"
+            ).fetchone()
+            return (
+                None if row is None else str(row["scan_run_id"]),
+                None if row is None else row["published_at"],
+                None if live is None else live["updated_at"],
+            )
+        finally:
+            connection.close()
+
     def latest_completed_scan(self) -> Mapping[str, Any] | None:
         connection = self._read_connection()
         try:

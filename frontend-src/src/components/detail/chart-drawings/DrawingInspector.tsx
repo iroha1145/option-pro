@@ -3,6 +3,7 @@ import Icon from '@/components/icons';
 import SelectionViewport from '@/components/shared/SelectionViewport';
 import { cn } from '@/lib/utils';
 import { t } from '../../../i18n/core.ts';
+import { drawingPaint } from './drawingAppearance.ts';
 import type { ChartDrawing, DrawingKind, DrawingStyle } from './types.ts';
 
 const KIND_LABEL: Record<DrawingKind, string> = {
@@ -160,7 +161,7 @@ export default function DrawingInspector({
                   'size-6 min-h-11 min-w-11 rounded-xs border outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30 md:size-6 md:min-h-6 md:min-w-6',
                   drawing.style.color.toUpperCase() === color.value ? 'border-ink-700' : 'border-line',
                 )}
-                style={{ background: color.value }}
+                style={{ background: drawingPaint(color.value) }}
               />
             ))}
           </div>

@@ -23,6 +23,8 @@ export interface PollingOptions<T> {
    * fetcher 一旦兑现,以网络结果为准。resolve null 表示没有可恢复的数据。
    */
   restore?: () => Promise<T | null>;
+  /** When false, skip the initial fetch and later ticks without unmounting the hook. */
+  enabled?: boolean;
 }
 
 /**
@@ -46,7 +48,7 @@ export function usePolling<T>(
   useEffect(() => {
     fetcherRef.current = fetcher;
     restoreRef.current = options?.restore;
-  }, [fetcher, options?.restore]);
+  }, [fetcher, options?.restore, options?.enabled]);
   const generationRef = useRef(0);
   const activeGenerationsRef = useRef(new Set<number>());
   const inFlightGenerationsRef = useRef(new Set<number>());
@@ -91,7 +93,14 @@ export function usePolling<T>(
     void tick(false);
   }, [tick]);
 
+  const enabled = options?.enabled !== false;
+
   useEffect(() => {
+    if (!enabled) {
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
     const generation = generationRef.current + 1;
     generationRef.current = generation;
     const activeGenerations = activeGenerationsRef.current;
@@ -130,7 +139,7 @@ export function usePolling<T>(
       document.removeEventListener('visibilitychange', onVisible);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [intervalMs, tick, ...deps]);
+  }, [intervalMs, tick, enabled, ...deps]);
 
   return { data, error, loading, refreshing, lastUpdatedAt, refresh };
 }

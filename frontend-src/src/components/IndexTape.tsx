@@ -77,8 +77,8 @@ function FundTapeItem({ symbol, onOpen }: { symbol: string; onOpen: () => void }
 export default function IndexTape() {
   const quoteStatus = useQuoteStatus();
   const useFunds = quoteStatus.enabled && quoteStatus.configured && quoteStatus.allowed !== false;
-  useQuoteSymbols(useFunds ? MARKET_FUNDS : []);
-  const { data } = usePolling(() => marketApi.indices(), 60_000);
+  useQuoteSymbols(MARKET_FUNDS);
+  const { data } = usePolling(() => marketApi.indices(), 60_000, [], { enabled: !useFunds });
   /* 闪烁定时器由 useTickFlash 单独持有：旧写法把定时器当 effect cleanup，
      下一轮没有价格变化时状态就再也没人清除（审计 P2-5）。 */
   const flashes = useTickFlash(data, tapeKey, tapePrice);

@@ -135,8 +135,8 @@ function SignalCard({ ev: initialEvent, index, flash, locate, onOpen }: SignalCa
         <span
           className={cn(
             'tick-flash rounded-xs px-1 font-mono text-data-l text-ink-900 tnum',
-            flash === 'up' && 'tick-flash-up',
-            flash === 'down' && 'tick-flash-down',
+            !preferLiveQuote(quote, Number.isFinite(ev.current_price)) && flash === 'up' && 'tick-flash-up',
+            !preferLiveQuote(quote, Number.isFinite(ev.current_price)) && flash === 'down' && 'tick-flash-down',
           )}
         >
           <LivePrice symbol={ev.ticker} fallback={ev.current_price} />

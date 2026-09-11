@@ -119,7 +119,7 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
       <div className="mx-auto flex h-12 max-w-shell items-center gap-3 px-4 md:h-16 md:gap-5 md:px-8">
         {/* Logo */}
         <Link to="/" className="flex shrink-0 items-center gap-2.5" aria-label={t("Optix Pro 首页")}>
-          <img src="/logo.svg" alt="" className="size-7 md:size-8" />
+          <img src="/logo.svg" alt="" className="size-7 md:size-8 dark:brightness-0 dark:invert" />
           <span className="hidden flex-col leading-none sm:flex">
             <span className="font-display text-[17px] font-bold text-ink-900">Optix Pro</span>
             <span className="eyebrow mt-0.5 text-[9px]">US EQUITY DESK</span>

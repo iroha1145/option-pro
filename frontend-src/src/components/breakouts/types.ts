@@ -69,7 +69,7 @@ export const LIFECYCLE_TONE: Record<LifecycleState, LifecycleTone> = {
 };
 
 export const LIFECYCLE_CHIP_CLASS: Record<LifecycleTone, string> = {
-  brand: 'radar-chip-brand bg-brand-50 text-brand-600',
+  brand: 'radar-chip-brand bg-brand-50 text-brand-700',
   up: 'radar-chip-up bg-up-50 text-up-700',
   down: 'radar-chip-down bg-down-50 text-down-700',
   ink: 'radar-chip-neutral bg-card-warm text-ink-500',

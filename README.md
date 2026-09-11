@@ -212,7 +212,10 @@ curl --fail http://127.0.0.1:2000/ready
 - `optix-worker.db`
 - `runtime-settings.json`
 - `watchlist-snapshot-v1.json`
+- `stock-chart-snapshots-v1/`
 - `backups/`
+
+非日线图表快照的目录上限、各周期 `max_age` 以及与日线手动拉取分桶的说明见 [stock-chart-snapshots.md](docs/stock-chart-snapshots.md)。
 
 升级和回滚时不要附加 `--volumes` 或 `-v`。迁移工具会生成 `personal.toml`、`machine.env`、`secrets.env` 和不含任何值的 `migration-report.json`。详细边界见[个人版迁移说明](docs/personal-edition/migration.md)。
 

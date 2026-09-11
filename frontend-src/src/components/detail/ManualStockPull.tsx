@@ -94,6 +94,10 @@ export default function ManualStockPull({
         error: cause instanceof ApiError
           ? cause.bizCode === 'account_login_required' || cause.bizCode === 'owner_login_required'
             ? t('登录后可更新行情；当前可查看已有数据')
+            : cause.bizCode === 'stock_pull_rate_limited'
+              ? `${t('行情获取过于频繁，请稍后再试')}${cause.retryAfter ? t(' · {n} 秒后可重试', { n: cause.retryAfter }) : ''}`
+              : cause.bizCode === 'stock_pull_cooldown'
+                ? `${t('{ticker} 刚刚更新过，请稍后再试', { ticker: requestedTicker })}${cause.retryAfter ? t(' · {n} 秒后可重试', { n: cause.retryAfter }) : ''}`
             : `${cause.message}${cause.retryAfter ? t(' · {n} 秒后可重试', { n: cause.retryAfter }) : ''}`
           : t('拉取失败，请稍后重试'),
       });

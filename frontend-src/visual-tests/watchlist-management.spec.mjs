@@ -5,7 +5,7 @@ const defaults = ['AAPL', 'MSFT', 'NVDA', 'SPY'];
 async function fixture(page, tickers = [], owner = true) {
   const state = { tickers: [...tickers], owner, username: null, writes: [], quoteReads: [], errors: [], failRead: false, failWrite: false, malformedWrite: false, holdRead: null, holdWrite: null };
   page.on('pageerror', (error) => state.errors.push(error.message));
-  await page.addInitScript(() => localStorage.setItem('optix-locale', 'zh'));
+  await page.addInitScript(() => localStorage.setItem('optix:locale', 'zh'));
   await page.route('**/*', (route) => ['localhost', '127.0.0.1'].includes(new URL(route.request().url()).hostname) ? route.continue() : route.abort());
   await page.route('**/api/**', async (route) => {
     const request = route.request();
