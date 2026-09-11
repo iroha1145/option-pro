@@ -8,7 +8,7 @@ export type Appearance = 'light' | 'dark';
 
 export const THEME_KEY = 'optix_theme';
 
-export const THEME_PREFERENCES: readonly ThemePreference[] = ['system', 'light', 'dark'];
+const THEME_PREFERENCES: readonly ThemePreference[] = ['system', 'light', 'dark'];
 
 const listeners = new Set<() => void>();
 let currentPreference: ThemePreference = 'system';
@@ -19,7 +19,7 @@ let mediaBound = false;
 let mediaQuery: MediaQueryList | null = null;
 
 function isPreference(value: unknown): value is ThemePreference {
-  return value === 'system' || value === 'light' || value === 'dark';
+  return typeof value === 'string' && (THEME_PREFERENCES as readonly string[]).includes(value);
 }
 
 function systemAppearance(): Appearance {
@@ -146,6 +146,3 @@ export function subscribeAppearance(listener: () => void): () => void {
   };
 }
 
-export function subscribeThemePreference(listener: () => void): () => void {
-  return subscribeAppearance(listener);
-}

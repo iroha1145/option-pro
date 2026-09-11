@@ -206,12 +206,6 @@ export function getWatchlist(force = false): WatchlistItem[] {
   return [...watchState.values()].map((s) => ({ ...s.item }));
 }
 
-export function getWatchlistAggregates(): { advancers: number; decliners: number } {
-  let advancers = 0, decliners = 0;
-  watchState.forEach((s) => (s.item.changePct >= 0 ? advancers++ : decliners++));
-  return { advancers, decliners };
-}
-
 /* ---------------- 市场信号 / 强度 ---------------- */
 export function getMarketSignals(): MarketSignalsSummary {
   const r = new Rng(88123);

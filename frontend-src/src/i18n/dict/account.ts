@@ -1,5 +1,5 @@
 /**
- * 登录 / 公开落地页（Login.tsx）+ 404 与建设中占位页（NotFound.tsx、_PageStub.tsx）。
+ * 登录 / 公开落地页（Login.tsx）+ 404（NotFound.tsx）。
  * Login.tsx 是产品的公开门面，营销文案（大标、特性三行、副文、脚注免责声明）需要
  * 读起来像专业交易终端的文案，而不是逐字直译；表单/错误/按钮文案保持终端一贯的简洁。
  */
@@ -93,8 +93,4 @@ export const ACCOUNT: Dict = {
   /* ---------------- 404（NotFound.tsx） ---------------- */
   '页面不存在': ['Page not found', 'ページが見つかりません'],
   '返回首页': ['Back to home', 'ホームに戻る'],
-
-  /* ---------------- 建设中占位页（_PageStub.tsx） ---------------- */
-  '· 建设中': ['· Under construction', '· 準備中'],
-  "· 功能开发中": ["· Feature in development", "· 開発中の機能です"],
 };

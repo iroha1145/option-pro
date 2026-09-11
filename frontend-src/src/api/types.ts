@@ -700,24 +700,3 @@ export interface AiJob {
   /** 失败诊断细节（owner 排障用；后端对非 owner 置空） */
   errorDetail?: string;
 }
-
-/* ---------- 运行时 ---------- */
-export interface RuntimeSettings {
-  aiEnabled: boolean;
-  scanIntervalMin: number;
-  watchlistRefreshSec: number;
-  optionsUnusualEnabled: boolean;
-}
-export interface RuntimeHistoryEntry {
-  id: string;
-  at: string;
-  actor: string;
-  change: string;
-}
-export interface WorkerTask {
-  id: string;
-  name: string;
-  status: 'ok' | 'degraded' | 'down';
-  lastBeatAt: string;
-  note: string;
-}

@@ -253,8 +253,4 @@ export const MOCKS: Dict = {
   /* ---------------- marketPulse.ts ---------------- */
   '常规时段已收盘 · 等待下一交易时段': ['Regular session closed · Waiting for the next session', '通常取引終了 · 次のセッションを待機中'],
   '周末休市 · 下一个交易日 9:30 ET 开盘': ['Weekend closure · Next session opens 9:30 ET', '週末休場 · 次の取引日は9:30 ET 開始'],
-
-  /* ---------------- session.ts：设置变更审计日志 ---------------- */
-  '开启 AI 分析开关': ['Enabled the AI analysis toggle', 'AI分析トグルをオンに変更'],
-  '扫描间隔 10 → 15 分钟': ['Scan interval 10 → 15 min', 'スキャン間隔 10 → 15分'],
 };
