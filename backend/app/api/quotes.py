@@ -115,7 +115,7 @@ def _public_status(value: dict[str, Any], request: Request) -> dict[str, Any]:
         if key in {
             "enabled", "configured", "public_enabled", "signals_enabled", "connected",
             "connection_status", "max_symbols", "allocated_symbols", "subscribed_count",
-            "last_message_at", "last_error", "session", "market_session", "reconnect_count", "resync_required", "signals_resync_required",
+            "last_message_at", "last_error", "session", "market_session", "reconnect_count", "resync_required", "signals_resync_required", "as_of",
         }
     }
     allocated = result.get("allocated_symbols")

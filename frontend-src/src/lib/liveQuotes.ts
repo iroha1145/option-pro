@@ -24,6 +24,7 @@ export interface QuoteStatus {
   connection_status: string;
   market_session?: LiveQuote['session'];
   resync_required?: boolean;
+  as_of?: string;
 }
 export interface QuoteEnvelope { quotes: LiveQuote[]; status: QuoteStatus }
 export interface RadarUpdate { events: Record<string, unknown>[]; resync_required?: boolean }
@@ -277,6 +278,7 @@ export class QuoteStore {
   private accepts(status: QuoteStatus) { return status.enabled && status.configured && (status.allowed ?? (status.public_enabled || this.owner)); }
   private ingestStatus(status: unknown) {
     if (!isQuoteStatus(status)) return;
+    if (isRecord(status) && typeof status.as_of === 'string') calibrateClock(status.as_of);
     this.setStatus(status);
     if (status.resync_required) this.radarListeners.forEach(fn => fn({ events: [], resync_required: true }));
     if (!this.accepts(status)) {
@@ -378,7 +380,6 @@ export class QuoteStore {
       if (!raw || typeof raw.symbol !== 'string') continue;
       const symbol = raw.symbol.toUpperCase();
       if (raw.price != null && (!Number.isFinite(raw.price) || raw.price <= 0)) continue;
-      if (raw.received_at) calibrateClock(raw.received_at);
       if (raw.price != null && !reliableTimestamp(raw.trade_at)) continue;
       if (raw.received_at && !reliableTimestamp(raw.received_at)) continue;
       if (raw.trade_at && raw.received_at) {
