@@ -73,6 +73,7 @@ class BreakoutRealtimeAdapter:
         self._inventory_retry_at = 0.0
         self._inventory_task: asyncio.Task[list[dict[str, Any]]] | None = None
         self._inventory_revision: tuple[str | None, str | None, str | None] | None = None
+        self._read_revision: tuple[str | None, str | None, str | None] | None = None
 
     async def radar_symbols(self) -> list[str]:
         """Reload only when the cheap revision token changes; swap under lock."""
@@ -93,14 +94,10 @@ class BreakoutRealtimeAdapter:
                 return list(self._events)
             events = await self._load_events_shared(force=revision != self._inventory_revision)
             async with self._serial:
-                return self._install_inventory(events, revision)
+                return self._install_inventory(events, self._read_revision)
         events = await self._load_events_shared()
         async with self._serial:
-            try:
-                revision = await asyncio.to_thread(self.repository.inventory_revision)
-            except (FileNotFoundError, OSError, sqlite3.Error, BreakoutRepositoryError, ValueError, RuntimeError):
-                revision = self._inventory_revision
-            return self._install_inventory(events, revision)
+            return self._install_inventory(events, self._read_revision)
 
     def _inventory_failed(self) -> RadarInventoryUnavailable:
         self._inventory_failures = min(self._inventory_failures + 1, 8)
@@ -121,16 +118,12 @@ class BreakoutRealtimeAdapter:
         if self._inventory_failures and remaining > 0:
             raise RadarInventoryUnavailable(self._inventory_failures, remaining)
         events = await self._load_events_shared()
-        try:
-            revision = await asyncio.to_thread(self.repository.inventory_revision)
-        except (FileNotFoundError, OSError, sqlite3.Error, BreakoutRepositoryError, ValueError):
-            revision = self._inventory_revision
-        return self._install_inventory(events, revision)
+        return self._install_inventory(events, self._read_revision)
 
     async def _load_events_shared(self, *, force: bool = False) -> list[dict[str, Any]]:
         """Coalesce one SQLite read so a slow reload is not duplicated."""
         if force or self._inventory_task is None:
-            self._inventory_task = asyncio.create_task(asyncio.to_thread(self._load_events))
+            self._inventory_task = asyncio.create_task(asyncio.to_thread(self._load_inventory_page))
             self._inventory_task.add_done_callback(_consume_task_exception)
         task = self._inventory_task
         try:
@@ -165,6 +158,24 @@ class BreakoutRealtimeAdapter:
         self._loaded = True
         self._inventory_revision = revision
         return list(self._events)
+
+    def _peek_inventory_revision(self) -> tuple[str | None, str | None, str | None] | None:
+        try:
+            return self.repository.inventory_revision()
+        except (FileNotFoundError, OSError, sqlite3.Error, BreakoutRepositoryError, ValueError, RuntimeError):
+            return None
+
+    def _load_inventory_page(self) -> list[dict[str, Any]]:
+        """Load events and a revision token that cannot outrun those events."""
+        before = self._peek_inventory_revision()
+        events = self._load_events()
+        after = self._peek_inventory_revision()
+        if before is not None and after is not None and before != after:
+            events = self._load_events()
+            confirmed = self._peek_inventory_revision()
+            after = confirmed if confirmed == before else before
+        self._read_revision = after if before is not None else None
+        return events
 
     @staticmethod
     def _change(event: Mapping[str, Any]) -> dict[str, Any]:
