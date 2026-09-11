@@ -328,6 +328,7 @@ test('price labels distinguish a rendered fallback from the disconnected cached 
   assert.equal(h.displayedQuoteLabel(stale, disconnected, true), '行情重连中');
   assert.equal(h.displayedQuoteLabel(quote('AAPL', 105), enabled, true), '实时');
   assert.equal(h.displayedQuoteLabel(quote('AAPL', 101, 1, { subscription_status: 'limited' }), enabled, false), '盘中 · 延迟 15 分钟');
+  assert.equal(h.displayedQuoteLabel(quote('AAPL', 101, 1, { subscription_status: 'limited' }), enabled, false, '2026-08-01', 'scan'), '扫描价 · 日线');
 });
 
 test('a client clock that lags the server still keeps the quote', async () => {

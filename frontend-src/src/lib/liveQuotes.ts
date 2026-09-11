@@ -473,6 +473,8 @@ export function displayedQuoteLabel(
   fallbackAt?: string | null,
   fallbackKind: FallbackQuoteKind = 'reference',
 ): string {
+  // Scan fallback is the price on screen; limited only describes a delayed quote.
+  if (!usesLive && fallbackKind === 'scan') return fallbackQuoteLabel(fallbackAt, fallbackKind);
   if (quote.subscription_status === 'limited') {
     return delayedSessionLabel(status.market_session ?? quote.session);
   }

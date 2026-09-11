@@ -68,7 +68,7 @@ test('watchlist subscribes offscreen rows, pushes prices without reordering, and
   const after = await page.locator('main [data-quote-symbol]').evaluateAll(rows => rows.map(row => row.dataset.quoteSymbol));
   expect(after).toEqual(before);
   await emit(page, symbol, 1234.56, { subscription_status: 'limited', freshness: 'snapshot' });
-  await expect(page.locator(`main [data-quote-symbol="${symbol}"]`).first()).toContainText('定时更新');
+  await expect(page.locator(`main [data-quote-symbol="${symbol}"]`).first()).toContainText('盘中 · 延迟 15 分钟');
   await page.getByRole('link', { name: '大盘', exact: true }).first().click();
   await expect.poll(() => latestSymbols(page)).not.toContain('S031');
   expect(await page.evaluate(() => window.quoteStreams.filter(row => !row.closed).length)).toBe(1);
