@@ -242,6 +242,42 @@ def test_radar_publish_during_first_read_does_not_pin_stale_inventory(tmp_path):
     asyncio.run(run())
 
 
+def test_radar_publish_during_recovery_read_does_not_pin_stale_inventory(tmp_path):
+    settings_obj = BreakoutSettings(
+        _env_file=None, BREAKOUT_RADAR_ENABLED=True,
+        db_path=tmp_path / "radar.db", RANGE_PERSISTENCE_MODE="disabled",
+    )
+    repo = BreakoutRepository(settings_obj.db_path, clock=lambda: AT + timedelta(seconds=20))
+    repo.initialize()
+    publish(repo, AT, [event()])
+    adapter = BreakoutRealtimeAdapter(settings_obj, repo, now=lambda: AT + timedelta(seconds=20))
+
+    async def run():
+        assert await adapter.radar_symbols() == ["AAPL"]
+        adapter._inventory_failures = 1
+        adapter._inventory_retry_at = 0.0
+        original = adapter._load_events
+        published = []
+
+        def load():
+            rows = original()
+            if not published:
+                published.append(True)
+                publish(repo, AT + timedelta(seconds=1), [event(), event(symbol="MSFT")])
+            return rows
+
+        adapter._load_events = load
+        async with adapter._serial:
+            recovered = await adapter._refresh_inventory_locked()
+        later = await adapter.radar_symbols()
+        assert "MSFT" in recovered or "MSFT" in later
+        assert set(later) == {"AAPL", "MSFT"}
+        assert adapter._inventory_revision == repo.inventory_revision()
+        assert adapter._inventory_failures == 0
+
+    asyncio.run(run())
+
+
 def test_chart_and_daily_pull_budgets_are_independent():
     stocks._public_stock_pull_recent.clear()
     stocks._public_chart_pull_recent.clear()
