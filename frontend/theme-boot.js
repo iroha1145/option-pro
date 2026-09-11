@@ -8,5 +8,6 @@
   root.classList.toggle("dark", dark);
   root.dataset.theme = dark ? "dark" : "light";
   root.style.colorScheme = dark ? "dark" : "light";
-  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#191B20" : "#F6F7F9");
+  var themeColor = document.querySelector('meta[name="theme-color"]');
+  if (themeColor) themeColor.setAttribute("content", dark ? "#191B20" : "#F6F7F9");
 })();

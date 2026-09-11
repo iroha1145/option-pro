@@ -95,7 +95,7 @@ export function setThemePreference(preference: ThemePreference): void {
 }
 
 function onStorage(event: StorageEvent): void {
-  if (event.key !== THEME_KEY) return;
+  if (event.key !== THEME_KEY && event.key !== null) return;
   const next: ThemePreference = isPreference(event.newValue) ? event.newValue : 'system';
   if (next === currentPreference && resolveAppearance(next) === currentAppearance) return;
   currentPreference = next;
@@ -122,7 +122,11 @@ function ensureMediaListener(): void {
   mediaBound = true;
   try {
     mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    mediaQuery.addEventListener('change', onMediaChange);
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', onMediaChange);
+    } else {
+      mediaQuery.addListener(onMediaChange);
+    }
   } catch {
     mediaBound = false;
     mediaQuery = null;

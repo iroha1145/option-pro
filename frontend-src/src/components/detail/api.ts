@@ -282,7 +282,7 @@ export function getDetailChart(
         } catch (error) {
           // Another customer may have completed the same chart between our
           // missing GET and POST. Read that result without another provider pull.
-          if (error instanceof ApiError && error.bizCode === 'stock_pull_cooldown') {
+          if (error instanceof ApiError && (error.bizCode === 'stock_pull_cooldown' || error.bizCode === 'stock_pull_rate_limited')) {
             try { return await read(true); } catch { throw error; }
           }
           throw error;

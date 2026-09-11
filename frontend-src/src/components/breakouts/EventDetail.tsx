@@ -299,7 +299,7 @@ export default function EventDetail({
               <section>
                 <p className="eyebrow mb-2">{__t('价格标尺')}</p>
                 <QuoteIndicator symbol={event.ticker} />
-                {event.trigger_source === 'finnhub' && <p className="mb-2 text-micro text-ink-500">{__t('实时成交触发')} · {event.evidence_at ? new Date(event.evidence_at).toLocaleTimeString('zh-CN', { hour12: false }) : __t('时间待更新')} · {__t('状态版本')} {event.state_version}</p>}
+                {event.trigger_source === 'finnhub' && <p className="mb-2 text-micro text-ink-500">{__t('实时成交触发')} · {event.evidence_at ? `${hhmm(event.evidence_at)} ${__t('纽约')}` : __t('时间待更新')} · {__t('状态版本')} {event.state_version}</p>}
                 <PriceScale large invalidation={event.invalidation_price} trigger={event.event_price} target={event.target_price} current={event.current_price} />
                 {event.event_anchor?.kind === 'opening_range' && event.event_anchor.status === 'partial' && <p className="mt-2 text-caption text-ink-400">{__t('开盘区间低点缺失，暂无失效位')}</p>}
                 <div className="mt-1 flex flex-wrap gap-x-4 font-mono text-micro text-ink-400 tnum">

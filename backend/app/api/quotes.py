@@ -115,7 +115,7 @@ def _public_status(value: dict[str, Any], request: Request) -> dict[str, Any]:
         if key in {
             "enabled", "configured", "public_enabled", "signals_enabled", "connected",
             "connection_status", "max_symbols", "allocated_symbols", "subscribed_count",
-            "last_message_at", "last_error", "session", "market_session", "reconnect_count", "resync_required", "signals_resync_required",
+            "last_message_at", "last_error", "session", "market_session", "reconnect_count", "resync_required", "signals_resync_required", "as_of",
         }
     }
     allocated = result.get("allocated_symbols")
@@ -202,7 +202,7 @@ async def quotes_stream(
         raise HTTPException(429, detail={"code": "quote_connection_limit", "message": "Too many quote connections"}, headers={"Retry-After": "30"})
     active[peer] += 1
     try:
-        client_id = await hub.subscribe(requested, focus=focused)
+        client_id = await hub.subscribe(requested, focus=focused, owner=current_request_is_owner())
     except BaseException as error:
         active[peer] -= 1
         if active[peer] <= 0:

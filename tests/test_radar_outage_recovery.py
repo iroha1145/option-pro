@@ -12,6 +12,43 @@ from app.services.breakouts.realtime import RadarInventoryUnavailable
 from test_pr135_review_regressions import NOW, bootstrap, fixture, settings, tick
 
 
+@pytest.mark.parametrize("symbol", ["AAPL", "BRK-B"])
+def test_retired_radar_candidate_clears_fault_while_quote_page_stays_open(tmp_path, monkeypatch, symbol):
+    clock = [NOW]
+    monkeypatch.setattr(quotes, "_utcnow", lambda: clock[0])
+    candidates = [symbol]
+    read_failed = [False]
+
+    async def inventory():
+        if read_failed[0]:
+            raise OSError("inventory temporarily unavailable")
+        return list(candidates)
+
+    async def write_trade(_trade):
+        if candidates:
+            raise OSError("trigger could not be saved")
+        return []
+
+    async def run():
+        hub = quotes.QuoteHub(settings(tmp_path), radar_loader=inventory, trade_handler=write_trade)
+        await hub._poll_radar_inventory()
+        client_id = await hub.subscribe([symbol])
+        await hub._process_trade(tick(clock, symbol))
+        assert hub._status()["signals_resync_required"] is True
+        candidates.clear()
+        read_failed[0] = True
+        await hub._poll_radar_inventory()
+        assert f"trade:{symbol}" in hub._errors, "A failed read cannot prove the candidate retired"
+        read_failed[0] = False
+        await hub._poll_radar_inventory()
+        assert client_id in hub._clients
+        assert quotes._provider_symbol(symbol) in hub._desired_symbols
+        assert hub._status()["last_error"] is None
+        assert hub._status()["signals_resync_required"] is False
+
+    asyncio.run(run())
+
+
 def test_inventory_recovers_after_one_worker_thread_start_failure(tmp_path, monkeypatch):
     _, adapter, _, _, _, _ = fixture(tmp_path, monkeypatch)
     monotonic = [0.0]
@@ -260,8 +297,9 @@ def test_shared_inventory_backoff_is_bounded_and_resets_after_success(tmp_path, 
         assert await adapter.radar_symbols() == []
         assert adapter._inventory_failures == 0
         assert adapter._inventory_retry_at == 0
+        assert len(attempts) == 7
         assert await adapter.radar_symbols() == []
-        assert len(attempts) == 8
+        assert len(attempts) == 7, "unchanged revision must not reload inventory"
 
     asyncio.run(run())
 

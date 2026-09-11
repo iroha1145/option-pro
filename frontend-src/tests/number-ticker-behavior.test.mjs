@@ -32,7 +32,9 @@ test('decimal and place-value identity survives sign and thousands-boundary chan
 
 test('first render displays exact decimal price without counting from zero', () => {
   const html = renderToStaticMarkup(createElement(component, { text: '$1,234.56' }));
-  assert.match(html, /aria-label="\$1,234\.56"/);
+  assert.match(html, /sr-only/);
+  assert.match(html, /\$1,234\.56/);
+  assert.doesNotMatch(html, /aria-label=/);
   assert.match(html, /translateY\(-5\.5em\)/);
   assert.match(html, /translateY\(-6\.6[0-9]*em\)/);
   assert.match(html, /width:1ch/);
@@ -47,6 +49,6 @@ test('unchanged numbers and digits are memoized and reduced motion removes digit
   const reducedHtml = renderToStaticMarkup(createElement(component, { text: '-12.34%' }));
   assert.match(reducedHtml, /-12\.34%/);
   assert.doesNotMatch(reducedHtml, /translateY|transition|width:1ch/);
-  assert.equal((reducedHtml.match(/<span/g) ?? []).length, 2);
+  assert.equal((reducedHtml.match(/<span/g) ?? []).length, 3);
   reduced = false;
 });

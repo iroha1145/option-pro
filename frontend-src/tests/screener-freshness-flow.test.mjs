@@ -148,7 +148,7 @@ test('equal trade and fallback times keep the quote, not the scan-price label', 
     enabled: true, configured: true, public_enabled: true, connected: true, connection_status: 'connected',
   };
   assert.equal(preferLiveQuote(quote, true, '2026-09-04T15:00:00Z'), true);
-  assert.equal(displayedQuoteLabel(quote, status, true, '2026-09-04T15:00:00Z'), '定时更新');
+  assert.equal(displayedQuoteLabel(quote, status, true, '2026-09-04T15:00:00Z'), '盘中 · 延迟 15 分钟');
   assert.equal(preferLiveQuote(quote, true, '2026-09-04'), false, 'intraday must not beat the complete daily session');
   assert.equal(preferLiveQuote({ ...quote, trade_at: '2026-09-04T20:00:00.000Z' }, true, '2026-09-04'), false);
 });

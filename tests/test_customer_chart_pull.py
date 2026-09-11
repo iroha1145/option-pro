@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
+import os
 import time
 
 import pytest
@@ -38,6 +39,7 @@ def isolated_state(monkeypatch, tmp_path):
     for state in (stocks._endpoint_cache, stocks._endpoint_locks,
                   stocks._endpoint_lock_users, stocks._endpoint_refresh_retry_after,
                   stocks._stock_chart_pull_tasks, stocks._public_stock_pull_recent,
+                  stocks._public_chart_pull_recent,
                   stocks._public_stock_pull_ticker_deadlines):
         state.clear()
     yield
@@ -96,20 +98,18 @@ def test_customer_pulls_selected_chart_and_reads_it_after_restart(period, provid
         assert api.get("/api/stocks/AAPL/chart?range=" + period).status_code == 503
 
 
-def test_different_periods_have_separate_cooldowns_but_share_account_budget(provider):
+def test_different_periods_have_separate_cooldowns_and_a_wider_chart_budget(provider):
     with client() as api:
         for period in PERIODS:
             assert api.post(f"/api/stocks/NVDA/pull?chart_range={period}", json={}, headers=HEADERS).status_code == 200
         repeat = api.post("/api/stocks/NVDA/pull?chart_range=5m", json={}, headers=HEADERS)
         assert repeat.status_code == 429
         assert repeat.json()["detail"]["code"] == "stock_pull_cooldown"
-        for symbol in ("AAPL", "MSFT"):
+        for symbol in ("AAPL", "MSFT", "AMD"):
             assert api.post(f"/api/stocks/{symbol}/pull?chart_range=5m", json={}, headers=HEADERS).status_code == 200
-        blocked = api.post("/api/stocks/AMD/pull?chart_range=5m", json={}, headers=HEADERS)
-        assert blocked.status_code == 429
-        assert blocked.json()["detail"]["code"] == "stock_pull_rate_limited"
-        assert len(provider) == 6
-        assert all(key.startswith("acct:") for key in stocks._public_stock_pull_recent)
+        assert len(provider) == 7
+        assert all(key.startswith("acct:") for key in stocks._public_chart_pull_recent)
+        assert stocks._public_stock_pull_recent == {}
 
 
 def test_anonymous_and_cross_origin_requests_cannot_start_chart_work(provider):
@@ -147,8 +147,8 @@ def test_same_chart_shares_inflight_work_and_survives_one_client_cancellation(mo
         release.set()
         assert (await second)["persisted"]
         assert calls == [("NVDA", "5m")]
-        assert len(stocks._public_stock_pull_recent["acct:first"]) == 1
-        assert "acct:second" not in stocks._public_stock_pull_recent
+        assert len(stocks._public_chart_pull_recent["acct:first"]) == 1
+        assert "acct:second" not in stocks._public_chart_pull_recent
 
     asyncio.run(scenario())
 
@@ -209,8 +209,11 @@ def test_snapshot_storage_is_bounded_and_does_not_evict_daily_pulls(monkeypatch,
     monkeypatch.setattr(snapshots, "MAX_SNAPSHOTS", 2)
     legacy = tmp_path / "stock-pull-snapshots-v1.json"
     legacy.write_text(json.dumps({"sentinel": "existing daily resources"}))
-    for symbol in ("NVDA", "AAPL", "BRK.B"):
-        snapshots.write_stock_chart_resource(symbol, "5m", chart(symbol, "5m"), time.time())
+    now = time.time()
+    for index, symbol in enumerate(("NVDA", "AAPL", "BRK.B")):
+        snapshots.write_stock_chart_resource(symbol, "5m", chart(symbol, "5m"), now + index)
+        path = snapshots.stock_chart_snapshot_path(symbol, "5m")
+        os.utime(path, (now + index, now + index))
     assert not snapshots.stock_chart_snapshot_path("NVDA", "5m").exists()
     assert snapshots.read_stock_chart_resource("BRK.B", "5m") is not None
     assert len(list((tmp_path / "stock-chart-snapshots-v1").glob("*.json"))) == 2

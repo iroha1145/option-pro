@@ -12,12 +12,15 @@ export default function QuoteConnection() {
     const stop = quoteStore.start(isOwner);
     const onVisibility = () => quoteStore.setVisible(!document.hidden);
     const onPageHide = () => quoteStore.setVisible(false);
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) quoteStore.setVisible(!document.hidden);
+    };
     document.addEventListener('visibilitychange', onVisibility);
     window.addEventListener('pagehide', onPageHide);
-    window.addEventListener('pageshow', onVisibility);
+    window.addEventListener('pageshow', onPageShow);
     return () => {
       stop(); document.removeEventListener('visibilitychange', onVisibility);
-      window.removeEventListener('pagehide', onPageHide); window.removeEventListener('pageshow', onVisibility);
+      window.removeEventListener('pagehide', onPageHide); window.removeEventListener('pageshow', onPageShow);
     };
   }, [isOwner, loading, identityUnavailable, username]);
   return null;

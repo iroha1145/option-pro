@@ -1,4 +1,4 @@
-import { LivePrice, LiveChange } from '@/components/shared/LiveQuote';
+import { LivePrice, LiveChange, PeriodicPriceFlash } from '@/components/shared/LiveQuote';
 /**
  * B2 结果表（桌面 ≥768px）：紧凑 44px 行 · 发丝线 · 行展开 accordion（260ms）· 分页
  * 列：# / 代码 / 强度分 / 分项 / 价·涨跌 / 催化剂 72h / 成交额 / ▸
@@ -173,16 +173,15 @@ export default function ResultTable({
                   </td>
                   {/* 价 / 涨跌 */}
                   <td className="px-3 py-2 text-right">
-                    <span
+                    <PeriodicPriceFlash
                       key={r.ticker}
-                      className={cn(
-                        'tick-flash inline-block rounded-xs px-1 font-mono text-body-s text-ink-900 tnum',
-                        flashes[r.ticker] === 'up' && 'tick-flash-up',
-                        flashes[r.ticker] === 'down' && 'tick-flash-down',
-                      )}
+                      symbol={r.ticker}
+                      fallbackAt={r.priceAsOf ?? r.dailyDataThrough}
+                      flash={flashes[r.ticker] ?? null}
+                      className="tick-flash inline-block rounded-xs px-1 font-mono text-body-s text-ink-900 tnum"
                     >
                       <LivePrice symbol={r.ticker} fallback={r.price} fallbackAt={r.priceAsOf ?? r.dailyDataThrough} fallbackKind="scan" />
-                    </span>
+                    </PeriodicPriceFlash>
                     <span className="ml-1.5 align-middle">
                       <LiveChange symbol={r.ticker} fallback={r.changePct} fallbackPrice={r.price} fallbackAt={r.priceAsOf ?? r.dailyDataThrough} size="sm" />
                     </span>

@@ -13,7 +13,7 @@ function harness() {
   const schedule = (fn, delay) => { const id = ++serial; timers.set(id, { fn, at: now + delay }); return id; };
   const clear = id => { timers.delete(id); intervals.delete(id); };
   const exports = {};
-  const context = vm.createContext({ exports, require: () => ({ t: text => text }), AbortController, URLSearchParams, console,
+  const context = vm.createContext({ exports, require: () => ({ t: (text, vars) => String(text).replace(/\{(\w+)\}/g, (_, key) => vars?.[key] ?? `{${key}}`) }), AbortController, URLSearchParams, console,
     Date: class extends Date { static now() { return Date.UTC(2026, 8, 8) + now; } },
     setTimeout: schedule, clearTimeout: clear,
     setInterval(fn, delay) { const id = ++serial; intervals.add(id); const repeat = () => { fn(); if (intervals.has(id)) timers.set(id, { fn: repeat, at: now + delay }); }; timers.set(id, { fn: repeat, at: now + delay }); return id; },
@@ -327,6 +327,72 @@ test('price labels distinguish a rendered fallback from the disconnected cached 
   assert.equal(h.displayedQuoteLabel(stale, disconnected, false, '2026-08-01', 'scan'), '扫描价 · 日线');
   assert.equal(h.displayedQuoteLabel(stale, disconnected, true), '行情重连中');
   assert.equal(h.displayedQuoteLabel(quote('AAPL', 105), enabled, true), '实时');
+  assert.equal(h.displayedQuoteLabel(quote('AAPL', 101, 1, { subscription_status: 'limited' }), enabled, false), '盘中 · 延迟 15 分钟');
+  assert.equal(h.displayedQuoteLabel(quote('AAPL', 101, 1, { subscription_status: 'limited' }), enabled, false, '2026-08-01', 'scan'), '扫描价 · 日线');
+});
+
+test('a client clock that lags the server still keeps the quote', async () => {
+  const h = harness(); h.store.register(['AAPL']); h.store.start(false); await h.tick(1000);
+  const received = new Date(Date.UTC(2026, 8, 8) + 120_000).toISOString();
+  h.streams[0].emit('quotes', {
+    status: { ...enabled, as_of: received },
+    quotes: [quote('AAPL', 111, 1, { trade_at: received, received_at: received })],
+  });
+  await h.tick(250);
+  assert.equal(h.store.getQuote('AAPL').price, 111);
+  h.store.stop();
+});
+
+test('a stale quote in the same snapshot does not rewind the shared clock', async () => {
+  const h = harness(); h.store.register(['AAPL', 'MSFT']); h.store.start(false); await h.tick(1000);
+  const now = new Date(Date.UTC(2026, 8, 8)).toISOString();
+  const stale = new Date(Date.UTC(2026, 8, 8) - 120_000).toISOString();
+  h.streams[0].emit('quotes', {
+    status: { ...enabled, as_of: now },
+    quotes: [
+      quote('AAPL', 105, 0, { trade_at: now, received_at: now }),
+      quote('MSFT', 100, 0, { trade_at: stale, received_at: stale }),
+    ],
+  });
+  await h.tick(250);
+  assert.ok(Math.abs(h.quoteClockOffsetMs()) <= 1_000);
+  assert.equal(h.store.getQuote('AAPL').price, 105);
+  assert.equal(h.preferLiveQuote(h.store.getQuote('AAPL'), true, stale), true);
+  assert.equal(h.store.getStatus().connection_status, 'connected');
+  h.store.stop();
+  assert.equal(h.quoteClockOffsetMs(), 0);
+});
+
+test('setVisible is a no-op when visibility did not change', async () => {
+  const h = harness(); h.store.register(['AAPL']); h.store.start(false); await h.tick(1000);
+  const streams = h.streams.length;
+  const requests = h.requests.length;
+  h.store.setVisible(true);
+  await h.tick(1000);
+  assert.equal(h.streams.length, streams);
+  assert.equal(h.requests.length, requests);
+  h.store.stop();
+});
+
+test('changing the subscription set does not broadcast radar resync', async () => {
+  const h = harness(); h.store.register(['AAPL']); h.store.start(false); await h.tick(1000);
+  let resyncs = 0;
+  h.store.subscribeRadar(update => { if (update.resync_required) resyncs++; });
+  h.store.register(['MSFT']); await h.tick(1000);
+  assert.equal(resyncs, 0);
+  h.store.stop();
+});
+
+test('polling and connect use separate abort controllers', async () => {
+  const h = harness(); h.store.register(['AAPL']); h.store.start(false); await h.tick(1000);
+  let aborted = 0;
+  h.respond(async (_url, init) => new Promise((_resolve, reject) => {
+    init.signal.addEventListener('abort', () => { aborted += 1; reject(new Error('aborted')); });
+  }));
+  await h.tick(59_000);
+  h.store.register(['MSFT']); await h.tick(100);
+  assert.equal(aborted, 0);
+  h.store.stop();
 });
 
 test('daily scan prices are ordered by New York date without inventing a closing clock', () => {

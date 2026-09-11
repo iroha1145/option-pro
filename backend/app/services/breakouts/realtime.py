@@ -71,12 +71,34 @@ class BreakoutRealtimeAdapter:
         self._monotonic = monotonic or time.monotonic
         self._inventory_failures = 0
         self._inventory_retry_at = 0.0
-        self._inventory_task: asyncio.Task[list[dict[str, Any]]] | None = None
+        self._inventory_task: asyncio.Task[tuple[list[dict[str, Any]], tuple[str | None, str | None, str | None] | None, int]] | None = None
+        self._inventory_revision: tuple[str | None, str | None, str | None] | None = None
+        self._read_seq = 0
+        self._installed_seq = 0
 
     async def radar_symbols(self) -> list[str]:
-        """Serialize inventory replacement with trade commits, without reentry."""
+        """Reload only when the cheap revision token changes; swap under lock."""
+        if not self.settings.enabled:
+            return []
+        remaining = self._inventory_retry_at - self._monotonic()
+        if self._inventory_failures and remaining > 0:
+            raise RadarInventoryUnavailable(self._inventory_failures, remaining)
+        # First load (and retry-after-failure) must go through the shared
+        # loader so executor/schema errors stay RadarInventoryUnavailable.
+        # Peek the cheap token only after a successful install.
+        if self._loaded and not self._inventory_failures:
+            try:
+                revision = await asyncio.to_thread(self.repository.inventory_revision)
+            except (FileNotFoundError, OSError, sqlite3.Error, BreakoutRepositoryError, ValueError, RuntimeError):
+                revision = None
+            if revision is not None and revision == self._inventory_revision:
+                return list(self._events)
+            page = await self._load_events_shared(force=revision != self._inventory_revision)
+            async with self._serial:
+                return self._install_inventory(*page)
+        page = await self._load_events_shared()
         async with self._serial:
-            return await self._refresh_inventory_locked()
+            return self._install_inventory(*page)
 
     def _inventory_failed(self) -> RadarInventoryUnavailable:
         self._inventory_failures = min(self._inventory_failures + 1, 8)
@@ -96,14 +118,21 @@ class BreakoutRealtimeAdapter:
         remaining = self._inventory_retry_at - self._monotonic()
         if self._inventory_failures and remaining > 0:
             raise RadarInventoryUnavailable(self._inventory_failures, remaining)
-        if self._inventory_task is None:
-            self._inventory_task = asyncio.create_task(asyncio.to_thread(self._load_events))
+        page = await self._load_events_shared()
+        return self._install_inventory(*page)
+
+    async def _load_events_shared(
+        self, *, force: bool = False,
+    ) -> tuple[list[dict[str, Any]], tuple[str | None, str | None, str | None] | None, int]:
+        """Coalesce one SQLite read so a slow reload is not duplicated."""
+        if force or self._inventory_task is None:
+            self._read_seq += 1
+            seq = self._read_seq
+            self._inventory_task = asyncio.create_task(asyncio.to_thread(self._load_inventory_page, seq))
             self._inventory_task.add_done_callback(_consume_task_exception)
+        task = self._inventory_task
         try:
-            events = await asyncio.shield(self._inventory_task)
-            inventory: dict[str, list[dict[str, Any]]] = {}
-            for event in events:
-                inventory.setdefault(str(event["ticker"]), []).append(event)
+            page = await asyncio.shield(task)
         except asyncio.CancelledError:
             self._inventory_failed()
             raise
@@ -111,16 +140,55 @@ class BreakoutRealtimeAdapter:
             # A completed failure must never become the next caller's cached
             # result, including a transient executor/thread startup failure.
             # Only cancellation of a waiter keeps the shared read alive above.
-            self._inventory_task = None
+            if self._inventory_task is task:
+                self._inventory_task = None
             # Keep the last good inventory; never publish a partial replacement.
             raise self._inventory_failed() from None
-        self._inventory_task = None
+        if self._inventory_task is task:
+            self._inventory_task = None
+        return page
+
+    def _install_inventory(
+        self,
+        events: list[dict[str, Any]],
+        revision: tuple[str | None, str | None, str | None] | None,
+        seq: int,
+    ) -> list[str]:
+        # A waiter that finished an earlier read must not stamp that page
+        # over a newer install, even if both hold a valid revision token.
+        if seq < self._installed_seq:
+            return list(self._events)
+        inventory: dict[str, list[dict[str, Any]]] = {}
+        for event in events:
+            inventory.setdefault(str(event["ticker"]), []).append(event)
         self._inventory_failures = 0
         self._inventory_retry_at = 0.0
         self._events = inventory
         self._watermarks = {symbol: value for symbol, value in self._watermarks.items() if symbol in self._events}
         self._loaded = True
+        self._inventory_revision = revision
+        self._installed_seq = seq
         return list(self._events)
+
+    def _peek_inventory_revision(self) -> tuple[str | None, str | None, str | None] | None:
+        try:
+            return self.repository.inventory_revision()
+        except (FileNotFoundError, OSError, sqlite3.Error, BreakoutRepositoryError, ValueError, RuntimeError):
+            return None
+
+    def _load_inventory_page(
+        self, seq: int,
+    ) -> tuple[list[dict[str, Any]], tuple[str | None, str | None, str | None] | None, int]:
+        """Load an inseparable (events, revision) page for this read sequence."""
+        before = self._peek_inventory_revision()
+        events = self._load_events()
+        after = self._peek_inventory_revision()
+        if before is not None and after is not None and before != after:
+            events = self._load_events()
+            confirmed = self._peek_inventory_revision()
+            after = confirmed if confirmed == before else before
+        revision = after if before is not None else None
+        return events, revision, seq
 
     @staticmethod
     def _change(event: Mapping[str, Any]) -> dict[str, Any]:

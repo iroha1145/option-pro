@@ -207,9 +207,17 @@ test('theme-boot 与运行时共用 optix_theme 键，并按系统色决定默�
   assert.match(boot, /prefers-color-scheme:\s*dark/);
   assert.match(boot, /classList\.toggle\("dark"/);
   assert.match(boot, /#191B20/);
+  assert.doesNotMatch(boot, /\?\./);
+  assert.match(boot, /if \(themeColor\)/);
   const html = await readFile(path.resolve(here, '..', 'index.html'), 'utf8');
   assert.match(html, /src="\/theme-boot\.js"/);
   assert.match(html, /name="theme-color"/);
+});
+
+test('系统外观监听兼容 addListener，清空本地存储会重置偏好', async () => {
+  const sourceText = await source('lib/themePreference.ts');
+  assert.match(sourceText, /addListener\(/);
+  assert.match(sourceText, /event\.key !== THEME_KEY && event\.key !== null/);
 });
 
 test('顶栏、登录页与手机更多菜单都有外观开关', async () => {
