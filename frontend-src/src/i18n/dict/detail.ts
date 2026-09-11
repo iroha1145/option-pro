@@ -66,7 +66,7 @@ export const DETAIL: Dict = {
   '52 周区间': ['52W Range', '52週レンジ'],
 
   /* src/components/detail/KlineChart.tsx */
-  ' · <span style="color:#E8930C">仅报价</span>': [' · <span style="color:#E8930C">Quote only</span>', ' · <span style="color:#E8930C">現在値のみ</span>'],
+  ' · <span style="color:var(--warn-600)">仅报价</span>': [' · <span style="color:var(--warn-600)">Quote only</span>', ' · <span style="color:var(--warn-600)">現在値のみ</span>'],
   '开': ['Open', '始値'],
   '收': ['Close', '終値'],
   '涨跌': ['Chg', '騰落'],
@@ -75,6 +75,9 @@ export const DETAIL: Dict = {
   '面积': ['Area', '面グラフ'],
   '数据暂未刷新 · 显示最近一次结果（延迟行情）': ['Data hasn\'t refreshed yet · showing the last available result (delayed quotes)', 'データ未更新 · 直近の結果を表示（遅延データ）'],
   'K 线暂不可用': ['Candlestick chart unavailable', 'ローソク足チャートは利用できません'],
+  '行情获取过于频繁，请稍后再试': ['Quote requests are too frequent. Try again shortly.', '相場の取得が頻繁すぎます。しばらくしてから再試行してください。'],
+  '{ticker} 刚刚更新过，请稍后再试': ['{ticker} was just updated. Try again shortly.', '{ticker} は直前に更新されています。しばらくしてから再試行してください。'],
+  '登录后可加载该周期图表': ['Sign in to load this chart interval.', 'ログインするとこの足種のチャートを読み込めます。'],
   '为仅报价 bar': ['is a quote-only bar', '現在値のみのバー'],
   '已收齐': ['closed', '確定'],
 

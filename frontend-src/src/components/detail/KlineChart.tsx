@@ -436,7 +436,7 @@ function buildOption(
           `<div style="display:flex;justify-content:space-between;gap:16px"><span style="color:${CH.ink400}">${escapeTooltipText(k)}</span><span>${v}</span></div>`;
         return (
           `<div style="font-family:${CHART_MONO_FONT};font-size:12px;line-height:19px;min-width:150px">` +
-          `<div style="color:${CH.ink400};margin-bottom:2px">${barTooltipTitle(b.t, range)}${b.quote_only ? t(' · <span style="color:#E8930C">仅报价</span>') : ''}</div>` +
+          `<div style="color:${CH.ink400};margin-bottom:2px">${barTooltipTitle(b.t, range)}${b.quote_only ? t(' · <span style="color:var(--warn-600)">仅报价</span>') : ''}</div>` +
           row(t('开'), fmtPrice(b.o)) +
           row(t('高'), fmtPrice(b.h)) +
           row(t('低'), fmtPrice(b.l)) +
@@ -904,7 +904,7 @@ export default function KlineChart({
   const referenceCandidate = liveQuote ? (usesLiveReference ? liveQuote.price : currentPrice) : null;
   const referencePrice = typeof referenceCandidate === 'number' && Number.isFinite(referenceCandidate) && referenceCandidate > 0 ? referenceCandidate : null;
   const referenceLabel = referencePrice !== null && liveQuote
-    ? `${displayedQuoteLabel(liveQuote, quoteStatus, usesLiveReference)} $${referencePrice.toFixed(2)}` : '';
+    ? `${displayedQuoteLabel(liveQuote, quoteStatus, usesLiveReference)} $${fmtPrice(referencePrice)}` : '';
   const referenceBarCount = bars?.length ?? 0;
   useEffect(() => {
     if (!chartInst || chartInst.isDisposed() || !option) return;
@@ -1116,15 +1116,21 @@ export default function KlineChart({
                 }
                 description={
                   error?.code === 429
-                    ? `${error.message}${error.retryAfter ? t(' · {n} 秒后可重试', { n: error.retryAfter }) : ''}`
+                    ? `${error.bizCode === 'stock_pull_rate_limited'
+                      ? t('行情获取过于频繁，请稍后再试')
+                      : error.bizCode === 'stock_pull_cooldown'
+                        ? t('{ticker} 刚刚更新过，请稍后再试', { ticker })
+                        : error.message}${error.retryAfter ? t(' · {n} 秒后可重试', { n: error.retryAfter }) : ''}`
                     : error?.bizCode === 'public_snapshot_unavailable' && range === '1d'
                     ? t('该股票暂无数据，可手动获取最新行情、日线与技术指标')
+                    : !isCustomer && !isOwner && range !== '1d'
+                    ? t('登录后可加载该周期图表')
                     : t('{ticker} · {range}数据暂不可用，其他周期仍可切换', { ticker, range: CHART_RANGES.find((item) => item.value === range)?.label ?? range })
                 }
                 action={
                   error?.bizCode === 'public_snapshot_unavailable' && range === '1d' ? (
                     <ManualStockPull ticker={ticker} compact onPulled={() => refresh({ force: true })} />
-                  ) : (
+                  ) : !isCustomer && !isOwner && range !== '1d' ? undefined : (
                     <button type="button" onClick={() => refresh()} className="btn-primary">
                       {t('重试')}
                     </button>
