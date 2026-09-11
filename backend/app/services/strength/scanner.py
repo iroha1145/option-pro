@@ -22,6 +22,8 @@ from app.services.finnhub_budget import mark_finnhub_rate_limited, reserve_finnh
 from app.services.sectors import SECTORS
 from app.services.strength.features import (
     _feature_row,
+    _ret,
+    _rsi,
     _safe_float,
 )
 from app.services.strength.finnhub import (
