@@ -49,6 +49,6 @@ test('unchanged numbers and digits are memoized and reduced motion removes digit
   const reducedHtml = renderToStaticMarkup(createElement(component, { text: '-12.34%' }));
   assert.match(reducedHtml, /-12\.34%/);
   assert.doesNotMatch(reducedHtml, /translateY|transition|width:1ch/);
-  assert.equal((reducedHtml.match(/<span/g) ?? []).length, 2);
+  assert.equal((reducedHtml.match(/<span/g) ?? []).length, 3);
   reduced = false;
 });

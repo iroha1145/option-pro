@@ -260,8 +260,9 @@ def test_shared_inventory_backoff_is_bounded_and_resets_after_success(tmp_path, 
         assert await adapter.radar_symbols() == []
         assert adapter._inventory_failures == 0
         assert adapter._inventory_retry_at == 0
+        assert len(attempts) == 7
         assert await adapter.radar_symbols() == []
-        assert len(attempts) == 8
+        assert len(attempts) == 7, "unchanged revision must not reload inventory"
 
     asyncio.run(run())
 

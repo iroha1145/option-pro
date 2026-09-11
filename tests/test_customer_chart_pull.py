@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
+import os
 import time
 
 import pytest
@@ -208,8 +209,11 @@ def test_snapshot_storage_is_bounded_and_does_not_evict_daily_pulls(monkeypatch,
     monkeypatch.setattr(snapshots, "MAX_SNAPSHOTS", 2)
     legacy = tmp_path / "stock-pull-snapshots-v1.json"
     legacy.write_text(json.dumps({"sentinel": "existing daily resources"}))
-    for symbol in ("NVDA", "AAPL", "BRK.B"):
-        snapshots.write_stock_chart_resource(symbol, "5m", chart(symbol, "5m"), time.time())
+    now = time.time()
+    for index, symbol in enumerate(("NVDA", "AAPL", "BRK.B")):
+        snapshots.write_stock_chart_resource(symbol, "5m", chart(symbol, "5m"), now + index)
+        path = snapshots.stock_chart_snapshot_path(symbol, "5m")
+        os.utime(path, (now + index, now + index))
     assert not snapshots.stock_chart_snapshot_path("NVDA", "5m").exists()
     assert snapshots.read_stock_chart_resource("BRK.B", "5m") is not None
     assert len(list((tmp_path / "stock-chart-snapshots-v1").glob("*.json"))) == 2

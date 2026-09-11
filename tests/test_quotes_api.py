@@ -29,7 +29,7 @@ class FakeHub:
                        "client_count": 3, "max_symbols": 50},
         }
 
-    async def subscribe(self, symbols, *, focus):
+    async def subscribe(self, symbols, *, focus, owner=False):
         self.subscriptions.append((symbols, focus))
         return "client-1"
 

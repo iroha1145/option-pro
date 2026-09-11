@@ -13,7 +13,7 @@ function harness() {
   const schedule = (fn, delay) => { const id = ++serial; timers.set(id, { fn, at: now + delay }); return id; };
   const clear = id => { timers.delete(id); intervals.delete(id); };
   const exports = {};
-  const context = vm.createContext({ exports, require: () => ({ t: text => text }), AbortController, URLSearchParams, console,
+  const context = vm.createContext({ exports, require: () => ({ t: (text, vars) => String(text).replace(/\{(\w+)\}/g, (_, key) => vars?.[key] ?? `{${key}}`) }), AbortController, URLSearchParams, console,
     Date: class extends Date { static now() { return Date.UTC(2026, 8, 8) + now; } },
     setTimeout: schedule, clearTimeout: clear,
     setInterval(fn, delay) { const id = ++serial; intervals.add(id); const repeat = () => { fn(); if (intervals.has(id)) timers.set(id, { fn: repeat, at: now + delay }); }; timers.set(id, { fn: repeat, at: now + delay }); return id; },

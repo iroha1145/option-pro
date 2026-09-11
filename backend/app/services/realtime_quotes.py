@@ -406,10 +406,10 @@ class QuoteHub:
             subscription = "disabled"
         elif not self._api_key:
             subscription = "unconfigured"
-        elif provider_symbol not in self._desired_symbols:
-            subscription = "limited"
         elif provider_symbol in self._provider_unavailable and not cached:
             subscription = "unavailable"
+        elif provider_symbol not in self._desired_symbols:
+            subscription = "limited"
         elif self._connected and provider_symbol in self._sent_symbols and cached and cached["source"] == "finnhub_websocket":
             subscription = "live"
         else:
@@ -824,7 +824,9 @@ class QuoteHub:
         if not isinstance(raw, dict) or not isinstance(raw.get("s"), str):
             return
         symbol = _provider_symbol(raw["s"])
-        if symbol not in self._desired_symbols:
+        # A later valid print may rehabilitate a quarantined code. Keep that
+        # recovery path even after allocate() dropped it from the live set.
+        if symbol not in self._desired_symbols and symbol not in self._provider_unavailable:
             return
         price = _positive(raw.get("p"))
         at = _timestamp(raw.get("t"), milliseconds=True)
@@ -922,15 +924,20 @@ class QuoteHub:
         baseline = self._baselines.get(symbol)
         previous_close = None
         if baseline:
+            # Same session day uses REST `pc`. The next trading day may use
+            # yesterday's official close, or `pc` when that print is missing.
+            # A wider gap stays unknown so a 3-day-old snapshot cannot mint
+            # a fake change.
             trade_day = at.astimezone(ET).date()
             official = _positive(baseline.get("official_close"))
             official_day = baseline.get("official_close_day")
-            if official and official_day == trade_day:
+            baseline_day = baseline.get("trade_day")
+            if trade_day == baseline_day:
                 previous_close = baseline.get("previous_close")
             elif official and official_day is not None and trade_day == next_trading_day(official_day):
                 previous_close = official
-            else:
-                previous_close = baseline.get("previous_close")
+            elif baseline_day is not None and trade_day == next_trading_day(baseline_day):
+                previous_close = official or baseline.get("previous_close")
         change = price - previous_close if previous_close else None
         self._quotes[symbol] = {"symbol": symbol, "price": price, "previous_close": previous_close,
                                 "change": change, "change_pct": change / previous_close * 100 if change is not None else None,

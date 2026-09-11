@@ -81,14 +81,25 @@ class BreakoutRealtimeAdapter:
         remaining = self._inventory_retry_at - self._monotonic()
         if self._inventory_failures and remaining > 0:
             raise RadarInventoryUnavailable(self._inventory_failures, remaining)
-        try:
-            revision = await asyncio.to_thread(self.repository.inventory_revision)
-        except (FileNotFoundError, OSError, sqlite3.Error, BreakoutRepositoryError, ValueError):
-            raise self._inventory_failed() from None
-        if self._loaded and not self._inventory_failures and revision == self._inventory_revision:
-            return list(self._events)
-        events = await self._load_events_shared(force=revision != self._inventory_revision)
+        # First load (and retry-after-failure) must go through the shared
+        # loader so executor/schema errors stay RadarInventoryUnavailable.
+        # Peek the cheap token only after a successful install.
+        if self._loaded and not self._inventory_failures:
+            try:
+                revision = await asyncio.to_thread(self.repository.inventory_revision)
+            except (FileNotFoundError, OSError, sqlite3.Error, BreakoutRepositoryError, ValueError, RuntimeError):
+                revision = None
+            if revision is not None and revision == self._inventory_revision:
+                return list(self._events)
+            events = await self._load_events_shared(force=revision != self._inventory_revision)
+            async with self._serial:
+                return self._install_inventory(events, revision)
+        events = await self._load_events_shared()
         async with self._serial:
+            try:
+                revision = await asyncio.to_thread(self.repository.inventory_revision)
+            except (FileNotFoundError, OSError, sqlite3.Error, BreakoutRepositoryError, ValueError, RuntimeError):
+                revision = self._inventory_revision
             return self._install_inventory(events, revision)
 
     def _inventory_failed(self) -> RadarInventoryUnavailable:
