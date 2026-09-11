@@ -56,6 +56,7 @@ async function emitEvent(page, type, data) {
   }, { type, data })).toBe(true);
 }
 const emit = (page, symbol, value, extra = {}) => emitEvent(page, 'quotes', { quotes: [price(symbol, value, extra)] });
+const ticker = (scope, text) => scope.getByText(text, { exact: true }).locator('xpath=..');
 
 test('watchlist subscribes offscreen rows, pushes prices without reordering, and releases on navigation', async ({ page }) => {
   const state = await fixture(page, true, true); await page.goto('/watchlist');
@@ -64,7 +65,7 @@ test('watchlist subscribes offscreen rows, pushes prices without reordering, and
   const before = await page.locator('main [data-quote-symbol]').evaluateAll(rows => rows.map(row => row.dataset.quoteSymbol));
   expect(before.length).toBeGreaterThan(0);
   const symbol = before[0]; await emit(page, symbol, 1234.56);
-  await expect(page.locator(`main [data-quote-symbol="${symbol}"]`).first().locator('[aria-label="1,234.56"]')).toBeVisible();
+  await expect(ticker(page.locator(`main [data-quote-symbol="${symbol}"]`).first(), '1,234.56')).toBeVisible();
   const after = await page.locator('main [data-quote-symbol]').evaluateAll(rows => rows.map(row => row.dataset.quoteSymbol));
   expect(after).toEqual(before);
   await emit(page, symbol, 1234.56, { subscription_status: 'limited', freshness: 'snapshot' });
@@ -79,9 +80,9 @@ for (const width of [390, 1440]) {
   test(`detail price arrives while analysis is pending, with decimal rolling at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 }); const state = await fixture(page); await page.goto('/stock/AAPL');
     const header = page.locator('main [data-quote-symbol="AAPL"]').first();
-    await expect(header.locator('[aria-label="$100.00"]')).toBeVisible();
-    await emit(page, 'AAPL', 999.99); await expect(header.locator('[aria-label="$999.99"]')).toBeVisible();
-    await emit(page, 'AAPL', 1000.01); await expect(header.locator('[aria-label="$1,000.01"]')).toBeVisible();
+    await expect(ticker(header, '$100.00')).toBeVisible();
+    await emit(page, 'AAPL', 999.99); await expect(ticker(header, '$999.99')).toBeVisible();
+    await emit(page, 'AAPL', 1000.01); await expect(ticker(header, '$1,000.01')).toBeVisible();
     await expect(page.getByRole('heading', { name: 'AAPL' })).toBeVisible();
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.waitForTimeout(350); // Let the 250 ms digit transition reach its real final frame.
@@ -168,7 +169,7 @@ for (const width of [320, 390, 768, 1440]) {
     const state = await fixture(page);
     await page.goto('/stock/AAPL');
     await emit(page, 'AAPL', 750000.01, { previous_close: 749999, change: 1.01, change_pct: 0.00013 });
-    const value = page.locator('main [aria-label="$750,000.01"]').first();
+    const value = ticker(page.locator('main'), '$750,000.01');
     await expect(value).toBeVisible();
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     const box = await value.boundingBox(); expect(box.x).toBeGreaterThanOrEqual(0); expect(box.x + box.width).toBeLessThanOrEqual(width);
@@ -176,7 +177,7 @@ for (const width of [320, 390, 768, 1440]) {
     await page.screenshot({ path: `test-results/quotes/review-detail-${width}.png`, animations: 'disabled' });
     await page.goto('/watchlist');
     await emit(page, 'AAPL', 750000.01, { previous_close: 749999, change: 1.01, change_pct: 0.00013 });
-    await expect(page.locator('main [aria-label="750,000.01"]').first()).toBeVisible();
+    await expect(ticker(page.locator('main'), '750,000.01')).toBeVisible();
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: `test-results/quotes/review-watchlist-${width}.png`, animations: 'disabled' });
     expect(state.errors).toEqual([]);
@@ -186,7 +187,7 @@ for (const width of [320, 390, 768, 1440]) {
 test('detail labels a retained price as reconnecting, never live, after a stream error', async ({ page }) => {
   const state = await fixture(page); await page.goto('/stock/AAPL');
   await emit(page, 'AAPL', 105.27);
-  await expect(page.locator('main [aria-label="$105.27"]').first()).toBeVisible();
+  await expect(ticker(page.locator('main'), '$105.27')).toBeVisible();
   await expect.poll(() => page.evaluate(() => {
     const stream = window.quoteStreams.filter(row => !row.closed).at(-1);
     if (typeof stream?.onerror !== 'function') return false;
@@ -194,14 +195,14 @@ test('detail labels a retained price as reconnecting, never live, after a stream
     return true;
   })).toBe(true);
   await expect(page.locator('main header').first()).toContainText('行情重连中');
-  await expect(page.locator('main [aria-label="$105.27"]').first()).toBeVisible();
+  await expect(ticker(page.locator('main'), '$105.27')).toBeVisible();
   expect(state.errors).toEqual([]);
 });
 
 test('timestamp-only quote bursts keep number DOM stable and reduced motion removes digit columns', async ({ page }) => {
   const state = await fixture(page);
   await page.goto('/stock/AAPL');
-  const number = page.locator('main [data-quote-symbol="AAPL"]').first().locator('[aria-label="$100.00"]');
+  const number = ticker(page.locator('main [data-quote-symbol="AAPL"]').first(), '$100.00');
   await expect(number).toBeVisible();
   await expect.poll(() => latestSymbols(page)).toContain('AAPL');
   await page.waitForTimeout(500);
@@ -221,7 +222,7 @@ test('timestamp-only quote bursts keep number DOM stable and reduced motion remo
   expect(await page.evaluate(() => window.numberMutations)).toBe(0);
   await page.evaluate(() => window.numberObserver.disconnect());
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await expect.poll(() => number.locator('span').count()).toBe(1);
-  await expect(number).toHaveText('$100.00');
+  await expect.poll(() => number.locator('[aria-hidden="true"] span').count()).toBe(0);
+  await expect(number.locator('.sr-only')).toHaveText('$100.00');
   expect(state.errors).toEqual([]);
 });
