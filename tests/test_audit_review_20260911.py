@@ -14,24 +14,51 @@ from tests.test_realtime_quotes import NOW, settings, trade
 from tests.test_realtime_review_regressions import AT, event, publish
 
 
-def test_invalid_symbol_error_quarantines_unknowns_without_dropping_the_stream(tmp_path, monkeypatch):
+def test_unnamed_invalid_symbol_does_not_drop_unwarmed_codes(tmp_path, monkeypatch):
     monkeypatch.setattr(quotes, "_utcnow", lambda: NOW)
 
     async def scenario():
         hub = quotes.QuoteHub(settings(tmp_path))
         await hub.subscribe(["AAPL", "DELISTD"])
-        hub._apply_rest_quote("AAPL", {
-            "c": 100, "pc": 95,
-            "t": int(datetime(2026, 9, 3, 20, 0, tzinfo=timezone.utc).timestamp()),
-        })
         hub._sent_symbols = set(hub._desired_symbols)
+        before = list(hub._desired_symbols)
         await hub._process_message('{"type":"error","msg":"Invalid symbol"}')
+        assert hub._desired_symbols == before
+        assert hub._provider_unavailable == set()
+        hub._apply_rest_quote("DELISTD", {"c": 0, "pc": 0, "t": 0})
         assert "DELISTD" in hub._provider_unavailable
         assert "DELISTD" not in hub._desired_symbols
         assert "AAPL" in hub._desired_symbols
+        await hub._process_message('{"type":"error","msg":"Invalid symbol: FAKE.X"}')
+        assert "FAKE.X" not in hub._provider_unavailable
+        await hub._process_message('{"type":"error","msg":"Invalid symbol: AAPL"}')
+        assert "AAPL" in hub._provider_unavailable
         assert hub._status()["last_error"] is None
         with pytest.raises(RuntimeError):
             await hub._process_message('{"type":"error","msg":"Invalid API key"}')
+
+    asyncio.run(scenario())
+
+
+def test_unavailable_backoff_survives_trim_while_still_demanded(tmp_path, monkeypatch):
+    monkeypatch.setattr(quotes, "_utcnow", lambda: NOW)
+
+    async def scenario():
+        hub = quotes.QuoteHub(settings(tmp_path))
+        await hub.subscribe(["AAPL", "DELISTD"])
+        hub._apply_rest_quote("DELISTD", {"c": 0, "pc": 0, "t": 0})
+        hub._rest_attempts["DELISTD"] = 1.0
+        hub._note_rest_failure("DELISTD")
+        assert "DELISTD" in hub._provider_unavailable
+        assert "DELISTD" in hub._demanded_symbols
+        assert "DELISTD" not in hub._desired_symbols
+        hub._trim_cache()
+        hub._radar_symbols = ["DELISTD"]
+        hub._allocate()
+        assert "DELISTD" in hub._provider_unavailable
+        assert hub._rest_backoff["DELISTD"] == quotes.REST_MIN_BACKOFF
+        assert hub._rest_attempts["DELISTD"] == 1.0
+        assert "DELISTD" not in hub._desired_symbols
 
     asyncio.run(scenario())
 
@@ -61,8 +88,8 @@ def test_after_hours_rest_close_is_not_next_day_previous_close(tmp_path, monkeyp
         })
         await hub._process_trade(trade(price=105, at=now))
         view = (await hub.snapshot(["AAPL"]))["quotes"][0]
-        assert view["previous_close"] == 100
-        assert view["change_pct"] == 5
+        assert view["previous_close"] is None
+        assert view["change_pct"] is None
 
     asyncio.run(scenario())
 
@@ -71,6 +98,42 @@ def test_regular_close_print_is_regular_session():
     assert quotes.market_session(datetime(2026, 9, 3, 20, 0, tzinfo=timezone.utc)) == "regular"
     assert quotes.market_session(datetime(2026, 9, 3, 20, 0, 1, tzinfo=timezone.utc)) == "postmarket"
     assert quotes._is_official_close_print(datetime(2026, 9, 3, 20, 0, tzinfo=timezone.utc))
+    assert not quotes._is_official_close_print(datetime(2026, 9, 3, 19, 58, tzinfo=timezone.utc))
+    assert not quotes._is_official_close_print(datetime(2026, 9, 3, 20, 0, 45, tzinfo=timezone.utc))
+
+
+def test_near_close_and_stale_official_prints_do_not_invent_change(tmp_path, monkeypatch):
+    now = datetime(2026, 9, 4, 14, 30, tzinfo=timezone.utc)
+    monkeypatch.setattr(quotes, "_utcnow", lambda: now)
+
+    async def scenario():
+        early = quotes.QuoteHub(settings(tmp_path))
+        await early.subscribe(["AAPL"])
+        early._apply_rest_quote("AAPL", {
+            "c": 110, "pc": 100,
+            "t": int(datetime(2026, 9, 3, 19, 58, tzinfo=timezone.utc).timestamp()),
+        })
+        await early._process_trade(trade(price=105, at=now))
+        early_view = (await early.snapshot(["AAPL"]))["quotes"][0]
+        assert early_view["previous_close"] is None
+        assert early_view["change_pct"] is None
+
+        stale = quotes.QuoteHub(settings(tmp_path))
+        await stale.subscribe(["AAPL"])
+        stale._baselines["AAPL"] = {
+            "close": 100, "previous_close": 95, "official_close": 100,
+            "official_close_day": datetime(2026, 9, 2, 20, 0, tzinfo=timezone.utc).date(),
+            "trade_day": datetime(2026, 9, 2, 20, 0, tzinfo=timezone.utc).date(),
+            "trade_time": datetime(2026, 9, 2, 20, 0, tzinfo=timezone.utc),
+            "fetched_day": datetime(2026, 9, 2, 20, 0, tzinfo=timezone.utc).date(),
+            "needs_refresh": False,
+        }
+        await stale._process_trade(trade(price=105, at=now))
+        stale_view = (await stale.snapshot(["AAPL"]))["quotes"][0]
+        assert stale_view["previous_close"] is None
+        assert stale_view["change_pct"] is None
+
+    asyncio.run(scenario())
 
 
 def test_newer_rest_print_cannot_replace_websocket_last(tmp_path, monkeypatch):
@@ -144,6 +207,37 @@ def test_radar_symbols_skips_reload_when_revision_is_unchanged(tmp_path):
         assert first == second == ["AAPL"]
         assert len(loads) == 1
         assert repo.inventory_revision()[0]
+
+    asyncio.run(run())
+
+
+def test_radar_publish_during_first_read_does_not_pin_stale_inventory(tmp_path):
+    settings_obj = BreakoutSettings(
+        _env_file=None, BREAKOUT_RADAR_ENABLED=True,
+        db_path=tmp_path / "radar.db", RANGE_PERSISTENCE_MODE="disabled",
+    )
+    repo = BreakoutRepository(settings_obj.db_path, clock=lambda: AT + timedelta(seconds=20))
+    repo.initialize()
+    publish(repo, AT, [event()])
+    adapter = BreakoutRealtimeAdapter(settings_obj, repo, now=lambda: AT + timedelta(seconds=20))
+    original = adapter._load_events
+    published = []
+
+    def load():
+        rows = original()
+        if not published:
+            published.append(True)
+            publish(repo, AT + timedelta(seconds=1), [event(), event(symbol="MSFT")])
+        return rows
+
+    adapter._load_events = load
+
+    async def run():
+        first = await adapter.radar_symbols()
+        second = await adapter.radar_symbols()
+        assert "MSFT" in first or "MSFT" in second
+        assert set(second) == {"AAPL", "MSFT"}
+        assert adapter._inventory_revision == repo.inventory_revision()
 
     asyncio.run(run())
 

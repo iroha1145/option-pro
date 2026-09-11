@@ -334,10 +334,33 @@ test('price labels distinguish a rendered fallback from the disconnected cached 
 test('a client clock that lags the server still keeps the quote', async () => {
   const h = harness(); h.store.register(['AAPL']); h.store.start(false); await h.tick(1000);
   const received = new Date(Date.UTC(2026, 8, 8) + 120_000).toISOString();
-  h.streams[0].emit('quotes', { quotes: [quote('AAPL', 111, 1, { trade_at: received, received_at: received })] });
+  h.streams[0].emit('quotes', {
+    status: { ...enabled, as_of: received },
+    quotes: [quote('AAPL', 111, 1, { trade_at: received, received_at: received })],
+  });
   await h.tick(250);
   assert.equal(h.store.getQuote('AAPL').price, 111);
   h.store.stop();
+});
+
+test('a stale quote in the same snapshot does not rewind the shared clock', async () => {
+  const h = harness(); h.store.register(['AAPL', 'MSFT']); h.store.start(false); await h.tick(1000);
+  const now = new Date(Date.UTC(2026, 8, 8)).toISOString();
+  const stale = new Date(Date.UTC(2026, 8, 8) - 120_000).toISOString();
+  h.streams[0].emit('quotes', {
+    status: { ...enabled, as_of: now },
+    quotes: [
+      quote('AAPL', 105, 0, { trade_at: now, received_at: now }),
+      quote('MSFT', 100, 0, { trade_at: stale, received_at: stale }),
+    ],
+  });
+  await h.tick(250);
+  assert.ok(Math.abs(h.quoteClockOffsetMs()) <= 1_000);
+  assert.equal(h.store.getQuote('AAPL').price, 105);
+  assert.equal(h.preferLiveQuote(h.store.getQuote('AAPL'), true, stale), true);
+  assert.equal(h.store.getStatus().connection_status, 'connected');
+  h.store.stop();
+  assert.equal(h.quoteClockOffsetMs(), 0);
 });
 
 test('setVisible is a no-op when visibility did not change', async () => {
