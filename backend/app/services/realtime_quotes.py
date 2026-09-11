@@ -52,6 +52,7 @@ _SYMBOL = re.compile(r"^[A-Z][A-Z0-9.-]{0,14}$")
 _US_CLASS_ALIAS = re.compile(r"^([A-Z]{1,10})-([A-Z])$")
 _AUTH_ERROR = re.compile(r"invalid api key|unauthorized|forbidden|authentication", re.I)
 _INVALID_SYMBOL_ERROR = re.compile(r"invalid symbol", re.I)
+_INVALID_SYMBOL_NAMED = re.compile(r"invalid symbol[:\s]+([A-Z][A-Z0-9.]{0,14})", re.I)
 # Finnhub's official websocket documentation links this condition table:
 # https://docs.google.com/spreadsheets/d/1PUxiSWPHSODbaTaoL2Vef6DgU-yFtlRGZf19oBb9Hp0
 # Only unconditional consolidated Update Last=Yes conditions qualify. Codes
@@ -120,13 +121,13 @@ def market_session(at: datetime) -> str:
 
 
 def _is_official_close_print(at: datetime) -> bool:
-    """True when a REST print can stand in as that day's regular close."""
+    """True only for the regular closing print, not nearby last prices."""
     local = at.astimezone(ET)
     if not is_trading_day(local.date()):
         return False
     close = early_close_minutes(local.date()) or 16 * 60
     minutes = local.hour * 60 + local.minute
-    return close - 2 <= minutes <= close
+    return minutes == close and local.second == 0 and local.microsecond == 0
 
 
 def normalize_symbols(symbols: list[str] | tuple[str, ...], *, limit: int = MAX_CLIENT_SYMBOLS) -> list[str]:
@@ -210,6 +211,7 @@ class QuoteHub:
         self._radar_failures = 0
         self._radar_events_failures = 0
         self._desired_symbols: list[str] = []
+        self._demanded_symbols: list[str] = []
         self._signal_symbols: dict[str, list[str]] = {}
         self._sent_symbols: set[str] = set()
         self._dirty_symbols: set[str] = set()
@@ -435,6 +437,7 @@ class QuoteHub:
         for client in self._clients.values():
             ordered.extend(client.symbols)
         candidates = list(dict.fromkeys(_provider_symbol(symbol) for symbol in ordered)) if self._active and self._api_key else []
+        self._demanded_symbols = candidates
         desired = [symbol for symbol in candidates if symbol not in self._provider_unavailable][:self.max_symbols]
         radar_aliases: dict[str, list[str]] = {}
         page_aliases: dict[str, list[str]] = {}
@@ -670,23 +673,24 @@ class QuoteHub:
     def _trim_cache(self) -> None:
         # A page can name many stocks, but only admitted symbols create cache
         # entries. Keep a bounded recent cache for quick page back-navigation.
-        protected = set(self._desired_symbols)
+        live = set(self._desired_symbols)
+        demanded = set(self._demanded_symbols)
         for symbol in list(self._quotes):
             if len(self._quotes) <= MAX_CACHED_QUOTES:
                 break
-            if symbol not in protected:
+            if symbol not in live:
                 self._quotes.pop(symbol, None)
                 self._baselines.pop(symbol, None)
-                self._rest_attempts.pop(symbol, None)
-                self._rest_backoff.pop(symbol, None)
                 self._recent_trades.pop(symbol, None)
                 self._freshness.pop(symbol, None)
-        # Failed REST lookups must not accumulate when visitors change pages.
+        # Isolation and REST backoff stay while a page or radar still wants
+        # the code. Drop them only after it leaves the demand set.
+        keep = demanded | set(self._quotes)
         for mapping in (self._baselines, self._rest_attempts, self._rest_backoff, self._recent_trades):
             for symbol in list(mapping):
-                if symbol not in protected and symbol not in self._quotes:
+                if symbol not in keep:
                     mapping.pop(symbol, None)
-        self._provider_unavailable.intersection_update(protected | self._quotes.keys())
+        self._provider_unavailable.intersection_update(keep)
 
     def _try_lock(self) -> bool:
         if self._lock_file is not None:
@@ -805,7 +809,7 @@ class QuoteHub:
                 raise RuntimeError("Quote provider rejected the connection")
             if _INVALID_SYMBOL_ERROR.search(text):
                 _logger.warning("quotes_stream_error error_type=invalid_symbol")
-                self._mark_unconfirmed_unavailable()
+                self._quarantine_named_invalid_symbol(text)
                 return
             _logger.warning("quotes_stream_error error_type=provider_error")
             return
@@ -896,23 +900,16 @@ class QuoteHub:
                 # Earlier aliases may have committed before a later one failed.
                 self._publish_radar_updates(changes, fallback_symbol=symbol)
 
-    def _mark_unconfirmed_unavailable(self) -> None:
-        """An Invalid-symbol frame does not name the code. Quarantine unknowns."""
-        changed = False
-        for symbol in list(self._sent_symbols):
-            if symbol in self._quotes:
-                continue
-            baseline = self._baselines.get(symbol)
-            if baseline and (
-                _positive(baseline.get("official_close"))
-                or _positive(baseline.get("close"))
-                or _positive(baseline.get("previous_close"))
-            ):
-                continue
-            if symbol not in self._provider_unavailable:
-                self._provider_unavailable.add(symbol)
-                changed = True
-        if changed:
+    def _quarantine_named_invalid_symbol(self, text: str) -> None:
+        """Unnamed Invalid-symbol frames cannot isolate codes still warming up."""
+        named = _INVALID_SYMBOL_NAMED.search(text)
+        if named is None:
+            return
+        symbol = _provider_symbol(named.group(1).upper())
+        if symbol not in self._demanded_symbols and symbol not in self._sent_symbols:
+            return
+        if symbol not in self._provider_unavailable:
+            self._provider_unavailable.add(symbol)
             self._allocate()
 
     def _store_quote(self, symbol: str, price: float, at: datetime, received: datetime, source: str) -> None:
@@ -925,9 +922,9 @@ class QuoteHub:
         previous_close = None
         if baseline:
             # Same session day uses REST `pc`. The next trading day may use
-            # yesterday's official close, or `pc` when that print is missing.
-            # A wider gap stays unknown so a 3-day-old snapshot cannot mint
-            # a fake change.
+            # yesterday's official close only when that print is dated. A
+            # missing prior close stays unknown — stale `pc` is the day
+            # before yesterday, not a substitute official close.
             trade_day = at.astimezone(ET).date()
             official = _positive(baseline.get("official_close"))
             official_day = baseline.get("official_close_day")
@@ -936,8 +933,6 @@ class QuoteHub:
                 previous_close = baseline.get("previous_close")
             elif official and official_day is not None and trade_day == next_trading_day(official_day):
                 previous_close = official
-            elif baseline_day is not None and trade_day == next_trading_day(baseline_day):
-                previous_close = official or baseline.get("previous_close")
         change = price - previous_close if previous_close else None
         self._quotes[symbol] = {"symbol": symbol, "price": price, "previous_close": previous_close,
                                 "change": change, "change_pct": change / previous_close * 100 if change is not None else None,
