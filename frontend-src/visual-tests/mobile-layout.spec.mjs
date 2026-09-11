@@ -202,7 +202,15 @@ for (const viewport of EARNINGS_DESKTOP_VIEWPORTS) {
     test.use({ viewport });
 
     test("keeps every earnings column and the analysis rail fully visible", async ({ page, request }) => {
-      test.setTimeout(60_000);
+      test.setTimeout(120_000);
+      let earningsRetryAt = null;
+      page.on("response", (response) => {
+        if (new URL(response.url()).pathname !== "/api/earnings/upcoming") return;
+        if (response.status() === 429) {
+          const seconds = Number(response.headers()["retry-after"]);
+          if (Number.isFinite(seconds) && seconds > 0) earningsRetryAt = Date.now() + seconds * 1000;
+        } else if (response.ok()) earningsRetryAt = null;
+      });
       // 财报列表需要真实 /api/earnings/upcoming（CI 的 :2000 后端提供）。
       // 本地默认的 python http.server 静态取证服务器没有 API，会 404 →
       // 页面如实渲染错误态，这不是布局回归——显式跳过而不是假红。
@@ -219,10 +227,21 @@ for (const viewport of EARNINGS_DESKTOP_VIEWPORTS) {
       const list = page.locator('[aria-label="即将公布"]');
       const analysis = page.locator('[aria-label="AI 影响分析"]');
       await expect(subject).toBeVisible();
-      // The first owner read may wait for the unified worker's cold earnings
-      // snapshot. Keep the visual assertion on the real list instead of
-      // mistaking its loading skeleton for a layout failure.
-      await expect(list).toBeVisible({ timeout: 30_000 });
+      // The API probe and earlier browser cases share this backend's IP
+      // bucket. Recover only an observed 429 through the actual page action;
+      // all data and layout assertions still use the real backend response.
+      await expect.poll(async () => {
+        if (await list.isVisible()) return true;
+        if (earningsRetryAt !== null && Date.now() >= earningsRetryAt) {
+          const retry = subject.locator('[aria-label="财报列表不可用"]')
+            .getByRole("button", { name: "重试", exact: true });
+          if (await retry.isVisible()) {
+            earningsRetryAt = null;
+            await retry.click({ timeout: 1_000 }).catch(() => {});
+          }
+        }
+        return false;
+      }, { timeout: 60_000 }).toBe(true);
       await expect(analysis).toBeVisible({ timeout: 30_000 });
 
       const header = list.locator(":scope > div").first();
