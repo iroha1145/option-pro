@@ -943,23 +943,35 @@ class QuoteHub:
         if len(self._quotes) > MAX_CACHED_QUOTES:
             self._trim_cache()
 
+    def _quote_warmup_needed(self, symbol: str) -> bool:
+        """True when /quote can still supply a missing session baseline field."""
+        if symbol in self._provider_unavailable:
+            return False
+        baseline = self._baselines.get(symbol)
+        today = _utcnow().astimezone(ET).date()
+        if baseline is None or baseline.get("fetched_day") != today:
+            return True
+        previous = _positive(baseline.get("previous_close"))
+        if baseline.get("needs_refresh") or previous is None:
+            return True
+        if baseline.get("official_close") is not None:
+            return False
+        now_local = _utcnow().astimezone(ET)
+        close = early_close_minutes(now_local.date()) or 16 * 60
+        minutes = now_local.hour * 60 + now_local.minute
+        # The official print is 16:00:00 ET (or the half-day close). After that
+        # minute, /quote last is a post-market trade and cannot become today's
+        # official close. Keep trying only in the close window.
+        return close - 2 <= minutes < close + 1
+
     async def _warm_loop(self) -> None:
         while self._running:
             if self._lock_file is not None:
-                today = _utcnow().astimezone(ET).date()
                 for symbol in list(self._desired_symbols):
                     if symbol not in self._desired_symbols:
                         continue
-                    if symbol in self._provider_unavailable:
+                    if not self._quote_warmup_needed(symbol):
                         continue
-                    baseline = self._baselines.get(symbol)
-                    if baseline and baseline["fetched_day"] == today and not baseline.get("needs_refresh"):
-                        if baseline.get("official_close") is not None:
-                            continue
-                        now_local = _utcnow().astimezone(ET)
-                        close = early_close_minutes(now_local.date()) or 16 * 60
-                        if now_local.hour * 60 + now_local.minute < close - 2:
-                            continue
                     last = self._rest_attempts.get(symbol)
                     delay = self._rest_backoff.get(symbol, REST_MIN_BACKOFF)
                     if last is not None and time.monotonic() - last < delay:
@@ -990,11 +1002,19 @@ class QuoteHub:
             payload = response.json()
             if symbol in self._desired_symbols:
                 self._apply_rest_quote(symbol, payload)
-            if symbol in self._baselines or symbol in self._quotes or symbol in self._provider_unavailable:
+            if symbol in self._provider_unavailable:
                 self._rest_backoff.pop(symbol, None)
-                # A completed snapshot ends the REST fault; a websocket reconnect is
-                # no longer the only thing that can clear it. A malformed response
-                # remains the same fault, without resetting its transition order.
+                self._set_error("rest", None)
+            elif symbol in self._baselines or symbol in self._quotes:
+                # A reachable /quote is not the same as a complete baseline.
+                # Missing previous close (or a still-seekable official close)
+                # keeps the per-symbol backoff; only a finished baseline
+                # clears it. The REST transport fault still ends because the
+                # provider answered.
+                if self._quote_warmup_needed(symbol):
+                    self._note_rest_failure(symbol)
+                else:
+                    self._rest_backoff.pop(symbol, None)
                 self._set_error("rest", None)
             else:
                 self._note_rest_failure(symbol)
