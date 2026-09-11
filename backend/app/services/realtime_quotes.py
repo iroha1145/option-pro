@@ -951,6 +951,13 @@ class QuoteHub:
         today = _utcnow().astimezone(ET).date()
         if baseline is None or baseline.get("fetched_day") != today:
             return True
+        latest = self._quotes.get(symbol)
+        if (latest is not None and latest["_trade_time"].astimezone(ET).date() == today
+                and _positive(latest.get("previous_close")) is None):
+            # A successful midnight fetch can still contain yesterday's last
+            # trade. Once today's stream arrives without a comparison close,
+            # recover its baseline instead of treating fetched_day as complete.
+            return True
         previous = _positive(baseline.get("previous_close"))
         if baseline.get("needs_refresh") or previous is None:
             return True
