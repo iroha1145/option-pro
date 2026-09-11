@@ -118,7 +118,7 @@ async function clearTouchedDrawings(page) {
     };
     for (const { ticker, range } of scopes) {
       const url = `/api/account/chart-drawings?ticker=${encodeURIComponent(ticker)}&range=${encodeURIComponent(range)}&adjustment=raw`;
-      for (let attempt = 0; attempt < 6; attempt += 1) {
+      for (let attempt = 0; attempt < 10; attempt += 1) {
         const listedRes = await fetch(url, { credentials: "same-origin" }).catch(() => null);
         if (!listedRes) break;
         if (listedRes.status === 429) { await wait(backoffFrom(listedRes)); continue; }
@@ -135,7 +135,10 @@ async function clearTouchedDrawings(page) {
         if (removed && removed.status === 429) { await wait(backoffFrom(removed)); continue; }
         // 409 = revision 在 GET 与 DELETE 之间动了：回头重新 GET 再删
         if (removed && removed.status === 409) continue;
-        break;
+        // 成功也要再 GET 确认空 scope。内存里的控制器可能立刻把图形写回去，
+        // 下一笔水平线就会变成 n=2，锁定用例会在 unlocked 轮询上卡满 45s。
+        if (removed && removed.ok) continue;
+        await wait(backoffFrom(removed));
       }
     }
     try {
@@ -427,8 +430,23 @@ test("hide then restore from the object list", async ({ page }) => {
 
 test("undo color text lock delete then refresh", async ({ page }) => {
   test.skip(!HAS_REAL_BACKEND, "stock drawings visual path needs OPTIX_VISUAL_BASE_URL");
-  test.setTimeout(90_000);
+  test.setTimeout(120_000);
   await openStock(page);
+  // beforeEach 清扫后，已挂载的绘图控制器仍可能把旧对象写回。先确认 scope
+  // 为空再落笔，否则 list 会一直是 n=2，unlocked 轮询永远等不到。
+  await clearTouchedDrawings(page);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(toolButton(page, "选择")).toBeVisible({ timeout: 20_000 });
+  await expect.poll(async () => {
+    const listed = await listDrawings(page);
+    if (listed.status === 429) return "rate-limited";
+    if (!Array.isArray(listed.drawings)) return "n=?";
+    if (listed.drawings.length > 0) {
+      await clearTouchedDrawings(page);
+      return `n=${listed.drawings.length}`;
+    }
+    return "empty";
+  }, { timeout: 45_000 }).toBe("empty");
   await placeHorizontal(page, 0.5, 0.4);
   await expandChart(page);
   const row = drawingRows(page).first();
