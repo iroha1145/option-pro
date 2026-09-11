@@ -19,7 +19,7 @@ from app.api.ai import (
     _require_manual_analysis_enabled,
     _require_runtime_capability,
 )
-from app.api.stocks import _sanitize
+from app.services.utils import sanitize as _sanitize
 from app.access import (
     current_request_is_owner,
     public_snapshot_unavailable,

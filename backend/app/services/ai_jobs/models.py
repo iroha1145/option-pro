@@ -2192,18 +2192,6 @@ class OptionAlertJobRequest(StrictModel):
         return value.upper()
 
 
-class SignalAnalysisJobRequest(StrictModel):
-    ticker: Ticker
-    signals: dict[str, Any]
-    scores: dict[str, Any]
-    as_of: Annotated[str, StringConstraints(min_length=1, max_length=40)]
-
-    @field_validator("ticker")
-    @classmethod
-    def normalize_ticker(cls, value: str) -> str:
-        return value.upper()
-
-
 class EarningsImpactItem(StrictModel):
     ticker: Ticker
     name: ZhCompanyName

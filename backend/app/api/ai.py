@@ -21,7 +21,7 @@ from pydantic import (
     field_validator,
 )
 
-from app.api.stocks import _sanitize
+from app.services.utils import sanitize as _sanitize
 from app.access import current_request_is_owner, require_same_origin_json
 from app.config import get_settings
 from app.personal_config import get_personal_config

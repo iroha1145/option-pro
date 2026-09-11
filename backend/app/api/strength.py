@@ -534,11 +534,6 @@ def _existing_strength_publication(
         return None, None
 
 
-def _existing_strength_saved_at(path: Path) -> float | None:
-    saved_at, _payload = _existing_strength_publication(path)
-    return saved_at
-
-
 def _write_strength_snapshot(
     path: Path,
     *,

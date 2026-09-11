@@ -353,7 +353,7 @@ class OwnerAccessRuntime:
         trusted_proxy_cidrs: str = "",
     ) -> DeploymentBoundary:
         if self.mode == "password":
-            if not self._password_hash or not self._valid_password_hash_shape():
+            if not self.password_configured or not self._valid_password_hash_shape():
                 raise RuntimeError(
                     "ACCESS_MODE=password requires a valid APP_PASSWORD_HASH"
                 )

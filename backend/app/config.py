@@ -229,7 +229,6 @@ class Settings(BaseSettings):
     marketdata_option_dte: int = Field(default=30, alias="MARKETDATA_OPTION_DTE")
     marketdata_option_strike_limit: int = Field(default=8, alias="MARKETDATA_OPTION_STRIKE_LIMIT")
     marketdata_option_mode: str = Field(default="delayed", alias="MARKETDATA_OPTION_MODE")
-    cache_ttl: int = Field(default=60, alias="CACHE_TTL")
     request_timeout: float = Field(default=20.0, alias="REQUEST_TIMEOUT")
 
     model_config = SettingsConfigDict(

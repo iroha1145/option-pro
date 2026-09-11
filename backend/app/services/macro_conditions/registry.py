@@ -14,7 +14,7 @@ inferred.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal, Mapping, Optional
+from typing import Mapping, Optional
 
 
 SCORING_VERSION = "optix-macro-score-v1"
@@ -87,14 +87,6 @@ def regime_for(score: Optional[float]) -> Optional[str]:
 
 
 # --- Unit families ---------------------------------------------------------
-
-UnitsFamily = Literal[
-    "usd_amount",
-    "percent",
-    "index",
-    "usd_per_barrel",
-    "usd_per_mmbtu",
-]
 
 #: All money is normalised to USD billions. The multiplier is resolved from the
 #: FRED ``units`` metadata string at fetch time, never guessed from the series

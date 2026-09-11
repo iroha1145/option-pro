@@ -53,10 +53,3 @@ def snapshot() -> dict[str, Any]:
             "timings": timings,
             "gauges": dict(sorted(_gauges.items())),
         }
-
-
-def reset_for_tests() -> None:
-    with _lock:
-        _counters.clear()
-        _timings.clear()
-        _gauges.clear()

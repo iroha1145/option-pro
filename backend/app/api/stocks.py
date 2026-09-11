@@ -593,7 +593,7 @@ from app.services.utils import sanitize as _sanitize
 
 _LOGO_MEDIA_TYPES = {"image/png", "image/jpeg", "image/webp", "image/svg+xml"}
 _LOGO_MAX_BYTES = 512 * 1024
-_LOGO_NOT_FOUND_TTL = 60 * 60
+_LOGO_NOT_FOUND_TTL = company_logo_cache.NEGATIVE_SECONDS
 _LOGO_SUCCESS_TTL = company_logo_cache.FRESH_SECONDS
 _LOGO_STALE_TTL = company_logo_cache.STALE_SECONDS
 _LOGO_MEMORY_ENTRIES = 128

@@ -21,12 +21,7 @@ from app.services.cache import cache
 from app.services.finnhub_budget import mark_finnhub_rate_limited, reserve_finnhub_request
 from app.services.sectors import SECTORS
 from app.services.strength.features import (
-    _MIN_52W_HISTORY_BARS,
-    _atr_pct,
     _feature_row,
-    _macd_direction,
-    _ret,
-    _rsi,
     _safe_float,
 )
 from app.services.strength.finnhub import (
@@ -40,7 +35,6 @@ from app.services.strength.marketdata import (
 )
 from app.services.strength.market_regime import MARKET_BENCHMARKS, compute_market_regime
 from app.services.strength.market_shape import MARKET_SHAPE_VERSION
-from app.services.strength.price_action import compute_price_action
 from app.services.strength.scoring import (
     FEATURE_VERSION as STRENGTH_FEATURE_VERSION,
     NORMALIZATION_VERSION as STRENGTH_NORMALIZATION_VERSION,
@@ -50,7 +44,6 @@ from app.services.strength.scoring import (
     score_profile_fit,
     score_ranking,
 )
-from app.services.strength.vol_price_match import compute_vol_price_match
 from app.services.strength.yahoo_options import (
     enrich_rows_with_yahoo_options,
     yahoo_options_is_enabled,
@@ -60,8 +53,6 @@ from app.services.technical.range_persistence import (
     RANGE_PERSISTENCE_VERSION,
     compute_range_persistence,
 )
-from app.services.zh_names import get_zh_name
-
 TIMEFRAMES = ("short", "mid", "long", "all")
 PROFILES = ("conservative", "balanced", "aggressive")
 UNIVERSES = ("themes",)

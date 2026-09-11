@@ -248,36 +248,6 @@ def _cached(
         _release_key_lock(key, key_lock)
 
 
-def _read_cached(
-    key: str,
-    *,
-    with_metadata: bool = False,
-    is_valid=None,
-    max_stale_seconds: int = _MAX_STALE_SECONDS,
-) -> Any | None:
-    """Read an existing bounded cache entry without invoking its loader."""
-
-    now = datetime.now(timezone.utc)
-    with _cache_lock:
-        hit = _cache.get(key)
-    if hit is None:
-        return None
-    expires_at, fetched_at, value = hit
-    valid = is_valid(value) if is_valid is not None else True
-    stale_age = (now - fetched_at).total_seconds()
-    if not valid or stale_age > max(0, int(max_stale_seconds)):
-        return None
-    stale = expires_at <= now
-    metadata = {
-        "_stale": stale,
-        "as_of": fetched_at.isoformat(),
-        "source_status": "stale" if stale else "active",
-    }
-    if stale:
-        metadata["stale_age_seconds"] = round(max(stale_age, 0.0), 1)
-    return _cache_value(value, metadata, with_metadata)
-
-
 def option_expiry_metrics(expiration: str, now: datetime | None = None) -> dict[str, Any]:
     """Time remaining to the regular or early US equity-option close."""
     expiry_date = datetime.strptime(expiration, "%Y-%m-%d").date()
@@ -371,23 +341,6 @@ def get_expirations_snapshot(ticker: str) -> dict[str, Any]:
     if is_declared_unsupported(symbol):
         return _unsupported_expiration_snapshot(symbol)
     expirations, metadata = _get_expirations_cached(symbol, with_metadata=True)
-    return _annotate_expiration_snapshot(symbol, expirations, metadata)
-
-
-def get_cached_expirations_snapshot(ticker: str) -> dict[str, Any] | None:
-    """Read expiration data already held by this process without refreshing."""
-
-    symbol = canonicalize_option_symbol(ticker)
-    if is_declared_unsupported(symbol):
-        return _unsupported_expiration_snapshot(symbol)
-    cached = _read_cached(
-        f"expirations:{symbol}",
-        with_metadata=True,
-        is_valid=lambda value: isinstance(value, list),
-    )
-    if cached is None:
-        return None
-    expirations, metadata = cached
     return _annotate_expiration_snapshot(symbol, expirations, metadata)
 
 
@@ -672,21 +625,6 @@ def get_option_chain(ticker: str, expiration: str) -> dict[str, Any]:
         f"chain:{symbol}:{expiration}",
         300,
         load,
-        is_valid=lambda value: bool(value.get("calls") or value.get("puts")),
-    )
-
-
-def get_cached_option_chain(
-    ticker: str,
-    expiration: str,
-) -> dict[str, Any] | None:
-    """Read an existing option chain without contacting the provider."""
-
-    symbol = canonicalize_option_symbol(ticker)
-    if is_declared_unsupported(symbol):
-        return None
-    return _read_cached(
-        f"chain:{symbol}:{expiration}",
         is_valid=lambda value: bool(value.get("calls") or value.get("puts")),
     )
 

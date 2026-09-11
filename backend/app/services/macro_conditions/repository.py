@@ -19,22 +19,18 @@ Durability rules enforced here:
 from __future__ import annotations
 
 import json
-import math
 import sqlite3
 import uuid
 from contextlib import contextmanager
 from datetime import date, datetime, timezone
 from hashlib import sha256
 from pathlib import Path
-from typing import Any, Iterable, Iterator, Mapping, Optional, Sequence
+from typing import Any, Iterator, Mapping, Optional, Sequence
 from urllib.parse import quote
 
 from .models import (
-    CompositeSnapshot,
     EtfObservation,
-    FactorSnapshot,
     MacroError,
-    ModuleSnapshot,
     SeriesMetadata,
     SeriesObservation,
     SnapshotBundle,
@@ -668,15 +664,6 @@ class MacroRepository:
             ).fetchall()
         return [dict(row) for row in rows]
 
-    def series_ids(self) -> list[str]:
-        with self.read() as connection:
-            return [
-                str(row["series_id"])
-                for row in connection.execute(
-                    "SELECT DISTINCT series_id FROM macro_series_revisions ORDER BY series_id"
-                )
-            ]
-
     def series_coverage(self) -> dict[str, dict[str, Optional[str]]]:
         with self.read() as connection:
             rows = connection.execute(
@@ -1279,21 +1266,6 @@ class MacroRepository:
                 ),
             ).fetchall()
         return [dict(row) for row in rows]
-
-    def snapshot_dates(
-        self,
-        *,
-        scoring_version: str = SCORING_VERSION,
-    ) -> tuple[Optional[str], Optional[str]]:
-        with self.read() as connection:
-            row = connection.execute(
-                """SELECT MIN(snapshot_date) AS earliest, MAX(snapshot_date) AS latest
-                   FROM macro_composite_snapshots WHERE scoring_version=?""",
-                (scoring_version,),
-            ).fetchone()
-        if row is None:
-            return None, None
-        return row["earliest"], row["latest"]
 
 
 __all__ = [

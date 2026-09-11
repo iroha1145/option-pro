@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import math
 from datetime import datetime
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Iterable, Sequence
 
 from pydantic import ValidationError
 

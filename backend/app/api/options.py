@@ -658,7 +658,7 @@ async def option_chain(
     allow_live = current_request_is_owner() or request_allows_visitor_live_pulls(request)
 
     try:
-        from app.api.stocks import _sanitize
+        from app.services.utils import sanitize as _sanitize
 
         # A chain is validated before it enters this cache and has its own TTL.
         # Its expiration-list entry may have been loaded earlier and already

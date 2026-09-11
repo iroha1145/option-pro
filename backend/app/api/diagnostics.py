@@ -23,7 +23,6 @@ async def cache_diagnostics() -> dict[str, Any]:
     from app import public_home_snapshot
     from app.api import sectors as sectors_api
     from app.api import strength as strength_api
-    from app.services import http_read_cache
 
     return {
         "metrics": cache_metrics.snapshot(),

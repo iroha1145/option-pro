@@ -816,7 +816,6 @@ def _public_calendar_title(value: Any) -> str:
     ]
     if not acronyms:
         return f"原文事件：{raw}"
-    acronym = acronyms[0]
     if (
         (
             any(word in folded for word in ("inventory", "inventories", "stockpile"))

@@ -266,19 +266,6 @@ class EarningsAnalysisTask:
         return self._repository
 
     @staticmethod
-    def _same_report_date(row: Mapping[str, Any] | None, report_date: str) -> bool:
-        if not row:
-            return False
-        try:
-            payload = json.loads(str(row.get("payload_json") or ""))
-        except (TypeError, ValueError, json.JSONDecodeError):
-            return False
-        return (
-            isinstance(payload, dict)
-            and str(payload.get("earnings_date") or "") == report_date
-        )
-
-    @staticmethod
     def _updated_before_utc_date(
         row: Mapping[str, Any] | None,
         utc_date: date,

@@ -87,11 +87,6 @@ def _read_cached(key: str) -> Any | None:
     return _cached_value(hit[1]) if hit is not None else None
 
 
-def cached_market_signals() -> dict[str, Any] | None:
-    value = _read_cached("market_signals")
-    return value if isinstance(value, dict) else None
-
-
 def cached_stock_signals(ticker: str) -> dict[str, Any] | None:
     value = _read_cached(f"stock_signals:{ticker.upper().strip()}")
     return value if isinstance(value, dict) else None
