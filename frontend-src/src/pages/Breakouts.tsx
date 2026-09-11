@@ -544,8 +544,8 @@ export default function Breakouts() {
               {/* 卡片定位闪烁：左缘 brand tick-flash（点击卡片定位联动） */}
               <style>{`
                 @keyframes bk-locate-flash {
-                  0% { box-shadow: inset 3px 0 0 var(--brand-600), 0 0 0 3px rgba(46,70,224,.18); }
-                  100% { box-shadow: inset 3px 0 0 transparent, 0 0 0 0 rgba(46,70,224,0); }
+                  0% { box-shadow: inset 3px 0 0 var(--brand-600), 0 0 0 3px color-mix(in srgb, var(--brand-600) 25%, transparent); }
+                  100% { box-shadow: inset 3px 0 0 transparent, 0 0 0 0 transparent; }
                 }
                 .bk-locate { animation: bk-locate-flash 900ms cubic-bezier(.22,1,.36,1) 2; }
                 @media (prefers-reduced-motion: reduce) { .bk-locate { animation: none; } }

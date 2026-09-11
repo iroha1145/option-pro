@@ -237,7 +237,7 @@ export function overlayMarks(
   style: { color: string; width?: number; dash?: string | number[] },
 ): { lines: object[]; points: object[] } {
   const lineStyle = {
-    color: style.color,
+    color: drawingPaint(style.color),
     width: style.width ?? 2,
     type: style.dash ?? [4, 3],
   };
@@ -249,7 +249,7 @@ export function overlayMarks(
     coord: [anchor.x, anchor.y],
     symbol: 'circle',
     symbolSize: 10,
-    itemStyle: { color: '#FDFCF9', borderColor: style.color, borderWidth: 2 },
+    itemStyle: { color: drawingSurface(1), borderColor: drawingPaint(style.color), borderWidth: 2 },
   }));
   return { lines, points };
 }
@@ -283,7 +283,7 @@ export function graphicFromOverlay(
       type: 'line',
       id: `overlay-seg-${index}`,
       shape: { x1: a.x, y1: a.y, x2: b.x, y2: b.y },
-      style: { stroke, lineWidth, lineDash, lineCap: 'round', shadowColor: '#FFFFFF', shadowBlur: 3 },
+      style: { stroke, lineWidth, lineDash, lineCap: 'round', shadowColor: drawingSurface(0.95), shadowBlur: 3 },
       silent: true,
     });
   });
@@ -294,7 +294,7 @@ export function graphicFromOverlay(
       type: 'circle',
       id: `overlay-anchor-${index}`,
       shape: { cx: pixel.x, cy: pixel.y, r: 6 },
-      style: { fill: '#FDFCF9', stroke, lineWidth: 2 },
+      style: { fill: drawingSurface(1), stroke, lineWidth: 2 },
       silent: true,
     });
   });
@@ -399,7 +399,7 @@ export function drawingsToMarks(
   }
   if (options.inProgress && options.inProgress.points.length) {
     const overlay = draftOverlay(options.inProgress, ctx);
-    const extra = overlayMarks(overlay, { color: '#2E46E0', width: 1.5, dash: [4, 3] });
+    const extra = overlayMarks(overlay, { color: drawingPaint('#2E46E0'), width: 1.5, dash: [4, 3] });
     lines.push(...extra.lines);
     points.push(...extra.points);
   }

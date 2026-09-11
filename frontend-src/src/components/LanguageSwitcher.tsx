@@ -96,19 +96,19 @@ export default function LanguageSwitcher({ className }: { className?: string }) 
       {mounted && (
         <div
           role="menu"
-          aria-label={t('界面语言')}
+          aria-labelledby="language-switcher-label"
           data-origin="top-right"
           className={cn(
             't-dropdown absolute right-0 top-10 z-40 w-[176px] rounded-md border border-line bg-card p-1.5 shadow-sh-2',
             overlayClassName(phase),
           )}
         >
-          <p className="px-2 pb-1.5 pt-1 eyebrow">{t('界面语言')}</p>
-          <ul ref={listRef} onKeyDown={onMenuKeyDown}>
+          <p id="language-switcher-label" className="px-2 pb-1.5 pt-1 eyebrow">{t('界面语言')}</p>
+          <ul ref={listRef} role="none" onKeyDown={onMenuKeyDown}>
             {LOCALES.map((l) => {
               const active = l.code === current;
               return (
-                <li key={l.code}>
+                <li key={l.code} role="none">
                   <button
                     role="menuitemradio"
                     aria-checked={active}
@@ -117,7 +117,7 @@ export default function LanguageSwitcher({ className }: { className?: string }) 
                       setLocale(l.code);
                     }}
                     className={cn(
-                      'flex w-full items-center gap-2 rounded-xs px-2 py-1.5 text-left text-body-s transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30',
+                      'flex w-full items-center gap-2 rounded-xs px-2 py-1.5 text-left text-body-s transition-colors focus-visible:bg-paper-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600',
                       active ? 'text-brand-600' : 'text-ink-700 hover:bg-paper-2',
                     )}
                   >

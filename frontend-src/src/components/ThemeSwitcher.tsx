@@ -102,7 +102,7 @@ export default function ThemeSwitcher({ className }: { className?: string }) {
         }}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label={triggerLabel(preference)}
+        aria-label={t('切换外观')}
         title={t('当前外观：{mode}', { mode: preferenceLabel(preference) })}
         className={cn(
           'theme-switcher-control flex size-9 shrink-0 items-center justify-center rounded-md border shadow-btn transition-colors duration-fast md:h-8 md:w-8',
@@ -114,19 +114,19 @@ export default function ThemeSwitcher({ className }: { className?: string }) {
       {mounted && (
         <div
           role="menu"
-          aria-label={t('外观')}
+          aria-labelledby="theme-appearance-label"
           data-origin="top-right"
           className={cn(
             't-dropdown absolute right-0 top-10 z-40 w-[176px] rounded-md border border-line bg-card p-1.5 shadow-sh-2',
             overlayClassName(phase),
           )}
         >
-          <p className="eyebrow px-2 pb-1.5 pt-1">{t('外观')}</p>
-          <ul ref={listRef} onKeyDown={onMenuKeyDown}>
+          <p id="theme-appearance-label" className="eyebrow px-2 pb-1.5 pt-1">{t('外观')}</p>
+          <ul ref={listRef} role="none" onKeyDown={onMenuKeyDown}>
             {OPTIONS.map((option) => {
               const active = option.value === preference;
               return (
-                <li key={option.value}>
+                <li key={option.value} role="none">
                   <button
                     type="button"
                     role="menuitemradio"
@@ -137,7 +137,7 @@ export default function ThemeSwitcher({ className }: { className?: string }) {
                       triggerRef.current?.focus();
                     }}
                     className={cn(
-                      'flex w-full items-center gap-2 rounded-xs px-2 py-1.5 text-left text-body-s transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30',
+                      'flex w-full items-center gap-2 rounded-xs px-2 py-1.5 text-left text-body-s transition-colors focus-visible:bg-paper-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-600',
                       active ? 'text-brand-600' : 'text-ink-700 hover:bg-paper-2',
                     )}
                   >

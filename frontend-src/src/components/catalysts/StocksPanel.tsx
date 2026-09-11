@@ -56,7 +56,7 @@ function NetImpactBar({ value, analyzed }: { value: number; analyzed: number }) 
       <NetImpactLabel />
       <div
         className="relative h-1.5 w-28 rounded-pill"
-        style={{ background: 'linear-gradient(90deg, color-mix(in srgb, var(--down-600) 35%, transparent), rgba(233,231,224,.6) 50%, color-mix(in srgb, var(--up-600) 35%, transparent))' }}
+        style={{ background: 'linear-gradient(90deg, color-mix(in srgb, var(--down-600) 35%, transparent), color-mix(in srgb, var(--ink-300) 35%, var(--paper-2)) 50%, color-mix(in srgb, var(--up-600) 35%, transparent))' }}
         role="img"
         aria-label={t('净影响 {sign}{value}', { sign, value: Math.abs(value).toFixed(2) })}
       >

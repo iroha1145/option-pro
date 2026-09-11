@@ -74,6 +74,11 @@
     --control-selected-shadow: 0 2px 4px rgba(24, 43, 68, .045), 0 5px 12px -4px rgba(24, 43, 68, .09);
     --card-shadow: 0 2px 4px rgba(24, 43, 68, .02), 0 9px 25px -12px rgba(24, 43, 68, .12);
     --popover-shadow: 0 2px 5px rgba(24, 43, 68, .045), 0 10px 28px -10px rgba(24, 43, 68, .15);
+    --knob-shadow: 0 1px 3px rgba(16, 24, 40, .18), 0 1px 1px rgba(16, 24, 40, .10);
+    --shadow-xs: 0 1px 2px 0 rgba(16, 24, 40, .05);
+    --track-shadow: inset 0 1px 2px rgba(16, 24, 40, .16);
+    --overlay-shadow: 0 24px 64px -16px rgba(16, 24, 40, 0.35), 0 6px 20px -8px rgba(16, 24, 40, 0.16);
+    --dock-shadow: 0 18px 40px -14px rgba(16, 24, 40, 0.30), 0 4px 14px -6px rgba(16, 24, 40, 0.14);
 
     /* shadcn/ui 基座变量（亮纸面映射；v8.1 hue 44°→220° 随纸面降温，杜绝冷暖混用） */
     --background: 220 20% 97%;
@@ -151,6 +156,11 @@
     --control-selected-shadow: 0 2px 4px rgba(0, 0, 0, .28), 0 5px 12px -4px rgba(0, 0, 0, .36);
     --card-shadow: 0 2px 4px rgba(0, 0, 0, .28), 0 9px 25px -12px rgba(0, 0, 0, .45);
     --popover-shadow: 0 2px 5px rgba(0, 0, 0, .32), 0 10px 28px -10px rgba(0, 0, 0, .5);
+    --knob-shadow: 0 1px 3px rgba(0, 0, 0, .45), 0 1px 1px rgba(0, 0, 0, .28);
+    --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, .35);
+    --track-shadow: inset 0 1px 2px rgba(0, 0, 0, .4);
+    --overlay-shadow: 0 24px 64px -16px rgba(0, 0, 0, 0.55), 0 6px 20px -8px rgba(0, 0, 0, 0.32);
+    --dock-shadow: 0 18px 40px -14px rgba(0, 0, 0, 0.5), 0 4px 14px -6px rgba(0, 0, 0, 0.28);
     --shadow-sh-1: 0 1px 2px rgba(0, 0, 0, .35);
     --shadow-sh-2: 0 1px 2px rgba(0, 0, 0, .35), 0 12px 32px -14px rgba(0, 0, 0, .55);
     --shadow-sh-3: 0 2px 4px rgba(0, 0, 0, .4), 0 24px 56px -16px rgba(0, 0, 0, .62);
@@ -240,7 +250,7 @@
   :focus-visible {
     outline: 2px solid var(--brand-600);
     outline-offset: 3px;
-    box-shadow: 0 0 0 3px rgba(46, 70, 224, .18);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-600) 25%, transparent);
     border-radius: 6px;
     transition: none;
   }
@@ -260,8 +270,8 @@
     transform: translateY(-200%);
     border-radius: 8px;
     padding: .75rem 1rem;
-    background: #0D1626;
-    color: #fff;
+    background: var(--ink-900);
+    color: var(--paper);
   }
   .skip-link:focus { transform: none; }
 
@@ -753,7 +763,7 @@
 .ft-range:active::-webkit-slider-thumb { transform: scale(1.12); }
 .ft-range:active::-moz-range-thumb { transform: scale(1.12); }
 .ft-range:focus-visible {
-  box-shadow: 0 0 0 2px var(--card), 0 0 0 4px rgba(59, 89, 242, 0.3);
+  box-shadow: 0 0 0 2px var(--card), 0 0 0 4px color-mix(in srgb, var(--brand-600) 30%, transparent);
 }
 @media (prefers-reduced-motion: reduce) {
   .ft-range::-webkit-slider-thumb, .ft-range::-moz-range-thumb { transition: none; }

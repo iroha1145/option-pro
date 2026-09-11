@@ -145,8 +145,8 @@ export function ScanButton({
       disabled={scanning}
       animate={
         dirty && !scanning
-          ? { boxShadow: [`${base}, 0 0 0 0 rgba(46,70,224,.38)`, `${base}, 0 0 0 9px rgba(46,70,224,0)`, `${base}, 0 0 0 0 rgba(46,70,224,0)`] }
-          : { boxShadow: `${base}, 0 0 0 0 rgba(46,70,224,0)` }
+          ? { boxShadow: [`${base}, 0 0 0 0 color-mix(in srgb, var(--brand-600) 38%, transparent)`, `${base}, 0 0 0 9px transparent`, `${base}, 0 0 0 0 transparent`] }
+          : { boxShadow: `${base}, 0 0 0 0 transparent` }
       }
       transition={dirty && !scanning ? { duration: 1.2, repeat: 2 } : { duration: 0.16 }}
       className={cn(

@@ -399,7 +399,7 @@ function MiniKline({ ticker, dailyVersion, preparation, statusReadFailed }: { ti
         </div>
       ) : error || !option ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 px-4 text-center">
-          <img src="/empty-chart.svg" alt="" className="h-12 w-auto opacity-90" loading="lazy" />
+          <img src="/empty-chart.svg" alt="" className="h-12 w-auto opacity-90 dark:brightness-0 dark:invert dark:opacity-60" loading="lazy" />
           <p className="text-caption font-medium text-ink-600">
             {error && !snapshotMissing ? t('K 线读取失败') : t('暂无日线走势')}
           </p>
@@ -701,8 +701,8 @@ export default function LeadBigCard({ ev: initialEvent, flash, locate, onOpen, d
               <span
                 className={cn(
                   'tick-flash rounded-xs px-1 font-mono text-data-l text-ink-900 tnum',
-                  flash === 'up' && 'tick-flash-up',
-                  flash === 'down' && 'tick-flash-down',
+                  !preferLiveQuote(quote, Number.isFinite(e.current_price)) && flash === 'up' && 'tick-flash-up',
+                  !preferLiveQuote(quote, Number.isFinite(e.current_price)) && flash === 'down' && 'tick-flash-down',
                 )}
               >
                 <LivePrice symbol={e.ticker} fallback={e.current_price} />

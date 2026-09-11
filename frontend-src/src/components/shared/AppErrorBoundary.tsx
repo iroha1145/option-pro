@@ -41,16 +41,16 @@ export default class AppErrorBoundary extends Component<Props, State> {
           maxWidth: '34rem',
           padding: '1.5rem',
           borderRadius: '12px',
-          border: '1px solid rgba(200, 60, 60, .25)',
-          background: '#fffaf9',
-          color: '#1b1b1f',
+          border: '1px solid color-mix(in srgb, var(--down-600, #E5484D) 25%, transparent)',
+          background: 'var(--card, #fff)',
+          color: 'var(--ink-900, #1b1b1f)',
           fontFamily:
             'ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif',
           textAlign: 'center',
         }}
       >
         <p style={{ fontSize: '18px', fontWeight: 600 }}>{t('页面无法打开')}</p>
-        <p style={{ marginTop: '.25rem', fontSize: '12px', color: '#8a8a95' }}>
+        <p style={{ marginTop: '.25rem', fontSize: '12px', color: 'var(--ink-600, #5b6472)' }}>
           {t('请先重新加载。若仍无法打开，可清除此设备的网站数据；本地绘图、未同步修改和显示偏好将被删除。')}
         </p>
         <div
@@ -67,8 +67,8 @@ export default class AppErrorBoundary extends Component<Props, State> {
             style={{
               borderRadius: '8px',
               border: 'none',
-              background: '#2e46e0',
-              color: '#fff',
+              background: 'var(--brand-600, #2e46e0)',
+              color: 'var(--on-accent, #fff)',
               padding: '.5rem 1rem',
               fontSize: '13px',
               fontWeight: 500,

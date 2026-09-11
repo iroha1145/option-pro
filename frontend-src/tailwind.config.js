@@ -117,12 +117,14 @@ module.exports = {
         'card': 'var(--card-shadow)',
         'card-hover': 'var(--card-hover-shadow)',
         'inset-hi': 'var(--inset-hi-shadow)',
-        'focus-ring': '0 0 0 3px rgba(46,70,224,.18)',
-        /* 开关旋钮：小件白色控件在彩色轨道上需要比 sh-1 更实的两层墨影才有层次 */
-        knob: '0 1px 3px rgba(16,24,40,.18), 0 1px 1px rgba(16,24,40,.10)',
-        /* 区带/轨道色块：内高光 + 一层薄墨影，翻出层次但不打破扁平轨道语言 */
+        'focus-ring': '0 0 0 3px color-mix(in srgb, var(--brand-600) 25%, transparent)',
+        /* 开关旋钮、小件影、轨道井与悬浮层走 CSS 变量，便于夜间覆盖。 */
+        knob: 'var(--knob-shadow)',
+        xs: 'var(--shadow-xs)',
+        track: 'var(--track-shadow)',
+        overlay: 'var(--overlay-shadow)',
+        dock: 'var(--dock-shadow)',
         zone: 'var(--zone-shadow)',
-        xs: '0 1px 2px 0 rgba(16,24,40,.05)', // v8.1 纯黑→墨色，与三层制同源
         /* 按钮立体三档（与 sh-* 同族墨影）：btn-hi 实心主按钮 > btn 描边次按钮 >
            幽灵/文字按钮平面。chip 给选中态胶囊/页码/分段滑块（介于两者之间）；
            track 是开关轨道的内凹井。按下收拢/禁用摊平的全局规则在 index.css。 */
@@ -131,10 +133,6 @@ module.exports = {
         btn: 'var(--btn-shadow)',
         'btn-hi': 'var(--btn-hi-shadow)',
         chip: 'var(--chip-shadow)',
-        track: 'inset 0 1px 2px rgba(16,24,40,.16)',
-        /* v8.3 悬浮层两档登记（原 CommandPalette/MobileDock 的任意值 shadow，同族墨影） */
-        overlay: '0 24px 64px -16px rgba(16,24,40,0.35), 0 6px 20px -8px rgba(16,24,40,0.16)',
-        dock: '0 18px 40px -14px rgba(16,24,40,0.30), 0 4px 14px -6px rgba(16,24,40,0.14)',
       },
       fontFamily: {
         /* v8：display 换系统 sans 栈（与 sans 相同但独立变量保留，大标不再用衬线） */
