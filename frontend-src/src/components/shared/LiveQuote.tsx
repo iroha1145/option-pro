@@ -39,6 +39,24 @@ export function LivePrice({ symbol, fallback, fallbackAt, fallbackKind = 'refere
   const flashes = useTickFlash([price ?? null], flashKey, flashValue);
   return <span data-quote-symbol={symbol} className={cn('inline-flex flex-wrap items-baseline gap-x-1.5', className)}><span className={cn('tick-flash rounded-xs', flashes.price === 'up' && 'tick-flash-up', flashes.price === 'down' && 'tick-flash-down')}><NumberTicker text={typeof price === 'number' && Number.isFinite(price) ? `${prefix}${fmtPrice(price)}` : '—'} /></span>{indicator && <QuoteIndicator symbol={symbol} usingFallback={!useLive && hasFallback} fallbackAt={fallbackAt} fallbackKind={fallbackKind} />}</span>;
 }
+/** Outer periodic flashes stay off while the visible price is already live. */
+export function PeriodicPriceFlash({
+  symbol, fallbackAt, flash, className, children,
+}: {
+  symbol: string;
+  fallbackAt?: string | null;
+  flash?: 'up' | 'down' | null;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  const quote = useLiveQuote(symbol);
+  const live = preferLiveQuote(quote, true, fallbackAt);
+  return (
+    <span className={cn(className, !live && flash === 'up' && 'tick-flash-up', !live && flash === 'down' && 'tick-flash-down')}>
+      {children}
+    </span>
+  );
+}
 export function LiveChange({ symbol, fallback, fallbackPrice, fallbackAt, ...props }: { symbol: string; fallback?: number | null; fallbackPrice?: number | null; fallbackAt?: string | null; size?: 'sm' | 'md'; className?: string }) {
   const quote = useLiveQuote(symbol);
   const hasFallback = typeof fallback === 'number' && Number.isFinite(fallback);

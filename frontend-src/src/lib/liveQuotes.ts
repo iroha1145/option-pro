@@ -70,10 +70,25 @@ const timestamp = (value: string | null) => {
 // Allow one minute of client/server clock skew, but never let a future trade
 // become the ordering watermark and block all subsequent valid prices.
 const MAX_CLOCK_SKEW_MS = 60_000;
-const reliableTimestamp = (value: string | null) => {
+const MAX_CLOCK_CALIBRATION_MS = 10 * 60_000;
+let clockOffsetMs = 0;
+export function quoteClockOffsetMs(): number {
+  return clockOffsetMs;
+}
+function calibrateClock(receivedAt: string | null): void {
+  if (!receivedAt) return;
+  const parsed = timestamp(receivedAt);
+  if (!parsed) return;
+  const offset = parsed - Date.now();
+  // A 1–2 minute slow device is the case we must keep. Multi-year
+  // "future" stamps must not become the clock sample.
+  if (!Number.isFinite(offset) || Math.abs(offset) > MAX_CLOCK_CALIBRATION_MS) return;
+  clockOffsetMs = offset;
+}
+export function reliableTimestamp(value: string | null): number {
   const parsed = timestamp(value);
-  return parsed && parsed <= Date.now() + MAX_CLOCK_SKEW_MS ? parsed : 0;
-};
+  return parsed && parsed <= Date.now() + clockOffsetMs + MAX_CLOCK_SKEW_MS ? parsed : 0;
+}
 const quoteDateFormat = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' });
 export function visibleQuoteDate(value?: string | null): string | null {
   if (!value) return null;
@@ -116,7 +131,9 @@ export class QuoteStore {
   private consumers = new Map<symbol, { symbols: string[]; focus: string[] }>();
   private status = INITIAL_STATUS;
   private stream: Stream | null = null;
-  private controller: AbortController | null = null;
+  private connectController: AbortController | null = null;
+  private pollController: AbortController | null = null;
+  private radarResyncOnConnect = false;
   private generation = 0;
   private started = false;
   private visible = true;
@@ -175,10 +192,11 @@ export class QuoteStore {
   }
   start(owner: boolean) {
     this.stop(); this.started = true; this.owner = owner; this.terminal = false; this.failures = 0;
+    this.radarResyncOnConnect = true;
     this.pollTimer = setInterval(() => {
       if (!this.permitted || !this.visible) return;
       const generation = this.generation;
-      void this.snapshot(generation).catch(() => {
+      void this.snapshot(generation, false, 'poll').catch(() => {
         // A previous identity/page poll may reject after stop() or reconnect.
         if (generation === this.generation && this.started && this.visible && !this.terminal) this.markDisconnected();
       });
@@ -188,17 +206,27 @@ export class QuoteStore {
   }
   stop() {
     this.started = false; this.permitted = false; this.generation++;
-    this.closeStream(); this.controller?.abort(); this.controller = null;
+    this.closeStream();
+    this.connectController?.abort(); this.pollController?.abort();
+    this.connectController = this.pollController = null;
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     if (this.pollTimer) clearInterval(this.pollTimer);
     if (this.flushTimer) clearTimeout(this.flushTimer);
     this.reconnectTimer = this.pollTimer = this.flushTimer = null;
+    clockOffsetMs = 0;
     this.pending.clear(); this.clearQuotes(); this.setStatus(INITIAL_STATUS);
   }
   setVisible(visible: boolean) {
+    if (visible === this.visible) return;
     this.visible = visible;
-    if (!visible) { this.generation++; this.closeStream(); this.controller?.abort(); this.markDisconnected(); }
-    else this.schedule(0);
+    if (!visible) {
+      this.generation++; this.closeStream();
+      this.connectController?.abort();
+      this.markDisconnected();
+    } else {
+      this.radarResyncOnConnect = true;
+      this.schedule(0);
+    }
   }
   private clearQuotes() {
     const ids = [...this.radarEvents.keys()]; this.radarEvents.clear();
@@ -255,8 +283,17 @@ export class QuoteStore {
       this.terminal = true; this.permitted = false; this.closeStream(); this.pending.clear(); this.clearQuotes();
     }
   }
-  private async snapshot(generation: number, probe = false) {
-    this.controller?.abort(); const controller = new AbortController(); this.controller = controller;
+  private retryAfterMs(response: { headers?: { get?: (name: string) => string | null } }, fallback: number): number {
+    const raw = response.headers?.get?.('Retry-After');
+    const seconds = raw == null || raw === '' ? Number.NaN : Number(raw);
+    return Number.isFinite(seconds) && seconds > 0 ? Math.min(300, seconds) * 1000 : fallback;
+  }
+  private async snapshot(generation: number, probe = false, origin: 'connect' | 'poll' = 'connect') {
+    const current = origin === 'poll' ? this.pollController : this.connectController;
+    current?.abort();
+    const controller = new AbortController();
+    if (origin === 'poll') this.pollController = controller;
+    else this.connectController = controller;
     const timeout = setTimeout(() => controller.abort(), 10_000);
     try {
       const response = await this.runtime.fetch(`/api/quotes${probe ? '' : `?${this.query()}`}`, { credentials: 'include', signal: controller.signal, cache: 'no-store' });
@@ -265,7 +302,12 @@ export class QuoteStore {
         this.terminal = true; this.permitted = false; this.closeStream(); this.pending.clear(); this.clearQuotes();
         this.setStatus({ ...INITIAL_STATUS, connection_status: 'unavailable' }); return false;
       }
-      if (!response.ok) throw new Error('Quote snapshot unavailable');
+      if (!response.ok) {
+        if (origin === 'connect') {
+          this.schedule(this.retryAfterMs(response, Math.min(30_000, 2_000 * 2 ** this.failures++)));
+        }
+        return false;
+      }
       let data: unknown;
       try { data = await response.json(); } catch { /* Invalid JSON uses the same safe fallback as an invalid envelope. */ }
       if (generation !== this.generation || !this.visible || !this.started) return false;
@@ -294,9 +336,10 @@ export class QuoteStore {
       if (probe && !await this.snapshot(generation)) return;
       if (generation !== this.generation || !this.started || !this.visible) return;
       const stream = this.runtime.stream(`/api/quotes/stream?${this.query()}`); this.stream = stream;
+      let streamReady = false;
       const read = <T,>(callback: (data: T) => void) => (event: Event) => {
         if (generation !== this.generation || this.stream !== stream) return;
-        try { callback(JSON.parse((event as MessageEvent).data) as T); } catch { /* A malformed event does not erase the last quote. */ }
+        try { streamReady = true; callback(JSON.parse((event as MessageEvent).data) as T); } catch { /* A malformed event does not erase the last quote. */ }
       };
       stream.addEventListener('quotes', read<unknown>(data => {
         if (!isRecord(data)) return;
@@ -309,10 +352,16 @@ export class QuoteStore {
       }));
       stream.addEventListener('status', read<QuoteStatus>(data => this.ingestStatus(data)));
       stream.addEventListener('radar', read<RadarUpdate>(data => this.ingestRadar(data)));
-      if (!probe) this.radarListeners.forEach(fn => fn({ events: [], resync_required: true }));
+      if (this.radarResyncOnConnect) {
+        this.radarResyncOnConnect = false;
+        this.radarListeners.forEach(fn => fn({ events: [], resync_required: true }));
+      }
       stream.onerror = () => {
         if (this.stream !== stream || generation !== this.generation) return;
-        this.closeStream(); this.markDisconnected(); this.schedule(Math.min(30_000, 2_000 * 2 ** this.failures++));
+        this.closeStream(); this.markDisconnected();
+        this.radarResyncOnConnect = true;
+        const backoff = Math.min(30_000, 2_000 * 2 ** this.failures++);
+        this.schedule(streamReady ? backoff : Math.max(30_000, backoff));
       };
     } catch {
       if (generation !== this.generation || !this.started || !this.visible) return;
@@ -329,8 +378,14 @@ export class QuoteStore {
       if (!raw || typeof raw.symbol !== 'string') continue;
       const symbol = raw.symbol.toUpperCase();
       if (raw.price != null && (!Number.isFinite(raw.price) || raw.price <= 0)) continue;
+      if (raw.received_at) calibrateClock(raw.received_at);
       if (raw.price != null && !reliableTimestamp(raw.trade_at)) continue;
       if (raw.received_at && !reliableTimestamp(raw.received_at)) continue;
+      if (raw.trade_at && raw.received_at) {
+        const tradeAt = timestamp(raw.trade_at);
+        const receivedAt = timestamp(raw.received_at);
+        if (tradeAt && receivedAt && tradeAt > receivedAt + MAX_CLOCK_SKEW_MS) continue;
+      }
       const previous = this.pending.get(symbol) ?? this.quotes.get(symbol);
       // Subscription state may change with an older REST price; keep newest price fields.
       const quote = previous && (timestamp(raw.trade_at) < timestamp(previous.trade_at) || (kind === 'snapshot' && previous.price != null && timestamp(raw.trade_at) === timestamp(previous.trade_at)))
@@ -405,6 +460,12 @@ export function fallbackQuoteLabel(fallbackAt?: string | null, fallbackKind: Fal
 }
 
 /** The label describes the price actually rendered, not a superseded cache. */
+export function delayedSessionLabel(session?: LiveQuote['session'] | null): string {
+  if (session === 'closed') return t('休市');
+  const label = session === 'premarket' ? t('盘前') : session === 'postmarket' ? t('盘后') : t('盘中');
+  return t('{label} · 延迟 15 分钟', { label });
+}
+
 export function displayedQuoteLabel(
   quote: LiveQuote,
   status: QuoteStatus,
@@ -412,6 +473,9 @@ export function displayedQuoteLabel(
   fallbackAt?: string | null,
   fallbackKind: FallbackQuoteKind = 'reference',
 ): string {
+  if (quote.subscription_status === 'limited') {
+    return delayedSessionLabel(status.market_session ?? quote.session);
+  }
   if (!usesLive) return fallbackQuoteLabel(fallbackAt, fallbackKind);
   if (!preferLiveQuote(quote, false)) return t('等待报价');
   if (!status.connected && quote.subscription_status === 'live') return t('行情重连中');

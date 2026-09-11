@@ -15,7 +15,7 @@ async function fixture(page, enabled = true, personal = false) {
       emit(type, data) { this.listeners.get(type)?.({ data: JSON.stringify(data) }); }
     }
     window.EventSource = MockEventSource;
-    localStorage.setItem('optix-locale', 'zh');
+    localStorage.setItem('optix:locale', 'zh');
   });
   await page.route('**/*', route => ['127.0.0.1', 'localhost'].includes(new URL(route.request().url()).hostname) ? route.continue() : route.abort());
   await page.route('**/api/**', async route => {
