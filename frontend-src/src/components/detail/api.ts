@@ -576,54 +576,6 @@ export function getTrendBias(ticker: string, force = false): Promise<StockTrendB
   );
 }
 
-function mockSignalAnalysisResult(symbol: string): Record<string, unknown> {
-  const d = fx.getStockDetail(symbol);
-  const b = fx.getStockTrendBias(symbol);
-  const ivTone = d.ivPercentile >= 60 ? '偏贵' : d.ivPercentile <= 40 ? '相对便宜' : '中性';
-  const summary =
-    `${symbol} 模型分析完成：趋势偏向分 ${b.trend_bias_score}（${b.trend_bias_label}），` +
-    `分项读数 趋势 ${b.scores.trend} / 动量 ${b.scores.momentum} / 量能 ${b.scores.volume} / 波动 ${b.scores.volatility}。` +
-    `现价 ${d.price.toFixed(2)} 美元，IV 百分位 ${d.ivPercentile}%，期权定价${ivTone}。` +
-    `近端观察 MA20 附近的量能配合与突破延续性；若量价背离放大，偏向读数将快速回落。`;
-  return {
-    output_language: 'zh-CN',
-    asset: symbol,
-    horizon: '数日到数周',
-    dominant_regime: b.trend_bias_label || '趋势偏向待确认',
-    trend_bias_confidence: Math.max(0, Math.min(100, Math.round(b.trend_bias_score))),
-    top_risk_confidence: 42,
-    bottom_opportunity_confidence: 38,
-    dip_buy_quality: 45,
-    breakdown_risk: 36,
-    data_quality: 72,
-    final_bias: 'range_consolidation',
-    top_evidence: ['量价尚未同步放大，追高证据不足'],
-    bottom_evidence: ['未见恐慌性放量杀跌'],
-    dip_buy_evidence: ['回撤仍在均线附近，质量中等'],
-    bearish_evidence: ['若失守近端支撑，偏向会转弱'],
-    contradictions: ['期权定价与趋势分并不完全同向'],
-    options_flow_read: {
-      net_direction: 'unknown',
-      confidence: 20,
-      bullish_flow_evidence: [],
-      bearish_flow_evidence: [],
-      unknown_or_neutral_flow: ['缺少成交主动方，无法判断真实方向'],
-      warnings: ['演示数据不是实时期权流'],
-    },
-    key_levels: {
-      support: ['近端观察均线附近支撑'],
-      resistance: ['前高附近阻力'],
-      vwap_levels: ['会话均价可作短线锚'],
-      options_levels: ['关注成交集中的行权价'],
-    },
-    confirmation_signals: ['收盘站稳并放量'],
-    invalidation_signals: ['失守近端支撑'],
-    event_risks: ['关注即将公布的公司与宏观事件'],
-    data_quality_notes: ['部分字段来自演示快照'],
-    summary,
-  };
-}
-
 /** 只读回填已有 signal_analysis；409 analysis_required 视为尚无任务。 */
 export async function getLatestSignalAnalysisJob(ticker: string): Promise<AiJob | null> {
   const symbol = quoteSymbol(ticker);
@@ -654,7 +606,7 @@ export function createSignalAnalysisJob(ticker: string, force = false): Promise<
       if (!fx.hasTicker(symbol)) throw new ApiError(404, __t('代码 {ticker} 不存在', { ticker: symbol }));
       return fx2.createAiJob('signal-analysis', '', {
         ticker: symbol,
-        result: mockSignalAnalysisResult(symbol),
+        result: fx2.mockSignalAnalysisResult(symbol),
       });
     },
     // 契约：owner+SO → 202 + Location（job_id 可能仅在 Location 头）

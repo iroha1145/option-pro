@@ -363,23 +363,20 @@ test('经济日历按浏览器本地自然日请求前三天并传递时区偏�
 test('news impact mapping keeps a zero score as neutral and does not treat cancel as failure', () => {
   const { exports } = loadCatalystsModule();
 
-  assert.deepEqual(
-    exports.mapNewsStockImpact({
-      ticker: 'NVDA',
-      impact_score: 0,
-      horizon: 'intraday',
-      mechanism: 'direct_company',
-      reason: '事件本身中性。',
-    }),
-    {
-      ticker: 'NVDA',
-      direction: 'neutral',
-      impactScore: 0,
-      horizon: 'intraday',
-      mechanism: 'direct_company',
-      reason: '事件本身中性。',
-    },
-  );
+  const impact = exports.mapNewsStockImpact({
+    ticker: 'NVDA',
+    impact_score: 0,
+    horizon: 'intraday',
+    mechanism: 'direct_company',
+    reason: '事件本身中性。',
+  });
+  // vm 沙箱对象跨 realm，不能 deepEqual 整颗对象，只核字段。
+  assert.equal(impact.ticker, 'NVDA');
+  assert.equal(impact.direction, 'neutral');
+  assert.equal(impact.impactScore, 0);
+  assert.equal(impact.horizon, 'intraday');
+  assert.equal(impact.mechanism, 'direct_company');
+  assert.equal(impact.reason, '事件本身中性。');
   assert.equal(exports.mapNewsStockImpact({ ticker: 'NVDA' }), null);
   assert.equal(exports.nAnalysisStatus('canceled'), 'pending');
   assert.equal(exports.nAnalysisStatus('cancelled'), 'pending');
