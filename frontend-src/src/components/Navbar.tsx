@@ -101,10 +101,8 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
     setLoggingOut(true);
     try {
       await logout();
-      toast.info(
-        isOwner ? t('已退出管理员账号') : t('已退出登录'),
-        t('当前为访客只读模式'),
-      );
+      // The cookie write succeeded; its separate identity confirmation may still be unavailable.
+      toast.info(isOwner ? t('已退出管理员账号') : t('已退出登录'));
       navigate('/watchlist');
     } catch (error) {
       // 登出失败以前完全静默：按钮按了没反应，会话还挂着

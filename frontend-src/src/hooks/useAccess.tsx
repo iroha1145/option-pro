@@ -34,7 +34,7 @@ interface AccessContextValue {
    */
   canManageWatchlist: boolean;
   loading: boolean;
-  /** At least one successful identity read; retained across later outages. */
+  /** Identity confirmed since the latest explicit credential write; ordinary read failures retain it. */
   hasConfirmedIdentity: boolean;
   /**
    * 身份服务本身读不到。
@@ -225,6 +225,9 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     async (write: () => Promise<void>) => {
       pendingWritesRef.current += 1;
       generationRef.current += 1;
+      // Login/register/logout can change the cookie even if its follow-up read fails.
+      // Retire the old principal's UI and write capabilities until this write is confirmed.
+      setHasConfirmedIdentity(false);
       setQueryPrincipal(null);
       setIdentityUnavailable(true);
       dropSharedReads();
@@ -274,16 +277,16 @@ export function AccessProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<AccessContextValue>(
     () => ({
-      role: status.role,
-      aiEnabled: status.aiEnabled,
-      aiAvailable: status.aiAvailable,
+      role: hasConfirmedIdentity ? status.role : 'visitor',
+      aiEnabled: hasConfirmedIdentity && status.aiEnabled,
+      aiAvailable: hasConfirmedIdentity && status.aiAvailable,
       aiReason: status.aiReason,
-      isOwner: status.role === 'owner',
-      isVisitor: status.role !== 'owner',
-      username: status.accountUsername,
-      isCustomer: status.accountUsername !== null,
-      isSignedIn: status.role === 'owner' || status.accountUsername !== null,
-      canManageWatchlist: status.accountUsername !== null || status.role === 'owner',
+      isOwner: hasConfirmedIdentity && status.role === 'owner',
+      isVisitor: !hasConfirmedIdentity || status.role !== 'owner',
+      username: hasConfirmedIdentity ? status.accountUsername : null,
+      isCustomer: hasConfirmedIdentity && status.accountUsername !== null,
+      isSignedIn: hasConfirmedIdentity && (status.role === 'owner' || status.accountUsername !== null),
+      canManageWatchlist: hasConfirmedIdentity && (status.accountUsername !== null || status.role === 'owner'),
       loading,
       hasConfirmedIdentity,
       identityUnavailable,

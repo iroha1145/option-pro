@@ -94,9 +94,9 @@ export default function Layout() {
             {/* 按路由重建的错误边界:页面崩溃显示错误卡而非白屏,切页自动复位 */}
             <RouteErrorBoundary>
               <Suspense fallback={<PageFallback />}>
-                {/* Initial visitor is provisional: mounting editable pages before the
-                    first successful identity read would discard input on confirmation.
-                    Once confirmed, later outages retain the mounted page and its draft. */}
+                {/* Initial reads and explicit credential writes need a confirmed identity
+                    before mounting editable pages. Later ordinary read failures retain the
+                    mounted page; login/register/logout retire it until reconfirmation. */}
                 {hasConfirmedIdentity ? <Outlet /> : identityUnavailable ? (
                   <StatusNotice action={
                     <button type="button" className="control-button touch-target" onClick={() => { void refresh().catch(() => undefined); }}>

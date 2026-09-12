@@ -264,22 +264,24 @@ test('persisted database opening delay rechecks the response generation before c
 });
 
 function accessHarness() {
-  const runner = reactRunner(), h = registryHarness(), statuses = [], logins = [];
+  const runner = reactRunner(), h = registryHarness(), statuses = [], logins = [], registrations = [], ownerLogouts = [], customerLogouts = [];
   const status = { role: 'visitor', accountUsername: null, aiEnabled: false, aiAvailable: false, aiReason: 'owner_login_required' };
   const accessApi = {
     status: () => { const d = deferred(); statuses.push(d); return d.promise; },
     login: () => { const d = deferred(); logins.push(d); return d.promise; },
-    register: async () => {}, logout: async () => {},
+    register: () => { const d = deferred(); registrations.push(d); return d.promise; },
+    logout: () => { const d = deferred(); ownerLogouts.push(d); return d.promise; },
   };
   const { AccessProvider } = load('hooks/useAccess.tsx', {
-    react: runner.React, 'react/jsx-runtime': jsx, '@/api/modules/account': { accountApi: { logout: async () => {} } },
+    react: runner.React, 'react/jsx-runtime': jsx,
+    '@/api/modules/account': { accountApi: { logout: () => { const d = deferred(); customerLogouts.push(d); return d.promise; } } },
     '@/api/modules/access': { accessApi }, '@/api/client': { ApiError, PRINCIPAL_INVALID_EVENT: 'invalid' },
     '@/lib/identityRetry': { identityRetryDelayMs: () => 1000 },
     '@/api/sharedRead': { dropSharedReads: h.q.dropQueryRegistry }, '@/api/queryRegistry': h.q,
     '@/api/marketRead': { resetMarketReadState() {} }, '@/components/catalysts/api': { clearCatalystReadCache() {} }, '../i18n/core.ts': translate,
   }, h.env);
   const result = runner.mount(() => AccessProvider({ children: null }));
-  return { ...h, statuses, logins, read: () => result().props.value, status, unmount: runner.unmount };
+  return { ...h, statuses, logins, registrations, ownerLogouts, customerLogouts, read: () => result().props.value, status, unmount: runner.unmount };
 }
 
 test('initial identity readiness survives later failures but cannot be set by a failed read', async () => {
@@ -298,6 +300,77 @@ test('initial identity readiness survives later failures but cannot be set by a 
   assert.equal(h.read().identityUnavailable, true);
   assert.equal(h.read().hasConfirmedIdentity, true);
   h.unmount();
+});
+
+test('every explicit credential write retires identity and capabilities until its own confirmation succeeds', async () => {
+  for (const action of ['login', 'register', 'ownerLogout', 'customerLogout']) {
+    const h = accessHarness();
+    const previous = action === 'customerLogout'
+      ? { ...h.status, accountUsername: 'alice' }
+      : { ...h.status, role: 'owner', aiEnabled: true, aiAvailable: true };
+    h.statuses.shift().resolve(previous); await settle();
+    const oldProbe = h.read().refresh();
+    const writing = action === 'login' ? h.read().login('admin', 'new-password')
+      : action === 'register' ? h.read().register('bob', 'new-password') : h.read().logout();
+    assert.equal(h.read().hasConfirmedIdentity, false, action);
+    assert.equal(h.read().username, null, action);
+    assert.equal(h.read().role, 'visitor', action);
+    for (const capability of ['isOwner', 'isCustomer', 'isSignedIn', 'canManageWatchlist', 'aiEnabled', 'aiAvailable']) {
+      assert.equal(h.read()[capability], false, `${action}: ${capability}`);
+    }
+    h.statuses.shift().resolve(previous); await oldProbe;
+    assert.equal(h.read().hasConfirmedIdentity, false, 'a probe started before the write cannot confirm it');
+    const requests = action === 'login' ? h.logins : action === 'register' ? h.registrations
+      : action === 'ownerLogout' ? h.ownerLogouts : h.customerLogouts;
+    assert.equal(requests.length, 1, 'the original principal still chooses the correct write endpoint');
+    requests.shift().resolve(); await settle();
+    h.statuses.shift().reject(new ApiError(503, 'identity unavailable')); await writing;
+    assert.equal(h.read().hasConfirmedIdentity, false, 'successful write with failed confirmation stays unconfirmed');
+    assert.equal(h.read().isSignedIn, false);
+    const confirmation = h.read().refresh();
+    const next = action.endsWith('Logout') ? h.status : { ...h.status, accountUsername: 'bob' };
+    h.statuses.shift().resolve(next); await confirmation;
+    assert.equal(h.read().hasConfirmedIdentity, true);
+    assert.equal(h.read().username, next.accountUsername);
+    h.unmount();
+  }
+});
+
+test('failed credential write restores the original customer only after a current successful identity read', async () => {
+  const h = accessHarness(), alice = { ...h.status, accountUsername: 'alice' };
+  h.statuses.shift().resolve(alice); await settle();
+  const writing = h.read().logout(), rejected = assert.rejects(writing, /write failed/);
+  assert.equal(h.read().hasConfirmedIdentity, false);
+  assert.equal(h.read().canManageWatchlist, false);
+  h.customerLogouts.shift().reject(Error('write failed')); await rejected; await settle();
+  assert.equal(h.read().hasConfirmedIdentity, false);
+  h.statuses.shift().resolve(alice); await settle();
+  assert.equal(h.read().hasConfirmedIdentity, true);
+  assert.equal(h.read().username, 'alice');
+  assert.equal(h.read().canManageWatchlist, true);
+  h.unmount();
+});
+
+test('quote connections retire on credential transition and reconnect only after confirmation', () => {
+  const runner = reactRunner(), env = environment(), starts = [];
+  let stops = 0;
+  let access = { isOwner: true, username: null, loading: false, hasConfirmedIdentity: true, identityUnavailable: false };
+  const { default: QuoteConnection } = load('components/QuoteConnection.tsx', {
+    react: runner.React, '@/api/client': { isMock: false }, '@/hooks/useAccess': { useAccess: () => access },
+    '@/lib/liveQuotes': { quoteStore: { setVisible() {}, start: owner => { starts.push(owner); return () => { stops++; }; } } },
+  }, env);
+  runner.mount(QuoteConnection);
+  assert.deepEqual(starts, [true]);
+  access = { ...access, hasConfirmedIdentity: false, identityUnavailable: true }; runner.mount(QuoteConnection);
+  assert.equal(stops, 1);
+  // A retained owner bit alone is insufficient even if an unrelated error flag clears.
+  access = { ...access, identityUnavailable: false }; runner.mount(QuoteConnection);
+  assert.deepEqual(starts, [true]);
+  access = { ...access, hasConfirmedIdentity: true, isOwner: false }; runner.mount(QuoteConnection);
+  assert.deepEqual(starts, [true, false]);
+  access = { ...access, identityUnavailable: true }; runner.mount(QuoteConnection);
+  assert.equal(stops, 2, 'ordinary identity outages keep their existing stop-stream behavior');
+  runner.unmount();
 });
 
 test('confirmed customer invalidation clears username and write permission before status recovery', async () => {

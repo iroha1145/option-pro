@@ -5,9 +5,9 @@ import { quoteStore } from '@/lib/liveQuotes';
 
 /** Mounted once below identity provider; no keys or owner credentials enter URLs. */
 export default function QuoteConnection() {
-  const { isOwner, loading, identityUnavailable, username } = useAccess();
+  const { isOwner, loading, hasConfirmedIdentity, identityUnavailable, username } = useAccess();
   useEffect(() => {
-    if (isMock || loading || identityUnavailable) return;
+    if (isMock || loading || !hasConfirmedIdentity || identityUnavailable) return;
     quoteStore.setVisible(!document.hidden);
     const stop = quoteStore.start(isOwner);
     const onVisibility = () => quoteStore.setVisible(!document.hidden);
@@ -22,6 +22,6 @@ export default function QuoteConnection() {
       stop(); document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('pagehide', onPageHide); window.removeEventListener('pageshow', onPageShow);
     };
-  }, [isOwner, loading, identityUnavailable, username]);
+  }, [isOwner, loading, hasConfirmedIdentity, identityUnavailable, username]);
   return null;
 }

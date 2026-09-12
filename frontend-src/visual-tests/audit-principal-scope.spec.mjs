@@ -5,7 +5,8 @@ import { expect, test } from '@playwright/test';
 async function fixture(page, options = {}) {
   const state = { owner: false, username: null, failIdentity: false, holdWatchlist: false,
     holdScans: false, unauthorized: false, holdPersonal: false, holdCalendar: false, calendarAvailable: false, feedAvailable: false, holdFeedNext: false, calendarEmpty: false,
-    holdRuntime: false, holdAi: false, identityFailureStatus: 503, heldRuntime: [], heldAi: [], held: [], reads: [], errors: [], ...options };
+    holdRuntime: false, holdAi: false, holdLogout: false, failLogout: false, identityFailureStatus: 503,
+    heldRuntime: [], heldAi: [], heldLogout: [], held: [], reads: [], errors: [], ...options };
   await page.addInitScript(() => localStorage.setItem('optix:locale', 'zh'));
   page.on('pageerror', error => state.errors.push(error.message));
   await page.route('**/*', route => ['127.0.0.1', 'localhost'].includes(new URL(route.request().url()).hostname) ? route.continue() : route.abort());
@@ -21,8 +22,13 @@ async function fixture(page, options = {}) {
       account: state.username ? { logged_in: true, username: state.username } : null,
     } });
     if (path === '/api/access/logout' || path === '/api/account/logout') {
-      state.owner = false; state.username = null;
-      return route.fulfill({ json: { ok: true } });
+      const release = () => {
+        if (state.failLogout) return unavailable();
+        state.owner = false; state.username = null;
+        return route.fulfill({ json: { ok: true } });
+      };
+      if (state.holdLogout) { state.heldLogout.push(release); return; }
+      return release();
     }
     if (path === '/api/ai/status') {
       const release = () => route.fulfill({ json: { enabled: false } });
@@ -210,6 +216,59 @@ test('explicit Home logout still navigates to Watchlist', async ({ page }) => {
   await expect(page).toHaveURL(/\/watchlist$/);
   await expect(page.getByRole('link', { name: '登录', exact: true })).toBeVisible();
   await expect(page.getByText('OWNER snapshot', { exact: true })).toHaveCount(0);
+  expect(state.errors).toEqual([]);
+});
+
+test('same-page explicit logout retires customer content and write controls even when confirmation is 503', async ({ page }) => {
+  const state = await fixture(page, { username: 'alice', holdLogout: true });
+  await page.goto('/watchlist');
+  await expect(page.getByText('ALICE snapshot', { exact: true })).toBeVisible();
+  state.failIdentity = true;
+  await page.getByRole('button', { name: '退出 alice', exact: true }).click();
+  await expect.poll(() => state.heldLogout.length).toBe(1);
+  // The cookie write is still pending. Neither the old account nor its controls may remain.
+  await expect(page.getByText('ALICE snapshot', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '退出 alice', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('region', { name: '自选列表', exact: true })).toHaveCount(0);
+  await Promise.all(state.heldLogout.splice(0).map(release => release()));
+  await expect(page).toHaveURL(/\/watchlist$/);
+  await expect(page.getByText('身份暂时无法确认，请稍后重试', { exact: true })).toBeVisible();
+  const personalReads = state.reads.filter(read => ['/api/account/watchlist', '/api/stocks/watchlist'].includes(read.path)).length;
+  const identityReads = state.reads.filter(read => read.path === '/api/access/status').length;
+  // Exercise another automatic failed probe, rather than sampling only the first render.
+  await expect.poll(() => state.reads.filter(read => read.path === '/api/access/status').length).toBeGreaterThan(identityReads);
+  await expect(page.getByText('ALICE snapshot', { exact: true })).toHaveCount(0);
+  expect(state.reads.filter(read => ['/api/account/watchlist', '/api/stocks/watchlist'].includes(read.path)).length).toBe(personalReads);
+  state.failIdentity = false;
+  await page.getByRole('status').filter({ hasText: '身份暂时无法确认，请稍后重试' }).getByRole('button', { name: '重试', exact: true }).click();
+  await expect(page.getByRole('link', { name: '登录', exact: true })).toBeVisible();
+  await expect(page.getByText('VISITOR snapshot', { exact: true })).toBeVisible();
+  await expect(page.getByText('ALICE snapshot', { exact: true })).toHaveCount(0);
+  expect(state.reads.filter(read => read.path === '/api/account/logout' && read.method === 'POST').length).toBe(1);
+  expect(state.errors).toEqual([]);
+});
+
+test('failed logout waits for confirmation before restoring the same customer and its list', async ({ page }) => {
+  const state = await fixture(page, { username: 'alice', holdLogout: true, failLogout: true });
+  await page.goto('/watchlist');
+  await expect(page.getByText('ALICE snapshot', { exact: true })).toBeVisible();
+  state.failIdentity = true;
+  await page.getByRole('button', { name: '退出 alice', exact: true }).click();
+  await expect.poll(() => state.heldLogout.length).toBe(1);
+  await expect(page.getByText('ALICE snapshot', { exact: true })).toHaveCount(0);
+  await Promise.all(state.heldLogout.splice(0).map(release => release()));
+  await expect(page.getByText('退出失败', { exact: true })).toBeVisible();
+  await expect(page.getByText('身份暂时无法确认，请稍后重试', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '退出 alice', exact: true })).toHaveCount(0);
+  const readsBefore = state.reads.filter(read => ['/api/account/watchlist', '/api/stocks/watchlist'].includes(read.path)).length;
+  state.failIdentity = false;
+  await page.getByRole('status').filter({ hasText: '身份暂时无法确认，请稍后重试' }).getByRole('button', { name: '重试', exact: true }).click();
+  await expect(page.getByRole('button', { name: '退出 alice', exact: true })).toBeVisible();
+  await expect(page.getByText('ALICE snapshot', { exact: true })).toBeVisible();
+  const resumed = state.reads.filter(read => ['/api/account/watchlist', '/api/stocks/watchlist'].includes(read.path)).slice(readsBefore);
+  expect(resumed.length).toBeGreaterThan(0);
+  expect(resumed.every(read => read.principal === 'ALICE')).toBe(true);
+  await expect(page.getByText('VISITOR snapshot', { exact: true })).toHaveCount(0);
   expect(state.errors).toEqual([]);
 });
 

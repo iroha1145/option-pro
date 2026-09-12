@@ -125,7 +125,7 @@ test('customer 401 clears the username and management controls even while identi
   expect(state.errors).toEqual([]);
 });
 
-test('login cookie plus failed identity does not write owner response under old visitor principal', async ({ page, context }) => {
+test('login cookie plus failed identity pauses personalized reads and restores only confirmed owner cache', async ({ page, context }) => {
   const state = await fixture(page);
   await page.goto('/watchlist');
   // The old principal must be confirmed before this test changes its cookie.
@@ -138,14 +138,17 @@ test('login cookie plus failed identity does not write owner response under old 
   await page.locator('form').getByRole('button', { name: '登录', exact: true }).click();
   await expect(page).toHaveURL(/\/watchlist$/);
   expect((await context.cookies()).some(cookie => cookie.name === 'audit_owner' && cookie.value === '1')).toBe(true);
-  // Watchlist now suspends identity-dependent reads. Home still exercises an
-  // actual response during the unknown-principal window, which must not persist.
+  // An explicit credential write suspends all page-owned personalized reads until
+  // its new identity is confirmed. Navigating to Home cannot bypass that boundary.
   await page.getByRole('link', { name: 'Optix Pro 首页', exact: true }).click();
-  await expect.poll(() => state.strengthReads).toBeGreaterThan(before);
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByText('身份暂时无法确认，请稍后重试', { exact: true })).toBeVisible();
+  expect(state.strengthReads).toBe(before);
   expect(await cached(page, '/strength/market')).toBeNull();
   state.failIdentity = false;
   // Visitor state has an automatic identity retry even without a signed-in focus listener.
   await expect(page.getByRole('button', { name: '退出', exact: true })).toBeVisible();
+  await expect.poll(() => state.strengthReads).toBeGreaterThan(before);
   // The confirmed principal remounts Home and obtains an owner-tagged response.
   await expect.poll(async () => (await cached(page, '/strength/market'))?.principal).toBe('owner\0');
   expect((await cached(page, '/strength/market')).raw.source).toBe('audit-owner-cookie');
