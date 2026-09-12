@@ -7,7 +7,7 @@
 //   2) password（8768）：visual-tests/support/password_server.py 以口令模式起真实后端
 //      （HTTPS + 自签名证书），FRONTEND_DIR 指向 ../frontend，验证登录/登出全流程。
 import { defineConfig } from "@playwright/test";
-import { resolveVenvPython } from "./visual-tests/support/localPython.mjs";
+import { quotedPythonCommand, resolveVenvPython } from "./visual-tests/support/localPython.mjs";
 
 const visualBaseURL = process.env.OPTIX_VISUAL_BASE_URL || "http://127.0.0.1:8767";
 const passwordBaseURL = process.env.OPTIX_PASSWORD_BASE_URL || "https://127.0.0.1:8768";
@@ -25,7 +25,7 @@ if (!process.env.OPTIX_PASSWORD_BASE_URL) {
   // 优先用仓库 .venv 的 Python（含后端依赖），否则回退系统 python3
   const pythonExecutable = resolveVenvPython(import.meta.url);
   webServers.push({
-    command: `${JSON.stringify(pythonExecutable)} visual-tests/support/password_server.py --port 8768`,
+    command: quotedPythonCommand(pythonExecutable, "visual-tests/support/password_server.py --port 8768"),
     url: `${passwordBaseURL}/health`,
     reuseExistingServer: false,
     timeout: 30_000,

@@ -1,5 +1,5 @@
 import { defineConfig } from '@playwright/test';
-import { resolveVenvPython } from './visual-tests/support/localPython.mjs';
+import { quotedPythonCommand, resolveVenvPython } from './visual-tests/support/localPython.mjs';
 
 const pythonExecutable = process.env.SCREENER_FRESHNESS_PYTHON
   || resolveVenvPython(import.meta.url);
@@ -14,7 +14,7 @@ export default defineConfig({
   reporter: [['list'], ['html', { outputFolder: './test-results/screener-report', open: 'never' }]],
   webServer: [
     {
-      command: `${JSON.stringify(pythonExecutable)} visual-tests/support/screener_freshness_api.py`,
+      command: quotedPythonCommand(pythonExecutable, 'visual-tests/support/screener_freshness_api.py'),
       url: 'http://127.0.0.1:8765/health',
       reuseExistingServer: false,
       timeout: 60_000,

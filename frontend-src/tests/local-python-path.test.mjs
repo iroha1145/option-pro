@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { resolveVenvPython } from '../visual-tests/support/localPython.mjs';
+import { posixShellQuote, quotedPythonCommand, resolveVenvPython } from '../visual-tests/support/localPython.mjs';
 
 function seedVenv(projectDir) {
   const python = join(projectDir, '.venv', 'bin', 'python');
@@ -53,3 +53,29 @@ test('OPTIX_PYTHON_EXECUTABLE wins over a local venv', () => {
     '/custom/python',
   );
 });
+
+function runThroughShell(command) {
+  return spawnSync('sh', ['-c', command], { encoding: 'utf8' });
+}
+
+for (const name of ['option pro', '中文项目', 'option$HOME', 'option`uname`', "option'quote"]) {
+  test(`quotedPythonCommand survives shell metacharacters in ${JSON.stringify(name)}`, () => {
+    const root = mkdtempSync(join(tmpdir(), 'optix-python-shell-'));
+    const projectDir = join(root, name);
+    mkdirSync(join(projectDir, 'frontend-src'), { recursive: true });
+    const expected = seedVenv(projectDir);
+    const resolved = resolveVenvPython(configUrl(projectDir), {});
+    assert.equal(resolved, expected);
+
+    const jsonQuoted = `${JSON.stringify(resolved)} -c 'pass'`;
+    const posixQuoted = quotedPythonCommand(resolved, "-c 'pass'");
+    const viaJson = runThroughShell(jsonQuoted);
+    const viaPosix = runThroughShell(posixQuoted);
+
+    if (name.includes('$') || name.includes('`')) {
+      assert.notEqual(viaJson.status, 0, `JSON.stringify should fail for ${name}`);
+    }
+    assert.equal(viaPosix.status, 0, viaPosix.stderr || viaPosix.error?.message);
+    assert.match(posixShellQuote(resolved), /^'/);
+  });
+}

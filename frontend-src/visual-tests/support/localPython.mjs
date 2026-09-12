@@ -10,3 +10,12 @@ export function resolveVenvPython(fromImportMetaUrl, env = process.env) {
   const localPython = fileURLToPath(new URL('../.venv/bin/python', fromImportMetaUrl));
   return existsSync(localPython) ? localPython : 'python3';
 }
+
+/** POSIX single-quote so Playwright's `shell: true` does not expand `$` / backticks. */
+export function posixShellQuote(value) {
+  return `'${String(value).replace(/'/g, `'\\''`)}'`;
+}
+
+export function quotedPythonCommand(pythonExecutable, scriptAndArgs) {
+  return `${posixShellQuote(pythonExecutable)} ${scriptAndArgs}`;
+}

@@ -160,6 +160,58 @@ async function expectDrawingCount(page, n) {
   await expect(drawingRows(page)).toHaveCount(n);
 }
 
+function drawingIdentity(listed) {
+  const row = listed.drawings?.[0];
+  if (!row) return null;
+  return {
+    id: row.id,
+    price: row.anchors?.[0]?.price,
+    time: row.anchors?.[0]?.time,
+    barKey: row.anchors?.[0]?.barKey,
+    locked: Boolean(row.locked),
+  };
+}
+
+async function waitOneUnlockedDrawing(page) {
+  let identity = null;
+  await expect.poll(async () => {
+    const listed = await listDrawings(page);
+    if (listed.status === 429) return "rate-limited";
+    identity = drawingIdentity(listed);
+    if (!identity || listed.drawings.length !== 1) return `n=${listed.drawings?.length ?? "?"}`;
+    return identity.locked ? "locked" : "unlocked";
+  }, { timeout: 45_000 }).toBe("unlocked");
+  return identity;
+}
+
+/** Map a stored price to a page-space point on the price canvas. */
+async function pagePointForPrice(page, price, xRatio = 0.5) {
+  return page.evaluate(({ price, xRatio }) => {
+    const host = document.querySelector('[role="img"][aria-label$="图"]');
+    const canvas = (host ?? document).querySelector("canvas");
+    if (!canvas || typeof echarts === "undefined") return null;
+    let inst = null;
+    try { inst = echarts.getInstanceByDom(canvas.parentElement); } catch { /* */ }
+    if (!inst || typeof inst.convertToPixel !== "function") return null;
+    const px = inst.convertToPixel({ gridIndex: 0 }, [0, price]);
+    if (!Array.isArray(px) || !Number.isFinite(px[1])) return null;
+    const rect = canvas.parentElement.getBoundingClientRect();
+    return { x: rect.x + rect.width * xRatio, y: rect.y + px[1] };
+  }, { price, xRatio });
+}
+
+async function dragHorizontalByPrice(page, fromPrice, toPrice) {
+  const start = await pagePointForPrice(page, fromPrice, 0.5);
+  const end = await pagePointForPrice(page, toPrice, 0.55);
+  expect(start, "start pixel for current price").toBeTruthy();
+  expect(end, "end pixel for target price").toBeTruthy();
+  await toolButton(page, "选择").click();
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(end.x, end.y, { steps: 8 });
+  await page.mouse.up();
+}
+
 /** 在价格区落一笔水平线（工具按钮 → 画布点击）。 */
 async function placeHorizontal(page, xRatio = 0.5, yRatio = 0.4) {
   /* 落笔前必须等图表画完：readPoint 走 containPixel，首绘没铺开时坐标系
@@ -298,13 +350,48 @@ test("seven drawing tools are present and selectable", async ({ page }) => {
 test("drag endpoint and whole-object after selecting a drawing", async ({ page }) => {
   test.skip(!HAS_REAL_BACKEND, "stock drawings visual path needs OPTIX_VISUAL_BASE_URL");
   await openStock(page);
-  const box = await placeHorizontal(page, 0.5, 0.4);
-  await toolButton(page, "选择").click();
-  await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.4);
-  await page.mouse.down();
-  await page.mouse.move(box.x + box.width * 0.55, box.y + box.height * 0.3, { steps: 6 });
-  await page.mouse.up();
-  // 拖拽提交不该复制出第二个对象，也不该把它弄丢。
+  await placeHorizontal(page, 0.5, 0.4);
+  const before = await waitOneUnlockedDrawing(page);
+  expect(Number.isFinite(before.price)).toBeTruthy();
+  const targetPrice = before.price * 0.92;
+  await dragHorizontalByPrice(page, before.price, targetPrice);
+  let after = null;
+  await expect.poll(async () => {
+    const listed = await listDrawings(page);
+    if (listed.status === 429) return "rate-limited";
+    after = drawingIdentity(listed);
+    if (!after || listed.drawings.length !== 1) return `n=${listed.drawings?.length ?? "?"}`;
+    if (after.id !== before.id) return "id-changed";
+    return Math.abs(after.price - before.price) > Math.abs(before.price) * 0.01 ? "moved" : `same:${after.price}`;
+  }, { timeout: 45_000 }).toBe("moved");
+  await expectDrawingCount(page, 1);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(toolButton(page, "选择")).toBeVisible({ timeout: 20_000 });
+  await expect.poll(async () => {
+    const listed = await listDrawings(page);
+    if (listed.status === 429) return "rate-limited";
+    const persisted = drawingIdentity(listed);
+    if (!persisted || listed.drawings.length !== 1) return `n=${listed.drawings?.length ?? "?"}`;
+    if (persisted.id !== before.id) return "id-changed";
+    return Math.abs(persisted.price - after.price) < 1e-6 ? "persisted" : `price:${persisted.price}`;
+  }, { timeout: 45_000 }).toBe("persisted");
+});
+
+test("locked drawing keeps its anchors when dragged", async ({ page }) => {
+  test.skip(!HAS_REAL_BACKEND, "stock drawings visual path needs OPTIX_VISUAL_BASE_URL");
+  await openStock(page);
+  await placeHorizontal(page, 0.5, 0.45);
+  const before = await waitOneUnlockedDrawing(page);
+  await expandChart(page);
+  await toolButton(page, "锁定").first().click();
+  await expect.poll(async () => drawingsLockState(await listDrawings(page)), { timeout: 45_000 }).toBe("locked");
+  const locked = drawingIdentity(await listDrawings(page));
+  await dragHorizontalByPrice(page, locked.price, locked.price * 0.9);
+  await page.waitForTimeout(400);
+  const after = drawingIdentity(await listDrawings(page));
+  expect(after.id).toBe(before.id);
+  expect(after.locked).toBe(true);
+  expect(after.price).toBe(locked.price);
   await expectDrawingCount(page, 1);
 });
 
