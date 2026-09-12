@@ -47,23 +47,25 @@ DISPLAY_PRIORITY_WEIGHTS = {
 
 def compute_display_priority(
     shape_quality: float,
-    volume_confirmation: float,
+    volume_confirmation: float | None,
     trend_alignment: float,
     recency: float,
     consensus: float,
 ) -> float:
-    weights = DISPLAY_PRIORITY_WEIGHTS
-    value = (
-        weights["shapeQuality"] * _clamp01(shape_quality)
-        + weights["volumeConfirmation"] * _clamp01(volume_confirmation)
-        + weights["trendAlignment"] * _clamp01(trend_alignment)
-        + weights["recency"] * _clamp01(recency)
-        + weights["consensus"] * _clamp01(consensus)
-    )
+    components = {
+        "shapeQuality": shape_quality,
+        "volumeConfirmation": volume_confirmation,
+        "trendAlignment": trend_alignment,
+        "recency": recency,
+        "consensus": consensus,
+    }
+    active = {name: value for name, value in components.items() if value is not None}
+    active_weight = sum(DISPLAY_PRIORITY_WEIGHTS[name] for name in active)
+    value = sum(DISPLAY_PRIORITY_WEIGHTS[name] * _clamp01(value) for name, value in active.items()) / active_weight
     return round(_clamp01(value), 4)
 
 
-def apply_volume_confirmation(row: Mapping[str, Any], volume_confirmation: float) -> dict[str, Any]:
+def apply_volume_confirmation(row: Mapping[str, Any], volume_confirmation: float | None) -> dict[str, Any]:
     """Change displayPriority from volumeConfirmation without touching geometry."""
 
     return apply_display_evidence(row, volume_confirmation, float(row.get("trendAlignment") or 0.0))
@@ -71,14 +73,14 @@ def apply_volume_confirmation(row: Mapping[str, Any], volume_confirmation: float
 
 def apply_display_evidence(
     row: Mapping[str, Any],
-    volume_confirmation: float,
+    volume_confirmation: float | None,
     trend_alignment: float,
 ) -> dict[str, Any]:
     """Change displayPriority from volume/trend evidence; geometry stays put."""
 
     updated = dict(row)
     evidence = dict(updated.get("evidence") or {})
-    evidence["volumeConfirmation"] = round(_clamp01(volume_confirmation), 4)
+    evidence["volumeConfirmation"] = round(_clamp01(volume_confirmation), 4) if volume_confirmation is not None else None
     evidence["trendAlignment"] = round(_clamp01(trend_alignment), 4)
     updated["volumeConfirmation"] = evidence["volumeConfirmation"]
     updated["trendAlignment"] = evidence["trendAlignment"]
@@ -281,7 +283,7 @@ def _evaluate_line(
     points: Sequence[tuple[int, float]],
     opens: Sequence[float],
     closes: Sequence[float],
-    volumes: Sequence[float],
+    volumes: Sequence[float | None],
     local_atr: Sequence[float],
     side: str,
     start: int,
@@ -399,9 +401,15 @@ def _evaluate_line(
     if shape_quality < _KEEP_QUALITY:
         return None
     recency = _clamp01(1.0 - last_bars_ago / 60.0)
-    median_vol = _median([float(v) for v in volumes]) or 1.0
-    touch_vol = _median([float(volumes[i]) for i in touch_indexes if i < len(volumes)]) if touch_indexes else median_vol
-    volume_confirmation = _clamp01(0.35 + 0.4 * min(2.0, touch_vol / median_vol))
+    volume_confirmation = None
+    # Volume confirmation compares the complete fit window with its touch
+    # bars. An incomplete baseline must not become a synthetic low-volume
+    # signal; geometry and price evidence remain independently usable.
+    if volumes and all(v is not None and math.isfinite(v) and v >= 0 for v in volumes):
+        median_vol = _median(volumes)
+        touch_vol = _median([volumes[i] for i in touch_indexes if i < len(volumes)]) if touch_indexes else median_vol
+        if median_vol > 0:
+            volume_confirmation = _clamp01(0.35 + 0.4 * min(2.0, touch_vol / median_vol))
     net = closes[-1] - closes[max(0, len(closes) - 21)]
     if side == "support":
         trend_alignment = 0.7 if net >= 0 else 0.3
@@ -421,7 +429,7 @@ def _evaluate_line(
         "touch_indexes": touch_indexes,
         "confidence": confidence,
         "shapeQuality": round(shape_quality, 4),
-        "volumeConfirmation": round(volume_confirmation, 4),
+        "volumeConfirmation": round(volume_confirmation, 4) if volume_confirmation is not None else None,
         "trendAlignment": round(trend_alignment, 4),
         "recency": round(recency, 4),
         "consensus": consensus,
@@ -473,7 +481,7 @@ def _collapse(candidates: list[dict[str, Any]], atr: float) -> list[dict[str, An
                 other["evidence"] = evidence
                 other["displayPriority"] = compute_display_priority(
                     float(other.get("shapeQuality") or 0),
-                    float(other.get("volumeConfirmation") or 0),
+                    other.get("volumeConfirmation"),
                     float(other.get("trendAlignment") or 0),
                     float(other.get("recency") or 0),
                     float(other["consensus"]),
@@ -560,7 +568,7 @@ def _pack(
     if not id_anchors:
         id_anchors = public_anchors
     shape_quality = float(eval_row.get("shapeQuality") or (eval_row.get("confidence") or 0) / 100.0)
-    volume_confirmation = float(eval_row.get("volumeConfirmation") or 0.5)
+    volume_confirmation = eval_row.get("volumeConfirmation")
     trend_alignment = float(eval_row.get("trendAlignment") or 0.5)
     recency = float(eval_row.get("recency") or 0.5)
     consensus = float(eval_row.get("consensus") or _CONSENSUS_BASE)
@@ -599,7 +607,7 @@ def _pack(
         "measuredTargetNote": "technical_projection",
         "rationaleCodes": rationale,
         "shapeQuality": round(shape_quality, 4),
-        "volumeConfirmation": round(volume_confirmation, 4),
+        "volumeConfirmation": round(volume_confirmation, 4) if volume_confirmation is not None else None,
         "trendAlignment": round(trend_alignment, 4),
         "recency": round(recency, 4),
         "consensus": round(consensus, 4),
@@ -608,7 +616,7 @@ def _pack(
         "mergedCount": 1,
         "evidence": {
             "shapeQuality": round(shape_quality, 4),
-            "volumeConfirmation": round(volume_confirmation, 4),
+            "volumeConfirmation": round(volume_confirmation, 4) if volume_confirmation is not None else None,
             "trendAlignment": round(trend_alignment, 4),
             "recency": round(recency, 4),
             "consensus": round(consensus, 4),
@@ -695,7 +703,7 @@ def detect_auto_patterns(
     lows: list[float] = list(series.get("lows") or [])
     closes: list[float] = list(series.get("closes") or [])
     opens: list[float] = list(series.get("opens") or closes)
-    volumes: list[float] = list(series.get("volumes") or [])
+    volumes: list[float | None] = list(series.get("volumes") or [])
     times: list[int] = list(series.get("times") or [])
     dates: list[str] = list(series.get("dates") or [])
     n = len(closes)
@@ -715,7 +723,7 @@ def detect_auto_patterns(
         lows = lows[:last]
         closes = closes[:last]
         opens = opens[:last] if len(opens) >= last else closes[:]
-        volumes = volumes[:last] if len(volumes) == n else [0.0] * last
+        volumes = volumes[:last] if len(volumes) == n else [None] * last
         times = times[:last]
         dates = dates[:last]
         n = last
@@ -724,7 +732,7 @@ def detect_auto_patterns(
     window_lows = lows[start:]
     window_closes = closes[start:]
     window_opens = opens[start:] if len(opens) >= n else window_closes
-    window_volumes = volumes[start:] if len(volumes) == n else [0.0] * (n - start)
+    window_volumes = volumes[start:] if len(volumes) == n else [None] * (n - start)
     window_times = times[start:]
     window_dates = dates[start:]
     local_atr = _atr_series(window_highs, window_lows, window_closes)
@@ -929,7 +937,7 @@ def detect_auto_patterns(
                 "shapeQuality": shape_quality,
                 "volumeConfirmation": round(
                     0.5 * (support["volumeConfirmation"] + resist["volumeConfirmation"]), 4
-                ),
+                ) if support["volumeConfirmation"] is not None and resist["volumeConfirmation"] is not None else None,
                 "trendAlignment": round(
                     0.5 * (support["trendAlignment"] + resist["trendAlignment"]), 4
                 ),

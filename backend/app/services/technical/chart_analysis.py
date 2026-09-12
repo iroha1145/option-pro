@@ -120,11 +120,16 @@ def _clamp01(value: float) -> float:
     return max(0.0, min(1.0, float(value)))
 
 
-def volume_confirmation_from_vol_price(vol_price: Mapping[str, Any] | None) -> float:
+def _observed_volume(value: Any) -> float | None:
+    volume = _finite_number(value)
+    return volume if volume is not None and volume >= 0 else None
+
+
+def volume_confirmation_from_vol_price(vol_price: Mapping[str, Any] | None) -> float | None:
     """Map existing vol_price_match fields onto 0–1 display evidence."""
 
     if not vol_price:
-        return 0.5
+        return None
     parts: list[float] = []
     setup = f"{vol_price.get('setup_type') or ''} {vol_price.get('setup_label') or ''}".lower()
     if "absor" in setup or "吸收" in setup:
@@ -148,7 +153,7 @@ def volume_confirmation_from_vol_price(vol_price: Mapping[str, Any] | None) -> f
         risk = fbr / 100.0 if fbr > 1.0 else fbr
         parts.append(_clamp01(1.0 - risk))
     if not parts:
-        return 0.5
+        return None
     return round(sum(parts) / len(parts), 4)
 
 
@@ -209,18 +214,20 @@ def canonical_bar_payload(series: Mapping[str, list]) -> str:
     opens = list(series.get("opens") or closes)
     highs = list(series.get("highs") or closes)
     lows = list(series.get("lows") or closes)
-    volumes = list(series.get("volumes") or [0.0] * n)
+    volumes = list(series.get("volumes") or [None] * n)
     exts = list(series.get("ext") or [False] * n)
     quotes = list(series.get("quote_only") or [False] * n)
     lines: list[str] = []
     for i in range(n):
+        volume = _observed_volume(volumes[i] if i < len(volumes) else None)
+        volume_token = _fmt6(volume) if volume is not None else "null"
         lines.append(
             f"{int(times[i] if i < len(times) else 0)}|"
             f"{_fmt6(opens[i] if i < len(opens) else closes[i])}|"
             f"{_fmt6(highs[i] if i < len(highs) else closes[i])}|"
             f"{_fmt6(lows[i] if i < len(lows) else closes[i])}|"
             f"{_fmt6(closes[i])}|"
-            f"{_fmt6(volumes[i] if i < len(volumes) else 0.0)}|"
+            f"{volume_token}|"
             f"{1 if i < len(exts) and exts[i] else 0}|"
             f"{1 if i < len(quotes) and quotes[i] else 0}"
         )
@@ -343,7 +350,7 @@ def _base_overlays(
     base_state: Mapping[str, Any] | None,
     data_through: str,
     *,
-    volume_confirmation: float,
+    volume_confirmation: float | None,
     trend_alignment: float,
 ) -> list[dict[str, Any]]:
     if not base:
@@ -363,7 +370,7 @@ def _base_overlays(
     consensus = min(1.0, float(base.get("window_agreement") or 1) / max(float(base.get("windows_scanned") or 7), 1.0))
     evidence = {
         "shapeQuality": quality,
-        "volumeConfirmation": round(float(volume_confirmation), 4),
+        "volumeConfirmation": round(volume_confirmation, 4) if volume_confirmation is not None else None,
         "trendAlignment": round(float(trend_alignment), 4),
         "recency": 0.6,
         "consensus": round(consensus, 4),
@@ -687,7 +694,7 @@ def _breakout_overlays(
     data_through: str,
     *,
     chart_range: str,
-    volume_confirmation: float,
+    volume_confirmation: float | None,
     trend_alignment: float,
 ) -> list[dict[str, Any]]:
     if not base or not base_state:
@@ -727,7 +734,7 @@ def _breakout_overlays(
             ),
             evidence={
                 "shapeQuality": float(base.get("quality") or 0.5),
-                "volumeConfirmation": round(float(volume_confirmation), 4),
+                "volumeConfirmation": round(volume_confirmation, 4) if volume_confirmation is not None else None,
                 "trendAlignment": round(float(trend_alignment), 4),
                 "recency": 0.7,
                 "consensus": 1.0,
@@ -750,19 +757,26 @@ def _volume_series(series: Mapping[str, list]) -> dict[str, list[float | None]]:
     closes = list(series.get("closes") or [])
     highs = list(series.get("highs") or [])
     lows = list(series.get("lows") or [])
-    volumes = list(series.get("volumes") or [0.0] * len(closes))
+    volumes = list(series.get("volumes") or [None] * len(closes))
     n = len(closes)
     obv: list[float | None] = [None] * n
     clv: list[float | None] = [None] * n
-    running = 0.0
+    running: float | None = None
     for i in range(n):
-        vol = float(volumes[i] if i < len(volumes) else 0.0)
-        if i > 0:
-            if closes[i] > closes[i - 1]:
-                running += vol
-            elif closes[i] < closes[i - 1]:
-                running -= vol
-        obv[i] = round(running, 4)
+        vol = _observed_volume(volumes[i] if i < len(volumes) else None)
+        if vol is None:
+            # OBV has an arbitrary origin. Leave a gap, then start a new
+            # independent segment when observations resume.
+            running = None
+        else:
+            if running is None:
+                running = 0.0
+            elif i > 0:
+                if closes[i] > closes[i - 1]:
+                    running += vol
+                elif closes[i] < closes[i - 1]:
+                    running -= vol
+            obv[i] = round(running, 4)
         span = highs[i] - lows[i] if i < len(highs) and i < len(lows) else 0.0
         if span > 0:
             clv[i] = round((2 * closes[i] - highs[i] - lows[i]) / span, 4)
@@ -957,7 +971,7 @@ def _hist_frame(series: Mapping[str, list]) -> pd.DataFrame:
             "High": list(series.get("highs") or []),
             "Low": list(series.get("lows") or []),
             "Close": list(series.get("closes") or []),
-            "Volume": list(series.get("volumes") or [0.0] * len(times)),
+            "Volume": list(series.get("volumes") or [None] * len(times)),
         },
         index=index,
     )
@@ -1049,7 +1063,7 @@ def _intraday_overlays(series: Mapping[str, list], data_through: str, chart_rang
     highs = list(series.get("highs") or [])
     lows = list(series.get("lows") or [])
     closes = list(series.get("closes") or [])
-    volumes = list(series.get("volumes") or [0.0] * len(closes))
+    volumes = list(series.get("volumes") or [None] * len(closes))
     n = len(closes)
     if n == 0 or chart_range not in _INTRADAY_RANGES:
         return []
@@ -1063,19 +1077,26 @@ def _intraday_overlays(series: Mapping[str, list], data_through: str, chart_rang
     vwap_values: list[float | None] = [None] * n
     dollar_acc = 0.0
     volume_acc = 0.0
+    volume_complete = True
     session_start = 0
     for i in range(n):
         if i > 0 and sessions[i] != sessions[i - 1]:
             dollar_acc = 0.0
             volume_acc = 0.0
+            volume_complete = True
             session_start = i
         typical = (highs[i] + lows[i] + closes[i]) / 3.0
-        vol = float(volumes[i] if i < len(volumes) else 0.0)
-        if vol > 0:
-            dollar_acc += typical * vol
-            volume_acc += vol
-        if volume_acc > 0:
-            vwap_values[i] = round(dollar_acc / volume_acc, 6)
+        vol = _observed_volume(volumes[i] if i < len(volumes) else None)
+        if vol is None:
+            # The session's cumulative denominator is now unknown. Later
+            # observations cannot repair it; the next session resets it.
+            volume_complete = False
+        if volume_complete and vol is not None:
+            if vol > 0:
+                dollar_acc += typical * vol
+                volume_acc += vol
+            if volume_acc > 0:
+                vwap_values[i] = round(dollar_acc / volume_acc, 6)
     opening_start = 9 * 60 + 30
     opening_end = opening_start + 30
     opening_indexes = [
@@ -1093,8 +1114,8 @@ def _intraday_overlays(series: Mapping[str, list], data_through: str, chart_rang
     opening_low = min(lows[i] for i in opening_indexes) if opening_indexes and opening_complete else None
     session_start_key = dates[session_start] if dates and 0 <= session_start < len(dates) else None
     session_end_key = dates[-1] if dates else None
-    last_vwap = next((value for value in reversed(vwap_values) if value is not None), None)
-    hold_vwap = 0
+    last_vwap = vwap_values[-1]
+    hold_vwap = 0 if last_vwap is not None else None
     for i in range(n - 1, session_start - 1, -1):
         vwap_i = vwap_values[i]
         if vwap_i is None or closes[i] < vwap_i:
@@ -1119,7 +1140,7 @@ def _intraday_overlays(series: Mapping[str, list], data_through: str, chart_rang
             "High": highs,
             "Low": lows,
             "Close": closes,
-            "Volume": volumes if len(volumes) == n else [0.0] * n,
+            "Volume": volumes if len(volumes) == n else [None] * n,
         },
         index=index,
     )
@@ -1225,12 +1246,12 @@ def _intraday_overlays(series: Mapping[str, list], data_through: str, chart_rang
                 "styleHint": "summary",
             },
             status="forming",
-            direction="bullish" if hold_vwap >= 3 else "neutral",
+            direction="bullish" if hold_vwap is not None and hold_vwap >= 3 else "neutral",
             shape_quality=0.5,
             display_priority=0.4,
             evidence={
                 "shapeQuality": 0.5,
-                "volumeConfirmation": 0.5 if tod_rvol is None else min(1.0, max(0.0, (tod_rvol or 0) / 2.0)),
+                "volumeConfirmation": None if tod_rvol is None else min(1.0, max(0.0, (tod_rvol or 0) / 2.0)),
                 "trendAlignment": 0.5,
                 "recency": 1.0,
                 "consensus": 1.0,
@@ -1260,7 +1281,7 @@ def series_from_chart_bars(
     highs: list[float] = []
     lows: list[float] = []
     closes: list[float] = []
-    volumes: list[float] = []
+    volumes: list[float | None] = []
     for bar in bars:
         if bar.get("ext") is True or bar.get("quote_only") is True or bar.get("closed") is False:
             continue
@@ -1281,11 +1302,11 @@ def series_from_chart_bars(
             open_ = float(bar.get("o") or close)
             high = float(bar.get("h") or close)
             low = float(bar.get("l") or close)
-            volume = max(0.0, float(bar.get("v") or 0))
         except (KeyError, TypeError, ValueError):
             continue
         if close <= 0:
             continue
+        volume = _observed_volume(bar.get("v"))
         times.append(t)
         if chart_range in _INTRADAY_RANGES:
             dates.append(str(t))

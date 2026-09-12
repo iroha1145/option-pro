@@ -11,6 +11,7 @@ type Snapshot = { key: string; data: AccountWatchlist | null; error: string | nu
 /** Guard stale reads and identity changes, including navigation during a save. */
 export function usePersonalWatchlist() {
   const access = useAccess();
+  const { identityUnavailable, refresh: refreshIdentity } = access;
   const key = `${access.role}\0${access.username ?? ''}`;
   const enabled = access.canManageWatchlist && !access.loading && !access.identityUnavailable;
   const [snapshot, setSnapshot] = useState<Snapshot>({ key: '', data: null, error: null, ready: false });
@@ -60,12 +61,13 @@ export function usePersonalWatchlist() {
     }
     pendingWrites.add(key);
     window.dispatchEvent(new CustomEvent(CHANGED, { detail: key }));
+    const generation = life.current.generation;
     try {
       const next = await accountApi.edit(add, remove);
       if (add.some((symbol) => !next.tickers.includes(symbol)) || remove.some((symbol) => next.tickers.includes(symbol))) {
         throw new ApiError(502, t('自选修改尚未确认，请重试'));
       }
-      if (life.current.alive && life.current.key === key) {
+      if (life.current.alive && life.current.key === key && life.current.generation === generation) {
         setSnapshot({ key, data: next, error: null, ready: true });
       }
       return next;
@@ -75,13 +77,23 @@ export function usePersonalWatchlist() {
     }
   }, [enabled, key]);
 
-  const current = enabled && snapshot.key === key ? snapshot : null;
+  // A transient identity failure suspends I/O, but does not revoke the last
+  // confirmed principal. Keep only this mounted hook's matching display data.
+  const current = access.canManageWatchlist && !access.loading && snapshot.key === key ? snapshot : null;
+  const retry = useCallback(async () => {
+    if (identityUnavailable) {
+      await refreshIdentity().catch(() => undefined);
+      // A successful confirmation enables the effect above to reload membership.
+      return;
+    }
+    await refresh();
+  }, [identityUnavailable, refreshIdentity, refresh]);
   return {
     key, enabled, tickers: current?.data?.tickers ?? null,
     maxTickers: current?.data?.maxTickers ?? 50,
     loading: access.loading || (enabled && !current?.ready),
     error: access.identityUnavailable ? t('身份暂时无法确认，请稍后重试') : current?.error ?? null,
-    busy, refresh, edit,
+    busy, refresh: retry, edit,
     add: (symbol: string) => edit([symbol], []),
     remove: (symbol: string) => edit([], [symbol]),
   };

@@ -6,7 +6,13 @@ import {
   invalidateQueryPaths,
   registryGet,
   resetQueryRegistry,
+  setQueryPrincipal,
 } from '../src/api/queryRegistry.ts';
+
+test.beforeEach(() => {
+  resetQueryRegistry();
+  setQueryPrincipal('visitor\0');
+});
 
 function jsonResponse(body, headers = {}) {
   return new Response(JSON.stringify(body), {
@@ -16,7 +22,6 @@ function jsonResponse(body, headers = {}) {
 }
 
 test('concurrent reads of one whitelisted path share a single request', async () => {
-  resetQueryRegistry();
   const originalFetch = globalThis.fetch;
   let fetchCount = 0;
   let release;
@@ -43,7 +48,6 @@ test('concurrent reads of one whitelisted path share a single request', async ()
 });
 
 test('fresh window serves from memory without a second request', async () => {
-  resetQueryRegistry();
   const originalFetch = globalThis.fetch;
   let fetchCount = 0;
   globalThis.fetch = async () => {
@@ -62,7 +66,6 @@ test('fresh window serves from memory without a second request', async () => {
 });
 
 test('after the fresh window a 304 keeps the value with no body download', async () => {
-  resetQueryRegistry();
   const originalFetch = globalThis.fetch;
   const originalNow = Date.now;
   const seen = [];
@@ -99,7 +102,6 @@ test('after the fresh window a 304 keeps the value with no body download', async
 });
 
 test('manual invalidation discards in-flight responses instead of writing them back', async () => {
-  resetQueryRegistry();
   const originalFetch = globalThis.fetch;
   let release;
   const bodies = [{ generationTag: 'stale' }, { generationTag: 'fresh' }];
@@ -133,7 +135,6 @@ test('manual invalidation discards in-flight responses instead of writing them b
 });
 
 test('principal switch drops every cached value', async () => {
-  resetQueryRegistry();
   const originalFetch = globalThis.fetch;
   let fetchCount = 0;
   globalThis.fetch = async () => {
@@ -154,7 +155,6 @@ test('principal switch drops every cached value', async () => {
 });
 
 test('non-whitelisted paths pass through without sharing', async () => {
-  resetQueryRegistry();
   const originalFetch = globalThis.fetch;
   let fetchCount = 0;
   globalThis.fetch = async () => {
@@ -172,7 +172,6 @@ test('non-whitelisted paths pass through without sharing', async () => {
 });
 
 test('hard invalidation bypasses the browser HTTP cache exactly once', async () => {
-  resetQueryRegistry();
   const originalFetch = globalThis.fetch;
   const inits = [];
   let version = 'old';

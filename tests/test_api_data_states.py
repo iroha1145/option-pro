@@ -1066,7 +1066,8 @@ def test_watchlist_replaces_current_daily_bar_and_keeps_previous_close_baseline(
     assert item["change"] == 7.0
     assert item["change_percent"] == 3.68
     assert item["spark"] == [190.0, 197.0]
-    assert item["quote_session"] == "post_market"
+    # The official 16:00:00 closing print remains part of the regular session.
+    assert item["quote_session"] == "regular"
 
 
 def test_watchlist_omits_ticker_without_latest_quote_and_marks_batch_degraded(monkeypatch):

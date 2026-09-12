@@ -237,23 +237,3 @@ def event_identity(
         [trading_date.isoformat(), normalize_ticker(ticker), setup, str(pivot_id)]
     )
     return hashlib.sha256(raw.encode()).hexdigest()[:32]
-
-
-def transition_identity(
-    *,
-    event_id: str,
-    from_state: BreakoutLifecycleState,
-    to_state: BreakoutLifecycleState,
-    reason: str,
-    transitioned_at: datetime,
-) -> str:
-    raw = "|".join(
-        [
-            event_id,
-            from_state.value,
-            to_state.value,
-            reason,
-            transitioned_at.isoformat(),
-        ]
-    )
-    return hashlib.sha256(raw.encode()).hexdigest()[:32]

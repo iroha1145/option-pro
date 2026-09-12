@@ -87,6 +87,7 @@ _EARNINGS_OUTPUT_FIELDS = (
     "sector",
     "earnings_date_source",
     "estimate_source",
+    "estimate_sources",
     "actual_source",
     "release_status",
     "quarter",
@@ -509,7 +510,7 @@ async def _fetch_finnhub_earnings(today: date) -> dict[str, Any]:
         previous = normalized.get(ticker)
         if previous is not None:
             previous_date = str(previous.get("earnings_date") or "")
-            if previous_date == report_date_text:
+            if previous_date == report_date_text and _same_earnings_report(previous, row):
                 # Finnhub occasionally emits the same company/date more than
                 # once while actuals are being populated.
                 normalized[ticker] = {
@@ -543,6 +544,42 @@ async def _fetch_finnhub_earnings(today: date) -> dict[str, Any]:
         succeeded=not errors,
         truncated=truncated,
         error=errors[0] if errors else None,
+    )
+
+
+_ESTIMATE_FIELDS = ("eps_estimate", "revenue_estimate", "eps_high", "eps_low")
+
+
+def _same_earnings_report(primary: Mapping[str, Any], other: Mapping[str, Any]) -> bool:
+    """A shared date can supplement unknown periods, never conflicting ones."""
+    return bool(primary.get("earnings_date")) and (
+        primary.get("earnings_date") == other.get("earnings_date")
+        and all(
+            primary.get(field) is None or other.get(field) is None
+            or primary[field] == other[field]
+            for field in ("quarter", "year")
+        )
+    )
+
+
+def _estimate_sources(row: Mapping[str, Any]) -> dict[str, str]:
+    sources = row.get("estimate_sources") or {}
+    fallback = row.get("estimate_source")
+    return {
+        field: source
+        for field in _ESTIMATE_FIELDS
+        if row.get(field) is not None
+        and (source := sources.get(field) or (fallback if fallback != "mixed" else None))
+    }
+
+
+def _set_estimate_sources(row: dict[str, Any], sources: Mapping[str, str]) -> None:
+    row["estimate_sources"] = {
+        field: source for field, source in sources.items() if row.get(field) is not None
+    }
+    providers = set(row["estimate_sources"].values())
+    row["estimate_source"] = (
+        next(iter(providers)) if len(providers) == 1 else "mixed" if providers else None
     )
 
 
@@ -684,6 +721,7 @@ def _normalize_earnings_output_row(value: Mapping[str, Any]) -> dict[str, Any]:
         "sector": str(value.get("sector") or ""),
         "earnings_date_source": value.get("earnings_date_source"),
         "estimate_source": value.get("estimate_source"),
+        "estimate_sources": _estimate_sources(value),
         "actual_source": actual_source,
         "release_status": release_status,
         "quarter": value.get("quarter"),
@@ -1163,12 +1201,18 @@ async def _build_upcoming_earnings(today: date):
         if isinstance(result.get("data"), dict)
     }
     for row in earnings_by_ticker.values():
+        _set_estimate_sources(row, _estimate_sources(row))
         row["calendar_sources"] = ["yahoo"]
         row["calendar_date_status"] = "single_source"
         row["calendar_conflict"] = None
     observed_at = datetime.now(MARKET_TZ).isoformat()
     for ticker, finnhub in finnhub_selected.items():
-        existing = earnings_by_ticker.get(ticker, {})
+        existing = dict(earnings_by_ticker.get(ticker, {}))
+        inherited_sources = _estimate_sources(existing)
+        if not _same_earnings_report(existing, finnhub):
+            for field in _ESTIMATE_FIELDS:
+                existing.pop(field, None)
+            inherited_sources = {}
         release_status = (
             "released"
             if finnhub.get("eps_actual") is not None
@@ -1206,6 +1250,12 @@ async def _build_upcoming_earnings(today: date):
                 else {}
             ),
         }
+        for field in _ESTIMATE_FIELDS:
+            if field in finnhub:
+                inherited_sources.pop(field, None)
+                if finnhub[field] is not None:
+                    inherited_sources[field] = "finnhub_calendar"
+        _set_estimate_sources(earnings_by_ticker[ticker], inherited_sources)
 
     # ── FMP 合并：交叉验证既有行的日期，补充 Finnhub 没覆盖的公司 ──
     for ticker, fmp_row in fmp_selected.items():
@@ -1216,22 +1266,33 @@ async def _build_upcoming_earnings(today: date):
             if "fmp_calendar" not in sources:
                 sources.append("fmp_calendar")
             existing["calendar_sources"] = sources
-            existing_date = str(existing.get("earnings_date") or "")
-            if existing_date == fmp_date:
+            same_report = _same_earnings_report(existing, fmp_row)
+            if same_report:
                 existing["calendar_date_status"] = "confirmed"
                 existing["calendar_conflict"] = None
             else:
-                # 日期冲突必须可识别：主源（Finnhub/Yahoo）日期保留，
+                # 日期或已知财年、季度冲突必须可识别：主源期次保留，
                 # 次源日期原样记录，绝不静默合并成一条无法追踪的记录。
                 existing["calendar_date_status"] = "conflict"
-                existing["calendar_conflict"] = {"fmp_calendar": fmp_date}
-            # 主源缺失的预期值可由次源补上（来源标注跟着换）。
-            for field in ("eps_estimate", "revenue_estimate"):
-                if existing.get(field) is None and fmp_row.get(field) is not None:
-                    existing[field] = fmp_row[field]
-                    existing["estimate_source"] = (
-                        existing.get("estimate_source") or "fmp_calendar"
+                existing["calendar_conflict"] = {
+                    "fmp_calendar": (
+                        {
+                            "earnings_date": fmp_date,
+                            "quarter": fmp_row.get("quarter"),
+                            "year": fmp_row.get("year"),
+                        }
+                        if fmp_date == existing.get("earnings_date")
+                        else fmp_date
                     )
+                }
+            # Confirmation and estimate merging must use the same report identity.
+            if same_report:
+                estimate_sources = _estimate_sources(existing)
+                for field in ("eps_estimate", "revenue_estimate"):
+                    if existing.get(field) is None and fmp_row.get(field) is not None:
+                        existing[field] = fmp_row[field]
+                        estimate_sources[field] = "fmp_calendar"
+                _set_estimate_sources(existing, estimate_sources)
             continue
         release_status = (
             "released"
@@ -1384,10 +1445,12 @@ async def _build_upcoming_earnings(today: date):
     )
     yahoo_contributed = any(
         item.get("earnings_date_source") in {"calendar", "earnings_dates"}
+        or bool({"calendar", "earnings_dates"}.intersection(_estimate_sources(item).values()))
         for item in earnings
     )
     fmp_contributed = any(
         item.get("earnings_date_source") == "fmp_calendar"
+        or "fmp_calendar" in _estimate_sources(item).values()
         for item in earnings
     )
     providers = [

@@ -104,17 +104,17 @@ async def _build_indices():
                 raise ValueError("non-finite index price")
             try:
                 previous_close = getattr(fi, "previous_close", None)
-                prev = float(previous_close) if previous_close is not None else price
-                if not math.isfinite(prev) or prev <= 0:
-                    prev = price
+                prev = float(previous_close) if previous_close is not None else None
+                if prev is not None and (not math.isfinite(prev) or prev <= 0):
+                    prev = None
             except Exception:
                 # Some yfinance fast_info properties raise independently. A
                 # missing previous close should not discard a valid live price.
-                prev = price
+                prev = None
             return {
                 "symbol": symbol,
                 "price": round(price, 2),
-                "change_percent": round((price - prev) / prev * 100, 2) if prev else 0,
+                "change_percent": round((price - prev) / prev * 100, 2) if prev is not None else None,
             }
         except Exception:
             return {"symbol": symbol, "price": None, "change_percent": None}

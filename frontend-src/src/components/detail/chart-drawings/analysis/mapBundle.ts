@@ -114,14 +114,14 @@ export const FINGERPRINT_ALGORITHM = 'sha256-bar-ohlcv-v1';
 export function canonicalBarPayload(bars: CanonicalBar[]): string {
   return bars.map((bar) => {
     const timestamp = epochOfStamp(String(bar.t));
-    const volume = typeof bar.v === 'number' && Number.isFinite(bar.v) ? bar.v : 0;
+    const volume = typeof bar.v === 'number' && Number.isFinite(bar.v) && bar.v >= 0 ? fmt6(bar.v) : 'null';
     return [
       String(timestamp),
       fmt6(bar.o),
       fmt6(bar.h),
       fmt6(bar.l),
       fmt6(bar.c),
-      fmt6(volume),
+      volume,
       bar.ext === true ? '1' : '0',
       bar.quote_only === true ? '1' : '0',
     ].join('|');

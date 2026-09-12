@@ -568,6 +568,9 @@
 @media (pointer: coarse) {
   .control-button, .filter-group .control-button, .t-tabs.selection-group .t-tab { min-height: 44px; }
 }
+@media (max-width: 767px), (pointer: coarse) {
+  .touch-target { min-height: 44px; min-width: 44px; }
+}
 @media (prefers-reduced-motion: reduce) { .control-button { transition: none; } }
 
 /* Phone selectors mirror the narrow rail and raised selection in Cloud Monitor.

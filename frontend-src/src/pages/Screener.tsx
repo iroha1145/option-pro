@@ -64,12 +64,14 @@ import {
 } from '@/lib/screenerScanFlow';
 import {
   DEFAULT_FILTERS,
+  CATALYST_SUMMARY_TTL_MS,
   DOLLAR_VOL_OPTIONS,
   EMPTY_CATALYST,
   PROFILE_CN,
   SORT_CN,
   TIMEFRAME_CN,
   catalystSummaryUsable,
+  catalystSortReadiness,
   countByTier,
   tierOf,
   type CatalystSummary,
@@ -92,6 +94,7 @@ const SECTOR_COLLATOR = new Intl.Collator(localeTag());
 const CATALYST_BATCH_SIZE = 20;
 
 type ScanState = 'idle' | 'scanning' | 'done' | 'error';
+type ScanAttempt = { filters: ScanFilters; options: { forceRefresh?: boolean } };
 
 /* 预设策略 → 偏好映射 + 强度下限（契约枚举 conservative/balanced/aggressive 直接落偏好） */
 function withPreset(base: ScanFilters, id: string): ScanFilters {
@@ -175,11 +178,14 @@ export default function Screener() {
   const [flashes, setFlashes] = useState<Record<string, 'up' | 'down'>>({});
   const [refreshingStrength, setRefreshingStrength] = useState(false);
   const [inFlightFilters, setInFlightFilters] = useState<ScanFilters | null>(null);
+  const [lastScanAttempt, setLastScanAttempt] = useState<ScanAttempt | null>(null);
 
   const [details, setDetails] = useState<DetailCache>({});
   const detailsRef = useRef<DetailCache>({});
   const [catalysts, setCatalysts] = useState<Record<string, CatalystSummary>>({});
   const catalystsRef = useRef<Record<string, CatalystSummary>>({});
+  const [catalystRetry, setCatalystRetry] = useState(0);
+  const [catalystLoading, setCatalystLoading] = useState(false);
   const [signalsMap, setSignalsMap] = useState<Record<string, RowSignalsState>>({});
   const signalsRef = useRef<Record<string, RowSignalsState>>({});
   const scanSeq = useRef(0);
@@ -210,6 +216,7 @@ export default function Screener() {
       if (!isCurrent()) throw new DOMException('Scan superseded', 'AbortError');
     };
     setInFlightFilters(filters);
+    setLastScanAttempt({ filters, options: { ...options } });
     setScanState('scanning');
     setScanError(null);
     setScanPhase('reading');
@@ -381,7 +388,7 @@ export default function Screener() {
       detailsRef.current = { ...detailsRef.current, ...detailPatch };
       setDetails(detailsRef.current);
       setApplied(filters);
-      setDraft(filters);
+      // The draft may have changed while this request was running. Only commit results.
       setQueryCheckedAt(times.queryCheckedAt);
       setLastScanAt(times.scanCompletedAt);
       setReusedExisting(times.reusedExisting);
@@ -476,19 +483,18 @@ export default function Screener() {
     return out;
   }, [rows, applied]);
 
+  // Both the table and tier comparison use this macro-filtered pool. Missing is not neutral.
+  const macroFilteredBase = useMemo(() => macroToneFilter === 'all'
+    ? filteredBase
+    : filteredBase.filter((r) => macroToneOf(r.macroFit, r.macroTailwind) === macroToneFilter),
+  [filteredBase, macroToneFilter]);
+
   const filtered = useMemo(() => {
-    let out = filteredBase;
+    let out = macroFilteredBase;
     if (applied.tier !== 'all') out = out.filter((r) => tierOf(r.strengthScore) === applied.tier);
-    // 宏观分档筛选。刻意在 tier 之后、topN 之前，和其他客户端条件同一层。
-    //
-    // 没有宏观读数的行会被这个筛选**排除**，而不是当成中性留下 —— 留下就等于宣称
-    // 它是中性，而后端返回 null 正是为了不说这句话。上面的提示会说明少了多少行。
-    if (macroToneFilter !== 'all') {
-      out = out.filter((r) => macroToneOf(r.macroFit, r.macroTailwind) === macroToneFilter);
-    }
     if (applied.topN > 0) out = out.slice(0, applied.topN);
     return out;
-  }, [filteredBase, applied.tier, applied.topN, macroToneFilter]);
+  }, [macroFilteredBase, applied.tier, applied.topN]);
 
   /**
    * 催化排序的前置条件（审计 P1-06）。
@@ -509,14 +515,11 @@ export default function Screener() {
   }, [filteredBase, applied.tier]);
 
   const catalystSortActive = sortMode !== 'deterministic';
-  const missingCatalystTickers = useMemo(() => {
-    if (!catalystSortActive) return [];
-    const now = Date.now();
-    return filtered
-      .map((row) => row.ticker)
-      .filter((ticker) => !catalystSummaryUsable(catalysts[ticker], now));
-  }, [catalystSortActive, filtered, catalysts]);
-  const preparingCatalystSort = catalystSortActive && missingCatalystTickers.length > 0;
+  const catalystReadiness = catalystSortReadiness(catalystSortActive ? filtered.map((row) => row.ticker) : [], catalysts, Date.now());
+  const missingCatalystTickers = catalystReadiness.missing;
+  const catalystSortFailed = catalystReadiness.failed.length > 0;
+  const catalystSortIncomplete = missingCatalystTickers.length > 0;
+  const preparingCatalystSort = scanState === 'done' && catalystSortIncomplete && !catalystSortFailed;
 
   /* ---------------- 三态排序（deterministic / latest / impact） ---------------- */
   const sorted = useMemo(() => {
@@ -524,7 +527,7 @@ export default function Screener() {
     const byScore = (a: ScreenerRow, b: ScreenerRow) =>
       b.strengthScore - a.strengthScore || Math.abs(b.changePct ?? 0) - Math.abs(a.changePct ?? 0) || a.ticker.localeCompare(b.ticker);
     // 摘要没取齐就维持确定性顺序：用缺失值排名会让结果取决于访问过哪些分页。
-    if (sortMode === 'deterministic' || preparingCatalystSort) {
+    if (sortMode === 'deterministic' || catalystSortIncomplete) {
       out.sort(byScore);
     } else if (sortMode === 'latest') {
       const ts = (r: ScreenerRow) => {
@@ -541,7 +544,7 @@ export default function Screener() {
       out.sort((a, b) => impact(b) - impact(a) || count(b) - count(a) || byScore(a, b));
     }
     return out;
-  }, [filtered, sortMode, catalysts, preparingCatalystSort]);
+  }, [filtered, sortMode, catalysts, catalystSortIncomplete]);
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
@@ -582,32 +585,57 @@ export default function Screener() {
     [],
   );
 
-  const pageTickerKey = pageRows.map((r) => r.ticker).join(',');
+  // One request scope owns both page badges and full-pool sorting. Response patches
+  // must not cancel/restart a partially completed batch, or failed rows retry forever.
+  const catalystTickerKey = (catalystSortActive ? filtered : pageRows).map((r) => r.ticker).sort().join(',');
   useQuoteSymbols(pageRows.map((r) => r.ticker), expanded ? [expanded] : []);
   useEffect(() => {
-    if (scanState !== 'done') return;
-    const now = Date.now();
-    const tickers = pageTickerKey
-      .split(',')
-      .filter((t) => t && !catalystSummaryUsable(catalystsRef.current[t], now));
-    if (tickers.length === 0) return;
+    if (scanState !== 'done') {
+      setCatalystLoading(false);
+      return;
+    }
+    const scopeTickers = catalystTickerKey.split(',').filter(Boolean);
     let cancelled = false;
-    void loadCatalystSummaries(tickers, () => cancelled);
+    let expiryTimer: ReturnType<typeof window.setTimeout> | null = null;
+    const refreshScope = async (includeFailures: boolean) => {
+      const now = Date.now();
+      const tickers = scopeTickers.filter((ticker) => {
+        const summary = catalystsRef.current[ticker];
+        return !catalystSummaryUsable(summary, now) && (includeFailures || !summary?.failed);
+      });
+      setCatalystLoading(tickers.length > 0);
+      if (tickers.length > 0) await loadCatalystSummaries(tickers, () => cancelled);
+      if (cancelled) return;
+      setCatalystLoading(false);
+      // Start the expiry clock after the complete round. A same-symbol background
+      // scan must not cancel a slow later batch or keep restarting failed early ones.
+      const expiries = scopeTickers.flatMap((ticker) => {
+        const summary = catalystsRef.current[ticker];
+        return summary?.loaded && !summary.failed && summary.fetchedAt !== undefined
+          ? [summary.fetchedAt + CATALYST_SUMMARY_TTL_MS] : [];
+      });
+      if (expiries.length > 0) {
+        expiryTimer = window.setTimeout(() => {
+          expiryTimer = null;
+          void refreshScope(false);
+        }, Math.max(1_000, Math.min(...expiries) - Date.now()));
+      }
+    };
+    void refreshScope(true);
     return () => {
       cancelled = true;
+      if (expiryTimer !== null) window.clearTimeout(expiryTimer);
     };
-  }, [scanState, pageTickerKey, loadCatalystSummaries]);
+  }, [scanState, catalystSortActive, catalystTickerKey, catalystRetry, loadCatalystSummaries]);
 
-  /* 催化排序：为全部候选股票取齐摘要，而不是只取当前页（审计 P1-06）。 */
-  const missingCatalystKey = missingCatalystTickers.join(',');
-  useEffect(() => {
-    if (scanState !== 'done' || !catalystSortActive || !missingCatalystKey) return;
-    let cancelled = false;
-    void loadCatalystSummaries(missingCatalystKey.split(','), () => cancelled);
-    return () => {
-      cancelled = true;
-    };
-  }, [scanState, catalystSortActive, missingCatalystKey, loadCatalystSummaries]);
+  const retryCatalystSort = () => {
+    if (catalystLoading) return;
+    const next = { ...catalystsRef.current };
+    for (const ticker of catalystReadiness.failed) delete next[ticker];
+    catalystsRef.current = next;
+    setCatalysts(next);
+    setCatalystRetry((current) => current + 1);
+  };
 
   /* ---------------- 行展开 + 信号懒加载 ---------------- */
   const onToggle = useCallback((ticker: string) => {
@@ -661,6 +689,9 @@ export default function Screener() {
 
   /* ---------------- 交互回调 ---------------- */
   const onScanClick = useCallback(() => void runScan(draft), [draft, runScan]);
+  const onScanRetry = () => {
+    if (lastScanAttempt) void runScan(lastScanAttempt.filters, lastScanAttempt.options);
+  };
 
   const patchApplied = useCallback((p: Partial<ScanFilters>) => {
     setApplied((a) => {
@@ -671,6 +702,15 @@ export default function Screener() {
     setPage(1);
   }, []);
 
+  const resetAllFilters = () => {
+    const filters = { ...DEFAULT_FILTERS, sectors: [] };
+    setMacroToneFilter('all');
+    setDraft(filters);
+    // Defaults include server-side profile/timeframe. Keep the old result's
+    // applied identity until the corresponding default scan succeeds.
+    void runScan(filters);
+  };
+
   const onTierFromHistogram = useCallback((t: TierFilter) => {
     setDraft((d) => ({ ...d, tier: t, presetId: null, minScore: null }));
     setApplied((a) => ({ ...a, tier: t, presetId: null, minScore: null }));
@@ -680,6 +720,7 @@ export default function Screener() {
   const onPresetQuick = useCallback(
     (id: string) => {
       const f = withPreset(draft, id);
+      setDraft(f);
       void runScan(f);
     },
     [draft, runScan],
@@ -704,11 +745,11 @@ export default function Screener() {
   }, [scanMeta, rows]);
   const hitsByTier = useMemo(() => {
     const acc: Record<Tier, number> = { S: 0, A: 0, B: 0, C: 0, D: 0 };
-    filteredBase.forEach((r) => {
+    macroFilteredBase.forEach((r) => {
       acc[tierOf(r.strengthScore)] += 1;
     });
     return acc;
-  }, [filteredBase]);
+  }, [macroFilteredBase]);
 
   /**
    * 评分说明必须描述实际使用的评分风格（审计 P2-11）。
@@ -841,6 +882,14 @@ export default function Screener() {
                     {__t('正在准备排序数据 · 剩余')} {missingCatalystTickers.length}
                   </SoftBadge>
                 )}
+                {scanState === 'done' && catalystSortFailed && (
+                  <div className="flex flex-wrap items-center gap-2" role="status">
+                    <SoftBadge tone="warn" className="whitespace-normal">{__t('催化摘要读取失败，暂按强度排序')}</SoftBadge>
+                    <button type="button" onClick={retryCatalystSort} disabled={catalystLoading} className="control-button">
+                      {__t('重试')}
+                    </button>
+                  </div>
+                )}
                 {scanMeta?.sourceStatus === 'unknown' && !scanMeta.stale && (
                   <SoftBadge tone="warn">{__t('数据时间待核验')}</SoftBadge>
                 )}
@@ -967,7 +1016,7 @@ export default function Screener() {
                     description={scanError?.code === 503 ? __t('稍后刷新再试') : scanError?.message}
                     action={
                       <button
-                        onClick={() => void runScan(applied)}
+                        onClick={onScanRetry}
                         className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105"
                       >
                         {__t('重试')}
@@ -1038,7 +1087,7 @@ export default function Screener() {
                         <SuggestButton label={__t("清除价格区间")} onClick={() => patchApplied({ priceMin: null, priceMax: null })} />
                       )}
                       {applied.minDollarVol > 0 && <SuggestButton label={__t("清除成交额下限")} onClick={() => patchApplied({ minDollarVol: 0 })} />}
-                      <SuggestButton label={__t("重置全部条件")} onClick={() => patchApplied({ ...DEFAULT_FILTERS })} />
+                      <SuggestButton label={__t("重置全部条件")} onClick={resetAllFilters} />
                     </div>
                   }
                 />
@@ -1239,7 +1288,7 @@ function PagerButton({ label, disabled, onClick }: { label: string; disabled: bo
     <button
       onClick={onClick}
       disabled={disabled}
-      className="flex h-8 items-center rounded-md border border-line bg-card px-3 text-caption text-ink-600 shadow-btn transition-colors hover:border-brand-400 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-40"
+      className="flex min-h-11 min-w-11 items-center rounded-md border border-line bg-card px-3 text-caption text-ink-600 shadow-btn transition-colors hover:border-brand-400 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-40"
     >
       {label}
     </button>

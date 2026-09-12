@@ -108,7 +108,7 @@ def clean_series(bars: Sequence[Mapping[str, Any]]) -> dict[str, list] | None:
     highs: list[float] = []
     lows: list[float] = []
     closes: list[float] = []
-    volumes: list[float] = []
+    volumes: list[float | None] = []
     turnover: list[float | None] = []
     for bar in bars:
         try:
@@ -120,12 +120,14 @@ def clean_series(bars: Sequence[Mapping[str, Any]]) -> dict[str, list] | None:
         except (KeyError, TypeError, ValueError):
             continue
         try:
-            volume = max(0.0, float(bar.get("v") or 0))
+            volume = float(bar.get("v"))
         except (TypeError, ValueError):
-            volume = 0.0
-        # NaN/Inf 会穿过下面所有比较（与 NaN 比大小恒为 False），一路活到
-        # 指纹与指标里再炸；非有限值一律当坏 bar 丢掉，先于任何筛选。
-        if not all(math.isfinite(v) for v in (open_, high, low, close, volume)):
+            volume = None
+        if volume is not None and (not math.isfinite(volume) or volume < 0):
+            volume = None
+        # 无效成交量保持未知，不丢掉仍然有效的价格；真实零成交仍保留为零。
+        # 价格中的 NaN/Inf 会穿过后续比较，必须先剔除坏价格 bar。
+        if not all(math.isfinite(v) for v in (open_, high, low, close)):
             continue
         if close <= 0 or high < low or close > high * 1.0001 or close < low * 0.9999:
             continue
@@ -140,7 +142,7 @@ def clean_series(bars: Sequence[Mapping[str, Any]]) -> dict[str, list] | None:
         lows.append(low)
         closes.append(close)
         volumes.append(volume)
-        turnover.append(close * volume if volume > 0 else None)
+        turnover.append(close * volume if volume is not None else None)
     if len(closes) < _MIN_BARS:
         return None
     return {

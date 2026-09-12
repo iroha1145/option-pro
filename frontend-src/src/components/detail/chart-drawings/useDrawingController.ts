@@ -98,6 +98,21 @@ function openModalCount(): number {
   return document.querySelectorAll(MODAL_SELECTOR).length;
 }
 
+/** Server bookkeeping may change without changing what the user can undo. */
+function sameDrawingContent(current: ChartDrawing[], incoming: ChartDrawing[]): boolean {
+  if (current.length !== incoming.length) return false;
+  const byId = new Map(current.map((drawing) => [drawing.id, drawing]));
+  return incoming.every((drawing) => {
+    const previous = byId.get(drawing.id);
+    return previous !== undefined
+      && previous.kind === drawing.kind
+      && previous.ticker === drawing.ticker
+      && previous.range === drawing.range
+      && previous.adjustment === drawing.adjustment
+      && !mutableFieldsDiffer(previous, drawing);
+  });
+}
+
 /** 拖动期间关掉 inside dataZoom 的漫游；图上没有 dataZoom 就什么都别加。 */
 function setChartRoam(chart: EChartsInstance, enabled: boolean): void {
   if (chart.isDisposed()) return;
@@ -153,6 +168,10 @@ export function useDrawingController(args: {
   const localSaveRef = useRef<{ key: string; list: ChartDrawing[]; timer: ReturnType<typeof setTimeout> } | null>(null);
   const coalesceRef = useRef<{ id: string; at: number } | null>(null);
   const drawingsRef = useRef(drawings);
+  // Includes debounced edits, undo/redo and server echoes: none may be replaced
+  // by a scope read that started against an older state.
+  const stateVersionRef = useRef(0);
+  const scopeLoadIdRef = useRef(0);
   const drainRef = useRef<(drawingId: string) => Promise<void>>(async () => {});
   const loadScopeRef = useRef<(generation: number) => Promise<void>>(async () => {});
   const outboxRef = useRef(new DrawingOutbox());
@@ -201,6 +220,7 @@ export function useDrawingController(args: {
     recordHistory: boolean,
     options?: { persist?: 'now' | 'debounced' | 'skip' },
   ) => {
+    stateVersionRef.current += 1;
     drawingsRef.current = next;
     setDrawings(next);
     setHistory((prev) => (recordHistory ? historyPush(prev, next) : historyReplace(prev, next)));
@@ -377,11 +397,26 @@ export function useDrawingController(args: {
     void drain(queued.drawingId);
   }, [drain, signedIn]);
 
-  const loadScope = useCallback(async (generation: number) => {
+  /** 把防抖窗口里的编辑立刻入队（只入队不发送），再清空计时器。 */
+  const flushPendingEdits = useCallback(() => {
+    for (const timer of styleTimers.current.values()) clearTimeout(timer);
+    styleTimers.current.clear();
+    const edits = [...pendingEdits.current.values()];
+    pendingEdits.current.clear();
+    if (!signedIn) return;
+    for (const drawing of edits) {
+      outboxRef.current.enqueue({ drawingId: drawing.id, type: 'update', drawing });
+    }
+  }, [signedIn]);
+
+  const loadScope = useCallback(async (generation: number, resetHistory = false) => {
     /* 这里不清 selectedId/inProgress/拖拽预览：交互态重置属于**换 scope**，
        由切换 effect 自己做（它本来就做了）。loadScope 还会被后台自愈调用
        （限流/断网后的定时重载）——后台恢复把用户正选中的图形踢掉，Inspector
        会当着用户的面消失（CI 取证等「颜色 红色」超时抓到的就是这个）。 */
+    flushPendingEdits();
+    flushLocalSave();
+    const loadId = ++scopeLoadIdRef.current;
     conflictServerRef.current = null;
     if (!signedIn) {
       const loaded = loadDrawings(storageKey);
@@ -389,28 +424,60 @@ export function useDrawingController(args: {
       if (!loaded.ok) quarantineDrawings(storageKey);
       const list = loaded.drawings;
       writeLocal(list, false, { persist: loaded.ok || list.length ? 'now' : 'skip' });
-      setHistory(createHistory(list));
+      if (resetHistory) setHistory(createHistory(list));
       setSyncStatus('guest');
       setSyncHint(loaded.ok ? null : 'local_corrupt');
       return;
     }
     const cached = loadDrawings(storageKey);
     if (!cached.ok && !cached.missing) quarantineDrawings(storageKey);
-    const preview = previewScopeLoad(cached);
-    // Apply cache (including authoritative empty) before GET so AAPL rows
-    // cannot stay editable under the MSFT storageKey while the list is in flight.
-    writeLocal(preview.drawings, false, { persist: preview.persist });
-    setHistory(createHistory(preview.drawings));
-    setSyncStatus(preview.status === 'load_failed' ? 'load_failed' : 'saving');
-    setSyncHint(preview.hint);
+    if (resetHistory) {
+      const preview = previewScopeLoad(cached);
+      // Only entering a scope replaces its preview and resets session history.
+      // A same-scope retry must retain edits (including those still debouncing).
+      writeLocal(preview.drawings, false, { persist: preview.persist });
+      setHistory(createHistory(preview.drawings));
+      setSyncStatus(preview.status === 'load_failed' ? 'load_failed' : 'saving');
+      setSyncHint(preview.hint);
+    } else {
+      setSyncStatus('saving');
+    }
+    const stateVersion = stateVersionRef.current;
+    // drainPersistJob advances this before its caller applies the drawing echo.
+    // Comparing both closes the microtask gap between server commit and render.
+    const scopeRevision = outboxRef.current.getScopeRevision();
     const outcome = await completeScopeLoad({
       generation,
       outbox: outboxRef.current,
       cached,
       list: () => drawingsApi.list(args.ticker, args.range, adjustment),
+      isCurrent: () => scopeLoadIdRef.current === loadId
+        && stateVersionRef.current === stateVersion
+        && outboxRef.current.getScopeRevision() === scopeRevision,
       errorInfo: (error) => ({ code: drawingErrorCode(error), status: drawingErrorStatus(error) }),
     });
-    if (outcome.foreign) return;
+    if (outcome.foreign) {
+      // Edits or a newer write invalidated this GET. Read again before adopting
+      // its baseline; otherwise a late response can roll back send revisions.
+      if (scopeLoadIdRef.current === loadId && outboxRef.current.getScopeGeneration() === generation) {
+        if (outcome.status === 'load_failed') {
+          autoRetryAttempt.current += 1;
+          const delay = nextDrainRetryDelayMs(autoRetryAttempt.current, outcome.retryAfterSeconds);
+          if (autoRetryTimer.current) clearTimeout(autoRetryTimer.current);
+          autoRetryTimer.current = setTimeout(() => {
+            autoRetryTimer.current = null;
+            if (scopeLoadIdRef.current === loadId && outboxRef.current.getScopeGeneration() === generation) {
+              void loadScopeRef.current(generation);
+            }
+          }, delay);
+          setSyncStatus('load_failed');
+          setSyncHint('unsynced');
+        } else {
+          void loadScopeRef.current(generation);
+        }
+      }
+      return;
+    }
     if (outcome.lastServer && outboxRef.current.getScope()) {
       lastServerRef.current = {
         scope: outboxRef.current.getScope() as ScopeKey,
@@ -427,9 +494,13 @@ export function useDrawingController(args: {
         drawings: outcome.lastServer,
       };
     }
-    if (outcome.apply !== 'none') {
+    if (outcome.apply !== 'none' && (resetHistory || outcome.apply !== 'cache')) {
+      // A same-scope failed GET cannot replace live edits with a missing cache.
+      // Successful remote/replayed content may include another page's changes:
+      // old snapshots must not undo those additions, deletions or modifications.
+      const contentChanged = !sameDrawingContent(drawingsRef.current, outcome.drawings);
       writeLocal(outcome.drawings, false, { persist: outcome.persist });
-      setHistory(createHistory(outcome.drawings));
+      if (contentChanged) setHistory(createHistory(outcome.drawings));
     }
     setSyncStatus(outcome.status);
     setSyncHint(outcome.hint);
@@ -452,21 +523,9 @@ export function useDrawingController(args: {
     } else if (outcome.baselineReady) {
       autoRetryAttempt.current = 0;
     }
-  }, [adjustment, args.range, args.ticker, signedIn, storageKey, writeLocal]);
+  }, [adjustment, args.range, args.ticker, flushLocalSave, flushPendingEdits, signedIn, storageKey, writeLocal]);
 
   useLayoutEffect(() => { loadScopeRef.current = loadScope; }, [loadScope]);
-
-  /** 把防抖窗口里的编辑立刻入队（只入队不发送），再清空计时器。 */
-  const flushPendingEdits = useCallback(() => {
-    for (const timer of styleTimers.current.values()) clearTimeout(timer);
-    styleTimers.current.clear();
-    const edits = [...pendingEdits.current.values()];
-    pendingEdits.current.clear();
-    if (!signedIn) return;
-    for (const drawing of edits) {
-      outboxRef.current.enqueue({ drawingId: drawing.id, type: 'update', drawing });
-    }
-  }, [signedIn]);
 
   /** 丢弃防抖窗口里的编辑（用户选了「用服务器版本」）。 */
   const discardPendingEdits = useCallback(() => {
@@ -493,7 +552,7 @@ export function useDrawingController(args: {
     const run = async () => {
       await Promise.resolve();
       if (cancelled) return;
-      await loadScope(generation);
+      await loadScope(generation, true);
     };
     void run();
     return () => {
@@ -525,6 +584,7 @@ export function useDrawingController(args: {
   }, [signedIn]);
 
   useEffect(() => () => {
+    scopeLoadIdRef.current += 1;
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
     if (autoRetryTimer.current) clearTimeout(autoRetryTimer.current);
     flushPendingEdits();
@@ -704,6 +764,7 @@ export function useDrawingController(args: {
       const present = restoreHistory(stepped.present);
       const next = { ...stepped, present };
       coalesceRef.current = null;
+      stateVersionRef.current += 1;
       drawingsRef.current = present;
       setDrawings(present);
       flushLocalSave();
@@ -721,6 +782,7 @@ export function useDrawingController(args: {
       const present = restoreHistory(stepped.present);
       const next = { ...stepped, present };
       coalesceRef.current = null;
+      stateVersionRef.current += 1;
       drawingsRef.current = present;
       setDrawings(present);
       flushLocalSave();

@@ -57,7 +57,7 @@ def test_continuing_rise_is_holding_above_original_orb_not_retesting_daily_base(
     first, _ = _scan(orb_service)
     confirmed, _ = _scan(orb_service, AS_OF + timedelta(minutes=5), first)
     holding, _ = _scan(orb_service, AS_OF + timedelta(minutes=10), confirmed)
-    assert [event.lifecycle_state.value for event in (first, confirmed, holding)] == ["TRIGGERED", "CONFIRMED", "HOLDING"]
+    assert [event.lifecycle_state.value for event in (first, confirmed, holding)] == ["CONFIRMED", "HOLDING", "HOLDING"]
     assert first.event_price < confirmed.event_price < holding.event_price
     for event in (first, confirmed, holding):
         public = _public(orb_service, event)
@@ -136,7 +136,7 @@ def test_legacy_saved_event_recovers_levels_for_read_and_next_scan_without_mutat
         assert connection.execute("SELECT event_json FROM breakout_events").fetchone()[0] == before
     # The public timeline is not an input field of the strict event model.
     continued, _ = _scan(orb_service, AS_OF + timedelta(minutes=5), json.loads(before))
-    assert continued.lifecycle_state.value == "CONFIRMED"
+    assert continued.lifecycle_state.value == "HOLDING"
     assert continued.event_anchor.invalidation_price == 99.5
     assert continued.event_id == event.event_id
 

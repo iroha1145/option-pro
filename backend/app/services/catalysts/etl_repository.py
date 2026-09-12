@@ -770,28 +770,6 @@ class CatalystEtlRepository:
             )
         return result
 
-    def list_active_news(self, *, limit: int = 100) -> list[dict[str, Any]]:
-        if isinstance(limit, bool) or not 1 <= limit <= 1_000:
-            raise ValueError("active-news limit is invalid")
-        with self._connect() as connection:
-            rows = connection.execute(
-                """SELECT * FROM macrolens_etl_news WHERE deleted=0
-                   ORDER BY available_at DESC,news_id DESC LIMIT ?""",
-                (limit,),
-            ).fetchall()
-        output = []
-        for row in rows:
-            item = dict(row)
-            item["raw"] = json.loads(item["raw_json"])
-            item["source_tickers"] = json.loads(item["source_tickers_json"])
-            item["sources"] = json.loads(item["sources_json"])
-            item["source_count"] = len(item["sources"])
-            item["source_observations"] = json.loads(
-                item["source_observations_json"]
-            )
-            output.append(item)
-        return output
-
     def tombstones(self, news_id: int | None = None) -> list[dict[str, Any]]:
         query = "SELECT * FROM macrolens_etl_news_tombstones"
         params: tuple[Any, ...] = ()

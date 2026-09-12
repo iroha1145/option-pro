@@ -16,7 +16,7 @@
  * 并另建对象。
  */
 
-import { requestRaw } from './client.ts';
+import { requestRaw, REQUEST_TIMEOUT_MS } from './client.ts';
 import {
   clearPersisted,
   deletePersisted,
@@ -69,7 +69,28 @@ interface Entry {
 }
 
 const entries = new Map<string, Entry>();
-let principalKey = 'anonymous';
+let principalKey: string | null = null;
+let principalGeneration = 0;
+const principalWaiters = new Set<(key: string | null) => void>();
+
+function clearMemory(): void {
+  for (const entry of entries.values()) entry.generation += 1;
+  entries.clear();
+}
+
+/** 恢复不阻塞网络首取；身份服务失败或超时后放弃本次恢复。 */
+function confirmedPrincipal(): Promise<string | null> {
+  if (principalKey !== null) return Promise.resolve(principalKey);
+  return new Promise((resolve) => {
+    const finish = (key: string | null) => {
+      clearTimeout(timer);
+      principalWaiters.delete(finish);
+      resolve(key);
+    };
+    const timer = setTimeout(() => finish(null), REQUEST_TIMEOUT_MS);
+    principalWaiters.add(finish);
+  });
+}
 
 /**
  * 部署版本在网关发 index.html 时以 <meta name="x-app-commit"> 注入——
@@ -110,18 +131,29 @@ export function queryConfigFor(path: string): QueryConfig | null {
 }
 
 /** useAccess 在身份确定/变化时调用;持久层记录按 principal 校验。 */
-export function setQueryPrincipal(key: string): void {
-  principalKey = key;
+export function setQueryPrincipal(key: string | null): void {
+  if (key !== principalKey) {
+    principalGeneration += 1;
+    clearMemory();
+    principalKey = key;
+  }
+  // null 也会结束等待：一次失败的身份核验不应让恢复永久悬挂。
+  for (const finish of principalWaiters) finish(key);
 }
 
 async function fetchInto(path: string, entry: Entry, config: QueryConfig): Promise<unknown> {
   const generation = entry.generation;
+  const principal = principalKey;
+  const identityGeneration = principalGeneration;
+  const current = () => entry.generation === generation
+    && principalGeneration === identityGeneration && principalKey === principal;
   /* 硬失效后的第一发必须打穿浏览器 HTTP 缓存：后端给 max-age=60，普通
      GET 在窗口内可能整个不出浏览器就拿回刷新前的旧正文（审计 P1-01
      场景二）。标记一次性使用；即便这发失败，重试退回条件请求也可接受。 */
   const reload = entry.forceReload;
   if (reload) entry.forceReload = false;
   const conditional = reload ? null : entry.etag;
+  const conditionalValue = entry.value;
   const res = await requestRaw(path, {
     method: 'GET',
     ...(reload ? { cache: 'reload' as RequestCache } : {}),
@@ -129,29 +161,29 @@ async function fetchInto(path: string, entry: Entry, config: QueryConfig): Promi
     headers: conditional ? { 'If-None-Match': conditional } : {},
   });
   const commit = res.headers.get('X-App-Commit');
-  if (commit) knownAppCommit = commit;
+  if (commit && current()) knownAppCommit = commit;
   if (res.status === 304) {
     // 数据没变:正文零下载,只把这份值确认成"刚验证过"。
-    if (entry.generation === generation) {
+    if (current()) {
       entry.fetchedAt = Date.now();
-      if (config.persist && entry.value !== undefined) {
+      if (config.persist && principal !== null && entry.value !== undefined) {
         // 304 = 服务器刚确认这份数据仍有效:validatedAt 前移,让恢复
         // 年龄按最后确认时间计——一直有效的数据不该越放越"老"。
         void writePersisted({
           path,
-          principal: principalKey,
+          principal,
           appCommit: knownAppCommit,
           etag: entry.etag,
           raw: entry.value,
           storedAt: entry.persistedStoredAt || Date.now(),
           validatedAt: Date.now(),
-        });
+        }, current);
       }
     }
-    return entry.value;
+    return conditionalValue;
   }
   const data: unknown = res.status === 204 ? undefined : await res.json();
-  if (entry.generation !== generation) {
+  if (!current() || principal === null) {
     // 手动刷新已作废这一世代:旧在途响应不得回写缓存,原调用方照常拿到它。
     return data;
   }
@@ -162,13 +194,13 @@ async function fetchInto(path: string, entry: Entry, config: QueryConfig): Promi
   if (config.persist) {
     void writePersisted({
       path,
-      principal: principalKey,
+      principal,
       appCommit: knownAppCommit,
       etag: entry.etag,
       raw: data,
       storedAt: entry.persistedStoredAt,
       validatedAt: entry.persistedStoredAt,
-    });
+    }, current);
   }
   return data;
 }
@@ -204,12 +236,17 @@ export function registryGet<T>(path: string): Promise<T> {
 export async function restorePersistedQuery<T>(path: string): Promise<T | null> {
   const config = QUERY_CONFIG[path];
   if (!config?.persist) return null;
+  const principal = await confirmedPrincipal();
+  if (principal === null || principal !== principalKey) return null;
+  const identityGeneration = principalGeneration;
   const entry = entryFor(path);
+  const generation = entry.generation;
   if (entry.value !== undefined) return entry.value as T;
   if (entry.restored) return null;
   entry.restored = true;
   const record = await readPersisted(path);
-  if (!record || record.principal !== principalKey) return null;
+  if (entry.generation !== generation || identityGeneration !== principalGeneration
+    || principal !== principalKey || !record || record.principal !== principal) return null;
   if (
     record.appCommit &&
     knownAppCommit &&
@@ -257,10 +294,7 @@ export function invalidateQueryPaths(
 
 /** 主体切换:内存与持久层一起清,不同主体不共享任何响应。 */
 export function dropQueryRegistry(): void {
-  for (const entry of entries.values()) {
-    entry.generation += 1;
-  }
-  entries.clear();
+  clearMemory();
   void clearPersisted();
 }
 
@@ -281,7 +315,9 @@ export function persistedRecordWithinAge(
 
 /** 测试用复位。 */
 export function resetQueryRegistry(): void {
-  entries.clear();
-  principalKey = 'anonymous';
+  clearMemory();
+  principalGeneration += 1;
+  principalKey = null;
+  for (const finish of principalWaiters) finish(null);
   knownAppCommit = null;
 }

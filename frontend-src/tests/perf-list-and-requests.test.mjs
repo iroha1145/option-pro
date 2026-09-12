@@ -58,7 +58,7 @@ test('自选页在完整列表上排序与统计，只对渲染切片分批', as
   // 渲染用切片
   assert.match(page, /renderedCards\.map/);
   assert.doesNotMatch(page, /\{\s*cardItems\.map\(/, '不应再有直接渲染整份列表的地方');
-  assert.match(page, /useQuoteSymbols\(cardItems\.map\(/, '行情订阅必须包含尚未挂载的列表项');
+  assert.match(page, /useQuoteSymbols\(identityUnavailable \? \[\] : cardItems\.map\(/, '身份已确认时订阅完整列表，未确认时暂停订阅');
   // 还有剩余时必须给出可见的继续加载入口
   assert.match(page, /progressive\.hasMore/);
   assert.match(page, /加载更多/);
@@ -236,6 +236,7 @@ test('共享的市场时段请求在并发调用下只发一次', async () => {
   const { marketApi, resetMarketStatusShare } = module.exports;
   assert.equal(typeof resetMarketStatusShare, 'function');
   resetMarketStatusShare();
+  registryModule.exports.setQueryPrincipal('visitor\0');
   const [a, b, c] = await Promise.all([
     marketApi.status(),
     marketApi.status(),
@@ -247,17 +248,20 @@ test('共享的市场时段请求在并发调用下只发一次', async () => {
 
   // 共享窗口之外必须重新请求：这是缓存，不是冻结。
   resetMarketStatusShare();
+  registryModule.exports.setQueryPrincipal('visitor\0');
   await marketApi.status();
   assert.equal(calls, 2, '复位后必须重新发出请求');
 
   // 指数走同一套：常驻 IndexTape 与大盘页并发时也只发一次。
   resetMarketStatusShare();
+  registryModule.exports.setQueryPrincipal('visitor\0');
   const before = calls;
   await Promise.all([marketApi.indices(), marketApi.indices()]);
   assert.equal(calls, before + 1, '两个并发的指数调用者只应发一次请求');
 
   // 两个端点的共享互不干扰
   resetMarketStatusShare();
+  registryModule.exports.setQueryPrincipal('visitor\0');
   const beforeBoth = calls;
   await Promise.all([marketApi.status(), marketApi.indices()]);
   assert.equal(calls, beforeBoth + 2, '不同端点必须各发各的');

@@ -14,10 +14,12 @@ import QuoteConnection from '@/components/QuoteConnection';
 import Footer from '@/components/Footer';
 import RouteErrorBoundary from '@/components/shared/RouteErrorBoundary';
 import PageFallback from '@/components/shared/PageFallback';
+import StatusNotice from '@/components/shared/StatusNotice';
 import MobileDock from '@/components/MobileDock';
 import CommandPalette from '@/components/CommandPalette';
 import { pushRecent } from '@/lib/recentTickers';
 import { ShellContext } from '@/hooks/useShell';
+import { useAccess } from '@/hooks/useAccess';
 import { isMock } from '@/api/client';
 import { t as __t } from '../i18n/core.ts';
 
@@ -25,6 +27,10 @@ export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
   const navigationType = useNavigationType();
+  const { role, username, hasConfirmedIdentity, identityUnavailable, refresh } = useAccess();
+  // An actual principal change retires every page-owned snapshot and draft, including
+  // non-polling state. Temporary identity read failures keep the last known principal.
+  const pageKey = JSON.stringify([location.pathname, role, username]);
   const previousPathname = useRef(location.pathname);
   const [paletteOpen, setPaletteOpen] = useState(false);
 
@@ -84,11 +90,22 @@ export default function Layout() {
               页（手机菜单进催化白屏的根因之二）。CSS 动画基态即可见：动画只
               描述过渡，被饿死时最坏也只是直接出现。代价是去掉了 120ms 的退场
               淡出。 */}
-          <div key={location.pathname} className="page-enter">
+          <div key={pageKey} className="page-enter">
             {/* 按路由重建的错误边界:页面崩溃显示错误卡而非白屏,切页自动复位 */}
             <RouteErrorBoundary>
               <Suspense fallback={<PageFallback />}>
-                <Outlet />
+                {/* Initial reads and explicit credential writes need a confirmed identity
+                    before mounting editable pages. Later ordinary read failures retain the
+                    mounted page; login/register/logout retire it until reconfirmation. */}
+                {hasConfirmedIdentity ? <Outlet /> : identityUnavailable ? (
+                  <StatusNotice action={
+                    <button type="button" className="control-button touch-target" onClick={() => { void refresh().catch(() => undefined); }}>
+                      {__t('重试')}
+                    </button>
+                  }>
+                    {__t('身份暂时无法确认，请稍后重试')}
+                  </StatusNotice>
+                ) : <PageFallback />}
               </Suspense>
             </RouteErrorBoundary>
           </div>

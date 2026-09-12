@@ -191,7 +191,7 @@ test('写操作成功后状态校验失败不再报成登录失败', async () =>
   // 登录不再把状态 GET 串进同一个 Promise
   assert.doesNotMatch(api, /post\('\/access\/login'[^)]*\)\.then\(liveStatus\)/);
   assert.doesNotMatch(api, /post\('\/access\/logout'\)\.then\(liveStatus\)/);
-  assert.match(hook, /await write\(\);\s*\n\s*await invalidateAndRead\(\)\.catch\(\(\) => undefined\);/);
+  assert.match(hook, /await write\(\);[\s\S]*?finally\s*\{[\s\S]*?invalidateAndRead\(\)\.catch\(\(\) => undefined\);/);
 });
 
 /* ---------------- P1-09：损坏的本地存储不能让整站白屏 ---------------- */

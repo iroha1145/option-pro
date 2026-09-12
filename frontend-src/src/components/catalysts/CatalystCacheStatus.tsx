@@ -9,6 +9,7 @@ export default function CatalystCacheStatus({ data, error, refreshing, restored,
   if (data === null) return null;
   return <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line bg-paper-2/40 px-4 py-2 text-micro text-ink-400" data-testid="catalyst-cache-status">
     <span role="status">{error ? copy.failed : refreshing ? copy.checking : restored ? copy.cached : copy.checked}
+      {error instanceof Error && <span className="ml-2">{error.message}</span>}
       {validatedAt > 0 && <time className="ml-2 font-mono tnum" dateTime={new Date(validatedAt).toISOString()}
         title={new Date(validatedAt).toLocaleString(localeTag())}>{fmtLocaleDate(new Date(validatedAt).toISOString(), { month: '2-digit', day: '2-digit' })} {fmtLocaleTime(new Date(validatedAt).toISOString())}</time>}
     </span>

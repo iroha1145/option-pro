@@ -146,7 +146,9 @@ test('research pages stay usable in dark mode on desktop and phone', async ({ pa
     for (const route of routes) {
       await page.goto(route);
       await expect(page.locator('html')).toHaveClass(/dark/);
-      await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
+      // Real-backend runs share a request bucket. Initial identity confirmation
+      // may honor up to 60s of Retry-After before the page can safely mount.
+      await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible({ timeout: 75_000 });
       await expect(page.getByRole('button', { name: /外观/ }).first()).toBeVisible();
       await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
 

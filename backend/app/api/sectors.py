@@ -239,16 +239,9 @@ async def _sector_iv_rows(sector_id: str) -> list[dict[str, Any]]:
                 snapshot = snapshots.get(symbol)
                 if not isinstance(snapshot, dict):
                     continue
-                minute = snapshot.get("minute")
-                price = (
-                    _finite_number(minute.get("c"))
-                    if isinstance(minute, dict)
-                    else None
-                )
-                if price is None:
-                    price = _finite_number(snapshot.get("day_close"))
-                if price is not None and price > 0:
-                    massive_prices[ticker] = price
+                minute_quote = massive.snapshot_minute_quote(snapshot)
+                if minute_quote is not None:
+                    massive_prices[ticker] = minute_quote[0]
 
     def _one(ticker: str) -> dict[str, Any] | None:
         try:

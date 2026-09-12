@@ -45,6 +45,8 @@ export function usePolling<T>(
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
   const fetcherRef = useRef(fetcher);
   const restoreRef = useRef(options?.restore);
+  const enabledRef = useRef(options?.enabled !== false);
+  enabledRef.current = options?.enabled !== false;
   useEffect(() => {
     fetcherRef.current = fetcher;
     restoreRef.current = options?.restore;
@@ -56,6 +58,7 @@ export function usePolling<T>(
   const restoreAttemptedRef = useRef(false);
 
   const tick = useCallback(async (first = false, generation = generationRef.current) => {
+    if (!enabledRef.current) return;
     if (inFlightGenerationsRef.current.has(generation)) return;
     inFlightGenerationsRef.current.add(generation);
     if (first) setLoading(true);
@@ -81,6 +84,7 @@ export function usePolling<T>(
   }, []);
 
   const refresh = useCallback((options?: { force?: boolean }) => {
+    if (!enabledRef.current) return;
     if (options?.force) {
       // 开新世代：旧在途响应从此过不了世代守卫（写不进 data/error），
       // 新世代不受「同世代在途即跳过」的合流闸限制，立即真正发起请求。
@@ -97,7 +101,6 @@ export function usePolling<T>(
 
   useEffect(() => {
     if (!enabled) {
-      setLoading(false);
       setRefreshing(false);
       return;
     }
@@ -112,6 +115,7 @@ export function usePolling<T>(
       restoreAttemptedRef.current = true;
       void restore().then((restored) => {
         if (restored === null || restored === undefined) return;
+        if (!activeGenerationsRef.current.has(generation)) return;
         if (generation !== generationRef.current) return;
         if (settledGenerationsRef.current.has(generation)) return;
         setData((current) => (current === null ? restored : current));
@@ -141,5 +145,5 @@ export function usePolling<T>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [intervalMs, tick, enabled, ...deps]);
 
-  return { data, error, loading, refreshing, lastUpdatedAt, refresh };
+  return { data, error, loading: enabled && loading, refreshing, lastUpdatedAt, refresh };
 }

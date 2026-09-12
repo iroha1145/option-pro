@@ -32,6 +32,11 @@ export function QuoteIndicator({ symbol, className, usingFallback = false, fallb
 const flashKey = () => 'price';
 const flashValue = (value: number | null) => value;
 export function LivePrice({ symbol, fallback, fallbackAt, fallbackKind = 'reference', prefix = '', className, indicator = true }: { symbol: string; fallback?: number | null; fallbackAt?: string | null; fallbackKind?: FallbackQuoteKind; prefix?: string; className?: string; indicator?: boolean }) {
+  const normalizedSymbol = symbol.trim().toUpperCase();
+  return <LivePriceValue key={normalizedSymbol} symbol={normalizedSymbol} fallback={fallback} fallbackAt={fallbackAt} fallbackKind={fallbackKind} prefix={prefix} className={className} indicator={indicator} />;
+}
+
+function LivePriceValue({ symbol, fallback, fallbackAt, fallbackKind, prefix, className, indicator }: Parameters<typeof LivePrice>[0]) {
   const quote = useLiveQuote(symbol);
   const hasFallback = typeof fallback === 'number' && Number.isFinite(fallback) && fallback > 0;
   const useLive = preferLiveQuote(quote, hasFallback, fallbackAt);

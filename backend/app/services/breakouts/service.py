@@ -2221,6 +2221,11 @@ class BreakoutRadarService:
                         _finite(features.get("atr20")),
                     )
                 )
+                features.update(
+                    self._opening_range_confirmation_features(
+                        intraday_snapshot.frame, cutoff, features,
+                    )
+                )
             _attach_price_provenance(
                 features,
                 daily_snapshot=daily_snapshot,

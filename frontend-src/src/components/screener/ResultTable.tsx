@@ -5,7 +5,7 @@ import { LivePrice, LiveChange, PeriodicPriceFlash } from '@/components/shared/L
  * 行 stagger 30ms 仅第一页入场（翻页直接呈现）；排序切换 layout 重排 320ms；价格 tick-flash。
  */
 import SoftBadge from '@/components/shared/SoftBadge';
-import { Fragment } from 'react';
+import { Fragment, useId } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { ScreenerRow } from '@/api/types';
 import { cn } from '@/lib/utils';
@@ -89,6 +89,7 @@ export default function ResultTable({
   showMacro = false,
 }: ResultTableProps) {
   const heads = headsFor(showMacro);
+  const tableId = useId();
   return (
     // overflow-x-auto 与 shared/DataTable 同口径（审计 2.4.1）：8–9 个数据列在
     // 1024–1280px 视口下超出 col-span-8，overflow-hidden 会把「成交额」列
@@ -115,6 +116,7 @@ export default function ResultTable({
         <tbody key={animKey}>
           {rows.map((r, i) => {
             const isOpen = expanded === r.ticker;
+            const panelId = `${tableId}-${r.ticker}-details`;
             const dv = details[r.ticker]?.dollarVolume;
             const dvPending = details[r.ticker] === undefined;
             return (
@@ -124,23 +126,15 @@ export default function ResultTable({
                   initial={page === 1 ? { opacity: 0, y: 14 } : false}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.4, ease: EASE_PAPER, delay: page === 1 ? Math.min(i * 0.03, 0.3) : 0, layout: { duration: 0.32, ease: EASE_PAPER } }}
-                  onClick={() => onToggle(r.ticker)}
-                  /* 可点击行同时可聚焦、可回车/空格展开——与 shared/DataTable 的
-                     P3-1 口径一致（审计 2.5.1）；aria-expanded 挂在 role=button 上才有效。 */
-                  tabIndex={0}
-                  role="button"
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault();
-                      onToggle(r.ticker);
-                    }
+                  onClick={(event) => {
+                    // Tooltip/link controls keep their own pointer and keyboard actions.
+                    if (event.target instanceof Element && event.target.closest('button, a, input, select, textarea, [role="button"], [tabindex]')) return;
+                    onToggle(r.ticker);
                   }}
                   className={cn(
                     'group h-11 cursor-pointer border-b border-line transition-colors duration-fast hover:bg-paper-2',
-                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500/30',
                     isOpen && 'bg-paper-2',
                   )}
-                  aria-expanded={isOpen}
                 >
                   {/* # */}
                   <td className="px-3 py-2 font-mono text-caption text-ink-400 tnum">{startIndex + i + 1}</td>
@@ -196,14 +190,19 @@ export default function ResultTable({
                   </td>
                   {/* 展开 */}
                   <td className="px-3 py-2 text-right">
-                    <span
+                    <button
+                      type="button"
+                      onClick={() => onToggle(r.ticker)}
+                      aria-expanded={isOpen}
+                      aria-controls={isOpen ? panelId : undefined}
+                      aria-label={t('展开或收起 {ticker} 详情', { ticker: r.ticker })}
                       className={cn(
-                        'inline-flex size-6 items-center justify-center rounded-sm border border-line text-ink-400 transition-transform duration-200',
-                        isOpen && 'rotate-180 border-brand-400 text-brand-600',
+                        'inline-flex size-8 items-center justify-center rounded-sm border border-line text-ink-400 transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/30 [@media(pointer:coarse)]:min-h-11 [@media(pointer:coarse)]:min-w-11',
+                        isOpen && 'border-brand-400 text-brand-600',
                       )}
                     >
-                      <Icon name="chevron-down" size={13} />
-                    </span>
+                      <Icon name="chevron-down" size={13} className={cn('transition-transform duration-200', isOpen && 'rotate-180')} />
+                    </button>
                   </td>
                 </motion.tr>
                 {/* 行展开 accordion */}
@@ -212,6 +211,7 @@ export default function ResultTable({
                     <tr key={`${r.ticker}-exp`}>
                       <td colSpan={heads.length} className="p-0">
                         <motion.div
+                          id={panelId}
                           initial={{ height: 0, opacity: 0 }}
                           animate={{ height: 'auto', opacity: 1 }}
                           exit={{ height: 0, opacity: 0 }}

@@ -119,19 +119,13 @@ def _candidate(
     touch_quality = _clamp(len(resistance_cluster) / 4.0)
     tightness = _clamp(1.0 - width_atr / 12.0)
     duration = _clamp((len(window) - settings.base_min_days) / 40.0 + 0.4)
-    atr_quality = _clamp(
-        (((atr_contraction if atr_contraction is not None else 0.0) + 0.2) / 0.6)
+    atr_quality = (
+        _clamp((atr_contraction + 0.2) / 0.6)
+        if atr_contraction is not None else None
     )
-    volume_quality = _clamp(
-        (
-            (
-                volume_contraction
-                if volume_contraction is not None
-                else 0.0
-            )
-            + 0.2
-        )
-        / 0.6
+    volume_quality = (
+        _clamp((volume_contraction + 0.2) / 0.6)
+        if volume_contraction is not None else None
     )
     support_quality = _clamp(len(support_cluster) / 3.0) if support_cluster else 0.35
     higher_low = (
@@ -139,15 +133,16 @@ def _candidate(
         if len(lows) >= 2
         else 0.5
     )
-    quality = (
-        tightness * 0.25
-        + duration * 0.15
-        + touch_quality * 0.15
-        + volume_quality * 0.15
-        + atr_quality * 0.10
-        + support_quality * 0.10
-        + higher_low * 0.10
+    # Unobserved contractions do not participate in candidate ranking either.
+    quality_components = (
+        (tightness, 0.25), (duration, 0.15), (touch_quality, 0.15),
+        (volume_quality, 0.15), (atr_quality, 0.10),
+        (support_quality, 0.10), (higher_low, 0.10),
     )
+    active_weight = sum(weight for value, weight in quality_components if value is not None)
+    quality = sum(
+        value * weight for value, weight in quality_components if value is not None
+    ) / active_weight
     start = pd.Timestamp(window.index[0]).date()
     end = pd.Timestamp(window.index[-1]).date()
     pivot_source = {
@@ -205,8 +200,8 @@ def _candidate(
             "tightness_quality": round(tightness * 100, 4),
             "duration_quality": round(duration * 100, 4),
             "resistance_touch_quality": round(touch_quality * 100, 4),
-            "volume_contraction_quality": round(volume_quality * 100, 4),
-            "atr_contraction_quality": round(atr_quality * 100, 4),
+            "volume_contraction_quality": round(volume_quality * 100, 4) if volume_quality is not None else None,
+            "atr_contraction_quality": round(atr_quality * 100, 4) if atr_quality is not None else None,
             "support_integrity": round(support_quality * 100, 4),
             "higher_low_quality": round(higher_low * 100, 4),
             "resistance_dispersion_atr": round(

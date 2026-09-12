@@ -541,6 +541,22 @@ def snapshot_batch(symbols: list[str]) -> dict[str, dict[str, Any]]:
     return out
 
 
+def snapshot_minute_quote(snapshot: dict[str, Any]) -> tuple[float, str] | None:
+    """Return a timestamped minute price; a daily aggregate is not a latest quote."""
+
+    minute = snapshot.get("minute")
+    if not isinstance(minute, dict):
+        return None
+    price = _finite(minute.get("c"))
+    stamp = minute.get("t")
+    if isinstance(stamp, bool) or not isinstance(stamp, (int, float)):
+        return None
+    as_of = _epoch_iso(stamp)
+    if price is None or as_of is None:
+        return None
+    return price, as_of
+
+
 def reference_ticker_detail(ticker: str) -> dict[str, Any]:
     """单只代码的参考详情（含 market_cap）。
 

@@ -620,6 +620,57 @@ test("undo color text lock delete then refresh", async ({ page }) => {
   await expect(drawingRows(page).first()).not.toContainText("已锁定");
 });
 
+test("drawing sync recovery retains undo after one rate-limited reconciliation", async ({ page }) => {
+  test.setTimeout(90_000);
+  test.skip(!HAS_REAL_BACKEND, "stock drawings visual path needs OPTIX_VISUAL_BASE_URL");
+  await openStock(page);
+  await resetDrawingScope(page);
+  await placeHorizontal(page);
+  await waitOneUnlockedDrawing(page);
+  await expandChart(page);
+  const row = drawingRows(page).first();
+  let failNextGet = false;
+  let injected = 0;
+  let recovered = 0;
+  await page.route("**/api/account/chart-drawings**", async route => {
+    const request = route.request();
+    if (request.method() === "PUT" && request.postDataJSON()?.locked === true) {
+      const response = await route.fetch();
+      if (response.ok() && !injected) failNextGet = true;
+      return route.fulfill({ response });
+    }
+    if (request.method() === "GET" && failNextGet) {
+      failNextGet = false;
+      injected++;
+      return route.fulfill({ status: 429, headers: { "Retry-After": "1" },
+        json: { detail: { code: "rate_limited", message: "One reconciliation retry" } } });
+    }
+    if (request.method() === "GET" && injected) {
+      const response = await route.fetch();
+      if (response.ok()) recovered++;
+      return route.fulfill({ response });
+    }
+    return route.continue();
+  });
+  await toolButton(page, "锁定").click();
+  await expect(row).toContainText("已锁定");
+  await expect(toolButton(page, "重试同步")).toBeVisible();
+  await expect(toolButton(page, "撤销")).toBeEnabled();
+  await toolButton(page, "重试同步").click();
+  // The real backend shares a 60-second rate-limit window with adjacent tests.
+  await expect.poll(() => recovered, { timeout: 75_000 }).toBeGreaterThan(0);
+  await expect(page.getByText("已同步", { exact: true }).first()).toBeVisible();
+  expect(injected).toBe(1);
+  await expect(toolButton(page, "撤销")).toBeEnabled();
+  await toolButton(page, "撤销").click();
+  await expect(row).not.toContainText("已锁定");
+  await waitOneDrawing(page, false);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await waitDrawingToolbar(page);
+  await expectDrawingCount(page, 1);
+  await expect(drawingRows(page).first()).not.toContainText("已锁定");
+});
+
 test("scope reload retries a rate-limited stock overview before drawing", async ({ page }) => {
   test.skip(!HAS_REAL_BACKEND, "stock drawings visual path needs OPTIX_VISUAL_BASE_URL");
   let overviewRequests = 0;

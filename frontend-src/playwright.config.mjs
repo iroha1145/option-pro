@@ -39,7 +39,7 @@ if (!process.env.OPTIX_PASSWORD_BASE_URL) {
 export default defineConfig({
   testDir: "./visual-tests",
   // This suite uses isolated demo data and a Vite-only component harness.
-  testIgnore: ["indicator-panes.spec.mjs", "realtime-quotes.spec.mjs", "watchlist-management.spec.mjs", "ui-review.spec.mjs", "options-redesign.spec.mjs", "feedback-layout.spec.mjs", "overlay-behavior.spec.mjs", "smart-drawings.spec.mjs", "screener-tooltips.spec.mjs", "stock-data-status.spec.mjs", "audit-recovery.spec.mjs", "customer-chart-periods.spec.mjs", "screener-freshness.spec.mjs", "screener-http-cache.spec.mjs"],
+  testIgnore: ["indicator-panes.spec.mjs", "realtime-quotes.spec.mjs", "watchlist-management.spec.mjs", "ui-review.spec.mjs", "options-redesign.spec.mjs", "feedback-layout.spec.mjs", "overlay-behavior.spec.mjs", "smart-drawings.spec.mjs", "screener-tooltips.spec.mjs", "stock-data-status.spec.mjs", "audit-recovery.spec.mjs", "customer-chart-periods.spec.mjs", "screener-freshness.spec.mjs", "screener-http-cache.spec.mjs", "audit-state.spec.mjs", "audit-screener-time.spec.mjs", "audit-touch-targets.spec.mjs", "audit-principal-scope.spec.mjs", "mock-earnings-contract.spec.mjs", "index-nullable-change.spec.mjs"],
   outputDir: "./test-results/playwright",
   timeout: 45_000,
   expect: { timeout: 10_000 },

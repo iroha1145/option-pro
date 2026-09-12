@@ -7,8 +7,8 @@ export interface IndexQuote {
   symbol: string;      // ^GSPC / ^IXIC …（真实行情符号——详情页/接口只认这个）
   name: string;
   price: number;
-  change: number;
-  changePct: number;
+  change: number | null;
+  changePct: number | null;
 }
 
 export type MarketSession = 'premarket' | 'regular' | 'afterhours' | 'closed';

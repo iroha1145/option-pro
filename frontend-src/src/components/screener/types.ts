@@ -167,6 +167,16 @@ export function catalystSummaryUsable(
   );
 }
 
+/** Failed reads block ranking, but are a retryable error rather than pending work. */
+export function catalystSortReadiness(
+  tickers: string[],
+  summaries: Record<string, CatalystSummary | undefined>,
+  now: number,
+): { missing: string[]; failed: string[] } {
+  const missing = tickers.filter((ticker) => !catalystSummaryUsable(summaries[ticker], now));
+  return { missing, failed: missing.filter((ticker) => summaries[ticker]?.failed === true) };
+}
+
 export const EMPTY_CATALYST: CatalystSummary = {
   loaded: false,
   count: 0,

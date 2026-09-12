@@ -365,7 +365,7 @@ export default function Home() {
               /* 数据纪律：无有效价（live 快照缺失）显「—」，不显 0.00 */
               const hasPrice = Number.isFinite(q.price) && q.price > 0;
               /* sparkline mock-only：live 无指数 K 线端点，如实留空 */
-              const spark = isMock ? getIndexIntraday(q.code, q.changePct) : null;
+              const spark = isMock && q.changePct !== null ? getIndexIntraday(q.code, q.changePct) : null;
               return (
                 <motion.div
                   key={q.code}
@@ -384,7 +384,7 @@ export default function Home() {
                     </span>
                     <span className="flex items-end justify-between gap-2">
                       <ChangeBadge value={q.changePct} size="sm" />
-                      {spark && <Sparkline data={spark} width={64} height={20} change={q.changePct} />}
+                      {spark && q.changePct !== null && <Sparkline data={spark} width={64} height={20} change={q.changePct} />}
                     </span>
                   </Link>
                 </motion.div>
@@ -588,8 +588,8 @@ function MarketStatusPanel({
 }) {
   const now = useNow(1000);
 
-  if (loading) return <SkeletonCard className="h-full" />;
-  if (error) {
+  if (loading && !status) return <SkeletonCard className="h-full" />;
+  if (error && !status) {
     return (
       <div className="card-surface h-full">
         <EmptyState
@@ -604,6 +604,7 @@ function MarketStatusPanel({
 
   return (
     <section className="card-surface flex h-full flex-col p-4 md:p-5" aria-label={t('市场状态')}>
+      {error && <StaleStrip onRetry={onRetry} refreshing={refreshing} className="mb-3" />}
       <div className="flex items-center justify-between gap-3">
         <h3 className="text-h3 text-ink-900">{t('市场状态')}</h3>
         <SessionLED

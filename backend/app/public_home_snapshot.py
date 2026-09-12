@@ -176,6 +176,7 @@ _EARNINGS_ROW_FIELDS = {
     "sector",
     "earnings_date_source",
     "estimate_source",
+    "estimate_sources",
     "actual_source",
     "release_status",
     "quarter",
@@ -496,7 +497,9 @@ def _validate_indices(payload: Mapping[str, Any]) -> bool:
             if change is not None:
                 return False
             continue
-        if not _finite_number(price, minimum=0.0000001) or not _finite_number(change):
+        if not _finite_number(price, minimum=0.0000001) or (
+            change is not None and not _finite_number(change)
+        ):
             return False
         succeeded += 1
     return bool(
@@ -599,7 +602,7 @@ def _validate_chart_for_ticker(
             or not isinstance(timestamp, int)
             or timestamp <= previous_time
             or not all(_finite_number(value, minimum=0.0000001) for value in prices)
-            or not _finite_number(bar.get("v", 0), minimum=0)
+            or not _optional_finite(bar.get("v"), minimum=0)
             or not isinstance(bar.get("ext"), bool)
             or not isinstance(bar.get("quote_only"), bool)
             or bar.get("session") != "regular"
@@ -854,14 +857,54 @@ def _valid_earnings_calendar_fields(row: Mapping[str, Any]) -> bool:
     for key, value in conflict.items():
         if key not in _EARNINGS_CALENDAR_SOURCES or key not in sources:
             return False
+        period_conflict = False
+        if isinstance(value, Mapping):
+            # Date-only conflicts keep their original string shape. A same-day
+            # fiscal-period conflict must carry the secondary report identity.
+            if set(value) != {"earnings_date", "quarter", "year"}:
+                return False
+            for field, low, high in (("quarter", 1, 4), ("year", 1900, 2200)):
+                other = value.get(field)
+                if other is not None and (
+                    isinstance(other, bool) or not isinstance(other, int)
+                    or not low <= other <= high
+                ):
+                    return False
+                if other is not None and row.get(field) is not None and other != row[field]:
+                    period_conflict = True
+            conflict_date = value.get("earnings_date")
+        else:
+            conflict_date = value
         try:
-            date.fromisoformat(str(value))
+            date.fromisoformat(str(conflict_date))
         except ValueError:
             return False
-        # 冲突记录的是「与主日期不同」的次源日期，静默相等没有意义。
-        if str(value) == str(row.get("earnings_date")):
+        # A conflict needs an actual date or known fiscal-period disagreement.
+        if str(conflict_date) == str(row.get("earnings_date")) and not period_conflict:
             return False
     return True
+
+
+def _valid_earnings_estimate_sources(row: Mapping[str, Any]) -> bool:
+    sources = row.get("estimate_sources")
+    if sources is None:
+        # Existing snapshots predate field-level provenance.
+        return row.get("estimate_source") != "mixed"
+    if not isinstance(sources, Mapping):
+        return False
+    allowed_fields = {"eps_estimate", "revenue_estimate", "eps_high", "eps_low"}
+    allowed_sources = {"calendar", "earnings_dates", "finnhub_calendar", "fmp_calendar"}
+    if any(
+        field not in allowed_fields or row.get(field) is None
+        or not isinstance(source, str) or source not in allowed_sources
+        for field, source in sources.items()
+    ):
+        return False
+    if set(sources) != {field for field in allowed_fields if row.get(field) is not None}:
+        return False
+    providers = set(sources.values())
+    expected = next(iter(providers)) if len(providers) == 1 else "mixed" if providers else None
+    return row.get("estimate_source") == expected
 
 
 def _validate_earnings(payload: Mapping[str, Any]) -> bool:
@@ -914,7 +957,8 @@ def _validate_earnings(payload: Mapping[str, Any]) -> bool:
         )
         if (
             not isinstance(row, dict)
-            or set(row) != _EARNINGS_ROW_FIELDS
+            or not (_EARNINGS_ROW_FIELDS - {"estimate_sources"}).issubset(row)
+            or bool(set(row) - _EARNINGS_ROW_FIELDS)
             or not isinstance(row.get("ticker"), str)
             or _EARNINGS_TICKER_PATTERN.fullmatch(row["ticker"]) is None
             or not isinstance(row.get("name"), str)
@@ -946,7 +990,9 @@ def _validate_earnings(payload: Mapping[str, Any]) -> bool:
                 "earnings_dates",
                 "finnhub_calendar",
                 "fmp_calendar",
+                "mixed",
             }
+            or not _valid_earnings_estimate_sources(row)
             or row.get("actual_source")
             not in {None, "earnings_dates", "finnhub_calendar", "fmp_calendar"}
             or row.get("release_status")
@@ -1024,6 +1070,11 @@ def _validate_earnings(payload: Mapping[str, Any]) -> bool:
             contributing_providers.add("FMP")
         else:
             contributing_providers.add("Yahoo Finance")
+        for source in (row.get("estimate_sources") or {}).values():
+            contributing_providers.add({
+                "finnhub_calendar": "Finnhub", "fmp_calendar": "FMP",
+                "calendar": "Yahoo Finance", "earnings_dates": "Yahoo Finance",
+            }[source])
     failed_symbols = payload.get("failed_symbols")
     return bool(
         set(providers) == contributing_providers

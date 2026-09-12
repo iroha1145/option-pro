@@ -1,5 +1,5 @@
 import { memo, useEffect, useState } from 'react';
-import { fmtLocaleDateTime } from '@/lib/format';
+import { formatChartTime } from '../chartTime.ts';
 import { CH, type EChartsInstance } from '@/lib/chart';
 import { useAppearance } from '@/hooks/useAppearance.ts';
 import { t } from '../../../i18n/core.ts';
@@ -40,8 +40,7 @@ function IndicatorReadouts({ chart, bars, range, panes, layout }: {
       zr.off('globalout', reset);
     };
   }, [chart, bars]);
-  const stamp = bar?.t ? (range === '1d' || range === '1w'
-    ? bar.t.slice(0, 10) : fmtLocaleDateTime(bar.t, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })) : '—';
+  const stamp = bar?.t ? formatChartTime(bar.t, range) : '—';
   const rows = [{ id: 'volume', label: t('成交量'), series: [{ name: t('量'), value: bar?.v }] },
     ...panes.map(pane => ({ id: pane.id, label: pane.label, series: pane.series.map(series => ({
       name: series.name, value: series.data[index],

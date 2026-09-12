@@ -116,13 +116,6 @@ ADVANCED_DEFAULTS = {
 }
 
 
-def layer_by_id(layer_id: str) -> dict[str, Any] | None:
-    for layer in LAYERS:
-        if layer["id"] == layer_id:
-            return layer
-    return None
-
-
 def preset_enabled(preset: str) -> set[str]:
     row = PRESETS.get(preset) or PRESETS["minimal"]
     return set(row["enabled"])
@@ -133,6 +126,5 @@ __all__ = [
     "LAYERS",
     "LAYER_REGISTRY_VERSION",
     "PRESETS",
-    "layer_by_id",
     "preset_enabled",
 ]

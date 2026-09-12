@@ -479,13 +479,6 @@ def budget_reservation_microusd(job_type: str) -> int:
     )
 
 
-def minimum_budget_reservation_microusd() -> int:
-    return min(
-        budget_reservation_microusd(job_type)
-        for job_type in AI_TASK_MAX_OUTPUT_TOKENS
-    )
-
-
 def settled_usage_cost_microusd(
     job_type: str,
     usage: dict[str, int | None],

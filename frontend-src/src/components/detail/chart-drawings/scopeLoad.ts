@@ -90,12 +90,14 @@ export async function completeScopeLoad(args: {
   outbox: DrawingOutbox;
   cached: LoadResult;
   list: () => Promise<{ drawings: ChartDrawing[]; scopeRevision: number }>;
+  /** Reject obsolete reads before they can change the outbox baseline/revisions. */
+  isCurrent?: () => boolean;
   errorInfo?: (error: unknown) => { code: string | null; status: number | null };
 }): Promise<ScopeLoadComplete> {
   const { outbox, cached } = args;
   try {
     const remote = await args.list();
-    if (outbox.getScopeGeneration() !== args.generation) return FOREIGN;
+    if (outbox.getScopeGeneration() !== args.generation || args.isCurrent?.() === false) return FOREIGN;
     if (outbox.isEmpty()) {
       outbox.setScopeRevision(remote.scopeRevision);
       outbox.clearBase();
@@ -167,6 +169,14 @@ export async function completeScopeLoad(args: {
     };
   } catch (error) {
     if (outbox.getScopeGeneration() !== args.generation) return FOREIGN;
+    const row = error && typeof error === 'object' ? error as { retryAfter?: unknown } : {};
+    const retryAfterSeconds = typeof row.retryAfter === 'number' && Number.isFinite(row.retryAfter)
+      ? row.retryAfter
+      : null;
+    if (args.isCurrent?.() === false) {
+      // A stale payload is unusable, but the server's retry delay still applies.
+      return { ...FOREIGN, status: 'load_failed', retryAfterSeconds };
+    }
     const drawings = drawingsFromCache(cached);
     const persist: 'now' | 'skip' = cached.ok || drawings.length ? 'now' : 'skip';
     if (isAuthStatus(error, args.errorInfo)) {
@@ -182,10 +192,6 @@ export async function completeScopeLoad(args: {
         baselineReady: false,
       };
     }
-    const row = error && typeof error === 'object' ? error as { retryAfter?: unknown } : {};
-    const retryAfterSeconds = typeof row.retryAfter === 'number' && Number.isFinite(row.retryAfter)
-      ? row.retryAfter
-      : null;
     return {
       foreign: false,
       apply: 'cache',
