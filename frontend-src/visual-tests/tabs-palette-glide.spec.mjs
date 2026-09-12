@@ -228,21 +228,24 @@ test.describe("command palette glide highlight (#113 blocker 1+2)", () => {
   });
 });
 
-test.describe("spring tabs glide (#113 blocker 3+4)", () => {
-  test.use({ contextOptions: { reducedMotion: "no-preference" } });
-
-  async function openScreener(page) {
-    await page.goto("/", { waitUntil: "domcontentloaded" });
-    /* 窄屏（<1280）桌面导航收起，走底部移动端导航（同 mobile-layout.spec 口径） */
-    const viewport = page.viewportSize();
-    if (viewport && viewport.width < 1280) {
-      await page.getByRole("navigation", { name: "移动端导航" }).getByRole("link", { name: "选股" }).click();
-    } else {
-      await page.getByRole("link", { name: "选股", exact: true }).first().click();
-    }
-    await expect(page).toHaveURL(/\/screener$/);
-    await expect(page.locator('[aria-label="筛选条件"]')).toBeVisible();
+async function openScreener(page) {
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  /* 窄屏（<1280）桌面导航收起，走底部移动端导航（同 mobile-layout.spec 口径） */
+  const viewport = page.viewportSize();
+  if (viewport && viewport.width < 1280) {
+    await page.getByRole("navigation", { name: "移动端导航" }).getByRole("link", { name: "选股" }).click();
+  } else {
+    await page.getByRole("link", { name: "选股", exact: true }).first().click();
   }
+  await expect(page).toHaveURL(/\/screener$/);
+  // Real-backend runs share a request bucket. Initial identity confirmation
+  // may honor up to 60s of Retry-After before editable filters can safely mount.
+  await expect(page.locator('[aria-label="筛选条件"]')).toBeVisible({ timeout: 75_000 });
+}
+
+test.describe("spring tabs glide (#113 blocker 3+4)", () => {
+  test.describe.configure({ timeout: 90_000 });
+  test.use({ contextOptions: { reducedMotion: "no-preference" } });
 
   const TIER_LIST = '[role="tablist"][aria-label^="强度分档"]';
   const TIER_PILL = `${TIER_LIST} [data-glide-pill]`;
@@ -387,14 +390,13 @@ test.describe("spring tabs glide (#113 blocker 3+4)", () => {
 });
 
 test.describe("spring tabs under reduced motion", () => {
+  test.describe.configure({ timeout: 90_000 });
   /* playwright.config 全局 contextOptions.reducedMotion: "reduce"：GlidePill 自持的
      useReducedMotion 把 transition 归零，滑块瞬切不做弹簧。
      headless 软渲染会饿死 rAF，落点用 poll 等而不是定死 100ms。 */
   test("pill lands on the active tab without spring travel", async ({ page }) => {
-    await page.goto("/", { waitUntil: "domcontentloaded" });
+    await openScreener(page);
     expect(await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches)).toBe(true);
-    await page.getByRole("link", { name: "选股", exact: true }).first().click();
-    await expect(page).toHaveURL(/\/screener$/);
     const list = page.locator('[role="tablist"][aria-label^="强度分档"]');
     const target = list.getByRole("tab", { name: /^B/ }).first();
     const pill = page.locator('[role="tablist"][aria-label^="强度分档"] [data-glide-pill]');
