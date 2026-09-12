@@ -15,7 +15,7 @@ from __future__ import annotations
 import threading
 import time
 import math
-from typing import Annotated, Any, Literal
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, Request, Response, status
 from fastapi.responses import JSONResponse

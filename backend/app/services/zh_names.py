@@ -104,10 +104,6 @@ def get_zh_name(ticker: str) -> str | None:
     entry = NAMES.get(ticker.upper())
     return entry[0] if entry else None
 
-def get_zh_desc(ticker: str) -> str | None:
-    entry = NAMES.get(ticker.upper())
-    return entry[1] if entry else None
-
 def get_zh_info(ticker: str) -> dict:
     entry = NAMES.get(ticker.upper())
     if entry:

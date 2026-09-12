@@ -1,4 +1,4 @@
-/** 股票域：watchlist / detail / signals / chart / search */
+/** 股票域：watchlist / detail / chart / search */
 import { get, mockOr, post } from '../client';
 import { quoteSymbol } from '@/lib/quoteSymbol';
 import { industryLabel } from '@/lib/industryLabel';
@@ -10,7 +10,6 @@ import { mapMacroFitDrivers } from '../macroFields';
 import * as fx from '@/mocks/fixtures';
 import type {
   Candle,
-  Signal,
   StockChart,
   StockDetail,
   StockPullResource,
@@ -274,15 +273,6 @@ export const stocksApi = {
           staleMs: 30 * 60_000,
           force,
         }).then(mapStockDetail),
-    ),
-  signals: (ticker: string): Promise<Signal[]> =>
-    mockOr(
-      () => fx.getStockSignals(ticker),
-      () =>
-        marketGet(`/stocks/${encodeURIComponent(quoteSymbol(ticker))}/signals`, {
-          ttlMs: 60_000,
-          staleMs: 30 * 60_000,
-        }),
     ),
   // adjustment 形参保留以兼容既有调用签名；契约仅支持 adjustment=raw，live 恒发 raw
   chart: (

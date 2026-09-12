@@ -18,7 +18,7 @@ import json
 import logging
 import time
 from datetime import date, datetime
-from typing import Any, Callable, Iterable, Mapping, Optional, Sequence
+from typing import Any, Callable, Mapping, Optional, Sequence
 
 import httpx
 

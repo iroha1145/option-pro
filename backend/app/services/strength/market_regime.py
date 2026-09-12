@@ -85,15 +85,6 @@ def _above_sma_value(close: pd.Series, period: int) -> bool | None:
     return bool(close.iloc[-1] > sma)
 
 
-def _sma_slope_up(close: pd.Series, period: int = 200, lookback: int = 20) -> bool:
-    if len(close) < period + lookback:
-        return False
-    sma = close.rolling(period).mean()
-    current = sma.iloc[-1]
-    previous = sma.iloc[-lookback]
-    return bool(current and previous and current > previous)
-
-
 def _sma_slope_up_value(
     close: pd.Series,
     period: int = 200,

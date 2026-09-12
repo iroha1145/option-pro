@@ -27,7 +27,7 @@ from app.access import (
 from app.services.catalysts.config import CatalystSettings, get_catalyst_settings
 from app.services.catalysts.economic_calendar_actuals import enrich_recent_actuals
 from app.services.catalysts.read_updates import catalyst_update_response
-from app.services.catalysts.errors import CatalystError, InvalidCursorError
+from app.services.catalysts.errors import CatalystError
 from app.services.catalysts.personal_service import PersonalCatalystService
 
 

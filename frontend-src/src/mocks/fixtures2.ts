@@ -25,7 +25,6 @@ import type {
   TechSwingPoint,
   TechnicalStructure,
   UnusualOption,
-  WorkerTask,
 } from '@/api/types';
 import { t as __t } from '../i18n/core.ts';
 
@@ -917,22 +916,6 @@ export function cancelAiJob(id: string): AiJob {
     job.updatedAt = new Date().toISOString();
   }
   return getAiJob(id);
-}
-
-/* ---------------- Worker 心跳 ---------------- */
-export function getWorkerStatus(): WorkerTask[] {
-  const names = [
-    __t('指数行情采集'), __t('自选股快照'), __t('强度分计算'), '突破扫描', __t('板块聚合'),
-    __t('财报日历同步'), __t('新闻抓取'), __t('热点聚类'), __t('期权异动'), __t('AI 任务调度'),
-  ];
-  const r = new Rng(24680);
-  return names.map((name, i) => ({
-    id: `w${i + 1}`,
-    name,
-    status: r.chance(0.85) ? 'ok' : r.chance(0.7) ? 'degraded' : 'down',
-    lastBeatAt: new Date(Date.now() - r.int(4, 90) * 1000).toISOString(),
-    note: r.pick([__t('运行正常'), __t('延迟略高于均值'), __t('队列积压清理中'), __t('等待下一周期')]),
-  }));
 }
 
 export function postWorkerAction(action: string): { ok: boolean; action: string } {

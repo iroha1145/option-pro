@@ -63,7 +63,6 @@ FINNHUB_EARNINGS_LOOKAHEAD_DAYS = 30
 FINNHUB_SEGMENT_DAYS = 7
 FINNHUB_RESPONSE_HARD_LIMIT = 1_500
 EXPECTED_MOVE_LOOKAHEAD_DAYS = 30
-EXPECTED_MOVE_MAX_EXPIRY_GAP_DAYS = 14
 MAX_FINNHUB_EARNINGS_ROWS = 5_000
 MAX_EARNINGS_OUTPUT_ROWS = 5_000
 EARNINGS_REFRESH_COOLDOWN_SECONDS = 60
@@ -298,10 +297,6 @@ def _earnings_records_from_table(ticker_obj: yf.Ticker) -> list[dict[str, Any]]:
             }
         )
     return records
-
-
-def _earnings_dates_from_table(ticker_obj: yf.Ticker) -> list[date]:
-    return [record["date"] for record in _earnings_records_from_table(ticker_obj)]
 
 
 def _recent_earnings_record(

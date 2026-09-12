@@ -89,7 +89,6 @@ def compute_vol_price_match(
     if len(data) < baseline_window + recent_window + 2:
         return _empty("not_enough_data", "量价样本不足")
 
-    open_ = data["Open"].astype(float)
     high = data["High"].astype(float)
     low = data["Low"].astype(float)
     close = data["Close"].astype(float)

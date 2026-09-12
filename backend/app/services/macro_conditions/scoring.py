@@ -28,11 +28,9 @@ from typing import Mapping, Optional, Sequence
 from .models import FactorPoint, finite
 from .registry import (
     COMPOSITE_MINIMUM_VALID_MODULES,
-    FACTORS,
     FACTORS_BY_ID,
     FACTOR_IDS_BY_MODULE,
     MODULES,
-    MODULES_BY_ID,
     regime_for,
 )
 

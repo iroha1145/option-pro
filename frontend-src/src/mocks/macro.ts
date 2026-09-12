@@ -13,7 +13,6 @@ import type {
   MacroConditionsResponse,
   MacroDriver,
   MacroFactor,
-  MacroFactorHistoryPoint,
   MacroHistoryPoint,
   MacroHistoryResponse,
   MacroModule,
@@ -287,25 +286,6 @@ export function getMacroModuleDetail(moduleId: MacroModuleId): MacroModuleDetail
     module: MOCK_MODULES.find((item) => item.moduleId === moduleId) ?? null,
     factors: FACTOR_META.filter((factor) => factor.module === moduleId).map(buildFactor),
   };
-}
-
-export function getMacroFactorHistory(factorId: string, days = 365): MacroFactorHistoryPoint[] {
-  const meta = FACTOR_META.find((item) => item.id === factorId);
-  if (!meta) return [];
-  const historyRng = new Rng(20200202 + factorId.length);
-  const points: MacroFactorHistoryPoint[] = [];
-  for (let offset = days; offset >= 0; offset -= 1) {
-    points.push({
-      date: isoDate(offset),
-      rawValue: round4(historyRng.normal(FACTOR_RAWS.get(factorId) ?? 0, 1, -1e6, 1e6)),
-      signedValue: null,
-      score: round2(historyRng.normal(FACTOR_SCORES.get(factorId) ?? 50, 8, 2, 98)),
-      status: 'ok',
-      dataThrough: isoDate(offset),
-      historyBasis: 'latest_revised_backfill',
-    });
-  }
-  return points;
 }
 
 export function refreshMacroConditions(): MacroRefreshResult {

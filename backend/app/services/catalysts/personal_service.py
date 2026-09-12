@@ -9,7 +9,6 @@ from typing import Any, Literal, Protocol, cast
 
 from app.access import current_request_is_owner
 from app.config import Settings, get_settings
-from app.data_paths import get_data_paths
 from app.personal_config import PersonalConfig, get_personal_config
 from app.services.ai_jobs import runtime as ai_runtime
 from app.services.ai_jobs.models import (

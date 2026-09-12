@@ -5,8 +5,6 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-from typing import Any
-
 import numpy as np
 import pandas as pd
 
@@ -98,7 +96,6 @@ def _candidate(
         support_prices = [item[1] for item in support_cluster]
     else:
         support_prices = list(window["Low"].nsmallest(min(3, len(window))).astype(float))
-    support_mid = float(np.mean(support_prices))
     support_low = min(support_prices) - tolerance * 0.25
     support_high = max(support_prices) + tolerance * 0.25
 

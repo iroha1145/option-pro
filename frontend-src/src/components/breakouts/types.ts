@@ -52,9 +52,6 @@ export const SESSION_CN: Record<BreakoutSession, string> = {
   closed: t('休市'),
 };
 
-export const LIFECYCLE_LIST = Object.keys(LIFECYCLE_CN) as LifecycleState[];
-export const SETUP_LIST = Object.keys(SETUP_CN) as SetupType[];
-
 /** 生命周期语义分组：brand=进行中 / up=走强 / down=失败归档 / ink=早期观察 */
 export type LifecycleTone = 'brand' | 'up' | 'down' | 'ink';
 export const LIFECYCLE_TONE: Record<LifecycleState, LifecycleTone> = {
@@ -218,30 +215,4 @@ export function riskBarClass(score: number): string {
   if (score >= 70) return 'bg-down-600';
   if (score >= 50) return 'bg-warn-600';
   return 'bg-ink-300';
-}
-
-/** 板块 → 雷达 12 槽位缩写（外环刻度文字） */
-export const RADAR_SECTORS: { match: string[]; label: string }[] = [
-  { match: [t('信息技术')], label: t('科技') },
-  { match: [t('半导体')], label: t('半导体') },
-  { match: [t('通信服务')], label: t('通信') },
-  { match: [t('可选消费')], label: t('可选') },
-  { match: [t('必需消费')], label: t('必需') },
-  { match: [t('医疗保健')], label: t('医疗') },
-  { match: [t('金融')], label: t('金融') },
-  { match: [t('能源')], label: t('能源') },
-  { match: [t('工业')], label: t('工业') },
-  { match: [t('原材料')], label: t('材料') },
-  { match: [t('公用事业')], label: t('公用') },
-  { match: [], label: t('其他') },
-];
-
-export function sectorSlotIndex(sector: string): number {
-  const i = RADAR_SECTORS.findIndex((s) => s.match.includes(sector));
-  return i >= 0 ? i : RADAR_SECTORS.length - 1;
-}
-
-/** 事件评分主分（雷达半径 / 过滤 min 评分用内在强度分） */
-export function primaryScore(e: Pick<BreakoutEventFull, 'intrinsic_strength_score'>): number {
-  return e.intrinsic_strength_score;
 }

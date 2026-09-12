@@ -411,16 +411,6 @@ def _is_public_read_request(
     )
 
 
-def _scope_header(scope, name: bytes) -> str:
-    for key, value in scope.get("headers") or []:
-        if key == name:
-            try:
-                return value.decode("latin-1")
-            except Exception:
-                return ""
-    return ""
-
-
 def _scope_client_ip(scope) -> str:
     return client_ip_from_scope(
         scope,

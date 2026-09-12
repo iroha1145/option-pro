@@ -251,20 +251,6 @@ def fingerprint_meta(series: Mapping[str, list]) -> dict[str, Any]:
     }
 
 
-def _anchor_from_index(
-    times: Sequence[int],
-    dates: Sequence[str],
-    index: int,
-    price: float,
-) -> dict[str, Any]:
-    day = dates[index]
-    return {
-        "time": f"{day}T00:00:00+00:00",
-        "barKey": day,
-        "price": round(float(price), 4),
-    }
-
-
 def _overlay(
     *,
     overlay_id: str,

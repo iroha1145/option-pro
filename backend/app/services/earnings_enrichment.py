@@ -19,7 +19,6 @@ import math
 import os
 import re
 import tempfile
-import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping
@@ -71,8 +70,8 @@ def _now_iso() -> str:
 # ── FMP：第二财报日历来源 ────────────────────────────────────
 
 
-def fmp_configured() -> bool:
-    return bool(str(get_settings().fmp_api_key or "").strip())
+def _fmp_api_token() -> str:
+    return str(get_settings().fmp_api_key or "").strip()
 
 
 def _fmp_result(
@@ -114,7 +113,7 @@ async def fetch_fmp_calendar(
     """拉取 FMP 财报日历窗口；返回归一化行（与 Finnhub 行同形状）。"""
 
     settings = get_settings()
-    token = str(settings.fmp_api_key or "").strip()
+    token = _fmp_api_token()
     if not token:
         return _fmp_result(configured=False, succeeded=False, error="not_configured")
     start = today - timedelta(days=lookback_days)
@@ -193,7 +192,7 @@ async def fetch_fmp_profiles(tickers: list[str]) -> dict[str, Any]:
     """批量公司资料（mktCap/companyName/sector），50 家一批、批数有硬上限。"""
 
     settings = get_settings()
-    token = str(settings.fmp_api_key or "").strip()
+    token = _fmp_api_token()
     if not token:
         return {
             "configured": False,

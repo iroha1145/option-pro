@@ -18,7 +18,7 @@ from dataclasses import asdict, dataclass, is_dataclass
 from datetime import date, datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Iterable, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 from urllib.parse import quote
 
 
@@ -83,15 +83,6 @@ class LeaseLostError(BreakoutRepositoryError):
 
 class InvalidCursorError(BreakoutRepositoryError):
     """Raised when an event cursor is malformed or does not match its scan."""
-
-
-@dataclass(frozen=True)
-class LeaseInfo:
-    lock_name: str
-    owner_id: str
-    fencing_token: int
-    heartbeat_at: datetime
-    expires_at: datetime
 
 
 @dataclass(frozen=True)
@@ -1971,54 +1962,6 @@ class BreakoutRepository:
         finally:
             connection.close()
 
-    def acquire_lease(
-        self,
-        owner_id: str,
-        ttl_seconds: float,
-        *,
-        lock_name: str = DEFAULT_LOCK_NAME,
-        now: datetime | None = None,
-    ) -> LeaseInfo | None:
-        token = self.acquire_lock(lock_name, owner_id, ttl_seconds, now)
-        if token is None:
-            return None
-        current = self._now(now)
-        return LeaseInfo(
-            lock_name=lock_name,
-            owner_id=owner_id,
-            fencing_token=token,
-            heartbeat_at=current,
-            expires_at=current + timedelta(seconds=float(ttl_seconds)),
-        )
-
-    def heartbeat_lease(self, lease: LeaseInfo, ttl_seconds: float, *, now: datetime | None = None) -> bool:
-        return self.heartbeat_lock(
-            lease.lock_name,
-            lease.owner_id,
-            lease.fencing_token,
-            ttl_seconds,
-            now,
-        )
-
-    def release_lease(self, lease: LeaseInfo, *, now: datetime | None = None) -> bool:
-        return self.release_lock(
-            lease.lock_name,
-            lease.owner_id,
-            lease.fencing_token,
-            now,
-        )
-
-    def current_lock(self, lock_name: str = DEFAULT_LOCK_NAME) -> Mapping[str, Any] | None:
-        connection = self._read_connection()
-        try:
-            self._require_schema(connection)
-            row = connection.execute(
-                "SELECT * FROM breakout_worker_lock WHERE lock_name=?", (lock_name,)
-            ).fetchone()
-            return self._row_dict(row) if row is not None else None
-        finally:
-            connection.close()
-
     def _verify_lease(
         self,
         connection: sqlite3.Connection,
@@ -3015,8 +2958,6 @@ class BreakoutRepository:
         self._require_schema(connection)
         return connection
 
-    connect_read_only = open_read_connection
-
     def inventory_revision(self) -> tuple[str | None, str | None, str | None]:
         """Cheap change token: latest completed scan plus live-event watermark.
 
@@ -3360,61 +3301,6 @@ class BreakoutRepository:
 
     ticker_events = events_for_ticker
 
-    def latest_events_for_tickers(
-        self,
-        tickers: Sequence[str],
-        *,
-        per_ticker: int = 10,
-    ) -> dict[str, list[Mapping[str, Any]]]:
-        """Load prior published events in one bounded read transaction."""
-        symbols = sorted(
-            {
-                str(ticker).strip().upper()
-                for ticker in tickers
-                if str(ticker).strip()
-            }
-        )
-        if not symbols:
-            return {}
-        if len(symbols) > 200:
-            raise ValueError("at most 200 tickers can be loaded")
-        if per_ticker < 1 or per_ticker > 50:
-            raise ValueError("per_ticker must be between 1 and 50")
-        placeholders = ",".join("?" for _ in symbols)
-        connection = self._read_connection()
-        try:
-            self._require_schema(connection)
-            rows = connection.execute(
-                f"""
-                WITH ranked AS (
-                    SELECT ticker,event_json,
-                           ROW_NUMBER() OVER(
-                               PARTITION BY ticker
-                               ORDER BY last_seen_at DESC,event_id DESC
-                           ) AS position
-                    FROM breakout_events
-                    WHERE ticker IN ({placeholders}) AND EXISTS(
-                        SELECT 1 FROM breakout_scan_events se
-                        JOIN breakout_scan_runs sr ON sr.scan_run_id=se.scan_run_id
-                        WHERE se.event_id=breakout_events.event_id
-                          AND sr.status='completed'
-                    )
-                )
-                SELECT ticker,event_json FROM ranked
-                WHERE position<=?
-                ORDER BY ticker,position
-                """,
-                (*symbols, per_ticker),
-            ).fetchall()
-            result: dict[str, list[Mapping[str, Any]]] = {symbol: [] for symbol in symbols}
-            for row in rows:
-                result[str(row["ticker"])].append(
-                    _json_loads(row["event_json"], {})
-                )
-            return result
-        finally:
-            connection.close()
-
     def load_carryover_events(
         self,
         *,
@@ -3503,24 +3389,6 @@ class BreakoutRepository:
             )
         finally:
             connection.close()
-
-    def active_events_for_carryover(
-        self,
-        *,
-        as_of: datetime,
-        event_ttl_seconds: float,
-        limit: int = 150,
-    ) -> list[Mapping[str, Any]]:
-        """Compatibility view of :meth:`load_carryover_events`."""
-
-        return list(
-            self.load_carryover_events(
-                as_of=as_of,
-                event_ttl_seconds=event_ttl_seconds,
-                limit=limit,
-                expired_due_limit=min(limit, 40),
-            ).events
-        )
 
     def status(self) -> Mapping[str, Any]:
         """Read database, worker and Provider status without creating the file."""
@@ -3751,14 +3619,6 @@ class BreakoutRepository:
         finally:
             connection.close()
 
-    def checkpoint_passive(self) -> tuple[int, int, int]:
-        connection = self._write_connection()
-        try:
-            row = connection.execute("PRAGMA wal_checkpoint(PASSIVE)").fetchone()
-            return int(row[0]), int(row[1]), int(row[2])
-        finally:
-            connection.close()
-
 
 __all__ = [
     "BreakoutRepository",
@@ -3768,7 +3628,6 @@ __all__ = [
     "InvalidCursorError",
     "LEGACY_SCHEMA_CHECKSUM",
     "LEGACY_SCHEMA_VERSION",
-    "LeaseInfo",
     "LeaseLostError",
     "ReadOnlyRepositoryError",
     "SCHEMA_CHECKSUM",

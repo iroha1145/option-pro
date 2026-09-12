@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Mapping
+from typing import Mapping
 
 from app.services.breakouts.models import MarketShapeSnapshot
 from app.services.strength.market_shape import MARKET_SHAPE_VERSION
