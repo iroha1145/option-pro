@@ -18,6 +18,11 @@
 import { expect, test } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import {
+  describeListedDrawing,
+  drawingIdentity,
+  unchangedLockedState,
+} from "./support/drawingList.mjs";
 
 const SCREENSHOT_DIR = join(process.cwd(), "test-results", "visual-evidence");
 const HAS_REAL_BACKEND = Boolean(process.env.OPTIX_VISUAL_BASE_URL);
@@ -97,11 +102,7 @@ async function listDrawings(page, ticker = "AAPL", range = "1d") {
 
 /** Poll sentinel: 429 is transient; never treat it as n=0 / unlocked / 409. */
 function drawingsLockState(listed) {
-  if (listed.status === 429) return "rate-limited";
-  if (listed.status !== 200) return `http ${listed.status}`;
-  if (!Array.isArray(listed.drawings)) return "n=?";
-  if (listed.drawings.length !== 1) return `n=${listed.drawings.length}`;
-  return listed.drawings[0].locked ? "locked" : "unlocked";
+  return describeListedDrawing(listed).state;
 }
 
 /** 从页面发 DELETE（带 Origin），page.request 没有 CSRF 头会被 403 吞掉。 */
@@ -160,19 +161,7 @@ async function expectDrawingCount(page, n) {
   await expect(drawingRows(page)).toHaveCount(n);
 }
 
-function drawingIdentity(listed) {
-  const row = listed.drawings?.[0];
-  if (!row) return null;
-  return {
-    id: row.id,
-    price: row.anchors?.[0]?.price,
-    time: row.anchors?.[0]?.time,
-    barKey: row.anchors?.[0]?.barKey,
-    locked: Boolean(row.locked),
-  };
-}
-
-async function waitOneUnlockedDrawing(page) {
+async function waitOneDrawing(page, wantLocked, { id = null } = {}) {
   let identity = null;
   await expect.poll(async () => {
     await clickRetryIfShown(page);
@@ -180,13 +169,17 @@ async function waitOneUnlockedDrawing(page) {
     if (await keepLocal.isVisible().catch(() => false)) {
       await keepLocal.click({ timeout: 1_000 }).catch(() => {});
     }
-    const listed = await listDrawings(page);
-    if (listed.status === 429) return "rate-limited";
-    identity = drawingIdentity(listed);
-    if (!identity || listed.drawings.length !== 1) return `n=${listed.drawings?.length ?? "?"}`;
-    return identity.locked ? "locked" : "unlocked";
-  }, { timeout: 45_000 }).toBe("unlocked");
+    const snap = describeListedDrawing(await listDrawings(page));
+    if (!snap.ok) return snap.state;
+    if (id && snap.identity.id !== id) return "id-changed";
+    identity = snap.identity;
+    return snap.state;
+  }, { timeout: 45_000 }).toBe(wantLocked ? "locked" : "unlocked");
   return identity;
+}
+
+async function waitOneUnlockedDrawing(page) {
+  return waitOneDrawing(page, false);
 }
 
 /** beforeEach DELETE 后控制器仍可能把旧对象写回；409 会让 GET 一直是空。 */
@@ -441,17 +434,23 @@ test("locked drawing keeps its anchors when dragged", async ({ page }) => {
   const before = await waitOneUnlockedDrawing(page);
   await expandChart(page);
   await toolButton(page, "锁定").first().click();
-  await expect.poll(async () => drawingsLockState(await listDrawings(page)), { timeout: 45_000 }).toBe("locked");
-  const locked = drawingIdentity(await listDrawings(page));
+  const locked = await waitOneDrawing(page, true, { id: before.id });
+  expect(Number.isFinite(locked.price)).toBeTruthy();
+  await expect(drawingRows(page).first()).toContainText("已锁定");
   await collapseChart(page);
   await chartFilled(page);
   await dragDrawingByPrice(page, locked.price, -80);
-  await page.waitForTimeout(400);
-  const after = drawingIdentity(await listDrawings(page));
-  expect(after.id).toBe(before.id);
-  expect(after.locked).toBe(true);
-  expect(after.price).toBe(locked.price);
-  await expectDrawingCount(page, 1);
+  await expect.poll(async () => {
+    if (await page.getByText("保存中", { exact: true }).isVisible().catch(() => false)) return "saving";
+    return unchangedLockedState(await listDrawings(page), locked);
+  }, { timeout: 45_000 }).toBe("unchanged");
+  await expandChart(page);
+  await expect(drawingRows(page).first()).toContainText("已锁定");
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(toolButton(page, "选择")).toBeVisible({ timeout: 20_000 });
+  await expect.poll(async () => unchangedLockedState(await listDrawings(page), locked), {
+    timeout: 45_000,
+  }).toBe("unchanged");
 });
 
 test("zoom keeps drawing time and price identity", async ({ page }) => {
