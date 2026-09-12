@@ -33,11 +33,14 @@ async function expectShell(page) {
 }
 
 test("Catalyst Desk visual evidence: home /", async ({ page }) => {
+  test.setTimeout(90_000);
   await page.goto("/", { waitUntil: "domcontentloaded" });
   // R4 起 / 是真实首页仪表盘（App.tsx <Route index element={<Home />}>），
   // 不再重定向 /watchlist。
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByRole("region", { name: "指数概览" })).toBeVisible();
+  // Real-backend runs share a request bucket. Initial identity confirmation
+  // may honor up to 60s of Retry-After before the page can safely mount.
+  await expect(page.getByRole("region", { name: "指数概览" })).toBeVisible({ timeout: 75_000 });
   await expectShell(page);
   await screenshot(page, "1440x900-home");
 });
