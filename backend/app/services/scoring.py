@@ -45,23 +45,6 @@ def _finite_number(value) -> float | None:
     return number if math.isfinite(number) else None
 
 
-def _valid_scores(signals: dict) -> list[dict]:
-    # Metadata entries such as ``_volume_today`` are dictionaries too, but they
-    # are not scored signals and must not inflate the reported data quality.
-    return [
-        signal
-        for signal in signals.values()
-        if (
-            isinstance(signal, dict)
-            and _finite_number(signal.get("value")) is not None
-            and (
-                _finite_number(signal.get("top_score")) is not None
-                or _finite_number(signal.get("bottom_score")) is not None
-            )
-        )
-    ]
-
-
 def _avg(signals: dict, keys: list[str], side: str) -> float | None:
     vals = []
     score_key = "top_score" if side == "top" else "bottom_score"
@@ -102,11 +85,6 @@ def _aggregate_parts(
         "coverage": round(max(0.0, min(1.0, coverage)), 4),
         "missing_components": missing,
     }
-
-
-def _quality(signals: dict, expected: int) -> int:
-    valid = len(_valid_scores(signals))
-    return round(max(0, min(100, valid / expected * 100)))
 
 
 def _quality_for_keys(signals: dict, keys: tuple[str, ...]) -> tuple[int, int, int]:

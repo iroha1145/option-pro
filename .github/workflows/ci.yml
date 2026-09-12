@@ -107,6 +107,9 @@ jobs:
       - name: Verify audit recovery paths with isolated accounts and jobs
         run: npm --prefix frontend-src run test:audit
 
+      - name: Verify audit fixes for identity, filters, charts and touch controls
+        run: npm --prefix frontend-src run test:audit-fixes
+
       - name: Verify screener freshness flows and native HTTP cache
         run: npm --prefix frontend-src run test:screener
 
@@ -323,6 +326,7 @@ jobs:
             frontend-src/test-results/review/**
             frontend-src/test-results/customer-charts/**
             frontend-src/test-results/audit/**
+            frontend-src/test-results/audit-fixes/**
             frontend-src/test-results/screener/**
             frontend-src/test-results/screener-report/**
             frontend-src/test-results/screener-evidence/**

@@ -1,4 +1,5 @@
 import IndicatorReadouts from './chart-indicators/IndicatorReadouts';
+import { formatChartTime } from './chartTime.ts';
 import { indicatorLayout, selectIndicatorPanes, formatIndicatorValue, type IndicatorLayout, type IndicatorView } from './chart-indicators/layout.ts';
 import { useLiveQuote, useQuoteStatus } from '@/hooks/useLiveQuote';
 import { displayedQuoteLabel, preferLiveQuote } from '@/lib/liveQuotes';
@@ -64,7 +65,7 @@ import {
   type MeasureBasis,
   type RangeMeasure,
 } from '@/lib/drawdown';
-import { fmtCompact, fmtLocaleDateTime, fmtPct, fmtPrice, fmtSigned } from '@/lib/format';
+import { fmtCompact, fmtPct, fmtPrice, fmtSigned } from '@/lib/format';
 import { escapeHandledByOverlay } from './chart-drawings/tools.ts';
 import { cn } from '@/lib/utils';
 import { t } from '../../i18n/core.ts';
@@ -98,21 +99,11 @@ function overlaysConsistentWithBars(
 }
 
 function fmtAxisLabel(iso: string, range: ChartRange): string {
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  if (range === '5m' || range === '15m' || range === '1h') {
-    return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  }
-  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return formatChartTime(iso, range, 'axis');
 }
 
 function barTooltipTitle(iso: string, range: ChartRange): string {
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  const ymd = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  return range === '5m' || range === '15m' || range === '1h'
-    ? `${ymd} ${pad(d.getHours())}:${pad(d.getMinutes())}`
-    : ymd;
+  return formatChartTime(iso, range);
 }
 
 /** 读回 ECharts 实例当前的 inside 缩放窗口（索引口径）。 */
@@ -1274,9 +1265,10 @@ export default function KlineChart({
                 status: data.bars[data.bars.length - 1]?.quote_only ? t('（仅报价）') : '',
               })
             : ' '}
+          {data && <> · {t('美东')}</>}
         </span>
         <span className="font-mono tnum">
-          {data ? t('读取于 {at}', { at: fmtLocaleDateTime(data.as_of, { hour12: false }) }) : ''}
+          {data ? t('读取于 {at}', { at: formatChartTime(data.as_of, '5m') }) : ''}
         </span>
       </p>
     </section>
@@ -1306,14 +1298,7 @@ export default function KlineChart({
 /** 末根 K 线自身的时间：日/周只到日期，分钟带时刻（as_of 只是读取时刻，两回事） */
 function lastBarText(data: { bars: ChartBarEx[]; last_bar_at?: string | null }, range: ChartRange): string {
   const iso = data.bars[data.bars.length - 1]?.t ?? data.last_bar_at;
-  if (!iso) return '—';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '—';
-  const pad = (n: number) => String(n).padStart(2, '0');
-  const ymd = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  return range === '5m' || range === '15m' || range === '1h'
-    ? `${ymd} ${pad(d.getHours())}:${pad(d.getMinutes())}`
-    : ymd;
+  return iso ? formatChartTime(iso, range) : '—';
 }
 
 /** 只认已命名的形态；认不出就返回 null，绝不把 kind 原样打成「形态 · ma」。 */

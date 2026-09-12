@@ -92,7 +92,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             if arguments.status:
                 return 0
             return 0 if payload["healthy"] else 1
-        return asyncio.run(_run(arguments.once, settings))
+        try:
+            return asyncio.run(_run(arguments.once, settings))
+        finally:
+            # asyncio.run has drained its thread executor before the shared
+            # synchronous client is closed. Health/status never open it.
+            from app.services import massive
+
+            massive.close()
     except WorkerAlreadyRunning:
         _print({"healthy": False, "status": "already_running", "error_code": "worker_locked"})
         return 1

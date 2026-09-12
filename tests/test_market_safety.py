@@ -55,4 +55,4 @@ def test_indices_keep_valid_price_when_previous_close_access_fails(monkeypatch):
 
     assert payload["succeeded"] == len(market.INDEX_SYMBOLS)
     assert all(item["price"] == 100.0 for item in payload["indices"])
-    assert all(item["change_percent"] == 0.0 for item in payload["indices"])
+    assert all(item["change_percent"] is None for item in payload["indices"])

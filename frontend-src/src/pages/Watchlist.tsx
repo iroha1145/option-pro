@@ -371,11 +371,12 @@ export default function Watchlist() {
   selectedTickersRef.current = selectedTickers;
   const selectionKey = selectedTickers.join(',');
   const fetchWatchlist = useCallback(() => {
-    if (personal.loading || personal.error) return Promise.resolve([]);
     const tickers = selectedTickersRef.current;
     return canManageWatchlist ? stocksApi.watchlistFor(tickers) : stocksApi.watchlist();
-  }, [canManageWatchlist, personal.loading, personal.error]);
-  const wl = usePolling(fetchWatchlist, 60_000, [personal.key, selectionKey, personal.loading, personal.error]);
+  }, [canManageWatchlist]);
+  const wl = usePolling(fetchWatchlist, 60_000, [personal.key, selectionKey], {
+    enabled: !personal.loading && !personal.error,
+  });
   const refreshWatchlist = wl.refresh;
   const items = useMemo(() => {
     if (personal.loading || personal.error) return [];
@@ -787,7 +788,7 @@ export default function Watchlist() {
             </p>
           </div>
 
-          {err && canManageWatchlist && items.length > 0 && (
+          {err && items.length > 0 && (
             <p className="mt-3 flex flex-wrap items-center gap-2 text-caption text-ink-500" role="status">
               <SoftBadge tone="warn" className="whitespace-normal">{t('行情暂时读取失败，自选名单已保留。')}</SoftBadge>
               <button className="control-button" disabled={wl.refreshing} onClick={() => wl.refresh({ force: true })}>{t('重试')}</button>

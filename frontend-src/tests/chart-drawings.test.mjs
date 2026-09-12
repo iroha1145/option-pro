@@ -2963,3 +2963,19 @@ test('GET failure with pending jobs retries completeScopeLoad not drain', async 
     'replay',
   );
 });
+
+test('missing volume has the backend null fingerprint token and differs from observed zero', async (t) => {
+  const { canonicalBarPayload, barFingerprint } = await loadDrawings(t);
+  const bars = [
+    { t: 1700000000, o: 10, h: 11, l: 9, c: 10.5, v: null },
+    { t: 1700086400, o: 10.5, h: 12, l: 10, c: 11, v: 0 },
+  ];
+  const expected = '1700000000|10.000000|11.000000|9.000000|10.500000|null|0|0\n1700086400|10.500000|12.000000|10.000000|11.000000|0.000000|0|0';
+  assert.equal(canonicalBarPayload(bars), expected);
+  const digest = 'e210acdc4ad8160ffd7fbf49d60c4305307fdb132f07c956f1a9ccef56310329';
+  assert.equal(barFingerprint(bars), digest);
+  for (const missing of [undefined, Number.NaN, Infinity, -1]) {
+    assert.equal(barFingerprint([{ ...bars[0], v: missing }, bars[1]]), digest);
+  }
+  assert.notEqual(barFingerprint([{ ...bars[0], v: 0 }, bars[1]]), digest);
+});

@@ -96,13 +96,6 @@ class ProviderStatus(str, Enum):
     UNAVAILABLE = "unavailable"
 
 
-class ScanStatus(str, Enum):
-    RUNNING = "running"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    ABANDONED = "abandoned"
-
-
 class TemporalCutoff(_StrictModel):
     event_at: AwareDatetime
     market_timezone: str = MARKET_TIMEZONE

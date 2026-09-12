@@ -68,9 +68,10 @@ export async function readPersisted(path: string): Promise<PersistedResponse | n
   });
 }
 
-export async function writePersisted(record: PersistedResponse): Promise<void> {
+export async function writePersisted(record: PersistedResponse, isCurrent: () => boolean = () => true): Promise<void> {
   const handle = await db();
-  if (!handle) return;
+  // 打开数据库期间可能已退出或切换身份；事务开始前再检查请求所属世代。
+  if (!handle || !isCurrent()) return;
   await new Promise<void>((resolve) => {
     try {
       const tx = handle.transaction(STORE, 'readwrite');

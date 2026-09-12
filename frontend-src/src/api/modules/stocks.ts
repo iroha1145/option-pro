@@ -19,7 +19,7 @@ import type {
 } from '../types';
 
 /** 契约 bar {t,o,h,l,c,v,quote_only} → UI Candle（字段名 1:1，仅做容错读取） */
-export function mapBar<T extends Candle = Candle>(b: Rec): T {
+export function mapBar<T extends Candle = Candle>(b: Rec): T | null {
   const rawTime = b.t;
   const epoch = typeof rawTime === 'number' && Number.isFinite(rawTime)
     ? (rawTime >= 100_000_000_000 ? rawTime : rawTime * 1_000)
@@ -28,13 +28,20 @@ export function mapBar<T extends Candle = Candle>(b: Rec): T {
   const isoTime = parsedTime !== null && Number.isFinite(parsedTime.getTime())
     ? parsedTime.toISOString()
     : null;
+  const stamp = pickS(b, 't') ?? isoTime;
+  const o = pickN(b, 'o');
+  const h = pickN(b, 'h');
+  const l = pickN(b, 'l');
+  const c = pickN(b, 'c');
+  if (!stamp || !Number.isFinite(Date.parse(stamp))
+    || o === null || h === null || l === null || c === null
+    || ![o, h, l, c].every((price) => Number.isFinite(price) && price > 0)
+    || h < l || c > h * 1.0001 || c < l * 0.9999) return null;
+  const volume = pickN(b, 'v');
   return {
-    t: pickS(b, 't') ?? isoTime ?? '',
-    o: pickN(b, 'o') ?? 0,
-    h: pickN(b, 'h') ?? 0,
-    l: pickN(b, 'l') ?? 0,
-    c: pickN(b, 'c') ?? 0,
-    v: pickN(b, 'v') ?? 0,
+    t: stamp,
+    o, h, l, c,
+    v: volume !== null && Number.isFinite(volume) && volume >= 0 ? volume : Number.NaN,
     // 盘前盘后与仅报价 bar 要一路带到图表层：均线等常规时段指标按它剔除
     ...(b.ext === true ? { ext: true } : {}),
     ...(b.quote_only === true ? { quote_only: true } : {}),
@@ -61,7 +68,7 @@ export function ma20Of(candles: Candle[]): (number | null)[] {
 /** 契约 {bars:[...], as_of, _stale?} → UI StockChart */
 export function mapChart(body: unknown, ticker: string, range: StockChart['range']): StockChart {
   const bars = unwrap(body, 'bars', 'candles');
-  const candles = bars.map(mapBar);
+  const candles = bars.map((bar) => mapBar(bar)).filter((bar): bar is Candle => bar !== null);
   return { ticker, range, candles, ma20: ma20Of(candles) };
 }
 
@@ -147,13 +154,14 @@ export function mapDailyTrend(body: unknown): WatchlistItem['dailyTrend'] {
  */
 function mapStockDetail(body: unknown): StockDetail {
   const r = asRec(body);
+  const price = pickN(r, 'price');
   const yearLow = pickN(r, 'year_low');
   const yearHigh = pickN(r, 'year_high');
   return {
     ticker: pickS(r, 'ticker') ?? '',
     name: pickLabel(r, 'name') ?? '',
     sector: stockIndustry(r),
-    price: pickN(r, 'price') ?? 0,
+    price: price !== null && Number.isFinite(price) && price > 0 ? price : Number.NaN,
     change: pickN(r, 'change') ?? (null as unknown as number),
     changePct: pickN(r, 'changePct', 'change_percent') ?? (null as unknown as number),
     sparkline: Array.isArray(r.sparkline) ? (r.sparkline as number[]) : [],

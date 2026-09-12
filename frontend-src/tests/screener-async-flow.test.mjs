@@ -7,6 +7,7 @@ import * as flow from '../src/lib/screenerScanFlow.ts';
 import { ApiError, toQuery } from '../src/api/client.ts';
 import { marketGet, resetMarketReadState } from '../src/api/marketRead.ts';
 import * as live from '../src/api/live.ts';
+import { DEFAULT_FILTERS } from '../src/components/screener/types.ts';
 
 const source = fs.readFileSync(new URL('../src/pages/Screener.tsx', import.meta.url), 'utf8');
 const parameters = { universe: 'themes', timeframe: 'all', profile: 'balanced', top: 20, sector_id: null, min_price: 5, min_avg_dollar_volume: 10000000, include_options: true };
@@ -51,6 +52,121 @@ function harness(overrides = {}) {
   vm.runInNewContext(code, scope);
   return { state, scope, runScan: scope.runScan, seedPending: (value) => { pending = value; }, pending: () => pending };
 }
+
+function retryLastAttempt(h) {
+  h.scope.lastScanAttempt = h.state.lastScanAttempt;
+  const start = source.indexOf('  const onScanRetry = ');
+  const end = source.indexOf('  const patchApplied', start);
+  vm.runInNewContext(ts.transpileModule(`${source.slice(start, end)}\nglobalThis.retryScan = onScanRetry;`, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText, h.scope);
+  h.scope.retryScan();
+}
+
+function resetAll(h) {
+  h.scope.DEFAULT_FILTERS = DEFAULT_FILTERS;
+  const start = source.indexOf('  const resetAllFilters = ');
+  const end = source.indexOf('  const onTierFromHistogram', start);
+  vm.runInNewContext(ts.transpileModule(`${source.slice(start, end)}\nglobalThis.resetAll = resetAllFilters;`, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText, h.scope);
+  h.scope.resetAll();
+}
+
+test('reset scans default server parameters and keeps old result identity through failure until retry succeeds', async () => {
+  const pendingDefault = deferred();
+  const requests = [];
+  let defaultReads = 0;
+  const h = harness({ isOwner: false, strengthApi: {
+    scanEnvelope: params => {
+      requests.push(params);
+      if (params.profile === 'aggressive') return Promise.resolve(envelope('AGGRESSIVE'));
+      defaultReads++;
+      return defaultReads === 1 ? pendingDefault.promise : Promise.resolve(envelope('BALANCED'));
+    },
+  } });
+  const aggressive = { ...DEFAULT_FILTERS, profile: 'aggressive', timeframe: 'short' };
+  h.state.draft = aggressive;
+  await h.runScan(aggressive);
+  h.state.macroToneFilter = 'neutral';
+  resetAll(h);
+  assert.equal(h.state.macroToneFilter, 'all');
+  assert.equal(h.state.draft.profile, 'balanced');
+  assert.equal(h.state.draft.timeframe, 'all');
+  assert.equal(requests.at(-1).profile, 'balanced');
+  assert.equal(requests.at(-1).timeframe, 'all');
+  assert.equal(h.state.scanState, 'scanning');
+  assert.equal(h.state.applied.profile, 'aggressive', 'old rows must retain their real profile while defaults are in flight');
+  assert.equal(h.state.rows[0].ticker, 'AGGRESSIVE');
+  pendingDefault.reject(new ApiError(503, 'default snapshot unavailable'));
+  await new Promise(setImmediate);
+  assert.equal(h.state.scanState, 'error');
+  assert.equal(h.state.applied.profile, 'aggressive');
+  assert.equal(h.state.lastScanAttempt.filters.profile, 'balanced');
+  retryLastAttempt(h);
+  await new Promise(setImmediate);
+  assert.equal(defaultReads, 2);
+  assert.equal(h.state.scanState, 'done');
+  assert.equal(h.state.applied.profile, 'balanced');
+  assert.equal(h.state.applied.timeframe, 'all');
+  assert.equal(h.state.rows[0].ticker, 'BALANCED');
+});
+
+test('error retry keeps failed filters rather than the previous successful profile', async () => {
+  let fail = false;
+  const requests = [];
+  const h = harness({ isOwner: false, strengthApi: {
+    scanEnvelope: async (params) => {
+      requests.push(params);
+      if (fail) throw new ApiError(500, 'read failed');
+      return envelope();
+    },
+  } });
+  await h.runScan({ profile: 'balanced' });
+  fail = true;
+  await h.runScan({ profile: 'aggressive', min_price: 40 });
+  assert.equal(h.state.applied.profile, 'balanced');
+  h.state.draft = { profile: 'conservative', min_price: 80 };
+  fail = false;
+  retryLastAttempt(h);
+  await new Promise(setImmediate);
+  assert.equal(requests.at(-1).profile, 'aggressive');
+  assert.equal(requests.at(-1).min_price, 40);
+  assert.equal(h.state.applied.profile, 'aggressive');
+  assert.equal(h.state.draft.profile, 'conservative', 'retry success must keep subsequent draft edits');
+});
+
+test('error retry retains force-refresh intent even when an older fresh snapshot exists', async () => {
+  let fail = true;
+  let posts = 0;
+  const h = harness({ runtimeApi: {
+    workerAction: async () => {
+      posts++;
+      if (fail) throw new ApiError(503, 'worker unavailable');
+      return completed;
+    },
+  } });
+  assert.equal(await h.runScan({}, { forceRefresh: true }), false);
+  assert.equal(h.state.lastScanAttempt.options.forceRefresh, true);
+  fail = false;
+  retryLastAttempt(h);
+  await new Promise(setImmediate);
+  assert.equal(posts, 2, 'retry must not silently settle for a cached scan');
+  assert.equal(h.state.scanState, 'done');
+});
+
+test('scan completion leaves a newer draft intact while committing the requested results', async () => {
+  const pending = deferred();
+  const h = harness({ strengthApi: { scanEnvelope: () => pending.promise } });
+  h.state.draft = { profile: 'balanced' };
+  const running = h.runScan(h.state.draft);
+  h.state.draft = { profile: 'aggressive', min_price: 50 };
+  pending.resolve(envelope());
+  assert.equal(await running, true);
+  assert.equal(h.state.applied.profile, 'balanced');
+  assert.equal(h.state.draft.profile, 'aggressive');
+  assert.equal(h.state.draft.min_price, 50);
+});
 
 test('failed recovered task is discarded so a new click can create a replacement', async () => {
   let posts = 0;

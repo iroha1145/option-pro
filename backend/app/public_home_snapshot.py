@@ -176,6 +176,7 @@ _EARNINGS_ROW_FIELDS = {
     "sector",
     "earnings_date_source",
     "estimate_source",
+    "estimate_sources",
     "actual_source",
     "release_status",
     "quarter",
@@ -864,6 +865,28 @@ def _valid_earnings_calendar_fields(row: Mapping[str, Any]) -> bool:
     return True
 
 
+def _valid_earnings_estimate_sources(row: Mapping[str, Any]) -> bool:
+    sources = row.get("estimate_sources")
+    if sources is None:
+        # Existing snapshots predate field-level provenance.
+        return row.get("estimate_source") != "mixed"
+    if not isinstance(sources, Mapping):
+        return False
+    allowed_fields = {"eps_estimate", "revenue_estimate", "eps_high", "eps_low"}
+    allowed_sources = {"calendar", "earnings_dates", "finnhub_calendar", "fmp_calendar"}
+    if any(
+        field not in allowed_fields or row.get(field) is None
+        or not isinstance(source, str) or source not in allowed_sources
+        for field, source in sources.items()
+    ):
+        return False
+    if set(sources) != {field for field in allowed_fields if row.get(field) is not None}:
+        return False
+    providers = set(sources.values())
+    expected = next(iter(providers)) if len(providers) == 1 else "mixed" if providers else None
+    return row.get("estimate_source") == expected
+
+
 def _validate_earnings(payload: Mapping[str, Any]) -> bool:
     rows = payload.get("earnings")
     attempted = payload.get("attempted")
@@ -914,7 +937,8 @@ def _validate_earnings(payload: Mapping[str, Any]) -> bool:
         )
         if (
             not isinstance(row, dict)
-            or set(row) != _EARNINGS_ROW_FIELDS
+            or not (_EARNINGS_ROW_FIELDS - {"estimate_sources"}).issubset(row)
+            or bool(set(row) - _EARNINGS_ROW_FIELDS)
             or not isinstance(row.get("ticker"), str)
             or _EARNINGS_TICKER_PATTERN.fullmatch(row["ticker"]) is None
             or not isinstance(row.get("name"), str)
@@ -946,7 +970,9 @@ def _validate_earnings(payload: Mapping[str, Any]) -> bool:
                 "earnings_dates",
                 "finnhub_calendar",
                 "fmp_calendar",
+                "mixed",
             }
+            or not _valid_earnings_estimate_sources(row)
             or row.get("actual_source")
             not in {None, "earnings_dates", "finnhub_calendar", "fmp_calendar"}
             or row.get("release_status")
@@ -1024,6 +1050,11 @@ def _validate_earnings(payload: Mapping[str, Any]) -> bool:
             contributing_providers.add("FMP")
         else:
             contributing_providers.add("Yahoo Finance")
+        for source in (row.get("estimate_sources") or {}).values():
+            contributing_providers.add({
+                "finnhub_calendar": "Finnhub", "fmp_calendar": "FMP",
+                "calendar": "Yahoo Finance", "earnings_dates": "Yahoo Finance",
+            }[source])
     failed_symbols = payload.get("failed_symbols")
     return bool(
         set(providers) == contributing_providers

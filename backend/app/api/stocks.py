@@ -2340,12 +2340,12 @@ async def _build_watchlist(requested_tickers: list[str] | None = None):
             def session_name(market_dt, market_timezone):
                 if market_timezone.key != _WATCHLIST_MARKET_TIMEZONE.key:
                     return "exchange_session"
-                minute = market_dt.hour * 60 + market_dt.minute
-                if minute < 9 * 60 + 30:
-                    return "pre_market"
-                if minute < 16 * 60:
-                    return "regular"
-                return "post_market"
+                from app.services.realtime_quotes import market_session
+
+                session = market_session(market_dt)
+                return {"premarket": "pre_market", "postmarket": "post_market"}.get(
+                    session, session
+                )
 
             quotes = {}
             quote_times = []
@@ -3126,15 +3126,10 @@ async def _stock_overview_impl(ticker: str):
             except massive_provider.MassiveError:
                 snapshot = None
             if snapshot:
-                minute = snapshot.get("minute") or {}
                 day = snapshot.get("day") or {}
-                massive_price = (
-                    _finite_quote(minute.get("c"))
-                    or _finite_quote(day.get("c"))
-                    or _finite_quote(snapshot.get("day_close"))
-                )
-                if massive_price is not None:
-                    last_price = massive_price
+                minute_quote = massive_provider.snapshot_minute_quote(snapshot)
+                if minute_quote is not None:
+                    last_price, quote_as_of = minute_quote
                     price_provider = "Massive"
                     prev_close = _finite_quote(snapshot.get("prev_close"))
                     quote_open = _finite_quote(day.get("o"))
@@ -3146,12 +3141,6 @@ async def _stock_overview_impl(ticker: str):
                     )
                     if massive_volume is not None:
                         quote_volume = massive_volume
-                    quote_as_of = (
-                        _quote_as_of(snapshot.get("as_of"))
-                        or _quote_as_of(minute.get("t"))
-                        or _quote_as_of(day.get("t"))
-                        or _quote_as_of(snapshot.get("updated"))
-                    )
 
         info: dict[str, Any] = {}
         fi: Any = None

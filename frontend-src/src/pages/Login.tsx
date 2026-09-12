@@ -561,7 +561,7 @@ export default function Login() {
                   <button
                     type="button"
                     onClick={() => setShowPw((v) => !v)}
-                    className="shrink-0 rounded-xs p-1 text-ink-400 transition-colors hover:text-ink-600"
+                    className="touch-target flex shrink-0 items-center justify-center rounded-xs p-1 text-ink-400 transition-colors hover:text-ink-600"
                     aria-label={showPw ? t('隐藏密码') : t('显示密码')}
                   >
                     <EyeIcon off={!showPw} />

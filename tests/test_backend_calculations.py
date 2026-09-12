@@ -264,7 +264,7 @@ def test_data_quality_excludes_metadata_dictionaries() -> None:
         "_volume_ratio": {"value": 1.23, "label": "metadata"},
     }
 
-    assert scoring._quality(payload, 2) == 50
+    assert scoring._quality_for_keys(payload, ("real", "missing")) == (50, 1, 2)
 
 
 def test_market_top_bottom_scores_exclude_unwired_components_instead_of_filling_50() -> None:

@@ -73,6 +73,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
    * 世代的结果允许写入；登录/注册/登出先递增世代，从而作废所有在途探测。
    */
   const generationRef = useRef(0);
+  const pendingWritesRef = useRef(0);
 
   /**
    * 上一次确认到的身份，用来判断它是不是**真的**变了。
@@ -117,6 +118,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       if (generation !== generationRef.current) return;
       // 身份读不到时保留当前已知身份并明确置错，而不是悄悄退回访客。
+      setQueryPrincipal(null);
       setIdentityUnavailable(true);
       retryAttemptRef.current += 1;
       const retryAfter = error instanceof ApiError ? error.retryAfter : undefined;
@@ -135,6 +137,8 @@ export function AccessProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refresh = useCallback(async () => {
+    // Cookie 写入期间的探测仍可能读到旧会话，等写入结束后统一核验。
+    if (pendingWritesRef.current > 0) return;
     // 焦点与可见性可能同时核验；只有最后发出的请求可以确定当前身份。
     generationRef.current += 1;
     if (retryTimerRef.current !== null) {
@@ -178,10 +182,16 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     if (!hasPrincipal) return;
     const verify = () => void refresh().catch(() => undefined);
     const onInvalidated = () => {
-      // 只做降级提示，权威结论仍以随后的 /access/status 为准。
+      // 明确的会话失效立即撤掉客户身份和写入能力，再核验新的主体。
+      setQueryPrincipal(null);
+      dropSharedReads();
+      resetMarketReadState();
+      clearCatalystReadCache();
+      setIdentityUnavailable(true);
       setStatus((current) => ({
         ...current,
         role: 'visitor',
+        accountUsername: null,
         aiEnabled: false,
         aiAvailable: false,
         aiReason: 'owner_login_required',
@@ -209,8 +219,26 @@ export function AccessProvider({ children }: { children: ReactNode }) {
    */
   const applyWrite = useCallback(
     async (write: () => Promise<void>) => {
-      await write();
-      await invalidateAndRead().catch(() => undefined);
+      pendingWritesRef.current += 1;
+      generationRef.current += 1;
+      setQueryPrincipal(null);
+      setIdentityUnavailable(true);
+      dropSharedReads();
+      resetMarketReadState();
+      clearCatalystReadCache();
+      let written = false;
+      try {
+        await write();
+        written = true;
+      } finally {
+        pendingWritesRef.current -= 1;
+        // 写入失败也重新确认原会话，不能永远留在“身份未知”。
+        if (pendingWritesRef.current === 0) {
+          const confirmation = invalidateAndRead().catch(() => undefined);
+          // 密码等写入错误立即反馈；后台身份核验不延迟原错误。
+          if (written) await confirmation;
+        }
+      }
     },
     [invalidateAndRead],
   );

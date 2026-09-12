@@ -39,10 +39,10 @@ test('切到催化排序时为全部候选取摘要，而不是只取当前页',
   const page = codeOf(await source('pages/Screener.tsx'));
 
   // 缺失集合按 filtered（全部候选）计算，不是 pageRows
-  assert.match(page, /missingCatalystTickers = useMemo\(\(\) => \{[\s\S]*?return filtered/);
+  assert.match(page, /catalystSortReadiness\(catalystSortActive \? filtered\.map/);
   assert.match(page, /catalystSortActive = sortMode !== 'deterministic'/);
   // 未取齐时维持确定性顺序 —— 不能用缺失值参与正式排名
-  assert.match(page, /if \(sortMode === 'deterministic' \|\| preparingCatalystSort\)/);
+  assert.match(page, /if \(sortMode === 'deterministic' \|\| catalystSortIncomplete\)/);
   // 界面必须说明正在准备
   assert.match(page, /正在准备排序数据/);
   // 契约批量上限是 20，超过必须切片
@@ -90,7 +90,8 @@ test('催化摘要按 TTL 过期，失败条目立即可重试', () => {
 test('页内抓取也走同一套新鲜度判断，不再只看键是否存在', async () => {
   const page = codeOf(await source('pages/Screener.tsx'));
   assert.doesNotMatch(page, /catalystsRef\.current\[t\] === undefined/);
-  assert.match(page, /!catalystSummaryUsable\(catalystsRef\.current\[t\], now\)/);
+  assert.match(page, /const summary = catalystsRef\.current\[ticker\]/);
+  assert.match(page, /!catalystSummaryUsable\(summary, now\)/);
   assert.match(page, /fetchedAt/);
 });
 

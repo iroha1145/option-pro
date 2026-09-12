@@ -2,6 +2,11 @@
 import type { Dict } from './types';
 
 export const SCREENER: Dict = {
+  '催化摘要读取失败，暂按强度排序': ['Catalyst summaries failed to load; results remain sorted by strength.', '材料の概要を取得できないため、強度順で表示しています。'],
+  '展开或收起 {ticker} 详情': ['Expand or collapse {ticker} details', '{ticker} の詳細を開く・閉じる'],
+  '强度分布 · 候选比较': ['Strength distribution · candidate comparison', '強度分布 · 候補比較'],
+  '筛选后候选': ['Filtered candidates', '絞り込み後の候補'],
+  '已应用其他筛选，分档和数量上限不影响此图': ['Other filters apply; tier selection and the result limit do not affect this chart.', '他の絞り込み条件を反映しています。階層の選択と表示件数の上限はこの図に影響しません。'],
   '更多筛选': ['More filters', '詳細フィルター'],
   '辅助读数': ['Supporting metrics', '補助指標'],
   '辅助指标': ['Additional indicators', '補助指標'],

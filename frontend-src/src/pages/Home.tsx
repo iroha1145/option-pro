@@ -588,8 +588,8 @@ function MarketStatusPanel({
 }) {
   const now = useNow(1000);
 
-  if (loading) return <SkeletonCard className="h-full" />;
-  if (error) {
+  if (loading && !status) return <SkeletonCard className="h-full" />;
+  if (error && !status) {
     return (
       <div className="card-surface h-full">
         <EmptyState
@@ -604,6 +604,7 @@ function MarketStatusPanel({
 
   return (
     <section className="card-surface flex h-full flex-col p-4 md:p-5" aria-label={t('市场状态')}>
+      {error && <StaleStrip onRetry={onRetry} refreshing={refreshing} className="mb-3" />}
       <div className="flex items-center justify-between gap-3">
         <h3 className="text-h3 text-ink-900">{t('市场状态')}</h3>
         <SessionLED

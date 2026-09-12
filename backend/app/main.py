@@ -122,6 +122,7 @@ class _ExactTrustedHostMiddleware:
 @asynccontextmanager
 async def _lifespan(application: FastAPI):
     from app.config import get_settings
+    from app.services import massive
     from app.services.realtime_quotes import QuoteHub
 
     configuration = get_settings()
@@ -143,9 +144,16 @@ async def _lifespan(application: FastAPI):
         await hub.start()
         yield
     finally:
-        await hub.close()
-        await stocks.close_company_logo_client()
-        application.state.quote_hub = None
+        try:
+            await hub.close()
+        finally:
+            try:
+                await stocks.close_company_logo_client()
+            finally:
+                try:
+                    massive.close()
+                finally:
+                    application.state.quote_hub = None
 
 
 app = FastAPI(

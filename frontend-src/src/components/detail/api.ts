@@ -51,7 +51,9 @@ export const CHART_RANGES: { value: ChartRange; label: string }[] = [
 /** 契约 {bars:[{t,o,h,l,c,v,quote_only}], as_of, _stale?} → StockChartEx（字段名 1:1） */
 function mapChartEx(body: unknown, ticker: string, range: ChartRange): StockChartEx {
   const r = asRec(body);
-  const bars = unwrap(body, 'bars').map((b: Rec) => mapBar<ChartBarEx>(b));
+  const bars = unwrap(body, 'bars')
+    .map((b: Rec) => mapBar<ChartBarEx>(b))
+    .filter((bar): bar is ChartBarEx => bar !== null);
   const analysis = r.chart_analysis ?? r.chartAnalysis;
   return {
     ticker,

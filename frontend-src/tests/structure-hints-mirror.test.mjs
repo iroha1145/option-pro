@@ -43,8 +43,8 @@ test('形态与陷阱修正：±6 / 封顶 ±10 / ±8 与代码一致', () => {
 });
 
 test('基底七维权重：文案与 _candidate 的加权系数一致', () => {
-  const formula = /quality = \(([\s\S]+?)\)\n/.exec(baseStructure)?.[1] ?? '';
-  const weights = [...formula.matchAll(/\*\s*(0\.\d+)/g)].map((m) => Number(m[1]));
+  const formula = /quality_components = \(([\s\S]+?)\n    \)/.exec(baseStructure)?.[1] ?? '';
+  const weights = [...formula.matchAll(/,\s*(0\.\d+)\)/g)].map((m) => Number(m[1]));
   assert.deepEqual(weights, [0.25, 0.15, 0.15, 0.15, 0.1, 0.1, 0.1]);
   assert.ok(hints.includes('紧致度 25% / 持续时间 15% / 触碰次数 15% / 成交额收缩 15% / ATR收缩 10% / 支撑完整性 10% / 低点抬升 10%'));
 });

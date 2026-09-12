@@ -47,7 +47,7 @@ export function TierHistogram({
 
   return (
     <div className="card-surface p-5">
-      <p className="eyebrow">{__t('强度分布 · 筛选结果')}</p>
+      <p className="eyebrow">{__t('强度分布 · 候选比较')}</p>
       <div className="mt-4 flex h-28 items-end gap-2.5">
         {TIERS.map((t) => {
           const hit = hits?.[t] ?? 0;
@@ -100,11 +100,9 @@ export function TierHistogram({
         ))}
       </div>
       {ref !== null ? (
-        <HatchLegend className="mt-3.5" actual={__t("本次命中")} estimate={__t("全市场参照")} />
-      ) : (
-        /* 契约无全市场直方图：只标注命中分布，参照留空优于编造 */
-        <p className="mt-3.5 text-micro text-ink-400">{__t('仅统计本次筛选命中的标的')}</p>
-      )}
+        <HatchLegend className="mt-3.5" actual={__t("筛选后候选")} estimate={__t("全市场参照")} />
+      ) : null}
+      <p className="mt-3.5 text-micro text-ink-400">{__t('已应用其他筛选，分档和数量上限不影响此图')}</p>
     </div>
   );
 }

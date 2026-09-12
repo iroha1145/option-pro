@@ -167,7 +167,7 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
             onClick={onOpenPalette}
             /* xl–2xl 是 9 项导航的拥挤带（审计：1280 + 长用户名/英日文风险）：
                该档只留搜索图标（下方按钮），文字框在 md–xl 与 ≥2xl 显示。 */
-            className="hidden h-8 w-44 items-center gap-2 rounded-md border border-line bg-card-warm px-3 text-caption text-ink-400 transition-[border-color,box-shadow,color] duration-fast hover:border-line-strong hover:text-ink-500 focus-visible:border-brand-500 focus-visible:shadow-focus-ring md:flex xl:hidden 2xl:flex 2xl:w-[220px]"
+            className="touch-target hidden h-8 w-44 items-center gap-2 rounded-md border border-line bg-card-warm px-3 text-caption text-ink-400 transition-[border-color,box-shadow,color] duration-fast hover:border-line-strong hover:text-ink-500 focus-visible:border-brand-500 focus-visible:shadow-focus-ring md:flex xl:hidden 2xl:flex 2xl:w-[220px]"
             aria-label={t("打开命令面板")}
           >
             <Icon name="search" size={14} />
@@ -178,7 +178,7 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
           </button>
           <button
             onClick={onOpenPalette}
-            className="flex size-9 items-center justify-center rounded-md border border-line bg-card-warm text-ink-500 shadow-btn md:hidden xl:flex 2xl:hidden"
+            className="touch-target flex size-9 items-center justify-center rounded-md border border-line bg-card-warm text-ink-500 shadow-btn md:hidden xl:flex 2xl:hidden"
             aria-label={t("搜索")}
           >
             <Icon name="search" size={16} />
@@ -222,7 +222,7 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
             <button
               onClick={handleLogout}
               disabled={loggingOut}
-              className="flex h-8 max-w-[140px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-line bg-card px-3 text-caption text-ink-500 shadow-btn transition-colors hover:text-ink-800 disabled:cursor-wait disabled:opacity-60 md:max-w-none"
+              className="touch-target flex h-8 max-w-[140px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-line bg-card px-3 text-caption text-ink-500 shadow-btn transition-colors hover:text-ink-800 disabled:cursor-wait disabled:opacity-60 md:max-w-none"
             >
               <Icon name="logout" size={14} className="shrink-0" />
               <span className="truncate">{username ? t('退出 {name}', { name: username }) : t('退出')}</span>
@@ -230,7 +230,7 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
           ) : (
             <Link
               to="/login"
-              className="flex h-8 shrink-0 items-center whitespace-nowrap rounded-md bg-brand-600 px-3.5 text-caption font-medium text-on-accent shadow-btn-hi transition-[transform,background-color] duration-fast hover:bg-brand-700 active:scale-[0.98]"
+              className="touch-target flex h-8 shrink-0 items-center whitespace-nowrap rounded-md bg-brand-600 px-3.5 text-caption font-medium text-on-accent shadow-btn-hi transition-[transform,background-color] duration-fast hover:bg-brand-700 active:scale-[0.98]"
             >
               {t('登录')}
             </Link>

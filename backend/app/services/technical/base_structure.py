@@ -130,19 +130,30 @@ def _candidate(window: dict[str, list], dates: Sequence[str]) -> dict[str, Any] 
     touch_quality = _clamp01(len(resistance_cluster) / 4.0)
     tightness = _clamp01(1.0 - width_atr / 12.0)
     duration = _clamp01((size - BASE_MIN_DAYS) / 40.0 + 0.4)
-    atr_quality = _clamp01(((atr_contraction if atr_contraction is not None else 0.0) + 0.2) / 0.6)
-    turnover_quality = _clamp01(((turnover_contraction if turnover_contraction is not None else 0.0) + 0.2) / 0.6)
+    atr_quality = (
+        _clamp01((atr_contraction + 0.2) / 0.6)
+        if atr_contraction is not None else None
+    )
+    turnover_quality = (
+        _clamp01((turnover_contraction + 0.2) / 0.6)
+        if turnover_contraction is not None else None
+    )
     support_quality = _clamp01(len(support_cluster) / 3.0) if support_cluster else 0.35
     higher_low = (
         _clamp01(0.5 + (low_pivots[-1][1] - low_pivots[-2][1]) / atr * 0.2)
         if len(low_pivots) >= 2
         else 0.5
     )
-    quality = (
-        tightness * 0.25 + duration * 0.15 + touch_quality * 0.15
-        + turnover_quality * 0.15 + atr_quality * 0.10
-        + support_quality * 0.10 + higher_low * 0.10
+    # Unobserved contractions do not participate in candidate ranking either.
+    quality_components = (
+        (tightness, 0.25), (duration, 0.15), (touch_quality, 0.15),
+        (turnover_quality, 0.15), (atr_quality, 0.10),
+        (support_quality, 0.10), (higher_low, 0.10),
     )
+    active_weight = sum(weight for value, weight in quality_components if value is not None)
+    quality = sum(
+        value * weight for value, weight in quality_components if value is not None
+    ) / active_weight
     pivot_source = {
         "base_start": dates[0], "base_end": dates[-1],
         "resistance_low": round(resistance_low, 6),
@@ -174,14 +185,13 @@ def _candidate(window: dict[str, list], dates: Sequence[str]) -> dict[str, Any] 
             "tightness_quality": round(tightness * 100, 2),
             "duration_quality": round(duration * 100, 2),
             "resistance_touch_quality": round(touch_quality * 100, 2),
-            "turnover_contraction_quality": round(turnover_quality * 100, 2),
-            "atr_contraction_quality": round(atr_quality * 100, 2),
+            "turnover_contraction_quality": round(turnover_quality * 100, 2) if turnover_quality is not None else None,
+            "atr_contraction_quality": round(atr_quality * 100, 2) if atr_quality is not None else None,
             "support_integrity": round(support_quality * 100, 2),
             "higher_low_quality": round(higher_low * 100, 2),
         },
-        # 七维里有几维是实测（其余走保守默认值顶位）：紧致/持续/触碰必有，
-        # 量能收缩、ATR 收缩、支撑聚类、低点抬升可能缺数据。默认值刻意压在
-        # 中位以下不抬分，但读者需要知道这个分是几维数据撑起来的。
+        # 七维的实测覆盖度：缺失的收缩指标不参与加权；支撑聚类与
+        # 低点抬升仍沿用保守默认值，并在 missing 中如实标注。
         "quality_coverage": {
             "observed": 3
             + int(turnover_contraction is not None)

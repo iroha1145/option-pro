@@ -406,7 +406,7 @@ def test_sector_iv_uses_massive_price_then_yahoo_for_uncovered_symbols(
         "snapshot_batch",
         lambda symbols: {
             "AAA": {
-                "minute": {"c": 101.25},
+                "minute": {"c": 101.25, "t": 1784907600000},
                 "day_close": 100.0,
             }
         },

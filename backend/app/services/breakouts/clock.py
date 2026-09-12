@@ -95,8 +95,6 @@ class MarketClock:
 
         if trading_today and minutes < 20 * 60:
             trading_date = today
-        elif trading_today and minutes < 4 * 60:
-            trading_date = today
         else:
             trading_date = _next_trading_day(today)
 
