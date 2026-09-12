@@ -592,22 +592,21 @@ test("hide then restore from the object list", async ({ page }) => {
 
 test("undo color text lock delete then refresh", async ({ page }) => {
   test.skip(!HAS_REAL_BACKEND, "stock drawings visual path needs OPTIX_VISUAL_BASE_URL");
+  test.setTimeout(120_000);
   await openStock(page);
   await resetDrawingScope(page);
   await placeHorizontal(page, 0.5, 0.4);
+  // POST 409 / 未同步时 GET 会一直 n=0；等对象真正进账户再锁，避免锁到空 scope。
+  await waitOneUnlockedDrawing(page);
   await expandChart(page);
   const row = drawingRows(page).first();
-  // Create must land before lock: a PUT 404 while still-local is conflict, not idle.
-  // 锁状态轮询打的是真服务器：热桶下诚实 Retry-After 是 1–3s，但 20s 窗口可能
-  // 整段落在热窗里；45s 跨过 60s 滚动桶的冷却期（本地连跑三次实测 20s 不够）。
-  await expect.poll(async () => drawingsLockState(await listDrawings(page)), { timeout: 45_000 }).toBe("unlocked");
+  await expect(row).toHaveCount(1);
   await toolButton(page, "锁定").first().click();
   await expect(row).toContainText("已锁定");
-  await expect.poll(async () => drawingsLockState(await listDrawings(page)), { timeout: 45_000 }).toBe("locked");
+  await waitOneDrawing(page, true);
   await toolButton(page, "撤销").first().click();
   await expect(row).not.toContainText("已锁定");
-  // 不读工具条文案（同步标签会改）：等 GET 上的 locked 落地再刷新。
-  await expect.poll(async () => drawingsLockState(await listDrawings(page)), { timeout: 45_000 }).toBe("unlocked");
+  await waitOneDrawing(page, false);
   await page.reload({ waitUntil: "domcontentloaded" });
   await waitDrawingToolbar(page);
   await expectDrawingCount(page, 1);
