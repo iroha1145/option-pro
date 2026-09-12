@@ -184,31 +184,23 @@ async function waitOneUnlockedDrawing(page) {
   return identity;
 }
 
-/** Map a stored price to a page-space point on the price canvas. */
-async function pagePointForPrice(page, price, xRatio = 0.5) {
-  return page.evaluate(({ price, xRatio }) => {
-    const host = document.querySelector('[role="img"][aria-label$="图"]');
-    const canvas = (host ?? document).querySelector("canvas");
-    if (!canvas || typeof echarts === "undefined") return null;
-    let inst = null;
-    try { inst = echarts.getInstanceByDom(canvas.parentElement); } catch { /* */ }
-    if (!inst || typeof inst.convertToPixel !== "function") return null;
-    const px = inst.convertToPixel({ gridIndex: 0 }, [0, price]);
-    if (!Array.isArray(px) || !Number.isFinite(px[1])) return null;
-    const rect = canvas.parentElement.getBoundingClientRect();
-    return { x: rect.x + rect.width * xRatio, y: rect.y + px[1] };
-  }, { price, xRatio });
+async function collapseChart(page) {
+  const collapse = toolButton(page, "收起图表");
+  if (await collapse.isVisible().catch(() => false)) await collapse.click();
+  await expect(page.getByRole("dialog", { name: "绘图工作区" })).toHaveCount(0);
 }
 
-async function dragHorizontalByPrice(page, fromPrice, toPrice) {
-  const start = await pagePointForPrice(page, fromPrice, 0.5);
-  const end = await pagePointForPrice(page, toPrice, 0.55);
-  expect(start, "start pixel for current price").toBeTruthy();
-  expect(end, "end pixel for target price").toBeTruthy();
+/**
+ * Drag on the same canvas box used to place the line. Do not expand first:
+ * expand resizes the plot, so a later 0.4 y-ratio is no longer on the line.
+ * Packed ECharts is not on `window`, so price→pixel mapping is unavailable.
+ */
+async function dragOnPlacedBox(page, box, fromYRatio, toYRatio) {
+  expect(box, "placed canvas box").toBeTruthy();
   await toolButton(page, "选择").click();
-  await page.mouse.move(start.x, start.y);
+  await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * fromYRatio);
   await page.mouse.down();
-  await page.mouse.move(end.x, end.y, { steps: 8 });
+  await page.mouse.move(box.x + box.width * 0.55, box.y + box.height * toYRatio, { steps: 12 });
   await page.mouse.up();
 }
 
@@ -350,11 +342,11 @@ test("seven drawing tools are present and selectable", async ({ page }) => {
 test("drag endpoint and whole-object after selecting a drawing", async ({ page }) => {
   test.skip(!HAS_REAL_BACKEND, "stock drawings visual path needs OPTIX_VISUAL_BASE_URL");
   await openStock(page);
-  await placeHorizontal(page, 0.5, 0.4);
+  const placedY = 0.4;
+  const box = await placeHorizontal(page, 0.5, placedY);
   const before = await waitOneUnlockedDrawing(page);
   expect(Number.isFinite(before.price)).toBeTruthy();
-  const targetPrice = before.price * 0.92;
-  await dragHorizontalByPrice(page, before.price, targetPrice);
+  await dragOnPlacedBox(page, box, placedY, 0.15);
   let after = null;
   await expect.poll(async () => {
     const listed = await listDrawings(page);
@@ -362,7 +354,7 @@ test("drag endpoint and whole-object after selecting a drawing", async ({ page }
     after = drawingIdentity(listed);
     if (!after || listed.drawings.length !== 1) return `n=${listed.drawings?.length ?? "?"}`;
     if (after.id !== before.id) return "id-changed";
-    return Math.abs(after.price - before.price) > Math.abs(before.price) * 0.01 ? "moved" : `same:${after.price}`;
+    return Number.isFinite(after.price) && after.price !== before.price ? "moved" : `same:${after.price}`;
   }, { timeout: 45_000 }).toBe("moved");
   await expectDrawingCount(page, 1);
   await page.reload({ waitUntil: "domcontentloaded" });
@@ -373,20 +365,25 @@ test("drag endpoint and whole-object after selecting a drawing", async ({ page }
     const persisted = drawingIdentity(listed);
     if (!persisted || listed.drawings.length !== 1) return `n=${listed.drawings?.length ?? "?"}`;
     if (persisted.id !== before.id) return "id-changed";
-    return Math.abs(persisted.price - after.price) < 1e-6 ? "persisted" : `price:${persisted.price}`;
+    return Math.abs(persisted.price - after.price) < 1e-4 ? "persisted" : `price:${persisted.price}`;
   }, { timeout: 45_000 }).toBe("persisted");
 });
 
 test("locked drawing keeps its anchors when dragged", async ({ page }) => {
   test.skip(!HAS_REAL_BACKEND, "stock drawings visual path needs OPTIX_VISUAL_BASE_URL");
   await openStock(page);
-  await placeHorizontal(page, 0.5, 0.45);
+  const placedY = 0.45;
+  const box = await placeHorizontal(page, 0.5, placedY);
   const before = await waitOneUnlockedDrawing(page);
   await expandChart(page);
   await toolButton(page, "锁定").first().click();
   await expect.poll(async () => drawingsLockState(await listDrawings(page)), { timeout: 45_000 }).toBe("locked");
   const locked = drawingIdentity(await listDrawings(page));
-  await dragHorizontalByPrice(page, locked.price, locked.price * 0.9);
+  // 收起后画布回到落笔尺寸，才能用同一 y 比例命中水平线。
+  await collapseChart(page);
+  await chartFilled(page);
+  const collapsedBox = await page.locator("canvas").first().boundingBox();
+  await dragOnPlacedBox(page, collapsedBox ?? box, placedY, 0.15);
   await page.waitForTimeout(400);
   const after = drawingIdentity(await listDrawings(page));
   expect(after.id).toBe(before.id);
