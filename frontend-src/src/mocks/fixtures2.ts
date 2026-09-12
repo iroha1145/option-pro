@@ -872,25 +872,50 @@ export function getOptionChain(ticker: string, expiration?: string): OptionChain
 }
 
 /* ---------------- AI 任务 ---------------- */
-const jobs = new Map<string, AiJob & { _born: number; _ticker: string }>();
+const jobs = new Map<string, AiJob & { _born: number; _ticker: string; _expiration: string }>();
 
-export function createAiJob(kind: AiJob['kind'], payloadLabel = ''): AiJob {
+export function createAiJob(
+  kind: AiJob['kind'],
+  payloadLabel = '',
+  extras: { ticker?: string; expiration?: string; result?: unknown } = {},
+): AiJob {
   const id = `job-${Date.now().toString(36)}-${jobs.size + 1}`;
   const now = new Date().toISOString();
-  const job: AiJob & { _born: number; _ticker: string } = {
+  const ticker = extras.ticker ?? (kind === 'earnings-impact' ? payloadLabel.toUpperCase() : '');
+  const job: AiJob & { _born: number; _ticker: string; _expiration: string } = {
     id,
     kind,
     status: 'queued',
     progress: 0,
     createdAt: now,
     updatedAt: now,
-    result: '',
+    result: extras.result ?? payloadLabel ?? '',
     _born: Date.now(),
-    _ticker: kind === 'earnings-impact' ? payloadLabel.toUpperCase() : '',
+    _ticker: ticker.toUpperCase(),
+    _expiration: extras.expiration ?? '',
   };
-  if (payloadLabel) job.result = payloadLabel;
+  if (payloadLabel && extras.result === undefined) job.result = payloadLabel;
   jobs.set(id, job);
   return { ...job };
+}
+
+export function getLatestAiJob(
+  kind: AiJob['kind'],
+  ticker: string,
+  expiration?: string,
+): AiJob {
+  const symbol = ticker.toUpperCase();
+  const matches = [...jobs.values()].filter(
+    (job) =>
+      job.kind === kind &&
+      job._ticker === symbol &&
+      (expiration === undefined || job._expiration === expiration),
+  );
+  const latest = matches.sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
+  if (!latest) {
+    throw new ApiError(409, __t('尚未生成分析'), { bizCode: 'analysis_required' });
+  }
+  return getAiJob(latest.id);
 }
 
 export function getAiJob(id: string): AiJob {
@@ -909,7 +934,7 @@ export function getAiJob(id: string): AiJob {
     }
   }
   job.updatedAt = new Date().toISOString();
-  const { _born, _ticker, ...pub } = job;
+  const { _born, _ticker, _expiration, ...pub } = job;
   void _born;
   void _ticker;
   return pub;
@@ -966,6 +991,9 @@ export interface NewsImpactResult {
   headlineSummary: string;
   causalSummary: string;
   trustedStockImpacts: TrustedStockImpact[];
+  keyFactors?: string[];
+  uncertaintyNotes?: string[];
+  affectedSectors?: string[];
   model: string;
   generatedAt: string;
 }

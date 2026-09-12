@@ -4,7 +4,7 @@
  * 完整术语、精确行权价、独立报价明细；移动端按同一数据重排。
  * owner：「AI 期权解读」（option_alerts 任务 + 轮询 + 确认费用）；visitor 隐藏
  */
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { isMock } from '@/api/client';
 import { optionsApi } from '@/api/modules/options';
 import { aiJobsApi } from '@/api/modules/ai-jobs';
@@ -81,9 +81,10 @@ function AiOptionInsight({
   expiration: string | null;
   chain: OptionChain | null;
 }) {
-  const { isOwner } = useAccess();
-  const { job, error, queryIssue, starting, start, cancel, resume, reset } = useAiJob();
+  const { isOwner, aiEnabled, aiAvailable } = useAccess();
+  const { job, error, queryIssue, starting, start, cancel, resume, reset, adopt } = useAiJob();
   const [confirming, setConfirming] = useState(false);
+  const [hydrating, setHydrating] = useState(true);
   /* 提交那一刻的到期日与证据数快照：结果脚注只认它。轮询会刷新 chain、
      父层切换会换 expiration——用渲染期的值标注既成结果，会把已付费的
      解读错误归属到另一个到期周。 */
@@ -108,6 +109,30 @@ function AiOptionInsight({
   const result =
     job?.status === 'succeeded' ? parseOptionAlertResult(job.result) : null;
 
+  useEffect(() => {
+    if (!isOwner || !expiration) {
+      setHydrating(false);
+      return;
+    }
+    let dead = false;
+    setHydrating(true);
+    void aiJobsApi
+      .getLatestOptionAlerts(ticker, expiration)
+      .then((latest) => {
+        if (!dead && latest) {
+          setSubmitted({ expiration, evidenceCount: 0 });
+          adopt(latest);
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (!dead) setHydrating(false);
+      });
+    return () => {
+      dead = true;
+    };
+  }, [adopt, expiration, isOwner, ticker]);
+
   if (!isOwner) return null;
 
   const running =
@@ -115,7 +140,23 @@ function AiOptionInsight({
     (job.status === 'queued' ||
       job.status === 'in_progress' ||
       job.status === 'running');
-  const hasEvidence = Boolean(chain && expiration && evidence.length > 0);
+  const hasEvidence = Boolean(activeChain && expiration && evidence.length > 0);
+  const submitInsight = (force: boolean) => {
+    if (!activeChain || !expiration || evidence.length === 0 || !aiAvailable) return;
+    setSubmitted({ expiration, evidenceCount: evidence.length });
+    void start(() =>
+      aiJobsApi.createOptionAlerts({
+        tickers: [ticker],
+        alerts: evidence,
+        force,
+        ...(activeChain.spot !== null
+          ? { underlyingPrice: activeChain.spot }
+          : {}),
+        expiration,
+      }),
+    );
+  };
+  const canStart = aiAvailable && !job && !starting && !confirming && !hydrating;
   return (
     <div className="mt-4 rounded-md border border-ai-600/25 bg-ai-50 p-3.5">
       <div className="flex items-center justify-between gap-3">
@@ -123,7 +164,7 @@ function AiOptionInsight({
           <Icon name="spark-ai" size={15} className="text-ai-600" />
           {t('AI 期权解读')}
         </p>
-        {!job && !starting && !confirming && (
+        {canStart && (
           <button
             onClick={() => setConfirming(true)}
             disabled={!hasEvidence}
@@ -138,6 +179,14 @@ function AiOptionInsight({
           </button>
         )}
       </div>
+      {!aiAvailable && !job && !hydrating && (
+        <p className="mt-2.5 text-caption text-ink-500">
+          {aiEnabled ? t('AI 分析暂不可用') : t('AI 分析未启用')}
+          {aiEnabled
+            ? t('暂时无法生成新分析，已有分析仍可查看。')
+            : t('分析生成已关闭，已有分析仍可查看。')}
+        </p>
+      )}
 
       {!job && !confirming && chain && evidence.length === 0 && (
         <p className="mt-2.5 text-caption text-ink-500">
@@ -145,8 +194,10 @@ function AiOptionInsight({
         </p>
       )}
 
-      {!job && starting && (
-        <p className="mt-2.5 text-caption text-ink-500">{t('正在准备解读…')}</p>
+      {!job && (starting || hydrating) && (
+        <p className="mt-2.5 text-caption text-ink-500">
+          {hydrating ? t('正在读取已有分析…') : t('正在准备解读…')}
+        </p>
       )}
       {!job && confirming && (
         <div className="mt-2.5">
@@ -157,21 +208,10 @@ function AiOptionInsight({
             <button
               onClick={() => {
                 setConfirming(false);
-                if (!activeChain || !expiration || evidence.length === 0) return;
-                setSubmitted({ expiration, evidenceCount: evidence.length });
-                void start(() =>
-                  aiJobsApi.createOptionAlerts({
-                    tickers: [ticker],
-                    alerts: evidence,
-                    // 标的现价缺失时不发 0：契约里它是可选字段。
-                    ...(activeChain.spot !== null
-                      ? { underlyingPrice: activeChain.spot }
-                      : {}),
-                    expiration,
-                  }),
-                );
+                submitInsight(false);
               }}
-              className="rounded-md bg-ai-600 px-3 py-1.5 text-caption font-medium text-on-accent shadow-btn-hi hover:brightness-105"
+              disabled={starting}
+              className="rounded-md bg-ai-600 px-3 py-1.5 text-caption font-medium text-on-accent shadow-btn-hi hover:brightness-105 disabled:cursor-wait disabled:opacity-60"
             >
               {t('生成解读')}
             </button>
@@ -260,17 +300,21 @@ function AiOptionInsight({
           <p className="mt-2 text-micro text-ink-400">
             {/* 只认提交快照：渲染期的 expiration/evidence 会随切换与轮询漂移 */}
             {t('到期日 {date}', { date: submitted?.expiration ?? expiration ?? '—' })}
-            {t(' · 异动记录 {n} 条', { n: submitted?.evidenceCount ?? evidence.length })}
+            {submitted?.evidenceCount
+              ? t(' · 异动记录 {n} 条', { n: submitted.evidenceCount })
+              : ''}
           </p>
-          <button
-            onClick={() => {
-              setSubmitted(null);
-              reset();
-            }}
-            className="mt-2 text-caption font-medium text-ai-600 hover:text-ai-600/80"
-          >
-            {t('重新生成')}
-          </button>
+          {aiAvailable && (
+            <button
+              onClick={() => {
+                reset();
+                submitInsight(true);
+              }}
+              className="mt-2 text-caption font-medium text-ai-600 hover:text-ai-600/80"
+            >
+              {t('重新生成')}
+            </button>
+          )}
         </div>
       )}
 
@@ -279,15 +323,33 @@ function AiOptionInsight({
           <p className="text-caption text-down-700">
             {t('分析已完成，但没有返回可展示的结果。')}
           </p>
-          <button onClick={reset} className="mt-2 text-caption font-medium text-ai-600">
-            {t('重新生成')}
-          </button>
+          {aiAvailable && (
+            <button
+              onClick={() => {
+                reset();
+                submitInsight(true);
+              }}
+              className="mt-2 text-caption font-medium text-ai-600"
+            >
+              {t('重新生成')}
+            </button>
+          )}
         </div>
       )}
       {(job?.status === 'failed' || job?.status === 'cancelled') && (
         <p className="mt-2.5 text-caption text-ink-500">
           {t('任务')}{job.status === 'failed' ? t('失败') : t('已取消')} ·{' '}
-          <button onClick={reset} className="font-medium text-ai-600">{t('重试')}</button>
+          {aiAvailable && (
+            <button
+              onClick={() => {
+                reset();
+                submitInsight(true);
+              }}
+              className="font-medium text-ai-600"
+            >
+              {t('重试')}
+            </button>
+          )}
           {job.status === 'failed' && job.errorDetail && (
             /* owner 排障线索（非 owner 后端置空不渲染）：命中的校验规则/字段 */
             <span className="mt-1 block break-all font-mono text-micro text-ink-400">

@@ -226,6 +226,7 @@ export const MOCKS: Dict = {
     'モデル出力の検証に失敗しました。force 指定で再試行できます。',
   ],
   '新闻不存在': ['News item not found', 'ニュースが見つかりません'],
+  '尚未生成分析': ['No analysis has been generated yet', '分析はまだ生成されていません'],
 
   /* fixtures2.ts：经济日历（getEconomicCalendar） */
   '纽约联储制造业指数': ['NY Fed Manufacturing Index', 'ニューヨーク連銀製造業景気指数'],

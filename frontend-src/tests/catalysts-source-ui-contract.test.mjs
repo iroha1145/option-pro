@@ -359,3 +359,46 @@ test('经济日历按浏览器本地自然日请求前三天并传递时区偏�
   );
   assert.match(panel, /useCalendarResource\(\)/);
 });
+
+test('news impact mapping keeps a zero score as neutral and does not treat cancel as failure', () => {
+  const { exports } = loadCatalystsModule();
+
+  assert.deepEqual(
+    exports.mapNewsStockImpact({
+      ticker: 'NVDA',
+      impact_score: 0,
+      horizon: 'intraday',
+      mechanism: 'direct_company',
+      reason: '事件本身中性。',
+    }),
+    {
+      ticker: 'NVDA',
+      direction: 'neutral',
+      impactScore: 0,
+      horizon: 'intraday',
+      mechanism: 'direct_company',
+      reason: '事件本身中性。',
+    },
+  );
+  assert.equal(exports.mapNewsStockImpact({ ticker: 'NVDA' }), null);
+  assert.equal(exports.nAnalysisStatus('canceled'), 'pending');
+  assert.equal(exports.nAnalysisStatus('cancelled'), 'pending');
+  assert.equal(exports.nAnalysisStatus('failed'), 'failed');
+  assert.equal(exports.nAnalysisStatus('completed'), 'completed');
+});
+
+test('news drawer shows Chinese horizon or mechanism labels and extra impact fields', () => {
+  const drawer = fs.readFileSync(
+    path.join(sourceRoot, 'components', 'catalysts', 'NewsDrawer.tsx'),
+    'utf8',
+  );
+  assert.match(drawer, /HORIZON_LABEL/);
+  assert.match(drawer, /MECHANISM_LABEL/);
+  assert.match(drawer, /intraday/);
+  assert.match(drawer, /direct_company/);
+  assert.match(drawer, /affectedSectors/);
+  assert.match(drawer, /keyFactors/);
+  assert.match(drawer, /uncertaintyNotes/);
+  assert.match(drawer, /关键因素/);
+  assert.match(drawer, /不确定性/);
+});

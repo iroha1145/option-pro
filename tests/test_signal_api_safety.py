@@ -466,3 +466,92 @@ def test_stock_signal_snapshot_uses_saved_time_instead_of_current_time(
     assert payload["snapshot_saved_at"] == "2023-11-14T22:13:20+00:00"
     assert payload["as_of"] == payload["snapshot_saved_at"]
     assert payload["_stale"] is True
+
+
+class _SignalJobRepository:
+    def __init__(self, *, active=None, completed=None, latest=None):
+        self._active = active
+        self._completed = completed
+        self._latest = latest
+
+    def public(self, row, *, cached=False):
+        return {**row, "cached": cached}
+
+    def active_for_ticker(self, job_type, ticker):
+        assert job_type == "signal_analysis"
+        assert ticker == "AAPL"
+        return self._active
+
+    def latest_completed(self, job_type, ticker):
+        assert job_type == "signal_analysis"
+        assert ticker == "AAPL"
+        return self._completed
+
+    def latest_for_ticker(self, job_type, ticker):
+        assert job_type == "signal_analysis"
+        assert ticker == "AAPL"
+        return self._latest
+
+
+def test_get_stock_ai_analysis_returns_409_when_no_job_exists(monkeypatch):
+    monkeypatch.setattr(signals, "_job_repository", lambda: _SignalJobRepository())
+
+    response = asyncio.run(signals.get_stock_ai_analysis("aapl"))
+
+    assert response.status_code == 409
+    payload = response.body
+    if isinstance(payload, (bytes, bytearray)):
+        import json
+
+        payload = json.loads(payload)
+    assert payload["status"] == "analysis_required"
+    assert payload["ticker"] == "AAPL"
+
+
+def test_get_stock_ai_analysis_prefers_active_then_completed(monkeypatch):
+    active = {
+        "job_id": "aij_active01",
+        "job_type": "signal_analysis",
+        "status": "in_progress",
+        "error_detail": "owner-only-secret",
+    }
+    completed = {
+        "job_id": "aij_done0001",
+        "job_type": "signal_analysis",
+        "status": "completed",
+        "error_detail": None,
+    }
+    monkeypatch.setattr(
+        signals,
+        "_job_repository",
+        lambda: _SignalJobRepository(active=active, completed=completed),
+    )
+
+    payload = asyncio.run(signals.get_stock_ai_analysis("AAPL"))
+
+    assert payload["job_id"] == "aij_active01"
+    assert payload["cached"] is False
+    assert payload["error_detail"] == "owner-only-secret"
+
+
+def test_get_stock_ai_analysis_hides_error_detail_from_visitors(monkeypatch):
+    failed = {
+        "job_id": "aij_failed01",
+        "job_type": "signal_analysis",
+        "status": "failed",
+        "error_detail": "schema boom",
+    }
+    monkeypatch.setattr(
+        signals,
+        "_job_repository",
+        lambda: _SignalJobRepository(latest=failed),
+    )
+
+    async def scenario():
+        with request_owner_access_context(False):
+            return await signals.get_stock_ai_analysis("AAPL")
+
+    payload = asyncio.run(scenario())
+
+    assert payload["job_id"] == "aij_failed01"
+    assert payload["error_detail"] is None

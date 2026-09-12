@@ -81,22 +81,37 @@ function pickId(r: Rec, ...keys: string[]): string | null {
   return n !== null ? String(n) : null;
 }
 
-function nStockImpact(v: unknown): TrustedStockImpact | null {
+export function mapNewsStockImpact(v: unknown): TrustedStockImpact | null {
   const r = asRec(v);
   const ticker = pickS(r, 'ticker');
   const backendImpactScore = pickN(r, 'impactScore', 'impact_score');
   // 个人版 NewsStockImpact 没有 direction/classification；有符号 impact_score 是唯一方向事实。
-  // 后端范围 [-100,100]，统一映射为界面使用的 [-5,5]，避免真实数据全部挤在端点。
-  if (!ticker || backendImpactScore === null || backendImpactScore === 0) return null;
+  // 后端范围 [-100,100]，统一映射为界面使用的 [-5,5]。0 是中性结论，不能丢掉。
+  if (!ticker || backendImpactScore === null) return null;
   const impactScore = fromBackendImpact(backendImpactScore);
   return {
     ticker,
-    direction: backendImpactScore > 0 ? 'bullish' : 'bearish',
+    direction:
+      backendImpactScore > 0 ? 'bullish' : backendImpactScore < 0 ? 'bearish' : 'neutral',
     impactScore,
     horizon: pickS(r, 'horizon') ?? '',
     mechanism: pickS(r, 'mechanism') ?? '',
     reason: pickS(r, 'reason', 'reason_zh', 'why') ?? '',
   };
+}
+
+function nStockImpact(v: unknown): TrustedStockImpact | null {
+  return mapNewsStockImpact(v);
+}
+
+function stringList(r: Rec, ...keys: string[]): string[] {
+  for (const key of keys) {
+    const value = r[key];
+    if (Array.isArray(value)) {
+      return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+    }
+  }
+  return [];
 }
 
 function nImpact(v: unknown): NewsImpactResult | null {
@@ -112,18 +127,22 @@ function nImpact(v: unknown): NewsImpactResult | null {
     trustedStockImpacts: unwrap(r, 'trustedStockImpacts', 'trusted_stock_impacts', 'affected_stocks')
       .map(nStockImpact)
       .filter((x): x is TrustedStockImpact => x !== null),
+    keyFactors: stringList(r, 'keyFactors', 'key_factors'),
+    uncertaintyNotes: stringList(r, 'uncertaintyNotes', 'uncertainty_notes'),
+    affectedSectors: stringList(r, 'affectedSectors', 'affected_sectors'),
     model: pickS(r, 'model') ?? '',
     generatedAt: pickS(r, 'generatedAt', 'generated_at') ?? '',
   };
 }
 
-function nAnalysisStatus(v: unknown): CatalystNewsItem['analysisStatus'] {
+export function nAnalysisStatus(v: unknown): CatalystNewsItem['analysisStatus'] {
   const s = String(v ?? 'pending');
   // 契约活跃态归一（processing/running → in_progress；preparing → pending）
   // 个人版匿名态只回 not_requested|completed：not_requested 视作「未分析」
   if (s === 'not_requested' || s === 'preparing') return 'pending';
   if (s === 'processing' || s === 'running' || s === 'cancel_requested') return 'in_progress';
-  if (s === 'canceled') return 'failed';
+  // 已取消不是失败：回到未分析，读者可以重新生成。
+  if (s === 'canceled' || s === 'cancelled') return 'pending';
   if (s === 'queued' || s === 'in_progress' || s === 'completed' || s === 'insufficient_context' || s === 'failed' || s === 'pending') return s;
   return 'pending';
 }

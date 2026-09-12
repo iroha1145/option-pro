@@ -1,5 +1,5 @@
 /** AI 任务域：POST /api/ai/jobs/* · GET /api/ai/jobs/{id} · POST /cancel */
-import { ApiError, get, idFromLocation, mockOr, postCreate, post } from '../client';
+import { ApiError, get, idFromLocation, mockOr, postCreate, post, toQuery } from '../client';
 import {
   aiJobResultSummary,
   normalizeAiJob,
@@ -56,7 +56,11 @@ export const aiJobsApi = {
     expiration?: string;
   }): Promise<AiJob> =>
     mockOr(
-      () => fx2.createAiJob('option-alerts', params.tickers.join(',')),
+      () =>
+        fx2.createAiJob('option-alerts', params.tickers.join(','), {
+          ticker: params.tickers[0],
+          expiration: params.expiration,
+        }),
       // 契约：{ticker, force, alerts, underlying_price, expiration}
       () =>
         postAiJob('/ai/jobs/option-alerts', {
@@ -67,6 +71,26 @@ export const aiJobsApi = {
           ...(params.expiration !== undefined ? { expiration: params.expiration } : {}),
         }),
     ),
+  getLatestOptionAlerts: async (ticker: string, expiration?: string): Promise<AiJob | null> => {
+    try {
+      return await mockOr(
+        () => fx2.getLatestAiJob('option-alerts', ticker, expiration),
+        () =>
+          get(
+            `/ai/jobs/latest?${toQuery({
+              job_type: 'option_alerts',
+              ticker,
+              expiration,
+            })}`,
+          ).then((d) => normalizeAiJob(d)),
+      );
+    } catch (error) {
+      if (error instanceof ApiError && (error.code === 409 || error.bizCode === 'analysis_required')) {
+        return null;
+      }
+      throw error;
+    }
+  },
   get: (id: string): Promise<AiJob> =>
     mockOr(() => fx2.getAiJob(id), () => get(`/ai/jobs/${encodeURIComponent(id)}`).then((d) => normalizeAiJob(d, id))),
   cancel: (id: string): Promise<AiJob> =>

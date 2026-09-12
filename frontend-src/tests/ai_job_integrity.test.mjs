@@ -12,6 +12,7 @@ import {
   buildOptionAlertEvidence,
   parseOptionAlertResult,
 } from '../src/components/detail/optionAnalysis.ts';
+import { parseSignalAnalysisResult } from '../src/components/detail/signalAnalysis.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -115,4 +116,69 @@ test('production option panel contains no hard-coded completion conclusion', asy
   assert.match(source, /alerts: evidence/);
   assert.match(source, /underlyingPrice: activeChain\.spot/);
   assert.match(source, /expiration,/);
+  assert.match(source, /force,/);
+  assert.match(source, /aiAvailable/);
+  assert.match(source, /activeChain/);
+});
+
+function validSignalResult(overrides = {}) {
+  return {
+    output_language: 'zh-CN',
+    asset: 'AAPL',
+    horizon: '数日到数周',
+    dominant_regime: '区间整理',
+    trend_bias_confidence: 60,
+    top_risk_confidence: 40,
+    bottom_opportunity_confidence: 50,
+    dip_buy_quality: 55,
+    breakdown_risk: 35,
+    data_quality: 80,
+    final_bias: 'range_consolidation',
+    top_evidence: [],
+    bottom_evidence: [],
+    dip_buy_evidence: [],
+    bearish_evidence: [],
+    contradictions: [],
+    options_flow_read: {
+      net_direction: 'mixed',
+      confidence: 50,
+      bullish_flow_evidence: [],
+      bearish_flow_evidence: [],
+      unknown_or_neutral_flow: [],
+      warnings: [],
+    },
+    key_levels: {
+      support: [],
+      resistance: [],
+      vwap_levels: [],
+      options_levels: [],
+    },
+    confirmation_signals: [],
+    invalidation_signals: [],
+    event_risks: [],
+    data_quality_notes: [],
+    summary: '区间整理，等待方向确认。',
+    ...overrides,
+  };
+}
+
+test('signal analysis parser keeps the structured contract and rejects gaps', () => {
+  const result = validSignalResult();
+  assert.equal(parseSignalAnalysisResult(result)?.final_bias, 'range_consolidation');
+  assert.equal(parseSignalAnalysisResult(result)?.options_flow_read.net_direction, 'mixed');
+  assert.equal(parseSignalAnalysisResult({ ...result, summary: '' }), null);
+  assert.equal(parseSignalAnalysisResult({ ...result, final_bias: 'sideways' }), null);
+  assert.equal(parseSignalAnalysisResult({ summary: '只有摘要' }), null);
+});
+
+test('stock AI card hydrates existing jobs and renders structured fields', async () => {
+  const source = await readFile(
+    path.resolve(here, '..', 'src', 'components', 'detail', 'AiAnalysisCard.tsx'),
+    'utf8',
+  );
+  assert.match(source, /getLatestSignalAnalysisJob/);
+  assert.match(source, /parseSignalAnalysisResult/);
+  assert.match(source, /aiAvailable/);
+  assert.match(source, /isOwner && \(/);
+  assert.doesNotMatch(source, /accordion/);
 });

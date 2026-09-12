@@ -862,9 +862,32 @@ async def create_earnings_impact_job(
     )
 
 
+def _public_ai_job(row: dict, *, cached: bool = False) -> dict:
+    public = _job_repository().public(row, cached=cached)
+    if not current_request_is_owner():
+        public["error_detail"] = None
+    return public
+
+
 @router.post("/jobs/option-alerts")
 async def create_option_alert_job(req: AlertsRequest):
     _require_manual_submission()
+    if not req.force:
+        active = _job_repository().active_for_ticker(
+            "option_alerts",
+            req.ticker,
+            expiration=req.expiration,
+        )
+        if active is not None:
+            public = _public_ai_job(active)
+            return JSONResponse(
+                public,
+                status_code=202,
+                headers={
+                    "Location": f"/api/ai/jobs/{active['job_id']}",
+                    "Retry-After": "2",
+                },
+            )
     payload = OptionAlertJobRequest.model_validate(
         req.model_dump(mode="json", exclude={"force"})
     ).model_dump(mode="json")
@@ -873,7 +896,7 @@ async def create_option_alert_job(req: AlertsRequest):
         payload,
         force_retry=req.force,
     )
-    public = _job_repository().public(
+    public = _public_ai_job(
         row,
         cached=(not created and row["status"] == "completed"),
     )
@@ -881,6 +904,41 @@ async def create_option_alert_job(req: AlertsRequest):
         public,
         status_code=202,
         headers={"Location": f"/api/ai/jobs/{row['job_id']}", "Retry-After": "2"},
+    )
+
+
+@router.get("/jobs/latest")
+async def latest_ai_job(
+    job_type: Literal["option_alerts"],
+    ticker: Ticker,
+    expiration: Expiration = "",
+):
+    """Return the latest matching job; GET never creates paid work."""
+
+    repository = _job_repository()
+    symbol = ticker.upper()
+    expiration_key = expiration or None
+    active = repository.active_for_ticker(
+        job_type,
+        symbol,
+        expiration=expiration_key,
+    )
+    if active is not None:
+        return _public_ai_job(active)
+    latest = repository.latest_for_ticker(
+        job_type,
+        symbol,
+        expiration=expiration_key,
+    )
+    if latest is not None:
+        return _public_ai_job(latest, cached=latest.get("status") == "completed")
+    return JSONResponse(
+        {
+            "status": "analysis_required",
+            "ticker": symbol,
+            "message": "Create a persistent job with POST /api/ai/jobs/option-alerts",
+        },
+        status_code=409,
     )
 
 
@@ -909,7 +967,12 @@ async def cancel_ai_job(
     job_id: Annotated[str, Path(min_length=10, max_length=80)],
     req: CancelRequest,
 ):
+    if not req.confirm:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "confirmation_required", "message": "需要确认取消"},
+        )
     row = _job_repository().request_cancel(job_id)
     if not row:
         raise HTTPException(status_code=404, detail="AI job not found")
-    return _job_repository().public(row)
+    return _public_ai_job(row)
