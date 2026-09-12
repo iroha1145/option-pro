@@ -1,10 +1,8 @@
 import { defineConfig } from '@playwright/test';
-import { existsSync } from 'node:fs';
+import { resolveVenvPython } from './visual-tests/support/localPython.mjs';
 
-const localPython = new URL('../.venv/bin/python', import.meta.url);
 const pythonExecutable = process.env.SCREENER_FRESHNESS_PYTHON
-  || process.env.OPTIX_PYTHON_EXECUTABLE
-  || (existsSync(localPython) ? localPython.pathname : 'python3');
+  || resolveVenvPython(import.meta.url);
 
 export default defineConfig({
   testDir: './visual-tests',
