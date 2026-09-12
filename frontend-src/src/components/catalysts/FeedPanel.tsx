@@ -184,6 +184,7 @@ interface FeedPanelProps {
 
 export default function FeedPanel({ filters, onOpenNews, patches, onFeedResult, onClearFilters }: FeedPanelProps) {
   const q = useFeedResource(filters);
+  const { update } = q;
   const items = q.data?.items ?? [];
   const nextCursor = q.data?.nextCursor ?? null;
   const hiddenUnanalyzed = q.data?.hiddenUnanalyzed ?? 0;
@@ -204,7 +205,7 @@ export default function FeedPanel({ filters, onOpenNews, patches, onFeedResult, 
     setLoadingMore(false);
     setMoreError(null);
     return () => { generation.current += 1; };
-  }, [q.key]);
+  }, [q.key, q.enabled]);
 
   useEffect(() => {
     onFeedResult({ total: q.data?.total ?? null, ok: q.data !== null && !q.error && !q.restored,
@@ -213,7 +214,7 @@ export default function FeedPanel({ filters, onOpenNews, patches, onFeedResult, 
 
   useEffect(() => {
     if (!Object.keys(patches).length) return;
-    q.update((previous) => {
+    update((previous) => {
       if (!previous) return previous;
       let changed = false;
       const revised = previous.items.map((item) => {
@@ -223,10 +224,10 @@ export default function FeedPanel({ filters, onOpenNews, patches, onFeedResult, 
       });
       return changed ? { ...previous, items: revised } : previous;
     });
-  }, [patches, q.update]);
+  }, [patches, update]);
 
   const loadMore = useCallback(async () => {
-    if (!q.data || !q.data.nextCursor || pendingMore.current || q.refreshing) return;
+    if (!q.enabled || !q.data || !q.data.nextCursor || pendingMore.current || q.refreshing) return;
     const previous = q.data;
     const key = q.key;
     const requestGeneration = generation.current;
@@ -236,7 +237,7 @@ export default function FeedPanel({ filters, onOpenNews, patches, onFeedResult, 
     try {
       const page = await visibleFeedPage((cursor) => catalystsContract.feed({ ...toFeedQuery(filters), limit: PAGE_SIZE, cursor }), previous.nextCursor!);
       if (keyRef.current !== key || generation.current !== requestGeneration) return;
-      q.update((current) => current ? appendFeedPage(current, page) : current, previous);
+      update((current) => current ? appendFeedPage(current, page) : current, previous);
     } catch (cause) {
       if (keyRef.current !== key || generation.current !== requestGeneration) return;
       setMoreError(cause instanceof ApiError ? cause : new ApiError(500, __t('加载更多失败')));
@@ -246,7 +247,7 @@ export default function FeedPanel({ filters, onOpenNews, patches, onFeedResult, 
         setLoadingMore(false);
       }
     }
-  }, [q.data, q.key, q.refreshing, q.update, filters]);
+  }, [q.data, q.key, q.enabled, q.refreshing, update, filters]);
 
   const hasFilters =
     filters.ticker !== '' ||
@@ -326,7 +327,7 @@ export default function FeedPanel({ filters, onOpenNews, patches, onFeedResult, 
             {nextCursor ? (
               <button
                 onClick={() => void loadMore()}
-                disabled={loadingMore}
+                disabled={loadingMore || !q.enabled}
                 className="inline-flex items-center gap-2 rounded-md border border-line bg-card px-4 py-2 text-caption font-medium text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:opacity-60"
               >
                 {loadingMore && <span className="size-3.5 animate-spin rounded-full border-2 border-line-strong border-t-brand-600" aria-hidden="true" />}
@@ -338,7 +339,7 @@ export default function FeedPanel({ filters, onOpenNews, patches, onFeedResult, 
             {moreError && (
               <p className="mt-1.5 text-micro text-down-700">
                 {__t('加载更多失败：')}{moreError.message} ·{' '}
-                <button type="button" onClick={() => void loadMore()} className="font-medium underline underline-offset-2">
+                <button type="button" disabled={!q.enabled} onClick={() => void loadMore()} className="font-medium underline underline-offset-2">
                   {__t('重试')}
                 </button>
               </p>

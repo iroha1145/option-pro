@@ -38,10 +38,12 @@ export function mapIndices(body: unknown): IndexQuote[] {
   return unwrap(body, 'indices').flatMap((r) => {
     const price = pickN(r, 'price');
     const changePct = pickN(r, 'change_percent', 'changePct');
-    // 后端允许单个指数失败并返回 null；该行应隐藏，不能冒充为 0。
-    if (price === null || changePct === null) return [];
+    // 有价但缺昨收时仍保留价格；只有无有效价格的行才隐藏。
+    if (price === null || price <= 0) return [];
     // change 由 price 与 change_percent 反推（真实算术，非编造）
-    const change = Math.round(((price * changePct) / (100 + changePct)) * 100) / 100;
+    const change = changePct !== null && changePct > -100
+      ? Math.round(((price * changePct) / (100 + changePct)) * 100) / 100
+      : null;
     const symbol = quoteSymbol(pickS(r, 'symbol', 'code') ?? '');
     const mapped = INDEX_SYMBOL_MAP[symbol];
     return [{

@@ -69,6 +69,7 @@ export const MARKET: Dict = {
   '「{label}」{value}': ['{label} ({value})', '「{label}」{value}'],
   '主要指标：{items}。': ['Key indicators: {items}.', '主な指標：{items}。'],
   ' {flat} 平': [', {flat} unchanged', '・{flat}変わらず'],
+  '，{unknown} 个涨跌未知': [', {unknown} with unknown change', '・{unknown}騰落不明'],
   '，标普 500 报 {price}（{pct}）': [', S&P 500 at {price} ({pct})', '、S&P500は{price}（{pct}）'],
   '六维市场形态均值 {mean}': ['Six-factor regime average {mean}', '6因子レジーム平均 {mean}'],
   '，整体「{label}」': [', overall {label}', '、全体では「{label}」'],

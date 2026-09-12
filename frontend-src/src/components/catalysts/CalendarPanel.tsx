@@ -75,7 +75,7 @@ export default function CalendarPanel({ refreshToken }: { refreshToken: number }
           variant="error"
           icon="doc-quote"
           title={q.error.code === 503 ? __t('日历数据暂不可用') : __t('加载失败')}
-          description={__t("稍后刷新再试")}
+          description={q.error.message}
           action={
             <button
               onClick={() => q.refresh()}
@@ -94,6 +94,7 @@ export default function CalendarPanel({ refreshToken }: { refreshToken: number }
        卡片没法区分「没有事件」和「渲染坏了」。 */
     return (
       <div className="card-surface">
+        <CatalystCacheStatus {...cacheStatusProps(q)} />
         <EmptyState
           icon="doc-quote"
           title={__t('本窗口暂无经济事件')}

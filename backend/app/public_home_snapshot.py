@@ -497,7 +497,9 @@ def _validate_indices(payload: Mapping[str, Any]) -> bool:
             if change is not None:
                 return False
             continue
-        if not _finite_number(price, minimum=0.0000001) or not _finite_number(change):
+        if not _finite_number(price, minimum=0.0000001) or (
+            change is not None and not _finite_number(change)
+        ):
             return False
         succeeded += 1
     return bool(
@@ -600,7 +602,7 @@ def _validate_chart_for_ticker(
             or not isinstance(timestamp, int)
             or timestamp <= previous_time
             or not all(_finite_number(value, minimum=0.0000001) for value in prices)
-            or not _finite_number(bar.get("v", 0), minimum=0)
+            or not _optional_finite(bar.get("v"), minimum=0)
             or not isinstance(bar.get("ext"), bool)
             or not isinstance(bar.get("quote_only"), bool)
             or bar.get("session") != "regular"
@@ -855,12 +857,30 @@ def _valid_earnings_calendar_fields(row: Mapping[str, Any]) -> bool:
     for key, value in conflict.items():
         if key not in _EARNINGS_CALENDAR_SOURCES or key not in sources:
             return False
+        period_conflict = False
+        if isinstance(value, Mapping):
+            # Date-only conflicts keep their original string shape. A same-day
+            # fiscal-period conflict must carry the secondary report identity.
+            if set(value) != {"earnings_date", "quarter", "year"}:
+                return False
+            for field, low, high in (("quarter", 1, 4), ("year", 1900, 2200)):
+                other = value.get(field)
+                if other is not None and (
+                    isinstance(other, bool) or not isinstance(other, int)
+                    or not low <= other <= high
+                ):
+                    return False
+                if other is not None and row.get(field) is not None and other != row[field]:
+                    period_conflict = True
+            conflict_date = value.get("earnings_date")
+        else:
+            conflict_date = value
         try:
-            date.fromisoformat(str(value))
+            date.fromisoformat(str(conflict_date))
         except ValueError:
             return False
-        # 冲突记录的是「与主日期不同」的次源日期，静默相等没有意义。
-        if str(value) == str(row.get("earnings_date")):
+        # A conflict needs an actual date or known fiscal-period disagreement.
+        if str(conflict_date) == str(row.get("earnings_date")) and not period_conflict:
             return False
     return True
 

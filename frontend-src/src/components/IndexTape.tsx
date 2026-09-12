@@ -17,15 +17,15 @@ import { t } from '../i18n/core.ts';
 
 function TapeItem({ q, flash, onOpen }: { q: IndexQuote; flash: 'up' | 'down' | null; onOpen: (code: string) => void }) {
   /* 平盘用中性色，不画成上涨（审计 P2-8 同一口径）。 */
-  const tone = q.changePct > 0 ? 'up' : q.changePct < 0 ? 'down' : 'flat';
+  const tone = q.changePct === null ? 'unknown' : q.changePct > 0 ? 'up' : q.changePct < 0 ? 'down' : 'flat';
   return (
     <button
       type="button"
       onClick={() => onOpen(q.code)}
       title={t('查看大盘强弱 · {code}', { code: q.code })}
       aria-label={
-        tone === 'flat'
-          ? t('查看大盘强弱，{code} 最新价 {price}，{flat}', { code: q.code, price: fmtPrice(q.price), flat: t('持平') })
+        tone === 'flat' || tone === 'unknown'
+          ? t('查看大盘强弱，{code} 最新价 {price}，{flat}', { code: q.code, price: fmtPrice(q.price), flat: tone === 'unknown' ? t('涨跌数据缺失') : t('持平') })
           : t('查看大盘强弱，{code} 最新价 {price}，涨跌 {pct}', { code: q.code, price: fmtPrice(q.price), pct: fmtPct(q.changePct) })
       }
       className={cn(

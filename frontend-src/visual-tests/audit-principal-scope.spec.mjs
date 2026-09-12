@@ -4,7 +4,7 @@ import { expect, test } from '@playwright/test';
 // or another tab switching accounts. No synthetic React state or private hook is used.
 async function fixture(page, options = {}) {
   const state = { owner: false, username: null, failIdentity: false, holdWatchlist: false,
-    holdScans: false, held: [], reads: [], errors: [], ...options };
+    holdScans: false, unauthorized: false, holdPersonal: false, holdCalendar: false, calendarAvailable: false, feedAvailable: false, holdFeedNext: false, calendarEmpty: false, held: [], reads: [], errors: [], ...options };
   await page.addInitScript(() => localStorage.setItem('optix:locale', 'zh'));
   page.on('pageerror', error => state.errors.push(error.message));
   await page.route('**/*', route => ['127.0.0.1', 'localhost'].includes(new URL(route.request().url()).hostname) ? route.continue() : route.abort());
@@ -24,7 +24,27 @@ async function fixture(page, options = {}) {
     }
     if (path === '/api/ai/status') return route.fulfill({ json: { enabled: false } });
     if (path === '/api/runtime-settings') return route.fulfill({ json: { settings: { ai: { manual_analysis_enabled: false } } } });
-    if (path === '/api/account/watchlist') return route.fulfill({ json: { tickers: ['AAPL'], max_tickers: 50 } });
+    if (path === '/api/account/watchlist') {
+      if (state.unauthorized) return route.fulfill({ status: 401, json: { code: 'account_login_required', message: '请重新登录' } });
+      const json = { tickers: state.username === 'bob' ? ['MSFT'] : ['AAPL'], max_tickers: 50 };
+      if (state.holdPersonal) { state.held.push(() => route.fulfill({ json })); return; }
+      return route.fulfill({ json });
+    }
+    if (path === '/api/catalysts/feed' && state.feedAvailable) {
+      const next = url.searchParams.has('cursor');
+      const json = { items: [{ news_id: next ? 2 : 1, title_zh: `${principal} ${next ? '迟到分页' : '催化快照'}`,
+        summary_zh: '核验用新闻摘要', published_at: new Date().toISOString(), source: 'test', source_tickers: ['AAPL'] }],
+        next_cursor: next ? null : 'page-two', summary: { count: 2 } };
+      if (next && state.holdFeedNext) { state.held.push(() => route.fulfill({ json })); return; }
+      return route.fulfill({ json });
+    }
+    if (path === '/api/catalysts/calendar' && state.calendarAvailable) {
+      const json = { items: [{ event_id: 'test-event', country: 'US', title: `${principal} calendar`, impact: 'high',
+        scheduled_at: new Date().toISOString(), actual: '2.1', forecast: '2.0', previous: '1.9' }] };
+      if (state.calendarEmpty) json.items = [];
+      if (state.holdCalendar) { state.held.push(() => route.fulfill({ json })); return; }
+      return route.fulfill({ json });
+    }
     if (path === '/api/quotes') return route.fulfill({ json: { quotes: [], status: { enabled: false, allowed: false, connected: false } } });
     if (path === '/api/market/status') return route.fulfill({ json: { market: 'open', session: 'regular', is_open: true } });
     if (path === '/api/market/indices') return route.fulfill({ json: { indices: [] } });
@@ -121,5 +141,163 @@ test('explicit Home logout still navigates to Watchlist', async ({ page }) => {
   await expect(page).toHaveURL(/\/watchlist$/);
   await expect(page.getByRole('link', { name: '登录', exact: true })).toBeVisible();
   await expect(page.getByText('OWNER snapshot', { exact: true })).toHaveCount(0);
+  expect(state.errors).toEqual([]);
+});
+
+
+test('confirmed personal Watchlist keeps names prices and count on identity 503, pauses writes and retries identity', async ({ page }) => {
+  const state = await fixture(page, { username: 'alice' });
+  await page.goto('/watchlist');
+  const list = page.getByRole('region', { name: '自选列表', exact: true });
+  await expect(list.getByText('ALICE snapshot', { exact: true })).toBeVisible();
+  await expect(list.getByText('100.00', { exact: true })).toBeVisible();
+  await expect(list).toContainText('1 只标的');
+  state.failIdentity = true;
+  await focusAndVerify(page, 503);
+  await expect(list.getByText('ALICE snapshot', { exact: true })).toBeVisible();
+  await expect(list.getByText('100.00', { exact: true })).toBeVisible();
+  await expect(list).toContainText('1 只标的');
+  await expect(list.getByRole('button', { name: '管理自选', exact: true })).toBeDisabled();
+  await expect(list.getByRole('button', { name: '将 AAPL 移出自选', exact: true })).toBeDisabled();
+  await expect(list.getByText('身份暂时无法确认，请稍后重试', { exact: true })).toBeVisible();
+  const before = state.reads.filter(read => ['/api/account/watchlist', '/api/stocks/watchlist'].includes(read.path)).length;
+  await page.evaluate(() => { window.dispatchEvent(new Event('focus')); document.dispatchEvent(new Event('visibilitychange')); });
+  await expect.poll(() => state.reads.filter(read => read.path === '/api/access/status').length).toBeGreaterThan(2);
+  expect(state.reads.filter(read => ['/api/account/watchlist', '/api/stocks/watchlist'].includes(read.path)).length).toBe(before);
+  state.failIdentity = false;
+  await list.getByRole('button', { name: '重试', exact: true }).click();
+  await expect(list.getByRole('button', { name: '管理自选', exact: true })).toBeEnabled();
+  await expect(list.getByText('身份暂时无法确认，请稍后重试', { exact: true })).toHaveCount(0);
+  await expect(list.getByText('ALICE snapshot', { exact: true })).toBeVisible();
+  expect(state.reads.filter(read => read.path === '/api/account/watchlist' && read.method !== 'GET')).toEqual([]);
+  expect(state.errors).toEqual([]);
+});
+
+
+test('first identity failure on Watchlist shows an error without a fabricated default or personal list', async ({ page }) => {
+  const state = await fixture(page, { failIdentity: true, username: 'alice' });
+  await page.goto('/watchlist');
+  const list = page.getByRole('region', { name: '自选列表', exact: true });
+  await expect(list.getByText('自选读取失败', { exact: true })).toBeVisible();
+  await expect(list.getByText('ALICE snapshot', { exact: true })).toHaveCount(0);
+  await expect(list.getByText('默认关注 AAPL、MSFT、NVDA、SPY，共 4 只。', { exact: true })).toHaveCount(0);
+  expect(state.reads.filter(read => ['/api/account/watchlist', '/api/stocks/watchlist'].includes(read.path))).toEqual([]);
+  state.failIdentity = false;
+  await list.getByRole('button', { name: '重试', exact: true }).click();
+  await expect(list.getByText('ALICE snapshot', { exact: true })).toBeVisible();
+  expect(state.errors).toEqual([]);
+});
+
+test('confirmed customer change discards the previous Watchlist before delayed new membership arrives', async ({ page }) => {
+  const state = await fixture(page, { username: 'alice' });
+  await page.goto('/watchlist');
+  const list = page.getByRole('region', { name: '自选列表', exact: true });
+  await expect(list.getByText('ALICE snapshot', { exact: true })).toBeVisible();
+  state.username = 'bob'; state.holdPersonal = true;
+  await focusAndVerify(page);
+  await expect(page.getByRole('button', { name: '退出 bob', exact: true })).toBeVisible();
+  await expect.poll(() => state.held.length).toBeGreaterThan(0);
+  await expect(list.getByText('ALICE snapshot', { exact: true })).toHaveCount(0);
+  await expect(list.getByText('AAPL', { exact: true })).toHaveCount(0);
+  state.holdPersonal = false;
+  await Promise.all(state.held.splice(0).map(release => release()));
+  await expect(list.getByRole('button', { name: 'MSFT MSFT 涨跌数据缺失 — 暂无行情', exact: true })).toBeVisible();
+  await expect(list.getByText('ALICE snapshot', { exact: true })).toHaveCount(0);
+  expect(state.errors).toEqual([]);
+});
+
+test('explicit watchlist 401 clears confirmed personal data even when the follow-up identity check fails', async ({ page }) => {
+  const state = await fixture(page, { username: 'alice' });
+  await page.goto('/watchlist');
+  const list = page.getByRole('region', { name: '自选列表', exact: true });
+  await expect(list.getByText('ALICE snapshot', { exact: true })).toBeVisible();
+  state.unauthorized = true; state.failIdentity = true;
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(list.getByText('ALICE snapshot', { exact: true })).toHaveCount(0);
+  await expect(list.getByText('自选读取失败', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '退出 alice', exact: true })).toHaveCount(0);
+  expect(state.errors).toEqual([]);
+});
+
+test('confirmed catalyst calendar survives identity 503 with retry and clears on a customer change', async ({ page }) => {
+  const state = await fixture(page, { username: 'alice', calendarAvailable: true });
+  await page.goto('/catalysts?tab=calendar');
+  await expect(page.getByText('ALICE calendar', { exact: true })).toBeVisible();
+  state.failIdentity = true;
+  await focusAndVerify(page, 503);
+  await expect(page.getByText('ALICE calendar', { exact: true })).toBeVisible();
+  const status = page.getByTestId('catalyst-cache-status');
+  await expect(status).toContainText('身份暂时无法确认，请稍后重试');
+  const readsBefore = state.reads.filter(read => read.path === '/api/catalysts/calendar').length;
+  await page.evaluate(() => { window.dispatchEvent(new Event('focus')); document.dispatchEvent(new Event('visibilitychange')); });
+  await expect.poll(() => state.reads.filter(read => read.path === '/api/access/status').length).toBeGreaterThan(2);
+  expect(state.reads.filter(read => read.path === '/api/catalysts/calendar').length).toBe(readsBefore);
+  state.failIdentity = false;
+  await status.getByRole('button', { name: '重试', exact: true }).click();
+  await expect(status).not.toContainText('身份暂时无法确认');
+  await expect(page.getByText('ALICE calendar', { exact: true })).toBeVisible();
+  state.username = 'bob'; state.holdCalendar = true;
+  await focusAndVerify(page);
+  await expect(page.getByRole('button', { name: '退出 bob', exact: true })).toBeVisible();
+  await expect(page.getByText('ALICE calendar', { exact: true })).toHaveCount(0);
+  await expect.poll(() => state.held.length).toBeGreaterThan(0);
+  state.holdCalendar = false;
+  await Promise.all(state.held.splice(0).map(release => release()));
+  await expect(page.getByText('BOB calendar', { exact: true })).toBeVisible();
+  expect(state.errors).toEqual([]);
+});
+
+test('catalyst calendar with no confirmed snapshot stays in an error state on identity failure', async ({ page }) => {
+  const state = await fixture(page, { username: 'alice', failIdentity: true, calendarAvailable: true });
+  await page.goto('/catalysts?tab=calendar');
+  await expect(page.getByText('日历数据暂不可用', { exact: true })).toBeVisible();
+  await expect(page.getByText('本窗口暂无经济事件', { exact: true })).toHaveCount(0);
+  await expect(page.getByTestId('catalyst-cache-status')).toHaveCount(0);
+  expect(state.reads.filter(read => read.path === '/api/catalysts/calendar')).toEqual([]);
+  state.failIdentity = false;
+  await page.getByText('日历数据暂不可用', { exact: true }).locator('..').getByRole('button', { name: '重试', exact: true }).click();
+  await expect(page.getByText('ALICE calendar', { exact: true })).toBeVisible();
+  expect(state.errors).toEqual([]);
+});
+
+
+test('retained catalyst feed suspends pagination while identity is unavailable', async ({ page }) => {
+  const state = await fixture(page, { username: 'alice', feedAvailable: true });
+  await page.goto('/catalysts');
+  await expect(page.getByText('ALICE 催化快照', { exact: true })).toBeVisible();
+  const more = page.getByRole('button', { name: '加载更多', exact: true });
+  await expect(more).toBeEnabled();
+  state.holdFeedNext = true;
+  await more.click();
+  await expect.poll(() => state.held.length).toBeGreaterThan(0);
+  state.failIdentity = true;
+  await focusAndVerify(page, 503);
+  await expect(page.getByText('ALICE 催化快照', { exact: true })).toBeVisible();
+  await expect(more).toBeDisabled();
+  await Promise.all(state.held.splice(0).map(release => release()));
+  await expect(page.getByText('ALICE 迟到分页', { exact: true })).toHaveCount(0);
+  await expect(page.getByTestId('catalyst-cache-status')).toContainText('身份暂时无法确认，请稍后重试');
+  const readsBefore = state.reads.filter(read => read.path === '/api/catalysts/feed').length;
+  await more.evaluate(button => button.click());
+  expect(state.reads.filter(read => read.path === '/api/catalysts/feed').length).toBe(readsBefore);
+  state.failIdentity = false;
+  await page.getByTestId('catalyst-cache-status').getByRole('button', { name: '重试', exact: true }).click();
+  await expect(more).toBeEnabled();
+  expect(state.errors).toEqual([]);
+});
+
+
+test('confirmed empty catalyst calendar still reports identity errors with a working retry', async ({ page }) => {
+  const state = await fixture(page, { username: 'alice', calendarAvailable: true, calendarEmpty: true });
+  await page.goto('/catalysts?tab=calendar');
+  await expect(page.getByText('本窗口暂无经济事件', { exact: true })).toBeVisible();
+  state.failIdentity = true;
+  await focusAndVerify(page, 503);
+  await expect(page.getByText('本窗口暂无经济事件', { exact: true })).toBeVisible();
+  const status = page.getByTestId('catalyst-cache-status');
+  await expect(status).toContainText('身份暂时无法确认，请稍后重试');
+  state.failIdentity = false;
+  await status.getByRole('button', { name: '重试', exact: true }).click();
+  await expect(status).not.toContainText('身份暂时无法确认');
   expect(state.errors).toEqual([]);
 });

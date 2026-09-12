@@ -3287,11 +3287,11 @@ def _normalize_extended_quote_bar(
 ) -> dict[str, Any] | None:
     """Yahoo extended-hours bars often carry quote-only high/low spikes.
 
-    With zero reported volume, treat the bar as a quote path and draw only
-    open/close. This keeps pre/post-market movement without letting bad
-    high/low ticks flatten the whole chart scale.
+    With an observed zero volume, treat the bar as a quote path and draw only
+    open/close. Missing volume is not evidence that no trade occurred, so it
+    keeps the provider's OHLC envelope and remains unobserved downstream.
     """
-    if int(bar.get("v") or 0) > 0:
+    if bar.get("v") != 0:
         return bar
     open_price = float(bar["o"])
     close_price = float(bar["c"])
@@ -3631,7 +3631,7 @@ def _massive_chart_history(provider, symbol: str, range_key: str, adjusted: bool
                 "High": bar.get("h"),
                 "Low": bar.get("l"),
                 "Close": bar.get("c"),
-                "Volume": bar.get("v") or 0,
+                "Volume": bar.get("v"),
             }
         )
     if not rows:
@@ -3740,12 +3740,12 @@ async def _stock_chart_impl(ticker: str, range: str, adjustment: str = "raw"):
             if l > min(o, c) or h < max(o, c) or l > h:
                 continue
             try:
-                volume_raw = float(row.get("Volume", 0))
+                volume_raw = float(row.get("Volume"))
                 if math.isfinite(volume_raw) and volume_raw < 0:
                     continue
-                v = int(volume_raw) if math.isfinite(volume_raw) else 0
+                v = int(volume_raw) if math.isfinite(volume_raw) else None
             except Exception:
-                v = 0
+                v = None
             bar = {
                 "t": t,
                 "o": o,

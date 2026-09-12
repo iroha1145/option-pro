@@ -38,7 +38,7 @@ const IndexCard = memo(function IndexCard({
   /* count-up 减量：指数卡价格直接呈现终值，更新反馈交给 tick-flash */
   const price = hasPrice ? quote.price : 0;
   const spark = useMemo(
-    () => (isMock ? getIndexIntraday(quote.code, quote.changePct) : null),
+    () => (isMock && quote.changePct !== null ? getIndexIntraday(quote.code, quote.changePct) : null),
     [quote.code, quote.changePct],
   );
   return (
@@ -83,7 +83,7 @@ const IndexCard = memo(function IndexCard({
       >
         {hasPrice ? fmtPrice(price) : '—'}
       </p>
-      {spark && (
+      {spark && quote.changePct !== null && (
         <div className="mt-2 flex h-8 items-center justify-between gap-2">
           <span className="text-micro text-ink-400">{t('当日')}</span>
           <Sparkline data={spark} width={84} height={28} change={quote.changePct} className="max-w-[65%]" />

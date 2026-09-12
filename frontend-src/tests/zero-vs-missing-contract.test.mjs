@@ -369,7 +369,7 @@ test('ChangeBadge 与指数跑马灯都有中性平盘态', async () => {
   assert.match(tape, /q\.changePct > 0 \? 'up' : q\.changePct < 0 \? 'down' : 'flat'/);
 
   assert.doesNotMatch(codeOf(reading), /q\.changePct >= 0/);
-  assert.match(reading, /indices\.filter\(\(q\) => q\.changePct > 0\)/);
+  assert.match(reading, /indices\.filter\(\(q\) => q\.changePct !== null && q\.changePct > 0\)/);
 });
 
 /* ---------------- P2-14 / P2-15：缺失值不参与排序、不填成 0 分 ---------------- */

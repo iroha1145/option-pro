@@ -365,7 +365,7 @@ export default function Home() {
               /* 数据纪律：无有效价（live 快照缺失）显「—」，不显 0.00 */
               const hasPrice = Number.isFinite(q.price) && q.price > 0;
               /* sparkline mock-only：live 无指数 K 线端点，如实留空 */
-              const spark = isMock ? getIndexIntraday(q.code, q.changePct) : null;
+              const spark = isMock && q.changePct !== null ? getIndexIntraday(q.code, q.changePct) : null;
               return (
                 <motion.div
                   key={q.code}
@@ -384,7 +384,7 @@ export default function Home() {
                     </span>
                     <span className="flex items-end justify-between gap-2">
                       <ChangeBadge value={q.changePct} size="sm" />
-                      {spark && <Sparkline data={spark} width={64} height={20} change={q.changePct} />}
+                      {spark && q.changePct !== null && <Sparkline data={spark} width={64} height={20} change={q.changePct} />}
                     </span>
                   </Link>
                 </motion.div>

@@ -53,9 +53,10 @@ function buildReading(
   }
   if (indices?.length) {
     /* 平盘不算上涨（审计 P2-4 同一口径）；这段文字会进 AI 上下文，口径必须准。 */
-    const adv = indices.filter((q) => q.changePct > 0).length;
-    const dec = indices.filter((q) => q.changePct < 0).length;
-    const flat = indices.length - adv - dec;
+    const adv = indices.filter((q) => q.changePct !== null && q.changePct > 0).length;
+    const dec = indices.filter((q) => q.changePct !== null && q.changePct < 0).length;
+    const flat = indices.filter((q) => q.changePct === 0).length;
+    const unknown = indices.length - adv - dec - flat;
     const spx = indices.find((q) => q.code === 'SPX');
     /* 数量随真实指数列表走（审计 2.1.3）：后端目前只有 5 个指数（含日经与
        上证），写死「六大」会得出「六大指数 3 涨 2 跌」这类自相矛盾的句子，
@@ -63,6 +64,7 @@ function buildReading(
     parts.push(
       t('{n} 个主要指数 {adv} 涨 {dec} 跌', { n: indices.length, adv, dec }) +
         (flat > 0 ? t(' {flat} 平', { flat }) : '') +
+        (unknown > 0 ? t('，{unknown} 个涨跌未知', { unknown }) : '') +
         (spx ? t('，标普 500 报 {price}（{pct}）', { price: fmtPrice(spx.price), pct: fmtPct(spx.changePct) }) : '') +
         t('。'),
     );

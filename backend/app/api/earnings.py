@@ -1266,17 +1266,27 @@ async def _build_upcoming_earnings(today: date):
             if "fmp_calendar" not in sources:
                 sources.append("fmp_calendar")
             existing["calendar_sources"] = sources
-            existing_date = str(existing.get("earnings_date") or "")
-            if existing_date == fmp_date:
+            same_report = _same_earnings_report(existing, fmp_row)
+            if same_report:
                 existing["calendar_date_status"] = "confirmed"
                 existing["calendar_conflict"] = None
             else:
-                # 日期冲突必须可识别：主源（Finnhub/Yahoo）日期保留，
+                # 日期或已知财年、季度冲突必须可识别：主源期次保留，
                 # 次源日期原样记录，绝不静默合并成一条无法追踪的记录。
                 existing["calendar_date_status"] = "conflict"
-                existing["calendar_conflict"] = {"fmp_calendar": fmp_date}
-            # Date agreement alone is insufficient when known fiscal periods differ.
-            if _same_earnings_report(existing, fmp_row):
+                existing["calendar_conflict"] = {
+                    "fmp_calendar": (
+                        {
+                            "earnings_date": fmp_date,
+                            "quarter": fmp_row.get("quarter"),
+                            "year": fmp_row.get("year"),
+                        }
+                        if fmp_date == existing.get("earnings_date")
+                        else fmp_date
+                    )
+                }
+            # Confirmation and estimate merging must use the same report identity.
+            if same_report:
                 estimate_sources = _estimate_sources(existing)
                 for field in ("eps_estimate", "revenue_estimate"):
                     if existing.get(field) is None and fmp_row.get(field) is not None:

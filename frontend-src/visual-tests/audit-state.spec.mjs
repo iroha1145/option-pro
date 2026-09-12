@@ -136,13 +136,15 @@ test('login cookie plus failed identity does not write owner response under old 
   await page.locator('form').getByRole('button', { name: '登录', exact: true }).click();
   await expect(page).toHaveURL(/\/watchlist$/);
   expect((await context.cookies()).some(cookie => cookie.name === 'audit_owner' && cookie.value === '1')).toBe(true);
+  // Watchlist now suspends identity-dependent reads. Home still exercises an
+  // actual response during the unknown-principal window, which must not persist.
+  await page.getByRole('link', { name: 'Optix Pro 首页', exact: true }).click();
   await expect.poll(() => state.strengthReads).toBeGreaterThan(before);
   expect(await cached(page, '/strength/market')).toBeNull();
   state.failIdentity = false;
   // Visitor state has an automatic identity retry even without a signed-in focus listener.
   await expect(page.getByRole('button', { name: '退出', exact: true })).toBeVisible();
-  // Remount the page after identity confirmation to obtain an explicitly owner-tagged response.
-  await page.getByRole('link', { name: 'Optix Pro 首页', exact: true }).click();
+  // The confirmed principal remounts Home and obtains an owner-tagged response.
   await expect.poll(async () => (await cached(page, '/strength/market'))?.principal).toBe('owner\0');
   expect((await cached(page, '/strength/market')).raw.source).toBe('audit-owner-cookie');
   expect(state.errors).toEqual([]);

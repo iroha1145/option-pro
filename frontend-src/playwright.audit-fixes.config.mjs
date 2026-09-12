@@ -2,7 +2,7 @@ import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
   testDir: './visual-tests',
-  testMatch: ['audit-state.spec.mjs', 'audit-screener-time.spec.mjs', 'audit-touch-targets.spec.mjs', 'audit-principal-scope.spec.mjs'],
+  testMatch: ['audit-state.spec.mjs', 'audit-screener-time.spec.mjs', 'audit-touch-targets.spec.mjs', 'audit-principal-scope.spec.mjs', 'index-nullable-change.spec.mjs'],
   outputDir: './test-results/audit-fixes',
   workers: 1,
   timeout: 30_000,

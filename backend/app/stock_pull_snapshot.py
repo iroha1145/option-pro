@@ -222,8 +222,14 @@ def _clean_chart(
                 _finite_number(bar.get(field), positive=True)
                 for field in ("o", "h", "l", "c")
             )
-            or not _finite_number(bar.get("v"), allow_zero=True)
-            or float(bar["v"]) < 0
+            or "v" not in bar
+            or (
+                bar.get("v") is not None
+                and (
+                    not _finite_number(bar.get("v"), allow_zero=True)
+                    or float(bar["v"]) < 0
+                )
+            )
             or float(bar["l"]) > min(float(bar["o"]), float(bar["c"]))
             or float(bar["h"]) < max(float(bar["o"]), float(bar["c"]))
         ):
