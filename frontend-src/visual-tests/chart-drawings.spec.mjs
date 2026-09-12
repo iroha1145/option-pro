@@ -68,6 +68,24 @@ function drawingRows(page) {
   return page.getByRole("dialog", { name: "绘图工作区" }).getByRole("button", { name: /^绘图对象 / });
 }
 
+async function waitDrawingToolbar(page, ticker = "AAPL") {
+  await expect.poll(async () => {
+    if (await toolButton(page, "选择").isVisible().catch(() => false)) return "ready";
+    const retry = page.getByRole("region", { name: /K 线图$/ })
+      .getByRole("button", { name: "重试", exact: true });
+    if (await retry.isVisible().catch(() => false)) {
+      await retry.click({ timeout: 1_000 }).catch(() => {});
+    }
+    const listed = await listDrawings(page, ticker);
+    if (listed.status === 429) return "rate-limited";
+    if (listed.status !== 200) {
+      await page.goto(`/stock/${ticker}`, { waitUntil: "domcontentloaded" }).catch(() => {});
+      return `http ${listed.status}`;
+    }
+    return "no-toolbar";
+  }, { timeout: 90_000 }).toBe("ready");
+}
+
 async function openStock(page, ticker = "AAPL") {
   trackChartRateLimits(page);
   const errors = [];
@@ -75,7 +93,7 @@ async function openStock(page, ticker = "AAPL") {
   if (!page.url().includes(`/stock/${ticker}`)) {
     await page.goto(`/stock/${ticker}`, { waitUntil: "domcontentloaded" });
   }
-  await expect(toolButton(page, "选择")).toBeVisible({ timeout: 20_000 });
+  await waitDrawingToolbar(page, ticker);
   return errors;
 }
 
@@ -186,7 +204,7 @@ async function waitOneUnlockedDrawing(page) {
 async function resetDrawingScope(page) {
   await clearTouchedDrawings(page);
   await page.reload({ waitUntil: "domcontentloaded" });
-  await expect(toolButton(page, "选择")).toBeVisible({ timeout: 20_000 });
+  await waitDrawingToolbar(page);
   await expect.poll(async () => {
     const listed = await listDrawings(page);
     if (listed.status === 429) return "rate-limited";
@@ -346,16 +364,7 @@ test.beforeEach(async ({ page }) => {
   // After ~25 drawing specs the owner light bucket 429s stock/chart GETs, so
   // the toolbar is missing until a 200 lands. Poll like the OCC helpers:
   // 429 is transient, not a missing toolbar.
-  await expect.poll(async () => {
-    if (await toolButton(page, "选择").isVisible().catch(() => false)) return "ready";
-    const listed = await listDrawings(page);
-    if (listed.status === 429) return "rate-limited";
-    if (listed.status !== 200) {
-      await page.goto("/stock/AAPL", { waitUntil: "domcontentloaded" }).catch(() => {});
-      return `http ${listed.status}`;
-    }
-    return "no-toolbar";
-  }, { timeout: 90_000 }).toBe("ready");
+  await waitDrawingToolbar(page);
   await clearTouchedDrawings(page);
 });
 
@@ -415,7 +424,7 @@ test("drag endpoint and whole-object after selecting a drawing", async ({ page }
   }, { timeout: 45_000 }).toBe("moved");
   await expectDrawingCount(page, 1);
   await page.reload({ waitUntil: "domcontentloaded" });
-  await expect(toolButton(page, "选择")).toBeVisible({ timeout: 20_000 });
+  await waitDrawingToolbar(page);
   await expect.poll(async () => {
     const listed = await listDrawings(page);
     if (listed.status === 429) return "rate-limited";
@@ -447,7 +456,7 @@ test("locked drawing keeps its anchors when dragged", async ({ page }) => {
   await expandChart(page);
   await expect(drawingRows(page).first()).toContainText("已锁定");
   await page.reload({ waitUntil: "domcontentloaded" });
-  await expect(toolButton(page, "选择")).toBeVisible({ timeout: 20_000 });
+  await waitDrawingToolbar(page);
   await expect.poll(async () => unchangedLockedState(await listDrawings(page), locked), {
     timeout: 45_000,
   }).toBe("unchanged");
@@ -506,7 +515,7 @@ test("ticker and range switch isolates drawings", async ({ page }) => {
   await expect(chartTab(page, "日线")).toHaveAttribute("aria-selected", "true");
   await expect(drawingRows(page)).toHaveCount(1);
   await page.goto("/stock/MSFT", { waitUntil: "domcontentloaded" });
-  await expect(toolButton(page, "选择")).toBeVisible({ timeout: 15_000 });
+  await waitDrawingToolbar(page, "MSFT");
   await expectDrawingCount(page, 0);
 });
 
@@ -516,7 +525,7 @@ test("refresh persistence keeps the account drawing", async ({ page }) => {
   await placeHorizontal(page, 0.5, 0.4);
   await expectDrawingCount(page, 1);
   await page.reload({ waitUntil: "domcontentloaded" });
-  await expect(toolButton(page, "选择")).toBeVisible({ timeout: 15_000 });
+  await waitDrawingToolbar(page);
   await expect(page.getByRole("img", { name: /K 线图$|面积图$/ })).toBeVisible({ timeout: 15_000 });
   // 刷新后对象要真的回来——chartFilled 只要有蜡烛就绿，全丢也照样过。
   await expectDrawingCount(page, 1);
@@ -525,6 +534,7 @@ test("refresh persistence keeps the account drawing", async ({ page }) => {
 test("failed save then retry keeps the local edit", async ({ page }) => {
   test.skip(!HAS_REAL_BACKEND, "stock drawings visual path needs OPTIX_VISUAL_BASE_URL");
   await openStock(page);
+  await resetDrawingScope(page);
   await page.route("**/api/account/chart-drawings**", (route) => {
     if (route.request().method() === "GET") return route.continue();
     return route.abort();
@@ -553,7 +563,7 @@ test("rapid same-id revision stays serial from the inspector", async ({ page }) 
   await expect(widths.nth(count - 1)).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByText(/绘图冲突/)).toHaveCount(0);
   await page.reload({ waitUntil: "domcontentloaded" });
-  await expect(toolButton(page, "选择")).toBeVisible({ timeout: 15_000 });
+  await waitDrawingToolbar(page);
   await expectDrawingCount(page, 1);
   expect(errors, errors.join("\n")).toEqual([]);
 });
@@ -577,21 +587,7 @@ test("undo color text lock delete then refresh", async ({ page }) => {
   test.skip(!HAS_REAL_BACKEND, "stock drawings visual path needs OPTIX_VISUAL_BASE_URL");
   test.setTimeout(120_000);
   await openStock(page);
-  // beforeEach 清扫后，已挂载的绘图控制器仍可能把旧对象写回。先确认 scope
-  // 为空再落笔，否则 list 会一直是 n=2，unlocked 轮询永远等不到。
-  await clearTouchedDrawings(page);
-  await page.reload({ waitUntil: "domcontentloaded" });
-  await expect(toolButton(page, "选择")).toBeVisible({ timeout: 20_000 });
-  await expect.poll(async () => {
-    const listed = await listDrawings(page);
-    if (listed.status === 429) return "rate-limited";
-    if (!Array.isArray(listed.drawings)) return "n=?";
-    if (listed.drawings.length > 0) {
-      await clearTouchedDrawings(page);
-      return `n=${listed.drawings.length}`;
-    }
-    return "empty";
-  }, { timeout: 45_000 }).toBe("empty");
+  await resetDrawingScope(page);
   await placeHorizontal(page, 0.5, 0.4);
   await expandChart(page);
   const row = drawingRows(page).first();
@@ -607,7 +603,7 @@ test("undo color text lock delete then refresh", async ({ page }) => {
   // 不读工具条文案（同步标签会改）：等 GET 上的 locked 落地再刷新。
   await expect.poll(async () => drawingsLockState(await listDrawings(page)), { timeout: 45_000 }).toBe("unlocked");
   await page.reload({ waitUntil: "domcontentloaded" });
-  await expect(toolButton(page, "选择")).toBeVisible({ timeout: 20_000 });
+  await waitDrawingToolbar(page);
   await expectDrawingCount(page, 1);
   await expect(drawingRows(page).first()).not.toContainText("已锁定");
 });
@@ -669,6 +665,7 @@ test("layer presets switch algorithm and pattern groups", async ({ page }) => {
 test("failed save survives refresh and replays after network returns", async ({ page }) => {
   test.skip(!HAS_REAL_BACKEND, "stock drawings visual path needs OPTIX_VISUAL_BASE_URL");
   await openStock(page);
+  await resetDrawingScope(page);
   await page.route("**/api/account/chart-drawings**", (route) => {
     if (route.request().method() === "GET") return route.continue();
     return route.abort();
@@ -676,7 +673,7 @@ test("failed save survives refresh and replays after network returns", async ({ 
   await placeHorizontal(page, 0.48, 0.42);
   await expectDrawingCount(page, 1);
   await page.reload({ waitUntil: "domcontentloaded" });
-  await expect(toolButton(page, "选择")).toBeVisible({ timeout: 20_000 });
+  await waitDrawingToolbar(page);
   await expectDrawingCount(page, 1);
   await page.unroute("**/api/account/chart-drawings**");
   const retry = toolButton(page, "重试同步");
