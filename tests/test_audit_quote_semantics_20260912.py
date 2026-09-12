@@ -63,6 +63,48 @@ def test_minute_quote_uses_its_own_timestamp_not_snapshot_refresh_time(monkeypat
     assert payload["as_of"] == at.isoformat()
 
 
+@pytest.mark.parametrize("previous", [None, 0, -1, float("nan"), float("inf"), "invalid", 100.0])
+def test_overview_never_pairs_massive_last_with_yahoo_previous_close(monkeypatch, previous):
+    at = datetime(2026, 9, 11, 14, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(stocks.yf, "Ticker", lambda _ticker: SimpleNamespace(
+        fast_info=SimpleNamespace(last_price=104.0, previous_close=80.0),
+        info={"regularMarketTime": int(at.timestamp())},
+    ))
+    monkeypatch.setattr(massive, "configured", lambda: True)
+    monkeypatch.setattr(massive, "snapshot_batch", lambda _symbols: {
+        "AAPL": {"minute": {"c": 105.0, "t": int(at.timestamp() * 1000)}, "prev_close": previous},
+    })
+    payload = asyncio.run(stocks._stock_overview_impl("AAPL"))
+    assert payload["price"] == 105.0
+    assert payload["price_provider"] == "Massive"
+    assert payload["as_of"] == at.isoformat()
+    if previous == 100.0:
+        assert payload["prev_close"] == 100.0
+        assert payload["change"] == 5.0
+        assert payload["change_percent"] == 5.0
+    else:
+        assert payload["prev_close"] is None
+        assert payload["change"] is None
+        assert payload["change_percent"] is None
+
+
+@pytest.mark.parametrize("yahoo_previous", [None, 100.0])
+def test_yahoo_fallback_uses_only_yahoo_previous_close(monkeypatch, yahoo_previous):
+    monkeypatch.setattr(stocks.yf, "Ticker", lambda _ticker: SimpleNamespace(
+        fast_info=SimpleNamespace(last_price=105.0, previous_close=yahoo_previous), info={},
+    ))
+    monkeypatch.setattr(massive, "configured", lambda: True)
+    monkeypatch.setattr(massive, "snapshot_batch", lambda _symbols: {
+        "AAPL": {"minute": {}, "day": {"c": 104.0}, "prev_close": 80.0},
+    })
+    payload = asyncio.run(stocks._stock_overview_impl("AAPL"))
+    assert payload["price"] == 105.0
+    assert payload["price_provider"] == "Yahoo/yfinance"
+    assert payload["prev_close"] == yahoo_previous
+    assert payload["change"] == (5.0 if yahoo_previous else None)
+    assert payload["change_percent"] == (5.0 if yahoo_previous else None)
+
+
 def test_sector_daily_only_price_falls_back_without_losing_option_iv(monkeypatch):
     monkeypatch.setitem(sectors.SECTORS, "audit", {"tickers": ["AAPL"]})
     monkeypatch.setattr(massive, "configured", lambda: True)

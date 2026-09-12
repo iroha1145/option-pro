@@ -2,7 +2,7 @@
 import { ApiError } from '@/api/client';
 import { Rng, round2, round4 } from './rng';
 import { HOTSPOTS, NEWS_SOURCES, NEWS_TEMPLATES, SECTORS, TICKER_POOL } from './data';
-import { SIGNAL_LABELS, WATCHLIST_TICKERS, getMarketStatus, getStockChartEx, getStockDetail } from './fixtures';
+import { SIGNAL_LABELS, getMarketStatus, getStockChartEx, getStockDetail } from './fixtures';
 import type {
   AiJob,
   BreakoutEvent,
@@ -533,21 +533,26 @@ const analyzedAt = new Map<string, string>();
 
 /*
  * 生成范围：上月 1 日 ~ 下月月末（覆盖月历「上月/本月/下月」三月视图）。
- * 工作日每天 0–4 条（按日期确定性种子，当日 ticker 不重复）；周末留白。
+ * 与线上相同，每家公司只保留一份报告；使用已有公司池，基金不生成公司财报。
+ * 保留近期分析、非重点公司、同日折叠、历史实际值和三月导航，周末留白。
  * 过去日期视为已公布（eps/rev 实际值大概率回填，days_until 由页面侧算得为负）；
  * 今日/未来一律未公布，避免列表出现「尚未发生的财报却有实际值」。
  */
 const earningsList: EarningsItem[] = (() => {
-  const names = [...WATCHLIST_TICKERS, 'TSM', 'NFLX', 'CRM', 'ORCL', 'JPM', 'UNH', 'COST'].slice(0, 18);
-  const now = new Date();
-  const todayIso = now.toISOString().slice(0, 10);
-  const startMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1);
-  const endMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 2, 0); // 下月月末
-  const byDate = new Map<string, EarningsItem[]>();
-  const push = (date: string, item: EarningsItem) => {
-    const arr = byDate.get(date) ?? [];
-    arr.push(item);
-    byDate.set(date, arr);
+  const names = TICKER_POOL.filter((item) => !['SPY', 'QQQ'].includes(item.ticker)).map((item) => item.ticker);
+  const todayIso = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
+  const todayMs = Date.parse(`${todayIso}T12:00:00Z`);
+  const now = new Date(todayMs);
+  const endMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 2, 0, 12);
+  const dayMs = 86_400_000;
+  const byTicker = new Map<string, EarningsItem>();
+  const weekday = (ms: number, direction = 1): string => {
+    let date = new Date(ms);
+    while (date.getUTCDay() === 0 || date.getUTCDay() === 6) {
+      ms += direction * dayMs;
+      date = new Date(ms);
+    }
+    return date.toISOString().slice(0, 10);
   };
   const mkItem = (r: Rng, ticker: string, date: string): EarningsItem => {
     const info = TICKER_POOL.find((x) => x.ticker === ticker) ?? TICKER_POOL[0];
@@ -564,37 +569,38 @@ const earningsList: EarningsItem[] = (() => {
       revActual: reported ? Math.round(r.float(40, 990) * 1_000_000) : null,
     } as EarningsItem;
   };
-  for (let ms = startMs; ms <= endMs; ms += 86_400_000) {
-    const d = new Date(ms);
-    const dow = d.getUTCDay();
-    if (dow === 0 || dow === 6) continue; // 仅工作日
-    const date = d.toISOString().slice(0, 10);
-    const r = new Rng(20240 + Number(date.replaceAll('-', '')));
-    const roll = r.float();
-    const count = roll < 0.12 ? 0 : roll < 0.45 ? 1 : roll < 0.75 ? 2 : roll < 0.92 ? 3 : 4;
-    /* 确定性洗牌后取前 N 个，保证当日 ticker 唯一 */
-    const order = [...names];
-    for (let i = order.length - 1; i > 0; i--) {
-      const j = r.int(0, i);
-      [order[i], order[j]] = [order[j], order[i]];
-    }
-    order.slice(0, count).forEach((t) => push(date, mkItem(r, t, date)));
-  }
-  /* 锚定 NVDA/MSFT/TSLA 于近期工作日：AI 影响演示三标的在未来两周内必有排期 */
+  const assign = (ticker: string, date: string) => {
+    const seed = Number(date.replaceAll('-', '')) + [...ticker].reduce((sum, ch) => sum * 31 + ch.charCodeAt(0), 7);
+    byTicker.set(ticker, mkItem(new Rng(seed), ticker, date));
+  };
+  /* 三个已有分析的标的只在近期出现一次，不再与历史随机行竞争。 */
   ['NVDA', 'MSFT', 'TSLA'].forEach((t, i) => {
-    let ms = Date.parse(`${todayIso}T12:00:00Z`) + (2 + i * 3) * 86_400_000;
-    let d = new Date(ms);
-    while (d.getUTCDay() === 0 || d.getUTCDay() === 6) {
-      ms += 86_400_000;
-      d = new Date(ms);
-    }
-    const date = d.toISOString().slice(0, 10);
-    const arr = byDate.get(date) ?? [];
-    if (!arr.some((e) => e.ticker === t) && arr.length < 4) {
-      push(date, mkItem(new Rng(60606 + i * 97), t, date));
-    }
+    assign(t, weekday(todayMs + (2 + i * 3) * dayMs));
   });
-  return [...byDate.values()].flat().sort((a, b) => (a.date < b.date ? -1 : 1));
+  /* 同日四家公司覆盖 +N 折叠及“非重点公司 → 全部公司”的联动。 */
+  for (const ticker of ['TSM', 'NFLX', 'CRM']) assign(ticker, weekday(todayMs + 2 * dayMs));
+  const recentDate = weekday(todayMs - dayMs, -1);
+  assign('AAPL', recentDate);
+  const recent = byTicker.get('AAPL')!;
+  recent.epsActual ??= recent.epsEstimate;
+  recent.revActual ??= recent.revEstimate;
+
+  const nearDates = Array.from({ length: 31 }, (_, offset) => new Date(todayMs + offset * dayMs))
+    .filter((date) => date.getTime() <= endMs && ![0, 6].includes(date.getUTCDay()))
+    .map((date) => date.toISOString().slice(0, 10));
+  const remaining = names.filter((ticker) => !byTicker.has(ticker));
+  remaining.forEach((ticker, index) => {
+    if (index < 8) {
+      // 四份上月历史、四份下月排期；其余留在默认滚动窗口，保证列表可展开。
+      const monthOffset = index < 4 ? -1 : 1;
+      assign(ticker, weekday(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + monthOffset, 5 + (index % 4) * 7, 12)));
+      return;
+    }
+    let slot = (index - 8) % nearDates.length;
+    while ([...byTicker.values()].filter((item) => item.date === nearDates[slot]).length >= 4) slot = (slot + 1) % nearDates.length;
+    assign(ticker, nearDates[slot]);
+  });
+  return [...byTicker.values()].sort((a, b) => a.date.localeCompare(b.date) || a.ticker.localeCompare(b.ticker));
 })();
 
 /** 每标的确定性预期波动（2.8%–11.5%），与 AI 影响结果共用同一来源 */

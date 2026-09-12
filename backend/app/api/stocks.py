@@ -3172,7 +3172,8 @@ async def _stock_overview_impl(ticker: str):
         if last_price is None and yahoo_price is not None:
             last_price = yahoo_price
             price_provider = "Yahoo/yfinance"
-        if prev_close is None:
+            # The move needs a baseline from the selected quote provider.
+            # A missing Massive baseline must stay unknown, not borrow Yahoo's.
             prev_close = yahoo_previous
         if quote_volume is None:
             quote_volume = _finite_quote(

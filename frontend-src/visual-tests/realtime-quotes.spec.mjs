@@ -4,7 +4,7 @@ const at = '2026-09-04T15:00:00Z';
 const status = { enabled: true, configured: true, allowed: true, public_enabled: true, connected: true, connection_status: 'connected', market_session: 'regular' };
 const price = (symbol, value = 100, extra = {}) => ({ symbol, price: value, previous_close: 99, change: value - 99, change_pct: (value / 99 - 1) * 100, trade_at: at, received_at: at, source: 'finnhub', session: 'regular', freshness: 'live', subscription_status: 'live', ...extra });
 async function fixture(page, enabled = true, personal = false) {
-  const state = { requests: [], errors: [], completeDetail: false, quoteDelayMs: 0, radar: { event_id: 'live-event', ticker: 'AAPL', name: 'Apple', session: 'regular', setup_type: 'DAILY_BASE_BREAKOUT', lifecycle_state: 'WATCHING', state_version: 0, event_at: at, current_price: 100, event_price: 100, invalidation_price: 90, target_price: 120, session_change_pct: 1, intrinsic_strength_score: 80 }, transitions: [{ state: 'WATCHING', at }] };
+  const state = { requests: [], errors: [], completeDetail: false, quoteDelayMs: 0, quoteValues: {}, radar: { event_id: 'live-event', ticker: 'AAPL', name: 'Apple', session: 'regular', setup_type: 'DAILY_BASE_BREAKOUT', lifecycle_state: 'WATCHING', state_version: 0, event_at: at, current_price: 100, event_price: 100, invalidation_price: 90, target_price: 120, session_change_pct: 1, intrinsic_strength_score: 80 }, transitions: [{ state: 'WATCHING', at }] };
   page.on('pageerror', error => state.errors.push(error.message));
   await page.addInitScript(() => {
     window.quoteStreams = [];
@@ -24,7 +24,7 @@ async function fixture(page, enabled = true, personal = false) {
     if (url.pathname === '/api/account/watchlist') return route.fulfill({ json: { tickers: Array.from({ length: 32 }, (_, i) => i === 0 ? 'AAPL' : `S${String(i).padStart(3, '0')}`), max_tickers: 50 } });
     if (url.pathname === '/api/quotes') {
       if (state.quoteDelayMs) await new Promise(resolve => setTimeout(resolve, state.quoteDelayMs));
-      return route.fulfill({ json: { quotes: enabled ? (url.searchParams.get('symbols') ?? '').split(',').filter(Boolean).map(symbol => price(symbol)) : [], status: { ...status, allowed: enabled } } });
+      return route.fulfill({ json: { quotes: enabled ? (url.searchParams.get('symbols') ?? '').split(',').filter(Boolean).map(symbol => price(symbol, state.quoteValues[symbol] ?? 100)) : [], status: { ...status, allowed: enabled } } });
     }
     if (url.pathname === '/api/market/status') return route.fulfill({ json: { session: 'regular', label: '盘中', is_open: true } });
     if (url.pathname === '/api/market/indices') return route.fulfill({ json: { indices: [{ code: 'SPX', symbol: '^GSPC', price: 6000, change_percent: 1 }] } });
@@ -32,7 +32,7 @@ async function fixture(page, enabled = true, personal = false) {
     if (url.pathname === '/api/stocks/data/status') return route.fulfill({ json: { items: (url.searchParams.get('tickers') ?? '').split(',').map(ticker => ({ ticker, status: 'ready', refresh_status: 'ready', resources: { overview: { available: true, fresh: true, as_of: at }, daily_chart: { available: true, fresh: true, as_of: at }, signals: { available: true, fresh: true, as_of: at } } })) } });
     if (url.pathname === '/api/breakouts/current') return route.fulfill({ json: { events: [state.radar], as_of: at, session: 'regular' } });
     if (url.pathname === '/api/breakouts/events') return route.fulfill({ json: { events: [], next_cursor: null } });
-    if (url.pathname === '/api/breakouts/events/live-event') return route.fulfill({ json: { event: state.radar, transitions: state.transitions } });
+    if (url.pathname === `/api/breakouts/events/${state.radar.event_id}`) return route.fulfill({ json: { event: state.radar, transitions: state.transitions } });
     if (url.pathname === '/api/breakouts/status') return route.fulfill({ json: { enabled: true, market_session: 'regular' } });
     if (state.completeDetail && url.pathname === '/api/stocks/AAPL') return route.fulfill({ json: { ticker: 'AAPL', name: 'Apple', price: 100, change: 1, change_percent: 1, as_of: at, prev_close: 99 } });
     if (state.completeDetail && url.pathname === '/api/stocks/AAPL/chart') return route.fulfill({ json: { ticker: 'AAPL', interval: '1d', adjustment: 'raw', bars: Array.from({ length: 240 }, (_, i) => ({ t: new Date(Date.UTC(2026, 0, 1 + i)).toISOString().slice(0, 10), o: 98 + i % 3, h: 102 + i % 3, l: 96 + i % 3, c: 100 + i % 3, v: 1000 + i })).filter(bar => ![0, 6].includes(new Date(bar.t).getUTCDay())) } });
@@ -123,6 +123,49 @@ test('an open radar detail follows new versions and reconciles missed states aft
   })).toBe(true);
   await expect(dialog.getByRole('list', { name: '信号进展' })).toContainText('已确认');
   await expect(dialog.getByText('已确认', { exact: true }).first()).toBeVisible();
+  expect(state.errors).toEqual([]);
+});
+
+test('a real radar lead replacement resets price motion while same-symbol moves still flash', async ({ page }) => {
+  const state = await fixture(page);
+  await page.goto('/breakouts');
+  const lead = page.locator('.radar-lead-card');
+  const aaplPrice = lead.locator('[data-quote-symbol="AAPL"]').first();
+  await expect(aaplPrice.locator('.sr-only').first()).toHaveText('100.00');
+  await expect.poll(() => latestSymbols(page)).toContain('AAPL');
+
+  await emit(page, 'AAPL', 101.25);
+  await expect(aaplPrice.locator('.sr-only').first()).toHaveText('101.25');
+  await expect(aaplPrice.locator(':scope > .tick-flash')).toHaveClass(/tick-flash-up/);
+  await aaplPrice.evaluate(node => { window.previousRadarLeadPrice = node; });
+
+  state.quoteValues.MSFT = 5000;
+  state.radar = {
+    ...state.radar,
+    event_id: 'msft-event', ticker: 'MSFT', name: 'Microsoft', state_version: 0,
+    current_price: 5000, event_price: 5000, invalidation_price: 4800,
+    target_price: 5400, session_change_pct: 2,
+  };
+  state.transitions = [{ state: 'WATCHING', at }];
+  await emitEvent(page, 'radar', { events: [state.radar], resync_required: true });
+
+  const msftPrice = lead.locator('[data-quote-symbol="MSFT"]').first();
+  await expect(lead.getByRole('button', { name: '打开 MSFT 个股详情抽屉', exact: true })).toBeVisible();
+  await expect(msftPrice.locator('.sr-only').first()).toHaveText('5,000.00');
+  expect(await msftPrice.evaluate(node => ({
+    reused: window.previousRadarLeadPrice === node,
+    previousConnected: window.previousRadarLeadPrice?.isConnected ?? null,
+  }))).toEqual({ reused: false, previousConnected: false });
+  await expect(msftPrice.locator(':scope > .tick-flash')).not.toHaveClass(/tick-flash-(?:up|down)/);
+  await expect.poll(() => latestSymbols(page)).toContain('MSFT');
+
+  await emit(page, 'MSFT', 4990);
+  await expect(msftPrice.locator('.sr-only').first()).toHaveText('4,990.00');
+  await expect(msftPrice.locator(':scope > .tick-flash')).toHaveClass(/tick-flash-down/);
+  await expect(msftPrice.locator(':scope > .tick-flash')).not.toHaveClass(/tick-flash-(?:up|down)/, { timeout: 2_000 });
+  await emit(page, 'MSFT', 5010);
+  await expect(msftPrice.locator('.sr-only').first()).toHaveText('5,010.00');
+  await expect(msftPrice.locator(':scope > .tick-flash')).toHaveClass(/tick-flash-up/);
   expect(state.errors).toEqual([]);
 });
 

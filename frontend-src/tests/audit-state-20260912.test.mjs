@@ -338,3 +338,41 @@ test('LivePrice isolates its stateful child by normalized symbol and stale UI re
   assert.match(source('pages/Home.tsx'), /error && <StaleStrip onRetry=\{onRetry\}/);
   assert.match(source('pages/Watchlist.tsx'), /\{err && items.length > 0 &&/);
 });
+
+test('route content changes identity only for pathname or principal, not a same-principal verification failure', () => {
+  const runner = reactRunner(), env = environment();
+  let identity = { role: 'owner', username: null, loading: false, identityUnavailable: false };
+  let pathname = '/';
+  const components = ['Navbar', 'IndexTape', 'QuoteConnection', 'Footer', 'MobileDock', 'CommandPalette', 'shared/RouteErrorBoundary', 'shared/PageFallback'];
+  const imports = Object.fromEntries(components.map(name => [`@/components/${name}`, { default: name }]));
+  Object.assign(imports, {
+    react: runner.React, 'react/jsx-runtime': jsx,
+    'react-router': { Outlet: 'outlet', useLocation: () => ({ pathname }), useNavigate: () => () => {}, useNavigationType: () => 'POP' },
+    '@/hooks/useAccess': { useAccess: () => identity }, '@/hooks/useShell': { ShellContext: { Provider: 'shell' } },
+    '@/lib/recentTickers': { pushRecent() {} }, '@/api/client': { isMock: false }, '../i18n/core.ts': translate,
+  });
+  const { default: Layout } = load('components/Layout.tsx', imports, env);
+  const read = runner.mount(Layout);
+  const findContent = node => {
+    if (!node || typeof node !== 'object') return null;
+    if (node.props?.className === 'page-enter') return node;
+    for (const child of [node.props?.children].flat(Infinity)) {
+      const content = findContent(child);
+      if (content) return content;
+    }
+    return null;
+  };
+  const ownerKey = findContent(read()).key;
+  identity = { ...identity, identityUnavailable: true }; runner.mount(Layout);
+  assert.equal(findContent(read()).key, ownerKey);
+  identity = { ...identity, identityUnavailable: false }; runner.mount(Layout);
+  assert.equal(findContent(read()).key, ownerKey);
+  identity = { ...identity, role: 'visitor', username: 'alice' }; runner.mount(Layout);
+  const aliceKey = findContent(read()).key;
+  assert.notEqual(aliceKey, ownerKey);
+  identity = { ...identity, username: 'bob' }; runner.mount(Layout);
+  assert.notEqual(findContent(read()).key, aliceKey);
+  pathname = '/screener'; runner.mount(Layout);
+  assert.equal(JSON.parse(findContent(read()).key)[0], '/screener');
+  runner.unmount();
+});

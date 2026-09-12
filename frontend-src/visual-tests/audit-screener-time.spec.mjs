@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { mkdir } from 'node:fs/promises';
 
 // Real application components and browser interactions, with local API fixtures only.
 async function fixture(page, options = {}) {
@@ -15,7 +16,7 @@ async function fixture(page, options = {}) {
     if (path === '/api/quotes') return route.fulfill({ json: { quotes: [], status: { allowed: false, enabled: false, connected: false } } });
     if (path === '/api/market/status') return route.fulfill({ json: { market: 'open', session: 'regular', is_open: true, next_close: '2026-09-14T20:00:00Z' } });
     if (path === '/api/market/indices') return route.fulfill({ json: { indices: [] } });
-    if (path === '/api/strength/market') return route.fulfill({ json: { avg_score: 80, stocks: [] } });
+    if (path === '/api/strength/market') return route.fulfill({ json: state.marketPayload ?? { avg_score: 80, stocks: [] } });
     if (path === '/api/strength/profiles') return route.fulfill({ json: { profiles: ['balanced', 'aggressive', 'conservative'], sectors: [] } });
     if (path === '/api/strength/scan') {
       state.scans.push(Object.fromEntries(url.searchParams));
@@ -25,10 +26,11 @@ async function fixture(page, options = {}) {
         if (state.failBalanced) return unavailable();
       }
       const now = new Date().toISOString();
-      return route.fulfill({ json: { rows: [
+      const rows = state.rows ?? [
         { ticker: 'AAA', name: url.searchParams.get('profile') === 'aggressive' ? '进取甲公司' : '甲公司', price: 100, final_score: 95, change_pct: 1, avg_dollar_volume_20d: 25_000_000, macro_fit_shadow: 80, score_short: 95, score_mid: 90 },
         { ticker: 'BBB', name: '乙公司', price: 110, final_score: 85, change_pct: 2, avg_dollar_volume_20d: 25_000_000, macro_fit_shadow: 20, score_short: 85, score_mid: 80 },
-      ], universe_count: 2, screened_count: 2, source_status: 'active', snapshot_saved_at: now, scan_completed_at: now,
+      ];
+      return route.fulfill({ json: { rows, universe_count: rows.length, screened_count: rows.length, source_status: 'active', snapshot_saved_at: now, scan_completed_at: now,
       cache_expires_at: new Date(Date.now() + 3_600_000).toISOString(), score_version: 'audit', _stale: false } });
     }
     if (path === '/api/catalysts/tickers/batch') {
@@ -157,6 +159,62 @@ test('reset from aggressive actually scans balanced and preserves old profile th
   await expect(page.getByRole('table').getByText('进取甲公司', { exact: true })).toHaveCount(0);
   expect(state.errors).toEqual([]);
 });
+
+for (const width of [320, 390]) {
+  test(`mobile screener pager changes rows with 44px controls and no overflow at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 1000 });
+    const rows = Array.from({ length: 25 }, (_, index) => ({
+      ticker: `T${String(index).padStart(3, '0')}`,
+      name: `分页公司 ${index}`,
+      price: 100 + index,
+      final_score: 95 - index * 0.5,
+      change_pct: index / 10,
+      avg_dollar_volume_20d: 25_000_000,
+      macro_fit_shadow: 80,
+      score_short: 95 - index * 0.5,
+      score_mid: 90 - index * 0.5,
+    }));
+    const state = await fixture(page, { rows, marketPayload: { market_regime: {
+      score: 80, label: '偏强', index_trend_score: 80, market_momentum_score: 75,
+      market_breadth_score: 70, market_volume_score: 65, risk_appetite_score: 75,
+      risk_on_spread_score: 60, warnings: [],
+    } } });
+    await page.getByRole('combobox', { name: '最多显示数量', exact: true }).click();
+    await page.getByRole('option', { name: 'Top 40', exact: true }).click();
+    await page.locator('button.scan-trigger').click();
+    await expect(page.getByText('T000', { exact: true }).filter({ visible: true })).toBeVisible();
+
+    const previous = page.getByRole('button', { name: '上一页', exact: true });
+    const next = page.getByRole('button', { name: '下一页', exact: true });
+    await expect(previous).toBeVisible();
+    await expect(next).toBeVisible();
+    for (const button of [previous, next]) {
+      const box = await button.boundingBox();
+      expect(box).not.toBeNull();
+      expect(box.width).toBeGreaterThanOrEqual(44);
+      expect(box.height).toBeGreaterThanOrEqual(44);
+    }
+    await expect(page.getByText('T000', { exact: true }).filter({ visible: true })).toBeVisible();
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+
+    await next.click();
+    await expect(page.getByText('T020', { exact: true }).filter({ visible: true })).toBeVisible();
+    await expect(page.getByText('T000', { exact: true }).filter({ visible: true })).toHaveCount(0);
+    await expect(page.getByText('2 / 2', { exact: true })).toBeVisible();
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+
+    await previous.click();
+    await expect(page.getByText('T000', { exact: true }).filter({ visible: true })).toBeVisible();
+    await expect(page.getByText('T020', { exact: true }).filter({ visible: true })).toHaveCount(0);
+    await expect(page.getByText('1 / 2', { exact: true })).toBeVisible();
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    if (width === 320) {
+      await mkdir('test-results/audit-fixes', { recursive: true });
+      await page.screenshot({ path: 'test-results/audit-fixes/screener-pager-320.png', animations: 'disabled' });
+    }
+    expect(state.errors).toEqual([]);
+  });
+}
 
 test.describe('chart exchange time', () => {
   test.use({ timezoneId: 'Asia/Tokyo' });
