@@ -58,7 +58,7 @@ test('自选页在完整列表上排序与统计，只对渲染切片分批', as
   // 渲染用切片
   assert.match(page, /renderedCards\.map/);
   assert.doesNotMatch(page, /\{\s*cardItems\.map\(/, '不应再有直接渲染整份列表的地方');
-  assert.match(page, /useQuoteSymbols\(cardItems\.map\(/, '行情订阅必须包含尚未挂载的列表项');
+  assert.match(page, /useQuoteSymbols\(identityUnavailable \? \[\] : cardItems\.map\(/, '身份已确认时订阅完整列表，未确认时暂停订阅');
   // 还有剩余时必须给出可见的继续加载入口
   assert.match(page, /progressive\.hasMore/);
   assert.match(page, /加载更多/);
