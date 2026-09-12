@@ -922,6 +922,22 @@ export function mockSignalAnalysisResult(symbol: string): Record<string, unknown
   };
 }
 
+export function mockOptionAlertResult(symbol: string, expiration = ''): Record<string, unknown> {
+  const expiry = expiration || getOptionExpirations(symbol)[0] || '最近到期日';
+  return {
+    output_language: 'zh-CN',
+    confidence: 'medium',
+    direction: 'unknown',
+    direction_status: 'unavailable_without_trade_side',
+    summary: `${symbol} ${expiry} 的成交集中在少数行权价，但缺少成交主动方，不能据此判断真实方向。`,
+    analysis:
+      `${symbol} 当前链上的量能和权利金只能说明成交分布，不能还原买方还是卖方主动成交。` +
+      '演示数据用于核对结构化展示，不代表实时期权流。',
+    key_strikes: ['近端虚值看涨', '近端虚值看跌', '平值附近'],
+    risk_note: '买卖中价估算不等于实际成交价，也不能单独作为方向信号。',
+  };
+}
+
 export function createAiJob(
   kind: AiJob['kind'],
   payloadLabel = '',
@@ -1385,6 +1401,9 @@ function buildAnalysisResult(
     headlineSummary: `「${titleZh}」整体判定为${clsZh}催化，主要影响 ${tickers.join('、')}。`,
     causalSummary: `该新闻处于「${themeLabel}」叙事主线上：表层是单一事件，底层是资金对该主线持续性的再确认。传导路径上，${tickers[0]}最先被定价，其后沿产业链与同类标的扩散；若未来 48 小时内出现证伪信息，影响将快速衰减，反之则可能演化为趋势级重估。`,
     trustedStockImpacts: impacts,
+    keyFactors: [`事件落在「${themeLabel}」主线`, `${tickers[0]} 最先被定价`],
+    uncertaintyNotes: ['若 48 小时内出现证伪信息，影响可能快速衰减'],
+    affectedSectors: [themeLabel],
     model: 'optix-news-v2',
     generatedAt,
   };

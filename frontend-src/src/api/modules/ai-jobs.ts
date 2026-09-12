@@ -60,6 +60,7 @@ export const aiJobsApi = {
         fx2.createAiJob('option-alerts', params.tickers.join(','), {
           ticker: params.tickers[0],
           expiration: params.expiration,
+          result: fx2.mockOptionAlertResult(params.tickers[0] ?? '', params.expiration ?? ''),
         }),
       // 契约：{ticker, force, alerts, underlying_price, expiration}
       () =>

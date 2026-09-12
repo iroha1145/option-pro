@@ -107,6 +107,26 @@ test('option result parser requires the complete backend contract', () => {
   assert.equal(parseOptionAlertResult('期权解读完成'), null);
 });
 
+test('mock option-alerts jobs carry a parseable structured result', async () => {
+  const source = await readFile(
+    path.resolve(here, '..', 'src', 'api', 'modules', 'ai-jobs.ts'),
+    'utf8',
+  );
+  assert.match(source, /mockOptionAlertResult/);
+  const parsed = parseOptionAlertResult({
+    output_language: 'zh-CN',
+    confidence: 'medium',
+    direction: 'unknown',
+    direction_status: 'unavailable_without_trade_side',
+    summary: '成交集中在少数行权价，但缺少成交主动方。',
+    analysis: '现有结构化数据只能说明成交和持仓分布。',
+    key_strikes: ['近端虚值看涨', '平值附近'],
+    risk_note: '买卖中价估算不等于实际成交价。',
+  });
+  assert.equal(parsed?.direction_status, 'unavailable_without_trade_side');
+  assert.equal(parsed?.key_strikes.length, 2);
+});
+
 test('production option panel contains no hard-coded completion conclusion', async () => {
   const source = await readFile(
     path.resolve(here, '..', 'src', 'components', 'detail', 'OptionsPanel.tsx'),
