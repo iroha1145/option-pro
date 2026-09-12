@@ -128,6 +128,8 @@ test('customer 401 clears the username and management controls even while identi
 test('login cookie plus failed identity does not write owner response under old visitor principal', async ({ page, context }) => {
   const state = await fixture(page);
   await page.goto('/watchlist');
+  // The old principal must be confirmed before this test changes its cookie.
+  await expect(page.getByRole('heading', { name: '自选观察', exact: true })).toBeVisible();
   await expect(page.getByRole('link', { name: '登录', exact: true })).toBeVisible();
   await page.getByRole('link', { name: '登录', exact: true }).click();
   await page.getByLabel('用户名', { exact: true }).fill('admin');

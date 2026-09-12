@@ -282,6 +282,24 @@ function accessHarness() {
   return { ...h, statuses, logins, read: () => result().props.value, status, unmount: runner.unmount };
 }
 
+test('initial identity readiness survives later failures but cannot be set by a failed read', async () => {
+  const h = accessHarness();
+  assert.equal(h.read().hasConfirmedIdentity, false);
+  h.statuses.shift().reject(new ApiError(503, 'identity unavailable')); await settle();
+  assert.equal(h.read().loading, false);
+  assert.equal(h.read().identityUnavailable, true);
+  assert.equal(h.read().hasConfirmedIdentity, false);
+  const retry = h.read().refresh();
+  h.statuses.shift().resolve(h.status); await retry;
+  assert.equal(h.read().hasConfirmedIdentity, true);
+  const refresh = h.read().refresh();
+  const rejected = assert.rejects(refresh, /identity unavailable/);
+  h.statuses.shift().reject(new ApiError(503, 'identity unavailable')); await rejected;
+  assert.equal(h.read().identityUnavailable, true);
+  assert.equal(h.read().hasConfirmedIdentity, true);
+  h.unmount();
+});
+
 test('confirmed customer invalidation clears username and write permission before status recovery', async () => {
   const h = accessHarness();
   h.statuses.shift().resolve({ ...h.status, accountUsername: 'alice' }); await settle();
@@ -341,9 +359,9 @@ test('LivePrice isolates its stateful child by normalized symbol and stale UI re
 
 test('route content changes identity only for pathname or principal, not a same-principal verification failure', () => {
   const runner = reactRunner(), env = environment();
-  let identity = { role: 'owner', username: null, loading: false, identityUnavailable: false };
+  let identity = { role: 'owner', username: null, loading: false, hasConfirmedIdentity: true, identityUnavailable: false };
   let pathname = '/';
-  const components = ['Navbar', 'IndexTape', 'QuoteConnection', 'Footer', 'MobileDock', 'CommandPalette', 'shared/RouteErrorBoundary', 'shared/PageFallback'];
+  const components = ['Navbar', 'IndexTape', 'QuoteConnection', 'Footer', 'MobileDock', 'CommandPalette', 'shared/RouteErrorBoundary', 'shared/PageFallback', 'shared/StatusNotice'];
   const imports = Object.fromEntries(components.map(name => [`@/components/${name}`, { default: name }]));
   Object.assign(imports, {
     react: runner.React, 'react/jsx-runtime': jsx,

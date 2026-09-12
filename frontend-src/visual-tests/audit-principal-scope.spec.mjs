@@ -4,7 +4,8 @@ import { expect, test } from '@playwright/test';
 // or another tab switching accounts. No synthetic React state or private hook is used.
 async function fixture(page, options = {}) {
   const state = { owner: false, username: null, failIdentity: false, holdWatchlist: false,
-    holdScans: false, unauthorized: false, holdPersonal: false, holdCalendar: false, calendarAvailable: false, feedAvailable: false, holdFeedNext: false, calendarEmpty: false, held: [], reads: [], errors: [], ...options };
+    holdScans: false, unauthorized: false, holdPersonal: false, holdCalendar: false, calendarAvailable: false, feedAvailable: false, holdFeedNext: false, calendarEmpty: false,
+    holdRuntime: false, holdAi: false, identityFailureStatus: 503, heldRuntime: [], heldAi: [], held: [], reads: [], errors: [], ...options };
   await page.addInitScript(() => localStorage.setItem('optix:locale', 'zh'));
   page.on('pageerror', error => state.errors.push(error.message));
   await page.route('**/*', route => ['127.0.0.1', 'localhost'].includes(new URL(route.request().url()).hostname) ? route.continue() : route.abort());
@@ -14,7 +15,8 @@ async function fixture(page, options = {}) {
     const principal = state.owner ? 'OWNER' : state.username?.toUpperCase() ?? 'VISITOR';
     state.reads.push({ path, principal, method: request.method() });
     const unavailable = () => route.fulfill({ status: 503, json: { message: '本地身份隔离验证：暂不可用' } });
-    if (path === '/api/access/status') return state.failIdentity ? unavailable() : route.fulfill({ json: {
+    if (path === '/api/access/status') return state.failIdentity ? route.fulfill({ status: state.identityFailureStatus,
+      json: { message: '本地身份隔离验证：暂不可用' } }) : route.fulfill({ json: {
       access_mode: 'password', logged_in: state.owner,
       account: state.username ? { logged_in: true, username: state.username } : null,
     } });
@@ -22,8 +24,16 @@ async function fixture(page, options = {}) {
       state.owner = false; state.username = null;
       return route.fulfill({ json: { ok: true } });
     }
-    if (path === '/api/ai/status') return route.fulfill({ json: { enabled: false } });
-    if (path === '/api/runtime-settings') return route.fulfill({ json: { settings: { ai: { manual_analysis_enabled: false } } } });
+    if (path === '/api/ai/status') {
+      const release = () => route.fulfill({ json: { enabled: false } });
+      if (state.holdAi) { state.heldAi.push(release); return; }
+      return release();
+    }
+    if (path === '/api/runtime-settings') {
+      const release = () => route.fulfill({ json: { settings: { ai: { manual_analysis_enabled: false } } } });
+      if (state.holdRuntime) { state.heldRuntime.push(release); return; }
+      return release();
+    }
     if (path === '/api/account/watchlist') {
       if (state.unauthorized) return route.fulfill({ status: 401, json: { code: 'account_login_required', message: '请重新登录' } });
       const json = { tickers: state.username === 'bob' ? ['MSFT'] : ['AAPL'], max_tickers: 50 };
@@ -76,6 +86,65 @@ async function focusAndVerify(page, status = 200) {
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await response;
 }
+
+test('initial identity waits for both capability probes before mounting editable Screener filters', async ({ page }) => {
+  const state = await fixture(page, { owner: true, holdRuntime: true, holdAi: true });
+  await page.goto('/');
+  await page.getByRole('link', { name: '选股', exact: true }).first().click();
+  await expect(page).toHaveURL(/\/screener$/);
+  await expect.poll(() => state.heldRuntime.length).toBeGreaterThan(0);
+  await expect.poll(() => state.heldAi.length).toBeGreaterThan(0);
+  await expect(page.getByRole('status', { name: '页面加载中' })).toBeVisible();
+  await expect(page.locator('[aria-label="筛选条件"]')).toHaveCount(0);
+  state.holdRuntime = false;
+  await Promise.all(state.heldRuntime.splice(0).map(release => release()));
+  // The access response and runtime settings are complete, but AI status is still pending.
+  await expect(page.locator('[aria-label="筛选条件"]')).toHaveCount(0);
+  state.holdAi = false;
+  await Promise.all(state.heldAi.splice(0).map(release => release()));
+  await expect(page.getByRole('button', { name: '退出', exact: true })).toBeVisible();
+  const last = page.getByRole('tablist', { name: /^强度分档/ }).getByRole('tab', { name: /^C/ });
+  await last.click();
+  await expect(last).toHaveAttribute('aria-selected', 'true');
+  const original = await last.elementHandle();
+  // A later same-principal capability refresh must preserve the mounted control and focus.
+  state.holdAi = true;
+  await focusAndVerify(page);
+  await expect.poll(() => state.heldAi.length).toBeGreaterThan(0);
+  await expect(last).toHaveAttribute('aria-selected', 'true');
+  state.holdAi = false;
+  await Promise.all(state.heldAi.splice(0).map(release => release()));
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await expect(last).toHaveAttribute('aria-selected', 'true');
+  await expect(last).toBeFocused();
+  expect(await original.evaluate(node => node.isConnected)).toBe(true);
+  expect(state.errors).toEqual([]);
+});
+
+test('initial identity 503 shows a recoverable error and automatically opens the page after retry succeeds', async ({ page }) => {
+  const state = await fixture(page, { owner: true, failIdentity: true });
+  await page.goto('/screener');
+  await expect(page.getByText('身份暂时无法确认，请稍后重试', { exact: true })).toBeVisible();
+  await expect(page.getByRole('status', { name: '页面加载中' })).toHaveCount(0);
+  await expect(page.locator('[aria-label="筛选条件"]')).toHaveCount(0);
+  state.failIdentity = false;
+  await expect(page.getByRole('button', { name: '退出', exact: true })).toBeVisible();
+  await expect(page.locator('[aria-label="筛选条件"]')).toBeVisible();
+  expect(state.reads.filter(read => read.path === '/api/access/status').length).toBeGreaterThan(1);
+  expect(state.errors).toEqual([]);
+});
+
+test('initial identity 429 offers manual retry without mounting provisional editable controls', async ({ page }) => {
+  const state = await fixture(page, { owner: true, failIdentity: true, identityFailureStatus: 429 });
+  await page.goto('/screener');
+  await expect(page.getByText('身份暂时无法确认，请稍后重试', { exact: true })).toBeVisible();
+  await expect(page.locator('[aria-label="筛选条件"]')).toHaveCount(0);
+  state.failIdentity = false;
+  await page.getByRole('status').filter({ hasText: '身份暂时无法确认，请稍后重试' }).getByRole('button', { name: '重试', exact: true }).click();
+  await expect(page.getByRole('button', { name: '退出', exact: true })).toBeVisible();
+  await expect(page.locator('[aria-label="筛选条件"]')).toBeVisible();
+  expect(state.errors).toEqual([]);
+});
 
 test('principal expiry on Home removes the old 300-second snapshot before delayed visitor data arrives', async ({ page }) => {
   const state = await fixture(page, { owner: true });
@@ -178,12 +247,13 @@ test('first identity failure on Watchlist shows an error without a fabricated de
   const state = await fixture(page, { failIdentity: true, username: 'alice' });
   await page.goto('/watchlist');
   const list = page.getByRole('region', { name: '自选列表', exact: true });
-  await expect(list.getByText('自选读取失败', { exact: true })).toBeVisible();
-  await expect(list.getByText('ALICE snapshot', { exact: true })).toHaveCount(0);
-  await expect(list.getByText('默认关注 AAPL、MSFT、NVDA、SPY，共 4 只。', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('身份暂时无法确认，请稍后重试', { exact: true })).toBeVisible();
+  await expect(list).toHaveCount(0);
+  await expect(page.getByText('ALICE snapshot', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('默认关注 AAPL、MSFT、NVDA、SPY，共 4 只。', { exact: true })).toHaveCount(0);
   expect(state.reads.filter(read => ['/api/account/watchlist', '/api/stocks/watchlist'].includes(read.path))).toEqual([]);
   state.failIdentity = false;
-  await list.getByRole('button', { name: '重试', exact: true }).click();
+  await page.getByRole('status').filter({ hasText: '身份暂时无法确认，请稍后重试' }).getByRole('button', { name: '重试', exact: true }).click();
   await expect(list.getByText('ALICE snapshot', { exact: true })).toBeVisible();
   expect(state.errors).toEqual([]);
 });
@@ -250,12 +320,12 @@ test('confirmed catalyst calendar survives identity 503 with retry and clears on
 test('catalyst calendar with no confirmed snapshot stays in an error state on identity failure', async ({ page }) => {
   const state = await fixture(page, { username: 'alice', failIdentity: true, calendarAvailable: true });
   await page.goto('/catalysts?tab=calendar');
-  await expect(page.getByText('日历数据暂不可用', { exact: true })).toBeVisible();
+  await expect(page.getByText('身份暂时无法确认，请稍后重试', { exact: true })).toBeVisible();
   await expect(page.getByText('本窗口暂无经济事件', { exact: true })).toHaveCount(0);
   await expect(page.getByTestId('catalyst-cache-status')).toHaveCount(0);
   expect(state.reads.filter(read => read.path === '/api/catalysts/calendar')).toEqual([]);
   state.failIdentity = false;
-  await page.getByText('日历数据暂不可用', { exact: true }).locator('..').getByRole('button', { name: '重试', exact: true }).click();
+  await page.getByRole('status').filter({ hasText: '身份暂时无法确认，请稍后重试' }).getByRole('button', { name: '重试', exact: true }).click();
   await expect(page.getByText('ALICE calendar', { exact: true })).toBeVisible();
   expect(state.errors).toEqual([]);
 });

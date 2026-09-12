@@ -34,6 +34,8 @@ interface AccessContextValue {
    */
   canManageWatchlist: boolean;
   loading: boolean;
+  /** At least one successful identity read; retained across later outages. */
+  hasConfirmedIdentity: boolean;
   /**
    * 身份服务本身读不到。
    *
@@ -62,6 +64,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     accountUsername: null,
   });
   const [loading, setLoading] = useState(true);
+  const [hasConfirmedIdentity, setHasConfirmedIdentity] = useState(false);
   const [identityUnavailable, setIdentityUnavailable] = useState(false);
 
   /**
@@ -114,6 +117,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
       identityRef.current = identity;
       setQueryPrincipal(identity);
       setStatus(next);
+      setHasConfirmedIdentity(true);
       setIdentityUnavailable(false);
     } catch (error) {
       if (generation !== generationRef.current) return;
@@ -281,13 +285,14 @@ export function AccessProvider({ children }: { children: ReactNode }) {
       isSignedIn: status.role === 'owner' || status.accountUsername !== null,
       canManageWatchlist: status.accountUsername !== null || status.role === 'owner',
       loading,
+      hasConfirmedIdentity,
       identityUnavailable,
       login,
       register,
       logout,
       refresh,
     }),
-    [status, loading, identityUnavailable, login, register, logout, refresh],
+    [status, loading, hasConfirmedIdentity, identityUnavailable, login, register, logout, refresh],
   );
 
   return <AccessContext.Provider value={value}>{children}</AccessContext.Provider>;

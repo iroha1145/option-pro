@@ -14,6 +14,7 @@ import QuoteConnection from '@/components/QuoteConnection';
 import Footer from '@/components/Footer';
 import RouteErrorBoundary from '@/components/shared/RouteErrorBoundary';
 import PageFallback from '@/components/shared/PageFallback';
+import StatusNotice from '@/components/shared/StatusNotice';
 import MobileDock from '@/components/MobileDock';
 import CommandPalette from '@/components/CommandPalette';
 import { pushRecent } from '@/lib/recentTickers';
@@ -26,7 +27,7 @@ export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
   const navigationType = useNavigationType();
-  const { role, username } = useAccess();
+  const { role, username, hasConfirmedIdentity, identityUnavailable, refresh } = useAccess();
   // An actual principal change retires every page-owned snapshot and draft, including
   // non-polling state. Temporary identity read failures keep the last known principal.
   const pageKey = JSON.stringify([location.pathname, role, username]);
@@ -93,7 +94,18 @@ export default function Layout() {
             {/* 按路由重建的错误边界:页面崩溃显示错误卡而非白屏,切页自动复位 */}
             <RouteErrorBoundary>
               <Suspense fallback={<PageFallback />}>
-                <Outlet />
+                {/* Initial visitor is provisional: mounting editable pages before the
+                    first successful identity read would discard input on confirmation.
+                    Once confirmed, later outages retain the mounted page and its draft. */}
+                {hasConfirmedIdentity ? <Outlet /> : identityUnavailable ? (
+                  <StatusNotice action={
+                    <button type="button" className="control-button touch-target" onClick={() => { void refresh().catch(() => undefined); }}>
+                      {__t('重试')}
+                    </button>
+                  }>
+                    {__t('身份暂时无法确认，请稍后重试')}
+                  </StatusNotice>
+                ) : <PageFallback />}
               </Suspense>
             </RouteErrorBoundary>
           </div>
