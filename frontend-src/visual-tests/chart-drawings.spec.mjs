@@ -27,18 +27,24 @@ import {
 const SCREENSHOT_DIR = join(process.cwd(), "test-results", "visual-evidence");
 const HAS_REAL_BACKEND = Boolean(process.env.OPTIX_VISUAL_BASE_URL);
 const chartRateLimits = new WeakMap();
+const stockRateLimits = new WeakMap();
 
 function trackChartRateLimits(page) {
   if (chartRateLimits.has(page)) return;
   const state = { retryAt: null };
   chartRateLimits.set(page, state);
+  const stockState = { retryAt: null };
+  stockRateLimits.set(page, stockState);
   page.on("response", (response) => {
-    if (!/\/api\/stocks\/[^/]+\/chart(?:\?|$)/.test(response.url())) return;
+    const target = /\/api\/stocks\/[^/?]+(?:\?|$)/.test(response.url())
+      ? stockState
+      : /\/api\/stocks\/[^/]+\/chart(?:\?|$)/.test(response.url()) ? state : null;
+    if (!target) return;
     if (response.status() === 429) {
       const seconds = Number(response.headers()["retry-after"]);
-      state.retryAt = Date.now() + (Number.isFinite(seconds) && seconds > 0 ? seconds * 1_000 : 2_000);
+      target.retryAt = Date.now() + (Number.isFinite(seconds) && seconds > 0 ? seconds * 1_000 : 2_000);
     } else if (response.ok()) {
-      state.retryAt = null;
+      target.retryAt = null;
     }
   });
 }
@@ -68,22 +74,21 @@ function drawingRows(page) {
   return page.getByRole("dialog", { name: "绘图工作区" }).getByRole("button", { name: /^绘图对象 / });
 }
 
-async function waitDrawingToolbar(page, ticker = "AAPL") {
+/** Recover the stock-level error card before a chart region can be mounted. */
+async function waitDrawingToolbar(page) {
   await expect.poll(async () => {
-    if (await toolButton(page, "选择").isVisible().catch(() => false)) return "ready";
-    const retry = page.getByRole("region", { name: /K 线图$/ })
-      .getByRole("button", { name: "重试", exact: true });
-    if (await retry.isVisible().catch(() => false)) {
-      await retry.click({ timeout: 1_000 }).catch(() => {});
+    if (await toolButton(page, "选择").isVisible()) return "ready";
+    const rateLimit = stockRateLimits.get(page);
+    if (rateLimit?.retryAt != null && Date.now() >= rateLimit.retryAt) {
+      const retry = page.getByRole("heading", { name: "请求较频繁", exact: true })
+        .locator("..").getByRole("button", { name: "重试", exact: true });
+      if (await retry.isVisible().catch(() => false)) {
+        rateLimit.retryAt = Date.now() + 5_000;
+        await retry.click({ timeout: 1_000 }).catch(() => {});
+      }
     }
-    const listed = await listDrawings(page, ticker);
-    if (listed.status === 429) return "rate-limited";
-    if (listed.status !== 200) {
-      await page.goto(`/stock/${ticker}`, { waitUntil: "domcontentloaded" }).catch(() => {});
-      return `http ${listed.status}`;
-    }
-    return "no-toolbar";
-  }, { timeout: 90_000 }).toBe("ready");
+    return "waiting-for-stock";
+  }, { timeout: 90_000, intervals: [500, 1_000, 2_000] }).toBe("ready");
 }
 
 async function openStock(page, ticker = "AAPL") {
@@ -93,7 +98,7 @@ async function openStock(page, ticker = "AAPL") {
   if (!page.url().includes(`/stock/${ticker}`)) {
     await page.goto(`/stock/${ticker}`, { waitUntil: "domcontentloaded" });
   }
-  await waitDrawingToolbar(page, ticker);
+  await waitDrawingToolbar(page);
   return errors;
 }
 
@@ -202,8 +207,10 @@ async function waitOneUnlockedDrawing(page) {
 
 /** beforeEach DELETE 后控制器仍可能把旧对象写回；409 会让 GET 一直是空。 */
 async function resetDrawingScope(page) {
+  const stockUrl = page.url();
+  await page.goto("/health", { waitUntil: "domcontentloaded" });
   await clearTouchedDrawings(page);
-  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.goto(stockUrl, { waitUntil: "domcontentloaded" });
   await waitDrawingToolbar(page);
   await expect.poll(async () => {
     const listed = await listDrawings(page);
@@ -359,19 +366,19 @@ test.describe.configure({ timeout: 180_000 });
 test.beforeEach(async ({ page }) => {
   if (!HAS_REAL_BACKEND) return;
   trackChartRateLimits(page);
-  // 上一轮 CI 的残留会让「恰好 n 条」全红；page.request.delete 过不了同源守卫。
-  await page.goto("/stock/AAPL", { waitUntil: "domcontentloaded" });
-  // After ~25 drawing specs the owner light bucket 429s stock/chart GETs, so
-  // the toolbar is missing until a 200 lands. Poll like the OCC helpers:
-  // 429 is transient, not a missing toolbar.
-  await waitDrawingToolbar(page);
+  // Unmount the previous controller before deleting. A mounted controller can
+  // replay its local copy after DELETE and put a second object into this test.
+  await page.goto("/health", { waitUntil: "domcontentloaded" });
   await clearTouchedDrawings(page);
+  await page.goto("/stock/AAPL", { waitUntil: "domcontentloaded" });
+  await waitDrawingToolbar(page);
 });
 
 test.afterEach(async ({ page }) => {
   if (!HAS_REAL_BACKEND) return;
   // 「失败重试」用例把非 GET 全 abort 掉了，先撤路由再清扫。
   // 清扫必须走页面 fetch：page.request.delete 没有 Origin，同源守卫会 403。
+  await page.goto("/health", { waitUntil: "domcontentloaded" });
   await clearTouchedDrawings(page);
 });
 
@@ -515,7 +522,7 @@ test("ticker and range switch isolates drawings", async ({ page }) => {
   await expect(chartTab(page, "日线")).toHaveAttribute("aria-selected", "true");
   await expect(drawingRows(page)).toHaveCount(1);
   await page.goto("/stock/MSFT", { waitUntil: "domcontentloaded" });
-  await waitDrawingToolbar(page, "MSFT");
+  await waitDrawingToolbar(page);
   await expectDrawingCount(page, 0);
 });
 
@@ -585,7 +592,6 @@ test("hide then restore from the object list", async ({ page }) => {
 
 test("undo color text lock delete then refresh", async ({ page }) => {
   test.skip(!HAS_REAL_BACKEND, "stock drawings visual path needs OPTIX_VISUAL_BASE_URL");
-  test.setTimeout(120_000);
   await openStock(page);
   await resetDrawingScope(page);
   await placeHorizontal(page, 0.5, 0.4);
@@ -606,6 +612,36 @@ test("undo color text lock delete then refresh", async ({ page }) => {
   await waitDrawingToolbar(page);
   await expectDrawingCount(page, 1);
   await expect(drawingRows(page).first()).not.toContainText("已锁定");
+});
+
+test("scope reload retries a rate-limited stock overview before drawing", async ({ page }) => {
+  test.skip(!HAS_REAL_BACKEND, "stock drawings visual path needs OPTIX_VISUAL_BASE_URL");
+  let overviewRequests = 0;
+  let retryAllowedAt = 0;
+  let retriedEarly = false;
+  await page.route(/\/api\/stocks\/AAPL(?:\?.*)?$/, async (route) => {
+    overviewRequests += 1;
+    if (overviewRequests === 1) {
+      retryAllowedAt = Date.now() + 1_000;
+      await route.fulfill({
+        status: 429,
+        headers: { "Retry-After": "1", "Content-Type": "application/json" },
+        body: JSON.stringify({ detail: "Stock overview test cooldown" }),
+      });
+      return;
+    }
+    retriedEarly ||= Date.now() < retryAllowedAt;
+    await route.continue();
+  });
+  // clearTouchedDrawings removes routes, so install the fault after clearing.
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await waitDrawingToolbar(page);
+  expect(overviewRequests).toBeGreaterThanOrEqual(2);
+  expect(retriedEarly).toBe(false);
+  await placeHorizontal(page);
+  const drawing = await waitOneUnlockedDrawing(page);
+  expect(Number.isFinite(drawing.price)).toBeTruthy();
+  await expectDrawingCount(page, 1);
 });
 
 test("clear all removes every drawing in the scope", async ({ page }) => {
