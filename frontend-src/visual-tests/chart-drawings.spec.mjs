@@ -191,16 +191,58 @@ async function collapseChart(page) {
 }
 
 /**
- * Drag on the same canvas box used to place the line. Do not expand first:
- * expand resizes the plot, so a later 0.4 y-ratio is no longer on the line.
- * Packed ECharts is not on `window`, so price→pixel mapping is unavailable.
+ * Packed ECharts is not on `window`. Walk the React fiber on the init host
+ * (`role=img`) to reach convertToPixel. Use the live host rect — Playwright's
+ * place-time canvas box can shift ~18px after the mark lands, which is enough
+ * to miss the 8px hit tolerance.
  */
-async function dragOnPlacedBox(page, box, fromYRatio, toYRatio) {
-  expect(box, "placed canvas box").toBeTruthy();
+async function pagePointForPrice(page, price, xRatio = 0.55) {
+  return page.evaluate(({ price, xRatio }) => {
+    const host = document.querySelector('[role="img"][aria-label$="图"]');
+    if (!host || !Number.isFinite(price)) return null;
+    const fiberKey = Object.keys(host).find((key) => (
+      key.startsWith("__reactFiber") || key.startsWith("__reactInternalInstance")
+    ));
+    if (!fiberKey) return null;
+    const seen = new Set();
+    const pick = (node, depth) => {
+      if (!node || typeof node !== "object" || depth > 30 || seen.has(node)) return null;
+      seen.add(node);
+      if (typeof node.convertToPixel === "function") return node;
+      if (node.current && typeof node.current.convertToPixel === "function") return node.current;
+      for (const key of ["stateNode", "memoizedState", "memoizedProps", "child", "sibling", "return", "current"]) {
+        const hit = pick(node[key], depth + 1);
+        if (hit) return hit;
+      }
+      let hook = node.memoizedState;
+      let index = 0;
+      while (hook && index < 24) {
+        const value = hook.memoizedState;
+        if (value && typeof value.convertToPixel === "function") return value;
+        if (value?.current && typeof value.current.convertToPixel === "function") return value.current;
+        hook = hook.next;
+        index += 1;
+      }
+      return null;
+    };
+    const inst = pick(host[fiberKey], 0);
+    if (!inst) return null;
+    const yRaw = inst.convertToPixel({ yAxisIndex: 0 }, price);
+    const yPx = Array.isArray(yRaw) ? Number(yRaw[1] ?? yRaw[0]) : Number(yRaw);
+    if (!Number.isFinite(yPx)) return null;
+    const rect = host.getBoundingClientRect();
+    return { x: rect.x + rect.width * xRatio, y: rect.y + yPx };
+  }, { price, xRatio });
+}
+
+async function dragDrawingByPrice(page, fromPrice, yDelta = -80) {
+  const start = await pagePointForPrice(page, fromPrice, 0.55);
+  expect(start, "live price pixel").toBeTruthy();
+  expect(Number.isFinite(start.y), "finite drag y").toBeTruthy();
   await toolButton(page, "选择").click();
-  await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * fromYRatio);
+  await page.mouse.move(start.x, start.y);
   await page.mouse.down();
-  await page.mouse.move(box.x + box.width * 0.55, box.y + box.height * toYRatio, { steps: 12 });
+  await page.mouse.move(start.x + 20, start.y + yDelta, { steps: 12 });
   await page.mouse.up();
 }
 
@@ -342,11 +384,10 @@ test("seven drawing tools are present and selectable", async ({ page }) => {
 test("drag endpoint and whole-object after selecting a drawing", async ({ page }) => {
   test.skip(!HAS_REAL_BACKEND, "stock drawings visual path needs OPTIX_VISUAL_BASE_URL");
   await openStock(page);
-  const placedY = 0.4;
-  const box = await placeHorizontal(page, 0.5, placedY);
+  await placeHorizontal(page, 0.5, 0.4);
   const before = await waitOneUnlockedDrawing(page);
   expect(Number.isFinite(before.price)).toBeTruthy();
-  await dragOnPlacedBox(page, box, placedY, 0.15);
+  await dragDrawingByPrice(page, before.price, -80);
   let after = null;
   await expect.poll(async () => {
     const listed = await listDrawings(page);
@@ -372,18 +413,15 @@ test("drag endpoint and whole-object after selecting a drawing", async ({ page }
 test("locked drawing keeps its anchors when dragged", async ({ page }) => {
   test.skip(!HAS_REAL_BACKEND, "stock drawings visual path needs OPTIX_VISUAL_BASE_URL");
   await openStock(page);
-  const placedY = 0.45;
-  const box = await placeHorizontal(page, 0.5, placedY);
+  await placeHorizontal(page, 0.5, 0.45);
   const before = await waitOneUnlockedDrawing(page);
   await expandChart(page);
   await toolButton(page, "锁定").first().click();
   await expect.poll(async () => drawingsLockState(await listDrawings(page)), { timeout: 45_000 }).toBe("locked");
   const locked = drawingIdentity(await listDrawings(page));
-  // 收起后画布回到落笔尺寸，才能用同一 y 比例命中水平线。
   await collapseChart(page);
   await chartFilled(page);
-  const collapsedBox = await page.locator("canvas").first().boundingBox();
-  await dragOnPlacedBox(page, collapsedBox ?? box, placedY, 0.15);
+  await dragDrawingByPrice(page, locked.price, -80);
   await page.waitForTimeout(400);
   const after = drawingIdentity(await listDrawings(page));
   expect(after.id).toBe(before.id);
