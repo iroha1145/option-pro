@@ -268,12 +268,15 @@ function normalizeMockEarningsImpact(body: unknown): EarningsImpactResult {
       impacted: related.map((value) => {
         const item = asRec(value);
         const change = pickN(item, 'changePct', 'change_pct');
+        const relation = pickS(item, 'relation');
         return {
           ticker: (pickS(item, 'ticker') ?? '').toUpperCase(),
           name: pickLabel(item, 'name') ?? pickS(item, 'ticker') ?? '',
-          relation: 'opposing',
+          relation: RELATIONS.has(relation as EarningsImpactRelation)
+            ? (relation as EarningsImpactRelation)
+            : 'competitor',
           direction: change == null ? 'mixed' : change > 0 ? 'bullish' : change < 0 ? 'bearish' : 'mixed',
-          reason: pickS(item, 'reason', 'relation') ?? t('本地演示关联项'),
+          reason: pickS(item, 'reason') ?? pickS(item, 'relation') ?? t('本地演示关联项'),
         };
       }),
     };

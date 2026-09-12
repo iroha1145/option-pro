@@ -525,6 +525,16 @@ export interface EarningsImpactEx extends EarningsImpact {
   generatedAt: string;
   histAvgMovePct: number | null;
   confidence: number | null; // 0–1
+  output_language: 'zh-CN';
+  expectation: string;
+  impacted: Array<{
+    ticker: string;
+    name: string;
+    relation: 'competitor' | 'supplier' | 'customer' | 'etf' | 'opposing';
+    direction: 'bullish' | 'bearish' | 'mixed';
+    reason: string;
+    changePct: number;
+  }>;
 }
 
 /** Mock 要点：NVDA/MSFT/TSLA 三条已含 AI 分析结果，其余 409 analysis_required */
@@ -637,25 +647,25 @@ export function refreshEarningsUpcoming(): EarningsItem[] {
 }
 export const getEarningsRefreshCount = () => earningsRefreshCount;
 
-/** 连锁反应关系图谱（真实风格供应链叙事） */
-const IMPACT_RELATIONS: Record<string, { ticker: string; relation: string }[]> = {
+/** 连锁反应关系图谱：relation 走财报契约枚举，行业说明放 reason。 */
+const IMPACT_RELATIONS: Record<string, { ticker: string; relation: 'competitor' | 'supplier' | 'customer' | 'etf' | 'opposing'; reason: string }[]> = {
   NVDA: [
-    { ticker: 'SMCI', relation: __t('服务器整机') },
-    { ticker: 'TSM', relation: __t('晶圆代工') },
-    { ticker: 'MU', relation: __t('HBM 供应') },
-    { ticker: 'ARM', relation: __t('IP 授权') },
+    { ticker: 'SMCI', relation: 'customer', reason: __t('服务器整机') },
+    { ticker: 'TSM', relation: 'supplier', reason: __t('晶圆代工') },
+    { ticker: 'MU', relation: 'supplier', reason: __t('HBM 供应') },
+    { ticker: 'ARM', relation: 'supplier', reason: __t('IP 授权') },
   ],
   MSFT: [
-    { ticker: 'NVDA', relation: __t('算力供应链') },
-    { ticker: 'ORCL', relation: __t('云基建') },
-    { ticker: 'CRM', relation: __t('企业软件') },
-    { ticker: 'PLTR', relation: __t('数据平台') },
+    { ticker: 'NVDA', relation: 'supplier', reason: __t('算力供应链') },
+    { ticker: 'ORCL', relation: 'competitor', reason: __t('云基建') },
+    { ticker: 'CRM', relation: 'competitor', reason: __t('企业软件') },
+    { ticker: 'PLTR', relation: 'customer', reason: __t('数据平台') },
   ],
   TSLA: [
-    { ticker: 'UBER', relation: __t('出行生态') },
-    { ticker: 'DASH', relation: __t('消费景气') },
-    { ticker: 'ABNB', relation: '可选消费' },
-    { ticker: 'AMZN', relation: __t('大盘成长联动') },
+    { ticker: 'UBER', relation: 'customer', reason: __t('出行生态') },
+    { ticker: 'DASH', relation: 'competitor', reason: __t('消费景气') },
+    { ticker: 'ABNB', relation: 'competitor', reason: '可选消费' },
+    { ticker: 'AMZN', relation: 'competitor', reason: __t('大盘成长联动') },
   ],
 };
 
@@ -681,15 +691,19 @@ export function getEarningsImpact(ticker: string): EarningsImpactEx {
   const move = expectedMoveOf(t);
   const relations = IMPACT_RELATIONS[t] ?? TICKER_POOL.filter((x) => x.sector === info.sector && x.ticker !== t)
     .slice(0, 4)
-    .map((x) => ({ ticker: x.ticker, relation: __t('同板块联动') }));
+    .map((x) => ({ ticker: x.ticker, relation: 'competitor' as const, reason: __t('同板块联动') }));
   const rr = new Rng(9090 + t.length * 13 + t.charCodeAt(0));
   const related = relations.map((rel) => {
     const relInfo = TICKER_POOL.find((x) => x.ticker === rel.ticker);
+    const changePct = round2(rr.float(-2.4, 4.6));
+    const direction = changePct > 0 ? 'bullish' : changePct < 0 ? 'bearish' : 'mixed';
     return {
       ticker: rel.ticker,
       name: relInfo?.name ?? rel.ticker,
       relation: rel.relation,
-      changePct: round2(rr.float(-2.4, 4.6)),
+      reason: rel.reason,
+      direction,
+      changePct,
     };
   });
   const tpl = IMPACT_SUMMARIES[t];
@@ -697,12 +711,15 @@ export function getEarningsImpact(ticker: string): EarningsImpactEx {
     ? tpl.replace('{m}', move.toFixed(1))
     : `AI 综合历史财报反应与当前期权定价，预计${info.name}（$${info.ticker}）财报后单日波动区间 ±${move.toFixed(1)}%。供应链与指引口径是本次最大变量，建议关注管理层对资本开支的表述。`;
   return {
+    output_language: 'zh-CN',
     ticker: info.ticker,
     expectedMovePct: move,
     sentiment: IMPACT_SENTIMENT[t] ?? rr.pick(['bullish', 'neutral', 'bearish'] as const),
     ivRank: Math.round(r.float(28, 86)),
     related,
+    impacted: related,
     summary,
+    expectation: summary,
     generatedAt: analyzedAt.get(t) ?? new Date(Date.now() - r.int(2, 30) * 3_600_000).toISOString(),
     histAvgMovePct: round2(move * r.float(0.72, 1.08)),
     confidence: round2(r.float(0.58, 0.86)),

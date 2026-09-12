@@ -84,3 +84,15 @@ for (const instant of ['2026-09-12T12:00:00Z', '2026-09-01T02:00:00Z', '2026-01-
     assert.deepEqual(h.fixtures.getEarningsUpcoming(), rows, 'reads remain deterministic in one demo session');
   });
 }
+
+test('mock earnings impact uses live relation enums instead of opposing fallback', () => {
+  const h = fixturesAt('2026-09-12T12:00:00Z');
+  const impact = h.fixtures.getEarningsImpact('NVDA');
+  assert.equal(impact.output_language, 'zh-CN');
+  assert.equal(impact.expectation, impact.summary);
+  assert.ok(impact.impacted.length >= 4);
+  assert.ok(impact.impacted.every((item) => ['competitor', 'supplier', 'customer', 'etf', 'opposing'].includes(item.relation)));
+  assert.ok(impact.impacted.some((item) => item.relation === 'supplier'));
+  assert.ok(impact.impacted.some((item) => item.ticker === 'TSM' && item.reason.includes('晶圆')));
+  assert.equal(impact.impacted.every((item) => item.relation === 'opposing'), false);
+});
