@@ -13,9 +13,19 @@ async function harness(t) {
   const stub = createReactStub();
   stub.React.useLayoutEffect = stub.React.useEffect;
   stub.React.useMemo = (factory, deps) => stub.React.useCallback(factory, deps)();
-  const reads = [], writes = [], updates = [], timers = new Map(), storage = new Map();
+  const reads = [], writes = [], updates = [], removals = [], creations = [], timers = new Map(), storage = new Map();
   let timerId = 0, server = sample(), revision = 1, deferUpdates = false;
   const api = {
+    remove: (id, expectedScopeRevision) => {
+      removals.push({ id, expectedScopeRevision });
+      assert.equal(expectedScopeRevision, revision);
+      return Promise.resolve({ scopeRevision: ++revision });
+    },
+    create: (drawing, expectedScopeRevision) => {
+      creations.push({ drawing, expectedScopeRevision });
+      assert.equal(expectedScopeRevision, revision);
+      return Promise.resolve({ drawing, scopeRevision: ++revision });
+    },
     list: () => new Promise((resolve, reject) => reads.push({ resolve, reject })),
     update: (drawing, expectedScopeRevision) => {
       writes.push({ drawing, expectedScopeRevision, actualScopeRevision: revision, actualDrawingRevision: server.revision });
@@ -65,7 +75,12 @@ async function harness(t) {
     reads.shift().reject({ status: 429, retryAfter: 1 }); await settle();
     assert.equal(read().syncStatus, 'load_failed');
   };
-  return { read, reads, writes, updates, timers, args, rerender: stub.rerender, answer, flushEdit, failReconcile,
+  return { read, reads, writes, updates, removals, creations, timers, args, rerender: stub.rerender, answer, flushEdit, failReconcile,
+    dropCache: () => storage.clear(),
+    externalChange: drawings => {
+      server = drawings.find(drawing => drawing.id === sample().id) ?? server;
+      revision++;
+    },
     deferUpdates: () => { deferUpdates = true; },
     server: () => ({ ...server }), revision: () => revision };
 }
@@ -183,4 +198,68 @@ test('a rate-limited recovery invalidated by editing still honors Retry-After', 
   assert.equal(h.reads.length, 0, 'must not immediately issue another rate-limited GET');
   assert.ok([...h.timers.values()].some(timer => timer.delay >= 30_000));
   assert.equal(h.read().drawings[0].hidden, true);
+});
+
+const externalB = () => ({ ...sample(), id: '22222222-2222-4222-8222-222222222222' });
+for (const [change, changedDrawings] of [
+  ['addition', drawing => [drawing, externalB()]],
+  ['deletion', () => []],
+  ['price modification', drawing => [{ ...drawing, anchors: [{ ...drawing.anchors[0], price: 120 }], revision: drawing.revision + 1 }]],
+]) {
+  test(`adopting an external ${change} invalidates undo instead of changing another page's work`, async t => {
+    const h = await harness(t);
+    h.read().patchDrawing(sample().id, { locked: true }, true);
+    await h.flushEdit(); await h.failReconcile();
+    const remote = changedDrawings(h.server());
+    h.externalChange(remote);
+    h.read().retry();
+    h.reads.shift().resolve({ drawings: remote, scopeRevision: h.revision() }); await settle();
+    const adopted = JSON.stringify(h.read().drawings), writesBeforeUndo = h.writes.length;
+    h.read().undo(); await settle();
+    assert.equal(h.removals.length, 0, 'old undo must not delete externally added objects');
+    assert.equal(h.creations.length, 0, 'old undo must not restore externally deleted objects');
+    assert.equal(h.writes.length, writesBeforeUndo, 'old undo must not overwrite an external field change');
+    assert.equal(JSON.stringify(h.read().drawings), adopted);
+    assert.equal(h.read().canUndo, false);
+  });
+}
+
+test('a recovery that only updates server revisions and timestamps retains undo', async t => {
+  const h = await harness(t);
+  h.read().patchDrawing(sample().id, { locked: true }, true);
+  await h.flushEdit(); await h.failReconcile();
+  const sameContent = { ...h.server(), revision: 9, createdAt: '2026-09-11T00:00:00Z', updatedAt: '2026-09-12T01:00:00Z' };
+  h.externalChange([sameContent]);
+  h.read().retry(); await h.answer();
+  assert.equal(h.read().canUndo, true);
+  h.read().undo(); await settle();
+  assert.equal(h.read().drawings[0].locked, false);
+  assert.equal(h.writes.at(-1).drawing.revision, 9);
+});
+
+test('a safe replay that also adopts an external addition invalidates the earlier undo snapshots', async t => {
+  const h = await harness(t);
+  h.read().patchDrawing(sample().id, { locked: true }, true);
+  await h.flushEdit(); await h.failReconcile();
+  h.read().patchDrawing(sample().id, { hidden: true }, true, { coalesce: false });
+  const remote = [h.server(), externalB()];
+  h.externalChange(remote);
+  h.read().retry();
+  h.reads.shift().resolve({ drawings: remote, scopeRevision: h.revision() }); await settle();
+  assert.equal(h.read().drawings.length, 2);
+  assert.equal(h.read().drawings.find(drawing => drawing.id === sample().id).hidden, true);
+  h.read().undo(); await settle();
+  assert.equal(h.removals.length, 0, 'safe replay is not permission to keep snapshots missing B');
+  assert.equal(h.read().canUndo, false);
+});
+
+test('another failed recovery with a missing cache preserves current drawings and undo', async t => {
+  const h = await harness(t);
+  h.read().patchDrawing(sample().id, { locked: true }, true);
+  await h.flushEdit(); await h.failReconcile();
+  h.dropCache(); h.read().retry();
+  h.reads.shift().reject({ status: 429, retryAfter: 30 }); await settle();
+  assert.equal(h.read().drawings.length, 1, 'failed GET cannot treat a missing cache as a remote deletion');
+  assert.equal(h.read().drawings[0].locked, true);
+  assert.equal(h.read().canUndo, true);
 });

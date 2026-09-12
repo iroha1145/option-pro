@@ -98,6 +98,21 @@ function openModalCount(): number {
   return document.querySelectorAll(MODAL_SELECTOR).length;
 }
 
+/** Server bookkeeping may change without changing what the user can undo. */
+function sameDrawingContent(current: ChartDrawing[], incoming: ChartDrawing[]): boolean {
+  if (current.length !== incoming.length) return false;
+  const byId = new Map(current.map((drawing) => [drawing.id, drawing]));
+  return incoming.every((drawing) => {
+    const previous = byId.get(drawing.id);
+    return previous !== undefined
+      && previous.kind === drawing.kind
+      && previous.ticker === drawing.ticker
+      && previous.range === drawing.range
+      && previous.adjustment === drawing.adjustment
+      && !mutableFieldsDiffer(previous, drawing);
+  });
+}
+
 /** 拖动期间关掉 inside dataZoom 的漫游；图上没有 dataZoom 就什么都别加。 */
 function setChartRoam(chart: EChartsInstance, enabled: boolean): void {
   if (chart.isDisposed()) return;
@@ -479,8 +494,13 @@ export function useDrawingController(args: {
         drawings: outcome.lastServer,
       };
     }
-    if (outcome.apply !== 'none') {
+    if (outcome.apply !== 'none' && (resetHistory || outcome.apply !== 'cache')) {
+      // A same-scope failed GET cannot replace live edits with a missing cache.
+      // Successful remote/replayed content may include another page's changes:
+      // old snapshots must not undo those additions, deletions or modifications.
+      const contentChanged = !sameDrawingContent(drawingsRef.current, outcome.drawings);
       writeLocal(outcome.drawings, false, { persist: outcome.persist });
+      if (contentChanged) setHistory(createHistory(outcome.drawings));
     }
     setSyncStatus(outcome.status);
     setSyncHint(outcome.hint);
