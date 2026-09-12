@@ -1438,45 +1438,76 @@ class AIJobRepository:
             ).fetchone()
             return self._decorate_earnings_row(connection, row)
 
-    def latest_for_ticker(self, job_type: str, ticker: str) -> dict[str, Any] | None:
+    def latest_for_ticker(
+        self,
+        job_type: str,
+        ticker: str,
+        *,
+        expiration: str | None = None,
+    ) -> dict[str, Any] | None:
         """Return the latest durable job for a ticker, regardless of state."""
 
         self.ensure_initialized()
+        filters = [
+            "j.job_type=?",
+            "upper(json_extract(j.payload_json, '$.ticker'))=?",
+        ]
+        parameters: list[Any] = [job_type, ticker.upper()]
+        if expiration is not None:
+            filters.append(
+                "ifnull(json_extract(j.payload_json, '$.expiration'), '')=?"
+            )
+            parameters.append(expiration)
         with self._connect() as connection:
             row = connection.execute(
-                """
+                f"""
                 SELECT j.*,s.submission_source FROM ai_jobs AS j
                 JOIN ai_job_sources AS s ON s.job_id=j.job_id
-                WHERE j.job_type=?
-                  AND upper(json_extract(j.payload_json, '$.ticker'))=?
+                WHERE {' AND '.join(filters)}
                 ORDER BY j.created_at DESC,j.job_id DESC
                 LIMIT 1
                 """,
-                (job_type, ticker.upper()),
+                tuple(parameters),
             ).fetchone()
             return self._decorate_earnings_row(connection, row)
 
-    def active_for_ticker(self, job_type: str, ticker: str) -> dict[str, Any] | None:
+    def active_for_ticker(
+        self,
+        job_type: str,
+        ticker: str,
+        *,
+        expiration: str | None = None,
+    ) -> dict[str, Any] | None:
         """Return the newest still-running job for a ticker, if any.
 
         证据包含动态上下文块后，同一票的重复提交几乎必然产生新的
         request_hash，仓库级按哈希去重不再能挡住重复付费。端点用这个查询
         实现按票单飞：已有在跑任务时直接返回它，除非调用方显式 force。
+        期权任务再按 expiration 收窄，避免不同到期日互相挡住或重复付费。
         """
 
         self.ensure_initialized()
+        filters = [
+            "j.job_type=?",
+            "j.status IN ('pending','queued','in_progress')",
+            "upper(json_extract(j.payload_json, '$.ticker'))=?",
+        ]
+        parameters: list[Any] = [job_type, ticker.upper()]
+        if expiration is not None:
+            filters.append(
+                "ifnull(json_extract(j.payload_json, '$.expiration'), '')=?"
+            )
+            parameters.append(expiration)
         with self._connect() as connection:
             row = connection.execute(
-                """
+                f"""
                 SELECT j.*,s.submission_source FROM ai_jobs AS j
                 JOIN ai_job_sources AS s ON s.job_id=j.job_id
-                WHERE j.job_type=?
-                  AND j.status IN ('pending','queued','in_progress')
-                  AND upper(json_extract(j.payload_json, '$.ticker'))=?
+                WHERE {' AND '.join(filters)}
                 ORDER BY j.created_at DESC,j.job_id DESC
                 LIMIT 1
                 """,
-                (job_type, ticker.upper()),
+                tuple(parameters),
             ).fetchone()
             return dict(row) if row is not None else None
 

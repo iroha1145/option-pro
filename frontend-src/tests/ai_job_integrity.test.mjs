@@ -12,6 +12,7 @@ import {
   buildOptionAlertEvidence,
   parseOptionAlertResult,
 } from '../src/components/detail/optionAnalysis.ts';
+import { parseSignalAnalysisResult } from '../src/components/detail/signalAnalysis.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -106,6 +107,26 @@ test('option result parser requires the complete backend contract', () => {
   assert.equal(parseOptionAlertResult('期权解读完成'), null);
 });
 
+test('mock option-alerts jobs carry a parseable structured result', async () => {
+  const source = await readFile(
+    path.resolve(here, '..', 'src', 'api', 'modules', 'ai-jobs.ts'),
+    'utf8',
+  );
+  assert.match(source, /mockOptionAlertResult/);
+  const parsed = parseOptionAlertResult({
+    output_language: 'zh-CN',
+    confidence: 'medium',
+    direction: 'unknown',
+    direction_status: 'unavailable_without_trade_side',
+    summary: '成交集中在少数行权价，但缺少成交主动方。',
+    analysis: '现有结构化数据只能说明成交和持仓分布。',
+    key_strikes: ['近端虚值看涨', '平值附近'],
+    risk_note: '买卖中价估算不等于实际成交价。',
+  });
+  assert.equal(parsed?.direction_status, 'unavailable_without_trade_side');
+  assert.equal(parsed?.key_strikes.length, 2);
+});
+
 test('production option panel contains no hard-coded completion conclusion', async () => {
   const source = await readFile(
     path.resolve(here, '..', 'src', 'components', 'detail', 'OptionsPanel.tsx'),
@@ -115,4 +136,69 @@ test('production option panel contains no hard-coded completion conclusion', asy
   assert.match(source, /alerts: evidence/);
   assert.match(source, /underlyingPrice: activeChain\.spot/);
   assert.match(source, /expiration,/);
+  assert.match(source, /force,/);
+  assert.match(source, /aiAvailable/);
+  assert.match(source, /activeChain/);
+});
+
+function validSignalResult(overrides = {}) {
+  return {
+    output_language: 'zh-CN',
+    asset: 'AAPL',
+    horizon: '数日到数周',
+    dominant_regime: '区间整理',
+    trend_bias_confidence: 60,
+    top_risk_confidence: 40,
+    bottom_opportunity_confidence: 50,
+    dip_buy_quality: 55,
+    breakdown_risk: 35,
+    data_quality: 80,
+    final_bias: 'range_consolidation',
+    top_evidence: [],
+    bottom_evidence: [],
+    dip_buy_evidence: [],
+    bearish_evidence: [],
+    contradictions: [],
+    options_flow_read: {
+      net_direction: 'mixed',
+      confidence: 50,
+      bullish_flow_evidence: [],
+      bearish_flow_evidence: [],
+      unknown_or_neutral_flow: [],
+      warnings: [],
+    },
+    key_levels: {
+      support: [],
+      resistance: [],
+      vwap_levels: [],
+      options_levels: [],
+    },
+    confirmation_signals: [],
+    invalidation_signals: [],
+    event_risks: [],
+    data_quality_notes: [],
+    summary: '区间整理，等待方向确认。',
+    ...overrides,
+  };
+}
+
+test('signal analysis parser keeps the structured contract and rejects gaps', () => {
+  const result = validSignalResult();
+  assert.equal(parseSignalAnalysisResult(result)?.final_bias, 'range_consolidation');
+  assert.equal(parseSignalAnalysisResult(result)?.options_flow_read.net_direction, 'mixed');
+  assert.equal(parseSignalAnalysisResult({ ...result, summary: '' }), null);
+  assert.equal(parseSignalAnalysisResult({ ...result, final_bias: 'sideways' }), null);
+  assert.equal(parseSignalAnalysisResult({ summary: '只有摘要' }), null);
+});
+
+test('stock AI card hydrates existing jobs and renders structured fields', async () => {
+  const source = await readFile(
+    path.resolve(here, '..', 'src', 'components', 'detail', 'AiAnalysisCard.tsx'),
+    'utf8',
+  );
+  assert.match(source, /getLatestSignalAnalysisJob/);
+  assert.match(source, /parseSignalAnalysisResult/);
+  assert.match(source, /aiAvailable/);
+  assert.match(source, /isOwner && \(/);
+  assert.doesNotMatch(source, /accordion/);
 });

@@ -3,7 +3,7 @@
  * 契约对齐但 api/modules 尚未覆盖的端点在此经 mockOr 接入：
  * - GET /api/stocks/{t}/chart（ChartBar quote_only / as_of / _stale）
  * - GET /api/signals/stock/{t}（trend_bias_* 完整形状）
- * - POST /api/signals/stock/{t}/ai-analysis（signal_analysis 任务，202）
+ * - GET/POST /api/signals/stock/{t}/ai-analysis（signal_analysis 任务；GET 只读回填）
  * - GET /api/strength/stocks/{t}（概览 503 时的基础行情回退：扫描行快照，匿名可用）
  * mock 模式下代码不存在抛 404（整页形态 404 空态）。
  *
@@ -13,7 +13,8 @@
  * （`t` 确实存在，只是变成了 string）。双保险：局部改名 `symbol`，翻译函数按
  * codemod 惯例以 `__t` 别名引入（见 i18n-coverage 的 classify）。
  */
-import { ApiError, mockOr } from '@/api/client';
+import { ApiError, get, mockOr } from '@/api/client';
+import { normalizeAiJob } from '@/api/aiJobNormalize';
 import { quoteSymbol } from '@/lib/quoteSymbol';
 import { marketGet } from '@/api/marketRead';
 import { asRec, pickLabel, pickN, pickS, unwrap, type Rec } from '@/api/live';
@@ -575,25 +576,41 @@ export function getTrendBias(ticker: string, force = false): Promise<StockTrendB
   );
 }
 
+/** 只读回填已有 signal_analysis；409 analysis_required 视为尚无任务。 */
+export async function getLatestSignalAnalysisJob(ticker: string): Promise<AiJob | null> {
+  const symbol = quoteSymbol(ticker);
+  try {
+    return await mockOr(
+      () => {
+        if (!fx.hasTicker(symbol)) throw new ApiError(404, __t('代码 {ticker} 不存在', { ticker: symbol }));
+        return fx2.getLatestAiJob('signal-analysis', symbol);
+      },
+      () =>
+        get(`/signals/stock/${encodeURIComponent(symbol)}/ai-analysis`).then((d) =>
+          normalizeAiJob(d),
+        ),
+    );
+  } catch (error) {
+    if (error instanceof ApiError && (error.code === 409 || error.bizCode === 'analysis_required')) {
+      return null;
+    }
+    throw error;
+  }
+}
+
 /** signal_analysis 任务（owner）；轮询/取消复用 aiJobsApi.get / cancel */
-export function createSignalAnalysisJob(ticker: string): Promise<AiJob> {
+export function createSignalAnalysisJob(ticker: string, force = false): Promise<AiJob> {
   const symbol = quoteSymbol(ticker);
   return mockOr(
     () => {
       if (!fx.hasTicker(symbol)) throw new ApiError(404, __t('代码 {ticker} 不存在', { ticker: symbol }));
-      const d = fx.getStockDetail(symbol);
-      const b = fx.getStockTrendBias(symbol);
-      // mock 模式下模拟「模型写的分析正文」，与真实 AI 输出同样不做界面翻译（如实保留原文）。
-      const ivTone = d.ivPercentile >= 60 ? '偏贵' : d.ivPercentile <= 40 ? '相对便宜' : '中性';
-      const text =
-        `${symbol} 模型分析完成：趋势偏向分 ${b.trend_bias_score}（${b.trend_bias_label}），` +
-        `分项读数 趋势 ${b.scores.trend} / 动量 ${b.scores.momentum} / 量能 ${b.scores.volume} / 波动 ${b.scores.volatility}。` +
-        `现价 ${d.price.toFixed(2)} 美元，IV 百分位 ${d.ivPercentile}%，期权定价${ivTone}。` +
-        `近端观察 MA20 附近的量能配合与突破延续性；若量价背离放大，偏向读数将快速回落。`;
-      return fx2.createAiJob('signal-analysis' as AiJob['kind'], text);
+      return fx2.createAiJob('signal-analysis', '', {
+        ticker: symbol,
+        result: fx2.mockSignalAnalysisResult(symbol),
+      });
     },
     // 契约：owner+SO → 202 + Location（job_id 可能仅在 Location 头）
-    () => postAiJob(`/signals/stock/${encodeURIComponent(symbol)}/ai-analysis`, { force: false }),
+    () => postAiJob(`/signals/stock/${encodeURIComponent(symbol)}/ai-analysis`, { force }),
   );
 }
 

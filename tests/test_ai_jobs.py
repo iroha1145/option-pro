@@ -3173,3 +3173,161 @@ def test_active_for_ticker_sees_only_running_jobs_of_the_same_type(tmp_path):
     connection.commit()
     connection.close()
     assert repository.active_for_ticker("signal_analysis", "AMD") is None
+
+
+def _option_job_client(monkeypatch, tmp_path):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    settings = _settings(tmp_path / "ai-jobs.db")
+    monkeypatch.setattr(ai, "_job_repository", lambda: repository)
+    monkeypatch.setattr(ai, "get_settings", lambda: settings)
+    monkeypatch.setattr(ai, "_require_runtime_capability", lambda: None)
+    monkeypatch.setattr(ai, "_require_manual_analysis_enabled", lambda: None)
+    app = FastAPI()
+    app.include_router(ai.router)
+    return TestClient(app, base_url="http://localhost"), repository
+
+
+def _create_option_job(repository: AIJobRepository, *, ticker: str, expiration: str):
+    version, digest = runtime.schema_identity("option_alerts")
+    return repository.create_job(
+        job_type="option_alerts",
+        payload={
+            "ticker": ticker,
+            "alerts": [],
+            "underlying_price": 200,
+            "expiration": expiration,
+        },
+        model="gpt-5.6-terra",
+        reasoning="max",
+        execution_mode="background",
+        prompt_version="option-alerts-zh-cn-v4",
+        schema_version=version,
+        schema_sha256=digest,
+        max_queued=200,
+    )[0]
+
+
+def test_option_alert_reuses_active_job_only_for_the_same_expiration(
+    monkeypatch,
+    tmp_path,
+):
+    client, repository = _option_job_client(monkeypatch, tmp_path)
+    body = {
+        "ticker": "AAPL",
+        "alerts": [],
+        "underlying_price": 200,
+        "expiration": "2026-08-21",
+    }
+
+    first = client.post("/api/ai/jobs/option-alerts", json=body)
+    reused = client.post("/api/ai/jobs/option-alerts", json=body)
+    other_expiry = client.post(
+        "/api/ai/jobs/option-alerts",
+        json={**body, "expiration": "2026-09-18"},
+    )
+
+    assert first.status_code == 202
+    assert reused.status_code == 202
+    assert other_expiry.status_code == 202
+    assert first.json()["job_id"] == reused.json()["job_id"]
+    assert other_expiry.json()["job_id"] != first.json()["job_id"]
+    empty_expiration = client.post(
+        "/api/ai/jobs/option-alerts",
+        json={"ticker": "AAPL", "alerts": [], "underlying_price": 200},
+    )
+    assert empty_expiration.status_code == 202
+    assert empty_expiration.json()["job_id"] != first.json()["job_id"]
+    assert empty_expiration.json()["job_id"] != other_expiry.json()["job_id"]
+    assert repository.health()["pending"] == 3
+
+
+def test_latest_option_alert_filters_by_expiration_and_never_creates_work(
+    monkeypatch,
+    tmp_path,
+):
+    client, repository = _option_job_client(monkeypatch, tmp_path)
+    first = _create_option_job(repository, ticker="AAPL", expiration="2026-08-21")
+    second = _create_option_job(repository, ticker="AAPL", expiration="2026-09-18")
+
+    matching = client.get(
+        "/api/ai/jobs/latest",
+        params={
+            "job_type": "option_alerts",
+            "ticker": "AAPL",
+            "expiration": "2026-08-21",
+        },
+    )
+    other = client.get(
+        "/api/ai/jobs/latest",
+        params={
+            "job_type": "option_alerts",
+            "ticker": "AAPL",
+            "expiration": "2026-12-18",
+        },
+    )
+    newest = client.get(
+        "/api/ai/jobs/latest",
+        params={"job_type": "option_alerts", "ticker": "AAPL"},
+    )
+
+    assert matching.status_code == 200
+    assert matching.json()["job_id"] == first["job_id"]
+    assert other.status_code == 409
+    assert other.json()["status"] == "analysis_required"
+    assert newest.status_code == 200
+    assert newest.json()["job_id"] == second["job_id"]
+    assert repository.health()["pending"] == 2
+
+
+def test_active_and_latest_for_ticker_honor_option_expiration(tmp_path):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    first = _create_option_job(repository, ticker="AAPL", expiration="2026-08-21")
+    second = _create_option_job(repository, ticker="AAPL", expiration="2026-09-18")
+
+    assert (
+        repository.active_for_ticker(
+            "option_alerts",
+            "AAPL",
+            expiration="2026-08-21",
+        )["job_id"]
+        == first["job_id"]
+    )
+    assert (
+        repository.active_for_ticker(
+            "option_alerts",
+            "AAPL",
+            expiration="2026-09-18",
+        )["job_id"]
+        == second["job_id"]
+    )
+    assert (
+        repository.latest_for_ticker(
+            "option_alerts",
+            "AAPL",
+            expiration="2026-08-21",
+        )["job_id"]
+        == first["job_id"]
+    )
+    assert repository.latest_for_ticker("option_alerts", "AAPL")["job_id"] == second[
+        "job_id"
+    ]
+
+
+def test_cancel_ai_job_requires_explicit_confirmation(monkeypatch, tmp_path):
+    client, repository = _option_job_client(monkeypatch, tmp_path)
+    created = client.post(
+        "/api/ai/jobs/option-alerts",
+        json={"ticker": "AAPL", "alerts": [], "underlying_price": 200},
+    )
+    job_id = created.json()["job_id"]
+
+    denied = client.post(f"/api/ai/jobs/{job_id}/cancel", json={"confirm": False})
+    missing = client.post(f"/api/ai/jobs/{job_id}/cancel", json={})
+    confirmed = client.post(f"/api/ai/jobs/{job_id}/cancel", json={"confirm": True})
+
+    assert denied.status_code == 400
+    assert denied.json()["detail"]["code"] == "confirmation_required"
+    assert missing.status_code == 422
+    assert confirmed.status_code == 200
+    assert confirmed.json()["status"] == "cancelled"
+    assert repository.get_job(job_id)["status"] == "cancelled"

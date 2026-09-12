@@ -2498,7 +2498,7 @@ class AIJobPublic(StrictModel):
 
 
 class CancelRequest(StrictModel):
-    confirm: StrictBool = True
+    confirm: StrictBool
 
 
 def result_model_for(job_type: str) -> type[BaseModel]:

@@ -346,6 +346,38 @@ async def stock_signals(ticker: str):
         raise HTTPException(503, "Stock signals are currently unavailable") from exc
 
 
+def _public_signal_job(row: dict, *, cached: bool) -> dict:
+    public = _job_repository().public(row, cached=cached)
+    if not current_request_is_owner():
+        public["error_detail"] = None
+    return public
+
+
+@router.get("/stock/{ticker}/ai-analysis")
+async def get_stock_ai_analysis(ticker: str):
+    """Return the latest signal_analysis job; GET never creates paid work."""
+
+    symbol = _normalize_ticker(ticker)
+    repository = _job_repository()
+    active = repository.active_for_ticker("signal_analysis", symbol)
+    if active is not None:
+        return _public_signal_job(active, cached=False)
+    completed = repository.latest_completed("signal_analysis", symbol)
+    if completed is not None:
+        return _public_signal_job(completed, cached=True)
+    latest = repository.latest_for_ticker("signal_analysis", symbol)
+    if latest is not None:
+        return _public_signal_job(latest, cached=False)
+    return JSONResponse(
+        {
+            "status": "analysis_required",
+            "ticker": symbol,
+            "message": "Create a persistent job with POST /api/signals/stock/{ticker}/ai-analysis",
+        },
+        status_code=409,
+    )
+
+
 @router.post(
     "/stock/{ticker}/ai-analysis",
     dependencies=[Depends(require_same_origin_action)],

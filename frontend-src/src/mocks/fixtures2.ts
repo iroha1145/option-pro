@@ -2,7 +2,7 @@
 import { ApiError } from '@/api/client';
 import { Rng, round2, round4 } from './rng';
 import { HOTSPOTS, NEWS_SOURCES, NEWS_TEMPLATES, SECTORS, TICKER_POOL } from './data';
-import { SIGNAL_LABELS, getMarketStatus, getStockChartEx, getStockDetail } from './fixtures';
+import { SIGNAL_LABELS, getMarketStatus, getStockChartEx, getStockDetail, getStockTrendBias } from './fixtures';
 import type {
   AiJob,
   BreakoutEvent,
@@ -525,6 +525,16 @@ export interface EarningsImpactEx extends EarningsImpact {
   generatedAt: string;
   histAvgMovePct: number | null;
   confidence: number | null; // 0–1
+  output_language: 'zh-CN';
+  expectation: string;
+  impacted: Array<{
+    ticker: string;
+    name: string;
+    relation: 'competitor' | 'supplier' | 'customer' | 'etf' | 'opposing';
+    direction: 'bullish' | 'bearish' | 'mixed';
+    reason: string;
+    changePct: number;
+  }>;
 }
 
 /** Mock 要点：NVDA/MSFT/TSLA 三条已含 AI 分析结果，其余 409 analysis_required */
@@ -637,25 +647,25 @@ export function refreshEarningsUpcoming(): EarningsItem[] {
 }
 export const getEarningsRefreshCount = () => earningsRefreshCount;
 
-/** 连锁反应关系图谱（真实风格供应链叙事） */
-const IMPACT_RELATIONS: Record<string, { ticker: string; relation: string }[]> = {
+/** 连锁反应关系图谱：relation 走财报契约枚举，行业说明放 reason。 */
+const IMPACT_RELATIONS: Record<string, { ticker: string; relation: 'competitor' | 'supplier' | 'customer' | 'etf' | 'opposing'; reason: string }[]> = {
   NVDA: [
-    { ticker: 'SMCI', relation: __t('服务器整机') },
-    { ticker: 'TSM', relation: __t('晶圆代工') },
-    { ticker: 'MU', relation: __t('HBM 供应') },
-    { ticker: 'ARM', relation: __t('IP 授权') },
+    { ticker: 'SMCI', relation: 'customer', reason: __t('服务器整机') },
+    { ticker: 'TSM', relation: 'supplier', reason: __t('晶圆代工') },
+    { ticker: 'MU', relation: 'supplier', reason: __t('HBM 供应') },
+    { ticker: 'ARM', relation: 'supplier', reason: __t('IP 授权') },
   ],
   MSFT: [
-    { ticker: 'NVDA', relation: __t('算力供应链') },
-    { ticker: 'ORCL', relation: __t('云基建') },
-    { ticker: 'CRM', relation: __t('企业软件') },
-    { ticker: 'PLTR', relation: __t('数据平台') },
+    { ticker: 'NVDA', relation: 'supplier', reason: __t('算力供应链') },
+    { ticker: 'ORCL', relation: 'competitor', reason: __t('云基建') },
+    { ticker: 'CRM', relation: 'competitor', reason: __t('企业软件') },
+    { ticker: 'PLTR', relation: 'customer', reason: __t('数据平台') },
   ],
   TSLA: [
-    { ticker: 'UBER', relation: __t('出行生态') },
-    { ticker: 'DASH', relation: __t('消费景气') },
-    { ticker: 'ABNB', relation: '可选消费' },
-    { ticker: 'AMZN', relation: __t('大盘成长联动') },
+    { ticker: 'UBER', relation: 'customer', reason: __t('出行生态') },
+    { ticker: 'DASH', relation: 'competitor', reason: __t('消费景气') },
+    { ticker: 'ABNB', relation: 'competitor', reason: '可选消费' },
+    { ticker: 'AMZN', relation: 'competitor', reason: __t('大盘成长联动') },
   ],
 };
 
@@ -681,15 +691,19 @@ export function getEarningsImpact(ticker: string): EarningsImpactEx {
   const move = expectedMoveOf(t);
   const relations = IMPACT_RELATIONS[t] ?? TICKER_POOL.filter((x) => x.sector === info.sector && x.ticker !== t)
     .slice(0, 4)
-    .map((x) => ({ ticker: x.ticker, relation: __t('同板块联动') }));
+    .map((x) => ({ ticker: x.ticker, relation: 'competitor' as const, reason: __t('同板块联动') }));
   const rr = new Rng(9090 + t.length * 13 + t.charCodeAt(0));
   const related = relations.map((rel) => {
     const relInfo = TICKER_POOL.find((x) => x.ticker === rel.ticker);
+    const changePct = round2(rr.float(-2.4, 4.6));
+    const direction = changePct > 0 ? 'bullish' : changePct < 0 ? 'bearish' : 'mixed';
     return {
       ticker: rel.ticker,
       name: relInfo?.name ?? rel.ticker,
       relation: rel.relation,
-      changePct: round2(rr.float(-2.4, 4.6)),
+      reason: rel.reason,
+      direction,
+      changePct,
     };
   });
   const tpl = IMPACT_SUMMARIES[t];
@@ -697,12 +711,15 @@ export function getEarningsImpact(ticker: string): EarningsImpactEx {
     ? tpl.replace('{m}', move.toFixed(1))
     : `AI 综合历史财报反应与当前期权定价，预计${info.name}（$${info.ticker}）财报后单日波动区间 ±${move.toFixed(1)}%。供应链与指引口径是本次最大变量，建议关注管理层对资本开支的表述。`;
   return {
+    output_language: 'zh-CN',
     ticker: info.ticker,
     expectedMovePct: move,
     sentiment: IMPACT_SENTIMENT[t] ?? rr.pick(['bullish', 'neutral', 'bearish'] as const),
     ivRank: Math.round(r.float(28, 86)),
     related,
+    impacted: related,
     summary,
+    expectation: summary,
     generatedAt: analyzedAt.get(t) ?? new Date(Date.now() - r.int(2, 30) * 3_600_000).toISOString(),
     histAvgMovePct: round2(move * r.float(0.72, 1.08)),
     confidence: round2(r.float(0.58, 0.86)),
@@ -872,25 +889,114 @@ export function getOptionChain(ticker: string, expiration?: string): OptionChain
 }
 
 /* ---------------- AI 任务 ---------------- */
-const jobs = new Map<string, AiJob & { _born: number; _ticker: string }>();
+const jobs = new Map<string, AiJob & { _born: number; _ticker: string; _expiration: string }>();
 
-export function createAiJob(kind: AiJob['kind'], payloadLabel = ''): AiJob {
+export function mockSignalAnalysisResult(symbol: string): Record<string, unknown> {
+  const d = getStockDetail(symbol);
+  const b = getStockTrendBias(symbol);
+  const ivTone = d.ivPercentile >= 60 ? '偏贵' : d.ivPercentile <= 40 ? '相对便宜' : '中性';
+  const summary =
+    `${symbol} 模型分析完成：趋势偏向分 ${b.trend_bias_score}（${b.trend_bias_label}），` +
+    `分项读数 趋势 ${b.scores.trend} / 动量 ${b.scores.momentum} / 量能 ${b.scores.volume} / 波动 ${b.scores.volatility}。` +
+    `现价 ${d.price.toFixed(2)} 美元，IV 百分位 ${d.ivPercentile}%，期权定价${ivTone}。` +
+    `近端观察 MA20 附近的量能配合与突破延续性；若量价背离放大，偏向读数将快速回落。`;
+  return {
+    output_language: 'zh-CN',
+    asset: symbol,
+    horizon: '数日到数周',
+    dominant_regime: b.trend_bias_label || '趋势偏向待确认',
+    trend_bias_confidence: Math.max(0, Math.min(100, Math.round(b.trend_bias_score))),
+    top_risk_confidence: 42,
+    bottom_opportunity_confidence: 38,
+    dip_buy_quality: 45,
+    breakdown_risk: 36,
+    data_quality: 72,
+    final_bias: 'range_consolidation',
+    top_evidence: ['量价尚未同步放大，追高证据不足'],
+    bottom_evidence: ['未见恐慌性放量杀跌'],
+    dip_buy_evidence: ['回撤仍在均线附近，质量中等'],
+    bearish_evidence: ['若失守近端支撑，偏向会转弱'],
+    contradictions: ['期权定价与趋势分并不完全同向'],
+    options_flow_read: {
+      net_direction: 'unknown',
+      confidence: 20,
+      bullish_flow_evidence: [],
+      bearish_flow_evidence: [],
+      unknown_or_neutral_flow: ['缺少成交主动方，无法判断真实方向'],
+      warnings: ['演示数据不是实时期权流'],
+    },
+    key_levels: {
+      support: ['近端观察均线附近支撑'],
+      resistance: ['前高附近阻力'],
+      vwap_levels: ['会话均价可作短线锚'],
+      options_levels: ['关注成交集中的行权价'],
+    },
+    confirmation_signals: ['收盘站稳并放量'],
+    invalidation_signals: ['失守近端支撑'],
+    event_risks: ['关注即将公布的公司与宏观事件'],
+    data_quality_notes: ['部分字段来自演示快照'],
+    summary,
+  };
+}
+
+export function mockOptionAlertResult(symbol: string, expiration = ''): Record<string, unknown> {
+  const expiry = expiration || getOptionExpirations(symbol)[0] || '最近到期日';
+  return {
+    output_language: 'zh-CN',
+    confidence: 'medium',
+    direction: 'unknown',
+    direction_status: 'unavailable_without_trade_side',
+    summary: `${symbol} ${expiry} 的成交集中在少数行权价，但缺少成交主动方，不能据此判断真实方向。`,
+    analysis:
+      `${symbol} 当前链上的量能和权利金只能说明成交分布，不能还原买方还是卖方主动成交。` +
+      '演示数据用于核对结构化展示，不代表实时期权流。',
+    key_strikes: ['近端虚值看涨', '近端虚值看跌', '平值附近'],
+    risk_note: '买卖中价估算不等于实际成交价，也不能单独作为方向信号。',
+  };
+}
+
+export function createAiJob(
+  kind: AiJob['kind'],
+  payloadLabel = '',
+  extras: { ticker?: string; expiration?: string; result?: unknown } = {},
+): AiJob {
   const id = `job-${Date.now().toString(36)}-${jobs.size + 1}`;
   const now = new Date().toISOString();
-  const job: AiJob & { _born: number; _ticker: string } = {
+  const ticker = extras.ticker ?? (kind === 'earnings-impact' ? payloadLabel.toUpperCase() : '');
+  const job: AiJob & { _born: number; _ticker: string; _expiration: string } = {
     id,
     kind,
     status: 'queued',
     progress: 0,
     createdAt: now,
     updatedAt: now,
-    result: '',
+    result: extras.result ?? payloadLabel ?? '',
     _born: Date.now(),
-    _ticker: kind === 'earnings-impact' ? payloadLabel.toUpperCase() : '',
+    _ticker: ticker.toUpperCase(),
+    _expiration: extras.expiration ?? '',
   };
-  if (payloadLabel) job.result = payloadLabel;
+  if (payloadLabel && extras.result === undefined) job.result = payloadLabel;
   jobs.set(id, job);
   return { ...job };
+}
+
+export function getLatestAiJob(
+  kind: AiJob['kind'],
+  ticker: string,
+  expiration?: string,
+): AiJob {
+  const symbol = ticker.toUpperCase();
+  const matches = [...jobs.values()].filter(
+    (job) =>
+      job.kind === kind &&
+      job._ticker === symbol &&
+      (expiration === undefined || job._expiration === expiration),
+  );
+  const latest = matches.sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
+  if (!latest) {
+    throw new ApiError(409, __t('尚未生成分析'), { bizCode: 'analysis_required' });
+  }
+  return getAiJob(latest.id);
 }
 
 export function getAiJob(id: string): AiJob {
@@ -909,7 +1015,7 @@ export function getAiJob(id: string): AiJob {
     }
   }
   job.updatedAt = new Date().toISOString();
-  const { _born, _ticker, ...pub } = job;
+  const { _born, _ticker, _expiration, ...pub } = job;
   void _born;
   void _ticker;
   return pub;
@@ -966,6 +1072,9 @@ export interface NewsImpactResult {
   headlineSummary: string;
   causalSummary: string;
   trustedStockImpacts: TrustedStockImpact[];
+  keyFactors?: string[];
+  uncertaintyNotes?: string[];
+  affectedSectors?: string[];
   model: string;
   generatedAt: string;
 }
@@ -1309,6 +1418,9 @@ function buildAnalysisResult(
     headlineSummary: `「${titleZh}」整体判定为${clsZh}催化，主要影响 ${tickers.join('、')}。`,
     causalSummary: `该新闻处于「${themeLabel}」叙事主线上：表层是单一事件，底层是资金对该主线持续性的再确认。传导路径上，${tickers[0]}最先被定价，其后沿产业链与同类标的扩散；若未来 48 小时内出现证伪信息，影响将快速衰减，反之则可能演化为趋势级重估。`,
     trustedStockImpacts: impacts,
+    keyFactors: [`事件落在「${themeLabel}」主线`, `${tickers[0]} 最先被定价`],
+    uncertaintyNotes: ['若 48 小时内出现证伪信息，影响可能快速衰减'],
+    affectedSectors: [themeLabel],
     model: 'optix-news-v2',
     generatedAt,
   };

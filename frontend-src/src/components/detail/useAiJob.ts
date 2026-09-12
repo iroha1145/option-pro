@@ -170,6 +170,24 @@ export function useAiJob() {
     }
   }, [job, poll, queryIssue]);
 
+  /** 回填已有任务：页面刷新后继续展示结果或接着轮询，不另开付费任务。 */
+  const adopt = useCallback(
+    (next: AiJob) => {
+      if (!aliveRef.current || !next.id) return;
+      stop();
+      setError(null);
+      setQueryIssue(null);
+      setJob(next);
+      if (TERMINAL.has(next.status)) {
+        activeJobRef.current = null;
+        return;
+      }
+      activeJobRef.current = next.id;
+      poll(next.id, true);
+    },
+    [poll, stop],
+  );
+
   const reset = useCallback(() => {
     // 查询失败不等于任务失败，不能忘记仍在运行的任务后重新收费创建。
     if (activeJobRef.current !== null) return;
@@ -179,5 +197,5 @@ export function useAiJob() {
     setQueryIssue(null);
   }, [stop]);
 
-  return { job, error, queryIssue, starting, start, cancel, resume, reset };
+  return { job, error, queryIssue, starting, start, cancel, resume, reset, adopt };
 }

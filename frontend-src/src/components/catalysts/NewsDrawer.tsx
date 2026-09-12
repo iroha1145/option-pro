@@ -18,6 +18,32 @@ import { t as __t } from '../../i18n/core.ts';
 
 const TERMINAL: NewsAnalysisJob['status'][] = ['completed', 'failed', 'cancelled', 'insufficient_context'];
 
+const HORIZON_LABEL: Record<string, string> = {
+  intraday: __t('日内'),
+  days: __t('数日'),
+  weeks: __t('数周'),
+  uncertain: __t('跨度未定'),
+};
+
+const MECHANISM_LABEL: Record<string, string> = {
+  direct_company: __t('公司直接相关'),
+  supplier_customer: __t('上下游'),
+  sector_readthrough: __t('板块传导'),
+  macro_rate: __t('宏观利率'),
+  commodity_input: __t('大宗商品'),
+  regulatory: __t('监管'),
+  competitive: __t('竞争格局'),
+  other: __t('其他机制'),
+};
+
+function horizonLabel(value: string): string {
+  return HORIZON_LABEL[value] ?? value;
+}
+
+function mechanismLabel(value: string): string {
+  return MECHANISM_LABEL[value] ?? value;
+}
+
 /* ---------------- 逐股影响卡 ---------------- */
 function StockImpactCard({ imp, index }: { imp: TrustedStockImpact; index: number }) {
   const { openTicker } = useShell();
@@ -32,10 +58,10 @@ function StockImpactCard({ imp, index }: { imp: TrustedStockImpact; index: numbe
         <TickerChip ticker={imp.ticker} onClick={() => openTicker(imp.ticker)} />
         <ClassificationChip classification={imp.direction} />
         <ImpactValue value={imp.impactScore} />
-        <span className="ml-auto font-mono text-micro text-ink-400">{imp.horizon}</span>
+        <span className="ml-auto font-mono text-micro text-ink-400">{horizonLabel(imp.horizon)}</span>
       </div>
       <p className="mt-2 text-micro text-ink-500">
-        <span className="font-medium text-ink-600">{__t('机制 ·')} {imp.mechanism}</span>
+        <span className="font-medium text-ink-600">{__t('机制 ·')} {mechanismLabel(imp.mechanism)}</span>
       </p>
       <p className="mt-1 text-body-s leading-relaxed text-ink-600">{imp.reason}</p>
     </motion.div>
@@ -396,6 +422,34 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
                 <blockquote className="mt-3 border-l-[3px] border-ai-600/40 pl-3.5">
                   <p className="font-quote text-[14px] leading-[24px] text-ink-800">{analysis.causalSummary}</p>
                 </blockquote>
+                {!!analysis.affectedSectors?.length && (
+                  <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                    <span className="text-micro text-ink-400">{__t('影响板块')}</span>
+                    {analysis.affectedSectors.map((sector) => (
+                      <SoftBadge key={sector}>{sector}</SoftBadge>
+                    ))}
+                  </div>
+                )}
+                {!!analysis.keyFactors?.length && (
+                  <div className="mt-3">
+                    <p className="text-micro text-ink-400">{__t('关键因素')}</p>
+                    <ul className="mt-1 space-y-1">
+                      {analysis.keyFactors.map((factor) => (
+                        <li key={factor} className="text-caption leading-5 text-ink-600">{factor}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {!!analysis.uncertaintyNotes?.length && (
+                  <div className="mt-3 border-t border-line pt-2.5">
+                    <p className="text-micro text-ink-400">{__t('不确定性')}</p>
+                    <ul className="mt-1 space-y-1">
+                      {analysis.uncertaintyNotes.map((note) => (
+                        <li key={note} className="text-caption leading-5 text-ink-500">{note}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
                 <div className="mt-4 space-y-2">
                   {analysis.trustedStockImpacts.map((imp, i) => (
                     <StockImpactCard key={imp.ticker} imp={imp} index={i} />

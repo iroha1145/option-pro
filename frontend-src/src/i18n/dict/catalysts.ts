@@ -202,6 +202,16 @@ export const CATALYSTS: Dict = {
 
   /* ---------------- NewsDrawer.tsx ---------------- */
   '机制 ·': ['Mechanism ·', 'メカニズム ·'],
+  '公司直接相关': ['Direct company impact', '企業への直接影響'],
+  '上下游': ['Supply chain', 'サプライチェーン'],
+  '板块传导': ['Sector read-through', 'セクター波及'],
+  '宏观利率': ['Macro / rates', 'マクロ・金利'],
+  '大宗商品': ['Commodity input', '商品市況'],
+  '竞争格局': ['Competitive', '競争環境'],
+  '其他机制': ['Other mechanism', 'その他のメカニズム'],
+  '影响板块': ['Affected sectors', '影響セクター'],
+  '关键因素': ['Key factors', '主要な要因'],
+  '不确定性': ['Uncertainties', '不確実性'],
   '任务排队中': ['Job queued', 'ジョブはキュー待ち'],
   '模型分析中': ['Model analyzing', 'モデル分析中'],
   '等待服务端状态': ['Waiting for server status', 'サーバー状態を待機中'],
