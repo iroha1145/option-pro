@@ -288,6 +288,13 @@ async function dragDrawingByPrice(page, fromPrice, yDelta = -80) {
 
 /** 在价格区落一笔水平线（工具按钮 → 画布点击）。 */
 async function placeHorizontal(page, xRatio = 0.5, yRatio = 0.4) {
+  // A chart can render while the access probe is retrying a 429. Drawing then
+  // creates a guest-local object, which deliberately never merges into owner
+  // storage when identity arrives. Wait for the account-backed scope first.
+  await expect.poll(async () => {
+    await clickRetryIfShown(page);
+    return page.getByText("已同步", { exact: true }).first().isVisible();
+  }, { timeout: 90_000, intervals: [500, 1_000, 2_000] }).toBe(true);
   /* 落笔前必须等图表画完：readPoint 走 containPixel，首绘没铺开时坐标系
      未就绪，点击会被判到网格外——这一笔就静默没了（双上下文用例的 pageB
      只等了工具条就点，抓到过「已同步 + 少一条」的终态）。 */
@@ -641,6 +648,37 @@ test("scope reload retries a rate-limited stock overview before drawing", async 
   const drawing = await waitOneUnlockedDrawing(page);
   expect(Number.isFinite(drawing.price)).toBeTruthy();
   await expectDrawingCount(page, 1);
+});
+
+test("drawing waits for a delayed account identity before saving", async ({ page }) => {
+  test.skip(!HAS_REAL_BACKEND, "stock drawings visual path needs OPTIX_VISUAL_BASE_URL");
+  let delayed = false;
+  let identityReleased = false;
+  let wroteBeforeIdentity = false;
+  await page.route("**/api/access/status", async (route) => {
+    if (delayed) return route.continue();
+    delayed = true;
+    const response = await route.fetch();
+    await new Promise((resolve) => setTimeout(resolve, 2_500));
+    identityReleased = true;
+    await route.fulfill({ response });
+  });
+  page.on("request", (request) => {
+    if (request.method() === "POST" && request.url().includes("/api/account/chart-drawings")) {
+      wroteBeforeIdentity ||= !identityReleased;
+    }
+  });
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await waitDrawingToolbar(page);
+  await placeHorizontal(page);
+  const created = await waitOneUnlockedDrawing(page);
+  expect(delayed).toBe(true);
+  expect(identityReleased).toBe(true);
+  expect(wroteBeforeIdentity).toBe(false);
+  expect(Number.isFinite(created.price)).toBeTruthy();
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await waitDrawingToolbar(page);
+  await waitOneDrawing(page, false, { id: created.id });
 });
 
 test("clear all removes every drawing in the scope", async ({ page }) => {
