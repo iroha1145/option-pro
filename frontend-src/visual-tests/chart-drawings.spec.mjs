@@ -175,6 +175,11 @@ function drawingIdentity(listed) {
 async function waitOneUnlockedDrawing(page) {
   let identity = null;
   await expect.poll(async () => {
+    await clickRetryIfShown(page);
+    const keepLocal = toolButton(page, "保留本地并重试");
+    if (await keepLocal.isVisible().catch(() => false)) {
+      await keepLocal.click({ timeout: 1_000 }).catch(() => {});
+    }
     const listed = await listDrawings(page);
     if (listed.status === 429) return "rate-limited";
     identity = drawingIdentity(listed);
@@ -182,6 +187,23 @@ async function waitOneUnlockedDrawing(page) {
     return identity.locked ? "locked" : "unlocked";
   }, { timeout: 45_000 }).toBe("unlocked");
   return identity;
+}
+
+/** beforeEach DELETE 后控制器仍可能把旧对象写回；409 会让 GET 一直是空。 */
+async function resetDrawingScope(page) {
+  await clearTouchedDrawings(page);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(toolButton(page, "选择")).toBeVisible({ timeout: 20_000 });
+  await expect.poll(async () => {
+    const listed = await listDrawings(page);
+    if (listed.status === 429) return "rate-limited";
+    if (!Array.isArray(listed.drawings)) return "n=?";
+    if (listed.drawings.length > 0) {
+      await clearTouchedDrawings(page);
+      return `n=${listed.drawings.length}`;
+    }
+    return "empty";
+  }, { timeout: 45_000 }).toBe("empty");
 }
 
 async function collapseChart(page) {
@@ -384,6 +406,7 @@ test("seven drawing tools are present and selectable", async ({ page }) => {
 test("drag endpoint and whole-object after selecting a drawing", async ({ page }) => {
   test.skip(!HAS_REAL_BACKEND, "stock drawings visual path needs OPTIX_VISUAL_BASE_URL");
   await openStock(page);
+  await resetDrawingScope(page);
   await placeHorizontal(page, 0.5, 0.4);
   const before = await waitOneUnlockedDrawing(page);
   expect(Number.isFinite(before.price)).toBeTruthy();
@@ -413,6 +436,7 @@ test("drag endpoint and whole-object after selecting a drawing", async ({ page }
 test("locked drawing keeps its anchors when dragged", async ({ page }) => {
   test.skip(!HAS_REAL_BACKEND, "stock drawings visual path needs OPTIX_VISUAL_BASE_URL");
   await openStock(page);
+  await resetDrawingScope(page);
   await placeHorizontal(page, 0.5, 0.45);
   const before = await waitOneUnlockedDrawing(page);
   await expandChart(page);
