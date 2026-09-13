@@ -68,4 +68,20 @@
 - **证据**：冷路径在 JS 解析后仍串行 identity → 挂页 → feed；抽屉先 `setItem(null)` 再等详情。
 - **假设**：HTML 阶段发出 `/access/status` 与默认 72h/12 feed，主包执行时预取 Catalysts chunk，列表项作为抽屉 seed，可去掉两轮 RTT 等待且不缩数据。
 - **改动**：`theme-boot.js` 预取；`consumeBootPrefetch` 按完整 URL 消费一次；`prefetchRouteChunk`；NewsDrawer 用 seed 立刻画真实标题，仍请求 `/catalysts/news/{id}`。
-- **指标**：复测后回填。失败或无收益则回滚。
+- **指标**（实验室 mobile-ref，n=20）：`/opt/cursor/artifacts/perf/browser-r3-mobile-ref.json`、`browser-interact-r3.json`
+
+| 指标 | R1b | R3 | 预算 |
+|---|---|---|---|
+| 冷 news_content_ready p50/p75 | 2317 / 2334 | **1614 / 1642** | ≤2500 |
+| 热 news_content_ready p50/p75 | 772 / 775 | 822 / 829 | ≤1000 |
+| 冷 LCP p75 | 2064 | **1556** | ≤2500 |
+| 热 LCP p75 | 528 | 780 | ≤2500 |
+| 冷 CLS p75 | 0.046 | **0.0008** | ≤0.1 |
+| 抽屉真实标题 p75 | 394 | **287** | 实验室，非 INP |
+| 抽屉详情 GET p75 | （未分列） | 444 | 仍拉 `/news/{id}` |
+| 筛选 24h p75 | 445 | 445 | 未改 |
+
+冷路径相对 R1b p75 −29.6%（2334→1642），相对基线 2381 −31.0%。首条标题 20/20 为 `第9600条快讯`。热路径 p75 +54ms（+7%），仍 ≤1000；根因是 theme-boot 每次整页进入都会发出默认 feed，resource 计时可见该请求。冷路径仍有 1/20 的 37.8s 离群（基线同类），p75 不受其拉动。
+- **功能验证**：前端 931 pass / 0 fail；静态断言通过；详情接口仍发出。
+- **决定**：**保留**。热路径 7% 低于冷路径收益，且未破预算。
+- **下一步**：弱网 n=20；筛选打开时预取 24h；其它页与压力。
