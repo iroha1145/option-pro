@@ -16,8 +16,8 @@
 
 ## 已确认的高优先级调查点（修改前，待测量验证）
 
-1. `GET /api/catalysts/feed` 先完整执行 `status()`，再把窗口内全部 revision 物化到内存后切片分页（`personal_service.py` + `local_intelligence.feed`）。
-2. 新闻页首屏至少两次 feed：`StatusHero.newsToday`（24h / limit 50）与 `FeedPanel`（limit 12），另加 status / hotspots / focus。
+1. ~~`GET /api/catalysts/feed` 先完整执行 `status()`~~：Round 1 已改为只检查 mode/cache，再用 `_analysis_availability_for_access`。整窗物化 + 切片分页仍在（`local_intelligence.feed`），列为 Round 2。
+2. ~~新闻页首屏至少两次 feed 并行~~：`StatusHero.newsToday`（24h / limit 50）改为 load+idle 后再拉；`FeedPanel`（limit 12）仍是首屏关键路径。status / hotspots / focus 仍立即请求（可见内容）。
 3. 列表行使用 framer-motion stagger；Layout 全局 IndexTape + 身份确认后才挂页面。
 4. 生产镜像为单进程 uvicorn，无 `--workers`。本虚拟机 4 核 / 15 GiB，不能按 16 核 / 32 GiB 宣称容量。
 
