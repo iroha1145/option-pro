@@ -11,7 +11,8 @@
 | [04-experiments.md](04-experiments.md) | 逐轮实验记录 |
 | [05-status.md](05-status.md) | 当前状态、缺口与下一步 |
 | [06-review-round1.md](06-review-round1.md) | 第 1 轮对照复查（非隔离审查者） |
-| [07-review-round2.md](07-review-round2.md) | 第 2 轮隔离复查（仍缺第 3 轮） |
+| [07-review-round2.md](07-review-round2.md) | 第 2 轮隔离复查 |
+| [08-review-round3.md](08-review-round3.md) | 第 3 轮隔离复查（只读；完成判定仍部分成立） |
 
 对照未优化树：`$HOME/option-pro-unoptimized`（同一 SHA，detached HEAD）。
 
