@@ -163,3 +163,25 @@
 - **口径**：mobile-ref 节流；Dock「更多」→ button「新闻催化」；`news_content_ready` 仍是首条真实标题。对间隔 8s，本轮 **rate_limited_n=0**。
 - **指标**：`/opt/cursor/artifacts/perf/browser-spa.json`。站内回新闻 p50 **519** / p75 **531**。整页冷启动约 2.5s（含首次 goto）。20/20 标题 `第9600条快讯`。未优化树仅有 n=1 冒烟 512ms，不能当对照验收。
 - **决定**：保留现有导航与预取。不把 SPA 531ms 写成 INP。
+
+## Round 5f — 其它页 n=20（测量，无新业务改动）
+
+- **口径**：mobile-ref；真实 heading / 已登录文案 / 404「页面不存在」。对间隔 8s。全部路由 `ready_n=20/20`、`rate_limited_n=0`。
+- **指标**：`/opt/cursor/artifacts/perf/browser-pages-n20.json`
+
+| 路由 | p75 (ms) | n=8 对照 |
+|---|---|---|
+| `/` | 1638 | 1722 |
+| `/watchlist` | 1795 | 1848 |
+| `/screener` | 1689 | 1694 |
+| `/market` | 1715 | 1727 |
+| `/breakouts` | 1626 | 1601 |
+| `/earnings` | 1606 | 1567 |
+| `/sectors` | 1571 | 1541 |
+| `/login` | 1239 | 1213 |
+| `/cta` | 2167 | （此前未 n=20） |
+| `/stock/NVDA` | 2148 | （此前未 n=20） |
+| 404 | 1154 | （此前未 n=20） |
+
+雷达/财报/板块相对 n=8 有 1–2% 波动，未超过 5% 复查线。CTA / 个股首屏约 2.1s，仍低于 2.5s 冷启动参考。
+- **决定**：不因 n=8→n=20 的小幅波动改业务代码。
