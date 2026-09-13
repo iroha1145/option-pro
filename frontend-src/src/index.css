@@ -437,6 +437,32 @@
     }
   }
 
+  /* 新闻行：手机端跳过屏外布局与绘制，不改变可见行的尺寸与交互。 */
+  .news-row {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 140px;
+  }
+
+  .hotspot-card,
+  .watch-card {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 220px;
+  }
+
+  .heat-bar {
+    transform-origin: bottom;
+    animation: heat-grow 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  @keyframes heat-grow {
+    from { transform: scaleY(0); }
+    to { transform: scaleY(1); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .heat-bar { animation: none; }
+  }
+
   /* 表格数字 */
   .tnum {
     font-variant-numeric: tabular-nums;

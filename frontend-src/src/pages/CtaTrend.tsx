@@ -6,7 +6,7 @@
  * 语义纪律：代理估算，不是任何机构的真实仓位披露，不输出美元流量；CTA 读数
  * 不混入 market_regime / Strength 评分，只做并排联动解释。
  */
-import { useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useMemo, useRef, useState } from 'react';
 import { marketApi } from '@/api/modules/market';
 import { marketPulseApi } from '@/components/market/api';
 import { regimeMean } from '@/lib/regime';
@@ -18,8 +18,9 @@ import EmptyState from '@/components/shared/EmptyState';
 import Icon from '@/components/icons';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
 import CtaOverviewStrip from '@/components/cta/CtaOverviewStrip';
-import CtaDeepDive from '@/components/cta/CtaDeepDive';
 import { t } from '../i18n/core.ts';
+
+const CtaDeepDive = lazy(() => import('@/components/cta/CtaDeepDive'));
 
 export default function CtaTrend() {
   /* 300s：CTA 趋势资金（worker 快照只读）+ 形态六维（仅联动说明） */
@@ -123,13 +124,15 @@ export default function CtaTrend() {
           {/* B2 指数详情 */}
           <section className="mt-8" aria-label={t('指数详情')}>
             <div ref={mainRef} className="scroll-mt-20">
-              <CtaDeepDive
-                data={ctaQ.data}
-                rows={rows}
-                row={row}
-                onInstrumentChange={(value) => selectInstrument(value)}
-                regimeMean={mean}
-              />
+              <Suspense fallback={<SkeletonBlock className="h-72 w-full" />}>
+                <CtaDeepDive
+                  data={ctaQ.data}
+                  rows={rows}
+                  row={row}
+                  onInstrumentChange={(value) => selectInstrument(value)}
+                  regimeMean={mean}
+                />
+              </Suspense>
             </div>
           </section>
         </>

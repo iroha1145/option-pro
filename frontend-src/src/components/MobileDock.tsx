@@ -4,6 +4,7 @@
  * 五个入口同级单色（雷达不再是中央凸起圆钮）；「更多」上弹 sheet（spring-gentle）。
  */
 import { useEffect, useId, useState, useRef } from 'react';
+import { prefetchPrimaryRoutes, prefetchRoute } from '@/lib/prefetchRoutes';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { AnimatePresence, motion } from 'framer-motion';
 import { cn, isNavPathActive } from '@/lib/utils';
@@ -58,6 +59,19 @@ function MobileDockContent() {
   const overlayId = useId();
   const morePhase = useOverlayPhase(moreOpen, 150);
   useBodyScrollLock(overlayVisible(moreOpen, morePhase));
+  useEffect(() => {
+    const idle = window.requestIdleCallback;
+    if (typeof idle !== 'function') {
+      const timer = window.setTimeout(() => prefetchPrimaryRoutes(), 200);
+      return () => window.clearTimeout(timer);
+    }
+    const id = idle(() => prefetchPrimaryRoutes(), { timeout: 800 });
+    return () => window.cancelIdleCallback(id);
+  }, []);
+  useEffect(() => {
+    if (!moreOpen) return;
+    for (const item of MORE_ITEMS) prefetchRoute(item.path);
+  }, [moreOpen]);
   // The pathname key unmounts the sheet synchronously on navigation; it cannot
   // cover a newly mounted page while waiting for an exit animation.
 
@@ -94,6 +108,8 @@ function MobileDockContent() {
         )}
         <Link
           to={item.path}
+          onPointerEnter={() => prefetchRoute(item.path)}
+          onFocus={() => prefetchRoute(item.path)}
           className="relative z-10 flex min-h-[44px] flex-1 flex-col items-center justify-center gap-1 transition-transform duration-fast active:scale-[0.96]"
           aria-label={item.label}
           aria-current={active ? 'page' : undefined}

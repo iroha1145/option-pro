@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import re
 from datetime import date, datetime, timedelta, timezone
 from typing import Annotated, Literal, Optional
@@ -242,27 +243,27 @@ def _raise_safe(error: CatalystError) -> None:
 
 
 @router.get("/status")
-def catalyst_status(
+async def catalyst_status(
     service: PersonalCatalystService = Depends(_service),
 ) -> dict:
-    return service.status()
+    return await asyncio.to_thread(service.status)
 
 
 @router.get(
     "/analysis-progress",
     dependencies=[Depends(require_owner_access)],
 )
-def catalyst_analysis_progress(
+async def catalyst_analysis_progress(
     service: PersonalCatalystService = Depends(_service),
 ) -> dict:
     try:
-        return service.analysis_progress(now=_now())
+        return await asyncio.to_thread(service.analysis_progress, now=_now())
     except CatalystError as error:
         _raise_safe(error)
 
 
 @router.get("/feed")
-def catalyst_feed(
+async def catalyst_feed(
     as_of: Optional[AwareDatetime] = Query(default=None),
     window_hours: int = Query(default=72, ge=1, le=24 * 365),
     limit: int = Query(default=50, ge=1, le=100),
@@ -297,7 +298,8 @@ def catalyst_feed(
     )
     _require_public_query_bound("limit", limit, _PUBLIC_MAX_FEED_LIMIT)
     try:
-        return service.feed(
+        return await asyncio.to_thread(
+            service.feed,
             as_of=as_of or _now(),
             window_hours=window_hours,
             limit=limit,
@@ -320,14 +322,14 @@ def catalyst_feed(
 
 
 @router.get("/news/{news_id}")
-def catalyst_news(
+async def catalyst_news(
     news_id: int = Path(ge=1),
     as_of: Optional[AwareDatetime] = Query(default=None),
     service: PersonalCatalystService = Depends(_service),
 ) -> dict:
     observed = as_of or _now()
     try:
-        detail = service.news(news_id, as_of=observed)
+        detail = await asyncio.to_thread(service.news, news_id, as_of=observed)
     except CatalystError as error:
         _raise_safe(error)
     if detail is None:
@@ -336,7 +338,7 @@ def catalyst_news(
 
 
 @router.get("/tickers/{ticker}")
-def ticker_catalysts(
+async def ticker_catalysts(
     ticker: str,
     as_of: Optional[AwareDatetime] = Query(default=None),
     window_hours: int = Query(default=72, ge=1, le=24 * 365),
@@ -354,7 +356,8 @@ def ticker_catalysts(
     )
     _require_public_query_bound("limit", limit, _PUBLIC_MAX_FEED_LIMIT)
     try:
-        return service.ticker(
+        return await asyncio.to_thread(
+            service.ticker,
             _ticker(ticker),
             as_of=as_of or _now(),
             window_hours=window_hours,
@@ -436,7 +439,8 @@ async def catalyst_calendar(
         else None
     )
     try:
-        payload = service.calendar(
+        payload = await asyncio.to_thread(
+            service.calendar,
             date_from=start_date,
             date_to=end_date,
             as_of=observed,
@@ -464,25 +468,25 @@ async def catalyst_calendar(
 
 
 @router.get("/hotspots/status")
-def catalyst_hotspot_status(
+async def catalyst_hotspot_status(
     service: PersonalCatalystService = Depends(_service),
 ) -> dict:
-    return service.hotspot_status()
+    return await asyncio.to_thread(service.hotspot_status)
 
 
 @router.get("/hotspots")
-def catalyst_hotspots(
+async def catalyst_hotspots(
     limit: int = Query(default=20, ge=1, le=100),
     service: PersonalCatalystService = Depends(_service),
 ) -> dict:
-    return service.hotspots(limit=limit)
+    return await asyncio.to_thread(service.hotspots, limit=limit)
 
 
 @router.get("/market-focus-cycles/latest")
-def latest_market_focus_cycle(
+async def latest_market_focus_cycle(
     service: PersonalCatalystService = Depends(_service),
 ) -> dict:
-    return service.latest_market_focus_cycle()
+    return await asyncio.to_thread(service.latest_market_focus_cycle)
 
 
 @router.post(
@@ -505,14 +509,14 @@ def request_market_focus_cycle(
 
 
 @router.get("/market-focus-cycles/{cycle_id}")
-def market_focus_cycle(
+async def market_focus_cycle(
     cycle_id: Annotated[
         str, Path(pattern=r"^mfc_[0-9a-f]{32}$")
     ],
     service: PersonalCatalystService = Depends(_service),
 ) -> dict:
     try:
-        cycle = service.market_focus_cycle(cycle_id)
+        cycle = await asyncio.to_thread(service.market_focus_cycle, cycle_id)
     except CatalystError as error:
         _raise_safe(error)
     if cycle is None:
@@ -599,12 +603,12 @@ def request_news_analysis(
     "/analysis-jobs/{job_id}",
     dependencies=[Depends(require_owner_access)],
 )
-def analysis_job(
+async def analysis_job(
     job_id: Annotated[str, Path(min_length=16, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")],
     service: PersonalCatalystService = Depends(_service),
 ) -> dict:
     try:
-        job = service.analysis_job(job_id)
+        job = await asyncio.to_thread(service.analysis_job, job_id)
     except CatalystError as error:
         _raise_safe(error)
     if job is None:

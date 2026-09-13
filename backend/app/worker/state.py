@@ -167,6 +167,9 @@ class WorkerStateRepository:
             connection = sqlite3.connect(uri, uri=True, timeout=2.0)
             connection.row_factory = sqlite3.Row
             connection.execute("PRAGMA busy_timeout=2000")
+            from app.services.sqlite_runtime import apply_sqlite_runtime_pragmas
+
+            apply_sqlite_runtime_pragmas(connection)
         else:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             # 30s 而不是 5s：维护任务备份 GB 级数据库时同盘 fsync 会把
@@ -177,6 +180,9 @@ class WorkerStateRepository:
             connection = sqlite3.connect(self.path, timeout=30.0)
             connection.row_factory = sqlite3.Row
             connection.execute("PRAGMA busy_timeout=30000")
+            from app.services.sqlite_runtime import apply_sqlite_runtime_pragmas
+
+            apply_sqlite_runtime_pragmas(connection)
         try:
             yield connection
         finally:

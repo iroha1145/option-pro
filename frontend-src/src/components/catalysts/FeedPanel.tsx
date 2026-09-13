@@ -1,7 +1,6 @@
 import AnalysisIcon from '@/components/shared/AnalysisIcon';
 /** feed 新闻流面板：电报带列表 + 呼吸式刷新 + 游标分页 + 空态/骨架/503 */
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { motion } from 'framer-motion';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ApiError } from '@/api/client';
 import { useShell } from '@/hooks/useShell';
 import EmptyState from '@/components/shared/EmptyState';
@@ -42,6 +41,21 @@ function TimeCol({ iso }: { iso: string }) {
   );
 }
 
+function NewsRowShell({
+  animate,
+  children,
+}: {
+  animate: boolean;
+  index: number;
+  children: ReactNode;
+}) {
+  const className = 'news-row group relative flex gap-3 px-4 py-[18px] transition-colors duration-fast hover:bg-paper-2/70 sm:px-5';
+  if (!animate) {
+    return <article className={className}>{children}</article>;
+  }
+  return <article className={className}>{children}</article>;
+}
+
 /* ---------------- 新闻行 ---------------- */
 export function NewsRow({
   item,
@@ -58,15 +72,7 @@ export function NewsRow({
   const a = item.analysis;
   const bestImpact = a ? a.trustedStockImpacts.reduce((m, x) => (Math.abs(x.impactScore) > Math.abs(m?.impactScore ?? 0) ? x : m), a.trustedStockImpacts[0]) : null;
   return (
-    <motion.article
-      /* 繁忙 feed 列表：stagger ≤30ms，仅第一页播放；y 写法以便 hover 上浮可组合（内联 transform 字符串会挡住 whileHover） */
-      initial={animate ? { opacity: 0, y: 14 } : false}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1], delay: animate ? Math.min(index * 0.03, 0.3) : 0 }}
-      /* v8.1：行级去位移。上浮属于「卡片脱离纸面」的 elevation 隐喻——列表行无阴影无边界，
-         浮起没有语义；60 行高频扫视区满屏跳也违反动效克制。背景色 + 标题下划线两重反馈已够。 */
-      className="group relative flex gap-3 px-4 py-[18px] transition-colors duration-fast hover:bg-paper-2/70 sm:px-5"
-    >
+    <NewsRowShell animate={animate} index={index}>
       <button
         type="button"
         onClick={() => onOpen(item.newsId)}
@@ -143,7 +149,7 @@ export function NewsRow({
           <AnalysisIcon size={14} />
         </button>
       </div>
-    </motion.article>
+    </NewsRowShell>
   );
 }
 

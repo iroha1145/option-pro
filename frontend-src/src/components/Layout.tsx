@@ -6,7 +6,7 @@
  * v2：个股详情从右侧抽屉改为 /stock/:ticker 全屏整页（参考日股工作台），
  * openTicker 一律导航——抽屉基座与 StockDrawerBody 已随之撤除。
  */
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Outlet, useLocation, useNavigate, useNavigationType } from 'react-router';
 import Navbar from '@/components/Navbar';
 import IndexTape from '@/components/IndexTape';
@@ -16,12 +16,14 @@ import RouteErrorBoundary from '@/components/shared/RouteErrorBoundary';
 import PageFallback from '@/components/shared/PageFallback';
 import StatusNotice from '@/components/shared/StatusNotice';
 import MobileDock from '@/components/MobileDock';
-import CommandPalette from '@/components/CommandPalette';
 import { pushRecent } from '@/lib/recentTickers';
+import { prefetchPrimaryRoutes } from '@/lib/prefetchRoutes';
 import { ShellContext } from '@/hooks/useShell';
 import { useAccess } from '@/hooks/useAccess';
 import { isMock } from '@/api/client';
 import { t as __t } from '../i18n/core.ts';
+
+const CommandPalette = lazy(() => import('@/components/CommandPalette'));
 
 export default function Layout() {
   const location = useLocation();
@@ -33,6 +35,7 @@ export default function Layout() {
   const pageKey = JSON.stringify([location.pathname, role, username]);
   const previousPathname = useRef(location.pathname);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [paletteReady, setPaletteReady] = useState(false);
 
   const openPalette = useCallback(() => setPaletteOpen(true), []);
   const openTicker = useCallback((ticker: string) => {
@@ -62,6 +65,20 @@ export default function Layout() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  useEffect(() => {
+    const idle = window.requestIdleCallback;
+    const warm = () => {
+      prefetchPrimaryRoutes();
+      void import('@/components/CommandPalette').then(() => setPaletteReady(true));
+    };
+    if (typeof idle !== 'function') {
+      const timer = window.setTimeout(warm, 300);
+      return () => window.clearTimeout(timer);
+    }
+    const id = idle(warm, { timeout: 1000 });
+    return () => window.cancelIdleCallback(id);
   }, []);
 
   const value = useMemo(() => ({ openPalette, openTicker }), [openPalette, openTicker]);
@@ -114,12 +131,16 @@ export default function Layout() {
         <MobileDock />
       </div>
 
-      <CommandPalette
-        open={paletteOpen}
-        onClose={() => setPaletteOpen(false)}
-        onOpenTicker={openTicker}
-        onForceRefresh={() => navigate('/watchlist?force=1')}
-      />
+      {(paletteOpen || paletteReady) && (
+        <Suspense fallback={null}>
+          <CommandPalette
+            open={paletteOpen}
+            onClose={() => setPaletteOpen(false)}
+            onOpenTicker={openTicker}
+            onForceRefresh={() => navigate('/watchlist?force=1')}
+          />
+        </Suspense>
+      )}
     </ShellContext.Provider>
   );
 }

@@ -199,7 +199,7 @@ test('数据源卡映射真实近24小时条数与新鲜度滞后', async () => 
 test('今日新闻优先使用完整过滤窗口汇总而非首屏五十条', async () => {
   const feedPath =
     '/catalysts/feed?window_hours=24'
-    + '&include_unanalyzed=true&include_neutral=true&limit=50';
+    + '&include_unanalyzed=true&include_neutral=true&limit=1';
   const loaded = loadCatalystsModule({
     [feedPath]: {
       items: [

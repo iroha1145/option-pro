@@ -1,6 +1,5 @@
 import SoftBadge from '@/components/shared/SoftBadge';
 /** Shared card surfaces, with the existing heat, source and news interactions. */
-import { motion } from 'framer-motion';
 import { usePolling } from '@/hooks/usePolling';
 import { catalystsContract } from './api';
 import type { HotspotGroup } from './api';
@@ -13,18 +12,15 @@ import Icon from '@/components/icons';
 import { fmtRelative } from '@/lib/format';
 import { t as __t } from '../../i18n/core.ts';
 
-function HotspotCard({ h, index, onOpen }: { h: HotspotGroup; index: number; onOpen: () => void }) {
+function HotspotCard({ h, onOpen }: { h: HotspotGroup; index?: number; onOpen: () => void }) {
   const openable = !!h.representative?.newsId;
   return (
-    <motion.button
+    <button
       type="button"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1], delay: Math.min(index * 0.05, 0.4) }}
       onClick={onOpen}
       disabled={!openable}
       data-hotspot-card
-      className={`card-surface group relative flex w-[260px] shrink-0 snap-start flex-col overflow-hidden p-4 text-left sm:w-[300px] sm:p-5 ${
+      className={`hotspot-card card-surface group relative flex w-[260px] shrink-0 snap-start flex-col overflow-hidden p-4 text-left sm:w-[300px] sm:p-5 ${
         openable ? 'card-hover' : 'cursor-default'
       }`}
     >
@@ -63,7 +59,7 @@ function HotspotCard({ h, index, onOpen }: { h: HotspotGroup; index: number; onO
           </span>
         )}
       </div>
-    </motion.button>
+    </button>
   );
 }
 

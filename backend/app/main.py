@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json as _json_mod
 import os as _os
 import re as _re
 import threading
 import time as _time
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from collections import deque as _deque
 from pathlib import Path
@@ -119,12 +121,18 @@ class _ExactTrustedHostMiddleware:
         await self.app(scope, receive, send)
 
 
+_IO_WORKERS = 32
+
+
 @asynccontextmanager
 async def _lifespan(application: FastAPI):
     from app.config import get_settings
     from app.services import massive
     from app.services.realtime_quotes import QuoteHub
 
+    loop = asyncio.get_running_loop()
+    executor = ThreadPoolExecutor(max_workers=_IO_WORKERS, thread_name_prefix="optix-io")
+    loop.set_default_executor(executor)
     configuration = get_settings()
     application.state.quote_settings = configuration
     radar = None
@@ -154,6 +162,7 @@ async def _lifespan(application: FastAPI):
                     massive.close()
                 finally:
                     application.state.quote_hub = None
+                    executor.shutdown(wait=False, cancel_futures=True)
 
 
 app = FastAPI(

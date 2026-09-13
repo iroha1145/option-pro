@@ -10,7 +10,7 @@ import { useQuoteSymbols, useRadarVersion, useRadarUpdates } from '@/hooks/useLi
  * 其下：SignalCards 个股小卡网格（当日其余事件，3 列 / 移动单列，V3 小卡结构恢复）
  * 事件详情模态保留 · status/current 30s 轮询 · 空态/骨架/503/移动端单列
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { ApiError } from '@/api/client';
 import { breakoutsApi } from '@/api/modules/breakouts';
@@ -38,7 +38,6 @@ import Icon from '@/components/icons';
 import LeadBigCard from '@/components/breakouts/LeadBigCard';
 import HistoryRail from '@/components/breakouts/HistoryRail';
 import SignalCards from '@/components/breakouts/SignalCards';
-import EventDetail from '@/components/breakouts/EventDetail';
 import '@/components/breakouts/radar.css';
 import { asCurrentEvents, asFullDetail, asFullEvent, asFullStatus } from '@/components/breakouts/types';
 import type {
@@ -48,6 +47,8 @@ import type {
   LifecycleState,
 } from '@/components/breakouts/types';
 import { t as __t } from '../i18n/core.ts';
+
+const EventDetail = lazy(() => import('@/components/breakouts/EventDetail'));
 
 /* ---------------- 筛选维度 ---------------- */
 type StatusFilter = 'ALL' | LifecycleState;
@@ -204,6 +205,10 @@ export default function Breakouts() {
 
   /* 详情模态 */
   const [selected, setSelected] = useState<BreakoutEventFull | null>(null);
+  const [detailReady, setDetailReady] = useState(false);
+  useEffect(() => {
+    if (selected) setDetailReady(true);
+  }, [selected]);
   const [locateTicker, setLocateTicker] = useState<string | null>(null);
   const locateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (locateTimer.current) clearTimeout(locateTimer.current); }, []);
@@ -573,21 +578,25 @@ export default function Breakouts() {
         )}
       </section>
 
-      {/* 事件详情模态（保留） */}
-      <EventDetail
-        event={selected}
-        detailError={detailError}
-        onRetryDetail={selected ? refreshSelectedDetail : undefined}
-        onClose={() => {
-          setSelected(null);
-          setDetailError(null);
-        }}
-        onOpenTicker={(t) => {
-          setSelected(null);
-          openTicker(t);
-        }}
-        onShowTickerEvents={showTickerEvents}
-      />
+      {/* 事件详情模态：首次打开才拉 chunk，关闭后保持挂载以便退场动画。 */}
+      <Suspense fallback={null}>
+        {(detailReady || selected) && (
+          <EventDetail
+            event={selected}
+            detailError={detailError}
+            onRetryDetail={selected ? refreshSelectedDetail : undefined}
+            onClose={() => {
+              setSelected(null);
+              setDetailError(null);
+            }}
+            onOpenTicker={(t) => {
+              setSelected(null);
+              openTicker(t);
+            }}
+            onShowTickerEvents={showTickerEvents}
+          />
+        )}
+      </Suspense>
     </div>
   );
 }

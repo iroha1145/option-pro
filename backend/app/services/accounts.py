@@ -526,6 +526,9 @@ class AccountStore:
         connection.execute("PRAGMA journal_mode=WAL")
         connection.execute("PRAGMA busy_timeout=10000")
         connection.execute("PRAGMA foreign_keys=ON")
+        from app.services.sqlite_runtime import apply_sqlite_runtime_pragmas
+
+        apply_sqlite_runtime_pragmas(connection)
         return connection
 
     def initialize(self) -> None:

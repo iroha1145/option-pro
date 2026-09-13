@@ -20,6 +20,7 @@ from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
 from app.access import current_request_is_owner
+from app.services.sqlite_runtime import apply_sqlite_runtime_pragmas
 from app.services.ai_jobs import runtime as ai_runtime
 from app.services.ai_jobs.models import (
     validate_result,
@@ -360,7 +361,7 @@ TIMESTAMP_NORMALIZATION_CHECKSUM = hashlib.sha256(
 # ---------------------------------------------------------------------------
 _REVISION_CACHE: dict[tuple[str, int], dict[str, Any]] = {}
 _REVISION_CACHE_LOCK = threading.Lock()
-_REVISION_CACHE_MAX_ENTRIES = 32
+_REVISION_CACHE_MAX_ENTRIES = 64
 _REVISION_CACHE_MAX_AGE_SECONDS = 300.0
 _REVISION_CACHE_AS_OF_TOLERANCE_SECONDS = 90.0
 
@@ -1191,6 +1192,7 @@ class LocalCatalystIntelligence:
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys=ON")
         connection.execute("PRAGMA busy_timeout=5000")
+        apply_sqlite_runtime_pragmas(connection)
         if not owner_access:
             connection.execute("PRAGMA query_only=ON")
         try:

@@ -45,6 +45,7 @@ import SessionLED, { SessionDot } from '@/components/shared/SessionLED';
 import { SkeletonCard, SkeletonReveal, SkeletonRows } from '@/components/shared/Skeleton';
 import Sparkline from '@/components/charts/Sparkline';
 import Icon from '@/components/icons';
+import { prefetchStockPage } from '@/lib/prefetchRoutes';
 import { getLocale, t } from '../i18n/core.ts';
 
 /* ---------------- B1 小件：涨跌宽度比条 ---------------- */
@@ -278,6 +279,7 @@ function WatchCard({
        「将 X 移出自选」被并进卡片名、删除动作对读屏几乎不存在。
        入场动画留在外层包装上，hover 上浮/阴影走 button 的 card-lift（gated CSS），观感不变。 */
     <motion.div
+      onPointerEnter={prefetchStockPage}
       /* layout="position" 曾挂在每张卡上。它会为每个元素建一个 framer 投影节点并在
          每次布局变化时重新测量 —— 214 张卡时 Style & Layout 达 1,285ms，且把
          ~103K 的投影/拖拽代码拉进首屏包。入场淡入不需要它，hover 位移也不需要。 */
@@ -288,7 +290,7 @@ function WatchCard({
           ? { duration: 0.48, ease: [0.16, 1, 0.3, 1], delay: Math.min(index * 0.045, 0.5) }
           : undefined
       }
-      className="group/card relative"
+      className="watch-card group/card relative"
     >
       <button
         type="button"
@@ -483,6 +485,8 @@ export default function Watchlist() {
               <span className="flex flex-wrap items-center gap-1.5">
                 <Link
                   to={`/stock/${encodeURIComponent(r.ticker)}`}
+                  onPointerEnter={prefetchStockPage}
+                  onFocus={prefetchStockPage}
                   aria-label={t('打开 {ticker} 详情', { ticker: r.ticker })}
                   className="block w-fit rounded-sm font-mono text-body-s font-semibold text-ink-800 hover:text-brand-700 hover:underline"
                 >{r.ticker}</Link>

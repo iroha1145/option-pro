@@ -1,6 +1,6 @@
 import AnalysisIcon from '@/components/shared/AnalysisIcon';
 /** 状态 hero：数据源状态 / 热点计算 / 分析可用性 / 今日新闻（真实契约口径，不可用原因如实标注） */
-import { motion } from 'framer-motion';
+import { useEffect, useState } from 'react';
 import { usePolling } from '@/hooks/usePolling';
 import { remoteState } from '@/hooks/remoteState';
 import { catalystsContract } from './api';
@@ -9,7 +9,6 @@ import SourceNote from '@/components/shared/SourceNote';
 import SoftBadge from '@/components/shared/SoftBadge';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
 import { fmtRelative } from '@/lib/format';
-import { DUR_SECTION } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import Icon from '@/components/icons';
 import { t } from '../../i18n/core.ts';
@@ -46,7 +45,23 @@ export default function StatusHero({ refreshToken = 0 }: { refreshToken?: number
   /* refreshToken 参与依赖：页头「刷新」必须真的刷新这一栏（审计 P2-21）。 */
   const statusQ = usePolling(() => catalystsContract.status(), 45_000, [refreshToken]);
   const hotStatusQ = usePolling(() => catalystsContract.hotspotsStatus(), 45_000, [refreshToken]);
-  const newsQ = usePolling(() => catalystsContract.newsToday(), 120_000, [refreshToken]);
+  /* 今日计数走完整过滤窗口汇总，但不要和 status/feed/hotspots 抢首屏带宽：
+     首次空闲后再取；手动刷新立即取。 */
+  const [todayEnabled, setTodayEnabled] = useState(refreshToken > 0);
+  useEffect(() => {
+    if (refreshToken > 0) {
+      setTodayEnabled(true);
+      return;
+    }
+    const idle = window.requestIdleCallback;
+    if (typeof idle !== 'function') {
+      const timer = window.setTimeout(() => setTodayEnabled(true), 1);
+      return () => window.clearTimeout(timer);
+    }
+    const id = idle(() => setTodayEnabled(true), { timeout: 600 });
+    return () => window.cancelIdleCallback(id);
+  }, [refreshToken]);
+  const newsQ = usePolling(() => catalystsContract.newsToday(), 120_000, [refreshToken], { enabled: todayEnabled });
 
   const s = statusQ.data;
   const hs = hotStatusQ.data;
@@ -69,10 +84,7 @@ export default function StatusHero({ refreshToken = 0 }: { refreshToken?: number
   );
 
   return (
-    <motion.section
-      initial={{ opacity: 0, y: 14 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: DUR_SECTION, ease: [0.16, 1, 0.3, 1] }}
+    <section
       aria-label={t("数据源状态")}
       className="card-surface mt-6"
     >
@@ -192,6 +204,6 @@ export default function StatusHero({ refreshToken = 0 }: { refreshToken?: number
         </summary>
         <SourceNote className="border-0 pb-3 pt-1" text={t("新闻保留原始来源；影响分与置信度由模型估算。数据滞后时间反映来源的更新进度。")} />
       </details>
-    </motion.section>
+    </section>
   );
 }

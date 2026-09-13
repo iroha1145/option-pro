@@ -678,7 +678,7 @@ export const catalystsContract = {
       () =>
         cachedGet(`/catalysts/feed${qs({
           windowHours: 24,
-          limit: 50,
+          limit: 1,
           includeUnanalyzed: true,
           includeNeutral: true,
         })}`).then((d) => {

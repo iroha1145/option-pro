@@ -3,27 +3,39 @@
  * 状态 hero · 热点带 · 市场焦点周期 · 标签页（feed/stocks/calendar/sources，URL 同步）
  * 过滤器条（URL query）· 新闻详情抽屉（AI 分析任务状态机）· 空态/骨架/503/移动端
  */
-import { startTransition, useCallback, useMemo, useOptimistic, useState } from 'react';
+import { lazy, startTransition, Suspense, useCallback, useEffect, useMemo, useOptimistic, useState } from 'react';
 import { useSearchParams } from 'react-router';
 import PageHeader from '@/components/shared/PageHeader';
 import Segmented from '@/components/shared/Segmented';
 import Icon from '@/components/icons';
 import { fmtTimeHHMMSS } from '@/lib/format';
 import StatusHero from '@/components/catalysts/StatusHero';
-import AnalysisProgressCard from '@/components/catalysts/AnalysisProgressCard';
 import HotspotsStrip from '@/components/catalysts/HotspotsStrip';
-import FocusCycleCard from '@/components/catalysts/FocusCycleCard';
-import ManagePanel from '@/components/catalysts/ManagePanel';
 import FilterBar from '@/components/catalysts/FilterBar';
 import { DEFAULT_FILTERS, sanitizeThemeId, type CatalystFilters } from '@/components/catalysts/filters';
 import FeedPanel from '@/components/catalysts/FeedPanel';
-import StocksPanel from '@/components/catalysts/StocksPanel';
-import CalendarPanel from '@/components/catalysts/CalendarPanel';
-import SourcesPanel from '@/components/catalysts/SourcesPanel';
-import NewsDrawer from '@/components/catalysts/NewsDrawer';
+import DeferredMount from '@/components/shared/DeferredMount';
+import { useAccess } from '@/hooks/useAccess';
+import { prefetchNewsDrawer } from '@/lib/prefetchRoutes';
 import { clearCatalystReadCache } from '@/components/catalysts/api';
 import type { CatalystNewsItem, NewsAnalysisStatus, NewsClassification } from '@/components/catalysts/api';
 import { t as __t } from '../i18n/core.ts';
+
+const FocusCycleCard = lazy(() => import('@/components/catalysts/FocusCycleCard'));
+const StocksPanel = lazy(() => import('@/components/catalysts/StocksPanel'));
+const CalendarPanel = lazy(() => import('@/components/catalysts/CalendarPanel'));
+const SourcesPanel = lazy(() => import('@/components/catalysts/SourcesPanel'));
+const NewsDrawer = lazy(() => import('@/components/catalysts/NewsDrawer'));
+const ManagePanel = lazy(() => import('@/components/catalysts/ManagePanel'));
+const AnalysisProgressCard = lazy(() => import('@/components/catalysts/AnalysisProgressCard'));
+
+function TabFallback() {
+  return (
+    <div className="card-surface flex items-center justify-center px-5 py-10" role="status" aria-label={__t('加载中…')}>
+      <span className="size-4 animate-spin rounded-full border-2 border-line border-t-brand-600" aria-hidden="true" />
+    </div>
+  );
+}
 
 type TabId = 'feed' | 'stocks' | 'calendar' | 'sources';
 
@@ -74,7 +86,9 @@ function parseFilters(sp: URLSearchParams): CatalystFilters {
 }
 
 export default function Catalysts() {
+  const { isOwner } = useAccess();
   const [searchParams, setSearchParams] = useSearchParams();
+  const [drawerReady, setDrawerReady] = useState(false);
 
   /* URL 为唯一事实来源 */
   const tab: TabId = useMemo(() => {
@@ -136,8 +150,20 @@ export default function Catalysts() {
     if (result.ok) setLastLoadedAt(result.validatedAt ?? Date.now());
   }, []);
 
-  /* 新闻详情抽屉 */
+  /* 新闻详情抽屉：首次打开才拉 chunk；关闭后保持挂载以免丢掉在途任务。 */
   const [selectedNewsId, setSelectedNewsId] = useState<string | null>(null);
+  useEffect(() => {
+    if (selectedNewsId) setDrawerReady(true);
+  }, [selectedNewsId]);
+  useEffect(() => {
+    const idle = window.requestIdleCallback;
+    if (typeof idle !== 'function') {
+      const timer = window.setTimeout(() => prefetchNewsDrawer(), 400);
+      return () => window.clearTimeout(timer);
+    }
+    const id = idle(() => prefetchNewsDrawer(), { timeout: 1200 });
+    return () => window.cancelIdleCallback(id);
+  }, []);
 
   return (
     <div>
@@ -172,18 +198,30 @@ export default function Catalysts() {
       <StatusHero refreshToken={refreshToken} />
 
       {/* Owner 专属：任务库真实计数，不以定时补间伪造单条进度 */}
-      <AnalysisProgressCard />
+      {isOwner && (
+        <Suspense fallback={null}>
+          <AnalysisProgressCard />
+        </Suspense>
+      )}
 
       {/* B1 热点主题带（点击卡片打开代表新闻抽屉） */}
       <HotspotsStrip onOpenNews={setSelectedNewsId} refreshToken={refreshToken} />
 
-      {/* B2 市场焦点周期卡 */}
+      {/* B2 市场焦点周期卡：折线以下，手机端空闲后再挂 */}
       <div className="mt-6">
-        <FocusCycleCard refreshToken={refreshToken} onDataRefreshed={onRefresh} />
+        <DeferredMount refreshToken={refreshToken}>
+          <Suspense fallback={null}>
+            <FocusCycleCard refreshToken={refreshToken} onDataRefreshed={onRefresh} />
+          </Suspense>
+        </DeferredMount>
       </div>
 
       {/* B2.5 管理面板（owner 专属：数据刷新 / 后台任务 / 运行设置） */}
-      <ManagePanel onDataRefreshed={onRefresh} />
+      {isOwner && (
+        <Suspense fallback={null}>
+          <ManagePanel onDataRefreshed={onRefresh} />
+        </Suspense>
+      )}
 
 
       {/* 标签页（URL 同步 ?tab=） */}
@@ -214,13 +252,29 @@ export default function Catalysts() {
             onClearFilters={clearFilters}
           />
         )}
-        {tab === 'stocks' && <StocksPanel filters={filters} refreshToken={refreshToken} />}
-        {tab === 'calendar' && <CalendarPanel refreshToken={refreshToken} />}
-        {tab === 'sources' && <SourcesPanel refreshToken={refreshToken} />}
+        {tab === 'stocks' && (
+          <Suspense fallback={<TabFallback />}>
+            <StocksPanel filters={filters} refreshToken={refreshToken} />
+          </Suspense>
+        )}
+        {tab === 'calendar' && (
+          <Suspense fallback={<TabFallback />}>
+            <CalendarPanel refreshToken={refreshToken} />
+          </Suspense>
+        )}
+        {tab === 'sources' && (
+          <Suspense fallback={<TabFallback />}>
+            <SourcesPanel refreshToken={refreshToken} />
+          </Suspense>
+        )}
       </div>
 
       {/* 新闻详情抽屉 */}
-      <NewsDrawer newsId={selectedNewsId} onClose={() => setSelectedNewsId(null)} onUpdate={onNewsUpdate} />
+      <Suspense fallback={null}>
+        {(drawerReady || selectedNewsId) && (
+          <NewsDrawer newsId={selectedNewsId} onClose={() => setSelectedNewsId(null)} onUpdate={onNewsUpdate} />
+        )}
+      </Suspense>
     </div>
   );
 }

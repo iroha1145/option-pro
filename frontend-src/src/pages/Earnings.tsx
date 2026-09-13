@@ -7,7 +7,7 @@ import SoftBadge from '@/components/shared/SoftBadge';
  * B3 AI 影响分析卡（缓存结果 / 409 生成 / 任务轮询 / 锁定态）· B5 本月密度条
  * 轮询 1800s（契约 TTL）· 空态 / 骨架 / 503 · 响应式（<md 卡片流 + 横滑 snap）
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { invalidateQueryPaths } from '@/api/queryRegistry';
 import { earningsApi, restoreUpcomingFromCache } from '@/api/modules/earnings';
@@ -27,8 +27,6 @@ import Segmented from '@/components/shared/Segmented';
 import WeekScrubber from '@/components/earnings/WeekScrubber';
 import MonthCalendar from '@/components/earnings/MonthCalendar';
 import EarningsList from '@/components/earnings/EarningsList';
-import EpsHatchChart from '@/components/earnings/EpsHatchChart';
-import ImpactCard from '@/components/earnings/ImpactCard';
 import EarningsAnalysisControls from '@/components/earnings/EarningsAnalysisControls';
 import DensityStrip from '@/components/earnings/DensityStrip';
 import PulseDot from '@/components/earnings/PulseDot';
@@ -44,6 +42,9 @@ import {
   weekStartMonday,
 } from '@/components/earnings/types';
 import { t } from '../i18n/core.ts';
+
+const EpsHatchChart = lazy(() => import('@/components/earnings/EpsHatchChart'));
+const ImpactCard = lazy(() => import('@/components/earnings/ImpactCard'));
 
 const REFRESH_COOLDOWN_S = 60;
 const LIST_PAGE_SIZE = 24;
@@ -706,14 +707,20 @@ export default function Earnings() {
           {loading ? (
             <SkeletonCard />
           ) : (
-            <ImpactCard
-              row={selectedRow}
-              ticker={selectedTicker}
-              calendarRevision={q.data?.asOf ?? refreshStatus}
-              onAnalyzed={onReportAnalysis}
-            />
+            <Suspense fallback={<SkeletonCard />}>
+              <ImpactCard
+                row={selectedRow}
+                ticker={selectedTicker}
+                calendarRevision={q.data?.asOf ?? refreshStatus}
+                onAnalyzed={onReportAnalysis}
+              />
+            </Suspense>
           )}
-          {!loading && !error503 && <EpsHatchChart items={visibleItems} />}
+          {!loading && !error503 && (
+            <Suspense fallback={null}>
+              <EpsHatchChart items={visibleItems} />
+            </Suspense>
+          )}
           {!loading && !error503 && <DensityStrip items={items} onJumpDay={onJumpDay} />}
         </div>
       </div>

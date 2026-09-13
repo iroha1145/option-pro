@@ -4,7 +4,7 @@
  * B6 强度分布 · B7 联动卡
  * 轮询：indices+status 60s / 形态+信号+强度 300s / 宏观 15min（visibility 暂停，usePolling）
  */
-import { useMemo } from 'react';
+import { lazy, Suspense, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { useShell } from '@/hooks/useShell';
 import { marketApi } from '@/api/modules/market';
@@ -24,8 +24,9 @@ import { regimeMean } from '@/lib/regime';
 import SignalsReading, { type TrendBias } from '@/components/market/SignalsReading';
 import BreadthHistogram from '@/components/market/BreadthHistogram';
 import LinkCards from '@/components/market/LinkCards';
-import MacroConditionsPanel from '@/components/market/macro/MacroConditionsPanel';
 import { t } from '../i18n/core.ts';
+
+const MacroConditionsPanel = lazy(() => import('@/components/market/macro/MacroConditionsPanel'));
 
 const MARKET_TO_SESSION: Record<string, MarketSession> = {
   open: 'regular',
@@ -144,7 +145,9 @@ export default function Market() {
       <section className="mt-8" aria-label={t("宏观环境")}>
         {/* 技术侧分数由这里传下去：本页已经有形态六维均值，面板不必为一张展示卡
             再拉一次 /strength/market。 */}
-        <MacroConditionsPanel technicalScore={mean} />
+        <Suspense fallback={<div className="card-surface h-48" aria-hidden="true" />}>
+          <MacroConditionsPanel technicalScore={mean} />
+        </Suspense>
       </section>
 
       {/* B4.5 CTA 趋势资金：已剥离为独立页 /cta，这里只留紧凑引导卡 */}
