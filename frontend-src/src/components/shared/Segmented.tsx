@@ -26,6 +26,8 @@ interface SegmentedProps<T extends string> {
   scrollable?: boolean;
   ariaLabel?: string;
   title?: string;
+  /** 指针悬停或聚焦某项时回调；用于预取，不得在挂载时对每一项触发。 */
+  onOptionIntent?: (value: T) => void;
 }
 
 export default function Segmented<T extends string>({
@@ -37,6 +39,7 @@ export default function Segmented<T extends string>({
   scrollable = false,
   ariaLabel,
   title,
+  onOptionIntent,
 }: SegmentedProps<T>) {
   const layoutId = useId();
 
@@ -72,6 +75,8 @@ export default function Segmented<T extends string>({
                  Home/End。旧实现只有 role，Tab 会逐个停在每一项，方向键完全无效。 */
               tabIndex={active ? 0 : -1}
               onClick={() => onChange(o.value)}
+              onPointerEnter={() => onOptionIntent?.(o.value)}
+              onFocus={() => onOptionIntent?.(o.value)}
               onKeyDown={(event) => {
                 const step =
                   event.key === 'ArrowRight' || event.key === 'ArrowDown'

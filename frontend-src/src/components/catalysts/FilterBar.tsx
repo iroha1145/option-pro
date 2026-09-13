@@ -124,6 +124,9 @@ export default function FilterBar({ filters, onChange, total, filtered }: Filter
         ]}
         value={String(filters.windowHours)}
         onChange={(v) => set({ windowHours: Number(v) })}
+        onOptionIntent={(v) => {
+          if (v === '24' && filters.windowHours !== 24) prefetchDefaultFeed(24);
+        }}
       />
 
       <Segmented

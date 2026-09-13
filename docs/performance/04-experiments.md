@@ -136,3 +136,9 @@
 - **证据**：`resourceCache.ensure` 失败后 `retryAt` 至少 15s；`invalidate()` 故意不消退避（后台 SSE 测试已锁）。页头「刷新」与状态条「重试」都走同一条失效路径，用户点击会被 15s 吃掉。
 - **改动**：`invalidate({ userInitiated: true })` 清 `retryAt`；页头 / hook.refresh / 写操作传 `userInitiated`。SSE 后台失效仍保留退避。失败时 UI 仍是「更新失败，保留上次数据」，不把已可见列表清空。
 - **验证**：`calendar-cache.test.mjs` 增加用户刷新立即重试用例；原「后台通知不得提前重试」保留。生产构建等 soak 结束后再打，避免和长稳抢 CPU。
+
+## Round 5c — 桌面悬停预取 24h/12（不在挂载时打）
+
+- **证据**：移动端展开筛选预取已把 24h/12 从 445ms 降到 244ms。桌面 FilterBar 常开，挂载时预取会与默认 72h 首屏抢整窗物化。
+- **改动**：`Segmented` 增加 `onOptionIntent`（pointerenter/focus）；只在意图切到 24 时且当前窗不是 24 时预取。不预取 6/168。
+- **指标**：等 soak 后桌面 interact n=20。立刻连点（thinkMs=0）仍接近一轮 RTT。

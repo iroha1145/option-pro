@@ -223,6 +223,10 @@ test('theme-boot 在主包解析前预取身份和默认新闻 feed', async () =
   assert.match(drawer, /catalystsContract\s*\.\s*news\(newsId\)/);
   const filters = codeOf(await source('components/catalysts/FilterBar.tsx'));
   assert.match(filters, /prefetchDefaultFeed\(24\)/);
+  assert.match(filters, /onOptionIntent/);
+  const segmented = codeOf(await source('components/shared/Segmented.tsx'));
+  assert.match(segmented, /onPointerEnter/);
+  assert.match(segmented, /onOptionIntent/);
   assert.match(client, /export function offerBootPrefetch/);
 });
 

@@ -118,9 +118,13 @@ for (let i = 0; i < REPEATS; i += 1) {
   if (profile.mobile === false && !(await page.getByRole('tab', { name: '24 时' }).count())) {
     await page.getByRole('button', { name: '筛选' }).click();
   }
-  /* 展开筛选后用户会看一眼选项；这段时间预取 24h/12。0 则变成「展开后立刻点」。 */
+  /* 展开筛选后用户会看一眼选项；这段时间预取 24h/12。0 则变成「展开后立刻点」。
+     桌面常开 FilterBar：悬停「24 时」才预取，避免挂载时再抢一条整窗物化。 */
   const thinkMs = Number(process.env.OPTIX_PERF_FILTER_THINK_MS ?? 800);
-  if (thinkMs > 0) await page.waitForTimeout(thinkMs);
+  if (thinkMs > 0) {
+    await page.getByRole('tab', { name: '24 时' }).hover().catch(() => {});
+    await page.waitForTimeout(thinkMs);
+  }
   const filterStarted = await page.evaluate(() => performance.now());
   const prefetchAlreadyDone = list24Hits.length > 0;
   await page.getByRole('tab', { name: '24 时' }).click();
