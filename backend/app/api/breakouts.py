@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import sqlite3
 import logging
 from datetime import date as CalendarDate
@@ -661,7 +662,11 @@ def _root_from_scan(
 
 
 @router.get("/current", response_model=BreakoutRootResponse)
-def current() -> BreakoutRootResponse:
+async def current() -> BreakoutRootResponse:
+    return await asyncio.to_thread(_current_impl)
+
+
+def _current_impl() -> BreakoutRootResponse:
     settings = get_breakout_settings()
     if not settings.enabled:
         return _unavailable_root(
@@ -717,7 +722,7 @@ def current() -> BreakoutRootResponse:
 
 
 @router.get("/events", response_model=BreakoutEventPageResponse)
-def events(
+async def events(
     date: Optional[CalendarDate] = Query(default=None),
     ticker: Optional[str] = Query(default=None, max_length=15),
     setup_type: Optional[BreakoutSetupType] = None,
@@ -729,6 +734,29 @@ def events(
     min_priority: Optional[float] = Query(default=None, ge=0, le=100),
     limit: int = Query(default=50, ge=1, le=200),
     cursor: Optional[str] = Query(default=None, max_length=2048),
+) -> BreakoutEventPageResponse:
+    return await asyncio.to_thread(
+        _events_impl,
+        date,
+        ticker,
+        setup_type,
+        lifecycle_state,
+        session,
+        min_priority,
+        limit,
+        cursor,
+    )
+
+
+def _events_impl(
+    date: Optional[CalendarDate],
+    ticker: Optional[str],
+    setup_type: Optional[BreakoutSetupType],
+    lifecycle_state: Optional[BreakoutLifecycleState],
+    session: Optional[str],
+    min_priority: Optional[float],
+    limit: int,
+    cursor: Optional[str],
 ) -> BreakoutEventPageResponse:
     settings = get_breakout_settings()
     if not settings.enabled:
@@ -813,7 +841,11 @@ def events(
 
 
 @router.get("/events/{event_id}", response_model=BreakoutEventDetailResponse)
-def event_detail(event_id: str) -> BreakoutEventDetailResponse:
+async def event_detail(event_id: str) -> BreakoutEventDetailResponse:
+    return await asyncio.to_thread(_event_detail_impl, event_id)
+
+
+def _event_detail_impl(event_id: str) -> BreakoutEventDetailResponse:
     settings = get_breakout_settings()
     if not settings.enabled:
         raise HTTPException(status_code=404, detail="Breakout Radar is disabled")
@@ -849,7 +881,11 @@ def event_detail(event_id: str) -> BreakoutEventDetailResponse:
 
 
 @router.get("/tickers/{ticker}", response_model=BreakoutTickerResponse)
-def ticker_events(ticker: str) -> BreakoutTickerResponse:
+async def ticker_events(ticker: str) -> BreakoutTickerResponse:
+    return await asyncio.to_thread(_ticker_events_impl, ticker)
+
+
+def _ticker_events_impl(ticker: str) -> BreakoutTickerResponse:
     settings = get_breakout_settings()
     try:
         symbol = normalize_ticker(ticker)
@@ -897,7 +933,11 @@ def ticker_events(ticker: str) -> BreakoutTickerResponse:
 
 
 @router.get("/status", response_model=BreakoutStatusResponse)
-def status() -> BreakoutStatusResponse:
+async def status() -> BreakoutStatusResponse:
+    return await asyncio.to_thread(_status_impl)
+
+
+def _status_impl() -> BreakoutStatusResponse:
     settings = get_breakout_settings()
     clock_snapshot = MarketClock().snapshot(_now())
     if not settings.enabled:

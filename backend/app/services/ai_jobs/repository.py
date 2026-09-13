@@ -282,6 +282,9 @@ class AIJobRepository:
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys=ON")
         connection.execute("PRAGMA busy_timeout=5000")
+        from app.services.sqlite_runtime import apply_sqlite_runtime_pragmas
+
+        apply_sqlite_runtime_pragmas(connection)
         try:
             yield connection
         finally:

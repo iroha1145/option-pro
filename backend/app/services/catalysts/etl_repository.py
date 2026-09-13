@@ -9,6 +9,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator, Literal
 
+from app.services.sqlite_runtime import apply_sqlite_runtime_pragmas
+
 from .etl_client import CalendarPage, NewsChangesPage
 
 
@@ -197,6 +199,7 @@ class CatalystEtlRepository:
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA foreign_keys=ON")
         connection.execute("PRAGMA busy_timeout=5000")
+        apply_sqlite_runtime_pragmas(connection)
         try:
             yield connection
         finally:
