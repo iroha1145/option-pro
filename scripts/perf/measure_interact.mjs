@@ -60,6 +60,10 @@ for (let i = 0; i < REPEATS; i += 1) {
   await waitNews(page);
 
   const drawerStarted = await page.evaluate(() => performance.now());
+  const detailWait = page.waitForResponse(
+    (response) => /\/api\/catalysts\/news\/\d+/.test(response.url()) && response.ok(),
+    { timeout: 30_000 },
+  );
   await page.locator('article').first().locator('h3').click({ force: true });
   await page.waitForFunction(() => {
     const dialog = document.querySelector('[role="dialog"][aria-modal="true"]');
@@ -74,6 +78,8 @@ for (let i = 0; i < REPEATS; i += 1) {
     return { at: performance.now(), title: text };
   });
   const drawerMs = drawerReady.at - drawerStarted;
+  await detailWait;
+  const drawerDetailMs = await page.evaluate(() => performance.now()) - drawerStarted;
 
   await page.keyboard.press('Escape').catch(() => {});
   await page.waitForTimeout(200);
@@ -117,6 +123,7 @@ for (let i = 0; i < REPEATS; i += 1) {
 
   samples.push({
     drawer_ms: drawerMs,
+    drawer_detail_ms: drawerDetailMs,
     drawer_title: drawerReady.title,
     filter_ms: filterMs,
     filter_title: filterTitle?.trim() || null,
@@ -126,7 +133,7 @@ for (let i = 0; i < REPEATS; i += 1) {
     horizontal_overflow: scroll.overflowX,
   });
   console.log(
-    `#${i + 1}/${REPEATS} drawer=${drawerMs.toFixed(0)} filter=${filterMs.toFixed(0)} `
+    `#${i + 1}/${REPEATS} drawer=${drawerMs.toFixed(0)} detail=${drawerDetailMs.toFixed(0)} filter=${filterMs.toFixed(0)} `
     + `scroll_long=${scroll.longTasks.reduce((sum, ms) => sum + ms, 0).toFixed(0)}`,
   );
   await context.close();
@@ -134,6 +141,7 @@ for (let i = 0; i < REPEATS; i += 1) {
 }
 
 const drawer = samples.map((s) => s.drawer_ms);
+const drawerDetail = samples.map((s) => s.drawer_detail_ms);
 const filter = samples.map((s) => s.filter_ms);
 const report = {
   lab: true,
@@ -143,6 +151,8 @@ const report = {
   summary: {
     drawer_p50: percentile(drawer, 0.5),
     drawer_p75: percentile(drawer, 0.75),
+    drawer_detail_p50: percentile(drawerDetail, 0.5),
+    drawer_detail_p75: percentile(drawerDetail, 0.75),
     filter_p50: percentile(filter, 0.5),
     filter_p75: percentile(filter, 0.75),
     scroll_longtask_total_p75: percentile(samples.map((s) => s.scroll_longtask_total_ms), 0.75),

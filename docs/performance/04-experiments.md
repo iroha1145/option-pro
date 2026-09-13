@@ -47,3 +47,25 @@
 - **结果**：进程内 n=10000 window=72 limit=12：基线冷 184 / 热 60；整窗 overlay 冷 235 / 热 65；只叠当前页冷 224 / 热 50。热路径最多快约 10ms，冷路径更慢。浏览器侧 180ms RTT 下用户不可见。
 - **决定**：**回滚**。无足够可感知收益，增加正确性表面积。
 - **下一步**：不继续改 feed 物化，除非压力测试证明服务端 CPU 是瓶颈。转向交互、弱网、其它模块与长稳。
+
+## Round 2b — 交互口径修正（仅脚本，业务未改）
+
+- **证据**：旧脚本点覆盖层 button、筛选点 button「24 时」、只等到任意 `article h3`，会把骨架或旧 72h 列表算完成。
+- **改动**：点 `article h3`；等到 dialog 内真实 `h2`；筛选等到 `window_hours=24` 的新 feed。
+- **指标**（R1b 代码，mobile-ref，n=20，实验室非 INP）：`/opt/cursor/artifacts/perf/browser-interact-n20.json`
+
+| 指标 | p50 | p75 |
+|---|---|---|
+| 抽屉真实标题 | 386 | 394 |
+| 筛选到 24h 结果可用 | 437 | 445 |
+| 滚动 longtask 合计 | 0 | 0 |
+
+首条/筛选后标题均为 `第9600条快讯`。横向溢出：无。抽屉耗时含详情 GET（约 180ms RTT）。
+- **决定**：保留脚本。下一轮用列表 seed 立刻画标题，并继续预取身份/默认 feed。
+
+## Round 3 — 启动预取 + 路由块提前 + 抽屉 seed（待复测）
+
+- **证据**：冷路径在 JS 解析后仍串行 identity → 挂页 → feed；抽屉先 `setItem(null)` 再等详情。
+- **假设**：HTML 阶段发出 `/access/status` 与默认 72h/12 feed，主包执行时预取 Catalysts chunk，列表项作为抽屉 seed，可去掉两轮 RTT 等待且不缩数据。
+- **改动**：`theme-boot.js` 预取；`consumeBootPrefetch` 按完整 URL 消费一次；`prefetchRouteChunk`；NewsDrawer 用 seed 立刻画真实标题，仍请求 `/catalysts/news/{id}`。
+- **指标**：复测后回填。失败或无收益则回滚。
