@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any, Mapping
 
+import pandas as pd
+
 from app.services.research.calendar import session_close
 from app.services.research.dataset import OfflineOHLCV
 from app.services.research.protocol import (
@@ -22,6 +24,7 @@ def replay_screener_day(
     parameters: Mapping[str, Any] | None = None,
     allow_sealed: bool = False,
     include_future_bars: bool = False,
+    panel: Any | None = None,
 ) -> dict[str, Any]:
     """Run the production scan loop at the regular close of ``signal_date``.
 
@@ -33,14 +36,18 @@ def replay_screener_day(
     assert_split_access(session, allow_sealed=allow_sealed, purpose="screener_replay")
     as_of = session_close(session)
     params = {**DEFAULT_SCAN_PARAMETERS, **dict(parameters or {})}
-    tickers, _meta = _theme_universe()
-    symbols = list(dict.fromkeys([*tickers, *dataset.tickers()]))
-    through = None if include_future_bars else session
-    panel = dataset.adjusted_panel(
-        symbols,
-        through=through,
-        allow_sealed=allow_sealed,
-    )
+    history = panel
+    if history is None:
+        tickers, _meta = _theme_universe()
+        symbols = list(dict.fromkeys([*tickers, *dataset.tickers()]))
+        through = None if include_future_bars else session
+        history = dataset.adjusted_panel(
+            symbols,
+            through=through,
+            allow_sealed=allow_sealed,
+        )
+    elif not isinstance(history, pd.DataFrame):
+        raise TypeError("panel must be a DataFrame")
     payload = _scan_sync(
         universe=str(params["universe"]),
         timeframe=str(params["timeframe"]),
@@ -50,7 +57,7 @@ def replay_screener_day(
         min_price=float(params["min_price"]),
         min_avg_dollar_volume=float(params["min_avg_dollar_volume"]),
         include_options=False,
-        raw_history=panel,
+        raw_history=history,
         as_of=as_of,
         enrich_live=False,
     )

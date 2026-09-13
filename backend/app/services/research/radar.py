@@ -86,6 +86,7 @@ def reconstruct_daily_base_events(
     *,
     tickers: Iterable[str] | None = None,
     allow_sealed: bool = False,
+    frames: dict[str, pd.DataFrame] | None = None,
 ) -> dict[str, Any]:
     """Evaluate production daily-base logic at T using a T-1 structure.
 
@@ -108,7 +109,11 @@ def reconstruct_daily_base_events(
         "missing_bar": 0,
     }
     for ticker in symbols:
-        daily = dataset.frame(ticker, through=session, allow_sealed=allow_sealed)
+        if frames is not None and ticker in frames:
+            daily = frames[ticker]
+            daily = daily[pd.Index(daily.index.date) <= session]
+        else:
+            daily = dataset.frame(ticker, through=session, allow_sealed=allow_sealed)
         if daily.empty or dataset.bar(ticker, session) is None:
             skipped["missing_bar"] += 1
             continue

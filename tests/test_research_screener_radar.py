@@ -131,6 +131,27 @@ def test_future_bars_do_not_change_completed_ranks(monkeypatch) -> None:
     assert all(row["score_scope"] == "ranking" for row in truncated["rows"])
 
 
+def test_reused_panel_matches_per_day_slice(monkeypatch) -> None:
+    _install_small_universe(monkeypatch)
+    dataset = _synth_dataset()
+    signal = date(2019, 3, 21)
+    panel = dataset.adjusted_panel(through=date(2019, 4, 1))
+    sliced = replay_screener_day(
+        dataset,
+        signal,
+        parameters={"min_price": 1, "min_avg_dollar_volume": 0, "top": 3},
+    )
+    reused = replay_screener_day(
+        dataset,
+        signal,
+        parameters={"min_price": 1, "min_avg_dollar_volume": 0, "top": 3},
+        panel=panel,
+    )
+    assert [
+        (row["ticker"], row["ranking_score"]) for row in sliced["rows"]
+    ] == [(row["ticker"], row["ranking_score"]) for row in reused["rows"]]
+
+
 def test_truncation_matches_full_panel_replay(monkeypatch) -> None:
     _install_small_universe(monkeypatch)
     dataset = _synth_dataset()

@@ -14,6 +14,7 @@ from app.services.research.metrics import date_clustered_mean, spearman_rank_ic,
 from app.services.research.portfolio import simulate_long_only
 from app.services.research.protocol import (
     FROZEN_PROTOCOL,
+    FROZEN_SPLITS,
     PRIMARY_HORIZON,
     PRIMARY_TOP_K,
     SplitName,
@@ -59,9 +60,16 @@ def cmd_screener_replay(args: argparse.Namespace) -> int:
         dates = dates[:: args.step]
     if args.limit:
         dates = dates[: args.limit]
+    panel_through = (
+        FROZEN_SPLITS["sealed"]["end"]
+        if split == "sealed" and allow_sealed
+        else FROZEN_SPLITS["validation"]["end"]
+    )
+    panel = dataset.adjusted_panel(through=panel_through, allow_sealed=allow_sealed)
     daily: list[dict[str, Any]] = []
     event_rows: list[dict[str, Any]] = []
-    for session in dates:
+    for index, session in enumerate(dates, start=1):
+        print(f"screener-replay {index}/{len(dates)} {session.isoformat()}", flush=True)
         payload = replay_screener_day(
             dataset,
             session,
@@ -71,6 +79,7 @@ def cmd_screener_replay(args: argparse.Namespace) -> int:
                 "top": args.top,
             },
             allow_sealed=allow_sealed,
+            panel=panel,
         )
         labeled = attach_screener_labels(
             payload.get("rows") or [],
@@ -161,8 +170,26 @@ def cmd_radar_replay(args: argparse.Namespace) -> int:
     if args.limit:
         dates = dates[: args.limit]
     events: list[dict[str, Any]] = []
-    for session in dates:
-        payload = reconstruct_daily_base_events(dataset, session, allow_sealed=allow_sealed)
+    from app.services.strength.scanner import _theme_universe
+
+    symbols, _meta = _theme_universe()
+    panel_through = (
+        FROZEN_SPLITS["sealed"]["end"]
+        if split == "sealed" and allow_sealed
+        else FROZEN_SPLITS["validation"]["end"]
+    )
+    frames = {
+        ticker: dataset.frame(ticker, through=panel_through, allow_sealed=allow_sealed)
+        for ticker in symbols
+    }
+    for index, session in enumerate(dates, start=1):
+        print(f"radar-replay {index}/{len(dates)} {session.isoformat()}", flush=True)
+        payload = reconstruct_daily_base_events(
+            dataset,
+            session,
+            allow_sealed=allow_sealed,
+            frames=frames,
+        )
         events.extend(payload.get("events") or [])
     pairs = []
     labeled_events = []
