@@ -25,6 +25,32 @@ function percentile(values, q) {
   return ordered[Math.min(ordered.length - 1, Math.max(0, Math.round((ordered.length - 1) * q)))];
 }
 
+async function goHome(page) {
+  const dock = page.locator('nav[aria-label="移动端导航"]');
+  const dockHome = dock.getByRole('link', { name: '首页' });
+  if (await dockHome.count() && await dockHome.isVisible()) {
+    await dockHome.click({ timeout: 15_000 });
+    return;
+  }
+  await page.getByRole('link', { name: '首页' }).first().click({ timeout: 15_000 });
+}
+
+async function goNews(page) {
+  const dock = page.locator('nav[aria-label="移动端导航"]');
+  const more = dock.getByRole('button', { name: '更多' });
+  if (await more.count() && await more.isVisible()) {
+    await more.click({ timeout: 15_000 });
+    await page.getByRole('button', { name: /新闻催化/ }).click({ timeout: 15_000 });
+    return;
+  }
+  const navNews = page.getByRole('link', { name: /^催化$/ });
+  if (await navNews.count() && await navNews.first().isVisible()) {
+    await navNews.first().click({ timeout: 15_000 });
+    return;
+  }
+  throw new Error('no visible in-app news navigation');
+}
+
 async function waitNews(page) {
   await page.waitForFunction(() => {
     const title = document.querySelector('article h3');
@@ -60,20 +86,10 @@ for (let i = 0; i < REPEATS; i += 1) {
   const coldStart = Date.now();
   await page.goto(`${BASE}/catalysts`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
   const cold = await waitNews(page);
-  const homeLink = page.getByRole('link', { name: '首页' }).first();
-  if (await homeLink.count()) {
-    await homeLink.click({ timeout: 15_000 });
-  } else {
-    await page.locator('a[href="/"]').first().click({ timeout: 15_000 });
-  }
+  await goHome(page);
   await page.waitForFunction(() => location.pathname === '/' || document.querySelector('h1')?.textContent?.includes('首页'), null, { timeout: 30_000 });
   const spaStart = await page.evaluate(() => performance.now());
-  const newsLink = page.getByRole('link', { name: /新闻催化|^催化$/ }).first();
-  if (await newsLink.count()) {
-    await newsLink.click({ timeout: 15_000 });
-  } else {
-    await page.locator('a[href="/catalysts"]').first().click({ timeout: 15_000 });
-  }
+  await goNews(page);
   const spa = await waitNews(page);
   samples.push({
     cold_ready_ms: Date.now() - coldStart,

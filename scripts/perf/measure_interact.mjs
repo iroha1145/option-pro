@@ -54,7 +54,9 @@ async function applyThrottle(page) {
 async function openFiltersIfNeeded(page) {
   if (!profile.mobile) return;
   const filterBtn = page.getByRole('button', { name: '筛选' });
-  if (await filterBtn.count()) await filterBtn.click();
+  if (!(await filterBtn.count())) return;
+  const expanded = await filterBtn.getAttribute('aria-expanded');
+  if (expanded !== 'true') await filterBtn.click();
 }
 
 async function waitNews(page) {
