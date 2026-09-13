@@ -129,3 +129,4 @@
 - **改动**：`measure_interleaved.mjs`、`run_faults.mjs`、`run_restart_recovery.py`、`watch_rss.py`、`analyze_soak.py`、`run_post_soak_suite.sh`；`measure_spa.mjs` 改为点「首页 / 新闻催化」；`measure_pages.mjs` 增加 `/cta` `/stock/NVDA` / 404；`measure_interact.mjs` 可加代码过滤与利多分类。
 - **指标**：等 soak 满 2h 后再跑套件。本轮没有新的业务性能数字。
 - **决定**：保留脚本。无新证据不改业务代码。
+- **冒烟（未优化 :2001，n=1，不是验收）**：移动端新闻在 Dock「更多」里，不是一级 link。修正后站内回新闻 512ms，标题仍为 `第9600条快讯`。筛选二次点「筛选」会关上面板，已改为看 `aria-expanded`。
