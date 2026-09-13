@@ -26,6 +26,21 @@ test('实验室计时仍以真实新闻标题为准，不用骨架屏冒充完�
   assert.match(interact, /limit=12/);
   assert.match(interact, /dialog\?\.querySelector\('h2'\)/);
   assert.match(interact, /drawer_detail_ms/);
+  assert.match(interact, /OPTIX_PERF_INTERACT_EXTRA/);
+  assert.match(interact, /按代码过滤/);
+  const spa = await read('scripts/perf/measure_spa.mjs');
+  assert.match(spa, /新闻催化/);
+  assert.doesNotMatch(spa, /text=新闻/);
+  const pages = await read('scripts/perf/measure_pages.mjs');
+  assert.match(pages, /\/cta/);
+  assert.match(pages, /\/stock\/NVDA/);
+  assert.match(pages, /页面不存在/);
+  const interleaved = await read('scripts/perf/measure_interleaved.mjs');
+  assert.match(interleaved, /interleaved/);
+  assert.match(interleaved, /OPTIX_PERF_UNOPT_BASE/);
+  const faults = await read('scripts/perf/run_faults.mjs');
+  assert.match(faults, /feed_429_then_retry/);
+  assert.match(faults, /internetdisconnected/);
 });
 
 test('启动预取与非首屏让路约束仍在', async () => {

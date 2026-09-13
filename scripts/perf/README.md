@@ -14,5 +14,11 @@
 | `measure_load.py` | 到达率混合 URL 探索性压测（勿打生产） |
 | `run_soak.py` | 默认可跑 2 小时的隔离长稳；不进普通 CI |
 | `measure_spa.mjs` | 同页站内回到 /catalysts（不是整页热缓存） |
+| `measure_interleaved.mjs` | 优化树与未优化树交错冷/热（禁止冷比热） |
+| `run_faults.mjs` | 新闻页断网 / 429 / 慢响应 / 清缓存后恢复（路由拦截，不打付费上游） |
+| `run_restart_recovery.py` | 重启隔离后端后对照 feed 条数与首条标题 |
+| `watch_rss.py` | 采样 uvicorn RSS，供长稳区分有界增长与泄漏 |
+| `analyze_soak.py` | 长稳 JSONL 早/晚 p95 与 RSS 摘要 |
+| `run_post_soak_suite.sh` | 等 2h soak 摘要后跑视口 / SPA / 页 / 交错 / 故障 |
 
 原始结果默认写到 `/opt/cursor/artifacts/perf/`。

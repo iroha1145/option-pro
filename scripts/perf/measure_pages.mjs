@@ -25,8 +25,17 @@ const PROFILES = {
     width: 390, height: 844, dpr: 3, cpu: 4,
     down: (10 * 1024 * 1024) / 8, up: (2 * 1024 * 1024) / 8, rtt: 180, mobile: true,
   },
+  'mobile-360': {
+    width: 360, height: 800, dpr: 3, cpu: 4,
+    down: (10 * 1024 * 1024) / 8, up: (2 * 1024 * 1024) / 8, rtt: 180, mobile: true,
+  },
+  'mobile-430': {
+    width: 430, height: 932, dpr: 3, cpu: 4,
+    down: (10 * 1024 * 1024) / 8, up: (2 * 1024 * 1024) / 8, rtt: 180, mobile: true,
+  },
 };
 const profile = PROFILES[PROFILE];
+if (!profile) throw new Error(`unknown profile ${PROFILE}`);
 
 const ONLY = process.env.OPTIX_PERF_ROUTE;
 const ALL_ROUTES = [
@@ -38,6 +47,19 @@ const ALL_ROUTES = [
   { path: '/earnings', ready: () => (document.querySelector('h1')?.textContent?.includes('财报') ?? false) && (document.querySelector('table') || (document.querySelector('main')?.innerText.length || 0) > 40) },
   { path: '/sectors', ready: () => (document.querySelector('h1')?.textContent?.includes('板块') ?? false) && (document.querySelector('main')?.innerText.length || 0) > 40 },
   { path: '/login', ready: () => !!document.querySelector('form, input[type="password"]') || /已登录|管理员/.test(document.body.innerText) },
+  { path: '/cta', ready: () => {
+    const heading = document.querySelector('h1')?.textContent || '';
+    if (!/CTA|趋势资金/.test(heading)) return false;
+    const text = document.body.innerText || '';
+    return /CTA 估算尚未生成|CTA 估算读取失败|暂无数据/.test(text) || (document.querySelector('main')?.innerText.length || 0) > 80;
+  } },
+  { path: '/stock/NVDA', ready: () => {
+    if (document.querySelector('[aria-busy="true"]')) return false;
+    const text = document.body.innerText || '';
+    return /该标的暂无完整数据|代码不存在|行情服务暂不可用|请求较频繁|登录状态已失效|该股票暂无数据/.test(text)
+      || (/NVDA/.test(text) && text.length > 80 && !/skeleton/i.test(document.body.className));
+  } },
+  { path: '/this-page-is-not-a-route', ready: () => /页面不存在/.test(document.body.innerText || '') },
 ];
 const ROUTES = ONLY ? ALL_ROUTES.filter((route) => route.path === ONLY) : ALL_ROUTES;
 if (!ROUTES.length) throw new Error(`unknown OPTIX_PERF_ROUTE=${ONLY}`);

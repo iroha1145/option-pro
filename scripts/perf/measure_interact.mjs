@@ -18,6 +18,18 @@ const { chromium } = require(path.resolve(
 const BASE = process.env.OPTIX_PERF_BASE || 'http://127.0.0.1:2000';
 const OUT = process.env.OPTIX_PERF_OUT || '/opt/cursor/artifacts/perf/browser-interact.json';
 const REPEATS = Number(process.env.OPTIX_PERF_REPEATS || 20);
+const PROFILE = process.env.OPTIX_PERF_PROFILE || 'mobile-ref';
+const EXTRA = process.env.OPTIX_PERF_INTERACT_EXTRA === '1';
+
+const PROFILES = {
+  desktop: { width: 1440, height: 900, dpr: 1, cpu: 1, down: 0, up: 0, rtt: 0, mobile: false },
+  'mobile-ref': {
+    width: 390, height: 844, dpr: 3, cpu: 4,
+    down: (10 * 1024 * 1024) / 8, up: (2 * 1024 * 1024) / 8, rtt: 180, mobile: true,
+  },
+};
+const profile = PROFILES[PROFILE];
+if (!profile) throw new Error(`unknown profile ${PROFILE}`);
 
 function percentile(values, q) {
   if (!values.length) return null;
@@ -27,14 +39,22 @@ function percentile(values, q) {
 
 async function applyThrottle(page) {
   const client = await page.context().newCDPSession(page);
-  await client.send('Emulation.setCPUThrottlingRate', { rate: 4 });
-  await client.send('Network.enable');
-  await client.send('Network.emulateNetworkConditions', {
-    offline: false,
-    downloadThroughput: (10 * 1024 * 1024) / 8,
-    uploadThroughput: (2 * 1024 * 1024) / 8,
-    latency: 180,
-  });
+  if (profile.cpu > 1) await client.send('Emulation.setCPUThrottlingRate', { rate: profile.cpu });
+  if (profile.down > 0) {
+    await client.send('Network.enable');
+    await client.send('Network.emulateNetworkConditions', {
+      offline: false,
+      downloadThroughput: profile.down,
+      uploadThroughput: profile.up,
+      latency: profile.rtt,
+    });
+  }
+}
+
+async function openFiltersIfNeeded(page) {
+  if (!profile.mobile) return;
+  const filterBtn = page.getByRole('button', { name: '筛选' });
+  if (await filterBtn.count()) await filterBtn.click();
 }
 
 async function waitNews(page) {
@@ -48,10 +68,10 @@ const samples = [];
 for (let i = 0; i < REPEATS; i += 1) {
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({
-    viewport: { width: 390, height: 844 },
-    deviceScaleFactor: 3,
-    isMobile: true,
-    hasTouch: true,
+    viewport: { width: profile.width, height: profile.height },
+    deviceScaleFactor: profile.dpr,
+    isMobile: profile.mobile,
+    hasTouch: profile.mobile,
     locale: 'zh-CN',
   });
   const page = await context.newPage();
@@ -92,7 +112,10 @@ for (let i = 0; i < REPEATS; i += 1) {
     }
   };
   page.on('response', onList24);
-  await page.getByRole('button', { name: '筛选' }).click();
+  await openFiltersIfNeeded(page);
+  if (profile.mobile === false && !(await page.getByRole('tab', { name: '24 时' }).count())) {
+    await page.getByRole('button', { name: '筛选' }).click();
+  }
   /* 展开筛选后用户会看一眼选项；这段时间预取 24h/12。0 则变成「展开后立刻点」。 */
   const thinkMs = Number(process.env.OPTIX_PERF_FILTER_THINK_MS ?? 800);
   if (thinkMs > 0) await page.waitForTimeout(thinkMs);
@@ -115,6 +138,35 @@ for (let i = 0; i < REPEATS; i += 1) {
   const filterMs = filterReady - filterStarted;
   const filterTitle = await page.locator('article h3').first().textContent();
   const filterPrefetchHit = prefetchAlreadyDone;
+
+  let searchMs = null;
+  let searchTitle = null;
+  let classMs = null;
+  let classReady = null;
+  if (EXTRA) {
+    await openFiltersIfNeeded(page);
+    const searchStarted = await page.evaluate(() => performance.now());
+    await page.getByLabel('按代码过滤').fill('NVDA');
+    await page.waitForFunction(() => new URL(location.href).searchParams.get('ticker') === 'NVDA', null, { timeout: 15_000 });
+    await page.waitForFunction(() => {
+      const title = document.querySelector('article h3');
+      const empty = /这个角度暂时没有新闻|暂时没有新闻/.test(document.body.innerText || '');
+      return !!(title && title.textContent && title.textContent.trim().length > 1) || empty;
+    }, null, { timeout: 60_000 });
+    searchMs = await page.evaluate(() => performance.now()) - searchStarted;
+    searchTitle = (await page.locator('article h3').first().textContent().catch(() => ''))?.trim() || null;
+
+    const classStarted = await page.evaluate(() => performance.now());
+    await page.getByRole('tab', { name: '利多' }).click();
+    await page.waitForFunction(() => new URL(location.href).searchParams.get('cls') === 'bullish', null, { timeout: 15_000 });
+    await page.waitForFunction(() => /这个角度暂时没有新闻|暂时没有新闻/.test(document.body.innerText || '') || document.querySelector('article h3'), null, { timeout: 60_000 });
+    classMs = await page.evaluate(() => performance.now()) - classStarted;
+    classReady = await page.evaluate(() => {
+      const title = document.querySelector('article h3')?.textContent?.trim() || '';
+      const empty = /这个角度暂时没有新闻/.test(document.body.innerText || '');
+      return { title, empty };
+    });
+  }
 
   const longBefore = await page.evaluate(() => {
     window.__scrollLong = [];
@@ -144,6 +196,11 @@ for (let i = 0; i < REPEATS; i += 1) {
     filter_ms: filterMs,
     filter_prefetch_hit: filterPrefetchHit,
     filter_title: filterTitle?.trim() || null,
+    search_ms: searchMs,
+    search_title: searchTitle,
+    class_ms: classMs,
+    class_empty: classReady?.empty ?? null,
+    class_title: classReady?.title || null,
     scroll_ms: scroll.elapsed,
     scroll_longtask_count: scroll.longTasks.length,
     scroll_longtask_total_ms: scroll.longTasks.reduce((sum, ms) => sum + ms, 0),
@@ -160,11 +217,15 @@ for (let i = 0; i < REPEATS; i += 1) {
 const drawer = samples.map((s) => s.drawer_ms);
 const drawerDetail = samples.map((s) => s.drawer_detail_ms);
 const filter = samples.map((s) => s.filter_ms);
+const search = samples.map((s) => s.search_ms).filter((v) => v != null);
+const classified = samples.map((s) => s.class_ms).filter((v) => v != null);
 const report = {
   lab: true,
   notINP: true,
+  profile: PROFILE,
   measuredAt: new Date().toISOString(),
   filterThinkMs: Number(process.env.OPTIX_PERF_FILTER_THINK_MS ?? 800),
+  extra: EXTRA,
   n: samples.length,
   summary: {
     drawer_p50: percentile(drawer, 0.5),
@@ -174,6 +235,8 @@ const report = {
     filter_p50: percentile(filter, 0.5),
     filter_p75: percentile(filter, 0.75),
     filter_prefetch_hit_n: samples.filter((s) => s.filter_prefetch_hit).length,
+    search_p75: percentile(search, 0.75),
+    class_p75: percentile(classified, 0.75),
     scroll_longtask_total_p75: percentile(samples.map((s) => s.scroll_longtask_total_ms), 0.75),
     horizontal_overflow_any: samples.some((s) => s.horizontal_overflow),
   },

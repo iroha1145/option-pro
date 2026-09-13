@@ -2,7 +2,7 @@
 # Start the production-like isolated backend (single-worker uvicorn).
 set -Eeuo pipefail
 
-ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+ROOT="${OPTIX_PERF_ROOT:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)}"
 COUNT="${1:-10000}"
 PORT="${PORT:-2000}"
 DATA_DIR="${DATA_DIR:-$HOME/optix-perf-data/n${COUNT}}"
