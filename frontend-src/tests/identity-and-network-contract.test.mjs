@@ -221,6 +221,9 @@ test('theme-boot 在主包解析前预取身份和默认新闻 feed', async () =
   const drawer = codeOf(await source('components/catalysts/NewsDrawer.tsx'));
   assert.match(drawer, /seedMatches && seed/);
   assert.match(drawer, /catalystsContract\s*\.\s*news\(newsId\)/);
+  const filters = codeOf(await source('components/catalysts/FilterBar.tsx'));
+  assert.match(filters, /prefetchDefaultFeed\(24\)/);
+  assert.match(client, /export function offerBootPrefetch/);
 });
 
 test('非首屏增强请求等 load 后再固定延迟，不用 idle 抢首屏带宽', async () => {

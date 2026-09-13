@@ -4,7 +4,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import {
   apiHeaders, fetchBuffered, parseRetryAfter, ResponseLimitError, TransportTimeoutError,
 } from '../src/api/transport.ts';
-import { ApiError, consumeBootPrefetch, idFromLocation, postCreate, request, requestRaw } from '../src/api/client.ts';
+import { ApiError, consumeBootPrefetch, idFromLocation, offerBootPrefetch, postCreate, request, requestRaw } from '../src/api/client.ts';
 import { fmtPrice, fmtSigned, fmtPct, fmtCompact, fmtCountdown, fmtNyTime, fmtTimeHHMMSS } from '../src/lib/format.ts';
 
 for (const status of [200, 503]) {
@@ -171,6 +171,17 @@ test('missing and nonfinite financial values remain distinct from real zero', ()
   assert.equal(fmtPct(1.5), '+1.50%');
   assert.doesNotThrow(() => fmtPrice(1.23, -1));
   assert.doesNotThrow(() => fmtPct(1.23, Infinity));
+});
+
+test('offerBootPrefetch dedupes the same URL until consumed', async (t) => {
+  delete globalThis.__OPTIX_PREFETCH__;
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () => new Response('{"offered":true}'));
+  offerBootPrefetch('/api/catalysts/feed?window_hours=24&include_unanalyzed=true&include_neutral=true&limit=12');
+  offerBootPrefetch('/api/catalysts/feed?window_hours=24&include_unanalyzed=true&include_neutral=true&limit=12');
+  assert.equal(fetchMock.mock.callCount(), 1);
+  assert.deepEqual(await request('/catalysts/feed?window_hours=24&include_unanalyzed=true&include_neutral=true&limit=12'), { offered: true });
+  assert.equal(fetchMock.mock.callCount(), 1);
+  delete globalThis.__OPTIX_PREFETCH__;
 });
 
 test('boot prefetch is consumed once and a failed boot fetch falls back', async (t) => {

@@ -114,10 +114,22 @@ export interface RequestOptions extends RequestInit {
 
 type BootPrefetchBag = Record<string, Promise<Response>>;
 
+function bootPrefetchRoot(): { __OPTIX_PREFETCH__?: BootPrefetchBag } {
+  return globalThis as typeof globalThis & { __OPTIX_PREFETCH__?: BootPrefetchBag };
+}
+
+/** 把一次已发出的同源 GET 放进启动预取袋，供随后的 requestRaw 按完整 URL 消费。 */
+export function offerBootPrefetch(url: string): void {
+  const root = bootPrefetchRoot();
+  if (!root.__OPTIX_PREFETCH__) root.__OPTIX_PREFETCH__ = Object.create(null) as BootPrefetchBag;
+  const bag = root.__OPTIX_PREFETCH__;
+  if (!bag || Object.prototype.hasOwnProperty.call(bag, url) || typeof fetch !== 'function') return;
+  bag[url] = fetch(url, { credentials: 'include', redirect: 'error' });
+}
+
 /** theme-boot 在主包解析前发出的同源 GET；按完整 URL 消费一次，避免重复打同一接口。 */
 export function consumeBootPrefetch(url: string): Promise<Response> | undefined {
-  const root = globalThis as typeof globalThis & { __OPTIX_PREFETCH__?: BootPrefetchBag };
-  const bag = root.__OPTIX_PREFETCH__;
+  const bag = bootPrefetchRoot().__OPTIX_PREFETCH__;
   if (!bag || !Object.prototype.hasOwnProperty.call(bag, url)) return undefined;
   const pending = bag[url];
   delete bag[url];
