@@ -49,7 +49,7 @@ export default function StatusHero({ refreshToken = 0 }: { refreshToken?: number
   const statusQ = usePolling(() => catalystsContract.status(), 45_000, [refreshToken]);
   const hotStatusQ = usePolling(() => catalystsContract.hotspotsStatus(), 45_000, [refreshToken]);
   /* 今日计数走完整 24h feed 汇总，与列表 72h/12 不是同一请求。
-     首屏先让 FeedPanel 占用网络与主线程，计数仍会在空闲后到达，数字口径不变。 */
+     首屏先让 FeedPanel 占用连接；load 后再固定延迟拉取，数字口径不变。 */
   const [newsTodayEnabled, setNewsTodayEnabled] = useState(false);
   useEffect(() => {
     if (refreshToken > 0) {

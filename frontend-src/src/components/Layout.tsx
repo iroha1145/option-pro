@@ -60,7 +60,7 @@ export default function Layout() {
       if (path !== '/catalysts') void import('@/pages/Catalysts');
       if (path !== '/watchlist') void import('@/pages/Watchlist');
       if (path !== '/') void import('@/pages/Home');
-    }, 4000);
+    }, 8000);
   }, [hasConfirmedIdentity, location.pathname]);
 
   useEffect(() => {
