@@ -190,6 +190,7 @@ class OfflineOHLCV:
         if not records:
             return pd.DataFrame(columns=["Open", "High", "Low", "Close", "Volume"])
         frame = pd.DataFrame.from_records(records).set_index("date").sort_index()
+        frame.index = pd.to_datetime(frame.index)
         frame.index = pd.DatetimeIndex(frame.index)
         return frame
 
@@ -211,6 +212,8 @@ class OfflineOHLCV:
             for symbol in symbols
         }
         panel = pd.concat(frames, axis=1)
+        panel.index = pd.to_datetime(panel.index)
+        panel.index = pd.DatetimeIndex(panel.index)
         panel.attrs["price_source"] = {
             "provider": self.manifest.get("source") or "offline",
             "status": "active",

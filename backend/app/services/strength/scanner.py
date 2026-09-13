@@ -848,8 +848,12 @@ def _complete_daily_frame(
         tzinfo=_NEW_YORK,
     )
     bounded = hist.copy()
+    if not bounded.empty and not isinstance(bounded.index, pd.DatetimeIndex):
+        bounded.index = pd.to_datetime(bounded.index, errors="raise")
     if isinstance(bounded.index, pd.DatetimeIndex):
         bounded = bounded[pd.Index(bounded.index.date) <= completed]
+    elif not bounded.empty:
+        raise ValueError("daily history requires a DatetimeIndex")
     return bounded, cutoff
 
 

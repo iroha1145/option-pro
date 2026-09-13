@@ -113,6 +113,25 @@ def _install_small_universe(monkeypatch) -> None:
     )
 
 
+def test_object_index_history_is_trimmed_to_as_of() -> None:
+    index = pd.Index([value.date().isoformat() for value in pd.bdate_range("2019-03-01", periods=40)])
+    hist = pd.DataFrame(
+        {
+            "Open": 10.0,
+            "High": 11.0,
+            "Low": 9.0,
+            "Close": range(40),
+            "Volume": 1_000_000.0,
+        },
+        index=index,
+    )
+    assert not isinstance(hist.index, pd.DatetimeIndex)
+    bounded, _cutoff = scanner._complete_daily_frame(hist, session_close(date(2019, 3, 20)))
+    assert isinstance(bounded.index, pd.DatetimeIndex)
+    assert bounded.index.max().date() == date(2019, 3, 20)
+    assert float(bounded["Close"].iloc[-1]) < float(hist["Close"].iloc[-1])
+
+
 def test_future_bars_do_not_change_completed_ranks(monkeypatch) -> None:
     _install_small_universe(monkeypatch)
     dataset = _synth_dataset()
