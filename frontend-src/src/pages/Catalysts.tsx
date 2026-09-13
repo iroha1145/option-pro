@@ -118,7 +118,7 @@ export default function Catalysts() {
   const [spinning, setSpinning] = useState(false);
   const onRefresh = useCallback(() => {
     setSpinning(true);
-    clearCatalystReadCache(); // 手动刷新必须穿透客户端读缓存
+    clearCatalystReadCache({ userInitiated: true }); // 手动刷新必须穿透客户端读缓存，并绕过失败退避
     setRefreshToken((v) => v + 1);
     window.setTimeout(() => setSpinning(false), 650);
   }, []);

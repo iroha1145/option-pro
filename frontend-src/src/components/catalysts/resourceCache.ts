@@ -185,12 +185,17 @@ export class ResourceCache {
   }
 
   /** Invalidate old responses too; an in-flight pre-write response cannot win. */
-  invalidate(): void {
+  invalidate(options?: { userInitiated?: boolean }): void {
     for (const entry of this.entries.values()) {
       entry.generation += 1;
       entry.pending = null;
       entry.stale = true;
       // Background hints must not cancel a server or failure-backoff deadline.
+      // A header 刷新 / 重试 is the user asking to try now; keep the last snapshot.
+      if (options?.userInitiated) {
+        entry.retryAt = 0;
+        entry.failures = 0;
+      }
       if (entry.snapshot.refreshing) this.publish(entry, { ...entry.snapshot, refreshing: false });
     }
   }

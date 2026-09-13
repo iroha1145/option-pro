@@ -42,6 +42,11 @@ test('实验室计时仍以真实新闻标题为准，不用骨架屏冒充完�
   const faults = await read('scripts/perf/run_faults.mjs');
   assert.match(faults, /feed_429_then_retry/);
   assert.match(faults, /internetdisconnected/);
+  assert.match(faults, /更新失败，保留上次数据/);
+  assert.match(faults, /first_load_disconnect_then_retry/);
+  const cache = await read('frontend-src/src/components/catalysts/resourceCache.ts');
+  assert.match(cache, /userInitiated/);
+  assert.match(cache, /entry\.retryAt = 0/);
 });
 
 test('启动预取与非首屏让路约束仍在', async () => {

@@ -2,7 +2,8 @@
 /**
  * Laboratory fault injection on the news page.
  * Uses Playwright route interception — does not hit paid upstreams.
- * Asserts error UI and recovery, not just HTTP status.
+ * Refresh failure keeps the last list (stale-while-error) and shows
+ * 「更新失败，保留上次数据」. First-load failure shows 「加载失败」.
  */
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
@@ -27,18 +28,30 @@ async function waitNews(page) {
   return page.locator('article h3').first().innerText();
 }
 
-async function waitError(page) {
-  await page.waitForFunction(() => /加载失败|新闻暂不可用/.test(document.body.innerText || ''), null, { timeout: 30_000 });
+async function waitStaleError(page) {
+  await page.waitForFunction(
+    () => /更新失败，保留上次数据|加载失败|新闻暂不可用/.test(document.body.innerText || ''),
+    null,
+    { timeout: 30_000 },
+  );
+}
+
+async function waitRecovered(page, previousTitle) {
+  await page.waitForFunction((title) => {
+    const heading = document.querySelector('article h3')?.textContent?.trim() || '';
+    const stale = /更新失败，保留上次数据/.test(document.body.innerText || '');
+    return heading.length > 1 && heading === title && !stale;
+  }, previousTitle, { timeout: 45_000 });
 }
 
 async function clickRefresh(page) {
-  const refresh = page.getByRole('button', { name: /^刷新$/ });
-  if (await refresh.count()) {
-    await refresh.first().click();
+  const retry = page.getByRole('button', { name: /^重试$/ });
+  if (await retry.count() && await retry.first().isVisible()) {
+    await retry.first().click();
     return;
   }
-  const retry = page.getByRole('button', { name: /重试/ });
-  if (await retry.count()) await retry.first().click();
+  const refresh = page.getByRole('button', { name: /^刷新$/ });
+  if (await refresh.count()) await refresh.first().click();
 }
 
 async function withPage(run) {
@@ -67,15 +80,17 @@ cases.push(await withPage(async (page) => {
   const title = await waitNews(page);
   await page.route(FEED, (route) => route.abort('internetdisconnected'));
   await clickRefresh(page);
-  await waitError(page);
+  await waitStaleError(page);
+  const kept = await page.locator('article h3').first().innerText();
   await page.unroute(FEED);
   await clickRefresh(page);
-  const recovered = await waitNews(page);
+  await waitRecovered(page, title);
   return {
     name: 'feed_disconnect_then_retry',
-    ok: recovered.length > 1,
+    ok: kept.trim() === title.trim(),
     title,
-    recovered,
+    kept,
+    recovered: (await page.locator('article h3').first().innerText()).trim(),
     ms: Date.now() - started,
   };
 }));
@@ -91,15 +106,17 @@ cases.push(await withPage(async (page) => {
     headers: { 'retry-after': '1' },
   }));
   await clickRefresh(page);
-  await waitError(page);
+  await waitStaleError(page);
+  const kept = await page.locator('article h3').first().innerText();
   await page.unroute(FEED);
   await clickRefresh(page);
-  const recovered = await waitNews(page);
+  await waitRecovered(page, title);
   return {
     name: 'feed_429_then_retry',
-    ok: recovered.length > 1,
+    ok: kept.trim() === title.trim(),
     title,
-    recovered,
+    kept,
+    recovered: (await page.locator('article h3').first().innerText()).trim(),
     ms: Date.now() - started,
   };
 }));
@@ -138,6 +155,22 @@ cases.push(await withPage(async (page) => {
     name: 'reload_after_cache_clear',
     ok: recovered.length > 1,
     title,
+    recovered,
+    ms: Date.now() - started,
+  };
+}));
+
+cases.push(await withPage(async (page) => {
+  const started = Date.now();
+  await page.route(FEED, (route) => route.abort('internetdisconnected'));
+  await page.goto(`${BASE}/catalysts`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+  await page.waitForFunction(() => /加载失败|新闻暂不可用/.test(document.body.innerText || ''), null, { timeout: 60_000 });
+  await page.unroute(FEED);
+  await clickRefresh(page);
+  const recovered = await waitNews(page);
+  return {
+    name: 'first_load_disconnect_then_retry',
+    ok: recovered.length > 1,
     recovered,
     ms: Date.now() - started,
   };

@@ -30,6 +30,13 @@ fi
 
 python3 "$ROOT/scripts/perf/analyze_soak.py" --in "${ART}/soak-2h.jsonl" --rss "${ART}/backend-rss.jsonl" --out "${ART}/soak-2h.analysis.json" || true
 
+# Soak is over: rebuild the production SPA so recovery/user-refresh fixes are what we measure.
+echo "=== rebuild production frontend $(date -u +%Y-%m-%dT%H:%M:%SZ) ==="
+(cd "$ROOT/frontend-src" && VITE_API_MODE=live npm run build)
+rm -rf "$ROOT/frontend"
+mkdir "$ROOT/frontend"
+cp -a "$ROOT/frontend-src/dist/." "$ROOT/frontend/"
+
 run_node() {
   local name="$1"
   shift

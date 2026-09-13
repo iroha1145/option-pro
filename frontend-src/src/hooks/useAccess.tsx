@@ -112,7 +112,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
         // 上一个主体的响应不得复用给下一个。
         dropSharedReads();
         resetMarketReadState();
-        clearCatalystReadCache();
+        clearCatalystReadCache({ userInitiated: true });
       }
       identityRef.current = identity;
       setQueryPrincipal(identity);
@@ -167,7 +167,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     // 上一个身份那份。三层读缓存一起清。
     dropSharedReads();
     resetMarketReadState();
-    clearCatalystReadCache();
+    clearCatalystReadCache({ userInitiated: true });
     return readInto(generationRef.current);
   }, [readInto]);
 
@@ -197,7 +197,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
       setQueryPrincipal(null);
       dropSharedReads();
       resetMarketReadState();
-      clearCatalystReadCache();
+      clearCatalystReadCache({ userInitiated: true });
       setIdentityUnavailable(true);
       setStatus((current) => ({
         ...current,
@@ -239,7 +239,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
       setIdentityUnavailable(true);
       dropSharedReads();
       resetMarketReadState();
-      clearCatalystReadCache();
+      clearCatalystReadCache({ userInitiated: true });
       let written = false;
       try {
         await write();

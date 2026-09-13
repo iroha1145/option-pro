@@ -170,6 +170,39 @@ for (const [label, retryAfter, delay] of [
   });
 }
 
+test('用户点刷新时立即重试，并保留上次可见数据', async () => {
+  const ResourceCache = await loadResourceCache();
+  let now = 1000;
+  let calls = 0;
+  let recovered = false;
+  const old = { version: 1 };
+  const fresh = { version: 2 };
+  const cache = new ResourceCache(undefined, () => now);
+  const policy = { freshMs: 1000, retainMs: 300_000 };
+  const unsubscribe = cache.subscribe('feed', policy, () => {});
+  const load = async () => {
+    calls += 1;
+    if (calls === 1) return old;
+    if (!recovered) throw new Error('temporarily unavailable');
+    return fresh;
+  };
+  await cache.ensure('feed', policy, load);
+  now = 2000;
+  await cache.ensure('feed', policy, load);
+  assert.equal(calls, 2);
+  assert.equal(cache.snapshot('feed', policy).data, old);
+  assert.ok(cache.snapshot('feed', policy).error);
+  recovered = true;
+  now += 1;
+  cache.invalidate({ userInitiated: true });
+  cache.tick();
+  await cache.ensure('feed', policy, load);
+  assert.equal(calls, 3);
+  assert.equal(cache.snapshot('feed', policy).data, fresh);
+  assert.equal(cache.snapshot('feed', policy).error, null);
+  unsubscribe();
+});
+
 test('保留重试期限后，失效前的旧响应仍不能覆盖新数据', async () => {
   const ResourceCache = await loadResourceCache();
   let calls = 0;
