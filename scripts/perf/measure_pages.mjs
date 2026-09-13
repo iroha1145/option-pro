@@ -29,13 +29,13 @@ const PROFILES = {
 const profile = PROFILES[PROFILE];
 
 const ROUTES = [
-  { path: '/', ready: () => !!document.querySelector('h1, h2, [data-page]') },
-  { path: '/watchlist', ready: () => !!document.querySelector('h1, table, [class*="empty"]') },
-  { path: '/screener', ready: () => !!document.querySelector('h1, button, form') },
-  { path: '/market', ready: () => !!document.querySelector('h1, h2') },
-  { path: '/breakouts', ready: () => !!document.querySelector('h1, h2') },
-  { path: '/earnings', ready: () => !!document.querySelector('h1, h2, table') },
-  { path: '/sectors', ready: () => !!document.querySelector('h1, h2') },
+  { path: '/', ready: () => document.querySelector('h1')?.textContent?.includes('首页') && (document.querySelector('main')?.innerText.length || 0) > 80 },
+  { path: '/watchlist', ready: () => (document.querySelector('h1')?.textContent?.includes('自选') ?? false) && (!!document.querySelector('table') || /暂无|空|还没有/.test(document.body.innerText)) },
+  { path: '/screener', ready: () => (document.querySelector('h1')?.textContent?.includes('选股') ?? false) && !!document.querySelector('button, form, input') },
+  { path: '/market', ready: () => (document.querySelector('h1')?.textContent?.includes('大盘') ?? false) && (document.querySelector('main')?.innerText.length || 0) > 80 },
+  { path: '/breakouts', ready: () => /突破|雷达/.test(document.querySelector('h1')?.textContent || '') && (document.querySelector('main')?.innerText.length || 0) > 40 },
+  { path: '/earnings', ready: () => (document.querySelector('h1')?.textContent?.includes('财报') ?? false) && (document.querySelector('table') || (document.querySelector('main')?.innerText.length || 0) > 40) },
+  { path: '/sectors', ready: () => (document.querySelector('h1')?.textContent?.includes('板块') ?? false) && (document.querySelector('main')?.innerText.length || 0) > 40 },
   { path: '/login', ready: () => !!document.querySelector('form, input[type="password"]') },
 ];
 

@@ -84,24 +84,37 @@ for (let i = 0; i < REPEATS; i += 1) {
   await page.keyboard.press('Escape').catch(() => {});
   await page.waitForTimeout(200);
 
+  const list24Hits = [];
+  const onList24 = (response) => {
+    const url = response.url();
+    if (response.ok() && url.includes('window_hours=24') && url.includes('limit=12')) {
+      list24Hits.push({ url, at: Date.now() });
+    }
+  };
+  page.on('response', onList24);
   await page.getByRole('button', { name: '筛选' }).click();
-  /* 展开筛选后用户会看一眼选项；这段时间预取 24h feed。0 则变成「展开后立刻点」，预取没有有效提前量。 */
+  /* 展开筛选后用户会看一眼选项；这段时间预取 24h/12。0 则变成「展开后立刻点」。 */
   const thinkMs = Number(process.env.OPTIX_PERF_FILTER_THINK_MS ?? 800);
   if (thinkMs > 0) await page.waitForTimeout(thinkMs);
   const filterStarted = await page.evaluate(() => performance.now());
-  const feedWait = page.waitForResponse(
-    (response) => response.url().includes('window_hours=24') && response.ok(),
-    { timeout: 60_000 },
-  );
+  const prefetchAlreadyDone = list24Hits.length > 0;
   await page.getByRole('tab', { name: '24 时' }).click();
-  await feedWait;
+  await page.waitForFunction(() => new URL(location.href).searchParams.get('window') === '24', null, { timeout: 15_000 });
+  if (!prefetchAlreadyDone) {
+    const deadline = Date.now() + 60_000;
+    while (list24Hits.length === 0 && Date.now() < deadline) {
+      await page.waitForTimeout(25);
+    }
+  }
   await page.waitForFunction(() => {
     const title = document.querySelector('article h3');
     return !!(title && title.textContent && title.textContent.trim().length > 1);
   }, null, { timeout: 60_000 });
+  page.off('response', onList24);
   const filterReady = await page.evaluate(() => performance.now());
   const filterMs = filterReady - filterStarted;
   const filterTitle = await page.locator('article h3').first().textContent();
+  const filterPrefetchHit = prefetchAlreadyDone;
 
   const longBefore = await page.evaluate(() => {
     window.__scrollLong = [];
@@ -129,6 +142,7 @@ for (let i = 0; i < REPEATS; i += 1) {
     drawer_detail_ms: drawerDetailMs,
     drawer_title: drawerReady.title,
     filter_ms: filterMs,
+    filter_prefetch_hit: filterPrefetchHit,
     filter_title: filterTitle?.trim() || null,
     scroll_ms: scroll.elapsed,
     scroll_longtask_count: scroll.longTasks.length,
@@ -150,6 +164,7 @@ const report = {
   lab: true,
   notINP: true,
   measuredAt: new Date().toISOString(),
+  filterThinkMs: Number(process.env.OPTIX_PERF_FILTER_THINK_MS ?? 800),
   n: samples.length,
   summary: {
     drawer_p50: percentile(drawer, 0.5),
@@ -158,6 +173,7 @@ const report = {
     drawer_detail_p75: percentile(drawerDetail, 0.75),
     filter_p50: percentile(filter, 0.5),
     filter_p75: percentile(filter, 0.75),
+    filter_prefetch_hit_n: samples.filter((s) => s.filter_prefetch_hit).length,
     scroll_longtask_total_p75: percentile(samples.map((s) => s.scroll_longtask_total_ms), 0.75),
     horizontal_overflow_any: samples.some((s) => s.horizontal_overflow),
   },

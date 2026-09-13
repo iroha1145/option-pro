@@ -23,6 +23,7 @@ test('实验室计时仍以真实新闻标题为准，不用骨架屏冒充完�
   assert.doesNotMatch(browser, /SkeletonBlock/);
   const interact = await read('scripts/perf/measure_interact.mjs');
   assert.match(interact, /window_hours=24/);
+  assert.match(interact, /limit=12/);
   assert.match(interact, /dialog\?\.querySelector\('h2'\)/);
   assert.match(interact, /drawer_detail_ms/);
 });
