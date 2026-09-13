@@ -8,6 +8,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { afterSampleGap, attach429Counter } from './lib/rate_limit.mjs';
 
 const require = createRequire(fileURLToPath(import.meta.url));
 const { chromium } = require(path.resolve(
@@ -77,6 +78,7 @@ for (let i = 0; i < REPEATS; i += 1) {
     locale: 'zh-CN',
   });
   const page = await context.newPage();
+  const rateLimit = attach429Counter(page);
   await applyThrottle(page);
   await page.goto(`${BASE}/catalysts`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
   await waitNews(page);
@@ -211,13 +213,15 @@ for (let i = 0; i < REPEATS; i += 1) {
     scroll_longtask_count: scroll.longTasks.length,
     scroll_longtask_total_ms: scroll.longTasks.reduce((sum, ms) => sum + ms, 0),
     horizontal_overflow: scroll.overflowX,
+    rate_limited: rateLimit.count,
   });
   console.log(
     `#${i + 1}/${REPEATS} drawer=${drawerMs.toFixed(0)} detail=${drawerDetailMs.toFixed(0)} filter=${filterMs.toFixed(0)} `
-    + `scroll_long=${scroll.longTasks.reduce((sum, ms) => sum + ms, 0).toFixed(0)}`,
+    + `scroll_long=${scroll.longTasks.reduce((sum, ms) => sum + ms, 0).toFixed(0)} rate_limited=${rateLimit.count}`,
   );
   await context.close();
   await browser.close();
+  await afterSampleGap({ rateLimitedCount: rateLimit.count, last: i + 1 >= REPEATS });
 }
 
 const drawer = samples.map((s) => s.drawer_ms);
@@ -245,6 +249,7 @@ const report = {
     class_p75: percentile(classified, 0.75),
     scroll_longtask_total_p75: percentile(samples.map((s) => s.scroll_longtask_total_ms), 0.75),
     horizontal_overflow_any: samples.some((s) => s.horizontal_overflow),
+    rate_limited_n: samples.filter((s) => (s.rate_limited || 0) > 0).length,
   },
   samples,
 };

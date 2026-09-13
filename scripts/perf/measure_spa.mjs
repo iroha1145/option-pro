@@ -8,6 +8,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { afterSampleGap, attach429Counter } from './lib/rate_limit.mjs';
 
 const require = createRequire(fileURLToPath(import.meta.url));
 const { chromium } = require(path.resolve(
@@ -74,6 +75,7 @@ for (let i = 0; i < REPEATS; i += 1) {
     locale: 'zh-CN',
   });
   const page = await context.newPage();
+  const rateLimit = attach429Counter(page);
   const client = await page.context().newCDPSession(page);
   await client.send('Emulation.setCPUThrottlingRate', { rate: 4 });
   await client.send('Network.enable');
@@ -96,10 +98,12 @@ for (let i = 0; i < REPEATS; i += 1) {
     cold_title: cold.title,
     spa_ready_ms: spa.at - spaStart,
     spa_title: spa.title,
+    rate_limited: rateLimit.count,
   });
-  console.log(`#${i + 1}/${REPEATS} cold=${samples.at(-1).cold_ready_ms} spa=${samples.at(-1).spa_ready_ms.toFixed(0)} ${spa.title}`);
+  console.log(`#${i + 1}/${REPEATS} cold=${samples.at(-1).cold_ready_ms} spa=${samples.at(-1).spa_ready_ms.toFixed(0)} ${spa.title} rate_limited=${rateLimit.count}`);
   await context.close();
   await browser.close();
+  await afterSampleGap({ rateLimitedCount: rateLimit.count, last: i + 1 >= REPEATS });
 }
 
 const spa = samples.map((s) => s.spa_ready_ms);
@@ -110,6 +114,7 @@ const report = {
   summary: {
     spa_p50: percentile(spa, 0.5),
     spa_p75: percentile(spa, 0.75),
+    rate_limited_n: samples.filter((s) => (s.rate_limited || 0) > 0).length,
   },
   samples,
 };

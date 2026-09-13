@@ -47,7 +47,11 @@ def main() -> None:
             except ValueError:
                 gap = None
         # End-of-run spin: leftover sleep was skipped, cycles fire every few ms.
+        # Advance prev even when dropping, otherwise the first spin row of a
+        # burst is kept (gap vs last honest cycle is ~15s) and its 429s leak
+        # into error_sum.
         if gap is not None and gap < 1.0:
+            prev = at
             continue
         rows.append(row)
         prev = at
@@ -58,7 +62,15 @@ def main() -> None:
     split = max(1, len(rows) // 3)
     early, late = p95[:split], p95[-split:]
     rss_rows = _load(args.rss) if args.rss.exists() else []
-    rss = [int(row["VmRSS"]) for row in rss_rows if "VmRSS" in row]
+    first_at = rows[0]["at"] if rows else None
+    last_at = rows[-1]["at"] if rows else None
+    rss_in_window = [
+        row
+        for row in rss_rows
+        if "VmRSS" in row
+        and (not first_at or not last_at or first_at <= str(row.get("at") or "") <= last_at)
+    ]
+    rss = [int(row["VmRSS"]) for row in rss_in_window]
     report = {
         "cycles": len(rows),
         "spin_cycles_dropped": spin_dropped,
@@ -73,6 +85,8 @@ def main() -> None:
             None if not early or not late or early[-1] is None else (sorted(late)[len(late) // 2] - sorted(early)[len(early) // 2])
         ),
         "rss_n": len(rss),
+        "rss_window_first_at": rss_in_window[0]["at"] if rss_in_window else None,
+        "rss_window_last_at": rss_in_window[-1]["at"] if rss_in_window else None,
         "rss_kb_first": rss[0] if rss else None,
         "rss_kb_last": rss[-1] if rss else None,
         "rss_kb_delta": (rss[-1] - rss[0]) if rss else None,

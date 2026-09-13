@@ -7,6 +7,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { afterSampleGap, attach429Counter } from './lib/rate_limit.mjs';
 
 const require = createRequire(fileURLToPath(import.meta.url));
 const { chromium } = require(path.resolve(
@@ -97,6 +98,7 @@ for (const route of ROUTES) {
       locale: 'zh-CN',
     });
     const page = await context.newPage();
+    const rateLimit = attach429Counter(page);
     await applyThrottle(page);
     const started = Date.now();
     await page.goto(`${BASE}${route.path}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
@@ -108,9 +110,11 @@ for (const route of ROUTES) {
       wall_ms: Date.now() - started,
       ready_ms: ready.at,
       ready_ok: !!ready.ok,
+      rate_limited: rateLimit.count,
     });
     await context.close();
     await browser.close();
+    await afterSampleGap({ rateLimitedCount: rateLimit.count, last: i + 1 >= REPEATS });
   }
   const ready = samples.filter((s) => s.ready_ms != null).map((s) => s.ready_ms);
   results[route.path] = {
@@ -118,6 +122,7 @@ for (const route of ROUTES) {
     ready_n: ready.length,
     ready_p50: percentile(ready, 0.5),
     ready_p75: percentile(ready, 0.75),
+    rate_limited_n: samples.filter((s) => (s.rate_limited || 0) > 0).length,
     samples,
   };
   console.log(`${route.path} p50=${results[route.path].ready_p50} p75=${results[route.path].ready_p75} ready_n=${ready.length}/${samples.length}`);

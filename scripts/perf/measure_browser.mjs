@@ -12,6 +12,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { afterSampleGap, attach429Counter } from './lib/rate_limit.mjs';
 
 const require = createRequire(fileURLToPath(import.meta.url));
 const { chromium } = require(path.resolve(
@@ -23,7 +24,7 @@ const BASE = process.env.OPTIX_PERF_BASE || 'http://127.0.0.1:2000';
 const OUT = process.env.OPTIX_PERF_OUT || '/opt/cursor/artifacts/perf/browser-baseline.json';
 const PAIRS = Number(process.env.OPTIX_PERF_PAIRS || process.env.OPTIX_PERF_REPEATS || 20);
 const PROFILE = process.env.OPTIX_PERF_PROFILE || 'mobile-ref';
-const PAIR_GAP_MS = Number(process.env.OPTIX_PERF_PAIR_GAP_MS || 4000);
+const PAIR_GAP_MS = Number(process.env.OPTIX_PERF_PAIR_GAP_MS || 8000);
 
 const PROFILES = {
   desktop: { width: 1440, height: 900, dpr: 1, cpu: 1, down: 0, up: 0, rtt: 0, mobile: false },
@@ -166,28 +167,32 @@ async function collectPair() {
     locale: 'zh-CN',
   });
   const page = await context.newPage();
+  const rateLimit = attach429Counter(page);
   await applyThrottle(page);
   await prepareObservers(page);
   const cold = await measureNavigation(page, '/catalysts');
+  const coldLimited = rateLimit.count;
   await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded', timeout: 60_000 }).catch(() => null);
   const warm = await measureNavigation(page, '/catalysts');
   await context.close();
   await browser.close();
-  return { cold: { cache: 'cold', ...cold }, warm: { cache: 'warm', ...warm } };
+  return {
+    cold: { cache: 'cold', rate_limited: coldLimited, ...cold },
+    warm: { cache: 'warm', rate_limited: Math.max(0, rateLimit.count - coldLimited), ...warm },
+    rate_limited: rateLimit.count,
+  };
 }
 
 const samples = [];
 for (let i = 0; i < PAIRS; i += 1) {
   const pair = await collectPair();
-  samples.push(pair);
+  samples.push({ cold: pair.cold, warm: pair.warm });
   console.log(
     `#${i + 1}/${PAIRS} cold_ready=${pair.cold.news_content_ready_ms} warm_ready=${pair.warm.news_content_ready_ms} `
     + `cold_lcp=${pair.cold.lcp?.startTime ?? null} warm_lcp=${pair.warm.lcp?.startTime ?? null} `
-    + `cold_cls=${pair.cold.cls} warm_cls=${pair.warm.cls}`,
+    + `cold_cls=${pair.cold.cls} warm_cls=${pair.warm.cls} rate_limited=${pair.rate_limited}`,
   );
-  if (i + 1 < PAIRS && PAIR_GAP_MS > 0) {
-    await new Promise((resolve) => setTimeout(resolve, PAIR_GAP_MS));
-  }
+  await afterSampleGap({ rateLimitedCount: pair.rate_limited, last: i + 1 >= PAIRS });
 }
 
 const flat = (side) => samples.map((row) => row[side]);
@@ -206,6 +211,8 @@ function summarize(rows) {
     cls_p75: percentile(cls, 0.75),
     transfer_p50: percentile(rows.map((s) => s.transferSize || 0), 0.5),
     longtask_total_p75: percentile(rows.map((s) => s.longTaskTotalMs || 0), 0.75),
+    rate_limited_n: rows.filter((s) => (s.rate_limited || 0) > 0).length,
+    outlier_5s_n: rows.filter((s) => (s.news_content_ready_ms || 0) > 5000).length,
   };
 }
 
@@ -217,6 +224,7 @@ const report = {
   lab: true,
   notRUM: true,
   pairs: samples.length,
+  pairGapMs: PAIR_GAP_MS,
   summary: { cold: summarize(flat('cold')), warm: summarize(flat('warm')) },
   samples,
 };

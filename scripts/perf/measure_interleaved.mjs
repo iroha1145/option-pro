@@ -8,6 +8,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { afterSampleGap, attach429Counter, sleep, REPEAT_GAP_MS } from './lib/rate_limit.mjs';
 
 const require = createRequire(fileURLToPath(import.meta.url));
 const { chromium } = require(path.resolve(
@@ -110,14 +111,20 @@ async function collectPair(base) {
     locale: 'zh-CN',
   });
   const page = await context.newPage();
+  const rateLimit = attach429Counter(page);
   await applyThrottle(page);
   await prepareObservers(page);
   const cold = await measureNavigation(page, base, '/catalysts');
+  const coldLimited = rateLimit.count;
   await page.goto(`${base}/`, { waitUntil: 'domcontentloaded', timeout: 60_000 }).catch(() => null);
   const warm = await measureNavigation(page, base, '/catalysts');
   await context.close();
   await browser.close();
-  return { cold: { cache: 'cold', ...cold }, warm: { cache: 'warm', ...warm } };
+  return {
+    cold: { cache: 'cold', rate_limited: coldLimited, ...cold },
+    warm: { cache: 'warm', rate_limited: Math.max(0, rateLimit.count - coldLimited), ...warm },
+    rate_limited: rateLimit.count,
+  };
 }
 
 function summarize(rows) {
@@ -130,6 +137,7 @@ function summarize(rows) {
     news_content_ready_p75: percentile(ready, 0.75),
     lcp_p75: percentile(lcp, 0.75),
     titles: [...new Set(rows.map((s) => s.news_title).filter(Boolean))],
+    rate_limited_n: rows.filter((s) => (s.rate_limited || 0) > 0).length,
   };
 }
 
@@ -141,19 +149,23 @@ for (let i = 0; i < PAIRS; i += 1) {
   const firstLabel = optFirst ? 'opt' : 'unopt';
   const secondLabel = optFirst ? 'unopt' : 'opt';
   const first = await collectPair(firstBase);
+  if (REPEAT_GAP_MS > 0) await sleep(REPEAT_GAP_MS);
   const second = await collectPair(secondBase);
   const row = {
     i: i + 1,
     first: firstLabel,
-    [firstLabel]: first,
-    [secondLabel]: second,
+    [firstLabel]: { cold: first.cold, warm: first.warm },
+    [secondLabel]: { cold: second.cold, warm: second.warm },
+    rate_limited: first.rate_limited + second.rate_limited,
   };
   samples.push(row);
   console.log(
     `#${i + 1}/${PAIRS} first=${firstLabel} `
     + `opt_cold=${row.opt.cold.news_content_ready_ms} unopt_cold=${row.unopt.cold.news_content_ready_ms} `
-    + `opt_warm=${row.opt.warm.news_content_ready_ms} unopt_warm=${row.unopt.warm.news_content_ready_ms}`,
+    + `opt_warm=${row.opt.warm.news_content_ready_ms} unopt_warm=${row.unopt.warm.news_content_ready_ms} `
+    + `rate_limited=${row.rate_limited}`,
   );
+  await afterSampleGap({ rateLimitedCount: row.rate_limited, last: i + 1 >= PAIRS });
 }
 
 const optCold = samples.map((s) => s.opt.cold);
