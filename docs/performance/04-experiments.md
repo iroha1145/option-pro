@@ -105,4 +105,13 @@
 
 - **改动**：点开「筛选」时 `offerBootPrefetch` 默认 24h/12；切换时 `consumeBootPrefetch`。
 - **作废**：`browser-interact-r4.json` 的 filter≈1830ms。当时 `waitForResponse(window_hours=24)` 误等到 `newsToday` 的 24h/50，不是列表。
-- **下一步**：只用 `limit=12` 的 24h 响应（含思考时间内完成的预取）重测。
+- **指标**（实验室，展开筛选后思考 800ms，n=20）：`/opt/cursor/artifacts/perf/browser-interact-r4b.json`
+
+| 指标 | R3 | R4b | 说明 |
+|---|---|---|---|
+| 抽屉标题 p75 | 287 | 293 | 噪声内 |
+| 抽屉详情 GET p75 | 444 | 444 | 仍拉详情 |
+| 筛选 24h/12 p75 | 445 | **244** | 预取命中 20/20 |
+
+筛选相对 R3 −45%。思考 800ms 是用户看选项的时间，不计入 filter_ms。立刻连点路径预取没有提前量，耗时仍接近一轮 RTT，不把那条写成已优化。
+- **决定**：**保留**。
