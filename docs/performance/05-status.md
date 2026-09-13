@@ -20,10 +20,11 @@
 - 360 n=20：`browser-r5-mobile-360.json`。冷 p75 **1654** / 热 **823**。2–4 对及第14对受 429 污染（max 冷 38844 / 热 7025）；p75 仍在预算内
 - 430 n=20：`browser-r5-mobile-430.json`。冷 p75 **1644** / 热 **834**。1/20 冷 36s、1/20 热 6s（429）；p75 在预算内
 - 2h soak 诚实窗口（丢弃 gap&lt;1s 空转，且不再把空转第一行算进来）：480 轮、**0 错**、早/晚 p95 中位 149→155ms、RSS 572→599MB（+26MB，有界）。原始 `soak-2h.summary.json` 含空转 429，**不得**当结论
+- 站内 SPA n=20：`browser-spa.json`。回新闻 p75 **531ms**，`rate_limited_n=0`，标题 20/20 `第9600条快讯`
 
 ## 未完成（完成判定第 1–6 条仍未同时满足）
 
-- SPA / 其它页 n=20 / 交互 extra / 桌面交互 / 交错对照 / 故障注入（`run_remaining_suite.sh` 已启动）
+- 其它页 n=20 / 交互 extra / 桌面交互 / 交错对照 / 故障注入（`run_remaining_suite.sh` 正在跑 pages）
 - 重启恢复（:2001）已通过：`restart-recovery.json`，`ready` 1.7s，首条仍为 `第9600条快讯`，`summary.count` 重启前后均为 9199
 - 测量脚本已加对间 8s 间隔 + 遇到 429 冷却 60s；旧 soak 后套件在 profile 间几乎无冷却，剩余项改走 `run_remaining_suite.sh`
 - 独立三轮复查：`06-review-round1.md` / `07-review-round2.md` / `08-review-round3.md`。第 3 轮确认无刷指标、30s+ 离群是 429；完成判定仍只是部分成立
