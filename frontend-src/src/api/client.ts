@@ -112,23 +112,86 @@ export interface RequestOptions extends RequestInit {
   acceptNotModified?: boolean;
 }
 
+type BootPrefetchBag = Record<string, Promise<Response>>;
+
+/** theme-boot 在主包解析前发出的同源 GET；按完整 URL 消费一次，避免重复打同一接口。 */
+export function consumeBootPrefetch(url: string): Promise<Response> | undefined {
+  const root = globalThis as typeof globalThis & { __OPTIX_PREFETCH__?: BootPrefetchBag };
+  const bag = root.__OPTIX_PREFETCH__;
+  if (!bag || !Object.prototype.hasOwnProperty.call(bag, url)) return undefined;
+  const pending = bag[url];
+  delete bag[url];
+  return pending;
+}
+
+function awaitWithBudget<T>(promise: Promise<T>, budget: number, signal?: AbortSignal): Promise<T> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const finish = (apply: () => void) => {
+      if (settled) return;
+      settled = true;
+      if (timer !== undefined) clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+      apply();
+    };
+    const onAbort = () => {
+      finish(() => reject(signal?.reason ?? new DOMException('Aborted', 'AbortError')));
+    };
+    if (signal) {
+      if (signal.aborted) {
+        onAbort();
+        return;
+      }
+      signal.addEventListener('abort', onAbort);
+    }
+    if (budget > 0) {
+      timer = setTimeout(() => finish(() => reject(new TransportTimeoutError())), budget);
+    }
+    promise.then(
+      (value) => finish(() => resolve(value)),
+      (error) => finish(() => reject(error)),
+    );
+  });
+}
+
 /** live 模式请求（返回原始 Response 供需要读头的场景，如 202 Location） */
 export async function requestRaw(path: string, init?: RequestOptions): Promise<Response> {
   const method = (init?.method ?? 'GET').toUpperCase();
   const isWrite = method !== 'GET' && method !== 'HEAD';
   const { timeoutMs, acceptNotModified, signal: callerSignal, ...rest } = init ?? {};
   const budget = timeoutMs ?? REQUEST_TIMEOUT_MS;
-  let res: Response;
+  const url = `${BASE}${path}`;
+  let res: Response | undefined;
+  const boot = !isWrite ? consumeBootPrefetch(url) : undefined;
   try {
+    if (boot) {
+      try {
+        res = await awaitWithBudget(boot, budget, callerSignal ?? undefined);
+      } catch (error) {
+        if (error instanceof TransportTimeoutError) {
+          throw new ApiError(408, t('请求超时，请重试'), {
+            bizCode: 'request_timeout',
+            retryable: true,
+          });
+        }
+        if (error && typeof error === 'object' && (error as { name?: string }).name === 'AbortError') {
+          throw error;
+        }
+        // 启动预取失败时回退到正常请求，不把一次 boot 失败当成业务错误。
+      }
+    }
     // This API adapter is JSON/non-streaming. Keep the deadline alive until
     // the complete body has arrived, including unsuccessful proxy responses.
-    res = await fetchBuffered(`${BASE}${path}`, {
-      ...rest,
-      credentials: 'include',
-      redirect: 'error',
-      signal: callerSignal,
-      headers: apiHeaders(init?.headers, isWrite),
-    }, budget);
+    if (!res) {
+      res = await fetchBuffered(url, {
+        ...rest,
+        credentials: 'include',
+        redirect: 'error',
+        signal: callerSignal,
+        headers: apiHeaders(init?.headers, isWrite),
+      }, budget);
+    }
   } catch (error) {
     if (error instanceof TransportTimeoutError) {
       throw new ApiError(408, t('请求超时，请重试'), {

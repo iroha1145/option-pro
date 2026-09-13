@@ -4,7 +4,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import {
   apiHeaders, fetchBuffered, parseRetryAfter, ResponseLimitError, TransportTimeoutError,
 } from '../src/api/transport.ts';
-import { ApiError, idFromLocation, postCreate, request, requestRaw } from '../src/api/client.ts';
+import { ApiError, consumeBootPrefetch, idFromLocation, postCreate, request, requestRaw } from '../src/api/client.ts';
 import { fmtPrice, fmtSigned, fmtPct, fmtCompact, fmtCountdown, fmtNyTime, fmtTimeHHMMSS } from '../src/lib/format.ts';
 
 for (const status of [200, 503]) {
@@ -171,6 +171,29 @@ test('missing and nonfinite financial values remain distinct from real zero', ()
   assert.equal(fmtPct(1.5), '+1.50%');
   assert.doesNotThrow(() => fmtPrice(1.23, -1));
   assert.doesNotThrow(() => fmtPct(1.23, Infinity));
+});
+
+test('boot prefetch is consumed once and a failed boot fetch falls back', async (t) => {
+  const first = { access_mode: 'private_network', logged_in: false };
+  globalThis.__OPTIX_PREFETCH__ = {
+    '/api/access/status': Promise.resolve(new Response(JSON.stringify(first), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })),
+  };
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({ second: true })));
+  assert.deepEqual(await request('/access/status'), first);
+  assert.equal(fetchMock.mock.callCount(), 0);
+  assert.equal(consumeBootPrefetch('/api/access/status'), undefined);
+  assert.deepEqual(await request('/access/status'), { second: true });
+  assert.equal(fetchMock.mock.callCount(), 1);
+
+  globalThis.__OPTIX_PREFETCH__ = {
+    '/api/test': Promise.reject(new TypeError('boot prefetch failed')),
+  };
+  fetchMock.mock.mockImplementation(async () => new Response('{"ok":true}'));
+  assert.deepEqual(await request('/test'), { ok: true });
+  delete globalThis.__OPTIX_PREFETCH__;
 });
 
 test('invalid countdowns are empty and New York clocks use the same midnight convention', () => {

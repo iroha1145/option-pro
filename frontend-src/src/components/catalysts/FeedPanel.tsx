@@ -175,7 +175,7 @@ function FeedSkeleton({ rows = 6 }: { rows?: number }) {
 
 interface FeedPanelProps {
   filters: CatalystFilters;
-  onOpenNews: (id: string) => void;
+  onOpenNews: (id: string, seed?: CatalystNewsItem) => void;
   patches: Record<string, CatalystNewsItem>;
   refreshToken: number;
   onFeedResult: (result: { total: number | null; ok: boolean; validatedAt?: number }) => void;
@@ -319,7 +319,7 @@ export default function FeedPanel({ filters, onOpenNews, patches, onFeedResult, 
           >
             {items.map((it, i) => (
               /* 游标分页追加的项不再播放入场 */
-              <NewsRow key={it.newsId} item={it} index={i} animate={false} onOpen={onOpenNews} />
+              <NewsRow key={it.newsId} item={it} index={i} animate={false} onOpen={(id) => onOpenNews(id, it)} />
             ))}
           </div>
           {/* 游标分页 */}

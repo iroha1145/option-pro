@@ -138,6 +138,15 @@ export default function Catalysts() {
 
   /* 新闻详情抽屉 */
   const [selectedNewsId, setSelectedNewsId] = useState<string | null>(null);
+  const [selectedSeed, setSelectedSeed] = useState<CatalystNewsItem | null>(null);
+  const openNews = useCallback((id: string, seed?: CatalystNewsItem) => {
+    setSelectedNewsId(id);
+    setSelectedSeed(seed?.newsId === id ? seed : null);
+  }, []);
+  const closeNews = useCallback(() => {
+    setSelectedNewsId(null);
+    setSelectedSeed(null);
+  }, []);
 
   return (
     <div>
@@ -175,7 +184,7 @@ export default function Catalysts() {
       <AnalysisProgressCard />
 
       {/* B1 热点主题带（点击卡片打开代表新闻抽屉） */}
-      <HotspotsStrip onOpenNews={setSelectedNewsId} refreshToken={refreshToken} />
+      <HotspotsStrip onOpenNews={openNews} refreshToken={refreshToken} />
 
       {/* B2 市场焦点周期卡 */}
       <div className="mt-6">
@@ -207,7 +216,7 @@ export default function Catalysts() {
         {tab === 'feed' && (
           <FeedPanel
             filters={filters}
-            onOpenNews={setSelectedNewsId}
+            onOpenNews={openNews}
             patches={patches}
             refreshToken={refreshToken}
             onFeedResult={onFeedResult}
@@ -220,7 +229,7 @@ export default function Catalysts() {
       </div>
 
       {/* 新闻详情抽屉 */}
-      <NewsDrawer newsId={selectedNewsId} onClose={() => setSelectedNewsId(null)} onUpdate={onNewsUpdate} />
+      <NewsDrawer newsId={selectedNewsId} seed={selectedSeed} onClose={closeNews} onUpdate={onNewsUpdate} />
     </div>
   );
 }

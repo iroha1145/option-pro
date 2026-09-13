@@ -5,10 +5,12 @@ import './index.css'
 import './styles/transitions-catalog.css'
 import { applyColorMode } from './lib/colorPreference.ts'
 import { applyAppearance } from './lib/themePreference.ts'
+import { prefetchRouteChunk } from './lib/prefetchRouteChunk.ts'
 import App from './App.tsx'
 
 applyAppearance()
 applyColorMode()
+prefetchRouteChunk(window.location.pathname)
 
 createRoot(document.getElementById('root')!).render(
   <BrowserRouter>

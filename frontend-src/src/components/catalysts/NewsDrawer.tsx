@@ -69,14 +69,22 @@ function JobStepper({ job }: { job: NewsAnalysisJob }) {
 /* ================= 抽屉主体 ================= */
 interface NewsDrawerProps {
   newsId: string | null;
+  /** 列表或热点已有的同一条，立刻画出真实标题/摘要；详情接口仍会刷新分析区。 */
+  seed?: CatalystNewsItem | null;
   onClose: () => void;
   onUpdate: (item: CatalystNewsItem) => void;
 }
 
-export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProps) {
+export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: NewsDrawerProps) {
   const { isOwner, loading: accessLoading } = useAccess();
   const toast = useToast();
-  const [item, setItem] = useState<CatalystNewsItem | null>(null);
+  const [fetched, setFetched] = useState<CatalystNewsItem | null>(null);
+  const seedMatches = Boolean(newsId && seed?.newsId === newsId && seed.titleZh);
+  const item = fetched && newsId && fetched.newsId === newsId
+    ? fetched
+    : seedMatches && seed
+      ? seed
+      : null;
   const [loadError, setLoadError] = useState<string | null>(null);
   const [job, setJob] = useState<NewsAnalysisJob | null>(null);
   const [confirm, setConfirm] = useState<'create' | 'force' | 'cancel' | null>(null);
@@ -108,7 +116,6 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
       stopPoll();
       return;
     }
-    setItem(null);
     setLoadError(null);
     setJob(null);
     stopPoll();
@@ -117,11 +124,13 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
       .news(newsId)
       .then((n) => {
         if (dead) return;
-        setItem(n);
+        setFetched(n);
         onUpdate(n);
       })
       .catch(() => {
-        if (!dead) setLoadError(__t('暂时打不开这条新闻的详情'));
+        if (dead) return;
+        /* 列表摘要仍有效时继续展示 seed，不把已可见的真实标题清成空壳。 */
+        if (!seedMatches) setLoadError(__t('暂时打不开这条新闻的详情'));
       });
     return () => {
       dead = true;
@@ -187,7 +196,7 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
               try {
                 const fresh = await catalystsContract.news(job.newsId);
                 if (!sameNews()) return;
-                setItem(fresh);
+                setFetched(fresh);
                 onUpdate(fresh);
                 return;
               } catch (error) {
@@ -244,7 +253,7 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
         const j = await catalystsContract.createAnalysisJob(item.newsId, force);
         setJob(j);
         const nextItem = { ...item, analysisStatus: (j.status === 'queued' ? 'queued' : 'in_progress') as CatalystNewsItem['analysisStatus'], analysisJobId: j.jobId };
-        setItem(nextItem);
+        setFetched(nextItem);
         onUpdate(nextItem);
         toast.info(__t('分析任务已提交'), force ? __t('强制重新分析') : __t('可在本页查看进度'));
       } catch (e) {

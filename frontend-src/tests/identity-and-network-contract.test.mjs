@@ -15,6 +15,7 @@ import {
   PRINCIPAL_INVALID_EVENT,
   REQUEST_TIMEOUT_MS,
   get,
+  toQuery,
 } from '../src/api/client.ts';
 import {
   RECENT_KEY,
@@ -196,6 +197,30 @@ test('研究页身份确认不串行等待 AI 能力探针', async () => {
   const confirmAt = hook.indexOf('setHasConfirmedIdentity(true)');
   const enrichAt = hook.indexOf('accessApi.enrichOwnerCapabilities(next)');
   assert.ok(confirmAt >= 0 && enrichAt > confirmAt, '必须先确认主体再补 AI 点');
+});
+
+test('theme-boot 在主包解析前预取身份和默认新闻 feed', async () => {
+  const boot = await readFile(path.resolve(here, '..', 'public', 'theme-boot.js'), 'utf8');
+  assert.match(boot, /\/api\/access\/status/);
+  const defaultFeedSearch = toQuery({
+    window_hours: 72,
+    include_unanalyzed: true,
+    include_neutral: true,
+    limit: 12,
+  });
+  assert.equal(defaultFeedSearch, 'window_hours=72&include_unanalyzed=true&include_neutral=true&limit=12');
+  assert.match(boot, new RegExp(defaultFeedSearch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(boot, /__OPTIX_PREFETCH__/);
+  assert.match(boot, /credentials:\s*"include"/);
+  assert.match(boot, /!location\.search/);
+  const client = codeOf(await source('api/client.ts'));
+  assert.match(client, /export function consumeBootPrefetch/);
+  assert.match(client, /consumeBootPrefetch\(url\)/);
+  const main = codeOf(await source('main.tsx'));
+  assert.match(main, /prefetchRouteChunk\(window\.location\.pathname\)/);
+  const drawer = codeOf(await source('components/catalysts/NewsDrawer.tsx'));
+  assert.match(drawer, /seedMatches && seed/);
+  assert.match(drawer, /catalystsContract\s*\.\s*news\(newsId\)/);
 });
 
 test('非首屏增强请求等 load 后再固定延迟，不用 idle 抢首屏带宽', async () => {
