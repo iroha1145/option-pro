@@ -26,6 +26,33 @@ from app.services.research.radar import reconstruct_daily_base_events
 from app.services.research.registry import append_trial
 from app.services.research.screener import momentum_baseline_ranks, replay_screener_day
 
+_SCREENER_JOB: dict[str, Any] = {}
+
+
+def _init_screener_job(state: dict[str, Any]) -> None:
+    _SCREENER_JOB.clear()
+    _SCREENER_JOB.update(state)
+
+
+def _screener_day_job(session_iso: str) -> tuple[str, dict[str, Any], list[dict[str, Any]]]:
+    from datetime import date
+
+    session = date.fromisoformat(session_iso)
+    payload = replay_screener_day(
+        _SCREENER_JOB["dataset"],
+        session,
+        parameters=_SCREENER_JOB["parameters"],
+        allow_sealed=_SCREENER_JOB["allow_sealed"],
+        panel=_SCREENER_JOB["panel"],
+    )
+    labeled = attach_screener_labels(
+        payload.get("rows") or [],
+        _SCREENER_JOB["dataset"],
+        signal_date=session,
+        allow_sealed=_SCREENER_JOB["allow_sealed"],
+    )
+    return session_iso, payload, labeled
+
 
 def _write_json(path: Path, payload: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -66,27 +93,52 @@ def cmd_screener_replay(args: argparse.Namespace) -> int:
         else FROZEN_SPLITS["validation"]["end"]
     )
     panel = dataset.adjusted_panel(through=panel_through, allow_sealed=allow_sealed)
+    parameters = {
+        "timeframe": args.timeframe,
+        "profile": args.profile,
+        "top": args.top,
+    }
+
     daily: list[dict[str, Any]] = []
     event_rows: list[dict[str, Any]] = []
-    for index, session in enumerate(dates, start=1):
-        print(f"screener-replay {index}/{len(dates)} {session.isoformat()}", flush=True)
-        payload = replay_screener_day(
-            dataset,
-            session,
-            parameters={
-                "timeframe": args.timeframe,
-                "profile": args.profile,
-                "top": args.top,
-            },
-            allow_sealed=allow_sealed,
-            panel=panel,
-        )
-        labeled = attach_screener_labels(
-            payload.get("rows") or [],
-            dataset,
-            signal_date=session,
-            allow_sealed=allow_sealed,
-        )
+    workers = max(1, int(args.workers))
+    _SCREENER_JOB.update(
+        {
+            "dataset": dataset,
+            "panel": panel,
+            "parameters": parameters,
+            "allow_sealed": allow_sealed,
+        }
+    )
+    print(
+        f"screener-replay starting {len(dates)} days workers={workers}",
+        flush=True,
+    )
+    session_keys = [day.isoformat() for day in dates]
+    if workers == 1:
+        sequenced = []
+        for index, key in enumerate(session_keys, start=1):
+            item = _screener_day_job(key)
+            sequenced.append(item)
+            print(f"screener-replay {index}/{len(dates)} {key}", flush=True)
+    else:
+        from concurrent.futures import ProcessPoolExecutor, as_completed
+
+        ordered = {key: None for key in session_keys}
+        with ProcessPoolExecutor(
+            max_workers=workers,
+            initializer=_init_screener_job,
+            initargs=(dict(_SCREENER_JOB),),
+        ) as pool:
+            futures = {pool.submit(_screener_day_job, key): key for key in session_keys}
+            done = 0
+            for future in as_completed(futures):
+                session_iso, payload, labeled = future.result()
+                ordered[session_iso] = (session_iso, payload, labeled)
+                done += 1
+                print(f"screener-replay {done}/{len(dates)} {session_iso}", flush=True)
+        sequenced = [item for item in ordered.values() if item is not None]
+    for session_iso, payload, labeled in sequenced:
         ic = spearman_rank_ic(
             [row.get("ranking_score") for row in labeled],
             [
@@ -105,7 +157,7 @@ def cmd_screener_replay(args: argparse.Namespace) -> int:
         }
         daily.append(
             {
-                "signal_date": session.isoformat(),
+                "signal_date": session_iso,
                 "screened_count": payload.get("screened_count"),
                 "ic": ic,
                 "top_k": tops,
@@ -116,7 +168,7 @@ def cmd_screener_replay(args: argparse.Namespace) -> int:
         for row in labeled:
             event_rows.append(
                 {
-                    "signal_date": session.isoformat(),
+                    "signal_date": session_iso,
                     "ticker": row.get("ticker"),
                     "selected_view_rank": row.get("selected_view_rank"),
                     "ranking_score": row.get("ranking_score"),
@@ -302,6 +354,7 @@ def build_parser() -> argparse.ArgumentParser:
     screener.add_argument("--limit", type=int, default=0)
     screener.add_argument("--trial-id", default="original-screener-balanced-all")
     screener.add_argument("--unblind-sealed", action="store_true")
+    screener.add_argument("--workers", type=int, default=1)
     screener.set_defaults(func=cmd_screener_replay)
 
     radar = sub.add_parser("radar-replay")
