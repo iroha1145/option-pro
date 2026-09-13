@@ -31,7 +31,27 @@ def main() -> None:
     parser.add_argument("--rss", type=Path, default=Path("/opt/cursor/artifacts/perf/backend-rss.jsonl"))
     parser.add_argument("--out", type=Path, default=Path("/opt/cursor/artifacts/perf/soak-2h.analysis.json"))
     args = parser.parse_args()
-    rows = _load(args.src)
+    raw = _load(args.src)
+    rows = []
+    prev = None
+    for row in raw:
+        at = row.get("at")
+        gap = None
+        if prev and at:
+            try:
+                from datetime import datetime
+                gap = (
+                    datetime.fromisoformat(at.replace("Z", "+00:00"))
+                    - datetime.fromisoformat(prev.replace("Z", "+00:00"))
+                ).total_seconds()
+            except ValueError:
+                gap = None
+        # End-of-run spin: leftover sleep was skipped, cycles fire every few ms.
+        if gap is not None and gap < 1.0:
+            continue
+        rows.append(row)
+        prev = at
+    spin_dropped = len(raw) - len(rows)
     p95 = [float(row["summary"]["p95_ms"]) for row in rows if row.get("summary")]
     errors = [int(row["summary"].get("errors") or 0) for row in rows if row.get("summary")]
     ok = [int(row["summary"].get("ok") or 0) for row in rows if row.get("summary")]
@@ -41,6 +61,7 @@ def main() -> None:
     rss = [int(row["VmRSS"]) for row in rss_rows if "VmRSS" in row]
     report = {
         "cycles": len(rows),
+        "spin_cycles_dropped": spin_dropped,
         "first_at": rows[0]["at"] if rows else None,
         "last_at": rows[-1]["at"] if rows else None,
         "ok_sum": sum(ok),

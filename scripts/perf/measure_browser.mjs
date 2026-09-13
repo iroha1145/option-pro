@@ -23,6 +23,7 @@ const BASE = process.env.OPTIX_PERF_BASE || 'http://127.0.0.1:2000';
 const OUT = process.env.OPTIX_PERF_OUT || '/opt/cursor/artifacts/perf/browser-baseline.json';
 const PAIRS = Number(process.env.OPTIX_PERF_PAIRS || process.env.OPTIX_PERF_REPEATS || 20);
 const PROFILE = process.env.OPTIX_PERF_PROFILE || 'mobile-ref';
+const PAIR_GAP_MS = Number(process.env.OPTIX_PERF_PAIR_GAP_MS || 4000);
 
 const PROFILES = {
   desktop: { width: 1440, height: 900, dpr: 1, cpu: 1, down: 0, up: 0, rtt: 0, mobile: false },
@@ -184,6 +185,9 @@ for (let i = 0; i < PAIRS; i += 1) {
     + `cold_lcp=${pair.cold.lcp?.startTime ?? null} warm_lcp=${pair.warm.lcp?.startTime ?? null} `
     + `cold_cls=${pair.cold.cls} warm_cls=${pair.warm.cls}`,
   );
+  if (i + 1 < PAIRS && PAIR_GAP_MS > 0) {
+    await new Promise((resolve) => setTimeout(resolve, PAIR_GAP_MS));
+  }
 }
 
 const flat = (side) => samples.map((row) => row[side]);

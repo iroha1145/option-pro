@@ -50,8 +50,10 @@ for profile in desktop mobile-360 mobile-430; do
     OPTIX_PERF_BASE="$OPT_BASE" \
     OPTIX_PERF_PROFILE="$profile" \
     OPTIX_PERF_PAIRS=20 \
+    OPTIX_PERF_PAIR_GAP_MS=4000 \
     OPTIX_PERF_OUT="${ART}/browser-r5-${profile}.json" \
     "${NODE[@]}" "$ROOT/scripts/perf/measure_browser.mjs"
+  sleep 15
 done
 
 run_node spa env \

@@ -45,8 +45,13 @@ def main() -> None:
             handle.flush()
             print(f"cycle {cycle} ok={row['summary']['ok']}/{row['summary']['n']} p95={row['summary']['p95_ms']}")
             leftover = args.cycle_s - (time.time() - started)
-            if leftover > 0 and time.time() + leftover < stop_at:
-                time.sleep(leftover)
+            if leftover <= 0:
+                continue
+            # Sleeping past stop_at used to skip the sleep and spin thousands of
+            # extra cycles in the last few seconds, 429-ing the heavy API bucket.
+            if time.time() + leftover >= stop_at:
+                break
+            time.sleep(leftover)
     final = args.out.with_suffix(".summary.json")
     final.write_text(
         json.dumps(
