@@ -21,6 +21,7 @@
 | `analyze_soak.py` | 长稳 JSONL 早/晚 p95 与 RSS 摘要 |
 | `run_post_soak_suite.sh` | 等 2h soak 摘要后重建 frontend 并跑视口 / SPA / 页 / 交错 / 故障 |
 | `run_remaining_suite.sh` | 视口 n=20 之后续跑 SPA / 页 / 交互 / 交错 / 故障（不重建 frontend） |
+| `run_final_regression.sh` | 剩余套件结束后的最终关键回归：前端测试 + 催化 pytest + mobile-ref/交互 n=20 |
 | `lib/rate_limit.mjs` | 测量脚本共用：对间间隔 + 遇到 429 冷却 60s（不放宽产品限流） |
 
 原始结果默认写到 `/opt/cursor/artifacts/perf/`。
