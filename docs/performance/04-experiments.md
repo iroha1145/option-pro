@@ -219,3 +219,11 @@
 
 - **故障**：`faults.json` 五案全部 ok。断网/429 刷新保留「第9600条快讯」并出现 stale-while-error；恢复后标题不变。首屏断网后重试恢复。慢 feed 2500ms 仍等到真实标题。清缓存再进 645ms。
 - **决定**：对照收益来自已保留的调度/预取，不是缩数据。不据此再改 feed SQL。
+
+## Round 5i — 最终累计回归
+
+- **口径**：`run_final_regression.sh`。套件结束后才跑，避免和测量重叠。
+- **功能**：前端 935 pass / 0 fail；催化 pytest 228 passed；`frontend/` 与 `frontend-src/dist` 无差异。
+- **性能**：`browser-final-mobile-ref.json` 冷 p75 1698 / 热 838 / LCP 1580 / CLS 0.0008，0 次 429，0 个 >5s 离群。`browser-final-interact.json` 抽屉 314 / 筛选 249，预取 20/20。
+- **相对 R3**：冷 1642→1698（+3.4%，低于 5% 复查线），热 829→838。仍远低于基线 2381/1110。
+- **决定**：保留当前累计版本。不把实验室数字写成 RUM。

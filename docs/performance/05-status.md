@@ -1,46 +1,58 @@
 # 当前状态
 
-更新：2026-09-13 剩余套件已跑完；最终累计回归进行中。Goal **未**标记完成。
+更新：2026-09-13 最终累计回归已落盘。实验室交付齐；真机 / 日本链路 / 16 核 / Docker 仍受阻。不得把本目录写成 RUM 或生产全面验证。
 
-## 已完成
+## 实验室已交付
 
-- 拉取并核对 `origin/main` = `31e8955d89dc2b9b51a5bea1c47f5cfa6ea8cabc`
-- 分支 `cursor/perf-sitewide-1d7a`；对照工作区 `$HOME/option-pro-unoptimized`
-- 全站矩阵初稿、冻结预算、环境诚实记录（4 核 / 15 GiB）
-- 性能种子与测量脚本落在 `scripts/perf/`
-- 实验室基线 n=20（mobile-ref 冷/热）
-- Round 1 / 1b：身份拆分 + load 后固定延迟。热 ready p75 775ms（基线 1110，−30%），冷 2334ms（预算 ≤2500）
-- Round 2 Owner 缓存实验已回滚
-- 交互实验室（R1b 代码，修好口径，n=20）：抽屉标题 p75 394ms，筛选 24h p75 445ms，滚动无 longtask
-- Round 3 保留：冷 ready p75 1642（基线 2381，−31%）；热 829（预算 ≤1000）；抽屉标题 p75 287
-- Round 3 弱网档（实验室）：冷 p75 4089，热 p75 1371；不是日本实测
-- Round 4 保留：展开筛选后预取 24h/12，思考 800ms 后切换 p75 244（R3 445，−45%）
-- soak 结束后已重建生产 `frontend/`（与 R5b/R5c 源码对齐）
-- 桌面 n=20：`/opt/cursor/artifacts/perf/browser-r5-desktop.json`。冷 ready p75 **449** / 热 **217**。3/20 冷离群 36–43s，根因是 heavy API 30/60s 的 429 重试，不是渲染回归。首条标题 20/20 `第9600条快讯`
-- 360 n=20：`browser-r5-mobile-360.json`。冷 p75 **1654** / 热 **823**。2–4 对及第14对受 429 污染（max 冷 38844 / 热 7025）；p75 仍在预算内
-- 430 n=20：`browser-r5-mobile-430.json`。冷 p75 **1644** / 热 **834**。1/20 冷 36s、1/20 热 6s（429）；p75 在预算内
-- 2h soak 诚实窗口（丢弃 gap&lt;1s 空转，且不再把空转第一行算进来）：480 轮、**0 错**、早/晚 p95 中位 149→155ms、RSS 572→599MB（+26MB，有界）。原始 `soak-2h.summary.json` 含空转 429，**不得**当结论
-- 站内 SPA n=20：`browser-spa.json`。回新闻 p75 **531ms**，`rate_limited_n=0`，标题 20/20 `第9600条快讯`
-- 其它页 n=20：`browser-pages-n20.json`。11 条路由全部 20/20 就绪、0 次 429。最慢 CTA 2167 / 个股 2148；首页 1638、自选 1795、404 1154
-- 交互 extra n=20：抽屉 317 / 筛选 256 / 搜索 130 / 利多 575，预取 20/20，0 次 429
-- 桌面交互 n=20：抽屉 **71** / 筛选 **72**，悬停预取 **20/20**，0 次 429
+- 基线 SHA `31e8955d89dc2b9b51a5bea1c47f5cfa6ea8cabc`；分支 `cursor/perf-sitewide-1d7a`；对照 `$HOME/option-pro-unoptimized`
+- 生产 `frontend/` + 单进程 uvicorn `:2000` / `:2001`；种子 n10000；回环 = Owner
+- 新闻页最终 mobile-ref n=20：`browser-final-mobile-ref.json`。冷 ready p75 **1698** / 热 **838**。0 次 429，0 个 >5s 离群，20/20 标题 `第9600条快讯`
+- 最终交互 n=20：`browser-final-interact.json`。抽屉 314 / 筛选 249，预取 20/20，滚动 longtask 0
+- 交错对照：优化 1651/832 vs 未优化 2392/1093（冷 −31%）
+- 功能回归：前端 **935 pass / 0 fail**（`final-frontend-tests.log`）；催化 pytest **228 passed**（`final-catalyst-pytest.log`）；`frontend/` 与 `frontend-src/dist` 无 diff
+- 2h soak 诚实窗口 480 轮 0 错，RSS +26MB。不要用带空转的 `soak-2h.summary.json`
+- `:2001` 重启 1.7s，count 与标题不变。故障五案通过
+- 三轮复查：`06-review-round1.md` / `07-review-round2.md` / `08-review-round3.md`
 
-## 未完成（完成判定第 1–6 条仍未同时满足）
+## 关键预算（实验室 p75）
 
-- 交错对照 / 故障注入（`run_remaining_suite.sh` 正在跑 interleaved）
-- 重启恢复（:2001）已通过：`restart-recovery.json`，`ready` 1.7s，首条仍为 `第9600条快讯`，`summary.count` 重启前后均为 9199
-- 测量脚本已加对间 8s 间隔 + 遇到 429 冷却 60s；旧 soak 后套件在 profile 间几乎无冷却，剩余项改走 `run_remaining_suite.sh`
-- 独立三轮复查：`06-review-round1.md` / `07-review-round2.md` / `08-review-round3.md`。第 3 轮确认无刷指标、30s+ 离群是 429；完成判定仍只是部分成立
-- 最终累计版本未重跑：前端全量 + 催化 pytest + mobile-ref 冷热 n=20 + 交互 n=20
-- 真机、Safari、日本到美国链路：**待验证，未执行**
+| 场景 | 结果 | 预算 |
+|------|------|------|
+| 新闻冷 `news_content_ready` | 1698（交错优化 1651） | ≤2500 |
+| 新闻热 | 838（交错优化 832） | ≤1000 |
+| 冷 LCP | 1580 | ≤2500 |
+| CLS | 0.0008 | ≤0.1 |
+| 筛选 24h/12 | 249 | 思考 800ms 后可用 |
+| 搜索 / 分类 | 130 / 575 | 结果或合法空态可用 |
+| 站内返回新闻 | 531 | 不是整页热缓存 |
+| 未优化对照冷/热 | 2392 / 1093 | 热仍超 1000，说明收益来自优化而非机器变快 |
 
-滚动 72h 窗随墙钟滑动：种子 `published_at` 锚定 2026-09-13T12:00Z，墙钟越往后，`summary.count` 会从基线 9566 下降（14:50Z 9446，16:35Z 未优化树 9199）。这是产品时效，不是缩数据。对照与复测必须记当时 `count` / `as_of`。
+弱网档冷 4089 / 热 1371 **不适用** 上述 2.5s/1s 预算。
 
-## 受阻项
+`summary.count` 随 72h 窗从 9566 降到约 9048（17:47Z）。这是产品时效。首条标题仍是 `第9600条快讯`。
 
-| 项 | 原因 | 剩余步骤 |
-|----|------|----------|
-| 按生产 16 核容量下结论 | 本 VM 4 核 / 15 GiB | 在报告中保持实验室标注；不改配置假装有 16 核 |
-| 真机 iPhone Safari | 环境无真机 / 非 iOS WebKit | 交付可重复的 Chromium 移动档脚本 |
-| 日本→美国 RTT | 无该链路权限 | CDP 180ms/300ms 实验室档 + 缺口说明 |
-| Docker 双容器 | 无 Docker daemon | uvicorn 单进程对齐生产 CMD |
+## 明确不做（有回滚或负向证据）
+
+- feed 整窗物化下推 SQL
+- 主包拆 framer-motion
+- Owner 复用匿名 revision 缓存（Round 2 已回滚）
+- 放宽 heavy API 30/60s
+
+## 回滚
+
+工作分支上按提交回退，不要 force-push `main`，不要合并本 PR 来「撤销」。
+
+- 只撤一轮业务改动：`git revert <sha>`（例如 Round 2 已用提交回滚 Owner 缓存）
+- 放弃整分支：关闭 PR，对照树已停在基线 SHA
+- 测量脚本与文档可单独 revert，不影响运行中的生产部署（本任务未部署）
+
+## 受阻 / 部分完成
+
+| 项 | 状态 |
+|----|------|
+| 真机 iPhone Safari | 未执行 |
+| 日本→美国 RTT | 未执行；仅 CDP 180/300ms |
+| 按生产 16 核下结论 | 本机 4 核 / 15 GiB |
+| Docker 双容器 | 无 daemon；uvicorn 单进程对齐镜像 CMD |
+| 访客登录表单 | 未测（Owner 已登录态 n=20） |
+| ManagePanel / worker 后台专项预算 | 弱覆盖，无独立 n=20 交互档 |

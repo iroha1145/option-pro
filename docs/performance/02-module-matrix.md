@@ -8,18 +8,18 @@
 
 | 模块 | 路由 | 首屏数据链路 | 关键交互 | 前端测试 | pytest | 性能基线 |
 |------|------|--------------|----------|----------|--------|----------|
-| 首页 | `/` | indices/status/regime/signals/strength/breakouts/earnings/watchlist/cta/calendar/data-status | 指数跳转、区块重试、日历切换、实时报价订阅 | 有（契约）视觉弱 | 间接 | 实验室 n=8 mobile-ref 页头+正文 p75 1722ms |
-| 自选 | `/watchlist` | market status、watchlist、signals、strength、account watchlist | 排序、增删、强制刷新、渐进列表、表格/卡片 | 有 | 有 | 同上 p75 1848ms |
-| 选股 | `/screener` | strength scan/market/profiles；扫描时 batch catalysts | 筛选、扫描、分页 20、行展开 | 有 | 有 | 同上 p75 1694ms |
-| 雷达 | `/breakouts` | status/current/events | 筛选、立即扫描、事件详情、历史分页 100 | 弱～有 | 有 | 同上 p75 1601ms |
-| 板块 | `/sectors` | sectors、strength/sectors、iv-ranking | 热力/列表、周期、IV | 弱 | 弱 | 同上 p75 1541ms |
-| 财报 | `/earnings` | upcoming；Owner refresh；AI impact | 周/月历、分页 24、分析任务 | 有 | 有 | 同上 p75 1567ms |
-| 新闻 | `/catalysts` | status、hotspots/status、feed×2、hotspots、focus latest/previous、Owner analysis-progress | 筛选/搜索/分类、游标分页 12、详情抽屉、刷新 | 有 | 有 | **n=20 mobile-ref 冷 ready p75 1642；热 829** |
-| 大盘 | `/market` | 同首页核心 + macro conditions/history | 指数聚焦、宏观刷新 | 有 | 有 | 实验室 n=8 p75 1727ms |
-| CTA | `/cta` | market/cta、strength/market | instrument 切换 | 弱 | 间接 | 脚本已覆盖 `/cta`；n=20 待跑 |
-| 个股 | `/stock/:ticker` | detail+technical 并行；预取 chart/signals；期权/新闻/绘图 | 周期、绘图、期权链、手动拉取 | 有 | 有 | 脚本已覆盖 `/stock/NVDA`（骨架不算就绪）；n=20 待跑 |
-| 登录 | `/login` | access/status；login/register | Owner/客户登录 | 弱～有 | 有 | Owner 已登录态 n=8 p75 1213ms；访客表单未测 |
-| 404 | `*` | 无 | 返回首页 | 无 | 无 | 脚本已覆盖不存在路径；n=20 待跑 |
+| 首页 | `/` | indices/status/regime/signals/strength/breakouts/earnings/watchlist/cta/calendar/data-status | 指数跳转、区块重试、日历切换、实时报价订阅 | 有（契约）视觉弱 | 间接 | n=20 p75 1638（`browser-pages-n20.json`） |
+| 自选 | `/watchlist` | market status、watchlist、signals、strength、account watchlist | 排序、增删、强制刷新、渐进列表、表格/卡片 | 有 | 有 | n=20 p75 1795 |
+| 选股 | `/screener` | strength scan/market/profiles；扫描时 batch catalysts | 筛选、扫描、分页 20、行展开 | 有 | 有 | n=20 p75 1689 |
+| 雷达 | `/breakouts` | status/current/events | 筛选、立即扫描、事件详情、历史分页 100 | 弱～有 | 有 | n=20 p75 1626 |
+| 板块 | `/sectors` | sectors、strength/sectors、iv-ranking | 热力/列表、周期、IV | 弱 | 弱 | n=20 p75 1571 |
+| 财报 | `/earnings` | upcoming；Owner refresh；AI impact | 周/月历、分页 24、分析任务 | 有 | 有 | n=20 p75 1606 |
+| 新闻 | `/catalysts` | status、hotspots/status、feed×2、hotspots、focus latest/previous、Owner analysis-progress | 筛选/搜索/分类、游标分页 12、详情抽屉、刷新 | 有 | 有 | **最终 n=20 冷 1698 / 热 838**；交错未优化 2392 / 1093 |
+| 大盘 | `/market` | 同首页核心 + macro conditions/history | 指数聚焦、宏观刷新 | 有 | 有 | n=20 p75 1715 |
+| CTA | `/cta` | market/cta、strength/market | instrument 切换 | 弱 | 间接 | n=20 p75 2167 |
+| 个股 | `/stock/:ticker` | detail+technical 并行；预取 chart/signals；期权/新闻/绘图 | 周期、绘图、期权链、手动拉取 | 有 | 有 | `/stock/NVDA` n=20 p75 2148（骨架不算就绪） |
+| 登录 | `/login` | access/status；login/register | Owner/客户登录 | 弱～有 | 有 | Owner 已登录 n=20 p75 1239；**访客表单未测** |
+| 404 | `*` | 无 | 返回首页 | 无 | 无 | n=20 p75 1154 |
 
 ## 壳与后台
 
