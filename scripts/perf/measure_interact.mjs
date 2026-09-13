@@ -85,6 +85,9 @@ for (let i = 0; i < REPEATS; i += 1) {
   await page.waitForTimeout(200);
 
   await page.getByRole('button', { name: '筛选' }).click();
+  /* 展开筛选后用户会看一眼选项；这段时间预取 24h feed。0 则变成「展开后立刻点」，预取没有有效提前量。 */
+  const thinkMs = Number(process.env.OPTIX_PERF_FILTER_THINK_MS ?? 800);
+  if (thinkMs > 0) await page.waitForTimeout(thinkMs);
   const filterStarted = await page.evaluate(() => performance.now());
   const feedWait = page.waitForResponse(
     (response) => response.url().includes('window_hours=24') && response.ok(),
