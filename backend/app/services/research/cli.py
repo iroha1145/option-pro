@@ -1,0 +1,310 @@
+"""Offline research CLI. Fetch, replay, and report stay in separate commands."""
+
+from __future__ import annotations
+
+import argparse
+import json
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+from app.services.research.dataset import load_dataset, research_universe
+from app.services.research.labels import attach_screener_labels, last_usable_signal_date
+from app.services.research.metrics import date_clustered_mean, spearman_rank_ic, summarize_daily_ics, top_k_mean
+from app.services.research.portfolio import simulate_long_only
+from app.services.research.protocol import (
+    FROZEN_PROTOCOL,
+    PRIMARY_HORIZON,
+    PRIMARY_TOP_K,
+    SplitName,
+    assert_split_access,
+    iter_split_dates,
+    protocol_hash,
+)
+from app.services.research.radar import reconstruct_daily_base_events
+from app.services.research.registry import append_trial
+from app.services.research.screener import momentum_baseline_ranks, replay_screener_day
+
+
+def _write_json(path: Path, payload: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(payload, indent=2, ensure_ascii=True, default=str) + "\n", encoding="utf-8")
+    tmp.replace(path)
+
+
+def cmd_protocol(_args: argparse.Namespace) -> int:
+    print(json.dumps(FROZEN_PROTOCOL, indent=2, ensure_ascii=True))
+    return 0
+
+
+def cmd_audit_data(args: argparse.Namespace) -> int:
+    dataset = load_dataset(args.dataset)
+    coverage = dataset.coverage()
+    _write_json(Path(args.out), coverage)
+    print(json.dumps({"wrote": args.out, "tickers": coverage["manifest"]["ticker_count"], "bars": coverage["manifest"]["bar_count"]}, ensure_ascii=True))
+    return 0
+
+
+def cmd_screener_replay(args: argparse.Namespace) -> int:
+    split: SplitName = args.split
+    allow_sealed = bool(args.unblind_sealed)
+    if split == "sealed":
+        assert_split_access(FROZEN_PROTOCOL["splits"]["sealed"]["start"], allow_sealed=allow_sealed)
+    dataset = load_dataset(args.dataset)
+    dates = iter_split_dates(split, allow_sealed=allow_sealed)
+    last = last_usable_signal_date(split, PRIMARY_HORIZON, embargo_sessions=1)
+    dates = [day for day in dates if day <= last]
+    if args.step > 1:
+        dates = dates[:: args.step]
+    if args.limit:
+        dates = dates[: args.limit]
+    daily: list[dict[str, Any]] = []
+    event_rows: list[dict[str, Any]] = []
+    for session in dates:
+        payload = replay_screener_day(
+            dataset,
+            session,
+            parameters={
+                "timeframe": args.timeframe,
+                "profile": args.profile,
+                "top": args.top,
+            },
+            allow_sealed=allow_sealed,
+        )
+        labeled = attach_screener_labels(
+            payload.get("rows") or [],
+            dataset,
+            signal_date=session,
+            allow_sealed=allow_sealed,
+        )
+        ic = spearman_rank_ic(
+            [row.get("ranking_score") for row in labeled],
+            [
+                ((row.get("excess") or {}).get(str(PRIMARY_HORIZON)) or {}).get("excess_vs_universe")
+                for row in labeled
+            ],
+        )
+        tops = {
+            str(k): top_k_mean(
+                labeled,
+                score_key="ranking_score",
+                outcome_key=("excess", str(PRIMARY_HORIZON), "excess_vs_universe"),
+                k=k,
+            )
+            for k in PRIMARY_TOP_K
+        }
+        daily.append(
+            {
+                "signal_date": session.isoformat(),
+                "screened_count": payload.get("screened_count"),
+                "ic": ic,
+                "top_k": tops,
+                "as_of": payload.get("as_of"),
+                "universe_version": payload.get("universe_version"),
+            }
+        )
+        for row in labeled:
+            event_rows.append(
+                {
+                    "signal_date": session.isoformat(),
+                    "ticker": row.get("ticker"),
+                    "selected_view_rank": row.get("selected_view_rank"),
+                    "ranking_score": row.get("ranking_score"),
+                    "intrinsic_score": row.get("intrinsic_score"),
+                    "return_63d": row.get("return_63d"),
+                    "labels": row.get("labels"),
+                    "excess": row.get("excess"),
+                }
+            )
+    summary = {
+        "status": "active",
+        "split": split,
+        "step": args.step,
+        "limit": args.limit,
+        "protocol_hash": protocol_hash(),
+        "ic_summary": summarize_daily_ics(item["ic"] for item in daily),
+        "days": daily,
+        "notes": [
+            "这是开发区/验证区点时重建，不是当年真实发布快照。",
+            "封存区未包含在内，除非显式 --unblind-sealed。",
+        ],
+    }
+    out = Path(args.out)
+    _write_json(out, summary)
+    _write_json(out.with_name(out.stem + "-rows.json"), event_rows)
+    append_trial(
+        Path(args.registry),
+        {
+            "trial_id": args.trial_id,
+            "layer": "original",
+            "family": "screener",
+            "split": split,
+            "command": "screener-replay",
+            "output": str(out),
+            "day_count": len(daily),
+        },
+    )
+    print(json.dumps({"wrote": str(out), "days": len(daily)}, ensure_ascii=True))
+    return 0
+
+
+def cmd_radar_replay(args: argparse.Namespace) -> int:
+    split: SplitName = args.split
+    allow_sealed = bool(args.unblind_sealed)
+    dataset = load_dataset(args.dataset)
+    dates = iter_split_dates(split, allow_sealed=allow_sealed)
+    last = last_usable_signal_date(split, PRIMARY_HORIZON, embargo_sessions=1)
+    dates = [day for day in dates if day <= last]
+    if args.step > 1:
+        dates = dates[:: args.step]
+    if args.limit:
+        dates = dates[: args.limit]
+    events: list[dict[str, Any]] = []
+    for session in dates:
+        payload = reconstruct_daily_base_events(dataset, session, allow_sealed=allow_sealed)
+        events.extend(payload.get("events") or [])
+    pairs = []
+    labeled_events = []
+    from app.services.research.labels import forward_close_return
+
+    for event in events:
+        label = forward_close_return(
+            dataset,
+            str(event["ticker"]),
+            parse_date(event["trading_date"]),
+            PRIMARY_HORIZON,
+            allow_sealed_prices=allow_sealed,
+        )
+        spy = forward_close_return(
+            dataset,
+            "SPY",
+            parse_date(event["trading_date"]),
+            PRIMARY_HORIZON,
+            allow_sealed_prices=allow_sealed,
+        )
+        raw = label.get("forward_return")
+        bench = spy.get("forward_return")
+        excess = None if raw is None or bench is None else raw - bench
+        item = {**event, "label_20d": label, "spy_20d": spy, "excess_vs_spy_20d": excess}
+        labeled_events.append(item)
+        if excess is not None:
+            pairs.append((event["trading_date"], excess))
+    summary = {
+        "status": "active",
+        "split": split,
+        "protocol_hash": protocol_hash(),
+        "event_count": len(labeled_events),
+        "clustered_excess_vs_spy": date_clustered_mean(pairs),
+        "unverifiable": FROZEN_PROTOCOL["unverifiable_without_intraday"],
+        "notes": [
+            "日线平台重建，无 Discovery、无盘中确认。",
+            "同一 event_id 只在首次触发日进入本表。",
+        ],
+    }
+    out = Path(args.out)
+    _write_json(out, summary)
+    _write_json(out.with_name(out.stem + "-events.json"), labeled_events)
+    append_trial(
+        Path(args.registry),
+        {
+            "trial_id": args.trial_id,
+            "layer": "original",
+            "family": "radar",
+            "split": split,
+            "command": "radar-replay",
+            "output": str(out),
+            "event_count": len(labeled_events),
+        },
+    )
+    print(json.dumps({"wrote": str(out), "events": len(labeled_events)}, ensure_ascii=True))
+    return 0
+
+
+def parse_date(value: str):
+    from datetime import date
+
+    return date.fromisoformat(value)
+
+
+def cmd_portfolio(args: argparse.Namespace) -> int:
+    dataset = load_dataset(args.dataset)
+    rows = json.loads(Path(args.signals).read_text(encoding="utf-8"))
+    result = simulate_long_only(
+        dataset,
+        rows,
+        cost_bps=args.cost_bps,
+        hold_days=args.hold_days,
+    )
+    _write_json(Path(args.out), result)
+    append_trial(
+        Path(args.registry),
+        {
+            "trial_id": args.trial_id,
+            "layer": "original",
+            "family": "portfolio",
+            "command": "portfolio",
+            "output": args.out,
+            "cost_bps": args.cost_bps,
+            "trade_count": result.get("trade_count"),
+        },
+    )
+    print(json.dumps({"wrote": args.out, "final_equity": result.get("final_equity")}, ensure_ascii=True))
+    return 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="python -m app.services.research.cli")
+    sub = parser.add_subparsers(dest="command", required=True)
+    sub.add_parser("protocol").set_defaults(func=cmd_protocol)
+
+    audit = sub.add_parser("audit-data")
+    audit.add_argument("--dataset", required=True)
+    audit.add_argument("--out", required=True)
+    audit.set_defaults(func=cmd_audit_data)
+
+    screener = sub.add_parser("screener-replay")
+    screener.add_argument("--dataset", required=True)
+    screener.add_argument("--out", required=True)
+    screener.add_argument("--registry", required=True)
+    screener.add_argument("--split", default="development", choices=["warmup", "development", "validation", "sealed"])
+    screener.add_argument("--timeframe", default="all")
+    screener.add_argument("--profile", default="balanced")
+    screener.add_argument("--top", type=int, default=20)
+    screener.add_argument("--step", type=int, default=1)
+    screener.add_argument("--limit", type=int, default=0)
+    screener.add_argument("--trial-id", default="original-screener-balanced-all")
+    screener.add_argument("--unblind-sealed", action="store_true")
+    screener.set_defaults(func=cmd_screener_replay)
+
+    radar = sub.add_parser("radar-replay")
+    radar.add_argument("--dataset", required=True)
+    radar.add_argument("--out", required=True)
+    radar.add_argument("--registry", required=True)
+    radar.add_argument("--split", default="development", choices=["warmup", "development", "validation", "sealed"])
+    radar.add_argument("--step", type=int, default=1)
+    radar.add_argument("--limit", type=int, default=0)
+    radar.add_argument("--trial-id", default="original-radar-daily-base-theme-universe")
+    radar.add_argument("--unblind-sealed", action="store_true")
+    radar.set_defaults(func=cmd_radar_replay)
+
+    portfolio = sub.add_parser("portfolio")
+    portfolio.add_argument("--dataset", required=True)
+    portfolio.add_argument("--signals", required=True)
+    portfolio.add_argument("--out", required=True)
+    portfolio.add_argument("--registry", required=True)
+    portfolio.add_argument("--cost-bps", type=float, default=10.0)
+    portfolio.add_argument("--hold-days", type=int, default=20)
+    portfolio.add_argument("--trial-id", default="original-portfolio-10bps")
+    portfolio.set_defaults(func=cmd_portfolio)
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    return int(args.func(args))
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

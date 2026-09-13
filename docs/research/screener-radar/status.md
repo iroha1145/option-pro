@@ -1,0 +1,32 @@
+# 当前状态
+
+更新：2026-09-13。不要依赖其他对话的记忆。
+
+## 已完成
+
+- 固定 `origin/main` = `31e8955d89dc2b9b51a5bea1c47f5cfa6ea8cabc`。
+- 独立分支 `cursor/screener-radar-backtest-5ee5` 与 worktree。
+- 对照选股 / 雷达实现与 `docs/breakout-radar/*`、`docs/strength-scoring-v2.md`。
+- 向生产 `_scan_sync` 注入 `as_of`、`raw_history`、`enrich_live`；默认生产行为保持 enrich_live=True。
+- 研究执行层：离线数据、选股回放、雷达日线重建、标签、组合账本、封存禁看、CLI、实验登记。
+- 数据能力表与冻结协议。
+
+## 进行中
+
+- 有界 Yahoo 日线缓存与覆盖审计。
+- 开发区原版基线实跑（先步长抽样打通，再全日频）。
+- 既有 research / strength 回归 + 新因果测试。
+
+## 未完成 / 受阻
+
+- Grade A：无生产扫描库。
+- 盘中 / 盘前雷达类型：无历史分钟与盘前数据。
+- 封存区：按协议未揭盲。
+- 独立审查 agent：将在有原始结果文件后进行。
+
+## 不要做的事
+
+- 不要看封存区收益。
+- 不要打开 Range Persistence 生产权重。
+- 不要把候选权重写进 `personal.toml` 默认值。
+- 不要把下载塞进回放 CLI。

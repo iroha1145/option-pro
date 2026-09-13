@@ -1612,11 +1612,15 @@ def _scan_sync(
     min_avg_dollar_volume: float,
     include_options: bool = True,
     raw_history: pd.DataFrame | None = None,
+    as_of: datetime | None = None,
+    enrich_live: bool = True,
 ) -> dict[str, Any]:
     from app.services.breakouts.config import get_breakout_settings
 
     breakout_settings = get_breakout_settings()
-    observed_at = datetime.now(timezone.utc)
+    observed_at = as_of or datetime.now(timezone.utc)
+    if observed_at.tzinfo is None or observed_at.utcoffset() is None:
+        raise ValueError("as_of must include a timezone")
     if universe != "themes":
         raise ValueError(f"Unsupported universe: {universe}")
     if sector_id and sector_id not in SECTORS:
@@ -1785,37 +1789,70 @@ def _scan_sync(
             continue
         view_rows.append(item)
 
-    if include_options:
+    if enrich_live and include_options:
         yahoo_options_status = enrich_rows_with_yahoo_options(view_rows, display_top=top)
     else:
         # Single-stock lookups don't need the expensive option-chain pass.
+        # Research replay also skips live option chains so historical ranks
+        # cannot be contaminated by today's option snapshot.
         yahoo_options_status = {
             "provider": "Yahoo/yfinance",
             "status": "skipped",
             "configured": True,
             "enriched": 0,
-            "message": "单标的查询跳过期权粗筛（性能优化）",
+            "message": (
+                "研究回放跳过实时期权粗筛"
+                if not enrich_live
+                else "单标的查询跳过期权粗筛（性能优化）"
+            ),
         }
     _refresh_classifications(view_rows)
     _sort_scored(view_rows, timeframe)
     for selected_rank, item in enumerate(view_rows, start=1):
         item["selected_view_rank"] = selected_rank
     limited = view_rows[:top]
-    finnhub_status = enrich_rows_with_finnhub(limited)
-    if include_options:
-        marketdata_status = enrich_rows_with_marketdata_options(limited)
+    if enrich_live:
+        finnhub_status = enrich_rows_with_finnhub(limited)
+        if include_options:
+            marketdata_status = enrich_rows_with_marketdata_options(limited)
+        else:
+            marketdata_status = {
+                "provider": "MarketData.app",
+                "status": "skipped",
+                "configured": False,
+                "enriched": 0,
+                "message": "单标的查询跳过期权增强",
+            }
     else:
-        marketdata_status = {"provider": "MarketData.app", "status": "skipped", "configured": False, "enriched": 0, "message": "单标的查询跳过期权增强"}
+        finnhub_status = {
+            "provider": "Finnhub",
+            "status": "skipped",
+            "configured": False,
+            "enriched": 0,
+            "message": "研究回放跳过实时基本面补充",
+        }
+        marketdata_status = {
+            "provider": "MarketData.app",
+            "status": "skipped",
+            "configured": False,
+            "enriched": 0,
+            "message": "研究回放跳过实时期权增强",
+        }
     _refresh_classifications(limited)
     _sort_scored(limited, timeframe)
     # Shadow only, computed after the production ordering is fixed: attaching it
     # earlier would invite it to leak into a sort key. Nothing below reads these
     # fields, and _sort_scored has already run.
-    macro_reader = _load_macro_reader()
-    macro_linkage = _attach_macro_fit_shadow(limited, macro_reader)
-    # Built here rather than inline in the payload below so the sector radar and
-    # the row-level shadow fields provably describe the same snapshot read.
-    sector_rows = _sector_strength(scored, reader=macro_reader)
+    if enrich_live:
+        macro_reader = _load_macro_reader()
+        macro_linkage = _attach_macro_fit_shadow(limited, macro_reader)
+        sector_rows = _sector_strength(scored, reader=macro_reader)
+    else:
+        macro_linkage = {
+            "status": "skipped",
+            "message": "研究回放跳过当前宏观影子，避免把今天的宏观读数写进历史排名行",
+        }
+        sector_rows = _sector_strength(scored, reader=None)
     options_status = _combined_options_status(yahoo_options_status, marketdata_status)
     throughs = [
         str(item.get("daily_data_through"))
@@ -1826,7 +1863,7 @@ def _scan_sync(
     # must not hide stale inputs in the same published scoring snapshot.
     score_data_through = min(throughs) if throughs else None
     return {
-        "as_of": _now_iso(),
+        "as_of": observed_at.astimezone(timezone.utc).isoformat(),
         "score_data_through": score_data_through,
         "params": {
             "universe": universe,
