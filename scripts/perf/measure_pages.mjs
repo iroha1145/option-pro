@@ -28,7 +28,8 @@ const PROFILES = {
 };
 const profile = PROFILES[PROFILE];
 
-const ROUTES = [
+const ONLY = process.env.OPTIX_PERF_ROUTE;
+const ALL_ROUTES = [
   { path: '/', ready: () => document.querySelector('h1')?.textContent?.includes('首页') && (document.querySelector('main')?.innerText.length || 0) > 80 },
   { path: '/watchlist', ready: () => (document.querySelector('h1')?.textContent?.includes('自选') ?? false) && (!!document.querySelector('table') || /暂无|空|还没有/.test(document.body.innerText)) },
   { path: '/screener', ready: () => (document.querySelector('h1')?.textContent?.includes('选股') ?? false) && !!document.querySelector('button, form, input') },
@@ -36,8 +37,10 @@ const ROUTES = [
   { path: '/breakouts', ready: () => /突破|雷达/.test(document.querySelector('h1')?.textContent || '') && (document.querySelector('main')?.innerText.length || 0) > 40 },
   { path: '/earnings', ready: () => (document.querySelector('h1')?.textContent?.includes('财报') ?? false) && (document.querySelector('table') || (document.querySelector('main')?.innerText.length || 0) > 40) },
   { path: '/sectors', ready: () => (document.querySelector('h1')?.textContent?.includes('板块') ?? false) && (document.querySelector('main')?.innerText.length || 0) > 40 },
-  { path: '/login', ready: () => !!document.querySelector('form, input[type="password"]') },
+  { path: '/login', ready: () => !!document.querySelector('form, input[type="password"]') || /已登录|管理员/.test(document.body.innerText) },
 ];
+const ROUTES = ONLY ? ALL_ROUTES.filter((route) => route.path === ONLY) : ALL_ROUTES;
+if (!ROUTES.length) throw new Error(`unknown OPTIX_PERF_ROUTE=${ONLY}`);
 
 function percentile(values, q) {
   if (!values.length) return null;
