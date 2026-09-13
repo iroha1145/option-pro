@@ -12,7 +12,7 @@ import { useQuoteSymbols } from '@/hooks/useLiveQuote';
  * 旧抽屉形态已撤：全站 openTicker 一律导航到本页（审计 #12 的任务丢失
  * 问题随抽屉一并消失——本页不再有按 tab 卸载的区块）。
  */
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { usePolling } from '@/hooks/usePolling';
 import EmptyState from '@/components/shared/EmptyState';
@@ -23,17 +23,18 @@ import Icon from '@/components/icons';
 import { getDetail, getTechnicalStructure, prefetchStockDetailPanels } from '@/components/detail/api';
 import PriceHeader from '@/components/detail/PriceHeader';
 import SidebarEvents from '@/components/detail/SidebarEvents';
-import KlineChart from '@/components/detail/KlineChart';
 import TechnicalPanel from '@/components/detail/TechnicalPanel';
 import StructurePanel from '@/components/detail/StructurePanel';
 import TrendBiasPanel from '@/components/detail/TrendBiasPanel';
 import SignalList from '@/components/detail/SignalList';
-import OptionsPanel from '@/components/detail/OptionsPanel';
-import NewsPanel from '@/components/detail/NewsPanel';
-import AiAnalysisCard from '@/components/detail/AiAnalysisCard';
 import ManualStockPull from '@/components/detail/ManualStockPull';
 import KeyStats from '@/components/detail/KeyStats';
 import { t, t as __t } from '../i18n/core.ts';
+
+const KlineChart = lazy(() => import('@/components/detail/KlineChart'));
+const OptionsPanel = lazy(() => import('@/components/detail/OptionsPanel'));
+const NewsPanel = lazy(() => import('@/components/detail/NewsPanel'));
+const AiAnalysisCard = lazy(() => import('@/components/detail/AiAnalysisCard'));
 
 export default function StockDetail() {
   const { ticker = '' } = useParams();
@@ -248,15 +249,17 @@ export default function StockDetail() {
         <div className="xl:col-span-8">
           <div className="card-surface p-5">
             {/* 图例改由 KlineChart 内部按模式/状态渲染（真图例：色块/符号 + 状态语义） */}
-            <KlineChart
-              ticker={detail.ticker}
-              prevClose={detail.prevClose}
-              currentPrice={detail.price}
-              quoteUpdatedAt={detail.updatedAt}
-              height={420}
-              refreshVersion={dataRevision}
-              technical={technical}
-            />
+            <Suspense fallback={<SkeletonBlock className="h-[380px] w-full rounded-md" />}>
+              <KlineChart
+                ticker={detail.ticker}
+                prevClose={detail.prevClose}
+                currentPrice={detail.price}
+                quoteUpdatedAt={detail.updatedAt}
+                height={420}
+                refreshVersion={dataRevision}
+                technical={technical}
+              />
+            </Suspense>
           </div>
         </div>
         <aside className="xl:col-span-4">
@@ -334,7 +337,9 @@ export default function StockDetail() {
           <SidebarEvents ticker={detail.ticker} />
         </div>
         <div className="xl:col-span-7">
-          <AiAnalysisCard key={detail.ticker} ticker={detail.ticker} />
+          <Suspense fallback={<SkeletonBlock className="h-48 w-full rounded-md" />}>
+            <AiAnalysisCard key={detail.ticker} ticker={detail.ticker} />
+          </Suspense>
         </div>
       </div>
 
@@ -342,14 +347,18 @@ export default function StockDetail() {
       <div className="card-surface mt-6 p-5">
         <p className="eyebrow">OPTIONS CHAIN</p>
         <h3 className="mb-4 mt-1.5 text-h3 text-ink-900">{__t('期权链')}</h3>
-        <OptionsPanel key={detail.ticker} ticker={detail.ticker} />
+        <Suspense fallback={<SkeletonBlock className="h-40 w-full rounded-md" />}>
+          <OptionsPanel key={detail.ticker} ticker={detail.ticker} />
+        </Suspense>
       </div>
 
       {/* 行5: 相关新闻 */}
       <div className="card-surface mt-6 p-5">
         <p className="eyebrow">RELATED NEWS</p>
         <h3 className="mb-4 mt-1.5 text-h3 text-ink-900">{__t('相关新闻')}</h3>
-        <NewsPanel ticker={detail.ticker} />
+        <Suspense fallback={<SkeletonBlock className="h-32 w-full rounded-md" />}>
+          <NewsPanel ticker={detail.ticker} />
+        </Suspense>
       </div>
 
     </div>

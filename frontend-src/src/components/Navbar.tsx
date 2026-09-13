@@ -18,6 +18,7 @@ import { SessionDot } from '@/components/shared/SessionLED';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import ColorModeSwitcher from '@/components/ColorModeSwitcher';
 import ThemeSwitcher from '@/components/ThemeSwitcher';
+import { prefetchRoute } from '@/lib/prefetchRoutes';
 import { t } from '../i18n/core.ts';
 
 export const NAV_ITEMS = [
@@ -139,6 +140,8 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
               to={item.path}
               end={item.path === '/'}
               data-active={active}
+              onPointerEnter={() => prefetchRoute(item.path)}
+              onFocus={() => prefetchRoute(item.path)}
               className={cn(
                 /* R4 加到 9 项后 1440(xl) 逼近满宽：sub-2xl 收 px-2，登录态
                    右侧簇（AI 胶囊+退出）才不会被挤出视口；≥2xl 恢复 3.5。 */

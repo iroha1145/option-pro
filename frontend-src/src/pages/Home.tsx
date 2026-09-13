@@ -11,7 +11,7 @@ import { LivePrice, LiveChange } from '@/components/shared/LiveQuote';
  * - 无有效价显「—」，不显 0.00；sparkline 仅 mock 有数据，live 无指数 K 线端点如实留空
  * - 强度聚合 aggregateAvailable !== true 时隐藏对应行，不显 0
  */
-import { useEffect, useMemo, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useMemo, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { motion } from 'framer-motion';
 import { isMock, type ApiError } from '@/api/client';
@@ -34,7 +34,6 @@ import { cn } from '@/lib/utils';
 import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import { fmtCountdown, fmtNyTime, fmtPrice, fmtRelative, fmtTimeHHMMSS } from '@/lib/format';
 import { instrumentName, signed } from '@/components/cta/ctaMeta';
-import EconomicCalendarCard from '@/components/catalysts/EconomicCalendarCard';
 import PageHeader from '@/components/shared/PageHeader';
 import StaleStrip from '@/components/shared/StaleStrip';
 import StockDataCoverage from '@/components/shared/StockDataCoverage';
@@ -48,6 +47,8 @@ import { SkeletonBlock, SkeletonCard, SkeletonRows } from '@/components/shared/S
 import Sparkline from '@/components/charts/Sparkline';
 import Icon from '@/components/icons';
 import { localeTag, t } from '../i18n/core.ts';
+
+const EconomicCalendarCard = lazy(() => import('@/components/catalysts/EconomicCalendarCard'));
 
 const MARKET_TO_SESSION: Record<string, MarketSession> = {
   open: 'regular',
@@ -479,7 +480,9 @@ export default function Home() {
         </SectionCard>
       </div>
 
-      <EconomicCalendarCard />
+      <Suspense fallback={null}>
+        <EconomicCalendarCard />
+      </Suspense>
 
       {/* 行4：CTA 趋势资金联动带。区块常驻：加载给骨架、失败给错误行、
           快照未发布给说明——整块消失会让「本来没有」与「没读到」不可分辨，

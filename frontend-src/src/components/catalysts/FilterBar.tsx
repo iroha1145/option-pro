@@ -1,6 +1,5 @@
 /** 过滤器条：ticker / window_hours / classification / analysis_status / min_confidence / min_abs_impact / multi_source_only */
 import { useState } from 'react';
-import { motion } from 'framer-motion';
 import Segmented from '@/components/shared/Segmented';
 import MenuSelect from '@/components/shared/MenuSelect';
 import Icon from '@/components/icons';
@@ -210,12 +209,7 @@ export default function FilterBar({ filters, onChange, total, filtered }: Filter
 
       {/* 激活的主题过滤 chip（热点带带入） */}
       {filters.themeId && (
-        <motion.div
-          initial={{ scale: 0.9, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ type: 'spring', stiffness: 520, damping: 32 }}
-          className="mt-2.5 flex items-center gap-2"
-        >
+        <div className="mt-2.5 flex items-center gap-2">
           <button
             type="button"
             onClick={() => set({ themeId: null })}
@@ -226,7 +220,7 @@ export default function FilterBar({ filters, onChange, total, filtered }: Filter
             {t('主题：')}{catalystsContract.themeName(filters.themeId)}
             <Icon name="x" size={11} />
           </button>
-        </motion.div>
+        </div>
       )}
     </div>
   );

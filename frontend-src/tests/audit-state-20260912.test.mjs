@@ -143,6 +143,12 @@ function reactRunner() {
   const runner = createReactStub();
   runner.React.useMemo = (fn, deps) => runner.React.useCallback(fn, deps)();
   runner.React.createContext = () => ({ Provider: 'provider' });
+  runner.React.lazy = (factory) => {
+    const Lazy = () => null;
+    Lazy._factory = factory;
+    return Lazy;
+  };
+  runner.React.Suspense = ({ children }) => children;
   return runner;
 }
 class ApiError extends Error { constructor(code, message) { super(message); this.code = code; } }
@@ -441,6 +447,7 @@ test('route content changes identity only for pathname or principal, not a same-
     'react-router': { Outlet: 'outlet', useLocation: () => ({ pathname }), useNavigate: () => () => {}, useNavigationType: () => 'POP' },
     '@/hooks/useAccess': { useAccess: () => identity }, '@/hooks/useShell': { ShellContext: { Provider: 'shell' } },
     '@/lib/recentTickers': { pushRecent() {} }, '@/api/client': { isMock: false }, '../i18n/core.ts': translate,
+    '@/lib/prefetchRoutes': { prefetchPrimaryRoutes() {} },
   });
   const { default: Layout } = load('components/Layout.tsx', imports, env);
   const read = runner.mount(Layout);
