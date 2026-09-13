@@ -35,7 +35,11 @@ function identityHarness() {
   stub.React.useMemo = (factory, deps) => stub.React.useCallback(factory, deps)();
   const requests = []; const clock = timers();
   const { AccessProvider } = compile('hooks/useAccess.tsx', stub.React, {
-    '@/api/modules/access': { accessApi: { status: () => new Promise((resolve, reject) => requests.push({ resolve, reject })) } },
+    '@/api/modules/access': { accessApi: {
+      identity: () => new Promise((resolve, reject) => requests.push({ resolve, reject })),
+      enrichOwnerCapabilities: async (next) => next,
+      status: () => new Promise((resolve, reject) => requests.push({ resolve, reject })),
+    } },
     '@/api/modules/account': { accountApi: {} },
     '@/api/client': { ApiError, PRINCIPAL_INVALID_EVENT: 'invalid' },
     '@/lib/identityRetry': { identityRetryDelayMs: () => 1000 },

@@ -99,7 +99,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
 
   const readInto = useCallback(async (generation: number) => {
     try {
-      const next = await accessApi.status();
+      const next = await accessApi.identity();
       if (generation !== generationRef.current) return;
       retryAttemptRef.current = 0;
       if (retryTimerRef.current !== null) {
@@ -119,6 +119,13 @@ export function AccessProvider({ children }: { children: ReactNode }) {
       setStatus(next);
       setHasConfirmedIdentity(true);
       setIdentityUnavailable(false);
+      if (generation === generationRef.current) setLoading(false);
+      // AI 点随后补齐；等它会让 /ai/status 与 runtime-settings 再挡一轮 RTT。
+      if (next.role === 'owner') {
+        const enriched = await accessApi.enrichOwnerCapabilities(next);
+        if (generation !== generationRef.current) return;
+        setStatus(enriched);
+      }
     } catch (error) {
       if (generation !== generationRef.current) return;
       // 身份读不到时保留当前已知身份并明确置错，而不是悄悄退回访客。

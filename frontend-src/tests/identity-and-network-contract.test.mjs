@@ -185,6 +185,31 @@ test('身份服务不可用是独立状态，不显示成未登录', async () =>
   assert.match(hook, /setIdentityUnavailable\(true\)/);
 });
 
+test('研究页身份确认不串行等待 AI 能力探针', async () => {
+  const api = codeOf(await source('api/modules/access.ts'));
+  const hook = codeOf(await source('hooks/useAccess.tsx'));
+  assert.match(api, /function identityFromAccess/);
+  assert.match(api, /async function enrichOwnerCapabilities/);
+  assert.match(hook, /accessApi\.identity\(\)/);
+  assert.match(hook, /setHasConfirmedIdentity\(true\)/);
+  assert.match(hook, /accessApi\.enrichOwnerCapabilities\(next\)/);
+  const confirmAt = hook.indexOf('setHasConfirmedIdentity(true)');
+  const enrichAt = hook.indexOf('accessApi.enrichOwnerCapabilities(next)');
+  assert.ok(confirmAt >= 0 && enrichAt > confirmAt, '必须先确认主体再补 AI 点');
+});
+
+test('非首屏增强请求等 load 后再进入 idle', async () => {
+  const idle = codeOf(await source('lib/afterLoadIdle.ts'));
+  const quotes = codeOf(await source('components/QuoteConnection.tsx'));
+  const hero = codeOf(await source('components/catalysts/StatusHero.tsx'));
+  const layout = codeOf(await source('components/Layout.tsx'));
+  assert.match(idle, /document\.readyState/);
+  assert.match(quotes, /afterLoadIdle\(/);
+  assert.match(hero, /afterLoadIdle\(\(\) => setNewsTodayEnabled\(true\), 3500\)/);
+  assert.match(layout, /afterLoadIdle\(/);
+  assert.match(hero, /refreshToken > 0/);
+});
+
 test('写操作成功后状态校验失败不再报成登录失败', async () => {
   const api = codeOf(await source('api/modules/access.ts'));
   const hook = codeOf(await source('hooks/useAccess.tsx'));

@@ -21,6 +21,7 @@ import { pushRecent } from '@/lib/recentTickers';
 import { ShellContext } from '@/hooks/useShell';
 import { useAccess } from '@/hooks/useAccess';
 import { isMock } from '@/api/client';
+import { afterLoadIdle } from '@/lib/afterLoadIdle';
 import { t as __t } from '../i18n/core.ts';
 
 export default function Layout() {
@@ -52,6 +53,16 @@ export default function Layout() {
   }, [location.pathname, navigationType]);
 
   /* ⌘K / Ctrl+K 全局绑定 */
+  useEffect(() => {
+    if (!hasConfirmedIdentity) return;
+    return afterLoadIdle(() => {
+      const path = location.pathname;
+      if (path !== '/catalysts') void import('@/pages/Catalysts');
+      if (path !== '/watchlist') void import('@/pages/Watchlist');
+      if (path !== '/') void import('@/pages/Home');
+    }, 4000);
+  }, [hasConfirmedIdentity, location.pathname]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.isComposing || e.keyCode === 229 || e.altKey || e.shiftKey) return;
