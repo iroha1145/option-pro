@@ -11,20 +11,39 @@
 - **决定**：先改挡住挂页的串行 RTT 与首屏抢带宽请求，再动 SQL 物化。
 - **下一步**：Round 1 业务改动 → 同条件复测。
 
-## Round 1 — 身份确认与非首屏请求让路（已改代码，复测中）
+## Round 1 — 身份确认与非首屏请求让路
 
-- **证据**：Owner `accessApi.liveStatus` 先 `/access/status` 再串行 `Promise.all(/ai/status, /runtime-settings)`，180ms RTT 下多挡一轮才挂 `<Outlet/>`。`QuoteConnection` 确认身份后立即 `quoteStore.start()`（基线约 516ms）。`StatusHero.newsToday` 与列表 feed 并行再打一次 24h/50。短 timeout 的 `requestIdleCallback` 会在 feed 仍传输时开火。
-- **假设**：先确认主体再补 AI 点，并把行情探测 / 今日计数 / 其它页预取推迟到 `load`+idle，可在不缩数据的前提下压低热缓存 `news_content_ready`（目标 ≤1000ms p75）并避免冷启动抢带宽。
-- **改动**：
-  - `accessApi.identity()` 只读 `/access/status`；Owner 未补齐前 `aiReason: analysis_status_pending`，失败仍是 `analysis_status_unavailable`，禁止假绿灯。
-  - `useAccess.readInto` 在 `hasConfirmedIdentity=true` 之后再 `enrichOwnerCapabilities`。
-  - `afterLoadIdle`：有 `readyState` 且未 `complete` 时等 `load`，再 `requestIdleCallback`。
-  - `StatusHero.newsToday`：手动刷新立即拉；否则 load+idle（timeout 3500）。
-  - `QuoteConnection.start`：load+idle（timeout 2500）；可见性恢复逻辑不变。
-  - `Layout` 预取跳过当前路由，timeout 4000。
-  - `PersonalCatalystService.feed` 不再每次完整 `status()`。
-- **功能验证**：`node --experimental-strip-types --test frontend-src/tests/*.test.mjs` → 928 pass / 1 skip；`pytest tests/test_personal_catalyst_service.py tests/test_catalyst_api.py tests/test_catalyst_local_intelligence.py` 通过。
-- **代价**：生产 `index.js` 957 KiB / gzip 328 KiB（基线约 934 / 318）。复测时对照 transfer。
-- **指标**：复测写入 `/opt/cursor/artifacts/perf/browser-r1-mobile-ref.json`。
-- **决定**：待同条件 n=20 对复测后保留或回滚。
-- **下一步**：热 p75 仍 >1000 或冷退化 >5% 则进入 feed 分页物化；否则测桌面/弱网/其它页。
+- **证据**：Owner `liveStatus` 先 `/access/status` 再串行 AI/runtime，180ms RTT 下多挡一轮才挂 `<Outlet/>`。
+- **改动**：`accessApi.identity()` 只读 `/access/status`；`afterLoadIdle` 初版用 `requestIdleCallback`；feed 不再每次 `status()`。
+- **指标**：`/opt/cursor/artifacts/perf/browser-r1-mobile-ref.json`。热 ready p75 802（达标）；冷 p75 2778（退化，超 2500）。72h feed duration p50 523ms（基线 228ms）。请求数 49 vs 31。
+- **决定**：保留身份拆分。idle 在等网络时会立刻回调，必须改成固定延迟。
+
+## Round 1b — idle 改为固定延迟（保留）
+
+- **证据**：idle 抢连接；feed 从 ~190ms 被挤到 ~480ms。
+- **改动**：`afterLoadIdle` 只用 `setTimeout(delayMs)`；预取 8s。
+- **指标**：`/opt/cursor/artifacts/perf/browser-r1b-mobile-ref.json`（n=20）。
+
+| 指标 | 基线 | R1 | R1b | 预算 |
+|---|---|---|---|---|
+| 冷 news_content_ready p50/p75 | 2348 / 2381 | 2713 / 2778 | **2317 / 2334** | ≤2500 |
+| 热 news_content_ready p50/p75 | 1084 / 1110 | 781 / 802 | **772 / 775** | ≤1000 |
+| 冷 LCP p75 | 2088 | 2140 | **2064** | ≤2500 |
+| 热 LCP p75 | 1044 | 728 | **528** | ≤2500 |
+| 冷 CLS p75 | 0.044 | 0.060 | **0.046** | ≤0.1 |
+| 冷 72h feed duration p50 | 228 | 523 | **231** | — |
+| 冷请求数 p50 | 31 | 49 | **29** | — |
+| 冷 transfer p50 | 450KB | 495KB | **446KB** | — |
+
+热路径相对基线 p75 下降 30.2%（1110→775），达到「原卡顿路径 ≥30%」目标。首条标题始终为 `第9600条快讯`，count 仍为 9566，未缩数据。热样本无 feed 请求：同上下文 120s 新鲜窗口命中内存缓存；「缓存内容可用」= 775ms，「按既有时效再刷新」见手动刷新测量。冷路径有 1/20 的 27.5s 离群（基线亦有 29.6s），p75 不受其拉动。
+- **功能验证**：前端 928 pass / 1 skip；催化后端此前已通过。
+- **决定**：保留。
+- **下一步**：Owner feed 整窗 `_item()` 实验；交互/弱网/其它页。
+
+## Round 2 — Owner 复用匿名 revision 缓存（回滚）
+
+- **证据**：Owner `_active_revision_bundle` 对 `current_request_is_owner()` 直接 `items=None`，每次 `_item()` 整窗。
+- **假设**：复用匿名 item 缓存、只叠 job 状态，10k 热路径会明显下降。
+- **结果**：进程内 n=10000 window=72 limit=12：基线冷 184 / 热 60；整窗 overlay 冷 235 / 热 65；只叠当前页冷 224 / 热 50。热路径最多快约 10ms，冷路径更慢。浏览器侧 180ms RTT 下用户不可见。
+- **决定**：**回滚**。无足够可感知收益，增加正确性表面积。
+- **下一步**：不继续改 feed 物化，除非压力测试证明服务端 CPU 是瓶颈。转向交互、弱网、其它模块与长稳。

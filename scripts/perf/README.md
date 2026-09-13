@@ -9,5 +9,9 @@
 | `measure_browser.mjs` | 生产页 Chromium 实验室计时（LCP/CLS/`news_content_ready`） |
 | `measure_feed_inprocess.py` | 进程内 `PersonalCatalystService.feed` 计时（冷/热 revision 缓存） |
 | `run_isolated_backend.sh` | 单进程 uvicorn，`DATA_DIR` 指向种子目录 |
+| `measure_interact.mjs` | 新闻页抽屉 / 筛选 / 滚动（实验室，不是真实 INP） |
+| `measure_pages.mjs` | 其它路由首屏内容可见计时 |
+| `measure_load.py` | 到达率混合 URL 探索性压测（勿打生产） |
+| `run_soak.py` | 默认可跑 2 小时的隔离长稳；不进普通 CI |
 
 原始结果默认写到 `/opt/cursor/artifacts/perf/`。
