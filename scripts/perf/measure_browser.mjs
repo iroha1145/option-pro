@@ -1,16 +1,27 @@
 #!/usr/bin/env node
 /**
  * Laboratory browser timings against the production SPA + real backend.
- * Does not treat skeleton/spinner as ready. news_content_ready is the first
+ * Skeleton/spinner is not treated as ready. news_content_ready is the first
  * real news title that is visible and whose open control is enabled.
+ *
+ * Cold = new browser context (empty HTTP cache).
+ * Warm = same context, navigate away then back (HTTP + JS cache).
+ * Network/CPU throttling is applied once via CDP, not stacked with tc.
  */
-import { chromium } from '@playwright/test';
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
+const require = createRequire(fileURLToPath(import.meta.url));
+const { chromium } = require(path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../../frontend-src/node_modules/playwright',
+));
+
 const BASE = process.env.OPTIX_PERF_BASE || 'http://127.0.0.1:2000';
 const OUT = process.env.OPTIX_PERF_OUT || '/opt/cursor/artifacts/perf/browser-baseline.json';
-const REPEATS = Number(process.env.OPTIX_PERF_REPEATS || 20);
+const PAIRS = Number(process.env.OPTIX_PERF_PAIRS || process.env.OPTIX_PERF_REPEATS || 20);
 const PROFILE = process.env.OPTIX_PERF_PROFILE || 'mobile-ref';
 
 const PROFILES = {
@@ -59,27 +70,42 @@ async function applyThrottle(page) {
   return client;
 }
 
-async function collectOnce({ cold }) {
-  const browser = await chromium.launch({ headless: true, channel: 'chrome' }).catch(
-    () => chromium.launch({ headless: true }),
-  );
-  const context = await browser.newContext({
-    viewport: { width: profile.width, height: profile.height },
-    deviceScaleFactor: profile.dpr,
-    isMobile: profile.mobile,
-    hasTouch: profile.mobile,
-    locale: 'zh-CN',
+async function prepareObservers(page) {
+  await page.addInitScript(() => {
+    window.__optixPerf = { lcp: null, cls: 0, longTasks: [] };
+    try {
+      new PerformanceObserver((list) => {
+        const last = list.getEntries().at(-1);
+        if (last) window.__optixPerf.lcp = { startTime: last.startTime, size: last.size, url: last.url || null };
+      }).observe({ type: 'largest-contentful-paint', buffered: true });
+      new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          if (!entry.hadRecentInput) window.__optixPerf.cls += entry.value;
+        }
+      }).observe({ type: 'layout-shift', buffered: true });
+      new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          window.__optixPerf.longTasks.push({ start: entry.startTime, duration: entry.duration });
+        }
+      }).observe({ type: 'longtask', buffered: true });
+    } catch {
+      /* observers optional in older engines */
+    }
   });
-  const page = await context.newPage();
-  await applyThrottle(page);
-  if (cold) {
-    await context.clearCookies();
-  }
+}
 
+async function measureNavigation(page, pathName) {
+  const requests = [];
+  const onRequest = (request) => {
+    if (request.resourceType() === 'document' || request.resourceType() === 'script'
+      || request.resourceType() === 'stylesheet' || request.url().includes('/api/')) {
+      requests.push({ url: request.url(), type: request.resourceType(), started: Date.now() });
+    }
+  };
+  page.on('request', onRequest);
   const started = Date.now();
-  const response = await page.goto(`${BASE}/catalysts`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+  const response = await page.goto(`${BASE}${pathName}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
   const navStatus = response?.status() ?? null;
-
   const readyHandle = await page.waitForFunction(() => {
     const title = document.querySelector('article h3');
     if (!title) return false;
@@ -93,69 +119,91 @@ async function collectOnce({ cold }) {
     if (!visible || !enabled) return false;
     return { title: text, at: performance.now() };
   }, null, { timeout: 120_000 }).catch(() => null);
+  page.off('request', onRequest);
   const ready = readyHandle ? await readyHandle.jsonValue() : null;
-
   const metrics = await page.evaluate(() => {
     const nav = performance.getEntriesByType('navigation')[0];
     const paints = performance.getEntriesByType('paint');
-    const lcp = performance.getEntriesByType('largest-contentful-paint').at(-1);
-    const shifts = performance.getEntriesByType('layout-shift').filter((e) => !e.hadRecentInput);
     const resources = performance.getEntriesByType('resource');
-    const longTasks = performance.getEntriesByType('longtask');
+    const observed = window.__optixPerf || {};
     return {
       ttfb: nav?.responseStart ?? null,
       dcl: nav?.domContentLoadedEventEnd ?? null,
       load: nav?.loadEventEnd ?? null,
       fp: paints.find((e) => e.name === 'first-paint')?.startTime ?? null,
       fcp: paints.find((e) => e.name === 'first-contentful-paint')?.startTime ?? null,
-      lcp: lcp ? { startTime: lcp.startTime, size: lcp.size, url: lcp.url || null } : null,
-      cls: shifts.reduce((sum, e) => sum + e.value, 0),
+      lcp: observed.lcp || null,
+      cls: observed.cls ?? 0,
       resourceCount: resources.length,
       transferSize: resources.reduce((sum, e) => sum + (e.transferSize || 0), 0),
       encodedBodySize: resources.reduce((sum, e) => sum + (e.encodedBodySize || 0), 0),
-      longTaskCount: longTasks.length,
-      longTaskTotalMs: longTasks.reduce((sum, e) => sum + e.duration, 0),
+      longTaskCount: (observed.longTasks || []).length,
+      longTaskTotalMs: (observed.longTasks || []).reduce((sum, e) => sum + e.duration, 0),
       domNodes: document.getElementsByTagName('*').length,
+      apiPaths: resources
+        .filter((e) => String(e.name).includes('/api/'))
+        .map((e) => ({ name: e.name.replace(/^https?:\/\/[^/]+/, ''), duration: e.duration, transferSize: e.transferSize })),
     };
   });
-
-  let clickDelayMs = null;
-  if (ready) {
-    const handle = page.locator('article h3').first();
-    const clickStarted = Date.now();
-    await handle.click({ timeout: 15_000 }).catch(() => null);
-    clickDelayMs = Date.now() - clickStarted;
-    await page.locator('[role="dialog"], aside, [data-news-drawer]').first().waitFor({ state: 'visible', timeout: 15_000 }).catch(() => null);
-  }
-
-  const wallMs = Date.now() - started;
-  await context.close();
-  await browser.close();
   return {
-    cold,
     navStatus,
-    wall_ms: wallMs,
+    wall_ms: Date.now() - started,
     news_content_ready_ms: ready?.at ?? null,
     news_title: ready?.title ?? null,
-    click_delay_ms: clickDelayMs,
+    request_count_tracked: requests.length,
     ...metrics,
   };
 }
 
+async function collectPair() {
+  const browser = await chromium.launch({ headless: true });
+  const context = await browser.newContext({
+    viewport: { width: profile.width, height: profile.height },
+    deviceScaleFactor: profile.dpr,
+    isMobile: profile.mobile,
+    hasTouch: profile.mobile,
+    locale: 'zh-CN',
+  });
+  const page = await context.newPage();
+  await applyThrottle(page);
+  await prepareObservers(page);
+  const cold = await measureNavigation(page, '/catalysts');
+  await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded', timeout: 60_000 }).catch(() => null);
+  const warm = await measureNavigation(page, '/catalysts');
+  await context.close();
+  await browser.close();
+  return { cold: { cache: 'cold', ...cold }, warm: { cache: 'warm', ...warm } };
+}
+
 const samples = [];
-for (let i = 0; i < REPEATS; i += 1) {
-  const cold = i % 2 === 0;
-  const row = await collectOnce({ cold });
-  samples.push(row);
+for (let i = 0; i < PAIRS; i += 1) {
+  const pair = await collectPair();
+  samples.push(pair);
   console.log(
-    `#${i + 1}/${REPEATS} cold=${cold} ready=${row.news_content_ready_ms} lcp=${row.lcp?.startTime ?? null} cls=${row.cls} status=${row.navStatus}`,
+    `#${i + 1}/${PAIRS} cold_ready=${pair.cold.news_content_ready_ms} warm_ready=${pair.warm.news_content_ready_ms} `
+    + `cold_lcp=${pair.cold.lcp?.startTime ?? null} warm_lcp=${pair.warm.lcp?.startTime ?? null} `
+    + `cold_cls=${pair.cold.cls} warm_cls=${pair.warm.cls}`,
   );
 }
 
-const readyCold = samples.filter((s) => s.cold && s.news_content_ready_ms != null).map((s) => s.news_content_ready_ms);
-const readyWarm = samples.filter((s) => !s.cold && s.news_content_ready_ms != null).map((s) => s.news_content_ready_ms);
-const lcp = samples.filter((s) => s.lcp?.startTime != null).map((s) => s.lcp.startTime);
-const cls = samples.map((s) => s.cls);
+const flat = (side) => samples.map((row) => row[side]);
+function summarize(rows) {
+  const ready = rows.filter((s) => s.news_content_ready_ms != null).map((s) => s.news_content_ready_ms);
+  const lcp = rows.filter((s) => s.lcp?.startTime != null).map((s) => s.lcp.startTime);
+  const cls = rows.map((s) => s.cls ?? 0);
+  return {
+    n: rows.length,
+    ready_n: ready.length,
+    news_content_ready_p50: percentile(ready, 0.5),
+    news_content_ready_p75: percentile(ready, 0.75),
+    news_content_ready_min: ready.length ? Math.min(...ready) : null,
+    news_content_ready_max: ready.length ? Math.max(...ready) : null,
+    lcp_p75: percentile(lcp, 0.75),
+    cls_p75: percentile(cls, 0.75),
+    transfer_p50: percentile(rows.map((s) => s.transferSize || 0), 0.5),
+    longtask_total_p75: percentile(rows.map((s) => s.longTaskTotalMs || 0), 0.75),
+  };
+}
 
 const report = {
   profile: PROFILE,
@@ -164,17 +212,8 @@ const report = {
   measuredAt: new Date().toISOString(),
   lab: true,
   notRUM: true,
-  n: samples.length,
-  summary: {
-    news_content_ready_cold_p50: percentile(readyCold, 0.5),
-    news_content_ready_cold_p75: percentile(readyCold, 0.75),
-    news_content_ready_warm_p50: percentile(readyWarm, 0.5),
-    news_content_ready_warm_p75: percentile(readyWarm, 0.75),
-    lcp_p75: percentile(lcp, 0.75),
-    cls_p75: percentile(cls, 0.75),
-    ready_samples_cold: readyCold.length,
-    ready_samples_warm: readyWarm.length,
-  },
+  pairs: samples.length,
+  summary: { cold: summarize(flat('cold')), warm: summarize(flat('warm')) },
   samples,
 };
 
