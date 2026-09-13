@@ -60,11 +60,16 @@ for (let i = 0; i < REPEATS; i += 1) {
   await waitNews(page);
 
   const drawerStarted = await page.evaluate(() => performance.now());
-  await page.locator('article button[aria-label]').first().click();
-  await page.waitForSelector('[role="dialog"][aria-modal="true"]', { timeout: 30_000 });
+  await page.locator('article').first().locator('h3').click({ force: true });
+  await page.waitForFunction(() => {
+    const dialog = document.querySelector('[role="dialog"][aria-modal="true"]');
+    const heading = dialog?.querySelector('h2');
+    const text = heading?.textContent?.trim() || '';
+    return text.length > 2;
+  }, null, { timeout: 30_000 });
   const drawerReady = await page.evaluate(() => {
     const dialog = document.querySelector('[role="dialog"][aria-modal="true"]');
-    const heading = dialog?.querySelector('h2, h3, h1');
+    const heading = dialog?.querySelector('h2');
     const text = heading?.textContent?.trim() || '';
     return { at: performance.now(), title: text };
   });
@@ -75,7 +80,12 @@ for (let i = 0; i < REPEATS; i += 1) {
 
   await page.getByRole('button', { name: '筛选' }).click();
   const filterStarted = await page.evaluate(() => performance.now());
-  await page.getByRole('button', { name: '24 时' }).click();
+  const feedWait = page.waitForResponse(
+    (response) => response.url().includes('window_hours=24') && response.ok(),
+    { timeout: 60_000 },
+  );
+  await page.getByRole('tab', { name: '24 时' }).click();
+  await feedWait;
   await page.waitForFunction(() => {
     const title = document.querySelector('article h3');
     return !!(title && title.textContent && title.textContent.trim().length > 1);
