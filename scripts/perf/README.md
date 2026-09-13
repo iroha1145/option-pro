@@ -13,5 +13,6 @@
 | `measure_pages.mjs` | 其它路由首屏内容可见计时 |
 | `measure_load.py` | 到达率混合 URL 探索性压测（勿打生产） |
 | `run_soak.py` | 默认可跑 2 小时的隔离长稳；不进普通 CI |
+| `measure_spa.mjs` | 同页站内回到 /catalysts（不是整页热缓存） |
 
 原始结果默认写到 `/opt/cursor/artifacts/perf/`。
