@@ -53,13 +53,12 @@ export default function StatusHero({ refreshToken = 0 }: { refreshToken?: number
   const [newsTodayEnabled, setNewsTodayEnabled] = useState(false);
   useEffect(() => {
     if (refreshToken > 0) {
-      setNewsTodayEnabled(true);
       return;
     }
     return afterLoadIdle(() => setNewsTodayEnabled(true), 3500);
   }, [refreshToken]);
   const newsQ = usePolling(() => catalystsContract.newsToday(), 120_000, [refreshToken], {
-    enabled: newsTodayEnabled,
+    enabled: refreshToken > 0 || newsTodayEnabled,
   });
 
   const s = statusQ.data;

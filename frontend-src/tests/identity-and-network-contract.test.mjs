@@ -242,6 +242,8 @@ test('非首屏增强请求等 load 后再固定延迟，不用 idle 抢首屏�
   assert.match(hero, /afterLoadIdle\(\(\) => setNewsTodayEnabled\(true\), 3500\)/);
   assert.match(layout, /afterLoadIdle\(/);
   assert.match(hero, /refreshToken > 0/);
+  assert.match(hero, /enabled:\s*refreshToken > 0 \|\| newsTodayEnabled/);
+  assert.doesNotMatch(hero, /if \(refreshToken > 0\) \{\s*setNewsTodayEnabled\(true\)/);
 });
 
 test('写操作成功后状态校验失败不再报成登录失败', async () => {
