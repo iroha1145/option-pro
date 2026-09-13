@@ -1,0 +1,16 @@
+# 全站性能专项
+
+本目录记录基于 `origin/main` `31e8955d89dc2b9b51a5bea1c47f5cfa6ea8cabc` 的隔离性能优化任务。原始 trace / 视频 / 大批量 JSON 不入库，放在 `/opt/cursor/artifacts/perf/`。
+
+| 文件 | 内容 |
+|------|------|
+| [00-plan.md](00-plan.md) | 目标、约束、闭环与交付 |
+| [01-environment.md](01-environment.md) | 机器、运行时、对照工作区、启动命令 |
+| [02-module-matrix.md](02-module-matrix.md) | 全站模块—功能—数据链路—测试覆盖 |
+| [03-baseline-and-budget.md](03-baseline-and-budget.md) | 冻结测量配置与验收预算 |
+| [04-experiments.md](04-experiments.md) | 逐轮实验记录 |
+| [05-status.md](05-status.md) | 当前状态、缺口与下一步 |
+
+对照未优化树：`$HOME/option-pro-unoptimized`（同一 SHA，detached HEAD）。
+
+测量与种子脚本：`scripts/perf/`。
