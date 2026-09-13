@@ -100,3 +100,9 @@
 
 离散很小（冷 max 4124），标题 20/20 `第9600条快讯`。这是人工弱网档，不是日本到美国实测。
 - **决定**：记录缺口；不把弱网超 2.5s 写成 mobile-ref 失败。
+
+## Round 4 — 筛选展开预取 24h（测量口径已修正，待 r4b）
+
+- **改动**：点开「筛选」时 `offerBootPrefetch` 默认 24h/12；切换时 `consumeBootPrefetch`。
+- **作废**：`browser-interact-r4.json` 的 filter≈1830ms。当时 `waitForResponse(window_hours=24)` 误等到 `newsToday` 的 24h/50，不是列表。
+- **下一步**：只用 `limit=12` 的 24h 响应（含思考时间内完成的预取）重测。
