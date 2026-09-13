@@ -10,6 +10,8 @@
 | [03-baseline-and-budget.md](03-baseline-and-budget.md) | 冻结测量配置与验收预算 |
 | [04-experiments.md](04-experiments.md) | 逐轮实验记录 |
 | [05-status.md](05-status.md) | 当前状态、缺口与下一步 |
+| [06-review-round1.md](06-review-round1.md) | 第 1 轮对照复查（非隔离审查者） |
+| [07-review-round2.md](07-review-round2.md) | 第 2 轮隔离复查（仍缺第 3 轮） |
 
 对照未优化树：`$HOME/option-pro-unoptimized`（同一 SHA，detached HEAD）。
 

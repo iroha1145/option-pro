@@ -32,7 +32,10 @@
 ```text
 优化工作区  /workspace          分支 cursor/perf-sitewide-1d7a
 未优化对照  $HOME/option-pro-unoptimized   31e8955d（detached）
+未优化后端  127.0.0.1:2001      DATA_DIR=$HOME/optix-perf-data/n10000-unopt
 ```
+
+未优化数据目录从 n10000 复制，避免与 :2000 争同一 SQLite。72h 窗随墙钟滑动，两份库的 `summary.count` 可能差十几条；交错前若相差 >1% 应再备份一次。
 
 ## 启动（隔离）
 

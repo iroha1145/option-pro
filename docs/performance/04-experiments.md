@@ -122,3 +122,10 @@
 - **桌面** n=8（不足 20）：冷 ready p75 442，热 196。1/8 冷离群 30s。
 - **探索性到达率**（非生产需求）：1 rps 0 错；5 rps 150/150；10 rps 289/300，11 次 **429**。
 - **2h soak**：已启动，结果 `/opt/cursor/artifacts/perf/soak-2h.jsonl`。未完成前不得写成通过。
+
+## Round 5 — 补齐完成判定所需脚本（业务未改）
+
+- **证据**：第 2 轮隔离复查确认完成判定 1–6 仍不成立，缺口是测量而不是再改 feed / framer / Owner 缓存。
+- **改动**：`measure_interleaved.mjs`、`run_faults.mjs`、`run_restart_recovery.py`、`watch_rss.py`、`analyze_soak.py`、`run_post_soak_suite.sh`；`measure_spa.mjs` 改为点「首页 / 新闻催化」；`measure_pages.mjs` 增加 `/cta` `/stock/NVDA` / 404；`measure_interact.mjs` 可加代码过滤与利多分类。
+- **指标**：等 soak 满 2h 后再跑套件。本轮没有新的业务性能数字。
+- **决定**：保留脚本。无新证据不改业务代码。

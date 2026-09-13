@@ -16,10 +16,10 @@
 | 财报 | `/earnings` | upcoming；Owner refresh；AI impact | 周/月历、分页 24、分析任务 | 有 | 有 | 同上 p75 1567ms |
 | 新闻 | `/catalysts` | status、hotspots/status、feed×2、hotspots、focus latest/previous、Owner analysis-progress | 筛选/搜索/分类、游标分页 12、详情抽屉、刷新 | 有 | 有 | **n=20 mobile-ref 冷 ready p75 1642；热 829** |
 | 大盘 | `/market` | 同首页核心 + macro conditions/history | 指数聚焦、宏观刷新 | 有 | 有 | 实验室 n=8 p75 1727ms |
-| CTA | `/cta` | market/cta、strength/market | instrument 切换 | 弱 | 间接 | 未专测（n<20） |
-| 个股 | `/stock/:ticker` | detail+technical 并行；预取 chart/signals；期权/新闻/绘图 | 周期、绘图、期权链、手动拉取 | 有 | 有 | 未专测 |
+| CTA | `/cta` | market/cta、strength/market | instrument 切换 | 弱 | 间接 | 脚本已覆盖 `/cta`；n=20 待跑 |
+| 个股 | `/stock/:ticker` | detail+technical 并行；预取 chart/signals；期权/新闻/绘图 | 周期、绘图、期权链、手动拉取 | 有 | 有 | 脚本已覆盖 `/stock/NVDA`（骨架不算就绪）；n=20 待跑 |
 | 登录 | `/login` | access/status；login/register | Owner/客户登录 | 弱～有 | 有 | Owner 已登录态 n=8 p75 1213ms；访客表单未测 |
-| 404 | `*` | 无 | 返回首页 | 无 | 无 | 未专测 |
+| 404 | `*` | 无 | 返回首页 | 无 | 无 | 脚本已覆盖不存在路径；n=20 待跑 |
 
 ## 壳与后台
 
