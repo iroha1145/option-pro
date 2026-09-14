@@ -133,6 +133,7 @@ export class QuoteStore {
   private status = INITIAL_STATUS;
   private stream: Stream | null = null;
   private connectController: AbortController | null = null;
+  private connectingGeneration: number | null = null;
   private pollController: AbortController | null = null;
   private radarResyncOnConnect = false;
   private generation = 0;
@@ -210,6 +211,9 @@ export class QuoteStore {
   enableStream() {
     if (this.allowStream) return;
     this.allowStream = true;
+    // A pending snapshot will open the stream when it finishes. A scheduled
+    // retry must keep its server deadline instead of being replaced by load.
+    if (this.connectingGeneration !== null || this.reconnectTimer !== null) return;
     if (this.started && this.visible && !this.terminal) this.schedule(0);
   }
   stop() {
@@ -217,6 +221,7 @@ export class QuoteStore {
     this.closeStream();
     this.connectController?.abort(); this.pollController?.abort();
     this.connectController = this.pollController = null;
+    this.connectingGeneration = null;
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     if (this.pollTimer) clearInterval(this.pollTimer);
     if (this.flushTimer) clearTimeout(this.flushTimer);
@@ -336,6 +341,7 @@ export class QuoteStore {
   private async connect() {
     if (!this.started || !this.visible || this.terminal) return;
     const generation = ++this.generation;
+    this.connectingGeneration = generation;
     this.closeStream();
     try {
       const probe = !this.permitted;
@@ -376,6 +382,8 @@ export class QuoteStore {
     } catch {
       if (generation !== this.generation || !this.started || !this.visible) return;
       this.markDisconnected(); this.schedule(Math.min(30_000, 2_000 * 2 ** this.failures++));
+    } finally {
+      if (this.connectingGeneration === generation) this.connectingGeneration = null;
     }
   }
   private markDisconnected() {

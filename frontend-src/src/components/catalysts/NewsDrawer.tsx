@@ -109,11 +109,51 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
   const jobRef = useRef<NewsAnalysisJob | null>(null);
   const recoverySeqRef = useRef(0);
   const recoveryOkRef = useRef('');
+  const detailSeqRef = useRef(0);
+  const detailReadRef = useRef<{ cancel: () => void } | null>(null);
   useEffect(() => {
     openNewsRef.current = newsId;
   }, [newsId]);
   itemJobIdRef.current = item?.analysisJobId ?? null;
   jobRef.current = job;
+
+  const invalidateDetailRead = useCallback(() => {
+    detailSeqRef.current += 1;
+    detailReadRef.current?.cancel();
+    detailReadRef.current = null;
+  }, []);
+
+  /* 初始读取、手动重试与两条终态路径共用顺序；新读取开始即作废旧响应及其退避。
+     按请求顺序判断，不按分析状态排序，新的 queued 任务仍可替换旧 completed。 */
+  const beginDetailRead = useCallback((forNews: string, expectedJobId?: string) => {
+    invalidateDetailRead();
+    const sequence = detailSeqRef.current;
+    const sessionGen = getQueryPrincipalGeneration();
+    let disposed = false;
+    const isAlive = () => !disposed && sequence === detailSeqRef.current
+      && openNewsRef.current === forNews && getQueryPrincipalGeneration() === sessionGen
+      && (expectedJobId === undefined || itemJobIdRef.current === expectedJobId);
+    const sleeper = createCancellableSleep({
+      isAlive,
+      setTimeoutFn: (fn, ms) => window.setTimeout(fn, ms),
+      clearTimeoutFn: (id) => window.clearTimeout(id),
+    });
+    const request = {
+      isAlive,
+      read: () => runBoundedRead({
+        read: () => catalystsContract.news(forNews),
+        isAlive,
+        sleep: sleeper.sleep,
+      }),
+      cancel: () => {
+        disposed = true;
+        sleeper.cancel();
+        if (detailReadRef.current === request) detailReadRef.current = null;
+      },
+    };
+    detailReadRef.current = request;
+    return request;
+  }, [invalidateDetailRead]);
 
   const stopPoll = useCallback(() => {
     pollGenRef.current += 1;
@@ -124,10 +164,11 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
   }, []);
 
   const retryDetail = useCallback(() => {
+    invalidateDetailRead();
     setDetailNotice(null);
     setLoadError(null);
     setDetailEpoch((value) => value + 1);
-  }, []);
+  }, [invalidateDetailRead]);
 
   const retryRecovery = useCallback(() => {
     setJobNotice(null);
@@ -138,6 +179,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
 
   /* 换条时清任务；重试详情不走这里，避免打断已经在跟的任务。 */
   useEffect(() => {
+    invalidateDetailRead();
     if (!newsId) {
       /* 抽屉关闭（newsId=null）时必须停掉分析任务轮询（审计 2.2.17）：
          组件常驻不卸载，不清理的话 setTimeout 会继续以 2s→10s 打后端，
@@ -147,55 +189,39 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
       setDetailNotice(null);
       setJobNotice(null);
       stopPoll();
-      return;
+      return invalidateDetailRead;
     }
     setLoadError(null);
     setDetailNotice(null);
     setJobNotice(null);
     setJob(null);
     stopPoll();
-  }, [newsId, stopPoll]);
+    return invalidateDetailRead;
+  }, [newsId, stopPoll, invalidateDetailRead]);
 
   /* 拉取详情：听 Retry-After；401/403/404 与 retryable=false 停；清理取消睡眠。 */
   useEffect(() => {
     if (!newsId) return;
-    let disposed = false;
     const forNews = newsId;
-    const sessionGen = getQueryPrincipalGeneration();
     const keepSeed = Boolean(forNews && seed?.newsId === forNews && seed.titleZh);
-    const sleeper = createCancellableSleep({
-      isAlive: () => !disposed && openNewsRef.current === forNews
-        && getQueryPrincipalGeneration() === sessionGen,
-      setTimeoutFn: (fn, ms) => window.setTimeout(fn, ms),
-      clearTimeoutFn: (id) => window.clearTimeout(id),
-    });
-    const isAlive = () => !disposed && openNewsRef.current === forNews
-      && getQueryPrincipalGeneration() === sessionGen;
+    const request = beginDetailRead(forNews);
     void (async () => {
       try {
-        const n = await runBoundedRead({
-          read: () => {
-            if (!isAlive()) throw new ReadAttemptAborted();
-            return catalystsContract.news(forNews);
-          },
-          isAlive,
-          sleep: sleeper.sleep,
-        });
-        if (!isAlive()) return;
+        const n = await request.read();
+        if (!request.isAlive()) return;
         setFetched(n);
         setDetailNotice(null);
         setLoadError(null);
         onUpdate(n);
       } catch (error) {
-        if (error instanceof ReadAttemptAborted || !isAlive()) return;
+        if (error instanceof ReadAttemptAborted || !request.isAlive()) return;
         if (keepSeed) setDetailNotice(__t('详情更新失败'));
         else setLoadError(__t('暂时打不开这条新闻的详情'));
+      } finally {
+        request.cancel();
       }
     })();
-    return () => {
-      disposed = true;
-      sleeper.cancel();
-    };
+    return request.cancel;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [newsId, detailEpoch]);
 
@@ -237,22 +263,19 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
         setJobNotice(null);
         setJob(j);
         if (!TERMINAL.includes(j.status)) return;
+        const request = beginDetailRead(forNews, jobId);
         try {
-          const fresh = await runBoundedRead({
-            read: () => {
-              if (!isAlive()) throw new ReadAttemptAborted();
-              return catalystsContract.news(forNews);
-            },
-            isAlive,
-            sleep: sleeper.sleep,
-          });
-          if (!isAlive()) return;
+          const fresh = await request.read();
+          if (!request.isAlive()) return;
           setFetched(fresh);
           setDetailNotice(null);
+          setLoadError(null);
           onUpdate(fresh);
         } catch (error) {
-          if (error instanceof ReadAttemptAborted || !isAlive()) return;
+          if (error instanceof ReadAttemptAborted || !request.isAlive()) return;
           setDetailNotice(__t('详情更新失败'));
+        } finally {
+          request.cancel();
         }
       } catch (error) {
         if (error instanceof ReadAttemptAborted || !isAlive()) return;
@@ -304,32 +327,20 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
              必然为假，会把一次瞬时 429 直接吞成永久静默（toast 已喊完成、抽屉却停在
              旧态，复审实锤）。有界三次、1.5s/3s 退避；抽屉已关或已换条就放弃。 */
           const refreshItem = async () => {
-            const sessionGen = getQueryPrincipalGeneration();
-            const sleeper = createCancellableSleep({
-              isAlive: () => sameNews() && getQueryPrincipalGeneration() === sessionGen,
-              setTimeoutFn: (fn, ms) => window.setTimeout(fn, ms),
-              clearTimeoutFn: (id) => window.clearTimeout(id),
-            });
+            const request = beginDetailRead(job.newsId, job.jobId);
             try {
-              const fresh = await runBoundedRead({
-                read: () => {
-                  if (!sameNews()) throw new ReadAttemptAborted();
-                  return catalystsContract.news(job.newsId);
-                },
-                isAlive: () => sameNews() && getQueryPrincipalGeneration() === sessionGen,
-                sleep: sleeper.sleep,
-              });
-              if (!sameNews()) return;
+              const fresh = await request.read();
+              if (!request.isAlive()) return;
               setFetched(fresh);
               setDetailNotice(null);
+              setLoadError(null);
               onUpdate(fresh);
             } catch (error) {
-              sleeper.cancel();
-              if (error instanceof ReadAttemptAborted || !sameNews()) return;
+              if (error instanceof ReadAttemptAborted || !request.isAlive()) return;
               setDetailNotice(__t('详情更新失败'));
               toast.error(__t('任务查询失败'), error instanceof Error ? error.message : __t('稍后刷新页面可继续查看结果'));
             } finally {
-              sleeper.cancel();
+              request.cancel();
             }
           };
           if (next.status === 'completed') {
@@ -374,6 +385,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
       setConfirm(null);
       try {
         const j = await catalystsContract.createAnalysisJob(item.newsId, force);
+        invalidateDetailRead();
         setJob(j);
         const nextItem = { ...item, analysisStatus: (j.status === 'queued' ? 'queued' : 'in_progress') as CatalystNewsItem['analysisStatus'], analysisJobId: j.jobId };
         setFetched(nextItem);
@@ -385,7 +397,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
         submittingRef.current = false;
       }
     },
-    [item, onUpdate, toast],
+    [item, onUpdate, toast, invalidateDetailRead],
   );
 
   const cancelJob = useCallback(async () => {

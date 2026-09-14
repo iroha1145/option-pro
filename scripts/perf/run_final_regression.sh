@@ -36,7 +36,10 @@ echo "=== catalyst pytest $(date -u +%Y-%m-%dT%H:%M:%SZ) ==="
 ) | tee "${ART}/final-catalyst-pytest.log"
 
 echo "=== static frontend vs dist $(date -u +%Y-%m-%dT%H:%M:%SZ) ==="
-diff -rq "$ROOT/frontend-src/dist" "$ROOT/frontend" | tee "${ART}/final-frontend-dist.diff" || true
+bash "$ROOT/scripts/perf/lib/verify_frontend_dist.sh" \
+  "$ROOT/frontend-src/dist" \
+  "$ROOT/frontend" \
+  "${ART}/final-frontend-dist.diff"
 
 echo "=== mobile-ref n=20 $(date -u +%Y-%m-%dT%H:%M:%SZ) ==="
 OPTIX_PERF_BASE="$OPT_BASE" \

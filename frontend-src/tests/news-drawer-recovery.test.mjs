@@ -179,6 +179,7 @@ function harness() {
   let sessionGen = 0;
   let newsImpl = async () => item({ analysisStatus: 'queued', analysisJobId: 'job-1' });
   let jobImpl = async () => job({ status: 'in_progress' });
+  let createImpl = async () => { throw new Error('recovery must not POST createAnalysisJob'); };
   const env = {
     window: {
       setTimeout(fn, ms = 0) {
@@ -235,7 +236,7 @@ function harness() {
           analysisJob(id) { jobCalls.push(id); return jobImpl(id); },
           createAnalysisJob(id, force) {
             createCalls.push([id, force]);
-            throw new Error('recovery must not POST createAnalysisJob');
+            return createImpl(id, force);
           },
         },
       };
@@ -270,6 +271,7 @@ function harness() {
     bumpSession: () => { sessionGen += 1; },
     setNews: (fn) => { newsImpl = fn; },
     setJob: (fn) => { jobImpl = fn; },
+    setCreate: (fn) => { createImpl = fn; },
     fireDue,
     unmount: () => runner.unmount(),
     tree: () => treeOf(),
@@ -298,6 +300,196 @@ function collectText(node, out = []) {
   if (typeof node === 'object' && node.props) collectText(node.props.children, out);
   return out;
 }
+
+function completedItem(partial = {}) {
+  return item({ analysisStatus: 'completed', analysisJobId: 'job-1', analysis: {
+    classification: 'bullish', confidence: 0.8, headlineSummary: '完整分析', causalSummary: '分析原因',
+    trustedStockImpacts: [], model: 'm', generatedAt: '2026-09-13T00:00:02Z',
+  }, ...partial });
+}
+
+function findNode(node, predicate) {
+  if (!node || typeof node !== 'object') return null;
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const found = findNode(child, predicate);
+      if (found) return found;
+    }
+    return null;
+  }
+  if (predicate(node)) return node;
+  return findNode(node.props?.children, predicate);
+}
+
+function findButton(node, label) {
+  return findNode(node, (row) => row.type === 'button' && collectText(row).join('') === label);
+}
+
+for (const terminalPath of ['recovery', 'poll']) {
+  test(`${terminalPath} 终态详情先返回后，迟到的初始 queued 不得覆盖已完成分析`, async () => {
+    const h = harness();
+    const initial = deferred();
+    const terminal = deferred();
+    let newsRound = 0;
+    let jobRound = 0;
+    h.setNews(() => ++newsRound === 1 ? initial.promise : terminal.promise);
+    h.setJob(async () => job({
+      status: terminalPath === 'poll' && ++jobRound === 1 ? 'in_progress' : 'completed',
+    }));
+    h.render({ newsId: '9600', seed: item({ analysisStatus: 'queued', analysisJobId: 'job-1' }) });
+    await settle();
+    if (terminalPath === 'poll') await h.fireDue(2000);
+    assert.equal(h.newsCalls.length, 2);
+    terminal.resolve(completedItem());
+    await settle();
+    assert.match(collectText(h.tree()).join(' '), /完整分析/);
+    initial.resolve(item({ analysisStatus: 'queued', analysisJobId: 'job-1' }));
+    await settle();
+    await h.fireDue(600);
+    assert.equal(h.updates.at(-1).analysisStatus, 'completed');
+    assert.match(collectText(h.tree()).join(' '), /完整分析/);
+    assert.equal(h.newsCalls.length, 2);
+    h.unmount();
+  });
+}
+
+test('较新终态详情尚未返回时，旧详情也不能变更状态或中断终态读取', async () => {
+  const h = harness();
+  const initial = deferred();
+  const terminal = deferred();
+  let newsRound = 0;
+  h.setNews(() => ++newsRound === 1 ? initial.promise : terminal.promise);
+  h.setJob(async () => job({ status: 'completed' }));
+  h.render({ newsId: '9600', seed: item({ analysisStatus: 'queued', analysisJobId: 'job-1' }) });
+  await settle();
+  assert.equal(h.newsCalls.length, 2);
+  initial.resolve(item({ analysisStatus: 'in_progress', analysisJobId: 'job-1' }));
+  await settle();
+  assert.equal(h.updates.length, 0, '已有更新的详情请求时，旧响应不得回写列表');
+  terminal.resolve(completedItem());
+  await settle();
+  assert.match(collectText(h.tree()).join(' '), /完整分析/);
+  h.unmount();
+});
+
+test('终态详情成功后，旧初始请求失败不得再显示详情错误', async () => {
+  const h = harness();
+  const initial = deferred();
+  let newsRound = 0;
+  h.setNews(() => ++newsRound === 1 ? initial.promise : Promise.resolve(completedItem()));
+  h.setJob(async () => job({ status: 'completed' }));
+  h.render({ newsId: '9600', seed: item({ analysisStatus: 'queued', analysisJobId: 'job-1' }) });
+  await settle();
+  initial.reject(Object.assign(new Error('old failure'), { code: 404 }));
+  await settle();
+  assert.match(collectText(h.tree()).join(' '), /完整分析/);
+  assert.doesNotMatch(collectText(h.tree()).join(' '), /详情更新失败|重试/);
+  h.unmount();
+});
+
+test('手动重试可接收新任务 B，并使在途任务 A 的终态详情失效', async () => {
+  const h = harness();
+  const terminal = deferred();
+  let newsRound = 0;
+  let jobRound = 0;
+  h.setNews(async () => {
+    newsRound += 1;
+    if (newsRound === 1) throw Object.assign(new Error('temporary'), { code: 404 });
+    if (newsRound === 2) return terminal.promise;
+    return item({ analysisStatus: 'queued', analysisJobId: 'job-B' });
+  });
+  h.setJob(async (id) => job({ jobId: id,
+    status: id === 'job-1' && ++jobRound > 1 ? 'completed' : 'in_progress' }));
+  h.render({ newsId: '9600', seed: item({ analysisStatus: 'queued', analysisJobId: 'job-1' }) });
+  await settle();
+  await h.fireDue(2000);
+  assert.equal(h.newsCalls.length, 2);
+  const retry = findButton(h.tree(), '重试');
+  assert.ok(retry, '初始读取失败后必须保留重试入口');
+  retry.props.onClick();
+  await settle();
+  assert.equal(h.updates.at(-1).analysisJobId, 'job-B');
+  terminal.resolve(completedItem());
+  await settle();
+  assert.equal(h.updates.at(-1).analysisJobId, 'job-B');
+  assert.equal(h.updates.at(-1).analysisStatus, 'queued');
+  assert.ok(h.jobCalls.includes('job-B'));
+  h.unmount();
+});
+
+test('成功提交新任务 B 后，在途初始详情中的旧 completed A 不得覆盖它', async () => {
+  const h = harness();
+  const initial = deferred();
+  h.setNews(() => initial.promise);
+  h.setJob(async (id) => job({ jobId: id, status: 'queued' }));
+  h.setCreate(async () => job({ jobId: 'job-B', status: 'queued' }));
+  h.render({ newsId: '9600', seed: completedItem() });
+  await settle();
+  const start = findButton(h.tree(), '重新分析（强制）');
+  assert.ok(start);
+  start.props.onClick();
+  const confirm = findNode(h.tree(), (node) => node.props?.open && node.props?.confirmLabel === '重新分析');
+  assert.ok(confirm);
+  confirm.props.onConfirm();
+  await settle();
+  assert.deepEqual(h.createCalls, [['9600', true]]);
+  assert.equal(h.updates.at(-1).analysisJobId, 'job-B');
+  initial.resolve(completedItem());
+  await settle();
+  assert.equal(h.updates.at(-1).analysisJobId, 'job-B');
+  assert.equal(h.updates.at(-1).analysisStatus, 'queued');
+  h.unmount();
+});
+
+test('关闭并重开同一新闻后，上一轮轮询的终态详情不得写回', async () => {
+  const h = harness();
+  const terminal = deferred();
+  let newsRound = 0;
+  let jobRound = 0;
+  h.setNews(async () => {
+    newsRound += 1;
+    if (newsRound === 1) return item({ analysisStatus: 'queued', analysisJobId: 'job-1' });
+    if (newsRound === 2) return terminal.promise;
+    return item({ titleZh: '重开新闻的新详情' });
+  });
+  h.setJob(async () => job({ status: ++jobRound === 1 ? 'in_progress' : 'completed' }));
+  h.render({ newsId: '9600', seed: item({ analysisStatus: 'queued', analysisJobId: 'job-1' }) });
+  await settle();
+  await h.fireDue(2000);
+  assert.equal(h.newsCalls.length, 2);
+  h.render({ newsId: null });
+  await settle();
+  h.render({ newsId: '9600', seed: item() });
+  await settle();
+  assert.equal(h.updates.at(-1).titleZh, '重开新闻的新详情');
+  const updateCount = h.updates.length;
+  terminal.resolve(completedItem());
+  await settle();
+  assert.equal(h.updates.length, updateCount);
+  assert.equal(h.updates.at(-1).titleZh, '重开新闻的新详情');
+  h.unmount();
+});
+
+test('关闭抽屉立即取消轮询终态详情的重试等待', async () => {
+  const h = harness();
+  let newsRound = 0;
+  let jobRound = 0;
+  h.setNews(async () => {
+    if (++newsRound === 1) return item({ analysisStatus: 'queued', analysisJobId: 'job-1' });
+    throw Object.assign(new Error('busy'), { code: 503, retryAfter: 30 });
+  });
+  h.setJob(async () => job({ status: ++jobRound === 1 ? 'in_progress' : 'completed' }));
+  h.render({ newsId: '9600', seed: item() });
+  await settle();
+  await h.fireDue(2000);
+  assert.ok([...h.timers.values()].some((row) => row.ms === 30_000));
+  h.render({ newsId: null });
+  await settle();
+  assert.ok(![...h.timers.values()].some((row) => row.ms === 30_000));
+  await h.fireDue(30_000);
+  assert.equal(h.newsCalls.length, 2);
+  h.unmount();
+});
 
 test('seed 无任务时等详情带回 queued 才开始轮询并走到完成', async () => {
   const h = harness();

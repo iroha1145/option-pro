@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { afterSampleGap, attach429Counter, sleep, REPEAT_GAP_MS } from './lib/rate_limit.mjs';
+import { buildInterleavedSummary, interleavedExitCode } from './lib/interleaved_summary.mjs';
 
 const require = createRequire(fileURLToPath(import.meta.url));
 const { chromium } = require(path.resolve(
@@ -31,12 +32,6 @@ const PROFILES = {
 };
 const profile = PROFILES[PROFILE];
 if (!profile) throw new Error(`unknown profile ${PROFILE}`);
-
-function percentile(values, q) {
-  if (!values.length) return null;
-  const ordered = [...values].sort((a, b) => a - b);
-  return ordered[Math.min(ordered.length - 1, Math.max(0, Math.round((ordered.length - 1) * q)))];
-}
 
 async function applyThrottle(page) {
   const client = await page.context().newCDPSession(page);
@@ -127,20 +122,6 @@ async function collectPair(base) {
   };
 }
 
-function summarize(rows) {
-  const ready = rows.filter((s) => s.news_content_ready_ms != null).map((s) => s.news_content_ready_ms);
-  const lcp = rows.filter((s) => s.lcp?.startTime != null).map((s) => s.lcp.startTime);
-  return {
-    n: rows.length,
-    ready_n: ready.length,
-    news_content_ready_p50: percentile(ready, 0.5),
-    news_content_ready_p75: percentile(ready, 0.75),
-    lcp_p75: percentile(lcp, 0.75),
-    titles: [...new Set(rows.map((s) => s.news_title).filter(Boolean))],
-    rate_limited_n: rows.filter((s) => (s.rate_limited || 0) > 0).length,
-  };
-}
-
 const samples = [];
 for (let i = 0; i < PAIRS; i += 1) {
   const optFirst = i % 2 === 0;
@@ -172,7 +153,9 @@ const optCold = samples.map((s) => s.opt.cold);
 const unoptCold = samples.map((s) => s.unopt.cold);
 const optWarm = samples.map((s) => s.opt.warm);
 const unoptWarm = samples.map((s) => s.unopt.warm);
+const summary = buildInterleavedSummary({ optCold, optWarm, unoptCold, unoptWarm });
 const report = {
+  ok: summary.comparison_complete,
   lab: true,
   interleaved: true,
   notRUM: true,
@@ -181,15 +164,14 @@ const report = {
   unoptBase: UNOPT,
   measuredAt: new Date().toISOString(),
   pairs: samples.length,
-  summary: {
-    opt: { cold: summarize(optCold), warm: summarize(optWarm) },
-    unopt: { cold: summarize(unoptCold), warm: summarize(unoptWarm) },
-    delta_cold_p75: (summarize(optCold).news_content_ready_p75 ?? 0) - (summarize(unoptCold).news_content_ready_p75 ?? 0),
-    delta_warm_p75: (summarize(optWarm).news_content_ready_p75 ?? 0) - (summarize(unoptWarm).news_content_ready_p75 ?? 0),
-  },
+  summary,
   samples,
 };
 await mkdir(path.dirname(OUT), { recursive: true });
 await writeFile(OUT, JSON.stringify(report, null, 2) + '\n');
 console.log(JSON.stringify(report.summary, null, 2));
 console.log(`wrote ${OUT}`);
+if (interleavedExitCode(summary) !== 0) {
+  console.error('interleaved comparison incomplete: one or more cold/warm samples timed out');
+  process.exitCode = 1;
+}
