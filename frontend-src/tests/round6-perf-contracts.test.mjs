@@ -47,6 +47,30 @@ test('production chunks keep en/ja dictionaries off the shared entry', async () 
   }
 });
 
+test('prepareI18n installs only the active language and falls back before it loads', async () => {
+  const { getLocale, setLocale, t } = await import('../src/i18n/core.ts');
+  const { prepareI18n } = await import('../src/i18n/boot.ts');
+  const previous = getLocale();
+  try {
+    setLocale('en');
+    assert.equal(getLocale(), 'en');
+    assert.equal(t('支撑'), '支撑');
+    await prepareI18n();
+    assert.equal(t('支撑'), 'Support');
+    assert.equal(t('阻力'), 'Resistance');
+    setLocale('ja');
+    assert.equal(t('支撑'), '支撑');
+    await prepareI18n();
+    assert.equal(t('支撑'), 'サポート');
+    assert.equal(t('阻力'), 'レジスタンス');
+    setLocale('zh');
+    await prepareI18n();
+    assert.equal(t('支撑'), '支撑');
+  } finally {
+    setLocale(previous);
+  }
+});
+
 test('earnings week start follows the New York calendar date', async () => {
   const { weekStartMonday, addDays, daysUntil } = await import('../src/components/earnings/types.ts');
   assert.equal(weekStartMonday('2026-09-13'), '2026-09-07');
