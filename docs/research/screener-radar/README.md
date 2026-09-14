@@ -19,6 +19,7 @@
 - [冻结实验协议](protocol.md)
 - [当前状态](status.md)
 - [实验台账说明](experiment-registry.md)
+- [开发区结果（封存区未揭盲）](findings.md)
 
 ## 命令
 
