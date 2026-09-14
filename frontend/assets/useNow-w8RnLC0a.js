@@ -1,0 +1,1 @@
+import{r as o}from"./index-BskMhVzt.js";function a(t=1e3){const[r,e]=o.useState(()=>Date.now());return o.useEffect(()=>{if(e(Date.now()),!t||t<=0)return;const n=setInterval(()=>e(Date.now()),t);return()=>clearInterval(n)},[t]),r}export{a as u};
