@@ -117,7 +117,7 @@ for (const route of ROUTES) {
       locale: 'zh-CN',
     });
     const page = await context.newPage();
-    await page.addInitScript({ content: pageReadyInstallScript() });
+    await page.addInitScript({ content: `${pageReadyInstallScript()}; try { localStorage.setItem('optix:locale', 'zh'); } catch (e) {}` });
     const rateLimit = attach429Counter(page);
     await applyThrottle(page);
     const started = Date.now();

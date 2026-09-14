@@ -18,6 +18,23 @@ test('选股壳和个股错误态不能算 content-ready', () => {
   }), 'shell');
   assert.equal(classifyPageReady({
     path: '/screener',
+    heading: 'Screener',
+    bodyText: 'Screener Start scan',
+    mainText: 'Screener',
+    hasForm: true,
+    hasScanHits: false,
+    hasScanEmpty: false,
+    hasScanTableRow: false,
+  }), 'shell');
+  assert.equal(classifyPageReady({
+    path: '/watchlist',
+    heading: 'Your watchlist',
+    bodyText: 'Your watchlist is empty',
+    mainText: 'Your watchlist is empty',
+    hasTable: false,
+  }), 'empty');
+  assert.equal(classifyPageReady({
+    path: '/screener',
     heading: '选股扫描',
     hasForm: true,
     hasScanHits: true,
