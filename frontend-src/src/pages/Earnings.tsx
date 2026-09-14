@@ -14,11 +14,9 @@ import { earningsApi, restoreUpcomingFromCache } from '@/api/modules/earnings';
 import type { EarningsReportAnalysis } from '@/api/modules/earnings';
 import { useAccess } from '@/hooks/useAccess';
 import { usePersonalWatchlist } from '@/hooks/usePersonalWatchlist';
-import { useNow } from '@/hooks/useNow';
+import { useEtCalendarDate } from '@/hooks/useEtCalendarDate';
 import { usePolling } from '@/hooks/usePolling';
 import { useToast } from '@/hooks/useToast';
-import { cn } from '@/lib/utils';
-import { fmtTimeHHMMSS } from '@/lib/format';
 import Icon from '@/components/icons';
 import PageHeader from '@/components/shared/PageHeader';
 import EmptyState from '@/components/shared/EmptyState';
@@ -27,15 +25,15 @@ import Segmented from '@/components/shared/Segmented';
 import WeekScrubber from '@/components/earnings/WeekScrubber';
 import MonthCalendar from '@/components/earnings/MonthCalendar';
 import EarningsList from '@/components/earnings/EarningsList';
-import EpsHatchChart from '@/components/earnings/EpsHatchChart';
+import DeferredEpsChart from '@/components/earnings/DeferredEpsChart';
 import ImpactCard from '@/components/earnings/ImpactCard';
 import EarningsAnalysisControls from '@/components/earnings/EarningsAnalysisControls';
+import EarningsRefreshButton from '@/components/earnings/EarningsRefreshButton';
 import DensityStrip from '@/components/earnings/DensityStrip';
 import PulseDot from '@/components/earnings/PulseDot';
 import type { EarningsListMode, EarningsRow } from '@/components/earnings/types';
 import {
   computeEarningsListState,
-  etToday,
   fmtMDCN,
   isFeaturedRow,
   pickDefaultEarningsRow,
@@ -57,7 +55,8 @@ function reportAnalysisKey(ticker: string, reportDate: string): string {
 export default function Earnings() {
   const { isOwner, aiEnabled, aiAvailable, aiReason, aiPending } = useAccess();
   const toast = useToast();
-  const now = useNow(1000);
+  const etDate = useEtCalendarDate();
+  const liveMonday = weekStartMonday(etDate);
 
   /* 数据（契约 TTL：earnings 1800s） */
   const q = usePolling(() => earningsApi.upcoming(), 1_800_000, [], {
@@ -95,9 +94,13 @@ export default function Earnings() {
   // incomplete; optional/stale enrichment must not trigger a false warning.
   const coverageLimited = q.data?.dataLimited === true;
 
-  /* 周历状态 */
-  const [monday, setMonday] = useState(() => weekStartMonday(etToday()));
+  /* 周历状态。未手动翻周时跟随纽约日期，避免停掉整页秒级渲染后跨日停住。 */
+  const [monday, setMonday] = useState(liveMonday);
+  const [weekPinned, setWeekPinned] = useState(false);
   const [weekDir, setWeekDir] = useState(0);
+  if (!weekPinned && monday !== liveMonday) {
+    setMonday(liveMonday);
+  }
   /* 日历视图：默认折叠 = 周历条；「月」展开月历大界面（上月/本月/下月） */
   const [calView, setCalView] = useState<'week' | 'month'>('week');
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
@@ -128,7 +131,6 @@ export default function Earnings() {
   }, [refreshStatus, staleBannerAsOf, lastGoodAsOf]);
   const [cooldownUntil, setCooldownUntil] = useState<number>(0);
   const [refreshing, setRefreshing] = useState(false);
-  const cooldownRemain = Math.max(0, Math.ceil((cooldownUntil - now) / 1000));
 
   /**
    * Worker 化手动刷新的跟进（审计 P2-04，与宏观刷新同一套节奏）。
@@ -206,6 +208,7 @@ export default function Earnings() {
   }
 
   const onWeekChange = useCallback((dir: -1 | 1) => {
+    setWeekPinned(true);
     setWeekDir(dir);
     setMonday((m) => {
       const d = new Date(`${m}T12:00:00Z`);
@@ -214,7 +217,7 @@ export default function Earnings() {
     });
   }, []);
 
-  const onRefresh = useCallback(async () => {
+  const onRefresh = useCallback(async (cooldownRemain = 0) => {
     if (refreshing) return;
     if (cooldownRemain > 0) {
       setRefreshStatus('cooldown');
@@ -263,7 +266,7 @@ export default function Earnings() {
     } finally {
       if (!following) setRefreshing(false);
     }
-  }, [refreshing, cooldownRemain, q, toast]);
+  }, [refreshing, q, toast]);
 
   /* 联动选择。从月历/周历/任意入口点到非重点公司时：自动切「全部公司」、
      保留并选中日期与代码、重置渐进额度（listScope 变化自动归位），选中行
@@ -274,6 +277,7 @@ export default function Earnings() {
       /* 月历点选的日期要带动周历（#42）：否则切回周视图后选中日不在可视周，
          列表在筛选、周历却看不出选了哪天。 */
       if (date) {
+        setWeekPinned(true);
         setWeekDir(date >= monday ? 1 : -1);
         setMonday(weekStartMonday(date));
       }
@@ -332,6 +336,7 @@ export default function Earnings() {
   }, []);
   const onJumpDay = useCallback(
     (date: string) => {
+      setWeekPinned(true);
       setWeekDir(date >= monday ? 1 : -1);
       setMonday(weekStartMonday(date));
       setSelectedDay(date);
@@ -424,28 +429,13 @@ export default function Earnings() {
         <span className="font-mono text-micro text-warn-600">{t('刷新失败 · 显示已有数据')}</span>
       )}
       {isOwner && (
-        <span className="flex items-center gap-2.5">
-          {refreshStatus === 'failed_stale' && (
-            <span className="font-mono text-micro text-warn-600">{t('刷新失败 · 显示已有数据')}</span>
-          )}
-          {refreshStatus === 'refreshed' && cooldownRemain <= 0 && q.lastUpdatedAt && (
-            <span className="font-mono text-micro text-ink-400 tnum">{t('已更新')} {fmtTimeHHMMSS(q.lastUpdatedAt)}</span>
-          )}
-          <button
-            onClick={() => void onRefresh()}
-            disabled={refreshing || cooldownRemain > 0}
-            title={cooldownRemain > 0 ? t('冷却中，{n}s 后可刷新', { n: cooldownRemain }) : t('手动刷新财报日历')}
-            className={cn(
-              'flex h-9 items-center gap-2 rounded-md border px-3 text-caption shadow-btn transition-colors duration-fast',
-              refreshing || cooldownRemain > 0
-                ? 'cursor-not-allowed border-line bg-card-warm text-ink-300'
-                : 'border-line bg-card text-ink-600 hover:border-brand-400 hover:text-brand-600',
-            )}
-          >
-            <Icon name="refresh" size={15} className={refreshing ? 'animate-spin-once' : ''} />
-            {refreshing ? t('刷新中') : cooldownRemain > 0 ? <span className="font-mono tnum">{cooldownRemain}s</span> : t('刷新日历')}
-          </button>
-        </span>
+        <EarningsRefreshButton
+          cooldownUntil={cooldownUntil}
+          refreshing={refreshing}
+          refreshStatus={refreshStatus}
+          lastUpdatedAt={q.lastUpdatedAt}
+          onRefresh={(remain) => void onRefresh(remain)}
+        />
       )}
     </>
   );
@@ -726,7 +716,7 @@ export default function Earnings() {
               onAnalyzed={onReportAnalysis}
             />
           )}
-          {!loading && !error503 && <EpsHatchChart items={visibleItems} />}
+          {!loading && !error503 && <DeferredEpsChart items={visibleItems} />}
           {!loading && !error503 && <DensityStrip items={items} onJumpDay={onJumpDay} />}
         </div>
       </div>
