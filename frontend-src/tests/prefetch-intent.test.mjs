@@ -12,8 +12,10 @@ test('intent prefetch only loads route chunks and respects save-data / concurren
   assert.match(prefetch, /MAX_INTENT = 2/);
   assert.match(prefetch, /saveData === true/);
   assert.match(prefetch, /current === normalized/);
-  assert.match(prefetch, /void import\('@\/pages\/Earnings'\)/);
+  assert.match(prefetch, /return import\('@\/pages\/Earnings'\)/);
   assert.match(prefetch, /normalized\.startsWith\('\/stock\/'\)/);
+  assert.match(prefetch, /Promise\.resolve\(loadRouteChunk\(normalized\)\)\.finally/);
+  assert.doesNotMatch(prefetch, /queueMicrotask/);
   assert.doesNotMatch(prefetch, /\/api\//);
   assert.doesNotMatch(prefetch, /earningsApi|catalystsContract|stocksApi/);
 });

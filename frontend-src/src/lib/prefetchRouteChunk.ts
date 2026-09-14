@@ -12,46 +12,36 @@ function prefersSaveData(): boolean {
   return connection?.saveData === true;
 }
 
-function loadRouteChunk(pathname: string): void {
+function loadRouteChunk(pathname: string): Promise<unknown> | undefined {
   const normalized = pathname.length > 1 && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname;
   switch (normalized) {
     case '/':
-      void import('@/pages/Home');
-      return;
+      return import('@/pages/Home');
     case '/watchlist':
-      void import('@/pages/Watchlist');
-      return;
+      return import('@/pages/Watchlist');
     case '/screener':
-      void import('@/pages/Screener');
-      return;
+      return import('@/pages/Screener');
     case '/breakouts':
-      void import('@/pages/Breakouts');
-      return;
+      return import('@/pages/Breakouts');
     case '/sectors':
-      void import('@/pages/Sectors');
-      return;
+      return import('@/pages/Sectors');
     case '/earnings':
-      void import('@/pages/Earnings');
-      return;
+      return import('@/pages/Earnings');
     case '/catalysts':
-      void import('@/pages/Catalysts');
-      return;
+      return import('@/pages/Catalysts');
     case '/market':
-      void import('@/pages/Market');
-      return;
+      return import('@/pages/Market');
     case '/cta':
-      void import('@/pages/CtaTrend');
-      return;
+      return import('@/pages/CtaTrend');
     case '/login':
-      void import('@/pages/Login');
-      return;
+      return import('@/pages/Login');
     default:
-      if (normalized.startsWith('/stock/')) void import('@/pages/StockDetail');
+      if (normalized.startsWith('/stock/')) return import('@/pages/StockDetail');
   }
 }
 
 export function prefetchRouteChunk(pathname: string): void {
-  loadRouteChunk(pathname);
+  void loadRouteChunk(pathname);
 }
 
 /** 悬停/键盘聚焦时只预取目标路由代码，不发付费上游请求。 */
@@ -66,11 +56,11 @@ export function prefetchRouteOnIntent(pathname: string): void {
   if (inflight.size >= MAX_INTENT) return;
   inflight.add(normalized);
   prefetched.add(normalized);
-  try {
-    loadRouteChunk(normalized);
-  } finally {
-    queueMicrotask(() => inflight.delete(normalized));
-  }
+  // 计数要覆盖整个 import，不能在 microtask 里立刻清掉，否则连扫三个
+  // 导航项会同时开三个路由块，MAX_INTENT=2 形同虚设。
+  Promise.resolve(loadRouteChunk(normalized)).finally(() => {
+    inflight.delete(normalized);
+  });
 }
 
 export function routeIntentHandlers(pathname: string): {

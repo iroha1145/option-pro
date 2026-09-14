@@ -41,6 +41,10 @@
 - 页级不再 `useNow(1000)`。冷却只在按钮内走秒；`cooldownUntil` 到期清零。
 - 纽约日 15s 轮询；未钉住的周起始随跨日更新。最多晚约 15s 感知午夜，不做秒级整页重绘。
 
+## 意图预取并发
+
+`MAX_INTENT=2` 必须按「正在下载的路由块」计数。用 `queueMicrotask` 立刻清 `inflight` 时，连扫三个导航项会同时开三个 import。已改为等 `import()` settle 再释放名额。已预取过的路径不再重复下载。
+
 ## surfaces 本地 fulfill
 
 首页会打指数、时段、雷达、自选、报价。浏览器 abort `finnhub|yahoo|…` 只挡页面直连，挡不住 uvicorn 出站。对照脚本在到达 `:2000` 之前 fulfill `/api/market/indices`、`/status`、`/strength/market`、`/signals/market`、`/breakouts/*`、`/stocks/watchlist`、`/market/cta`、`/quotes`，并 abort `/api/quotes/stream`。财报日历仍本地 fulfill，不打 upcoming 刷新。尚未跑浏览器。
