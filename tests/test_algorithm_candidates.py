@@ -135,6 +135,31 @@ def test_t1_t2_dataset_clocks() -> None:
     assert t2["resistance_high_frozen"] == 20.0
 
 
+def test_f1_drops_negative_rs_and_missing() -> None:
+    from app.services.research.followups import apply_f1_rs_filter
+
+    result = apply_f1_rs_filter(
+        [
+            {"ticker": "POS", "ranking_score": 50, "rs_spy_63d": 0.1},
+            {"ticker": "NEG", "ranking_score": 90, "rs_spy_63d": -0.2},
+            {"ticker": "MISS", "ranking_score": 80, "rs_spy_63d": None},
+        ]
+    )
+    assert [row["ticker"] for row in result["rows"]] == ["POS"]
+    assert result["missing_rs"] == 1
+    assert result["coverage"] == 1 / 3
+
+
+def test_percentile_requires_dispersion() -> None:
+    from app.services.research.followups import xs_percentile
+
+    assert xs_percentile([1.0] * 10, 1.0) is None
+    assert xs_percentile([1.0, 2.0], 2.0) is None
+    values = [float(i) for i in range(10)]
+    assert xs_percentile(values, 0.0) == 0.0
+    assert xs_percentile(values, 9.0) == 100.0
+
+
 def test_mae_excludes_exit_day_extremes() -> None:
     start = date(2019, 3, 4)
     records = [

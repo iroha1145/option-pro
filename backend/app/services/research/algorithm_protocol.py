@@ -92,6 +92,21 @@ CANDIDATES = (
         "executable_from": "T+2 open",
         "not_changed": ["screener_ranking", "T1"],
     },
+    {
+        "candidate_id": "F1",
+        "layer": "ranking_filter",
+        "rule": "original ranking after rs_spy_63d > 0; missing RS dropped",
+        "why": "Top10 crash names looked like extended winners; test a wide relative-strength gate",
+        "not_changed": ["ranking_formula", "A0", "exits"],
+    },
+    {
+        "candidate_id": "F2",
+        "layer": "ranking",
+        "rule": "same-day percentiles of return_63d/rs/return_126d/return_252d, rebuild mid/long without macd, then A0",
+        "why": "score_long and ath saturate in Top20; test whether fixed return caps hide ranking",
+        "proxy_note": "macd_direction not in compact dump",
+        "not_changed": ["RSI", "ath_scale", "exits"],
+    },
 )
 
 HISTORICAL_TRIALS_ALREADY_RUN = (

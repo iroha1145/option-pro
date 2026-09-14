@@ -22,7 +22,8 @@ from app.services.research.candidate_signals import (
     momentum_top_signals,
     original_top_signals,
 )
-from app.services.research.compare import compare_screener_candidates, yearly_top10_means
+from app.services.research.compare import compare_screener_candidates, filter_split, group_by_date, yearly_top10_means
+from app.services.research.followups import compare_followups
 from app.services.research.dataset import load_dataset
 from app.services.research.diagnostics import (
     concentration_report,
@@ -64,6 +65,7 @@ def main() -> int:
         "split": args.split,
         "screener": None,
         "radar": None,
+        "followups": None,
         "diagnostics": {},
     }
 
@@ -103,6 +105,45 @@ def main() -> int:
         _write(out / "signals-a0-top10.json", a0_top_signals(rows))
         _write(out / "signals-c0-top10.json", c0_top_signals(rows))
         _write(out / "signals-momentum63-top10.json", momentum_top_signals(rows))
+        follow = compare_followups(group_by_date(filter_split(rows, args.split)))
+        follow["yearly_f1_top10"] = yearly_top10_means(follow["F1"]["vs_original_top10"])
+        follow["yearly_f2_top10"] = yearly_top10_means(follow["F2"]["vs_original_top10"])
+        follow["yearly_f2_vs_a0_top10"] = yearly_top10_means(follow["F2"]["vs_a0_top10"])
+        summary["followups"] = {
+            "F1": {
+                key: value
+                for key, value in follow["F1"].items()
+                if key != "vs_original_top10"
+            }
+            | {
+                "vs_original_top10": {
+                    k: v
+                    for k, v in follow["F1"]["vs_original_top10"].items()
+                    if k != "daily"
+                }
+            },
+            "F2": {
+                key: value
+                for key, value in follow["F2"].items()
+                if key not in {"vs_original_top10", "vs_a0_top10"}
+            }
+            | {
+                "vs_original_top10": {
+                    k: v
+                    for k, v in follow["F2"]["vs_original_top10"].items()
+                    if k != "daily"
+                },
+                "vs_a0_top10": {
+                    k: v
+                    for k, v in follow["F2"]["vs_a0_top10"].items()
+                    if k != "daily"
+                },
+            },
+            "yearly_f1_top10": follow["yearly_f1_top10"],
+            "yearly_f2_top10": follow["yearly_f2_top10"],
+            "yearly_f2_vs_a0_top10": follow["yearly_f2_vs_a0_top10"],
+        }
+        _write(out / "followup-compare.json", follow)
 
     if args.events:
         events = _load_json(Path(args.events))
