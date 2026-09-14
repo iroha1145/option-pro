@@ -28,6 +28,10 @@
 - `_displayable_zh` 对 Owner/访客相同：无合法中文原文则隐藏。Owner 仍能看任务态等原有权限字段。
 - 未混用管理员与访客缓存换速度。
 
+## 语言冷启动测速
+
+`/catalysts` 原先没有 laboratory ready 分类，三种语言各会空等 45s。已按标题 + `article h3` / 空态判定 content/empty/shell。这只影响测速脚本，不改业务 ready 区。
+
 ## 语言初始化
 
 - `main.tsx` 先 `await prepareI18n()` 再 `import('./App.tsx')`。
