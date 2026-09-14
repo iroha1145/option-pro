@@ -22,8 +22,7 @@ export default function EarningsRefreshButton({
   lastUpdatedAt,
   onRefresh,
 }: EarningsRefreshButtonProps) {
-  const cooling = cooldownUntil > Date.now();
-  const now = useNow(cooling ? 1000 : 0);
+  const now = useNow(cooldownUntil > 0 ? 1000 : 0);
   const cooldownRemain = Math.max(0, Math.ceil((cooldownUntil - now) / 1000));
 
   return (

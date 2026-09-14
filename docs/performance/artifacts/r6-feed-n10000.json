@@ -1,0 +1,559 @@
+{
+  "measured_at": "2026-09-14T15:41:46.322112+00:00",
+  "data_dir": "/home/ubuntu/optix-perf-data/n10000-r6",
+  "store": {
+    "analysis_links": 5078,
+    "result_audits": 5078,
+    "news_revisions": 10000
+  },
+  "cases": {
+    "guest_legacy_hop": {
+      "n": 8,
+      "cold_ms": 1566.9430180000745,
+      "p50_ms": 1033.2741249999344,
+      "p75_ms": 1036.2226040001588,
+      "warm_p50_ms": 1017.6711240001168,
+      "warm_p75_ms": 1033.2741249999344,
+      "spread": {
+        "stdev": 76.85996116600515,
+        "iqr": 46.505647000230965
+      },
+      "cold_fingerprints": 6,
+      "warm_fingerprints_p50": 5.0,
+      "first_ids": [
+        9600,
+        9000,
+        8400
+      ],
+      "hops": 5,
+      "item_count": 12,
+      "total": 9568,
+      "samples": [
+        {
+          "elapsed_ms": 1566.9430180000745,
+          "hops": 5,
+          "hidden": 48,
+          "item_count": 12,
+          "first_ids": [
+            9600,
+            9000,
+            8400
+          ],
+          "status": "active",
+          "has_more": true,
+          "total": 9568,
+          "cold": true,
+          "fingerprints": 6
+        },
+        {
+          "elapsed_ms": 1017.6711240001168,
+          "hops": 5,
+          "hidden": 48,
+          "item_count": 12,
+          "first_ids": [
+            9600,
+            9000,
+            8400
+          ],
+          "status": "active",
+          "has_more": true,
+          "total": 9568,
+          "cold": false,
+          "fingerprints": 5
+        },
+        {
+          "elapsed_ms": 1033.2741249999344,
+          "hops": 5,
+          "hidden": 48,
+          "item_count": 12,
+          "first_ids": [
+            9600,
+            9000,
+            8400
+          ],
+          "status": "active",
+          "has_more": true,
+          "total": 9568,
+          "cold": false,
+          "fingerprints": 5
+        },
+        {
+          "elapsed_ms": 975.875293000172,
+          "hops": 5,
+          "hidden": 48,
+          "item_count": 12,
+          "first_ids": [
+            9600,
+            9000,
+            8400
+          ],
+          "status": "active",
+          "has_more": true,
+          "total": 9568,
+          "cold": false,
+          "fingerprints": 5
+        },
+        {
+          "elapsed_ms": 1036.2226040001588,
+          "hops": 5,
+          "hidden": 48,
+          "item_count": 12,
+          "first_ids": [
+            9600,
+            9000,
+            8400
+          ],
+          "status": "active",
+          "has_more": true,
+          "total": 9568,
+          "cold": false,
+          "fingerprints": 5
+        },
+        {
+          "elapsed_ms": 999.0844869998909,
+          "hops": 5,
+          "hidden": 48,
+          "item_count": 12,
+          "first_ids": [
+            9600,
+            9000,
+            8400
+          ],
+          "status": "active",
+          "has_more": true,
+          "total": 9568,
+          "cold": false,
+          "fingerprints": 5
+        },
+        {
+          "elapsed_ms": 989.7169569999278,
+          "hops": 5,
+          "hidden": 48,
+          "item_count": 12,
+          "first_ids": [
+            9600,
+            9000,
+            8400
+          ],
+          "status": "active",
+          "has_more": true,
+          "total": 9568,
+          "cold": false,
+          "fingerprints": 5
+        },
+        {
+          "elapsed_ms": 1203.280704000008,
+          "hops": 5,
+          "hidden": 48,
+          "item_count": 12,
+          "first_ids": [
+            9600,
+            9000,
+            8400
+          ],
+          "status": "active",
+          "has_more": true,
+          "total": 9568,
+          "cold": false,
+          "fingerprints": 5
+        }
+      ]
+    },
+    "guest_visible": {
+      "n": 8,
+      "cold_ms": 769.7602960001859,
+      "p50_ms": 242.67794800016418,
+      "p75_ms": 249.74640600021303,
+      "warm_p50_ms": 240.2779770000052,
+      "warm_p75_ms": 242.67794800016418,
+      "spread": {
+        "stdev": 7.513603579432807,
+        "iqr": 9.979042000395566
+      },
+      "cold_fingerprints": 2,
+      "warm_fingerprints_p50": 1.0,
+      "first_ids": [
+        9600,
+        9000,
+        8400
+      ],
+      "hops": null,
+      "item_count": 12,
+      "total": 9568,
+      "samples": [
+        {
+          "elapsed_ms": 769.7602960001859,
+          "item_count": 12,
+          "hidden": 48,
+          "first_ids": [
+            9600,
+            9000,
+            8400
+          ],
+          "status": "active",
+          "has_more": true,
+          "total": 9568,
+          "cold": true,
+          "fingerprints": 2
+        },
+        {
+          "elapsed_ms": 242.67794800016418,
+          "item_count": 12,
+          "hidden": 48,
+          "first_ids": [
+            9600,
+            9000,
+            8400
+          ],
+          "status": "active",
+          "has_more": true,
+          "total": 9568,
+          "cold": false,
+          "fingerprints": 1
+        },
+        {
+          "elapsed_ms": 255.3999740002837,
+          "item_count": 12,
+          "hidden": 48,
+          "first_ids": [
+            9600,
+            9000,
+            8400
+          ],
+          "status": "active",
+          "has_more": true,
+          "total": 9568,
+          "cold": false,
+          "fingerprints": 1
+        },
+        {
+          "elapsed_ms": 240.06687299970508,
+          "item_count": 12,
+          "hidden": 48,
+          "first_ids": [
+            9600,
+            9000,
+            8400
+          ],
+          "status": "active",
+          "has_more": true,
+          "total": 9568,
+          "cold": false,
+          "fingerprints": 1
+        },
+        {
+          "elapsed_ms": 249.74640600021303,
+          "item_count": 12,
+          "hidden": 48,
+          "first_ids": [
+            9600,
+            9000,
+            8400
+          ],
+          "status": "active",
+          "has_more": true,
+          "total": 9568,
+          "cold": false,
+          "fingerprints": 1
+        },
+        {
+          "elapsed_ms": 239.76736399981746,
+          "item_count": 12,
+          "hidden": 48,
+          "first_ids": [
+            9600,
+            9000,
+            8400
+          ],
+          "status": "active",
+          "has_more": true,
+          "total": 9568,
+          "cold": false,
+          "fingerprints": 1
+        },
+        {
+          "elapsed_ms": 240.2779770000052,
+          "item_count": 12,
+          "hidden": 48,
+          "first_ids": [
+            9600,
+            9000,
+            8400
+          ],
+          "status": "active",
+          "has_more": true,
+          "total": 9568,
+          "cold": false,
+          "fingerprints": 1
+        },
+        {
+          "elapsed_ms": 232.37201400024787,
+          "item_count": 12,
+          "hidden": 48,
+          "first_ids": [
+            9600,
+            9000,
+            8400
+          ],
+          "status": "active",
+          "has_more": true,
+          "total": 9568,
+          "cold": false,
+          "fingerprints": 1
+        }
+      ]
+    },
+    "guest_legacy_one_page": {
+      "n": 8,
+      "cold_ms": 788.2571320001261,
+      "p50_ms": 199.03648699983023,
+      "p75_ms": 201.89285599963114,
+      "warm_p50_ms": 198.9543350000531,
+      "warm_p75_ms": 199.03648699983023,
+      "spread": {
+        "stdev": 18.625105437408482,
+        "iqr": 8.001782999599527
+      },
+      "cold_fingerprints": 2,
+      "warm_fingerprints_p50": 1.0,
+      "first_ids": [],
+      "hops": null,
+      "item_count": 0,
+      "total": 9568,
+      "samples": [
+        {
+          "elapsed_ms": 788.2571320001261,
+          "item_count": 0,
+          "hidden": 12,
+          "first_ids": [],
+          "status": "active",
+          "has_more": true,
+          "total": 9568,
+          "cold": true,
+          "fingerprints": 2
+        },
+        {
+          "elapsed_ms": 245.90746300009414,
+          "item_count": 0,
+          "hidden": 12,
+          "first_ids": [],
+          "status": "active",
+          "has_more": true,
+          "total": 9568,
+          "cold": false,
+          "fingerprints": 1
+        },
+        {
+          "elapsed_ms": 201.89285599963114,
+          "item_count": 0,
+          "hidden": 12,
+          "first_ids": [],
+          "status": "active",
+          "has_more": true,
+          "total": 9568,
+          "cold": false,
+          "fingerprints": 1
+        },
+        {
+          "elapsed_ms": 193.8910730000316,
+          "item_count": 0,
+          "hidden": 12,
+          "first_ids": [],
+          "status": "active",
+          "has_more": true,
+          "total": 9568,
+          "cold": false,
+          "fingerprints": 1
+        },
+        {
+          "elapsed_ms": 199.03648699983023,
+          "item_count": 0,
+          "hidden": 12,
+          "first_ids": [],
+          "status": "active",
+          "has_more": true,
+          "total": 9568,
+          "cold": false,
+          "fingerprints": 1
+        },
+        {
+          "elapsed_ms": 196.64244599971425,
+          "item_count": 0,
+          "hidden": 12,
+          "first_ids": [],
+          "status": "active",
+          "has_more": true,
+          "total": 9568,
+          "cold": false,
+          "fingerprints": 1
+        },
+        {
+          "elapsed_ms": 198.9543350000531,
+          "item_count": 0,
+          "hidden": 12,
+          "first_ids": [],
+          "status": "active",
+          "has_more": true,
+          "total": 9568,
+          "cold": false,
+          "fingerprints": 1
+        },
+        {
+          "elapsed_ms": 193.29269899981227,
+          "item_count": 0,
+          "hidden": 12,
+          "first_ids": [],
+          "status": "active",
+          "has_more": true,
+          "total": 9568,
+          "cold": false,
+          "fingerprints": 1
+        }
+      ]
+    },
+    "owner_visible": {
+      "n": 8,
+      "cold_ms": 6907.319297000413,
+      "p50_ms": 6627.930394000032,
+      "p75_ms": 6662.309852999897,
+      "warm_p50_ms": 6626.672642999893,
+      "warm_p75_ms": 6627.930394000032,
+      "spread": {
+        "stdev": 72.83485217007677,
+        "iqr": 120.84145600010743
+      },
+      "cold_fingerprints": 1,
+      "warm_fingerprints_p50": 1.0,
+      "first_ids": [
+        9600,
+        9000,
+        8400
+      ],
+      "hops": null,
+      "item_count": 12,
+      "total": 9568,
+      "samples": [
+        {
+          "elapsed_ms": 6907.319297000413,
+          "item_count": 12,
+          "hidden": 48,
+          "first_ids": [
+            9600,
+            9000,
+            8400
+          ],
+          "status": "active",
+          "has_more": true,
+          "total": 9568,
+          "cold": true,
+          "fingerprints": 1
+        },
+        {
+          "elapsed_ms": 6541.46839699979,
+          "item_count": 12,
+          "hidden": 48,
+          "first_ids": [
+            9600,
+            9000,
+            8400
+          ],
+          "status": "active",
+          "has_more": true,
+          "total": 9568,
+          "cold": false,
+          "fingerprints": 1
+        },
+        {
+          "elapsed_ms": 6627.930394000032,
+          "item_count": 12,
+          "hidden": 48,
+          "first_ids": [
+            9600,
+            9000,
+            8400
+          ],
+          "status": "active",
+          "has_more": true,
+          "total": 9568,
+          "cold": false,
+          "fingerprints": 1
+        },
+        {
+          "elapsed_ms": 6594.130784000299,
+          "item_count": 12,
+          "hidden": 48,
+          "first_ids": [
+            9600,
+            9000,
+            8400
+          ],
+          "status": "active",
+          "has_more": true,
+          "total": 9568,
+          "cold": false,
+          "fingerprints": 1
+        },
+        {
+          "elapsed_ms": 6726.625194999997,
+          "item_count": 12,
+          "hidden": 48,
+          "first_ids": [
+            9600,
+            9000,
+            8400
+          ],
+          "status": "active",
+          "has_more": true,
+          "total": 9568,
+          "cold": false,
+          "fingerprints": 1
+        },
+        {
+          "elapsed_ms": 6662.309852999897,
+          "item_count": 12,
+          "hidden": 48,
+          "first_ids": [
+            9600,
+            9000,
+            8400
+          ],
+          "status": "active",
+          "has_more": true,
+          "total": 9568,
+          "cold": false,
+          "fingerprints": 1
+        },
+        {
+          "elapsed_ms": 6626.672642999893,
+          "item_count": 12,
+          "hidden": 48,
+          "first_ids": [
+            9600,
+            9000,
+            8400
+          ],
+          "status": "active",
+          "has_more": true,
+          "total": 9568,
+          "cold": false,
+          "fingerprints": 1
+        },
+        {
+          "elapsed_ms": 6510.018652000326,
+          "item_count": 12,
+          "hidden": 48,
+          "first_ids": [
+            9600,
+            9000,
+            8400
+          ],
+          "status": "active",
+          "has_more": true,
+          "total": 9568,
+          "cold": false,
+          "fingerprints": 1
+        }
+      ]
+    }
+  }
+}

@@ -29,7 +29,7 @@ test('earnings page localizes the clock and defers the EPS chart', async () => {
   assert.match(chart, /PRELOAD_ROOT_MARGIN = '100% 0px'/);
   assert.match(chart, /PLACEHOLDER_HEIGHT_PX = 320/);
   assert.match(chart, /if \(mounted \|\| !hasRows\) return/);
-  assert.match(refresh, /useNow\(cooling \? 1000 : 0\)/);
+  assert.match(refresh, /useNow\(cooldownUntil > 0 \? 1000 : 0\)/);
   assert.match(calendar, /setInterval\(tick, 15_000\)/);
   assert.match(nowHook, /if \(!intervalMs \|\| intervalMs <= 0\) return/);
 });

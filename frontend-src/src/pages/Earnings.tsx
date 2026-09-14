@@ -131,6 +131,12 @@ export default function Earnings() {
   }, [refreshStatus, staleBannerAsOf, lastGoodAsOf]);
   const [cooldownUntil, setCooldownUntil] = useState<number>(0);
   const [refreshing, setRefreshing] = useState(false);
+  useEffect(() => {
+    if (!cooldownUntil) return undefined;
+    const remain = cooldownUntil - Date.now();
+    const id = window.setTimeout(() => setCooldownUntil(0), Math.max(0, remain));
+    return () => window.clearTimeout(id);
+  }, [cooldownUntil]);
 
   /**
    * Worker 化手动刷新的跟进（审计 P2-04，与宏观刷新同一套节奏）。
