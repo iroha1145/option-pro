@@ -438,7 +438,7 @@ test('财报页面保留近期已公布结果并默认收纳长列表', () => {
   assert.equal(deferred.includes('100% 0px'), true);
   assert.equal(deferred.includes('setMounted(false)'), false);
   const refresh = fs.readFileSync(path.join(earningsComponentsPath, 'EarningsRefreshButton.tsx'), 'utf8');
-  assert.equal(refresh.includes('useNow(cooling ? 1000 : 0)'), true);
+  assert.equal(refresh.includes('useNow(cooldownUntil > 0 ? 1000 : 0)'), true);
   assert.equal(list.includes('md:max-h-[min(72vh,880px)]'), true);
   assert.equal(list.includes('md:overflow-y-auto'), true);
   assert.equal(list.includes('sticky top-0'), true);
