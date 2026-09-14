@@ -283,6 +283,98 @@ def test_screener_labels_attach_without_entering_scores(monkeypatch) -> None:
     assert ic["n"] == 3 or ic["status"] == "unavailable"
 
 
+def test_compact_row_keeps_mode_fields_and_unadjusted_close(monkeypatch) -> None:
+    from app.services.research.screener import compact_screener_row
+
+    _install_small_universe(monkeypatch)
+    dataset = _synth_dataset()
+    signal = date(2019, 3, 22)
+    payload = replay_screener_day(
+        dataset,
+        signal,
+        parameters={"min_price": 1, "min_avg_dollar_volume": 0, "top": 3},
+    )
+    labeled = attach_screener_labels(payload["view_rows"], dataset, signal_date=signal)
+    compact = compact_screener_row(labeled[0], signal_date=signal, dataset=dataset)
+    assert compact["ticker"]
+    assert compact["score_short"] is not None or compact["ranking_score"] is not None
+    assert compact["unadjusted_close"] == pytest.approx(dataset.bar(compact["ticker"], signal)["close"])
+    assert "factor_breakdown" not in compact
+    assert "benchmark_labels" not in compact
+
+
+def test_mode_rerank_changes_profile_order() -> None:
+    from app.services.research.screener import apply_screener_mode
+
+    rows = [
+        {
+            "ticker": "LOWVOL",
+            "ranking_score": 60.0,
+            "intrinsic_score": 60.0,
+            "score_short": 80.0,
+            "score_mid": 50.0,
+            "score_long": 40.0,
+            "market_fit_score": 50.0,
+            "profile_fit_score": 50.0,
+            "intrinsic_confidence": 1.0,
+            "market_fit_confidence": 1.0,
+            "profile_fit_confidence": 1.0,
+            "atr_pct": 1.0,
+            "ma_alignment": 80.0,
+            "avg_dollar_volume_20d": 50_000_000,
+        },
+        {
+            "ticker": "HIVOL",
+            "ranking_score": 61.0,
+            "intrinsic_score": 61.0,
+            "score_short": 40.0,
+            "score_mid": 50.0,
+            "score_long": 80.0,
+            "market_fit_score": 50.0,
+            "profile_fit_score": 50.0,
+            "intrinsic_confidence": 1.0,
+            "market_fit_confidence": 1.0,
+            "profile_fit_confidence": 1.0,
+            "atr_pct": 8.0,
+            "ma_alignment": 80.0,
+            "avg_dollar_volume_20d": 50_000_000,
+        },
+    ]
+    short = apply_screener_mode(rows, timeframe="short", profile="balanced")
+    long = apply_screener_mode(rows, timeframe="long", profile="balanced")
+    conservative = apply_screener_mode(rows, timeframe="all", profile="conservative")
+    assert short[0]["ticker"] == "LOWVOL"
+    assert long[0]["ticker"] == "HIVOL"
+    assert conservative[0]["ticker"] == "LOWVOL"
+
+
+def test_prior_screener_overlap_uses_strictly_earlier_snapshot() -> None:
+    from app.services.research.radar import prior_screener_overlap
+
+    events = [
+        {"ticker": "AAA", "trading_date": "2019-03-21"},
+        {"ticker": "BBB", "trading_date": "2019-03-21"},
+    ]
+    rows = [
+        {"ticker": "AAA", "signal_date": "2019-03-20", "selected_view_rank": 1},
+        {"ticker": "BBB", "signal_date": "2019-03-21", "selected_view_rank": 1},
+    ]
+    marked = prior_screener_overlap(events, rows, top=20)
+    by_ticker = {item["ticker"]: item for item in marked}
+    assert by_ticker["AAA"]["in_prior_screener_top"] is True
+    assert by_ticker["AAA"]["prior_screener_date"] == "2019-03-20"
+    assert by_ticker["BBB"]["in_prior_screener_top"] is False
+
+
+def test_replay_store_resume_reads_completed_days(tmp_path: Path) -> None:
+    from app.services.research.replay_store import append_jsonl, completed_sessions, partial_paths
+
+    out = tmp_path / "run.json"
+    days_path, _rows_path = partial_paths(out)
+    append_jsonl(days_path, [{"signal_date": "2019-01-02", "ic": {"status": "active", "ic": 0.1}}])
+    assert completed_sessions(days_path) == {"2019-01-02"}
+
+
 def test_radar_marks_intraday_types_unverifiable(monkeypatch) -> None:
     _install_small_universe(monkeypatch)
     monkeypatch.setattr(

@@ -224,16 +224,34 @@ def prior_screener_overlap(
     *,
     top: int = 20,
 ) -> list[dict[str, Any]]:
-    """Keep radar events whose ticker was already in a prior screener snapshot."""
+    """Mark radar events that already appeared in an earlier screener snapshot.
 
-    leaders = {
-        str(row.get("ticker"))
-        for row in list(screener_rows)[:top]
-        if row.get("ticker")
-    }
+    Same-day close ranks are excluded: a T-close list cannot endorse a T-session
+    breakout. The most recent strictly earlier snapshot is used.
+    """
+
+    leaders_by_date: dict[str, set[str]] = {}
+    for row in screener_rows:
+        ticker = row.get("ticker")
+        session = str(row.get("signal_date") or "")
+        rank = row.get("selected_view_rank")
+        if not ticker or not session or rank is None:
+            continue
+        if int(rank) > top:
+            continue
+        leaders_by_date.setdefault(session, set()).add(str(ticker))
+    dated = sorted(leaders_by_date)
     out = []
     for event in events:
         item = dict(event)
-        item["in_prior_screener_top"] = item.get("ticker") in leaders
+        event_date = str(item.get("trading_date") or item.get("signal_date") or "")
+        prior_dates = [day for day in dated if day < event_date]
+        if not prior_dates:
+            item["in_prior_screener_top"] = False
+            item["prior_screener_date"] = None
+        else:
+            prior = prior_dates[-1]
+            item["in_prior_screener_top"] = str(item.get("ticker") or "") in leaders_by_date[prior]
+            item["prior_screener_date"] = prior
         out.append(item)
     return out

@@ -13,6 +13,7 @@ from app.services.research.labels import attach_screener_labels, last_usable_sig
 from app.services.research.metrics import date_clustered_mean, spearman_rank_ic, summarize_daily_ics, top_k_mean
 from app.services.research.portfolio import simulate_long_only
 from app.services.research.protocol import (
+    DEFAULT_SCAN_PARAMETERS,
     FROZEN_PROTOCOL,
     FROZEN_SPLITS,
     PRIMARY_HORIZON,
@@ -23,6 +24,15 @@ from app.services.research.protocol import (
     protocol_hash,
 )
 from app.services.research.radar import reconstruct_daily_base_events
+from app.services.research.replay_store import (
+    append_jsonl,
+    completed_sessions,
+    partial_paths,
+    read_jsonl,
+    reset_partials,
+)
+from app.services.research.registry import append_trial
+from app.services.research.screener import compact_screener_row, replay_screener_day
 
 _RADAR_JOB: dict[str, Any] = {}
 
@@ -43,8 +53,6 @@ def _radar_day_job(session_iso: str) -> tuple[str, dict[str, Any]]:
         frames=_RADAR_JOB["frames"],
     )
     return session_iso, payload
-from app.services.research.registry import append_trial
-from app.services.research.screener import momentum_baseline_ranks, replay_screener_day
 
 _SCREENER_JOB: dict[str, Any] = {}
 
@@ -71,7 +79,17 @@ def _screener_day_job(session_iso: str) -> tuple[str, dict[str, Any], list[dict[
         signal_date=session,
         allow_sealed=_SCREENER_JOB["allow_sealed"],
     )
-    return session_iso, payload, labeled
+    compact = [
+        compact_screener_row(row, signal_date=session, dataset=_SCREENER_JOB["dataset"])
+        for row in labeled
+    ]
+    slim = {
+        "screened_count": payload.get("screened_count"),
+        "as_of": payload.get("as_of"),
+        "universe_version": payload.get("universe_version"),
+        "skipped": payload.get("skipped"),
+    }
+    return session_iso, slim, compact
 
 
 def _write_json(path: Path, payload: Any) -> None:
@@ -117,10 +135,25 @@ def cmd_screener_replay(args: argparse.Namespace) -> int:
         "timeframe": args.timeframe,
         "profile": args.profile,
         "top": args.top,
+        "min_price": float(getattr(args, "min_price", DEFAULT_SCAN_PARAMETERS["min_price"])),
+        "min_avg_dollar_volume": float(
+            getattr(
+                args,
+                "min_avg_dollar_volume",
+                DEFAULT_SCAN_PARAMETERS["min_avg_dollar_volume"],
+            )
+        ),
     }
 
-    daily: list[dict[str, Any]] = []
-    event_rows: list[dict[str, Any]] = []
+    out = Path(args.out)
+    days_path, rows_path = partial_paths(out)
+    resume = bool(getattr(args, "resume", False))
+    if resume:
+        done_keys = completed_sessions(days_path)
+    else:
+        reset_partials(days_path, rows_path)
+        done_keys = set()
+    pending = [day for day in dates if day.isoformat() not in done_keys]
     workers = max(1, int(args.workers))
     _SCREENER_JOB.update(
         {
@@ -131,20 +164,19 @@ def cmd_screener_replay(args: argparse.Namespace) -> int:
         }
     )
     print(
-        f"screener-replay starting {len(dates)} days workers={workers}",
+        f"screener-replay starting {len(pending)}/{len(dates)} days "
+        f"resume={int(len(done_keys))} workers={workers}",
         flush=True,
     )
-    session_keys = [day.isoformat() for day in dates]
+    session_keys = [day.isoformat() for day in pending]
     if workers == 1:
-        sequenced = []
         for index, key in enumerate(session_keys, start=1):
-            item = _screener_day_job(key)
-            sequenced.append(item)
-            print(f"screener-replay {index}/{len(dates)} {key}", flush=True)
+            session_iso, payload, labeled = _screener_day_job(key)
+            _persist_screener_day(days_path, rows_path, session_iso, payload, labeled)
+            print(f"screener-replay {index}/{len(session_keys)} {key}", flush=True)
     else:
         from concurrent.futures import ProcessPoolExecutor, as_completed
 
-        ordered = {key: None for key in session_keys}
         with ProcessPoolExecutor(
             max_workers=workers,
             initializer=_init_screener_job,
@@ -154,65 +186,28 @@ def cmd_screener_replay(args: argparse.Namespace) -> int:
             done = 0
             for future in as_completed(futures):
                 session_iso, payload, labeled = future.result()
-                ordered[session_iso] = (session_iso, payload, labeled)
+                _persist_screener_day(days_path, rows_path, session_iso, payload, labeled)
                 done += 1
-                print(f"screener-replay {done}/{len(dates)} {session_iso}", flush=True)
-        sequenced = [item for item in ordered.values() if item is not None]
-    for session_iso, payload, labeled in sequenced:
-        ic = spearman_rank_ic(
-            [row.get("ranking_score") for row in labeled],
-            [
-                ((row.get("excess") or {}).get(str(PRIMARY_HORIZON)) or {}).get("excess_vs_universe")
-                for row in labeled
-            ],
-        )
-        tops = {
-            str(k): top_k_mean(
-                labeled,
-                score_key="ranking_score",
-                outcome_key=("excess", str(PRIMARY_HORIZON), "excess_vs_universe"),
-                k=k,
-            )
-            for k in PRIMARY_TOP_K
-        }
-        daily.append(
-            {
-                "signal_date": session_iso,
-                "screened_count": payload.get("screened_count"),
-                "ic": ic,
-                "top_k": tops,
-                "as_of": payload.get("as_of"),
-                "universe_version": payload.get("universe_version"),
-            }
-        )
-        for row in labeled:
-            event_rows.append(
-                {
-                    "signal_date": session_iso,
-                    "ticker": row.get("ticker"),
-                    "selected_view_rank": row.get("selected_view_rank"),
-                    "ranking_score": row.get("ranking_score"),
-                    "intrinsic_score": row.get("intrinsic_score"),
-                    "return_63d": row.get("return_63d"),
-                    "labels": row.get("labels"),
-                    "excess": row.get("excess"),
-                }
-            )
+                print(f"screener-replay {done}/{len(session_keys)} {session_iso}", flush=True)
+    daily = read_jsonl(days_path)
+    daily.sort(key=lambda item: str(item.get("signal_date") or ""))
+    event_rows = read_jsonl(rows_path)
     summary = {
         "status": "active",
         "split": split,
         "step": args.step,
         "limit": args.limit,
         "protocol_hash": protocol_hash(),
+        "parameters": parameters,
         "ic_summary": summarize_daily_ics(item["ic"] for item in daily),
         "days": daily,
         "notes": [
             "这是开发区/验证区点时重建，不是当年真实发布快照。",
             "封存区未包含在内，除非显式 --unblind-sealed。",
             "Rank IC 与股票池均值使用当日全部合格 view_rows，不是 Top-N 截断样本。",
+            "逐日压缩行含 short/mid/long 与 profile 重算所需字段，可用同一份 dump 报告六种预登记模式。",
         ],
     }
-    out = Path(args.out)
     _write_json(out, summary)
     _write_json(out.with_name(out.stem + "-rows.json"), event_rows)
     append_trial(
@@ -225,10 +220,48 @@ def cmd_screener_replay(args: argparse.Namespace) -> int:
             "command": "screener-replay",
             "output": str(out),
             "day_count": len(daily),
+            "parameters": parameters,
         },
     )
     print(json.dumps({"wrote": str(out), "days": len(daily)}, ensure_ascii=True))
     return 0
+
+
+def _persist_screener_day(
+    days_path: Path,
+    rows_path: Path,
+    session_iso: str,
+    payload: dict[str, Any],
+    labeled: list[dict[str, Any]],
+) -> dict[str, Any]:
+    ic = spearman_rank_ic(
+        [row.get("ranking_score") for row in labeled],
+        [
+            ((row.get("excess") or {}).get(str(PRIMARY_HORIZON)) or {}).get("excess_vs_universe")
+            for row in labeled
+        ],
+    )
+    tops = {
+        str(k): top_k_mean(
+            labeled,
+            score_key="ranking_score",
+            outcome_key=("excess", str(PRIMARY_HORIZON), "excess_vs_universe"),
+            k=k,
+        )
+        for k in PRIMARY_TOP_K
+    }
+    day = {
+        "signal_date": session_iso,
+        "screened_count": payload.get("screened_count"),
+        "ic": ic,
+        "top_k": tops,
+        "as_of": payload.get("as_of"),
+        "universe_version": payload.get("universe_version"),
+        "skipped": payload.get("skipped"),
+    }
+    append_jsonl(rows_path, labeled)
+    append_jsonl(days_path, [day])
+    return day
 
 
 def cmd_radar_replay(args: argparse.Namespace) -> int:
@@ -242,7 +275,6 @@ def cmd_radar_replay(args: argparse.Namespace) -> int:
         dates = dates[:: args.step]
     if args.limit:
         dates = dates[: args.limit]
-    events: list[dict[str, Any]] = []
     from app.services.strength.scanner import _theme_universe
 
     symbols, _meta = _theme_universe()
@@ -255,18 +287,33 @@ def cmd_radar_replay(args: argparse.Namespace) -> int:
         ticker: dataset.frame(ticker, through=panel_through, allow_sealed=allow_sealed)
         for ticker in symbols
     }
+    out = Path(args.out)
+    days_path, events_path = partial_paths(out)
+    resume = bool(getattr(args, "resume", False))
+    if resume:
+        done_keys = completed_sessions(days_path)
+    else:
+        reset_partials(days_path, events_path)
+        done_keys = set()
+    pending = [day for day in dates if day.isoformat() not in done_keys]
     workers = max(1, int(getattr(args, "workers", 1)))
     _RADAR_JOB.update(
         {"dataset": dataset, "allow_sealed": allow_sealed, "frames": frames}
     )
-    print(f"radar-replay starting {len(dates)} days workers={workers}", flush=True)
-    session_keys = [day.isoformat() for day in dates]
+    print(
+        f"radar-replay starting {len(pending)}/{len(dates)} days "
+        f"resume={int(len(done_keys))} workers={workers}",
+        flush=True,
+    )
+    session_keys = [day.isoformat() for day in pending]
     if workers == 1:
-        day_payloads = [_radar_day_job(key) for key in session_keys]
+        for index, key in enumerate(session_keys, start=1):
+            session_iso, payload = _radar_day_job(key)
+            _persist_radar_day(days_path, events_path, session_iso, payload)
+            print(f"radar-replay {index}/{len(session_keys)} {key}", flush=True)
     else:
         from concurrent.futures import ProcessPoolExecutor, as_completed
 
-        ordered = {key: None for key in session_keys}
         with ProcessPoolExecutor(
             max_workers=workers,
             initializer=_init_radar_job,
@@ -276,12 +323,10 @@ def cmd_radar_replay(args: argparse.Namespace) -> int:
             done = 0
             for future in as_completed(futures):
                 session_iso, payload = future.result()
-                ordered[session_iso] = (session_iso, payload)
+                _persist_radar_day(days_path, events_path, session_iso, payload)
                 done += 1
-                print(f"radar-replay {done}/{len(dates)} {session_iso}", flush=True)
-        day_payloads = [item for item in ordered.values() if item is not None]
-    for _session_iso, payload in day_payloads:
-        events.extend(payload.get("events") or [])
+                print(f"radar-replay {done}/{len(session_keys)} {session_iso}", flush=True)
+    events = read_jsonl(events_path)
     first_hits: dict[tuple[str, str], dict[str, Any]] = {}
     duplicate_triggers = 0
     for event in events:
@@ -349,6 +394,26 @@ def cmd_radar_replay(args: argparse.Namespace) -> int:
     return 0
 
 
+def _persist_radar_day(
+    days_path: Path,
+    events_path: Path,
+    session_iso: str,
+    payload: dict[str, Any],
+) -> None:
+    events = list(payload.get("events") or [])
+    append_jsonl(events_path, events)
+    append_jsonl(
+        days_path,
+        [
+            {
+                "signal_date": session_iso,
+                "event_count": len(events),
+                "skipped": payload.get("skipped"),
+            }
+        ],
+    )
+
+
 def parse_date(value: str):
     from datetime import date
 
@@ -404,6 +469,13 @@ def build_parser() -> argparse.ArgumentParser:
     screener.add_argument("--trial-id", default="original-screener-balanced-all")
     screener.add_argument("--unblind-sealed", action="store_true")
     screener.add_argument("--workers", type=int, default=1)
+    screener.add_argument("--resume", action="store_true")
+    screener.add_argument("--min-price", type=float, default=DEFAULT_SCAN_PARAMETERS["min_price"])
+    screener.add_argument(
+        "--min-avg-dollar-volume",
+        type=float,
+        default=DEFAULT_SCAN_PARAMETERS["min_avg_dollar_volume"],
+    )
     screener.set_defaults(func=cmd_screener_replay)
 
     radar = sub.add_parser("radar-replay")
@@ -416,6 +488,7 @@ def build_parser() -> argparse.ArgumentParser:
     radar.add_argument("--trial-id", default="original-radar-daily-base-theme-universe")
     radar.add_argument("--unblind-sealed", action="store_true")
     radar.add_argument("--workers", type=int, default=1)
+    radar.add_argument("--resume", action="store_true")
     radar.set_defaults(func=cmd_radar_replay)
 
     portfolio = sub.add_parser("portfolio")

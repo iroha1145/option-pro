@@ -44,7 +44,7 @@ PYTHONPATH=backend python -m app.services.research.cli screener-replay \
   --split development \
   --out /opt/cursor/research/screener-radar-data/runs/dev-screener.json \
   --registry /opt/cursor/research/screener-radar-data \
-  --step 5
+  --workers 3 --resume
 
 # 开发区雷达日线重建
 PYTHONPATH=backend python -m app.services.research.cli radar-replay \

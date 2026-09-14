@@ -55,4 +55,7 @@
 | `app/services/research/radar.py` | 调用生产 `detect_base` / `detect_breakout` |
 | `app/services/research/labels.py` | 标签分表；缺会话不顺延 |
 | `app/services/research/portfolio.py` | 下一开盘成交、资金守恒 |
-| `app/services/research/cli.py` | 分命令：audit / replay / portfolio |
+| `app/services/research/cli.py` | 分命令：audit / replay / portfolio；按日落盘并可 resume |
+| `app/services/research/replay_store.py` | 部分结果 JSONL |
+| `scripts/research/analyze_screener_modes.py` | 同一份 dump 报告六种模式与两项候选 |
+| `scripts/research/analyze_combo.py` | 只用更早选股快照做联用 |
