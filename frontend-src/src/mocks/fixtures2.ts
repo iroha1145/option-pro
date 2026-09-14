@@ -1165,7 +1165,7 @@ export interface CatalystFeedQuery {
   themeId?: string;
   limit?: number;
   cursor?: string | null;
-  pageMode?: 'visible';
+  pageMode?: 'visible' | null;
 }
 
 /* ---------------- 主题与标题模板 ---------------- */

@@ -517,7 +517,7 @@ function qs(q: CatalystFeedQuery): string {
     min_abs_impact: toBackendImpact(q.minAbsImpact),
     multi_source_only: q.multiSourceOnly ? true : undefined,
     theme: q.themeId || undefined,
-    page_mode: q.pageMode ?? 'visible',
+    page_mode: q.pageMode === null ? undefined : (q.pageMode ?? 'visible'),
     limit: q.limit,
     cursor: q.cursor ?? undefined,
   });
@@ -688,6 +688,7 @@ export const catalystsContract = {
           limit: 50,
           includeUnanalyzed: true,
           includeNeutral: true,
+          pageMode: null,
         })}`).then((d) => {
           const items = unwrap(d, 'items').map(nNewsItem);
           const summary = asRec(asRec(d).summary);
@@ -900,6 +901,7 @@ export const catalystsContract = {
                 windowHours: q.windowHours,
                 analysisStatus: 'completed',
                 limit: 50,
+                pageMode: null,
               })}`,
             ),
             cachedGet('/catalysts/hotspots?limit=20'),

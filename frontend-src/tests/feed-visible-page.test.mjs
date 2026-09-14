@@ -21,7 +21,9 @@ test('default feed path uses visible page mode and matches theme-boot query orde
     expected,
   );
   const api = await readFile(path.join(here, '../src/components/catalysts/api.ts'), 'utf8');
-  assert.match(api, /page_mode: q\.pageMode \?\? 'visible'/);
+  assert.match(api, /page_mode: q\.pageMode === null \? undefined : \(q\.pageMode \?\? 'visible'\)/);
+  assert.match(api, /windowHours: 24,\s*limit: 50,[\s\S]*pageMode: null/);
+  assert.match(api, /analysisStatus: 'completed',\s*limit: 50,\s*pageMode: null/);
   const boot = await readFile(path.join(here, '../public/theme-boot.js'), 'utf8');
   assert.match(boot, new RegExp(expected.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 });

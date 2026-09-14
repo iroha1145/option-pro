@@ -47,6 +47,14 @@ test('production chunks keep en/ja dictionaries off the shared entry', async () 
   }
 });
 
+test('earnings week start follows the New York calendar date', async () => {
+  const { weekStartMonday, addDays, daysUntil } = await import('../src/components/earnings/types.ts');
+  assert.equal(weekStartMonday('2026-09-13'), '2026-09-07');
+  assert.equal(weekStartMonday('2026-09-14'), '2026-09-14');
+  assert.equal(addDays('2026-09-13', 1), '2026-09-14');
+  assert.equal(daysUntil('2026-09-14') - daysUntil('2026-09-13'), 1);
+});
+
 test('earnings page localizes the clock and defers the EPS chart', async () => {
   const page = await readFile(src('pages', 'Earnings.tsx'), 'utf8');
   const chart = await readFile(src('components', 'earnings', 'DeferredEpsChart.tsx'), 'utf8');
