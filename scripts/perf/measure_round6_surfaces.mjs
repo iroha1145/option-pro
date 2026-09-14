@@ -183,7 +183,7 @@ async function waitReady(page, route, timeout = 60_000) {
 }
 
 async function withPage(fn) {
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({ headless: true, channel: 'chrome' });
   const context = await browser.newContext({
     viewport: { width: profile.width, height: profile.height },
     deviceScaleFactor: profile.dpr,

@@ -101,7 +101,7 @@ async function measureNavigation(page, base, pathName, network) {
   const beforeFeeds = network.feedUrls.length;
   const beforeReq = network.requests;
   const beforeErr = network.errors;
-  await page.goto(`${base}${pathName}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+  await page.goto(`${base}${pathName}`, { waitUntil: 'domcontentloaded', timeout: 180_000 });
   const readyHandle = await page.waitForFunction(() => {
     const title = document.querySelector('article h3');
     if (!title) return false;
@@ -114,7 +114,7 @@ async function measureNavigation(page, base, pathName, network) {
     const enabled = !button || !button.disabled;
     if (!visible || !enabled) return false;
     return { title: text, at: performance.now() };
-  }, null, { timeout: 120_000 }).catch(() => null);
+  }, null, { timeout: 180_000 }).catch(() => null);
   const ready = readyHandle ? await readyHandle.jsonValue() : null;
   const metrics = await page.evaluate(() => {
     const observed = window.__optixPerf || {};
@@ -143,7 +143,7 @@ async function measureNavigation(page, base, pathName, network) {
 }
 
 async function collectPair(base) {
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({ headless: true, channel: 'chrome' });
   const context = await browser.newContext({
     viewport: { width: profile.width, height: profile.height },
     deviceScaleFactor: profile.dpr,
