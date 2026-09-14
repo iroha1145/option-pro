@@ -33,6 +33,7 @@ import NewsPanel from '@/components/detail/NewsPanel';
 import AiAnalysisCard from '@/components/detail/AiAnalysisCard';
 import ManualStockPull from '@/components/detail/ManualStockPull';
 import KeyStats from '@/components/detail/KeyStats';
+import { pageRegionProps } from '@/lib/pageRegion';
 import { t, t as __t } from '../i18n/core.ts';
 
 export default function StockDetail() {
@@ -107,7 +108,7 @@ export default function StockDetail() {
 
   if (loading && !detail) {
     return (
-      <div className="space-y-5" aria-busy="true">
+      <div className="space-y-5" aria-busy="true" {...pageRegionProps('stock', 'loading')}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">{backButton}<WatchlistToggle ticker={symbol} /></div>
           <span className="eyebrow">STOCK · ${symbol}</span>
@@ -127,7 +128,7 @@ export default function StockDetail() {
     const publicSnapshotMissing = error?.bizCode === 'public_snapshot_unavailable';
     const manualRecovery = publicSnapshotMissing || (!error && !detail);
     return (
-      <div>
+      <div {...pageRegionProps('stock', is404 || manualRecovery ? 'empty' : 'error')}>
         <div className="mb-6 flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">{backButton}<WatchlistToggle ticker={symbol} /></div>
           <span className="eyebrow">STOCK · ${symbol}</span>
@@ -230,7 +231,7 @@ export default function StockDetail() {
   );
 
   return (
-    <div>
+    <div {...pageRegionProps('stock', 'content')}>
       {/* 行0 */}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">{backButton}<WatchlistToggle ticker={symbol} /></div>

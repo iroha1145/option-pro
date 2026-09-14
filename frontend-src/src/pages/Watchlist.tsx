@@ -45,6 +45,7 @@ import SessionLED, { SessionDot } from '@/components/shared/SessionLED';
 import { SkeletonCard, SkeletonReveal, SkeletonRows } from '@/components/shared/Skeleton';
 import Sparkline from '@/components/charts/Sparkline';
 import Icon from '@/components/icons';
+import { pageRegionProps } from '@/lib/pageRegion';
 import { getLocale, t } from '../i18n/core.ts';
 
 /* ---------------- B1 小件：涨跌宽度比条 ---------------- */
@@ -289,6 +290,7 @@ function WatchCard({
           : undefined
       }
       className="group/card relative"
+      data-watch-ticker={item.ticker}
     >
       <button
         type="button"
@@ -747,7 +749,20 @@ export default function Watchlist() {
 
       <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-12">
         {/* B2 自选主区（8 列） */}
-        <section className="lg:col-span-8" aria-label={t("自选列表")}>
+        <section
+          className="lg:col-span-8"
+          aria-label={t("自选列表")}
+          {...pageRegionProps(
+            'watchlist',
+            loading
+              ? 'loading'
+              : personalFailed || (err && !wl.data && !canManageWatchlist)
+                ? 'error'
+                : items.length === 0
+                  ? 'empty'
+                  : 'content',
+          )}
+        >
           {/* 工具行 */}
           <div className="flex min-h-11 flex-wrap items-center justify-between gap-2 border-b border-line py-1.5">
             <div className="flex min-w-0 flex-wrap items-center gap-2.5">

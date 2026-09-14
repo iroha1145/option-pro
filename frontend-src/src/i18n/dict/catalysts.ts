@@ -217,6 +217,8 @@ export const CATALYSTS: Dict = {
   '取消失败': ['Cancel failed', 'キャンセルに失敗しました'],
   'NEWS DETAIL · 新闻详情': ['NEWS DETAIL · News detail', 'NEWS DETAIL · ニュース詳細'],
   '详情不可用': ['Details unavailable', '詳細を取得できません'],
+  '详情更新失败': ['Could not refresh details', '詳細の更新に失敗しました'],
+  '任务状态暂时读不到': ['Job status is temporarily unavailable', 'ジョブ状態を一時的に取得できません'],
   '· 列表摘要仍然有效': ["· the list summary is still valid", '· 一覧の要約は引き続き有効です'],
   '源确认': ['source confirmations', '件のソースで確認'],
   '原文': ['Original', '原文'],

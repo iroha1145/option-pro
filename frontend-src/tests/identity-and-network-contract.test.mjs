@@ -224,7 +224,7 @@ test('theme-boot 在主包解析前预取身份和默认新闻 feed', async () =
   assert.match(main, /prefetchRouteChunk\(window\.location\.pathname\)/);
   const drawer = codeOf(await source('components/catalysts/NewsDrawer.tsx'));
   assert.match(drawer, /seedMatches && seed/);
-  assert.match(drawer, /catalystsContract\s*\.\s*news\(newsId\)/);
+  assert.match(drawer, /catalystsContract\s*\.\s*news\(/);
   assert.match(drawer, /item\?\.analysisJobId/);
   assert.match(drawer, /item\?\.analysisStatus/);
   const filters = codeOf(await source('components/catalysts/FilterBar.tsx'));

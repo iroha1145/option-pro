@@ -24,4 +24,4 @@
 | `run_final_regression.sh` | 剩余套件结束后的最终关键回归：前端测试 + 催化 pytest + mobile-ref/交互 n=20 |
 | `lib/rate_limit.mjs` | 测量脚本共用：对间间隔 + 遇到 429 冷却 60s（不放宽产品限流） |
 
-原始结果默认写到 `/opt/cursor/artifacts/perf/`。
+原始结果默认写到 `/opt/cursor/artifacts/perf/`。体量可控的复测 JSON 同时放入 `docs/performance/artifacts/`，避免只留 Cursor 机器绝对路径。

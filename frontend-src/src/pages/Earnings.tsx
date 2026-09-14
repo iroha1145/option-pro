@@ -43,6 +43,7 @@ import {
   resolveFeaturedSelection,
   weekStartMonday,
 } from '@/components/earnings/types';
+import { pageRegionProps } from '@/lib/pageRegion';
 import { t } from '../i18n/core.ts';
 
 const REFRESH_COOLDOWN_S = 60;
@@ -603,6 +604,16 @@ export default function Earnings() {
       <div
         className="mt-6 grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-12"
         aria-label={t("财报主体")}
+        {...pageRegionProps(
+          'earnings',
+          loading
+            ? 'loading'
+            : error503
+              ? 'error'
+              : items.length === 0
+                ? 'empty'
+                : 'content',
+        )}
       >
         <div className="min-w-0 space-y-6 xl:col-span-8">
           {loading ? (

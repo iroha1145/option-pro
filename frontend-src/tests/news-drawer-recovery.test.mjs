@@ -5,6 +5,14 @@ import path from 'node:path';
 import vm from 'node:vm';
 import ts from 'typescript';
 import { fileURLToPath } from 'node:url';
+import {
+  ReadAttemptAborted,
+  boundedReadRetryDelayMs,
+  createCancellableSleep,
+  isAutoRetryableReadError,
+  runBoundedRead,
+  shouldApplyRecoveryJob,
+} from '../src/lib/boundedReadRetry.ts';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../src');
 const source = fs.readFileSync(path.join(root, 'components/catalysts/NewsDrawer.tsx'), 'utf8');
@@ -165,8 +173,10 @@ function harness() {
   let nextTimer = 0;
   const newsCalls = [];
   const jobCalls = [];
+  const createCalls = [];
   const updates = [];
   const toasts = [];
+  let sessionGen = 0;
   let newsImpl = async () => item({ analysisStatus: 'queued', analysisJobId: 'job-1' });
   let jobImpl = async () => job({ status: 'in_progress' });
   const env = {
@@ -210,10 +220,23 @@ function harness() {
       }) };
       if (id === '@/hooks/useShell') return { useShell: () => ({ openTicker() {} }) };
       if (id === '@/lib/format') return { fmtLocaleDateTime: () => 't', fmtLocaleTime: () => 't' };
+      if (id === '@/api/queryRegistry') return { getQueryPrincipalGeneration: () => sessionGen };
+      if (id === '@/lib/boundedReadRetry') return {
+        ReadAttemptAborted,
+        boundedReadRetryDelayMs,
+        createCancellableSleep,
+        isAutoRetryableReadError,
+        runBoundedRead,
+        shouldApplyRecoveryJob,
+      };
       if (id === './api') return {
         catalystsContract: {
           news(id) { newsCalls.push(id); return newsImpl(id); },
           analysisJob(id) { jobCalls.push(id); return jobImpl(id); },
+          createAnalysisJob(id, force) {
+            createCalls.push([id, force]);
+            throw new Error('recovery must not POST createAnalysisJob');
+          },
         },
       };
       if (id === './bits') return {
@@ -236,18 +259,22 @@ function harness() {
       await settle();
     }
   };
+  let treeOf = () => null;
   return {
     newsCalls,
     jobCalls,
+    createCalls,
     updates,
     toasts,
     timers,
+    bumpSession: () => { sessionGen += 1; },
     setNews: (fn) => { newsImpl = fn; },
     setJob: (fn) => { jobImpl = fn; },
     fireDue,
     unmount: () => runner.unmount(),
+    tree: () => treeOf(),
     render(props) {
-      runner.mount(
+      treeOf = runner.mount(
         () => NewsDrawer({
           onClose() {},
           onUpdate: (row) => updates.push(row),
@@ -256,6 +283,20 @@ function harness() {
       );
     },
   };
+}
+
+function collectText(node, out = []) {
+  if (node == null) return out;
+  if (typeof node === 'string' || typeof node === 'number') {
+    out.push(String(node));
+    return out;
+  }
+  if (Array.isArray(node)) {
+    for (const child of node) collectText(child, out);
+    return out;
+  }
+  if (typeof node === 'object' && node.props) collectText(node.props.children, out);
+  return out;
 }
 
 test('seed 无任务时等详情带回 queued 才开始轮询并走到完成', async () => {
@@ -356,4 +397,161 @@ test('详情已是完成态时不再轮询；瞬时失败后重试能恢复任�
   assert.deepEqual(h2.jobCalls, ['job-retry']);
   h.unmount();
   h2.unmount();
+});
+
+test('抽屉保持打开时，seed 的旧任务 A 迟到不得替换已恢复的新任务 B', async () => {
+  const h = harness();
+  const news = deferred();
+  const jobA = deferred();
+  const jobB = deferred();
+  h.setNews(async () => news.promise);
+  h.setJob(async (id) => (id === 'job-B' ? jobB.promise : jobA.promise));
+  h.render({
+    newsId: '9600',
+    seed: item({ analysisStatus: 'queued', analysisJobId: 'job-A' }),
+  });
+  await settle();
+  assert.deepEqual(h.jobCalls, ['job-A']);
+  news.resolve(item({ analysisStatus: 'in_progress', analysisJobId: 'job-B' }));
+  await settle();
+  assert.ok(h.jobCalls.includes('job-B'));
+  jobB.resolve(job({ jobId: 'job-B', status: 'in_progress', progress: 40 }));
+  await settle();
+  await h.fireDue(2000);
+  const afterB = h.jobCalls.filter((id) => id === 'job-B').length;
+  jobA.resolve(job({ jobId: 'job-A', status: 'in_progress', progress: 99 }));
+  await settle();
+  await h.fireDue(2000);
+  assert.equal(h.createCalls.length, 0);
+  assert.ok(h.jobCalls.filter((id) => id === 'job-B').length >= afterB);
+  assert.ok(!h.jobCalls.slice(h.jobCalls.lastIndexOf('job-B') + 1).includes('job-A'), '迟到的 A 不得开始轮询');
+  h.unmount();
+});
+
+test('首次 analysisJob 503 对同一任务 ID 有界重试，不 POST 创建', async () => {
+  const h = harness();
+  let jobRound = 0;
+  h.setNews(async () => item({ analysisStatus: 'queued', analysisJobId: 'job-1' }));
+  h.setJob(async (id) => {
+    jobRound += 1;
+    if (jobRound === 1) {
+      const error = new Error('busy');
+      error.code = 503;
+      error.retryable = true;
+      throw error;
+    }
+    return job({ jobId: id, status: 'in_progress' });
+  });
+  h.render({ newsId: '9600', seed: item({ analysisStatus: 'queued', analysisJobId: 'job-1' }) });
+  await settle();
+  assert.equal(h.jobCalls.length, 1);
+  assert.equal(h.createCalls.length, 0);
+  await h.fireDue(1500);
+  assert.deepEqual(h.jobCalls, ['job-1', 'job-1']);
+  assert.equal(h.createCalls.length, 0);
+  h.unmount();
+});
+
+test('恢复已 completed 后详情失败必须可见且可重试', async () => {
+  const h = harness();
+  let newsRound = 0;
+  h.setNews(async () => {
+    newsRound += 1;
+    if (newsRound === 1) return item({ analysisStatus: 'queued', analysisJobId: 'job-1' });
+    const error = new Error('gone');
+    error.code = 503;
+    error.retryable = true;
+    throw error;
+  });
+  h.setJob(async () => job({ jobId: 'job-1', status: 'completed', progress: 100 }));
+  h.render({ newsId: '9600', seed: item({ analysisStatus: 'queued', analysisJobId: 'job-1' }) });
+  await settle();
+  await h.fireDue(1500);
+  await h.fireDue(3000);
+  await settle();
+  const text = collectText(h.tree()).join(' ');
+  assert.match(text, /第9600条快讯/);
+  assert.match(text, /详情更新失败/);
+  assert.match(text, /重试/);
+  h.unmount();
+});
+
+test('429 + Retry-After 30 秒不在 1.5/4.5 秒重发详情', async () => {
+  const h = harness();
+  h.setNews(async () => {
+    const error = new Error('slow');
+    error.code = 429;
+    error.retryAfter = 30;
+    error.retryable = true;
+    throw error;
+  });
+  h.render({ newsId: '9600', seed: item() });
+  await settle();
+  assert.equal(h.newsCalls.length, 1);
+  await h.fireDue(1500);
+  await h.fireDue(4500);
+  assert.equal(h.newsCalls.length, 1);
+  await h.fireDue(30_000);
+  assert.equal(h.newsCalls.length, 2);
+  assert.match(collectText(h.tree()).join(' '), /第9600条快讯/);
+  h.unmount();
+});
+
+test('404 与 retryable=false 只打一次详情', async () => {
+  for (const extras of [{ code: 404 }, { code: 502, retryable: false }]) {
+    const h = harness();
+    h.setNews(async () => {
+      const error = new Error('blocked');
+      Object.assign(error, extras);
+      throw error;
+    });
+    h.render({ newsId: '9600', seed: item() });
+    await settle();
+    assert.equal(h.newsCalls.length, 1);
+    await h.fireDue(1500);
+    await h.fireDue(3000);
+    assert.equal(h.newsCalls.length, 1, JSON.stringify(extras));
+    assert.match(collectText(h.tree()).join(' '), /第9600条快讯/);
+    h.unmount();
+  }
+});
+
+test('睡眠期间关抽屉不再发详情请求', async () => {
+  const h = harness();
+  h.setNews(async () => {
+    const error = new Error('busy');
+    error.code = 503;
+    error.retryable = true;
+    throw error;
+  });
+  h.render({ newsId: '9600', seed: item() });
+  await settle();
+  assert.equal(h.newsCalls.length, 1);
+  h.render({ newsId: null, seed: item() });
+  await settle();
+  await h.fireDue(1500);
+  await h.fireDue(3000);
+  assert.equal(h.newsCalls.length, 1);
+  h.unmount();
+});
+
+test('连续失败仍显示真实 seed 并给出错误/重试', async () => {
+  const h = harness();
+  h.setNews(async () => {
+    const error = new Error('busy');
+    error.code = 503;
+    error.retryable = true;
+    throw error;
+  });
+  h.render({ newsId: '9600', seed: item() });
+  await settle();
+  await h.fireDue(1500);
+  await h.fireDue(3000);
+  await settle();
+  const text = collectText(h.tree()).join(' ');
+  assert.match(text, /第9600条快讯/);
+  assert.match(text, /摘要/);
+  assert.match(text, /详情更新失败/);
+  assert.match(text, /重试/);
+  h.unmount();
 });

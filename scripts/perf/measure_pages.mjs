@@ -81,22 +81,28 @@ function summarize(samples) {
   const byClass = (kind) => samples.filter((row) => row.ready_class === kind).map((row) => row.ready_ms).filter((ms) => ms != null);
   const content = byClass('content');
   const empty = byClass('empty');
+  const idle = byClass('idle');
   const error = byClass('error');
   const timeout = samples.filter((row) => row.ready_class === 'timeout');
   return {
     n: samples.length,
     content_n: content.length,
     empty_n: empty.length,
+    idle_n: idle.length,
     error_n: error.length,
     timeout_n: timeout.length,
     content_rate: samples.length ? content.length / samples.length : 0,
     empty_rate: samples.length ? empty.length / samples.length : 0,
+    idle_rate: samples.length ? idle.length / samples.length : 0,
     error_rate: samples.length ? error.length / samples.length : 0,
-    success_rate: samples.length ? (content.length + empty.length) / samples.length : 0,
+    data_rate: samples.length ? (content.length + empty.length) / samples.length : 0,
+    success_rate: samples.length ? (content.length + empty.length + idle.length) / samples.length : 0,
     content_p50: percentile(content, 0.5),
     content_p75: percentile(content, 0.75),
     empty_p50: percentile(empty, 0.5),
     empty_p75: percentile(empty, 0.75),
+    idle_p50: percentile(idle, 0.5),
+    idle_p75: percentile(idle, 0.75),
     error_p50: percentile(error, 0.5),
     error_p75: percentile(error, 0.75),
     rate_limited_n: samples.filter((row) => (row.rate_limited || 0) > 0).length,
@@ -124,7 +130,7 @@ for (const route of ROUTES) {
     await page.goto(`${BASE}${route}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
     const ready = await page.waitForFunction((path) => {
       const kind = window.__optixPageReadyClass(path);
-      if (kind === 'content' || kind === 'empty' || kind === 'error') {
+      if (kind === 'content' || kind === 'empty' || kind === 'error' || kind === 'idle') {
         return { kind, at: performance.now() };
       }
       return false;
@@ -134,7 +140,7 @@ for (const route of ROUTES) {
       wall_ms: Date.now() - started,
       ready_ms: ready?.at ?? null,
       ready_class: kind,
-      ready_ok: kind === 'content' || kind === 'empty',
+      ready_ok: kind === 'content' || kind === 'empty' || kind === 'idle',
       rate_limited: rateLimit.count,
     });
     await context.close();
@@ -143,14 +149,14 @@ for (const route of ROUTES) {
   }
   results[route] = summarize(samples);
   const row = results[route];
-  console.log(`${route} content_p75=${row.content_p75} content=${row.content_n}/${row.n} empty=${row.empty_n} error=${row.error_n} timeout=${row.timeout_n}`);
+  console.log(`${route} content_p75=${row.content_p75} content=${row.content_n}/${row.n} empty=${row.empty_n} idle=${row.idle_n} error=${row.error_n} timeout=${row.timeout_n}`);
 }
 
 const report = {
   lab: true,
   profile: PROFILE,
   measuredAt: new Date().toISOString(),
-  ready_semantics: 'content/empty/error/timeout; content_p75 excludes error and timeout',
+  ready_semantics: 'content/empty/idle/error/timeout; content_p75 excludes idle, error and timeout; idle is unscanned, not a loaded empty result',
   routes: results,
 };
 await mkdir(path.dirname(OUT), { recursive: true });

@@ -130,6 +130,11 @@ export function queryConfigFor(path: string): QueryConfig | null {
   return QUERY_CONFIG[path] ?? null;
 }
 
+/** 当前主体世代：登录/登出/失效后递增，在途读不得写回。 */
+export function getQueryPrincipalGeneration(): number {
+  return principalGeneration;
+}
+
 /** useAccess 在身份确定/变化时调用;持久层记录按 principal 校验。 */
 export function setQueryPrincipal(key: string | null): void {
   if (key !== principalKey) {

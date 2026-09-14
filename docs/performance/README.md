@@ -14,6 +14,8 @@
 | [07-review-round2.md](07-review-round2.md) | 第 2 轮隔离复查 |
 | [08-review-round3.md](08-review-round3.md) | 第 3 轮隔离复查（只读；完成判定仍部分成立） |
 | [09-review-fixes.md](09-review-fixes.md) | PR 审查 R1–R4 修复与复验边界 |
+| [10-review-fixes.md](10-review-fixes.md) | 抽屉恢复 / 详情重试 / ready 业务区 |
+| [artifacts/](artifacts/) | 体量可控的复测原始 JSON |
 
 对照未优化树：`$HOME/option-pro-unoptimized`（同一 SHA，detached HEAD）。
 

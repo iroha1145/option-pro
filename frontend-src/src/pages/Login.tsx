@@ -21,6 +21,7 @@ import Icon from '@/components/icons';
 import ThemeSwitcher from '@/components/ThemeSwitcher';
 import SelectionViewport from '@/components/shared/SelectionViewport';
 import type { IconName } from '@/components/icons';
+import { pageRegionProps } from '@/lib/pageRegion';
 import { t } from '../i18n/core.ts';
 
 /* ---------------- L0 主视觉（内联 login-motif + K 线循环） ---------------- */
@@ -313,7 +314,7 @@ export default function Login() {
         <div className="absolute right-4 top-4 z-20 md:right-8 md:top-6">
           <ThemeSwitcher />
         </div>
-        <div className="size-8 animate-spin rounded-full border-2 border-brand-100 border-t-brand-600" aria-label={t("加载中")} />
+        <div className="size-8 animate-spin rounded-full border-2 border-brand-100 border-t-brand-600" aria-label={t("加载中")} {...pageRegionProps('login', 'loading')} />
       </div>
     );
   }
@@ -326,7 +327,7 @@ export default function Login() {
         <div className="absolute right-4 top-4 z-20 md:right-8 md:top-6">
           <ThemeSwitcher />
         </div>
-        <div className="card-surface w-full max-w-[360px] p-6 text-center">
+        <div className="card-surface w-full max-w-[360px] p-6 text-center" {...pageRegionProps('login', 'content')}>
           <p className="eyebrow">{t('当前会话')}</p>
           <h1 className="mt-2 text-h3 text-ink-800">
             {isOwner ? t('管理员已登录') : t('已登录 {name}', { name: signedInName ?? '' })}
@@ -489,7 +490,7 @@ export default function Login() {
               </p>
             )}
 
-            <form onSubmit={onSubmit} className="mt-5" noValidate>
+            <form onSubmit={onSubmit} className="mt-5" noValidate {...pageRegionProps('login', 'content')}>
               <div className={cn('t-input-wrap mb-4', userShake.classes.wrap)}>
               <label className="block">
                 <span className="mb-1.5 block text-caption font-medium text-ink-500">{t('用户名')}</span>

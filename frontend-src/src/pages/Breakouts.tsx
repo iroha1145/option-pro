@@ -47,6 +47,7 @@ import type {
   BreakoutSession,
   LifecycleState,
 } from '@/components/breakouts/types';
+import { pageRegionProps } from '@/lib/pageRegion';
 import { t as __t } from '../i18n/core.ts';
 
 /* ---------------- 筛选维度 ---------------- */
@@ -451,7 +452,20 @@ export default function Breakouts() {
       </div>
 
       {/* 当日信号：左大面板（lead 压缩大卡）+ 右吸顶栏（事件队列 + 生命周期分布） */}
-      <section className="mt-8" aria-label={__t("当日信号")}>
+      <section
+        className="mt-8"
+        aria-label={__t("当日信号")}
+        {...pageRegionProps(
+          'breakouts',
+          currentQ.loading
+            ? 'loading'
+            : currentError
+              ? 'error'
+              : current.length === 0
+                ? 'empty'
+                : 'content',
+        )}
+      >
         <div className="radar-section-heading mb-4 flex items-end justify-between pb-1">
           <div>
             <p className="eyebrow">TODAY&apos;S SIGNALS</p>

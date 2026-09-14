@@ -42,6 +42,9 @@ test('实验室计时仍以真实新闻标题为准，不用骨架屏冒充完�
   assert.match(ready, /export function classifyPageReady/);
   assert.match(ready, /行情服务暂不可用/);
   assert.match(ready, /页面不存在/);
+  assert.match(ready, /data-optix-region/);
+  assert.match(ready, /idle/);
+  assert.doesNotMatch(ready, /main\.length\s*>\s*(40|80)/);
   assert.doesNotMatch(pages, /button, form, input/);
   const interleaved = await read('scripts/perf/measure_interleaved.mjs');
   assert.match(interleaved, /interleaved/);
