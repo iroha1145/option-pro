@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from app.services.research.dataset import load_dataset, research_universe
-from app.services.research.labels import attach_screener_labels, last_usable_signal_date
+from app.services.research.labels import attach_event_labels, attach_screener_labels, last_usable_signal_date
 from app.services.research.metrics import date_clustered_mean, spearman_rank_ic, summarize_daily_ics, top_k_mean
 from app.services.research.portfolio import simulate_long_only
 from app.services.research.protocol import (
@@ -23,15 +23,15 @@ from app.services.research.protocol import (
     iter_split_dates,
     protocol_hash,
 )
-from app.services.research.radar import reconstruct_daily_base_events, reconstruct_ticker_dates
-from app.services.research.replay_store import (
-    append_jsonl,
-    completed_sessions,
-    partial_paths,
-    read_jsonl,
-    reset_partials,
+from app.services.research.radar import (
+    first_trigger_by_pivot,
+    platform_evolution_groups,
+    reconstruct_daily_base_events,
+    reconstruct_ticker_dates,
 )
+from app.services.research.replay_store import ReplayStore
 from app.services.research.registry import append_trial
+from app.services.research.run_identity import RunIdentityError, build_run_identity
 from app.services.research.screener import compact_screener_row, replay_screener_day
 
 _RADAR_JOB: dict[str, Any] = {}
@@ -157,13 +157,31 @@ def cmd_screener_replay(args: argparse.Namespace) -> int:
     }
 
     out = Path(args.out)
-    days_path, rows_path = partial_paths(out)
+    identity = build_run_identity(
+        command="screener-replay",
+        dataset=dataset,
+        split=split,
+        dates=dates,
+        step=args.step,
+        limit=args.limit,
+        allow_sealed=allow_sealed,
+        parameters=parameters,
+        timeframe=args.timeframe,
+        profile=args.profile,
+        top=args.top,
+        min_price=parameters["min_price"],
+        min_avg_dollar_volume=parameters["min_avg_dollar_volume"],
+    )
+    store = ReplayStore(out)
     resume = bool(getattr(args, "resume", False))
-    if resume:
-        done_keys = completed_sessions(days_path)
-    else:
-        reset_partials(days_path, rows_path)
-        done_keys = set()
+    try:
+        if resume:
+            store.require_resume(identity)
+        else:
+            store.initialize(identity)
+    except RunIdentityError as exc:
+        raise SystemExit(str(exc)) from exc
+    done_keys = store.completed_keys()
     pending = [day for day in dates if day.isoformat() not in done_keys]
     workers = max(1, int(args.workers))
     _SCREENER_JOB.update(
@@ -183,7 +201,7 @@ def cmd_screener_replay(args: argparse.Namespace) -> int:
     if workers == 1:
         for index, key in enumerate(session_keys, start=1):
             session_iso, payload, labeled = _screener_day_job(key)
-            _persist_screener_day(days_path, rows_path, session_iso, payload, labeled)
+            _persist_screener_day(store, session_iso, payload, labeled)
             print(f"screener-replay {index}/{len(session_keys)} {key}", flush=True)
     else:
         from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -197,26 +215,29 @@ def cmd_screener_replay(args: argparse.Namespace) -> int:
             done = 0
             for future in as_completed(futures):
                 session_iso, payload, labeled = future.result()
-                _persist_screener_day(days_path, rows_path, session_iso, payload, labeled)
+                _persist_screener_day(store, session_iso, payload, labeled)
                 done += 1
                 print(f"screener-replay {done}/{len(session_keys)} {session_iso}", flush=True)
-    daily = read_jsonl(days_path)
+    daily = store.assemble_markers()
     daily.sort(key=lambda item: str(item.get("signal_date") or ""))
-    event_rows = read_jsonl(rows_path)
+    event_rows = store.assemble_rows()
+    event_rows = _unique_screener_rows(event_rows)
     summary = {
         "status": "active",
         "split": split,
         "step": args.step,
         "limit": args.limit,
         "protocol_hash": protocol_hash(),
+        "run_identity": identity,
         "parameters": parameters,
-        "ic_summary": summarize_daily_ics(item["ic"] for item in daily),
+        "ic_summary": summarize_daily_ics(daily),
         "days": daily,
         "notes": [
             "这是开发区/验证区点时重建，不是当年真实发布快照。",
             "封存区未包含在内，除非显式 --unblind-sealed。",
             "Rank IC 与股票池均值使用当日全部合格 view_rows，不是 Top-N 截断样本。",
             "逐日压缩行含 short/mid/long 与 profile 重算所需字段，可用同一份 dump 报告六种预登记模式。",
+            "Top-K 先按事前分数冻结再挂标签；CI 使用期限长度的块 bootstrap，不是普通日期分块 SE。",
         ],
     }
     _write_json(out, summary)
@@ -238,9 +259,16 @@ def cmd_screener_replay(args: argparse.Namespace) -> int:
     return 0
 
 
+def _unique_screener_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    merged: dict[tuple[str, str], dict[str, Any]] = {}
+    for row in rows:
+        key = (str(row.get("signal_date") or ""), str(row.get("ticker") or ""))
+        merged[key] = row
+    return list(merged.values())
+
+
 def _persist_screener_day(
-    days_path: Path,
-    rows_path: Path,
+    store: ReplayStore,
     session_iso: str,
     payload: dict[str, Any],
     labeled: list[dict[str, Any]],
@@ -270,8 +298,7 @@ def _persist_screener_day(
         "universe_version": payload.get("universe_version"),
         "skipped": payload.get("skipped"),
     }
-    append_jsonl(rows_path, labeled)
-    append_jsonl(days_path, [day])
+    store.commit(session_iso, marker=day, rows=labeled)
     return day
 
 
@@ -299,13 +326,26 @@ def cmd_radar_replay(args: argparse.Namespace) -> int:
         for ticker in symbols
     }
     out = Path(args.out)
-    days_path, events_path = partial_paths(out)
+    identity = build_run_identity(
+        command="radar-replay",
+        dataset=dataset,
+        split=split,
+        dates=dates,
+        step=args.step,
+        limit=args.limit,
+        allow_sealed=allow_sealed,
+        universe=FROZEN_PROTOCOL.get("universe"),
+    )
+    store = ReplayStore(out)
     resume = bool(getattr(args, "resume", False))
-    if resume:
-        done_keys = completed_sessions(days_path, key="ticker")
-    else:
-        reset_partials(days_path, events_path)
-        done_keys = set()
+    try:
+        if resume:
+            store.require_resume(identity)
+        else:
+            store.initialize(identity)
+    except RunIdentityError as exc:
+        raise SystemExit(str(exc)) from exc
+    done_keys = store.completed_keys()
     pending = [ticker for ticker in symbols if ticker not in done_keys]
     workers = max(1, int(getattr(args, "workers", 1)))
     _RADAR_JOB.update(
@@ -324,7 +364,7 @@ def cmd_radar_replay(args: argparse.Namespace) -> int:
     if workers == 1:
         for index, ticker in enumerate(pending, start=1):
             name, payload = _radar_ticker_job(ticker)
-            _persist_radar_ticker(days_path, events_path, name, payload)
+            _persist_radar_ticker(store, name, payload)
             print(f"radar-replay {index}/{len(pending)} {name}", flush=True)
     else:
         from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -338,56 +378,55 @@ def cmd_radar_replay(args: argparse.Namespace) -> int:
             done = 0
             for future in as_completed(futures):
                 name, payload = future.result()
-                _persist_radar_ticker(days_path, events_path, name, payload)
+                _persist_radar_ticker(store, name, payload)
                 done += 1
                 print(f"radar-replay {done}/{len(pending)} {name}", flush=True)
-    events = read_jsonl(events_path)
-    first_hits: dict[tuple[str, str], dict[str, Any]] = {}
-    duplicate_triggers = 0
-    for event in events:
-        key = (str(event.get("ticker")), str(event.get("pivot_id")))
-        if key in first_hits:
-            duplicate_triggers += 1
-            continue
-        first_hits[key] = event
-    events = list(first_hits.values())
-    pairs = []
-    labeled_events = []
-    from app.services.research.labels import forward_close_return
-
-    for event in events:
-        label = forward_close_return(
-            dataset,
-            str(event["ticker"]),
-            parse_date(event["trading_date"]),
-            PRIMARY_HORIZON,
-            allow_sealed_prices=allow_sealed,
-        )
-        spy = forward_close_return(
-            dataset,
-            "SPY",
-            parse_date(event["trading_date"]),
-            PRIMARY_HORIZON,
-            allow_sealed_prices=allow_sealed,
-        )
-        raw = label.get("forward_return")
-        bench = spy.get("forward_return")
-        excess = None if raw is None or bench is None else raw - bench
-        item = {**event, "label_20d": label, "spy_20d": spy, "excess_vs_spy_20d": excess}
-        labeled_events.append(item)
-        if excess is not None:
-            pairs.append((event["trading_date"], excess))
+    events = store.assemble_rows()
+    pivot_dedupe = first_trigger_by_pivot(events)
+    events = list(pivot_dedupe["events"])
+    labeled_events = attach_event_labels(
+        events,
+        dataset,
+        horizon=PRIMARY_HORIZON,
+        universe_tickers=symbols,
+        allow_sealed=allow_sealed,
+    )
+    universe_pairs = [
+        (item["trading_date"], item["excess_vs_universe_20d"])
+        for item in labeled_events
+        if item.get("excess_vs_universe_20d") is not None
+    ]
+    spy_pairs = [
+        (item["trading_date"], item["excess_vs_spy_20d"])
+        for item in labeled_events
+        if item.get("excess_vs_spy_20d") is not None
+    ]
+    platforms = platform_evolution_groups(labeled_events)
     summary = {
         "status": "active",
         "split": split,
         "protocol_hash": protocol_hash(),
+        "run_identity": identity,
         "event_count": len(labeled_events),
-        "duplicate_triggers_dropped": duplicate_triggers,
-        "clustered_excess_vs_spy": date_clustered_mean(pairs),
+        "duplicate_triggers_dropped": pivot_dedupe["duplicate_triggers_dropped"],
+        "triggered_20d_excess_vs_universe": date_clustered_mean(
+            universe_pairs, horizon_days=PRIMARY_HORIZON
+        ),
+        "triggered_20d_excess_vs_spy": date_clustered_mean(
+            spy_pairs, horizon_days=PRIMARY_HORIZON
+        ),
+        "platform_evolution": {
+            "evolving_platform_count": platforms["evolving_platform_count"],
+            "events_in_evolving_platforms": platforms["events_in_evolving_platforms"],
+            "extra_events_if_only_pivot_id_deduped": platforms["extra_events_if_only_pivot_id_deduped"],
+            "note": platforms["note"],
+        },
         "unverifiable": FROZEN_PROTOCOL["unverifiable_without_intraday"],
         "notes": [
-            "日线平台重建，无 Discovery、无盘中确认。",
-            "同一 ticker+pivot_id 只保留首次触发，后续续扫不重复计成功。",
+            "日线平台重建，无 Discovery、无盘中确认。Grade C。",
+            "主指标是 triggered_20d_excess_vs_universe；相对 SPY 只作补充。",
+            "ticker+pivot_id 去重不等于首次经济事件；见 platform_evolution。",
+            "hold_bars 是日线收盘计数，不能等同分钟确认。",
         ],
     }
     out = Path(args.out)
@@ -410,22 +449,19 @@ def cmd_radar_replay(args: argparse.Namespace) -> int:
 
 
 def _persist_radar_ticker(
-    days_path: Path,
-    events_path: Path,
+    store: ReplayStore,
     ticker: str,
     payload: dict[str, Any],
 ) -> None:
     events = list(payload.get("events") or [])
-    append_jsonl(events_path, events)
-    append_jsonl(
-        days_path,
-        [
-            {
-                "ticker": ticker,
-                "event_count": len(events),
-                "skipped": payload.get("skipped"),
-            }
-        ],
+    store.commit(
+        ticker,
+        marker={
+            "ticker": ticker,
+            "event_count": len(events),
+            "skipped": payload.get("skipped"),
+        },
+        rows=events,
     )
 
 
