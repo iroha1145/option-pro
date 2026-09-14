@@ -15,6 +15,7 @@ from app.services.research.protocol import (
     assert_split_access,
     parse_session_date,
 )
+from app.services.strength.features import _safe_float
 from app.services.strength.scanner import _scan_sync, _sort_scored, _theme_universe
 from app.services.strength.scoring import score_profile_fit, score_ranking
 
@@ -150,6 +151,18 @@ def compact_screener_row(
     }
 
 
+def production_sort_score(row: Mapping[str, Any], timeframe: str) -> float | None:
+    """The exact key used by production `_sort_scored`."""
+
+    ranking = _safe_float(row.get("ranking_score"), 4)
+    if timeframe in {"short", "mid", "long"}:
+        term = _safe_float(row.get(f"score_{timeframe}"), 4)
+        if term is None and ranking is None:
+            return None
+        return (term or 0.0) * 0.94 + (ranking or 0.0) * 0.06
+    return ranking
+
+
 def apply_screener_mode(
     rows: list[Mapping[str, Any]],
     *,
@@ -176,6 +189,7 @@ def apply_screener_mode(
             )
             item["ranking_score"] = ranking.get("score")
             item["profile_fit_score"] = profile_fit.get("score")
+        item["mode_sort_score"] = production_sort_score(item, timeframe)
         item["mode_timeframe"] = timeframe
         item["mode_profile"] = profile
         copies.append(item)
@@ -203,6 +217,7 @@ def apply_disable_market_fit(rows: list[Mapping[str, Any]]) -> list[dict[str, An
             },
         )
         item["ranking_score"] = ranking.get("score")
+        item["mode_sort_score"] = ranking.get("score")
         item["mode_timeframe"] = "all"
         item["mode_profile"] = "balanced"
         item["ablation"] = "disable_market_fit"

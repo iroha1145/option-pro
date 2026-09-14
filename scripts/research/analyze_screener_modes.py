@@ -33,7 +33,7 @@ def _mode_summary(grouped: dict[str, list[dict]], rows_for_day) -> dict:
             {
                 "signal_date": session,
                 **spearman_rank_ic(
-                    [row.get("ranking_score") for row in ranked],
+                    [row.get("mode_sort_score") for row in ranked],
                     [
                         ((row.get("excess") or {}).get("20") or {}).get("excess_vs_universe")
                         for row in ranked
@@ -45,7 +45,7 @@ def _mode_summary(grouped: dict[str, list[dict]], rows_for_day) -> dict:
             tops[str(k)].append(
                 top_k_mean(
                     ranked,
-                    score_key="ranking_score",
+                    score_key="mode_sort_score",
                     outcome_key=("excess", "20", "excess_vs_universe"),
                     k=k,
                 )

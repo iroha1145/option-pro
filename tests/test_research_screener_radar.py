@@ -346,6 +346,7 @@ def test_mode_rerank_changes_profile_order() -> None:
     assert short[0]["ticker"] == "LOWVOL"
     assert long[0]["ticker"] == "HIVOL"
     assert conservative[0]["ticker"] == "LOWVOL"
+    assert short[0]["mode_sort_score"] != long[0]["mode_sort_score"]
 
 
 def test_prior_screener_overlap_uses_strictly_earlier_snapshot() -> None:
