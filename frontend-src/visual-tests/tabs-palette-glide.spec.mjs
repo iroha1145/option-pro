@@ -22,6 +22,7 @@ const glide = (page) => page.locator(GLIDE_SELECTOR);
 const paletteRow = (page, idx) => page.locator(`#command-palette-listbox [data-idx="${idx}"]`);
 
 async function openPalette(page) {
+  await page.getByRole("heading", { level: 1 }).first().waitFor();
   await page.keyboard.press("Control+k");
   await expect(paletteDialog(page)).toBeVisible();
 }
