@@ -63,7 +63,7 @@ async function withLocale(locale, fn) {
     await route.continue();
   });
   await page.addInitScript({
-    content: `${pageReadyInstallScript()}; try { localStorage.setItem('optix:locale', ${JSON.stringify(locale)}); } catch (e) {}`,
+    content: `${pageReadyInstallScript()}; try { if (!localStorage.getItem('optix:locale')) localStorage.setItem('optix:locale', ${JSON.stringify(locale)}); } catch (e) {}`,
   });
   const rateLimit = attach429Counter(page);
   const network = attachNetwork(page);
@@ -117,9 +117,10 @@ const switched = await withLocale('zh', async (page, network) => {
     before,
     after: { href: page.url(), en: network.runtimeEn, ja: network.runtimeJa },
     html_lang: await page.locator('html').getAttribute('lang'),
+    heading: await page.getByRole('heading', { level: 1 }).first().textContent().catch(() => null),
   };
 });
-console.log(`switch zh→en stayed=${switched.stayed_on_earnings} en=${switched.after.en} ja=${switched.after.ja}`);
+console.log(`switch zh→en stayed=${switched.stayed_on_earnings} en=${switched.after.en} ja=${switched.after.ja} lang=${switched.html_lang} h=${switched.heading}`);
 
 const report = {
   lab: true,
@@ -133,6 +134,8 @@ const report = {
     en_only_en: cold.filter((row) => row.locale === 'en').every((row) => row.runtime_en > 0 && row.runtime_ja === 0),
     ja_only_ja: cold.filter((row) => row.locale === 'ja').every((row) => row.runtime_ja > 0 && row.runtime_en === 0),
     switch_keeps_deep_link: switched.stayed_on_earnings,
+    switch_loads_en: switched.after.en > 0 && switched.after.ja === 0,
+    switch_html_lang_en: /^en/i.test(switched.html_lang || ''),
   },
 };
 await mkdir(path.dirname(OUT), { recursive: true });
