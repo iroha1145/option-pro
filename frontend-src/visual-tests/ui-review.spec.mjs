@@ -37,6 +37,8 @@ for (const width of [390, 768, 1440]) {
 
 test('skip link moves keyboard focus to the content', async ({ page }) => {
   await page.goto('/');
+  await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
+  await expect(page.getByRole('link', { name: '跳到主要内容' })).toBeAttached();
   await page.keyboard.press('Tab');
   await expect(page.getByRole('link', { name: '跳到主要内容' })).toBeFocused();
   await page.keyboard.press('Enter');

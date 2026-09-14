@@ -197,6 +197,7 @@ for (const width of [390,1440]) {
 
 test('global shortcut respects repeat, input composition and existing prevented events', async ({ page }) => {
   await page.goto('/');
+  await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible();
   await page.keyboard.press('Control+k'); await expect(palette(page)).toBeVisible();
   await page.evaluate(() => window.dispatchEvent(new KeyboardEvent('keydown',{key:'k',ctrlKey:true,repeat:true,bubbles:true,cancelable:true})));
   await expect(palette(page)).toBeVisible();
