@@ -65,12 +65,12 @@ def _screener_day_job(session_iso: str) -> tuple[str, dict[str, Any], list[dict[
         allow_sealed=_SCREENER_JOB["allow_sealed"],
         panel=_SCREENER_JOB["panel"],
     )
-        labeled = attach_screener_labels(
-            payload.get("view_rows") or payload.get("rows") or [],
-            _SCREENER_JOB["dataset"],
-            signal_date=session,
-            allow_sealed=_SCREENER_JOB["allow_sealed"],
-        )
+    labeled = attach_screener_labels(
+        payload.get("view_rows") or payload.get("rows") or [],
+        _SCREENER_JOB["dataset"],
+        signal_date=session,
+        allow_sealed=_SCREENER_JOB["allow_sealed"],
+    )
     return session_iso, payload, labeled
 
 
