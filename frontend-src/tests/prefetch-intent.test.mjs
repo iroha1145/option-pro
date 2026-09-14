@@ -27,6 +27,25 @@ test('surfaces lab clicks the visible home card and desktop nav, not a hidden ea
   assert.doesNotMatch(surfaces, /querySelector\('a\[href="\/earnings"\]'\)/);
 });
 
+test('surfaces lab fulfills home and earnings APIs so isolate uvicorn does not call paid upstream', async () => {
+  const surfaces = await readFile(path.join(here, '..', '..', 'scripts', 'perf', 'measure_round6_surfaces.mjs'), 'utf8');
+  for (const pathName of [
+    '/api/earnings/upcoming',
+    '/api/market/indices',
+    '/api/market/status',
+    '/api/strength/market',
+    '/api/signals/market',
+    '/api/breakouts/current',
+    '/api/stocks/watchlist',
+    '/api/market/cta',
+    '/api/quotes',
+  ]) {
+    assert.match(surfaces, new RegExp(pathName.replace(/\//g, '\\/')));
+  }
+  assert.match(surfaces, /quotes\/stream/);
+  assert.match(surfaces, /挡不住 uvicorn 出站/);
+});
+
 test('navbar, dock, palette and login expose hover/focus route prefetch', async () => {
   const navbar = await readFile(src('components', 'Navbar.tsx'), 'utf8');
   const dock = await readFile(src('components', 'MobileDock.tsx'), 'utf8');

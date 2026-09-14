@@ -80,6 +80,46 @@ async function applyThrottle(page) {
   }
 }
 
+function jsonOk(body) {
+  return {
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(body),
+  };
+}
+
+function homeLabFixtures() {
+  const asOf = new Date().toISOString();
+  return {
+    indices: {
+      indices: [
+        { symbol: '^GSPC', price: 5972.4, change_percent: 0.21 },
+        { symbol: '^NDX', price: 21468.2, change_percent: 0.18 },
+        { symbol: '^DJI', price: 43828.1, change_percent: -0.12 },
+        { symbol: '^N225', price: 38220.1, change_percent: 0.33 },
+        { symbol: '000001.SS', price: 3351.8, change_percent: -0.08 },
+      ],
+    },
+    status: { market: 'closed', phase: null, holiday: null, server_time: asOf },
+    strength: { as_of: asOf, market_regime: null },
+    signals: { signals: {}, scores: {}, as_of: asOf },
+    breakoutsCurrent: { events: [] },
+    breakoutsStatus: { status: 'idle', as_of: asOf },
+    watchlist: { groups: [] },
+    cta: { method_version: 'lab', source_status: 'unavailable', instruments: [] },
+    quotes: {
+      quotes: [],
+      status: {
+        enabled: false,
+        configured: false,
+        public_enabled: false,
+        connected: false,
+        connection_status: 'disabled',
+      },
+    },
+  };
+}
+
 function earningsFixture() {
   const today = new Date();
   const iso = (offset) => {
@@ -127,18 +167,53 @@ function earningsFixture() {
 }
 
 async function installLabRoutes(page, { mockEarnings = true } = {}) {
+  const fixtures = homeLabFixtures();
   await page.route('**/*', async (route) => {
     const url = route.request().url();
-    if (PAID.test(url)) {
+    if (PAID.test(url) || url.includes('/api/quotes/stream')) {
       await route.abort();
       return;
     }
     if (mockEarnings && url.includes('/api/earnings/upcoming') && !url.includes('refresh')) {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify(earningsFixture()),
-      });
+      await route.fulfill(jsonOk(earningsFixture()));
+      return;
+    }
+    // Home / 财报会打这些端点。浏览器 abort 付费域名挡不住 uvicorn 出站，
+    // 必须在到达隔离后端之前 fulfill，避免 Yahoo/Finnhub。
+    if (url.includes('/api/market/indices')) {
+      await route.fulfill(jsonOk(fixtures.indices));
+      return;
+    }
+    if (url.includes('/api/market/status')) {
+      await route.fulfill(jsonOk(fixtures.status));
+      return;
+    }
+    if (url.includes('/api/strength/market')) {
+      await route.fulfill(jsonOk(fixtures.strength));
+      return;
+    }
+    if (url.includes('/api/signals/market')) {
+      await route.fulfill(jsonOk(fixtures.signals));
+      return;
+    }
+    if (url.includes('/api/breakouts/current')) {
+      await route.fulfill(jsonOk(fixtures.breakoutsCurrent));
+      return;
+    }
+    if (url.includes('/api/breakouts/status')) {
+      await route.fulfill(jsonOk(fixtures.breakoutsStatus));
+      return;
+    }
+    if (url.includes('/api/stocks/watchlist')) {
+      await route.fulfill(jsonOk(fixtures.watchlist));
+      return;
+    }
+    if (url.includes('/api/market/cta')) {
+      await route.fulfill(jsonOk(fixtures.cta));
+      return;
+    }
+    if (/\/api\/quotes(?:\?|$)/.test(url)) {
+      await route.fulfill(jsonOk(fixtures.quotes));
       return;
     }
     await route.continue();
@@ -153,11 +228,15 @@ function attachNetwork(page) {
     runtimeJa: 0,
     earningsChunk: 0,
     abortedPaid: 0,
+    fulfilled_upcoming: 0,
+    fulfilled_indices: 0,
   };
   page.on('request', (request) => {
     state.requests += 1;
     const url = request.url();
     if (PAID.test(url)) state.abortedPaid += 1;
+    if (url.includes('/api/earnings/upcoming') && !url.includes('refresh')) state.fulfilled_upcoming += 1;
+    if (url.includes('/api/market/indices')) state.fulfilled_indices += 1;
     if (/\/assets\/chart-/.test(url) || url.includes('EpsHatchChart')) state.chart += 1;
     if (url.includes('runtime-en')) state.runtimeEn += 1;
     if (url.includes('runtime-ja')) state.runtimeJa += 1;
@@ -240,6 +319,8 @@ for (const route of Object.keys(pages)) {
         runtime_en: network.runtimeEn > 0,
         runtime_ja: network.runtimeJa > 0,
         request_count: network.requests,
+        fulfilled_upcoming: network.fulfilled_upcoming,
+        fulfilled_indices: network.fulfilled_indices,
         rate_limited: rateLimit.count,
         ...resources,
       };

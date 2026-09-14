@@ -41,6 +41,10 @@
 - 页级不再 `useNow(1000)`。冷却只在按钮内走秒；`cooldownUntil` 到期清零。
 - 纽约日 15s 轮询；未钉住的周起始随跨日更新。最多晚约 15s 感知午夜，不做秒级整页重绘。
 
+## surfaces 本地 fulfill
+
+首页会打指数、时段、雷达、自选、报价。浏览器 abort `finnhub|yahoo|…` 只挡页面直连，挡不住 uvicorn 出站。对照脚本在到达 `:2000` 之前 fulfill `/api/market/indices`、`/status`、`/strength/market`、`/signals/market`、`/breakouts/*`、`/stocks/watchlist`、`/market/cta`、`/quotes`，并 abort `/api/quotes/stream`。财报日历仍本地 fulfill，不打 upcoming 刷新。尚未跑浏览器。
+
 ## surfaces 选择器（已修脚本，尚未跑浏览器）
 
 390px 主导航是 `hidden xl:flex`。DOM 里第一个 `a[href="/earnings"]` 不可见；财报在 Dock「更多」里是 `button`。首页可见入口是 `section[aria-label="财报临近"]` 的「查看全部」。意图预取挂在主导航 / Dock / 命令面板，不挂首页卡片。对照改为：切页点首页卡片；E 三案在 1440 主导航上悬停/点击。旧脚本会在隐藏链上超时或点到未挂预取的节点，不能用来决定是否回退 E。
