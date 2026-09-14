@@ -2,7 +2,7 @@
 
 2026-09-14 Round 6（基线 `df1bd5d`，PR #165，进行中）：可见分页、按语言词典、财报按需图表。方法与本轮数字见 [13-round6-visible-i18n-earnings.md](13-round6-visible-i18n-earnings.md)。**不要**把下面历史 1651/832 或更早 feed 毫秒数写成 Round 6 结果。
 
-Round 6 进程内 n=10000 访客 visible 热 p50 **240ms**（指纹 1）vs legacy 5 hop **1018ms**（指纹 5）。Owner visible 仍约 6.6s。浏览器交错 10/20（未完成）：优化冷约 8.7–9.6s，热约 0.7–2.7s；未优化多数超时，#5 热约 79s、#7 冷约 176s 曾成功。`newsToday` 已不再套用 visible，生产包待交错结束后同步。surfaces 脚本已改为点可见入口，尚未跑浏览器。
+Round 6 进程内 n=10000 访客 visible 热 p50 **240ms**（指纹 1）vs legacy 5 hop **1018ms**（指纹 5）。Owner visible 仍约 6.6s。浏览器交错 13/20（未完成）：优化冷约 8.7–10.2s，热约 0.7–2.7s；未优化多数超时，#5 热约 79s、#7 冷约 176s 曾成功。`newsToday` 已不再套用 visible，生产包待交错结束后同步。surfaces 夹具必须带 `publicFeatured`，尚未跑浏览器。
 
 2026-09-14 第二轮审查修复：抽屉关闭保留内容、AI 能力 pending 语义、自动重试封顶、预取 URL 按筛选、今日计数随 feed 落地、服务端 Retry-After 不被刷新跳过，见 [12-review-fixes.md](12-review-fixes.md)。本轮没有重新测量速度。
 
