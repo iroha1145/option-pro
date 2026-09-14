@@ -77,7 +77,7 @@ n=100 上 visible 比 2 次 hop 慢（扫描更多项 + 方差）。B 的收益�
 
 ### D. 财报屏外图表 + 秒级更新局部化 — 保留（正确性已测，浏览器滚动样本待 n=8）
 
-`DeferredEpsChart`：`rootMargin: 100%`，占位 320px，挂载后不卸。`Earnings.tsx` 去掉顶层 `useNow(1000)`。冷却只在按钮内走秒；`cooldownUntil` 到期后清零，避免冷却结束后仍 1Hz。纽约日 15s 轮询，未钉住的周起始随跨日更新。隔离库无财报日历，滚动/弱网样本用本地 fulfill，不打 Finnhub/Yahoo/FMP。
+`DeferredEpsChart`：`rootMargin: 100%`，占位 320px，挂载后不卸。`Earnings.tsx` 去掉顶层 `useNow(1000)`。冷却只在按钮内走秒；`cooldownUntil` 到期后清零，避免冷却结束后仍 1Hz。纽约日 15s 轮询，未钉住的周起始随跨日更新。隔离库无财报日历，滚动/弱网样本用本地 fulfill，不打 Finnhub/Yahoo/FMP。实验室行必须带 `publicFeatured: true`：重点列表不按市值自动入选，缺标注则图表槽不挂载。
 
 ### B2. 今日计数不再套用 visible — 保留（源码已改，产物待同步）
 

@@ -51,7 +51,9 @@
 
 ## surfaces 本地 fulfill
 
-首页会打指数、时段、雷达、自选、报价。浏览器 abort `finnhub|yahoo|…` 只挡页面直连，挡不住 uvicorn 出站。对照脚本在到达 `:2000` 之前 fulfill `/api/market/indices`、`/status`、`/strength/market`、`/signals/market`、`/breakouts/*`、`/stocks/watchlist`、`/market/cta`、`/quotes`，并 abort `/api/quotes/stream`。财报日历仍本地 fulfill，不打 upcoming 刷新。尚未跑浏览器。
+首页会打指数、时段、雷达、自选、报价。浏览器 abort `finnhub|yahoo|…` 只挡页面直连，挡不住 uvicorn 出站。对照脚本在到达 `:2000` 之前 fulfill `/api/market/indices`、`/status`、`/strength/market`、`/signals/market`、`/breakouts/*`、`/stocks/watchlist`、`/account/watchlist`、`/market/cta`、`/quotes`，并 abort `/api/quotes/stream`。财报日历仍本地 fulfill，不打 upcoming 刷新。尚未跑浏览器。
+
+重点口径只认 `publicFeatured` 或账号自选，市值再大也不会自动入选。实验室财报行必须带 `publicFeatured: true`，否则默认「重点公司」列表为空，`DeferredEpsChart` 直接 `return null`，滚动样本找不到 `[data-eps-chart-slot]`。个人自选 fulfill 为空名单，不依赖隔离库里碰巧有的账号数据。
 
 ## surfaces 选择器（已修脚本，尚未跑浏览器）
 
@@ -59,7 +61,7 @@
 
 ## 待浏览器收口
 
-- n=20 交错对照（进行中，已到 10/20）
+- n=20 交错对照（进行中，已到 13/20；不得把未完成样本写成最终 n=20）
 - 意图预取三案：立即点击 / 停留后点击 / 划过不进入（必须用桌面主导航）
 - 财报快滚、弱网、占位高度、图表保持挂载
 - 三种语言冷启动与深链接（源码运行时测试已补，浏览器样本未齐）

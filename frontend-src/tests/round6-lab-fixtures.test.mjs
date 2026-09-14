@@ -28,4 +28,11 @@ test('round6 lab fixtures match live mapper contracts', () => {
   }
   assert.equal(earnings.earnings[0].ticker, 'AAPL');
   assert.equal(earnings.earnings[0].date, '2026-09-14');
+  for (const row of earnings.earnings) {
+    assert.equal(row.publicFeatured, true);
+    assert.equal(row.public_featured, true);
+    assert.equal(row.market_cap, row.marketCap);
+  }
+  assert.deepEqual(home.accountWatchlist.tickers, []);
+  assert.equal(home.accountWatchlist.max_tickers, 50);
 });

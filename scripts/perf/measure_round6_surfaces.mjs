@@ -139,6 +139,10 @@ async function installLabRoutes(page, { mockEarnings = true } = {}) {
       await route.fulfill(jsonOk(fixtures.quotes));
       return;
     }
+    if (url.includes('/api/account/watchlist')) {
+      await route.fulfill(jsonOk(fixtures.accountWatchlist));
+      return;
+    }
     await route.continue();
   });
 }

@@ -29,6 +29,9 @@ export function homeLabFixtures(now = new Date()) {
         connection_status: 'disabled',
       },
     },
+    // Owner 回环会打个人自选。空名单 + 财报行 publicFeatured，
+    // 避免实验室依赖隔离库里碰巧有的账号自选。
+    accountWatchlist: { tickers: [], max_tickers: 50, maxTickers: 50 },
   };
 }
 
@@ -49,7 +52,12 @@ export function earningsFixture(now = new Date()) {
     eps_estimate: 1.25 + offset / 10,
     eps_actual: offset < 0 ? 1.3 : null,
     marketCap: 2e12,
+    market_cap: 2e12,
     sector: 'Technology',
+    // 重点口径只认显式标注或账号自选，市值再大也不会自动入选。
+    // 缺这个字段时默认「重点公司」列表为空，DeferredEpsChart 直接 return null。
+    publicFeatured: true,
+    public_featured: true,
   });
   return {
     earnings: [
