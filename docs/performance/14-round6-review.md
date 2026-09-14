@@ -1,4 +1,4 @@
-# Round 6 独立复查（进行中）
+# Round 6 独立复查
 
 审查对象：`cursor/perf-news-i18n-earnings-ac0f`，对照基线 `df1bd5d`。本篇只记本轮确认项，不把历史 1651/832 当成本轮证据。
 
@@ -13,7 +13,7 @@
 ## 默认 visible 的边界
 
 - 列表、`feedApiPath` 默认、theme-boot 预取必须带 `page_mode=visible`。
-- `newsToday` 与 `tickerSummaries` 必须省略 `page_mode`，否则会在首条 feed 落地后再扫 108 条。已修；生产包待 n=20 结束后同步。
+- `newsToday` 与 `tickerSummaries` 必须省略 `page_mode`。生产包 `useAccess-DbNUA1OH.js` 已是 `windowHours:24,limit:50,...,pageMode:null`。
 
 ## 游标与新旧客户端
 
@@ -28,9 +28,9 @@
 - `_displayable_zh` 对 Owner/访客相同：无合法中文原文则隐藏。Owner 仍能看任务态等原有权限字段。
 - 未混用管理员与访客缓存换速度。
 
-## 语言冷启动测速
+## 语言冷启动
 
-`/catalysts` 原先没有 laboratory ready 分类，三种语言各会空等 45s。已按标题 + `article h3` / 空态判定 content/empty/shell。这只影响测速脚本，不改业务 ready 区。
+`/catalysts` 实验室 ready 按标题 + `article h3` / 空态判定。vite mock 三语：zh 不装 runtime；en/ja 各只装一种。切换测试的 initScript 不得在 reload 时覆盖已写入的 `optix:locale`，否则会假阴性。已改：仅在键缺失时写入。zh→en 留在 `/earnings`，标题 `Earnings calendar`，`html lang=en-US`，`runtime-en=1`。
 
 ## 语言初始化
 
@@ -38,34 +38,22 @@
 - 中文不下载 runtime-en/ja；词典失败仍启动并回退中文。
 - `setLocale` 仍落盘 + `location.reload()`。
 - 不翻译模型生成的新闻/财报正文。
-- 独立图例 harness 必须在 `renderLegend` 前 `installTranslations`；App 壳用例必须等首屏标题后再 Tab / Ctrl+K。已修 visual CI 竞态（en/ja 图例、跳过链接、命令面板快捷键）。
+- 独立图例 harness 必须在 `renderLegend` 前 `installTranslations`。已修 visual CI 竞态。
 
-## 财报时钟
+## 财报时钟与屏外图表
 
-- 页级不再 `useNow(1000)`。冷却只在按钮内走秒；`cooldownUntil` 到期清零。
-- 纽约日 15s 轮询；未钉住的周起始随跨日更新。最多晚约 15s 感知午夜，不做秒级整页重绘。
+- 页级不再 `useNow(1000)`。冷却只在按钮内走秒。
+- 纽约日 15s 轮询。surfaces n=8：首开不拉 chart；近滚后 8/8 挂载且保持；占位 320px。
+- 实验室行必须 `publicFeatured: true`。个人自选 fulfill 空名单。
 
-## 意图预取并发
+## 意图预取
 
-`MAX_INTENT=2` 必须按「正在下载的路由块」计数。用 `queueMicrotask` 立刻清 `inflight` 时，连扫三个导航项会同时开三个 import。已改为等 `import()` settle 再释放名额。已预取过的路径不再重复下载。
+`MAX_INTENT=2` 按进行中的 `import()` 计数。1440 主导航 n=8：悬停 8/8 预取 Earnings 块、0 chart；`hover_then_click` 比立即点击快 222ms / 27%，按阈值 **保留**。
 
-## surfaces 本地 fulfill
+## 已知限制（不是待确认问题）
 
-首页会打指数、时段、雷达、自选、报价。浏览器 abort `finnhub|yahoo|…` 只挡页面直连，挡不住 uvicorn 出站。对照脚本在到达 `:2000` 之前 fulfill `/api/market/indices`、`/status`、`/strength/market`、`/signals/market`、`/breakouts/*`、`/stocks/watchlist`、`/account/watchlist`、`/market/cta`、`/quotes`，并 abort `/api/quotes/stream`。财报日历仍本地 fulfill，不打 upcoming 刷新。尚未跑浏览器。
-
-重点口径只认 `publicFeatured` 或账号自选，市值再大也不会自动入选。实验室财报行必须带 `publicFeatured: true`，否则默认「重点公司」列表为空，`DeferredEpsChart` 直接 `return null`，滚动样本找不到 `[data-eps-chart-slot]`。个人自选 fulfill 为空名单，不依赖隔离库里碰巧有的账号数据。
-
-## surfaces 选择器（已修脚本，尚未跑浏览器）
-
-390px 主导航是 `hidden xl:flex`。DOM 里第一个 `a[href="/earnings"]` 不可见；财报在 Dock「更多」里是 `button`。首页可见入口是 `section[aria-label="财报临近"]` 的「查看全部」。意图预取挂在主导航 / Dock / 命令面板，不挂首页卡片。对照改为：切页点首页卡片；E 三案在 1440 主导航上悬停/点击。旧脚本会在隐藏链上超时或点到未挂预取的节点，不能用来决定是否回退 E。
-
-## 待浏览器收口
-
-- n=20 交错对照（进行中，已到 13/20；不得把未完成样本写成最终 n=20）
-- 意图预取三案：立即点击 / 停留后点击 / 划过不进入（必须用桌面主导航）
-- 财报快滚、弱网、占位高度、图表保持挂载
-- 三种语言冷启动与深链接（源码运行时测试已补，浏览器样本未齐）
-
-E 去留阈值（1440 主导航，写在 `scripts/perf/lib/round6_intent_decision.mjs`）：悬停必须预取到 Earnings 路由块且不得拉 chart；`hover_then_click` p75 要比立即点击快至少 150ms 且相对快 ≥8%，否则回退意图预取。缺样本则标 undecided，不默认保留。
-
-确认的问题修完并复验后，才能把 Goal 标完成。
+- Owner 热路径仍约 6.6s（整窗 `_item()`）。
+- 未优化 Owner+10k 隐藏前缀在 180s 内几乎看不到首条；对照 `comparison_status=incomplete_samples`，不编造 p75 差值。
+- n=20 交错用的是收口前的 `index-uc86EHir.js`；`newsToday` 去 visible 的生产包是收口后的 `index-CS02aZ40.js`。
+- Navbar 纽约时钟仍是全站既有 1Hz。
+- 新前端 + 旧后端可能先空页。

@@ -1,0 +1,76 @@
+{
+  "writtenAt": "2026-09-14T19:06:01.825Z",
+  "interleaved": {
+    "pairs": 20,
+    "comparison_status": "incomplete_samples",
+    "opt_cold": {
+      "n": 20,
+      "ready_n": 20,
+      "timeout_n": 0,
+      "p50": 9224.899999999441,
+      "p75": 9436.300000000745
+    },
+    "opt_warm": {
+      "n": 20,
+      "ready_n": 20,
+      "timeout_n": 0,
+      "p50": 2444.4000000003725,
+      "p75": 2531.5
+    },
+    "unopt_cold": {
+      "n": 20,
+      "ready_n": 1,
+      "timeout_n": 19,
+      "p50": 176229.2999999998,
+      "p75": 176229.2999999998
+    },
+    "unopt_warm": {
+      "n": 20,
+      "ready_n": 3,
+      "timeout_n": 17,
+      "p50": 74210,
+      "p75": 79299.89999999944
+    },
+    "titles": {
+      "opt": [
+        "芯片企业发布最新进展"
+      ],
+      "unopt": [
+        "芯片企业发布最新进展"
+      ]
+    }
+  },
+  "i18n": {
+    "zh_no_runtime": true,
+    "en_only_en": true,
+    "ja_only_ja": true,
+    "switch_keeps_deep_link": true,
+    "switch_loads_en": true,
+    "switch_html_lang_en": true
+  },
+  "surfaces": {
+    "home_p75": 2721.0999999996275,
+    "earnings_p75": 2698.699999999255,
+    "first_nav": {
+      "home_card": 795,
+      "desktop_nav": 788
+    },
+    "intent": {
+      "immediate": 823,
+      "hover_then_click": 601,
+      "hover_only_chunk": 8,
+      "decision": {
+        "decision": "keep",
+        "reason": "hover_then_click_faster",
+        "faster_ms": 222,
+        "faster_ratio": 0.26974483596597815,
+        "chunk_n": 8
+      }
+    },
+    "earnings_scroll": {
+      "before": 0,
+      "after": 8,
+      "stayed": 8
+    }
+  }
+}

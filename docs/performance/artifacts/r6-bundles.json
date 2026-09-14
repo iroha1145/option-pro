@@ -1,0 +1,66 @@
+{
+  "measured_at": "2026-09-14T18:03:24.721Z",
+  "note": "Current production frontend/ after the live Vite build. Dictionary gzip is not main-bundle savings.",
+  "files": {
+    "optimized_index": {
+      "path": "frontend/assets/index-CS02aZ40.js",
+      "raw": 243867,
+      "gzip9": 79107,
+      "contains_ja": false,
+      "contains_en_skip_link": false
+    },
+    "optimized_css": {
+      "path": "frontend/assets/index-iqpzqbfw.css",
+      "raw": 118261,
+      "gzip9": 21532,
+      "contains_ja": false,
+      "contains_en_skip_link": false
+    },
+    "optimized_app": {
+      "path": "frontend/assets/App-BlA5eVcV.js",
+      "raw": 47628,
+      "gzip9": 15479,
+      "contains_ja": false,
+      "contains_en_skip_link": false
+    },
+    "optimized_runtime_en": {
+      "path": "frontend/assets/runtime-en-DCM2FWgP.js",
+      "raw": 239441,
+      "gzip9": 92107,
+      "contains_ja": false,
+      "contains_en_skip_link": true
+    },
+    "optimized_runtime_ja": {
+      "path": "frontend/assets/runtime-ja-CbLoSk9S.js",
+      "raw": 277389,
+      "gzip9": 94486,
+      "contains_ja": true,
+      "contains_en_skip_link": false
+    },
+    "optimized_chart": {
+      "path": "frontend/assets/chart-NPG-xq8z.js",
+      "raw": 643516,
+      "gzip9": 218261,
+      "contains_ja": false,
+      "contains_en_skip_link": false
+    },
+    "optimized_earnings_page": {
+      "path": "frontend/assets/Earnings-BmWWQTO0.js",
+      "raw": 62570,
+      "gzip9": 17905,
+      "contains_ja": false,
+      "contains_en_skip_link": false
+    },
+    "optimized_eps_chart_wrapper": {
+      "path": "frontend/assets/EpsHatchChart-BUWFwBl4.js",
+      "raw": 1991,
+      "gzip9": 1181,
+      "contains_ja": false,
+      "contains_en_skip_link": false
+    }
+  },
+  "zh_critical_js_gzip_approx": {
+    "optimized_index_plus_app": 94586,
+    "note": "Chinese mode does not download runtime-en or runtime-ja."
+  }
+}

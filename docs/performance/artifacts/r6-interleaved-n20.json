@@ -1,0 +1,51 @@
+{
+  "pairs": 20,
+  "ok": false,
+  "comparison_status": "incomplete_samples",
+  "measuredAt": "2026-09-14T18:02:13.728Z",
+  "opt": {
+    "cold": {
+      "n": 20,
+      "ready_n": 20,
+      "timeout_n": 0,
+      "news_content_ready_p50": 9224.899999999441,
+      "news_content_ready_p75": 9436.300000000745,
+      "titles": [
+        "\u82af\u7247\u4f01\u4e1a\u53d1\u5e03\u6700\u65b0\u8fdb\u5c55"
+      ]
+    },
+    "warm": {
+      "n": 20,
+      "ready_n": 20,
+      "timeout_n": 0,
+      "news_content_ready_p50": 2444.4000000003725,
+      "news_content_ready_p75": 2531.5,
+      "titles": [
+        "\u82af\u7247\u4f01\u4e1a\u53d1\u5e03\u6700\u65b0\u8fdb\u5c55"
+      ]
+    }
+  },
+  "unopt": {
+    "cold": {
+      "n": 20,
+      "ready_n": 1,
+      "timeout_n": 19,
+      "news_content_ready_p50": 176229.2999999998,
+      "news_content_ready_p75": 176229.2999999998,
+      "titles": [
+        "\u82af\u7247\u4f01\u4e1a\u53d1\u5e03\u6700\u65b0\u8fdb\u5c55"
+      ]
+    },
+    "warm": {
+      "n": 20,
+      "ready_n": 3,
+      "timeout_n": 17,
+      "news_content_ready_p50": 74210,
+      "news_content_ready_p75": 79299.89999999944,
+      "titles": [
+        "\u82af\u7247\u4f01\u4e1a\u53d1\u5e03\u6700\u65b0\u8fdb\u5c55"
+      ]
+    }
+  },
+  "rate_limited_sum": 0
+}

@@ -57,7 +57,14 @@ OPTIX_PERF_REPEATS=8 OPTIX_PERF_OUT=/opt/cursor/artifacts/perf/round6-surfaces.j
 
 n=100 上 visible 比 2 次 hop 慢（扫描更多项 + 方差）。B 的收益在「连续多页不可见」的大窗，不在 n=100。
 
-浏览器 1 对探针（Owner，mobile-ref）：优化冷 **9189ms** / 热 **2732ms**，标题「芯片企业发布最新进展」，feed 2 次（72h/12 visible + 既有 24h/50）。未优化 120s 内 18 次 legacy hop 仍无首条。随后把等待放到 180s，n=20 交错进行中。
+浏览器 Owner mobile-ref 交错 **n=20**（冷只比冷、热只比热；测速包仍是 `index-uc86EHir.js`）：
+
+| 侧 | 冷 ready | 冷 p50 / p75 | 热 ready | 热 p50 / p75 | 标题 |
+|---|---|---|---|---|---|
+| 优化 | **20/20** | **9225 / 9436** | **20/20** | **2444 / 2532** | 芯片企业发布最新进展 |
+| 未优化 | 1/20 | 仅 1 次 176229ms | 3/20 | 762 / 74210 / 79300 | 同上（成功样本） |
+
+优化侧 0 超时，0 次 429，冷热 feed 恒为 **2/2**。未优化 19/20 冷超时、17/20 热超时（180s 内 22–30 次 legacy hop 仍无首条）。`comparison_status=incomplete_samples`，**不写**冷/热 p75 差值。未优化成功样本标题与优化相同，说明不是缩数据。
 
 ### C. 按语言装入词典 — 保留
 
@@ -65,27 +72,32 @@ n=100 上 visible 比 2 次 hop 慢（扫描更多项 + 方差）。B 的收益�
 
 相对 `df1bd5d` 已提交 `frontend/`（不是把独立词典 gzip 当主包节省）：
 
-| 文件 | raw | gzip9/vite |
+| 文件 | raw | gzip9 |
 |---|---|---|
 | 基线 `index-Cnp05EGF.js` | 963385 | 326472（含日文） |
-| 本轮 `index-uc86EHir.js` | 243870 | 79117（不含英日译文） |
-| `App-D-zt9l2I.js` | 47628 | 15470 |
-| `runtime-en` / `runtime-ja` | 239441 / 277389 | 92124 / 94594（仅 en/ja 下载） |
-| `chart-D1l-hU5q.js` | 643516 | 218205（不进财报首屏块） |
+| 测速包 `index-uc86EHir.js` | 243870 | 79117（n=20 对照用） |
+| 收口后 `index-CS02aZ40.js` | 243867 | 79107（不含英日译文） |
+| 收口后 `App-BlA5eVcV.js` | 47628 | 15479 |
+| `runtime-en` / `runtime-ja` | 239441 / 277389 | 92107 / 94486（仅 en/ja 下载） |
+| `chart-NPG-xq8z.js` | 643516 | 218261（不进财报首屏块） |
 
 中文关键 JS 约 79+15KB gzip vs 基线入口 326KB。独立词典 gzip 不能当成主包节省量。扫描非 `runtime-en`/`runtime-ja` 的提交产物，没有 `Skip to main content` / `サポート`。
 
-### D. 财报屏外图表 + 秒级更新局部化 — 保留（正确性已测，浏览器滚动样本待 n=8）
+浏览器三语冷启动（vite mock `:3021`）：zh 不下载 runtime-en/ja；en 只装 en；ja 只装 ja。zh→en 重载留在 `/earnings`，标题变为 `Earnings calendar`，`html lang=en-US`。
+
+### D. 财报屏外图表 + 秒级更新局部化 — 保留
 
 `DeferredEpsChart`：`rootMargin: 100%`，占位 320px，挂载后不卸。`Earnings.tsx` 去掉顶层 `useNow(1000)`。冷却只在按钮内走秒；`cooldownUntil` 到期后清零，避免冷却结束后仍 1Hz。纽约日 15s 轮询，未钉住的周起始随跨日更新。隔离库无财报日历，滚动/弱网样本用本地 fulfill，不打 Finnhub/Yahoo/FMP。实验室行必须带 `publicFeatured: true`：重点列表不按市值自动入选，缺标注则图表槽不挂载。
 
-### B2. 今日计数不再套用 visible — 保留（源码已改，产物待同步）
+surfaces n=8（付费上游 abort，日历/首页本地 fulfill）：首页 ready p75 **2721ms**，财报 **2699ms**，首开 `chart_loaded=0`。切页：首页卡片 795ms / 桌面主导航 788ms。滚动：屏外前 0/8 拉 chart，近滚后 8/8，占位高度 320，挂载后 8/8 保持。
+
+### B2. 今日计数不再套用 visible — 保留（生产包已同步）
 
 复查发现 `qs()` 把 `newsToday`（24h/50）和 `tickerSummaries`（候选发现）也默认成了 `page_mode=visible`。这两处要的是窗口摘要 / 候选 ticker，不是可见列表；feed 落地后会再占一条 uvicorn。现已显式 `pageMode: null` 省略该参数，旧客户端哈希与旧切片不变。列表、预取、theme-boot 仍是 visible。契约测试已改为断言 24h 计数 URL 不含 `page_mode`。
 
-### E. 有限导航意图预取 — 暂留，等 surfaces 对照
+### E. 有限导航意图预取 — 保留
 
-只预取路由 chunk，`saveData`、跳过当前路径、`MAX_INTENT=2`。立即点击 / 停留后点击 / 划过不进入必须在 **1440 主导航**上测：390px 下该链 `display:none`，首页「查看全部」没有挂意图预取。收益不明显将回退该提交。
+只预取路由 chunk，`saveData`、跳过当前路径、`MAX_INTENT=2`（按进行中的 `import()` 计数）。1440 主导航 n=8：立即点击 p75 **823ms**；悬停后再点 **601ms**（快 222ms / 27%）；划过不进入 8/8 预取到 Earnings 块、0 次拉 chart、0 次额外付费。阈值见 `scripts/perf/lib/round6_intent_decision.mjs`（≥150ms 且 ≥8%）。390px 主导航隐藏，首页「查看全部」不挂预取。
 
 ## 明确不做 / 回退过的方向
 
@@ -109,5 +121,8 @@ Owner 热路径仍约 6.6s：瓶颈是整窗投影/复制，不是第二次指�
 - `artifacts/r6-feed-n10000.json`
 - `artifacts/r6-bundle-sizes.json`
 - `artifacts/r6-interleaved-probe.json`
+- `artifacts/r6-interleaved-n20.json`
+- `artifacts/r6-summary.json`
+- `artifacts/r6-bundles.json`
 
-完整 n=20 交错与 surfaces 原始 JSON 放 `/opt/cursor/artifacts/perf/`，体量可控的摘要会再拷回 `artifacts/`。
+完整 n=20 交错与 surfaces 原始 JSON 放 `/opt/cursor/artifacts/perf/`。
