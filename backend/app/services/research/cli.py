@@ -23,6 +23,26 @@ from app.services.research.protocol import (
     protocol_hash,
 )
 from app.services.research.radar import reconstruct_daily_base_events
+
+_RADAR_JOB: dict[str, Any] = {}
+
+
+def _init_radar_job(state: dict[str, Any]) -> None:
+    _RADAR_JOB.clear()
+    _RADAR_JOB.update(state)
+
+
+def _radar_day_job(session_iso: str) -> tuple[str, dict[str, Any]]:
+    from datetime import date
+
+    session = date.fromisoformat(session_iso)
+    payload = reconstruct_daily_base_events(
+        _RADAR_JOB["dataset"],
+        session,
+        allow_sealed=_RADAR_JOB["allow_sealed"],
+        frames=_RADAR_JOB["frames"],
+    )
+    return session_iso, payload
 from app.services.research.registry import append_trial
 from app.services.research.screener import momentum_baseline_ranks, replay_screener_day
 
@@ -45,12 +65,12 @@ def _screener_day_job(session_iso: str) -> tuple[str, dict[str, Any], list[dict[
         allow_sealed=_SCREENER_JOB["allow_sealed"],
         panel=_SCREENER_JOB["panel"],
     )
-    labeled = attach_screener_labels(
-        payload.get("rows") or [],
-        _SCREENER_JOB["dataset"],
-        signal_date=session,
-        allow_sealed=_SCREENER_JOB["allow_sealed"],
-    )
+        labeled = attach_screener_labels(
+            payload.get("view_rows") or payload.get("rows") or [],
+            _SCREENER_JOB["dataset"],
+            signal_date=session,
+            allow_sealed=_SCREENER_JOB["allow_sealed"],
+        )
     return session_iso, payload, labeled
 
 
@@ -189,6 +209,7 @@ def cmd_screener_replay(args: argparse.Namespace) -> int:
         "notes": [
             "这是开发区/验证区点时重建，不是当年真实发布快照。",
             "封存区未包含在内，除非显式 --unblind-sealed。",
+            "Rank IC 与股票池均值使用当日全部合格 view_rows，不是 Top-N 截断样本。",
         ],
     }
     out = Path(args.out)
@@ -234,15 +255,42 @@ def cmd_radar_replay(args: argparse.Namespace) -> int:
         ticker: dataset.frame(ticker, through=panel_through, allow_sealed=allow_sealed)
         for ticker in symbols
     }
-    for index, session in enumerate(dates, start=1):
-        print(f"radar-replay {index}/{len(dates)} {session.isoformat()}", flush=True)
-        payload = reconstruct_daily_base_events(
-            dataset,
-            session,
-            allow_sealed=allow_sealed,
-            frames=frames,
-        )
+    workers = max(1, int(getattr(args, "workers", 1)))
+    _RADAR_JOB.update(
+        {"dataset": dataset, "allow_sealed": allow_sealed, "frames": frames}
+    )
+    print(f"radar-replay starting {len(dates)} days workers={workers}", flush=True)
+    session_keys = [day.isoformat() for day in dates]
+    if workers == 1:
+        day_payloads = [_radar_day_job(key) for key in session_keys]
+    else:
+        from concurrent.futures import ProcessPoolExecutor, as_completed
+
+        ordered = {key: None for key in session_keys}
+        with ProcessPoolExecutor(
+            max_workers=workers,
+            initializer=_init_radar_job,
+            initargs=(dict(_RADAR_JOB),),
+        ) as pool:
+            futures = {pool.submit(_radar_day_job, key): key for key in session_keys}
+            done = 0
+            for future in as_completed(futures):
+                session_iso, payload = future.result()
+                ordered[session_iso] = (session_iso, payload)
+                done += 1
+                print(f"radar-replay {done}/{len(dates)} {session_iso}", flush=True)
+        day_payloads = [item for item in ordered.values() if item is not None]
+    for _session_iso, payload in day_payloads:
         events.extend(payload.get("events") or [])
+    first_hits: dict[tuple[str, str], dict[str, Any]] = {}
+    duplicate_triggers = 0
+    for event in events:
+        key = (str(event.get("ticker")), str(event.get("pivot_id")))
+        if key in first_hits:
+            duplicate_triggers += 1
+            continue
+        first_hits[key] = event
+    events = list(first_hits.values())
     pairs = []
     labeled_events = []
     from app.services.research.labels import forward_close_return
@@ -274,11 +322,12 @@ def cmd_radar_replay(args: argparse.Namespace) -> int:
         "split": split,
         "protocol_hash": protocol_hash(),
         "event_count": len(labeled_events),
+        "duplicate_triggers_dropped": duplicate_triggers,
         "clustered_excess_vs_spy": date_clustered_mean(pairs),
         "unverifiable": FROZEN_PROTOCOL["unverifiable_without_intraday"],
         "notes": [
             "日线平台重建，无 Discovery、无盘中确认。",
-            "同一 event_id 只在首次触发日进入本表。",
+            "同一 ticker+pivot_id 只保留首次触发，后续续扫不重复计成功。",
         ],
     }
     out = Path(args.out)
@@ -366,6 +415,7 @@ def build_parser() -> argparse.ArgumentParser:
     radar.add_argument("--limit", type=int, default=0)
     radar.add_argument("--trial-id", default="original-radar-daily-base-theme-universe")
     radar.add_argument("--unblind-sealed", action="store_true")
+    radar.add_argument("--workers", type=int, default=1)
     radar.set_defaults(func=cmd_radar_replay)
 
     portfolio = sub.add_parser("portfolio")

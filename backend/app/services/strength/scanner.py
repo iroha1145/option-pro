@@ -1902,6 +1902,7 @@ def _scan_sync(
         "skipped": skipped,
         "results": limited,
         "rows": limited,
+        "view_rows": view_rows if not enrich_live else None,
         "sectors": sector_rows,
         "data_sources": {
             "prices": {

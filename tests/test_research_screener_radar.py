@@ -143,6 +143,8 @@ def test_future_bars_do_not_change_completed_ranks(monkeypatch) -> None:
         parameters={"min_price": 1, "min_avg_dollar_volume": 0, "top": 3},
         include_future_bars=True,
     )
+    assert truncated.get("view_rows")
+    assert len(truncated["view_rows"]) >= len(truncated["rows"])
     assert truncated["as_of"] == with_future["as_of"]
     left = [(row["ticker"], row["ranking_score"], row["intrinsic_score"]) for row in truncated["rows"]]
     right = [(row["ticker"], row["ranking_score"], row["intrinsic_score"]) for row in with_future["rows"]]
