@@ -1907,6 +1907,7 @@ class WindowIntelligence(FakeIntelligence):
         page_mode = str(kwargs.get("page_mode") or "").strip() or None
         scan = 108 if page_mode == "visible" else limit
         offset = 0
+        anchor = NOW.isoformat().replace("+00:00", "Z")
         if kwargs.get("cursor"):
             from app.services.catalysts.local_intelligence import (
                 _cursor_decode,
@@ -1914,10 +1915,12 @@ class WindowIntelligence(FakeIntelligence):
             )
 
             theme = str(kwargs.get("theme") or "").strip().casefold() or None
-            offset, _ = _cursor_decode(
+            offset, cursor_anchor = _cursor_decode(
                 str(kwargs["cursor"]),
                 _feed_query_hash(kwargs, theme=theme),
             )
+            if cursor_anchor:
+                anchor = cursor_anchor
         page = self.window[offset : offset + scan]
         has_more = offset + len(page) < len(self.window)
         from app.services.catalysts.local_intelligence import (
@@ -1929,7 +1932,7 @@ class WindowIntelligence(FakeIntelligence):
         query_hash = _feed_query_hash(kwargs, theme=theme)
         payload = {
             "status": "active" if page else "empty",
-            "as_of": NOW.isoformat().replace("+00:00", "Z"),
+            "as_of": anchor,
             "items": page,
             "summary": {
                 "count": len(self.window),
@@ -1942,7 +1945,7 @@ class WindowIntelligence(FakeIntelligence):
                 "high_impact_macro": None,
             },
             "next_cursor": (
-                _cursor_encode(offset + len(page), NOW.isoformat().replace("+00:00", "Z"), query_hash)
+                _cursor_encode(offset + len(page), anchor, query_hash)
                 if has_more
                 else None
             ),
@@ -2029,6 +2032,25 @@ def test_visible_page_mode_cursor_tracks_raw_consumed_when_filled() -> None:
     assert [item["news_id"] for item in second["items"]] == list(range(18, 30))
     assert second["hidden_unanalyzed"] == 0
     assert second["has_more"] is False
+
+
+def test_visible_page_mode_keeps_cursor_as_of() -> None:
+    hidden = [_hidden_en_item(index) for index in range(1, 6)]
+    visible = [_visible_zh_item(index) for index in range(6, 20)]
+    engine = WindowIntelligence([*hidden, *visible])
+    service = _service("read", engine=engine)
+    first = service.feed(as_of=NOW, limit=12, page_mode="visible")
+    later = datetime(2026, 7, 16, 4, 0, tzinfo=timezone.utc)
+    second = service.feed(
+        as_of=later,
+        limit=12,
+        page_mode="visible",
+        cursor=first["next_cursor"],
+    )
+    assert first["as_of"] == NOW.isoformat().replace("+00:00", "Z")
+    assert second["as_of"] == first["as_of"]
+    assert [item["news_id"] for item in first["items"]] == list(range(6, 18))
+    assert [item["news_id"] for item in second["items"]] == [18, 19]
 
 
 def test_visible_page_mode_rejects_cursor_from_other_filters() -> None:

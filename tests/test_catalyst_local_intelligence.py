@@ -7819,3 +7819,35 @@ def test_visible_page_mode_scans_raw_candidates_once(tmp_path, monkeypatch) -> N
     assert visible["page_offset"] == 0
     with pytest.raises(ValueError, match="page_mode"):
         intelligence.feed(as_of=base, window_hours=24, page_mode="raw")
+
+
+def test_visible_feed_cursor_keeps_fixed_as_of(tmp_path, monkeypatch) -> None:
+    etl, _ai, intelligence = _stack(tmp_path)
+    base = datetime(2026, 7, 21, 14, 30, tzinfo=timezone.utc)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: base)
+    _apply_news(
+        etl,
+        [
+            _news_change(index, 400 + index, available_at=base - timedelta(minutes=index))
+            for index in range(1, 121)
+        ],
+        as_of=base,
+    )
+    intelligence.reconcile()
+    first = intelligence.feed(
+        as_of=base, window_hours=24, limit=5, page_mode="visible"
+    )
+    assert first["next_cursor"]
+    later = base + timedelta(hours=2)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: later)
+    second = intelligence.feed(
+        as_of=later,
+        window_hours=24,
+        limit=5,
+        page_mode="visible",
+        cursor=first["next_cursor"],
+    )
+    assert first["as_of"] == _iso(base)
+    assert second["as_of"] == first["as_of"]
+    assert first["page_scanned"] == 108
+    assert second["page_offset"] == 108

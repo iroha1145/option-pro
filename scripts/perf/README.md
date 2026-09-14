@@ -15,6 +15,9 @@
 | `run_soak.py` | 默认可跑 2 小时的隔离长稳；不进普通 CI |
 | `measure_spa.mjs` | 同页站内回到 /catalysts（不是整页热缓存） |
 | `measure_interleaved.mjs` | 优化树与未优化树交错冷/热（禁止冷比热） |
+| `measure_round6_feed.py` | 本轮进程内访客/可见分页/指纹次数 |
+| `measure_round6_browser.mjs` | 本轮新闻页交错对照（含 hop/传输） |
+| `measure_round6_surfaces.mjs` | 本轮首页/财报/切页/意图预取/屏外图表 |
 | `run_faults.mjs` | 新闻页断网 / 429 / 慢响应 / 清缓存后恢复（路由拦截，不打付费上游） |
 | `run_restart_recovery.py` | 重启隔离后端后对照 feed 条数与首条标题 |
 | `watch_rss.py` | 采样 uvicorn RSS，供长稳区分有界增长与泄漏 |
