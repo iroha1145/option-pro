@@ -38,4 +38,5 @@ OPTIX_PERF_BASE=http://127.0.0.1:2000 \
   OPTIX_PERF_OUT=/opt/cursor/artifacts/perf/round6-surfaces.json \
   node scripts/perf/measure_round6_surfaces.mjs
 
-echo "wrote $JSON /opt/cursor/artifacts/perf/round6-i18n.json /opt/cursor/artifacts/perf/round6-surfaces.json"
+node scripts/perf/summarize_round6.mjs
+echo "wrote $JSON /opt/cursor/artifacts/perf/round6-i18n.json /opt/cursor/artifacts/perf/round6-surfaces.json /opt/cursor/artifacts/perf/round6-summary.json"
