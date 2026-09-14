@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 /**
  * Laboratory first-content timings for non-news routes.
- * Ready means a real heading or primary landmark, not a skeleton block alone.
+ * Samples keep their class: shell / empty / error / content. Content and
+ * error timings are never mixed into one "ready" distribution.
  */
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { afterSampleGap, attach429Counter } from './lib/rate_limit.mjs';
+import { isTerminalReady, pageReadyInstallScript } from './lib/page_ready.mjs';
 
 const require = createRequire(fileURLToPath(import.meta.url));
 const { chromium } = require(path.resolve(
@@ -40,29 +42,19 @@ if (!profile) throw new Error(`unknown profile ${PROFILE}`);
 
 const ONLY = process.env.OPTIX_PERF_ROUTE;
 const ALL_ROUTES = [
-  { path: '/', ready: () => document.querySelector('h1')?.textContent?.includes('首页') && (document.querySelector('main')?.innerText.length || 0) > 80 },
-  { path: '/watchlist', ready: () => (document.querySelector('h1')?.textContent?.includes('自选') ?? false) && (!!document.querySelector('table') || /暂无|空|还没有/.test(document.body.innerText)) },
-  { path: '/screener', ready: () => (document.querySelector('h1')?.textContent?.includes('选股') ?? false) && !!document.querySelector('button, form, input') },
-  { path: '/market', ready: () => (document.querySelector('h1')?.textContent?.includes('大盘') ?? false) && (document.querySelector('main')?.innerText.length || 0) > 80 },
-  { path: '/breakouts', ready: () => /突破|雷达/.test(document.querySelector('h1')?.textContent || '') && (document.querySelector('main')?.innerText.length || 0) > 40 },
-  { path: '/earnings', ready: () => (document.querySelector('h1')?.textContent?.includes('财报') ?? false) && (document.querySelector('table') || (document.querySelector('main')?.innerText.length || 0) > 40) },
-  { path: '/sectors', ready: () => (document.querySelector('h1')?.textContent?.includes('板块') ?? false) && (document.querySelector('main')?.innerText.length || 0) > 40 },
-  { path: '/login', ready: () => !!document.querySelector('form, input[type="password"]') || /已登录|管理员/.test(document.body.innerText) },
-  { path: '/cta', ready: () => {
-    const heading = document.querySelector('h1')?.textContent || '';
-    if (!/CTA|趋势资金/.test(heading)) return false;
-    const text = document.body.innerText || '';
-    return /CTA 估算尚未生成|CTA 估算读取失败|暂无数据/.test(text) || (document.querySelector('main')?.innerText.length || 0) > 80;
-  } },
-  { path: '/stock/NVDA', ready: () => {
-    if (document.querySelector('[aria-busy="true"]')) return false;
-    const text = document.body.innerText || '';
-    return /该标的暂无完整数据|代码不存在|行情服务暂不可用|请求较频繁|登录状态已失效|该股票暂无数据/.test(text)
-      || (/NVDA/.test(text) && text.length > 80 && !/skeleton/i.test(document.body.className));
-  } },
-  { path: '/this-page-is-not-a-route', ready: () => /页面不存在/.test(document.body.innerText || '') },
+  '/',
+  '/watchlist',
+  '/screener',
+  '/market',
+  '/breakouts',
+  '/earnings',
+  '/sectors',
+  '/login',
+  '/cta',
+  '/stock/NVDA',
+  '/this-page-is-not-a-route',
 ];
-const ROUTES = ONLY ? ALL_ROUTES.filter((route) => route.path === ONLY) : ALL_ROUTES;
+const ROUTES = ONLY ? ALL_ROUTES.filter((route) => route === ONLY) : ALL_ROUTES;
 if (!ROUTES.length) throw new Error(`unknown OPTIX_PERF_ROUTE=${ONLY}`);
 
 function percentile(values, q) {
@@ -85,6 +77,33 @@ async function applyThrottle(page) {
   }
 }
 
+function summarize(samples) {
+  const byClass = (kind) => samples.filter((row) => row.ready_class === kind).map((row) => row.ready_ms).filter((ms) => ms != null);
+  const content = byClass('content');
+  const empty = byClass('empty');
+  const error = byClass('error');
+  const timeout = samples.filter((row) => row.ready_class === 'timeout');
+  return {
+    n: samples.length,
+    content_n: content.length,
+    empty_n: empty.length,
+    error_n: error.length,
+    timeout_n: timeout.length,
+    content_rate: samples.length ? content.length / samples.length : 0,
+    empty_rate: samples.length ? empty.length / samples.length : 0,
+    error_rate: samples.length ? error.length / samples.length : 0,
+    success_rate: samples.length ? (content.length + empty.length) / samples.length : 0,
+    content_p50: percentile(content, 0.5),
+    content_p75: percentile(content, 0.75),
+    empty_p50: percentile(empty, 0.5),
+    empty_p75: percentile(empty, 0.75),
+    error_p50: percentile(error, 0.5),
+    error_p75: percentile(error, 0.75),
+    rate_limited_n: samples.filter((row) => (row.rate_limited || 0) > 0).length,
+    samples,
+  };
+}
+
 const results = {};
 for (const route of ROUTES) {
   const samples = [];
@@ -98,40 +117,40 @@ for (const route of ROUTES) {
       locale: 'zh-CN',
     });
     const page = await context.newPage();
+    await page.addInitScript({ content: pageReadyInstallScript() });
     const rateLimit = attach429Counter(page);
     await applyThrottle(page);
     const started = Date.now();
-    await page.goto(`${BASE}${route.path}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-    const ready = await page.waitForFunction(route.ready, null, { timeout: 60_000 }).then(async (handle) => {
-      const ok = await handle.jsonValue();
-      return { ok, at: await page.evaluate(() => performance.now()) };
-    }).catch(() => ({ ok: false, at: null }));
+    await page.goto(`${BASE}${route}`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+    const ready = await page.waitForFunction((path) => {
+      const kind = window.__optixPageReadyClass(path);
+      if (kind === 'content' || kind === 'empty' || kind === 'error') {
+        return { kind, at: performance.now() };
+      }
+      return false;
+    }, route, { timeout: 60_000 }).then(async (handle) => handle.jsonValue()).catch(() => null);
+    const kind = ready?.kind && isTerminalReady(ready.kind) ? ready.kind : 'timeout';
     samples.push({
       wall_ms: Date.now() - started,
-      ready_ms: ready.at,
-      ready_ok: !!ready.ok,
+      ready_ms: ready?.at ?? null,
+      ready_class: kind,
+      ready_ok: kind === 'content' || kind === 'empty',
       rate_limited: rateLimit.count,
     });
     await context.close();
     await browser.close();
     await afterSampleGap({ rateLimitedCount: rateLimit.count, last: i + 1 >= REPEATS });
   }
-  const ready = samples.filter((s) => s.ready_ms != null).map((s) => s.ready_ms);
-  results[route.path] = {
-    n: samples.length,
-    ready_n: ready.length,
-    ready_p50: percentile(ready, 0.5),
-    ready_p75: percentile(ready, 0.75),
-    rate_limited_n: samples.filter((s) => (s.rate_limited || 0) > 0).length,
-    samples,
-  };
-  console.log(`${route.path} p50=${results[route.path].ready_p50} p75=${results[route.path].ready_p75} ready_n=${ready.length}/${samples.length}`);
+  results[route] = summarize(samples);
+  const row = results[route];
+  console.log(`${route} content_p75=${row.content_p75} content=${row.content_n}/${row.n} empty=${row.empty_n} error=${row.error_n} timeout=${row.timeout_n}`);
 }
 
 const report = {
   lab: true,
   profile: PROFILE,
   measuredAt: new Date().toISOString(),
+  ready_semantics: 'content/empty/error/timeout; content_p75 excludes error and timeout',
   routes: results,
 };
 await mkdir(path.dirname(OUT), { recursive: true });

@@ -120,39 +120,60 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
     setJob(null);
     stopPoll();
     let dead = false;
-    catalystsContract
-      .news(newsId)
-      .then((n) => {
-        if (dead) return;
-        setFetched(n);
-        onUpdate(n);
-      })
-      .catch(() => {
-        if (dead) return;
-        /* 列表摘要仍有效时继续展示 seed，不把已可见的真实标题清成空壳。 */
-        if (!seedMatches) setLoadError(__t('暂时打不开这条新闻的详情'));
-      });
+    const waits = [1_500, 3_000];
+    void (async () => {
+      for (let attempt = 0; ; attempt += 1) {
+        try {
+          const n = await catalystsContract.news(newsId);
+          if (dead) return;
+          setFetched(n);
+          onUpdate(n);
+          return;
+        } catch {
+          if (dead) return;
+          if (attempt >= waits.length) {
+            /* 列表摘要仍有效时继续展示 seed，不把已可见的真实标题清成空壳。 */
+            if (!seedMatches) setLoadError(__t('暂时打不开这条新闻的详情'));
+            return;
+          }
+          await new Promise((resolve) => window.setTimeout(resolve, waits[attempt]));
+        }
+      }
+    })();
     return () => {
       dead = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [newsId]);
 
-  /* 详情含在途任务 → 恢复轮询 */
+  /* 详情含在途任务 → 恢复轮询。依赖真实任务身份：seed 已有 newsId 时，
+     详情稍后带回的 analysisJobId/status 也必须重跑，不能只看 newsId。 */
   useEffect(() => {
-    if (!newsId || !item?.analysisJobId || job) return;
+    if (!newsId || !item?.analysisJobId) return;
     if (item.analysisStatus !== 'queued' && item.analysisStatus !== 'in_progress') return;
+    if (job?.jobId === item.analysisJobId) return;
     const forNews = item.newsId;
+    const jobId = item.analysisJobId;
+    const recoveryGen = pollGenRef.current;
     catalystsContract
-      .analysisJob(item.analysisJobId)
+      .analysisJob(jobId)
       .then((j) => {
         // 响应落地时可能已经换了新闻或关了抽屉：旧 job 不得复活轮询 / 污染新条
         if (openNewsRef.current !== forNews) return;
-        if (!TERMINAL.includes(j.status)) setJob(j);
+        if (recoveryGen !== pollGenRef.current) return;
+        setJob(j);
+        if (TERMINAL.includes(j.status)) {
+          void catalystsContract.news(forNews).then((fresh) => {
+            if (openNewsRef.current !== forNews) return;
+            if (recoveryGen !== pollGenRef.current) return;
+            setFetched(fresh);
+            onUpdate(fresh);
+          }).catch(() => undefined);
+        }
       })
       .catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [newsId, item?.newsId]);
+  }, [newsId, item?.newsId, item?.analysisJobId, item?.analysisStatus]);
 
   /* 轮询任务至终态（退避 2s→3s→5s→8s→10s，总超时 5 分钟） */
   const pollDeadlineRef = useRef<{ jobId: string; at: number } | null>(null);

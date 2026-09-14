@@ -9,7 +9,7 @@
  *     触发需 expected_prepared_revision（取自 hotspots/status.prepared_revision）
  *   snake_case → camelCase 的归一在本文件完成；契约缺失字段不编造（null/空由 UI 显「—」或隐藏）。
  */
-import { ApiError, get, idFromLocation, mockOr, notifyPrincipalInvalid, post, postCreate, toQuery } from '@/api/client';
+import { ApiError, get, idFromLocation, invalidateBootPrefetch, mockOr, notifyPrincipalInvalid, post, postCreate, toQuery } from '@/api/client';
 import { asRec, pickB, pickN, pickS, unwrap, type Rec } from '@/api/live';
 import * as fx2 from '@/mocks/fixtures2';
 import type {
@@ -634,6 +634,7 @@ const readCache = new Map<string, { at: number; promise: Promise<unknown> }>();
 
 export function clearCatalystReadCache(options?: { userInitiated?: boolean }): void {
   readCache.clear();
+  invalidateBootPrefetch();
   notifyCatalystReadsInvalidated(options);
 }
 

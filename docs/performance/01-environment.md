@@ -10,7 +10,7 @@
 | CPU | 4 核 Intel Xeon（online 0-3），无超线程 |
 | 内存 | 15 GiB，无 swap |
 | 磁盘 | `/dev/vdc` 254G，测量开始时约 247G 可用 |
-| Docker | 无（Cloud Agent 无 daemon；与生产双容器不同） |
+| Docker | 本机性能实验室无 daemon，用单进程 uvicorn 对齐镜像 CMD。GitHub CI 的 `CI / test` 已跑 backend + worker 双容器功能检查；那不是 16 核生产容量或本机压测 |
 | 生产对照 | 美国 Linux 独立服务器 16 核 / 32 GiB / 512G SSD；本环境不能代表其容量或日本到美国 RTT |
 
 ## 运行时

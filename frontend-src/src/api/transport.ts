@@ -34,20 +34,23 @@ export function parseRetryAfter(value: unknown, now = Date.now()): number | unde
   return Number.isFinite(stamp) && Number.isFinite(now) ? Math.max(0, Math.ceil((stamp - now) / 1000)) : undefined;
 }
 
-export async function fetchBuffered(
-  input: RequestInfo | URL,
-  init: RequestInit,
+type TransportHold = {
+  reader?: ReadableStreamDefaultReader<Uint8Array>;
+  original?: Response;
+};
+
+async function runTransport(
   timeoutMs: number,
-  limit = MAX_RESPONSE_BYTES,
+  limit: number,
+  external: AbortSignal | null | undefined,
+  work: (controller: AbortController, hold: TransportHold) => Promise<Response>,
 ): Promise<Response> {
   if (!Number.isFinite(timeoutMs) || timeoutMs < 0 || !Number.isFinite(limit) || limit <= 0) {
     throw new RangeError('Invalid transport budget');
   }
   const controller = new AbortController();
-  const external = init.signal;
   const abortExternal = () => controller.abort(external?.reason);
-  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
-  let original: Response | undefined;
+  const hold: TransportHold = {};
   let timer: ReturnType<typeof setTimeout> | undefined;
   let rejectAbort: (reason: unknown) => void = () => {};
   const aborted = new Promise<never>((_, reject) => { rejectAbort = reject; });
@@ -57,36 +60,14 @@ export async function fetchBuffered(
   else external?.addEventListener('abort', abortExternal, { once: true });
   if (timeoutMs > 0) timer = setTimeout(() => controller.abort(new TransportTimeoutError()), timeoutMs);
 
-  const work = async () => {
-    controller.signal.throwIfAborted();
-    original = await fetch(input, { ...init, signal: controller.signal });
-    if (controller.signal.aborted) {
-      // Also discard a late response from a fetch adapter that ignored abort.
-      void original.body?.cancel(controller.signal.reason).catch(() => {});
-      controller.signal.throwIfAborted();
-    }
-    if (!original.body) return original;
-    // A response clone tees the stream; never leave the original branch
-    // buffering an unbounded payload while waiting for the second branch.
-    reader = original.clone().body!.getReader();
-    let bytes = 0;
-    while (true) {
-      controller.signal.throwIfAborted();
-      const next = await reader.read();
-      if (next.done) break;
-      bytes += next.value.byteLength;
-      if (bytes > limit) throw new ResponseLimitError();
-    }
-    return original;
-  };
   try {
-    return await Promise.race([work(), aborted]);
+    return await Promise.race([work(controller, hold), aborted]);
   } catch (error) {
     // Cancellation of one tee alone can wait for the other branch. Do not
     // await these cancellations; abort the network and cancel BOTH branches.
     controller.abort(error);
-    void reader?.cancel(error).catch(() => {});
-    void original?.body?.cancel(error).catch(() => {});
+    void hold.reader?.cancel(error).catch(() => {});
+    void hold.original?.body?.cancel(error).catch(() => {});
     throw error;
   } finally {
     if (timer !== undefined) clearTimeout(timer);
@@ -95,4 +76,61 @@ export async function fetchBuffered(
     // The reader can still have a pending read on an aborted synthetic stream;
     // releaseLock is intentionally not required for garbage collection here.
   }
+}
+
+async function drainResponseBody(
+  original: Response,
+  controller: AbortController,
+  hold: TransportHold,
+  limit: number,
+): Promise<Response> {
+  controller.signal.throwIfAborted();
+  if (!original.body) return original;
+  // A response clone tees the stream; never leave the original branch
+  // buffering an unbounded payload while waiting for the second branch.
+  hold.reader = original.clone().body!.getReader();
+  let bytes = 0;
+  while (true) {
+    controller.signal.throwIfAborted();
+    const next = await hold.reader.read();
+    if (next.done) break;
+    bytes += next.value.byteLength;
+    if (bytes > limit) throw new ResponseLimitError();
+  }
+  return original;
+}
+
+/** Apply the same body deadline, cancel and size bound to an already-started Response. */
+export function bufferExistingResponse(
+  original: Response,
+  timeoutMs: number,
+  limit = MAX_RESPONSE_BYTES,
+  signal?: AbortSignal | null,
+): Promise<Response> {
+  return runTransport(timeoutMs, limit, signal, async (controller, hold) => {
+    hold.original = original;
+    if (controller.signal.aborted) {
+      void original.body?.cancel(controller.signal.reason).catch(() => {});
+      controller.signal.throwIfAborted();
+    }
+    return drainResponseBody(original, controller, hold, limit);
+  });
+}
+
+export async function fetchBuffered(
+  input: RequestInfo | URL,
+  init: RequestInit,
+  timeoutMs: number,
+  limit = MAX_RESPONSE_BYTES,
+): Promise<Response> {
+  return runTransport(timeoutMs, limit, init.signal, async (controller, hold) => {
+    controller.signal.throwIfAborted();
+    hold.original = await fetch(input, { ...init, signal: controller.signal });
+    if (controller.signal.aborted) {
+      // Also discard a late response from a fetch adapter that ignored abort.
+      void hold.original.body?.cancel(controller.signal.reason).catch(() => {});
+      controller.signal.throwIfAborted();
+    }
+    return drainResponseBody(hold.original, controller, hold, limit);
+  });
 }

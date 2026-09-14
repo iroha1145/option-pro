@@ -13,6 +13,7 @@
 | [06-review-round1.md](06-review-round1.md) | 第 1 轮对照复查（非隔离审查者） |
 | [07-review-round2.md](07-review-round2.md) | 第 2 轮隔离复查 |
 | [08-review-round3.md](08-review-round3.md) | 第 3 轮隔离复查（只读；完成判定仍部分成立） |
+| [09-review-fixes.md](09-review-fixes.md) | PR 审查 R1–R4 修复与复验边界 |
 
 对照未优化树：`$HOME/option-pro-unoptimized`（同一 SHA，detached HEAD）。
 

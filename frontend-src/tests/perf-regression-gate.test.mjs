@@ -33,9 +33,16 @@ test('实验室计时仍以真实新闻标题为准，不用骨架屏冒充完�
   assert.match(spa, /更多/);
   assert.doesNotMatch(spa, /text=新闻/);
   const pages = await read('scripts/perf/measure_pages.mjs');
+  const ready = await read('scripts/perf/lib/page_ready.mjs');
   assert.match(pages, /\/cta/);
   assert.match(pages, /\/stock\/NVDA/);
-  assert.match(pages, /页面不存在/);
+  assert.match(pages, /this-page-is-not-a-route/);
+  assert.match(pages, /content_p75/);
+  assert.match(pages, /error_rate/);
+  assert.match(ready, /export function classifyPageReady/);
+  assert.match(ready, /STOCK_ERROR/);
+  assert.match(ready, /页面不存在/);
+  assert.doesNotMatch(pages, /button, form, input/);
   const interleaved = await read('scripts/perf/measure_interleaved.mjs');
   assert.match(interleaved, /interleaved/);
   assert.match(interleaved, /OPTIX_PERF_UNOPT_BASE/);
