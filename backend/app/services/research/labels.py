@@ -76,6 +76,7 @@ def forward_close_return(
             "end_date": None,
             "forward_return": None,
         }
+    start_split = split_for_date(signal_date)
     end_split = split_for_date(end)
     if end_split == "sealed" and not allow_sealed_prices:
         return {
@@ -85,6 +86,17 @@ def forward_close_return(
             "start_date": signal_date.isoformat(),
             "end_date": end.isoformat(),
             "forward_return": None,
+        }
+    if start_split is not None and end_split is not None and end_split != start_split:
+        return {
+            "status": "purged",
+            "reason": "label_enters_next_split",
+            "horizon": horizon,
+            "start_date": signal_date.isoformat(),
+            "end_date": end.isoformat(),
+            "forward_return": None,
+            "start_split": start_split,
+            "end_split": end_split,
         }
     start_bar = dataset.bar(ticker, signal_date)
     end_bar = dataset.bar(ticker, end)
@@ -106,9 +118,9 @@ def forward_close_return(
             "end_date": end.isoformat(),
             "forward_return": None,
         }
-    start_price = start_bar["adj_close" if adjusted else "close"]
-    end_price = end_bar["adj_close" if adjusted else "close"]
-    if start_price <= 0 or end_price <= 0:
+    start_price = _finite(start_bar["adj_close" if adjusted else "close"])
+    end_price = _finite(end_bar["adj_close" if adjusted else "close"])
+    if start_price is None or end_price is None or start_price <= 0 or end_price <= 0:
         return {
             "status": "unavailable",
             "reason": "non_positive_price",
@@ -196,3 +208,107 @@ def attach_screener_labels(
         labeled["benchmark_labels"] = spy_labels
         labeled["universe_mean_labels"] = universe_mean
     return prepared
+
+
+def universe_forward_mean(
+    dataset: OfflineOHLCV,
+    session: date,
+    horizon: int,
+    tickers: Sequence[str],
+    *,
+    allow_sealed: bool = False,
+) -> dict[str, Any]:
+    values: list[float] = []
+    missing = 0
+    purged = 0
+    for ticker in tickers:
+        item = forward_close_return(
+            dataset,
+            ticker,
+            session,
+            horizon,
+            allow_sealed_prices=allow_sealed,
+        )
+        value = _finite(item.get("forward_return"))
+        if value is not None:
+            values.append(value)
+        elif item.get("status") == "purged":
+            purged += 1
+        else:
+            missing += 1
+    return {
+        "status": "active" if values else "unavailable",
+        "mean": (sum(values) / len(values)) if values else None,
+        "n": len(values),
+        "missing": missing,
+        "purged": purged,
+        "horizon": horizon,
+        "signal_date": session.isoformat(),
+    }
+
+
+def attach_event_labels(
+    events: Iterable[Mapping[str, Any]],
+    dataset: OfflineOHLCV,
+    *,
+    horizon: int = 20,
+    universe_tickers: Sequence[str] | None = None,
+    allow_sealed: bool = False,
+    benchmark: str = "SPY",
+) -> list[dict[str, Any]]:
+    """Attach close/close labels plus same-day universe and SPY excess."""
+
+    symbols = list(dict.fromkeys(universe_tickers or dataset.tickers()))
+    universe_cache: dict[date, dict[str, Any]] = {}
+    labeled: list[dict[str, Any]] = []
+    for event in events:
+        session = parse_session_date(str(event.get("trading_date") or event.get("signal_date")))
+        raw = forward_close_return(
+            dataset,
+            str(event.get("ticker") or ""),
+            session,
+            horizon,
+            allow_sealed_prices=allow_sealed,
+        )
+        spy = forward_close_return(
+            dataset,
+            benchmark,
+            session,
+            horizon,
+            allow_sealed_prices=allow_sealed,
+        )
+        if session not in universe_cache:
+            universe_cache[session] = universe_forward_mean(
+                dataset,
+                session,
+                horizon,
+                symbols,
+                allow_sealed=allow_sealed,
+            )
+        universe = universe_cache[session]
+        raw_ret = _finite(raw.get("forward_return"))
+        spy_ret = _finite(spy.get("forward_return"))
+        uni_ret = _finite(universe.get("mean"))
+        item = dict(event)
+        item[f"label_{horizon}d"] = raw
+        item[f"spy_{horizon}d"] = spy
+        item[f"universe_{horizon}d"] = universe
+        item[f"excess_vs_spy_{horizon}d"] = (
+            None if raw_ret is None or spy_ret is None else raw_ret - spy_ret
+        )
+        item[f"excess_vs_universe_{horizon}d"] = (
+            None if raw_ret is None or uni_ret is None else raw_ret - uni_ret
+        )
+        labeled.append(item)
+    return labeled
+
+
+def outcome_crosses_split(row: Mapping[str, Any], *, horizon: str | int) -> bool:
+    label = ((row.get("labels") or {}).get(str(horizon)) or {})
+    start = label.get("start_date") or row.get("signal_date")
+    end = label.get("end_date")
+    if not start or not end:
+        return False
+    start_split = split_for_date(str(start))
+    end_split = split_for_date(str(end))
+    return bool(start_split and end_split and start_split != end_split)

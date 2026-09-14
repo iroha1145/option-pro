@@ -85,16 +85,21 @@ class OfflineOHLCV:
                 )
                 continue
             factor = adj_close / close
+            raw_open = _finite_positive(raw.get("open"))
+            raw_high = _finite_positive(raw.get("high"))
+            raw_low = _finite_positive(raw.get("low"))
             record = {
-                "open": _finite_positive(raw.get("open")) or close,
-                "high": _finite_positive(raw.get("high")) or close,
-                "low": _finite_positive(raw.get("low")) or close,
+                "open": raw_open,
+                "high": raw_high,
+                "low": raw_low,
                 "close": close,
                 "adj_close": adj_close,
                 "volume": 0.0 if volume is None else volume,
-                "adj_open": (_finite_positive(raw.get("open")) or close) * factor,
-                "adj_high": (_finite_positive(raw.get("high")) or close) * factor,
-                "adj_low": (_finite_positive(raw.get("low")) or close) * factor,
+                "adj_open": None if raw_open is None else raw_open * factor,
+                "adj_high": None if raw_high is None else raw_high * factor,
+                "adj_low": None if raw_low is None else raw_low * factor,
+                "ohlc_complete": raw_open is not None and raw_high is not None and raw_low is not None,
+                "open_observed": raw_open is not None,
             }
             bucket = by_ticker.setdefault(ticker, {})
             if session in bucket:
@@ -117,6 +122,12 @@ class OfflineOHLCV:
             "bar_count": sum(len(points) for points in self.by_ticker.values()),
             "dropped_bar_count": len(dropped),
             "dropped_bars_head": dropped[:20],
+            "incomplete_ohlc_bar_count": sum(
+                1
+                for points in self.by_ticker.values()
+                for bar in points.values()
+                if not bar.get("ohlc_complete")
+            ),
             "source_path": str(source_path) if source_path is not None else None,
         }
 
@@ -164,6 +175,10 @@ class OfflineOHLCV:
         records: list[dict[str, Any]] = []
         for session, bar in points.items():
             if through is not None and session > through:
+                continue
+            if not bar.get("ohlc_complete"):
+                # Structure/feature frames refuse incomplete candles. Labels
+                # and close-only marks still use bar() and keep the raw None.
                 continue
             if adjusted:
                 records.append(
