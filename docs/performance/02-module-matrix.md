@@ -49,9 +49,9 @@ Calendar / sources 不在首屏，切 tab 才拉。
 
 ## API 前缀（网关默认 `private, no-store`，例外见表）
 
-公开读：stocks、options、earnings、sectors、market、quotes、macro、signals、catalysts、strength、breakouts。  
-Owner：ai、worker、runtime-settings、diagnostics、settings。  
-自管：access、account。  
+公开读：stocks、options、earnings、sectors、market、quotes、macro、signals、catalysts、strength、breakouts。
+Owner：ai、worker、runtime-settings、diagnostics、settings。
+自管：access、account。
 健康：`/health`、`/ready`。
 
 `GET /api/market/indices`：`max-age=30, swr=120`。`GET /api/market/cta`：`max-age=60, swr=300`。

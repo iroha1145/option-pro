@@ -4,8 +4,8 @@
 
 在保留功能、数据正确性与时效、UI 信息完整性、安全性与部署兼容性的前提下，减少真实用户完成任务的等待与卡顿。优先新闻页与手机端，再覆盖其余前后台。
 
-工作分支：`cursor/perf-sitewide-1d7a`  
-基线 SHA：`31e8955d89dc2b9b51a5bea1c47f5cfa6ea8cabc`（已与 2026-09-13 拉取的 `origin/main` 对齐，不再追逐后续 main）  
+工作分支：`cursor/perf-sitewide-1d7a`
+基线 SHA：`31e8955d89dc2b9b51a5bea1c47f5cfa6ea8cabc`（已与 2026-09-13 拉取的 `origin/main` 对齐，不再追逐后续 main）
 对照树：`$HOME/option-pro-unoptimized` 同一 SHA
 
 ## 闭环

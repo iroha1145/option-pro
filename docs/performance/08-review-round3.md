@@ -1,7 +1,7 @@
 # 第 3 轮隔离复查
 
-复查者：独立 explore 子代理（只读）。  
-对照：`/workspace` HEAD（当时 `d61e9414`）vs `$HOME/option-pro-unoptimized` SHA `31e8955d89dc2b9b51a5bea1c47f5cfa6ea8cabc`。  
+复查者：独立 explore 子代理（只读）。
+对照：`/workspace` HEAD（当时 `d61e9414`）vs `$HOME/option-pro-unoptimized` SHA `31e8955d89dc2b9b51a5bea1c47f5cfa6ea8cabc`。
 Soak 以 `soak-2h.analysis.json` 诚实窗口为准，不采信 `soak-2h.summary.json` 的错误率。
 
 Goal **不可**据此标记完成。
