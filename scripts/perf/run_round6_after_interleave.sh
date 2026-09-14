@@ -19,6 +19,8 @@ fi
 
 echo "== build frontend =="
 VITE_API_MODE=live npm run build --prefix frontend-src
+# newsToday 等源码改动会换哈希；先同步再生产入口，再核对两边一致。
+cp -a frontend-src/dist/. frontend/
 diff -rq frontend-src/dist frontend
 
 echo "== i18n lab (vite mock :3021) =="
