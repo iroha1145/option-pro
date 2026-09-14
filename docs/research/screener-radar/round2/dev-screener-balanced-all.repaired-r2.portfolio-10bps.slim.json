@@ -1,0 +1,225 @@
+{
+  "status": "active",
+  "protocol": {
+    "initial_cash": 100000.0,
+    "account": "cash",
+    "margin": false,
+    "shorting": false,
+    "max_positions": 10,
+    "max_weight": 0.1,
+    "rebalance": "signal_close_next_open",
+    "hold_trading_days": 20,
+    "cost_scenarios_bps": [
+      5,
+      10,
+      25
+    ],
+    "same_bar_stop_ambiguity": "conservative_stop_first",
+    "fill": "next_session_open",
+    "missing_fill": "unavailable",
+    "cost_bps": 10.0,
+    "hold_convention": "entry_open_plus_hold_days_trading_sessions",
+    "allow_sealed": false,
+    "lock_split": true
+  },
+  "initial_cash": 100000.0,
+  "final_equity": 471688.5637221262,
+  "total_return": 3.716885637221262,
+  "max_drawdown": -0.3387235891164414,
+  "trade_count": 1000,
+  "rejected_count": 9380,
+  "unexecuted_exits": 0,
+  "open_positions_at_end": 0,
+  "end_mark_status": {},
+  "average_positions": 9.900990099009901,
+  "average_occupancy": 0.9900990099009901,
+  "time_in_market": 0.9900990099009901,
+  "notes": [
+    "\u8fd9\u662f\u7814\u7a76\u8bc4\u4f30\u534f\u8bae\uff0c\u4e0d\u662f\u4ea7\u54c1\u5df2\u6709\u7b56\u7565\u3002",
+    "\u5f00\u76d8\u5b9a\u4ed3\u53ea\u7528\u4e0a\u4e00\u5b8c\u6574\u4f1a\u8bdd\u4f30\u503c\u4e0e\u5f53\u65e5\u5f00\u76d8\uff0c\u4e0d\u8bfb\u5f53\u65e5\u6536\u76d8\u3002",
+    "\u6301\u6709 20 \u4e2a\u4ea4\u6613\u65e5\uff1a\u5165\u573a\u5f00\u76d8\u5230\u7b2c 20 \u4e2a\u540e\u7eed\u4ea4\u6613\u65e5\u5f00\u76d8\u9000\u51fa\u3002",
+    "\u7f3a\u4ef7\u6cbf\u7528\u6700\u540e\u5df2\u77e5\u4f30\u503c\u5e76\u6807\u8bb0 stale/unpriced\uff0c\u4e0d\u56de\u9000\u5230\u4e70\u5165\u6210\u672c\u3002",
+    "\u9ed8\u8ba4\u62d2\u7edd\u5c01\u5b58\u671f\u4fe1\u53f7/\u6210\u4ea4/\u4f30\u503c\uff1b\u8de8 split \u7684\u9000\u51fa\u8bb0 unavailable\u3002"
+  ],
+  "trade_head": [
+    {
+      "status": "filled",
+      "reason": null,
+      "ticker": "LLY",
+      "fill_date": "2019-01-03",
+      "quote_open": 103.8686326422798,
+      "fill_price": 103.97250127492208,
+      "side": "buy",
+      "cost_bps": 10.0,
+      "source": "session_open",
+      "open_observed": true,
+      "action": "buy",
+      "shares": 96,
+      "cost": 9981.36012239252
+    },
+    {
+      "status": "filled",
+      "reason": null,
+      "ticker": "AVGO",
+      "fill_date": "2019-01-03",
+      "quote_open": 20.187506158146075,
+      "fill_price": 20.20769366430422,
+      "side": "buy",
+      "cost_bps": 10.0,
+      "source": "session_open",
+      "open_observed": true,
+      "action": "buy",
+      "shares": 494,
+      "cost": 9982.600670166285
+    },
+    {
+      "status": "filled",
+      "reason": null,
+      "ticker": "TLT",
+      "fill_date": "2019-01-03",
+      "quote_open": 97.67228682919603,
+      "fill_price": 97.7699591160252,
+      "side": "buy",
+      "cost_bps": 10.0,
+      "source": "session_open",
+      "open_observed": true,
+      "action": "buy",
+      "shares": 102,
+      "cost": 9972.53582983457
+    },
+    {
+      "status": "filled",
+      "reason": null,
+      "ticker": "GLD",
+      "fill_date": "2019-01-03",
+      "quote_open": 121.77999877929688,
+      "fill_price": 121.90177877807616,
+      "side": "buy",
+      "cost_bps": 10.0,
+      "source": "session_open",
+      "open_observed": true,
+      "action": "buy",
+      "shares": 82,
+      "cost": 9995.945859802245
+    },
+    {
+      "status": "filled",
+      "reason": null,
+      "ticker": "NVO",
+      "fill_date": "2019-01-03",
+      "quote_open": 19.712053856694247,
+      "fill_price": 19.73176591055094,
+      "side": "buy",
+      "cost_bps": 10.0,
+      "source": "session_open",
+      "open_observed": true,
+      "action": "buy",
+      "shares": 506,
+      "cost": 9984.273550738775
+    }
+  ],
+  "equity_head": [
+    {
+      "date": "2019-01-02",
+      "cash": 100000.0,
+      "positions": 0,
+      "equity": 100000.0,
+      "open_risk": 0.0,
+      "stale_marks": 0,
+      "unpriced_marks": 0,
+      "blocked_marks": 0
+    },
+    {
+      "date": "2019-01-03",
+      "cash": 599.4607746503116,
+      "positions": 10,
+      "equity": 98669.08660243961,
+      "open_risk": 98069.62582778929,
+      "stale_marks": 0,
+      "unpriced_marks": 0,
+      "blocked_marks": 0
+    },
+    {
+      "date": "2019-01-04",
+      "cash": 599.4607746503116,
+      "positions": 10,
+      "equity": 100803.2300350568,
+      "open_risk": 100203.76926040648,
+      "stale_marks": 0,
+      "unpriced_marks": 0,
+      "blocked_marks": 0
+    },
+    {
+      "date": "2019-01-07",
+      "cash": 599.4607746503116,
+      "positions": 10,
+      "equity": 101684.8340999982,
+      "open_risk": 101085.37332534789,
+      "stale_marks": 0,
+      "unpriced_marks": 0,
+      "blocked_marks": 0
+    },
+    {
+      "date": "2019-01-08",
+      "cash": 599.4607746503116,
+      "positions": 10,
+      "equity": 102534.76662563297,
+      "open_risk": 101935.30585098265,
+      "stale_marks": 0,
+      "unpriced_marks": 0,
+      "blocked_marks": 0
+    }
+  ],
+  "equity_tail": [
+    {
+      "date": "2022-12-28",
+      "cash": 471688.5637221262,
+      "positions": 0,
+      "equity": 471688.5637221262,
+      "open_risk": 0.0,
+      "stale_marks": 0,
+      "unpriced_marks": 0,
+      "blocked_marks": 0
+    },
+    {
+      "date": "2022-12-29",
+      "cash": 471688.5637221262,
+      "positions": 0,
+      "equity": 471688.5637221262,
+      "open_risk": 0.0,
+      "stale_marks": 0,
+      "unpriced_marks": 0,
+      "blocked_marks": 0
+    },
+    {
+      "date": "2022-12-30",
+      "cash": 471688.5637221262,
+      "positions": 0,
+      "equity": 471688.5637221262,
+      "open_risk": 0.0,
+      "stale_marks": 0,
+      "unpriced_marks": 0,
+      "blocked_marks": 0
+    },
+    {
+      "date": "2023-01-03",
+      "cash": 471688.5637221262,
+      "positions": 0,
+      "equity": 471688.5637221262,
+      "open_risk": 0.0,
+      "stale_marks": 0,
+      "unpriced_marks": 0,
+      "blocked_marks": 0
+    },
+    {
+      "date": "2023-01-04",
+      "cash": 471688.5637221262,
+      "positions": 0,
+      "equity": 471688.5637221262,
+      "open_risk": 0.0,
+      "stale_marks": 0,
+      "unpriced_marks": 0,
+      "blocked_marks": 0
+    }
+  ]
+}

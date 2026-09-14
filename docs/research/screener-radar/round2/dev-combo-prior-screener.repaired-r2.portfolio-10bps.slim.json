@@ -1,0 +1,225 @@
+{
+  "status": "active",
+  "protocol": {
+    "initial_cash": 100000.0,
+    "account": "cash",
+    "margin": false,
+    "shorting": false,
+    "max_positions": 10,
+    "max_weight": 0.1,
+    "rebalance": "signal_close_next_open",
+    "hold_trading_days": 20,
+    "cost_scenarios_bps": [
+      5,
+      10,
+      25
+    ],
+    "same_bar_stop_ambiguity": "conservative_stop_first",
+    "fill": "next_session_open",
+    "missing_fill": "unavailable",
+    "cost_bps": 10.0,
+    "hold_convention": "entry_open_plus_hold_days_trading_sessions",
+    "allow_sealed": false,
+    "lock_split": true
+  },
+  "initial_cash": 100000.0,
+  "final_equity": 250521.87409765765,
+  "total_return": 1.5052187409765767,
+  "max_drawdown": -0.22286714802281538,
+  "trade_count": 758,
+  "rejected_count": 396,
+  "unexecuted_exits": 0,
+  "open_positions_at_end": 0,
+  "end_mark_status": {},
+  "average_positions": 7.51984126984127,
+  "average_occupancy": 0.751984126984127,
+  "time_in_market": 0.9970238095238095,
+  "notes": [
+    "\u8fd9\u662f\u7814\u7a76\u8bc4\u4f30\u534f\u8bae\uff0c\u4e0d\u662f\u4ea7\u54c1\u5df2\u6709\u7b56\u7565\u3002",
+    "\u5f00\u76d8\u5b9a\u4ed3\u53ea\u7528\u4e0a\u4e00\u5b8c\u6574\u4f1a\u8bdd\u4f30\u503c\u4e0e\u5f53\u65e5\u5f00\u76d8\uff0c\u4e0d\u8bfb\u5f53\u65e5\u6536\u76d8\u3002",
+    "\u6301\u6709 20 \u4e2a\u4ea4\u6613\u65e5\uff1a\u5165\u573a\u5f00\u76d8\u5230\u7b2c 20 \u4e2a\u540e\u7eed\u4ea4\u6613\u65e5\u5f00\u76d8\u9000\u51fa\u3002",
+    "\u7f3a\u4ef7\u6cbf\u7528\u6700\u540e\u5df2\u77e5\u4f30\u503c\u5e76\u6807\u8bb0 stale/unpriced\uff0c\u4e0d\u56de\u9000\u5230\u4e70\u5165\u6210\u672c\u3002",
+    "\u9ed8\u8ba4\u62d2\u7edd\u5c01\u5b58\u671f\u4fe1\u53f7/\u6210\u4ea4/\u4f30\u503c\uff1b\u8de8 split \u7684\u9000\u51fa\u8bb0 unavailable\u3002"
+  ],
+  "trade_head": [
+    {
+      "status": "filled",
+      "reason": null,
+      "ticker": "NVO",
+      "fill_date": "2019-01-04",
+      "quote_open": 19.80810968065584,
+      "fill_price": 19.827917790336492,
+      "side": "buy",
+      "cost_bps": 10.0,
+      "source": "session_open",
+      "open_observed": true,
+      "action": "buy",
+      "shares": 504,
+      "cost": 9993.270566329593
+    },
+    {
+      "status": "filled",
+      "reason": null,
+      "ticker": "CPA",
+      "fill_date": "2019-01-07",
+      "quote_open": 65.67796801295566,
+      "fill_price": 65.74364598096861,
+      "side": "buy",
+      "cost_bps": 10.0,
+      "source": "session_open",
+      "open_observed": true,
+      "action": "buy",
+      "shares": 152,
+      "cost": 9993.034189107228
+    },
+    {
+      "status": "filled",
+      "reason": null,
+      "ticker": "SO",
+      "fill_date": "2019-01-07",
+      "quote_open": 32.9545509258589,
+      "fill_price": 32.987505476784754,
+      "side": "buy",
+      "cost_bps": 10.0,
+      "source": "session_open",
+      "open_observed": true,
+      "action": "buy",
+      "shares": 303,
+      "cost": 9995.21415946578
+    },
+    {
+      "status": "filled",
+      "reason": null,
+      "ticker": "MCD",
+      "fill_date": "2019-01-08",
+      "quote_open": 151.67015380251203,
+      "fill_price": 151.82182395631452,
+      "side": "buy",
+      "cost_bps": 10.0,
+      "source": "session_open",
+      "open_observed": true,
+      "action": "buy",
+      "shares": 65,
+      "cost": 9868.418557160443
+    },
+    {
+      "status": "filled",
+      "reason": null,
+      "ticker": "DE",
+      "fill_date": "2019-01-09",
+      "quote_open": 141.96655798598604,
+      "fill_price": 142.108524543972,
+      "side": "buy",
+      "cost_bps": 10.0,
+      "source": "session_open",
+      "open_observed": true,
+      "action": "buy",
+      "shares": 70,
+      "cost": 9947.59671807804
+    }
+  ],
+  "equity_head": [
+    {
+      "date": "2019-01-03",
+      "cash": 100000.0,
+      "positions": 0,
+      "equity": 100000.0,
+      "open_risk": 0.0,
+      "stale_marks": 0,
+      "unpriced_marks": 0,
+      "blocked_marks": 0
+    },
+    {
+      "date": "2019-01-04",
+      "cash": 90006.7294336704,
+      "positions": 1,
+      "equity": 99971.0730616001,
+      "open_risk": 9964.343627929688,
+      "stale_marks": 0,
+      "unpriced_marks": 0,
+      "blocked_marks": 0
+    },
+    {
+      "date": "2019-01-07",
+      "cash": 70018.48108509739,
+      "positions": 3,
+      "equity": 100066.72460392673,
+      "open_risk": 30048.243518829346,
+      "stale_marks": 0,
+      "unpriced_marks": 0,
+      "blocked_marks": 0
+    },
+    {
+      "date": "2019-01-08",
+      "cash": 60150.06252793694,
+      "positions": 4,
+      "equity": 100560.82379655266,
+      "open_risk": 40410.76126861572,
+      "stale_marks": 0,
+      "unpriced_marks": 0,
+      "blocked_marks": 0
+    },
+    {
+      "date": "2019-01-09",
+      "cash": 20110.87478972663,
+      "positions": 8,
+      "equity": 100685.11012507667,
+      "open_risk": 80574.23533535004,
+      "stale_marks": 0,
+      "unpriced_marks": 0,
+      "blocked_marks": 0
+    }
+  ],
+  "equity_tail": [
+    {
+      "date": "2022-12-27",
+      "cash": 200818.79657522723,
+      "positions": 2,
+      "equity": 252304.09575430438,
+      "open_risk": 51485.29917907715,
+      "stale_marks": 0,
+      "unpriced_marks": 0,
+      "blocked_marks": 0
+    },
+    {
+      "date": "2022-12-28",
+      "cash": 200818.79657522723,
+      "positions": 2,
+      "equity": 250425.16568533465,
+      "open_risk": 49606.36911010742,
+      "stale_marks": 0,
+      "unpriced_marks": 0,
+      "blocked_marks": 0
+    },
+    {
+      "date": "2022-12-29",
+      "cash": 227778.23974157855,
+      "positions": 1,
+      "equity": 250839.13955236957,
+      "open_risk": 23060.899810791016,
+      "stale_marks": 0,
+      "unpriced_marks": 0,
+      "blocked_marks": 0
+    },
+    {
+      "date": "2022-12-30",
+      "cash": 250521.87409765765,
+      "positions": 0,
+      "equity": 250521.87409765765,
+      "open_risk": 0.0,
+      "stale_marks": 0,
+      "unpriced_marks": 0,
+      "blocked_marks": 0
+    },
+    {
+      "date": "2023-01-03",
+      "cash": 250521.87409765765,
+      "positions": 0,
+      "equity": 250521.87409765765,
+      "open_risk": 0.0,
+      "stale_marks": 0,
+      "unpriced_marks": 0,
+      "blocked_marks": 0
+    }
+  ]
+}
