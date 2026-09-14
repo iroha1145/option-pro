@@ -21,8 +21,10 @@
 | C0 | 风险-集中度 | 原排序 Top10 每主行业最多 2 只，空位保留 | `research_ranking="c0_sector_quota"` |
 | T1 | 时点 | 日线强确认代理，T 收盘可知，T+1 开盘执行 | `evaluate_t1` |
 | T2 | 时点 | T 与 T+1 收盘都守住 T 冻结阻力，T+2 开盘执行 | `evaluate_t2` |
+| F1 | 过滤 | 原排序保留 `rs_spy_63d > 0` | 研究 `followups.apply_f1_rs_filter` |
+| F2 | 排序 | 当日分位数替换收益/RS 后重建 mid/long，再 A0 | 研究 `followups.apply_f2_percentile_a0` |
 
-生产默认 `research_ranking=None`，检测器公式不变。
+生产默认 `research_ranking=None`，检测器公式不变。F1/F2 不接生产扫描开关。
 
 ## 命令
 
@@ -38,12 +40,10 @@ PYTHONPATH=backend python -m app.services.research.cli screener-replay \
   --registry "$HOME/research/screener-radar-data" \
   --workers 3 --resume
 
-PYTHONPATH=backend python -m app.services.research.cli radar-replay \
+python scripts/research/extract_first_triggers.py \
   --dataset "$HOME/research/screener-radar-data/yahoo-daily" \
-  --split development \
-  --out "$HOME/research/screener-radar-data/runs/dev-radar.json" \
-  --registry "$HOME/research/screener-radar-data" \
-  --workers 3 --resume
+  --out "$HOME/research/screener-radar-data/runs/dev-first-triggers.json" \
+  --split development --workers 4 --max-lookback 120
 
 python scripts/research/analyze_algorithm_round.py \
   --rows "$HOME/research/screener-radar-data/runs/dev-screener-rows.json" \
