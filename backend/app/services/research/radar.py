@@ -191,6 +191,12 @@ def _evaluate_ticker_session(
     )
 
 
+# detect_base only inspects tail(base_max_days<=80). ATR(20) needs ~21 bars.
+# Extra history only changes hold_bars_above_pivot, which does not create or
+# drop a TRIGGERED first-hit when rvol_time_of_day is missing.
+DEFAULT_STRUCTURE_LOOKBACK = 120
+
+
 def reconstruct_ticker_dates(
     dataset: OfflineOHLCV,
     ticker: str,
@@ -198,6 +204,7 @@ def reconstruct_ticker_dates(
     *,
     allow_sealed: bool = False,
     frame: pd.DataFrame | None = None,
+    max_lookback: int | None = None,
 ) -> dict[str, Any]:
     """Walk one ticker across many sessions. Same detectors as the daily entry."""
 
@@ -217,6 +224,8 @@ def reconstruct_ticker_dates(
     for session in dates:
         assert_split_access(session, allow_sealed=allow_sealed, purpose="radar_replay")
         daily = slice_daily_through(source, session)
+        if max_lookback is not None and max_lookback > 0:
+            daily = daily.tail(int(max_lookback))
         event, reason = _evaluate_ticker_session(ticker, daily, session, settings)
         if event is None:
             skipped[reason or "missing_bar"] = skipped.get(reason or "missing_bar", 0) + 1

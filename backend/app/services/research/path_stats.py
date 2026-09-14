@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from datetime import date
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from app.services.research.calendar import nth_trading_day
 from app.services.research.dataset import OfflineOHLCV
@@ -170,6 +170,37 @@ def mae_mfe_from_entry(
         "entry_price": entry,
         "sessions_seen": sessions,
         "note": "Exit-day high/low are excluded after the exit open.",
+    }
+
+
+def universe_open_return_mean(
+    dataset: OfflineOHLCV,
+    tickers: Sequence[str],
+    entry_date: date | str,
+    exit_date: date | str,
+) -> dict[str, Any]:
+    """Equal-weight open-to-open mean over the same executable window."""
+
+    start = parse_session_date(entry_date)
+    end = parse_session_date(exit_date)
+    values: list[float] = []
+    missing = 0
+    for ticker in tickers:
+        entry_bar = dataset.bar(ticker, start)
+        exit_bar = dataset.bar(ticker, end)
+        entry = None if entry_bar is None else _finite(entry_bar.get("adj_open"))
+        exit_px = None if exit_bar is None else _finite(exit_bar.get("adj_open"))
+        if entry is None or entry <= 0 or exit_px is None or exit_px <= 0:
+            missing += 1
+            continue
+        values.append(exit_px / entry - 1.0)
+    return {
+        "status": "active" if values else "unavailable",
+        "mean": None if not values else sum(values) / len(values),
+        "n": len(values),
+        "missing": missing,
+        "entry_date": start.isoformat(),
+        "exit_date": end.isoformat(),
     }
 
 
