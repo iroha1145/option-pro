@@ -238,7 +238,8 @@ test('非首屏增强请求等 load 后再固定延迟，不用 idle 抢首屏�
   assert.match(idle, /document\.readyState/);
   assert.match(idle, /setTimeout\(run, delayMs\)/);
   assert.doesNotMatch(idle, /requestIdleCallback/);
-  assert.match(quotes, /afterLoadIdle\(/);
+  assert.match(quotes, /start\(isOwner,\s*\{\s*stream:\s*false\s*\}\)/);
+  assert.match(quotes, /afterLoadIdle\(\(\) => \{\s*quoteStore\.enableStream\(\);/);
   assert.match(hero, /afterLoadIdle\(\(\) => setNewsTodayEnabled\(true\), 3500\)/);
   assert.match(layout, /afterLoadIdle\(/);
   assert.match(hero, /refreshToken > 0/);

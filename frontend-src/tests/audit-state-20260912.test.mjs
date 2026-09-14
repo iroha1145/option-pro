@@ -360,7 +360,7 @@ test('quote connections retire on credential transition and reconnect only after
   const { default: QuoteConnection } = load('components/QuoteConnection.tsx', {
     react: runner.React, '@/api/client': { isMock: false }, '@/hooks/useAccess': { useAccess: () => access },
     '@/lib/afterLoadIdle': { afterLoadIdle: (run) => { run(); return () => {}; } },
-    '@/lib/liveQuotes': { quoteStore: { setVisible() {}, start: owner => { starts.push(owner); return () => { stops++; }; } } },
+    '@/lib/liveQuotes': { quoteStore: { setVisible() {}, enableStream() {}, start: owner => { starts.push(owner); return () => { stops++; }; } } },
   }, env);
   runner.mount(QuoteConnection);
   await new Promise((resolve) => setTimeout(resolve, 0));

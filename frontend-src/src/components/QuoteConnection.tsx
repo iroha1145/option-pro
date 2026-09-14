@@ -9,10 +9,10 @@ export default function QuoteConnection() {
   const { isOwner, loading, hasConfirmedIdentity, identityUnavailable, username } = useAccess();
   useEffect(() => {
     if (isMock || loading || !hasConfirmedIdentity || identityUnavailable) return;
-    let stop = () => {};
+    quoteStore.setVisible(!document.hidden);
+    const stop = quoteStore.start(isOwner, { stream: false });
     const cancelIdle = afterLoadIdle(() => {
-      quoteStore.setVisible(!document.hidden);
-      stop = quoteStore.start(isOwner);
+      quoteStore.enableStream();
     }, 2500);
     const onVisibility = () => quoteStore.setVisible(!document.hidden);
     const onPageHide = () => quoteStore.setVisible(false);

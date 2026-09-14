@@ -473,6 +473,34 @@ test('one-symbol delta leaves unchanged quotes and listeners untouched', async (
   h.store.stop();
 });
 
+test('start without stream snapshots immediately and enableStream opens EventSource later', async () => {
+  const h = harness();
+  h.store.register(['AAPL']);
+  h.store.start(false, { stream: false });
+  await h.tick(300);
+  assert.equal(h.streams.length, 0);
+  assert.ok(h.requests.some(row => String(row.url).startsWith('/api/quotes')));
+  assert.equal(h.store.getQuote('AAPL').price, 100);
+  h.store.enableStream();
+  await h.tick(300);
+  assert.equal(h.streams.length, 1);
+  h.store.stop();
+});
+
+test('denied snapshot with deferred stream probes once and never opens EventSource', async () => {
+  const h = harness();
+  h.respond(async () => ({ status: 200, body: { quotes: [], status: { ...enabled, allowed: false } } }));
+  h.store.start(false, { stream: false });
+  await h.tick(300);
+  assert.equal(h.requests.length, 1);
+  assert.equal(h.streams.length, 0);
+  h.store.enableStream();
+  await h.tick(300);
+  assert.equal(h.requests.length, 1);
+  assert.equal(h.streams.length, 0);
+  h.store.stop();
+});
+
 test('new over-limit consumers get fallback state without reopening the unchanged stream', async () => {
   const h = harness();
   h.store.register(Array.from({ length: 200 }, (_, i) => `S${i}`));

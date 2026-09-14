@@ -141,6 +141,7 @@ export class QuoteStore {
   private permitted = false;
   private owner = false;
   private terminal = false;
+  private allowStream = true;
   private failures = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -191,8 +192,9 @@ export class QuoteStore {
     this.subscriptionsChanged();
     return () => { this.consumers.delete(id); this.subscriptionsChanged(); };
   }
-  start(owner: boolean) {
+  start(owner: boolean, options?: { stream?: boolean }) {
     this.stop(); this.started = true; this.owner = owner; this.terminal = false; this.failures = 0;
+    this.allowStream = options?.stream !== false;
     this.radarResyncOnConnect = true;
     this.pollTimer = setInterval(() => {
       if (!this.permitted || !this.visible) return;
@@ -205,8 +207,13 @@ export class QuoteStore {
     this.schedule(0);
     return () => this.stop();
   }
+  enableStream() {
+    if (this.allowStream) return;
+    this.allowStream = true;
+    if (this.started && this.visible && !this.terminal) this.schedule(0);
+  }
   stop() {
-    this.started = false; this.permitted = false; this.generation++;
+    this.started = false; this.permitted = false; this.allowStream = true; this.generation++;
     this.closeStream();
     this.connectController?.abort(); this.pollController?.abort();
     this.connectController = this.pollController = null;
@@ -337,6 +344,7 @@ export class QuoteStore {
       // Probe contains no symbols; this snapshot starts price loading before SSE arrives.
       if (probe && !await this.snapshot(generation)) return;
       if (generation !== this.generation || !this.started || !this.visible) return;
+      if (!this.allowStream) return;
       const stream = this.runtime.stream(`/api/quotes/stream?${this.query()}`); this.stream = stream;
       let streamReady = false;
       const read = <T,>(callback: (data: T) => void) => (event: Event) => {
