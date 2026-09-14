@@ -28,6 +28,13 @@ const PROFILES = {
     width: 390, height: 844, dpr: 3, cpu: 4,
     down: (10 * 1024 * 1024) / 8, up: (2 * 1024 * 1024) / 8, rtt: 180, mobile: true,
   },
+  // xl+ so the numbered desktop nav is display:flex. Hover is a real
+  // pointer gesture here; 390px hides that nav and puts /earnings behind
+  // the dock "更多" sheet (a button, not <a href="/earnings">).
+  desktop: {
+    width: 1440, height: 900, dpr: 1, cpu: 4,
+    down: (10 * 1024 * 1024) / 8, up: (2 * 1024 * 1024) / 8, rtt: 180, mobile: false,
+  },
 };
 const profile = PROFILES[PROFILE];
 if (!profile) throw new Error(`unknown profile ${PROFILE}`);
@@ -182,13 +189,15 @@ async function waitReady(page, route, timeout = 60_000) {
   return { kind, at: ready?.at ?? null };
 }
 
-async function withPage(fn) {
+async function withPage(fn, { viewport = 'mobile-ref' } = {}) {
+  const vp = PROFILES[viewport];
+  if (!vp) throw new Error(`unknown viewport ${viewport}`);
   const browser = await chromium.launch({ headless: true, channel: 'chrome' });
   const context = await browser.newContext({
-    viewport: { width: profile.width, height: profile.height },
-    deviceScaleFactor: profile.dpr,
-    isMobile: profile.mobile,
-    hasTouch: profile.mobile,
+    viewport: { width: vp.width, height: vp.height },
+    deviceScaleFactor: vp.dpr,
+    isMobile: vp.mobile,
+    hasTouch: vp.mobile,
     locale: 'zh-CN',
   });
   const page = await context.newPage();
@@ -204,6 +213,14 @@ async function withPage(fn) {
     await context.close();
     await browser.close();
   }
+}
+
+function homeEarningsLink(page) {
+  return page.locator('section[aria-label="财报临近"] a[href="/earnings"]');
+}
+
+function desktopEarningsNav(page) {
+  return page.locator('nav[aria-label="主导航"] a[href="/earnings"]');
 }
 
 const pages = { '/': [], '/earnings': [] };
@@ -233,43 +250,57 @@ for (const route of Object.keys(pages)) {
   }
 }
 
-const nav = [];
+async function firstNavSample(page, network, rateLimit, open) {
+  await installLabRoutes(page);
+  await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+  await waitReady(page, '/');
+  const before = { req: network.requests, earn: network.earningsChunk, chart: network.chart };
+  const started = Date.now();
+  await open(page);
+  const ready = await waitReady(page, '/earnings');
+  return {
+    ready_ms: ready.at,
+    wall_ms: Date.now() - started,
+    ready_class: ready.kind,
+    chart_loaded: network.chart > before.chart,
+    earnings_chunk: network.earningsChunk > before.earn,
+    request_count: network.requests - before.req,
+    rate_limited: rateLimit.count,
+  };
+}
+
+const nav = { home_card: [], desktop_nav: [] };
 for (let i = 0; i < REPEATS; i += 1) {
-  const sample = await withPage(async (page, network, rateLimit) => {
-    await installLabRoutes(page);
-    await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-    await waitReady(page, '/');
-    const before = { req: network.requests, earn: network.earningsChunk, chart: network.chart };
-    const started = Date.now();
-    await page.evaluate(() => {
-      const link = document.querySelector('a[href="/earnings"]');
-      if (link) link.click();
-    });
-    const ready = await waitReady(page, '/earnings');
-    return {
-      ready_ms: ready.at,
-      wall_ms: Date.now() - started,
-      ready_class: ready.kind,
-      chart_loaded: network.chart > before.chart,
-      earnings_chunk: network.earningsChunk > before.earn,
-      request_count: network.requests - before.req,
-      rate_limited: rateLimit.count,
-    };
+  nav.home_card.push(await withPage(async (page, network, rateLimit) => (
+    firstNavSample(page, network, rateLimit, async (target) => {
+      await homeEarningsLink(target).click();
+    })
+  )));
+  nav.desktop_nav.push(await withPage(async (page, network, rateLimit) => (
+    firstNavSample(page, network, rateLimit, async (target) => {
+      await desktopEarningsNav(target).click();
+    })
+  ), { viewport: 'desktop' }));
+  console.log(
+    `nav #${i + 1} home=${nav.home_card.at(-1).wall_ms}/${nav.home_card.at(-1).ready_class} `
+    + `desk=${nav.desktop_nav.at(-1).wall_ms}/${nav.desktop_nav.at(-1).ready_class}`,
+  );
+  await afterSampleGap({
+    rateLimitedCount: (nav.home_card.at(-1).rate_limited || 0) + (nav.desktop_nav.at(-1).rate_limited || 0),
+    last: i + 1 >= REPEATS,
   });
-  nav.push(sample);
-  console.log(`nav #${i + 1} class=${sample.ready_class} ready=${sample.ready_ms} chart=${sample.chart_loaded}`);
-  await afterSampleGap({ rateLimitedCount: sample.rate_limited, last: i + 1 >= REPEATS });
 }
 
 const intent = { immediate: [], hover_then_click: [], hover_only: [] };
 for (let i = 0; i < REPEATS; i += 1) {
+  const intentOpts = { viewport: 'desktop' };
   intent.immediate.push(await withPage(async (page, network, rateLimit) => {
     await installLabRoutes(page);
     await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
     await waitReady(page, '/');
     const before = network.earningsChunk;
     const started = Date.now();
-    await page.click('a[href="/earnings"]');
+    await desktopEarningsNav(page).click();
     const ready = await waitReady(page, '/earnings');
     return {
       ready_ms: ready.at,
@@ -279,12 +310,12 @@ for (let i = 0; i < REPEATS; i += 1) {
       chart_loaded: network.chart > 0,
       rate_limited: rateLimit.count,
     };
-  }));
+  }, intentOpts));
   intent.hover_then_click.push(await withPage(async (page, network, rateLimit) => {
     await installLabRoutes(page);
     await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
     await waitReady(page, '/');
-    const link = page.locator('a[href="/earnings"]').first();
+    const link = desktopEarningsNav(page);
     await link.hover();
     await page.waitForTimeout(400);
     const prefetched = network.earningsChunk > 0;
@@ -299,14 +330,13 @@ for (let i = 0; i < REPEATS; i += 1) {
       chart_loaded: network.chart > 0,
       rate_limited: rateLimit.count,
     };
-  }));
+  }, intentOpts));
   intent.hover_only.push(await withPage(async (page, network, rateLimit) => {
     await installLabRoutes(page);
     await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
     await waitReady(page, '/');
     const beforePaid = network.abortedPaid;
-    const link = page.locator('a[href="/earnings"]').first();
-    await link.hover();
+    await desktopEarningsNav(page).hover();
     await page.waitForTimeout(800);
     return {
       earnings_chunk: network.earningsChunk > 0,
@@ -314,7 +344,7 @@ for (let i = 0; i < REPEATS; i += 1) {
       extra_paid: network.abortedPaid > beforePaid,
       rate_limited: rateLimit.count,
     };
-  }));
+  }, intentOpts));
   console.log(
     `intent #${i + 1} immediate=${intent.immediate.at(-1).wall_ms} `
     + `hover=${intent.hover_then_click.at(-1).wall_ms} `
@@ -367,7 +397,10 @@ const report = {
     '/': summarize(pages['/']),
     '/earnings': summarize(pages['/earnings']),
   },
-  first_nav: summarize(nav, 'wall_ms'),
+  first_nav: {
+    home_card: summarize(nav.home_card, 'wall_ms'),
+    desktop_nav: summarize(nav.desktop_nav, 'wall_ms'),
+  },
   intent: {
     immediate: summarize(intent.immediate, 'wall_ms'),
     hover_then_click: summarize(intent.hover_then_click, 'wall_ms'),
@@ -391,7 +424,10 @@ await mkdir(path.dirname(OUT), { recursive: true });
 await writeFile(OUT, JSON.stringify(report, null, 2) + '\n');
 console.log(JSON.stringify({
   pages: { '/': report.pages['/'].p75, '/earnings': report.pages['/earnings'].p75 },
-  first_nav: report.first_nav.p75,
+  first_nav: {
+    home_card: report.first_nav.home_card.p75,
+    desktop_nav: report.first_nav.desktop_nav.p75,
+  },
   intent: {
     immediate: report.intent.immediate.p75,
     hover_then_click: report.intent.hover_then_click.p75,

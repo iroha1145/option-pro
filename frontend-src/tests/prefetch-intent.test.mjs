@@ -18,6 +18,15 @@ test('intent prefetch only loads route chunks and respects save-data / concurren
   assert.doesNotMatch(prefetch, /earningsApi|catalystsContract|stocksApi/);
 });
 
+test('surfaces lab clicks the visible home card and desktop nav, not a hidden earnings anchor', async () => {
+  const surfaces = await readFile(path.join(here, '..', '..', 'scripts', 'perf', 'measure_round6_surfaces.mjs'), 'utf8');
+  assert.match(surfaces, /section\[aria-label="财报临近"\] a\[href="\/earnings"\]/);
+  assert.match(surfaces, /nav\[aria-label="主导航"\] a\[href="\/earnings"\]/);
+  assert.match(surfaces, /viewport: 'desktop'/);
+  assert.doesNotMatch(surfaces, /page\.click\('a\[href="\/earnings"\]'\)/);
+  assert.doesNotMatch(surfaces, /querySelector\('a\[href="\/earnings"\]'\)/);
+});
+
 test('navbar, dock, palette and login expose hover/focus route prefetch', async () => {
   const navbar = await readFile(src('components', 'Navbar.tsx'), 'utf8');
   const dock = await readFile(src('components', 'MobileDock.tsx'), 'utf8');
