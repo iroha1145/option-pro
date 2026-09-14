@@ -160,6 +160,25 @@ def test_percentile_requires_dispersion() -> None:
     assert xs_percentile(values, 9.0) == 100.0
 
 
+def test_structure_lookback_keeps_trigger_identity() -> None:
+    from app.services.research.radar import reconstruct_ticker_dates
+    from tests.test_research_screener_radar import _synth_dataset
+
+    dataset = _synth_dataset()
+    dates = [date(2019, 3, day) for day in (18, 19, 20, 21, 22, 25)]
+    full = reconstruct_ticker_dates(dataset, "AAA", dates)
+    short = reconstruct_ticker_dates(dataset, "AAA", dates, max_lookback=120)
+    full_keys = {
+        (event["ticker"], event["trading_date"], event["pivot_id"], event["resistance_high"])
+        for event in full["events"]
+    }
+    short_keys = {
+        (event["ticker"], event["trading_date"], event["pivot_id"], event["resistance_high"])
+        for event in short["events"]
+    }
+    assert full_keys == short_keys
+
+
 def test_mae_excludes_exit_day_extremes() -> None:
     start = date(2019, 3, 4)
     records = [
