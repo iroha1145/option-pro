@@ -2,6 +2,7 @@
 /** Compact Round 6 lab summaries for docs. Does not invent missing files. */
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { decideIntentPrefetch } from './lib/round6_intent_decision.mjs';
 
 const DIR = process.env.OPTIX_PERF_DIR || '/opt/cursor/artifacts/perf';
 const OUT = process.env.OPTIX_PERF_SUMMARY || path.join(DIR, 'round6-summary.json');
@@ -58,6 +59,7 @@ const report = {
         immediate: surfaces.intent?.immediate?.p75 ?? null,
         hover_then_click: surfaces.intent?.hover_then_click?.p75 ?? null,
         hover_only_chunk: surfaces.intent?.hover_only?.chunk_n ?? null,
+        decision: decideIntentPrefetch(surfaces.intent),
       },
       earnings_scroll: surfaces.earnings_scroll
         ? {

@@ -66,4 +66,6 @@
 - 财报快滚、弱网、占位高度、图表保持挂载
 - 三种语言冷启动与深链接（源码运行时测试已补，浏览器样本未齐）
 
+E 去留阈值（1440 主导航，写在 `scripts/perf/lib/round6_intent_decision.mjs`）：悬停必须预取到 Earnings 路由块且不得拉 chart；`hover_then_click` p75 要比立即点击快至少 150ms 且相对快 ≥8%，否则回退意图预取。缺样本则标 undecided，不默认保留。
+
 确认的问题修完并复验后，才能把 Goal 标完成。
