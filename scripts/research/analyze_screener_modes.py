@@ -14,7 +14,7 @@ sys.path.insert(0, str(ROOT / "backend"))
 
 from app.services.research.metrics import date_clustered_mean, spearman_rank_ic, summarize_daily_ics, top_k_mean
 from app.services.research.protocol import SCREENER_MODES, split_for_date
-from app.services.research.screener import apply_disable_market_fit, apply_price_filter, apply_screener_mode
+from app.services.research.screener import apply_disable_market_fit, apply_screener_mode
 
 
 def _group(rows: list[dict]) -> dict[str, list[dict]]:
@@ -43,24 +43,27 @@ def _mode_summary(grouped: dict[str, list[dict]], rows_for_day) -> dict:
         )
         for k in (5, 10, 20):
             tops[str(k)].append(
-                top_k_mean(
-                    ranked,
-                    score_key="mode_sort_score",
-                    outcome_key=("excess", "20", "excess_vs_universe"),
-                    k=k,
+                (
+                    session,
+                    top_k_mean(
+                        ranked,
+                        score_key="mode_sort_score",
+                        outcome_key=("excess", "20", "excess_vs_universe"),
+                        k=k,
+                    ),
                 )
             )
 
-    def _mean_excess(items: list[dict]) -> dict:
+    def _mean_excess(items: list[tuple[str, dict]]) -> dict:
         values = [
-            (f"d{index}", float(item["excess"]))
-            for index, item in enumerate(items)
+            (session, float(item["excess"]))
+            for session, item in items
             if item.get("status") == "active" and item.get("excess") is not None
         ]
-        return date_clustered_mean(values)
+        return date_clustered_mean(values, horizon_days=20)
 
     return {
-        "ranking_ic": summarize_daily_ics(ranking_ics),
+        "ranking_ic": summarize_daily_ics(ranking_ics, horizon_days=20),
         "top_excess": {key: _mean_excess(value) for key, value in tops.items()},
     }
 
@@ -88,18 +91,22 @@ def main() -> int:
         "day_count": len(grouped),
         "modes": modes,
         "candidate_disable_market_fit": _mode_summary(grouped, apply_disable_market_fit),
-        "candidate_unadjusted_min_price": _mode_summary(
-            grouped,
-            lambda items: apply_screener_mode(
-                apply_price_filter(items, min_price=5.0, price_key="unadjusted_close"),
-                timeframe="all",
-                profile="balanced",
+        "candidate_unadjusted_min_price": {
+            "status": "not_evaluated",
+            "reason": "requires_rebuild_from_pre_price_filter_research_universe",
+            "note": (
+                "The compact dump already passed the adjusted $5 filter. "
+                "Re-filtering unadjusted_close cannot recover names that were "
+                "dropped before the dump was written. This candidate is not "
+                "evidence of no incremental value."
             ),
-        ),
+        },
+        "review_status": "repaired_round2",
         "notes": [
             "short/mid/long 使用生产 _sort_scored（期限分 0.94 + ranking 0.06）。",
             "conservative/aggressive 使用生产 score_profile_fit + score_ranking。",
-            "candidate-unadjusted-min-price 只能从已通过复权 min_price 的视图再过滤，不能找回被复权价踢掉的股票。",
+            "candidate-unadjusted-min-price 标记 not_evaluated，不计入停止搜索依据。",
+            "CI 使用真实交易日上的 20 日块 bootstrap，不是普通日期分块 SE。",
         ],
     }
     Path(args.out).write_text(json.dumps(payload, indent=2, ensure_ascii=True) + "\n")

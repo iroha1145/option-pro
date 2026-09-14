@@ -7,7 +7,7 @@ unverifiable without intraday history.
 from __future__ import annotations
 
 from datetime import date
-from typing import Any, Iterable, Sequence
+from typing import Any, Iterable, Mapping, Sequence
 
 import pandas as pd
 
@@ -74,6 +74,7 @@ def _daily_features(
         ),
         "hold_bars_above_pivot": hold,
         "hold_bars_above_opening_range": 0,
+        "hold_bars_convention": "daily_close_not_intraday",
         "opening_range_complete": False,
         "opening_range_high": None,
         "warnings": ["intraday_rvol_unavailable", "opening_range_unavailable"],
@@ -96,6 +97,9 @@ def _evaluate_ticker_session(
 ) -> tuple[dict[str, Any] | None, str | None]:
     if daily.empty or daily.index.max().date() != session:
         return None, "missing_bar"
+    last = daily.iloc[-1]
+    if any(pd.isna(last.get(column)) for column in ("Open", "High", "Low", "Close")):
+        return None, "incomplete_ohlc"
     prior = previous_trading_day(session)
     as_of = session_close(session)
     prior_close = session_close(prior)
@@ -210,7 +214,7 @@ def reconstruct_ticker_dates(
         daily = slice_daily_through(source, session)
         event, reason = _evaluate_ticker_session(ticker, daily, session, settings)
         if event is None:
-            skipped[reason or "missing_bar"] += 1
+            skipped[reason or "missing_bar"] = skipped.get(reason or "missing_bar", 0) + 1
             continue
         events.append(event)
     return {"ticker": ticker, "events": events, "skipped": skipped}
@@ -249,7 +253,7 @@ def reconstruct_daily_base_events(
             daily = dataset.frame(ticker, through=session, allow_sealed=allow_sealed)
         event, reason = _evaluate_ticker_session(ticker, daily, session, settings)
         if event is None:
-            skipped[reason or "missing_bar"] += 1
+            skipped[reason or "missing_bar"] = skipped.get(reason or "missing_bar", 0) + 1
             continue
         events.append(event)
     return {
@@ -306,3 +310,91 @@ def prior_screener_overlap(
             item["prior_screener_date"] = prior
         out.append(item)
     return out
+
+
+def first_trigger_by_pivot(events: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
+    """Keep the first ticker+pivot_id hit. This is not an economic-event claim."""
+
+    first_hits: dict[tuple[str, str], dict[str, Any]] = {}
+    duplicate_triggers = 0
+    ordered = sorted(
+        (dict(event) for event in events),
+        key=lambda item: (
+            str(item.get("trading_date") or ""),
+            str(item.get("ticker") or ""),
+            str(item.get("pivot_id") or ""),
+        ),
+    )
+    for event in ordered:
+        key = (str(event.get("ticker") or ""), str(event.get("pivot_id") or ""))
+        if key in first_hits:
+            duplicate_triggers += 1
+            continue
+        first_hits[key] = event
+    return {
+        "events": list(first_hits.values()),
+        "duplicate_triggers_dropped": duplicate_triggers,
+        "protocol": "ticker_plus_pivot_id_first_seen",
+        "note": (
+            "pivot_id includes base_end, so a platform that rolls forward can "
+            "mint a new id. This is not a first-economic-event guarantee."
+        ),
+    }
+
+
+def platform_continuity_key(event: Mapping[str, Any]) -> tuple[str, str] | None:
+    ticker = str(event.get("ticker") or "")
+    resistance = event.get("resistance_high")
+    if not ticker or resistance is None:
+        return None
+    try:
+        rounded = f"{float(resistance):.2f}"
+    except (TypeError, ValueError):
+        return None
+    return ticker, rounded
+
+
+def platform_evolution_groups(events: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
+    """Group same-ticker events whose resistance stays on the same 1-cent platform.
+
+    Adjacent or overlapping trading dates in that group are one evolving
+    platform. Distinct pivot_ids inside the group are not independent first
+    economic events.
+    """
+
+    buckets: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for event in events:
+        key = platform_continuity_key(event)
+        if key is None:
+            continue
+        buckets.setdefault(key, []).append(dict(event))
+    groups = []
+    extra_after_pivot_dedupe = 0
+    for key, items in buckets.items():
+        items.sort(key=lambda item: str(item.get("trading_date") or ""))
+        pivot_ids = {str(item.get("pivot_id") or "") for item in items}
+        if len(items) > 1 and len(pivot_ids) > 1:
+            extra_after_pivot_dedupe += len(items) - 1
+        groups.append(
+            {
+                "ticker": key[0],
+                "resistance_high": key[1],
+                "event_count": len(items),
+                "distinct_pivot_ids": len(pivot_ids),
+                "first_trading_date": items[0].get("trading_date"),
+                "last_trading_date": items[-1].get("trading_date"),
+                "pivot_ids": sorted(pivot_ids),
+            }
+        )
+    evolving = [group for group in groups if group["distinct_pivot_ids"] > 1]
+    return {
+        "group_count": len(groups),
+        "evolving_platform_count": len(evolving),
+        "events_in_evolving_platforms": sum(group["event_count"] for group in evolving),
+        "extra_events_if_only_pivot_id_deduped": extra_after_pivot_dedupe,
+        "groups": groups,
+        "note": (
+            "This is a Grade C continuity heuristic, not Discovery identity. "
+            "ticker+pivot_id uniqueness does not prove the first economic event."
+        ),
+    }

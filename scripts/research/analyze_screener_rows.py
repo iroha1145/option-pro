@@ -13,6 +13,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "backend"))
 
+from app.services.research.labels import outcome_crosses_split
 from app.services.research.metrics import date_clustered_mean, spearman_rank_ic, summarize_daily_ics, top_k_mean
 from app.services.research.protocol import split_for_date
 
@@ -25,6 +26,8 @@ def _group(rows: list[dict]) -> dict[str, list[dict]]:
 
 
 def _outcome(row: dict, horizon: str = "20") -> float | None:
+    if outcome_crosses_split(row, horizon=horizon):
+        return None
     value = ((row.get("excess") or {}).get(horizon) or {}).get("excess_vs_universe")
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
@@ -68,19 +71,25 @@ def main() -> int:
         )
         for k in (5, 10, 20):
             tops[str(k)].append(
-                top_k_mean(
-                    items,
-                    score_key="ranking_score",
-                    outcome_key=("excess", args.horizon, "excess_vs_universe"),
-                    k=k,
+                (
+                    session,
+                    top_k_mean(
+                        items,
+                        score_key="ranking_score",
+                        outcome_key=("excess", args.horizon, "excess_vs_universe"),
+                        k=k,
+                    ),
                 )
             )
             mom_tops[str(k)].append(
-                top_k_mean(
-                    items,
-                    score_key="return_63d",
-                    outcome_key=("excess", args.horizon, "excess_vs_universe"),
-                    k=k,
+                (
+                    session,
+                    top_k_mean(
+                        items,
+                        score_key="return_63d",
+                        outcome_key=("excess", args.horizon, "excess_vs_universe"),
+                        k=k,
+                    ),
                 )
             )
         usable = [
@@ -119,27 +128,31 @@ def main() -> int:
                 }
             )
 
-    def _mean_excess(items: list[dict]) -> dict:
+    def _mean_excess(items: list[tuple[str, dict]]) -> dict:
         values = [
-            (f"d{index}", float(item["excess"]))
-            for index, item in enumerate(items)
+            (session, float(item["excess"]))
+            for session, item in items
             if item.get("status") == "active" and item.get("excess") is not None
         ]
-        return date_clustered_mean(values)
+        return date_clustered_mean(values, horizon_days=int(args.horizon))
 
     payload = {
         "row_count": len(rows),
         "day_count": len(grouped),
         "horizon": args.horizon,
-        "ranking_ic": summarize_daily_ics(ranking_ics),
-        "momentum63_ic": summarize_daily_ics(momentum_ics),
+        "ranking_ic": summarize_daily_ics(ranking_ics, horizon_days=int(args.horizon)),
+        "momentum63_ic": summarize_daily_ics(momentum_ics, horizon_days=int(args.horizon)),
         "ranking_top_excess": {key: _mean_excess(value) for key, value in tops.items()},
         "momentum63_top_excess": {key: _mean_excess(value) for key, value in mom_tops.items()},
         "high_score_negative_examples": sorted(failures, key=lambda item: item["excess"])[:25],
         "low_score_positive_examples": sorted(surprises, key=lambda item: item["excess"], reverse=True)[:25],
+        "review_status": "repaired_round2",
         "notes": [
             "动量对照使用同一日合格池的 return_63d，不是生产分数。",
             "失败/惊喜案例保留，不事后删除。",
+            "Top-K 先按事前分数冻结再挂标签；缺标签不换人。",
+            "CI 使用真实交易日上的期限长度块 bootstrap，不是普通日期分块 SE。",
+            "跨后续 split 的标签在读取时 purge，不进入统计。",
         ],
     }
     Path(args.out).write_text(json.dumps(payload, indent=2, ensure_ascii=True) + "\n")
