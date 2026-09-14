@@ -1,0 +1,61 @@
+{
+  "lab": true,
+  "profile": "mobile-ref",
+  "measuredAt": "2026-09-14T03:15:37.584Z",
+  "ready_semantics": "content/empty/idle/error/timeout; content_p75 excludes idle, error and timeout; idle is unscanned, not a loaded empty result",
+  "routes": {
+    "/watchlist": {
+      "n": 4,
+      "content_n": 0,
+      "empty_n": 4,
+      "idle_n": 0,
+      "error_n": 0,
+      "timeout_n": 0,
+      "content_rate": 0,
+      "empty_rate": 1,
+      "idle_rate": 0,
+      "error_rate": 0,
+      "data_rate": 1,
+      "success_rate": 1,
+      "content_p50": null,
+      "content_p75": null,
+      "empty_p50": 1714.699999999255,
+      "empty_p75": 1714.699999999255,
+      "idle_p50": null,
+      "idle_p75": null,
+      "error_p50": null,
+      "error_p75": null,
+      "rate_limited_n": 0,
+      "samples": [
+        {
+          "wall_ms": 1723,
+          "ready_ms": 1712.9000000022352,
+          "ready_class": "empty",
+          "ready_ok": true,
+          "rate_limited": 0
+        },
+        {
+          "wall_ms": 1722,
+          "ready_ms": 1714.699999999255,
+          "ready_class": "empty",
+          "ready_ok": true,
+          "rate_limited": 0
+        },
+        {
+          "wall_ms": 1777,
+          "ready_ms": 1767.7999999970198,
+          "ready_class": "empty",
+          "ready_ok": true,
+          "rate_limited": 0
+        },
+        {
+          "wall_ms": 1704,
+          "ready_ms": 1693.699999999255,
+          "ready_class": "empty",
+          "ready_ok": true,
+          "rate_limited": 0
+        }
+      ]
+    }
+  }
+}

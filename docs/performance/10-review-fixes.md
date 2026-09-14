@@ -38,6 +38,30 @@
 - `VITE_API_MODE=live npm run build --prefix frontend-src` 后 `frontend/` 与 `frontend-src/dist` 一致
 - 复测数字见同目录 `artifacts/`（仓库内），不要只用 Cursor 机器绝对路径
 
+## 5. 本轮复测（`78bf552e`，mobile-ref）
+
+实现提交 `78bf552ec2280e4236d29aab2b7154227d069f8d`。`:2000` 为新包 `index-BIAX8gp6.js`，`:2001` 仍为未优化 `index-Bnz11sk4.js`。这是单独一批，不要和 n=20 实验室（冷 1698 / 热 838）或上一轮 n=8（优化 1714/838 vs 未优化 2434/1100）混成一张总表。
+
+新闻交错 n=8，标题均为 `第9600条快讯`，0 次 429：
+
+| 侧 | 冷 ready p75 | 热 ready p75 |
+|---|---|---|
+| 优化 | 1674 | 853 |
+| 未优化 | 2371 | 1081 |
+
+冷 Δp75 −698，热 Δp75 −228。原始 JSON：`artifacts/r5-interleaved-n8.json`。
+
+修正后判据的非新闻页 n=4：
+
+| 路由 | 类别 | 说明 |
+|---|---|---|
+| `/` | content 4/4，p75 1782 | 首页指数区 |
+| `/watchlist` | empty 4/4 | 本实验室账号 0 只自选，合法空，不是失败 |
+| `/screener` | idle 4/4 | 未扫描；从数据加载成绩剥离，不再记 empty |
+| `/stock/NVDA` | content 4/4，p75 5929 | 真实个股内容；错误文案不进该分布 |
+
+原始 JSON：`artifacts/r5-pages-_.json`、`r5-pages-_watchlist.json`、`r5-pages-_screener.json`、`r5-pages-_stock_NVDA.json`。
+
 ## 明确仍不是
 
 - 单元测试与实验室 Chromium 不是生产全面验证

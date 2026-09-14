@@ -1,0 +1,61 @@
+{
+  "lab": true,
+  "profile": "mobile-ref",
+  "measuredAt": "2026-09-14T03:16:55.219Z",
+  "ready_semantics": "content/empty/idle/error/timeout; content_p75 excludes idle, error and timeout; idle is unscanned, not a loaded empty result",
+  "routes": {
+    "/stock/NVDA": {
+      "n": 4,
+      "content_n": 4,
+      "empty_n": 0,
+      "idle_n": 0,
+      "error_n": 0,
+      "timeout_n": 0,
+      "content_rate": 1,
+      "empty_rate": 0,
+      "idle_rate": 0,
+      "error_rate": 0,
+      "data_rate": 1,
+      "success_rate": 1,
+      "content_p50": 5928.5,
+      "content_p75": 5928.5,
+      "empty_p50": null,
+      "empty_p75": null,
+      "idle_p50": null,
+      "idle_p75": null,
+      "error_p50": null,
+      "error_p75": null,
+      "rate_limited_n": 0,
+      "samples": [
+        {
+          "wall_ms": 5971,
+          "ready_ms": 5928.5,
+          "ready_class": "content",
+          "ready_ok": true,
+          "rate_limited": 0
+        },
+        {
+          "wall_ms": 5985,
+          "ready_ms": 5942.400000002235,
+          "ready_class": "content",
+          "ready_ok": true,
+          "rate_limited": 0
+        },
+        {
+          "wall_ms": 5955,
+          "ready_ms": 5915,
+          "ready_class": "content",
+          "ready_ok": true,
+          "rate_limited": 0
+        },
+        {
+          "wall_ms": 2154,
+          "ready_ms": 2120,
+          "ready_class": "content",
+          "ready_ok": true,
+          "rate_limited": 0
+        }
+      ]
+    }
+  }
+}
