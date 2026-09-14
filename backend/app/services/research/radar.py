@@ -7,7 +7,7 @@ unverifiable without intraday history.
 from __future__ import annotations
 
 from datetime import date
-from typing import Any, Iterable
+from typing import Any, Iterable, Sequence
 
 import pandas as pd
 
@@ -80,6 +80,142 @@ def _daily_features(
     }
 
 
+def slice_daily_through(frame: pd.DataFrame, session: date) -> pd.DataFrame:
+    """Inclusive session cutoff. Avoids rebuilding a python-date index each call."""
+
+    if frame.empty:
+        return frame
+    return frame.loc[: pd.Timestamp(session)]
+
+
+def _evaluate_ticker_session(
+    ticker: str,
+    daily: pd.DataFrame,
+    session: date,
+    settings,
+) -> tuple[dict[str, Any] | None, str | None]:
+    if daily.empty or daily.index.max().date() != session:
+        return None, "missing_bar"
+    prior = previous_trading_day(session)
+    as_of = session_close(session)
+    prior_close = session_close(prior)
+    structure_cutoff = TemporalCutoff(
+        event_at=prior_close,
+        session=MarketSession.CLOSED,
+        include_current_bar=True,
+        completed_daily_session=prior,
+    )
+    event_cutoff = TemporalCutoff(
+        event_at=as_of,
+        session=MarketSession.REGULAR,
+        include_current_bar=True,
+        completed_daily_session=session,
+    )
+    structure = detect_base(ticker, daily, structure_cutoff, settings)
+    if structure is None:
+        return None, "no_base"
+    features = _daily_features(
+        daily,
+        structure_high=float(structure.resistance_zone.high),
+    )
+    if features.get("event_price") is None:
+        return None, "insufficient_history"
+    previous_close = None
+    if len(daily) >= 2 and daily.index[-2].date() == prior:
+        previous_close = float(daily.iloc[-2]["Close"])
+    candidate = BreakoutCandidate(
+        ticker=ticker,
+        price=features["event_price"],
+        previous_regular_close=previous_close,
+        provider_timestamp=as_of,
+        source="research-daily-reconstruction",
+        session=MarketSession.REGULAR,
+    )
+    detection = detect_breakout(
+        candidate,
+        structure,
+        features,
+        event_cutoff,
+        settings,
+    )
+    if not detection.get("triggered"):
+        return None, "not_triggered"
+    setup = detection.get("setup_type")
+    setup_value = setup.value if hasattr(setup, "value") else str(setup)
+    event_id = event_identity(
+        trading_date=session,
+        ticker=ticker,
+        setup_type=setup_value,
+        pivot_id=structure.pivot_id,
+    )
+    return (
+        {
+            "event_id": event_id,
+            "ticker": ticker,
+            "trading_date": session.isoformat(),
+            "setup_type": setup_value,
+            "origin_setup_type": BreakoutSetupType.DAILY_BASE_BREAKOUT.value,
+            "lifecycle_state": (
+                detection["lifecycle_state"].value
+                if hasattr(detection["lifecycle_state"], "value")
+                else detection["lifecycle_state"]
+            ),
+            "triggered": True,
+            "confirmed": bool(detection.get("confirmed")),
+            "first_seen_at": prior_close.isoformat(),
+            "triggered_at": as_of.isoformat(),
+            "published_at": as_of.isoformat(),
+            "feature_cutoff_at": as_of.isoformat(),
+            "raw_as_of": as_of.isoformat(),
+            "event_price": features["event_price"],
+            "event_price_is_fill": False,
+            "pivot_id": structure.pivot_id,
+            "resistance_high": float(structure.resistance_zone.high),
+            "breakout_distance_atr": detection.get("breakout_distance_atr"),
+            "extended": bool(detection.get("extended")),
+            "transition_reason": detection.get("transition_reason"),
+            "warnings": list(features.get("warnings") or [])
+            + list(detection.get("warnings") or []),
+            "intraday_verified": False,
+        },
+        None,
+    )
+
+
+def reconstruct_ticker_dates(
+    dataset: OfflineOHLCV,
+    ticker: str,
+    dates: Sequence[date],
+    *,
+    allow_sealed: bool = False,
+    frame: pd.DataFrame | None = None,
+) -> dict[str, Any]:
+    """Walk one ticker across many sessions. Same detectors as the daily entry."""
+
+    settings = get_breakout_settings()
+    source = frame if frame is not None else dataset.frame(
+        ticker,
+        through=max(dates) if dates else None,
+        allow_sealed=allow_sealed,
+    )
+    events: list[dict[str, Any]] = []
+    skipped = {
+        "insufficient_history": 0,
+        "no_base": 0,
+        "not_triggered": 0,
+        "missing_bar": 0,
+    }
+    for session in dates:
+        assert_split_access(session, allow_sealed=allow_sealed, purpose="radar_replay")
+        daily = slice_daily_through(source, session)
+        event, reason = _evaluate_ticker_session(ticker, daily, session, settings)
+        if event is None:
+            skipped[reason or "missing_bar"] += 1
+            continue
+        events.append(event)
+    return {"ticker": ticker, "events": events, "skipped": skipped}
+
+
 def reconstruct_daily_base_events(
     dataset: OfflineOHLCV,
     signal_date: date | str,
@@ -95,9 +231,7 @@ def reconstruct_daily_base_events(
 
     session = parse_session_date(signal_date)
     assert_split_access(session, allow_sealed=allow_sealed, purpose="radar_replay")
-    prior = previous_trading_day(session)
     as_of = session_close(session)
-    prior_close = session_close(prior)
     settings = get_breakout_settings()
     universe, _meta = _theme_universe()
     symbols = list(dict.fromkeys(tickers or universe))
@@ -110,97 +244,14 @@ def reconstruct_daily_base_events(
     }
     for ticker in symbols:
         if frames is not None and ticker in frames:
-            daily = frames[ticker]
-            daily = daily[pd.Index(daily.index.date) <= session]
+            daily = slice_daily_through(frames[ticker], session)
         else:
             daily = dataset.frame(ticker, through=session, allow_sealed=allow_sealed)
-        if daily.empty or dataset.bar(ticker, session) is None:
-            skipped["missing_bar"] += 1
+        event, reason = _evaluate_ticker_session(ticker, daily, session, settings)
+        if event is None:
+            skipped[reason or "missing_bar"] += 1
             continue
-        structure_cutoff = TemporalCutoff(
-            event_at=prior_close,
-            session=MarketSession.CLOSED,
-            include_current_bar=True,
-            completed_daily_session=prior,
-        )
-        event_cutoff = TemporalCutoff(
-            event_at=as_of,
-            session=MarketSession.REGULAR,
-            include_current_bar=True,
-            completed_daily_session=session,
-        )
-        structure = detect_base(ticker, daily, structure_cutoff, settings)
-        if structure is None:
-            skipped["no_base"] += 1
-            continue
-        features = _daily_features(
-            daily[pd.Index(daily.index.date) <= session],
-            structure_high=float(structure.resistance_zone.high),
-        )
-        if features.get("event_price") is None:
-            skipped["insufficient_history"] += 1
-            continue
-        previous_close = None
-        prior_bar = dataset.bar(ticker, prior)
-        if prior_bar is not None:
-            previous_close = prior_bar["adj_close"]
-        candidate = BreakoutCandidate(
-            ticker=ticker,
-            price=features["event_price"],
-            previous_regular_close=previous_close,
-            provider_timestamp=as_of,
-            source="research-daily-reconstruction",
-            session=MarketSession.REGULAR,
-        )
-        detection = detect_breakout(
-            candidate,
-            structure,
-            features,
-            event_cutoff,
-            settings,
-        )
-        if not detection.get("triggered"):
-            skipped["not_triggered"] += 1
-            continue
-        setup = detection.get("setup_type")
-        setup_value = setup.value if hasattr(setup, "value") else str(setup)
-        event_id = event_identity(
-            trading_date=session,
-            ticker=ticker,
-            setup_type=setup_value,
-            pivot_id=structure.pivot_id,
-        )
-        events.append(
-            {
-                "event_id": event_id,
-                "ticker": ticker,
-                "trading_date": session.isoformat(),
-                "setup_type": setup_value,
-                "origin_setup_type": BreakoutSetupType.DAILY_BASE_BREAKOUT.value,
-                "lifecycle_state": (
-                    detection["lifecycle_state"].value
-                    if hasattr(detection["lifecycle_state"], "value")
-                    else detection["lifecycle_state"]
-                ),
-                "triggered": True,
-                "confirmed": bool(detection.get("confirmed")),
-                "first_seen_at": prior_close.isoformat(),
-                "triggered_at": as_of.isoformat(),
-                "published_at": as_of.isoformat(),
-                "feature_cutoff_at": as_of.isoformat(),
-                "raw_as_of": as_of.isoformat(),
-                "event_price": features["event_price"],
-                "event_price_is_fill": False,
-                "pivot_id": structure.pivot_id,
-                "resistance_high": float(structure.resistance_zone.high),
-                "breakout_distance_atr": detection.get("breakout_distance_atr"),
-                "extended": bool(detection.get("extended")),
-                "transition_reason": detection.get("transition_reason"),
-                "warnings": list(features.get("warnings") or [])
-                + list(detection.get("warnings") or []),
-                "intraday_verified": False,
-            }
-        )
+        events.append(event)
     return {
         "signal_date": session.isoformat(),
         "as_of": as_of.isoformat(),

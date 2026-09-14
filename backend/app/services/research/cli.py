@@ -23,7 +23,7 @@ from app.services.research.protocol import (
     iter_split_dates,
     protocol_hash,
 )
-from app.services.research.radar import reconstruct_daily_base_events
+from app.services.research.radar import reconstruct_daily_base_events, reconstruct_ticker_dates
 from app.services.research.replay_store import (
     append_jsonl,
     completed_sessions,
@@ -53,6 +53,17 @@ def _radar_day_job(session_iso: str) -> tuple[str, dict[str, Any]]:
         frames=_RADAR_JOB["frames"],
     )
     return session_iso, payload
+
+
+def _radar_ticker_job(ticker: str) -> tuple[str, dict[str, Any]]:
+    payload = reconstruct_ticker_dates(
+        _RADAR_JOB["dataset"],
+        ticker,
+        _RADAR_JOB["dates"],
+        allow_sealed=_RADAR_JOB["allow_sealed"],
+        frame=_RADAR_JOB["frames"].get(ticker),
+    )
+    return ticker, payload
 
 _SCREENER_JOB: dict[str, Any] = {}
 
@@ -291,26 +302,30 @@ def cmd_radar_replay(args: argparse.Namespace) -> int:
     days_path, events_path = partial_paths(out)
     resume = bool(getattr(args, "resume", False))
     if resume:
-        done_keys = completed_sessions(days_path)
+        done_keys = completed_sessions(days_path, key="ticker")
     else:
         reset_partials(days_path, events_path)
         done_keys = set()
-    pending = [day for day in dates if day.isoformat() not in done_keys]
+    pending = [ticker for ticker in symbols if ticker not in done_keys]
     workers = max(1, int(getattr(args, "workers", 1)))
     _RADAR_JOB.update(
-        {"dataset": dataset, "allow_sealed": allow_sealed, "frames": frames}
+        {
+            "dataset": dataset,
+            "allow_sealed": allow_sealed,
+            "frames": frames,
+            "dates": dates,
+        }
     )
     print(
-        f"radar-replay starting {len(pending)}/{len(dates)} days "
-        f"resume={int(len(done_keys))} workers={workers}",
+        f"radar-replay starting {len(pending)}/{len(symbols)} tickers "
+        f"{len(dates)} sessions resume={int(len(done_keys))} workers={workers}",
         flush=True,
     )
-    session_keys = [day.isoformat() for day in pending]
     if workers == 1:
-        for index, key in enumerate(session_keys, start=1):
-            session_iso, payload = _radar_day_job(key)
-            _persist_radar_day(days_path, events_path, session_iso, payload)
-            print(f"radar-replay {index}/{len(session_keys)} {key}", flush=True)
+        for index, ticker in enumerate(pending, start=1):
+            name, payload = _radar_ticker_job(ticker)
+            _persist_radar_ticker(days_path, events_path, name, payload)
+            print(f"radar-replay {index}/{len(pending)} {name}", flush=True)
     else:
         from concurrent.futures import ProcessPoolExecutor, as_completed
 
@@ -319,13 +334,13 @@ def cmd_radar_replay(args: argparse.Namespace) -> int:
             initializer=_init_radar_job,
             initargs=(dict(_RADAR_JOB),),
         ) as pool:
-            futures = {pool.submit(_radar_day_job, key): key for key in session_keys}
+            futures = {pool.submit(_radar_ticker_job, ticker): ticker for ticker in pending}
             done = 0
             for future in as_completed(futures):
-                session_iso, payload = future.result()
-                _persist_radar_day(days_path, events_path, session_iso, payload)
+                name, payload = future.result()
+                _persist_radar_ticker(days_path, events_path, name, payload)
                 done += 1
-                print(f"radar-replay {done}/{len(session_keys)} {session_iso}", flush=True)
+                print(f"radar-replay {done}/{len(pending)} {name}", flush=True)
     events = read_jsonl(events_path)
     first_hits: dict[tuple[str, str], dict[str, Any]] = {}
     duplicate_triggers = 0
@@ -394,10 +409,10 @@ def cmd_radar_replay(args: argparse.Namespace) -> int:
     return 0
 
 
-def _persist_radar_day(
+def _persist_radar_ticker(
     days_path: Path,
     events_path: Path,
-    session_iso: str,
+    ticker: str,
     payload: dict[str, Any],
 ) -> None:
     events = list(payload.get("events") or [])
@@ -406,7 +421,7 @@ def _persist_radar_day(
         days_path,
         [
             {
-                "signal_date": session_iso,
+                "ticker": ticker,
                 "event_count": len(events),
                 "skipped": payload.get("skipped"),
             }

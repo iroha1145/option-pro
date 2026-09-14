@@ -376,6 +376,31 @@ def test_replay_store_resume_reads_completed_days(tmp_path: Path) -> None:
     assert completed_sessions(days_path) == {"2019-01-02"}
 
 
+def test_radar_loc_slice_matches_date_filter() -> None:
+    from app.services.research.radar import slice_daily_through
+
+    idx = pd.bdate_range("2019-03-01", periods=20)
+    frame = pd.DataFrame({"Close": range(20)}, index=idx)
+    session = date(2019, 3, 8)
+    left = slice_daily_through(frame, session)
+    right = frame[pd.Index(frame.index.date) <= session]
+    assert left.index.max().date() == session
+    assert list(left["Close"]) == list(right["Close"])
+
+
+def test_ticker_walk_matches_daily_entry(monkeypatch) -> None:
+    from app.services.research.radar import reconstruct_ticker_dates
+
+    _install_small_universe(monkeypatch)
+    dataset = _synth_dataset()
+    signal = date(2019, 3, 25)
+    daily = reconstruct_daily_base_events(dataset, signal, tickers=["AAA"])
+    walked = reconstruct_ticker_dates(dataset, "AAA", [signal])
+    assert [event["event_id"] for event in daily["events"]] == [
+        event["event_id"] for event in walked["events"]
+    ]
+
+
 def test_radar_marks_intraday_types_unverifiable(monkeypatch) -> None:
     _install_small_universe(monkeypatch)
     monkeypatch.setattr(
