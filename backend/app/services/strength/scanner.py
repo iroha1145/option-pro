@@ -1618,6 +1618,7 @@ def _scan_sync(
     raw_history: pd.DataFrame | None = None,
     as_of: datetime | None = None,
     enrich_live: bool = True,
+    research_ranking: str | None = None,
 ) -> dict[str, Any]:
     from app.services.breakouts.config import get_breakout_settings
 
@@ -1812,9 +1813,19 @@ def _scan_sync(
         }
     _refresh_classifications(view_rows)
     _sort_scored(view_rows, timeframe)
-    for selected_rank, item in enumerate(view_rows, start=1):
-        item["selected_view_rank"] = selected_rank
-    limited = view_rows[:top]
+    if research_ranking:
+        from app.services.strength.ranking_variants import apply_research_ranking
+
+        view_rows = apply_research_ranking(view_rows, research_ranking)
+    else:
+        for selected_rank, item in enumerate(view_rows, start=1):
+            item["selected_view_rank"] = selected_rank
+    limited = [
+        item
+        for item in view_rows
+        if item.get("selected_view_rank") is not None
+        and int(item["selected_view_rank"]) <= top
+    ]
     if enrich_live:
         finnhub_status = enrich_rows_with_finnhub(limited)
         if include_options:
@@ -1877,6 +1888,7 @@ def _scan_sync(
             "sector_id": sector_id,
             "min_price": min_price,
             "min_avg_dollar_volume": min_avg_dollar_volume,
+            "research_ranking": research_ranking,
             "range_persistence_mode": breakout_settings.range_persistence_mode,
             "range_persistence_version": breakout_settings.range_persistence_version,
         },

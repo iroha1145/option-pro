@@ -20,6 +20,7 @@
 - [当前状态](status.md)
 - [实验台账说明](experiment-registry.md)
 - [开发区结果（封存区未揭盲）](findings.md)
+- [2026-09-14 算法改进轮](algorithm-round/README.md)
 
 ## 命令
 

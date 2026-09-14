@@ -176,6 +176,11 @@ def _evaluate_ticker_session(
             "pivot_id": structure.pivot_id,
             "resistance_high": float(structure.resistance_zone.high),
             "breakout_distance_atr": detection.get("breakout_distance_atr"),
+            "atr20": features.get("atr20"),
+            "close_location_value": features.get("close_location_value"),
+            "upper_wick_ratio": features.get("upper_wick_ratio"),
+            "volume": float(last["Volume"]) if "Volume" in last else None,
+            "invalidation_price": getattr(structure, "invalidation_price", None),
             "extended": bool(detection.get("extended")),
             "transition_reason": detection.get("transition_reason"),
             "warnings": list(features.get("warnings") or [])
