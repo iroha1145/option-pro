@@ -5,6 +5,7 @@ import json
 import random
 import sqlite3
 import threading
+import time
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Iterable
@@ -7759,9 +7760,10 @@ def test_late_revision_build_does_not_clobber_newer_cache() -> None:
 def test_same_cursor_row_store_does_not_drop_anon_items() -> None:
     key = ("/tmp/revision-cache-same-cursor", 24)
     cursor = (4, 4, 4)
+    installed_at = time.monotonic()
     local_module._REVISION_CACHE[key] = {
         "cursor": cursor,
-        "built_at": 10.0,
+        "built_at": installed_at,
         "rows": [{"news_id": 4}],
         "anon_items": [{"news_id": 4, "title": "cached"}],
     }
@@ -7769,13 +7771,117 @@ def test_same_cursor_row_store_does_not_drop_anon_items() -> None:
         key,
         cursor,
         [{"news_id": 99}],
-        started_at=11.0,
+        started_at=installed_at - 1.0,
     )
     cached = local_module._REVISION_CACHE[key]
     assert cached["cursor"] == cursor
+    assert cached["built_at"] == installed_at
     assert [row["news_id"] for row in cached["rows"]] == [4]
     assert cached["anon_items"][0]["title"] == "cached"
     local_module._REVISION_CACHE.pop(key, None)
+
+
+def test_expired_same_cursor_store_refreshes_ttl_and_keeps_anon_items() -> None:
+    key = ("/tmp/revision-cache-expired-cursor", 24)
+    cursor = (5, 5, 5)
+    expired_at = time.monotonic() - local_module._REVISION_CACHE_MAX_AGE_SECONDS - 10.0
+    local_module._REVISION_CACHE[key] = {
+        "cursor": cursor,
+        "built_at": expired_at,
+        "rows": [{"news_id": 5}],
+        "anon_items": [{"news_id": 5, "title": "cached"}],
+    }
+    started_at = time.monotonic() - 1.0
+    local_module._store_revision_cache(
+        key,
+        cursor,
+        [{"news_id": 55}],
+        started_at=started_at,
+    )
+    cached = local_module._REVISION_CACHE[key]
+    assert cached["cursor"] == cursor
+    assert cached["built_at"] > expired_at
+    assert cached["built_at"] >= started_at
+    assert [row["news_id"] for row in cached["rows"]] == [55]
+    assert cached["anon_items"][0]["title"] == "cached"
+    assert local_module._revision_cache_fresh(cached, cursor)
+    local_module._REVISION_CACHE.pop(key, None)
+
+
+def test_expired_same_cursor_keeps_concurrent_install() -> None:
+    key = ("/tmp/revision-cache-expired-concurrent", 24)
+    cursor = (6, 6, 6)
+    now = time.monotonic()
+    started_at = now - local_module._REVISION_CACHE_MAX_AGE_SECONDS - 40.0
+    concurrent_at = now - local_module._REVISION_CACHE_MAX_AGE_SECONDS - 10.0
+    local_module._REVISION_CACHE[key] = {
+        "cursor": cursor,
+        "built_at": concurrent_at,
+        "rows": [{"news_id": 6}],
+        "anon_items": [{"news_id": 6, "title": "concurrent"}],
+    }
+    local_module._store_revision_cache(
+        key,
+        cursor,
+        [{"news_id": 66}],
+        started_at=started_at,
+    )
+    cached = local_module._REVISION_CACHE[key]
+    assert [row["news_id"] for row in cached["rows"]] == [6]
+    assert cached["built_at"] == concurrent_at
+    assert cached["anon_items"][0]["title"] == "concurrent"
+    local_module._REVISION_CACHE.pop(key, None)
+
+
+def test_expired_complete_cache_refreshes_once_then_hits(tmp_path, monkeypatch) -> None:
+    etl, _ai, intelligence = _stack(tmp_path)
+    base = datetime(2026, 7, 21, 14, 30, tzinfo=timezone.utc)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: base)
+    _apply_news(
+        etl,
+        [_news_change(1, 143, available_at=base - timedelta(hours=1))],
+        as_of=base,
+    )
+    intelligence.reconcile()
+
+    with request_owner_access_context(False):
+        first = intelligence.feed(as_of=base, window_hours=24, limit=10)
+        assert [item["news_id"] for item in first["items"]] == [143]
+        cached = local_module._REVISION_CACHE[(str(intelligence.db_path), 24)]
+        cached["built_at"] = (
+            time.monotonic() - local_module._REVISION_CACHE_MAX_AGE_SECONDS - 10.0
+        )
+        query_calls = {"n": 0}
+        original_query = intelligence._active_revisions_query
+
+        def counted_query(*args, **kwargs):
+            query_calls["n"] += 1
+            return original_query(*args, **kwargs)
+
+        intelligence._active_revisions_query = counted_query  # type: ignore[method-assign]
+        try:
+            second = intelligence.feed(as_of=base, window_hours=24, limit=10)
+            assert [item["news_id"] for item in second["items"]] == [143]
+            assert query_calls["n"] == 1
+            fingerprint_calls = {"n": 0}
+            original_cursor = local_module._revision_store_cursor
+
+            def counted_cursor(connection):
+                fingerprint_calls["n"] += 1
+                return original_cursor(connection)
+
+            monkeypatch.setattr(local_module, "_revision_store_cursor", counted_cursor)
+
+            def _must_not_run(*_args, **_kwargs):
+                raise AssertionError("refreshed cache must not rebuild revisions")
+
+            intelligence._active_revisions_query = _must_not_run  # type: ignore[method-assign]
+            third = intelligence.feed(as_of=base, window_hours=24, limit=10)
+        finally:
+            intelligence._active_revisions_query = original_query  # type: ignore[method-assign]
+
+    assert [item["news_id"] for item in third["items"]] == [143]
+    assert fingerprint_calls["n"] == 1
 
 
 def test_feed_query_hash_omits_page_mode_for_legacy_clients() -> None:

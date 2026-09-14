@@ -418,8 +418,18 @@ def _store_revision_cache(
     with _REVISION_CACHE_LOCK:
         existing = _REVISION_CACHE.get(key)
         if existing is not None and existing["cursor"] == store_cursor:
-            # Same store version is already cached. Do not refresh TTL or
-            # drop anon_items that a concurrent reader already attached.
+            # Same store version: keep a still-fresh entry, and keep one
+            # installed by a concurrent build that finished after we started.
+            # An expired same-cursor entry must be replaced — otherwise the
+            # next read fails freshness, rebuilds, and this branch discards
+            # the rebuild forever.
+            if (
+                _revision_cache_fresh(existing, store_cursor)
+                or existing["built_at"] >= started_at
+            ):
+                return
+            existing["built_at"] = time.monotonic()
+            existing["rows"] = built_rows
             return
         if (
             existing is not None

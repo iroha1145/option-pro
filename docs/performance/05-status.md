@@ -1,6 +1,6 @@
 # 当前状态
 
-2026-09-14 Round 6（基线 `df1bd5d`，PR #165）：可见分页、按语言词典、财报按需图表。方法与本轮数字见 [13-round6-visible-i18n-earnings.md](13-round6-visible-i18n-earnings.md)。**不要**把下面历史 1651/832 或更早 feed 毫秒数写成 Round 6 结果。
+2026-09-14 Round 6（基线 `df1bd5d`，PR #165）：可见分页、按语言词典、财报按需图表。方法与本轮数字见 [13-round6-visible-i18n-earnings.md](13-round6-visible-i18n-earnings.md)。Codex P2：过期同 cursor 缓存刷新 TTL。**不要**把下面历史 1651/832 或更早 feed 毫秒数写成 Round 6 结果。
 
 Round 6 进程内 n=10000 访客 visible 热 p50 **240ms**（指纹 1）vs legacy 5 hop **1018ms**（指纹 5）。Owner visible 仍约 6.6s。浏览器交错 n=20：优化冷 p75 **9436ms** / 热 **2532ms**，20/20，标题「芯片企业发布最新进展」；未优化冷 19/20 超时，不写 p75 差值。surfaces：首页/财报约 2.7s，意图预取保留（悬停后再点快 222ms），屏外图表 0→8。生产包已同步为 `index-CS02aZ40.js`。
 

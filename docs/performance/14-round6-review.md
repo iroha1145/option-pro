@@ -6,7 +6,7 @@
 
 - 热命中：peek 完整 `anon_items` → 一次指纹 → 同一把锁拷贝 rows 与 items。rows/items 不能来自不同 cursor。
 - 慢路径仍会再指纹；禁止把旧指纹传去写缓存。
-- `_store_revision_cache`：同 cursor 直接 return（不刷新 TTL、不丢 items）；`existing.built_at >= started_at` 的迟到旧构建不覆盖。
+- `_store_revision_cache`：同 cursor 且仍新鲜（或并发写入的 `built_at >= started_at`）直接 return，不刷新 TTL、不丢 items。同 cursor 但已超过 300s 的过期条目必须用新 rows 覆盖并刷新 `built_at`，同时保留已挂上的 `anon_items`；否则之后每次 feed 都会重扫整窗。迟到旧构建（`existing.built_at >= started_at` 且 cursor 不同）不覆盖。
 - Owner 与历史 `as_of`（超出 90s）仍 `items=None`，未恢复 Round 2 的 Owner 复用。
 - 未使用 `BEGIN IMMEDIATE`，未延长 TTL，未跳过损坏检查。
 

@@ -238,3 +238,4 @@
 - **E**：1440 主导航悬停后再点 p75 601 vs 立即 823（快 222ms / 27%），按阈值保留。
 - **浏览器交错 n=20**：优化冷/热 20/20，p75 9436 / 2532；未优化冷 19/20 超时。`incomplete_samples`，不写差值。
 - **决定**：A/B/B2/C/D/E 全部保留。生产包同步为 `index-CS02aZ40.js`。
+- **Codex P2**：过期同 cursor 条目在 `_store_revision_cache` 必须刷新 `built_at` 并保留 `anon_items`，否则 300s 后每次 feed 都重扫。未延长 TTL，未混用 Owner/访客缓存。

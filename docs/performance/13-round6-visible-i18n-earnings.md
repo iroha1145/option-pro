@@ -45,7 +45,7 @@ OPTIX_PERF_REPEATS=8 OPTIX_PERF_OUT=/opt/cursor/artifacts/perf/round6-surfaces.j
 
 ### A. 匿名完整缓存热命中一次指纹 — 保留
 
-一次 peek 完整 `anon_items` 后，单次 `_revision_store_cursor`，同一把锁校验 cursor / TTL / items，从同一条目拷贝 rows 与 items。未命中或不完整走原慢路径（会再指纹）。同 cursor 再写不刷新 TTL、不清 `anon_items`。迟到旧构建若 `existing.built_at >= started_at` 不得覆盖。未延长 TTL，未混用 Owner/访客缓存，未跳过损坏检查。未对冷路径加只读事务或 `BEGIN IMMEDIATE`。
+一次 peek 完整 `anon_items` 后，单次 `_revision_store_cursor`，同一把锁校验 cursor / TTL / items，从同一条目拷贝 rows 与 items。未命中或不完整走原慢路径（会再指纹）。同 cursor 且仍新鲜再写不刷新 TTL、不清 `anon_items`。同 cursor 但已过 300s 的过期条目用新 rows 刷新 `built_at` 并保留 `anon_items`（Codex P2：否则过期后每次都重扫）。迟到旧构建若 `existing.built_at >= started_at` 不得覆盖。未延长 TTL，未混用 Owner/访客缓存，未跳过损坏检查。未对冷路径加只读事务或 `BEGIN IMMEDIATE`。
 
 进程内 n=10000 访客 visible 热路径指纹 **1**；legacy hop 热路径指纹 **5**（五次请求各一次）。n=100 访客 visible 热路径指纹也是 1。
 
