@@ -332,9 +332,15 @@ test('runtime language dictionaries stay in sync with domain files', async () =>
 
 test('main prepares i18n before importing application modules that call t()', async () => {
   const main = await readFile(path.join(srcDir, 'main.tsx'), 'utf8');
+  const boot = await readFile(path.join(srcDir, 'i18n', 'boot.ts'), 'utf8');
+  const core = await readFile(path.join(srcDir, 'i18n', 'core.ts'), 'utf8');
   assert.match(main, /prepareI18n/);
   const prepareAt = main.indexOf('prepareI18n');
   const appAt = main.indexOf("import('./App.tsx')");
   assert.ok(prepareAt >= 0 && appAt > prepareAt, 'App must load only after prepareI18n');
   assert.doesNotMatch(main, /import App from/);
+  assert.match(boot, /if \(locale !== 'zh'\)/);
+  assert.match(boot, /词典加载失败时继续启动/);
+  assert.match(core, /window\.location\.reload\(\)/);
+  assert.match(core, /AI 生成的正文/);
 });

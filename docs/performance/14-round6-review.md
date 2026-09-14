@@ -29,6 +29,7 @@
 - 中文不下载 runtime-en/ja；词典失败仍启动并回退中文。
 - `setLocale` 仍落盘 + `location.reload()`。
 - 不翻译模型生成的新闻/财报正文。
+- 独立图例 harness 必须在 `renderLegend` 前 `installTranslations`；App 壳用例必须等首屏标题后再 Tab / Ctrl+K。已修 visual CI 竞态（en/ja 图例、跳过链接、命令面板快捷键）。
 
 ## 财报时钟
 
