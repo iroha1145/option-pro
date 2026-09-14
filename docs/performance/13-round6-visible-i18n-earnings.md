@@ -68,12 +68,12 @@ n=100 上 visible 比 2 次 hop 慢（扫描更多项 + 方差）。B 的收益�
 | 文件 | raw | gzip9/vite |
 |---|---|---|
 | 基线 `index-Cnp05EGF.js` | 963385 | 326472（含日文） |
-| 本轮 `index-BskMhVzt.js` | 243870 | 79112（不含英日） |
-| `App-BKcov0VL.js` | 47630 | 15580 |
+| 本轮 `index-uc86EHir.js` | 243870 | 79117（不含英日译文） |
+| `App-D-zt9l2I.js` | 47628 | 15470 |
 | `runtime-en` / `runtime-ja` | 239441 / 277389 | 92124 / 94594（仅 en/ja 下载） |
-| `chart-NTG_CAhm.js` | 643516 | 219280（不进财报首屏块） |
+| `chart-D1l-hU5q.js` | 643516 | 218205（不进财报首屏块） |
 
-中文关键 JS 约 79+16KB gzip vs 基线入口 326KB。
+中文关键 JS 约 79+15KB gzip vs 基线入口 326KB。独立词典 gzip 不能当成主包节省量。扫描非 `runtime-en`/`runtime-ja` 的提交产物，没有 `Skip to main content` / `サポート`。
 
 ### D. 财报屏外图表 + 秒级更新局部化 — 保留（正确性已测，浏览器滚动样本待 n=8）
 
