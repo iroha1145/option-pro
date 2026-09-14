@@ -213,6 +213,8 @@ test('theme-boot 在主包解析前预取身份和默认新闻 feed', async () =
   assert.match(boot, /__OPTIX_PREFETCH__/);
   assert.match(boot, /credentials:\s*"include"/);
   assert.match(boot, /!location\.search/);
+  // 主包接管前的拒绝要标成已处理，否则断网首载会变成 Uncaught (in promise) / pageerror。
+  assert.match(boot, /promise\.catch\(function \(\) \{\}\)/);
   const client = codeOf(await source('api/client.ts'));
   assert.match(client, /export function consumeBootPrefetch/);
   assert.match(client, /takeBootPrefetch\(url\)/);
@@ -228,7 +230,7 @@ test('theme-boot 在主包解析前预取身份和默认新闻 feed', async () =
   assert.match(drawer, /item\?\.analysisJobId/);
   assert.match(drawer, /item\?\.analysisStatus/);
   const filters = codeOf(await source('components/catalysts/FilterBar.tsx'));
-  assert.match(filters, /prefetchDefaultFeed\(24\)/);
+  assert.match(filters, /prefetchDefaultFeed\(24, filters\)/);
   assert.match(filters, /onOptionIntent/);
   const segmented = codeOf(await source('components/shared/Segmented.tsx'));
   assert.match(segmented, /onPointerEnter/);

@@ -73,6 +73,12 @@ function JobStepper({ job }: { job: NewsAnalysisJob }) {
   );
 }
 
+/** POST 之后补读的详情不得把刚提交的任务降级：服务端投影若还没带上新任务，保留提交态。 */
+function mergeSubmittedJob(fresh: CatalystNewsItem, submitted: CatalystNewsItem): CatalystNewsItem {
+  if (fresh.analysisJobId === submitted.analysisJobId) return fresh;
+  return { ...fresh, analysisStatus: submitted.analysisStatus, analysisJobId: submitted.analysisJobId };
+}
+
 /* ================= 抽屉主体 ================= */
 interface NewsDrawerProps {
   newsId: string | null;
@@ -87,14 +93,19 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
   const toast = useToast();
   const [fetched, setFetched] = useState<CatalystNewsItem | null>(null);
   const seedMatches = Boolean(newsId && seed?.newsId === newsId && seed.titleZh);
-  const item = fetched && newsId && fetched.newsId === newsId
+  const liveItem = fetched && newsId && fetched.newsId === newsId
     ? fetched
     : seedMatches && seed
       ? seed
       : null;
+  /* 关抽屉（newsId=null）后 Drawer 还要滑出 350ms：这段时间继续画最后一条，
+     派生值不能一夜回到骨架屏。只做展示；提交/轮询/恢复都另看 newsId 与 openNewsRef。 */
+  const [lastShown, setLastShown] = useState<CatalystNewsItem | null>(null);
+  if (liveItem && liveItem !== lastShown) setLastShown(liveItem);
+  const item = liveItem ?? (newsId === null ? lastShown : null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [detailNotice, setDetailNotice] = useState<string | null>(null);
-  const [jobNotice, setJobNotice] = useState<string | null>(null);
+  const [jobNotice, setJobNotice] = useState<{ text: string; retryable: boolean } | null>(null);
   const [detailEpoch, setDetailEpoch] = useState(0);
   const [recoveryEpoch, setRecoveryEpoch] = useState(0);
   const [job, setJob] = useState<NewsAnalysisJob | null>(null);
@@ -184,10 +195,8 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
       /* 抽屉关闭（newsId=null）时必须停掉分析任务轮询（审计 2.2.17）：
          组件常驻不卸载，不清理的话 setTimeout 会继续以 2s→10s 打后端，
          直到任务终态再弹一条与当前语境无关的 toast。 */
+      /* 错误/提示文案留到滑出结束，换条时才清（下面分支）。 */
       setJob(null);
-      setLoadError(null);
-      setDetailNotice(null);
-      setJobNotice(null);
       stopPoll();
       return invalidateDetailRead;
     }
@@ -279,7 +288,11 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
         }
       } catch (error) {
         if (error instanceof ReadAttemptAborted || !isAlive()) return;
-        setJobNotice(__t('任务状态暂时读不到'));
+        /* 404 = 任务记录已不在（例如已被清理）：再点重试也只会再 404，不给按钮。 */
+        const gone = (error as { code?: unknown } | null)?.code === 404;
+        setJobNotice(gone
+          ? { text: __t('任务记录已不存在'), retryable: false }
+          : { text: __t('任务状态暂时读不到'), retryable: true });
       }
     })();
     return () => {
@@ -384,20 +397,45 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
       submittingRef.current = true;
       setConfirm(null);
       try {
-        const j = await catalystsContract.createAnalysisJob(item.newsId, force);
+        const forNews = item.newsId;
+        // 提交前详情还没到、抽屉在用列表 seed：作废的初次读取要补回来。
+        const onSeed = !fetched || fetched.newsId !== forNews;
+        const j = await catalystsContract.createAnalysisJob(forNews, force);
         invalidateDetailRead();
         setJob(j);
         const nextItem = { ...item, analysisStatus: (j.status === 'queued' ? 'queued' : 'in_progress') as CatalystNewsItem['analysisStatus'], analysisJobId: j.jobId };
         setFetched(nextItem);
         onUpdate(nextItem);
         toast.info(__t('分析任务已提交'), force ? __t('强制重新分析') : __t('可在本页查看进度'));
+        if (onSeed) {
+          /* 读缓存已被 createAnalysisJob 清掉；读取绑定新任务 id，换条/换任务即作废。
+             合并时不降级任务态：详情投影若还没带上新任务，仍按刚提交的任务显示。 */
+          itemJobIdRef.current = j.jobId;
+          const request = beginDetailRead(forNews, j.jobId);
+          void (async () => {
+            try {
+              const fresh = await request.read();
+              if (!request.isAlive()) return;
+              const merged = mergeSubmittedJob(fresh, nextItem);
+              setFetched(merged);
+              setDetailNotice(null);
+              setLoadError(null);
+              onUpdate(merged);
+            } catch (error) {
+              if (error instanceof ReadAttemptAborted || !request.isAlive()) return;
+              setDetailNotice(__t('详情更新失败'));
+            } finally {
+              request.cancel();
+            }
+          })();
+        }
       } catch (e) {
         toast.error(__t('提交失败'), e instanceof Error ? e.message : undefined);
       } finally {
         submittingRef.current = false;
       }
     },
-    [item, onUpdate, toast, invalidateDetailRead],
+    [item, fetched, onUpdate, toast, invalidateDetailRead, beginDetailRead],
   );
 
   const cancelJob = useCallback(async () => {
@@ -448,6 +486,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
           </span>
           <h3 className="mt-4 text-h3 text-ink-800">{__t('详情不可用')}</h3>
           <p className="mt-1.5 text-body-s text-ink-500">{loadError} {__t('· 列表摘要仍然有效')}</p>
+          <button type="button" className="control-button mt-4" onClick={retryDetail}>{__t('重试')}</button>
         </div>
       )}
       {item && (
@@ -505,8 +544,10 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
             </div>
             {jobNotice && (
               <p className="mt-3 flex flex-wrap items-center gap-2 text-caption text-ink-500" role="status">
-                <span>{jobNotice}</span>
-                <button type="button" className="control-button" onClick={retryRecovery}>{__t('重试')}</button>
+                <span>{jobNotice.text}</span>
+                {jobNotice.retryable && (
+                  <button type="button" className="control-button" onClick={retryRecovery}>{__t('重试')}</button>
+                )}
               </p>
             )}
 

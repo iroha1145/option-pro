@@ -90,7 +90,7 @@ function harness(t) {
   return { access, identities, capabilities, writes, listeners, env, resolveCapabilities, ready, flushImmediate };
 }
 
-function mountCard(t, h, confirmation) {
+function mountCard(t, h, confirmation, ticker = 'NVDA') {
   const runner = createReactStub();
   let reads = 0;
   const report = confirmation ? { status: 'not_requested', result: null } : {
@@ -111,7 +111,7 @@ function mountCard(t, h, confirmation) {
   }
   imports['@/components/shared/Skeleton'] = { SkeletonText: 'SkeletonText' };
   const Card = compile('components/earnings/ImpactCard.tsx', imports, h.env).default;
-  const props = { ticker: 'NVDA', row: { date: '2026-09-14' }, calendarRevision: 1, onAnalyzed: noop };
+  const props = { ticker, row: ticker ? { date: '2026-09-14' } : null, calendarRevision: 1, onAnalyzed: noop };
   const read = runner.mount(() => Card(props));
   t.after(() => runner.unmount());
   return { read, rerender: runner.rerender, reads: () => reads };
@@ -147,9 +147,28 @@ test('first identity confirmation renders without waiting for capability probes'
   assert.equal(h.access().hasConfirmedIdentity, true);
   assert.equal(h.access().isOwner, true);
   assert.equal(h.access().aiAvailable, false);
+  assert.equal(h.access().aiPending, true, '能力探针未回来前是未知，不是关闭');
   assert.equal(h.capabilities.length, 2);
   h.resolveCapabilities(); await settle(); assert.equal(h.access().aiAvailable, true);
+  assert.equal(h.access().aiPending, false);
 });
+
+for (const ticker of ['NVDA', null]) {
+  test(`pending capabilities show ${ticker ? 'loading for a selected report' : 'the empty-selection prompt without a ticker'}`, async t => {
+    const h = harness(t);
+    h.identities.shift().resolve(owner); await settle();
+    const card = mountCard(t, h, false, ticker); await h.flushImmediate();
+    const pending = JSON.stringify(card.read());
+    assert.equal(h.access().aiPending, true);
+    assert.equal(pending.includes('AI 影响分析加载中'), ticker !== null);
+    assert.equal(pending.includes('选择一只标的'), ticker === null);
+    assert.equal(card.reads(), 0, 'capability confirmation must still precede the first report read');
+    h.resolveCapabilities(); await settle(); card.rerender(); await h.flushImmediate();
+    assert.equal(card.reads(), ticker ? 1 : 0);
+    assert.equal(JSON.stringify(card.read()).includes('Saved analysis'), ticker !== null);
+    assert.equal(JSON.stringify(card.read()).includes('选择一只标的'), ticker === null);
+  });
+}
 
 test('a confirmed capability shutdown still closes the analysis confirmation', async t => {
   const h = harness(t); await h.ready();

@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils';
 import { fmtLocaleDate, fmtLocaleTime, fmtRelative } from '@/lib/format';
 import { SCORE_HINTS } from '@/lib/scoreHints';
 import { catalystsContract } from './api';
+import { DEFAULT_FEED_PAGE_SIZE } from './feedPrefetch';
 import { useFeedResource } from './useFeedResource';
 import { appendFeedPage, visibleFeedPage } from './feedSnapshot';
 import CatalystCacheStatus from './CatalystCacheStatus';
@@ -23,7 +24,7 @@ import { toFeedQuery } from './filters';
 import { AnalysisStatusChip, ClassificationChip, ConfidenceLabel, ImpactValue, StaleChip, TickerChip } from './bits';
 import { t as __t } from '../../i18n/core.ts';
 
-const PAGE_SIZE = 12;
+const PAGE_SIZE = DEFAULT_FEED_PAGE_SIZE;
 
 /* ---------------- 时间列 ---------------- */
 function TimeCol({ iso }: { iso: string }) {
@@ -178,7 +179,7 @@ interface FeedPanelProps {
   onOpenNews: (id: string, seed?: CatalystNewsItem) => void;
   patches: Record<string, CatalystNewsItem>;
   refreshToken: number;
-  onFeedResult: (result: { total: number | null; ok: boolean; validatedAt?: number }) => void;
+  onFeedResult: (result: { total: number | null; ok: boolean; validatedAt?: number; settled?: boolean }) => void;
   onClearFilters: () => void;
 }
 
@@ -209,7 +210,7 @@ export default function FeedPanel({ filters, onOpenNews, patches, onFeedResult, 
 
   useEffect(() => {
     onFeedResult({ total: q.data?.total ?? null, ok: q.data !== null && !q.error && !q.restored,
-      validatedAt: q.validatedAt || undefined });
+      validatedAt: q.validatedAt || undefined, settled: q.data !== null || q.error !== null });
   }, [q.data, q.error, q.restored, q.validatedAt, onFeedResult]);
 
   useEffect(() => {

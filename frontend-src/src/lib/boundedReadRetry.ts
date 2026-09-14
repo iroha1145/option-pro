@@ -6,6 +6,8 @@
  */
 
 export const NEWS_DETAIL_RETRY_WAITS_MS = [1_500, 3_000] as const;
+/** 自动重试最多静默等这么久；服务端 Retry-After 超过它就直接抛错，交给界面显示错误与手动重试。 */
+export const MAX_AUTO_RETRY_WAIT_MS = 10_000;
 
 export class ReadAttemptAborted extends Error {
   constructor() {
@@ -107,6 +109,7 @@ export async function runBoundedRead<T>(options: {
   isAlive: () => boolean;
   sleep: (ms: number) => Promise<void>;
   waitsMs?: readonly number[];
+  maxWaitMs?: number;
 }): Promise<T> {
   const waits = options.waitsMs ?? NEWS_DETAIL_RETRY_WAITS_MS;
   for (let attempt = 0; ; attempt += 1) {
@@ -122,7 +125,10 @@ export async function runBoundedRead<T>(options: {
       if (!isAutoRetryableReadError(error) || attempt >= waits.length) {
         throw error;
       }
-      await options.sleep(boundedReadRetryDelayMs(attempt, error, waits));
+      const delay = boundedReadRetryDelayMs(attempt, error, waits);
+      // heavy 限流窗 60s：Retry-After 太长就不再静默等，否则无 seed 的抽屉会停在骨架屏一分钟。
+      if (delay > (options.maxWaitMs ?? MAX_AUTO_RETRY_WAIT_MS)) throw error;
+      await options.sleep(delay);
     }
   }
 }

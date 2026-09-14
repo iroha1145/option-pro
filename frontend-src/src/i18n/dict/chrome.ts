@@ -67,6 +67,7 @@ export const CHROME: Dict = {
   '分析任务处理中': ['Analysis job in progress', '分析ジョブを実行中'],
   "分析服务暂不可用": ["Analysis is temporarily unavailable", "分析は一時的に利用できません"],
   '分析服务未开启': ['Analysis service is off', '分析サービスは無効です'],
+  '分析服务确认中': ['Checking analysis service', '分析サービスを確認中'],
 
   /* 命令面板 */
   '命令面板': ['Command palette', 'コマンドパレット'],

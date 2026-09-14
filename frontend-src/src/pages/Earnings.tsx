@@ -55,7 +55,7 @@ function reportAnalysisKey(ticker: string, reportDate: string): string {
 }
 
 export default function Earnings() {
-  const { isOwner, aiEnabled, aiAvailable, aiReason } = useAccess();
+  const { isOwner, aiEnabled, aiAvailable, aiReason, aiPending } = useAccess();
   const toast = useToast();
   const now = useNow(1000);
 
@@ -382,7 +382,9 @@ export default function Earnings() {
         tone={aiAvailable ? 'ai' : aiEnabled ? 'warn' : 'neutral'}
         size="md"
         aria-label={
-          aiAvailable
+          aiPending
+            ? t('AI 状态确认中')
+            : aiAvailable
             ? t('AI 分析可用')
             : aiEnabled
               ? t('AI 分析暂不可用')
@@ -411,7 +413,7 @@ export default function Earnings() {
           <>
             <span className="size-2 rounded-full bg-ink-300" aria-hidden="true" />
             <AnalysisIcon size={15} />
-            <span>{isOwner ? t('AI 未开启') : t('单股分析可用')}</span>
+            <span>{aiPending ? t('AI 确认中') : isOwner ? t('AI 未开启') : t('单股分析可用')}</span>
           </>
         )}
       </SoftBadge>

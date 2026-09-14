@@ -1,5 +1,8 @@
 /**
- * Lightweight performance contracts for ordinary CI.
+ * Lightweight performance contracts for ordinary CI: only the lab scripts'
+ * measurement semantics are pinned here. Product source behaviour is covered by
+ * behaviour tests (identity-and-network-contract, news-drawer-recovery,
+ * calendar-cache), not by text regexes over numbers and identifiers.
  * Heavy browser/load jobs stay in scripts/perf and must not be imported here.
  */
 import test from 'node:test';
@@ -54,23 +57,4 @@ test('实验室计时仍以真实新闻标题为准，不用骨架屏冒充完�
   assert.match(faults, /internetdisconnected/);
   assert.match(faults, /更新失败，保留上次数据/);
   assert.match(faults, /first_load_disconnect_then_retry/);
-  const cache = await read('frontend-src/src/components/catalysts/resourceCache.ts');
-  assert.match(cache, /userInitiated/);
-  assert.match(cache, /entry\.retryAt = 0/);
-});
-
-test('启动预取与非首屏让路约束仍在', async () => {
-  const boot = await read('frontend-src/public/theme-boot.js');
-  const idle = await read('frontend-src/src/lib/afterLoadIdle.ts');
-  const client = await read('frontend-src/src/api/client.ts');
-  assert.match(boot, /\/api\/access\/status/);
-  assert.match(boot, /window_hours=72&include_unanalyzed=true&include_neutral=true&limit=12/);
-  assert.match(client, /function consumeBootPrefetch/);
-  const idleCode = idle
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .split('\n')
-    .filter((line) => !line.trimStart().startsWith('//'))
-    .join('\n');
-  assert.match(idleCode, /setTimeout\(run, delayMs\)/);
-  assert.doesNotMatch(idleCode, /requestIdleCallback/);
 });

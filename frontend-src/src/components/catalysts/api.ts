@@ -523,6 +523,11 @@ function qs(q: CatalystFeedQuery): string {
   return s ? `?${s}` : '';
 }
 
+/** feed 请求的 API 相对路径（不含 /api 前缀）。预取必须与真实请求逐字一致，只能从这里生成。 */
+export function feedApiPath(q: CatalystFeedQuery): string {
+  return `/catalysts/feed${qs(q)}`;
+}
+
 
 /* ================= 股票影响汇总（batch results map → 客户端聚合） ================= */
 
@@ -716,7 +721,7 @@ export const catalystsContract = {
         return { ...res, hiddenUnanalyzed: res.hiddenUnanalyzed ?? 0 };
       },
       () =>
-        cachedGet(`/catalysts/feed${qs(q)}`).then((d) => {
+        cachedGet(feedApiPath(q)).then((d) => {
           const mapped = unwrap(d, 'items').map(nNewsItem);
           const items = mapped.filter((item) => item.titleZh && item.summaryZh);
           const summary = asRec(asRec(d).summary);

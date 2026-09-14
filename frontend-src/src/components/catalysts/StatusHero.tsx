@@ -44,12 +44,13 @@ const ANALYSIS_REASON_CN: Record<string, { label: string; tone: 'muted' | 'down'
   catalyst_disabled: { label: t('催化剂模块未启用'), tone: 'down' },
 };
 
-export default function StatusHero({ refreshToken = 0 }: { refreshToken?: number }) {
+export default function StatusHero({ refreshToken = 0, feedSettled = false }: { refreshToken?: number; feedSettled?: boolean }) {
   /* refreshToken 参与依赖：页头「刷新」必须真的刷新这一栏（审计 P2-21）。 */
   const statusQ = usePolling(() => catalystsContract.status(), 45_000, [refreshToken]);
   const hotStatusQ = usePolling(() => catalystsContract.hotspotsStatus(), 45_000, [refreshToken]);
   /* 今日计数走完整 24h feed 汇总，与列表 72h/12 不是同一请求。
-     首屏先让 FeedPanel 占用连接；load 后再固定延迟拉取，数字口径不变。 */
+     首屏先让 FeedPanel 占用连接：feed 首页落地（成功或失败）就拉，否则 load 后
+     固定延迟兜底；站内切换命中缓存时不必干等。数字口径不变。 */
   const [newsTodayEnabled, setNewsTodayEnabled] = useState(false);
   useEffect(() => {
     if (refreshToken > 0) {
@@ -58,7 +59,7 @@ export default function StatusHero({ refreshToken = 0 }: { refreshToken?: number
     return afterLoadIdle(() => setNewsTodayEnabled(true), 3500);
   }, [refreshToken]);
   const newsQ = usePolling(() => catalystsContract.newsToday(), 120_000, [refreshToken], {
-    enabled: refreshToken > 0 || newsTodayEnabled,
+    enabled: refreshToken > 0 || newsTodayEnabled || feedSettled,
   });
 
   const s = statusQ.data;

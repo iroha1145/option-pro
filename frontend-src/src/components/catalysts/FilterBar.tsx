@@ -125,7 +125,7 @@ export default function FilterBar({ filters, onChange, total, filtered }: Filter
         value={String(filters.windowHours)}
         onChange={(v) => set({ windowHours: Number(v) })}
         onOptionIntent={(v) => {
-          if (v === '24' && filters.windowHours !== 24) prefetchDefaultFeed(24);
+          if (v === '24' && filters.windowHours !== 24) prefetchDefaultFeed(24, filters);
         }}
       />
 
@@ -189,11 +189,10 @@ export default function FilterBar({ filters, onChange, total, filtered }: Filter
       <div className="flex items-center justify-between md:hidden">
         <button
           onClick={() => {
-            setMobileOpen((open) => {
-              const next = !open;
-              if (next && filters.windowHours !== 24) prefetchDefaultFeed(24);
-              return next;
-            });
+            const next = !mobileOpen;
+            /* 副作用放在 updater 之外：StrictMode 会把 updater 调两次。 */
+            if (next && filters.windowHours !== 24) prefetchDefaultFeed(24, filters);
+            setMobileOpen(next);
           }}
           aria-expanded={mobileOpen}
           className={cn(

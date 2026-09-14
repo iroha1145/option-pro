@@ -202,14 +202,14 @@ function reportAnalysisNeedsPolling(value: EarningsReportAnalysis | null): boole
 }
 
 export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, className }: ImpactCardProps) {
-  const { isOwner, aiEnabled, aiAvailable } = useAccess();
+  const { isOwner, aiEnabled, aiAvailable, aiPending } = useAccess();
   const { openTicker } = useShell();
   const toast = useToast();
   const reportDate = row?.date ?? null;
   const reportYear = row ? exNum(row, 'year') : null;
   const reportQuarter = row ? exNum(row, 'quarter') : null;
 
-  const [phase, setPhase] = useState<Phase>('idle');
+  const [phase, setPhase] = useState<Phase>(ticker ? 'loading' : 'idle');
   const [impact, setImpact] = useState<EarningsImpactResult | null>(null);
   const [analysis, setAnalysis] = useState<EarningsReportAnalysis | null>(null);
   const [errorMsg, setErrorMsg] = useState<string>('');
@@ -336,6 +336,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
     reportQuarter ?? '',
     aiEnabled,
     aiAvailable,
+    aiPending,
     isOwner,
   ].join('|');
   const [prevContextKey, setPrevContextKey] = useState(contextKey);
@@ -352,12 +353,13 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
     setPhase(!ticker ? 'idle' : 'loading');
   }
 
-  /* 缓存读取不受生成开关影响。 */
+  /* 缓存读取不受生成开关影响。owner 的 AI 能力还没确认时先不读：占位的
+     aiAvailable=false 会把 409 判成 locked-ai，能力回来又硬重置再读一次。 */
   useEffect(() => {
-    if (!ticker) return;
+    if (!ticker || aiPending) return;
     const id = window.setTimeout(() => void loadImpact(ticker), 0);
     return () => window.clearTimeout(id);
-  }, [ticker, calendarRevision, aiEnabled, aiAvailable, isOwner, loadImpact]);
+  }, [ticker, calendarRevision, aiEnabled, aiAvailable, aiPending, isOwner, loadImpact]);
 
   /* 排队、分析或自动终版期间只轮询报告级 GET。 */
   const shouldPoll = reportAnalysisNeedsPolling(analysis);

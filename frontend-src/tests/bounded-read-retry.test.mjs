@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   ReadAttemptAborted,
+  MAX_AUTO_RETRY_WAIT_MS,
   NEWS_DETAIL_RETRY_WAITS_MS,
   boundedReadRetryDelayMs,
   createCancellableSleep,
@@ -54,19 +55,35 @@ test('runBoundedRead：404 只读一次，429 按 Retry-After 睡，关闭后不
   );
   assert.deepEqual(calls, ['404']);
 
+  // Retry-After 超过自动等待上限：不睡、直接抛给界面显示错误与手动重试。
+  assert.equal(MAX_AUTO_RETRY_WAIT_MS, 10_000);
+  const tooLong = [];
+  await assert.rejects(
+    runBoundedRead({
+      read: async () => {
+        tooLong.push('429');
+        throw { code: 429, retryAfter: 30, retryable: true };
+      },
+      isAlive: () => true,
+      sleep: async () => { throw new Error('a 30s Retry-After must not be slept through'); },
+    }),
+    (error) => error.code === 429,
+  );
+  assert.deepEqual(tooLong, ['429']);
+
   const slept = [];
   let round = 0;
   const value = await runBoundedRead({
     read: async () => {
       round += 1;
-      if (round === 1) throw { code: 429, retryAfter: 30, retryable: true };
+      if (round === 1) throw { code: 429, retryAfter: 5, retryable: true };
       return 'ok';
     },
     isAlive: () => true,
     sleep: async (ms) => { slept.push(ms); },
   });
   assert.equal(value, 'ok');
-  assert.deepEqual(slept, [30_000]);
+  assert.deepEqual(slept, [5_000]);
 
   const later = [];
   let alive = true;

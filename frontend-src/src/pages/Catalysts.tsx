@@ -131,9 +131,13 @@ export default function Catalysts() {
   }, []);
   /* 只有真正成功的一轮才更新时间戳（审计 P2-22）：旧实现在失败分支也调用
      onTotalChange(null)，于是用户看到一个很新的更新时间，而本轮数据根本没加载成功。 */
-  const onFeedResult = useCallback((result: { total: number | null; ok: boolean; validatedAt?: number }) => {
+  /* 今日计数等 feed 首页落地再拉（成功或失败都算落地）：首屏不抢 feed 的连接，
+     站内切换命中缓存时也不用干等固定延迟。 */
+  const [feedSettled, setFeedSettled] = useState(false);
+  const onFeedResult = useCallback((result: { total: number | null; ok: boolean; validatedAt?: number; settled?: boolean }) => {
     setTotal(result.total);
     if (result.ok) setLastLoadedAt(result.validatedAt ?? Date.now());
+    if (result.settled) setFeedSettled(true);
   }, []);
 
   /* 新闻详情抽屉 */
@@ -178,7 +182,7 @@ export default function Catalysts() {
       {/* 状态 hero：数据源状态 / 热点计算 / 分析可用性
           刷新令牌此前只传给四个标签内容，顶部采集状态、热点带与焦点周期不会
           立即重新加载，按钮文案与实际刷新范围不一致（审计 P2-21）。 */}
-      <StatusHero refreshToken={refreshToken} />
+      <StatusHero refreshToken={refreshToken} feedSettled={feedSettled} />
 
       {/* Owner 专属：任务库真实计数，不以定时补间伪造单条进度 */}
       <AnalysisProgressCard />

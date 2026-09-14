@@ -16,6 +16,8 @@ interface AccessContextValue {
   aiEnabled: boolean;
   aiAvailable: boolean;
   aiReason: string | null;
+  /** owner 身份已确认、但 /ai/status 与运行设置还没回来：AI 能力未知，不是关闭。 */
+  aiPending: boolean;
   isOwner: boolean;
   isVisitor: boolean;
   /** 已登录客户的用户名；管理员或未登录时为 null。 */
@@ -303,6 +305,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
       aiEnabled: hasConfirmedIdentity && status.aiEnabled,
       aiAvailable: hasConfirmedIdentity && status.aiAvailable,
       aiReason: status.aiReason,
+      aiPending: hasConfirmedIdentity && status.role === 'owner' && status.aiReason === 'analysis_status_pending',
       isOwner: hasConfirmedIdentity && status.role === 'owner',
       isVisitor: !hasConfirmedIdentity || status.role !== 'owner',
       username: hasConfirmedIdentity ? status.accountUsername : null,

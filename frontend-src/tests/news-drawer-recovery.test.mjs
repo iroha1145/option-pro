@@ -476,17 +476,18 @@ test('关闭抽屉立即取消轮询终态详情的重试等待', async () => {
   let jobRound = 0;
   h.setNews(async () => {
     if (++newsRound === 1) return item({ analysisStatus: 'queued', analysisJobId: 'job-1' });
-    throw Object.assign(new Error('busy'), { code: 503, retryAfter: 30 });
+    // Retry-After 在自动等待上限内才会真的睡；超过上限的情况见 429/30s 用例。
+    throw Object.assign(new Error('busy'), { code: 503, retryAfter: 5 });
   });
   h.setJob(async () => job({ status: ++jobRound === 1 ? 'in_progress' : 'completed' }));
   h.render({ newsId: '9600', seed: item() });
   await settle();
   await h.fireDue(2000);
-  assert.ok([...h.timers.values()].some((row) => row.ms === 30_000));
+  assert.ok([...h.timers.values()].some((row) => row.ms === 5_000));
   h.render({ newsId: null });
   await settle();
-  assert.ok(![...h.timers.values()].some((row) => row.ms === 30_000));
-  await h.fireDue(30_000);
+  assert.ok(![...h.timers.values()].some((row) => row.ms === 5_000));
+  await h.fireDue(5_000);
   assert.equal(h.newsCalls.length, 2);
   h.unmount();
 });
@@ -668,9 +669,11 @@ test('恢复已 completed 后详情失败必须可见且可重试', async () => 
   h.unmount();
 });
 
-test('429 + Retry-After 30 秒不在 1.5/4.5 秒重发详情', async () => {
+test('429 + Retry-After 30 秒超过自动等待上限：不静默等，立即给出详情更新失败与重试', async () => {
   const h = harness();
+  let blocked = true;
   h.setNews(async () => {
+    if (!blocked) return item();
     const error = new Error('slow');
     error.code = 429;
     error.retryAfter = 30;
@@ -680,12 +683,162 @@ test('429 + Retry-After 30 秒不在 1.5/4.5 秒重发详情', async () => {
   h.render({ newsId: '9600', seed: item() });
   await settle();
   assert.equal(h.newsCalls.length, 1);
-  await h.fireDue(1500);
-  await h.fireDue(4500);
-  assert.equal(h.newsCalls.length, 1);
+  const text = collectText(h.tree()).join(' ');
+  assert.match(text, /第9600条快讯/);
+  assert.match(text, /详情更新失败/);
+  const retry = findButton(h.tree(), '重试');
+  assert.ok(retry, '超过上限必须立刻给手动重试');
   await h.fireDue(30_000);
+  assert.equal(h.newsCalls.length, 1, '不得在 Retry-After 到期后自动重发');
+  blocked = false;
+  retry.props.onClick();
+  await settle();
   assert.equal(h.newsCalls.length, 2);
+  assert.doesNotMatch(collectText(h.tree()).join(' '), /详情更新失败/);
+  h.unmount();
+});
+
+test('429 + Retry-After 5 秒在上限内：不在 1.5 秒重发，5 秒后自动重发详情', async () => {
+  const h = harness();
+  let round = 0;
+  h.setNews(async () => {
+    round += 1;
+    if (round > 1) return item();
+    const error = new Error('slow');
+    error.code = 429;
+    error.retryAfter = 5;
+    error.retryable = true;
+    throw error;
+  });
+  h.render({ newsId: '9600', seed: item() });
+  await settle();
+  assert.equal(h.newsCalls.length, 1);
+  await h.fireDue(1500);
+  assert.equal(h.newsCalls.length, 1);
+  await h.fireDue(5000);
+  assert.equal(h.newsCalls.length, 2);
+  assert.doesNotMatch(collectText(h.tree()).join(' '), /详情更新失败/);
+  h.unmount();
+});
+
+test('无 seed 时详情失败显示不可用态并可手动重试', async () => {
+  const h = harness();
+  let blocked = true;
+  h.setNews(async () => {
+    if (!blocked) return item();
+    throw Object.assign(new Error('blocked'), { code: 502, retryable: false });
+  });
+  h.render({ newsId: '9600' });
+  await settle();
+  assert.equal(h.newsCalls.length, 1);
+  const text = collectText(h.tree()).join(' ');
+  assert.match(text, /详情不可用/);
+  const retry = findButton(h.tree(), '重试');
+  assert.ok(retry, '无 seed 的错误态也必须有重试入口');
+  blocked = false;
+  retry.props.onClick();
+  await settle();
+  assert.equal(h.newsCalls.length, 2);
+  const after = collectText(h.tree()).join(' ');
+  assert.match(after, /第9600条快讯/);
+  assert.doesNotMatch(after, /详情不可用/);
+  h.unmount();
+});
+
+test('关抽屉滑出期间继续显示最后一条，换到别的新闻才回到骨架', async () => {
+  const h = harness();
+  const next = deferred();
+  h.setNews(async (id) => (id === '9601' ? next.promise : item()));
+  h.render({ newsId: '9600', seed: item() });
+  await settle();
   assert.match(collectText(h.tree()).join(' '), /第9600条快讯/);
+  h.render({ newsId: null, seed: null });
+  await settle();
+  assert.match(collectText(h.tree()).join(' '), /第9600条快讯/, '滑出动画期间不得闪成骨架屏');
+  h.render({ newsId: '9601', seed: null });
+  await settle();
+  assert.doesNotMatch(collectText(h.tree()).join(' '), /第9600条快讯/, '换条后不得沿用上一条');
+  next.resolve(item({ newsId: '9601', titleZh: '第9601条快讯' }));
+  await settle();
+  assert.match(collectText(h.tree()).join(' '), /第9601条快讯/);
+  h.unmount();
+});
+
+test('任务恢复读到 404 只提示记录不存在，不给重试钮也不再读', async () => {
+  const h = harness();
+  h.setJob(async () => { throw Object.assign(new Error('gone'), { code: 404 }); });
+  h.render({ newsId: '9600', seed: item({ analysisStatus: 'queued', analysisJobId: 'job-1' }) });
+  await settle();
+  await h.fireDue(1500);
+  await h.fireDue(3000);
+  assert.equal(h.jobCalls.length, 1);
+  const text = collectText(h.tree()).join(' ');
+  assert.match(text, /任务记录已不存在/);
+  assert.doesNotMatch(text, /任务状态暂时读不到/);
+  assert.equal(findButton(h.tree(), '重试'), null, '404 不给必然再失败的重试');
+  h.unmount();
+});
+
+for (const [label, projected, expectedStatus] of [
+  ['服务端投影还没带上新任务时保留提交态', item(), 'queued'],
+  ['服务端投影已带上新任务时按详情为准', item({ analysisStatus: 'in_progress', analysisJobId: 'job-9' }), 'in_progress'],
+]) {
+  test(`在 seed 上提交分析后补读详情：${label}`, async () => {
+    const h = harness();
+    const initial = deferred();
+    let round = 0;
+    h.setNews(() => {
+      round += 1;
+      return round === 1 ? initial.promise : Promise.resolve(projected);
+    });
+    h.setJob(async (id) => job({ jobId: id, status: 'queued' }));
+    h.setCreate(async () => job({ jobId: 'job-9', status: 'queued' }));
+    h.render({ newsId: '9600', seed: item() });
+    await settle();
+    assert.equal(h.newsCalls.length, 1);
+    const start = findButton(h.tree(), '生成 AI 分析');
+    assert.ok(start, 'seed 已可见时就能提交');
+    start.props.onClick();
+    const confirm = findNode(h.tree(), (node) => node.props?.open && node.props?.confirmLabel === '生成分析');
+    assert.ok(confirm);
+    confirm.props.onConfirm();
+    await settle();
+    assert.deepEqual(h.createCalls, [['9600', false]]);
+    assert.equal(h.newsCalls.length, 2, '提交后必须补读一次详情，而不是只作废初次读取');
+    assert.equal(h.updates.at(-1).analysisJobId, 'job-9');
+    assert.equal(h.updates.at(-1).analysisStatus, expectedStatus);
+    initial.resolve(completedItem({ analysisJobId: 'job-0' }));
+    await settle();
+    assert.equal(h.updates.at(-1).analysisJobId, 'job-9', '被作废的初次读取不得写回');
+    h.unmount();
+  });
+}
+
+test('初始详情失败后在 seed 上提交分析，补读成功应清除旧错误提示', async () => {
+  const h = harness();
+  let round = 0;
+  h.setNews(async () => {
+    if (++round === 1) throw Object.assign(new Error('limited'), { code: 429, retryAfter: 30 });
+    return item({ summaryZh: '补读成功的新摘要', analysisStatus: 'queued', analysisJobId: 'job-9' });
+  });
+  h.setCreate(async () => job({ jobId: 'job-9', status: 'queued' }));
+  h.setJob(async (id) => job({ jobId: id, status: 'queued' }));
+  h.render({ newsId: '9600', seed: item() });
+  await settle();
+  assert.match(collectText(h.tree()).join(' '), /详情更新失败/);
+  const start = findButton(h.tree(), '生成 AI 分析');
+  assert.ok(start);
+  start.props.onClick();
+  const confirm = findNode(h.tree(), (node) => node.props?.open && node.props?.confirmLabel === '生成分析');
+  assert.ok(confirm);
+  confirm.props.onConfirm();
+  await settle();
+  assert.equal(h.newsCalls.length, 2);
+  assert.equal(h.updates.at(-1).analysisJobId, 'job-9');
+  const text = collectText(h.tree()).join(' ');
+  assert.match(text, /补读成功的新摘要/);
+  assert.doesNotMatch(text, /详情更新失败|详情不可用/);
+  assert.equal(findButton(h.tree(), '重试'), null);
   h.unmount();
 });
 

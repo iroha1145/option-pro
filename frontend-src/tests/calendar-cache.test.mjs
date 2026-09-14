@@ -222,3 +222,38 @@ test('保留重试期限后，失效前的旧响应仍不能覆盖新数据', as
   assert.equal(cache.snapshot('feed', policy).data, fresh);
   assert.equal(cache.snapshot('feed', policy).refreshing, false);
 });
+
+test('用户刷新可跳过本地退避，但不跳过服务端 Retry-After', async () => {
+  const ResourceCache = await loadResourceCache();
+  let now = 1000;
+  let calls = 0;
+  const cache = new ResourceCache(undefined, () => now);
+  const policy = { freshMs: 1000, retainMs: 300_000 };
+  const unsubscribe = cache.subscribe('feed', policy, () => {});
+  const load = async () => {
+    calls += 1;
+    if (calls === 1) throw Object.assign(new Error('rate limited'), { code: 429, retryAfter: 30 });
+    if (calls === 2) throw new Error('temporarily unavailable');
+    return { version: calls };
+  };
+  await cache.ensure('feed', policy, load);
+  assert.equal(calls, 1);
+  now += 1;
+  cache.invalidate({ userInitiated: true });
+  cache.tick();
+  await cache.ensure('feed', policy, load);
+  assert.equal(calls, 1, '服务端 Retry-After 未到期，用户刷新也不得再打');
+  now += 30_000;
+  cache.invalidate({ userInitiated: true });
+  cache.tick();
+  await cache.ensure('feed', policy, load);
+  assert.equal(calls, 2, 'Retry-After 到期后用户刷新立即重试');
+  now += 1;
+  cache.invalidate({ userInitiated: true });
+  cache.tick();
+  await cache.ensure('feed', policy, load);
+  assert.equal(calls, 3, '没有 Retry-After 的本地退避可以被用户刷新跳过');
+  assert.deepEqual(cache.snapshot('feed', policy).data, { version: 3 });
+  assert.equal(cache.snapshot('feed', policy).error, null);
+  unsubscribe();
+});
