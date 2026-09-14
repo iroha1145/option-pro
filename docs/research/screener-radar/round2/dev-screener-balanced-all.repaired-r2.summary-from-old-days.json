@@ -1,0 +1,423 @@
+{
+  "source": "/opt/cursor/research/screener-radar-data/runs/dev-screener-balanced-all.json",
+  "split": "development",
+  "protocol_hash": "b0b9708099363395cc191a70524f9e0460e135bf3d69edd0809623e90557ac00",
+  "run_identity": null,
+  "day_count": 988,
+  "ic_summary": {
+    "status": "active",
+    "days": 988,
+    "mean_ic": 0.037225018982761704,
+    "icir": 0.16327274951898202,
+    "positive_share": 0.611336032388664,
+    "min_ic": -0.6546098779600945,
+    "max_ic": 0.5782756764102068,
+    "horizon_days": 20,
+    "ci": {
+      "n": 988,
+      "mean": 0.037225018982761704,
+      "horizon_days": 20,
+      "primary_method": "moving_block_bootstrap",
+      "iid": {
+        "method": "iid_normal",
+        "n": 988,
+        "mean": 0.037225018982761704,
+        "se": 0.007257092274575651,
+        "ci_low": 0.023001379492109567,
+        "ci_high": 0.051448658473413844,
+        "ci95": [
+          0.023001379492109567,
+          0.051448658473413844
+        ],
+        "note": "Assumes independent observations. Overlapping-horizon labels violate this."
+      },
+      "newey_west": {
+        "method": "newey_west_hac",
+        "n": 988,
+        "lag": 20,
+        "mean": 0.037225018982761704,
+        "se": 0.024048028266971968,
+        "ci_low": -0.009908250319704527,
+        "ci_high": 0.08435828828522793,
+        "ci95": [
+          -0.009908250319704527,
+          0.08435828828522793
+        ],
+        "note": "HAC mean CI. Pre-registered lag equals the label/hold horizon in trading days."
+      },
+      "block_bootstrap": {
+        "method": "moving_block_bootstrap",
+        "n": 988,
+        "block_size": 20,
+        "n_bootstrap": 2000,
+        "mean": 0.037225018982761704,
+        "ci_low": -0.010326485641744355,
+        "ci_high": 0.0817096833928179,
+        "ci95": [
+          -0.010326485641744355,
+          0.0817096833928179
+        ],
+        "note": "Pre-registered circular moving-block bootstrap. Block length equals the label/hold horizon."
+      },
+      "ci95": [
+        -0.010326485641744355,
+        0.0817096833928179
+      ],
+      "note": "Primary CI is moving-block bootstrap with block length = horizon. HAC is a robustness check. iid is a known-biased comparison only. This is not date-clustered ordinary SE."
+    },
+    "ci95": [
+      -0.010326485641744355,
+      0.0817096833928179
+    ],
+    "note": "ICIR uses the raw daily-IC standard deviation. The reported 95% interval is the overlapping-horizon block bootstrap, not iid SE."
+  },
+  "ic_by_year": {
+    "2019": {
+      "status": "active",
+      "days": 252,
+      "mean_ic": -0.023407009593506816,
+      "icir": -0.13258649665819433,
+      "positive_share": 0.49206349206349204,
+      "min_ic": -0.483984155600711,
+      "max_ic": 0.33728784277676543,
+      "horizon_days": 20,
+      "ci": {
+        "n": 252,
+        "mean": -0.023407009593506816,
+        "horizon_days": 20,
+        "primary_method": "moving_block_bootstrap",
+        "iid": {
+          "method": "iid_normal",
+          "n": 252,
+          "mean": -0.023407009593506816,
+          "se": 0.01114319619347524,
+          "ci_low": -0.04524727280538211,
+          "ci_high": -0.0015667463816315223,
+          "ci95": [
+            -0.04524727280538211,
+            -0.0015667463816315223
+          ],
+          "note": "Assumes independent observations. Overlapping-horizon labels violate this."
+        },
+        "newey_west": {
+          "method": "newey_west_hac",
+          "n": 252,
+          "lag": 20,
+          "mean": -0.023407009593506816,
+          "se": 0.03024098985909347,
+          "ci_low": -0.08267826057417102,
+          "ci_high": 0.035864241387157395,
+          "ci95": [
+            -0.08267826057417102,
+            0.035864241387157395
+          ],
+          "note": "HAC mean CI. Pre-registered lag equals the label/hold horizon in trading days."
+        },
+        "block_bootstrap": {
+          "method": "moving_block_bootstrap",
+          "n": 252,
+          "block_size": 20,
+          "n_bootstrap": 2000,
+          "mean": -0.023407009593506816,
+          "ci_low": -0.08344667262268268,
+          "ci_high": 0.03797701141611971,
+          "ci95": [
+            -0.08344667262268268,
+            0.03797701141611971
+          ],
+          "note": "Pre-registered circular moving-block bootstrap. Block length equals the label/hold horizon."
+        },
+        "ci95": [
+          -0.08344667262268268,
+          0.03797701141611971
+        ],
+        "note": "Primary CI is moving-block bootstrap with block length = horizon. HAC is a robustness check. iid is a known-biased comparison only. This is not date-clustered ordinary SE."
+      },
+      "ci95": [
+        -0.08344667262268268,
+        0.03797701141611971
+      ],
+      "note": "ICIR uses the raw daily-IC standard deviation. The reported 95% interval is the overlapping-horizon block bootstrap, not iid SE."
+    },
+    "2020": {
+      "status": "active",
+      "days": 253,
+      "mean_ic": 0.1089670404101354,
+      "icir": 0.4423334648266488,
+      "positive_share": 0.7391304347826086,
+      "min_ic": -0.6546098779600945,
+      "max_ic": 0.5426828374411367,
+      "horizon_days": 20,
+      "ci": {
+        "n": 253,
+        "mean": 0.10896704041013541,
+        "horizon_days": 20,
+        "primary_method": "moving_block_bootstrap",
+        "iid": {
+          "method": "iid_normal",
+          "n": 253,
+          "mean": 0.10896704041013541,
+          "se": 0.01551833374553469,
+          "ci_low": 0.07855166516881486,
+          "ci_high": 0.13938241565145595,
+          "ci95": [
+            0.07855166516881486,
+            0.13938241565145595
+          ],
+          "note": "Assumes independent observations. Overlapping-horizon labels violate this."
+        },
+        "newey_west": {
+          "method": "newey_west_hac",
+          "n": 253,
+          "lag": 20,
+          "mean": 0.10896704041013541,
+          "se": 0.0465906365415153,
+          "ci_low": 0.017651070771969632,
+          "ci_high": 0.20028301004830118,
+          "ci95": [
+            0.017651070771969632,
+            0.20028301004830118
+          ],
+          "note": "HAC mean CI. Pre-registered lag equals the label/hold horizon in trading days."
+        },
+        "block_bootstrap": {
+          "method": "moving_block_bootstrap",
+          "n": 253,
+          "block_size": 20,
+          "n_bootstrap": 2000,
+          "mean": 0.10896704041013541,
+          "ci_low": 0.01086856947333273,
+          "ci_high": 0.19483743679938695,
+          "ci95": [
+            0.01086856947333273,
+            0.19483743679938695
+          ],
+          "note": "Pre-registered circular moving-block bootstrap. Block length equals the label/hold horizon."
+        },
+        "ci95": [
+          0.01086856947333273,
+          0.19483743679938695
+        ],
+        "note": "Primary CI is moving-block bootstrap with block length = horizon. HAC is a robustness check. iid is a known-biased comparison only. This is not date-clustered ordinary SE."
+      },
+      "ci95": [
+        0.01086856947333273,
+        0.19483743679938695
+      ],
+      "note": "ICIR uses the raw daily-IC standard deviation. The reported 95% interval is the overlapping-horizon block bootstrap, not iid SE."
+    },
+    "2021": {
+      "status": "active",
+      "days": 252,
+      "mean_ic": 0.0030485292186074116,
+      "icir": 0.015793227892890387,
+      "positive_share": 0.5674603174603174,
+      "min_ic": -0.5615118274568548,
+      "max_ic": 0.35030673927306366,
+      "horizon_days": 20,
+      "ci": {
+        "n": 252,
+        "mean": 0.0030485292186074125,
+        "horizon_days": 20,
+        "primary_method": "moving_block_bootstrap",
+        "iid": {
+          "method": "iid_normal",
+          "n": 252,
+          "mean": 0.0030485292186074125,
+          "se": 0.012183795443940491,
+          "ci_low": -0.02083127104651915,
+          "ci_high": 0.026928329483733974,
+          "ci95": [
+            -0.02083127104651915,
+            0.026928329483733974
+          ],
+          "note": "Assumes independent observations. Overlapping-horizon labels violate this."
+        },
+        "newey_west": {
+          "method": "newey_west_hac",
+          "n": 252,
+          "lag": 20,
+          "mean": 0.0030485292186074125,
+          "se": 0.040636626193885986,
+          "ci_low": -0.0765977945746261,
+          "ci_high": 0.08269485301184093,
+          "ci95": [
+            -0.0765977945746261,
+            0.08269485301184093
+          ],
+          "note": "HAC mean CI. Pre-registered lag equals the label/hold horizon in trading days."
+        },
+        "block_bootstrap": {
+          "method": "moving_block_bootstrap",
+          "n": 252,
+          "block_size": 20,
+          "n_bootstrap": 2000,
+          "mean": 0.0030485292186074125,
+          "ci_low": -0.08069298057677791,
+          "ci_high": 0.07740725570823394,
+          "ci95": [
+            -0.08069298057677791,
+            0.07740725570823394
+          ],
+          "note": "Pre-registered circular moving-block bootstrap. Block length equals the label/hold horizon."
+        },
+        "ci95": [
+          -0.08069298057677791,
+          0.07740725570823394
+        ],
+        "note": "Primary CI is moving-block bootstrap with block length = horizon. HAC is a robustness check. iid is a known-biased comparison only. This is not date-clustered ordinary SE."
+      },
+      "ci95": [
+        -0.08069298057677791,
+        0.07740725570823394
+      ],
+      "note": "ICIR uses the raw daily-IC standard deviation. The reported 95% interval is the overlapping-horizon block bootstrap, not iid SE."
+    },
+    "2022": {
+      "status": "active",
+      "days": 231,
+      "mean_ic": 0.06207789863930286,
+      "icir": 0.235184012903057,
+      "positive_share": 0.6493506493506493,
+      "min_ic": -0.6372122275190047,
+      "max_ic": 0.5782756764102068,
+      "horizon_days": 20,
+      "ci": {
+        "n": 231,
+        "mean": 0.06207789863930285,
+        "horizon_days": 20,
+        "primary_method": "moving_block_bootstrap",
+        "iid": {
+          "method": "iid_normal",
+          "n": 231,
+          "mean": 0.06207789863930285,
+          "se": 0.017404649953426807,
+          "ci_low": 0.027965411567059582,
+          "ci_high": 0.09619038571154612,
+          "ci95": [
+            0.027965411567059582,
+            0.09619038571154612
+          ],
+          "note": "Assumes independent observations. Overlapping-horizon labels violate this."
+        },
+        "newey_west": {
+          "method": "newey_west_hac",
+          "n": 231,
+          "lag": 20,
+          "mean": 0.06207789863930285,
+          "se": 0.06261345507223708,
+          "ci_low": -0.060642218249898586,
+          "ci_high": 0.18479801552850428,
+          "ci95": [
+            -0.060642218249898586,
+            0.18479801552850428
+          ],
+          "note": "HAC mean CI. Pre-registered lag equals the label/hold horizon in trading days."
+        },
+        "block_bootstrap": {
+          "method": "moving_block_bootstrap",
+          "n": 231,
+          "block_size": 20,
+          "n_bootstrap": 2000,
+          "mean": 0.06207789863930285,
+          "ci_low": -0.06695673838655929,
+          "ci_high": 0.17510444729748664,
+          "ci95": [
+            -0.06695673838655929,
+            0.17510444729748664
+          ],
+          "note": "Pre-registered circular moving-block bootstrap. Block length equals the label/hold horizon."
+        },
+        "ci95": [
+          -0.06695673838655929,
+          0.17510444729748664
+        ],
+        "note": "Primary CI is moving-block bootstrap with block length = horizon. HAC is a robustness check. iid is a known-biased comparison only. This is not date-clustered ordinary SE."
+      },
+      "ci95": [
+        -0.06695673838655929,
+        0.17510444729748664
+      ],
+      "note": "ICIR uses the raw daily-IC standard deviation. The reported 95% interval is the overlapping-horizon block bootstrap, not iid SE."
+    }
+  },
+  "top10_excess": {
+    "status": "active",
+    "clusters": 988,
+    "n_dates": 988,
+    "n_events": 988,
+    "mean": 0.01120153745896005,
+    "se": 0.0021481622429977824,
+    "ci95": [
+      -0.0014793146006998159,
+      0.024775262841633672
+    ],
+    "method": "moving_block_bootstrap",
+    "horizon_days": 20,
+    "iid": {
+      "method": "iid_normal",
+      "n": 988,
+      "mean": 0.01120153745896005,
+      "se": 0.0021481622429977824,
+      "ci_low": 0.006991216829735617,
+      "ci_high": 0.015411858088184483,
+      "ci95": [
+        0.006991216829735617,
+        0.015411858088184483
+      ],
+      "note": "Assumes independent observations. Overlapping-horizon labels violate this."
+    },
+    "newey_west": {
+      "method": "newey_west_hac",
+      "n": 988,
+      "lag": 20,
+      "mean": 0.01120153745896005,
+      "se": 0.006797457432559698,
+      "ci_low": -0.002121234295301061,
+      "ci_high": 0.02452430921322116,
+      "ci95": [
+        -0.002121234295301061,
+        0.02452430921322116
+      ],
+      "note": "HAC mean CI. Pre-registered lag equals the label/hold horizon in trading days."
+    },
+    "block_bootstrap": {
+      "method": "moving_block_bootstrap",
+      "n": 988,
+      "block_size": 20,
+      "n_bootstrap": 2000,
+      "mean": 0.01120153745896005,
+      "ci_low": -0.0014793146006998159,
+      "ci_high": 0.024775262841633672,
+      "ci95": [
+        -0.0014793146006998159,
+        0.024775262841633672
+      ],
+      "note": "Pre-registered circular moving-block bootstrap. Block length equals the label/hold horizon."
+    },
+    "dates_head": [
+      "2019-01-02",
+      "2019-01-03",
+      "2019-01-04",
+      "2019-01-07",
+      "2019-01-08"
+    ],
+    "dates_tail": [
+      "2022-11-25",
+      "2022-11-28",
+      "2022-11-29",
+      "2022-11-30",
+      "2022-12-01"
+    ],
+    "note": "Daily means in real calendar order, then overlapping-horizon CI. Not an ordinary date-clustered SE and not a claim that events are independent."
+  },
+  "review_status": "repaired_round2",
+  "notes": [
+    "\u8fd9\u662f\u5f00\u53d1\u533a/\u9a8c\u8bc1\u533a\u70b9\u65f6\u91cd\u5efa\uff0c\u4e0d\u662f\u5f53\u5e74\u771f\u5b9e\u53d1\u5e03\u5feb\u7167\u3002",
+    "\u5c01\u5b58\u533a\u672a\u5305\u542b\u5728\u5185\uff0c\u9664\u975e\u663e\u5f0f --unblind-sealed\u3002",
+    "Rank IC \u4e0e\u80a1\u7968\u6c60\u5747\u503c\u4f7f\u7528\u5f53\u65e5\u5168\u90e8\u5408\u683c view_rows\uff0c\u4e0d\u662f Top-N \u622a\u65ad\u6837\u672c\u3002",
+    "\u9010\u65e5\u538b\u7f29\u884c\u542b short/mid/long \u4e0e profile \u91cd\u7b97\u6240\u9700\u5b57\u6bb5\uff0c\u53ef\u7528\u540c\u4e00\u4efd dump \u62a5\u544a\u516d\u79cd\u9884\u767b\u8bb0\u6a21\u5f0f\u3002",
+    "IC \u4e0e Top-K CI \u4f7f\u7528 20 \u65e5\u5757 bootstrap\uff0c\u4e0d\u662f\u666e\u901a\u65e5\u671f\u5206\u5757 SE\u3002",
+    "\u82e5\u6e90 dump \u7684\u9010\u65e5 Top-K \u4ecd\u662f\u4fee\u590d\u524d\u7b97\u6cd5\uff0c\u5e94\u5148\u7528 analyze_screener_rows \u6309\u884c\u91cd\u7b97\u3002"
+  ]
+}
