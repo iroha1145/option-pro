@@ -30,6 +30,10 @@ test('visual review waits for async i18n boot before interacting with the app sh
   const shortcutAt = overlay.indexOf("keyboard.press('Control+k')");
   const headingBeforeShortcut = overlay.lastIndexOf("getByRole('heading'", shortcutAt);
   assert.ok(headingBeforeShortcut >= 0 && headingBeforeShortcut < shortcutAt, 'Ctrl+K test must wait for the app heading');
+  const glide = await readFile(visual('tabs-palette-glide.spec.mjs'), 'utf8');
+  const glideShortcut = glide.indexOf('keyboard.press("Control+k")');
+  const glideHeading = glide.lastIndexOf('getByRole("heading"', glideShortcut);
+  assert.ok(glideHeading >= 0 && glideHeading < glideShortcut, 'palette glide Ctrl+K must wait for the app heading');
 });
 
 test('production chunks keep en/ja dictionaries off the shared entry', async () => {
