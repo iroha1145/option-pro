@@ -77,11 +77,18 @@ def main() -> int:
         compare["yearly_a0_top10"] = yearly_top10_means(compare["a0_vs_original"]["10"])
         compare["yearly_c0_top10"] = yearly_top10_means(compare["c0_vs_original"]["10"])
         compare["yearly_momentum_top10"] = yearly_top10_means(compare["momentum63_vs_original"]["10"])
-        summary["screener"] = {
-            key: value
-            for key, value in compare.items()
-            if key != "c0_audit_head"
-        }
+        def _slim_pair(block: dict) -> dict:
+            return {
+                key: (
+                    {inner: {k: v for k, v in item.items() if k != "daily"} for inner, item in value.items()}
+                    if key.endswith("_vs_original") and isinstance(value, dict)
+                    else value
+                )
+                for key, value in block.items()
+                if key != "c0_audit_head"
+            }
+
+        summary["screener"] = _slim_pair(compare)
         summary["diagnostics"]["saturation"] = saturation_report(
             [row for row in rows if split_for_date(row.get("signal_date")) == args.split]
         )

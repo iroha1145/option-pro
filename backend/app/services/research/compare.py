@@ -15,6 +15,36 @@ from app.services.research.algorithm_protocol import (
 )
 from app.services.research.labels import outcome_crosses_split
 from app.services.research.metrics import paired_difference_ci, spearman_rank_ic, summarize_daily_ics
+
+
+def publish_ci(payload: Mapping[str, Any] | None, *, min_n: int = 20) -> dict[str, Any]:
+    """Keep the point estimate; hide degenerate or too-short intervals."""
+
+    if not payload:
+        return {"status": "unavailable", "reason": "missing", "ci95": None}
+    n = int(payload.get("n_paired") or payload.get("n_dates") or payload.get("n") or 0)
+    ci = payload.get("ci") if isinstance(payload.get("ci"), Mapping) else payload
+    interval = None
+    if isinstance(ci, Mapping):
+        interval = ci.get("ci95")
+        n = int(ci.get("n") or n)
+    if n < min_n:
+        return {
+            "status": "unavailable",
+            "reason": "insufficient_dates_for_horizon_blocks",
+            "n": n,
+            "mean": payload.get("mean") or payload.get("mean_diff") or payload.get("mean_ic"),
+            "ci95": None,
+        }
+    if not interval or interval[0] == interval[1]:
+        return {
+            "status": "unavailable",
+            "reason": "degenerate_or_zero_width_interval",
+            "n": n,
+            "mean": payload.get("mean") or payload.get("mean_diff") or payload.get("mean_ic"),
+            "ci95": None,
+        }
+    return {"status": "active", "n": n, "ci95": interval, "mean": payload.get("mean") or payload.get("mean_diff")}
 from app.services.research.protocol import split_for_date
 from app.services.strength.ranking_variants import (
     A0_VARIANT,
@@ -152,6 +182,15 @@ def paired_top_series(
         "original_mean": None if not orig_vals else fmean(orig_vals),
         "candidate_mean": None if not cand_vals else fmean(cand_vals),
         "paired": paired,
+        "paired_ci": publish_ci(
+            None
+            if paired is None
+            else {
+                "n_paired": len(orig_vals),
+                "mean_diff": paired.get("mean_diff"),
+                "ci": (paired.get("ci") or {}),
+            }
+        ),
         "daily_head": daily[:3],
         "daily_tail": daily[-3:],
         "daily": daily,
