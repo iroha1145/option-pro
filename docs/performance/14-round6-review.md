@@ -10,6 +10,11 @@
 - Owner 与历史 `as_of`（超出 90s）仍 `items=None`，未恢复 Round 2 的 Owner 复用。
 - 未使用 `BEGIN IMMEDIATE`，未延长 TTL，未跳过损坏检查。
 
+## 默认 visible 的边界
+
+- 列表、`feedApiPath` 默认、theme-boot 预取必须带 `page_mode=visible`。
+- `newsToday` 与 `tickerSummaries` 必须省略 `page_mode`，否则会在首条 feed 落地后再扫 108 条。已修；生产包待 n=20 结束后同步。
+
 ## 游标与新旧客户端
 
 - `query_hash` 仅在提供 `page_mode` 时纳入该字段；旧客户端哈希与基线一致。

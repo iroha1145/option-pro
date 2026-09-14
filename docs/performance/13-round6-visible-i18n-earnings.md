@@ -79,6 +79,10 @@ n=100 上 visible 比 2 次 hop 慢（扫描更多项 + 方差）。B 的收益�
 
 `DeferredEpsChart`：`rootMargin: 100%`，占位 320px，挂载后不卸。`Earnings.tsx` 去掉顶层 `useNow(1000)`。冷却只在按钮内走秒；`cooldownUntil` 到期后清零，避免冷却结束后仍 1Hz。纽约日 15s 轮询，未钉住的周起始随跨日更新。隔离库无财报日历，滚动/弱网样本用本地 fulfill，不打 Finnhub/Yahoo/FMP。
 
+### B2. 今日计数不再套用 visible — 保留（源码已改，产物待同步）
+
+复查发现 `qs()` 把 `newsToday`（24h/50）和 `tickerSummaries`（候选发现）也默认成了 `page_mode=visible`。这两处要的是窗口摘要 / 候选 ticker，不是可见列表；feed 落地后会再占一条 uvicorn。现已显式 `pageMode: null` 省略该参数，旧客户端哈希与旧切片不变。列表、预取、theme-boot 仍是 visible。契约测试已改为断言 24h 计数 URL 不含 `page_mode`。
+
 ### E. 有限导航意图预取 — 暂留，等 surfaces 对照
 
 只预取路由 chunk，`saveData`、跳过当前路径、`MAX_INTENT=2`。立即点击 / 停留后点击 / 划过不进入的计时尚未完成。收益不明显将回退该提交。
