@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -30,6 +30,21 @@ test('visual review waits for async i18n boot before interacting with the app sh
   const shortcutAt = overlay.indexOf("keyboard.press('Control+k')");
   const headingBeforeShortcut = overlay.lastIndexOf("getByRole('heading'", shortcutAt);
   assert.ok(headingBeforeShortcut >= 0 && headingBeforeShortcut < shortcutAt, 'Ctrl+K test must wait for the app heading');
+});
+
+test('production chunks keep en/ja dictionaries off the shared entry', async () => {
+  const dist = path.join(here, '..', 'dist');
+  const html = await readFile(path.join(dist, 'index.html'), 'utf8');
+  const entry = html.match(/assets\/(index-[^"]+\.js)/);
+  assert.ok(entry, 'index.html must point at the hashed entry script');
+  const leaked = /Skip to main content|サポート|レジスタンス|Demo mode · Prices/;
+  const entryText = await readFile(path.join(dist, 'assets', entry[1]), 'utf8');
+  assert.doesNotMatch(entryText, leaked);
+  for (const name of await readdir(path.join(dist, 'assets'))) {
+    if (!name.endsWith('.js') || name.startsWith('runtime-en') || name.startsWith('runtime-ja')) continue;
+    const text = await readFile(path.join(dist, 'assets', name), 'utf8');
+    assert.doesNotMatch(text, leaked, `${name} must not embed en/ja UI dictionaries`);
+  }
 });
 
 test('earnings page localizes the clock and defers the EPS chart', async () => {
