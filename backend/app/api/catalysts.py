@@ -288,6 +288,7 @@ def catalyst_feed(
     ]] = Query(default=None),
     multi_source_only: bool = Query(default=False),
     theme: Optional[str] = Query(default=None, max_length=64, pattern=r"^[A-Za-z0-9_-]+$"),
+    page_mode: Optional[Literal["visible"]] = Query(default=None),
     service: PersonalCatalystService = Depends(_service),
 ) -> dict:
     _require_public_query_bound(
@@ -314,6 +315,7 @@ def catalyst_feed(
             mechanism=mechanism,
             multi_source_only=multi_source_only,
             theme=theme,
+            page_mode=page_mode,
         )
     except CatalystError as error:
         _raise_safe(error)

@@ -1857,3 +1857,195 @@ def test_web_reads_do_not_initialize_missing_worker_databases(tmp_path) -> None:
         service.request_analysis(101, force=False)
     assert not cache_path.exists()
     assert not ai_path.exists()
+
+
+def _visible_zh_item(news_id: int) -> dict[str, Any]:
+    return {
+        "news_id": news_id,
+        "change_sequence": 1,
+        "content_hash": f"hash-{news_id}",
+        "deleted": False,
+        "updated_at": "2026-07-15T03:58:00Z",
+        "available_at": "2026-07-15T03:59:00Z",
+        "title": "芯片企业公布最新业绩",
+        "summary": "收入增长，但管理层仍提示需求波动风险。",
+        "title_zh": "芯片企业公布最新业绩",
+        "summary_zh": "收入增长，但管理层仍提示需求波动风险。",
+        "analysis_status": "not_requested",
+        "analysis": None,
+        "source_tickers": ["NVDA"],
+    }
+
+
+def _hidden_en_item(news_id: int) -> dict[str, Any]:
+    return {
+        "news_id": news_id,
+        "change_sequence": 1,
+        "content_hash": f"hash-{news_id}",
+        "deleted": False,
+        "updated_at": "2026-07-15T03:58:00Z",
+        "available_at": "2026-07-15T03:59:00Z",
+        "title": f"English only headline {news_id}",
+        "summary": f"English only summary {news_id}",
+        "title_zh": "",
+        "summary_zh": "",
+        "analysis_status": "not_requested",
+        "analysis": None,
+        "source_tickers": ["NVDA"],
+    }
+
+
+class WindowIntelligence(FakeIntelligence):
+    def __init__(self, items: list[dict[str, Any]]) -> None:
+        super().__init__()
+        self.window = items
+        self.feed_calls: list[dict[str, Any]] = []
+
+    def feed(self, **kwargs):
+        self.feed_calls.append(dict(kwargs))
+        limit = min(100, max(1, int(kwargs.get("limit") or 50)))
+        page_mode = str(kwargs.get("page_mode") or "").strip() or None
+        scan = 108 if page_mode == "visible" else limit
+        offset = 0
+        if kwargs.get("cursor"):
+            from app.services.catalysts.local_intelligence import (
+                _cursor_decode,
+                _feed_query_hash,
+            )
+
+            theme = str(kwargs.get("theme") or "").strip().casefold() or None
+            offset, _ = _cursor_decode(
+                str(kwargs["cursor"]),
+                _feed_query_hash(kwargs, theme=theme),
+            )
+        page = self.window[offset : offset + scan]
+        has_more = offset + len(page) < len(self.window)
+        from app.services.catalysts.local_intelligence import (
+            _cursor_encode,
+            _feed_query_hash,
+        )
+
+        theme = str(kwargs.get("theme") or "").strip().casefold() or None
+        query_hash = _feed_query_hash(kwargs, theme=theme)
+        payload = {
+            "status": "active" if page else "empty",
+            "as_of": NOW.isoformat().replace("+00:00", "Z"),
+            "items": page,
+            "summary": {
+                "count": len(self.window),
+                "analyzed_count": 0,
+                "pending": len(self.window),
+                "news_6h": len(self.window),
+                "analyzed_24h": 0,
+                "bullish": 0,
+                "bearish": 0,
+                "high_impact_macro": None,
+            },
+            "next_cursor": (
+                _cursor_encode(offset + len(page), NOW.isoformat().replace("+00:00", "Z"), query_hash)
+                if has_more
+                else None
+            ),
+            "has_more": has_more,
+        }
+        if page_mode == "visible":
+            payload["page_offset"] = offset
+            payload["page_scanned"] = len(page)
+        return payload
+
+
+def test_visible_page_mode_skips_hidden_raw_candidates_in_one_build() -> None:
+    hidden = [_hidden_en_item(index) for index in range(1, 13)]
+    visible_item = _visible_zh_item(13)
+    engine = WindowIntelligence([*hidden, visible_item])
+    service = _service("read", engine=engine)
+
+    old = service.feed(as_of=NOW, limit=12)
+    assert old["items"] == []
+    assert old["hidden_unanalyzed"] == 12
+    assert old["has_more"] is True
+    assert old["summary"]["count"] == 13
+
+    page = service.feed(as_of=NOW, limit=12, page_mode="visible")
+    assert [item["news_id"] for item in page["items"]] == [13]
+    assert page["hidden_unanalyzed"] == 12
+    assert page["has_more"] is False
+    assert page["summary"]["count"] == 13
+    assert len(engine.feed_calls) == 2
+    assert engine.feed_calls[1].get("page_mode") == "visible"
+
+
+def test_visible_page_mode_keeps_loading_after_108_hidden() -> None:
+    hidden = [_hidden_en_item(index) for index in range(1, 109)]
+    visible_item = _visible_zh_item(109)
+    engine = WindowIntelligence([*hidden, visible_item])
+    service = _service("read", engine=engine)
+
+    first = service.feed(as_of=NOW, limit=12, page_mode="visible")
+    assert first["items"] == []
+    assert first["hidden_unanalyzed"] == 108
+    assert first["has_more"] is True
+    assert first["status"] == "active"
+    assert first["next_cursor"]
+
+    second = service.feed(
+        as_of=NOW,
+        limit=12,
+        page_mode="visible",
+        cursor=first["next_cursor"],
+    )
+    assert [item["news_id"] for item in second["items"]] == [109]
+    assert second["hidden_unanalyzed"] == 0
+    assert second["has_more"] is False
+
+
+def test_unanalyzed_chinese_originals_remain_visible_in_visible_mode() -> None:
+    engine = WindowIntelligence([_visible_zh_item(7)])
+    payload = _service("read", engine=engine).feed(
+        as_of=NOW, limit=12, page_mode="visible"
+    )
+    assert [item["news_id"] for item in payload["items"]] == [7]
+    assert payload["items"][0]["title_zh"]
+    assert payload["items"][0]["analysis"] is None
+
+
+def test_visible_page_mode_cursor_tracks_raw_consumed_when_filled() -> None:
+    hidden = [_hidden_en_item(index) for index in range(1, 6)]
+    visible = [_visible_zh_item(index) for index in range(6, 30)]
+    engine = WindowIntelligence([*hidden, *visible])
+    service = _service("read", engine=engine)
+
+    first = service.feed(as_of=NOW, limit=12, page_mode="visible")
+    assert [item["news_id"] for item in first["items"]] == list(range(6, 18))
+    assert first["hidden_unanalyzed"] == 5
+    assert first["has_more"] is True
+
+    second = service.feed(
+        as_of=NOW,
+        limit=12,
+        page_mode="visible",
+        cursor=first["next_cursor"],
+    )
+    assert [item["news_id"] for item in second["items"]] == list(range(18, 30))
+    assert second["hidden_unanalyzed"] == 0
+    assert second["has_more"] is False
+
+
+def test_visible_page_mode_rejects_cursor_from_other_filters() -> None:
+    engine = WindowIntelligence([_visible_zh_item(index) for index in range(1, 20)])
+    service = _service("read", engine=engine)
+    first = service.feed(
+        as_of=NOW,
+        limit=12,
+        page_mode="visible",
+        ticker="NVDA",
+    )
+    assert first["next_cursor"]
+    with pytest.raises(CatalystError):
+        service.feed(
+            as_of=NOW,
+            limit=12,
+            page_mode="visible",
+            ticker="AAPL",
+            cursor=first["next_cursor"],
+        )

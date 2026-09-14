@@ -7650,3 +7650,172 @@ def test_stale_preparing_focus_unblocks_a_new_revision(tmp_path, monkeypatch):
     assert stale[0] == "failed"
     assert stale[1] == "focus_prepare_expired"
     assert ai.get_job(cycle["job_id"]) is not None
+
+
+def test_anon_complete_cache_hit_fingerprints_once(tmp_path, monkeypatch) -> None:
+    etl, _ai, intelligence = _stack(tmp_path)
+    base = datetime(2026, 7, 21, 14, 30, tzinfo=timezone.utc)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: base)
+    _apply_news(
+        etl,
+        [_news_change(1, 141, available_at=base - timedelta(hours=1))],
+        as_of=base,
+    )
+    intelligence.reconcile()
+
+    with request_owner_access_context(False):
+        first = intelligence.feed(as_of=base, window_hours=24, limit=10)
+        assert [item["news_id"] for item in first["items"]] == [141]
+        cached = local_module._REVISION_CACHE[(str(intelligence.db_path), 24)]
+        assert cached.get("anon_items") is not None
+
+        calls = {"n": 0}
+        original = local_module._revision_store_cursor
+
+        def counted(connection):
+            calls["n"] += 1
+            return original(connection)
+
+        monkeypatch.setattr(local_module, "_revision_store_cursor", counted)
+
+        def _must_not_run(*_args, **_kwargs):
+            raise AssertionError("complete cache hit must not rebuild revisions")
+
+        intelligence._active_revisions_query = _must_not_run  # type: ignore[method-assign]
+        try:
+            second = intelligence.feed(as_of=base, window_hours=24, limit=10)
+        finally:
+            del intelligence._active_revisions_query
+
+    assert [item["news_id"] for item in second["items"]] == [141]
+    assert calls["n"] == 1
+
+
+def test_incomplete_revision_cache_falls_back_to_slow_path(
+    tmp_path, monkeypatch
+) -> None:
+    etl, _ai, intelligence = _stack(tmp_path)
+    base = datetime(2026, 7, 21, 14, 30, tzinfo=timezone.utc)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: base)
+    _apply_news(
+        etl,
+        [_news_change(1, 142, available_at=base - timedelta(hours=1))],
+        as_of=base,
+    )
+    intelligence.reconcile()
+
+    with request_owner_access_context(False):
+        intelligence.feed(as_of=base, window_hours=24, limit=10)
+        cached = local_module._REVISION_CACHE[(str(intelligence.db_path), 24)]
+        cached["anon_items"] = None
+        calls = {"n": 0}
+        original = local_module._revision_store_cursor
+
+        def counted(connection):
+            calls["n"] += 1
+            return original(connection)
+
+        monkeypatch.setattr(local_module, "_revision_store_cursor", counted)
+        again = intelligence.feed(as_of=base, window_hours=24, limit=10)
+
+    assert [item["news_id"] for item in again["items"]] == [142]
+    assert calls["n"] == 2
+    assert local_module._REVISION_CACHE[(str(intelligence.db_path), 24)].get(
+        "anon_items"
+    ) is not None
+
+
+def test_late_revision_build_does_not_clobber_newer_cache() -> None:
+    key = ("/tmp/revision-cache-guard", 24)
+    newer_cursor = (2, 2, 2)
+    older_cursor = (1, 1, 1)
+    local_module._REVISION_CACHE[key] = {
+        "cursor": newer_cursor,
+        "built_at": 20.0,
+        "rows": [{"news_id": 200}],
+        "anon_items": [{"news_id": 200}],
+    }
+    local_module._store_revision_cache(
+        key,
+        older_cursor,
+        [{"news_id": 100}],
+        started_at=10.0,
+    )
+    cached = local_module._REVISION_CACHE[key]
+    assert cached["cursor"] == newer_cursor
+    assert [row["news_id"] for row in cached["rows"]] == [200]
+    local_module._store_revision_cache(
+        key,
+        (3, 3, 3),
+        [{"news_id": 300}],
+        started_at=25.0,
+    )
+    cached = local_module._REVISION_CACHE[key]
+    assert cached["cursor"] == (3, 3, 3)
+    assert [row["news_id"] for row in cached["rows"]] == [300]
+    local_module._REVISION_CACHE.pop(key, None)
+
+
+def test_same_cursor_row_store_does_not_drop_anon_items() -> None:
+    key = ("/tmp/revision-cache-same-cursor", 24)
+    cursor = (4, 4, 4)
+    local_module._REVISION_CACHE[key] = {
+        "cursor": cursor,
+        "built_at": 10.0,
+        "rows": [{"news_id": 4}],
+        "anon_items": [{"news_id": 4, "title": "cached"}],
+    }
+    local_module._store_revision_cache(
+        key,
+        cursor,
+        [{"news_id": 99}],
+        started_at=11.0,
+    )
+    cached = local_module._REVISION_CACHE[key]
+    assert cached["cursor"] == cursor
+    assert [row["news_id"] for row in cached["rows"]] == [4]
+    assert cached["anon_items"][0]["title"] == "cached"
+    local_module._REVISION_CACHE.pop(key, None)
+
+
+def test_feed_query_hash_omits_page_mode_for_legacy_clients() -> None:
+    legacy = local_module._feed_query_hash(
+        {"window_hours": 72, "include_unanalyzed": True},
+        theme=None,
+    )
+    omitted = local_module._feed_query_hash(
+        {"window_hours": 72, "include_unanalyzed": True, "page_mode": None},
+        theme=None,
+    )
+    visible = local_module._feed_query_hash(
+        {"window_hours": 72, "include_unanalyzed": True, "page_mode": "visible"},
+        theme=None,
+    )
+    assert legacy == omitted
+    assert legacy != visible
+
+
+def test_visible_page_mode_scans_raw_candidates_once(tmp_path, monkeypatch) -> None:
+    etl, _ai, intelligence = _stack(tmp_path)
+    base = datetime(2026, 7, 21, 14, 30, tzinfo=timezone.utc)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: base)
+    _apply_news(
+        etl,
+        [
+            _news_change(index, 300 + index, available_at=base - timedelta(minutes=index))
+            for index in range(1, 20)
+        ],
+        as_of=base,
+    )
+    intelligence.reconcile()
+    raw = intelligence.feed(as_of=base, window_hours=24, limit=5)
+    visible = intelligence.feed(
+        as_of=base, window_hours=24, limit=5, page_mode="visible"
+    )
+    assert raw["summary"]["count"] == visible["summary"]["count"]
+    assert len(raw["items"]) == 5
+    assert len(visible["items"]) == visible["summary"]["count"]
+    assert visible["page_scanned"] == visible["summary"]["count"]
+    assert visible["page_offset"] == 0
+    with pytest.raises(ValueError, match="page_mode"):
+        intelligence.feed(as_of=base, window_hours=24, page_mode="raw")

@@ -363,11 +363,92 @@ _REVISION_CACHE_LOCK = threading.Lock()
 _REVISION_CACHE_MAX_ENTRIES = 32
 _REVISION_CACHE_MAX_AGE_SECONDS = 300.0
 _REVISION_CACHE_AS_OF_TOLERANCE_SECONDS = 90.0
+VISIBLE_FEED_SCAN_BUDGET = 108
+_FEED_QUERY_HASH_KEYS = (
+    "window_hours",
+    "ticker",
+    "source",
+    "classification",
+    "analysis_status",
+    "min_confidence",
+    "include_unanalyzed",
+    "min_abs_impact",
+    "include_neutral",
+    "horizon",
+    "mechanism",
+    "multi_source_only",
+)
 
 
 def _reset_revision_cache() -> None:
     with _REVISION_CACHE_LOCK:
         _REVISION_CACHE.clear()
+
+
+def _normalize_page_mode(value: Any) -> str | None:
+    if value is None:
+        return None
+    page_mode = str(value).strip()
+    if not page_mode:
+        return None
+    if page_mode != "visible":
+        raise ValueError("page_mode must be 'visible' when provided")
+    return page_mode
+
+
+def _feed_query_hash(kwargs: Mapping[str, Any], *, theme: str | None) -> str:
+    payload: dict[str, Any] = {
+        key: kwargs.get(key) for key in _FEED_QUERY_HASH_KEYS
+    }
+    payload["theme"] = theme or None
+    page_mode = _normalize_page_mode(kwargs.get("page_mode"))
+    if page_mode:
+        payload["page_mode"] = page_mode
+    return _sha(payload)
+
+
+def _store_revision_cache(
+    key: tuple[str, int],
+    store_cursor: tuple[Any, ...],
+    built_rows: list[dict[str, Any]],
+    *,
+    started_at: float,
+) -> None:
+    """Write a row-set entry; a later-finished stale build cannot clobber a newer one."""
+    with _REVISION_CACHE_LOCK:
+        existing = _REVISION_CACHE.get(key)
+        if existing is not None and existing["cursor"] == store_cursor:
+            # Same store version is already cached. Do not refresh TTL or
+            # drop anon_items that a concurrent reader already attached.
+            return
+        if (
+            existing is not None
+            and existing["cursor"] != store_cursor
+            and existing["built_at"] >= started_at
+        ):
+            return
+        if (
+            len(_REVISION_CACHE) >= _REVISION_CACHE_MAX_ENTRIES
+            and key not in _REVISION_CACHE
+        ):
+            _REVISION_CACHE.clear()
+        _REVISION_CACHE[key] = {
+            "cursor": store_cursor,
+            "built_at": time.monotonic(),
+            "rows": built_rows,
+            "anon_items": None,
+        }
+
+
+def _revision_cache_fresh(
+    cached: Mapping[str, Any],
+    store_cursor: tuple[Any, ...],
+) -> bool:
+    return (
+        cached["cursor"] == store_cursor
+        and time.monotonic() - cached["built_at"]
+        <= _REVISION_CACHE_MAX_AGE_SECONDS
+    )
 
 
 def _revision_store_cursor(connection: sqlite3.Connection) -> tuple[Any, ...]:
@@ -3172,28 +3253,15 @@ class LocalCatalystIntelligence:
         store_cursor = _revision_store_cursor(connection)
         with _REVISION_CACHE_LOCK:
             cached = _REVISION_CACHE.get(key)
-            if (
-                cached is not None
-                and cached["cursor"] == store_cursor
-                and time.monotonic() - cached["built_at"]
-                <= _REVISION_CACHE_MAX_AGE_SECONDS
-            ):
+            if cached is not None and _revision_cache_fresh(cached, store_cursor):
                 return [_copy_revision_row(row) for row in cached["rows"]]
+        started_at = time.monotonic()
         built_rows = self._active_revisions_query(
             connection, as_of=as_of, window_hours=window_hours
         )
-        with _REVISION_CACHE_LOCK:
-            if (
-                len(_REVISION_CACHE) >= _REVISION_CACHE_MAX_ENTRIES
-                and key not in _REVISION_CACHE
-            ):
-                _REVISION_CACHE.clear()
-            _REVISION_CACHE[key] = {
-                "cursor": store_cursor,
-                "built_at": time.monotonic(),
-                "rows": built_rows,
-                "anon_items": None,
-            }
+        _store_revision_cache(
+            key, store_cursor, built_rows, started_at=started_at
+        )
         return [_copy_revision_row(row) for row in built_rows]
 
     def _active_revision_bundle(
@@ -3209,13 +3277,44 @@ class LocalCatalystIntelligence:
         Anonymous item payloads are deterministic per row set, so they ride
         the same cache entry. Owner reads always get items=None and rebuild
         with live job state; so do historical (non-cacheable) reads.
+
+        A complete anonymous hot hit fingerprints once, then copies rows and
+        items from the same locked entry so they cannot come from different
+        store versions. Incomplete or missing entries fall through to the
+        original slow path (which fingerprints again after the query).
         """
+        key = self._revision_cache_key(as_of=as_of, window_hours=window_hours)
+        if (
+            want_items
+            and key is not None
+            and not current_request_is_owner()
+        ):
+            with _REVISION_CACHE_LOCK:
+                cached = _REVISION_CACHE.get(key)
+                maybe_complete = (
+                    cached is not None and cached.get("anon_items") is not None
+                )
+            if maybe_complete:
+                store_cursor = _revision_store_cursor(connection)
+                with _REVISION_CACHE_LOCK:
+                    cached = _REVISION_CACHE.get(key)
+                    if (
+                        cached is not None
+                        and _revision_cache_fresh(cached, store_cursor)
+                        and cached.get("anon_items") is not None
+                    ):
+                        return (
+                            [_copy_revision_row(row) for row in cached["rows"]],
+                            [
+                                _copy_feed_item(item)
+                                for item in cached["anon_items"]
+                            ],
+                        )
         rows = self._active_revisions(
             connection, as_of=as_of, window_hours=window_hours
         )
         if not want_items:
             return rows, None
-        key = self._revision_cache_key(as_of=as_of, window_hours=window_hours)
         if key is None or current_request_is_owner():
             return rows, None
         store_cursor = _revision_store_cursor(connection)
@@ -3223,9 +3322,7 @@ class LocalCatalystIntelligence:
             cached = _REVISION_CACHE.get(key)
             if (
                 cached is not None
-                and cached["cursor"] == store_cursor
-                and time.monotonic() - cached["built_at"]
-                <= _REVISION_CACHE_MAX_AGE_SECONDS
+                and _revision_cache_fresh(cached, store_cursor)
                 and cached.get("anon_items") is not None
             ):
                 return rows, [
@@ -4109,28 +4206,8 @@ class LocalCatalystIntelligence:
         if theme and not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", theme):
             raise ValueError("theme must match [A-Za-z0-9_-]{1,64}")
         theme = theme.casefold()
-        query_hash = _sha(
-            {
-                **{
-                    key: kwargs.get(key)
-                    for key in (
-                    "window_hours",
-                    "ticker",
-                    "source",
-                    "classification",
-                    "analysis_status",
-                    "min_confidence",
-                    "include_unanalyzed",
-                    "min_abs_impact",
-                    "include_neutral",
-                    "horizon",
-                    "mechanism",
-                    "multi_source_only",
-                    )
-                },
-                "theme": theme or None,
-            }
-        )
+        page_mode = _normalize_page_mode(kwargs.get("page_mode"))
+        query_hash = _feed_query_hash(kwargs, theme=theme or None)
         offset, cursor_anchor = _cursor_decode(kwargs.get("cursor"), query_hash)
         if cursor_anchor is not None:
             parsed_anchor = _parse_time(cursor_anchor)
@@ -4218,10 +4295,12 @@ class LocalCatalystIntelligence:
             if theme and int(item.get("news_id") or 0) not in theme_member_ids:
                 continue
             filtered.append(item)
-        page = filtered[offset : offset + limit]
-        has_more = offset + limit < len(filtered)
+        scan_limit = VISIBLE_FEED_SCAN_BUDGET if page_mode == "visible" else limit
+        page = filtered[offset : offset + scan_limit]
+        consumed = len(page)
+        has_more = offset + consumed < len(filtered)
         analyzed = [item for item in filtered if item.get("analysis")]
-        return {
+        payload = {
             "status": "active" if page else "empty",
             "as_of": anchor,
             "data_through": data_through,
@@ -4238,11 +4317,17 @@ class LocalCatalystIntelligence:
             },
             "stock_impacts": [],
             "next_cursor": (
-                _cursor_encode(offset + limit, anchor, query_hash) if has_more else None
+                _cursor_encode(offset + consumed, anchor, query_hash)
+                if has_more
+                else None
             ),
             "has_more": has_more,
             "warnings": [],
         }
+        if page_mode == "visible":
+            payload["page_offset"] = offset
+            payload["page_scanned"] = consumed
+        return payload
 
     def news(self, news_id: int, *, as_of: datetime) -> dict[str, Any] | None:
         include_owner_state = current_request_is_owner()
