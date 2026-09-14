@@ -108,7 +108,7 @@ const KNOWN_TEMPLATE_EXEMPT_LINES = new Set([
 ]);
 
 // ── 收集 dict/*.ts 里的全部词条（跳过 types.ts / index.ts 本身） ────────────
-const dictFiles = (await readdir(dictDir)).filter((f) => /\.ts$/.test(f) && !['types.ts', 'index.ts'].includes(f));
+const dictFiles = (await readdir(dictDir)).filter((f) => /\.ts$/.test(f) && !['types.ts', 'index.ts'].includes(f) && !f.startsWith('runtime-'));
 assert.ok(dictFiles.length > 0, 'src/i18n/dict/ 下必须至少有一个词典文件');
 
 const merged = new Map(); // msgid -> { en, ja, sourceFile }
@@ -314,4 +314,27 @@ test('i18n core exposes zh/en/ja and a browser-language auto-detect', async () =
   const core = await readFile(path.join(srcDir, 'i18n', 'core.ts'), 'utf8');
   assert.match(core, /'zh'\s*\|\s*'en'\s*\|\s*'ja'/, 'Locale union must be zh | en | ja');
   assert.match(core, /detectLocale/, 'core.ts must export a browser-language detector');
+  assert.doesNotMatch(core, /from '\.\/dict\/index/, 'core.ts must not statically import the combined dictionary');
+});
+
+test('runtime language dictionaries stay in sync with domain files', async () => {
+  const [{ EN }, { JA }] = await Promise.all([
+    import(pathToFileURL(path.join(dictDir, 'runtime-en.ts')).href),
+    import(pathToFileURL(path.join(dictDir, 'runtime-ja.ts')).href),
+  ]);
+  for (const [msgid, { en, ja }] of merged) {
+    assert.equal(EN[msgid], en, `runtime-en missing or drifted: ${msgid}`);
+    assert.equal(JA[msgid], ja, `runtime-ja missing or drifted: ${msgid}`);
+  }
+  assert.equal(Object.keys(EN).length, merged.size);
+  assert.equal(Object.keys(JA).length, merged.size);
+});
+
+test('main prepares i18n before importing application modules that call t()', async () => {
+  const main = await readFile(path.join(srcDir, 'main.tsx'), 'utf8');
+  assert.match(main, /prepareI18n/);
+  const prepareAt = main.indexOf('prepareI18n');
+  const appAt = main.indexOf("import('./App.tsx')");
+  assert.ok(prepareAt >= 0 && appAt > prepareAt, 'App must load only after prepareI18n');
+  assert.doesNotMatch(main, /import App from/);
 });

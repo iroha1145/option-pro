@@ -18,7 +18,8 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import vm from 'node:vm';
-import { t, getLocale, setLocale } from '../src/i18n/core.ts';
+import { t, getLocale } from '../src/i18n/core.ts';
+import { installTestDictionaries, setLocale } from '../src/i18n/testing.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const src = path.resolve(here, '..', 'src');
@@ -62,6 +63,7 @@ function loadTypesModule(globalOverrides = {}) {
 const earnings = loadTypesModule();
 
 test('provider sector labels use the selected language and preserve unknown names', () => {
+  installTestDictionaries();
   const localized = loadTypesModule({ require: () => ({ t, getLocale }) });
   const before = getLocale();
   try {
