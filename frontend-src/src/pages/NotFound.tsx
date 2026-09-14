@@ -7,26 +7,29 @@
  */
 import { Link, useLocation } from 'react-router';
 import EmptyState from '@/components/shared/EmptyState';
+import { pageRegionProps } from '@/lib/pageRegion';
 import { t } from '../i18n/core.ts';
 
 export default function NotFound() {
   const location = useLocation();
   return (
-    <EmptyState
-      icon="search"
-      title={t("页面不存在")}
-      description={t('没有找到 {path} 对应的页面。链接可能已失效或地址输入有误。', { path: location.pathname })}
-      action={
-        <Link
-          to="/"
-          className="btn-primary"
-        >
-          {t('返回首页')}
-        </Link>
-      }
-      /* 占位是整屏高的（见 PageFallback）。这一页如果只有几百像素，页脚会从
-         折线以下反向弹上来 —— 换了个方向的同一种位移。撑到同样高度即可。 */
-      className="min-h-[70vh] justify-center py-16"
-    />
+    <div {...pageRegionProps('notfound', 'empty')}>
+      <EmptyState
+        icon="search"
+        title={t("页面不存在")}
+        description={t('没有找到 {path} 对应的页面。链接可能已失效或地址输入有误。', { path: location.pathname })}
+        action={
+          <Link
+            to="/"
+            className="btn-primary"
+          >
+            {t('返回首页')}
+          </Link>
+        }
+        /* 占位是整屏高的（见 PageFallback）。这一页如果只有几百像素，页脚会从
+           折线以下反向弹上来 —— 换了个方向的同一种位移。撑到同样高度即可。 */
+        className="min-h-[70vh] justify-center py-16"
+      />
+    </div>
   );
 }

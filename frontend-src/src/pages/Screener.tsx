@@ -16,6 +16,7 @@ import { catalystsApi } from '@/api/modules/catalysts';
 import { signalsApi } from '@/api/modules/signals';
 import { runtimeApi, type WorkerAction } from '@/api/modules/runtime';
 import { getMarketReadGeneration, resetMarketReadPaths } from '@/api/marketRead';
+import { pageRegionProps } from '@/lib/pageRegion';
 import { ApiError, isMock } from '@/api/client';
 import type { ScreenerRow, SectorOption, StrengthProfile } from '@/api/types';
 import { usePolling } from '@/hooks/usePolling';
@@ -833,7 +834,22 @@ export default function Screener() {
 
       <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-12">
         {/* B2 结果区（8 列） */}
-        <section className="lg:col-span-8" aria-label={__t("扫描结果")}>
+        <section
+          className="lg:col-span-8"
+          aria-label={__t("扫描结果")}
+          {...pageRegionProps(
+            'screener',
+            scanState === 'idle'
+              ? 'idle'
+              : scanState === 'scanning' && !rows
+                ? 'loading'
+                : scanState === 'error'
+                  ? 'error'
+                  : sorted.length === 0
+                    ? 'empty'
+                    : 'content',
+          )}
+        >
           {/* 结果统计行 */}
           <div className="flex min-h-10 flex-wrap items-center gap-x-3 gap-y-2">
             {scanState === 'scanning' ? (

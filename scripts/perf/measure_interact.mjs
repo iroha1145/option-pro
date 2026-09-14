@@ -1,0 +1,259 @@
+#!/usr/bin/env node
+/**
+ * Laboratory interaction timings on a loaded news page.
+ * Records click-to-drawer, window filter, and scroll long-tasks.
+ * Not real-user INP; do not label as INP.
+ */
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+import { mkdir, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { afterSampleGap, attach429Counter } from './lib/rate_limit.mjs';
+
+const require = createRequire(fileURLToPath(import.meta.url));
+const { chromium } = require(path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../../frontend-src/node_modules/playwright',
+));
+
+const BASE = process.env.OPTIX_PERF_BASE || 'http://127.0.0.1:2000';
+const OUT = process.env.OPTIX_PERF_OUT || '/opt/cursor/artifacts/perf/browser-interact.json';
+const REPEATS = Number(process.env.OPTIX_PERF_REPEATS || 20);
+const PROFILE = process.env.OPTIX_PERF_PROFILE || 'mobile-ref';
+const EXTRA = process.env.OPTIX_PERF_INTERACT_EXTRA === '1';
+
+const PROFILES = {
+  desktop: { width: 1440, height: 900, dpr: 1, cpu: 1, down: 0, up: 0, rtt: 0, mobile: false },
+  'mobile-ref': {
+    width: 390, height: 844, dpr: 3, cpu: 4,
+    down: (10 * 1024 * 1024) / 8, up: (2 * 1024 * 1024) / 8, rtt: 180, mobile: true,
+  },
+};
+const profile = PROFILES[PROFILE];
+if (!profile) throw new Error(`unknown profile ${PROFILE}`);
+
+function percentile(values, q) {
+  if (!values.length) return null;
+  const ordered = [...values].sort((a, b) => a - b);
+  return ordered[Math.min(ordered.length - 1, Math.max(0, Math.round((ordered.length - 1) * q)))];
+}
+
+async function applyThrottle(page) {
+  const client = await page.context().newCDPSession(page);
+  if (profile.cpu > 1) await client.send('Emulation.setCPUThrottlingRate', { rate: profile.cpu });
+  if (profile.down > 0) {
+    await client.send('Network.enable');
+    await client.send('Network.emulateNetworkConditions', {
+      offline: false,
+      downloadThroughput: profile.down,
+      uploadThroughput: profile.up,
+      latency: profile.rtt,
+    });
+  }
+}
+
+async function openFiltersIfNeeded(page) {
+  if (!profile.mobile) return;
+  const filterBtn = page.getByRole('button', { name: '筛选' });
+  if (!(await filterBtn.count())) return;
+  const expanded = await filterBtn.getAttribute('aria-expanded');
+  if (expanded !== 'true') await filterBtn.click();
+}
+
+async function waitNews(page) {
+  await page.waitForFunction(() => {
+    const title = document.querySelector('article h3');
+    return !!(title && title.textContent && title.textContent.trim().length > 1);
+  }, null, { timeout: 120_000 });
+}
+
+const samples = [];
+for (let i = 0; i < REPEATS; i += 1) {
+  const browser = await chromium.launch({ headless: true });
+  const context = await browser.newContext({
+    viewport: { width: profile.width, height: profile.height },
+    deviceScaleFactor: profile.dpr,
+    isMobile: profile.mobile,
+    hasTouch: profile.mobile,
+    locale: 'zh-CN',
+  });
+  const page = await context.newPage();
+  const rateLimit = attach429Counter(page);
+  await applyThrottle(page);
+  await page.goto(`${BASE}/catalysts`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+  await waitNews(page);
+
+  const drawerStarted = await page.evaluate(() => performance.now());
+  const detailWait = page.waitForResponse(
+    (response) => /\/api\/catalysts\/news\/\d+/.test(response.url()) && response.ok(),
+    { timeout: 30_000 },
+  );
+  await page.locator('article').first().locator('h3').click({ force: true });
+  await page.waitForFunction(() => {
+    const dialog = document.querySelector('[role="dialog"][aria-modal="true"]');
+    const heading = dialog?.querySelector('h2');
+    const text = heading?.textContent?.trim() || '';
+    return text.length > 2;
+  }, null, { timeout: 30_000 });
+  const drawerReady = await page.evaluate(() => {
+    const dialog = document.querySelector('[role="dialog"][aria-modal="true"]');
+    const heading = dialog?.querySelector('h2');
+    const text = heading?.textContent?.trim() || '';
+    return { at: performance.now(), title: text };
+  });
+  const drawerMs = drawerReady.at - drawerStarted;
+  await detailWait;
+  const drawerDetailMs = await page.evaluate(() => performance.now()) - drawerStarted;
+
+  await page.keyboard.press('Escape').catch(() => {});
+  await page.waitForTimeout(200);
+
+  const list24Hits = [];
+  const onList24 = (response) => {
+    const url = response.url();
+    if (response.ok() && url.includes('window_hours=24') && url.includes('limit=12')) {
+      list24Hits.push({ url, at: Date.now() });
+    }
+  };
+  page.on('response', onList24);
+  await openFiltersIfNeeded(page);
+  if (profile.mobile === false && !(await page.getByRole('tab', { name: '24 时' }).count())) {
+    await page.getByRole('button', { name: '筛选' }).click();
+  }
+  /* 展开筛选后用户会看一眼选项；这段时间预取 24h/12。0 则变成「展开后立刻点」。
+     桌面常开 FilterBar：悬停「24 时」才预取，避免挂载时再抢一条整窗物化。 */
+  const thinkMs = Number(process.env.OPTIX_PERF_FILTER_THINK_MS ?? 800);
+  if (thinkMs > 0) {
+    await page.getByRole('tab', { name: '24 时' }).hover().catch(() => {});
+    await page.waitForTimeout(thinkMs);
+  }
+  const filterStarted = await page.evaluate(() => performance.now());
+  const prefetchAlreadyDone = list24Hits.length > 0;
+  await page.getByRole('tab', { name: '24 时' }).click();
+  await page.waitForFunction(() => new URL(location.href).searchParams.get('window') === '24', null, { timeout: 15_000 });
+  if (!prefetchAlreadyDone) {
+    const deadline = Date.now() + 60_000;
+    while (list24Hits.length === 0 && Date.now() < deadline) {
+      await page.waitForTimeout(25);
+    }
+  }
+  await page.waitForFunction(() => {
+    const title = document.querySelector('article h3');
+    return !!(title && title.textContent && title.textContent.trim().length > 1);
+  }, null, { timeout: 60_000 });
+  page.off('response', onList24);
+  const filterReady = await page.evaluate(() => performance.now());
+  const filterMs = filterReady - filterStarted;
+  const filterTitle = await page.locator('article h3').first().textContent();
+  const filterPrefetchHit = prefetchAlreadyDone;
+
+  let searchMs = null;
+  let searchTitle = null;
+  let classMs = null;
+  let classReady = null;
+  if (EXTRA) {
+    await openFiltersIfNeeded(page);
+    const searchStarted = await page.evaluate(() => performance.now());
+    await page.getByLabel('按代码过滤').fill('NVDA');
+    await page.waitForFunction(() => new URL(location.href).searchParams.get('ticker') === 'NVDA', null, { timeout: 15_000 });
+    await page.waitForFunction(() => {
+      const title = document.querySelector('article h3');
+      const empty = /这个角度暂时没有新闻|暂时没有新闻/.test(document.body.innerText || '');
+      return !!(title && title.textContent && title.textContent.trim().length > 1) || empty;
+    }, null, { timeout: 60_000 });
+    searchMs = await page.evaluate(() => performance.now()) - searchStarted;
+    searchTitle = (await page.locator('article h3').first().textContent().catch(() => ''))?.trim() || null;
+
+    const classStarted = await page.evaluate(() => performance.now());
+    await page.getByRole('tab', { name: '利多' }).click();
+    await page.waitForFunction(() => new URL(location.href).searchParams.get('cls') === 'bullish', null, { timeout: 15_000 });
+    await page.waitForFunction(() => /这个角度暂时没有新闻|暂时没有新闻/.test(document.body.innerText || '') || document.querySelector('article h3'), null, { timeout: 60_000 });
+    classMs = await page.evaluate(() => performance.now()) - classStarted;
+    classReady = await page.evaluate(() => {
+      const title = document.querySelector('article h3')?.textContent?.trim() || '';
+      const empty = /这个角度暂时没有新闻/.test(document.body.innerText || '');
+      return { title, empty };
+    });
+  }
+
+  const longBefore = await page.evaluate(() => {
+    window.__scrollLong = [];
+    try {
+      new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          window.__scrollLong.push(entry.duration);
+        }
+      }).observe({ type: 'longtask', buffered: false });
+    } catch { /* optional */ }
+    return performance.now();
+  });
+  for (let step = 0; step < 12; step += 1) {
+    await page.mouse.wheel(0, 400);
+    await page.waitForTimeout(50);
+  }
+  const scroll = await page.evaluate((started) => ({
+    elapsed: performance.now() - started,
+    longTasks: window.__scrollLong || [],
+    overflowX: document.documentElement.scrollWidth > document.documentElement.clientWidth + 2,
+  }), longBefore);
+
+  samples.push({
+    drawer_ms: drawerMs,
+    drawer_detail_ms: drawerDetailMs,
+    drawer_title: drawerReady.title,
+    filter_ms: filterMs,
+    filter_prefetch_hit: filterPrefetchHit,
+    filter_title: filterTitle?.trim() || null,
+    search_ms: searchMs,
+    search_title: searchTitle,
+    class_ms: classMs,
+    class_empty: classReady?.empty ?? null,
+    class_title: classReady?.title || null,
+    scroll_ms: scroll.elapsed,
+    scroll_longtask_count: scroll.longTasks.length,
+    scroll_longtask_total_ms: scroll.longTasks.reduce((sum, ms) => sum + ms, 0),
+    horizontal_overflow: scroll.overflowX,
+    rate_limited: rateLimit.count,
+  });
+  console.log(
+    `#${i + 1}/${REPEATS} drawer=${drawerMs.toFixed(0)} detail=${drawerDetailMs.toFixed(0)} filter=${filterMs.toFixed(0)} `
+    + `scroll_long=${scroll.longTasks.reduce((sum, ms) => sum + ms, 0).toFixed(0)} rate_limited=${rateLimit.count}`,
+  );
+  await context.close();
+  await browser.close();
+  await afterSampleGap({ rateLimitedCount: rateLimit.count, last: i + 1 >= REPEATS });
+}
+
+const drawer = samples.map((s) => s.drawer_ms);
+const drawerDetail = samples.map((s) => s.drawer_detail_ms);
+const filter = samples.map((s) => s.filter_ms);
+const search = samples.map((s) => s.search_ms).filter((v) => v != null);
+const classified = samples.map((s) => s.class_ms).filter((v) => v != null);
+const report = {
+  lab: true,
+  notINP: true,
+  profile: PROFILE,
+  measuredAt: new Date().toISOString(),
+  filterThinkMs: Number(process.env.OPTIX_PERF_FILTER_THINK_MS ?? 800),
+  extra: EXTRA,
+  n: samples.length,
+  summary: {
+    drawer_p50: percentile(drawer, 0.5),
+    drawer_p75: percentile(drawer, 0.75),
+    drawer_detail_p50: percentile(drawerDetail, 0.5),
+    drawer_detail_p75: percentile(drawerDetail, 0.75),
+    filter_p50: percentile(filter, 0.5),
+    filter_p75: percentile(filter, 0.75),
+    filter_prefetch_hit_n: samples.filter((s) => s.filter_prefetch_hit).length,
+    search_p75: percentile(search, 0.75),
+    class_p75: percentile(classified, 0.75),
+    scroll_longtask_total_p75: percentile(samples.map((s) => s.scroll_longtask_total_ms), 0.75),
+    horizontal_overflow_any: samples.some((s) => s.horizontal_overflow),
+    rate_limited_n: samples.filter((s) => (s.rate_limited || 0) > 0).length,
+  },
+  samples,
+};
+await mkdir(path.dirname(OUT), { recursive: true });
+await writeFile(OUT, JSON.stringify(report, null, 2) + '\n');
+console.log(JSON.stringify(report.summary, null, 2));
+console.log(`wrote ${OUT}`);

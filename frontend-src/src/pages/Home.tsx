@@ -47,6 +47,7 @@ import EmptyState from '@/components/shared/EmptyState';
 import { SkeletonBlock, SkeletonCard, SkeletonRows } from '@/components/shared/Skeleton';
 import Sparkline from '@/components/charts/Sparkline';
 import Icon from '@/components/icons';
+import { pageRegionProps } from '@/lib/pageRegion';
 import { localeTag, t } from '../i18n/core.ts';
 
 const MARKET_TO_SESSION: Record<string, MarketSession> = {
@@ -338,7 +339,20 @@ export default function Home() {
       <StockDataCoverage state={readiness} className="mt-4" />
 
       {/* 指数带（SPX/NDX/DJI/RUT/SOX/VIX，点击进 /market?index= 高亮定位） */}
-      <section className="mt-8" aria-label={t('指数概览')}>
+      <section
+        className="mt-8"
+        aria-label={t('指数概览')}
+        {...pageRegionProps(
+          'home-indices',
+          indicesQ.loading
+            ? 'loading'
+            : indicesQ.error && !indicesQ.data?.length
+              ? 'error'
+              : !(indicesQ.data?.length)
+                ? 'empty'
+                : 'content',
+        )}
+      >
         {indicesQ.loading ? (
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:[grid-template-columns:repeat(auto-fit,minmax(170px,1fr))]">
             {Array.from({ length: 5 }, (_, i) => (

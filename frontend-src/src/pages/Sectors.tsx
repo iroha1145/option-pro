@@ -26,6 +26,7 @@ import {
   normalizeIvMeta,
   normalizeIvRow,
 } from '@/components/sectors/model';
+import { pageRegionProps } from '@/lib/pageRegion';
 import { t } from '../i18n/core.ts';
 
 function emptyStrength(period: SectorPeriod): SectorStrengthEnvelope {
@@ -195,7 +196,20 @@ export default function Sectors() {
         </StatusNotice>
       )}
 
-      <section className="mt-6" aria-label={t("板块总览")}>
+      <section
+        className="mt-6"
+        aria-label={t("板块总览")}
+        {...pageRegionProps(
+          'sectors',
+          overviewLoading
+            ? 'loading'
+            : catalogQ.error
+              ? 'error'
+              : sectors.length === 0
+                ? 'empty'
+                : 'content',
+        )}
+      >
         {overviewLoading ? (
           <div className="card-surface p-4 md:p-6">
             <HeatMatrixSkeleton />

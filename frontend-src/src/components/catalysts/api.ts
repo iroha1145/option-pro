@@ -9,7 +9,7 @@
  *     触发需 expected_prepared_revision（取自 hotspots/status.prepared_revision）
  *   snake_case → camelCase 的归一在本文件完成；契约缺失字段不编造（null/空由 UI 显「—」或隐藏）。
  */
-import { ApiError, get, idFromLocation, mockOr, notifyPrincipalInvalid, post, postCreate, toQuery } from '@/api/client';
+import { ApiError, get, idFromLocation, invalidateBootPrefetch, mockOr, notifyPrincipalInvalid, post, postCreate, toQuery } from '@/api/client';
 import { asRec, pickB, pickN, pickS, unwrap, type Rec } from '@/api/live';
 import * as fx2 from '@/mocks/fixtures2';
 import type {
@@ -523,6 +523,11 @@ function qs(q: CatalystFeedQuery): string {
   return s ? `?${s}` : '';
 }
 
+/** feed 请求的 API 相对路径（不含 /api 前缀）。预取必须与真实请求逐字一致，只能从这里生成。 */
+export function feedApiPath(q: CatalystFeedQuery): string {
+  return `/catalysts/feed${qs(q)}`;
+}
+
 
 /* ================= 股票影响汇总（batch results map → 客户端聚合） ================= */
 
@@ -632,9 +637,10 @@ const PUBLIC_BATCH_MAX_LIMIT = 5;
 const READ_CACHE_TTL_MS = 30_000;
 const readCache = new Map<string, { at: number; promise: Promise<unknown> }>();
 
-export function clearCatalystReadCache(): void {
+export function clearCatalystReadCache(options?: { userInitiated?: boolean }): void {
   readCache.clear();
-  notifyCatalystReadsInvalidated();
+  invalidateBootPrefetch();
+  notifyCatalystReadsInvalidated(options);
 }
 
 function cachedFetch<T>(key: string, run: () => Promise<T>, ttlMs: number): Promise<T> {
@@ -715,7 +721,7 @@ export const catalystsContract = {
         return { ...res, hiddenUnanalyzed: res.hiddenUnanalyzed ?? 0 };
       },
       () =>
-        cachedGet(`/catalysts/feed${qs(q)}`).then((d) => {
+        cachedGet(feedApiPath(q)).then((d) => {
           const mapped = unwrap(d, 'items').map(nNewsItem);
           const items = mapped.filter((item) => item.titleZh && item.summaryZh);
           const summary = asRec(asRec(d).summary);
@@ -860,7 +866,7 @@ export const catalystsContract = {
         );
       }
       const { data, location } = await postCreate('/catalysts/market-focus-cycles', body);
-      clearCatalystReadCache();
+      clearCatalystReadCache({ userInitiated: true });
       const rec = asRec(data);
       const locationId = idFromLocation(location);
       const cycle = asRec(rec.cycle);
@@ -952,7 +958,7 @@ export const catalystsContract = {
       () => fx2.createNewsAnalysisJob(newsId, force),
       () =>
         postCreate(`/catalysts/news/${encodeURIComponent(newsId)}/analysis`, { force }).then(({ data, location }) => {
-          clearCatalystReadCache();
+          clearCatalystReadCache({ userInitiated: true });
           const job = nAnalysisJob(data, idFromLocation(location));
           if (!job.jobId) throw new ApiError(502, __t('任务创建响应缺少 job_id'), { payload: data });
           if (!job.newsId) job.newsId = newsId;
@@ -966,7 +972,7 @@ export const catalystsContract = {
   cancelAnalysisJob: (jobId: string): Promise<NewsAnalysisJob> =>
     mockOr(
       () => fx2.cancelNewsAnalysisJob(jobId),
-      () => post(`/catalysts/analysis-jobs/${encodeURIComponent(jobId)}/cancel`, { confirm: true }).then((d) => { clearCatalystReadCache(); return nAnalysisJob(d, jobId); }),
+      () => post(`/catalysts/analysis-jobs/${encodeURIComponent(jobId)}/cancel`, { confirm: true }).then((d) => { clearCatalystReadCache({ userInitiated: true }); return nAnalysisJob(d, jobId); }),
     ),
   /* live 构建里 stripMocks 会把 fx2 的值导出替换成 undefined——这是整个
      contract 里唯一不在 mockOr 里的 fx2 调用，直接调用会在带 ?theme= 的

@@ -10,6 +10,13 @@ import { useShell } from '@/hooks/useShell';
 import { SkeletonBlock, SkeletonText } from '@/components/shared/Skeleton';
 import SoftBadge from '@/components/shared/SoftBadge';
 import { fmtLocaleDateTime, fmtLocaleTime } from '@/lib/format';
+import { getQueryPrincipalGeneration } from '@/api/queryRegistry';
+import {
+  ReadAttemptAborted,
+  createCancellableSleep,
+  runBoundedRead,
+  shouldApplyRecoveryJob,
+} from '@/lib/boundedReadRetry';
 import { catalystsContract } from './api';
 import type { CatalystNewsItem, NewsAnalysisJob, TrustedStockImpact } from './api';
 import { AnalysisStatusChip, ClassificationChip, ConfidenceLabel, ImpactValue, Led, StaleChip, TickerChip } from './bits';
@@ -66,18 +73,41 @@ function JobStepper({ job }: { job: NewsAnalysisJob }) {
   );
 }
 
+/** POST 之后补读的详情不得把刚提交的任务降级：服务端投影若还没带上新任务，保留提交态。 */
+function mergeSubmittedJob(fresh: CatalystNewsItem, submitted: CatalystNewsItem): CatalystNewsItem {
+  if (fresh.analysisJobId === submitted.analysisJobId) return fresh;
+  return { ...fresh, analysisStatus: submitted.analysisStatus, analysisJobId: submitted.analysisJobId };
+}
+
 /* ================= 抽屉主体 ================= */
 interface NewsDrawerProps {
   newsId: string | null;
+  /** 列表或热点已有的同一条，立刻画出真实标题/摘要；详情接口仍会刷新分析区。 */
+  seed?: CatalystNewsItem | null;
   onClose: () => void;
   onUpdate: (item: CatalystNewsItem) => void;
 }
 
-export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProps) {
+export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: NewsDrawerProps) {
   const { isOwner, loading: accessLoading } = useAccess();
   const toast = useToast();
-  const [item, setItem] = useState<CatalystNewsItem | null>(null);
+  const [fetched, setFetched] = useState<CatalystNewsItem | null>(null);
+  const seedMatches = Boolean(newsId && seed?.newsId === newsId && seed.titleZh);
+  const liveItem = fetched && newsId && fetched.newsId === newsId
+    ? fetched
+    : seedMatches && seed
+      ? seed
+      : null;
+  /* 关抽屉（newsId=null）后 Drawer 还要滑出 350ms：这段时间继续画最后一条，
+     派生值不能一夜回到骨架屏。只做展示；提交/轮询/恢复都另看 newsId 与 openNewsRef。 */
+  const [lastShown, setLastShown] = useState<CatalystNewsItem | null>(null);
+  if (liveItem && liveItem !== lastShown) setLastShown(liveItem);
+  const item = liveItem ?? (newsId === null ? lastShown : null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [detailNotice, setDetailNotice] = useState<string | null>(null);
+  const [jobNotice, setJobNotice] = useState<{ text: string; retryable: boolean } | null>(null);
+  const [detailEpoch, setDetailEpoch] = useState(0);
+  const [recoveryEpoch, setRecoveryEpoch] = useState(0);
   const [job, setJob] = useState<NewsAnalysisJob | null>(null);
   const [confirm, setConfirm] = useState<'create' | 'force' | 'cancel' | null>(null);
   const pollRef = useRef<number | null>(null);
@@ -86,9 +116,55 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
   const pollGenRef = useRef(0);
   /* 跟 prop，不跟 item：关抽屉后 item 仍可能留着给退场动画，item.newsId 守卫会继续热。 */
   const openNewsRef = useRef<string | null>(newsId);
+  const itemJobIdRef = useRef<string | null>(null);
+  const jobRef = useRef<NewsAnalysisJob | null>(null);
+  const recoverySeqRef = useRef(0);
+  const recoveryOkRef = useRef('');
+  const detailSeqRef = useRef(0);
+  const detailReadRef = useRef<{ cancel: () => void } | null>(null);
   useEffect(() => {
     openNewsRef.current = newsId;
   }, [newsId]);
+  itemJobIdRef.current = item?.analysisJobId ?? null;
+  jobRef.current = job;
+
+  const invalidateDetailRead = useCallback(() => {
+    detailSeqRef.current += 1;
+    detailReadRef.current?.cancel();
+    detailReadRef.current = null;
+  }, []);
+
+  /* 初始读取、手动重试与两条终态路径共用顺序；新读取开始即作废旧响应及其退避。
+     按请求顺序判断，不按分析状态排序，新的 queued 任务仍可替换旧 completed。 */
+  const beginDetailRead = useCallback((forNews: string, expectedJobId?: string) => {
+    invalidateDetailRead();
+    const sequence = detailSeqRef.current;
+    const sessionGen = getQueryPrincipalGeneration();
+    let disposed = false;
+    const isAlive = () => !disposed && sequence === detailSeqRef.current
+      && openNewsRef.current === forNews && getQueryPrincipalGeneration() === sessionGen
+      && (expectedJobId === undefined || itemJobIdRef.current === expectedJobId);
+    const sleeper = createCancellableSleep({
+      isAlive,
+      setTimeoutFn: (fn, ms) => window.setTimeout(fn, ms),
+      clearTimeoutFn: (id) => window.clearTimeout(id),
+    });
+    const request = {
+      isAlive,
+      read: () => runBoundedRead({
+        read: () => catalystsContract.news(forNews),
+        isAlive,
+        sleep: sleeper.sleep,
+      }),
+      cancel: () => {
+        disposed = true;
+        sleeper.cancel();
+        if (detailReadRef.current === request) detailReadRef.current = null;
+      },
+    };
+    detailReadRef.current = request;
+    return request;
+  }, [invalidateDetailRead]);
 
   const stopPoll = useCallback(() => {
     pollGenRef.current += 1;
@@ -98,52 +174,134 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
     }
   }, []);
 
-  /* 拉取详情 */
+  const retryDetail = useCallback(() => {
+    invalidateDetailRead();
+    setDetailNotice(null);
+    setLoadError(null);
+    setDetailEpoch((value) => value + 1);
+  }, [invalidateDetailRead]);
+
+  const retryRecovery = useCallback(() => {
+    setJobNotice(null);
+    setDetailNotice(null);
+    recoveryOkRef.current = '';
+    setRecoveryEpoch((value) => value + 1);
+  }, []);
+
+  /* 换条时清任务；重试详情不走这里，避免打断已经在跟的任务。 */
   useEffect(() => {
+    invalidateDetailRead();
     if (!newsId) {
       /* 抽屉关闭（newsId=null）时必须停掉分析任务轮询（审计 2.2.17）：
          组件常驻不卸载，不清理的话 setTimeout 会继续以 2s→10s 打后端，
          直到任务终态再弹一条与当前语境无关的 toast。 */
+      /* 错误/提示文案留到滑出结束，换条时才清（下面分支）。 */
       setJob(null);
       stopPoll();
-      return;
+      return invalidateDetailRead;
     }
-    setItem(null);
     setLoadError(null);
+    setDetailNotice(null);
+    setJobNotice(null);
     setJob(null);
     stopPoll();
-    let dead = false;
-    catalystsContract
-      .news(newsId)
-      .then((n) => {
-        if (dead) return;
-        setItem(n);
-        onUpdate(n);
-      })
-      .catch(() => {
-        if (!dead) setLoadError(__t('暂时打不开这条新闻的详情'));
-      });
-    return () => {
-      dead = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [newsId]);
+    return invalidateDetailRead;
+  }, [newsId, stopPoll, invalidateDetailRead]);
 
-  /* 详情含在途任务 → 恢复轮询 */
+  /* 拉取详情：听 Retry-After；401/403/404 与 retryable=false 停；清理取消睡眠。 */
   useEffect(() => {
-    if (!newsId || !item?.analysisJobId || job) return;
+    if (!newsId) return;
+    const forNews = newsId;
+    const keepSeed = Boolean(forNews && seed?.newsId === forNews && seed.titleZh);
+    const request = beginDetailRead(forNews);
+    void (async () => {
+      try {
+        const n = await request.read();
+        if (!request.isAlive()) return;
+        setFetched(n);
+        setDetailNotice(null);
+        setLoadError(null);
+        onUpdate(n);
+      } catch (error) {
+        if (error instanceof ReadAttemptAborted || !request.isAlive()) return;
+        if (keepSeed) setDetailNotice(__t('详情更新失败'));
+        else setLoadError(__t('暂时打不开这条新闻的详情'));
+      } finally {
+        request.cancel();
+      }
+    })();
+    return request.cancel;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [newsId, detailEpoch]);
+
+  /* 详情含在途任务 → 恢复轮询。analysisJobId/状态变化必须换独立 sequence，
+     不能只靠关抽屉才递增的 pollGenRef。首次 503 对同一任务 ID 有界重试，不 POST。 */
+  useEffect(() => {
+    if (!newsId || !item?.analysisJobId) return;
     if (item.analysisStatus !== 'queued' && item.analysisStatus !== 'in_progress') return;
     const forNews = item.newsId;
-    catalystsContract
-      .analysisJob(item.analysisJobId)
-      .then((j) => {
-        // 响应落地时可能已经换了新闻或关了抽屉：旧 job 不得复活轮询 / 污染新条
-        if (openNewsRef.current !== forNews) return;
-        if (!TERMINAL.includes(j.status)) setJob(j);
-      })
-      .catch(() => undefined);
+    const jobId = item.analysisJobId;
+    const recoveryKey = `${forNews}:${jobId}:${recoveryEpoch}`;
+    if (job?.jobId === jobId && recoveryOkRef.current === recoveryKey) return;
+    let disposed = false;
+    const seq = ++recoverySeqRef.current;
+    const sessionGen = getQueryPrincipalGeneration();
+    const sleeper = createCancellableSleep({
+      isAlive: () => !disposed && recoverySeqRef.current === seq
+        && openNewsRef.current === forNews
+        && getQueryPrincipalGeneration() === sessionGen,
+      setTimeoutFn: (fn, ms) => window.setTimeout(fn, ms),
+      clearTimeoutFn: (id) => window.clearTimeout(id),
+    });
+    const isAlive = () => !disposed && recoverySeqRef.current === seq
+      && openNewsRef.current === forNews
+      && getQueryPrincipalGeneration() === sessionGen;
+    void (async () => {
+      try {
+        const j = await runBoundedRead({
+          read: () => {
+            if (!isAlive()) throw new ReadAttemptAborted();
+            return catalystsContract.analysisJob(jobId);
+          },
+          isAlive,
+          sleep: sleeper.sleep,
+        });
+        if (!isAlive() || j.jobId !== jobId) return;
+        if (!shouldApplyRecoveryJob(jobRef.current, j, jobId, itemJobIdRef.current)) return;
+        recoveryOkRef.current = recoveryKey;
+        setJobNotice(null);
+        setJob(j);
+        if (!TERMINAL.includes(j.status)) return;
+        const request = beginDetailRead(forNews, jobId);
+        try {
+          const fresh = await request.read();
+          if (!request.isAlive()) return;
+          setFetched(fresh);
+          setDetailNotice(null);
+          setLoadError(null);
+          onUpdate(fresh);
+        } catch (error) {
+          if (error instanceof ReadAttemptAborted || !request.isAlive()) return;
+          setDetailNotice(__t('详情更新失败'));
+        } finally {
+          request.cancel();
+        }
+      } catch (error) {
+        if (error instanceof ReadAttemptAborted || !isAlive()) return;
+        /* 404 = 任务记录已不在（例如已被清理）：再点重试也只会再 404，不给按钮。 */
+        const gone = (error as { code?: unknown } | null)?.code === 404;
+        setJobNotice(gone
+          ? { text: __t('任务记录已不存在'), retryable: false }
+          : { text: __t('任务状态暂时读不到'), retryable: true });
+      }
+    })();
+    return () => {
+      disposed = true;
+      recoverySeqRef.current += 1;
+      sleeper.cancel();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [newsId, item?.newsId]);
+  }, [newsId, item?.newsId, item?.analysisJobId, item?.analysisStatus, recoveryEpoch]);
 
   /* 轮询任务至终态（退避 2s→3s→5s→8s→10s，总超时 5 分钟） */
   const pollDeadlineRef = useRef<{ jobId: string; at: number } | null>(null);
@@ -182,22 +340,20 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
              必然为假，会把一次瞬时 429 直接吞成永久静默（toast 已喊完成、抽屉却停在
              旧态，复审实锤）。有界三次、1.5s/3s 退避；抽屉已关或已换条就放弃。 */
           const refreshItem = async () => {
-            const waits = [1_500, 3_000];
-            for (let attempt = 0; ; attempt += 1) {
-              try {
-                const fresh = await catalystsContract.news(job.newsId);
-                if (!sameNews()) return;
-                setItem(fresh);
-                onUpdate(fresh);
-                return;
-              } catch (error) {
-                if (!sameNews()) return;
-                if (attempt >= waits.length) {
-                  toast.error(__t('任务查询失败'), error instanceof Error ? error.message : __t('稍后刷新页面可继续查看结果'));
-                  return;
-                }
-                await new Promise((resolve) => window.setTimeout(resolve, waits[attempt]));
-              }
+            const request = beginDetailRead(job.newsId, job.jobId);
+            try {
+              const fresh = await request.read();
+              if (!request.isAlive()) return;
+              setFetched(fresh);
+              setDetailNotice(null);
+              setLoadError(null);
+              onUpdate(fresh);
+            } catch (error) {
+              if (error instanceof ReadAttemptAborted || !request.isAlive()) return;
+              setDetailNotice(__t('详情更新失败'));
+              toast.error(__t('任务查询失败'), error instanceof Error ? error.message : __t('稍后刷新页面可继续查看结果'));
+            } finally {
+              request.cancel();
             }
           };
           if (next.status === 'completed') {
@@ -241,19 +397,45 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
       submittingRef.current = true;
       setConfirm(null);
       try {
-        const j = await catalystsContract.createAnalysisJob(item.newsId, force);
+        const forNews = item.newsId;
+        // 提交前详情还没到、抽屉在用列表 seed：作废的初次读取要补回来。
+        const onSeed = !fetched || fetched.newsId !== forNews;
+        const j = await catalystsContract.createAnalysisJob(forNews, force);
+        invalidateDetailRead();
         setJob(j);
         const nextItem = { ...item, analysisStatus: (j.status === 'queued' ? 'queued' : 'in_progress') as CatalystNewsItem['analysisStatus'], analysisJobId: j.jobId };
-        setItem(nextItem);
+        setFetched(nextItem);
         onUpdate(nextItem);
         toast.info(__t('分析任务已提交'), force ? __t('强制重新分析') : __t('可在本页查看进度'));
+        if (onSeed) {
+          /* 读缓存已被 createAnalysisJob 清掉；读取绑定新任务 id，换条/换任务即作废。
+             合并时不降级任务态：详情投影若还没带上新任务，仍按刚提交的任务显示。 */
+          itemJobIdRef.current = j.jobId;
+          const request = beginDetailRead(forNews, j.jobId);
+          void (async () => {
+            try {
+              const fresh = await request.read();
+              if (!request.isAlive()) return;
+              const merged = mergeSubmittedJob(fresh, nextItem);
+              setFetched(merged);
+              setDetailNotice(null);
+              setLoadError(null);
+              onUpdate(merged);
+            } catch (error) {
+              if (error instanceof ReadAttemptAborted || !request.isAlive()) return;
+              setDetailNotice(__t('详情更新失败'));
+            } finally {
+              request.cancel();
+            }
+          })();
+        }
       } catch (e) {
         toast.error(__t('提交失败'), e instanceof Error ? e.message : undefined);
       } finally {
         submittingRef.current = false;
       }
     },
-    [item, onUpdate, toast],
+    [item, fetched, onUpdate, toast, invalidateDetailRead, beginDetailRead],
   );
 
   const cancelJob = useCallback(async () => {
@@ -304,6 +486,7 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
           </span>
           <h3 className="mt-4 text-h3 text-ink-800">{__t('详情不可用')}</h3>
           <p className="mt-1.5 text-body-s text-ink-500">{loadError} {__t('· 列表摘要仍然有效')}</p>
+          <button type="button" className="control-button mt-4" onClick={retryDetail}>{__t('重试')}</button>
         </div>
       )}
       {item && (
@@ -330,6 +513,12 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
 
           {/* 标题 */}
           <h2 className="mt-3 font-display text-[22px] leading-[30px] font-semibold text-ink-900">{item.titleZh}</h2>
+          {detailNotice && (
+            <p className="mt-3 flex flex-wrap items-center gap-2 text-caption text-ink-500" role="status">
+              <span>{detailNotice}</span>
+              <button type="button" className="control-button" onClick={retryDetail}>{__t('重试')}</button>
+            </p>
+          )}
 
           {/* 摘要（serif 引文排版） */}
           <blockquote className="mt-4 border-l-[3px] border-line-strong pl-4">
@@ -353,6 +542,14 @@ export default function NewsDrawer({ newsId, onClose, onUpdate }: NewsDrawerProp
               </p>
               <AnalysisStatusChip status={running ? (job.status === 'queued' ? 'queued' : 'in_progress') : item.analysisStatus} />
             </div>
+            {jobNotice && (
+              <p className="mt-3 flex flex-wrap items-center gap-2 text-caption text-ink-500" role="status">
+                <span>{jobNotice.text}</span>
+                {jobNotice.retryable && (
+                  <button type="button" className="control-button" onClick={retryRecovery}>{__t('重试')}</button>
+                )}
+              </p>
+            )}
 
             {/* 任务进行中 */}
             <AnimatePresence initial={false}>

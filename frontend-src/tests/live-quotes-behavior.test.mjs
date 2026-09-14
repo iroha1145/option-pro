@@ -24,7 +24,7 @@ function harness() {
   const store = new exports.QuoteStore({
     async fetch(url, init) {
       requests.push({ url, init }); const response = await responder(url, init);
-      return { ok: response.status === 200, status: response.status, json: async () => {
+      return { ok: response.status === 200, status: response.status, headers: response.headers, json: async () => {
         if (response.jsonError) throw new SyntaxError('Invalid proxy JSON');
         return response.body;
       } };
@@ -471,6 +471,83 @@ test('one-symbol delta leaves unchanged quotes and listeners untouched', async (
   assert.equal(h.store.getQuote('MSFT'), old);
   assert.equal(changes, 0);
   h.store.stop();
+});
+
+test('start without stream snapshots immediately and enableStream opens EventSource later', async () => {
+  const h = harness();
+  h.store.register(['AAPL']);
+  h.store.start(false, { stream: false });
+  await h.tick(300);
+  assert.equal(h.streams.length, 0);
+  assert.ok(h.requests.some(row => String(row.url).startsWith('/api/quotes')));
+  assert.equal(h.store.getQuote('AAPL').price, 100);
+  h.store.enableStream();
+  await h.tick(300);
+  assert.equal(h.streams.length, 1);
+  h.store.stop();
+});
+
+test('denied snapshot with deferred stream probes once and never opens EventSource', async () => {
+  const h = harness();
+  h.respond(async () => ({ status: 200, body: { quotes: [], status: { ...enabled, allowed: false } } }));
+  h.store.start(false, { stream: false });
+  await h.tick(300);
+  assert.equal(h.requests.length, 1);
+  assert.equal(h.streams.length, 0);
+  h.store.enableStream();
+  await h.tick(300);
+  assert.equal(h.requests.length, 1);
+  assert.equal(h.streams.length, 0);
+  h.store.stop();
+});
+
+test('enabling the deferred stream preserves a pending Retry-After deadline', async () => {
+  for (const status of [429, 503]) {
+    const h = harness();
+    let calls = 0;
+    h.respond(async () => ++calls === 1
+      ? { status, headers: { get: name => name === 'Retry-After' ? '60' : null } }
+      : { status: 200, body: { quotes: [], status: enabled } });
+    h.store.start(false, { stream: false });
+    await h.tick(2500);
+    assert.equal(h.requests.length, 1);
+    h.store.enableStream();
+    h.store.enableStream();
+    await h.tick(57_499);
+    assert.equal(h.requests.length, 1, `${status}: do not retry before the server deadline`);
+    assert.equal(h.streams.length, 0);
+    await h.tick(1);
+    assert.equal(h.requests.length, 3, 'retry the permission probe and then load its price snapshot');
+    assert.equal(h.streams.length, 1);
+    h.store.stop();
+  }
+});
+
+test('enabling the deferred stream lets an in-flight probe or price snapshot finish', async () => {
+  for (const delayedCall of [1, 2]) {
+    const h = harness();
+    let calls = 0;
+    let complete;
+    h.respond(async () => {
+      if (++calls === delayedCall) await new Promise(resolve => { complete = resolve; });
+      return { status: 200, body: { quotes: [quote('AAPL', 100)], status: enabled } };
+    });
+    h.store.register(['AAPL']);
+    h.store.start(false, { stream: false });
+    await h.tick(2500);
+    assert.equal(h.requests.length, delayedCall);
+    const pending = h.requests.at(-1);
+    h.store.enableStream();
+    await h.tick(100);
+    assert.equal(pending.init.signal.aborted, false, 'the current snapshot must not be restarted');
+    assert.equal(h.requests.length, delayedCall);
+    complete();
+    await h.tick(300);
+    assert.equal(h.requests.length, 2);
+    assert.equal(h.streams.length, 1);
+    assert.equal(h.store.getQuote('AAPL').price, 100);
+    h.store.stop();
+  }
 });
 
 test('new over-limit consumers get fallback state without reopening the unchanged stream', async () => {

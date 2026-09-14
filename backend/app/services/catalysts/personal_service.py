@@ -1147,15 +1147,11 @@ class PersonalCatalystService:
     ) -> dict[str, Any]:
         include_owner_state = self._resolve_owner_state(include_owner_state)
         observed = kwargs.get("as_of") or _utc_now()
-        status = self.status(
-            now=observed,
-            include_owner_state=include_owner_state,
-        )
-        if status["status"] in {"disabled", "unavailable"}:
+        if self.mode == "off" or not self._cache_file_ready():
             payload = {
-                "status": status["status"],
-                "as_of": status["as_of"],
-                "data_through": status.get("data_through"),
+                "status": "disabled" if self.mode == "off" else "unavailable",
+                "as_of": _iso(observed),
+                "data_through": None,
                 "items": [],
                 "summary": {
                     "news_6h": None,
@@ -1171,9 +1167,12 @@ class PersonalCatalystService:
                 "next_cursor": None,
                 "has_more": False,
                 "hidden_unanalyzed": 0,
-                "warnings": status.get("warnings", []),
+                "warnings": [] if self.mode == "off" else ["cache_unavailable"],
             }
-            payload["analysis_availability"] = status["analysis_availability"]
+            payload["analysis_availability"] = self._analysis_availability_for_access(
+                include_owner_state=include_owner_state,
+                now=observed,
+            )
             return payload
         try:
             payload = self.intelligence.feed(**kwargs)
@@ -1283,7 +1282,10 @@ class PersonalCatalystService:
         projected["hidden_unanalyzed"] = max(0, len(matched) - len(visible))
         if not projected["items"] and not projected.get("has_more"):
             projected["status"] = "empty"
-        projected["analysis_availability"] = status["analysis_availability"]
+        projected["analysis_availability"] = self._analysis_availability_for_access(
+            include_owner_state=include_owner_state,
+            now=observed,
+        )
         return projected
 
     def news(

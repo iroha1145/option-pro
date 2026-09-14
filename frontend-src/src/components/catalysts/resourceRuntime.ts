@@ -16,8 +16,8 @@ const visible = () => typeof document !== 'undefined' && document.visibilityStat
 
 // Manual refresh / completed writes invalidate values AND in-flight generations.
 // Retain the displayed snapshot; revalidation failure must not erase useful data.
-onCatalystReadsInvalidated(() => {
-  catalystResources.invalidate();
+onCatalystReadsInvalidated((options) => {
+  catalystResources.invalidate(options);
   if (visible()) queueMicrotask(() => catalystResources.tick());
 });
 

@@ -25,6 +25,7 @@ import SignalsReading, { type TrendBias } from '@/components/market/SignalsReadi
 import BreadthHistogram from '@/components/market/BreadthHistogram';
 import LinkCards from '@/components/market/LinkCards';
 import MacroConditionsPanel from '@/components/market/macro/MacroConditionsPanel';
+import { pageRegionProps } from '@/lib/pageRegion';
 import { t } from '../i18n/core.ts';
 
 const MARKET_TO_SESSION: Record<string, MarketSession> = {
@@ -105,7 +106,20 @@ export default function Market() {
       />
 
       {/* B1 指数概览 */}
-      <section className="mt-6" aria-label={t("指数概览")}>
+      <section
+        className="mt-6"
+        aria-label={t("指数概览")}
+        {...pageRegionProps(
+          'market-indices',
+          indicesQ.loading
+            ? 'loading'
+            : indicesQ.error
+              ? 'error'
+              : !indicesQ.data?.length
+                ? 'empty'
+                : 'content',
+        )}
+      >
         <p className="eyebrow mb-3">{t('指数概览 · INDEX OVERVIEW（延迟行情）')}</p>
         <IndexCards
           data={indicesQ.data}

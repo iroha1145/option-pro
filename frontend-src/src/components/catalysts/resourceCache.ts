@@ -36,6 +36,8 @@ interface Entry<T> {
   lastUsed: number;
   retryAt: number;
   failures: number;
+  /** 服务端 Retry-After 到期时刻；用户刷新可跳过本地退避，但不能跳过它。 */
+  serverRetryAt: number;
 }
 const empty = <T>(): ResourceSnapshot<T> => ({
   data: null, error: null, refreshing: false, validatedAt: 0, restored: false,
@@ -61,7 +63,7 @@ export class ResourceCache {
     if (!entry) {
       entry = { key, policy, snapshot: empty<T>(), listeners: new Set(),
         generation: 0, pending: null, hydrated: false, stale: false,
-        lastUsed: this.now(), retryAt: 0, failures: 0 };
+        lastUsed: this.now(), retryAt: 0, failures: 0, serverRetryAt: 0 };
       this.entries.set(key, entry as Entry<unknown>);
     }
     entry.policy = policy;
@@ -161,6 +163,7 @@ export class ResourceCache {
         entry.stale = false;
         entry.failures = 0;
         entry.retryAt = 0;
+        entry.serverRetryAt = 0;
         this.publish(entry, { data: unchanged ? entry.snapshot.data : data,
           error: null, refreshing: false, validatedAt: at, restored: false });
         void this.persistence?.write({ key, data: entry.snapshot.data,
@@ -171,7 +174,9 @@ export class ResourceCache {
         const retryAfter = (error as { retryAfter?: unknown } | null)?.retryAfter;
         const serverDelay = typeof retryAfter === 'number' && Number.isFinite(retryAfter)
           ? Math.max(0, retryAfter) * 1000 : 0;
-        entry.retryAt = this.now() + Math.max(serverDelay, Math.min(300_000, 15_000 * 2 ** Math.min(5, entry.failures - 1)));
+        const failedAt = this.now();
+        entry.serverRetryAt = serverDelay > 0 ? failedAt + serverDelay : 0;
+        entry.retryAt = failedAt + Math.max(serverDelay, Math.min(300_000, 15_000 * 2 ** Math.min(5, entry.failures - 1)));
         this.publish(entry, { ...entry.snapshot, error, refreshing: false });
       }
     };
@@ -185,12 +190,18 @@ export class ResourceCache {
   }
 
   /** Invalidate old responses too; an in-flight pre-write response cannot win. */
-  invalidate(): void {
+  invalidate(options?: { userInitiated?: boolean }): void {
     for (const entry of this.entries.values()) {
       entry.generation += 1;
       entry.pending = null;
       entry.stale = true;
       // Background hints must not cancel a server or failure-backoff deadline.
+      // A header 刷新 / 重试 is the user asking to try now; keep the last snapshot.
+      // It may skip the local backoff, never a Retry-After the server imposed.
+      if (options?.userInitiated) {
+        entry.retryAt = entry.serverRetryAt;
+        entry.failures = 0;
+      }
       if (entry.snapshot.refreshing) this.publish(entry, { ...entry.snapshot, refreshing: false });
     }
   }

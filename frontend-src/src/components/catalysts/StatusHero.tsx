@@ -1,6 +1,7 @@
 import AnalysisIcon from '@/components/shared/AnalysisIcon';
 /** 状态 hero：数据源状态 / 热点计算 / 分析可用性 / 今日新闻（真实契约口径，不可用原因如实标注） */
 import { motion } from 'framer-motion';
+import { useEffect, useState } from 'react';
 import { usePolling } from '@/hooks/usePolling';
 import { remoteState } from '@/hooks/remoteState';
 import { catalystsContract } from './api';
@@ -9,6 +10,7 @@ import SourceNote from '@/components/shared/SourceNote';
 import SoftBadge from '@/components/shared/SoftBadge';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
 import { fmtRelative } from '@/lib/format';
+import { afterLoadIdle } from '@/lib/afterLoadIdle';
 import { DUR_SECTION } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import Icon from '@/components/icons';
@@ -42,11 +44,23 @@ const ANALYSIS_REASON_CN: Record<string, { label: string; tone: 'muted' | 'down'
   catalyst_disabled: { label: t('催化剂模块未启用'), tone: 'down' },
 };
 
-export default function StatusHero({ refreshToken = 0 }: { refreshToken?: number }) {
+export default function StatusHero({ refreshToken = 0, feedSettled = false }: { refreshToken?: number; feedSettled?: boolean }) {
   /* refreshToken 参与依赖：页头「刷新」必须真的刷新这一栏（审计 P2-21）。 */
   const statusQ = usePolling(() => catalystsContract.status(), 45_000, [refreshToken]);
   const hotStatusQ = usePolling(() => catalystsContract.hotspotsStatus(), 45_000, [refreshToken]);
-  const newsQ = usePolling(() => catalystsContract.newsToday(), 120_000, [refreshToken]);
+  /* 今日计数走完整 24h feed 汇总，与列表 72h/12 不是同一请求。
+     首屏先让 FeedPanel 占用连接：feed 首页落地（成功或失败）就拉，否则 load 后
+     固定延迟兜底；站内切换命中缓存时不必干等。数字口径不变。 */
+  const [newsTodayEnabled, setNewsTodayEnabled] = useState(false);
+  useEffect(() => {
+    if (refreshToken > 0) {
+      return;
+    }
+    return afterLoadIdle(() => setNewsTodayEnabled(true), 3500);
+  }, [refreshToken]);
+  const newsQ = usePolling(() => catalystsContract.newsToday(), 120_000, [refreshToken], {
+    enabled: refreshToken > 0 || newsTodayEnabled || feedSettled,
+  });
 
   const s = statusQ.data;
   const hs = hotStatusQ.data;

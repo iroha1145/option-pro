@@ -19,6 +19,7 @@ import Icon from '@/components/icons';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
 import CtaOverviewStrip from '@/components/cta/CtaOverviewStrip';
 import CtaDeepDive from '@/components/cta/CtaDeepDive';
+import { pageRegionProps } from '@/lib/pageRegion';
 import { t } from '../i18n/core.ts';
 
 export default function CtaTrend() {
@@ -73,18 +74,18 @@ export default function CtaTrend() {
       />
 
       {ctaQ.loading && !ctaQ.data ? (
-        <div className="mt-6 space-y-4" aria-hidden="true">
+        <div className="mt-6 space-y-4" aria-hidden="true" {...pageRegionProps('cta', 'loading')}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {[0, 1, 2, 3].map((i) => <SkeletonBlock key={i} className="h-36 w-full" />)}
           </div>
           <SkeletonBlock className="h-72 w-full" />
         </div>
       ) : snapshotMissing ? (
-        <p className="mt-6 rounded-md border border-line bg-card-warm px-3 py-4 text-caption text-ink-500">
+        <p className="mt-6 rounded-md border border-line bg-card-warm px-3 py-4 text-caption text-ink-500" {...pageRegionProps('cta', 'empty')}>
           {t('CTA 估算尚未生成，首次计算完成后自动显示')}
         </p>
       ) : ctaQ.error && !ctaQ.data ? (
-        <div className="card-surface mt-6">
+        <div className="card-surface mt-6" {...pageRegionProps('cta', 'error')}>
           <EmptyState
             variant="error"
             title={t('CTA 估算读取失败')}
@@ -102,11 +103,11 @@ export default function CtaTrend() {
           />
         </div>
       ) : !row || !ctaQ.data ? (
-        <div className="card-surface mt-6">
+        <div className="card-surface mt-6" {...pageRegionProps('cta', 'empty')}>
           <EmptyState title={t('暂无数据')} />
         </div>
       ) : (
-        <>
+        <div {...pageRegionProps('cta', 'content')}>
           {/* 有旧快照时刷新失败 → 明示陈旧，不清空页面（与首页同一纪律） */}
           {ctaQ.error && (
             <StaleStrip onRetry={() => ctaQ.refresh()} refreshing={ctaQ.refreshing} className="mt-6" />
@@ -132,7 +133,7 @@ export default function CtaTrend() {
               />
             </div>
           </section>
-        </>
+        </div>
       )}
     </div>
   );

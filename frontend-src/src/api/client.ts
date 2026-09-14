@@ -7,7 +7,7 @@
  */
 
 import { t } from '../i18n/core.ts';
-import { apiHeaders, fetchBuffered, parseRetryAfter, ResponseLimitError, TransportTimeoutError } from './transport.ts';
+import { apiHeaders, bufferExistingResponse, fetchBuffered, MAX_RESPONSE_BYTES, parseRetryAfter, ResponseLimitError, TransportTimeoutError } from './transport.ts';
 export type ApiMode = 'mock' | 'live';
 
 export const API_MODE: ApiMode =
@@ -112,23 +112,266 @@ export interface RequestOptions extends RequestInit {
   acceptNotModified?: boolean;
 }
 
+/** 与催化读缓存同一 TTL：展开筛选后未点的时间窗不能无限占着。 */
+export const PREFETCH_TTL_MS = 30_000;
+export const PREFETCH_MAX_ENTRIES = 8;
+
+type PrefetchSlot = {
+  promise: Promise<Response>;
+  createdAt: number;
+  generation: number;
+  controller: AbortController | null;
+};
+
+type BootPrefetchBag = Record<string, PrefetchSlot | Promise<Response>>;
+
+function bootPrefetchRoot(): { __OPTIX_PREFETCH__?: BootPrefetchBag } {
+  return globalThis as typeof globalThis & { __OPTIX_PREFETCH__?: BootPrefetchBag };
+}
+
+let prefetchGeneration = 0;
+
+export function prefetchGenerationId(): number {
+  return prefetchGeneration;
+}
+
+function isPromiseLike(value: unknown): value is Promise<Response> {
+  return typeof value === 'object' && value !== null && typeof (value as Promise<Response>).then === 'function';
+}
+
+function adoptSlot(url: string, value: PrefetchSlot | Promise<Response> | undefined): PrefetchSlot | undefined {
+  if (!value) return undefined;
+  if (isPromiseLike(value)) {
+    const slot: PrefetchSlot = {
+      promise: value,
+      createdAt: Date.now(),
+      generation: prefetchGeneration,
+      controller: null,
+    };
+    const bag = bootPrefetchRoot().__OPTIX_PREFETCH__;
+    if (bag) bag[url] = slot;
+    void value.catch(() => {
+      if (bag && bag[url] === slot) delete bag[url];
+    });
+    return slot;
+  }
+  if (isPromiseLike(value.promise)) return value;
+  return undefined;
+}
+
+function discardSlot(slot: PrefetchSlot | undefined, reason?: unknown): void {
+  if (!slot) return;
+  slot.controller?.abort(reason);
+  void slot.promise.then(
+    (response) => { void response.body?.cancel(reason).catch(() => {}); },
+    () => {},
+  );
+}
+
+function slotUsable(slot: PrefetchSlot, now = Date.now()): boolean {
+  return slot.generation === prefetchGeneration && now - slot.createdAt <= PREFETCH_TTL_MS;
+}
+
+function adoptBag(): BootPrefetchBag {
+  const root = bootPrefetchRoot();
+  if (!root.__OPTIX_PREFETCH__) root.__OPTIX_PREFETCH__ = Object.create(null) as BootPrefetchBag;
+  const bag = root.__OPTIX_PREFETCH__;
+  for (const url of Object.keys(bag)) {
+    const slot = adoptSlot(url, bag[url]);
+    if (!slot) delete bag[url];
+  }
+  return bag;
+}
+
+function pruneBootPrefetch(now = Date.now()): void {
+  const bag = bootPrefetchRoot().__OPTIX_PREFETCH__;
+  if (!bag) return;
+  for (const url of Object.keys(bag)) {
+    const slot = adoptSlot(url, bag[url]);
+    if (!slot || slotUsable(slot, now)) continue;
+    delete bag[url];
+    discardSlot(slot);
+  }
+}
+
+function evictOldestPrefetch(bag: BootPrefetchBag): void {
+  const rows = Object.entries(bag)
+    .map(([url, value]) => ({ url, slot: adoptSlot(url, value) }))
+    .filter((row): row is { url: string; slot: PrefetchSlot } => !!row.slot)
+    .sort((a, b) => a.slot.createdAt - b.slot.createdAt);
+  const overflow = rows.length - PREFETCH_MAX_ENTRIES;
+  for (let i = 0; i < overflow; i += 1) {
+    const row = rows[i];
+    delete bag[row.url];
+    discardSlot(row.slot);
+  }
+}
+
+/** 登录、登出、刷新与业务作废必须整袋换代：只删 key 挡不住晚到的旧响应再被消费。 */
+export function invalidateBootPrefetch(): void {
+  prefetchGeneration += 1;
+  const bag = bootPrefetchRoot().__OPTIX_PREFETCH__;
+  if (!bag) return;
+  for (const url of Object.keys(bag)) {
+    const slot = adoptSlot(url, bag[url]);
+    delete bag[url];
+    discardSlot(slot);
+  }
+}
+
+export function resetBootPrefetchForTests(): void {
+  prefetchGeneration = 0;
+  delete bootPrefetchRoot().__OPTIX_PREFETCH__;
+}
+
+/** 把一次已发出的同源 GET 放进启动预取袋，供随后的 requestRaw 按完整 URL 消费。 */
+export function offerBootPrefetch(url: string): void {
+  if (typeof fetch !== 'function') return;
+  pruneBootPrefetch();
+  const bag = adoptBag();
+  const existing = adoptSlot(url, bag[url]);
+  if (existing && slotUsable(existing)) return;
+  if (existing) {
+    delete bag[url];
+    discardSlot(existing);
+  }
+  const controller = new AbortController();
+  const promise = fetch(url, { credentials: 'include', redirect: 'error', signal: controller.signal });
+  const slot: PrefetchSlot = {
+    promise,
+    createdAt: Date.now(),
+    generation: prefetchGeneration,
+    controller,
+  };
+  bag[url] = slot;
+  void promise.catch(() => {
+    if (bag[url] === slot) delete bag[url];
+  });
+  evictOldestPrefetch(bag);
+}
+
+function takeBootPrefetch(url: string): PrefetchSlot | undefined {
+  pruneBootPrefetch();
+  const bag = bootPrefetchRoot().__OPTIX_PREFETCH__;
+  if (!bag || !Object.prototype.hasOwnProperty.call(bag, url)) return undefined;
+  const slot = adoptSlot(url, bag[url]);
+  delete bag[url];
+  if (!slot || !slotUsable(slot)) {
+    discardSlot(slot);
+    return undefined;
+  }
+  return slot;
+}
+
+/** theme-boot 在主包解析前发出的同源 GET；按完整 URL 消费一次，避免重复打同一接口。 */
+export function consumeBootPrefetch(url: string): Promise<Response> | undefined {
+  return takeBootPrefetch(url)?.promise;
+}
+
+async function consumeBufferedPrefetch(
+  slot: PrefetchSlot,
+  budget: number,
+  signal?: AbortSignal,
+): Promise<Response> {
+  const started = Date.now();
+  let headers: Response;
+  try {
+    headers = await awaitWithBudget(slot.promise, budget, signal);
+  } catch (error) {
+    discardSlot(slot, error);
+    throw error;
+  }
+  if (slot.generation !== prefetchGeneration) {
+    void headers.body?.cancel().catch(() => {});
+    throw new TypeError('prefetch retired');
+  }
+  const remaining = budget <= 0 ? 0 : Math.max(0, budget - (Date.now() - started));
+  if (budget > 0 && remaining <= 0) {
+    void headers.body?.cancel().catch(() => {});
+    throw new TransportTimeoutError();
+  }
+  const response = await bufferExistingResponse(headers, remaining, MAX_RESPONSE_BYTES, signal);
+  if (slot.generation !== prefetchGeneration) {
+    void response.body?.cancel().catch(() => {});
+    throw new TypeError('prefetch retired');
+  }
+  return response;
+}
+
+function awaitWithBudget<T>(promise: Promise<T>, budget: number, signal?: AbortSignal): Promise<T> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const finish = (apply: () => void) => {
+      if (settled) return;
+      settled = true;
+      if (timer !== undefined) clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+      apply();
+    };
+    const onAbort = () => {
+      finish(() => reject(signal?.reason ?? new DOMException('Aborted', 'AbortError')));
+    };
+    if (signal) {
+      if (signal.aborted) {
+        onAbort();
+        return;
+      }
+      signal.addEventListener('abort', onAbort);
+    }
+    if (budget > 0) {
+      timer = setTimeout(() => finish(() => reject(new TransportTimeoutError())), budget);
+    }
+    promise.then(
+      (value) => finish(() => resolve(value)),
+      (error) => finish(() => reject(error)),
+    );
+  });
+}
+
 /** live 模式请求（返回原始 Response 供需要读头的场景，如 202 Location） */
 export async function requestRaw(path: string, init?: RequestOptions): Promise<Response> {
   const method = (init?.method ?? 'GET').toUpperCase();
   const isWrite = method !== 'GET' && method !== 'HEAD';
   const { timeoutMs, acceptNotModified, signal: callerSignal, ...rest } = init ?? {};
   const budget = timeoutMs ?? REQUEST_TIMEOUT_MS;
-  let res: Response;
+  const url = `${BASE}${path}`;
+  let res: Response | undefined;
+  const boot = !isWrite ? takeBootPrefetch(url) : undefined;
   try {
+    if (boot) {
+      try {
+        res = await consumeBufferedPrefetch(boot, budget, callerSignal ?? undefined);
+      } catch (error) {
+        if (error instanceof TransportTimeoutError) {
+          throw new ApiError(408, t('请求超时，请重试'), {
+            bizCode: 'request_timeout',
+            retryable: true,
+          });
+        }
+        if (error instanceof ResponseLimitError) {
+          throw new ApiError(502, t('请求失败'), {
+            bizCode: 'response_too_large',
+            retryable: false,
+          });
+        }
+        if (error && typeof error === 'object' && (error as { name?: string }).name === 'AbortError') {
+          throw error;
+        }
+        // 启动预取失败时回退到正常请求，不把一次 boot 失败当成业务错误。
+      }
+    }
     // This API adapter is JSON/non-streaming. Keep the deadline alive until
     // the complete body has arrived, including unsuccessful proxy responses.
-    res = await fetchBuffered(`${BASE}${path}`, {
-      ...rest,
-      credentials: 'include',
-      redirect: 'error',
-      signal: callerSignal,
-      headers: apiHeaders(init?.headers, isWrite),
-    }, budget);
+    if (!res) {
+      res = await fetchBuffered(url, {
+        ...rest,
+        credentials: 'include',
+        redirect: 'error',
+        signal: callerSignal,
+        headers: apiHeaders(init?.headers, isWrite),
+      }, budget);
+    }
   } catch (error) {
     if (error instanceof TransportTimeoutError) {
       throw new ApiError(408, t('请求超时，请重试'), {

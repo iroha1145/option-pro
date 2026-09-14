@@ -182,6 +182,8 @@ export const EARNINGS: Dict = {
   'AI 处理中': ["AI processing", "AI 処理中"],
   'AI 暂不可用': ["AI unavailable", "AI 利用不可"],
   'AI 未开启': ["AI off", "AI オフ"],
+  'AI 确认中': ["Checking AI", "AI 確認中"],
+  'AI 状态确认中': ["Checking AI status", "AI 状態を確認中"],
   '刷新失败 · 显示已有数据': ["Refresh failed · showing existing data", "更新失敗 · 既存データを表示"],
   '手动刷新财报日历': ["Manually refresh the earnings calendar", "決算カレンダーを手動更新"],
   '刷新中': ["Refreshing", "更新中"],

@@ -267,6 +267,8 @@ function accessHarness() {
   const runner = reactRunner(), h = registryHarness(), statuses = [], logins = [], registrations = [], ownerLogouts = [], customerLogouts = [];
   const status = { role: 'visitor', accountUsername: null, aiEnabled: false, aiAvailable: false, aiReason: 'owner_login_required' };
   const accessApi = {
+    identity: () => { const d = deferred(); statuses.push(d); return d.promise; },
+    enrichOwnerCapabilities: async (next) => next,
     status: () => { const d = deferred(); statuses.push(d); return d.promise; },
     login: () => { const d = deferred(); logins.push(d); return d.promise; },
     register: () => { const d = deferred(); registrations.push(d); return d.promise; },
@@ -351,24 +353,30 @@ test('failed credential write restores the original customer only after a curren
   h.unmount();
 });
 
-test('quote connections retire on credential transition and reconnect only after confirmation', () => {
+test('quote connections retire on credential transition and reconnect only after confirmation', async () => {
   const runner = reactRunner(), env = environment(), starts = [];
   let stops = 0;
   let access = { isOwner: true, username: null, loading: false, hasConfirmedIdentity: true, identityUnavailable: false };
   const { default: QuoteConnection } = load('components/QuoteConnection.tsx', {
     react: runner.React, '@/api/client': { isMock: false }, '@/hooks/useAccess': { useAccess: () => access },
-    '@/lib/liveQuotes': { quoteStore: { setVisible() {}, start: owner => { starts.push(owner); return () => { stops++; }; } } },
+    '@/lib/afterLoadIdle': { afterLoadIdle: (run) => { run(); return () => {}; } },
+    '@/lib/liveQuotes': { quoteStore: { setVisible() {}, enableStream() {}, start: owner => { starts.push(owner); return () => { stops++; }; } } },
   }, env);
   runner.mount(QuoteConnection);
+  await new Promise((resolve) => setTimeout(resolve, 0));
   assert.deepEqual(starts, [true]);
   access = { ...access, hasConfirmedIdentity: false, identityUnavailable: true }; runner.mount(QuoteConnection);
+  await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(stops, 1);
   // A retained owner bit alone is insufficient even if an unrelated error flag clears.
   access = { ...access, identityUnavailable: false }; runner.mount(QuoteConnection);
+  await new Promise((resolve) => setTimeout(resolve, 0));
   assert.deepEqual(starts, [true]);
   access = { ...access, hasConfirmedIdentity: true, isOwner: false }; runner.mount(QuoteConnection);
+  await new Promise((resolve) => setTimeout(resolve, 0));
   assert.deepEqual(starts, [true, false]);
   access = { ...access, identityUnavailable: true }; runner.mount(QuoteConnection);
+  await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(stops, 2, 'ordinary identity outages keep their existing stop-stream behavior');
   runner.unmount();
 });
@@ -440,7 +448,8 @@ test('route content changes identity only for pathname or principal, not a same-
     react: runner.React, 'react/jsx-runtime': jsx,
     'react-router': { Outlet: 'outlet', useLocation: () => ({ pathname }), useNavigate: () => () => {}, useNavigationType: () => 'POP' },
     '@/hooks/useAccess': { useAccess: () => identity }, '@/hooks/useShell': { ShellContext: { Provider: 'shell' } },
-    '@/lib/recentTickers': { pushRecent() {} }, '@/api/client': { isMock: false }, '../i18n/core.ts': translate,
+    '@/lib/recentTickers': { pushRecent() {} }, '@/lib/afterLoadIdle': { afterLoadIdle: () => () => {} },
+    '@/api/client': { isMock: false }, '../i18n/core.ts': translate,
   });
   const { default: Layout } = load('components/Layout.tsx', imports, env);
   const read = runner.mount(Layout);

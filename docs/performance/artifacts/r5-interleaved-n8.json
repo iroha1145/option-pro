@@ -1,0 +1,552 @@
+{
+  "lab": true,
+  "interleaved": true,
+  "notRUM": true,
+  "profile": "mobile-ref",
+  "optBase": "http://127.0.0.1:2000",
+  "unoptBase": "http://127.0.0.1:2001",
+  "measuredAt": "2026-09-14T03:14:27.204Z",
+  "pairs": 8,
+  "summary": {
+    "opt": {
+      "cold": {
+        "n": 8,
+        "ready_n": 8,
+        "news_content_ready_p50": 1665.1000000014901,
+        "news_content_ready_p75": 1673.5999999977648,
+        "lcp_p75": 1572,
+        "titles": [
+          "第9600条快讯"
+        ],
+        "rate_limited_n": 0
+      },
+      "warm": {
+        "n": 8,
+        "ready_n": 8,
+        "news_content_ready_p50": 849.5,
+        "news_content_ready_p75": 853.1000000014901,
+        "lcp_p75": 788,
+        "titles": [
+          "第9600条快讯"
+        ],
+        "rate_limited_n": 0
+      }
+    },
+    "unopt": {
+      "cold": {
+        "n": 8,
+        "ready_n": 8,
+        "news_content_ready_p50": 2357.10000000149,
+        "news_content_ready_p75": 2371.099999997765,
+        "lcp_p75": 2084,
+        "titles": [
+          "第9600条快讯"
+        ],
+        "rate_limited_n": 0
+      },
+      "warm": {
+        "n": 8,
+        "ready_n": 8,
+        "news_content_ready_p50": 1080.4000000022352,
+        "news_content_ready_p75": 1080.699999999255,
+        "lcp_p75": 496,
+        "titles": [
+          "第9600条快讯"
+        ],
+        "rate_limited_n": 0
+      }
+    },
+    "delta_cold_p75": -697.5,
+    "delta_warm_p75": -227.59999999776483
+  },
+  "samples": [
+    {
+      "i": 1,
+      "first": "opt",
+      "opt": {
+        "cold": {
+          "cache": "cold",
+          "rate_limited": 0,
+          "wall_ms": 1788,
+          "news_content_ready_ms": 1717.4000000022352,
+          "news_title": "第9600条快讯",
+          "lcp": {
+            "startTime": 1608,
+            "size": 10835,
+            "url": null
+          },
+          "cls": 0.0007922795292800459
+        },
+        "warm": {
+          "cache": "warm",
+          "rate_limited": 0,
+          "wall_ms": 896,
+          "news_content_ready_ms": 854.0999999977648,
+          "news_title": "第9600条快讯",
+          "lcp": {
+            "startTime": 796,
+            "size": 10835,
+            "url": null
+          },
+          "cls": 0.0007922795292800459
+        }
+      },
+      "unopt": {
+        "cold": {
+          "cache": "cold",
+          "rate_limited": 0,
+          "wall_ms": 2823,
+          "news_content_ready_ms": 2766.699999999255,
+          "news_title": "第9600条快讯",
+          "lcp": {
+            "startTime": 2180,
+            "size": 10835,
+            "url": null
+          },
+          "cls": 0.04447110525197271
+        },
+        "warm": {
+          "cache": "warm",
+          "rate_limited": 0,
+          "wall_ms": 1108,
+          "news_content_ready_ms": 1078.300000000745,
+          "news_title": "第9600条快讯",
+          "lcp": {
+            "startTime": 496,
+            "size": 1056,
+            "url": null
+          },
+          "cls": 0.0007922795292800459
+        }
+      },
+      "rate_limited": 0
+    },
+    {
+      "i": 2,
+      "first": "unopt",
+      "unopt": {
+        "cold": {
+          "cache": "cold",
+          "rate_limited": 0,
+          "wall_ms": 2419,
+          "news_content_ready_ms": 2371.099999997765,
+          "news_title": "第9600条快讯",
+          "lcp": {
+            "startTime": 2052,
+            "size": 10835,
+            "url": null
+          },
+          "cls": 0.04447110525197271
+        },
+        "warm": {
+          "cache": "warm",
+          "rate_limited": 0,
+          "wall_ms": 1110,
+          "news_content_ready_ms": 1080.4000000022352,
+          "news_title": "第9600条快讯",
+          "lcp": {
+            "startTime": 484,
+            "size": 1056,
+            "url": null
+          },
+          "cls": 0.0007922795292800459
+        }
+      },
+      "opt": {
+        "cold": {
+          "cache": "cold",
+          "rate_limited": 0,
+          "wall_ms": 1675,
+          "news_content_ready_ms": 1636.2999999970198,
+          "news_title": "第9600条快讯",
+          "lcp": {
+            "startTime": 1540,
+            "size": 10835,
+            "url": null
+          },
+          "cls": 0.0007922795292800459
+        },
+        "warm": {
+          "cache": "warm",
+          "rate_limited": 0,
+          "wall_ms": 883,
+          "news_content_ready_ms": 855.9000000022352,
+          "news_title": "第9600条快讯",
+          "lcp": {
+            "startTime": 644,
+            "size": 1056,
+            "url": null
+          },
+          "cls": 0.0007922795292800459
+        }
+      },
+      "rate_limited": 0
+    },
+    {
+      "i": 3,
+      "first": "opt",
+      "opt": {
+        "cold": {
+          "cache": "cold",
+          "rate_limited": 0,
+          "wall_ms": 1659,
+          "news_content_ready_ms": 1618.800000000745,
+          "news_title": "第9600条快讯",
+          "lcp": {
+            "startTime": 1528,
+            "size": 10835,
+            "url": null
+          },
+          "cls": 0.0007922795292800459
+        },
+        "warm": {
+          "cache": "warm",
+          "rate_limited": 0,
+          "wall_ms": 878,
+          "news_content_ready_ms": 834.8999999985099,
+          "news_title": "第9600条快讯",
+          "lcp": {
+            "startTime": 640,
+            "size": 1056,
+            "url": null
+          },
+          "cls": 0.0007922795292800459
+        }
+      },
+      "unopt": {
+        "cold": {
+          "cache": "cold",
+          "rate_limited": 0,
+          "wall_ms": 2365,
+          "news_content_ready_ms": 2320.5,
+          "news_title": "第9600条快讯",
+          "lcp": {
+            "startTime": 2024,
+            "size": 10835,
+            "url": null
+          },
+          "cls": 0.04447110525197271
+        },
+        "warm": {
+          "cache": "warm",
+          "rate_limited": 0,
+          "wall_ms": 1093,
+          "news_content_ready_ms": 1065.2000000029802,
+          "news_title": "第9600条快讯",
+          "lcp": {
+            "startTime": 1036,
+            "size": 10835,
+            "url": null
+          },
+          "cls": 0.0007922795292800459
+        }
+      },
+      "rate_limited": 0
+    },
+    {
+      "i": 4,
+      "first": "unopt",
+      "unopt": {
+        "cold": {
+          "cache": "cold",
+          "rate_limited": 0,
+          "wall_ms": 2394,
+          "news_content_ready_ms": 2347.5,
+          "news_title": "第9600条快讯",
+          "lcp": {
+            "startTime": 2076,
+            "size": 10835,
+            "url": null
+          },
+          "cls": 0.04447110525197271
+        },
+        "warm": {
+          "cache": "warm",
+          "rate_limited": 0,
+          "wall_ms": 1097,
+          "news_content_ready_ms": 1066.699999999255,
+          "news_title": "第9600条快讯",
+          "lcp": {
+            "startTime": 480,
+            "size": 1056,
+            "url": null
+          },
+          "cls": 0.0007922795292800459
+        }
+      },
+      "opt": {
+        "cold": {
+          "cache": "cold",
+          "rate_limited": 0,
+          "wall_ms": 1736,
+          "news_content_ready_ms": 1673.800000000745,
+          "news_title": "第9600条快讯",
+          "lcp": {
+            "startTime": 1572,
+            "size": 10835,
+            "url": null
+          },
+          "cls": 0.0007922795292800459
+        },
+        "warm": {
+          "cache": "warm",
+          "rate_limited": 0,
+          "wall_ms": 877,
+          "news_content_ready_ms": 835.5999999977648,
+          "news_title": "第9600条快讯",
+          "lcp": {
+            "startTime": 620,
+            "size": 1056,
+            "url": null
+          },
+          "cls": 0.0007922795292800459
+        }
+      },
+      "rate_limited": 0
+    },
+    {
+      "i": 5,
+      "first": "opt",
+      "opt": {
+        "cold": {
+          "cache": "cold",
+          "rate_limited": 0,
+          "wall_ms": 1683,
+          "news_content_ready_ms": 1644.6000000014901,
+          "news_title": "第9600条快讯",
+          "lcp": {
+            "startTime": 1556,
+            "size": 10835,
+            "url": null
+          },
+          "cls": 0.0007922795292800459
+        },
+        "warm": {
+          "cache": "warm",
+          "rate_limited": 0,
+          "wall_ms": 875,
+          "news_content_ready_ms": 832.7999999970198,
+          "news_title": "第9600条快讯",
+          "lcp": {
+            "startTime": 636,
+            "size": 1056,
+            "url": null
+          },
+          "cls": 0.0007922795292800459
+        }
+      },
+      "unopt": {
+        "cold": {
+          "cache": "cold",
+          "rate_limited": 0,
+          "wall_ms": 2401,
+          "news_content_ready_ms": 2357.10000000149,
+          "news_title": "第9600条快讯",
+          "lcp": {
+            "startTime": 2076,
+            "size": 10835,
+            "url": null
+          },
+          "cls": 0.04447110525197271
+        },
+        "warm": {
+          "cache": "warm",
+          "rate_limited": 0,
+          "wall_ms": 1094,
+          "news_content_ready_ms": 1080.699999999255,
+          "news_title": "第9600条快讯",
+          "lcp": {
+            "startTime": 484,
+            "size": 1056,
+            "url": null
+          },
+          "cls": 0.0007922795292800459
+        }
+      },
+      "rate_limited": 0
+    },
+    {
+      "i": 6,
+      "first": "unopt",
+      "unopt": {
+        "cold": {
+          "cache": "cold",
+          "rate_limited": 0,
+          "wall_ms": 2411,
+          "news_content_ready_ms": 2371.800000000745,
+          "news_title": "第9600条快讯",
+          "lcp": {
+            "startTime": 2108,
+            "size": 10835,
+            "url": null
+          },
+          "cls": 0.04447110525197271
+        },
+        "warm": {
+          "cache": "warm",
+          "rate_limited": 0,
+          "wall_ms": 1117,
+          "news_content_ready_ms": 1088.1000000014901,
+          "news_title": "第9600条快讯",
+          "lcp": {
+            "startTime": 500,
+            "size": 1056,
+            "url": null
+          },
+          "cls": 0.0007922795292800459
+        }
+      },
+      "opt": {
+        "cold": {
+          "cache": "cold",
+          "rate_limited": 0,
+          "wall_ms": 1706,
+          "news_content_ready_ms": 1665.1000000014901,
+          "news_title": "第9600条快讯",
+          "lcp": {
+            "startTime": 1612,
+            "size": 10835,
+            "url": null
+          },
+          "cls": 0.0007922795292800459
+        },
+        "warm": {
+          "cache": "warm",
+          "rate_limited": 0,
+          "wall_ms": 886,
+          "news_content_ready_ms": 853.1000000014901,
+          "news_title": "第9600条快讯",
+          "lcp": {
+            "startTime": 796,
+            "size": 10835,
+            "url": null
+          },
+          "cls": 0.0007922795292800459
+        }
+      },
+      "rate_limited": 0
+    },
+    {
+      "i": 7,
+      "first": "opt",
+      "opt": {
+        "cold": {
+          "cache": "cold",
+          "rate_limited": 0,
+          "wall_ms": 1688,
+          "news_content_ready_ms": 1646.5,
+          "news_title": "第9600条快讯",
+          "lcp": {
+            "startTime": 1568,
+            "size": 10835,
+            "url": null
+          },
+          "cls": 0.0007922795292800459
+        },
+        "warm": {
+          "cache": "warm",
+          "rate_limited": 0,
+          "wall_ms": 881,
+          "news_content_ready_ms": 836,
+          "news_title": "第9600条快讯",
+          "lcp": {
+            "startTime": 788,
+            "size": 10835,
+            "url": null
+          },
+          "cls": 0.0007922795292800459
+        }
+      },
+      "unopt": {
+        "cold": {
+          "cache": "cold",
+          "rate_limited": 0,
+          "wall_ms": 2392,
+          "news_content_ready_ms": 2345.5,
+          "news_title": "第9600条快讯",
+          "lcp": {
+            "startTime": 2084,
+            "size": 10835,
+            "url": null
+          },
+          "cls": 0.04447110525197271
+        },
+        "warm": {
+          "cache": "warm",
+          "rate_limited": 0,
+          "wall_ms": 1091,
+          "news_content_ready_ms": 1078.300000000745,
+          "news_title": "第9600条快讯",
+          "lcp": {
+            "startTime": 480,
+            "size": 1056,
+            "url": null
+          },
+          "cls": 0.0007922795292800459
+        }
+      },
+      "rate_limited": 0
+    },
+    {
+      "i": 8,
+      "first": "unopt",
+      "unopt": {
+        "cold": {
+          "cache": "cold",
+          "rate_limited": 0,
+          "wall_ms": 2380,
+          "news_content_ready_ms": 2336.599999997765,
+          "news_title": "第9600条快讯",
+          "lcp": {
+            "startTime": 2060,
+            "size": 10835,
+            "url": null
+          },
+          "cls": 0.04447110525197271
+        },
+        "warm": {
+          "cache": "warm",
+          "rate_limited": 0,
+          "wall_ms": 1119,
+          "news_content_ready_ms": 1087,
+          "news_title": "第9600条快讯",
+          "lcp": {
+            "startTime": 492,
+            "size": 1056,
+            "url": null
+          },
+          "cls": 0.0007922795292800459
+        }
+      },
+      "opt": {
+        "cold": {
+          "cache": "cold",
+          "rate_limited": 0,
+          "wall_ms": 1718,
+          "news_content_ready_ms": 1673.5999999977648,
+          "news_title": "第9600条快讯",
+          "lcp": {
+            "startTime": 1568,
+            "size": 10835,
+            "url": null
+          },
+          "cls": 0.0007922795292800459
+        },
+        "warm": {
+          "cache": "warm",
+          "rate_limited": 0,
+          "wall_ms": 890,
+          "news_content_ready_ms": 849.5,
+          "news_title": "第9600条快讯",
+          "lcp": {
+            "startTime": 644,
+            "size": 1056,
+            "url": null
+          },
+          "cls": 0.0007922795292800459
+        }
+      },
+      "rate_limited": 0
+    }
+  ]
+}

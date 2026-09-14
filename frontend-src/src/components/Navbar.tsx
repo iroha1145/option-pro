@@ -45,7 +45,7 @@ function NyClock({ className }: { className?: string }) {
 }
 
 export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void }) {
-  const { isOwner, isSignedIn, username, aiEnabled, aiAvailable, aiReason, logout } = useAccess();
+  const { isOwner, isSignedIn, username, aiEnabled, aiAvailable, aiReason, aiPending, logout } = useAccess();
   const toast = useToast();
   const navigate = useNavigate();
   const location = useLocation();
@@ -198,7 +198,9 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
                     : 'border-line bg-card-warm text-ink-400',
               )}
               title={
-                aiAvailable
+                aiPending
+                  ? t('分析服务确认中')
+                  : aiAvailable
                   ? t('分析服务可用')
                   : aiEnabled && ['analysis_in_progress', 'global_concurrency_limit', 'queue_busy'].includes(aiReason ?? '')
                     ? t('分析任务处理中')

@@ -16,6 +16,8 @@ interface AccessContextValue {
   aiEnabled: boolean;
   aiAvailable: boolean;
   aiReason: string | null;
+  /** owner 身份已确认、但 /ai/status 与运行设置还没回来：AI 能力未知，不是关闭。 */
+  aiPending: boolean;
   isOwner: boolean;
   isVisitor: boolean;
   /** 已登录客户的用户名；管理员或未登录时为 null。 */
@@ -89,6 +91,9 @@ export function AccessProvider({ children }: { children: ReactNode }) {
    * 周期里三个组件同时要 /market/status，那正是这个窗口要压掉的重复。
    */
   const identityRef = useRef<string | null>(null);
+  // 普通核验沿用同一主体已确认的能力，避免待确认占位值重置财报卡片。
+  // 凭据写入或明确会话失效时清空，即使随后仍是同名主体也必须重新确认。
+  const confirmedCapabilitiesRef = useRef<{ identity: string; status: AccessStatus } | null>(null);
 
   /**
    * 探测失败的自愈重试（见 identityRetryDelayMs 的注释）：不能指望 60 秒定时
@@ -99,7 +104,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
 
   const readInto = useCallback(async (generation: number) => {
     try {
-      const next = await accessApi.status();
+      const next = await accessApi.identity();
       if (generation !== generationRef.current) return;
       retryAttemptRef.current = 0;
       if (retryTimerRef.current !== null) {
@@ -112,13 +117,30 @@ export function AccessProvider({ children }: { children: ReactNode }) {
         // 上一个主体的响应不得复用给下一个。
         dropSharedReads();
         resetMarketReadState();
-        clearCatalystReadCache();
+        clearCatalystReadCache({ userInitiated: true });
       }
       identityRef.current = identity;
       setQueryPrincipal(identity);
-      setStatus(next);
+      if (confirmedCapabilitiesRef.current?.identity !== identity) {
+        confirmedCapabilitiesRef.current = null;
+      }
+      const confirmed = confirmedCapabilitiesRef.current?.status;
+      setStatus(confirmed ? {
+        ...next,
+        aiEnabled: confirmed.aiEnabled,
+        aiAvailable: confirmed.aiAvailable,
+        aiReason: confirmed.aiReason,
+      } : next);
       setHasConfirmedIdentity(true);
       setIdentityUnavailable(false);
+      if (generation === generationRef.current) setLoading(false);
+      // AI 点随后补齐；等它会让 /ai/status 与 runtime-settings 再挡一轮 RTT。
+      if (next.role === 'owner') {
+        const enriched = await accessApi.enrichOwnerCapabilities(next);
+        if (generation !== generationRef.current) return;
+        confirmedCapabilitiesRef.current = { identity, status: enriched };
+        setStatus(enriched);
+      }
     } catch (error) {
       if (generation !== generationRef.current) return;
       // 身份读不到时保留当前已知身份并明确置错，而不是悄悄退回访客。
@@ -160,7 +182,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     // 上一个身份那份。三层读缓存一起清。
     dropSharedReads();
     resetMarketReadState();
-    clearCatalystReadCache();
+    clearCatalystReadCache({ userInitiated: true });
     return readInto(generationRef.current);
   }, [readInto]);
 
@@ -187,10 +209,11 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     const verify = () => void refresh().catch(() => undefined);
     const onInvalidated = () => {
       // 明确的会话失效立即撤掉客户身份和写入能力，再核验新的主体。
+      confirmedCapabilitiesRef.current = null;
       setQueryPrincipal(null);
       dropSharedReads();
       resetMarketReadState();
-      clearCatalystReadCache();
+      clearCatalystReadCache({ userInitiated: true });
       setIdentityUnavailable(true);
       setStatus((current) => ({
         ...current,
@@ -225,6 +248,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     async (write: () => Promise<void>) => {
       pendingWritesRef.current += 1;
       generationRef.current += 1;
+      confirmedCapabilitiesRef.current = null;
       // Login/register/logout can change the cookie even if its follow-up read fails.
       // Retire the old principal's UI and write capabilities until this write is confirmed.
       setHasConfirmedIdentity(false);
@@ -232,7 +256,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
       setIdentityUnavailable(true);
       dropSharedReads();
       resetMarketReadState();
-      clearCatalystReadCache();
+      clearCatalystReadCache({ userInitiated: true });
       let written = false;
       try {
         await write();
@@ -281,6 +305,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
       aiEnabled: hasConfirmedIdentity && status.aiEnabled,
       aiAvailable: hasConfirmedIdentity && status.aiAvailable,
       aiReason: status.aiReason,
+      aiPending: hasConfirmedIdentity && status.role === 'owner' && status.aiReason === 'analysis_status_pending',
       isOwner: hasConfirmedIdentity && status.role === 'owner',
       isVisitor: !hasConfirmedIdentity || status.role !== 'owner',
       username: hasConfirmedIdentity ? status.accountUsername : null,

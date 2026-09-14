@@ -46,7 +46,7 @@ export function useCatalystResource<T>(
       return;
     }
     if (!enabled) return;
-    clearCatalystReadCache();
+    clearCatalystReadCache({ userInitiated: true });
     void catalystResources.ensure(key, policy, load);
   }, [enabled, key, policy, load, identityUnavailable, refreshIdentity]);
   const update = useCallback((change: (data: T | null) => T | null, expected?: T | null) =>

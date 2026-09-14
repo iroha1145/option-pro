@@ -14,8 +14,7 @@ interface LiveAccessStatus {
   account?: { logged_in?: boolean; username?: string | null } | null;
 }
 
-async function liveStatus(): Promise<AccessStatus> {
-  const s = await get<LiveAccessStatus>('/access/status');
+function identityFromAccess(s: LiveAccessStatus): AccessStatus {
   const accountUsername =
     s.account?.logged_in === true && s.account.username ? String(s.account.username) : null;
   const owner = s.access_mode === 'private_network' || s.logged_in;
@@ -28,7 +27,18 @@ async function liveStatus(): Promise<AccessStatus> {
       accountUsername,
     };
   }
+  // AI 点是页头装饰，不能挡住研究页挂载：身份只由 /access/status 决定。
+  return {
+    role: 'owner',
+    aiEnabled: false,
+    aiAvailable: false,
+    aiReason: 'analysis_status_pending',
+    accountUsername,
+  };
+}
 
+async function enrichOwnerCapabilities(base: AccessStatus): Promise<AccessStatus> {
+  if (base.role !== 'owner') return base;
   try {
     const [capabilityBody, runtimeBody] = await Promise.all([
       get('/ai/status'),
@@ -41,7 +51,7 @@ async function liveStatus(): Promise<AccessStatus> {
     const capabilityEnabled = pickB(capability, 'enabled') === true;
     const aiAvailable = aiEnabled && capabilityEnabled;
     return {
-      role: 'owner',
+      ...base,
       aiEnabled,
       aiAvailable,
       aiReason: aiAvailable
@@ -49,18 +59,24 @@ async function liveStatus(): Promise<AccessStatus> {
         : aiEnabled
           ? pickS(capability, 'status') ?? 'analysis_unavailable'
           : 'manual_analysis_disabled',
-      accountUsername,
     };
   } catch {
     // 登录身份仍以 access/status 为准；模型能力或运行设置探针失败时绝不显示假绿灯。
     return {
-      role: 'owner',
+      ...base,
       aiEnabled: false,
       aiAvailable: false,
       aiReason: 'analysis_status_unavailable',
-      accountUsername,
     };
   }
+}
+
+async function liveIdentity(): Promise<AccessStatus> {
+  return identityFromAccess(await get<LiveAccessStatus>('/access/status'));
+}
+
+async function liveStatus(): Promise<AccessStatus> {
+  return enrichOwnerCapabilities(await liveIdentity());
 }
 
 /**
@@ -76,6 +92,12 @@ async function liveStatus(): Promise<AccessStatus> {
  * 独立一步。
  */
 export const accessApi = {
+  /** 只读 /access/status，足够确认主体并挂载公开研究页。 */
+  identity: (): Promise<AccessStatus> =>
+    mockOr(() => session.getAccess(), liveIdentity),
+  /** 管理员 AI 点：在身份确认之后再拉，失败不得回退成访客。 */
+  enrichOwnerCapabilities: (status: AccessStatus): Promise<AccessStatus> =>
+    mockOr(async () => status, () => enrichOwnerCapabilities(status)),
   status: (): Promise<AccessStatus> =>
     mockOr(() => session.getAccess(), liveStatus),
   /** 用户名为 admin 时走管理员通道，其余走客户账号表。 */

@@ -4,7 +4,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import {
   apiHeaders, fetchBuffered, parseRetryAfter, ResponseLimitError, TransportTimeoutError,
 } from '../src/api/transport.ts';
-import { ApiError, idFromLocation, postCreate, request, requestRaw } from '../src/api/client.ts';
+import { ApiError, consumeBootPrefetch, idFromLocation, invalidateBootPrefetch, offerBootPrefetch, PREFETCH_TTL_MS, resetBootPrefetchForTests, postCreate, request, requestRaw } from '../src/api/client.ts';
 import { fmtPrice, fmtSigned, fmtPct, fmtCompact, fmtCountdown, fmtNyTime, fmtTimeHHMMSS } from '../src/lib/format.ts';
 
 for (const status of [200, 503]) {
@@ -171,6 +171,118 @@ test('missing and nonfinite financial values remain distinct from real zero', ()
   assert.equal(fmtPct(1.5), '+1.50%');
   assert.doesNotThrow(() => fmtPrice(1.23, -1));
   assert.doesNotThrow(() => fmtPct(1.23, Infinity));
+});
+
+test('prefetch consume still enforces the body deadline, size bound and caller cancel', async (t) => {
+  resetBootPrefetchForTests();
+  let cancelled = false;
+  t.mock.method(globalThis, 'fetch', async () => new Response(new ReadableStream({
+    start(controller) { controller.enqueue(new TextEncoder().encode('{')); },
+    cancel() { cancelled = true; },
+  })));
+  offerBootPrefetch('/api/test');
+  await assert.rejects(request('/test', { timeoutMs: 30 }), (error) =>
+    error instanceof ApiError && error.code === 408 && error.bizCode === 'request_timeout');
+  await delay(0);
+  assert.equal(cancelled, true);
+  resetBootPrefetchForTests();
+
+  t.mock.method(globalThis, 'fetch', async () => new Response(new ReadableStream({
+    start(controller) {
+      controller.enqueue(new Uint8Array(33 * 1024 * 1024));
+      controller.close();
+    },
+  })));
+  offerBootPrefetch('/api/huge');
+  await assert.rejects(request('/huge'), (error) =>
+    error instanceof ApiError && error.bizCode === 'response_too_large');
+  resetBootPrefetchForTests();
+
+  const caller = new AbortController();
+  let abortedBody = false;
+  t.mock.method(globalThis, 'fetch', async () => {
+    queueMicrotask(() => caller.abort());
+    return new Response(new ReadableStream({ cancel() { abortedBody = true; } }));
+  });
+  offerBootPrefetch('/api/cancel-after-headers');
+  await assert.rejects(request('/cancel-after-headers', { signal: caller.signal, timeoutMs: 0 }), { name: 'AbortError' });
+  await delay(0);
+  assert.equal(abortedBody, true);
+  resetBootPrefetchForTests();
+});
+
+test('prefetch bag expires, isolates identity generations and drops failed slots', async (t) => {
+  resetBootPrefetchForTests();
+  let now = 1_000_000;
+  t.mock.method(Date, 'now', () => now);
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () => new Response('{"kept":true}'));
+  offerBootPrefetch('/api/stale');
+  assert.equal(fetchMock.mock.callCount(), 1);
+  now += PREFETCH_TTL_MS + 1;
+  assert.equal(consumeBootPrefetch('/api/stale'), undefined);
+  assert.deepEqual(await request('/stale'), { kept: true });
+  assert.equal(fetchMock.mock.callCount(), 2);
+  resetBootPrefetchForTests();
+
+  let seq = 0;
+  t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({ seq: ++seq })));
+  offerBootPrefetch('/api/owner-window');
+  invalidateBootPrefetch();
+  assert.equal(consumeBootPrefetch('/api/owner-window'), undefined);
+  assert.deepEqual(await request('/owner-window'), { seq: 2 });
+  resetBootPrefetchForTests();
+
+  let resolveLate;
+  t.mock.method(globalThis, 'fetch', () => new Promise((resolve) => { resolveLate = resolve; }));
+  offerBootPrefetch('/api/late-owner');
+  invalidateBootPrefetch();
+  resolveLate(new Response(JSON.stringify({ owner: true })));
+  await delay(0);
+  t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({ visitor: true })));
+  assert.deepEqual(await request('/late-owner'), { visitor: true });
+  resetBootPrefetchForTests();
+
+  t.mock.method(globalThis, 'fetch', async () => { throw new TypeError('boot offline'); });
+  offerBootPrefetch('/api/failed-boot');
+  await delay(0);
+  assert.equal(consumeBootPrefetch('/api/failed-boot'), undefined);
+  t.mock.method(globalThis, 'fetch', async () => new Response('{"ok":true}'));
+  assert.deepEqual(await request('/failed-boot'), { ok: true });
+  resetBootPrefetchForTests();
+});
+
+test('offerBootPrefetch dedupes the same URL until consumed', async (t) => {
+  resetBootPrefetchForTests();
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () => new Response('{"offered":true}'));
+  offerBootPrefetch('/api/catalysts/feed?window_hours=24&include_unanalyzed=true&include_neutral=true&limit=12');
+  offerBootPrefetch('/api/catalysts/feed?window_hours=24&include_unanalyzed=true&include_neutral=true&limit=12');
+  assert.equal(fetchMock.mock.callCount(), 1);
+  assert.deepEqual(await request('/catalysts/feed?window_hours=24&include_unanalyzed=true&include_neutral=true&limit=12'), { offered: true });
+  assert.equal(fetchMock.mock.callCount(), 1);
+  resetBootPrefetchForTests();
+});
+
+test('boot prefetch is consumed once and a failed boot fetch falls back', async (t) => {
+  const first = { access_mode: 'private_network', logged_in: false };
+  globalThis.__OPTIX_PREFETCH__ = {
+    '/api/access/status': Promise.resolve(new Response(JSON.stringify(first), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })),
+  };
+  const fetchMock = t.mock.method(globalThis, 'fetch', async () => new Response(JSON.stringify({ second: true })));
+  assert.deepEqual(await request('/access/status'), first);
+  assert.equal(fetchMock.mock.callCount(), 0);
+  assert.equal(consumeBootPrefetch('/api/access/status'), undefined);
+  assert.deepEqual(await request('/access/status'), { second: true });
+  assert.equal(fetchMock.mock.callCount(), 1);
+
+  globalThis.__OPTIX_PREFETCH__ = {
+    '/api/test': Promise.reject(new TypeError('boot prefetch failed')),
+  };
+  fetchMock.mock.mockImplementation(async () => new Response('{"ok":true}'));
+  assert.deepEqual(await request('/test'), { ok: true });
+  resetBootPrefetchForTests();
 });
 
 test('invalid countdowns are empty and New York clocks use the same midnight convention', () => {

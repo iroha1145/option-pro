@@ -15,6 +15,7 @@ import {
   PRINCIPAL_INVALID_EVENT,
   REQUEST_TIMEOUT_MS,
   get,
+  toQuery,
 } from '../src/api/client.ts';
 import {
   RECENT_KEY,
@@ -183,6 +184,75 @@ test('身份服务不可用是独立状态，不显示成未登录', async () =>
   const hook = codeOf(await source('hooks/useAccess.tsx'));
   assert.match(hook, /identityUnavailable/);
   assert.match(hook, /setIdentityUnavailable\(true\)/);
+});
+
+test('研究页身份确认不串行等待 AI 能力探针', async () => {
+  const api = codeOf(await source('api/modules/access.ts'));
+  const hook = codeOf(await source('hooks/useAccess.tsx'));
+  assert.match(api, /function identityFromAccess/);
+  assert.match(api, /async function enrichOwnerCapabilities/);
+  assert.match(hook, /accessApi\.identity\(\)/);
+  assert.match(hook, /setHasConfirmedIdentity\(true\)/);
+  assert.match(hook, /accessApi\.enrichOwnerCapabilities\(next\)/);
+  const confirmAt = hook.indexOf('setHasConfirmedIdentity(true)');
+  const enrichAt = hook.indexOf('accessApi.enrichOwnerCapabilities(next)');
+  assert.ok(confirmAt >= 0 && enrichAt > confirmAt, '必须先确认主体再补 AI 点');
+});
+
+test('theme-boot 在主包解析前预取身份和默认新闻 feed', async () => {
+  const boot = await readFile(path.resolve(here, '..', 'public', 'theme-boot.js'), 'utf8');
+  assert.match(boot, /\/api\/access\/status/);
+  const defaultFeedSearch = toQuery({
+    window_hours: 72,
+    include_unanalyzed: true,
+    include_neutral: true,
+    limit: 12,
+  });
+  assert.equal(defaultFeedSearch, 'window_hours=72&include_unanalyzed=true&include_neutral=true&limit=12');
+  assert.match(boot, new RegExp(defaultFeedSearch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(boot, /__OPTIX_PREFETCH__/);
+  assert.match(boot, /credentials:\s*"include"/);
+  assert.match(boot, /!location\.search/);
+  // 主包接管前的拒绝要标成已处理，否则断网首载会变成 Uncaught (in promise) / pageerror。
+  assert.match(boot, /promise\.catch\(function \(\) \{\}\)/);
+  const client = codeOf(await source('api/client.ts'));
+  assert.match(client, /export function consumeBootPrefetch/);
+  assert.match(client, /takeBootPrefetch\(url\)/);
+  assert.match(client, /export function invalidateBootPrefetch/);
+  assert.match(client, /bufferExistingResponse/);
+  const catalystsApi = codeOf(await source('components/catalysts/api.ts'));
+  assert.match(catalystsApi, /invalidateBootPrefetch\(\)/);
+  const main = codeOf(await source('main.tsx'));
+  assert.match(main, /prefetchRouteChunk\(window\.location\.pathname\)/);
+  const drawer = codeOf(await source('components/catalysts/NewsDrawer.tsx'));
+  assert.match(drawer, /seedMatches && seed/);
+  assert.match(drawer, /catalystsContract\s*\.\s*news\(/);
+  assert.match(drawer, /item\?\.analysisJobId/);
+  assert.match(drawer, /item\?\.analysisStatus/);
+  const filters = codeOf(await source('components/catalysts/FilterBar.tsx'));
+  assert.match(filters, /prefetchDefaultFeed\(24, filters\)/);
+  assert.match(filters, /onOptionIntent/);
+  const segmented = codeOf(await source('components/shared/Segmented.tsx'));
+  assert.match(segmented, /onPointerEnter/);
+  assert.match(segmented, /onOptionIntent/);
+  assert.match(client, /export function offerBootPrefetch/);
+});
+
+test('非首屏增强请求等 load 后再固定延迟，不用 idle 抢首屏带宽', async () => {
+  const idle = codeOf(await source('lib/afterLoadIdle.ts'));
+  const quotes = codeOf(await source('components/QuoteConnection.tsx'));
+  const hero = codeOf(await source('components/catalysts/StatusHero.tsx'));
+  const layout = codeOf(await source('components/Layout.tsx'));
+  assert.match(idle, /document\.readyState/);
+  assert.match(idle, /setTimeout\(run, delayMs\)/);
+  assert.doesNotMatch(idle, /requestIdleCallback/);
+  assert.match(quotes, /start\(isOwner,\s*\{\s*stream:\s*false\s*\}\)/);
+  assert.match(quotes, /afterLoadIdle\(\(\) => \{\s*quoteStore\.enableStream\(\);/);
+  assert.match(hero, /afterLoadIdle\(\(\) => setNewsTodayEnabled\(true\), 3500\)/);
+  assert.match(layout, /afterLoadIdle\(/);
+  assert.match(hero, /refreshToken > 0/);
+  assert.match(hero, /enabled:\s*refreshToken > 0 \|\| newsTodayEnabled/);
+  assert.doesNotMatch(hero, /if \(refreshToken > 0\) \{\s*setNewsTodayEnabled\(true\)/);
 });
 
 test('写操作成功后状态校验失败不再报成登录失败', async () => {

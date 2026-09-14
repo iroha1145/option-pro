@@ -133,6 +133,7 @@ export class QuoteStore {
   private status = INITIAL_STATUS;
   private stream: Stream | null = null;
   private connectController: AbortController | null = null;
+  private connectingGeneration: number | null = null;
   private pollController: AbortController | null = null;
   private radarResyncOnConnect = false;
   private generation = 0;
@@ -141,6 +142,7 @@ export class QuoteStore {
   private permitted = false;
   private owner = false;
   private terminal = false;
+  private allowStream = true;
   private failures = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -191,8 +193,9 @@ export class QuoteStore {
     this.subscriptionsChanged();
     return () => { this.consumers.delete(id); this.subscriptionsChanged(); };
   }
-  start(owner: boolean) {
+  start(owner: boolean, options?: { stream?: boolean }) {
     this.stop(); this.started = true; this.owner = owner; this.terminal = false; this.failures = 0;
+    this.allowStream = options?.stream !== false;
     this.radarResyncOnConnect = true;
     this.pollTimer = setInterval(() => {
       if (!this.permitted || !this.visible) return;
@@ -205,11 +208,20 @@ export class QuoteStore {
     this.schedule(0);
     return () => this.stop();
   }
+  enableStream() {
+    if (this.allowStream) return;
+    this.allowStream = true;
+    // A pending snapshot will open the stream when it finishes. A scheduled
+    // retry must keep its server deadline instead of being replaced by load.
+    if (this.connectingGeneration !== null || this.reconnectTimer !== null) return;
+    if (this.started && this.visible && !this.terminal) this.schedule(0);
+  }
   stop() {
-    this.started = false; this.permitted = false; this.generation++;
+    this.started = false; this.permitted = false; this.allowStream = true; this.generation++;
     this.closeStream();
     this.connectController?.abort(); this.pollController?.abort();
     this.connectController = this.pollController = null;
+    this.connectingGeneration = null;
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     if (this.pollTimer) clearInterval(this.pollTimer);
     if (this.flushTimer) clearTimeout(this.flushTimer);
@@ -329,6 +341,7 @@ export class QuoteStore {
   private async connect() {
     if (!this.started || !this.visible || this.terminal) return;
     const generation = ++this.generation;
+    this.connectingGeneration = generation;
     this.closeStream();
     try {
       const probe = !this.permitted;
@@ -337,6 +350,7 @@ export class QuoteStore {
       // Probe contains no symbols; this snapshot starts price loading before SSE arrives.
       if (probe && !await this.snapshot(generation)) return;
       if (generation !== this.generation || !this.started || !this.visible) return;
+      if (!this.allowStream) return;
       const stream = this.runtime.stream(`/api/quotes/stream?${this.query()}`); this.stream = stream;
       let streamReady = false;
       const read = <T,>(callback: (data: T) => void) => (event: Event) => {
@@ -368,6 +382,8 @@ export class QuoteStore {
     } catch {
       if (generation !== this.generation || !this.started || !this.visible) return;
       this.markDisconnected(); this.schedule(Math.min(30_000, 2_000 * 2 ** this.failures++));
+    } finally {
+      if (this.connectingGeneration === generation) this.connectingGeneration = null;
     }
   }
   private markDisconnected() {

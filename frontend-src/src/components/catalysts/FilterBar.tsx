@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import Switch from '@/components/shared/Switch';
 import type { NewsAnalysisStatus, NewsClassification } from './api';
 import { catalystsContract } from './api';
+import { prefetchDefaultFeed } from './feedPrefetch';
 import { DEFAULT_FILTERS, type CatalystFilters } from './filters';
 import { t } from '../../i18n/core.ts';
 
@@ -123,6 +124,9 @@ export default function FilterBar({ filters, onChange, total, filtered }: Filter
         ]}
         value={String(filters.windowHours)}
         onChange={(v) => set({ windowHours: Number(v) })}
+        onOptionIntent={(v) => {
+          if (v === '24' && filters.windowHours !== 24) prefetchDefaultFeed(24, filters);
+        }}
       />
 
       <Segmented
@@ -184,7 +188,12 @@ export default function FilterBar({ filters, onChange, total, filtered }: Filter
       {/* 移动：筛选折叠钮 */}
       <div className="flex items-center justify-between md:hidden">
         <button
-          onClick={() => setMobileOpen((v) => !v)}
+          onClick={() => {
+            const next = !mobileOpen;
+            /* 副作用放在 updater 之外：StrictMode 会把 updater 调两次。 */
+            if (next && filters.windowHours !== 24) prefetchDefaultFeed(24, filters);
+            setMobileOpen(next);
+          }}
           aria-expanded={mobileOpen}
           className={cn(
             'flex items-center gap-2 rounded-md border px-3 py-2 text-caption font-medium shadow-btn transition-colors',
