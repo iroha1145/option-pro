@@ -47,7 +47,7 @@ python scripts/research/extract_first_triggers.py \
 
 python scripts/research/analyze_algorithm_round.py \
   --rows "$HOME/research/screener-radar-data/runs/dev-screener-rows.json" \
-  --events "$HOME/research/screener-radar-data/runs/dev-radar-events.json" \
+  --events "$HOME/research/screener-radar-data/runs/dev-first-triggers.json" \
   --dataset "$HOME/research/screener-radar-data/yahoo-daily" \
   --out-dir "$HOME/research/screener-radar-data/runs/algorithm-round" \
   --registry "$HOME/research/screener-radar-data"
