@@ -15,7 +15,7 @@ const POLICY: ResourcePolicy<Snapshot> = { freshMs: 120_000, retainMs: 2 * 24 * 
   },
 };
 export function useFeedResource(filters: CatalystFilters) {
-  const query = { ...toFeedQuery(filters), limit: 12 };
+  const query = { ...toFeedQuery(filters), limit: 12, pageMode: 'visible' as const };
   return useCatalystResource(`feed:${JSON.stringify(query)}`, POLICY, async (previous) => {
     const result = await refreshFeedSnapshot((cursor) => catalystsContract.feed({ ...query, cursor }), previous);
     if (!result.items.length && !result.hiddenUnanalyzed) {

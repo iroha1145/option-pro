@@ -517,6 +517,7 @@ function qs(q: CatalystFeedQuery): string {
     min_abs_impact: toBackendImpact(q.minAbsImpact),
     multi_source_only: q.multiSourceOnly ? true : undefined,
     theme: q.themeId || undefined,
+    page_mode: q.pageMode ?? 'visible',
     limit: q.limit,
     cursor: q.cursor ?? undefined,
   });
