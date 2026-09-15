@@ -1,9 +1,9 @@
 {
-  "writtenAt": "2026-09-15T02:56:55.277Z",
-  "product_commit": "12e78b87d78d83c289af74803690173057a82ff0",
-  "entry": "frontend/assets/index-Bn8dbAUf.js",
+  "writtenAt": "2026-09-15T03:30:33.540Z",
+  "product_commit": "e3001fb0cc09d3108e66909fbccdd19e8a9585c4",
+  "entry": "frontend/assets/index-G7k80sIV.js",
   "interleaved": null,
-  "interleaved_note": "v2 n=20 remasurement in progress on 12e78b87 / index-Bn8dbAUf.js; historical index-uc86EHir.js numbers stay in r6-interleaved-n20.json",
+  "interleaved_note": "v2 n=20 remasurement in progress on e3001fb0 / index-G7k80sIV.js; historical index-uc86EHir.js numbers stay in r6-interleaved-n20.json",
   "i18n": {
     "zh_no_runtime": true,
     "en_only_en": true,
@@ -16,23 +16,23 @@
     "gate_ok": true
   },
   "surfaces": {
-    "home_p75": 2636,
-    "earnings_p75": 2466.39999999851,
+    "home_p75": 3641.400000002235,
+    "earnings_p75": 3592.400000002235,
     "gate_ok": true,
     "first_nav": {
-      "home_card": 747,
-      "desktop_nav": 746
+      "home_card": 1532,
+      "desktop_nav": 1346
     },
     "intent": {
-      "immediate": 748,
-      "hover_then_click": 545,
+      "immediate": 1337,
+      "hover_then_click": 1127,
       "hover_only_chunk": 8,
       "extra_paid_n": 0,
       "decision": {
         "decision": "keep",
         "reason": "hover_then_click_faster",
-        "faster_ms": 203,
-        "faster_ratio": 0.2713903743315508,
+        "faster_ms": 210,
+        "faster_ratio": 0.15706806282722513,
         "chunk_n": 8
       }
     },
@@ -48,24 +48,24 @@
   },
   "first_js_gzip9": {
     "shared": {
-      "script_n": 30,
-      "gzip9": 188047,
-      "raw": 555497
+      "script_n": 29,
+      "gzip9": 224441,
+      "raw": 646317
     },
     "home": {
-      "route_only_gzip9": 28686,
-      "with_shared_gzip9": 216733,
-      "script_n": 45
+      "route_only_gzip9": 29616,
+      "with_shared_gzip9": 254057,
+      "script_n": 44
     },
     "earnings": {
-      "route_only_gzip9": 29793,
-      "with_shared_gzip9": 217840,
-      "script_n": 40
+      "route_only_gzip9": 29797,
+      "with_shared_gzip9": 254238,
+      "script_n": 39
     },
     "catalysts": {
-      "route_only_gzip9": 80436,
-      "with_shared_gzip9": 268483,
-      "script_n": 42
+      "route_only_gzip9": 80485,
+      "with_shared_gzip9": 304926,
+      "script_n": 41
     },
     "note": "gzip -9 of statically imported JS only. Excludes CSS, JSON, fonts, data, and later intent prefetch."
   },

@@ -401,12 +401,30 @@ for (let i = 0; i < REPEATS; i += 1) {
       const rect = node.getBoundingClientRect();
       return { top: rect.top, height: rect.height };
     });
-    await page.evaluate(() => window.scrollBy(0, Math.round(window.innerHeight * 0.9)));
-    await page.waitForTimeout(1200);
-    const afterNear = network.chart;
+    // 近滚：把图槽送到首屏以下、rootMargin 100% 以内。
+    // 固定滚 0.9 视口在图槽更靠下时到不了观察区（本轮槽顶约 4300px）。
+    await page.evaluate(() => {
+      const node = document.querySelector('[data-eps-chart-slot]');
+      if (!node) return;
+      const top = node.getBoundingClientRect().top + window.scrollY;
+      window.scrollTo(0, Math.max(0, top - Math.round(window.innerHeight * 0.7)));
+    });
+    await page.waitForFunction(
+      () => Boolean(document.querySelector('[data-eps-chart], [data-eps-chart-error], canvas')),
+      null,
+      { timeout: 8_000 },
+    ).catch(() => null);
+    await page.waitForTimeout(400);
+    const afterNear = network.chart
+      + (await page.evaluate(() => document.querySelectorAll('[data-eps-chart], canvas').length));
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.waitForTimeout(400);
-    await page.evaluate(() => window.scrollBy(0, Math.round(window.innerHeight * 0.9)));
+    await page.evaluate(() => {
+      const node = document.querySelector('[data-eps-chart-slot]');
+      if (!node) return;
+      const top = node.getBoundingClientRect().top + window.scrollY;
+      window.scrollTo(0, Math.max(0, top - Math.round(window.innerHeight * 0.7)));
+    });
     await page.waitForTimeout(400);
     const mounted = await page.evaluate(() => {
       const slot = document.querySelector('[data-eps-chart-slot]');

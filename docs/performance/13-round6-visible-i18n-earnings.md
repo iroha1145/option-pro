@@ -4,7 +4,7 @@
 
 本篇只写本轮方法与本轮测得的数字。历史 `docs/performance/` 中的 60–230ms 实验室 feed、1651/832 新闻页 ready **不能**冒充本轮结果。调研采样（新闻列表 517–556ms、指纹 229–235ms、五次空页 4.71s）只用于定向，已独立核验，不当作实现结论。
 
-**当前产品提交** `12e78b87`（生产包 `index-Bn8dbAUf.js`）。`4fd819c0` 只改 batch 测试桩。下面 surfaces / i18n / 进程内 feed / 静态包图均在 `12e78b87` 上重测。n=20 交错正在同一产品提交上重跑；旧 `index-uc86EHir.js` 的 9436/2532 只作版本限定历史，不代表最终提交。
+**当前产品提交** `e3001fb0`（生产包 `index-G7k80sIV.js`，含图表失败边界英日词条）。`12e78b87` 是前一生产包 `index-Bn8dbAUf.js`；`4fd819c0` 只改 batch 测试桩。进程内 feed 在 `12e78b87` 上测（后端此后未改）。surfaces / i18n / 静态包图在 `e3001fb0` 上重测。n=20 交错正在最终包上重跑；旧 `index-uc86EHir.js` 的 9436/2532 只作版本限定历史。
 
 ## 发布边界
 
@@ -19,8 +19,8 @@
 | 访问 | `private_network`：回环 HTTP = Owner |
 | 浏览器档 | 390×844，CPU 4×，下载 10Mbps，上传 2Mbps，RTT 180ms（CDP 一次） |
 | 种子 | `--count 10000 --hidden-newest 48 --analyze-every 2 --history-every 15 --wall-clock` |
-| 产品提交 | `12e78b87` / tree `216e22428e1439114b40873cfdc266cf900978d8` |
-| 入口哈希 | `frontend/assets/index-Bn8dbAUf.js` sha256 `8cd7ae0b95a8e61520ebf8340e48f7b77623d6bdffd7765aa486838902fe8803` |
+| 产品提交 | `e3001fb0` / tree `f0c4ba60b913239f8df6b2004c731a60772ea948` |
+| 入口哈希 | `frontend/assets/index-G7k80sIV.js` sha256 `968bd1fb5a274eea9ea861774d42eb6c931f20526bfa52095626d94a1fe59480` |
 | 种子库 | `catalyst-cache.db` 239267840 字节，sha256 `c04b451343384990c099da24be3483680e393a0515e3e1243c5608124d785313` |
 
 种子核验（访客投影）：72h 窗 9568；分析 4760；rejected history 318；legacy 首页 0 条 / hidden 12；visible 首页 12 条，首条 `news_id=9600`。库：links 5078，audits 5078，revisions 10000，`result_json` 约 8.9MB。
@@ -37,7 +37,7 @@
 
 # 浏览器交错（冷只比冷、热只比热）
 OPTIX_PERF_PAIRS=20 OPTIX_PERF_OUT=/opt/cursor/artifacts/perf/round6-interleaved-mobile-ref.json \
-  OPTIX_PERF_PRODUCT_COMMIT=12e78b87 OPTIX_PERF_ENTRY=frontend/assets/index-Bn8dbAUf.js \
+  OPTIX_PERF_PRODUCT_COMMIT=e3001fb0 OPTIX_PERF_ENTRY=frontend/assets/index-G7k80sIV.js \
   node scripts/perf/measure_round6_browser.mjs
 
 # 首页 / 财报 / 切页 / 意图预取 / 屏外图表（拦截付费上游，财报日历本地 fulfill）
@@ -46,13 +46,13 @@ OPTIX_PERF_REPEATS=8 OPTIX_PERF_OUT=/opt/cursor/artifacts/perf/round6-surfaces.j
 
 # 提交 / 入口 / 种子 / 脚本哈希
 DATA_DIR=$HOME/optix-perf-data/n10000-r6 \
-  OPTIX_PERF_PRODUCT_COMMIT=12e78b87 \
+  OPTIX_PERF_PRODUCT_COMMIT=e3001fb0 \
   node scripts/perf/record_round6_provenance.mjs
 ```
 
 本机 Playwright 没有 bundled Chromium 时，脚本使用 `channel: 'chrome'`。
 
-`measure_round6_surfaces.mjs` / `measure_round6_i18n.mjs` 只把 `ready_class=content` 计为就绪；错误、超时、空态、未运行分别记账。不满足门禁则 `process.exit(1)`。意图预取 `keep` 要求全样本就绪、8/8 chunk、0 次额外付费。图表保持检查 `[data-eps-chart]` / canvas，不只看网络计数。
+`measure_round6_surfaces.mjs` / `measure_round6_i18n.mjs` 只把 `ready_class=content` 计为就绪；错误、超时、空态、未运行分别记账。不满足门禁则 `process.exit(1)`。意图预取 `keep` 要求全样本就绪、8/8 chunk、0 次额外付费。图表保持检查 `[data-eps-chart]` / canvas，不只看网络计数。近滚按图槽位置滚到 `rootMargin 100%` 内，不固定滚 0.9 视口。
 
 ## 候选结论
 
@@ -75,7 +75,7 @@ n=100 上 visible 比 2 次 hop 慢（扫描更多项 + 方差）。B 的收益�
 | 测速包 | 状态 | 说明 |
 |---|---|---|
 | `index-uc86EHir.js` | 历史 | 冷 20/20 p75 **9436** / 热 20/20 p75 **2532**；未优化冷 19/20 超时。版本限定，见 `artifacts/r6-interleaved-n20.json` |
-| `index-Bn8dbAUf.js` @ `12e78b87` | 重测中 | 与 surfaces / i18n / feed 同一产品提交。完成前不把旧 9436/2532 写成最终数字 |
+| `index-G7k80sIV.js` @ `e3001fb0` | 重测中 | 最终生产包。完成前不把旧 9436/2532 写成最终数字 |
 
 未优化侧大量超时仍记 `comparison_status=incomplete_samples`，**不写**冷/热 p75 差值。
 
@@ -83,22 +83,22 @@ n=100 上 visible 比 2 次 hop 慢（扫描更多项 + 方差）。B 的收益�
 
 中文不下载英日词典；en/ja 各只装一种。`prepareI18n()` 后再 `import('./App.tsx')`。缺译回退中文；切换语言整页重载。不翻译模型正文。
 
-相对 `df1bd5d` 已提交 `frontend/`（不是把独立词典 gzip 当主包节省）。`12e78b87` 静态导入图 gzip9：
+相对 `df1bd5d` 已提交 `frontend/`（不是把独立词典 gzip 当主包节省）。`e3001fb0` 静态导入图 gzip9：
 
 | 文件 / 图 | raw | gzip9 |
 |---|---|---|
 | 基线 `index-Cnp05EGF.js` | 963385 | 326472（含日文） |
 | 历史测速包 `index-uc86EHir.js` | 243870 | 79117（旧 n=20） |
-| 当前入口 `index-Bn8dbAUf.js` | 243867 | 79100（不含英日译文） |
-| 当前 `App-CumuKCxm.js` | 47643 | 15479 |
-| `runtime-en` / `runtime-ja` | 239441 / 277389 | 92107 / 94486（仅 en/ja 下载） |
-| `chart-N82pTYNr.js` | 643516 | 218262（不进财报首屏块） |
-| 公共壳 30 个静态脚本 | 555497 | **188047** |
-| 首页 = 公共壳 + 路由 | — | **216733** |
-| 财报 = 公共壳 + 路由 | — | **217840** |
-| 新闻 = 公共壳 + 路由 | — | **268483** |
+| 当前入口 `index-G7k80sIV.js` | 243817 | 79073（不含英日译文） |
+| 当前 `App-CIP_A2Sx.js` | 47744 | 15525 |
+| `runtime-en` / `runtime-ja` | 239658 / 277664 | 92179 / 94550（仅 en/ja 下载） |
+| `chart-BUi-naKq.js` | 643516 | 218262（不进财报首屏块） |
+| 公共壳 29 个静态脚本 | 646317 | **224441** |
+| 首页 = 公共壳 + 路由 | — | **254057** |
+| 财报 = 公共壳 + 路由 | — | **254238** |
+| 新闻 = 公共壳 + 路由 | — | **304926** |
 
-入口+App 约 94.6KB gzip **不是**完整首次下载。上述数字仍不含 CSS、JSON、字体、数据或后续意图预取。扫描非 `runtime-en`/`runtime-ja` 的提交产物，没有 `Skip to main content` / `サポート`。
+入口+App 约 94.6KB gzip **不是**完整首次下载。上述数字仍不含 CSS、JSON、字体、数据或后续意图预取。扫描非 `runtime-en`/`runtime-ja` 的提交产物，没有 `Skip to main content` / `サポート`。中文入口不含英日跳过链接；`runtime-en` 含 `Skip to main content` 是词典块本身，只在英文模式下载。
 
 浏览器三语冷启动（vite mock `:3021`，9/9 `content`，门禁通过）：zh 不下载 runtime-en/ja；en 只装 en；ja 只装 ja。zh→en 重载留在 `/earnings`，标题变为 `Earnings calendar`，`html lang=en-US`。
 
@@ -106,7 +106,7 @@ n=100 上 visible 比 2 次 hop 慢（扫描更多项 + 方差）。B 的收益�
 
 `DeferredEpsChart`：`rootMargin: 100%`，占位 320px，挂载后不卸。懒加载失败由 `ChartLoadErrorBoundary` 留在图槽，重试换新 `lazy()`。`Earnings.tsx` 去掉顶层 `useNow(1000)`。冷却在 `onRefresh` 内读 `cooldownUntil`，页头按钮与失败横幅共用；按钮仍做局部秒级更新。纽约日 15s 轮询，未钉住的周起始随跨日更新。隔离库无财报日历，滚动/弱网样本用本地 fulfill，不打 Finnhub/Yahoo/FMP。实验室行必须带 `publicFeatured: true`：重点列表不按市值自动入选，缺标注则图表槽不挂载。
 
-surfaces n=8（`12e78b87`，付费上游 abort，日历/首页本地 fulfill，门禁通过）：首页 ready p75 **2636ms**，财报 **2466ms**，首开 `chart_loaded=0`。切页：首页卡片 747ms / 桌面主导航 746ms。滚动：屏外前 0/8 拉 chart，近滚后 8/8，占位高度 320，DOM `[data-eps-chart]` / canvas 8/8 保持。
+surfaces n=8（`e3001fb0`，付费上游 abort，日历/首页本地 fulfill，门禁通过）：首页 ready p75 **3641ms**，财报 **3592ms**，首开 `chart_loaded=0`。切页：首页卡片 1532ms / 桌面主导航 1346ms。滚动：屏外前 0/8 拉 chart，近滚后 8/8，占位高度 320，DOM `[data-eps-chart]` / canvas 8/8 保持。相对 `12e78b87` 的 2636/2466，本包公共壳 gzip9 从 188KB 升到 224KB，首屏更慢；按最终包记账，不沿用旧包数字。
 
 ### B2. 今日计数不再套用 visible — 保留（生产包已同步）
 
@@ -114,7 +114,7 @@ surfaces n=8（`12e78b87`，付费上游 abort，日历/首页本地 fulfill，�
 
 ### E. 有限导航意图预取 — 保留
 
-只预取路由 chunk，`saveData`、跳过当前路径、`MAX_INTENT=2`（按进行中的 `import()` 计数）。命令面板关闭时 effect 不预取。1440 主导航 n=8（`12e78b87`，门禁通过）：立即点击 p75 **748ms**；悬停后再点 **545ms**（快 203ms / 27%）；划过不进入 8/8 预取到 Earnings 块、0 次拉 chart、0 次额外付费。关闭面板 / 无意图各 8 次：0 额外 chunk。阈值见 `scripts/perf/lib/round6_intent_decision.mjs`（≥150ms 且 ≥8%，且全样本 / 全 chunk / 无额外付费）。390px 主导航隐藏，首页「查看全部」不挂预取。
+只预取路由 chunk，`saveData`、跳过当前路径、`MAX_INTENT=2`（按进行中的 `import()` 计数）。命令面板关闭时 effect 不预取。1440 主导航 n=8（`e3001fb0`，门禁通过）：立即点击 p75 **1337ms**；悬停后再点 **1127ms**（快 210ms / 16%）；划过不进入 8/8 预取到 Earnings 块、0 次拉 chart、0 次额外付费。关闭面板 / 无意图各 8 次：0 额外 chunk。阈值见 `scripts/perf/lib/round6_intent_decision.mjs`（≥150ms 且 ≥8%，且全样本 / 全 chunk / 无额外付费）。390px 主导航隐藏，首页「查看全部」不挂预取。
 
 ## 明确不做 / 回退过的方向
 
@@ -141,8 +141,8 @@ Owner 热路径仍约 5.6s：瓶颈是整窗投影/复制，不是第二次指�
 - `artifacts/r6-bundles.json`（当前静态导入图）
 - `artifacts/r6-interleaved-probe.json`
 - `artifacts/r6-interleaved-n20.json`（`index-uc86EHir.js` 历史）
-- `artifacts/r6-surfaces.json`（`12e78b87`，含门禁与 extras）
-- `artifacts/r6-i18n.json`（`12e78b87`）
+- `artifacts/r6-surfaces.json`（`e3001fb0`，含门禁与 extras）
+- `artifacts/r6-i18n.json`（`e3001fb0`）
 - `artifacts/r6-provenance.json`（提交 / 入口 / 种子 / 脚本哈希）
 - `artifacts/r6-summary.json`
 

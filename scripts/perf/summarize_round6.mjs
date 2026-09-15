@@ -63,7 +63,7 @@ const report = {
     : null,
   interleaved_note: interleavedIsV2
     ? null
-    : 'v2 n=20 remasurement in progress on 12e78b87 / index-Bn8dbAUf.js; historical index-uc86EHir.js numbers stay in r6-interleaved-n20.json',
+    : 'v2 n=20 remasurement in progress on e3001fb0 / index-G7k80sIV.js; historical index-uc86EHir.js numbers stay in r6-interleaved-n20.json',
   i18n: i18n
     ? {
       ...(i18n.invariants || {}),
