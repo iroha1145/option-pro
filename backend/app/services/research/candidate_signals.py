@@ -16,6 +16,7 @@ def _signal(row: Mapping[str, Any], score: Any) -> dict[str, Any]:
         "selected_view_rank": rank,
         "rank": rank,
         "score": score,
+        "primary_sector_id": row.get("primary_sector_id"),
     }
 
 
