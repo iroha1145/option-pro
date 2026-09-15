@@ -57,8 +57,9 @@ async function sample(base) {
     new MutationObserver(check).observe(document, { subtree: true, childList: true, attributes: true });
   });
   const errors = [], failures = [], jsErrors = [];
+  let phase = 'cold';
   page.on('response', r => { if (r.status() >= 400) errors.push({ url: r.url(), status: r.status() }); });
-  page.on('requestfailed', r => { if (r.failure()?.errorText !== 'net::ERR_ABORTED') failures.push({ url: r.url(), error: r.failure()?.errorText }); });
+  page.on('requestfailed', r => { if (r.failure()?.errorText !== 'net::ERR_ABORTED') failures.push({ url: r.url(), error: r.failure()?.errorText, phase }); });
   page.on('pageerror', e => jsErrors.push(e.message));
   const ready = () => page.waitForFunction(() => window.__controlledPerf.ready !== null, null, { timeout: 45000 });
   const settle = async () => { await page.waitForLoadState('networkidle', { timeout: 45000 }); await page.waitForTimeout(500); };
@@ -69,6 +70,7 @@ async function sample(base) {
   try {
     await page.goto(base + '/catalysts', { waitUntil: 'domcontentloaded' }); await ready(); await settle();
     const cold = await metrics();
+    phase = 'warm_direct';
     await page.reload({ waitUntil: 'domcontentloaded' }); await ready(); await settle();
     const warm_direct = await metrics();
     for (const measured of [cold, warm_direct]) {
@@ -76,16 +78,27 @@ async function sample(base) {
         throw new Error('Native navigation/resource timing unavailable; do not report this sample');
       }
     }
+    phase = 'home';
     await page.getByRole('navigation', { name: '移动端导航' }).getByRole('link', { name: '首页', exact: true }).click();
     await page.waitForFunction(() => document.querySelector('[data-optix-region="home-indices"]')?.getAttribute('data-optix-state') === 'content', null, { timeout: 45000 });
     await settle();
     await page.getByRole('button', { name: '更多', exact: true }).click();
+    phase = 'warm_return';
     const start = await page.evaluate(() => performance.now());
     await page.getByRole('dialog', { name: '更多功能', exact: true }).getByRole('button', { name: /新闻催化/ }).click();
     await ready();
     const warm_return = await metrics(); warm_return.ready_ms -= start;
-    return { cold, warm_direct, warm_return, errors, failures, jsErrors };
-  } finally { await context.close(); }
+    // Preserve the measured ready time, then let requests finish before closing
+    // the context. Teardown socket errors must not mutate a completed sample.
+    await settle();
+    return { cold, warm_direct, warm_return, errors: [...errors], failures: [...failures], jsErrors: [...jsErrors] };
+  } catch (error) {
+    const diagnostic = await page.evaluate(() => ({ url: location.href,
+      body: document.body?.innerText, ready: window.__controlledPerf?.ready,
+      resources: performance.getEntriesByType('resource').map(e => e.toJSON()) })).catch(() => null);
+    await writeFile(out + '.failure.json', JSON.stringify({ base, phase, error: String(error), errors, failures, jsErrors, diagnostic }, null, 2));
+    throw error;
+  } finally { phase = 'teardown'; await context.close(); }
 }
 try {
   for (let i = 0; i < pairs; i++) {

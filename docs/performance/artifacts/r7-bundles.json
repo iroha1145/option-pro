@@ -1,11 +1,11 @@
 {
-  "measured_at": "2026-09-15T08:08:38.517Z",
+  "measured_at": "2026-09-15T08:45:48.867Z",
   "note": "Current production frontend/ after the live Vite build. Dictionary gzip is not main-bundle savings. zh_critical_js_gzip_approx is entry+App only; first_js_gzip9 includes the shared static import graph.",
   "files": {
     "optimized_index": {
-      "path": "frontend/assets/index-DuFYhLJY.js",
+      "path": "frontend/assets/index-BBs02XKu.js",
       "raw": 181985,
-      "gzip9": 57235,
+      "gzip9": 57237,
       "contains_ja": false,
       "contains_en_skip_link": false
     },
@@ -17,9 +17,9 @@
       "contains_en_skip_link": false
     },
     "optimized_app": {
-      "path": "frontend/assets/app-shell-C13lnOoj.js",
+      "path": "frontend/assets/app-shell-hDLCQw3J.js",
       "raw": 306007,
-      "gzip9": 98833,
+      "gzip9": 98828,
       "contains_ja": false,
       "contains_en_skip_link": false
     },
@@ -38,70 +38,70 @@
       "contains_en_skip_link": false
     },
     "optimized_chart": {
-      "path": "frontend/assets/eps-chart-0OaUeOom.js",
+      "path": "frontend/assets/eps-chart-B-BsXTot.js",
       "raw": 646540,
       "gzip9": 219562,
       "contains_ja": false,
       "contains_en_skip_link": false
     },
     "optimized_earnings_page": {
-      "path": "frontend/assets/Earnings-ByMDC5eT.js",
-      "raw": 62980,
-      "gzip9": 17975,
+      "path": "frontend/assets/Earnings-BrQNNwNo.js",
+      "raw": 63010,
+      "gzip9": 17984,
       "contains_ja": false,
       "contains_en_skip_link": false
     },
     "optimized_eps_chart_wrapper": null
   },
   "zh_critical_js_gzip_approx": {
-    "optimized_index_plus_app": 156068,
+    "optimized_index_plus_app": 156065,
     "note": "Chinese mode does not download runtime-en or runtime-ja. This is not the complete first-download JS."
   },
   "first_js_gzip9": {
     "shared": {
       "roots": [
-        "frontend/assets/index-DuFYhLJY.js",
-        "frontend/assets/app-shell-C13lnOoj.js"
+        "frontend/assets/index-BBs02XKu.js",
+        "frontend/assets/app-shell-hDLCQw3J.js"
       ],
       "script_n": 4,
       "gzip9": 178259,
       "raw": 548032,
       "files": [
         {
-          "path": "frontend/assets/app-shell-C13lnOoj.js",
+          "path": "frontend/assets/app-shell-hDLCQw3J.js",
           "raw": 306007,
-          "gzip9": 98833
+          "gzip9": 98828
         },
         {
-          "path": "frontend/assets/index-BJQvtGzj.js",
-          "raw": 3667,
-          "gzip9": 1404
-        },
-        {
-          "path": "frontend/assets/index-DuFYhLJY.js",
+          "path": "frontend/assets/index-BBs02XKu.js",
           "raw": 181985,
-          "gzip9": 57235
+          "gzip9": 57237
         },
         {
-          "path": "frontend/assets/prefetchRouteChunk-DyTXhzoN.js",
+          "path": "frontend/assets/index-BppUXR9B.js",
+          "raw": 3667,
+          "gzip9": 1405
+        },
+        {
+          "path": "frontend/assets/prefetchRouteChunk-CN-Zg5Y5.js",
           "raw": 56373,
-          "gzip9": 20787
+          "gzip9": 20789
         }
       ]
     },
     "home": {
-      "route_only_gzip9": 28352,
-      "with_shared_gzip9": 206611,
+      "route_only_gzip9": 28372,
+      "with_shared_gzip9": 206631,
       "script_n": 19
     },
     "earnings": {
-      "route_only_gzip9": 29682,
-      "with_shared_gzip9": 207941,
+      "route_only_gzip9": 29711,
+      "with_shared_gzip9": 207970,
       "script_n": 14
     },
     "catalysts": {
-      "route_only_gzip9": 80018,
-      "with_shared_gzip9": 258277,
+      "route_only_gzip9": 80038,
+      "with_shared_gzip9": 258297,
       "script_n": 15
     },
     "note": "gzip -9 of the deduplicated HTML module-entry and App/app-shell static JS graphs. Routes add their static graph to that base. Excludes classic theme-boot.js, CSS, JSON, fonts, data, and later dynamic/intent prefetch."

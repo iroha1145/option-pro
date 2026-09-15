@@ -21,6 +21,8 @@ stamp = fixtures['/api/catalysts/feed']['as_of']
 state = {'requests': [], 'failure_prefix': None, 'failures_left': 0}
 
 class Handler(BaseHTTPRequestHandler):
+    protocol_version = 'HTTP/1.1'
+
     def log_message(self, *args):
         pass
 
@@ -84,8 +86,10 @@ class Handler(BaseHTTPRequestHandler):
         return self.send_body(200, file.read_bytes(), mimetypes.guess_type(file.name)[0] or 'application/octet-stream', cache)
 
     def do_POST(self):
+        # Consume request bodies before reusing an HTTP/1.1 connection.
+        body = self.rfile.read(int(self.headers.get('Content-Length', 0)))
         if self.path == '/__review__/fault':
-            value = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+            value = json.loads(body)
             state['failure_prefix'] = value.get('prefix')
             state['failures_left'] = int(value.get('count', 0))
             return self.send_body(200, state)
@@ -94,4 +98,8 @@ class Handler(BaseHTTPRequestHandler):
         return self.send_body(405, {'error': 'local fixture does not allow product writes'})
 
 print(json.dumps({'root': str(root), 'port': a.port, 'fixture_time': stamp}), flush=True)
-ThreadingHTTPServer(('127.0.0.1', a.port), Handler).serve_forever()
+class FixtureServer(ThreadingHTTPServer):
+    # Browsers can open speculative connections alongside their asset burst.
+    request_queue_size = 128
+
+FixtureServer(('127.0.0.1', a.port), Handler).serve_forever()

@@ -1,26 +1,30 @@
 {
-  "timing_source_commit": "d22793ab3d7591b388e92cddb92b930a14032aca",
+  "timing_source_commit": "c4b21e31a7332589038e2764af4186220cf5b715",
   "source_trees": {
-    "backend": "ed45b2322b66f3f48dcede43be3cee9c9bc5b6f0",
-    "frontend-src/src": "76e5df51a405769401ebd6d217a972fbab452f1a",
+    "backend": "bdfd5e9634a1f2b63c116cc3b79be2da283e8bf5",
+    "frontend-src/src": "c517b9679dfe0ce0ad027066f4400feb6a8f40a9",
     "frontend-src/vite.config.ts": "6631583f29e73bd16e397bf6e4be087cd0f15ecb",
-    "frontend": "b9857d7ed5d44f0ba3e4946dadade667a2fdd4d8"
+    "frontend": "636cbb3b74b2cc38dc604e634140e571f0a2ba25"
   },
   "artifacts": {
-    "scripts/perf/measure_frontend_controlled.mjs": "582fdf0ff8c4aede8d969a5f5f4b80d43369ff8be12910e5600beaca20e1ac1b",
-    "scripts/perf/serve_frontend_fixture.py": "bf99b15d170167c74ec7fa446664150894b2fa6c873e30ae617faea3a82887d2",
+    "scripts/perf/measure_frontend_controlled.mjs": "167a1dabcd611556ed4ee169dfbe19a3315d280604f4855a146a4868771ff94e",
+    "scripts/perf/serve_frontend_fixture.py": "9145123e12270d5ad5aa03b6471310b7a1e906fa6f21bf4840e4a28cb59fa78b",
     "docs/performance/artifacts/r7-controlled-fixtures.json": "5eacc145c1555466a77211d66d300a1d71df1815e77d7bc9a6c40dd750b91de7",
-    "frontend/index.html": "684bc44ed85614b2cd1fe631a96f4107c0426a0dfe2390844b6d825a00240320",
-    "frontend/assets/index-DuFYhLJY.js": "5045279898cf2b516accd42589373a11c236645a0b27e0bb51d8ec6747ea79c3",
-    "frontend/assets/app-shell-C13lnOoj.js": "d593d6b366954b54ad0b556ca1c509ba72ea1a620a6b659e5389d1721ebe1a32",
-    "frontend/assets/eps-chart-0OaUeOom.js": "d6ce9083f31323701c4ff659c1be9cae4ddb366671035e90f6beca5837335a62"
+    "docs/performance/artifacts/r7-controlled-frontend-n20.json": "cddab773debb342dc2aaa7067f8bf2bd91f798cc4a4ca0d976581cf7bddd2813",
+    "frontend/index.html": "4d735529337b6b01305f0759e22770e0cc75d757510904def62899b4247921bb",
+    "frontend/assets/index-BBs02XKu.js": "a7e17a3a9c3615668b385bf6ad84537d16cb84035db0296a558bf2753b0e6d90",
+    "frontend/assets/app-shell-hDLCQw3J.js": "ec1505135fc43a6b0731366d7dc931f08a30308c9bfe63cde2c876f8b5932813",
+    "frontend/assets/eps-chart-B-BsXTot.js": "46450ce8b66916e4168ff1762eafaf4004a407dd3444de8a75899825507f8714"
   },
   "environment": {
-    "browser": "Google Chrome 152.0.7977.84",
-    "node": "24.6.0",
-    "macos": "26.6.2"
+    "browser": "152.0.7977.84",
+    "node": "v24.6.0",
+    "platform": "darwin",
+    "release": "27.0.0",
+    "arch": "arm64",
+    "macos_product_version": "27.0"
   },
-  "scope": "Fixed synthetic API responses served from a local HTTP/1.1 server, not the 10000-row backend workload. Native browser clocks; application date is not mocked.",
+  "scope": "Fixed synthetic API responses served from identical local HTTP/1.1 servers with persistent connections and request queue 128; not the 10000-row backend workload. Native browser clocks; application date is not mocked.",
   "language_validation": {
     "mode": "mock production build",
     "routes": [
@@ -36,5 +40,13 @@
     "ready_samples": 9,
     "gate_passed": true,
     "note": "This is translation/loading validation, not an end-to-end production backend measurement."
+  },
+  "fixture_transport_check": {
+    "ports": [
+      3055,
+      3057
+    ],
+    "response_protocol": "HTTP/1.1",
+    "post_then_get_same_socket": true
   }
 }
