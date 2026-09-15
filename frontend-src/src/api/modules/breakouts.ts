@@ -374,7 +374,7 @@ export const breakoutsApi = {
           const rec = asRec(d);
           return {
             items: events as unknown as BreakoutEvent[],
-            total: pickN(rec, 'total', 'total_count'),
+            total: pickN(asRec(d), 'total', 'total_count'),
             hasMore: nextCursor !== null && !rec.cursor_stale && !rec.restart_required,
             nextCursor,
             page,
