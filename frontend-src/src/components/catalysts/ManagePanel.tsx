@@ -20,6 +20,7 @@ import { useToast } from '@/hooks/useToast';
 import { Led } from './bits';
 import Icon from '@/components/icons';
 import { cn } from '@/lib/utils';
+import Segmented from '@/components/shared/Segmented';
 import Switch from '@/components/shared/Switch';
 import { fmtRelative } from '@/lib/format';
 import { t as __t } from '../../i18n/core.ts';
@@ -350,36 +351,38 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
                   <div className="space-y-2">
                     <Toggle label={__t("允许手动分析")} value={draft.manual} onChange={(v) => setDraft({ ...draft, manual: v })} />
                     <Toggle label={__t("定时分析")} value={draft.scheduled} onChange={(v) => setDraft({ ...draft, scheduled: v })} />
-                    <label className="block rounded-md border border-line bg-card-warm px-3 py-2">
+                    <div className="rounded-md border border-line bg-card-warm px-3 py-2">
                       <span className="mb-1.5 block text-caption text-ink-700">{__t('选股默认算法')}</span>
-                      <select
-                        aria-label={__t('选股默认算法')}
-                        className="w-full rounded-md border border-line bg-card px-2 py-1.5 text-caption text-ink-800"
+                      <Segmented<'production' | 'a0_mid_long'>
+                        ariaLabel={__t('选股默认算法')}
+                        scrollable
+                        options={[
+                          { value: 'production', label: __t('原版排序') },
+                          { value: 'a0_mid_long', label: __t('中长期趋势（试用）') },
+                        ]}
                         value={draft.screenerRankingAlgorithm}
-                        onChange={(event) => setDraft({
+                        onChange={(screenerRankingAlgorithm) => setDraft({
                           ...draft,
-                          screenerRankingAlgorithm: event.target.value === 'a0_mid_long' ? 'a0_mid_long' : 'production',
+                          screenerRankingAlgorithm,
                         })}
-                      >
-                        <option value="production">{__t('原版排序')}</option>
-                        <option value="a0_mid_long">{__t('中长期趋势（试用）')}</option>
-                      </select>
-                    </label>
-                    <label className="block rounded-md border border-line bg-card-warm px-3 py-2">
+                      />
+                    </div>
+                    <div className="rounded-md border border-line bg-card-warm px-3 py-2">
                       <span className="mb-1.5 block text-caption text-ink-700">{__t('雷达默认排序')}</span>
-                      <select
-                        aria-label={__t('雷达默认排序')}
-                        className="w-full rounded-md border border-line bg-card px-2 py-1.5 text-caption text-ink-800"
+                      <Segmented<'production' | 't1_daily_priority'>
+                        ariaLabel={__t('雷达默认排序')}
+                        scrollable
+                        options={[
+                          { value: 'production', label: __t('原雷达排序') },
+                          { value: 't1_daily_priority', label: __t('日线量价条件优先（试用）') },
+                        ]}
                         value={draft.radarSortAlgorithm}
-                        onChange={(event) => setDraft({
+                        onChange={(radarSortAlgorithm) => setDraft({
                           ...draft,
-                          radarSortAlgorithm: event.target.value === 't1_daily_priority' ? 't1_daily_priority' : 'production',
+                          radarSortAlgorithm,
                         })}
-                      >
-                        <option value="production">{__t('原雷达排序')}</option>
-                        <option value="t1_daily_priority">{__t('日线量价条件优先（试用）')}</option>
-                      </select>
-                    </label>
+                      />
+                    </div>
                     <p className="text-micro text-ink-400">
                       {__t('只影响未指定算法或选择跟随默认的请求。用户已明确选择原版时不会被覆盖。')}
                     </p>

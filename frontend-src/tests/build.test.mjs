@@ -238,7 +238,7 @@ test('screener result strength colors use stable score bands on mobile and deskt
     readFile(resultCardsSource, 'utf8'),
     readFile(resultCellsSource, 'utf8'),
   ]);
-  assert.match(cards, /screenerStrengthPresentation\(r\.strengthScore\)/);
+  assert.match(cards, /screenerStrengthPresentation\(primary \?\? r\.strengthScore\)/);
   assert.match(cells, /screenerStrengthPresentation\(score\)/);
   assert.match(cards, /data-strength-band=\{strength\.band\}/);
   assert.match(cards, /data-strength-tone=\{strength\.tone\}/);

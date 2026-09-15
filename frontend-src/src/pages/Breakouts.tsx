@@ -128,7 +128,9 @@ export default function Breakouts() {
         radarSortAlgorithm: remote.radarSortAlgorithm,
       });
       setRadarSort(remote.radarSortAlgorithm);
-    }).catch(() => undefined);
+    }, () => {
+      // Keep the local preference when the signed-in copy is unavailable.
+    });
     return () => { cancelled = true; };
   }, [isSignedIn]);
 

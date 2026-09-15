@@ -30,6 +30,7 @@ function harness(overrides = {}) {
     mounted: { current: true },
     getMarketReadGeneration: () => 0,
     __t: (text) => text,
+    toast: { error() {}, success() {} },
     summarizeFilters: () => '',
     buildStrengthScanRequest: (filters) => ({ apiParams: { ...parameters, ...filters }, refreshParameters: { ...parameters, ...filters } }),
     detailsRef: { current: {} },
@@ -65,6 +66,7 @@ function retryLastAttempt(h) {
 
 function resetAll(h) {
   h.scope.DEFAULT_FILTERS = DEFAULT_FILTERS;
+  h.scope.draft = h.state.draft ?? DEFAULT_FILTERS;
   const start = source.indexOf('  const resetAllFilters = ');
   const end = source.indexOf('  const onTierFromHistogram', start);
   vm.runInNewContext(ts.transpileModule(`${source.slice(start, end)}\nglobalThis.resetAll = resetAllFilters;`, {

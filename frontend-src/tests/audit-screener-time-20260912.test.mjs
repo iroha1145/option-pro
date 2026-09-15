@@ -5,6 +5,7 @@ import vm from 'node:vm';
 import ts from 'typescript';
 import { formatChartTime } from '../src/components/detail/chartTime.ts';
 import { catalystSortReadiness, catalystSummaryUsable, CATALYST_SUMMARY_TTL_MS, EMPTY_CATALYST, DEFAULT_FILTERS, tierOf } from '../src/components/screener/types.ts';
+import { keepServerRankingOrder } from '../src/lib/screenerSort.ts';
 import { macroToneOf } from '../src/lib/macroFit.ts';
 
 const source = fs.readFileSync(new URL('../src/pages/Screener.tsx', import.meta.url), 'utf8');
@@ -138,9 +139,11 @@ test('failed catalyst batches settle as errors, do not loop, and explicit retry 
 
 test('failed summaries block catalyst ranking rather than count as zero news', () => {
   const scope = {
-    useMemo: fn => fn(), Date, Math,
+    useMemo: fn => fn(), Date, Math, keepServerRankingOrder,
     filtered: [{ ticker: 'HIGH', strengthScore: 95, changePct: 0 }, { ticker: 'LOW', strengthScore: 70, changePct: 0 }],
     sortMode: 'impact', catalystSortIncomplete: true,
+    scanMeta: null,
+    applied: { rankingAlgorithm: 'follow_default' },
     catalysts: { HIGH: { ...news(), loaded: true, failed: true }, LOW: { ...news(10), loaded: true } },
   };
   const start = source.indexOf('  const sorted = useMemo(');
@@ -227,6 +230,7 @@ test('macro filtering affects tier comparison and reset clears macro without rel
   const requests = [];
   const scope = { useMemo: fn => fn(), useCallback: fn => fn, macroToneOf, tierOf, DEFAULT_FILTERS,
     filteredBase: rows, applied: { ...DEFAULT_FILTERS, profile: 'aggressive', tier: 'S', topN: 1 }, macroToneFilter: 'tailwind',
+    draft: { ...DEFAULT_FILTERS, profile: 'aggressive', tier: 'S', topN: 1 },
     setPage: () => {}, setDraft: () => {},
     runScan: filters => { requests.push(filters); },
   };
