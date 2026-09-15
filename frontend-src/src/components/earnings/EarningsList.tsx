@@ -398,7 +398,7 @@ export default function EarningsList({
                       <span className="font-mono text-data-m tnum">
                         <span className="text-ink-500">{est != null ? est.toFixed(2) : '—'}</span>
                         <span className="mx-1 text-ink-300">/</span>
-                        <span className={act != null ? 'font-semibold text-ink-900' : 'text-ink-300'}>
+                        <span className={cn('whitespace-nowrap', act != null ? 'font-semibold text-ink-900' : 'text-ink-300')}>
                           {act != null ? act.toFixed(2) : t('未公布')}
                         </span>
                       </span>
@@ -451,7 +451,7 @@ export default function EarningsList({
                         <span className="font-mono text-micro tnum">
                           <span className="text-ink-500">{est != null ? est.toFixed(2) : '—'}</span>
                           <span className="mx-1 text-ink-300">/</span>
-                          <span className={act != null ? 'text-ink-900' : 'text-ink-300'}>
+                          <span className={cn('whitespace-nowrap', act != null ? 'text-ink-900' : 'text-ink-300')}>
                             {act != null ? act.toFixed(2) : t('未公布')}
                           </span>
                         </span>
