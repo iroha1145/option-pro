@@ -2205,18 +2205,35 @@ class StrengthRefreshTask:
         selected_groups: list[tuple[str, dict[str, Any], list[str]]] = []
         group_index: dict[str, int] = {}
         leftover_request_ids: list[str] = []
+        action_completions: list[dict[str, Any]] = []
         for action in actions:
             details = action.get("details") if isinstance(action, dict) else None
             raw = details.get("parameters") if isinstance(details, dict) else None
-            if not isinstance(raw, dict):
-                raise ValueError("strength refresh action parameters are missing")
-            parameters = normalize_strength_scan_parameters(raw)
-            expected_hash = strength_scan_parameters_hash(parameters)
-            stored_hash = details.get("parameters_hash")
-            if stored_hash is not None and stored_hash != expected_hash:
-                raise ValueError("strength refresh action parameter hash is invalid")
-            request_id = action.get("request_id")
+            request_id = action.get("request_id") if isinstance(action, dict) else None
             request_ids = [request_id] if isinstance(request_id, str) and request_id else []
+            try:
+                if not isinstance(raw, dict):
+                    raise ValueError("strength refresh action parameters are missing")
+                parameters = normalize_strength_scan_parameters(raw)
+                expected_hash = strength_scan_parameters_hash(parameters)
+                stored_hash = details.get("parameters_hash") if isinstance(details, dict) else None
+                if stored_hash is not None and stored_hash != expected_hash:
+                    raise ValueError("strength refresh action parameter hash is invalid")
+            except ValueError as exc:
+                for item_id in request_ids:
+                    action_completions.append(
+                        {
+                            "request_id": item_id,
+                            "succeeded": False,
+                            "error_code": "invalid_parameters",
+                            "parameters": raw if isinstance(raw, dict) else None,
+                            "result": {
+                                "error_type": "ValueError",
+                                "message": str(exc),
+                            },
+                        }
+                    )
+                continue
             existing = group_index.get(expected_hash)
             if existing is not None:
                 selected_groups[existing][2].extend(request_ids)
@@ -2229,22 +2246,20 @@ class StrengthRefreshTask:
         selected_jobs = [parameters for _digest, parameters, _ids in selected_groups]
         seen = set(group_index)
         if not selected_jobs:
-            selected_jobs = [dict(DEFAULT_STRENGTH_SCAN_PARAMETERS)]
-            seen.add(strength_scan_parameters_hash(selected_jobs[0]))
-            selected_groups = [
-                (
-                    strength_scan_parameters_hash(selected_jobs[0]),
-                    selected_jobs[0],
-                    [],
-                )
-            ]
+            await self._publish_action_progress(action_completions, leftover_request_ids)
+            return TaskResult(
+                status="idle",
+                details={
+                    "action_completions": action_completions,
+                    "requeued_request_ids": leftover_request_ids,
+                },
+            )
         from app.services.strength.variant_demand import (
             complete_strength_variant_demand,
             list_pending_strength_variant_demands,
         )
 
         result: TaskResult | None = None
-        action_completions: list[dict[str, Any]] = []
         pending_groups = list(selected_groups)
 
         def remaining_ids() -> list[str]:
@@ -2360,8 +2375,9 @@ class StrengthRefreshTask:
         details = dict(result.details)
         details["action_completions"] = action_completions
         leftover = remaining_ids()
+        details["requeued_request_ids"] = leftover
         if leftover:
-            details["requeued_request_ids"] = leftover
+            details["leftover_mode"] = "immediate"
         return TaskResult(
             status=result.status,
             details=details,

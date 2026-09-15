@@ -592,6 +592,15 @@ def test_runtime_timeout_keeps_first_group_and_requeues_rest(tmp_path: Path) -> 
             == strength.strength_scan_parameters_hash(default)
         )
         assert customer_action["error_code"] is None
+        from datetime import datetime, timezone
+
+        retry = (customer_action.get("details") or {}).get("retry") or {}
+        assert retry.get("attempt") == 1
+        assert retry.get("exhausted") is False
+        assert retry.get("next_eligible_at")
+        observed = datetime.now(timezone.utc)
+        assert repository.has_pending_actions("strength_refresh", now=observed) is False
+        assert repository.next_action_retry_delay("strength_refresh", now=observed) > 0
         supervisor.request_stop()
         hang.set()
         await asyncio.wait_for(running, timeout=2)
@@ -703,3 +712,49 @@ def test_runtime_lease_loss_does_not_rewrite_settled_success(tmp_path: Path) -> 
         assert any(item[1] is True for item in finishes)
 
     asyncio.run(scenario())
+
+
+def test_invalid_parameters_fail_and_valid_group_completes(tmp_path: Path) -> None:
+    from app.api import strength
+
+    default, _a0, task = _pair_actions(tmp_path, _raising_scanner())
+    result = asyncio.run(
+        task.run_for_actions(
+            [
+                {"request_id": "act_bad", "details": {"parameters": default, "parameters_hash": "0" * 64}},
+                {"request_id": "act_owner", "details": {"parameters": default}},
+            ]
+        )
+    )
+    completions = {item["request_id"]: item for item in result.details["action_completions"]}
+    assert completions["act_bad"]["succeeded"] is False
+    assert completions["act_bad"]["error_code"] == "invalid_parameters"
+    assert completions["act_owner"]["succeeded"] is True
+    assert completions["act_owner"]["parameters_hash"] == strength.strength_scan_parameters_hash(
+        default
+    )
+    assert result.details["requeued_request_ids"] == []
+
+
+def test_timeout_retry_has_delay_and_exhausts(tmp_path: Path) -> None:
+    from datetime import datetime, timedelta, timezone
+
+    from app.worker.state import (
+        ACTION_TIMEOUT_RETRY_MAX,
+        action_is_claimable,
+        bump_action_retry,
+    )
+
+    now = datetime(2026, 9, 15, 12, 0, tzinfo=timezone.utc)
+    details = {}
+    for attempt in range(ACTION_TIMEOUT_RETRY_MAX):
+        details, exhausted, next_at = bump_action_retry(details, now=now, reason="task_timeout")
+        assert exhausted is False
+        assert next_at is not None
+        assert action_is_claimable(details, now) is False
+        assert action_is_claimable(details, next_at) is True
+        now = next_at
+    details, exhausted, next_at = bump_action_retry(details, now=now, reason="task_timeout")
+    assert exhausted is True
+    assert next_at is None
+    assert details["retry"]["exhausted"] is True

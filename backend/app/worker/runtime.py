@@ -21,6 +21,7 @@ from .state import (
     WorkerAlreadyRunning,
     WorkerLeaseLost,
     WorkerStateRepository,
+    bump_action_retry,
     utc_now,
 )
 
@@ -217,6 +218,7 @@ class WorkerSupervisor:
         request_ids: Sequence[str],
         *,
         now: datetime | None = None,
+        details_updates: Mapping[str, Mapping[str, Any]] | None = None,
     ) -> None:
         def write() -> None:
             self.repository.requeue_running_actions(
@@ -224,6 +226,7 @@ class WorkerSupervisor:
                 token,
                 list(request_ids),
                 now=now,
+                details_updates=details_updates,
             )
 
         try:
@@ -233,6 +236,52 @@ class WorkerSupervisor:
                 "worker manual action requeue dropped task=%s error=%s",
                 task.name,
                 error,
+            )
+
+    async def _requeue_or_exhaust(
+        self,
+        task: TaskSpec,
+        token: int,
+        request_ids: Sequence[str],
+        *,
+        now: datetime,
+        reason: str,
+    ) -> None:
+        if not request_ids:
+            return
+        delayed: list[str] = []
+        updates: dict[str, dict[str, Any]] = {}
+        exhausted: list[str] = []
+        for request_id in request_ids:
+            row = self.repository.action_request(request_id)
+            details = dict(row.get("details") or {}) if row else {}
+            merged, done, _next_at = bump_action_retry(details, now=now, reason=reason)
+            if done:
+                exhausted.append(request_id)
+                continue
+            delayed.append(request_id)
+            updates[request_id] = {"retry": merged.get("retry") or {}}
+        if exhausted:
+            await self._finish_actions_guarded(
+                task,
+                token,
+                exhausted,
+                succeeded=False,
+                error_code="retry_exhausted",
+                details={
+                    "task_status": "degraded",
+                    "task_completed_at": now.isoformat().replace("+00:00", "Z"),
+                    "result": {"reason": reason},
+                },
+                now=now,
+            )
+        if delayed:
+            await self._requeue_actions_guarded(
+                task,
+                token,
+                delayed,
+                now=now,
+                details_updates=updates,
             )
 
     def _can_commit_manual_actions(self, token: int) -> bool:
@@ -326,7 +375,31 @@ class WorkerSupervisor:
         if isinstance(extra, list):
             leftover.extend(str(item) for item in extra if item)
         leftover = list(dict.fromkeys(leftover))
-        if leftover:
+        leftover_mode = str(
+            (result.details or {}).get("leftover_mode") or "immediate"
+        )
+        if leftover and leftover_mode == "fail":
+            await self._finish_actions_guarded(
+                task,
+                token,
+                leftover,
+                succeeded=False,
+                error_code=result.error_code or "invalid_parameters",
+                details={
+                    "task_status": "degraded",
+                    "task_completed_at": completed.isoformat().replace("+00:00", "Z"),
+                },
+                now=completed,
+            )
+        elif leftover and leftover_mode == "timeout_retry":
+            await self._requeue_or_exhaust(
+                task,
+                token,
+                leftover,
+                now=completed,
+                reason=result.error_code or "task_timeout",
+            )
+        elif leftover:
             await self._requeue_actions_guarded(
                 task,
                 token,
@@ -361,6 +434,13 @@ class WorkerSupervisor:
             )
             return
         error_code = interrupt_code if _ERROR_CODE.fullmatch(interrupt_code) else "task_failed"
+        leftover_mode = (
+            "fail"
+            if error_code == "invalid_parameters"
+            else "timeout_retry"
+            if error_code in {"task_timeout", "task_failed"}
+            else "immediate"
+        )
         try:
             await self._complete_manual_actions(
                 task,
@@ -372,6 +452,7 @@ class WorkerSupervisor:
                     details={
                         "action_completions": list(progress.get("action_completions") or []),
                         "requeued_request_ids": list(progress.get("requeued_request_ids") or []),
+                        "leftover_mode": leftover_mode,
                     },
                 ),
                 degraded=True,
@@ -714,15 +795,24 @@ class WorkerSupervisor:
         try:
             return bool(
                 await asyncio.to_thread(
-                    self.repository.has_pending_actions,
+                    self.repository.has_claimable_actions,
                     task.name,
                 )
             )
         except sqlite3.OperationalError:
             return False
 
+    async def _next_retry_delay(self, task: TaskSpec) -> float | None:
+        try:
+            return await asyncio.to_thread(
+                self.repository.next_action_retry_delay,
+                task.name,
+            )
+        except sqlite3.OperationalError:
+            return None
+
     async def _wait_for_next(self, task: TaskSpec, delay: float) -> bool:
-        """Wake scheduled loops promptly when the API queues a manual action."""
+        """Wake for claimable actions; delayed retries keep their backoff."""
 
         if self.stop.is_set():
             return False
@@ -732,6 +822,9 @@ class WorkerSupervisor:
             if await self._has_pending_actions(task):
                 return True
             remaining = deadline - loop.time()
+            retry_delay = await self._next_retry_delay(task)
+            if retry_delay is not None:
+                remaining = min(remaining, max(0.0, retry_delay))
             if remaining <= 0:
                 return True
             try:
