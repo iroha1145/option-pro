@@ -877,7 +877,7 @@ class BreakoutRepository:
         computed_at = str(payload.get("computed_at") or published_at)
         known_at = payload.get("known_at")
         first_known = payload.get("first_known_at") or known_at
-        complete = t1_identity_complete(payload)
+        complete = t1_identity_complete(payload) and status in T1_SETTLED_STATUSES
         current = connection.execute(
             "SELECT eval_version, identity_hash, status, first_known_at, published_at FROM breakout_t1_current WHERE event_id=?",
             (event_id,),

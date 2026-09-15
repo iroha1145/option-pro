@@ -4,6 +4,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+import numpy as np
 import pandas as pd
 
 from app.services.breakouts.models import MarketSession
@@ -299,6 +300,162 @@ def test_regular_scan_carryover_overlay_keeps_sidecar_settled(tmp_path: Path) ->
     kept = repo.overlay_t1_evaluations([raw])[0]["t1_priority"]
     assert kept["status"] == T1_MET
     assert kept["latest_attempt"]["status"] == T1_UNAVAILABLE
+
+
+def _store_then_overlay(tmp_path: Path, name: str, first: dict, later: dict) -> dict:
+    repo = BreakoutRepository(tmp_path / name)
+    repo.initialize()
+    event_id = str(first.get("event_id") or later.get("event_id") or "evt")
+    repo.persist_t1_evaluations([{"event_id": event_id, "t1_priority": first}])
+    repo.persist_t1_evaluations([{"event_id": event_id, "t1_priority": later}])
+    return repo.overlay_t1_evaluations([{"event_id": event_id}])[0]["t1_priority"]
+
+
+def test_missing_event_volume_does_not_replace_settled_met(tmp_path: Path) -> None:
+    first = evaluate_t1_from_daily(
+        _daily_frame({"open_": 100, "high": 110, "low": 90, "close": 108, "volume": 2_000_000}),
+        session_date=SESSION,
+        resistance_high=100,
+        as_of=_closed(),
+        session=MarketSession.CLOSED,
+        event_id="evt-vol-missing",
+    )
+    assert first["status"] == T1_MET
+    frame = _daily_frame({"open_": 100, "high": 110, "low": 90, "close": 108, "volume": 2_000_000})
+    frame.loc[pd.Timestamp(SESSION), "Volume"] = np.nan
+    later = evaluate_t1_from_daily(
+        frame,
+        session_date=SESSION,
+        resistance_high=100,
+        as_of=_closed() + timedelta(hours=1),
+        session=MarketSession.CLOSED,
+        previous=first,
+        event_id="evt-vol-missing",
+    )
+    assert later["status"] == T1_UNAVAILABLE
+    assert later["reason"] == "missing_event_volume"
+    assert later.get("identity_complete") is False
+    kept = _store_then_overlay(tmp_path, "t1-vol-missing.db", first, later)
+    assert kept["status"] == T1_MET
+    assert kept["known_at"] == first["known_at"]
+    assert kept["eval_version"] == first["eval_version"]
+    assert kept["latest_attempt"]["reason"] == "missing_event_volume"
+
+
+def test_negative_event_volume_does_not_become_a_signal(tmp_path: Path) -> None:
+    first = evaluate_t1_from_daily(
+        _daily_frame({"open_": 100, "high": 110, "low": 90, "close": 108, "volume": 2_000_000}),
+        session_date=SESSION,
+        resistance_high=100,
+        as_of=_closed(),
+        session=MarketSession.CLOSED,
+        event_id="evt-vol-neg",
+    )
+    frame = _daily_frame({"open_": 100, "high": 110, "low": 90, "close": 108, "volume": -1})
+    later = evaluate_t1_from_daily(
+        frame,
+        session_date=SESSION,
+        resistance_high=100,
+        as_of=_closed() + timedelta(hours=1),
+        session=MarketSession.CLOSED,
+        previous=first,
+        event_id="evt-vol-neg",
+    )
+    assert later["status"] == T1_UNAVAILABLE
+    assert later["reason"] == "missing_event_volume"
+    assert later.get("identity_complete") is False
+    kept = _store_then_overlay(tmp_path, "t1-vol-neg.db", first, later)
+    assert kept["status"] == T1_MET
+    assert kept["latest_attempt"]["status"] == T1_UNAVAILABLE
+
+
+def test_missing_resistance_is_not_a_complete_revision(tmp_path: Path) -> None:
+    first = evaluate_t1_from_daily(
+        _daily_frame({"open_": 100, "high": 110, "low": 90, "close": 108, "volume": 2_000_000}),
+        session_date=SESSION,
+        resistance_high=100,
+        as_of=_closed(),
+        session=MarketSession.CLOSED,
+        event_id="evt-res",
+    )
+    later = evaluate_t1_from_daily(
+        _daily_frame({"open_": 100, "high": 110, "low": 90, "close": 108, "volume": 2_000_000}),
+        session_date=SESSION,
+        resistance_high=None,
+        as_of=_closed() + timedelta(hours=1),
+        session=MarketSession.CLOSED,
+        previous=first,
+        event_id="evt-res",
+    )
+    assert later["status"] == T1_UNAVAILABLE
+    assert later["reason"] == "t1_inputs_unavailable"
+    assert later.get("identity_complete") is False
+    kept = _store_then_overlay(tmp_path, "t1-res.db", first, later)
+    assert kept["status"] == T1_MET
+    assert kept["known_at"] == first["known_at"]
+    assert kept["latest_attempt"]["reason"] == "t1_inputs_unavailable"
+
+
+def test_zero_event_volume_is_unmet_not_missing(tmp_path: Path) -> None:
+    zero = evaluate_t1_from_daily(
+        _daily_frame({"open_": 100, "high": 110, "low": 90, "close": 108, "volume": 0}),
+        session_date=SESSION,
+        resistance_high=100,
+        as_of=_closed(),
+        session=MarketSession.CLOSED,
+        event_id="evt-zero",
+    )
+    assert zero["status"] == T1_UNMET
+    assert zero.get("identity_complete") is True
+    met = evaluate_t1_from_daily(
+        _daily_frame({"open_": 100, "high": 110, "low": 90, "close": 108, "volume": 2_000_000}),
+        session_date=SESSION,
+        resistance_high=100,
+        as_of=_closed(),
+        session=MarketSession.CLOSED,
+        event_id="evt-zero",
+    )
+    revised = evaluate_t1_from_daily(
+        _daily_frame({"open_": 100, "high": 110, "low": 90, "close": 108, "volume": 0}),
+        session_date=SESSION,
+        resistance_high=100,
+        as_of=_closed() + timedelta(hours=1),
+        session=MarketSession.CLOSED,
+        previous=met,
+        event_id="evt-zero",
+    )
+    assert revised["status"] == T1_UNMET
+    assert revised["eval_version"] == met["eval_version"] + 1
+    kept = _store_then_overlay(tmp_path, "t1-zero.db", met, revised)
+    assert kept["status"] == T1_UNMET
+    assert kept["first_known_at"] == met["known_at"]
+
+
+def test_store_rejects_claimed_complete_unavailable(tmp_path: Path) -> None:
+    repo = BreakoutRepository(tmp_path / "t1-claimed.db")
+    repo.initialize()
+    first = evaluate_t1_from_daily(
+        _daily_frame({"open_": 100, "high": 110, "low": 90, "close": 108, "volume": 2_000_000}),
+        session_date=SESSION,
+        resistance_high=100,
+        as_of=_closed(),
+        session=MarketSession.CLOSED,
+        event_id="evt-claimed",
+    )
+    repo.persist_t1_evaluations([{"event_id": "evt-claimed", "t1_priority": first}])
+    forged = {
+        "status": T1_UNAVAILABLE,
+        "reason": "missing_event_volume",
+        "identity_hash": "forged-complete-hash",
+        "identity_complete": True,
+        "computed_at": "2026-09-14T21:00:00Z",
+        "known_at": None,
+    }
+    repo.persist_t1_evaluations([{"event_id": "evt-claimed", "t1_priority": forged}])
+    kept = repo.overlay_t1_evaluations([{"event_id": "evt-claimed"}])[0]["t1_priority"]
+    assert kept["status"] == T1_MET
+    assert kept["known_at"] == first["known_at"]
+    assert kept["latest_attempt"]["reason"] == "missing_event_volume"
 
 
 def test_t1_input_identity_includes_prior_ohlc() -> None:

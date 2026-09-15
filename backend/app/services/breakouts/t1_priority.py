@@ -44,6 +44,7 @@ T1_EXPIRED_LIFECYCLES = {"FAILED", "EXPIRED"}
 T1_RETRYABLE_REASONS = {
     "daily_unavailable",
     "missing_event_bar",
+    "missing_event_volume",
     "no_completed_daily_bars",
     "daily_fetch_failed",
     "price_adapter_unavailable",
@@ -146,8 +147,17 @@ def _identity_hash(payload: Mapping[str, Any]) -> str:
 
 
 def t1_identity_complete(payload: Mapping[str, Any] | None) -> bool:
+    """True only for a hashable *and* decision-complete settled conclusion.
+
+    A hash that includes null resistance or volume is not proof that the
+    inputs were complete. Unavailable / pending attempts are never complete.
+    """
+
     body = dict(payload or {})
     if body.get("identity_complete") is False:
+        return False
+    status = str(body.get("status") or "").strip()
+    if status not in T1_SETTLED_STATUSES:
         return False
     return bool(str(body.get("identity_hash") or "").strip())
 
@@ -443,20 +453,38 @@ def evaluate_t1_from_daily(
         distance_atr=distance,
         settings=cfg,
     )
+    data_through = _bar_date(bar_index)
+    data_through_text = data_through.isoformat() if data_through else session_date.isoformat()
+    detail = {
+        "status": rvol.get("status"),
+        "reason": rvol.get("reason"),
+        "lookback_used": rvol.get("lookback_used"),
+        "denominator": rvol.get("denominator"),
+    }
     if not checks["available"]:
-        status = T1_UNAVAILABLE
         reason = rvol.get("reason") or (
             "invalid_ohlc" if location.get("invalid_ohlc")
             else "zero_range" if location.get("zero_range")
             else "t1_inputs_unavailable"
         )
-    elif checks["satisfied"]:
-        status = T1_MET
-        reason = None
-    else:
-        status = T1_UNMET
-        reason = "conditions_not_met"
-    known_at = computed_at if status in T1_TERMINAL_STATUSES else None
+        return {
+            **base,
+            "status": T1_UNAVAILABLE,
+            "session_complete": True,
+            "data_through": data_through_text,
+            "identity_hash": identity,
+            "identity_complete": False,
+            "reason": reason,
+            "checks": checks["checks"],
+            "clv": checks["clv"],
+            "rvol_daily_20med": checks["rvol"],
+            "upper_shadow_ratio": checks["upper_shadow_ratio"],
+            "breakout_distance_atr": checks["breakout_distance_atr"],
+            "rvol_detail": detail,
+        }
+    status = T1_MET if checks["satisfied"] else T1_UNMET
+    reason = None if status == T1_MET else "conditions_not_met"
+    known_at = computed_at
     revisions = list(prior.get("revisions") or [])
     eval_version = int(prior.get("eval_version") or 0) or 1
     if (
@@ -475,12 +503,11 @@ def evaluate_t1_from_daily(
         )
         eval_version += 1
         first_known = prior.get("first_known_at") or prior.get("known_at") or known_at
-    data_through = _bar_date(bar_index)
     return {
         **base,
         "status": status,
         "session_complete": True,
-        "data_through": data_through.isoformat() if data_through else session_date.isoformat(),
+        "data_through": data_through_text,
         "known_at": known_at,
         "first_known_at": first_known or known_at,
         "eval_version": eval_version,
@@ -495,12 +522,7 @@ def evaluate_t1_from_daily(
         "upper_shadow_ratio": checks["upper_shadow_ratio"],
         "breakout_distance_atr": checks["breakout_distance_atr"],
         "reason": reason,
-        "rvol_detail": {
-            "status": rvol.get("status"),
-            "reason": rvol.get("reason"),
-            "lookback_used": rvol.get("lookback_used"),
-            "denominator": rvol.get("denominator"),
-        },
+        "rvol_detail": detail,
     }
 
 
