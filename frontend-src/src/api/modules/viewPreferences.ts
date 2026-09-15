@@ -7,7 +7,7 @@ import {
   type RadarSortChoice,
   type ScreenerRankingChoice,
 } from '@/lib/algorithmPreferences';
-import { enqueuePreferenceWrite } from '@/lib/viewPreferenceWrites';
+import { persistRemoteOrKeepLocal } from '@/lib/viewPreferenceWrites';
 
 export interface ViewPreferencesDoc {
   principal: string | null;
@@ -95,9 +95,5 @@ export async function persistAlgorithmChoice(
 ): Promise<ViewPreferencesDoc> {
   const local = asLocalDoc(writeAlgorithmPreferences(patch, principal));
   if (!persistRemote) return local;
-  try {
-    return await enqueuePreferenceWrite(() => viewPreferencesApi.write(patch));
-  } catch (error) {
-    return { ...local, persisted: false, syncError: error };
-  }
+  return persistRemoteOrKeepLocal(local, () => viewPreferencesApi.write(patch));
 }

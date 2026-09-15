@@ -8,7 +8,11 @@ import {
   shouldCommitChoiceGeneration,
   shouldCommitHistoryPage,
 } from '../src/lib/choiceGeneration.ts';
-import { enqueuePreferenceWrite, resetPreferenceWriteQueue } from '../src/lib/viewPreferenceWrites.ts';
+import {
+  enqueuePreferenceWrite,
+  persistRemoteOrKeepLocal,
+  resetPreferenceWriteQueue,
+} from '../src/lib/viewPreferenceWrites.ts';
 
 test('later choice generation wins over a stale persist', () => {
   const first = 1;
@@ -78,4 +82,19 @@ test('preference storage keys are principal-scoped', () => {
   assert.equal(preferenceStorageKey('account:alice'), 'optix.algorithm-prefs.v1:account:alice');
   assert.equal(preferenceStorageKey(null), 'optix.algorithm-prefs.v1:guest');
   assert.notEqual(preferenceStorageKey('account:alice'), preferenceStorageKey('account:bob'));
+});
+
+test('remote preference 503/401/timeout keep the local follow_default choice', async () => {
+  resetPreferenceWriteQueue();
+  const local = { screenerRankingAlgorithm: 'follow_default', persisted: false };
+  for (const code of [503, 401, 'timeout']) {
+    const failed = await persistRemoteOrKeepLocal(local, async () => {
+      const error = new Error(String(code));
+      error.code = code;
+      throw error;
+    });
+    assert.equal(failed.screenerRankingAlgorithm, 'follow_default');
+    assert.equal(failed.persisted, false);
+    assert.equal(failed.syncError.code, code);
+  }
 });

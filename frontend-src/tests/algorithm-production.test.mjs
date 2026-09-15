@@ -13,7 +13,6 @@ import {
   requestedScreenerAlgorithm,
   writeAlgorithmPreferences,
 } from '../src/lib/algorithmPreferences.ts';
-import { resetPreferenceWriteQueue } from '../src/lib/viewPreferenceWrites.ts';
 
 test('follow_default is sent explicitly on both scan and refresh identities', () => {
   const request = buildStrengthScanRequest(DEFAULT_FILTERS);
@@ -95,44 +94,4 @@ test('local algorithm preferences keep an explicit original choice', () => {
   assert.equal(readAlgorithmPreferences('account:alice').screenerRankingAlgorithm, 'follow_default');
   assert.equal(readAlgorithmPreferences('account:bob').screenerRankingAlgorithm, 'follow_default');
   delete globalThis.window;
-});
-
-test('preference persist failure keeps the explicit follow_default request identity', async () => {
-  const memory = new Map();
-  globalThis.window = {
-    localStorage: {
-      getItem: (key) => memory.get(key) ?? null,
-      setItem: (key, value) => memory.set(key, value),
-    },
-  };
-  const { persistAlgorithmChoice, viewPreferencesApi } = await import('../src/api/modules/viewPreferences.ts');
-  const originalWrite = viewPreferencesApi.write;
-  resetPreferenceWriteQueue();
-  const request = buildStrengthScanRequest({
-    ...DEFAULT_FILTERS,
-    rankingAlgorithm: 'follow_default',
-  });
-  assert.equal(request.apiParams.ranking_algorithm, 'follow_default');
-  assert.equal(request.refreshParameters.ranking_algorithm, 'follow_default');
-  try {
-    for (const code of [503, 401, 'timeout']) {
-      viewPreferencesApi.write = async () => {
-        const error = new Error(String(code));
-        error.code = code;
-        throw error;
-      };
-      const failed = await persistAlgorithmChoice(
-        { screenerRankingAlgorithm: 'follow_default' },
-        true,
-        'account:alice',
-      );
-      assert.equal(failed.screenerRankingAlgorithm, 'follow_default');
-      assert.equal(failed.persisted, false);
-      assert.equal(failed.syncError.code, code);
-    }
-  } finally {
-    viewPreferencesApi.write = originalWrite;
-    resetPreferenceWriteQueue();
-    delete globalThis.window;
-  }
 });

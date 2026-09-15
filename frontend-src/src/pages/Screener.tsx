@@ -303,12 +303,16 @@ export default function Screener() {
     // 仅演示数据保留可见扫描过程；真实接口完成后立即呈现结果。
     const minMs = isMock ? 800 + Math.random() * 700 : 0;
     try {
-      const persisted = await persistAlgorithmChoice(
-        { screenerRankingAlgorithm: filters.rankingAlgorithm },
-        isSignedIn,
-        principal,
-      );
-      if (persisted?.syncError) {
+      try {
+        const persisted = await persistAlgorithmChoice(
+          { screenerRankingAlgorithm: filters.rankingAlgorithm },
+          isSignedIn,
+          principal,
+        );
+        if (persisted?.syncError) {
+          toast.info?.(__t('选择已生效，但尚未同步到账号'));
+        }
+      } catch {
         toast.info?.(__t('选择已生效，但尚未同步到账号'));
       }
       requireCurrent();
