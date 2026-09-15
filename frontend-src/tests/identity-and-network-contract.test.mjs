@@ -206,9 +206,10 @@ test('theme-boot 在主包解析前预取身份和默认新闻 feed', async () =
     window_hours: 72,
     include_unanalyzed: true,
     include_neutral: true,
+    page_mode: 'visible',
     limit: 12,
   });
-  assert.equal(defaultFeedSearch, 'window_hours=72&include_unanalyzed=true&include_neutral=true&limit=12');
+  assert.equal(defaultFeedSearch, 'window_hours=72&include_unanalyzed=true&include_neutral=true&page_mode=visible&limit=12');
   assert.match(boot, new RegExp(defaultFeedSearch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   assert.match(boot, /__OPTIX_PREFETCH__/);
   assert.match(boot, /credentials:\s*"include"/);

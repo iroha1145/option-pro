@@ -25,6 +25,12 @@ from app.services.sectors import SECTORS
 
 from .config import CatalystSettings
 from .errors import CatalystError
+from .local_intelligence import (
+    VISIBLE_FEED_SCAN_BUDGET,
+    _cursor_decode,
+    _cursor_encode,
+    _feed_query_hash,
+)
 
 
 _WAITING_TITLE = "中文标题等待生成"
@@ -1277,9 +1283,78 @@ class PersonalCatalystService:
         matched = [
             item for item in projected_items if matches_projected_filters(item)
         ]
-        visible = [item for item in matched if _displayable_zh(item)]
-        projected["items"] = visible
-        projected["hidden_unanalyzed"] = max(0, len(matched) - len(visible))
+        page_mode = str(kwargs.get("page_mode") or "").strip() or None
+        if page_mode != "visible":
+            page_mode = None
+        if page_mode == "visible":
+            requested_limit = min(100, max(1, int(kwargs.get("limit") or 50)))
+            visible: list[dict[str, Any]] = []
+            hidden = 0
+            for item in projected_items:
+                if matches_projected_filters(item) and _displayable_zh(item):
+                    visible.append(item)
+                    if len(visible) >= requested_limit:
+                        break
+                elif matches_projected_filters(item):
+                    hidden += 1
+            projected["items"] = visible
+            projected["hidden_unanalyzed"] = hidden
+            theme = str(kwargs.get("theme") or "").strip().casefold() or None
+            query_hash = _feed_query_hash(kwargs, theme=theme)
+            if "page_offset" in payload:
+                offset = int(payload.get("page_offset") or 0)
+            else:
+                offset, _anchor = _cursor_decode(kwargs.get("cursor"), query_hash)
+            raw_items = payload.get("items")
+            raw_page = raw_items if isinstance(raw_items, list) else []
+            filled = len(visible) >= requested_limit
+            if filled and visible:
+                last_news_id = visible[-1].get("news_id")
+                consumed = next(
+                    (
+                        index + 1
+                        for index, raw in enumerate(raw_page)
+                        if isinstance(raw, Mapping)
+                        and raw.get("news_id") == last_news_id
+                    ),
+                    len(raw_page) or len(projected_items),
+                )
+            else:
+                consumed = int(
+                    payload.get("page_scanned")
+                    or len(raw_page)
+                    or len(projected_items)
+                )
+            window_total = (projected.get("summary") or {}).get("count")
+            try:
+                window_total_n = int(window_total) if window_total is not None else None
+            except (TypeError, ValueError):
+                window_total_n = None
+            if filled:
+                remaining = (
+                    window_total_n is None
+                    or offset + consumed < window_total_n
+                )
+            elif window_total_n is not None:
+                remaining = offset + consumed < window_total_n
+            else:
+                remaining = bool(payload.get("has_more")) or consumed < len(raw_page)
+            if remaining:
+                projected["next_cursor"] = _cursor_encode(
+                    offset + consumed,
+                    str(projected.get("as_of") or payload.get("as_of") or ""),
+                    query_hash,
+                )
+                projected["has_more"] = True
+                if not visible:
+                    projected["status"] = "active"
+            else:
+                projected["next_cursor"] = None
+                projected["has_more"] = False
+        else:
+            visible = [item for item in matched if _displayable_zh(item)]
+            projected["items"] = visible
+            projected["hidden_unanalyzed"] = max(0, len(matched) - len(visible))
         if not projected["items"] and not projected.get("has_more"):
             projected["status"] = "empty"
         projected["analysis_availability"] = self._analysis_availability_for_access(

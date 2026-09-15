@@ -5,15 +5,18 @@ import './index.css'
 import './styles/transitions-catalog.css'
 import { applyColorMode } from './lib/colorPreference.ts'
 import { applyAppearance } from './lib/themePreference.ts'
+import { prepareI18n } from './i18n/boot.ts'
 import { prefetchRouteChunk } from './lib/prefetchRouteChunk.ts'
-import App from './App.tsx'
 
 applyAppearance()
 applyColorMode()
-prefetchRouteChunk(window.location.pathname)
 
-createRoot(document.getElementById('root')!).render(
-  <BrowserRouter>
-    <App />
-  </BrowserRouter>,
-)
+void prepareI18n().then(async () => {
+  prefetchRouteChunk(window.location.pathname)
+  const { default: App } = await import('./App.tsx')
+  createRoot(document.getElementById('root')!).render(
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>,
+  )
+})

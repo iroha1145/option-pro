@@ -6,14 +6,11 @@
  *   且后端下发的中文标签（板块名、形态标签、公司名…）可以走同一张表，不需要第二套机制。
  * - 语言在「页面加载期」定型：切换语言 = 落盘 + 整页重载。模块级常量、useMemo 缓存的
  *   文案都在加载期求值，只有重载才能保证全站文案不出现半中半日的混排。
- * - 词典静态引入（非按需 import）：t() 在模块顶层就可能被调用，异步加载会出现
- *   「常量已求值、词典还没到」的竞态。
+ * - 词典按当前语言装入：中文界面不下载英日译文；英/日只装入所需语言。必须先
+ *   prepareI18n() 再执行依赖模块级 t() 的应用代码，否则会出现「常量已求值、词典还没到」。
  * - AI 生成的正文（新闻分析、财报影响、焦点周期摘要、期权解读…）一律不进词典、
  *   不经 t()：那是模型当次写下的内容而非界面文案，翻译会失真，如实保留原文。
  */
-// 完整相对路径 + 扩展名（而不是 './dict' 目录导入）：node --experimental-strip-types
-// 跑测试时按 ES 模块规范解析，不会像 Vite/CommonJS 那样把目录自动接到 index.ts。
-import { DICT } from './dict/index.ts';
 
 export type Locale = 'zh' | 'en' | 'ja';
 
@@ -34,6 +31,12 @@ export const LOCALES: readonly LocaleMeta[] = [
 ] as const;
 
 const STORAGE_KEY = 'optix:locale';
+
+const tables: Partial<Record<Locale, Record<string, string>>> = {};
+
+export function installTranslations(locale: Locale, map: Record<string, string>): void {
+  tables[locale] = map;
+}
 
 function isLocale(value: unknown): value is Locale {
   return value === 'zh' || value === 'en' || value === 'ja';
@@ -108,6 +111,11 @@ function plural(text: string, vars?: TVars): string {
 
 const missing = new Set<string>();
 
+function lookup(msgid: string, code: Locale): string | undefined {
+  if (code === 'zh') return msgid;
+  return tables[code]?.[msgid];
+}
+
 /**
  * 取译文。msgid 为简体中文原文；未收录时回退原文（AI 生成的中文正文即走此分支，
  * 属预期行为——那是模型写下的内容，不是界面文案）。
@@ -115,8 +123,7 @@ const missing = new Set<string>();
 export function t(msgid: string, vars?: TVars): string {
   let text = msgid;
   if (current !== 'zh') {
-    const entry = DICT[msgid];
-    const translated = entry?.[current === 'en' ? 0 : 1];
+    const translated = lookup(msgid, current);
     if (translated) text = translated;
     else if (import.meta.env?.DEV && !missing.has(msgid)) {
       missing.add(msgid);
@@ -130,7 +137,7 @@ export function t(msgid: string, vars?: TVars): string {
 /** 该 msgid 是否有当前语言的译文（用于「AI 正文语言」这类如实标注） */
 export function hasTranslation(msgid: string, code: Locale = current): boolean {
   if (code === 'zh') return true;
-  return Boolean(DICT[msgid]?.[code === 'en' ? 0 : 1]);
+  return Boolean(lookup(msgid, code));
 }
 
 function applyHtmlLang(code: Locale): void {
@@ -142,6 +149,11 @@ function applyHtmlLang(code: Locale): void {
 }
 
 applyHtmlLang(current);
+
+/** 词典装入后再刷一次 <html lang> 与 document.title。 */
+export function applyDocumentLocale(): void {
+  applyHtmlLang(current);
+}
 
 /**
  * 切换语言：落盘后整页重载。重载保留当前 URL，用户停在原来的页面上。

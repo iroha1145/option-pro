@@ -328,6 +328,20 @@ def test_feed_forwards_theme_query() -> None:
     assert call[1]["theme"] == "evt_theme_ai_capex"
 
 
+def test_feed_forwards_visible_page_mode_and_keeps_legacy_default() -> None:
+    service = StubPersonalService()
+    client = client_for(service)
+    legacy = client.get("/api/catalysts/feed")
+    visible = client.get("/api/catalysts/feed", params={"page_mode": "visible"})
+    rejected = client.get("/api/catalysts/feed", params={"page_mode": "raw"})
+    assert legacy.status_code == 200
+    assert visible.status_code == 200
+    assert rejected.status_code == 422
+    calls = [item[1] for item in service.calls if item[0] == "feed"]
+    assert calls[0].get("page_mode") is None
+    assert calls[1].get("page_mode") == "visible"
+
+
 def test_feed_rejects_invalid_theme_query() -> None:
     service = StubPersonalService()
     response = client_for(service).get(

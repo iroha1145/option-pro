@@ -25,6 +25,14 @@ test.beforeAll(async () => {
       import React from 'react';
       import { createRoot } from 'react-dom/client';
       import AnalysisLegend from './components/detail/chart-drawings/AnalysisLegend.tsx';
+      import { getLocale, installTranslations } from './i18n/core.ts';
+      import { EN } from './i18n/dict/runtime-en.ts';
+      import { JA } from './i18n/dict/runtime-ja.ts';
+      export function prepareLegendI18n() {
+        const locale = getLocale();
+        if (locale === 'en') installTranslations('en', EN);
+        if (locale === 'ja') installTranslations('ja', JA);
+      }
       export function renderLegend(overlays, smartEnabled = true) {
         createRoot(document.getElementById('legend')).render(React.createElement(AnalysisLegend, { overlays, smartEnabled }));
       }
@@ -54,6 +62,7 @@ async function harness(page, locale = 'zh') {
   await page.goto('http://drawings.test/');
   await page.evaluate(locale => localStorage.setItem('optix:locale', locale), locale);
   await page.addScriptTag({ content: bundle });
+  await page.evaluate(() => DrawingsReview.prepareLegendI18n());
   await page.evaluate(() => {
     const R = DrawingsReview;
     window.bars = Array.from({ length: 160 }, (_, i) => {

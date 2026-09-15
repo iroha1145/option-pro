@@ -75,6 +75,21 @@ export function createReactStub() {
       }
       return slot.value;
     },
+    useMemo(fn, deps) {
+      const index = cursor++;
+      if (!(index in slots)) slots[index] = { value: fn(), deps };
+      const slot = slots[index];
+      const changed =
+        slot.deps === undefined ||
+        deps === undefined ||
+        deps.length !== slot.deps.length ||
+        deps.some((dep, i) => !Object.is(dep, slot.deps[i]));
+      if (changed) {
+        slot.value = fn();
+        slot.deps = deps;
+      }
+      return slot.value;
+    },
     useEffect(create, deps) {
       const index = cursor++;
       if (!(index in slots)) {

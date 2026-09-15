@@ -225,7 +225,7 @@ test('今日新闻优先使用完整过滤窗口汇总而非首屏五十条', as
 
 test('新闻流把未过中文校验的条目计为 hiddenUnanalyzed 而不是可见新闻', async () => {
   const loaded = loadCatalystsModule({
-    '/catalysts/feed?include_unanalyzed=true&include_neutral=true&limit=12': {
+    '/catalysts/feed?include_unanalyzed=true&include_neutral=true&page_mode=visible&limit=12': {
       items: [
         { news_id: 1, title_zh: '已译标题', summary_zh: '已译摘要' },
         { news_id: 2, title_zh: '', summary_zh: '' },

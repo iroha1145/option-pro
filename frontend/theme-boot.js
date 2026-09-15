@@ -25,7 +25,7 @@
     prefetch("/api/access/status");
     var path = location.pathname;
     if ((path === "/catalysts" || path === "/catalysts/") && !location.search) {
-      prefetch("/api/catalysts/feed?window_hours=72&include_unanalyzed=true&include_neutral=true&limit=12");
+      prefetch("/api/catalysts/feed?window_hours=72&include_unanalyzed=true&include_neutral=true&page_mode=visible&limit=12");
     }
     window.__OPTIX_PREFETCH__ = bag;
   } catch (e) { /* fetch 不可用时主包仍走原请求 */ }

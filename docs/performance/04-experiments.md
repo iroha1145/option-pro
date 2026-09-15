@@ -227,3 +227,15 @@
 - **性能**：`browser-final-mobile-ref.json` 冷 p75 1698 / 热 838 / LCP 1580 / CLS 0.0008，0 次 429，0 个 >5s 离群。`browser-final-interact.json` 抽屉 314 / 筛选 249，预取 20/20。
 - **相对 R3**：冷 1642→1698（+3.4%，低于 5% 复查线），热 829→838。仍远低于基线 2381/1110。
 - **决定**：保留当前累计版本。不把实验室数字写成 RUM。
+
+## Round 6 — 可见分页 / 按语言词典 / 财报按需
+
+完整方法、本轮原始数字与限制见 [13-round6-visible-i18n-earnings.md](13-round6-visible-i18n-earnings.md)。不覆盖本文件更早轮次的结论。
+
+- **A/B**（`58ffb2da` 后端重测）：访客 visible 热 187ms / 指纹 1；legacy hop 783ms / 指纹 5。Owner 整窗 `_item()` 热 p50 5292ms，不恢复 Owner 匿名缓存。并发安装失败保留本请求行集合，固定 `as_of` 翻页不漏项。
+- **C**：当前入口 `index-DbhCd4NO.js` gzip9 79102；公共壳 30 脚本 188070。入口+App 约 94.6KB 不是完整首次下载。词典块只在 en/ja 下载。三语 9/9 content，zh→en 深链接已测。
+- **D**：surfaces n=8（`58ffb2da`）首开不拉 chart，近滚后 8/8 挂载且 DOM 保持。图表失败留在局部边界；重试换带 `recover` 的模块 URL（浏览器 503→200 已验证）。刷新冷却内置 `onRefresh`。extras/悬停保存真实 ready，禁止 1ms 硬编码。
+- **E**：1440 主导航悬停后再点 p75 557 vs 立即 763（快 206ms / 27%），全 chunk / 0 额外付费，按阈值保留。命令面板关闭不预取。
+- **浏览器交错 n=20**：`index-uc86EHir.js` 历史为优化冷/热 20/20，p75 9436 / 2532；未优化冷 19/20 超时。`index-DDX2TFDT.js` @ `f2c05331`：两侧 20/20 无超时，`comparison_status=complete`。优化冷/热 p75 **7717 / 1596**，未优化 **112241 / 733**。冷差 −104524ms；热差 +863ms（未优化热更快，不写成收益）。**未在** `index-DbhCd4NO.js` 重跑。冷/热预算仍未达到。
+- **决定**：A/B/B2/C/D/E 全部保留。生产包同步为 `index-DbhCd4NO.js`。
+- **缓存续期**：过期同 cursor 条目在 `_store_revision_cache` 必须刷新 `built_at` **并作废** `anon_items`，再按当前窗口重建。不能为了少扫而保留旧展示条目。未延长 TTL，未混用 Owner/访客缓存。

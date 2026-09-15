@@ -26,6 +26,7 @@ import TickerLogo from '@/components/shared/TickerLogo';
 import SoftBadge from '@/components/shared/SoftBadge';
 import { NAV_ITEMS } from '@/components/Navbar';
 import { t, t as __t } from '../i18n/core.ts';
+import { prefetchRouteOnIntent } from '../lib/prefetchRouteChunk.ts';
 
 interface PaletteProps {
   open: boolean;
@@ -44,6 +45,7 @@ interface Entry {
   ticker?: string;
   sector?: string;
   icon: IconName;
+  path?: string;
   action: () => void;
 }
 
@@ -174,12 +176,13 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
           ticker: r.ticker,
           sector: r.sector,
           icon: 'candle',
+          path: `/stock/${r.ticker}`,
           action: () => pickTicker(r.ticker),
         }),
       );
     } else {
       readRecent().forEach((t) =>
-        list.push({ id: `r-${t}`, group: __t('最近'), title: t, ticker: t, mono: true, hint: __t('最近查看'), icon: 'clock-ny', action: () => pickTicker(t) }),
+        list.push({ id: `r-${t}`, group: __t('最近'), title: t, ticker: t, mono: true, hint: __t('最近查看'), icon: 'clock-ny', path: `/stock/${t}`, action: () => pickTicker(t) }),
       );
       NAV_ITEMS.forEach((n) =>
         list.push({
@@ -189,6 +192,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
           title: n.label,
           hint: __t('前往{label}', { label: n.label }),
           icon: 'chevron-right',
+          path: n.path,
           action: () => {
             onClose();
             navigate(n.path);
@@ -239,6 +243,7 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
           title: __t('登录'),
           hint: __t('管理员或个人账号'),
           icon: 'shield',
+          path: '/login',
           action: () => {
             onClose();
             navigate('/login');
@@ -281,9 +286,12 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
   };
 
   useEffect(() => {
+    if (!open) return;
     const el = listRef.current?.querySelector<HTMLElement>(`[data-idx="${clampedActive}"]`);
     el?.scrollIntoView({ block: 'nearest' });
-  }, [clampedActive]);
+    const path = flat[clampedActive]?.path;
+    if (path) prefetchRouteOnIntent(path);
+  }, [open, clampedActive, flat]);
 
   /* 滑行高亮定位：跟随 active 行（键盘 ↑↓ 与鼠标悬停同一套），首绘/列表
      换批时瞬放不补间，同一批内挪 active 才滑行。
@@ -466,11 +474,17 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
                       aria-selected={e.idx === clampedActive}
                       data-idx={e.idx}
                       onClick={e.action}
-                      onMouseEnter={() => setActive(e.idx)}
+                      onMouseEnter={() => {
+                        setActive(e.idx);
+                        if (e.path) prefetchRouteOnIntent(e.path);
+                      }}
                       /* 键盘焦点也要把高亮拉过来：面板级 Enter 让原生元素自己
                          派发 click（阻断 2），若焦点行与高亮行能分家，Tab 到第 1
                          行再按 Enter 打开的就不是唯一可见高亮的那一行。 */
-                      onFocus={() => setActive(e.idx)}
+                      onFocus={() => {
+                        setActive(e.idx);
+                        if (e.path) prefetchRouteOnIntent(e.path);
+                      }}
                       className={cn(
                         'relative z-10 flex w-full items-center gap-2.5 rounded-md px-4 py-2 text-left transition-colors duration-fast',
                       )}
