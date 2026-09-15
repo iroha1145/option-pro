@@ -291,6 +291,49 @@ test('publication visibility retry stays bounded and never creates a second work
   assert.equal(h.state.rows[0].ticker, 'NEW');
 });
 
+test('signed-in customer polls preparing A0 snapshot without posting owner refresh', async () => {
+  let posts = 0;
+  let reads = 0;
+  const h = harness({
+    isOwner: false,
+    isSignedIn: true,
+    principal: 'account:alice',
+    runtimeApi: { workerAction: async () => { posts++; return completed; } },
+    strengthApi: {
+      scanEnvelope: async () => {
+        reads += 1;
+        if (reads < 3) throw new ApiError(503, 'preparing', { bizCode: 'strength_snapshot_preparing' });
+        return envelope('A0ROW');
+      },
+    },
+  });
+  assert.equal(await h.runScan({ rankingAlgorithm: 'a0_mid_long' }), true);
+  assert.equal(posts, 0);
+  assert.equal(reads, 3);
+  assert.equal(h.state.rows[0].ticker, 'A0ROW');
+});
+
+test('unavailable A0 snapshot is a real failure and does not post owner refresh', async () => {
+  let posts = 0;
+  let reads = 0;
+  const h = harness({
+    isOwner: false,
+    isSignedIn: true,
+    principal: 'account:alice',
+    runtimeApi: { workerAction: async () => { posts++; return completed; } },
+    strengthApi: {
+      scanEnvelope: async () => {
+        reads += 1;
+        throw new ApiError(503, 'gone', { bizCode: 'strength_snapshot_unavailable' });
+      },
+    },
+  });
+  assert.equal(await h.runScan({ rankingAlgorithm: 'a0_mid_long' }), false);
+  assert.equal(posts, 0);
+  assert.equal(reads, 1);
+  assert.equal(h.state.scanError.bizCode, 'strength_snapshot_unavailable');
+});
+
 test('post-task missing publication cannot trigger another refresh loop', async () => {
   let posts = 0;
   let reads = 0;

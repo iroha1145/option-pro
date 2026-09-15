@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import { DEFAULT_FILTERS } from '../src/components/screener/types.ts';
 import { buildStrengthScanRequest } from '../src/components/screener/scanRequest.ts';
-import { strengthParametersMatch } from '../src/lib/screenerScanFlow.ts';
+import { isStrengthSnapshotPreparing, strengthParametersMatch } from '../src/lib/screenerScanFlow.ts';
 import { isA0Ranking, keepServerRankingOrder, rowPrimarySortScore } from '../src/lib/screenerSort.ts';
 import { t1StatusPresentation } from '../src/lib/t1Status.ts';
 import {
@@ -75,6 +75,13 @@ test('follow_default is an explicit request identity', () => {
   assert.equal(requestedRadarAlgorithm('follow_default'), 'follow_default');
   assert.equal(requestedScreenerAlgorithm('production'), 'production');
   assert.equal(requestedRadarAlgorithm('t1_daily_priority'), 't1_daily_priority');
+});
+
+test('only preparing 503 is treated as an in-progress A0 snapshot', () => {
+  assert.equal(isStrengthSnapshotPreparing({ code: 503, bizCode: 'strength_snapshot_preparing' }), true);
+  assert.equal(isStrengthSnapshotPreparing({ code: 503, bizCode: 'strength_snapshot_unavailable' }), false);
+  assert.equal(isStrengthSnapshotPreparing({ code: 500, bizCode: 'strength_snapshot_preparing' }), false);
+  assert.equal(isStrengthSnapshotPreparing(null), false);
 });
 
 test('local algorithm preferences keep an explicit original choice', () => {

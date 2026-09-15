@@ -320,6 +320,29 @@ def test_non_trading_day_bars_do_not_fill_the_window() -> None:
     assert result["status"] == T1_MET
 
 
+def test_zero_and_negative_prices_are_unavailable() -> None:
+    for open_, high, low, close in (
+        (0.0, 110.0, 90.0, 108.0),
+        (100.0, 110.0, 90.0, 0.0),
+        (-1.0, 110.0, 90.0, 108.0),
+        (100.0, 110.0, -0.01, 108.0),
+    ):
+        assert valid_daily_ohlc(open_, high, low, close) is None
+        frame = _daily_frame(
+            {"open_": open_, "high": high, "low": low, "close": close, "volume": 2_000_000}
+        )
+        result = evaluate_t1_from_daily(
+            frame,
+            session_date=SESSION,
+            resistance_high=100,
+            as_of=datetime(2026, 9, 14, 16, 5, tzinfo=ET),
+            session=MarketSession.CLOSED,
+        )
+        assert result["status"] == T1_UNAVAILABLE
+        assert result["reason"] == "invalid_ohlc"
+        assert result["known_at"] is None
+
+
 def test_illegal_ohlc_is_unavailable_not_unmet() -> None:
     frame = _daily_frame({"open_": 100, "high": 100, "low": 90, "close": 120, "volume": 2_000_000})
     result = evaluate_t1_from_daily(

@@ -525,3 +525,83 @@ def test_explicit_follow_default_scan_skips_saved_user_production(
     assert followed["rows"][0]["ticker"] == "A0ROW"
     assert followed["effective_algorithm"] == A0_ALGORITHM
     assert followed["requested_algorithm"] == "follow_default"
+
+
+def test_failed_preference_put_does_not_change_follow_default_scan(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fastapi import FastAPI
+
+    default_path = tmp_path / "strength-snapshot-v1.json"
+    a0_parameters = strength.a0_companion_scan_parameters()
+    a0_path = strength._strength_snapshot_path(a0_parameters, base_path=default_path)
+    strength._write_strength_snapshot(
+        default_path,
+        parameters=dict(strength.DEFAULT_STRENGTH_SCAN_PARAMETERS),
+        payload=_payload(ticker="PROD"),
+        saved_at=NOW - 10,
+    )
+    strength._write_strength_snapshot(
+        a0_path,
+        parameters=a0_parameters,
+        payload=_payload(parameters=a0_parameters, ticker="A0ROW"),
+        saved_at=NOW - 10,
+        base_path=default_path,
+    )
+    store = ViewPreferenceStore(tmp_path / "view-preferences.json")
+    store.write(
+        "account:alice",
+        normalize_view_preferences({"screener_ranking_algorithm": PRODUCTION_ALGORITHM}),
+    )
+    monkeypatch.setattr(strength, "_STRENGTH_SNAPSHOT_PATH", default_path)
+    monkeypatch.setattr(strength.time, "time", lambda: NOW)
+    monkeypatch.setattr(strength, "get_view_preference_store", lambda: store)
+    monkeypatch.setattr(view_preferences_api, "get_view_preference_store", lambda: store)
+    monkeypatch.setattr(strength, "principal_for_request", lambda **_kwargs: "account:alice")
+    monkeypatch.setattr(
+        strength,
+        "get_effective_runtime_settings",
+        lambda: type(
+            "Settings",
+            (),
+            {
+                "algorithms": type(
+                    "Algos",
+                    (),
+                    {
+                        "screener_ranking_algorithm": A0_ALGORITHM,
+                        "radar_sort_algorithm": T1_ALGORITHM,
+                    },
+                )()
+            },
+        )(),
+    )
+    app = FastAPI()
+    app.include_router(view_preferences_api.router)
+    with TestClient(app, base_url="http://localhost") as client:
+        failed_put = client.put(
+            "/api/view-preferences",
+            json={"screener_ranking_algorithm": "follow_default"},
+            headers={"Origin": "http://localhost", "X-Optix-Action": "1"},
+        )
+    assert failed_put.status_code == 401
+    assert store.read("account:alice").screener_ranking_algorithm == PRODUCTION_ALGORITHM
+    followed = _rp(
+        asyncio.run(
+            strength.scan(
+                _areq(),
+                universe="themes",
+                timeframe="all",
+                profile="balanced",
+                top=20,
+                sector_id=None,
+                min_price=5.0,
+                min_avg_dollar_volume=10_000_000.0,
+                ranking_algorithm="follow_default",
+            )
+        )
+    )
+    assert followed["rows"][0]["ticker"] == "A0ROW"
+    assert followed["effective_algorithm"] == A0_ALGORITHM
+    assert followed["requested_algorithm"] == "follow_default"
