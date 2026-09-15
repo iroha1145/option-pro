@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { afterSampleGap, attach429Counter, sleep, REPEAT_GAP_MS } from './lib/rate_limit.mjs';
-import { buildInterleavedSummary, interleavedExitCode } from './lib/interleaved_summary.mjs';
+import { buildInterleavedSummary, interleavedExitCode, interleavedGateFailures } from './lib/interleaved_summary.mjs';
 
 const require = createRequire(fileURLToPath(import.meta.url));
 const { chromium } = require(path.resolve(
@@ -22,6 +22,8 @@ const UNOPT = process.env.OPTIX_PERF_UNOPT_BASE || 'http://127.0.0.1:2001';
 const OUT = process.env.OPTIX_PERF_OUT || '/opt/cursor/artifacts/perf/round6-interleaved-mobile-ref.json';
 const PAIRS = Number(process.env.OPTIX_PERF_PAIRS || 20);
 const PROFILE = process.env.OPTIX_PERF_PROFILE || 'mobile-ref';
+const COLD_BUDGET_MS = Number(process.env.OPTIX_PERF_COLD_BUDGET_MS || 2500);
+const WARM_BUDGET_MS = Number(process.env.OPTIX_PERF_WARM_BUDGET_MS || 1000);
 
 const PROFILES = {
   desktop: { width: 1440, height: 900, dpr: 1, cpu: 1, down: 0, up: 0, rtt: 0, mobile: false },
@@ -80,6 +82,7 @@ function attachNetwork(page) {
     runtimeJa: 0,
     chart: 0,
     errors: 0,
+    requestFailureUrls: [],
   };
   page.on('request', (request) => {
     state.requests += 1;
@@ -87,11 +90,19 @@ function attachNetwork(page) {
     if (url.includes('/api/catalysts/feed')) state.feedUrls.push(url.replace(/^https?:\/\/[^/]+/, ''));
     if (url.includes('runtime-en')) state.runtimeEn += 1;
     if (url.includes('runtime-ja')) state.runtimeJa += 1;
-    if (/\/assets\/chart-/.test(url) || url.includes('EpsHatchChart')) state.chart += 1;
+    if (/\/assets\/(?:eps-chart|chart)-/.test(url) || url.includes('EpsHatchChart')) state.chart += 1;
     if (request.resourceType() === 'script') state.scriptUrls.push(url.replace(/^https?:\/\/[^/]+/, ''));
   });
   page.on('response', (response) => {
     if (response.status() >= 400) state.errors += 1;
+  });
+  page.on('requestfailed', (request) => {
+    const errorText = request.failure()?.errorText || 'unknown';
+    if (/ERR_ABORTED/i.test(errorText)) return;
+    state.requestFailureUrls.push({
+      url: request.url().replace(/^https?:\/\/[^/]+/, ''),
+      error: errorText,
+    });
   });
   return state;
 }
@@ -101,6 +112,7 @@ async function measureNavigation(page, base, pathName, network) {
   const beforeFeeds = network.feedUrls.length;
   const beforeReq = network.requests;
   const beforeErr = network.errors;
+  const beforeFailed = network.requestFailureUrls.length;
   await page.goto(`${base}${pathName}`, { waitUntil: 'domcontentloaded', timeout: 180_000 });
   const readyHandle = await page.waitForFunction(() => {
     const title = document.querySelector('article h3');
@@ -136,6 +148,8 @@ async function measureNavigation(page, base, pathName, network) {
     feed_urls: feedUrls,
     request_count: network.requests - beforeReq,
     http_error_n: network.errors - beforeErr,
+    request_failed_n: network.requestFailureUrls.length - beforeFailed,
+    request_failures: network.requestFailureUrls.slice(beforeFailed),
     runtime_en: network.runtimeEn,
     runtime_ja: network.runtimeJa,
     ...metrics,
@@ -203,6 +217,11 @@ const unoptCold = samples.map((s) => s.unopt.cold);
 const optWarm = samples.map((s) => s.opt.warm);
 const unoptWarm = samples.map((s) => s.unopt.warm);
 const summary = buildInterleavedSummary({ optCold, optWarm, unoptCold, unoptWarm });
+const gateFailures = interleavedGateFailures(summary, {
+  coldBudgetMs: COLD_BUDGET_MS,
+  warmBudgetMs: WARM_BUDGET_MS,
+  requireNetworkTelemetry: true,
+});
 summary.opt.cold.transfer_p50 = percentile(optCold.map((s) => s.transferSize || 0), 0.5);
 summary.opt.warm.transfer_p50 = percentile(optWarm.map((s) => s.transferSize || 0), 0.5);
 summary.unopt.cold.transfer_p50 = percentile(unoptCold.map((s) => s.transferSize || 0), 0.5);
@@ -213,7 +232,7 @@ summary.opt.cold.request_p50 = percentile(optCold.map((s) => s.request_count || 
 summary.unopt.cold.request_p50 = percentile(unoptCold.map((s) => s.request_count || 0), 0.5);
 
 const report = {
-  ok: summary.comparison_complete,
+  ok: gateFailures.length === 0,
   lab: true,
   interleaved: true,
   notRUM: true,
@@ -235,13 +254,23 @@ const report = {
   measuredAt: new Date().toISOString(),
   pairs: samples.length,
   summary,
+  gate: {
+    ok: gateFailures.length === 0,
+    cold_budget_ms: COLD_BUDGET_MS,
+    warm_budget_ms: WARM_BUDGET_MS,
+    failures: gateFailures,
+  },
   samples,
 };
 await mkdir(path.dirname(OUT), { recursive: true });
 await writeFile(OUT, JSON.stringify(report, null, 2) + '\n');
 console.log(JSON.stringify(report.summary, null, 2));
 console.log(`wrote ${OUT}`);
-if (interleavedExitCode(summary) !== 0) {
-  console.error('interleaved comparison incomplete: one or more cold/warm samples timed out');
+if (interleavedExitCode(summary, {
+  coldBudgetMs: COLD_BUDGET_MS,
+  warmBudgetMs: WARM_BUDGET_MS,
+  requireNetworkTelemetry: true,
+}) !== 0) {
+  console.error(`interleaved gate failed: ${gateFailures.join('; ')}`);
   process.exitCode = 1;
 }

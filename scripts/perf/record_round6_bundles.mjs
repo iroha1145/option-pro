@@ -14,6 +14,14 @@ function firstMatch(names, re) {
   return names.find((name) => re.test(name)) || null;
 }
 
+function firstAsset(names, patterns) {
+  for (const pattern of patterns) {
+    const match = firstMatch(names, pattern);
+    if (match) return match;
+  }
+  return null;
+}
+
 async function describe(rel) {
   if (!rel) return null;
   const abs = path.join(FRONTEND, rel);
@@ -32,19 +40,21 @@ const html = await readFile(path.join(FRONTEND, 'index.html'), 'utf8');
 const indexMatch = html.match(/\/assets\/(index-[^"]+\.js)/);
 const cssMatch = html.match(/\/assets\/(index-[^"]+\.css)/);
 const assets = await readdir(path.join(FRONTEND, 'assets'));
+const appName = firstAsset(assets, [/^app-shell-.+\.js$/, /^App-.+\.js$/]);
+const chartName = firstAsset(assets, [/^eps-chart-.+\.js$/, /^chart-.+\.js$/]);
 const files = {
   optimized_index: await describe(indexMatch ? `assets/${indexMatch[1]}` : null),
   optimized_css: await describe(cssMatch ? `assets/${cssMatch[1]}` : null),
-  optimized_app: await describe(firstMatch(assets, /^App-.+\.js$/) && `assets/${firstMatch(assets, /^App-.+\.js$/)}`),
+  optimized_app: await describe(appName && `assets/${appName}`),
   optimized_runtime_en: await describe(firstMatch(assets, /^runtime-en-.+\.js$/) && `assets/${firstMatch(assets, /^runtime-en-.+\.js$/)}`),
   optimized_runtime_ja: await describe(firstMatch(assets, /^runtime-ja-.+\.js$/) && `assets/${firstMatch(assets, /^runtime-ja-.+\.js$/)}`),
-  optimized_chart: await describe(firstMatch(assets, /^chart-.+\.js$/) && `assets/${firstMatch(assets, /^chart-.+\.js$/)}`),
+  optimized_chart: await describe(chartName && `assets/${chartName}`),
   optimized_earnings_page: await describe(firstMatch(assets, /^Earnings-.+\.js$/) && `assets/${firstMatch(assets, /^Earnings-.+\.js$/)}`),
   optimized_eps_chart_wrapper: await describe(firstMatch(assets, /^EpsHatchChart-.+\.js$/) && `assets/${firstMatch(assets, /^EpsHatchChart-.+\.js$/)}`),
 };
 
 const indexRel = indexMatch ? `assets/${indexMatch[1]}` : null;
-const appRel = firstMatch(assets, /^App-.+\.js$/) ? `assets/${firstMatch(assets, /^App-.+\.js$/)}` : null;
+const appRel = appName ? `assets/${appName}` : null;
 const shared = appRel ? await walkStaticJsGraph(FRONTEND, appRel) : (indexRel ? await walkStaticJsGraph(FRONTEND, indexRel) : null);
 const homeGraph = await walkStaticJsGraph(FRONTEND, firstMatch(assets, /^Home-.+\.js$/) ? `assets/${firstMatch(assets, /^Home-.+\.js$/)}` : appRel);
 const earningsGraph = await walkStaticJsGraph(FRONTEND, firstMatch(assets, /^Earnings-.+\.js$/) ? `assets/${firstMatch(assets, /^Earnings-.+\.js$/)}` : appRel);

@@ -1,1 +1,0 @@
-function l(d,r){let e=null,n=!1;const t=()=>{n||(n=!0,e=window.setTimeout(d,r))},o=document.readyState;return o&&o!=="complete"?window.addEventListener("load",t,{once:!0}):t(),()=>{window.removeEventListener("load",t),e!==null&&window.clearTimeout(e)}}export{l as a};

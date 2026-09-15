@@ -6,7 +6,6 @@
  */
 import { useMemo } from 'react';
 import ReactECharts from '@/components/charts/ReactECharts';
-import HatchLegend from '@/components/shared/HatchLegend';
 import { CH, baseAnimation, baseGrid, categoryAxis, glassTooltip, hatchDecal, withAlpha, valueAxis, type ChartOption } from '@/lib/chart';
 import { useAppearance } from '@/hooks/useAppearance.ts';
 import type { EarningsRow } from './types';
@@ -78,7 +77,21 @@ export default function EpsHatchChart({ items, title = t('EPS 预期 vs 实际')
     <section className="card-surface p-5" data-eps-chart="" aria-label={t("EPS 预期与实际对照图")}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="eyebrow">{title}</p>
-        <HatchLegend estimate={t("预估")} actual={t("实际")} />
+        {/* 图例随图表打包；不把选股页也使用的 HatchLegend 拉入图表大包。 */}
+        <span className="inline-flex items-center gap-3 text-micro text-ink-400">
+          <span className="inline-flex items-center gap-1">
+            <span className="inline-block size-2.5 rounded-[2px] bg-brand-600" aria-hidden="true" />
+            {t('实际')}
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <span
+              className="inline-block size-2.5 rounded-[2px] border border-brand-400"
+              style={{ backgroundImage: 'repeating-linear-gradient(45deg, color-mix(in srgb, var(--brand-600) 55%, transparent) 0 1.2px, transparent 1.2px 4px)' }}
+              aria-hidden="true"
+            />
+            {t('预估')}
+          </span>
+        </span>
       </div>
       <div className="mt-3 h-[240px]">
         <ReactECharts

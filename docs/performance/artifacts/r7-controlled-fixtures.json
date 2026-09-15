@@ -1,0 +1,395 @@
+{
+  "/api/access/status": {
+    "access_mode": "password",
+    "logged_in": true,
+    "account": null
+  },
+  "/api/earnings/upcoming": {
+    "earnings": [
+      {
+        "ticker": "AAPL",
+        "name": "Apple",
+        "date": "2026-09-15",
+        "earnings_date": "2026-09-15",
+        "timing": "amc",
+        "epsEstimate": 1.25,
+        "epsActual": null,
+        "eps_estimate": 1.25,
+        "eps_actual": null,
+        "marketCap": 2000000000000,
+        "market_cap": 2000000000000,
+        "sector": "Technology",
+        "publicFeatured": true,
+        "public_featured": true
+      },
+      {
+        "ticker": "MSFT",
+        "name": "Microsoft",
+        "date": "2026-09-16",
+        "earnings_date": "2026-09-16",
+        "timing": "amc",
+        "epsEstimate": 1.35,
+        "epsActual": null,
+        "eps_estimate": 1.35,
+        "eps_actual": null,
+        "marketCap": 2000000000000,
+        "market_cap": 2000000000000,
+        "sector": "Technology",
+        "publicFeatured": true,
+        "public_featured": true
+      },
+      {
+        "ticker": "NVDA",
+        "name": "NVIDIA",
+        "date": "2026-09-17",
+        "earnings_date": "2026-09-17",
+        "timing": "amc",
+        "epsEstimate": 1.45,
+        "epsActual": null,
+        "eps_estimate": 1.45,
+        "eps_actual": null,
+        "marketCap": 2000000000000,
+        "market_cap": 2000000000000,
+        "sector": "Technology",
+        "publicFeatured": true,
+        "public_featured": true
+      },
+      {
+        "ticker": "AMZN",
+        "name": "Amazon",
+        "date": "2026-09-18",
+        "earnings_date": "2026-09-18",
+        "timing": "amc",
+        "epsEstimate": 1.55,
+        "epsActual": null,
+        "eps_estimate": 1.55,
+        "eps_actual": null,
+        "marketCap": 2000000000000,
+        "market_cap": 2000000000000,
+        "sector": "Technology",
+        "publicFeatured": true,
+        "public_featured": true
+      },
+      {
+        "ticker": "META",
+        "name": "Meta",
+        "date": "2026-09-19",
+        "earnings_date": "2026-09-19",
+        "timing": "amc",
+        "epsEstimate": 1.65,
+        "epsActual": null,
+        "eps_estimate": 1.65,
+        "eps_actual": null,
+        "marketCap": 2000000000000,
+        "market_cap": 2000000000000,
+        "sector": "Technology",
+        "publicFeatured": true,
+        "public_featured": true
+      },
+      {
+        "ticker": "GOOGL",
+        "name": "Alphabet",
+        "date": "2026-09-20",
+        "earnings_date": "2026-09-20",
+        "timing": "amc",
+        "epsEstimate": 2.05,
+        "epsActual": null,
+        "eps_estimate": 2.05,
+        "eps_actual": null,
+        "marketCap": 2000000000000,
+        "market_cap": 2000000000000,
+        "sector": "Technology",
+        "publicFeatured": true,
+        "public_featured": true
+      }
+    ],
+    "items": [
+      {
+        "ticker": "AAPL",
+        "name": "Apple",
+        "date": "2026-09-15",
+        "earnings_date": "2026-09-15",
+        "timing": "amc",
+        "epsEstimate": 1.25,
+        "epsActual": null,
+        "eps_estimate": 1.25,
+        "eps_actual": null,
+        "marketCap": 2000000000000,
+        "market_cap": 2000000000000,
+        "sector": "Technology",
+        "publicFeatured": true,
+        "public_featured": true
+      },
+      {
+        "ticker": "MSFT",
+        "name": "Microsoft",
+        "date": "2026-09-16",
+        "earnings_date": "2026-09-16",
+        "timing": "amc",
+        "epsEstimate": 1.35,
+        "epsActual": null,
+        "eps_estimate": 1.35,
+        "eps_actual": null,
+        "marketCap": 2000000000000,
+        "market_cap": 2000000000000,
+        "sector": "Technology",
+        "publicFeatured": true,
+        "public_featured": true
+      },
+      {
+        "ticker": "NVDA",
+        "name": "NVIDIA",
+        "date": "2026-09-17",
+        "earnings_date": "2026-09-17",
+        "timing": "amc",
+        "epsEstimate": 1.45,
+        "epsActual": null,
+        "eps_estimate": 1.45,
+        "eps_actual": null,
+        "marketCap": 2000000000000,
+        "market_cap": 2000000000000,
+        "sector": "Technology",
+        "publicFeatured": true,
+        "public_featured": true
+      },
+      {
+        "ticker": "AMZN",
+        "name": "Amazon",
+        "date": "2026-09-18",
+        "earnings_date": "2026-09-18",
+        "timing": "amc",
+        "epsEstimate": 1.55,
+        "epsActual": null,
+        "eps_estimate": 1.55,
+        "eps_actual": null,
+        "marketCap": 2000000000000,
+        "market_cap": 2000000000000,
+        "sector": "Technology",
+        "publicFeatured": true,
+        "public_featured": true
+      },
+      {
+        "ticker": "META",
+        "name": "Meta",
+        "date": "2026-09-19",
+        "earnings_date": "2026-09-19",
+        "timing": "amc",
+        "epsEstimate": 1.65,
+        "epsActual": null,
+        "eps_estimate": 1.65,
+        "eps_actual": null,
+        "marketCap": 2000000000000,
+        "market_cap": 2000000000000,
+        "sector": "Technology",
+        "publicFeatured": true,
+        "public_featured": true
+      },
+      {
+        "ticker": "GOOGL",
+        "name": "Alphabet",
+        "date": "2026-09-20",
+        "earnings_date": "2026-09-20",
+        "timing": "amc",
+        "epsEstimate": 2.05,
+        "epsActual": null,
+        "eps_estimate": 2.05,
+        "eps_actual": null,
+        "marketCap": 2000000000000,
+        "market_cap": 2000000000000,
+        "sector": "Technology",
+        "publicFeatured": true,
+        "public_featured": true
+      }
+    ],
+    "attempted": 6,
+    "succeeded": 6,
+    "failed_symbols": [],
+    "data_limited": false,
+    "source_status": "ok",
+    "as_of": "2026-09-15T07:00:00+00:00"
+  },
+  "/api/market/indices": {
+    "indices": [
+      {
+        "symbol": "^GSPC",
+        "price": 5972.4,
+        "change_percent": 0.21
+      },
+      {
+        "symbol": "^NDX",
+        "price": 21468.2,
+        "change_percent": 0.18
+      },
+      {
+        "symbol": "^DJI",
+        "price": 43828.1,
+        "change_percent": -0.12
+      },
+      {
+        "symbol": "^N225",
+        "price": 38220.1,
+        "change_percent": 0.33
+      },
+      {
+        "symbol": "000001.SS",
+        "price": 3351.8,
+        "change_percent": -0.08
+      }
+    ]
+  },
+  "/api/market/status": {
+    "market": "closed",
+    "phase": null,
+    "holiday": null,
+    "server_time": "2026-09-15T05:30:03.667Z",
+    "as_of": "2026-09-15T07:00:00+00:00"
+  },
+  "/api/strength/market": {
+    "as_of": "2026-09-15T07:00:00+00:00",
+    "market_regime": null
+  },
+  "/api/signals/market": {
+    "signals": {},
+    "scores": {},
+    "as_of": "2026-09-15T07:00:00+00:00"
+  },
+  "/api/breakouts/current": {
+    "events": []
+  },
+  "/api/breakouts/status": {
+    "status": "idle",
+    "as_of": "2026-09-15T05:30:03.667Z"
+  },
+  "/api/stocks/watchlist": {
+    "groups": []
+  },
+  "/api/market/cta": {
+    "method_version": "lab",
+    "source_status": "unavailable",
+    "instruments": []
+  },
+  "/api/quotes": {
+    "quotes": [],
+    "status": {
+      "enabled": false,
+      "configured": false,
+      "public_enabled": false,
+      "connected": false,
+      "connection_status": "disabled"
+    }
+  },
+  "/api/account/watchlist": {
+    "tickers": [],
+    "max_tickers": 50,
+    "maxTickers": 50
+  },
+  "/api/ai/status": {
+    "enabled": false,
+    "status": "disabled"
+  },
+  "/api/runtime-settings": {
+    "version": 1,
+    "settings": {
+      "ai": {
+        "manual_analysis_enabled": false
+      }
+    }
+  },
+  "/api/catalysts/feed": {
+    "status": "active",
+    "as_of": "2026-09-15T07:00:00+00:00",
+    "items": [
+      {
+        "news_id": 1,
+        "source": "Local synthetic fixture",
+        "title_zh": "芯片企业发布最新进展",
+        "summary_zh": "同一份本地数据用于比较前端加载，不调用外部服务。",
+        "published_at": "2026-09-15T07:00:00+00:00",
+        "fetched_at": "2026-09-15T07:00:00+00:00",
+        "analysis_status": "not_requested",
+        "source_tickers": [
+          "AAPL"
+        ],
+        "analysis_trigger_enabled": false,
+        "analysis_availability": {
+          "enabled": false,
+          "reason": "disabled"
+        }
+      }
+    ],
+    "has_more": false,
+    "next_cursor": null,
+    "summary": {
+      "count": 1,
+      "news_6h": 1,
+      "analyzed": 0,
+      "analyzed_24h": 0,
+      "bullish": 0,
+      "bearish": 0,
+      "pending": 1,
+      "high_impact_calendar": 0
+    }
+  },
+  "/api/catalysts/status": {
+    "status": "active",
+    "enabled": true,
+    "remote_status": "ok",
+    "data_through": "2026-09-15T07:00:00+00:00",
+    "last_sync_at": "2026-09-15T07:00:00+00:00",
+    "analysis_trigger_enabled": false,
+    "analysis_availability": {
+      "enabled": false,
+      "reason": "disabled"
+    },
+    "sources": []
+  },
+  "/api/catalysts/hotspots/status": {
+    "status": "active",
+    "manual_enabled": false,
+    "prepared_hot_count": 0,
+    "prepared_revision": 0,
+    "last_consumed_revision": 0,
+    "data_through": "2026-09-15T07:00:00+00:00"
+  },
+  "/api/catalysts/hotspots": {
+    "status": "active",
+    "items": []
+  },
+  "/api/catalysts/market-focus-cycles/latest": null,
+  "/api/catalysts/analysis-progress": {
+    "status": "active",
+    "scope": "latest_submission_batch",
+    "batch_id": "controlled-fixture",
+    "batch_source": "scheduled",
+    "total": 0,
+    "finished": 0,
+    "succeeded": 0,
+    "awaiting_validation": 0,
+    "rejected": 0,
+    "failed": 0,
+    "waiting": 0,
+    "in_progress": 0,
+    "cancelled": 0,
+    "insufficient_context": 0,
+    "budget_blocked": 0,
+    "progress_percent": 0,
+    "current_index": null,
+    "current_news_id": null,
+    "current_phase": null,
+    "queue_total": 0,
+    "queue_waiting": 0,
+    "queue_in_progress": 0,
+    "started_at": "2026-09-15T07:00:00+00:00",
+    "last_updated_at": "2026-09-15T07:00:00+00:00",
+    "as_of": "2026-09-15T07:00:00+00:00"
+  },
+  "/api/catalysts/calendar": {
+    "status": "active",
+    "events": [],
+    "items": []
+  },
+  "/api/earnings/analysis": {
+    "items": [],
+    "status": "idle"
+  }
+}

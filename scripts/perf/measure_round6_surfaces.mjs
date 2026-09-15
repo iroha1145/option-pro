@@ -144,6 +144,8 @@ function attachNetwork(page) {
     abortedPaid: 0,
     fulfilled_upcoming: 0,
     fulfilled_indices: 0,
+    httpErrors: 0,
+    requestFailures: [],
   };
   page.on('request', (request) => {
     state.requests += 1;
@@ -151,14 +153,32 @@ function attachNetwork(page) {
     if (PAID.test(url)) state.abortedPaid += 1;
     if (url.includes('/api/earnings/upcoming') && !url.includes('refresh')) state.fulfilled_upcoming += 1;
     if (url.includes('/api/market/indices')) state.fulfilled_indices += 1;
-    if (/\/assets\/chart-/.test(url) || url.includes('EpsHatchChart')) state.chart += 1;
+    if (/\/assets\/(?:eps-chart|chart)-/.test(url) || url.includes('EpsHatchChart')) state.chart += 1;
     if (url.includes('runtime-en')) state.runtimeEn += 1;
     if (url.includes('runtime-ja')) state.runtimeJa += 1;
     if (/\/assets\/Earnings-/.test(url) || url.includes('/pages/Earnings')) state.earningsChunk += 1;
     if (/\/assets\/StockDetail-/.test(url) || url.includes('/pages/StockDetail')) state.stockChunk += 1;
     if (/\/assets\/Home-/.test(url) || url.includes('/pages/Home')) state.homeChunk += 1;
   });
+  page.on('response', (response) => {
+    if (response.status() >= 400) state.httpErrors += 1;
+  });
+  page.on('requestfailed', (request) => {
+    const url = request.url();
+    if (PAID.test(url) || url.includes('/api/quotes/stream')) return;
+    const errorText = request.failure()?.errorText || 'unknown';
+    if (/ERR_ABORTED/i.test(errorText)) return;
+    state.requestFailures.push({ url: url.replace(/^https?:\/\/[^/]+/, ''), error: errorText });
+  });
   return state;
+}
+
+function networkOutcome(network) {
+  return {
+    http_error_n: network.httpErrors,
+    request_failed_n: network.requestFailures.length,
+    request_failures: network.requestFailures,
+  };
 }
 
 async function collectResources(page) {
@@ -238,6 +258,7 @@ for (const route of Object.keys(pages)) {
         fulfilled_upcoming: network.fulfilled_upcoming,
         fulfilled_indices: network.fulfilled_indices,
         rate_limited: rateLimit.count,
+        ...networkOutcome(network),
         ...resources,
       };
     });
@@ -263,6 +284,7 @@ async function firstNavSample(page, network, rateLimit, open) {
     earnings_chunk: network.earningsChunk > before.earn,
     request_count: network.requests - before.req,
     rate_limited: rateLimit.count,
+    ...networkOutcome(network),
   };
 }
 
@@ -306,6 +328,7 @@ for (let i = 0; i < REPEATS; i += 1) {
       prefetched_before_click: before > 0,
       chart_loaded: network.chart > 0,
       rate_limited: rateLimit.count,
+      ...networkOutcome(network),
     };
   }, intentOpts));
   intent.hover_then_click.push(await withPage(async (page, network, rateLimit) => {
@@ -326,6 +349,7 @@ for (let i = 0; i < REPEATS; i += 1) {
       prefetched_before_click: prefetched,
       chart_loaded: network.chart > 0,
       rate_limited: rateLimit.count,
+      ...networkOutcome(network),
     };
   }, intentOpts));
   intent.hover_only.push(await withPage(async (page, network, rateLimit) => {
@@ -342,6 +366,7 @@ for (let i = 0; i < REPEATS; i += 1) {
       chart_loaded: network.chart > 0,
       extra_paid: network.abortedPaid > beforePaid,
       rate_limited: rateLimit.count,
+      ...networkOutcome(network),
     };
   }, intentOpts));
   console.log(
@@ -365,6 +390,7 @@ for (let i = 0; i < REPEATS; i += 1) {
       earnings_chunk: network.earningsChunk > 0,
       stock_chunk: network.stockChunk > 0,
       chart_loaded: network.chart > 0,
+      ...networkOutcome(network),
     };
   }, { viewport: 'desktop' }));
   extras.palette_closed.push(await withPage(async (page, network) => {
@@ -379,6 +405,7 @@ for (let i = 0; i < REPEATS; i += 1) {
       stock_chunk: network.stockChunk > 0,
       home_chunk: network.homeChunk > 0,
       chart_loaded: network.chart > 0,
+      ...networkOutcome(network),
     };
   }, { viewport: 'desktop' }));
   console.log(
@@ -444,6 +471,7 @@ for (let i = 0; i < REPEATS; i += 1) {
       chart_canvas_n: mounted.canvas,
       chart_stayed_mounted: mounted.slot && (mounted.canvas > 0 || mounted.chart > 0),
       rate_limited: rateLimit.count,
+      ...networkOutcome(network),
     };
   });
   scroll.push(sample);
@@ -505,19 +533,31 @@ const report = {
 const intentDecision = decideIntentPrefetch(report.intent, { expectedN: REPEATS });
 report.intent.decision = intentDecision;
 const gate = [
-  ...readyGateFailures(report.pages['/'], { expectedN: REPEATS, label: 'home' }),
-  ...readyGateFailures(report.pages['/earnings'], { expectedN: REPEATS, label: 'earnings' }),
-  ...readyGateFailures(report.first_nav.home_card, { expectedN: REPEATS, label: 'nav_home_card' }),
-  ...readyGateFailures(report.first_nav.desktop_nav, { expectedN: REPEATS, label: 'nav_desktop' }),
-  ...readyGateFailures(report.intent.immediate, { expectedN: REPEATS, label: 'intent_immediate' }),
-  ...readyGateFailures(report.intent.hover_then_click, { expectedN: REPEATS, label: 'intent_hover_then_click' }),
-  ...readyGateFailures(report.intent.hover_only, { expectedN: REPEATS, label: 'intent_hover_only' }),
-  ...readyGateFailures(report.extras.no_intent, { expectedN: REPEATS, label: 'extras_no_intent' }),
-  ...readyGateFailures(report.extras.palette_closed, { expectedN: REPEATS, label: 'extras_palette_closed' }),
+  ...readyGateFailures(report.pages['/'], { expectedN: REPEATS, label: 'home', requireNetworkTelemetry: true }),
+  ...readyGateFailures(report.pages['/earnings'], { expectedN: REPEATS, label: 'earnings', requireNetworkTelemetry: true }),
+  ...readyGateFailures(report.first_nav.home_card, { expectedN: REPEATS, label: 'nav_home_card', requireNetworkTelemetry: true }),
+  ...readyGateFailures(report.first_nav.desktop_nav, { expectedN: REPEATS, label: 'nav_desktop', requireNetworkTelemetry: true }),
+  ...readyGateFailures(report.intent.immediate, { expectedN: REPEATS, label: 'intent_immediate', requireNetworkTelemetry: true }),
+  ...readyGateFailures(report.intent.hover_then_click, { expectedN: REPEATS, label: 'intent_hover_then_click', requireNetworkTelemetry: true }),
+  ...readyGateFailures(report.intent.hover_only, { expectedN: REPEATS, label: 'intent_hover_only', requireNetworkTelemetry: true }),
+  ...readyGateFailures(report.extras.no_intent, { expectedN: REPEATS, label: 'extras_no_intent', requireNetworkTelemetry: true }),
+  ...readyGateFailures(report.extras.palette_closed, { expectedN: REPEATS, label: 'extras_palette_closed', requireNetworkTelemetry: true }),
 ];
 if (report.earnings_scroll.stayed_n !== REPEATS) {
   gate.push(`earnings_scroll: stayed_n=${report.earnings_scroll.stayed_n} expected=${REPEATS}`);
 }
+if (report.earnings_scroll.chart_before_n !== 0) {
+  gate.push(`earnings_scroll: chart_before_n=${report.earnings_scroll.chart_before_n} expected=0`);
+}
+if (report.earnings_scroll.chart_after_n !== REPEATS) {
+  gate.push(`earnings_scroll: chart_after_n=${report.earnings_scroll.chart_after_n} expected=${REPEATS}`);
+}
+const scrollHttpErrors = scroll.reduce((sum, row) => sum + Number(row.http_error_n || 0), 0);
+const scrollRequestFailures = scroll.reduce((sum, row) => sum + Number(row.request_failed_n || 0), 0);
+const scrollRateLimited = scroll.filter((row) => (row.rate_limited || 0) > 0).length;
+if (scrollRateLimited) gate.push(`earnings_scroll: rate_limited_n=${scrollRateLimited}`);
+if (scrollHttpErrors) gate.push(`earnings_scroll: http_error_n=${scrollHttpErrors}`);
+if (scrollRequestFailures) gate.push(`earnings_scroll: request_failed_n=${scrollRequestFailures}`);
 if (report.extras.no_intent_chunk_n > 0) {
   gate.push(`no_intent: earnings_chunk_n=${report.extras.no_intent_chunk_n}`);
 }
