@@ -8,6 +8,10 @@ import { dropSharedReads } from '@/api/sharedRead';
 import { setQueryPrincipal } from '@/api/queryRegistry';
 import { resetMarketReadState } from '@/api/marketRead';
 import { clearCatalystReadCache } from '@/components/catalysts/api';
+import {
+  bindPreferenceWritePrincipal,
+  invalidatePreferenceWriteQueue,
+} from '@/lib/viewPreferenceWrites';
 import type { AccessRole, AccessStatus } from '@/api/types';
 import { t } from '../i18n/core.ts';
 
@@ -118,9 +122,11 @@ export function AccessProvider({ children }: { children: ReactNode }) {
         dropSharedReads();
         resetMarketReadState();
         clearCatalystReadCache({ userInitiated: true });
+        invalidatePreferenceWriteQueue();
       }
       identityRef.current = identity;
       setQueryPrincipal(identity);
+      bindPreferenceWritePrincipal(`${next.role === 'owner' ? 'owner' : 'visitor'}:${next.accountUsername ?? ''}`);
       if (confirmedCapabilitiesRef.current?.identity !== identity) {
         confirmedCapabilitiesRef.current = null;
       }
@@ -145,6 +151,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
       if (generation !== generationRef.current) return;
       // 身份读不到时保留当前已知身份并明确置错，而不是悄悄退回访客。
       setQueryPrincipal(null);
+      invalidatePreferenceWriteQueue();
       setIdentityUnavailable(true);
       retryAttemptRef.current += 1;
       const retryAfter = error instanceof ApiError ? error.retryAfter : undefined;
@@ -214,6 +221,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
       dropSharedReads();
       resetMarketReadState();
       clearCatalystReadCache({ userInitiated: true });
+      invalidatePreferenceWriteQueue();
       setIdentityUnavailable(true);
       setStatus((current) => ({
         ...current,
@@ -255,6 +263,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
       setQueryPrincipal(null);
       setIdentityUnavailable(true);
       dropSharedReads();
+      invalidatePreferenceWriteQueue();
       resetMarketReadState();
       clearCatalystReadCache({ userInitiated: true });
       let written = false;

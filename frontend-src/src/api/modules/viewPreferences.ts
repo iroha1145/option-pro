@@ -1,4 +1,4 @@
-import { get, mockOr, put } from '@/api/client';
+import { get, mockOr, put, type RequestOptions } from '@/api/client';
 import { asRec, pickB, pickS } from '@/api/live';
 import {
   DEFAULT_ALGORITHM_PREFERENCES,
@@ -7,7 +7,10 @@ import {
   type RadarSortChoice,
   type ScreenerRankingChoice,
 } from '@/lib/algorithmPreferences';
-import { persistRemoteOrKeepLocal } from '@/lib/viewPreferenceWrites';
+import {
+  currentPreferenceWriteGeneration,
+  persistRemoteOrKeepLocal,
+} from '@/lib/viewPreferenceWrites';
 
 export interface ViewPreferencesDoc {
   principal: string | null;
@@ -51,10 +54,13 @@ export const viewPreferencesApi = {
       },
       () => get('/view-preferences').then(nDoc),
     ),
-  write: (patch: {
-    screenerRankingAlgorithm?: ScreenerRankingChoice;
-    radarSortAlgorithm?: RadarSortChoice;
-  }): Promise<ViewPreferencesDoc> =>
+  write: (
+    patch: {
+      screenerRankingAlgorithm?: ScreenerRankingChoice;
+      radarSortAlgorithm?: RadarSortChoice;
+    },
+    options?: RequestOptions,
+  ): Promise<ViewPreferencesDoc> =>
     mockOr(
       () => {
         const next = writeAlgorithmPreferences(patch);
@@ -71,7 +77,7 @@ export const viewPreferencesApi = {
             ? { screener_ranking_algorithm: patch.screenerRankingAlgorithm }
             : {}),
           ...(patch.radarSortAlgorithm ? { radar_sort_algorithm: patch.radarSortAlgorithm } : {}),
-        }).then(nDoc),
+        }, options).then(nDoc),
     ),
 };
 
@@ -95,5 +101,10 @@ export async function persistAlgorithmChoice(
 ): Promise<ViewPreferencesDoc> {
   const local = asLocalDoc(writeAlgorithmPreferences(patch, principal));
   if (!persistRemote) return local;
-  return persistRemoteOrKeepLocal(local, () => viewPreferencesApi.write(patch));
+  const generation = currentPreferenceWriteGeneration();
+  return persistRemoteOrKeepLocal(
+    local,
+    (signal) => viewPreferencesApi.write(patch, signal ? { signal } : undefined),
+    { principal: principal ?? undefined, generation },
+  );
 }
