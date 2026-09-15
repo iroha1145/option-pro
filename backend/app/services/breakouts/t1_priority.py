@@ -48,6 +48,8 @@ T1_RETRYABLE_REASONS = {
     "daily_fetch_failed",
     "price_adapter_unavailable",
 }
+T1_DATA_CONVENTION = "adj_preferred"
+T1_SETTLED_STATUSES = {T1_MET, T1_UNMET}
 
 
 def _finite(value: Any) -> float | None:
@@ -143,6 +145,93 @@ def _identity_hash(payload: Mapping[str, Any]) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def t1_identity_complete(payload: Mapping[str, Any] | None) -> bool:
+    body = dict(payload or {})
+    if body.get("identity_complete") is False:
+        return False
+    return bool(str(body.get("identity_hash") or "").strip())
+
+
+def t1_input_identity(
+    *,
+    event_id: str | None,
+    session_date: date,
+    resistance_high: Any,
+    session_bar: Mapping[str, Any],
+    prior_bars: Sequence[Mapping[str, Any]],
+    settings: Mapping[str, Any] | None = None,
+) -> str:
+    """Fingerprint every causal T-window input, including ATR history."""
+
+    cfg = {**T1_SETTINGS, **dict(settings or {})}
+    return _identity_hash(
+        {
+            "event_id": event_id or "",
+            "session_date": session_date.isoformat(),
+            "version": T1_VERSION,
+            "variant": T1_ALGORITHM,
+            "data_convention": T1_DATA_CONVENTION,
+            "resistance": _finite(resistance_high),
+            "session_bar": {
+                "open": _finite(session_bar.get("open")),
+                "high": _finite(session_bar.get("high")),
+                "low": _finite(session_bar.get("low")),
+                "close": _finite(session_bar.get("close")),
+                "volume": _finite(session_bar.get("volume")),
+            },
+            "prior_bars": [
+                {
+                    "session_date": str(item.get("session_date") or ""),
+                    "open": _finite(item.get("open")),
+                    "high": _finite(item.get("high")),
+                    "low": _finite(item.get("low")),
+                    "close": _finite(item.get("close")),
+                    "volume": _finite(item.get("volume")),
+                }
+                for item in prior_bars
+            ],
+            "settings": {
+                "clv_min": cfg.get("clv_min"),
+                "rvol_min": cfg.get("rvol_min"),
+                "upper_shadow_max": cfg.get("upper_shadow_max"),
+                "distance_atr_min": cfg.get("distance_atr_min"),
+                "rvol_lookback": cfg.get("rvol_lookback"),
+                "atr_period": cfg.get("atr_period"),
+            },
+        }
+    )
+
+
+def t1_view_token(
+    scan_run_id: str,
+    sort_algorithm: str,
+    events: Sequence[Mapping[str, Any]],
+) -> str:
+    items = []
+    for event in events:
+        payload = event.get("t1_priority")
+        if not isinstance(payload, Mapping):
+            features = event.get("features") if isinstance(event.get("features"), Mapping) else {}
+            payload = features.get("t1_priority") if isinstance(features, Mapping) else {}
+        body = dict(payload or {})
+        items.append(
+            {
+                "event_id": str(event.get("event_id") or ""),
+                "status": str(body.get("status") or ""),
+                "eval_version": int(body.get("eval_version") or 0),
+                "identity_hash": str(body.get("identity_hash") or ""),
+            }
+        )
+    items.sort(key=lambda item: item["event_id"])
+    return _identity_hash(
+        {
+            "scan_run_id": scan_run_id,
+            "sort_algorithm": sort_algorithm,
+            "items": items,
+        }
+    )[:24]
+
+
 def session_daily_complete(
     session_date: date,
     *,
@@ -192,7 +281,8 @@ def evaluate_t1_from_daily(
         "known_at": None,
         "first_known_at": first_known,
         "eval_version": int(prior.get("eval_version") or 0) or 1,
-        "identity_hash": prior.get("identity_hash"),
+        "identity_hash": None,
+        "identity_complete": False,
         "revisions": list(prior.get("revisions") or []),
         "event_id": event_id or prior.get("event_id"),
         "checks": {
@@ -268,6 +358,7 @@ def evaluate_t1_from_daily(
         }
     location = daily_bar_location(ohlc["open"], ohlc["high"], ohlc["low"], ohlc["close"])
     prior_volumes: list[Any] = []
+    prior_bars: list[dict[str, Any]] = []
     for day in prior_sessions:
         rows = bars_by_date.get(day)
         if not rows:
@@ -292,30 +383,23 @@ def evaluate_t1_from_daily(
                 "reason": "missing_prior_volume",
             }
         prior_volumes.append(prior_ohlc["volume"])
-    identity = _identity_hash(
-        {
-            "event_id": event_id or prior.get("event_id") or "",
-            "session_date": session_date.isoformat(),
-            "version": T1_VERSION,
-            "variant": T1_ALGORITHM,
-            "resistance": _finite(resistance_high),
-            "session_bar": {
-                "open": _finite(ohlc["open"]),
-                "high": _finite(ohlc["high"]),
-                "low": _finite(ohlc["low"]),
-                "close": _finite(ohlc["close"]),
-                "volume": _finite(ohlc["volume"]),
-            },
-            "prior_volumes": [_finite(value) for value in prior_volumes],
-            "settings": {
-                "clv_min": cfg.get("clv_min"),
-                "rvol_min": cfg.get("rvol_min"),
-                "upper_shadow_max": cfg.get("upper_shadow_max"),
-                "distance_atr_min": cfg.get("distance_atr_min"),
-                "rvol_lookback": cfg.get("rvol_lookback"),
-                "atr_period": cfg.get("atr_period"),
-            },
-        }
+        prior_bars.append(
+            {
+                "session_date": day.isoformat(),
+                "open": _finite(prior_ohlc["open"]),
+                "high": _finite(prior_ohlc["high"]),
+                "low": _finite(prior_ohlc["low"]),
+                "close": _finite(prior_ohlc["close"]),
+                "volume": _finite(prior_ohlc["volume"]),
+            }
+        )
+    identity = t1_input_identity(
+        event_id=event_id or prior.get("event_id") or "",
+        session_date=session_date,
+        resistance_high=resistance_high,
+        session_bar=ohlc,
+        prior_bars=prior_bars,
+        settings=cfg,
     )
     if (
         prior.get("identity_hash") == identity
@@ -328,11 +412,13 @@ def evaluate_t1_from_daily(
                 "computed_at": computed_at,
                 "session_complete": True,
                 "identity_hash": identity,
+                "identity_complete": True,
                 "reused": True,
                 "first_known_at": first_known or prior.get("known_at"),
                 "event_id": event_id or prior.get("event_id"),
             }
         )
+        reused.pop("latest_attempt", None)
         return reused
     rvol = rvol_daily_20med(
         ohlc["volume"],
@@ -399,6 +485,7 @@ def evaluate_t1_from_daily(
         "first_known_at": first_known or known_at,
         "eval_version": eval_version,
         "identity_hash": identity,
+        "identity_complete": True,
         "revisions": revisions,
         "reused": False,
         "event_id": event_id or prior.get("event_id"),
@@ -543,7 +630,13 @@ def attach_t1_features(
             resistance_high=resistance,
             as_of=as_of,
             session=session or payload.get("session"),
-            previous=features.get("t1_priority") if isinstance(features.get("t1_priority"), Mapping) else None,
+            previous=(
+                features.get("t1_priority")
+                if isinstance(features.get("t1_priority"), Mapping)
+                else payload.get("t1_priority")
+                if isinstance(payload.get("t1_priority"), Mapping)
+                else None
+            ),
             event_id=str(payload.get("event_id") or "") or None,
         )
     features["t1_priority"] = evaluation
