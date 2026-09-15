@@ -18,6 +18,7 @@ from app.services.algorithm_modes import (
 )
 from app.services.view_preferences import (
     ViewPreferenceStore,
+    ViewPreferenceStorageError,
     get_view_preference_store,
     normalize_view_preferences,
     principal_for_request,
@@ -60,6 +61,16 @@ def _principal(request: Request) -> str | None:
     )
 
 
+def _storage_unavailable() -> HTTPException:
+    return HTTPException(
+        status_code=503,
+        detail={
+            "code": "view_preferences_storage_unavailable",
+            "message": "算法选择暂时无法读取或保存",
+        },
+    )
+
+
 def current_view_preferences(request: Request) -> dict[str, Any]:
     principal = _principal(request)
     if principal is None:
@@ -71,7 +82,10 @@ def current_view_preferences(request: Request) -> dict[str, Any]:
 
 @router.get("", response_model=ViewPreferencesResponse)
 def read_view_preferences(request: Request) -> ViewPreferencesResponse:
-    return ViewPreferencesResponse(**current_view_preferences(request))
+    try:
+        return ViewPreferencesResponse(**current_view_preferences(request))
+    except ViewPreferenceStorageError as exc:
+        raise _storage_unavailable() from exc
 
 
 @router.put(
@@ -93,15 +107,15 @@ def update_view_preferences(
             },
         )
     try:
-        current = _store().read(principal).as_dict()
         updates = patch.model_dump(exclude_unset=True)
-        current.update(updates)
-        saved = _store().write(principal, normalize_view_preferences(current))
+        saved = _store().patch(principal, updates)
     except UnknownAlgorithmError as exc:
         raise HTTPException(
             status_code=400,
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
+    except ViewPreferenceStorageError as exc:
+        raise _storage_unavailable() from exc
     return ViewPreferencesResponse(
         principal=principal,
         persisted=True,
