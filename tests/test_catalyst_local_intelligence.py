@@ -7063,7 +7063,7 @@ def test_public_ticker_batch_scans_the_news_window_once(
 ) -> None:
     _etl, _ai, intelligence = _stack(tmp_path)
     observed = datetime(2030, 7, 16, 18, 35, tzinfo=timezone.utc)
-    original = intelligence._active_revisions
+    original = intelligence._active_revisions_tracked
     calls = 0
 
     def counted_active_revisions(*args, **kwargs):
@@ -7073,7 +7073,7 @@ def test_public_ticker_batch_scans_the_news_window_once(
 
     monkeypatch.setattr(
         intelligence,
-        "_active_revisions",
+        "_active_revisions_tracked",
         counted_active_revisions,
     )
 
@@ -7129,15 +7129,18 @@ def test_directional_batch_keeps_only_the_requested_tickers_nonzero_impact(
     ]
     monkeypatch.setattr(
         intelligence,
-        "_active_revisions",
-        lambda *_args, **_kwargs: [
-            {
-                "index": index,
-                "news_id": items[index]["news_id"],
-                "source_count": 1,
-            }
-            for index in range(3)
-        ],
+        "_active_revisions_tracked",
+        lambda *_args, **_kwargs: (
+            [
+                {
+                    "index": index,
+                    "news_id": items[index]["news_id"],
+                    "source_count": 1,
+                }
+                for index in range(3)
+            ],
+            None,
+        ),
     )
     monkeypatch.setattr(intelligence, "_ai_job_snapshot", lambda **_kwargs: {})
     monkeypatch.setattr(
