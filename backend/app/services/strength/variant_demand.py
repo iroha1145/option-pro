@@ -1,8 +1,8 @@
-"""Bounded customer demand for optional strength ranking variants.
+"""Bounded public demand for optional strength ranking variants.
 
-Signed-in non-owners cannot POST owner worker actions. When an A0 snapshot is
-missing they register a deduped demand; the existing strength_refresh task
-picks it up. GET never scans the pool itself.
+Non-owner callers cannot POST owner worker actions. When an A0 snapshot is
+missing, the public GET registers a deduped demand and the existing
+strength_refresh task picks it up. GET never scans the pool itself.
 """
 
 from __future__ import annotations
