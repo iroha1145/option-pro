@@ -10,9 +10,22 @@ interface DeferredEpsChartProps {
   items: EarningsRow[];
 }
 
+function withRecoverQuery(href: string, generation: number) {
+  const url = new URL(href, window.location.href);
+  url.searchParams.set('recover', String(generation));
+  return url.href;
+}
+
 function loadEpsHatchChart(generation = 0) {
-  // Query must change on retry: browsers cache a rejected module at the same URL.
-  return lazy(() => import(`./EpsHatchChart?recover=${generation}`));
+  // First load stays a static import so Vite still emits one async chunk.
+  // Retry must change the module URL: browsers cache a rejected specifier.
+  return lazy(async () => {
+    if (generation === 0) {
+      return import('./EpsHatchChart');
+    }
+    const href = (await import('./EpsHatchChart?url')).default;
+    return import(/* @vite-ignore */ withRecoverQuery(href, generation));
+  });
 }
 
 export default function DeferredEpsChart({ items }: DeferredEpsChartProps) {

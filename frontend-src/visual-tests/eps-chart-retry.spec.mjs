@@ -40,11 +40,12 @@ test('chart 503 then 200 retry issues a new module request and shows the canvas'
 
   const beforeRetry = chartRequests.length;
   await page.getByRole('button', { name: '重试图表', exact: true }).click();
-  await expect(page.locator('[data-eps-chart], canvas')).toHaveCount(1, { timeout: 10_000 });
+  await expect(page.locator('[data-eps-chart]')).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator('[data-eps-chart] canvas')).toHaveCount(1);
   await expect(page.locator('[data-eps-chart-error]')).toHaveCount(0);
   const retryRequests = chartRequests.slice(beforeRetry);
   expect(retryRequests.length, JSON.stringify({ chartRequests, beforeRetry })).toBeGreaterThanOrEqual(1);
   expect(retryRequests.every((row) => row.failed === false)).toBeTruthy();
-  expect(retryRequests.some((row) => /recover=1/.test(row.url))).toBeTruthy();
+  expect(retryRequests.some((row) => /[?&]recover=1(?:&|$)/.test(row.url))).toBeTruthy();
   expect(errors.filter((message) => !/loading chunk|Failed to fetch|503|chart unavailable/i.test(message))).toEqual([]);
 });
