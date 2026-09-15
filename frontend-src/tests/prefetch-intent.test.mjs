@@ -48,6 +48,18 @@ test('surfaces lab fulfills home and earnings APIs so isolate uvicorn does not c
   assert.match(surfaces, /挡不住 uvicorn 出站/);
 });
 
+test('surfaces extras and hover_only keep the real waitReady class and duration', async () => {
+  const surfaces = await readFile(path.join(here, '..', '..', 'scripts', 'perf', 'measure_round6_surfaces.mjs'), 'utf8');
+  assert.doesNotMatch(surfaces, /ready_class: 'content',\s*ready_ms: 1/);
+  assert.match(surfaces, /intent_hover_only/);
+  assert.match(surfaces, /extras_no_intent/);
+  assert.match(surfaces, /extras_palette_closed/);
+  const hoverOnly = surfaces.slice(surfaces.indexOf('intent.hover_only.push'));
+  assert.match(hoverOnly, /const ready = await waitReady\(page, '\/'\)/);
+  assert.match(hoverOnly, /ready_class: ready\.kind/);
+  assert.match(hoverOnly, /ready_ms: ready\.at/);
+});
+
 test('navbar, dock, palette and login expose hover/focus route prefetch', async () => {
   const navbar = await readFile(src('components', 'Navbar.tsx'), 'utf8');
   const dock = await readFile(src('components', 'MobileDock.tsx'), 'utf8');

@@ -331,13 +331,13 @@ for (let i = 0; i < REPEATS; i += 1) {
   intent.hover_only.push(await withPage(async (page, network, rateLimit) => {
     await installLabRoutes(page);
     await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-    await waitReady(page, '/');
+    const ready = await waitReady(page, '/');
     const beforePaid = network.abortedPaid;
     await desktopEarningsNav(page).hover();
     await page.waitForTimeout(800);
     return {
-      ready_class: 'content',
-      ready_ms: 1,
+      ready_class: ready.kind,
+      ready_ms: ready.at,
       earnings_chunk: network.earningsChunk > 0,
       chart_loaded: network.chart > 0,
       extra_paid: network.abortedPaid > beforePaid,
@@ -357,11 +357,11 @@ for (let i = 0; i < REPEATS; i += 1) {
   extras.no_intent.push(await withPage(async (page, network) => {
     await installLabRoutes(page);
     await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-    await waitReady(page, '/');
+    const ready = await waitReady(page, '/');
     await page.waitForTimeout(800);
     return {
-      ready_class: 'content',
-      ready_ms: 1,
+      ready_class: ready.kind,
+      ready_ms: ready.at,
       earnings_chunk: network.earningsChunk > 0,
       stock_chunk: network.stockChunk > 0,
       chart_loaded: network.chart > 0,
@@ -371,11 +371,11 @@ for (let i = 0; i < REPEATS; i += 1) {
     await installLabRoutes(page);
     await page.addInitScript({ content: "try { localStorage.setItem('optix:recent-tickers', JSON.stringify(['AAPL'])); } catch (e) {}" });
     await page.goto(`${BASE}/earnings`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
-    await waitReady(page, '/earnings');
+    const ready = await waitReady(page, '/earnings');
     await page.waitForTimeout(600);
     return {
-      ready_class: 'content',
-      ready_ms: 1,
+      ready_class: ready.kind,
+      ready_ms: ready.at,
       stock_chunk: network.stockChunk > 0,
       home_chunk: network.homeChunk > 0,
       chart_loaded: network.chart > 0,
@@ -471,17 +471,25 @@ const report = {
     immediate: summarize(intent.immediate, 'wall_ms'),
     hover_then_click: summarize(intent.hover_then_click, 'wall_ms'),
     hover_only: {
-      n: intent.hover_only.length,
-      ready_n: intent.hover_only.filter((row) => row.ready_class === 'content').length,
-      error_n: intent.hover_only.filter((row) => row.ready_class === 'error').length,
-      timeout_n: intent.hover_only.filter((row) => row.ready_class === 'timeout').length,
+      ...summarize(intent.hover_only),
       chunk_n: intent.hover_only.filter((row) => row.earnings_chunk).length,
       chart_n: intent.hover_only.filter((row) => row.chart_loaded).length,
       extra_paid_n: intent.hover_only.filter((row) => row.extra_paid).length,
-      samples: intent.hover_only,
     },
   },
   extras: {
+    no_intent: {
+      ...summarize(extras.no_intent),
+      chunk_n: extras.no_intent.filter((row) => row.earnings_chunk).length,
+      stock_n: extras.no_intent.filter((row) => row.stock_chunk).length,
+      chart_n: extras.no_intent.filter((row) => row.chart_loaded).length,
+    },
+    palette_closed: {
+      ...summarize(extras.palette_closed),
+      stock_n: extras.palette_closed.filter((row) => row.stock_chunk).length,
+      home_n: extras.palette_closed.filter((row) => row.home_chunk).length,
+      chart_n: extras.palette_closed.filter((row) => row.chart_loaded).length,
+    },
     no_intent_chunk_n: extras.no_intent.filter((row) => row.earnings_chunk).length,
     palette_closed_stock_n: extras.palette_closed.filter((row) => row.stock_chunk).length,
     samples: extras,
@@ -503,6 +511,9 @@ const gate = [
   ...readyGateFailures(report.first_nav.desktop_nav, { expectedN: REPEATS, label: 'nav_desktop' }),
   ...readyGateFailures(report.intent.immediate, { expectedN: REPEATS, label: 'intent_immediate' }),
   ...readyGateFailures(report.intent.hover_then_click, { expectedN: REPEATS, label: 'intent_hover_then_click' }),
+  ...readyGateFailures(report.intent.hover_only, { expectedN: REPEATS, label: 'intent_hover_only' }),
+  ...readyGateFailures(report.extras.no_intent, { expectedN: REPEATS, label: 'extras_no_intent' }),
+  ...readyGateFailures(report.extras.palette_closed, { expectedN: REPEATS, label: 'extras_palette_closed' }),
 ];
 if (report.earnings_scroll.stayed_n !== REPEATS) {
   gate.push(`earnings_scroll: stayed_n=${report.earnings_scroll.stayed_n} expected=${REPEATS}`);
