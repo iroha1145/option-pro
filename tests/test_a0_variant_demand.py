@@ -38,7 +38,7 @@ def _signed_in_request() -> object:
     return request
 
 
-def test_anonymous_missing_a0_does_not_register_demand(
+def test_anonymous_missing_a0_registers_bounded_demand(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -53,7 +53,6 @@ def test_anonymous_missing_a0_does_not_register_demand(
     monkeypatch.setattr(strength, "_STRENGTH_SNAPSHOT_PATH", default_path)
     monkeypatch.setattr(strength.time, "time", lambda: NOW)
     monkeypatch.setattr(strength, "current_request_is_owner", lambda: False)
-    monkeypatch.setattr(strength, "request_has_account_session", lambda _req: False)
     monkeypatch.setattr(strength, "request_account_session", lambda _req: None)
     with pytest.raises(HTTPException) as caught:
         asyncio.run(
@@ -70,8 +69,12 @@ def test_anonymous_missing_a0_does_not_register_demand(
             )
         )
     assert caught.value.status_code == 503
-    assert caught.value.detail["code"] == "strength_snapshot_unavailable"
-    assert list_pending_strength_variant_demands(root=tmp_path / "strength-variant-demand") == []
+    assert caught.value.detail["code"] == "strength_snapshot_preparing"
+    pending = list_pending_strength_variant_demands(
+        root=tmp_path / "strength-variant-demand"
+    )
+    assert len(pending) == 1
+    assert pending[0]["ranking_algorithm"] == A0_ALGORITHM
 
 
 def test_signed_in_customer_missing_a0_registers_demand_then_reads_full_pool(
@@ -89,7 +92,6 @@ def test_signed_in_customer_missing_a0_registers_demand_then_reads_full_pool(
     monkeypatch.setattr(strength, "_STRENGTH_SNAPSHOT_PATH", default_path)
     monkeypatch.setattr(strength.time, "time", lambda: NOW)
     monkeypatch.setattr(strength, "current_request_is_owner", lambda: False)
-    monkeypatch.setattr(strength, "request_has_account_session", lambda _req: True)
     monkeypatch.setattr(
         strength,
         "request_account_session",
@@ -328,9 +330,11 @@ def test_disabled_strength_task_marks_demand_unavailable(
     assert detail["code"] == "strength_snapshot_unavailable"
 
 
-def test_signed_in_customer_cannot_post_owner_strength_refresh(
+@pytest.mark.parametrize("signed_in", [False, True], ids=["anonymous", "customer"])
+def test_non_owner_cannot_post_owner_strength_refresh(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    signed_in: bool,
 ) -> None:
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     set_account_store(AccountStore(tmp_path / "accounts.db"))
@@ -353,12 +357,16 @@ def test_signed_in_customer_cannot_post_owner_strength_refresh(
     }
     try:
         with TestClient(app, base_url="https://testserver") as client:
-            registered = client.post(
-                "/api/account/register",
-                json={"username": "a0_customer", "password": "fixture-password-for-tests"},
-                headers=headers,
-            )
-            assert registered.status_code == 201
+            if signed_in:
+                registered = client.post(
+                    "/api/account/register",
+                    json={
+                        "username": "a0_customer",
+                        "password": "fixture-password-for-tests",
+                    },
+                    headers=headers,
+                )
+                assert registered.status_code == 201
             response = client.post(
                 "/api/worker/actions/strength_refresh",
                 json={"parameters": dict(strength.DEFAULT_STRENGTH_SCAN_PARAMETERS)},
@@ -425,9 +433,11 @@ def test_worker_picks_up_pending_a0_demand_without_scheduled_preheat(
     assert a0_path.is_file()
 
 
-def test_signed_in_customer_enqueue_claim_and_read_a0(
+@pytest.mark.parametrize("account_id", [None, "alice"], ids=["anonymous", "customer"])
+def test_public_caller_enqueue_claim_worker_publish_and_read_a0(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    account_id: str | None,
 ) -> None:
     repository, token = _init_strength_worker(tmp_path, monkeypatch)
     default_path = tmp_path / "strength-snapshot-v1.json"
@@ -440,13 +450,11 @@ def test_signed_in_customer_enqueue_claim_and_read_a0(
     monkeypatch.setattr(strength, "_STRENGTH_SNAPSHOT_PATH", default_path)
     monkeypatch.setattr(strength.time, "time", lambda: NOW)
     monkeypatch.setattr(strength, "current_request_is_owner", lambda: False)
-    monkeypatch.setattr(strength, "request_has_account_session", lambda _req: True)
     monkeypatch.setattr(
         strength,
         "request_account_session",
-        lambda _req: SimpleNamespace(user_id="alice"),
+        lambda _req: SimpleNamespace(user_id=account_id) if account_id else None,
     )
-    monkeypatch.setattr(strength, "principal_for_request", lambda **_kwargs: "account:alice")
     monkeypatch.setattr(
         strength,
         "get_effective_runtime_settings",
@@ -472,7 +480,7 @@ def test_signed_in_customer_enqueue_claim_and_read_a0(
                 universe="themes",
                 timeframe="all",
                 profile="balanced",
-                top=20,
+                top=50,
                 sector_id=None,
                 min_price=5.0,
                 min_avg_dollar_volume=10_000_000.0,
@@ -504,7 +512,7 @@ def test_signed_in_customer_enqueue_claim_and_read_a0(
                 universe="themes",
                 timeframe="all",
                 profile="balanced",
-                top=20,
+                top=50,
                 sector_id=None,
                 min_price=5.0,
                 min_avg_dollar_volume=10_000_000.0,

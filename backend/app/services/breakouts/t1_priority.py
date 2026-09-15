@@ -107,10 +107,16 @@ def _market_session(value: MarketSession | str | None) -> MarketSession:
         return MarketSession.CLOSED
 
 
-def t1_setup_applicable(event: Mapping[str, Any] | None) -> bool:
+def _event_setup_type(event: Mapping[str, Any] | None) -> str:
+    """Accept both production model enums and persisted JSON strings."""
+
     payload = dict(event or {})
-    setup = str(payload.get("setup_type") or payload.get("origin_setup_type") or "").strip()
-    return setup == T1_DAILY_SETUP
+    setup = payload.get("setup_type") or payload.get("origin_setup_type") or ""
+    return str(getattr(setup, "value", setup)).strip()
+
+
+def t1_setup_applicable(event: Mapping[str, Any] | None) -> bool:
+    return _event_setup_type(event) == T1_DAILY_SETUP
 
 
 def t1_boost_eligible(event: Mapping[str, Any]) -> bool:
@@ -124,9 +130,12 @@ def t1_needs_close_eval(event: Mapping[str, Any]) -> bool:
     if not t1_setup_applicable(event):
         return False
     status = event_t1_status(event)
-    if status in {T1_MET, T1_UNMET, T1_NOT_APPLICABLE}:
+    if status in {T1_MET, T1_UNMET}:
         return False
-    if status == T1_PENDING:
+    # Early enum annotations incorrectly marked daily-base events inapplicable.
+    # The canonical setup above allows those stored attempts to recover at close;
+    # genuinely inapplicable setups have already returned False.
+    if status in {T1_PENDING, T1_NOT_APPLICABLE}:
         return True
     features = event.get("features") if isinstance(event.get("features"), Mapping) else {}
     payload = event.get("t1_priority")
@@ -632,7 +641,7 @@ def attach_t1_features(
             "variant": T1_ALGORITHM,
             "status": T1_NOT_APPLICABLE,
             "reason": "setup_not_in_t1_universe",
-            "setup_type": str(payload.get("setup_type") or payload.get("origin_setup_type") or ""),
+            "setup_type": _event_setup_type(payload),
             "session_date": session_date.isoformat() if session_date else None,
             "computed_at": computed_at,
             "known_at": None,

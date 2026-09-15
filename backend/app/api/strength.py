@@ -18,7 +18,6 @@ from app.access import (
     current_request_is_owner,
     public_snapshot_unavailable,
     request_account_session,
-    request_has_account_session,
 )
 from app.data_paths import get_data_paths
 from app.personal_config import get_personal_config
@@ -474,10 +473,6 @@ def _request_screener_resolution(
     )
 
 
-def _signed_in_for_variant(request: Request) -> bool:
-    return bool(current_request_is_owner() or request_has_account_session(request))
-
-
 def _maybe_register_a0_variant_demand(
     request: Request,
     *,
@@ -485,8 +480,6 @@ def _maybe_register_a0_variant_demand(
     resolution: Any,
 ) -> dict[str, Any] | None:
     if resolution is None or resolution.effective != A0_ALGORITHM:
-        return None
-    if not _signed_in_for_variant(request):
         return None
     account = request_account_session(request)
     account_id = getattr(account, "user_id", None) if account is not None else None
