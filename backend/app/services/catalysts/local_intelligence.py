@@ -3312,14 +3312,11 @@ class LocalCatalystIntelligence:
             key, store_cursor, built_rows, started_at=started_at
         )
         if not installed:
-            later_cursor = _revision_store_cursor(connection)
-            with _REVISION_CACHE_LOCK:
-                cached = _REVISION_CACHE.get(key)
-                if cached is not None and _revision_cache_fresh(cached, later_cursor):
-                    return (
-                        [_copy_revision_row(row) for row in cached["rows"]],
-                        cached["cursor"],
-                    )
+            # A later concurrent write won this (db, window) key. Keep this
+            # request's own rows: the winner may have been built at a different
+            # as_of (near-now keys omit as_of). Adopting those rows lets
+            # visible pagination consume a slot that is hidden at this as_of,
+            # then skip the last original item on the historical cursor page.
             return [_copy_revision_row(row) for row in built_rows], store_cursor
         return [_copy_revision_row(row) for row in built_rows], store_cursor
 

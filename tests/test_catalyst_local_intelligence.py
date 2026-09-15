@@ -8061,3 +8061,141 @@ def test_visible_feed_cursor_keeps_fixed_as_of(tmp_path, monkeypatch) -> None:
     assert second["as_of"] == first["as_of"]
     assert first["page_scanned"] == 108
     assert second["page_offset"] == 108
+
+
+def test_rejected_cache_install_keeps_own_rows_for_fixed_as_of_pagination(
+    tmp_path, monkeypatch
+) -> None:
+    """Losing the install race must not adopt a later as_of row set.
+
+    Visible pagination hides items that are not yet public at the request
+    as_of, but the cursor still advances by raw position. Adopting a newer
+    cache makes that hidden slot consume offset and skip the last original
+    item when page 2 is served from the historical cursor.
+    """
+    from app.personal_config import FeatureConfig, PersonalConfig
+    from app.services.catalysts.personal_service import PersonalCatalystService
+
+    etl, ai, intelligence = _stack(tmp_path)
+    t0 = datetime(2026, 3, 20, 0, 0, tzinfo=timezone.utc)
+    clock = {"now": t0}
+    monkeypatch.setattr(local_module, "_utc_now", lambda: clock["now"])
+    originals = [
+        _news_change(
+            index,
+            index,
+            available_at=t0 - timedelta(minutes=30),
+            title="芯片企业公布最新业绩",
+            summary="收入增长，但管理层仍提示需求波动风险。",
+        )
+        for index in range(1, 14)
+    ]
+    _apply_news(etl, originals, as_of=t0)
+    intelligence.reconcile()
+    service = PersonalCatalystService(
+        type(
+            "SettingsStub",
+            (),
+            {
+                "cache_db_path": str(intelligence.db_path),
+                "model": "gpt-5.6-terra",
+                "reasoning": "max",
+            },
+        )(),
+        intelligence=intelligence,
+        ai_repository=ai,
+        personal_config=PersonalConfig(
+            features=FeatureConfig(catalyst_mode="read")
+        ),
+        ai_settings=type(
+            "AISettingsStub", (), {"personal_etl_enabled": True}
+        )(),
+    )
+
+    queried = threading.Event()
+    resume = threading.Event()
+    original_query = intelligence._active_revisions_query
+    delay_next = {"on": False}
+
+    def gated_query(*args, **kwargs):
+        rows = original_query(*args, **kwargs)
+        if delay_next["on"]:
+            queried.set()
+            if not resume.wait(timeout=5):
+                raise TimeoutError("fixed-as-of reader was not resumed")
+        return rows
+
+    intelligence._active_revisions_query = gated_query  # type: ignore[method-assign]
+    errors: list[BaseException] = []
+    first_page: dict[str, Any] = {}
+
+    def early_reader() -> None:
+        try:
+            with request_owner_access_context(False):
+                first_page["feed"] = service.feed(
+                    as_of=t0,
+                    window_hours=24,
+                    limit=12,
+                    page_mode="visible",
+                )
+        except BaseException as exc:  # noqa: BLE001 — surface in the parent thread
+            errors.append(exc)
+
+    delay_next["on"] = True
+    worker = threading.Thread(target=early_reader)
+    worker.start()
+    assert queried.wait(timeout=5)
+    delay_next["on"] = False
+
+    clock["now"] = t0 + timedelta(seconds=1)
+    _apply_news(
+        etl,
+        [
+            _news_change(
+                14,
+                14,
+                available_at=clock["now"],
+                title="芯片企业发布最新进展",
+                summary="公司披露后续安排，市场关注交付节奏。",
+            )
+        ],
+        as_of=clock["now"],
+    )
+    intelligence.reconcile()
+    clock["now"] = t0 + timedelta(seconds=2)
+    with request_owner_access_context(False):
+        later = service.feed(
+            as_of=clock["now"],
+            window_hours=24,
+            limit=12,
+            page_mode="visible",
+        )
+    assert later["summary"]["count"] == 14
+    assert 14 in {item["news_id"] for item in later["items"]}
+
+    resume.set()
+    worker.join(timeout=5)
+    assert errors == []
+    assert worker.is_alive() is False
+    first = first_page["feed"]
+    clock["now"] = t0 + timedelta(minutes=2)
+    with request_owner_access_context(False):
+        second = service.feed(
+            as_of=clock["now"],
+            window_hours=24,
+            limit=12,
+            page_mode="visible",
+            cursor=first["next_cursor"],
+        )
+
+    first_ids = [item["news_id"] for item in first["items"]]
+    second_ids = [item["news_id"] for item in second["items"]]
+    assert first["as_of"] == _iso(t0)
+    assert second["as_of"] == first["as_of"]
+    assert first["summary"]["count"] == 13
+    assert second["summary"]["count"] == 13
+    assert 14 not in first_ids
+    assert 14 not in second_ids
+    assert first_ids == [13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2]
+    assert second_ids == [1]
+    assert set(first_ids + second_ids) == set(range(1, 14))
