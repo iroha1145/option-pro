@@ -108,6 +108,11 @@ class AlgorithmResolution:
 def _clean(value: Any) -> str | None:
     if value is None:
         return None
+    # Direct handler calls pass FastAPI Query() objects as the default.
+    if not isinstance(value, (str, bytes, int)) and hasattr(value, "default"):
+        value = getattr(value, "default", None)
+        if value is None:
+            return None
     text = str(value).strip()
     return text or None
 

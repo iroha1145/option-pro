@@ -720,15 +720,11 @@ def _root_from_scan(
 
 @router.get("/current", response_model=BreakoutRootResponse)
 def current(
-    request: Request | None = None,
-    sort_algorithm: Optional[str] = Query(default=None),
+    request: Request,
+    sort_algorithm: Optional[str] = None,
 ) -> BreakoutRootResponse:
     try:
-        resolution = (
-            resolve_radar_for_request(request, sort_algorithm)
-            if request is not None
-            else resolve_radar_algorithm(requested=sort_algorithm)
-        )
+        resolution = resolve_radar_for_request(request, sort_algorithm)
     except UnknownAlgorithmError as exc:
         raise HTTPException(
             status_code=400,
@@ -795,7 +791,7 @@ def current(
 
 @router.get("/events", response_model=BreakoutEventPageResponse)
 def events(
-    request: Request | None = None,
+    request: Request,
     date: Optional[CalendarDate] = Query(default=None),
     ticker: Optional[str] = Query(default=None, max_length=15),
     setup_type: Optional[BreakoutSetupType] = None,
@@ -807,14 +803,10 @@ def events(
     min_priority: Optional[float] = Query(default=None, ge=0, le=100),
     limit: int = Query(default=50, ge=1, le=200),
     cursor: Optional[str] = Query(default=None, max_length=2048),
-    sort_algorithm: Optional[str] = Query(default=None),
+    sort_algorithm: Optional[str] = None,
 ) -> BreakoutEventPageResponse:
     try:
-        resolution = (
-            resolve_radar_for_request(request, sort_algorithm)
-            if request is not None
-            else resolve_radar_algorithm(requested=sort_algorithm)
-        )
+        resolution = resolve_radar_for_request(request, sort_algorithm)
     except UnknownAlgorithmError as exc:
         raise HTTPException(
             status_code=400,

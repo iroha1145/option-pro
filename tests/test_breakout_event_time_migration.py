@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from app.api import breakouts as breakout_api
+from tests.http_response_support import anonymous_get_request as _areq
 from app.services.breakouts.config import BreakoutSettings
 from app.services.breakouts import repository as repository_module
 from app.services.breakouts.repository import (
@@ -292,7 +293,7 @@ def test_read_only_api_reports_legacy_schema_without_mutating_it(
     assert status.database["required_schema_version"] == SCHEMA_VERSION
     assert status.database["migration_required"] is True
 
-    current = breakout_api.current()
+    current = breakout_api.current(_areq())
     assert current.status == "unavailable"
     assert current.source_status["database"] == "schema_upgrade_required"
     assert current.source_status["schema"]["schema_version"] == LEGACY_SCHEMA_VERSION

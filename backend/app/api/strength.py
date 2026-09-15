@@ -10,7 +10,7 @@ import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Annotated, Any, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
@@ -870,7 +870,7 @@ async def scan(
     min_price: float = Query(5.0, ge=0),
     min_avg_dollar_volume: float = Query(10_000_000, ge=0),
     include_options: bool = True,
-    ranking_algorithm: Optional[str] = Query(None),
+    ranking_algorithm: Annotated[Optional[str], Query()] = None,
 ):
     """Read a matching Strength Radar snapshot produced by the worker."""
     try:

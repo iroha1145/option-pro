@@ -16,7 +16,7 @@ from app.services.breakouts.config import BreakoutSettings
 from app.services.breakouts.repository import BreakoutRepository
 from app.services.view_preferences import ViewPreferenceStore, normalize_view_preferences
 from tests.http_response_support import anonymous_get_request as _areq, response_payload as _rp
-from tests.test_breakout_api_contract import _event, _heartbeat, _publish
+from tests.test_breakout_api_contract import _client, _event, _heartbeat, _publish
 from tests.test_strength_worker_snapshot import NOW, _payload
 
 
@@ -99,6 +99,7 @@ def test_a0_snapshot_uses_a_separate_identity(
         parameters=a0_parameters,
         payload=_payload(parameters=a0_parameters, ticker="MSFT"),
         saved_at=NOW - 10,
+        base_path=default_path,
     )
     monkeypatch.setattr(strength, "_STRENGTH_SNAPSHOT_PATH", default_path)
     monkeypatch.setattr(strength.time, "time", lambda: NOW)
@@ -169,6 +170,7 @@ def test_radar_current_and_events_apply_t1_after_full_set_sort(
         db_path=tmp_path / "breakouts.db",
     )
     repo = BreakoutRepository(settings.db_path)
+    repo.initialize()
     at = datetime(2026, 9, 14, 20, 0, tzinfo=timezone.utc)
     first = _event("unmet-late", "AAA", at, 99.0)
     first["features"]["t1_priority"] = {"status": "unmet"}
@@ -180,43 +182,66 @@ def test_radar_current_and_events_apply_t1_after_full_set_sort(
     _heartbeat(repo, at)
     monkeypatch.setattr(breakout_api, "get_breakout_settings", lambda: settings)
     monkeypatch.setattr(breakout_api, "_now", lambda: at)
+    client = _client()
 
-    production = breakout_api.current(sort_algorithm=PRODUCTION_ALGORITHM)
-    assert [event.event_id for event in production.events] == [
+    production = client.get(
+        "/api/breakouts/current",
+        params={"sort_algorithm": PRODUCTION_ALGORITHM},
+    ).json()
+    assert [event["event_id"] for event in production["events"]] == [
         "unmet-late",
         "met-early",
         "unmet-older",
     ]
-    assert production.effective_algorithm == PRODUCTION_ALGORITHM
+    assert production["effective_algorithm"] == PRODUCTION_ALGORITHM
 
-    boosted = breakout_api.current(sort_algorithm=T1_ALGORITHM)
-    assert [event.event_id for event in boosted.events] == [
+    boosted = client.get(
+        "/api/breakouts/current",
+        params={"sort_algorithm": T1_ALGORITHM},
+    ).json()
+    assert [event["event_id"] for event in boosted["events"]] == [
         "met-early",
         "unmet-late",
         "unmet-older",
     ]
-    assert boosted.effective_algorithm == T1_ALGORITHM
-    assert {event.lifecycle_state for event in boosted.events} == {"TRIGGERED"}
-    assert boosted.events[0].t1_status == "met"
+    assert boosted["effective_algorithm"] == T1_ALGORITHM
+    assert {event["lifecycle_state"] for event in boosted["events"]} == {"TRIGGERED"}
+    assert boosted["events"][0]["t1_status"] == "met"
 
-    page = breakout_api.events(sort_algorithm=T1_ALGORITHM, limit=2)
-    assert [event.event_id for event in page.events] == ["met-early", "unmet-late"]
-    assert page.next_cursor
-    more = breakout_api.events(sort_algorithm=T1_ALGORITHM, limit=2, cursor=page.next_cursor)
-    assert [event.event_id for event in more.events] == ["unmet-older"]
-    assert more.next_cursor is None
+    page = client.get(
+        "/api/breakouts/events",
+        params={"sort_algorithm": T1_ALGORITHM, "limit": 2},
+    ).json()
+    assert [event["event_id"] for event in page["events"]] == ["met-early", "unmet-late"]
+    assert page["next_cursor"]
+    more = client.get(
+        "/api/breakouts/events",
+        params={
+            "sort_algorithm": T1_ALGORITHM,
+            "limit": 2,
+            "cursor": page["next_cursor"],
+        },
+    ).json()
+    assert [event["event_id"] for event in more["events"]] == ["unmet-older"]
+    assert more["next_cursor"] is None
 
-    production_page = breakout_api.events(sort_algorithm=PRODUCTION_ALGORITHM, limit=2)
-    assert [event.event_id for event in production_page.events] == [
+    production_page = client.get(
+        "/api/breakouts/events",
+        params={"sort_algorithm": PRODUCTION_ALGORITHM, "limit": 2},
+    ).json()
+    assert [event["event_id"] for event in production_page["events"]] == [
         "unmet-late",
         "met-early",
     ]
-    production_more = breakout_api.events(
-        sort_algorithm=PRODUCTION_ALGORITHM,
-        limit=2,
-        cursor=production_page.next_cursor,
-    )
-    assert [event.event_id for event in production_more.events] == ["unmet-older"]
+    production_more = client.get(
+        "/api/breakouts/events",
+        params={
+            "sort_algorithm": PRODUCTION_ALGORITHM,
+            "limit": 2,
+            "cursor": production_page["next_cursor"],
+        },
+    ).json()
+    assert [event["event_id"] for event in production_more["events"]] == ["unmet-older"]
 
 
 def test_scheduled_strength_refresh_does_not_shadow_scan_a0_by_default(
@@ -231,7 +256,12 @@ def test_scheduled_strength_refresh_does_not_shadow_scan_a0_by_default(
 
     async def fake_scanner(**kwargs):
         calls.append(kwargs)
-        return _payload()
+        parameters = {
+            key: value
+            for key, value in kwargs.items()
+            if key != "force_refresh"
+        }
+        return _payload(parameters=parameters)
 
     monkeypatch.setattr(
         strength,
@@ -277,7 +307,12 @@ def test_admin_a0_default_preheats_companion_snapshot(
 
     async def fake_scanner(**kwargs):
         calls.append(kwargs)
-        return _payload()
+        parameters = {
+            key: value
+            for key, value in kwargs.items()
+            if key != "force_refresh"
+        }
+        return _payload(parameters=parameters)
 
     monkeypatch.setattr(
         strength,
@@ -321,7 +356,12 @@ def test_owner_default_refresh_preheats_a0_when_admin_default_is_a0(
 
     async def fake_scanner(**kwargs):
         calls.append(kwargs)
-        return _payload()
+        parameters = {
+            key: value
+            for key, value in kwargs.items()
+            if key != "force_refresh"
+        }
+        return _payload(parameters=parameters)
 
     monkeypatch.setattr(
         "app.api.strength.get_effective_runtime_settings",
