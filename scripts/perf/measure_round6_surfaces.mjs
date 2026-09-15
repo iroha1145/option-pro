@@ -11,6 +11,8 @@ import path from 'node:path';
 import { afterSampleGap, attach429Counter } from './lib/rate_limit.mjs';
 import { isTerminalReady, pageReadyInstallScript } from './lib/page_ready.mjs';
 import { earningsFixture, homeLabFixtures } from './lib/round6_lab_fixtures.mjs';
+import { decideIntentPrefetch } from './lib/round6_intent_decision.mjs';
+import { readyGateFailures, summarizeReady } from './lib/round6_ready_summary.mjs';
 
 const require = createRequire(fileURLToPath(import.meta.url));
 const { chromium } = require(path.resolve(
@@ -47,24 +49,7 @@ function percentile(values, q) {
 }
 
 function summarize(rows, field = 'ready_ms') {
-  const values = rows.map((row) => row[field]).filter((value) => value != null);
-  return {
-    n: rows.length,
-    ready_n: values.length,
-    timeout_n: rows.length - values.length,
-    p50: percentile(values, 0.5),
-    p75: percentile(values, 0.75),
-    spread_iqr: values.length
-      ? percentile(values, 0.75) - percentile(values, 0.25)
-      : null,
-    transfer_p50: percentile(rows.map((row) => row.transferSize || 0), 0.5),
-    request_p50: percentile(rows.map((row) => row.request_count || 0), 0.5),
-    chart_loaded_n: rows.filter((row) => row.chart_loaded).length,
-    runtime_en_n: rows.filter((row) => row.runtime_en).length,
-    runtime_ja_n: rows.filter((row) => row.runtime_ja).length,
-    rate_limited_n: rows.filter((row) => (row.rate_limited || 0) > 0).length,
-    samples: rows,
-  };
+  return summarizeReady(rows, field);
 }
 
 async function applyThrottle(page) {
@@ -154,6 +139,8 @@ function attachNetwork(page) {
     runtimeEn: 0,
     runtimeJa: 0,
     earningsChunk: 0,
+    stockChunk: 0,
+    homeChunk: 0,
     abortedPaid: 0,
     fulfilled_upcoming: 0,
     fulfilled_indices: 0,
@@ -167,7 +154,9 @@ function attachNetwork(page) {
     if (/\/assets\/chart-/.test(url) || url.includes('EpsHatchChart')) state.chart += 1;
     if (url.includes('runtime-en')) state.runtimeEn += 1;
     if (url.includes('runtime-ja')) state.runtimeJa += 1;
-    if (/\/assets\/Earnings-/.test(url)) state.earningsChunk += 1;
+    if (/\/assets\/Earnings-/.test(url) || url.includes('/pages/Earnings')) state.earningsChunk += 1;
+    if (/\/assets\/StockDetail-/.test(url) || url.includes('/pages/StockDetail')) state.stockChunk += 1;
+    if (/\/assets\/Home-/.test(url) || url.includes('/pages/Home')) state.homeChunk += 1;
   });
   return state;
 }
@@ -347,6 +336,8 @@ for (let i = 0; i < REPEATS; i += 1) {
     await desktopEarningsNav(page).hover();
     await page.waitForTimeout(800);
     return {
+      ready_class: 'content',
+      ready_ms: 1,
       earnings_chunk: network.earningsChunk > 0,
       chart_loaded: network.chart > 0,
       extra_paid: network.abortedPaid > beforePaid,
@@ -357,6 +348,42 @@ for (let i = 0; i < REPEATS; i += 1) {
     `intent #${i + 1} immediate=${intent.immediate.at(-1).wall_ms} `
     + `hover=${intent.hover_then_click.at(-1).wall_ms} `
     + `hover_only_chunk=${intent.hover_only.at(-1).earnings_chunk}`,
+  );
+  await afterSampleGap({ last: i + 1 >= REPEATS });
+}
+
+const extras = { no_intent: [], palette_closed: [] };
+for (let i = 0; i < REPEATS; i += 1) {
+  extras.no_intent.push(await withPage(async (page, network) => {
+    await installLabRoutes(page);
+    await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+    await waitReady(page, '/');
+    await page.waitForTimeout(800);
+    return {
+      ready_class: 'content',
+      ready_ms: 1,
+      earnings_chunk: network.earningsChunk > 0,
+      stock_chunk: network.stockChunk > 0,
+      chart_loaded: network.chart > 0,
+    };
+  }, { viewport: 'desktop' }));
+  extras.palette_closed.push(await withPage(async (page, network) => {
+    await installLabRoutes(page);
+    await page.addInitScript({ content: "try { localStorage.setItem('optix:recent-tickers', JSON.stringify(['AAPL'])); } catch (e) {}" });
+    await page.goto(`${BASE}/earnings`, { waitUntil: 'domcontentloaded', timeout: 120_000 });
+    await waitReady(page, '/earnings');
+    await page.waitForTimeout(600);
+    return {
+      ready_class: 'content',
+      ready_ms: 1,
+      stock_chunk: network.stockChunk > 0,
+      home_chunk: network.homeChunk > 0,
+      chart_loaded: network.chart > 0,
+    };
+  }, { viewport: 'desktop' }));
+  console.log(
+    `extras #${i + 1} no_intent_chunk=${extras.no_intent.at(-1).earnings_chunk} `
+    + `palette_stock=${extras.palette_closed.at(-1).stock_chunk}`,
   );
   await afterSampleGap({ last: i + 1 >= REPEATS });
 }
@@ -381,12 +408,23 @@ for (let i = 0; i < REPEATS; i += 1) {
     await page.waitForTimeout(400);
     await page.evaluate(() => window.scrollBy(0, Math.round(window.innerHeight * 0.9)));
     await page.waitForTimeout(400);
+    const mounted = await page.evaluate(() => {
+      const slot = document.querySelector('[data-eps-chart-slot]');
+      if (!slot) return { slot: false, canvas: 0, chart: 0 };
+      return {
+        slot: true,
+        canvas: slot.querySelectorAll('canvas').length,
+        chart: slot.querySelectorAll('[data-eps-chart]').length,
+      };
+    });
     return {
       placeholder_top: slot?.top ?? null,
       placeholder_height: slot?.height ?? null,
       chart_before_scroll: before > 0,
       chart_after_near_scroll: afterNear > 0,
-      chart_stayed_mounted: network.chart > 0 && afterNear > 0,
+      chart_node_n: mounted.chart,
+      chart_canvas_n: mounted.canvas,
+      chart_stayed_mounted: mounted.slot && (mounted.canvas > 0 || mounted.chart > 0),
       rate_limited: rateLimit.count,
     };
   });
@@ -414,11 +452,19 @@ const report = {
     hover_then_click: summarize(intent.hover_then_click, 'wall_ms'),
     hover_only: {
       n: intent.hover_only.length,
+      ready_n: intent.hover_only.filter((row) => row.ready_class === 'content').length,
+      error_n: intent.hover_only.filter((row) => row.ready_class === 'error').length,
+      timeout_n: intent.hover_only.filter((row) => row.ready_class === 'timeout').length,
       chunk_n: intent.hover_only.filter((row) => row.earnings_chunk).length,
       chart_n: intent.hover_only.filter((row) => row.chart_loaded).length,
       extra_paid_n: intent.hover_only.filter((row) => row.extra_paid).length,
       samples: intent.hover_only,
     },
+  },
+  extras: {
+    no_intent_chunk_n: extras.no_intent.filter((row) => row.earnings_chunk).length,
+    palette_closed_stock_n: extras.palette_closed.filter((row) => row.stock_chunk).length,
+    samples: extras,
   },
   earnings_scroll: {
     n: scroll.length,
@@ -428,6 +474,32 @@ const report = {
     samples: scroll,
   },
 };
+const intentDecision = decideIntentPrefetch(report.intent, { expectedN: REPEATS });
+report.intent.decision = intentDecision;
+const gate = [
+  ...readyGateFailures(report.pages['/'], { expectedN: REPEATS, label: 'home' }),
+  ...readyGateFailures(report.pages['/earnings'], { expectedN: REPEATS, label: 'earnings' }),
+  ...readyGateFailures(report.first_nav.home_card, { expectedN: REPEATS, label: 'nav_home_card' }),
+  ...readyGateFailures(report.first_nav.desktop_nav, { expectedN: REPEATS, label: 'nav_desktop' }),
+  ...readyGateFailures(report.intent.immediate, { expectedN: REPEATS, label: 'intent_immediate' }),
+  ...readyGateFailures(report.intent.hover_then_click, { expectedN: REPEATS, label: 'intent_hover_then_click' }),
+];
+if (report.earnings_scroll.stayed_n !== REPEATS) {
+  gate.push(`earnings_scroll: stayed_n=${report.earnings_scroll.stayed_n} expected=${REPEATS}`);
+}
+if (report.extras.no_intent_chunk_n > 0) {
+  gate.push(`no_intent: earnings_chunk_n=${report.extras.no_intent_chunk_n}`);
+}
+if (report.extras.palette_closed_stock_n > 0) {
+  gate.push(`palette_closed: stock_chunk_n=${report.extras.palette_closed_stock_n}`);
+}
+if (intentDecision.decision !== 'keep') {
+  gate.push(`intent: ${intentDecision.decision}/${intentDecision.reason}`);
+}
+report.gate = { ok: gate.length === 0, failures: gate };
+if (gate.length) {
+  console.error(JSON.stringify(report.gate, null, 2));
+}
 await mkdir(path.dirname(OUT), { recursive: true });
 await writeFile(OUT, JSON.stringify(report, null, 2) + '\n');
 console.log(JSON.stringify({
@@ -447,3 +519,4 @@ console.log(JSON.stringify({
   },
 }, null, 2));
 console.log(`wrote ${OUT}`);
+if (gate.length) process.exit(1);

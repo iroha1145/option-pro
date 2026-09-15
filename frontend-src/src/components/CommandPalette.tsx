@@ -286,11 +286,12 @@ export default function CommandPalette({ open, onClose, onOpenTicker, onForceRef
   };
 
   useEffect(() => {
+    if (!open) return;
     const el = listRef.current?.querySelector<HTMLElement>(`[data-idx="${clampedActive}"]`);
     el?.scrollIntoView({ block: 'nearest' });
     const path = flat[clampedActive]?.path;
     if (path) prefetchRouteOnIntent(path);
-  }, [clampedActive, flat]);
+  }, [open, clampedActive, flat]);
 
   /* 滑行高亮定位：跟随 active 行（键盘 ↑↓ 与鼠标悬停同一套），首绘/列表
      换批时瞬放不补间，同一批内挪 active 才滑行。

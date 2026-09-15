@@ -11,7 +11,7 @@ interface EarningsRefreshButtonProps {
   refreshing: boolean;
   refreshStatus: RefreshStatus;
   lastUpdatedAt?: number | null;
-  onRefresh: (cooldownRemain: number) => void;
+  onRefresh: () => void;
 }
 
 /** 秒级冷却只在本按钮内走字，不牵动整页。 */
@@ -34,7 +34,7 @@ export default function EarningsRefreshButton({
         <span className="font-mono text-micro text-ink-400 tnum">{t('已更新')} {fmtTimeHHMMSS(lastUpdatedAt)}</span>
       )}
       <button
-        onClick={() => onRefresh(cooldownRemain)}
+        onClick={() => onRefresh()}
         disabled={refreshing || cooldownRemain > 0}
         title={cooldownRemain > 0 ? t('冷却中，{n}s 后可刷新', { n: cooldownRemain }) : t('手动刷新财报日历')}
         className={cn(

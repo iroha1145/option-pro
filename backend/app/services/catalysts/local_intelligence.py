@@ -407,36 +407,55 @@ def _feed_query_hash(kwargs: Mapping[str, Any], *, theme: str | None) -> str:
     return _sha(payload)
 
 
+def _anon_items_match_rows(
+    items: Sequence[Mapping[str, Any]] | None,
+    rows: Sequence[Mapping[str, Any]],
+) -> bool:
+    if items is None:
+        return False
+    try:
+        item_ids = [int(item["news_id"]) for item in items]
+        row_ids = [int(row["news_id"]) for row in rows]
+    except (KeyError, TypeError, ValueError):
+        return False
+    return item_ids == row_ids
+
+
 def _store_revision_cache(
     key: tuple[str, int],
     store_cursor: tuple[Any, ...],
     built_rows: list[dict[str, Any]],
     *,
     started_at: float,
-) -> None:
-    """Write a row-set entry; a later-finished stale build cannot clobber a newer one."""
+) -> bool:
+    """Install a row-set entry.
+
+    Returns True when the cache now holds this build's cursor (fresh hit,
+    expired same-cursor replacement, or a new write). Returns False when a
+    newer concurrent entry won, so the caller must not attach items from
+    ``built_rows`` onto that newer entry.
+
+    Replacing an expired same-cursor entry always drops ``anon_items``: the
+    store version is unchanged, but the time window may have moved, so the
+    previous projected items can belong to a different row set.
+    """
     with _REVISION_CACHE_LOCK:
         existing = _REVISION_CACHE.get(key)
         if existing is not None and existing["cursor"] == store_cursor:
-            # Same store version: keep a still-fresh entry, and keep one
-            # installed by a concurrent build that finished after we started.
-            # An expired same-cursor entry must be replaced — otherwise the
-            # next read fails freshness, rebuilds, and this branch discards
-            # the rebuild forever.
-            if (
-                _revision_cache_fresh(existing, store_cursor)
-                or existing["built_at"] >= started_at
-            ):
-                return
+            if _revision_cache_fresh(existing, store_cursor):
+                return True
+            if existing["built_at"] >= started_at:
+                return False
             existing["built_at"] = time.monotonic()
             existing["rows"] = built_rows
-            return
+            existing["anon_items"] = None
+            return True
         if (
             existing is not None
             and existing["cursor"] != store_cursor
             and existing["built_at"] >= started_at
         ):
-            return
+            return False
         if (
             len(_REVISION_CACHE) >= _REVISION_CACHE_MAX_ENTRIES
             and key not in _REVISION_CACHE
@@ -448,6 +467,7 @@ def _store_revision_cache(
             "rows": built_rows,
             "anon_items": None,
         }
+        return True
 
 
 def _revision_cache_fresh(
@@ -3255,24 +3275,53 @@ class LocalCatalystIntelligence:
         Callers always get fresh copies so downstream mutation cannot leak
         between requests.
         """
+        rows, _source_cursor = self._active_revisions_tracked(
+            connection, as_of=as_of, window_hours=window_hours
+        )
+        return rows
+
+    def _active_revisions_tracked(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        as_of: datetime,
+        window_hours: int | None = None,
+    ) -> tuple[list[dict[str, Any]], tuple[Any, ...] | None]:
+        """Active revision rows plus the store cursor that produced them."""
         key = self._revision_cache_key(as_of=as_of, window_hours=window_hours)
         if key is None:
-            return self._active_revisions_query(
-                connection, as_of=as_of, window_hours=window_hours
+            return (
+                self._active_revisions_query(
+                    connection, as_of=as_of, window_hours=window_hours
+                ),
+                None,
             )
         store_cursor = _revision_store_cursor(connection)
         with _REVISION_CACHE_LOCK:
             cached = _REVISION_CACHE.get(key)
             if cached is not None and _revision_cache_fresh(cached, store_cursor):
-                return [_copy_revision_row(row) for row in cached["rows"]]
+                return (
+                    [_copy_revision_row(row) for row in cached["rows"]],
+                    cached["cursor"],
+                )
         started_at = time.monotonic()
         built_rows = self._active_revisions_query(
             connection, as_of=as_of, window_hours=window_hours
         )
-        _store_revision_cache(
+        installed = _store_revision_cache(
             key, store_cursor, built_rows, started_at=started_at
         )
-        return [_copy_revision_row(row) for row in built_rows]
+        if not installed:
+            later_cursor = _revision_store_cursor(connection)
+            with _REVISION_CACHE_LOCK:
+                cached = _REVISION_CACHE.get(key)
+                if cached is not None and _revision_cache_fresh(cached, later_cursor):
+                    return (
+                        [_copy_revision_row(row) for row in cached["rows"]],
+                        cached["cursor"],
+                    )
+            return [_copy_revision_row(row) for row in built_rows], store_cursor
+        return [_copy_revision_row(row) for row in built_rows], store_cursor
 
     def _active_revision_bundle(
         self,
@@ -3302,7 +3351,11 @@ class LocalCatalystIntelligence:
             with _REVISION_CACHE_LOCK:
                 cached = _REVISION_CACHE.get(key)
                 maybe_complete = (
-                    cached is not None and cached.get("anon_items") is not None
+                    cached is not None
+                    and _anon_items_match_rows(
+                        cached.get("anon_items"),
+                        cached.get("rows") or (),
+                    )
                 )
             if maybe_complete:
                 store_cursor = _revision_store_cursor(connection)
@@ -3311,7 +3364,10 @@ class LocalCatalystIntelligence:
                     if (
                         cached is not None
                         and _revision_cache_fresh(cached, store_cursor)
-                        and cached.get("anon_items") is not None
+                        and _anon_items_match_rows(
+                            cached.get("anon_items"),
+                            cached.get("rows") or (),
+                        )
                     ):
                         return (
                             [_copy_revision_row(row) for row in cached["rows"]],
@@ -3320,7 +3376,7 @@ class LocalCatalystIntelligence:
                                 for item in cached["anon_items"]
                             ],
                         )
-        rows = self._active_revisions(
+        rows, source_cursor = self._active_revisions_tracked(
             connection, as_of=as_of, window_hours=window_hours
         )
         if not want_items:
@@ -3332,8 +3388,10 @@ class LocalCatalystIntelligence:
             cached = _REVISION_CACHE.get(key)
             if (
                 cached is not None
+                and source_cursor == store_cursor
+                and cached["cursor"] == source_cursor
                 and _revision_cache_fresh(cached, store_cursor)
-                and cached.get("anon_items") is not None
+                and _anon_items_match_rows(cached.get("anon_items"), cached.get("rows") or ())
             ):
                 return rows, [
                     _copy_feed_item(item) for item in cached["anon_items"]
@@ -3342,16 +3400,18 @@ class LocalCatalystIntelligence:
             self._item(connection, row, as_of=as_of, jobs=None)
             for row in rows
         ]
-        with _REVISION_CACHE_LOCK:
-            cached = _REVISION_CACHE.get(key)
-            if (
-                cached is not None
-                and cached["cursor"] == store_cursor
-                and cached.get("anon_items") is None
-            ):
-                cached["anon_items"] = [
-                    _copy_feed_item(item) for item in built_items
-                ]
+        if source_cursor == store_cursor:
+            with _REVISION_CACHE_LOCK:
+                cached = _REVISION_CACHE.get(key)
+                if (
+                    cached is not None
+                    and cached["cursor"] == store_cursor
+                    and cached.get("anon_items") is None
+                    and _anon_items_match_rows(built_items, cached.get("rows") or ())
+                ):
+                    cached["anon_items"] = [
+                        _copy_feed_item(item) for item in built_items
+                    ]
         return rows, built_items
 
     def _data_through(self, connection: sqlite3.Connection) -> str | None:

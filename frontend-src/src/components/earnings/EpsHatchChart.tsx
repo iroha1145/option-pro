@@ -75,7 +75,7 @@ export default function EpsHatchChart({ items, title = t('EPS 预期 vs 实际')
   const hasActual = rows.some((r) => r.epsActual != null);
 
   return (
-    <section className="card-surface p-5" aria-label={t("EPS 预期与实际对照图")}>
+    <section className="card-surface p-5" data-eps-chart="" aria-label={t("EPS 预期与实际对照图")}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="eyebrow">{title}</p>
         <HatchLegend estimate={t("预估")} actual={t("实际")} />

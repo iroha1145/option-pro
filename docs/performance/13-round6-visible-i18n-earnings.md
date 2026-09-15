@@ -45,7 +45,7 @@ OPTIX_PERF_REPEATS=8 OPTIX_PERF_OUT=/opt/cursor/artifacts/perf/round6-surfaces.j
 
 ### A. 匿名完整缓存热命中一次指纹 — 保留
 
-一次 peek 完整 `anon_items` 后，单次 `_revision_store_cursor`，同一把锁校验 cursor / TTL / items，从同一条目拷贝 rows 与 items。未命中或不完整走原慢路径（会再指纹）。同 cursor 且仍新鲜再写不刷新 TTL、不清 `anon_items`。同 cursor 但已过 300s 的过期条目用新 rows 刷新 `built_at` 并保留 `anon_items`（Codex P2：否则过期后每次都重扫）。迟到旧构建若 `existing.built_at >= started_at` 不得覆盖。未延长 TTL，未混用 Owner/访客缓存，未跳过损坏检查。未对冷路径加只读事务或 `BEGIN IMMEDIATE`。
+一次 peek 完整 `anon_items` 后，单次 `_revision_store_cursor`，同一把锁校验 cursor / TTL / items，从同一条目拷贝 rows 与 items。未命中或不完整走原慢路径（会再指纹）。同 cursor 且仍新鲜再写不刷新 TTL、不清 `anon_items`。同 cursor 但已过 300s 的过期条目用新 rows 刷新 `built_at` 并作废 `anon_items`，再按当前窗口重建展示条目；否则窗口前进后会继续吐出已过期新闻。迟到旧构建若 `existing.built_at >= started_at` 不得覆盖，也不得把旧 items 挂到新 cursor 的行缓存上。未延长 TTL，未混用 Owner/访客缓存，未跳过损坏检查。未对冷路径加只读事务或 `BEGIN IMMEDIATE`。
 
 进程内 n=10000 访客 visible 热路径指纹 **1**；legacy hop 热路径指纹 **5**（五次请求各一次）。n=100 访客 visible 热路径指纹也是 1。
 
@@ -111,7 +111,7 @@ Owner 热路径仍约 6.6s：瓶颈是整窗投影/复制，不是第二次指�
 
 ## 正确性
 
-已覆盖：热命中一次指纹、不完整走慢路径、迟到旧构建不覆盖、同 cursor 不丢 `anon_items`、前 12 / 前 108 隐藏、未分析中文原文、游标按原始位置、固定 `as_of`、旧客户端省略 `page_mode`、非法 `page_mode` 422、PR #162 抽屉恢复与有界重试、词典不静态合并、财报不再整页 `useNow(1000)`。
+已覆盖：热命中一次指纹、不完整走慢路径、迟到旧构建不覆盖且不污染新缓存 items、过期同 cursor 作废 `anon_items` 并跟随窗口、同 cursor 新鲜命中不丢 `anon_items`、前 12 / 前 108 隐藏、未分析中文原文、游标按原始位置、固定 `as_of`、旧客户端省略 `page_mode`、非法 `page_mode` 422、PR #162 抽屉恢复与有界重试、词典不静态合并、财报不再整页 `useNow(1000)`、图表懒加载失败只留在图槽、刷新冷却由 `onRefresh` 内读 `cooldownUntil`、命令面板关闭不预取。
 
 已知兼容限制：新前端 + 旧后端会带上 `page_mode=visible`（旧后端忽略）且不再 hop，首页可能先空，需用户点继续加载。旧前端 + 新后端保持旧切片，不放大扫描。
 

@@ -223,8 +223,9 @@ export default function Earnings() {
     });
   }, []);
 
-  const onRefresh = useCallback(async (cooldownRemain = 0) => {
+  const onRefresh = useCallback(async () => {
     if (refreshing) return;
+    const cooldownRemain = Math.max(0, Math.ceil((cooldownUntil - Date.now()) / 1000));
     if (cooldownRemain > 0) {
       setRefreshStatus('cooldown');
       toast.info(t('刷新冷却中，{n}s 后可再次刷新', { n: cooldownRemain }));
@@ -272,7 +273,7 @@ export default function Earnings() {
     } finally {
       if (!following) setRefreshing(false);
     }
-  }, [refreshing, q, toast]);
+  }, [refreshing, cooldownUntil, q, toast]);
 
   /* 联动选择。从月历/周历/任意入口点到非重点公司时：自动切「全部公司」、
      保留并选中日期与代码、重置渐进额度（listScope 变化自动归位），选中行
@@ -440,7 +441,7 @@ export default function Earnings() {
           refreshing={refreshing}
           refreshStatus={refreshStatus}
           lastUpdatedAt={q.lastUpdatedAt}
-          onRefresh={(remain) => void onRefresh(remain)}
+          onRefresh={() => void onRefresh()}
         />
       )}
     </>

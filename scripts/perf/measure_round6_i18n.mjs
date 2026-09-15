@@ -10,6 +10,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { attach429Counter } from './lib/rate_limit.mjs';
 import { isTerminalReady, pageReadyInstallScript } from './lib/page_ready.mjs';
+import { readyGateFailures, summarizeReady } from './lib/round6_ready_summary.mjs';
 
 const require = createRequire(fileURLToPath(import.meta.url));
 const { chromium } = require(path.resolve(
@@ -122,12 +123,14 @@ const switched = await withLocale('zh', async (page, network) => {
 });
 console.log(`switch zh→en stayed=${switched.stayed_on_earnings} en=${switched.after.en} ja=${switched.after.ja} lang=${switched.html_lang} h=${switched.heading}`);
 
+const readySummary = summarizeReady(cold);
 const report = {
   lab: true,
   notRUM: true,
   base: BASE,
   measuredAt: new Date().toISOString(),
   cold,
+  ready: readySummary,
   language_switch: switched,
   invariants: {
     zh_no_runtime: cold.filter((row) => row.locale === 'zh').every((row) => row.runtime_en === 0 && row.runtime_ja === 0),
@@ -138,7 +141,15 @@ const report = {
     switch_html_lang_en: /^en/i.test(switched.html_lang || ''),
   },
 };
+const gate = [
+  ...readyGateFailures(readySummary, { expectedN: LOCALES.length * ROUTES.length, label: 'i18n_cold' }),
+  ...Object.entries(report.invariants)
+    .filter(([, ok]) => !ok)
+    .map(([name]) => `invariant:${name}`),
+];
+report.gate = { ok: gate.length === 0, failures: gate };
 await mkdir(path.dirname(OUT), { recursive: true });
 await writeFile(OUT, JSON.stringify(report, null, 2) + '\n');
-console.log(JSON.stringify(report.invariants, null, 2));
+console.log(JSON.stringify({ invariants: report.invariants, ready: { n: readySummary.n, ready_n: readySummary.ready_n, error_n: readySummary.error_n, timeout_n: readySummary.timeout_n }, gate: report.gate }, null, 2));
 console.log(`wrote ${OUT}`);
+if (gate.length) process.exit(1);
