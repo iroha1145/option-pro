@@ -126,9 +126,32 @@ export default function Breakouts() {
   const requestedSort = requestedRadarAlgorithm(radarSort);
   const choiceGeneration = useRef(0);
   const historyGeneration = useRef(0);
+  const historyRequestId = useRef(0);
+  const [extraEvents, setExtraEvents] = useState<BreakoutEventFull[]>([]);
+  const [historyCursor, setHistoryCursor] = useState<string | null>(null);
+  const [historyLoadingMore, setHistoryLoadingMore] = useState(false);
+  const [historyMoreError, setHistoryMoreError] = useState<ApiError | null>(null);
+  const beginHistoryEpoch = () => {
+    historyGeneration.current += 1;
+    historyRequestId.current += 1;
+    setHistoryLoadingMore(false);
+    setHistoryMoreError(null);
+  };
+  const applyHistoryFirstPage = (nextCursor: string | null) => {
+    beginHistoryEpoch();
+    setExtraEvents([]);
+    setHistoryCursor(nextCursor);
+  };
   useEffect(() => {
     setRadarSort(readAlgorithmPreferences(principal).radarSortAlgorithm);
+    applyHistoryFirstPage(null);
   }, [principal]);
+  useEffect(() => {
+    return () => {
+      historyGeneration.current += 1;
+      historyRequestId.current += 1;
+    };
+  }, []);
   useEffect(() => {
     if (!isSignedIn) return;
     const started = choiceGeneration.current;
@@ -164,24 +187,18 @@ export default function Breakouts() {
   );
   /* 历史事件此前固定只读第一页 100 条，界面还显示一个拼出来的「共 N 条」
      （审计 P2-19）。现在按游标续读，并如实说明是否还有更多。 */
-  const [extraEvents, setExtraEvents] = useState<BreakoutEventFull[]>([]);
-  const [historyCursor, setHistoryCursor] = useState<string | null>(null);
-  const [historyLoadingMore, setHistoryLoadingMore] = useState(false);
-  const [historyMoreError, setHistoryMoreError] = useState<ApiError | null>(null);
   const historyCursorRef = useRef(historyCursor);
   historyCursorRef.current = historyCursor;
   const requestedSortRef = useRef(requestedSort);
   requestedSortRef.current = requestedSort;
   useEffect(() => {
-    historyGeneration.current += 1;
     // 首页重新加载后丢弃已续读的部分，避免与新首页重复。
-    setExtraEvents([]);
-    setHistoryCursor(eventsQ.data?.nextCursor ?? null);
-    setHistoryMoreError(null);
+    applyHistoryFirstPage(eventsQ.data?.nextCursor ?? null);
   }, [eventsQ.data, requestedSort]);
   const loadMoreHistory = useCallback(async () => {
     if (!historyCursor || historyLoadingMore) return;
     const startedGeneration = historyGeneration.current;
+    const startedRequestId = ++historyRequestId.current;
     const startedCursor = historyCursor;
     const startedSort = requestedSort;
     setHistoryLoadingMore(true);
@@ -214,7 +231,7 @@ export default function Breakouts() {
       })) return;
       setHistoryMoreError(error instanceof ApiError ? error : new ApiError(500, __t('加载更多失败')));
     } finally {
-      if (startedGeneration === historyGeneration.current) {
+      if (startedRequestId === historyRequestId.current) {
         setHistoryLoadingMore(false);
       }
     }
@@ -243,7 +260,7 @@ export default function Breakouts() {
 
   const updateRadarSort = useCallback((next: RadarSortChoice) => {
     choiceGeneration.current = nextChoiceGeneration(choiceGeneration.current);
-    historyGeneration.current += 1;
+    beginHistoryEpoch();
     writeAlgorithmPreferences({ radarSortAlgorithm: next }, principal);
     setRadarSort(next);
     setExtraEvents([]);
