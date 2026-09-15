@@ -40,6 +40,8 @@ T2 确认 73.0%，T 日条件失败 0 次（触发定义已包含），全体超
 
 A0 Top10 配对 +26bps，CI 含 0；最差 5% 恶化到 -15.48%。**不改线上默认。** 封存区未揭盲。
 
+下一轮方法更正与 C1/T1P 见 `docs/research/screener-radar/risk-signal-round/report.md`。
+
 ## 不做
 
 - 不改线上默认、不部署、不合并、不真实下单

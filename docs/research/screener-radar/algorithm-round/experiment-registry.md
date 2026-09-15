@@ -22,3 +22,5 @@
 
 验证区 2023–2024-05 已在冻结后跑完一次。封存区未揭盲。
 后续实验预算 2/2 已用完。
+
+下一轮（方法更正 + C1/T1P）见 `docs/research/screener-radar/risk-signal-round/`，不回头用本验证区领养 C0。

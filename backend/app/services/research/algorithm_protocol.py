@@ -46,6 +46,54 @@ MINIMUM_MEANINGFUL = {
     "radar_mae_improvement": 0.005,
 }
 
+# Method-correction round. Does not reopen A0 weights, Top-K, horizon, or T1
+# thresholds. The 50bps tail tolerance stays attached to the original
+# unnamed random variable: daily mean of the worst ceil(0.05*n) Top-K names.
+RISK_SIGNAL_ROUND_ID = "risk-signal-priority-2026-09-15"
+RISK_SIGNAL_PROTOCOL_VERSION = "risk-signal-protocol-v1"
+PARENT_EXECUTION_SHA = "adac675c272fb0d3900f275c1ae0195b4f74a7c5"
+
+TAIL_DEFINITIONS = {
+    "daily_worst_name_mean": (
+        "For each day, take the worst ceil(0.05 * n_labeled) raw 20d returns "
+        "inside that day's selected Top-K (n=10 => 1 name), then average those "
+        "daily values. This is what PR #164 reported as worst_5pct / -14.70% / "
+        "-15.48%. The 50bps worsening hurdle is registered against this series."
+    ),
+    "pooled_stock_date_worst5pct": (
+        "Pool every selected stock-date raw 20d return, then average the worst "
+        "5% of that pooled sample. Not a portfolio drawdown."
+    ),
+    "daily_ew_portfolio_worst5pct": (
+        "Equal-weight mean of labeled Top-K raw 20d returns on each day, then "
+        "average the worst 5% of that daily portfolio series. Not MDD."
+    ),
+}
+TAIL_HURDLE_RANDOM_VARIABLE = "daily_worst_name_mean"
+C1_SECTOR_NOTIONAL_CAP = 0.20
+C1_MAX_GROSS_EXPOSURE = 1.0
+C1_NO_LEVERAGE = True
+C1_PLAN_PRICE = "signal_close_last_mark"
+C1_GAP_OVERRUN_RULE = (
+    "Shares are frozen from T close marks. T+1 open gaps that push a sector "
+    "above 20% are recorded as overrun. No same-open resize after seeing all "
+    "prints. No forced trim: the name keeps its 20d exit. Further same-sector "
+    "buys stay blocked while planned sector weight is above the cap."
+)
+GROSS_CAP_80_BASELINE = 0.80
+T1_PRIORITY_DEFAULT_K = 3
+T1_PRIORITY_DIAGNOSTIC_K = (1, 5)
+T1_PRIORITY_RANK_PROXY = {
+    "id": "research_daily_volume_then_ticker",
+    "rule": "same-day sort by trigger-day volume desc, ticker asc",
+    "not_production": (
+        "Production radar ranks by breakout-score-v1 alert_priority_score "
+        "(tightness, duration, confirmation, liquidity, chase, RS, market/sector "
+        "fit, freshness). First-trigger dumps lack those features, so this is a "
+        "disclosed research attention proxy, not live ranking."
+    ),
+}
+
 PRIMARY_METRICS = {
     "screener": (
         "Same-day same-eligible-pool Top10 20d excess vs universe, "
@@ -106,6 +154,30 @@ CANDIDATES = (
         "why": "score_long and ath saturate in Top20; test whether fixed return caps hide ranking",
         "proxy_note": "macd_direction not in compact dump",
         "not_changed": ["RSI", "ath_scale", "exits"],
+    },
+)
+
+RISK_SIGNAL_CANDIDATES = (
+    {
+        "candidate_id": "C1",
+        "layer": "risk_concentration",
+        "rule": (
+            "original ranking, 10% name target, 20d exit, 20% primary-sector "
+            "notional cap on the live book (positions + pending + cash), no leverage"
+        ),
+        "sector_map": "static current theme first-listing; unclassified share one bucket",
+        "not_changed": ["ranking_formula", "entry_clock", "exits", "A0"],
+        "distinct_from": "C0 is a same-day name-list quota; C1 is a position-aware budget",
+    },
+    {
+        "candidate_id": "T1P",
+        "layer": "timing_priority",
+        "rule": (
+            "Keep every raw TRIGGERED name. T1 confirmation only reorders. "
+            "Daily attention capacity K=3 (K=1/5 diagnostic). Remaining slots "
+            "fill from the frozen research proxy."
+        ),
+        "not_changed": ["T1_thresholds", "detector", "screener_ranking"],
     },
 )
 
@@ -177,4 +249,34 @@ ALGORITHM_ROUND_PROTOCOL = {
     "historical_trials_already_run": list(HISTORICAL_TRIALS_ALREADY_RUN),
     "follow_up_budget": 2,
     "defaults_online": False,
+}
+
+RISK_SIGNAL_PROTOCOL = {
+    "protocol_version": RISK_SIGNAL_PROTOCOL_VERSION,
+    "parent_algorithm_protocol": ALGORITHM_PROTOCOL_VERSION,
+    "round_id": RISK_SIGNAL_ROUND_ID,
+    "parent_execution_sha": PARENT_EXECUTION_SHA,
+    "score_version": SCORE_VERSION,
+    "feature_version": FEATURE_VERSION,
+    "normalization_version": NORMALIZATION_VERSION,
+    "design_split": DESIGN_SPLIT,
+    "already_seen_validation_split": RESERVED_VALIDATION_SPLIT,
+    "sealed": "closed",
+    "primary_screener_horizon": PRIMARY_SCREENER_HORIZON,
+    "primary_screener_top_k": PRIMARY_SCREENER_TOP_K,
+    "primary_cost_bps": PRIMARY_COST_BPS,
+    "minimum_meaningful": MINIMUM_MEANINGFUL,
+    "tail_definitions": TAIL_DEFINITIONS,
+    "tail_hurdle_random_variable": TAIL_HURDLE_RANDOM_VARIABLE,
+    "c1_sector_notional_cap": C1_SECTOR_NOTIONAL_CAP,
+    "c1_plan_price": C1_PLAN_PRICE,
+    "c1_gap_overrun_rule": C1_GAP_OVERRUN_RULE,
+    "gross_cap_80_baseline": GROSS_CAP_80_BASELINE,
+    "t1_priority_default_k": T1_PRIORITY_DEFAULT_K,
+    "t1_priority_diagnostic_k": list(T1_PRIORITY_DIAGNOSTIC_K),
+    "t1_priority_rank_proxy": T1_PRIORITY_RANK_PROXY,
+    "candidates": list(RISK_SIGNAL_CANDIDATES),
+    "method_corrections": ("M1", "M2", "M3", "M4", "M5"),
+    "defaults_online": False,
+    "no_f1_f2_search": True,
 }
