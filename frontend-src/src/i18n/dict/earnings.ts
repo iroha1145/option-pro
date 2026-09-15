@@ -75,6 +75,12 @@ export const EARNINGS: Dict = {
   '实际 EPS': ["Actual EPS", "EPS実績"],
   'EPS 预期与实际对照图': ["EPS estimate vs. actual chart", "EPS予想・実績比較チャート"],
   'EPS 图表加载中': ['Loading EPS chart', 'EPSチャートを読み込み中'],
+  'EPS 图表加载失败': ['Failed to load EPS chart', 'EPSチャートの読み込みに失敗しました'],
+  '列表与分析仍可查看。可单独重试图表。': [
+    'The list and analysis are still available. You can retry the chart on its own.',
+    'リストと分析は引き続き表示できます。チャートだけ再試行できます。',
+  ],
+  '重试图表': ['Retry chart', 'チャートを再試行'],
   "斜纹柱表示市场预期，实心柱表示已公布业绩。": ["Hatched bars show market estimates; solid bars show reported results.", "斜線の棒は市場予想、塗りつぶしの棒は発表済みの実績です。"],
   "这些公司尚未公布业绩。": ["These companies have not reported results yet.", "これらの企業はまだ決算を発表していません。"],
 

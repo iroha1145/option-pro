@@ -1,1 +1,0 @@
-import{r as o,t as r}from"./index-Bn8dbAUf.js";const e=o.createContext(null);function n(){const t=o.useContext(e);if(!t)throw new Error(r("useToast 必须在 <ToastProvider> 内使用"));return t}export{e as T,n as u};
