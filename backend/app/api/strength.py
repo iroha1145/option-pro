@@ -18,6 +18,7 @@ from app.access import (
     current_request_is_owner,
     public_snapshot_unavailable,
     request_account_session,
+    request_has_account_session,
 )
 from app.data_paths import get_data_paths
 from app.personal_config import get_personal_config
@@ -55,6 +56,10 @@ from app.services.strength.scanner import (
     profiles,
     sector_strength,
     stock_strength,
+)
+from app.services.strength.variant_demand import (
+    register_strength_variant_demand,
+    strength_variant_unavailable_detail,
 )
 from app.services.utils import sanitize
 
@@ -467,6 +472,32 @@ def _request_screener_resolution(
         profile=profile,
         explicit_request=requested not in (None, "", "follow_default", "default"),
     )
+
+
+def _signed_in_for_variant(request: Request) -> bool:
+    return bool(current_request_is_owner() or request_has_account_session(request))
+
+
+def _maybe_register_a0_variant_demand(
+    request: Request,
+    *,
+    parameters: dict[str, Any],
+    resolution: Any,
+) -> dict[str, Any] | None:
+    if resolution is None or resolution.effective != A0_ALGORITHM:
+        return None
+    if not _signed_in_for_variant(request):
+        return None
+    account = request_account_session(request)
+    account_id = getattr(account, "user_id", None) if account is not None else None
+    principal = principal_for_request(
+        is_owner=current_request_is_owner(),
+        account_id=str(account_id) if account_id else None,
+    )
+    try:
+        return register_strength_variant_demand(parameters, principal=principal)
+    except ValueError:
+        return None
 
 
 def _clean_strength_snapshot_payload(
@@ -890,18 +921,47 @@ async def scan(
             status_code=400,
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
-    payload, saved_at, stale = await _scan_snapshot_payload(
-        universe=universe,
-        timeframe=timeframe,
-        profile=profile,
-        top=top,
-        sector_id=sector_id,
-        min_price=min_price,
-        min_avg_dollar_volume=min_avg_dollar_volume,
-        include_options=include_options,
-        ranking_algorithm=resolution.effective,
-        resolution=resolution,
-    )
+    try:
+        payload, saved_at, stale = await _scan_snapshot_payload(
+            universe=universe,
+            timeframe=timeframe,
+            profile=profile,
+            top=top,
+            sector_id=sector_id,
+            min_price=min_price,
+            min_avg_dollar_volume=min_avg_dollar_volume,
+            include_options=include_options,
+            ranking_algorithm=resolution.effective,
+            resolution=resolution,
+        )
+    except HTTPException as exc:
+        if exc.status_code != 503:
+            raise
+        try:
+            parameters = _scan_parameters(
+                universe=universe,
+                timeframe=timeframe,
+                profile=profile,
+                top=top,
+                sector_id=sector_id,
+                min_price=min_price,
+                min_avg_dollar_volume=min_avg_dollar_volume,
+                include_options=include_options,
+                ranking_algorithm=resolution.effective,
+            )
+        except ValueError:
+            raise exc from None
+        demand = _maybe_register_a0_variant_demand(
+            request,
+            parameters=parameters,
+            resolution=resolution,
+        )
+        if demand is None:
+            raise
+        raise HTTPException(
+            status_code=503,
+            detail=strength_variant_unavailable_detail(demand),
+        ) from exc
     record_screener_resolution(
         resolution,
         fallback_reason=payload.get("fallback_reason"),
