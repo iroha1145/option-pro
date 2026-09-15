@@ -1,0 +1,876 @@
+{
+  "event_count": 8954,
+  "extended_count": 209,
+  "confirmed_count": 1736,
+  "primary_metric_key": "excess_vs_universe_20d",
+  "all_triggered_20d_vs_universe": {
+    "status": "active",
+    "clusters": 945,
+    "n_dates": 945,
+    "n_events": 8954,
+    "mean": 0.0041550482965296825,
+    "se": 0.0026235125624407395,
+    "ci95": [
+      -0.0017865334067330896,
+      0.010492725180876366
+    ],
+    "method": "moving_block_bootstrap",
+    "horizon_days": 20,
+    "iid": {
+      "method": "iid_normal",
+      "n": 945,
+      "mean": 0.0041550482965296825,
+      "se": 0.0026235125624407395,
+      "ci_low": -0.000986941838842557,
+      "ci_high": 0.009297038431901921,
+      "ci95": [
+        -0.000986941838842557,
+        0.009297038431901921
+      ],
+      "note": "Assumes independent observations. Overlapping-horizon labels violate this."
+    },
+    "newey_west": {
+      "method": "newey_west_hac",
+      "n": 945,
+      "lag": 20,
+      "mean": 0.0041550482965296825,
+      "se": 0.003144366458647538,
+      "ci_low": -0.0020077967166152446,
+      "ci_high": 0.01031789330967461,
+      "ci95": [
+        -0.0020077967166152446,
+        0.01031789330967461
+      ],
+      "note": "HAC mean CI. Pre-registered lag equals the label/hold horizon in trading days."
+    },
+    "block_bootstrap": {
+      "method": "moving_block_bootstrap",
+      "n": 945,
+      "block_size": 20,
+      "n_bootstrap": 2000,
+      "mean": 0.0041550482965296825,
+      "ci_low": -0.0017865334067330896,
+      "ci_high": 0.010492725180876366,
+      "ci95": [
+        -0.0017865334067330896,
+        0.010492725180876366
+      ],
+      "note": "Pre-registered circular moving-block bootstrap. Block length equals the label/hold horizon."
+    },
+    "dates_head": [
+      "2019-01-02",
+      "2019-01-03",
+      "2019-01-04",
+      "2019-01-07",
+      "2019-01-08"
+    ],
+    "dates_tail": [
+      "2022-11-25",
+      "2022-11-28",
+      "2022-11-29",
+      "2022-11-30",
+      "2022-12-01"
+    ],
+    "note": "Daily means in real calendar order, then overlapping-horizon CI. Not an ordinary date-clustered SE and not a claim that events are independent."
+  },
+  "all_triggered_20d_vs_spy": {
+    "status": "active",
+    "clusters": 945,
+    "n_dates": 945,
+    "n_events": 8954,
+    "mean": 0.011204758950262761,
+    "se": 0.0027450187797638196,
+    "ci95": [
+      0.002762026506960331,
+      0.02121639258471651
+    ],
+    "method": "moving_block_bootstrap",
+    "horizon_days": 20,
+    "iid": {
+      "method": "iid_normal",
+      "n": 945,
+      "mean": 0.011204758950262761,
+      "se": 0.0027450187797638196,
+      "ci_low": 0.005824621005039588,
+      "ci_high": 0.016584896895485934,
+      "ci95": [
+        0.005824621005039588,
+        0.016584896895485934
+      ],
+      "note": "Assumes independent observations. Overlapping-horizon labels violate this."
+    },
+    "newey_west": {
+      "method": "newey_west_hac",
+      "n": 945,
+      "lag": 20,
+      "mean": 0.011204758950262761,
+      "se": 0.004865803023231288,
+      "ci_low": 0.0016679602688633253,
+      "ci_high": 0.020741557631662196,
+      "ci95": [
+        0.0016679602688633253,
+        0.020741557631662196
+      ],
+      "note": "HAC mean CI. Pre-registered lag equals the label/hold horizon in trading days."
+    },
+    "block_bootstrap": {
+      "method": "moving_block_bootstrap",
+      "n": 945,
+      "block_size": 20,
+      "n_bootstrap": 2000,
+      "mean": 0.011204758950262761,
+      "ci_low": 0.002762026506960331,
+      "ci_high": 0.02121639258471651,
+      "ci95": [
+        0.002762026506960331,
+        0.02121639258471651
+      ],
+      "note": "Pre-registered circular moving-block bootstrap. Block length equals the label/hold horizon."
+    },
+    "dates_head": [
+      "2019-01-02",
+      "2019-01-03",
+      "2019-01-04",
+      "2019-01-07",
+      "2019-01-08"
+    ],
+    "dates_tail": [
+      "2022-11-25",
+      "2022-11-28",
+      "2022-11-29",
+      "2022-11-30",
+      "2022-12-01"
+    ],
+    "note": "Daily means in real calendar order, then overlapping-horizon CI. Not an ordinary date-clustered SE and not a claim that events are independent."
+  },
+  "exclude_extended_20d_vs_universe": {
+    "status": "active",
+    "clusters": 943,
+    "n_dates": 943,
+    "n_events": 8745,
+    "mean": 0.003405085762484586,
+    "se": 0.002601765131115669,
+    "ci95": [
+      -0.002605962413637174,
+      0.009626699058046717
+    ],
+    "method": "moving_block_bootstrap",
+    "horizon_days": 20,
+    "iid": {
+      "method": "iid_normal",
+      "n": 943,
+      "mean": 0.003405085762484586,
+      "se": 0.002601765131115669,
+      "ci_low": -0.0016942801907342563,
+      "ci_high": 0.008504451715703428,
+      "ci95": [
+        -0.0016942801907342563,
+        0.008504451715703428
+      ],
+      "note": "Assumes independent observations. Overlapping-horizon labels violate this."
+    },
+    "newey_west": {
+      "method": "newey_west_hac",
+      "n": 943,
+      "lag": 20,
+      "mean": 0.003405085762484586,
+      "se": 0.0030856191742870904,
+      "ci_low": -0.0026426166891243314,
+      "ci_high": 0.009452788214093504,
+      "ci95": [
+        -0.0026426166891243314,
+        0.009452788214093504
+      ],
+      "note": "HAC mean CI. Pre-registered lag equals the label/hold horizon in trading days."
+    },
+    "block_bootstrap": {
+      "method": "moving_block_bootstrap",
+      "n": 943,
+      "block_size": 20,
+      "n_bootstrap": 2000,
+      "mean": 0.003405085762484586,
+      "ci_low": -0.002605962413637174,
+      "ci_high": 0.009626699058046717,
+      "ci95": [
+        -0.002605962413637174,
+        0.009626699058046717
+      ],
+      "note": "Pre-registered circular moving-block bootstrap. Block length equals the label/hold horizon."
+    },
+    "dates_head": [
+      "2019-01-02",
+      "2019-01-03",
+      "2019-01-04",
+      "2019-01-07",
+      "2019-01-08"
+    ],
+    "dates_tail": [
+      "2022-11-25",
+      "2022-11-28",
+      "2022-11-29",
+      "2022-11-30",
+      "2022-12-01"
+    ],
+    "note": "Daily means in real calendar order, then overlapping-horizon CI. Not an ordinary date-clustered SE and not a claim that events are independent."
+  },
+  "exclude_extended_20d_vs_spy": {
+    "status": "active",
+    "clusters": 943,
+    "n_dates": 943,
+    "n_events": 8745,
+    "mean": 0.010496662861905556,
+    "se": 0.0027261647707132277,
+    "ci95": [
+      0.0019878987277358795,
+      0.020208172947511
+    ],
+    "method": "moving_block_bootstrap",
+    "horizon_days": 20,
+    "iid": {
+      "method": "iid_normal",
+      "n": 943,
+      "mean": 0.010496662861905556,
+      "se": 0.0027261647707132277,
+      "ci_low": 0.005153478095385735,
+      "ci_high": 0.01583984762842538,
+      "ci95": [
+        0.005153478095385735,
+        0.01583984762842538
+      ],
+      "note": "Assumes independent observations. Overlapping-horizon labels violate this."
+    },
+    "newey_west": {
+      "method": "newey_west_hac",
+      "n": 943,
+      "lag": 20,
+      "mean": 0.010496662861905556,
+      "se": 0.004774151729462662,
+      "ci_low": 0.0011394974154291266,
+      "ci_high": 0.019853828308381984,
+      "ci95": [
+        0.0011394974154291266,
+        0.019853828308381984
+      ],
+      "note": "HAC mean CI. Pre-registered lag equals the label/hold horizon in trading days."
+    },
+    "block_bootstrap": {
+      "method": "moving_block_bootstrap",
+      "n": 943,
+      "block_size": 20,
+      "n_bootstrap": 2000,
+      "mean": 0.010496662861905556,
+      "ci_low": 0.0019878987277358795,
+      "ci_high": 0.020208172947511,
+      "ci95": [
+        0.0019878987277358795,
+        0.020208172947511
+      ],
+      "note": "Pre-registered circular moving-block bootstrap. Block length equals the label/hold horizon."
+    },
+    "dates_head": [
+      "2019-01-02",
+      "2019-01-03",
+      "2019-01-04",
+      "2019-01-07",
+      "2019-01-08"
+    ],
+    "dates_tail": [
+      "2022-11-25",
+      "2022-11-28",
+      "2022-11-29",
+      "2022-11-30",
+      "2022-12-01"
+    ],
+    "note": "Daily means in real calendar order, then overlapping-horizon CI. Not an ordinary date-clustered SE and not a claim that events are independent."
+  },
+  "by_year": {
+    "2019": {
+      "event_count": 2272,
+      "triggered_20d_vs_universe": {
+        "status": "active",
+        "clusters": 242,
+        "n_dates": 242,
+        "n_events": 2272,
+        "mean": -0.00043081663661115457,
+        "se": 0.0024682883060039703,
+        "ci95": [
+          -0.006844104585626238,
+          0.005809880787708676
+        ],
+        "method": "moving_block_bootstrap",
+        "horizon_days": 20,
+        "iid": {
+          "method": "iid_normal",
+          "n": 242,
+          "mean": -0.00043081663661115457,
+          "se": 0.0024682883060039703,
+          "ci_low": -0.005268572819840317,
+          "ci_high": 0.004406939546618007,
+          "ci95": [
+            -0.005268572819840317,
+            0.004406939546618007
+          ],
+          "note": "Assumes independent observations. Overlapping-horizon labels violate this."
+        },
+        "newey_west": {
+          "method": "newey_west_hac",
+          "n": 242,
+          "lag": 20,
+          "mean": -0.00043081663661115457,
+          "se": 0.003530026820619622,
+          "ci_low": -0.007349542069486048,
+          "ci_high": 0.006487908796263738,
+          "ci95": [
+            -0.007349542069486048,
+            0.006487908796263738
+          ],
+          "note": "HAC mean CI. Pre-registered lag equals the label/hold horizon in trading days."
+        },
+        "block_bootstrap": {
+          "method": "moving_block_bootstrap",
+          "n": 242,
+          "block_size": 20,
+          "n_bootstrap": 2000,
+          "mean": -0.00043081663661115457,
+          "ci_low": -0.006844104585626238,
+          "ci_high": 0.005809880787708676,
+          "ci95": [
+            -0.006844104585626238,
+            0.005809880787708676
+          ],
+          "note": "Pre-registered circular moving-block bootstrap. Block length equals the label/hold horizon."
+        },
+        "dates_head": [
+          "2019-01-02",
+          "2019-01-03",
+          "2019-01-04",
+          "2019-01-07",
+          "2019-01-08"
+        ],
+        "dates_tail": [
+          "2019-12-24",
+          "2019-12-26",
+          "2019-12-27",
+          "2019-12-30",
+          "2019-12-31"
+        ],
+        "note": "Daily means in real calendar order, then overlapping-horizon CI. Not an ordinary date-clustered SE and not a claim that events are independent."
+      },
+      "triggered_20d_vs_spy": {
+        "status": "active",
+        "clusters": 242,
+        "n_dates": 242,
+        "n_events": 2272,
+        "mean": 0.0009763611176369328,
+        "se": 0.002461816060925046,
+        "ci95": [
+          -0.005091045642016906,
+          0.007646089433145705
+        ],
+        "method": "moving_block_bootstrap",
+        "horizon_days": 20,
+        "iid": {
+          "method": "iid_normal",
+          "n": 242,
+          "mean": 0.0009763611176369328,
+          "se": 0.002461816060925046,
+          "ci_low": -0.0038487096983384214,
+          "ci_high": 0.0058014319336122866,
+          "ci95": [
+            -0.0038487096983384214,
+            0.0058014319336122866
+          ],
+          "note": "Assumes independent observations. Overlapping-horizon labels violate this."
+        },
+        "newey_west": {
+          "method": "newey_west_hac",
+          "n": 242,
+          "lag": 20,
+          "mean": 0.0009763611176369328,
+          "se": 0.0035127536969681928,
+          "ci_low": -0.0059085096149806525,
+          "ci_high": 0.007861231850254518,
+          "ci95": [
+            -0.0059085096149806525,
+            0.007861231850254518
+          ],
+          "note": "HAC mean CI. Pre-registered lag equals the label/hold horizon in trading days."
+        },
+        "block_bootstrap": {
+          "method": "moving_block_bootstrap",
+          "n": 242,
+          "block_size": 20,
+          "n_bootstrap": 2000,
+          "mean": 0.0009763611176369328,
+          "ci_low": -0.005091045642016906,
+          "ci_high": 0.007646089433145705,
+          "ci95": [
+            -0.005091045642016906,
+            0.007646089433145705
+          ],
+          "note": "Pre-registered circular moving-block bootstrap. Block length equals the label/hold horizon."
+        },
+        "dates_head": [
+          "2019-01-02",
+          "2019-01-03",
+          "2019-01-04",
+          "2019-01-07",
+          "2019-01-08"
+        ],
+        "dates_tail": [
+          "2019-12-24",
+          "2019-12-26",
+          "2019-12-27",
+          "2019-12-30",
+          "2019-12-31"
+        ],
+        "note": "Daily means in real calendar order, then overlapping-horizon CI. Not an ordinary date-clustered SE and not a claim that events are independent."
+      }
+    },
+    "2020": {
+      "event_count": 2582,
+      "triggered_20d_vs_universe": {
+        "status": "active",
+        "clusters": 243,
+        "n_dates": 243,
+        "n_events": 2582,
+        "mean": 0.0059117426685842646,
+        "se": 0.00830300114229073,
+        "ci95": [
+          -0.010741679776905586,
+          0.02447587928121251
+        ],
+        "method": "moving_block_bootstrap",
+        "horizon_days": 20,
+        "iid": {
+          "method": "iid_normal",
+          "n": 243,
+          "mean": 0.0059117426685842646,
+          "se": 0.00830300114229073,
+          "ci_low": -0.010361840533900494,
+          "ci_high": 0.022185325871069025,
+          "ci95": [
+            -0.010361840533900494,
+            0.022185325871069025
+          ],
+          "note": "Assumes independent observations. Overlapping-horizon labels violate this."
+        },
+        "newey_west": {
+          "method": "newey_west_hac",
+          "n": 243,
+          "lag": 20,
+          "mean": 0.0059117426685842646,
+          "se": 0.009136726683978042,
+          "ci_low": -0.011995912568598773,
+          "ci_high": 0.023819397905767304,
+          "ci95": [
+            -0.011995912568598773,
+            0.023819397905767304
+          ],
+          "note": "HAC mean CI. Pre-registered lag equals the label/hold horizon in trading days."
+        },
+        "block_bootstrap": {
+          "method": "moving_block_bootstrap",
+          "n": 243,
+          "block_size": 20,
+          "n_bootstrap": 2000,
+          "mean": 0.0059117426685842646,
+          "ci_low": -0.010741679776905586,
+          "ci_high": 0.02447587928121251,
+          "ci95": [
+            -0.010741679776905586,
+            0.02447587928121251
+          ],
+          "note": "Pre-registered circular moving-block bootstrap. Block length equals the label/hold horizon."
+        },
+        "dates_head": [
+          "2020-01-02",
+          "2020-01-03",
+          "2020-01-06",
+          "2020-01-07",
+          "2020-01-08"
+        ],
+        "dates_tail": [
+          "2020-12-24",
+          "2020-12-28",
+          "2020-12-29",
+          "2020-12-30",
+          "2020-12-31"
+        ],
+        "note": "Daily means in real calendar order, then overlapping-horizon CI. Not an ordinary date-clustered SE and not a claim that events are independent."
+      },
+      "triggered_20d_vs_spy": {
+        "status": "active",
+        "clusters": 243,
+        "n_dates": 243,
+        "n_events": 2582,
+        "mean": 0.03705358325426937,
+        "se": 0.008570528142165478,
+        "ci95": [
+          0.01478403747476247,
+          0.0633311464144002
+        ],
+        "method": "moving_block_bootstrap",
+        "horizon_days": 20,
+        "iid": {
+          "method": "iid_normal",
+          "n": 243,
+          "mean": 0.03705358325426937,
+          "se": 0.008570528142165478,
+          "ci_low": 0.02025565676713805,
+          "ci_high": 0.05385150974140069,
+          "ci95": [
+            0.02025565676713805,
+            0.05385150974140069
+          ],
+          "note": "Assumes independent observations. Overlapping-horizon labels violate this."
+        },
+        "newey_west": {
+          "method": "newey_west_hac",
+          "n": 243,
+          "lag": 20,
+          "mean": 0.03705358325426937,
+          "se": 0.013333895997656043,
+          "ci_low": 0.010919627325260754,
+          "ci_high": 0.06318753918327799,
+          "ci95": [
+            0.010919627325260754,
+            0.06318753918327799
+          ],
+          "note": "HAC mean CI. Pre-registered lag equals the label/hold horizon in trading days."
+        },
+        "block_bootstrap": {
+          "method": "moving_block_bootstrap",
+          "n": 243,
+          "block_size": 20,
+          "n_bootstrap": 2000,
+          "mean": 0.03705358325426937,
+          "ci_low": 0.01478403747476247,
+          "ci_high": 0.0633311464144002,
+          "ci95": [
+            0.01478403747476247,
+            0.0633311464144002
+          ],
+          "note": "Pre-registered circular moving-block bootstrap. Block length equals the label/hold horizon."
+        },
+        "dates_head": [
+          "2020-01-02",
+          "2020-01-03",
+          "2020-01-06",
+          "2020-01-07",
+          "2020-01-08"
+        ],
+        "dates_tail": [
+          "2020-12-24",
+          "2020-12-28",
+          "2020-12-29",
+          "2020-12-30",
+          "2020-12-31"
+        ],
+        "note": "Daily means in real calendar order, then overlapping-horizon CI. Not an ordinary date-clustered SE and not a claim that events are independent."
+      }
+    },
+    "2021": {
+      "event_count": 2392,
+      "triggered_20d_vs_universe": {
+        "status": "active",
+        "clusters": 250,
+        "n_dates": 250,
+        "n_events": 2392,
+        "mean": 0.0029276556916169563,
+        "se": 0.00346126791337852,
+        "ci95": [
+          -0.004140383745169794,
+          0.01071462322530407
+        ],
+        "method": "moving_block_bootstrap",
+        "horizon_days": 20,
+        "iid": {
+          "method": "iid_normal",
+          "n": 250,
+          "mean": 0.0029276556916169563,
+          "se": 0.00346126791337852,
+          "ci_low": -0.0038563047594490463,
+          "ci_high": 0.009711616142682959,
+          "ci95": [
+            -0.0038563047594490463,
+            0.009711616142682959
+          ],
+          "note": "Assumes independent observations. Overlapping-horizon labels violate this."
+        },
+        "newey_west": {
+          "method": "newey_west_hac",
+          "n": 250,
+          "lag": 20,
+          "mean": 0.0029276556916169563,
+          "se": 0.0038967150944441784,
+          "ci_low": -0.004709765551507228,
+          "ci_high": 0.010565076934741142,
+          "ci95": [
+            -0.004709765551507228,
+            0.010565076934741142
+          ],
+          "note": "HAC mean CI. Pre-registered lag equals the label/hold horizon in trading days."
+        },
+        "block_bootstrap": {
+          "method": "moving_block_bootstrap",
+          "n": 250,
+          "block_size": 20,
+          "n_bootstrap": 2000,
+          "mean": 0.0029276556916169563,
+          "ci_low": -0.004140383745169794,
+          "ci_high": 0.01071462322530407,
+          "ci95": [
+            -0.004140383745169794,
+            0.01071462322530407
+          ],
+          "note": "Pre-registered circular moving-block bootstrap. Block length equals the label/hold horizon."
+        },
+        "dates_head": [
+          "2021-01-04",
+          "2021-01-05",
+          "2021-01-06",
+          "2021-01-07",
+          "2021-01-08"
+        ],
+        "dates_tail": [
+          "2021-12-27",
+          "2021-12-28",
+          "2021-12-29",
+          "2021-12-30",
+          "2021-12-31"
+        ],
+        "note": "Daily means in real calendar order, then overlapping-horizon CI. Not an ordinary date-clustered SE and not a claim that events are independent."
+      },
+      "triggered_20d_vs_spy": {
+        "status": "active",
+        "clusters": 250,
+        "n_dates": 250,
+        "n_events": 2392,
+        "mean": -0.0008407000261488497,
+        "se": 0.0037463804639147036,
+        "ci95": [
+          -0.013029725285656343,
+          0.01172250066602796
+        ],
+        "method": "moving_block_bootstrap",
+        "horizon_days": 20,
+        "iid": {
+          "method": "iid_normal",
+          "n": 250,
+          "mean": -0.0008407000261488497,
+          "se": 0.0037463804639147036,
+          "ci_low": -0.00818347080780613,
+          "ci_high": 0.00650207075550843,
+          "ci95": [
+            -0.00818347080780613,
+            0.00650207075550843
+          ],
+          "note": "Assumes independent observations. Overlapping-horizon labels violate this."
+        },
+        "newey_west": {
+          "method": "newey_west_hac",
+          "n": 250,
+          "lag": 20,
+          "mean": -0.0008407000261488497,
+          "se": 0.006717858396074498,
+          "ci_low": -0.01400746053569488,
+          "ci_high": 0.01232606048339718,
+          "ci95": [
+            -0.01400746053569488,
+            0.01232606048339718
+          ],
+          "note": "HAC mean CI. Pre-registered lag equals the label/hold horizon in trading days."
+        },
+        "block_bootstrap": {
+          "method": "moving_block_bootstrap",
+          "n": 250,
+          "block_size": 20,
+          "n_bootstrap": 2000,
+          "mean": -0.0008407000261488497,
+          "ci_low": -0.013029725285656343,
+          "ci_high": 0.01172250066602796,
+          "ci95": [
+            -0.013029725285656343,
+            0.01172250066602796
+          ],
+          "note": "Pre-registered circular moving-block bootstrap. Block length equals the label/hold horizon."
+        },
+        "dates_head": [
+          "2021-01-04",
+          "2021-01-05",
+          "2021-01-06",
+          "2021-01-07",
+          "2021-01-08"
+        ],
+        "dates_tail": [
+          "2021-12-27",
+          "2021-12-28",
+          "2021-12-29",
+          "2021-12-30",
+          "2021-12-31"
+        ],
+        "note": "Daily means in real calendar order, then overlapping-horizon CI. Not an ordinary date-clustered SE and not a claim that events are independent."
+      }
+    },
+    "2022": {
+      "event_count": 1708,
+      "triggered_20d_vs_universe": {
+        "status": "active",
+        "clusters": 210,
+        "n_dates": 210,
+        "n_events": 1708,
+        "mean": 0.008868147023382063,
+        "se": 0.00471074023062458,
+        "ci95": [
+          -0.004342355003039863,
+          0.02121487707850532
+        ],
+        "method": "moving_block_bootstrap",
+        "horizon_days": 20,
+        "iid": {
+          "method": "iid_normal",
+          "n": 210,
+          "mean": 0.008868147023382063,
+          "se": 0.00471074023062458,
+          "ci_low": -0.0003647341691660217,
+          "ci_high": 0.018101028215930147,
+          "ci95": [
+            -0.0003647341691660217,
+            0.018101028215930147
+          ],
+          "note": "Assumes independent observations. Overlapping-horizon labels violate this."
+        },
+        "newey_west": {
+          "method": "newey_west_hac",
+          "n": 210,
+          "lag": 20,
+          "mean": 0.008868147023382063,
+          "se": 0.006641435243372141,
+          "ci_low": -0.004148826859282343,
+          "ci_high": 0.021885120906046468,
+          "ci95": [
+            -0.004148826859282343,
+            0.021885120906046468
+          ],
+          "note": "HAC mean CI. Pre-registered lag equals the label/hold horizon in trading days."
+        },
+        "block_bootstrap": {
+          "method": "moving_block_bootstrap",
+          "n": 210,
+          "block_size": 20,
+          "n_bootstrap": 2000,
+          "mean": 0.008868147023382063,
+          "ci_low": -0.004342355003039863,
+          "ci_high": 0.02121487707850532,
+          "ci95": [
+            -0.004342355003039863,
+            0.02121487707850532
+          ],
+          "note": "Pre-registered circular moving-block bootstrap. Block length equals the label/hold horizon."
+        },
+        "dates_head": [
+          "2022-01-03",
+          "2022-01-04",
+          "2022-01-05",
+          "2022-01-06",
+          "2022-01-07"
+        ],
+        "dates_tail": [
+          "2022-11-25",
+          "2022-11-28",
+          "2022-11-29",
+          "2022-11-30",
+          "2022-12-01"
+        ],
+        "note": "Daily means in real calendar order, then overlapping-horizon CI. Not an ordinary date-clustered SE and not a claim that events are independent."
+      },
+      "triggered_20d_vs_spy": {
+        "status": "active",
+        "clusters": 210,
+        "n_dates": 210,
+        "n_events": 1708,
+        "mean": 0.007420819491809171,
+        "se": 0.0046482030508658645,
+        "ci95": [
+          -0.00584102219069672,
+          0.019022237623942916
+        ],
+        "method": "moving_block_bootstrap",
+        "horizon_days": 20,
+        "iid": {
+          "method": "iid_normal",
+          "n": 210,
+          "mean": 0.007420819491809171,
+          "se": 0.0046482030508658645,
+          "ci_low": -0.0016894910807171244,
+          "ci_high": 0.016531130064335466,
+          "ci95": [
+            -0.0016894910807171244,
+            0.016531130064335466
+          ],
+          "note": "Assumes independent observations. Overlapping-horizon labels violate this."
+        },
+        "newey_west": {
+          "method": "newey_west_hac",
+          "n": 210,
+          "lag": 20,
+          "mean": 0.007420819491809171,
+          "se": 0.006380583008866945,
+          "ci_low": -0.005084893405938253,
+          "ci_high": 0.019926532389556596,
+          "ci95": [
+            -0.005084893405938253,
+            0.019926532389556596
+          ],
+          "note": "HAC mean CI. Pre-registered lag equals the label/hold horizon in trading days."
+        },
+        "block_bootstrap": {
+          "method": "moving_block_bootstrap",
+          "n": 210,
+          "block_size": 20,
+          "n_bootstrap": 2000,
+          "mean": 0.007420819491809171,
+          "ci_low": -0.00584102219069672,
+          "ci_high": 0.019022237623942916,
+          "ci95": [
+            -0.00584102219069672,
+            0.019022237623942916
+          ],
+          "note": "Pre-registered circular moving-block bootstrap. Block length equals the label/hold horizon."
+        },
+        "dates_head": [
+          "2022-01-03",
+          "2022-01-04",
+          "2022-01-05",
+          "2022-01-06",
+          "2022-01-07"
+        ],
+        "dates_tail": [
+          "2022-11-25",
+          "2022-11-28",
+          "2022-11-29",
+          "2022-11-30",
+          "2022-12-01"
+        ],
+        "note": "Daily means in real calendar order, then overlapping-horizon CI. Not an ordinary date-clustered SE and not a claim that events are independent."
+      }
+    }
+  },
+  "platform_evolution": {
+    "group_count": 7386,
+    "evolving_platform_count": 1163,
+    "events_in_evolving_platforms": 2731,
+    "extra_events_if_only_pivot_id_deduped": 1568,
+    "note": "This is a Grade C continuity heuristic, not Discovery identity. ticker+pivot_id uniqueness does not prove the first economic event."
+  },
+  "review_status": "repaired_round2",
+  "notes": [
+    "\u51bb\u7ed3\u4e3b\u6307\u6807\u662f triggered_20d_excess_vs_universe\uff1bSPY \u53ea\u4f5c\u8865\u5145\u3002",
+    "\u540c\u4e00 ticker+pivot_id \u5e94\u5df2\u5728 replay \u53bb\u91cd\uff0c\u4f46\u4e0d\u7b49\u4e8e\u9996\u6b21\u7ecf\u6d4e\u4e8b\u4ef6\u3002",
+    "exclude_extended \u662f\u9884\u767b\u8bb0\u6d88\u878d\uff0c\u4e0d\u662f\u4e8b\u540e\u6311\u9009\u8d62\u5bb6\u3002",
+    "\u65e0\u72ec\u7acb\u673a\u4f1a\u96c6\u5408\uff0c\u53ec\u56de\u7387\u4e0d\u53ef\u8bc4\u4f30\u3002",
+    "CI \u4f7f\u7528\u771f\u5b9e\u4ea4\u6613\u65e5\u4e0a\u7684 20 \u65e5\u5757 bootstrap\uff0c\u4e0d\u662f\u666e\u901a\u65e5\u671f\u5206\u5757 SE\u3002",
+    "\u8bc1\u636e\u7b49\u7ea7\u4fdd\u6301 Grade C\uff1a\u65e0 Discovery\u3001\u65e0\u5206\u949f\u3001\u65e0\u771f\u5b9e\u53d1\u5e03\u65f6\u95f4\u3002"
+  ]
+}

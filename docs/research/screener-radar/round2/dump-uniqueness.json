@@ -1,0 +1,61 @@
+{
+  "review_status": "pending_review_of_pre_repair_dump",
+  "files": {
+    "/opt/cursor/research/screener-radar-data/runs/dev-screener-balanced-all-rows.json": {
+      "sha256": "471aea1b8da0d284b30cdb2d0bb8af8c35ec57970828f0acf23014c3da874cd6",
+      "bytes": 541229343
+    },
+    "/opt/cursor/research/screener-radar-data/runs/dev-radar-daily-base-events.json": {
+      "sha256": "a1a6f861204cefc139f9d06f21e6826eb589eaafab2e37e90891b6eb1eaf2f8e",
+      "bytes": 15327873
+    },
+    "/opt/cursor/research/screener-radar-data/runs/dev-screener-balanced-all.json": {
+      "sha256": "6e9048540b39c05bab4b6fe2d8bedd4823d2b5e0905b1b5247ad06810244c3cb",
+      "bytes": 1465905
+    }
+  },
+  "notes": [
+    "Final day_count == 988 does not prove the detail file is unique or complete.",
+    "Legacy partials are not an accepted resume identity."
+  ],
+  "screener_rows": {
+    "row_count": 188966,
+    "unique_keys": 188966,
+    "duplicate_key_count": 0,
+    "duplicate_examples": {},
+    "missing_key_count": 0,
+    "day_count": 988,
+    "min_rows_per_day": 174,
+    "max_rows_per_day": 205
+  },
+  "radar_events": {
+    "row_count": 8954,
+    "unique_keys": 8954,
+    "duplicate_key_count": 0,
+    "duplicate_examples": {},
+    "missing_key_count": 0,
+    "pivot_keys": {
+      "row_count": 8954,
+      "unique_keys": 8954,
+      "duplicate_key_count": 0,
+      "duplicate_examples": {},
+      "missing_key_count": 0
+    }
+  },
+  "day_markers": {
+    "count": 988,
+    "unique_signal_dates": 988,
+    "unique_tickers": 0
+  },
+  "legacy_partials": {
+    "completed_markers": 988,
+    "partial_rows": {
+      "row_count": 188966,
+      "unique_keys": 188966,
+      "duplicate_key_count": 0,
+      "duplicate_examples": {},
+      "missing_key_count": 0
+    },
+    "resume_without_manifest": "refused"
+  }
+}
