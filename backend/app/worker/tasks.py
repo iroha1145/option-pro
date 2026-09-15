@@ -16,7 +16,7 @@ from app.data_paths import get_data_paths
 from app.execution_limits import BREAKOUT_TASK_TIMEOUT_SECONDS
 from app.personal_config import get_personal_config
 
-from .runtime import TaskResult, TaskSpec
+from .runtime import TaskResult, TaskSpec, _public_error_code
 
 
 DEFAULT_TASK_NAMES = (
@@ -2005,6 +2005,34 @@ class StrengthRefreshTask:
         self._variant_retry_at: float | None = None
         self._pending_variant_parameters: dict[str, dict[str, Any]] = {}
         self._pending_variant_errors: dict[str, dict[str, Any]] = {}
+        self._action_progress_sink: Callable[[Mapping[str, Any]], Any] | None = None
+        self.settled_action_progress: dict[str, Any] = {
+            "action_completions": [],
+            "requeued_request_ids": [],
+        }
+
+    def bind_action_progress_sink(
+        self,
+        sink: Callable[[Mapping[str, Any]], Any] | None,
+    ) -> None:
+        self._action_progress_sink = sink
+
+    async def _publish_action_progress(
+        self,
+        completions: list[dict[str, Any]],
+        leftover_request_ids: Sequence[str],
+    ) -> None:
+        progress = {
+            "action_completions": list(completions),
+            "requeued_request_ids": list(dict.fromkeys(leftover_request_ids)),
+        }
+        self.settled_action_progress = progress
+        sink = self._action_progress_sink
+        if sink is None:
+            return
+        outcome = sink(progress)
+        if inspect.isawaitable(outcome):
+            await outcome
 
     def _next_scheduled_delay(self) -> float:
         delay = self._next_default_delay()
@@ -2170,6 +2198,10 @@ class StrengthRefreshTask:
             strength_scan_parameters_hash,
         )
 
+        self.settled_action_progress = {
+            "action_completions": [],
+            "requeued_request_ids": [],
+        }
         selected_groups: list[tuple[str, dict[str, Any], list[str]]] = []
         group_index: dict[str, int] = {}
         leftover_request_ids: list[str] = []
@@ -2213,34 +2245,100 @@ class StrengthRefreshTask:
 
         result: TaskResult | None = None
         action_completions: list[dict[str, Any]] = []
-        for digest, selected, request_ids in selected_groups:
-            result = await self._run(selected)
-            outcome = "completed" if result.status == "idle" and not result.error_code else "failed"
+        pending_groups = list(selected_groups)
+
+        def remaining_ids() -> list[str]:
+            leftover = list(leftover_request_ids)
+            leftover.extend(
+                request_id
+                for _digest, _parameters, request_ids in pending_groups
+                for request_id in request_ids
+            )
+            return leftover
+
+        await self._publish_action_progress(action_completions, remaining_ids())
+
+        def record_group(
+            digest: str,
+            selected: dict[str, Any],
+            request_ids: list[str],
+            group_result: TaskResult,
+        ) -> None:
+            outcome = (
+                "completed"
+                if group_result.status == "idle" and not group_result.error_code
+                else "failed"
+            )
             complete_strength_variant_demand(
                 selected,
                 status=outcome,
-                error_code=result.error_code,
+                error_code=group_result.error_code,
             )
-            if result.status == "idle" and not result.error_code:
+            if group_result.status == "idle" and not group_result.error_code:
                 self._pending_variant_parameters.pop(digest, None)
                 self._pending_variant_errors.pop(digest, None)
             compact = {
                 key: value
-                for key, value in dict(result.details).items()
+                for key, value in dict(group_result.details).items()
                 if key not in {"action_completions", "requeued_request_ids"}
             }
-            succeeded = result.status == "idle" and not result.error_code
+            succeeded = group_result.status == "idle" and not group_result.error_code
             for request_id in request_ids:
                 action_completions.append(
                     {
                         "request_id": request_id,
                         "succeeded": succeeded,
-                        "error_code": result.error_code,
+                        "error_code": group_result.error_code,
                         "parameters_hash": digest,
                         "parameters": selected,
                         "result": compact,
                     }
                 )
+
+        async def run_side_job(parameters: dict[str, Any]) -> None:
+            try:
+                side = await self._run(parameters)
+            except asyncio.CancelledError:
+                await self._publish_action_progress(action_completions, remaining_ids())
+                raise
+            except Exception as error:
+                complete_strength_variant_demand(
+                    parameters,
+                    status="failed",
+                    error_code=_public_error_code(error),
+                )
+                return
+            complete_strength_variant_demand(
+                parameters,
+                status="completed" if side.status == "idle" and not side.error_code else "failed",
+                error_code=side.error_code,
+            )
+
+        while pending_groups:
+            digest, selected, request_ids = pending_groups.pop(0)
+            try:
+                result = await self._run(selected)
+            except asyncio.CancelledError:
+                pending_groups.insert(0, (digest, selected, request_ids))
+                await self._publish_action_progress(action_completions, remaining_ids())
+                raise
+            except Exception as error:
+                error_code = _public_error_code(error)
+                result = TaskResult(
+                    status="degraded",
+                    error_code=error_code,
+                    details={
+                        "parameters": selected,
+                        "parameters_hash": digest,
+                        "error_type": type(error).__name__,
+                        "published": False,
+                    },
+                )
+                record_group(digest, selected, request_ids, result)
+                await self._publish_action_progress(action_completions, remaining_ids())
+                continue
+            record_group(digest, selected, request_ids, result)
+            await self._publish_action_progress(action_completions, remaining_ids())
         assert result is not None
         if result.status == "idle":
             from app.api.strength import a0_companion_for_admin_default
@@ -2249,34 +2347,21 @@ class StrengthRefreshTask:
             if companion is not None:
                 companion_hash = strength_scan_parameters_hash(companion)
                 if companion_hash not in seen:
-                    companion_result = await self._run(companion)
-                    complete_strength_variant_demand(
-                        companion,
-                        status=(
-                            "completed"
-                            if companion_result.status == "idle" and not companion_result.error_code
-                            else "failed"
-                        ),
-                        error_code=companion_result.error_code,
-                    )
+                    await run_side_job(companion)
         extras = [
             item
             for item in list_pending_strength_variant_demands()
             if strength_scan_parameters_hash(item) not in seen
         ][:4]
         for parameters in extras:
-            extra = await self._run(parameters)
-            complete_strength_variant_demand(
-                parameters,
-                status="completed" if extra.status == "idle" and not extra.error_code else "failed",
-                error_code=extra.error_code,
-            )
+            await run_side_job(parameters)
         if result.status == "idle" and not result.error_code and not self._pending_variant_parameters:
             self._variant_retry_at = None
         details = dict(result.details)
         details["action_completions"] = action_completions
-        if leftover_request_ids:
-            details["requeued_request_ids"] = leftover_request_ids
+        leftover = remaining_ids()
+        if leftover:
+            details["requeued_request_ids"] = leftover
         return TaskResult(
             status=result.status,
             details=details,
