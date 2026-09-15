@@ -59,6 +59,7 @@ for (const remount of [false, true]) {
     let all = await openChart();
     await expect(page.locator('[data-eps-chart-error]')).toBeVisible();
     expect(chartRequests).toHaveLength(1);
+    expect(new URL(chartRequests[0].url).searchParams.get('eps')).toBe('1');
     expect(chartRequests[0].unloadedDependencies).toEqual([]);
     await expect(all).toHaveAttribute('aria-selected', 'true');
 
@@ -82,6 +83,7 @@ for (const remount of [false, true]) {
     await expect(all).toHaveAttribute('aria-selected', 'true');
     await expect(page.locator('[aria-label="财报主体"]')).toBeVisible();
     expect(chartRequests).toHaveLength(3);
+    expect(chartRequests.every((row) => new URL(row.url).searchParams.get('eps') === '1')).toBe(true);
     expect(new URL(chartRequests[2].url).searchParams.get('recover')).toBe('2');
     expect(chartRequests[2].failed).toBe(false);
     expect(chartRequests.every((row) => row.unloadedDependencies.length === 0)).toBe(true);
@@ -94,6 +96,24 @@ for (const remount of [false, true]) {
       await expect(page.locator('[data-eps-chart-error]')).toHaveCount(0);
       expect(chartRequests).toHaveLength(3);
     }
+
+    // Market statically imports the canonical chart module. EPS failures must
+    // not leave that URL rejected in the browser's module map.
+    await page.locator('a[href="/market"]').first().click();
+    await expect(page.getByRole('heading', { name: '大盘强弱', exact: true })).toBeVisible();
+    expect(chartRequests).toHaveLength(4);
+    expect(new URL(chartRequests[3].url).search).toBe('');
+    expect(chartRequests[3].failed).toBe(false);
+    expect(errors).toEqual([]);
+
+    await page.getByRole('link', { name: /财报/ }).first().click();
+    all = await openChart();
+    await expect(page.locator('[data-eps-chart] canvas')).toHaveCount(1);
+    await expect(page.locator('[data-eps-chart]')).toBeVisible();
+    await expect(page.locator('[data-eps-chart-error]')).toHaveCount(0);
+    await expect(all).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('[aria-label="财报主体"]')).toBeVisible();
+    expect(chartRequests).toHaveLength(4);
     expect(errors).toEqual([]);
   });
 }

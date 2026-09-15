@@ -1,6 +1,7 @@
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import os from 'node:os';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -23,6 +24,7 @@ const entryHash = createHash('sha256').update(await readFile(path.join(ROOT, 'fr
 const browser = await chromium.launch({ headless: true, channel: 'chrome' });
 const samples = [];
 const report = () => ({ lab: true, fixed_responses: true, measuredAt: new Date().toISOString(),
+  environment: { browser: browser.version(), node: process.version, platform: os.platform(), release: os.release(), arch: os.arch() },
   product_commit: process.env.PRODUCT_COMMIT,
   baseline_commit: process.env.BASELINE_COMMIT || 'df1bd5d35e8128805d75291126341be06e38b1e6',
   entry, entry_sha256: entryHash, fixture_sha256: fixtureHash, fixture_as_of: '2026-09-15T07:00:00Z',

@@ -35,7 +35,7 @@ function loaderHarness() {
   return { ...module.exports, requests, success };
 }
 
-test('chart retries use fresh module URLs after repeated failure and across remounts', async () => {
+test('EPS isolates every load from other routes and retries across remounts', async () => {
   const h = loaderHarness();
   await assert.rejects(h.importEpsChart(false), /module fetch failed/);
   await assert.rejects(h.importEpsChart(true), /module fetch failed/);
@@ -46,9 +46,9 @@ test('chart retries use fresh module URLs after repeated failure and across remo
   assert.equal(await h.importEpsChart(false), h.success);
   assert.equal(await h.importEpsChart(true), h.success);
   assert.deepEqual(h.requests, [
-    'https://example.test/assets/eps-chart-hash.js',
-    'https://example.test/assets/eps-chart-hash.js?recover=1',
-    'https://example.test/assets/eps-chart-hash.js?recover=2',
+    'https://example.test/assets/eps-chart-hash.js?eps=1',
+    'https://example.test/assets/eps-chart-hash.js?eps=1&recover=1',
+    'https://example.test/assets/eps-chart-hash.js?eps=1&recover=2',
   ]);
 });
 
