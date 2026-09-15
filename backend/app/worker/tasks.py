@@ -2170,8 +2170,9 @@ class StrengthRefreshTask:
             strength_scan_parameters_hash,
         )
 
-        selected_jobs: list[dict[str, Any]] = []
-        seen: set[str] = set()
+        selected_groups: list[tuple[str, dict[str, Any], list[str]]] = []
+        group_index: dict[str, int] = {}
+        leftover_request_ids: list[str] = []
         for action in actions:
             details = action.get("details") if isinstance(action, dict) else None
             raw = details.get("parameters") if isinstance(details, dict) else None
@@ -2182,24 +2183,38 @@ class StrengthRefreshTask:
             stored_hash = details.get("parameters_hash")
             if stored_hash is not None and stored_hash != expected_hash:
                 raise ValueError("strength refresh action parameter hash is invalid")
-            if expected_hash in seen:
+            request_id = action.get("request_id")
+            request_ids = [request_id] if isinstance(request_id, str) and request_id else []
+            existing = group_index.get(expected_hash)
+            if existing is not None:
+                selected_groups[existing][2].extend(request_ids)
                 continue
-            seen.add(expected_hash)
-            selected_jobs.append(parameters)
-            if len(selected_jobs) >= 4:
-                break
+            if len(selected_groups) >= 4:
+                leftover_request_ids.extend(request_ids)
+                continue
+            group_index[expected_hash] = len(selected_groups)
+            selected_groups.append((expected_hash, parameters, request_ids))
+        selected_jobs = [parameters for _digest, parameters, _ids in selected_groups]
+        seen = set(group_index)
         if not selected_jobs:
             selected_jobs = [dict(DEFAULT_STRENGTH_SCAN_PARAMETERS)]
             seen.add(strength_scan_parameters_hash(selected_jobs[0]))
+            selected_groups = [
+                (
+                    strength_scan_parameters_hash(selected_jobs[0]),
+                    selected_jobs[0],
+                    [],
+                )
+            ]
         from app.services.strength.variant_demand import (
             complete_strength_variant_demand,
             list_pending_strength_variant_demands,
         )
 
         result: TaskResult | None = None
-        for selected in selected_jobs:
+        action_completions: list[dict[str, Any]] = []
+        for digest, selected, request_ids in selected_groups:
             result = await self._run(selected)
-            digest = strength_scan_parameters_hash(selected)
             outcome = "completed" if result.status == "idle" and not result.error_code else "failed"
             complete_strength_variant_demand(
                 selected,
@@ -2209,6 +2224,23 @@ class StrengthRefreshTask:
             if result.status == "idle" and not result.error_code:
                 self._pending_variant_parameters.pop(digest, None)
                 self._pending_variant_errors.pop(digest, None)
+            compact = {
+                key: value
+                for key, value in dict(result.details).items()
+                if key not in {"action_completions", "requeued_request_ids"}
+            }
+            succeeded = result.status == "idle" and not result.error_code
+            for request_id in request_ids:
+                action_completions.append(
+                    {
+                        "request_id": request_id,
+                        "succeeded": succeeded,
+                        "error_code": result.error_code,
+                        "parameters_hash": digest,
+                        "parameters": selected,
+                        "result": compact,
+                    }
+                )
         assert result is not None
         if result.status == "idle":
             from app.api.strength import a0_companion_for_admin_default
@@ -2227,8 +2259,6 @@ class StrengthRefreshTask:
                         ),
                         error_code=companion_result.error_code,
                     )
-                    if companion_result.status != "idle" or companion_result.error_code:
-                        return companion_result
         extras = [
             item
             for item in list_pending_strength_variant_demands()
@@ -2243,9 +2273,13 @@ class StrengthRefreshTask:
             )
         if result.status == "idle" and not result.error_code and not self._pending_variant_parameters:
             self._variant_retry_at = None
+        details = dict(result.details)
+        details["action_completions"] = action_completions
+        if leftover_request_ids:
+            details["requeued_request_ids"] = leftover_request_ids
         return TaskResult(
             status=result.status,
-            details=result.details,
+            details=details,
             next_delay_seconds=self._next_scheduled_delay(),
             error_code=result.error_code,
         )

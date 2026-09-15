@@ -210,6 +210,109 @@ class WorkerSupervisor:
                 error,
             )
 
+    async def _requeue_actions_guarded(
+        self,
+        task: TaskSpec,
+        token: int,
+        request_ids: Sequence[str],
+        *,
+        now: datetime | None = None,
+    ) -> None:
+        def write() -> None:
+            self.repository.requeue_running_actions(
+                self.owner_id,
+                token,
+                list(request_ids),
+                now=now,
+            )
+
+        try:
+            await self._state_call(write)
+        except sqlite3.OperationalError as error:
+            logger.warning(
+                "worker manual action requeue dropped task=%s error=%s",
+                task.name,
+                error,
+            )
+
+    async def _complete_manual_actions(
+        self,
+        task: TaskSpec,
+        token: int,
+        manual_request_ids: Sequence[str],
+        *,
+        result: TaskResult,
+        degraded: bool,
+        completed: datetime,
+    ) -> None:
+        raw_completions = result.details.get("action_completions") if result.details else None
+        completions = [
+            item
+            for item in raw_completions
+            if isinstance(item, dict) and item.get("request_id")
+        ] if isinstance(raw_completions, list) else []
+        if not completions:
+            await self._finish_actions_guarded(
+                task,
+                token,
+                manual_request_ids,
+                succeeded=not degraded,
+                error_code=result.error_code or "task_degraded",
+                details={
+                    "task_status": result.status,
+                    "task_completed_at": completed.isoformat().replace(
+                        "+00:00", "Z"
+                    ),
+                    "result": dict(result.details),
+                },
+                now=completed,
+            )
+            return
+        claimed = set(manual_request_ids)
+        finished: set[str] = set()
+        completed_at = completed.isoformat().replace("+00:00", "Z")
+        for item in completions:
+            request_id = str(item["request_id"])
+            if request_id not in claimed or request_id in finished:
+                continue
+            succeeded = bool(item.get("succeeded"))
+            error_code = item.get("error_code")
+            if not isinstance(error_code, str) or not error_code:
+                error_code = None if succeeded else (result.error_code or "task_degraded")
+            payload = item.get("result")
+            if not isinstance(payload, dict):
+                payload = {
+                    key: item[key]
+                    for key in ("parameters", "parameters_hash")
+                    if key in item
+                }
+            await self._finish_actions_guarded(
+                task,
+                token,
+                [request_id],
+                succeeded=succeeded,
+                error_code=error_code or "task_degraded",
+                details={
+                    "task_status": "idle" if succeeded else "degraded",
+                    "task_completed_at": completed_at,
+                    "result": payload,
+                },
+                now=completed,
+            )
+            finished.add(request_id)
+        leftover = [request_id for request_id in manual_request_ids if request_id not in finished]
+        extra = result.details.get("requeued_request_ids") if result.details else None
+        if isinstance(extra, list):
+            leftover.extend(str(item) for item in extra if item)
+        leftover = list(dict.fromkeys(leftover))
+        if leftover:
+            await self._requeue_actions_guarded(
+                task,
+                token,
+                leftover,
+                now=completed,
+            )
+
     async def _heartbeat(self, started: asyncio.Event | None = None) -> None:
         interval = max(0.05, min(30.0, self.lease_seconds / 3.0))
         thread_stop = threading.Event()
@@ -476,20 +579,13 @@ class WorkerSupervisor:
             "next_delay_seconds": delay,
         }
         if manual_request_ids:
-            await self._finish_actions_guarded(
+            await self._complete_manual_actions(
                 task,
                 token,
                 manual_request_ids,
-                succeeded=not degraded,
-                error_code=result.error_code or "task_degraded",
-                details={
-                    "task_status": result.status,
-                    "task_completed_at": completed.isoformat().replace(
-                        "+00:00", "Z"
-                    ),
-                    "result": dict(result.details),
-                },
-                now=completed,
+                result=result,
+                degraded=degraded,
+                completed=completed,
             )
         self._results[task.name] = payload
         return payload

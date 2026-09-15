@@ -603,6 +603,42 @@ class WorkerStateRepository:
             item["started_at"] = observed_text
         return claimed
 
+    def requeue_running_actions(
+        self,
+        owner_id: str,
+        fencing_token: int,
+        request_ids: Sequence[str],
+        *,
+        now: datetime | None = None,
+    ) -> int:
+        """Return claimed-but-unfinished actions to queued without marking them done."""
+
+        if not request_ids:
+            return 0
+        observed = _as_utc(now or utc_now())
+        unique_request_ids = list(dict.fromkeys(request_ids))
+        placeholders = ",".join("?" for _ in unique_request_ids)
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            self._assert_fence(connection, owner_id, fencing_token, observed)
+            cursor = connection.execute(
+                f"""
+                UPDATE worker_action_requests
+                SET status='queued',started_at=NULL,owner_id=NULL,
+                    fencing_token=NULL,error_code=NULL,updated_at=?
+                WHERE request_id IN ({placeholders})
+                  AND status='running' AND owner_id=? AND fencing_token=?
+                """,
+                (
+                    _iso(observed),
+                    *unique_request_ids,
+                    owner_id,
+                    int(fencing_token),
+                ),
+            )
+            connection.commit()
+            return int(cursor.rowcount)
+
     def finish_actions(
         self,
         owner_id: str,
