@@ -2599,6 +2599,7 @@ class BreakoutTask:
         self._settings: Any = None
         self._repository: Any = None
         self._service: Any = None
+        self._clock: Any = None
 
     async def _prepare(self) -> bool:
         if self._settings is not None:
@@ -2621,6 +2622,34 @@ class BreakoutTask:
             return float(self._settings.scan_interval_regular_seconds)
         return float(self._settings.scan_interval_closed_seconds)
 
+    def _paused_delay(self, session: Any, payload: Mapping[str, Any]) -> float:
+        delay = self._interval(str(session) if session else None)
+        if str(session or "") in {"premarket", "regular"}:
+            return delay
+        retry_after = payload.get("t1_retry_after_seconds")
+        if retry_after is not None:
+            try:
+                delay = min(delay, max(0.0, float(retry_after)))
+            except (TypeError, ValueError):
+                pass
+        next_session_at = payload.get("next_session_at")
+        if next_session_at:
+            try:
+                if isinstance(next_session_at, datetime):
+                    target = next_session_at
+                else:
+                    target = datetime.fromisoformat(str(next_session_at).replace("Z", "+00:00"))
+                if target.tzinfo is None:
+                    target = target.replace(tzinfo=timezone.utc)
+                clock = self._clock
+                now = clock.now() if clock is not None and hasattr(clock, "now") else datetime.now(timezone.utc)
+                remaining = (target.astimezone(timezone.utc) - now.astimezone(timezone.utc)).total_seconds()
+                if remaining >= 0:
+                    delay = min(delay, remaining)
+            except (TypeError, ValueError):
+                pass
+        return delay
+
     @bind_trusted_system_task
     async def __call__(self) -> TaskResult:
         if not await self._prepare():
@@ -2631,6 +2660,7 @@ class BreakoutTask:
             self._settings,
             self._repository,
             scan_service=self._service,
+            clock=self._clock,
             owner_id=self.owner_id,
             maximum_loop_stall_seconds=(
                 BREAKOUT_TASK_TIMEOUT_SECONDS
@@ -2640,7 +2670,7 @@ class BreakoutTask:
         payload = await worker.run_once()
         status = str(payload.get("status") or "degraded")
         session = payload.get("session")
-        delay = self._interval(str(session) if session else None)
+        delay = self._paused_delay(session, payload)
         if status in {"degraded", "locked"}:
             return TaskResult(
                 status="degraded",
@@ -2655,7 +2685,14 @@ class BreakoutTask:
         if status == "paused":
             return TaskResult(
                 status="paused",
-                details={"reason": payload.get("reason"), "session": session},
+                details={
+                    "reason": payload.get("reason"),
+                    "session": session,
+                    "t1_completion": payload.get("t1_completion")
+                    if isinstance(payload, Mapping)
+                    else None,
+                    "t1_retry_after_seconds": payload.get("t1_retry_after_seconds"),
+                },
                 next_delay_seconds=delay,
             )
         return TaskResult(
