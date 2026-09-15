@@ -127,10 +127,12 @@ test('chart lazy-load rejection does not unmount the earnings page', async () =>
   assert.match(chart, /ChartLoadErrorBoundary/);
   assert.match(chart, /loadEpsHatchChart/);
   assert.match(chart, /import\('\.\/EpsHatchChart'\)/);
-  assert.match(chart, /import\('\.\/EpsHatchChart\?url'\)/);
+  assert.match(chart, /import\.meta\.resolve\('\.\/EpsHatchChart'\)/);
+  assert.match(chart, /@vite-ignore/);
   assert.match(chart, /searchParams\.set\('recover'/);
   assert.match(chart, /setEpsHatchChart\(loadEpsHatchChart\(recoverGen\.current\)\)/);
   assert.doesNotMatch(chart, /useMemo\(\(\) => loadEpsHatchChart/);
+  assert.doesNotMatch(chart, /EpsHatchChart\.tsx\?recover/);
   assert.match(boundarySource, /getDerivedStateFromError/);
   assert.match(boundarySource, /data-eps-chart-error/);
   assert.match(boundarySource, /重试图表/);

@@ -10,22 +10,33 @@ interface DeferredEpsChartProps {
   items: EarningsRow[];
 }
 
-function withRecoverQuery(href: string, generation: number) {
-  const url = new URL(href, window.location.href);
+function chartChunkHref(generation: number) {
+  const load = () => import('./EpsHatchChart');
+  const fromImporter = String(load).match(/["'`]([^"'`]*EpsHatchChart[^"'`?]*)["'`]/)?.[1];
+  let resolved = import.meta.resolve('./EpsHatchChart');
+  if (fromImporter && /\.js$/i.test(fromImporter)) {
+    if (/^https?:/i.test(fromImporter) || fromImporter.startsWith('/')) {
+      resolved = fromImporter;
+    } else if (fromImporter.includes('assets/')) {
+      resolved = new URL(fromImporter.replace(/^\.\//, ''), `${window.location.origin}/`).href;
+    } else {
+      resolved = new URL(fromImporter.replace(/^\.\//, ''), new URL('/assets/', window.location.origin)).href;
+    }
+  }
+  const url = new URL(resolved, window.location.href);
   url.searchParams.set('recover', String(generation));
   return url.href;
 }
 
 function loadEpsHatchChart(generation = 0) {
-  // First load stays a static import so Vite still emits one async chunk.
-  // Retry must change the module URL: browsers cache a rejected specifier.
-  return lazy(async () => {
-    if (generation === 0) {
-      return import('./EpsHatchChart');
-    }
-    const href = (await import('./EpsHatchChart?url')).default;
-    return import(/* @vite-ignore */ withRecoverQuery(href, generation));
-  });
+  // First load stays a static import so Vite emits one async chunk.
+  // Retry resolves that same chunk and changes the query; browsers cache a
+  // rejected specifier and will not refetch the identical module URL.
+  return lazy(() => (
+    generation === 0
+      ? import('./EpsHatchChart')
+      : import(/* @vite-ignore */ chartChunkHref(generation))
+  ));
 }
 
 export default function DeferredEpsChart({ items }: DeferredEpsChartProps) {
