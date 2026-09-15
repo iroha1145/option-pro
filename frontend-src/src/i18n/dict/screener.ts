@@ -224,6 +224,11 @@ export const SCREENER: Dict = {
   '设定条件，开始一次扫描': ['Set your filters and run a scan', '条件を設定してスキャンを開始'],
   '或从预设策略一键开始': ['Or start instantly from a preset strategy', 'またはプリセット戦略からワンクリックで開始'],
   '扫描数据不可用': ['Scan data unavailable', 'スキャンデータが利用できません'],
+  '排序数据准备中': ['Preparing ranking data', '並び替えデータを準備中'],
+  '中长期趋势排序正在后台生成，请稍候。': [
+    'Mid/long-term ranking is being generated in the background. Please wait.',
+    '中長期トレンド順位をバックグラウンドで生成しています。しばらくお待ちください。',
+  ],
   '上次成功扫描于': ['Last successful scan at', '前回の成功したスキャン：'],
   '当前条件无命中': ['No matches for the current filters', '現在の条件に一致する銘柄がありません'],
   '尝试放宽条件，或移除部分过滤器': ['Try loosening your filters, or remove some of them.', '条件を緩めるか、一部のフィルターを解除してみてください。'],

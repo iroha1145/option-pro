@@ -77,7 +77,7 @@ export interface ScanParams {
   min_price?: number;
   min_avg_dollar_volume?: number;
   include_options?: boolean;
-  ranking_algorithm?: 'production' | 'a0_mid_long';
+  ranking_algorithm?: 'production' | 'a0_mid_long' | 'follow_default';
 }
 
 function applyParams(rows: ScreenerRow[], p: ScanParams): ScreenerRow[] {

@@ -61,6 +61,7 @@ import {
   visibleScanDate,
   workerActionPhase,
   writePendingStrengthTask,
+  isStrengthSnapshotPreparing,
   type StrengthScanPhase,
 } from '@/lib/screenerScanFlow';
 import {
@@ -89,6 +90,10 @@ import {
   readAlgorithmPreferences,
   writeAlgorithmPreferences,
 } from '@/lib/algorithmPreferences';
+import {
+  nextChoiceGeneration,
+  shouldApplyRemoteAlgorithmPreference,
+} from '@/lib/choiceGeneration';
 import { keepServerRankingOrder } from '@/lib/screenerSort';
 import { persistAlgorithmChoice, viewPreferencesApi } from '@/api/modules/viewPreferences';
 
@@ -165,11 +170,11 @@ export default function Screener() {
   /* ---------------- 扫描状态机 ---------------- */
   const [draft, setDraft] = useState<ScanFilters>(() => ({
     ...DEFAULT_FILTERS,
-    rankingAlgorithm: readAlgorithmPreferences().screenerRankingAlgorithm,
+    rankingAlgorithm: readAlgorithmPreferences(principal).screenerRankingAlgorithm,
   }));
   const [applied, setApplied] = useState<ScanFilters>(() => ({
     ...DEFAULT_FILTERS,
-    rankingAlgorithm: readAlgorithmPreferences().screenerRankingAlgorithm,
+    rankingAlgorithm: readAlgorithmPreferences(principal).screenerRankingAlgorithm,
   }));
   const [scanState, setScanState] = useState<ScanState>('idle');
   const [rows, setRows] = useState<ScreenerRow[] | null>(null);
@@ -202,6 +207,9 @@ export default function Screener() {
   const [signalsMap, setSignalsMap] = useState<Record<string, RowSignalsState>>({});
   const signalsRef = useRef<Record<string, RowSignalsState>>({});
   const scanSeq = useRef(0);
+  const choiceGeneration = useRef(0);
+  const rankingRef = useRef(draft.rankingAlgorithm);
+  rankingRef.current = draft.rankingAlgorithm;
 
   useEffect(() => {
     // Identity changes and unmounting revoke all older UI/worker continuations.
@@ -211,14 +219,28 @@ export default function Screener() {
   }, [principal]);
 
   useEffect(() => {
+    const local = readAlgorithmPreferences(principal);
+    setDraft((current) => (
+      current.rankingAlgorithm === local.screenerRankingAlgorithm
+        ? current
+        : { ...current, rankingAlgorithm: local.screenerRankingAlgorithm }
+    ));
+  }, [principal]);
+
+  useEffect(() => {
     if (!isSignedIn) return;
+    const started = choiceGeneration.current;
     let cancelled = false;
     viewPreferencesApi.read().then((remote) => {
-      if (cancelled) return;
+      if (!shouldApplyRemoteAlgorithmPreference({
+        startedGeneration: started,
+        currentGeneration: choiceGeneration.current,
+        cancelled,
+      })) return;
       writeAlgorithmPreferences({
         screenerRankingAlgorithm: remote.screenerRankingAlgorithm,
         radarSortAlgorithm: remote.radarSortAlgorithm,
-      });
+      }, principal);
       setDraft((current) => (
         current.rankingAlgorithm === remote.screenerRankingAlgorithm
           ? current
@@ -230,17 +252,29 @@ export default function Screener() {
     return () => { cancelled = true; };
   }, [isSignedIn, principal]);
 
-  const updateDraft = useCallback((next: ScanFilters) => {
-    setDraft((current) => {
-      if (current.rankingAlgorithm !== next.rankingAlgorithm) {
-        writeAlgorithmPreferences({ screenerRankingAlgorithm: next.rankingAlgorithm });
-        if (isSignedIn) {
-          void viewPreferencesApi.write({ screenerRankingAlgorithm: next.rankingAlgorithm });
-        }
+  const persistVisibleChoice = useCallback((rankingAlgorithm: ScanFilters['rankingAlgorithm']) => {
+    writeAlgorithmPreferences({ screenerRankingAlgorithm: rankingAlgorithm }, principal);
+    void persistAlgorithmChoice(
+      { screenerRankingAlgorithm: rankingAlgorithm },
+      isSignedIn,
+      principal,
+    ).then((result) => {
+      if (result?.syncError) {
+        toast.info?.(__t('选择已生效，但尚未同步到账号'));
       }
-      return next;
+    }, () => {
+      toast.info?.(__t('选择已生效，但尚未同步到账号'));
     });
-  }, [isSignedIn]);
+  }, [isSignedIn, principal, toast]);
+
+  const updateDraft = useCallback((next: ScanFilters) => {
+    const previous = rankingRef.current;
+    if (previous !== next.rankingAlgorithm) {
+      choiceGeneration.current = nextChoiceGeneration(choiceGeneration.current);
+      persistVisibleChoice(next.rankingAlgorithm);
+    }
+    setDraft(next);
+  }, [persistVisibleChoice]);
 
   const dirty = scanState === 'done' && !filtersEqual(draft, applied);
   const scanTriggerLocked = shouldLockScanTrigger({
@@ -269,13 +303,13 @@ export default function Screener() {
     // 仅演示数据保留可见扫描过程；真实接口完成后立即呈现结果。
     const minMs = isMock ? 800 + Math.random() * 700 : 0;
     try {
-      try {
-        await persistAlgorithmChoice(
-          { screenerRankingAlgorithm: filters.rankingAlgorithm },
-          isSignedIn,
-        );
-      } catch {
-        // Preference copy is best-effort. Scan must still use the visible local choice.
+      const persisted = await persistAlgorithmChoice(
+        { screenerRankingAlgorithm: filters.rankingAlgorithm },
+        isSignedIn,
+        principal,
+      );
+      if (persisted?.syncError) {
+        toast.info?.(__t('选择已生效，但尚未同步到账号'));
       }
       requireCurrent();
       const { apiParams: params, refreshParameters: requested } = buildStrengthScanRequest(filters);
@@ -337,6 +371,21 @@ export default function Screener() {
         setScanPhase('verifying');
         resetMarketReadPaths([scanPath]);
       };
+      const waitForPreparedSnapshot = async (): Promise<StrengthScanEnvelope> => {
+        const deadline = Date.now() + 120_000;
+        for (;;) {
+          requireCurrent();
+          try {
+            return expireStrengthSnapshot(await strengthApi.scanEnvelope(params, true));
+          } catch (error) {
+            requireCurrent();
+            if (!isStrengthSnapshotPreparing(error instanceof ApiError ? error : null)) throw error;
+            if (Date.now() >= deadline) throw error;
+            setScanPhase('queued');
+            await new Promise((resolve) => setTimeout(resolve, 1_500));
+          }
+        }
+      };
       const readSnapshot = async (force: boolean): Promise<StrengthScanEnvelope> => {
         // A task can finish just before its publication becomes visible on a
         // read replica. Retry that read only, without submitting another task.
@@ -353,6 +402,9 @@ export default function Screener() {
               error.bizCode === 'strength_publication_unverified'
               || error.bizCode === 'strength_snapshot_unavailable'
             );
+            if (isStrengthSnapshotPreparing(error) && !completedAction) {
+              return waitForPreparedSnapshot();
+            }
             if (!completedAction || !notPublished) throw error;
             if (attempt >= 2) {
               clearPendingStrengthTask(completedAction.requestId);
@@ -381,18 +433,25 @@ export default function Screener() {
         const snapshotMissing =
           error instanceof ApiError
           && error.code === 503
-          && error.bizCode === 'strength_snapshot_unavailable';
-        const decision = shouldSubmitStrengthRefresh({
-          isOwner,
-          isMock,
-          forceRefresh: Boolean(options.forceRefresh),
-          snapshotMissing,
-          snapshotStale: false,
-        });
-        if (submittedRefresh || !decision.submit || !snapshotMissing) throw error;
-        await refreshSnapshot();
-        submittedRefresh = true;
-        result = await readSnapshot(true);
+          && (
+            error.bizCode === 'strength_snapshot_unavailable'
+            || error.bizCode === 'strength_snapshot_preparing'
+          );
+        if (isStrengthSnapshotPreparing(error) && !isOwner) {
+          result = await waitForPreparedSnapshot();
+        } else {
+          const decision = shouldSubmitStrengthRefresh({
+            isOwner,
+            isMock,
+            forceRefresh: Boolean(options.forceRefresh),
+            snapshotMissing,
+            snapshotStale: false,
+          });
+          if (submittedRefresh || !decision.submit || !snapshotMissing) throw error;
+          await refreshSnapshot();
+          submittedRefresh = true;
+          result = await readSnapshot(true);
+        }
       }
       const followUp = shouldSubmitStrengthRefresh({
         isOwner,
@@ -459,6 +518,8 @@ export default function Screener() {
       const error = e instanceof ApiError ? e : new ApiError(500, e instanceof Error ? e.message : __t('扫描失败'));
       if (error.code === 400 && /A0|algorithm|timeframe|profile|中长期/i.test(error.message)) {
         toast.error(__t('中长期趋势排序仅支持周期=全部且偏好=均衡。请改回兼容视图，或改用原版排序。'), error.message);
+      } else if (isStrengthSnapshotPreparing(error)) {
+        toast.info?.(__t('排序数据准备中'), __t('中长期趋势排序正在后台生成，请稍候。'));
       }
       setScanError(error);
       setScanState('error');
@@ -830,17 +891,14 @@ export default function Screener() {
 
   /* 服务端参数 chip 的移除只写 draft：分数是哪套参数算的必须与右侧说明同源 */
   const patchDraftOnly = useCallback((p: Partial<ScanFilters>) => {
-    setDraft((current) => {
-      const next = { ...current, ...p };
-      if (current.rankingAlgorithm !== next.rankingAlgorithm) {
-        writeAlgorithmPreferences({ screenerRankingAlgorithm: next.rankingAlgorithm });
-        if (isSignedIn) {
-          void viewPreferencesApi.write({ screenerRankingAlgorithm: next.rankingAlgorithm });
-        }
-      }
-      return next;
-    });
-  }, [isSignedIn]);
+    const current = rankingRef.current;
+    const nextRanking = p.rankingAlgorithm ?? current;
+    if (current !== nextRanking) {
+      choiceGeneration.current = nextChoiceGeneration(choiceGeneration.current);
+      persistVisibleChoice(nextRanking);
+    }
+    setDraft((value) => ({ ...value, ...p }));
+  }, [persistVisibleChoice]);
   const chips = useMemo(
     () => buildChips(applied, profiles, sectorOptions, patchApplied, patchDraftOnly),
     [applied, profiles, sectorOptions, patchApplied, patchDraftOnly],
@@ -1116,8 +1174,16 @@ export default function Screener() {
                   <EmptyState
                     variant="error"
                     image="/empty-chart.svg"
-                    title={scanError?.code === 503 ? __t('扫描数据不可用') : __t('扫描失败')}
-                    description={scanError?.code === 503 ? __t('稍后刷新再试') : scanError?.message}
+                    title={
+                      isStrengthSnapshotPreparing(scanError)
+                        ? __t('排序数据准备中')
+                        : scanError?.code === 503 ? __t('扫描数据不可用') : __t('扫描失败')
+                    }
+                    description={
+                      isStrengthSnapshotPreparing(scanError)
+                        ? __t('中长期趋势排序正在后台生成，请稍候。')
+                        : scanError?.code === 503 ? __t('稍后刷新再试') : scanError?.message
+                    }
                     action={
                       <button
                         onClick={onScanRetry}

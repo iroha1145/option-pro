@@ -16,11 +16,11 @@ export interface BreakoutEventFilters {
   /** 契约参数（mock 忽略）：lifecycle_state / cursor */
   lifecycle_state?: string;
   cursor?: string;
-  sort_algorithm?: 'production' | 't1_daily_priority';
+  sort_algorithm?: 'production' | 't1_daily_priority' | 'follow_default';
 }
 
 export interface BreakoutCurrentFilters {
-  sort_algorithm?: 'production' | 't1_daily_priority';
+  sort_algorithm?: 'production' | 't1_daily_priority' | 'follow_default';
 }
 
 /* ================= live 归一化（契约原始事件 → mock 形状，mock 是 UI 唯一事实源） =================

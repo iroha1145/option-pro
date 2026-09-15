@@ -146,6 +146,10 @@ export const CHROME: Dict = {
   ],
   '后台扫描失败': ['The background scan failed', 'バックグラウンドスキャンが失敗しました'],
   '后台扫描等待超时': ['Timed out waiting for the background scan', 'バックグラウンドスキャンの待機がタイムアウトしました'],
+  '选择已生效，但尚未同步到账号': [
+    'Your choice is active here, but it has not synced to your account yet',
+    '選択はこちらで有効ですが、アカウントにはまだ同期されていません',
+  ],
 
   /* 共享小部件 */
   '涨跌数据缺失': ['Change data unavailable', '騰落データがありません'],

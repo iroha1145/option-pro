@@ -7,12 +7,14 @@ import {
   type RadarSortChoice,
   type ScreenerRankingChoice,
 } from '@/lib/algorithmPreferences';
+import { enqueuePreferenceWrite } from '@/lib/viewPreferenceWrites';
 
 export interface ViewPreferencesDoc {
   principal: string | null;
   persisted: boolean;
   screenerRankingAlgorithm: ScreenerRankingChoice;
   radarSortAlgorithm: RadarSortChoice;
+  syncError?: unknown;
 }
 
 function asScreener(value: string | null): ScreenerRankingChoice {
@@ -82,20 +84,20 @@ function asLocalDoc(local: ReturnType<typeof writeAlgorithmPreferences>): ViewPr
   };
 }
 
-/** Persist the visible choice before a follow_default request can read the old one. */
+/** Persist is best-effort. The visible request already carries the explicit choice. */
 export async function persistAlgorithmChoice(
   patch: {
     screenerRankingAlgorithm?: ScreenerRankingChoice;
     radarSortAlgorithm?: RadarSortChoice;
   },
   persistRemote: boolean,
+  principal?: string | null,
 ): Promise<ViewPreferencesDoc> {
-  const local = asLocalDoc(writeAlgorithmPreferences(patch));
+  const local = asLocalDoc(writeAlgorithmPreferences(patch, principal));
   if (!persistRemote) return local;
   try {
-    return await viewPreferencesApi.write(patch);
-  } catch {
-    // Local choice is already saved. A 503/401 here must not block scanning or radar reload.
-    return local;
+    return await enqueuePreferenceWrite(() => viewPreferencesApi.write(patch));
+  } catch (error) {
+    return { ...local, persisted: false, syncError: error };
   }
 }

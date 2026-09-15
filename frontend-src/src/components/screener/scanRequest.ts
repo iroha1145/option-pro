@@ -36,7 +36,7 @@ export function buildStrengthScanRequest(filters: ScanFilters): StrengthScanRequ
       min_price: minPrice,
       min_avg_dollar_volume: filters.minDollarVol,
       include_options: true,
-      ...(filters.rankingAlgorithm !== 'follow_default' ? { ranking_algorithm: filters.rankingAlgorithm } : {}),
+      ranking_algorithm: filters.rankingAlgorithm,
       ...(filters.minScore != null ? { minScore: filters.minScore } : {}),
     },
     refreshParameters: {
@@ -48,7 +48,7 @@ export function buildStrengthScanRequest(filters: ScanFilters): StrengthScanRequ
       min_price: minPrice,
       min_avg_dollar_volume: filters.minDollarVol,
       include_options: true,
-      ...(filters.rankingAlgorithm !== 'follow_default' ? { ranking_algorithm: filters.rankingAlgorithm } : {}),
+      ranking_algorithm: filters.rankingAlgorithm,
     },
   };
 }

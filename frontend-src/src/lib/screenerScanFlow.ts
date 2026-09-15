@@ -119,7 +119,7 @@ export function strengthParametersMatch(
     && value.min_price === expected.min_price
     && value.min_avg_dollar_volume === expected.min_avg_dollar_volume
     && value.include_options === expected.include_options
-    && (value.ranking_algorithm ?? 'production') === (expected.ranking_algorithm ?? 'production')
+    && rankingAlgorithmMatches(value.ranking_algorithm, expected.ranking_algorithm)
   );
 }
 
@@ -152,10 +152,36 @@ export function workerWaitHasTimedOut(nowMs: number, deadlineMs: number): boolea
   return nowMs >= deadlineMs;
 }
 
+export function rankingAlgorithmMatches(actual: unknown, expected: unknown): boolean {
+  const wanted = expected ?? 'production';
+  const got = actual ?? 'production';
+  if (wanted === 'follow_default') {
+    return got === 'follow_default' || got === 'production' || got === 'a0_mid_long';
+  }
+  return got === wanted;
+}
+
+export function isStrengthSnapshotPreparing(error: { code?: number; bizCode?: string } | null | undefined): boolean {
+  return error?.code === 503 && error.bizCode === 'strength_snapshot_preparing';
+}
+
 export function refreshActionMatchesRequest(
-  action: { details?: { parameters?: unknown; result?: unknown } },
+  action: { details?: { parameters?: unknown; result?: unknown; requested_algorithm?: unknown } },
   expected: StrengthRefreshParameters,
 ): boolean {
+  if (expected.ranking_algorithm === 'follow_default') {
+    const requested = action.details?.requested_algorithm;
+    const parameters = action.details?.parameters;
+    const resolved = parameters && typeof parameters === 'object'
+      ? { ...(parameters as Record<string, unknown>), ranking_algorithm: 'follow_default' }
+      : { ranking_algorithm: 'follow_default' };
+    if (requested === 'follow_default' || rankingAlgorithmMatches(
+      (parameters as { ranking_algorithm?: unknown } | undefined)?.ranking_algorithm,
+      'follow_default',
+    )) {
+      return strengthParametersMatch(resolved, expected);
+    }
+  }
   if (!strengthParametersMatch(action.details?.parameters, expected)) return false;
   const result = action.details?.result;
   if (result && typeof result === 'object' && 'parameters' in result) {

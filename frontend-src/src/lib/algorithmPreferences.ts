@@ -1,5 +1,10 @@
 /** Persist optional production algorithm choices without overriding explicit originals. */
 
+import {
+  LEGACY_PREFERENCE_STORAGE_KEY,
+  preferenceStorageKey,
+} from './choiceGeneration.ts';
+
 export const SCREENER_FOLLOW_DEFAULT = 'follow_default';
 export const SCREENER_PRODUCTION = 'production';
 export const SCREENER_A0 = 'a0_mid_long';
@@ -14,8 +19,6 @@ export interface AlgorithmPreferences {
   screenerRankingAlgorithm: ScreenerRankingChoice;
   radarSortAlgorithm: RadarSortChoice;
 }
-
-const STORAGE_KEY = 'optix.algorithm-prefs.v1';
 
 export const DEFAULT_ALGORITHM_PREFERENCES: AlgorithmPreferences = {
   screenerRankingAlgorithm: SCREENER_FOLLOW_DEFAULT,
@@ -36,37 +39,55 @@ function asRadarChoice(value: unknown): RadarSortChoice {
   return RADAR_FOLLOW_DEFAULT;
 }
 
-export function readAlgorithmPreferences(): AlgorithmPreferences {
-  if (typeof window === 'undefined') return { ...DEFAULT_ALGORITHM_PREFERENCES };
+function readStorage(key: string): Record<string, unknown> | null {
+  if (typeof window === 'undefined') return null;
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { ...DEFAULT_ALGORITHM_PREFERENCES };
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return null;
     const parsed = JSON.parse(raw) as Record<string, unknown>;
-    return {
-      screenerRankingAlgorithm: asScreenerChoice(parsed.screenerRankingAlgorithm),
-      radarSortAlgorithm: asRadarChoice(parsed.radarSortAlgorithm),
-    };
+    return parsed && typeof parsed === 'object' ? parsed : null;
   } catch {
-    return { ...DEFAULT_ALGORITHM_PREFERENCES };
+    return null;
   }
 }
 
-export function writeAlgorithmPreferences(next: Partial<AlgorithmPreferences>): AlgorithmPreferences {
-  const merged = { ...readAlgorithmPreferences(), ...next };
-  if (typeof window !== 'undefined') {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+function writeStorage(key: string, value: AlgorithmPreferences): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Quota / private mode must not crash the page.
   }
+}
+
+export function readAlgorithmPreferences(principal?: string | null): AlgorithmPreferences {
+  const scoped = readStorage(preferenceStorageKey(principal));
+  const legacy = principal ? null : readStorage(LEGACY_PREFERENCE_STORAGE_KEY);
+  const parsed = scoped ?? legacy;
+  if (!parsed) return { ...DEFAULT_ALGORITHM_PREFERENCES };
+  return {
+    screenerRankingAlgorithm: asScreenerChoice(parsed.screenerRankingAlgorithm),
+    radarSortAlgorithm: asRadarChoice(parsed.radarSortAlgorithm),
+  };
+}
+
+export function writeAlgorithmPreferences(
+  next: Partial<AlgorithmPreferences>,
+  principal?: string | null,
+): AlgorithmPreferences {
+  const merged = { ...readAlgorithmPreferences(principal), ...next };
+  writeStorage(preferenceStorageKey(principal), merged);
   return merged;
 }
 
 export function requestedScreenerAlgorithm(
   choice: ScreenerRankingChoice,
-): Exclude<ScreenerRankingChoice, 'follow_default'> | undefined {
-  return choice === SCREENER_FOLLOW_DEFAULT ? undefined : choice;
+): ScreenerRankingChoice {
+  return choice;
 }
 
 export function requestedRadarAlgorithm(
   choice: RadarSortChoice,
-): Exclude<RadarSortChoice, 'follow_default'> | undefined {
-  return choice === RADAR_FOLLOW_DEFAULT ? undefined : choice;
+): RadarSortChoice {
+  return choice;
 }

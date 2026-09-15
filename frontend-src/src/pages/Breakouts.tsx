@@ -55,6 +55,11 @@ import {
   writeAlgorithmPreferences,
   type RadarSortChoice,
 } from '@/lib/algorithmPreferences';
+import {
+  nextChoiceGeneration,
+  shouldApplyRemoteAlgorithmPreference,
+  shouldCommitHistoryPage,
+} from '@/lib/choiceGeneration';
 import { persistAlgorithmChoice, viewPreferencesApi } from '@/api/modules/viewPreferences';
 
 /* ---------------- 筛选维度 ---------------- */
@@ -109,30 +114,41 @@ const breakoutKey = (ev: BreakoutCurrentEvent) => ev.ticker;
 const breakoutPrice = (ev: BreakoutCurrentEvent) => ev.current_price;
 
 export default function Breakouts() {
-  const { isOwner, isSignedIn } = useAccess();
+  const { isOwner, isSignedIn, username } = useAccess();
+  const principal = `${isOwner ? 'owner' : 'visitor'}:${username ?? ''}`;
   const { openTicker } = useShell();
   const toast = useToast();
   const now = useNow(1000);
 
   const [radarSort, setRadarSort] = useState<RadarSortChoice>(
-    () => readAlgorithmPreferences().radarSortAlgorithm,
+    () => readAlgorithmPreferences(principal).radarSortAlgorithm,
   );
   const requestedSort = requestedRadarAlgorithm(radarSort);
+  const choiceGeneration = useRef(0);
+  const historyGeneration = useRef(0);
+  useEffect(() => {
+    setRadarSort(readAlgorithmPreferences(principal).radarSortAlgorithm);
+  }, [principal]);
   useEffect(() => {
     if (!isSignedIn) return;
+    const started = choiceGeneration.current;
     let cancelled = false;
     viewPreferencesApi.read().then((remote) => {
-      if (cancelled) return;
+      if (!shouldApplyRemoteAlgorithmPreference({
+        startedGeneration: started,
+        currentGeneration: choiceGeneration.current,
+        cancelled,
+      })) return;
       writeAlgorithmPreferences({
         screenerRankingAlgorithm: remote.screenerRankingAlgorithm,
         radarSortAlgorithm: remote.radarSortAlgorithm,
-      });
+      }, principal);
       setRadarSort(remote.radarSortAlgorithm);
     }, () => {
       // Keep the local preference when the signed-in copy is unavailable.
     });
     return () => { cancelled = true; };
-  }, [isSignedIn]);
+  }, [isSignedIn, principal]);
 
   /* 数据轮询：status 30s / current 30s（§11） */
   const statusQ = usePolling(() => breakoutsApi.status(), 30_000);
@@ -153,29 +169,50 @@ export default function Breakouts() {
   const [historyLoadingMore, setHistoryLoadingMore] = useState(false);
   const [historyMoreError, setHistoryMoreError] = useState<ApiError | null>(null);
   useEffect(() => {
+    historyGeneration.current += 1;
     // 首页重新加载后丢弃已续读的部分，避免与新首页重复。
     setExtraEvents([]);
     setHistoryCursor(eventsQ.data?.nextCursor ?? null);
     setHistoryMoreError(null);
-  }, [eventsQ.data]);
+  }, [eventsQ.data, requestedSort]);
   const loadMoreHistory = useCallback(async () => {
     if (!historyCursor || historyLoadingMore) return;
+    const startedGeneration = historyGeneration.current;
+    const startedCursor = historyCursor;
+    const startedSort = requestedSort;
     setHistoryLoadingMore(true);
     setHistoryMoreError(null);
     try {
       const next = await breakoutsApi.events({
         page: 1,
         pageSize: HISTORY_PAGE_SIZE,
-        cursor: historyCursor,
-        sort_algorithm: requestedSort,
+        cursor: startedCursor,
+        sort_algorithm: startedSort,
       });
+      if (!shouldCommitHistoryPage({
+        startedGeneration,
+        currentGeneration: historyGeneration.current,
+        startedCursor,
+        currentCursor: startedCursor,
+        startedSort,
+        currentSort: requestedSort,
+      })) return;
       setExtraEvents((prev) => [...prev, ...next.items.map(asFullEvent)]);
       setHistoryCursor(next.nextCursor);
     } catch (error) {
-      // 加载更多失败此前被吞掉，用户只会觉得按钮没反应（审计 P2-24 同型）。
+      if (!shouldCommitHistoryPage({
+        startedGeneration,
+        currentGeneration: historyGeneration.current,
+        startedCursor,
+        currentCursor: startedCursor,
+        startedSort,
+        currentSort: requestedSort,
+      })) return;
       setHistoryMoreError(error instanceof ApiError ? error : new ApiError(500, __t('加载更多失败')));
     } finally {
-      setHistoryLoadingMore(false);
+      if (startedGeneration === historyGeneration.current) {
+        setHistoryLoadingMore(false);
+      }
     }
   }, [historyCursor, historyLoadingMore, requestedSort]);
   const personal = usePersonalWatchlist();
@@ -201,19 +238,23 @@ export default function Breakouts() {
   const readiness = useStockDataStatus([...currentAll.map((event) => event.ticker), ...events.map((event) => event.ticker)]);
 
   const updateRadarSort = useCallback((next: RadarSortChoice) => {
-    void (async () => {
-      try {
-        await persistAlgorithmChoice({ radarSortAlgorithm: next }, isSignedIn);
-      } catch {
-        // Local choice is already saved; still switch the visible radar order.
-      }
-      invalidateQueryPaths(['/breakouts/current', '/breakouts/events'], { reload: true });
-      setRadarSort(next);
-      setExtraEvents([]);
-      setHistoryCursor(null);
-      setHistoryMoreError(null);
-    })();
-  }, [isSignedIn]);
+    choiceGeneration.current = nextChoiceGeneration(choiceGeneration.current);
+    historyGeneration.current += 1;
+    writeAlgorithmPreferences({ radarSortAlgorithm: next }, principal);
+    setRadarSort(next);
+    setExtraEvents([]);
+    setHistoryCursor(null);
+    setHistoryMoreError(null);
+    invalidateQueryPaths(['/breakouts/current', '/breakouts/events'], { reload: true });
+    const started = choiceGeneration.current;
+    void persistAlgorithmChoice({ radarSortAlgorithm: next }, isSignedIn, principal).then((result) => {
+      if (started !== choiceGeneration.current) return;
+      if (result?.syncError) toast.info?.(__t('选择已生效，但尚未同步到账号'));
+    }, () => {
+      if (started !== choiceGeneration.current) return;
+      toast.info?.(__t('选择已生效，但尚未同步到账号'));
+    });
+  }, [isSignedIn, principal, toast]);
   const effectiveRadar = currentQ.data?.effectiveAlgorithm
     ?? (radarSort === 'follow_default' ? 'production' : radarSort);
   const showT1 = effectiveRadar === 't1_daily_priority';

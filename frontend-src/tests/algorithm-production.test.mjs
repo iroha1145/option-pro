@@ -13,11 +13,12 @@ import {
   requestedScreenerAlgorithm,
   writeAlgorithmPreferences,
 } from '../src/lib/algorithmPreferences.ts';
+import { resetPreferenceWriteQueue } from '../src/lib/viewPreferenceWrites.ts';
 
-test('default screener request still omits ranking_algorithm', () => {
+test('follow_default is sent explicitly on both scan and refresh identities', () => {
   const request = buildStrengthScanRequest(DEFAULT_FILTERS);
-  assert.equal('ranking_algorithm' in request.apiParams, false);
-  assert.equal('ranking_algorithm' in request.refreshParameters, false);
+  assert.equal(request.apiParams.ranking_algorithm, 'follow_default');
+  assert.equal(request.refreshParameters.ranking_algorithm, 'follow_default');
 });
 
 test('explicit A0 is sent on both scan and refresh identities', () => {
@@ -70,9 +71,9 @@ test('T1 unknown or unmet is not labeled as a weak signal', () => {
   assert.equal((t1StatusPresentation('unavailable')?.label ?? '').includes('弱信号'), false);
 });
 
-test('follow_default does not send an algorithm override', () => {
-  assert.equal(requestedScreenerAlgorithm('follow_default'), undefined);
-  assert.equal(requestedRadarAlgorithm('follow_default'), undefined);
+test('follow_default is an explicit request identity', () => {
+  assert.equal(requestedScreenerAlgorithm('follow_default'), 'follow_default');
+  assert.equal(requestedRadarAlgorithm('follow_default'), 'follow_default');
   assert.equal(requestedScreenerAlgorithm('production'), 'production');
   assert.equal(requestedRadarAlgorithm('t1_daily_priority'), 't1_daily_priority');
 });
@@ -86,11 +87,52 @@ test('local algorithm preferences keep an explicit original choice', () => {
     },
   };
   assert.deepEqual(readAlgorithmPreferences(), DEFAULT_ALGORITHM_PREFERENCES);
-  writeAlgorithmPreferences({ screenerRankingAlgorithm: 'production', radarSortAlgorithm: 'production' });
-  const stored = readAlgorithmPreferences();
+  writeAlgorithmPreferences({ screenerRankingAlgorithm: 'production', radarSortAlgorithm: 'production' }, 'account:alice');
+  const stored = readAlgorithmPreferences('account:alice');
   assert.equal(stored.screenerRankingAlgorithm, 'production');
   assert.equal(stored.radarSortAlgorithm, 'production');
-  writeAlgorithmPreferences({ screenerRankingAlgorithm: 'follow_default' });
-  assert.equal(readAlgorithmPreferences().screenerRankingAlgorithm, 'follow_default');
+  writeAlgorithmPreferences({ screenerRankingAlgorithm: 'follow_default' }, 'account:alice');
+  assert.equal(readAlgorithmPreferences('account:alice').screenerRankingAlgorithm, 'follow_default');
+  assert.equal(readAlgorithmPreferences('account:bob').screenerRankingAlgorithm, 'follow_default');
   delete globalThis.window;
+});
+
+test('preference persist failure keeps the explicit follow_default request identity', async () => {
+  const memory = new Map();
+  globalThis.window = {
+    localStorage: {
+      getItem: (key) => memory.get(key) ?? null,
+      setItem: (key, value) => memory.set(key, value),
+    },
+  };
+  const { persistAlgorithmChoice, viewPreferencesApi } = await import('../src/api/modules/viewPreferences.ts');
+  const originalWrite = viewPreferencesApi.write;
+  resetPreferenceWriteQueue();
+  const request = buildStrengthScanRequest({
+    ...DEFAULT_FILTERS,
+    rankingAlgorithm: 'follow_default',
+  });
+  assert.equal(request.apiParams.ranking_algorithm, 'follow_default');
+  assert.equal(request.refreshParameters.ranking_algorithm, 'follow_default');
+  try {
+    for (const code of [503, 401, 'timeout']) {
+      viewPreferencesApi.write = async () => {
+        const error = new Error(String(code));
+        error.code = code;
+        throw error;
+      };
+      const failed = await persistAlgorithmChoice(
+        { screenerRankingAlgorithm: 'follow_default' },
+        true,
+        'account:alice',
+      );
+      assert.equal(failed.screenerRankingAlgorithm, 'follow_default');
+      assert.equal(failed.persisted, false);
+      assert.equal(failed.syncError.code, code);
+    }
+  } finally {
+    viewPreferencesApi.write = originalWrite;
+    resetPreferenceWriteQueue();
+    delete globalThis.window;
+  }
 });
