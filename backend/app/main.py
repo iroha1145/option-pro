@@ -62,6 +62,7 @@ from app.api import (
     signals,
     stocks,
     strength,
+    view_preferences,
     worker_actions,
 )
 from app.services.request_security import (
@@ -751,6 +752,7 @@ app.include_router(access.router)
 # No owner dependency: every account route authenticates the caller from its
 # own cookie and can only reach that caller's rows.
 app.include_router(accounts.router)
+app.include_router(view_preferences.router)
 app.include_router(settings.router)
 
 # Docker-compose runs from /app/backend; local runs may be from repo root.

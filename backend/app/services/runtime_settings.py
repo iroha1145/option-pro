@@ -138,10 +138,18 @@ class RuntimeEarningsSettings(_StrictModel):
     lookahead_days: int = Field(default=5, ge=1, le=30)
 
 
+class RuntimeAlgorithmSettings(_StrictModel):
+    """Independent defaults for optional production ranking/sort algorithms."""
+
+    screener_ranking_algorithm: Literal["production", "a0_mid_long"] = "production"
+    radar_sort_algorithm: Literal["production", "t1_daily_priority"] = "production"
+
+
 class RuntimeSettings(_StrictModel):
     ai: RuntimeAISettings = Field(default_factory=RuntimeAISettings)
     catalyst: RuntimeCatalystSettings = Field(default_factory=RuntimeCatalystSettings)
     earnings: RuntimeEarningsSettings = Field(default_factory=RuntimeEarningsSettings)
+    algorithms: RuntimeAlgorithmSettings = Field(default_factory=RuntimeAlgorithmSettings)
 
 
 class RuntimeAISettingsPatch(_StrictModel):
@@ -196,10 +204,16 @@ class RuntimeEarningsSettingsPatch(_StrictModel):
     lookahead_days: Optional[int] = Field(default=None, ge=1, le=30)
 
 
+class RuntimeAlgorithmSettingsPatch(_StrictModel):
+    screener_ranking_algorithm: Optional[Literal["production", "a0_mid_long"]] = None
+    radar_sort_algorithm: Optional[Literal["production", "t1_daily_priority"]] = None
+
+
 class RuntimeSettingsPatch(_StrictModel):
     ai: Optional[RuntimeAISettingsPatch] = None
     catalyst: Optional[RuntimeCatalystSettingsPatch] = None
     earnings: Optional[RuntimeEarningsSettingsPatch] = None
+    algorithms: Optional[RuntimeAlgorithmSettingsPatch] = None
 
 
 class RuntimeSettingsDocument(_StrictModel):

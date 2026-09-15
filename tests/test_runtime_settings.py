@@ -17,6 +17,7 @@ from app.personal_config import load_personal_config
 from app.services import runtime_settings as runtime_settings_module
 from app.services.runtime_settings import (
     RuntimeAISettingsPatch,
+    RuntimeAlgorithmSettingsPatch,
     RuntimeCatalystSettingsPatch,
     RuntimeEarningsSettingsPatch,
     RuntimeSettingsPatch,
@@ -116,10 +117,51 @@ def test_defaults_follow_non_secret_personal_configuration(tmp_path: Path) -> No
     )
     assert document.settings.earnings.scheduled_analysis_enabled is False
     assert document.settings.earnings.lookahead_days == 5
+    assert document.settings.algorithms.screener_ranking_algorithm == "production"
+    assert document.settings.algorithms.radar_sort_algorithm == "production"
     catalyst_document = document.settings.catalyst.model_dump()
     assert "manual_force_reanalysis" not in catalyst_document
     assert "manual_refresh_enabled" not in catalyst_document
     assert not store.path.exists(), "读取默认值不应产生设置文件"
+
+
+def test_algorithm_defaults_can_change_independently_and_roll_back(
+    tmp_path: Path,
+) -> None:
+    store = make_store(tmp_path / "runtime-settings.json")
+    updated = store.update(
+        RuntimeSettingsPatch(
+            algorithms=RuntimeAlgorithmSettingsPatch(
+                screener_ranking_algorithm="a0_mid_long",
+            )
+        ),
+        expected_version=1,
+    )
+    assert updated.settings.algorithms.screener_ranking_algorithm == "a0_mid_long"
+    assert updated.settings.algorithms.radar_sort_algorithm == "production"
+
+    updated = store.update(
+        RuntimeSettingsPatch(
+            algorithms=RuntimeAlgorithmSettingsPatch(
+                radar_sort_algorithm="t1_daily_priority",
+            )
+        ),
+        expected_version=updated.version,
+    )
+    assert updated.settings.algorithms.screener_ranking_algorithm == "a0_mid_long"
+    assert updated.settings.algorithms.radar_sort_algorithm == "t1_daily_priority"
+
+    restored = store.update(
+        RuntimeSettingsPatch(
+            algorithms=RuntimeAlgorithmSettingsPatch(
+                screener_ranking_algorithm="production",
+                radar_sort_algorithm="production",
+            )
+        ),
+        expected_version=updated.version,
+    )
+    assert restored.settings.algorithms.screener_ranking_algorithm == "production"
+    assert restored.settings.algorithms.radar_sort_algorithm == "production"
 
 
 def test_default_store_uses_existing_data_dir_without_a_new_path_variable(
