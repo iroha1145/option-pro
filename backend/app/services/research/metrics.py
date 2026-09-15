@@ -374,6 +374,154 @@ def horizon_mean_ci(
     }
 
 
+def trading_days_in_range(start: str, end: str) -> list[str]:
+    """Inclusive NYSE sessions. Empty days stay in the calendar."""
+
+    from datetime import date, timedelta
+
+    from app.services.market_calendar import is_trading_day
+
+    cursor = date.fromisoformat(start)
+    last = date.fromisoformat(end)
+    days: list[str] = []
+    while cursor <= last:
+        if is_trading_day(cursor):
+            days.append(cursor.isoformat())
+        cursor += timedelta(days=1)
+    return days
+
+
+def event_equal_calendar_block_ci(
+    values: Sequence[tuple[str, float]],
+    *,
+    horizon_days: int = 20,
+    n_bootstrap: int = 2000,
+    seed: int = 7,
+    trading_days: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    """Event-equal mean with blocks on real trading days.
+
+    Days with no events contribute no events. They are not zero-return events.
+    Adjacent event dates are not treated as adjacent if empty sessions sit
+    between them.
+    """
+
+    clean = [
+        (str(session), float(value))
+        for session, value in values
+        if session and _finite(value) is not None
+    ]
+    n_events = len(clean)
+    event_mean = None if not clean else float(fmean(item[1] for item in clean))
+    if n_events < 2:
+        return {
+            "status": "unavailable",
+            "target": "event_equal",
+            "n_events": n_events,
+            "mean": event_mean,
+            "ci95": None,
+        }
+    sessions = [session for session, _value in clean]
+    calendar = list(trading_days) if trading_days is not None else trading_days_in_range(min(sessions), max(sessions))
+    by_date: dict[str, list[float]] = {}
+    for session, value in clean:
+        by_date.setdefault(session, []).append(value)
+    n = len(calendar)
+    if n < 2:
+        return {
+            "status": "unavailable",
+            "target": "event_equal",
+            "reason": "insufficient_trading_days",
+            "n_events": n_events,
+            "n_trading_days": n,
+            "mean": event_mean,
+            "ci95": None,
+        }
+    block = max(1, min(int(horizon_days), n))
+    rng = np.random.default_rng(seed)
+    n_blocks = int(math.ceil(n / block))
+    means = []
+    for _ in range(n_bootstrap):
+        sampled_days: list[str] = []
+        starts = rng.integers(0, n, size=n_blocks)
+        for start in starts:
+            stop = int(start) + block
+            if stop <= n:
+                sampled_days.extend(calendar[int(start) : stop])
+            else:
+                sampled_days.extend(calendar[int(start) :])
+                sampled_days.extend(calendar[: stop - n])
+        sample: list[float] = []
+        for day in sampled_days:
+            sample.extend(by_date.get(day, []))
+        if sample:
+            means.append(float(np.mean(sample)))
+    if len(means) < 20:
+        return {
+            "status": "unavailable",
+            "target": "event_equal",
+            "reason": "bootstrap_samples_too_sparse",
+            "n_events": n_events,
+            "n_trading_days": n,
+            "n_empty_trading_days": sum(1 for day in calendar if day not in by_date),
+            "mean": event_mean,
+            "ci95": None,
+        }
+    lo = float(np.quantile(means, 0.025))
+    hi = float(np.quantile(means, 0.975))
+    return {
+        "status": "active",
+        "target": "event_equal",
+        "method": "calendar_block_event_equal",
+        "n_events": n_events,
+        "n_trading_days": n,
+        "n_dates_with_events": len(by_date),
+        "n_empty_trading_days": sum(1 for day in calendar if day not in by_date),
+        "block_size": block,
+        "n_bootstrap": n_bootstrap,
+        "mean": event_mean,
+        "ci95": [lo, hi],
+        "note": (
+            "Each replicate resamples contiguous NYSE sessions, then recomputes "
+            "sum(returns)/n_events. Empty sessions add no zero-return events."
+        ),
+    }
+
+
+def summarize_return_targets(
+    values: Sequence[tuple[str, float]],
+    *,
+    horizon_days: int = 20,
+    trading_days: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    numbers = [float(value) for _session, value in values if _finite(value) is not None]
+    date_ci = horizon_mean_ci(values, horizon_days=horizon_days)
+    event_ci = event_equal_calendar_block_ci(
+        values,
+        horizon_days=horizon_days,
+        trading_days=trading_days,
+    )
+    return {
+        "n_events": len(numbers),
+        "n_dates_with_events": date_ci.get("n_dates"),
+        "event_equal": {
+            "mean": None if not numbers else float(fmean(numbers)),
+            "fail_rate": None if not numbers else sum(1 for value in numbers if value < 0) / len(numbers),
+            "ci": event_ci,
+        },
+        "date_equal": {
+            "mean": date_ci.get("mean"),
+            "n_dates": date_ci.get("n_dates"),
+            "ci": date_ci,
+        },
+        "empty_trading_days_are_not_zero_events": True,
+        "note": (
+            "event_equal.mean is not attached to date_equal.ci. "
+            "The two targets can differ in sign."
+        ),
+    }
+
+
 def date_clustered_mean(
     values: Sequence[tuple[str, float]],
     *,

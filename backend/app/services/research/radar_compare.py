@@ -9,7 +9,7 @@ from typing import Any, Mapping, Sequence
 from app.services.research.algorithm_protocol import MINIMUM_MEANINGFUL, PRIMARY_SCREENER_HORIZON
 from app.services.research.dataset import OfflineOHLCV
 from app.services.research.labels import attach_event_labels
-from app.services.research.metrics import horizon_mean_ci
+from app.services.research.metrics import summarize_return_targets
 from app.services.research.path_stats import (
     executable_open_return,
     mae_mfe_from_entry,
@@ -32,12 +32,22 @@ def _event_excess(event: Mapping[str, Any]) -> float | None:
 
 
 def _summarize_returns(values: Sequence[tuple[str, float]]) -> dict[str, Any]:
-    numbers = [value for _session, value in values]
+    targets = summarize_return_targets(values, horizon_days=PRIMARY_SCREENER_HORIZON)
+    event_mean = targets["event_equal"]["mean"]
     return {
-        "n": len(numbers),
-        "mean": None if not numbers else fmean(numbers),
-        "ci": horizon_mean_ci(values, horizon_days=PRIMARY_SCREENER_HORIZON),
-        "fail_rate": None if not numbers else sum(1 for value in numbers if value < 0) / len(numbers),
+        "n": targets["n_events"],
+        "mean": event_mean,
+        "mean_is": "event_equal",
+        "fail_rate": targets["event_equal"]["fail_rate"],
+        "event_equal": targets["event_equal"],
+        "date_equal": targets["date_equal"],
+        "ci": targets["event_equal"]["ci"],
+        "date_equal_ci": targets["date_equal"]["ci"],
+        "empty_trading_days_are_not_zero_events": True,
+        "note": (
+            "mean is event-equal. date_equal.ci must not be read as the "
+            "interval for this mean."
+        ),
     }
 
 
@@ -58,6 +68,7 @@ def evaluate_timing_variant(
     delays: list[float] = []
     maes: list[float] = []
     mfes: list[float] = []
+    mae_incomplete = 0
     confirmable = 0
     confirmed = 0
     unavailable = 0
@@ -134,10 +145,13 @@ def evaluate_timing_variant(
                 exec_ret.get("exit_date") or exec_ret["entry_date"],
                 entry_price=_finite(exec_ret.get("entry_open")),
             )
-            if path.get("mae") is not None:
-                maes.append(float(path["mae"]))
-            if path.get("mfe") is not None:
-                mfes.append(float(path["mfe"]))
+            if path.get("status") == "active":
+                if path.get("mae") is not None:
+                    maes.append(float(path["mae"]))
+                if path.get("mfe") is not None:
+                    mfes.append(float(path["mfe"]))
+            else:
+                mae_incomplete += 1
         if len(details_head) < 8:
             details_head.append(
                 {
@@ -161,11 +175,18 @@ def evaluate_timing_variant(
         "confirm_rate": None if not confirmable else confirmed / confirmable,
         "conditional_executable": _summarize_returns(confirmed_exec),
         "conditional_executable_excess_vs_universe": _summarize_returns(confirmed_excess),
+        "selection_contribution_on_original_opportunity_set": _summarize_returns(overall_skip_zero),
+        "selection_contribution_on_original_opportunity_set_excess_vs_universe": _summarize_returns(
+            overall_skip_zero_excess
+        ),
         "overall_skip_as_zero": _summarize_returns(overall_skip_zero),
         "overall_skip_as_zero_excess_vs_universe": _summarize_returns(overall_skip_zero_excess),
         "mean_trigger_to_entry_change": None if not delays else fmean(delays),
+        "trigger_to_entry_change_is": "trigger_close_to_entry_open",
         "mae_mean": None if not maes else fmean(maes),
         "mfe_mean": None if not mfes else fmean(mfes),
+        "mae_complete_n": len(maes),
+        "mae_incomplete_n": mae_incomplete,
         "missed_upside_n": len(missed_upside),
         "missed_upside_mean": None if not missed_upside else fmean(missed_upside),
         "missed_upside_excess_n": len(missed_upside_excess),
@@ -174,10 +195,38 @@ def evaluate_timing_variant(
         "minimum_meaningful": MINIMUM_MEANINGFUL,
         "notes": [
             "Conditional stats use confirmed names only.",
-            "Overall skip-as-zero keeps the original opportunity set; rejects contribute 0, not dropped.",
+            "selection_contribution_on_original_opportunity_set keeps the original opportunity set; rejects contribute 0. It is not a cash-versus-fully-invested book and does not model a limited daily attention slot.",
+            "overall_skip_as_zero is a compatibility alias for that selection contribution.",
             "Executable excess uses the same entry/exit opens as the fill, minus the same-window universe open-to-open mean.",
             "Close/close raw excess is not reused as the executable return.",
+            "Incomplete MAE paths are excluded from mae_mean.",
         ],
+    }
+
+
+def _paired_vs_raw(events: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    diffs: list[tuple[str, float]] = []
+    for event in events:
+        session = str(event.get("trading_date") or "")
+        t1 = event.get("t1") or {}
+        raw = _finite(event.get("executable_t1_excess_vs_universe"))
+        if raw is None or t1.get("status") != "active":
+            continue
+        selected = raw if t1.get("confirmed") else 0.0
+        diffs.append((session, selected - raw))
+    if not diffs:
+        return {
+            "status": "unavailable",
+            "reason": "executable_t1_excess_not_attached",
+        }
+    return {
+        "status": "active",
+        "target": "t1_selection_contribution_minus_raw",
+        "series": summarize_return_targets(diffs, horizon_days=PRIMARY_SCREENER_HORIZON),
+        "note": (
+            "Matched on the same opportunity. A positive T1 conditional mean "
+            "does not replace this comparison."
+        ),
     }
 
 
@@ -222,7 +271,9 @@ def compare_radar_candidates(
                     )
                 universe_mean = universe_cache[cache_key]
                 if universe_mean is not None:
-                    raw_exec_excess.append((session, value - universe_mean))
+                    excess = value - universe_mean
+                    raw_exec_excess.append((session, excess))
+                    event["executable_t1_excess_vs_universe"] = excess
     return {
         "raw_close_label": _summarize_returns(raw_close),
         "raw_executable_t1_open": _summarize_returns(raw_exec),
@@ -234,6 +285,7 @@ def compare_radar_candidates(
             entry_lag=1,
             universe_tickers=symbols,
         ),
+        "paired_vs_raw": _paired_vs_raw(labeled),
         "t2": evaluate_timing_variant(
             dataset,
             labeled,
@@ -245,6 +297,7 @@ def compare_radar_candidates(
         "notes": [
             "T1 and T2 are applied independently to the same raw TRIGGERED set.",
             "T1 information is T close; T2 information is T+1 close.",
+            "Paired diffs vs raw use the same opportunity identities; a positive conditional mean is not a test vs raw.",
         ],
         "events": labeled,
     }
