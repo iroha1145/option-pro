@@ -1,8 +1,8 @@
 # 当前状态
 
-2026-09-15 Round 6（基线 `df1bd5d`，PR #165，产品提交 `e3001fb0` / `index-G7k80sIV.js`）：可见分页、按语言词典、财报按需图表。方法与本轮数字见 [13-round6-visible-i18n-earnings.md](13-round6-visible-i18n-earnings.md)。过期同 cursor 缓存刷新 TTL 时必须作废 `anon_items`。**不要**把下面历史 1651/832 或更早 feed 毫秒数写成 Round 6 结果，也不要把 `index-uc86EHir.js` 的 9436/2532 写成最终提交数字。
+2026-09-15 Round 6（基线 `df1bd5d`，PR #165，产品提交 `f2c05331` / `index-DDX2TFDT.js`）：可见分页、按语言词典、财报按需图表。方法与本轮数字见 [13-round6-visible-i18n-earnings.md](13-round6-visible-i18n-earnings.md)。过期同 cursor 缓存刷新 TTL 时必须作废 `anon_items`。**不要**把下面历史 1651/832 或更早 feed 毫秒数写成 Round 6 结果，也不要把 `index-uc86EHir.js` 的 9436/2532 或本地增量包 `index-G7k80sIV.js` 的 3641/3592 写成最终提交数字。
 
-Round 6 V2 进程内 n=10000 访客 visible 热 p50 **203ms**（指纹 1）vs legacy 5 hop **795ms**（指纹 5）。Owner visible 热 p50 **5564ms**。surfaces n=8（`e3001fb0`）门禁通过：首页 p75 **3641** / 财报 **3592**，意图预取保留（悬停后再点快 210ms / 16%），关闭面板 0 额外 chunk，屏外图表 0→8 且 DOM 保持 8/8。静态 JS gzip9：公共壳 **224441**，首页 **254057**，财报 **254238**，新闻 **304926**。n=20 交错正在最终包上重测。
+Round 6 V2 进程内 n=10000 访客 visible 热 p50 **203ms**（指纹 1）vs legacy 5 hop **795ms**（指纹 5）。Owner visible 热 p50 **5564ms**。surfaces n=8（`f2c05331`）门禁通过：首页 p75 **2641** / 财报 **2487**，意图预取保留（悬停后再点快 205ms / 28%），关闭面板 0 额外 chunk，屏外图表 0→8 且 DOM 保持 8/8。静态 JS gzip9：公共壳 **188063**，首页 **216758**，财报 **217875**，新闻 **268519**。n=20 交错（`f2c05331` / `index-DDX2TFDT.js`）`comparison_status=complete`：优化冷/热 p75 **7717 / 1596**，未优化 **112241 / 733**。冷路径优化更快（hops 2 vs 21）；热路径未优化更快，不写成热收益。
 
 2026-09-14 第二轮审查修复：抽屉关闭保留内容、AI 能力 pending 语义、自动重试封顶、预取 URL 按筛选、今日计数随 feed 落地、服务端 Retry-After 不被刷新跳过，见 [12-review-fixes.md](12-review-fixes.md)。本轮没有重新测量速度。
 

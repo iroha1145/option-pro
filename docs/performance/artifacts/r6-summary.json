@@ -1,9 +1,51 @@
 {
-  "writtenAt": "2026-09-15T03:30:33.540Z",
-  "product_commit": "e3001fb0cc09d3108e66909fbccdd19e8a9585c4",
-  "entry": "frontend/assets/index-G7k80sIV.js",
-  "interleaved": null,
-  "interleaved_note": "v2 n=20 remasurement in progress on e3001fb0 / index-G7k80sIV.js; historical index-uc86EHir.js numbers stay in r6-interleaved-n20.json",
+  "writtenAt": "2026-09-15T04:51:34.546Z",
+  "product_commit": "f2c05331fedaf08b67546293880d458036fea5ce",
+  "entry": "frontend/assets/index-DDX2TFDT.js",
+  "interleaved": {
+    "pairs": 20,
+    "comparison_status": "complete",
+    "measuredAt": "2026-09-15T04:48:19.783Z",
+    "product_commit": "f2c05331fedaf08b67546293880d458036fea5ce",
+    "entry": "frontend/assets/index-DDX2TFDT.js",
+    "opt_cold": {
+      "n": 20,
+      "ready_n": 20,
+      "timeout_n": 0,
+      "p50": 7562.699999999255,
+      "p75": 7716.699999999255
+    },
+    "opt_warm": {
+      "n": 20,
+      "ready_n": 20,
+      "timeout_n": 0,
+      "p50": 1492.699999999255,
+      "p75": 1596.300000000745
+    },
+    "unopt_cold": {
+      "n": 20,
+      "ready_n": 20,
+      "timeout_n": 0,
+      "p50": 111317.69999999925,
+      "p75": 112240.70000000298
+    },
+    "unopt_warm": {
+      "n": 20,
+      "ready_n": 20,
+      "timeout_n": 0,
+      "p50": 714.2999999970198,
+      "p75": 733.1999999992549
+    },
+    "titles": {
+      "opt": [
+        "芯片企业发布最新进展"
+      ],
+      "unopt": [
+        "芯片企业发布最新进展"
+      ]
+    }
+  },
+  "interleaved_note": null,
   "i18n": {
     "zh_no_runtime": true,
     "en_only_en": true,
@@ -16,23 +58,23 @@
     "gate_ok": true
   },
   "surfaces": {
-    "home_p75": 3641.400000002235,
-    "earnings_p75": 3592.400000002235,
+    "home_p75": 2641.39999999851,
+    "earnings_p75": 2486.89999999851,
     "gate_ok": true,
     "first_nav": {
-      "home_card": 1532,
-      "desktop_nav": 1346
+      "home_card": 751,
+      "desktop_nav": 754
     },
     "intent": {
-      "immediate": 1337,
-      "hover_then_click": 1127,
+      "immediate": 743,
+      "hover_then_click": 538,
       "hover_only_chunk": 8,
       "extra_paid_n": 0,
       "decision": {
         "decision": "keep",
         "reason": "hover_then_click_faster",
-        "faster_ms": 210,
-        "faster_ratio": 0.15706806282722513,
+        "faster_ms": 205,
+        "faster_ratio": 0.2759084791386272,
         "chunk_n": 8
       }
     },
@@ -48,24 +90,24 @@
   },
   "first_js_gzip9": {
     "shared": {
-      "script_n": 29,
-      "gzip9": 224441,
-      "raw": 646317
+      "script_n": 30,
+      "gzip9": 188063,
+      "raw": 555497
     },
     "home": {
-      "route_only_gzip9": 29616,
-      "with_shared_gzip9": 254057,
-      "script_n": 44
+      "route_only_gzip9": 28695,
+      "with_shared_gzip9": 216758,
+      "script_n": 45
     },
     "earnings": {
-      "route_only_gzip9": 29797,
-      "with_shared_gzip9": 254238,
-      "script_n": 39
+      "route_only_gzip9": 29812,
+      "with_shared_gzip9": 217875,
+      "script_n": 40
     },
     "catalysts": {
-      "route_only_gzip9": 80485,
-      "with_shared_gzip9": 304926,
-      "script_n": 41
+      "route_only_gzip9": 80456,
+      "with_shared_gzip9": 268519,
+      "script_n": 42
     },
     "note": "gzip -9 of statically imported JS only. Excludes CSS, JSON, fonts, data, and later intent prefetch."
   },
