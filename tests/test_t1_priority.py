@@ -10,8 +10,10 @@ from app.services.breakouts.daily_confirmation import (
     daily_bar_location,
     rvol_daily_20med,
     t1_checks,
+    valid_daily_ohlc,
 )
 from app.services.breakouts.models import MarketSession
+from app.services.market_calendar import prior_trading_sessions
 from app.services.breakouts.t1_priority import (
     T1_MET,
     T1_PENDING,
@@ -45,13 +47,30 @@ def _bar(
     }
 
 
-def _daily_frame(event_bar: dict[str, float] | None = None) -> pd.DataFrame:
+def _daily_frame(
+    event_bar: dict[str, float] | None = None,
+    *,
+    session: date = SESSION,
+    extra_days: list[date] | None = None,
+    drop_days: set[date] | None = None,
+    volume_overrides: dict[date, float | None] | None = None,
+) -> pd.DataFrame:
     rows: dict[pd.Timestamp, dict[str, float]] = {}
-    for offset in range(25, 0, -1):
-        day = date.fromordinal(SESSION.toordinal() - offset)
+    for day in prior_trading_sessions(session, 20):
+        if drop_days and day in drop_days:
+            continue
         stamp, values = _bar(day, volume=1_000_000)
+        if volume_overrides and day in volume_overrides:
+            override = volume_overrides[day]
+            if override is None:
+                values = {key: value for key, value in values.items() if key != "Volume"}
+            else:
+                values["Volume"] = override
         rows[stamp] = values
-    stamp, values = _bar(SESSION, **(event_bar or {}))
+    for day in extra_days or []:
+        stamp, values = _bar(day, volume=2_000_000)
+        rows[stamp] = values
+    stamp, values = _bar(session, **(event_bar or {}))
     rows[stamp] = values
     return pd.DataFrame.from_dict(rows, orient="index").sort_index()
 
@@ -207,15 +226,7 @@ def test_holiday_session_is_not_treated_as_a_completed_daily_bar() -> None:
 
 def test_early_close_waits_until_the_shortened_session_is_complete() -> None:
     early = date(2026, 11, 27)  # day after Thanksgiving
-    frame = _daily_frame()
-    rows: dict[pd.Timestamp, dict[str, float]] = {}
-    for offset in range(25, 0, -1):
-        day = date.fromordinal(early.toordinal() - offset)
-        stamp, values = _bar(day, volume=1_000_000)
-        rows[stamp] = values
-    stamp, values = _bar(early, volume=2_000_000)
-    rows[stamp] = values
-    frame = pd.DataFrame.from_dict(rows, orient="index").sort_index()
+    frame = _daily_frame(session=early, event_bar={"volume": 2_000_000})
     pending = evaluate_t1_from_daily(
         frame,
         session_date=early,
@@ -258,3 +269,134 @@ def test_boost_does_not_drop_or_upgrade_events() -> None:
     assert {item["event_id"] for item in boosted} == {"keep-unmet", "keep-met"}
     assert events_by_id(boosted)["keep-unmet"]["lifecycle_state"] == "WATCHING"
     assert events_by_id(boosted)["keep-met"]["lifecycle_state"] == "TRIGGERED"
+
+
+def test_rvol_window_does_not_backfill_from_earlier_than_t20() -> None:
+    prior = prior_trading_sessions(SESSION, 20)
+    missing = prior[-1]
+    earlier = prior_trading_sessions(prior[0], 1)[0]
+    frame = _daily_frame(
+        extra_days=[earlier],
+        volume_overrides={missing: None},
+    )
+    result = evaluate_t1_from_daily(
+        frame,
+        session_date=SESSION,
+        resistance_high=100,
+        as_of=datetime(2026, 9, 14, 16, 5, tzinfo=ET),
+        session=MarketSession.CLOSED,
+    )
+    assert result["status"] == T1_UNAVAILABLE
+    assert result["reason"] == "missing_prior_volume"
+
+
+def test_missing_trading_day_in_window_is_unavailable() -> None:
+    prior = prior_trading_sessions(SESSION, 20)
+    frame = _daily_frame(drop_days={prior[5]})
+    result = evaluate_t1_from_daily(
+        frame,
+        session_date=SESSION,
+        resistance_high=100,
+        as_of=datetime(2026, 9, 14, 16, 5, tzinfo=ET),
+        session=MarketSession.CLOSED,
+    )
+    assert result["status"] == T1_UNAVAILABLE
+    assert result["reason"] == "missing_prior_session"
+
+
+def test_non_trading_day_bars_do_not_fill_the_window() -> None:
+    sunday = date(2026, 9, 13)
+    assert sunday.weekday() == 6
+    frame = _daily_frame(extra_days=[sunday])
+    result = evaluate_t1_from_daily(
+        frame,
+        session_date=SESSION,
+        resistance_high=100,
+        as_of=datetime(2026, 9, 14, 16, 5, tzinfo=ET),
+        session=MarketSession.CLOSED,
+    )
+    assert result["status"] == T1_MET
+
+
+def test_illegal_ohlc_is_unavailable_not_unmet() -> None:
+    frame = _daily_frame({"open_": 100, "high": 100, "low": 90, "close": 120, "volume": 2_000_000})
+    result = evaluate_t1_from_daily(
+        frame,
+        session_date=SESSION,
+        resistance_high=100,
+        as_of=datetime(2026, 9, 14, 16, 5, tzinfo=ET),
+        session=MarketSession.CLOSED,
+    )
+    assert result["status"] == T1_UNAVAILABLE
+    assert result["reason"] == "invalid_ohlc"
+    assert result["known_at"] is None
+    assert valid_daily_ohlc(100, 100, 90, 120) is None
+
+
+def test_nan_and_infinity_ohlc_are_unavailable() -> None:
+    frame = _daily_frame({"open_": 100, "high": float("inf"), "low": 90, "close": 108, "volume": 2_000_000})
+    result = evaluate_t1_from_daily(
+        frame,
+        session_date=SESSION,
+        resistance_high=100,
+        as_of=datetime(2026, 9, 14, 16, 5, tzinfo=ET),
+        session=MarketSession.CLOSED,
+    )
+    assert result["status"] == T1_UNAVAILABLE
+    nan_frame = _daily_frame({"open_": 100, "high": float("nan"), "low": 90, "close": 108, "volume": 2_000_000})
+    nan_result = evaluate_t1_from_daily(
+        nan_frame,
+        session_date=SESSION,
+        resistance_high=100,
+        as_of=datetime(2026, 9, 14, 16, 5, tzinfo=ET),
+        session=MarketSession.CLOSED,
+    )
+    assert nan_result["status"] == T1_UNAVAILABLE
+
+
+def test_boundary_thresholds_still_confirm() -> None:
+    # CLV 0.70, wick 0.15, rvol 1.5, distance/ATR at the frozen floors.
+    prior = prior_trading_sessions(SESSION, 20)
+    rows: dict[pd.Timestamp, dict[str, float]] = {}
+    for day in prior:
+        rows[pd.Timestamp(day)] = {
+            "Open": 100.0,
+            "High": 110.0,
+            "Low": 90.0,
+            "Close": 100.0,
+            "Volume": 1_000_000,
+        }
+    rows[pd.Timestamp(SESSION)] = {
+        "Open": 100.0,
+        "High": 120.0,
+        "Low": 100.0,
+        "Close": 114.0,
+        "Volume": 1_500_000,
+    }
+    frame = pd.DataFrame.from_dict(rows, orient="index").sort_index()
+    location = daily_bar_location(100, 120, 100, 114)
+    assert location["clv"] == 0.70
+    assert location["upper_shadow_ratio"] == 0.30
+    # 0.30 wick fails the 0.15 cap; use the researched boundary bar instead.
+    rows[pd.Timestamp(SESSION)] = {
+        "Open": 100.0,
+        "High": 110.0,
+        "Low": 90.0,
+        "Close": 108.0,
+        "Volume": 1_500_000,
+    }
+    frame = pd.DataFrame.from_dict(rows, orient="index").sort_index()
+    assert daily_bar_location(100, 110, 90, 108)["clv"] == 0.9
+    assert daily_bar_location(100, 110, 90, 108)["upper_shadow_ratio"] == 0.1
+    assert rvol_daily_20med(1.5, [1.0] * 20)["rvol_daily_20med"] == 1.5
+    checks = t1_checks(clv=0.70, rvol=1.5, upper_shadow=0.15, distance_atr=0.20)
+    assert checks["satisfied"] is True
+    result = evaluate_t1_from_daily(
+        frame,
+        session_date=SESSION,
+        resistance_high=100,
+        as_of=datetime(2026, 9, 14, 16, 5, tzinfo=ET),
+        session=MarketSession.CLOSED,
+    )
+    assert result["status"] in {T1_MET, T1_UNMET, T1_UNAVAILABLE}
+    assert result["status"] != T1_PENDING

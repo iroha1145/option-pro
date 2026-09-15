@@ -50,20 +50,44 @@ def _finite(value: Any) -> float | None:
     return number
 
 
-def daily_bar_location(open_: Any, high: Any, low: Any, close: Any) -> dict[str, Any]:
+def valid_session_volume(value: Any) -> float | None:
+    number = _finite(value)
+    if number is None or number < 0:
+        return None
+    return number
+
+
+def valid_daily_ohlc(open_: Any, high: Any, low: Any, close: Any) -> dict[str, float] | None:
+    """Positive finite prices with a real range and uncrossed high/low."""
+
     open_v, high_v, low_v, close_v = map(_finite, (open_, high, low, close))
-    if None in (open_v, high_v, low_v, close_v) or high_v <= low_v:
+    if None in (open_v, high_v, low_v, close_v):
+        return None
+    if min(open_v, high_v, low_v, close_v) <= 0:
+        return None
+    if high_v < max(open_v, close_v) or low_v > min(open_v, close_v) or high_v <= low_v:
+        return None
+    return {"open": open_v, "high": high_v, "low": low_v, "close": close_v}
+
+
+def daily_bar_location(open_: Any, high: Any, low: Any, close: Any) -> dict[str, Any]:
+    ohlc = valid_daily_ohlc(open_, high, low, close)
+    if ohlc is None:
+        open_v, high_v, low_v, close_v = map(_finite, (open_, high, low, close))
         return {
             "clv": None,
             "upper_shadow_ratio": None,
             "zero_range": True,
+            "invalid_ohlc": True,
             "range": None if None in (high_v, low_v) else high_v - low_v,
         }
+    open_v, high_v, low_v, close_v = ohlc["open"], ohlc["high"], ohlc["low"], ohlc["close"]
     span = high_v - low_v
     return {
         "clv": (close_v - low_v) / span,
         "upper_shadow_ratio": (high_v - max(open_v, close_v)) / span,
         "zero_range": False,
+        "invalid_ohlc": False,
         "range": span,
     }
 
@@ -76,11 +100,13 @@ def rvol_daily_20med(
 ) -> dict[str, Any]:
     """V(T) / median of the previous ``lookback`` completed session volumes."""
 
-    current = _finite(volume_t)
+    current = valid_session_volume(volume_t)
     history: list[float] = []
+    missing = False
     for value in prior_volumes:
-        number = _finite(value)
+        number = valid_session_volume(value)
         if number is None:
+            missing = True
             continue
         history.append(number)
     if current is None:
@@ -91,10 +117,18 @@ def rvol_daily_20med(
             "lookback_used": len(history),
             "denominator": None,
         }
-    if len(history) < lookback:
+    if missing or len(prior_volumes) < lookback or len(history) < lookback:
         return {
             "status": "unavailable",
             "reason": "insufficient_prior_volume",
+            "rvol_daily_20med": None,
+            "lookback_used": len(history),
+            "denominator": None,
+        }
+    if len(prior_volumes) != lookback:
+        return {
+            "status": "unavailable",
+            "reason": "prior_volume_window_mismatch",
             "rvol_daily_20med": None,
             "lookback_used": len(history),
             "denominator": None,

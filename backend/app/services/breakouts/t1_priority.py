@@ -18,6 +18,8 @@ from app.services.breakouts.daily_confirmation import (
     daily_bar_location,
     rvol_daily_20med,
     t1_checks,
+    valid_daily_ohlc,
+    valid_session_volume,
 )
 from app.services.breakouts.feature_engine import (
     completed_daily_session,
@@ -25,7 +27,7 @@ from app.services.breakouts.feature_engine import (
     trim_daily_bars,
 )
 from app.services.breakouts.models import MarketSession, TemporalCutoff
-from app.services.market_calendar import ET, is_trading_day
+from app.services.market_calendar import ET, is_trading_day, prior_trading_sessions
 
 
 T1_MET = "met"
@@ -151,15 +153,39 @@ def evaluate_t1_from_daily(
         return {**base, "reason": "daily_unavailable"}
 
     cutoff = TemporalCutoff(event_at=as_of, session=_market_session(session))
+    raw_session_rows = [
+        (idx, daily.loc[idx])
+        for idx in daily.index
+        if _bar_date(idx) == session_date
+    ]
+    if raw_session_rows:
+        raw_ohlc = _ohlc(raw_session_rows[-1][1])
+        if valid_daily_ohlc(raw_ohlc["open"], raw_ohlc["high"], raw_ohlc["low"], raw_ohlc["close"]) is None:
+            return {
+                **base,
+                "session_complete": True,
+                "reason": "invalid_ohlc",
+            }
     completed = trim_daily_bars(daily, cutoff)
     if completed.empty:
         return {**base, "reason": "no_completed_daily_bars"}
 
-    session_rows = [
-        (idx, completed.loc[idx])
-        for idx in completed.index
-        if _bar_date(idx) == session_date
-    ]
+    lookback = int(cfg["rvol_lookback"])
+    try:
+        prior_sessions = prior_trading_sessions(session_date, lookback)
+    except (RuntimeError, ValueError):
+        return {**base, "session_complete": True, "reason": "trading_calendar_unavailable"}
+
+    bars_by_date: dict[date, list[tuple[Any, Any]]] = {}
+    for idx in completed.index:
+        day = _bar_date(idx)
+        if day is None:
+            return {**base, "session_complete": True, "reason": "unordered_daily_bars"}
+        bars_by_date.setdefault(day, []).append((idx, completed.loc[idx]))
+    if any(len(rows) > 1 for rows in bars_by_date.values()):
+        return {**base, "session_complete": True, "reason": "duplicate_session_bar"}
+
+    session_rows = bars_by_date.get(session_date) or []
     if not session_rows:
         return {
             **base,
@@ -167,7 +193,8 @@ def evaluate_t1_from_daily(
             "reason": "missing_event_bar",
         }
     bar_index, bar = session_rows[-1]
-    if _bar_date(completed.index.max()) != session_date:
+    latest_completed = _bar_date(completed.index.max())
+    if latest_completed != session_date:
         return {
             **base,
             "session_complete": True,
@@ -175,18 +202,47 @@ def evaluate_t1_from_daily(
         }
 
     ohlc = _ohlc(bar)
+    if valid_daily_ohlc(ohlc["open"], ohlc["high"], ohlc["low"], ohlc["close"]) is None:
+        return {
+            **base,
+            "session_complete": True,
+            "reason": "invalid_ohlc",
+        }
     location = daily_bar_location(ohlc["open"], ohlc["high"], ohlc["low"], ohlc["close"])
-    prior_volume_rows = [
-        completed.loc[idx]
-        for idx in completed.index
-        if _bar_date(idx) is not None and _bar_date(idx) < session_date
-    ]
+    prior_volumes: list[Any] = []
+    for day in prior_sessions:
+        rows = bars_by_date.get(day)
+        if not rows:
+            return {
+                **base,
+                "session_complete": True,
+                "reason": "missing_prior_session",
+            }
+        prior_ohlc = _ohlc(rows[-1][1])
+        if valid_daily_ohlc(
+            prior_ohlc["open"], prior_ohlc["high"], prior_ohlc["low"], prior_ohlc["close"]
+        ) is None:
+            return {
+                **base,
+                "session_complete": True,
+                "reason": "invalid_prior_ohlc",
+            }
+        if valid_session_volume(prior_ohlc["volume"]) is None:
+            return {
+                **base,
+                "session_complete": True,
+                "reason": "missing_prior_volume",
+            }
+        prior_volumes.append(prior_ohlc["volume"])
     rvol = rvol_daily_20med(
         ohlc["volume"],
-        [_ohlc(row)["volume"] for row in prior_volume_rows],
-        lookback=int(cfg["rvol_lookback"]),
+        prior_volumes,
+        lookback=lookback,
     )
-    atr = compute_atr(completed, period=int(cfg["atr_period"]))
+    window_dates = set(prior_sessions) | {session_date}
+    window_indexes = [idx for idx in completed.index if _bar_date(idx) in window_dates]
+    window_frame = completed.loc[window_indexes]
+    atr = compute_atr(window_frame, period=int(cfg["atr_period"]))
     close_v = _finite(ohlc["close"])
     resistance = _finite(resistance_high)
     distance = (
@@ -204,7 +260,9 @@ def evaluate_t1_from_daily(
     if not checks["available"]:
         status = T1_UNAVAILABLE
         reason = rvol.get("reason") or (
-            "zero_range" if location.get("zero_range") else "t1_inputs_unavailable"
+            "invalid_ohlc" if location.get("invalid_ohlc")
+            else "zero_range" if location.get("zero_range")
+            else "t1_inputs_unavailable"
         )
     elif checks["satisfied"]:
         status = T1_MET
