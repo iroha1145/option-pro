@@ -406,7 +406,7 @@ export default function Screener() {
               error.bizCode === 'strength_publication_unverified'
               || error.bizCode === 'strength_snapshot_unavailable'
             );
-            if (isStrengthSnapshotPreparing(error) && !completedAction) {
+            if (isStrengthSnapshotPreparing(error instanceof ApiError ? error : null) && !completedAction) {
               return waitForPreparedSnapshot();
             }
             if (!completedAction || !notPublished) throw error;
@@ -441,7 +441,7 @@ export default function Screener() {
             error.bizCode === 'strength_snapshot_unavailable'
             || error.bizCode === 'strength_snapshot_preparing'
           );
-        if (isStrengthSnapshotPreparing(error) && !isOwner) {
+        if (isStrengthSnapshotPreparing(error instanceof ApiError ? error : null) && !isOwner) {
           result = await waitForPreparedSnapshot();
         } else {
           const decision = shouldSubmitStrengthRefresh({
