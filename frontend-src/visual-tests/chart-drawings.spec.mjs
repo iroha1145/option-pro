@@ -540,8 +540,10 @@ test("refresh persistence keeps the account drawing", async ({ page }) => {
   await expectDrawingCount(page, 1);
   await page.reload({ waitUntil: "domcontentloaded" });
   await waitDrawingToolbar(page);
-  await expect(page.getByRole("img", { name: /K 线图$|面积图$/ })).toBeVisible({ timeout: 15_000 });
-  // 刷新后对象要真的回来——chartFilled 只要有蜡烛就绿，全丢也照样过。
+  // 工具栏就绪不等于 chart GET 已成功。套件后段 429 时，15s 的 img 断言会误杀。
+  // chartFilled 按 Retry-After 点「重试」，90s 内等到画布；对象是否还在另断言。
+  await chartFilled(page);
+  await expect(page.getByRole("img", { name: /K 线图$|面积图$/ })).toBeVisible();
   await expectDrawingCount(page, 1);
 });
 
