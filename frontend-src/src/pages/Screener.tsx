@@ -87,6 +87,7 @@ import {
 } from '@/components/screener/types';
 import { localeTag, t as __t } from '../i18n/core.ts';
 import {
+  algorithmPreferencePendingSync,
   readAlgorithmPreferences,
   writeAlgorithmPreferences,
 } from '@/lib/algorithmPreferences';
@@ -236,6 +237,7 @@ export default function Screener() {
         startedGeneration: started,
         currentGeneration: choiceGeneration.current,
         cancelled,
+        pendingLocalSync: algorithmPreferencePendingSync(principal),
       })) return;
       writeAlgorithmPreferences({
         screenerRankingAlgorithm: remote.screenerRankingAlgorithm,
@@ -303,23 +305,26 @@ export default function Screener() {
     // 仅演示数据保留可见扫描过程；真实接口完成后立即呈现结果。
     const minMs = isMock ? 800 + Math.random() * 700 : 0;
     try {
-      try {
-        const persisted = await persistAlgorithmChoice(
+      const startedChoice = choiceGeneration.current;
+      void Promise.resolve()
+        .then(() => persistAlgorithmChoice(
           { screenerRankingAlgorithm: filters.rankingAlgorithm },
           isSignedIn,
           principal,
-        );
-        if (persisted?.syncError) {
+        ))
+        .then((persisted) => {
+          if (startedChoice !== choiceGeneration.current) return;
+          if (persisted?.syncError) {
+            toast.info?.(__t('选择已生效，但尚未同步到账号'));
+          }
+        }, () => {
+          if (startedChoice !== choiceGeneration.current) return;
           toast.info?.(__t('选择已生效，但尚未同步到账号'));
-        }
-      } catch {
-        toast.info?.(__t('选择已生效，但尚未同步到账号'));
-      }
+        });
       requireCurrent();
       const { apiParams: params, refreshParameters: requested } = buildStrengthScanRequest(filters);
 
       const scanPath = strengthScanPath(params);
-      resetMarketReadPaths([scanPath]);
       let completedAction: WorkerAction | null = null;
       const refreshSnapshot = async () => {
         requireCurrent();
@@ -430,9 +435,10 @@ export default function Screener() {
         await refreshSnapshot();
         submittedRefresh = true;
       }
+      const forceRead = submittedRefresh || Boolean(options.forceRefresh);
       let result: StrengthScanEnvelope;
       try {
-        result = await readSnapshot(true);
+        result = await readSnapshot(forceRead);
       } catch (error) {
         const snapshotMissing =
           error instanceof ApiError

@@ -51,7 +51,7 @@ function readStorage(key: string): Record<string, unknown> | null {
   }
 }
 
-function writeStorage(key: string, value: AlgorithmPreferences): void {
+function writeStorage(key: string, value: AlgorithmPreferences | Record<string, unknown>): void {
   if (typeof window === 'undefined') return;
   try {
     window.localStorage.setItem(key, JSON.stringify(value));
@@ -76,8 +76,26 @@ export function writeAlgorithmPreferences(
   principal?: string | null,
 ): AlgorithmPreferences {
   const merged = { ...readAlgorithmPreferences(principal), ...next };
-  writeStorage(preferenceStorageKey(principal), merged);
+  const current = readStorage(preferenceStorageKey(principal)) ?? {};
+  writeStorage(preferenceStorageKey(principal), {
+    ...current,
+    ...merged,
+  } as AlgorithmPreferences & Record<string, unknown>);
   return merged;
+}
+
+export function markAlgorithmPreferencePendingSync(
+  principal: string | null | undefined,
+  pending: boolean,
+): void {
+  const key = preferenceStorageKey(principal);
+  const current = readStorage(key) ?? readAlgorithmPreferences(principal);
+  writeStorage(key, { ...current, pendingSync: pending } as AlgorithmPreferences & { pendingSync?: boolean });
+}
+
+export function algorithmPreferencePendingSync(principal?: string | null): boolean {
+  const parsed = readStorage(preferenceStorageKey(principal));
+  return parsed?.pendingSync === true;
 }
 
 export function requestedScreenerAlgorithm(

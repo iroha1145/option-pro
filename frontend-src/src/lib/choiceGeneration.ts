@@ -12,7 +12,9 @@ export function shouldApplyRemoteAlgorithmPreference(input: {
   startedGeneration: number;
   currentGeneration: number;
   cancelled: boolean;
+  pendingLocalSync?: boolean;
 }): boolean {
+  if (input.pendingLocalSync) return false;
   return !input.cancelled && input.startedGeneration === input.currentGeneration;
 }
 

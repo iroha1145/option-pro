@@ -58,6 +58,7 @@ function harness() {
       return persistQueue.shift().promise;
     },
     invalidateQueryPaths: () => {},
+    bumpAlgorithmViewGeneration: () => {},
     toast: { info(title) { state.toasts.push(title); } },
     __t: (text) => text,
     isSignedIn: true,

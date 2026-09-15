@@ -365,7 +365,7 @@ export const breakoutsApi = {
           cursor: filters.cursor,
           sort_algorithm: filters.sort_algorithm,
         });
-        return get(`/breakouts/events${qs ? `?${qs}` : ''}`).then((d) => {
+        return registryGet(`/breakouts/events${qs ? `?${qs}` : ''}`).then((d) => {
           const events = unwrap(d, 'events', 'items').map(normalizeBreakoutEvent);
           const nextCursor = pickS(asRec(d), 'next_cursor', 'nextCursor');
           return {

@@ -41,6 +41,12 @@ test('late remote preference reads do not apply after the user changes', () => {
     currentGeneration: 2,
     cancelled: false,
   }), true);
+  assert.equal(shouldApplyRemoteAlgorithmPreference({
+    startedGeneration: 2,
+    currentGeneration: 2,
+    cancelled: false,
+    pendingLocalSync: true,
+  }), false);
 });
 
 test('stale history pages do not commit after a sort change', () => {

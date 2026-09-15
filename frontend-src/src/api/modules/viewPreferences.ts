@@ -2,6 +2,7 @@ import { get, mockOr, put, type RequestOptions } from '@/api/client';
 import { asRec, pickB, pickS } from '@/api/live';
 import {
   DEFAULT_ALGORITHM_PREFERENCES,
+  markAlgorithmPreferencePendingSync,
   readAlgorithmPreferences,
   writeAlgorithmPreferences,
   type RadarSortChoice,
@@ -100,11 +101,16 @@ export async function persistAlgorithmChoice(
   principal?: string | null,
 ): Promise<ViewPreferencesDoc> {
   const local = asLocalDoc(writeAlgorithmPreferences(patch, principal));
-  if (!persistRemote) return local;
+  if (!persistRemote) {
+    markAlgorithmPreferencePendingSync(principal, false);
+    return local;
+  }
   const generation = currentPreferenceWriteGeneration();
-  return persistRemoteOrKeepLocal(
+  const result = await persistRemoteOrKeepLocal(
     local,
     (signal) => viewPreferencesApi.write(patch, signal ? { signal } : undefined),
     { principal: principal ?? undefined, generation },
   );
+  markAlgorithmPreferencePendingSync(principal, Boolean(result.syncError) || result.persisted === false);
+  return result;
 }

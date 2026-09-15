@@ -50,11 +50,17 @@ import type {
 import { pageRegionProps } from '@/lib/pageRegion';
 import { t as __t } from '../i18n/core.ts';
 import {
+  algorithmPreferencePendingSync,
   readAlgorithmPreferences,
   requestedRadarAlgorithm,
   writeAlgorithmPreferences,
   type RadarSortChoice,
 } from '@/lib/algorithmPreferences';
+import {
+  bumpAlgorithmViewGeneration,
+  getAlgorithmViewGeneration,
+  subscribeAlgorithmView,
+} from '@/lib/algorithmView';
 import {
   nextChoiceGeneration,
   shouldApplyRemoteAlgorithmPreference,
@@ -161,6 +167,7 @@ export default function Breakouts() {
         startedGeneration: started,
         currentGeneration: choiceGeneration.current,
         cancelled,
+        pendingLocalSync: algorithmPreferencePendingSync(principal),
       })) return;
       writeAlgorithmPreferences({
         screenerRankingAlgorithm: remote.screenerRankingAlgorithm,
@@ -174,16 +181,24 @@ export default function Breakouts() {
   }, [isSignedIn, principal]);
 
   /* 数据轮询：status 30s / current 30s（§11） */
+  const [algorithmViewGen, setAlgorithmViewGen] = useState(getAlgorithmViewGeneration);
+  useEffect(() => subscribeAlgorithmView(() => {
+    setAlgorithmViewGen(getAlgorithmViewGeneration());
+    beginHistoryEpoch();
+    setExtraEvents([]);
+    setHistoryCursor(null);
+    setHistoryMoreError(null);
+  }), []);
   const statusQ = usePolling(() => breakoutsApi.status(), 30_000);
   const currentQ = usePolling(
     () => breakoutsApi.currentEnvelope({ sort_algorithm: requestedSort }),
     30_000,
-    [requestedSort],
+    [requestedSort, algorithmViewGen],
   );
   const eventsQ = usePolling(
     () => breakoutsApi.events({ page: 1, pageSize: HISTORY_PAGE_SIZE, sort_algorithm: requestedSort }),
     null,
-    [requestedSort],
+    [requestedSort, algorithmViewGen],
   );
   /* 历史事件此前固定只读第一页 100 条，界面还显示一个拼出来的「共 N 条」
      （审计 P2-19）。现在按游标续读，并如实说明是否还有更多。 */
@@ -267,6 +282,7 @@ export default function Breakouts() {
     setHistoryCursor(null);
     setHistoryMoreError(null);
     invalidateQueryPaths(['/breakouts/current', '/breakouts/events'], { reload: true });
+    bumpAlgorithmViewGeneration();
     const started = choiceGeneration.current;
     void persistAlgorithmChoice({ radarSortAlgorithm: next }, isSignedIn, principal).then((result) => {
       if (started !== choiceGeneration.current) return;

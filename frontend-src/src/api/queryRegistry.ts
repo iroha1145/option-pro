@@ -53,7 +53,31 @@ const QUERY_CONFIG: Record<string, QueryConfig> = {
   '/macro/conditions': { ttlMs: 60_000, persist: true, maxRestoreAgeMs: 30 * DAY_MS },
   '/breakouts/status': { ttlMs: 10_000 },
   '/breakouts/current': { ttlMs: 10_000 },
+  '/breakouts/events': { ttlMs: 10_000 },
 };
+
+function pathNameOf(path: string): string {
+  const queryAt = path.indexOf('?');
+  return queryAt === -1 ? path : path.slice(0, queryAt);
+}
+
+export function normalizeQueryPath(path: string): string {
+  const queryAt = path.indexOf('?');
+  if (queryAt === -1) return path;
+  const pathname = path.slice(0, queryAt);
+  const params = new URLSearchParams(path.slice(queryAt + 1));
+  const keys = [...new Set(params.keys())].sort();
+  const sorted = new URLSearchParams();
+  for (const key of keys) {
+    for (const value of params.getAll(key)) sorted.append(key, value);
+  }
+  const query = sorted.toString();
+  return query ? `${pathname}?${query}` : pathname;
+}
+
+function pathMatchesPrefix(path: string, prefix: string): boolean {
+  return path === prefix || path.startsWith(`${prefix}?`) || path.startsWith(`${prefix}/`);
+}
 
 interface Entry {
   inFlight: Promise<unknown> | null;
@@ -127,7 +151,7 @@ function entryFor(path: string): Entry {
 }
 
 export function queryConfigFor(path: string): QueryConfig | null {
-  return QUERY_CONFIG[path] ?? null;
+  return QUERY_CONFIG[pathNameOf(path)] ?? null;
 }
 
 /** 当前主体世代：登录/登出/失效后递增，在途读不得写回。 */
@@ -214,19 +238,20 @@ async function fetchInto(path: string, entry: Entry, config: QueryConfig): Promi
  * 读取一个白名单路径。非白名单路径请继续用各自的数据层(marketGet 等)。
  */
 export function registryGet<T>(path: string): Promise<T> {
-  const config = QUERY_CONFIG[path];
+  const config = queryConfigFor(path);
+  const cacheKey = normalizeQueryPath(path);
   if (!config) {
     return requestRaw(path, { method: 'GET' }).then(
       (res) => res.json() as Promise<T>,
     );
   }
-  const entry = entryFor(path);
+  const entry = entryFor(cacheKey);
   const now = Date.now();
   if (entry.value !== undefined && now - entry.fetchedAt < config.ttlMs) {
     return Promise.resolve(entry.value as T);
   }
   if (entry.inFlight) return entry.inFlight as Promise<T>;
-  const request = fetchInto(path, entry, config).finally(() => {
+  const request = fetchInto(cacheKey, entry, config).finally(() => {
     if (entry.inFlight === request) entry.inFlight = null;
   });
   entry.inFlight = request;
@@ -239,7 +264,7 @@ export function registryGet<T>(path: string): Promise<T> {
  * 发条件请求确认,304 则零正文)。
  */
 export async function restorePersistedQuery<T>(path: string): Promise<T | null> {
-  const config = QUERY_CONFIG[path];
+  const config = queryConfigFor(path);
   if (!config?.persist) return null;
   const principal = await confirmedPrincipal();
   if (principal === null || principal !== principalKey) return null;
@@ -283,7 +308,7 @@ export function invalidateQueryPaths(
   options?: { reload?: boolean },
 ): void {
   for (const [path, entry] of entries) {
-    if (prefixes.some((prefix) => path === prefix || path.startsWith(prefix))) {
+    if (prefixes.some((prefix) => pathMatchesPrefix(path, prefix))) {
       entry.generation += 1;
       entry.value = undefined;
       entry.etag = null;

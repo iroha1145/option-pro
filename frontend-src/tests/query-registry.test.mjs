@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   dropQueryRegistry,
   invalidateQueryPaths,
+  queryConfigFor,
   registryGet,
   resetQueryRegistry,
   setQueryPrincipal,
@@ -232,4 +233,36 @@ test('restore age gate anchors on the last validation and deletes over-age recor
     persistedRecordWithinAge({ maxRestoreAgeMs: 3 * DAY }, { storedAt: Number.NaN }, now),
     false,
   );
+});
+
+test('parameterized radar current shares one request per algorithm', async () => {
+  const originalFetch = globalThis.fetch;
+  let fetchCount = 0;
+  let release;
+  globalThis.fetch = () => {
+    fetchCount += 1;
+    return new Promise((resolve) => {
+      release = () => resolve(jsonResponse({ events: [] }));
+    });
+  };
+  try {
+    assert.ok(queryConfigFor('/breakouts/current?sort_algorithm=t1_daily_priority'));
+    const first = registryGet('/breakouts/current?sort_algorithm=t1_daily_priority');
+    const second = registryGet('/breakouts/current?sort_algorithm=t1_daily_priority');
+    assert.equal(fetchCount, 1);
+    release();
+    await Promise.all([first, second]);
+    const other = registryGet('/breakouts/current?sort_algorithm=production');
+    assert.equal(fetchCount, 2);
+    release();
+    await other;
+    invalidateQueryPaths(['/breakouts/current'], { reload: true });
+    const after = registryGet('/breakouts/current?sort_algorithm=t1_daily_priority');
+    assert.equal(fetchCount, 3);
+    release();
+    await after;
+  } finally {
+    globalThis.fetch = originalFetch;
+    resetQueryRegistry();
+  }
 });
