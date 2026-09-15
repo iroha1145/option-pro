@@ -168,6 +168,10 @@ export default function Breakouts() {
   const [historyCursor, setHistoryCursor] = useState<string | null>(null);
   const [historyLoadingMore, setHistoryLoadingMore] = useState(false);
   const [historyMoreError, setHistoryMoreError] = useState<ApiError | null>(null);
+  const historyCursorRef = useRef(historyCursor);
+  historyCursorRef.current = historyCursor;
+  const requestedSortRef = useRef(requestedSort);
+  requestedSortRef.current = requestedSort;
   useEffect(() => {
     historyGeneration.current += 1;
     // 首页重新加载后丢弃已续读的部分，避免与新首页重复。
@@ -193,9 +197,9 @@ export default function Breakouts() {
         startedGeneration,
         currentGeneration: historyGeneration.current,
         startedCursor,
-        currentCursor: startedCursor,
+        currentCursor: historyCursorRef.current,
         startedSort,
-        currentSort: requestedSort,
+        currentSort: requestedSortRef.current,
       })) return;
       setExtraEvents((prev) => [...prev, ...next.items.map(asFullEvent)]);
       setHistoryCursor(next.nextCursor);
@@ -204,9 +208,9 @@ export default function Breakouts() {
         startedGeneration,
         currentGeneration: historyGeneration.current,
         startedCursor,
-        currentCursor: startedCursor,
+        currentCursor: historyCursorRef.current,
         startedSort,
-        currentSort: requestedSort,
+        currentSort: requestedSortRef.current,
       })) return;
       setHistoryMoreError(error instanceof ApiError ? error : new ApiError(500, __t('加载更多失败')));
     } finally {
