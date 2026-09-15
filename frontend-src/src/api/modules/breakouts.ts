@@ -349,6 +349,9 @@ export const breakoutsApi = {
     hasMore: boolean;
     nextCursor: string | null;
     page: number;
+    cursorStale?: boolean;
+    restartRequired?: boolean;
+    t1View?: string | null;
   }> =>
     mockOr(
       async () => {
@@ -368,12 +371,16 @@ export const breakoutsApi = {
         return registryGet(`/breakouts/events${qs ? `?${qs}` : ''}`).then((d) => {
           const events = unwrap(d, 'events', 'items').map(normalizeBreakoutEvent);
           const nextCursor = pickS(asRec(d), 'next_cursor', 'nextCursor');
+          const rec = asRec(d);
           return {
             items: events as unknown as BreakoutEvent[],
-            total: pickN(asRec(d), 'total', 'total_count'),
-            hasMore: nextCursor !== null,
+            total: pickN(rec, 'total', 'total_count'),
+            hasMore: nextCursor !== null && !rec.cursor_stale && !rec.restart_required,
             nextCursor,
             page,
+            cursorStale: Boolean(rec.cursor_stale || rec.cursorStale),
+            restartRequired: Boolean(rec.restart_required || rec.restartRequired),
+            t1View: pickS(rec, 't1_view', 't1View'),
           };
         });
       },

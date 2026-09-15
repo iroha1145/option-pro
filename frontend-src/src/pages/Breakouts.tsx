@@ -64,7 +64,7 @@ import {
 import {
   nextChoiceGeneration,
   shouldApplyRemoteAlgorithmPreference,
-  shouldCommitHistoryPage,
+  historyPageDecision,
 } from '@/lib/choiceGeneration';
 import { persistAlgorithmChoice, viewPreferencesApi } from '@/api/modules/viewPreferences';
 
@@ -225,14 +225,26 @@ export default function Breakouts() {
         cursor: startedCursor,
         sort_algorithm: startedSort,
       });
-      if (!shouldCommitHistoryPage({
+      const decision = historyPageDecision({
         startedGeneration,
         currentGeneration: historyGeneration.current,
         startedCursor,
         currentCursor: historyCursorRef.current,
         startedSort,
         currentSort: requestedSortRef.current,
-      })) return;
+        cursorStale: next.cursorStale,
+        restartRequired: next.restartRequired,
+      });
+      if (decision === 'ignore') return;
+      if (decision === 'restart') {
+        beginHistoryEpoch();
+        setExtraEvents([]);
+        setHistoryCursor(null);
+        setHistoryMoreError(null);
+        invalidateQueryPaths(['/breakouts/events'], { reload: true });
+        bumpAlgorithmViewGeneration();
+        return;
+      }
       setExtraEvents((prev) => [...prev, ...next.items.map(asFullEvent)]);
       setHistoryCursor(next.nextCursor);
     } catch (error) {

@@ -7,6 +7,7 @@ import {
   preferenceStorageKey,
   shouldApplyRemoteAlgorithmPreference,
   shouldCommitChoiceGeneration,
+  historyPageDecision,
   shouldCommitHistoryPage,
 } from '../src/lib/choiceGeneration.ts';
 import {
@@ -66,6 +67,24 @@ test('stale history pages do not commit after a sort change', () => {
     startedSort: 't1_daily_priority',
     currentSort: 't1_daily_priority',
   }), true);
+  assert.equal(historyPageDecision({
+    startedGeneration: 2,
+    currentGeneration: 2,
+    startedCursor: 't1-page-2',
+    currentCursor: 't1-page-2',
+    startedSort: 't1_daily_priority',
+    currentSort: 't1_daily_priority',
+    cursorStale: true,
+  }), 'restart');
+  assert.equal(historyPageDecision({
+    startedGeneration: 1,
+    currentGeneration: 2,
+    startedCursor: 't1-page-2',
+    currentCursor: 't1-page-2',
+    startedSort: 't1_daily_priority',
+    currentSort: 't1_daily_priority',
+    cursorStale: true,
+  }), 'ignore');
 });
 
 test('preference writes stay serial and last queued write wins', async () => {

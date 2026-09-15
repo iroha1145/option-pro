@@ -33,6 +33,21 @@ export function shouldCommitHistoryPage(input: {
   );
 }
 
+export function historyPageDecision(input: {
+  startedGeneration: number;
+  currentGeneration: number;
+  startedCursor: string | null;
+  currentCursor: string | null;
+  startedSort: string | null | undefined;
+  currentSort: string | null | undefined;
+  cursorStale?: boolean;
+  restartRequired?: boolean;
+}): 'ignore' | 'restart' | 'append' {
+  if (!shouldCommitHistoryPage(input)) return 'ignore';
+  if (input.cursorStale || input.restartRequired) return 'restart';
+  return 'append';
+}
+
 export function preferenceStorageKey(principal?: string | null): string {
   const id = String(principal || '').trim();
   return id ? `optix.algorithm-prefs.v1:${id}` : 'optix.algorithm-prefs.v1:guest';

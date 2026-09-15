@@ -168,6 +168,9 @@ class BreakoutRootResponse(_ResponseModel):
 
 class BreakoutEventPageResponse(BreakoutRootResponse):
     next_cursor: Optional[str] = None
+    cursor_stale: bool = False
+    restart_required: bool = False
+    t1_view: Optional[str] = None
 
 
 class BreakoutEventDetailResponse(_ResponseModel):
@@ -889,6 +892,9 @@ def events(
         ],
         scan_run_id=page.get("scan_run_id"),
         next_cursor=page.get("next_cursor"),
+        cursor_stale=bool(page.get("cursor_stale")),
+        restart_required=bool(page.get("restart_required")),
+        t1_view=page.get("t1_view") if isinstance(page.get("t1_view"), str) else None,
         runtime_status=read_state.status,
         runtime_reason=read_state.reason,
         market_session=read_state.details.get("market_session"),

@@ -7,6 +7,7 @@ import { ApiError } from '../src/api/client.ts';
 import {
   nextChoiceGeneration,
   shouldApplyRemoteAlgorithmPreference,
+  historyPageDecision,
   shouldCommitHistoryPage,
 } from '../src/lib/choiceGeneration.ts';
 
@@ -42,6 +43,7 @@ function harness() {
     persisted: [],
     toasts: [],
     eventRequests: [],
+    invalidations: [],
   };
   const scope = {
     ApiError,
@@ -51,13 +53,14 @@ function harness() {
     useCallback: (fn) => fn,
     nextChoiceGeneration,
     shouldCommitHistoryPage,
+    historyPageDecision,
     requestedRadarAlgorithm: (value) => value,
     writeAlgorithmPreferences: (patch) => { state.local = patch; },
     persistAlgorithmChoice: async (patch) => {
       state.persisted.push(patch);
       return persistQueue.shift().promise;
     },
-    invalidateQueryPaths: () => {},
+    invalidateQueryPaths: (paths) => { state.invalidations.push(paths); },
     bumpAlgorithmViewGeneration: () => {},
     toast: { info(title) { state.toasts.push(title); } },
     __t: (text) => text,
@@ -228,6 +231,40 @@ test('same-generation load more still rejects a second in-flight request', async
   await second;
   assert.equal(state.eventRequests.length, 1);
   assert.equal(state.extraEvents[1].event_id, 'only-once');
+  assert.equal(state.historyLoadingMore, false);
+});
+
+test('stale T1 cursor restarts first page and does not append old rows', async () => {
+  const { state, scope, laterPage, pageQueue } = harness();
+  scope.requestedSort = 't1_daily_priority';
+  scope.requestedSortRef.current = 't1_daily_priority';
+  const loading = scope.loadMoreHistory();
+  laterPage.resolve({
+    items: [{ event_id: 'should-not-append' }],
+    nextCursor: 't1-page-3',
+    cursorStale: true,
+    restartRequired: true,
+  });
+  await loading;
+  assert.equal(Array.from(state.extraEvents).length, 0);
+  assert.equal(state.historyCursor, null);
+  assert.equal(state.historyMoreError, null);
+  assert.equal(state.historyLoadingMore, false);
+  assert.equal(
+    state.invalidations.some((paths) => Array.isArray(paths) && paths[0] === '/breakouts/events'),
+    true,
+  );
+  scope.applyHistoryFirstPage('t1-page-2-fresh');
+  const nextPage = deferred();
+  pageQueue.push(nextPage);
+  const reload = scope.loadMoreHistory();
+  nextPage.resolve({
+    items: [{ event_id: 'fresh-after-restart' }],
+    nextCursor: 't1-page-3-fresh',
+  });
+  await reload;
+  assert.equal(state.extraEvents[0].event_id, 'fresh-after-restart');
+  assert.equal(state.historyCursor, 't1-page-3-fresh');
   assert.equal(state.historyLoadingMore, false);
 });
 
