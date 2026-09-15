@@ -1,76 +1,76 @@
 {
-  "writtenAt": "2026-09-14T19:06:01.825Z",
-  "interleaved": {
-    "pairs": 20,
-    "comparison_status": "incomplete_samples",
-    "opt_cold": {
-      "n": 20,
-      "ready_n": 20,
-      "timeout_n": 0,
-      "p50": 9224.899999999441,
-      "p75": 9436.300000000745
-    },
-    "opt_warm": {
-      "n": 20,
-      "ready_n": 20,
-      "timeout_n": 0,
-      "p50": 2444.4000000003725,
-      "p75": 2531.5
-    },
-    "unopt_cold": {
-      "n": 20,
-      "ready_n": 1,
-      "timeout_n": 19,
-      "p50": 176229.2999999998,
-      "p75": 176229.2999999998
-    },
-    "unopt_warm": {
-      "n": 20,
-      "ready_n": 3,
-      "timeout_n": 17,
-      "p50": 74210,
-      "p75": 79299.89999999944
-    },
-    "titles": {
-      "opt": [
-        "芯片企业发布最新进展"
-      ],
-      "unopt": [
-        "芯片企业发布最新进展"
-      ]
-    }
-  },
+  "writtenAt": "2026-09-15T02:56:55.277Z",
+  "product_commit": "12e78b87d78d83c289af74803690173057a82ff0",
+  "entry": "frontend/assets/index-Bn8dbAUf.js",
+  "interleaved": null,
+  "interleaved_note": "v2 n=20 remasurement in progress on 12e78b87 / index-Bn8dbAUf.js; historical index-uc86EHir.js numbers stay in r6-interleaved-n20.json",
   "i18n": {
     "zh_no_runtime": true,
     "en_only_en": true,
     "ja_only_ja": true,
     "switch_keeps_deep_link": true,
     "switch_loads_en": true,
-    "switch_html_lang_en": true
+    "switch_html_lang_en": true,
+    "ready_n": 9,
+    "ready_class_content_n": 9,
+    "gate_ok": true
   },
   "surfaces": {
-    "home_p75": 2721.0999999996275,
-    "earnings_p75": 2698.699999999255,
+    "home_p75": 2636,
+    "earnings_p75": 2466.39999999851,
+    "gate_ok": true,
     "first_nav": {
-      "home_card": 795,
-      "desktop_nav": 788
+      "home_card": 747,
+      "desktop_nav": 746
     },
     "intent": {
-      "immediate": 823,
-      "hover_then_click": 601,
+      "immediate": 748,
+      "hover_then_click": 545,
       "hover_only_chunk": 8,
+      "extra_paid_n": 0,
       "decision": {
         "decision": "keep",
         "reason": "hover_then_click_faster",
-        "faster_ms": 222,
-        "faster_ratio": 0.26974483596597815,
+        "faster_ms": 203,
+        "faster_ratio": 0.2713903743315508,
         "chunk_n": 8
       }
+    },
+    "extras": {
+      "no_intent_chunk_n": 0,
+      "palette_closed_stock_n": 0
     },
     "earnings_scroll": {
       "before": 0,
       "after": 8,
       "stayed": 8
     }
+  },
+  "first_js_gzip9": {
+    "shared": {
+      "script_n": 30,
+      "gzip9": 188047,
+      "raw": 555497
+    },
+    "home": {
+      "route_only_gzip9": 28686,
+      "with_shared_gzip9": 216733,
+      "script_n": 45
+    },
+    "earnings": {
+      "route_only_gzip9": 29793,
+      "with_shared_gzip9": 217840,
+      "script_n": 40
+    },
+    "catalysts": {
+      "route_only_gzip9": 80436,
+      "with_shared_gzip9": 268483,
+      "script_n": 42
+    },
+    "note": "gzip -9 of statically imported JS only. Excludes CSS, JSON, fonts, data, and later intent prefetch."
+  },
+  "seed": {
+    "sqlite_sha256": "c04b451343384990c099da24be3483680e393a0515e3e1243c5608124d785313",
+    "sqlite_bytes": 239267840
   }
 }

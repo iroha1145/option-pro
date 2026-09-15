@@ -1,8 +1,8 @@
 # 当前状态
 
-2026-09-14 Round 6（基线 `df1bd5d`，PR #165）：可见分页、按语言词典、财报按需图表。方法与本轮数字见 [13-round6-visible-i18n-earnings.md](13-round6-visible-i18n-earnings.md)。Codex P2：过期同 cursor 缓存刷新 TTL。**不要**把下面历史 1651/832 或更早 feed 毫秒数写成 Round 6 结果。
+2026-09-15 Round 6（基线 `df1bd5d`，PR #165，产品提交 `12e78b87` / `index-Bn8dbAUf.js`）：可见分页、按语言词典、财报按需图表。方法与本轮数字见 [13-round6-visible-i18n-earnings.md](13-round6-visible-i18n-earnings.md)。过期同 cursor 缓存刷新 TTL 时必须作废 `anon_items`。**不要**把下面历史 1651/832 或更早 feed 毫秒数写成 Round 6 结果，也不要把 `index-uc86EHir.js` 的 9436/2532 写成最终提交数字。
 
-Round 6 进程内 n=10000 访客 visible 热 p50 **240ms**（指纹 1）vs legacy 5 hop **1018ms**（指纹 5）。Owner visible 仍约 6.6s。浏览器交错 n=20：优化冷 p75 **9436ms** / 热 **2532ms**，20/20，标题「芯片企业发布最新进展」；未优化冷 19/20 超时，不写 p75 差值。surfaces：首页/财报约 2.7s，意图预取保留（悬停后再点快 222ms），屏外图表 0→8。生产包已同步为 `index-CS02aZ40.js`。
+Round 6 V2 进程内 n=10000 访客 visible 热 p50 **203ms**（指纹 1）vs legacy 5 hop **795ms**（指纹 5）。Owner visible 热 p50 **5564ms**。surfaces n=8 门禁通过：首页 p75 **2636** / 财报 **2466**，意图预取保留（悬停后再点快 203ms / 27%），关闭面板 0 额外 chunk，屏外图表 0→8 且 DOM 保持 8/8。静态 JS gzip9：公共壳 **188047**，首页 **216733**，财报 **217840**，新闻 **268483**。n=20 交错正在同一产品提交上重测。
 
 2026-09-14 第二轮审查修复：抽屉关闭保留内容、AI 能力 pending 语义、自动重试封顶、预取 URL 按筛选、今日计数随 feed 落地、服务端 Retry-After 不被刷新跳过，见 [12-review-fixes.md](12-review-fixes.md)。本轮没有重新测量速度。
 

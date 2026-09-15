@@ -232,10 +232,10 @@
 
 完整方法、本轮原始数字与限制见 [13-round6-visible-i18n-earnings.md](13-round6-visible-i18n-earnings.md)。不覆盖本文件更早轮次的结论。
 
-- **A/B**：访客 visible 热 240ms / 指纹 1；legacy hop 1018ms / 指纹 5。Owner 整窗投影仍约 6.6s，不恢复 Owner 匿名缓存。
-- **C**：中文入口 gzip 约 79KB vs 基线 326KB；词典块只在 en/ja 下载。三语冷启动与 zh→en 深链接已测。
-- **D**：surfaces n=8 首开不拉 chart，近滚后 8/8 挂载且保持。
-- **E**：1440 主导航悬停后再点 p75 601 vs 立即 823（快 222ms / 27%），按阈值保留。
-- **浏览器交错 n=20**：优化冷/热 20/20，p75 9436 / 2532；未优化冷 19/20 超时。`incomplete_samples`，不写差值。
-- **决定**：A/B/B2/C/D/E 全部保留。生产包同步为 `index-CS02aZ40.js`。
-- **Codex P2**：过期同 cursor 条目在 `_store_revision_cache` 必须刷新 `built_at` 并保留 `anon_items`，否则 300s 后每次 feed 都重扫。未延长 TTL，未混用 Owner/访客缓存。
+- **A/B**（`12e78b87`）：访客 visible 热 203ms / 指纹 1；legacy hop 795ms / 指纹 5。Owner 整窗投影热 p50 5564ms，不恢复 Owner 匿名缓存。
+- **C**：当前入口 `index-Bn8dbAUf.js` gzip9 79100；公共壳 30 脚本 188047。入口+App 约 94.6KB 不是完整首次下载。词典块只在 en/ja 下载。三语 9/9 content，zh→en 深链接已测。
+- **D**：surfaces n=8 首开不拉 chart，近滚后 8/8 挂载且 DOM 保持。图表失败留在局部边界；刷新冷却内置 `onRefresh`。
+- **E**：1440 主导航悬停后再点 p75 545 vs 立即 748（快 203ms / 27%），全 chunk / 0 额外付费，按阈值保留。命令面板关闭不预取。
+- **浏览器交错 n=20**：`index-uc86EHir.js` 历史为优化冷/热 20/20，p75 9436 / 2532；未优化冷 19/20 超时。`incomplete_samples`，不写差值。最终包 `index-Bn8dbAUf.js` 的交错正在重测。
+- **决定**：A/B/B2/C/D/E 全部保留。生产包同步为 `index-Bn8dbAUf.js`。
+- **缓存续期**：过期同 cursor 条目在 `_store_revision_cache` 必须刷新 `built_at` **并作废** `anon_items`，再按当前窗口重建。不能为了少扫而保留旧展示条目。未延长 TTL，未混用 Owner/访客缓存。

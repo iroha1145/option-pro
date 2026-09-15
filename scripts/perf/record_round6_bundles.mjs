@@ -44,10 +44,11 @@ const files = {
 };
 
 const indexRel = indexMatch ? `assets/${indexMatch[1]}` : null;
-const shared = indexRel ? await walkStaticJsGraph(FRONTEND, indexRel) : null;
-const homeGraph = await walkStaticJsGraph(FRONTEND, firstMatch(assets, /^Home-.+\.js$/) ? `assets/${firstMatch(assets, /^Home-.+\.js$/)}` : indexRel);
-const earningsGraph = await walkStaticJsGraph(FRONTEND, firstMatch(assets, /^Earnings-.+\.js$/) ? `assets/${firstMatch(assets, /^Earnings-.+\.js$/)}` : indexRel);
-const newsGraph = await walkStaticJsGraph(FRONTEND, firstMatch(assets, /^Catalysts-.+\.js$/) ? `assets/${firstMatch(assets, /^Catalysts-.+\.js$/)}` : indexRel);
+const appRel = firstMatch(assets, /^App-.+\.js$/) ? `assets/${firstMatch(assets, /^App-.+\.js$/)}` : null;
+const shared = appRel ? await walkStaticJsGraph(FRONTEND, appRel) : (indexRel ? await walkStaticJsGraph(FRONTEND, indexRel) : null);
+const homeGraph = await walkStaticJsGraph(FRONTEND, firstMatch(assets, /^Home-.+\.js$/) ? `assets/${firstMatch(assets, /^Home-.+\.js$/)}` : appRel);
+const earningsGraph = await walkStaticJsGraph(FRONTEND, firstMatch(assets, /^Earnings-.+\.js$/) ? `assets/${firstMatch(assets, /^Earnings-.+\.js$/)}` : appRel);
+const newsGraph = await walkStaticJsGraph(FRONTEND, firstMatch(assets, /^Catalysts-.+\.js$/) ? `assets/${firstMatch(assets, /^Catalysts-.+\.js$/)}` : appRel);
 const sharedPaths = new Set(shared?.files.map((file) => file.path) || []);
 const plus = (graph) => ({
   route_only_gzip9: graph.files.filter((file) => !sharedPaths.has(file.path)).reduce((sum, file) => sum + file.gzip9, 0),

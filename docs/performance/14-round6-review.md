@@ -2,6 +2,8 @@
 
 审查对象：`cursor/perf-news-i18n-earnings-ac0f`，对照基线 `df1bd5d`。本篇只记本轮确认项，不把历史 1651/832 当成本轮证据。
 
+2026-09-15 续修：R1–R5 / V1 已按失败回归先补再改实现。V2 在产品提交 `12e78b87` / `index-Bn8dbAUf.js` 上重测 surfaces、i18n、进程内 feed 与静态包图；n=20 交错同一提交重跑中。`4fd819c0` 只改 batch 测试桩。
+
 ## 并发与缓存
 
 - 热命中：peek 完整 `anon_items` → 一次指纹 → 同一把锁拷贝 rows 与 items。rows/items 不能来自不同 cursor。
@@ -13,7 +15,7 @@
 ## 默认 visible 的边界
 
 - 列表、`feedApiPath` 默认、theme-boot 预取必须带 `page_mode=visible`。
-- `newsToday` 与 `tickerSummaries` 必须省略 `page_mode`。生产包 `useAccess-DbNUA1OH.js` 已是 `windowHours:24,limit:50,...,pageMode:null`。
+- `newsToday` 与 `tickerSummaries` 必须省略 `page_mode`。生产包 `useAccess` 仍是 `windowHours:24,limit:50,...,pageMode:null`。
 
 ## 游标与新旧客户端
 
@@ -30,7 +32,7 @@
 
 ## 语言冷启动
 
-`/catalysts` 实验室 ready 按标题 + `article h3` / 空态判定。vite mock 三语：zh 不装 runtime；en/ja 各只装一种。切换测试的 initScript 不得在 reload 时覆盖已写入的 `optix:locale`，否则会假阴性。已改：仅在键缺失时写入。zh→en 留在 `/earnings`，标题 `Earnings calendar`，`html lang=en-US`，`runtime-en=1`。
+`/catalysts` 实验室 ready 按标题 + `article h3` / 空态判定。vite mock 三语：zh 不装 runtime；en/ja 各只装一种。切换测试的 initScript 不得在 reload 时覆盖已写入的 `optix:locale`，否则会假阴性。已改：仅在键缺失时写入。zh→en 留在 `/earnings`，标题 `Earnings calendar`，`html lang=en-US`，`runtime-en=1`。`12e78b87` 上 9/9 `content`，门禁通过。
 
 ## 语言初始化
 
@@ -42,18 +44,27 @@
 
 ## 财报时钟与屏外图表
 
-- 页级不再 `useNow(1000)`。冷却只在按钮内走秒。
-- 纽约日 15s 轮询。surfaces n=8：首开不拉 chart；近滚后 8/8 挂载且保持；占位 320px。
+- 页级不再 `useNow(1000)`。冷却在 `onRefresh` 内读 `cooldownUntil`，页头与失败横幅共用。
+- 图表懒加载失败留在 `ChartLoadErrorBoundary`，重试换新 `lazy()`。
+- 纽约日 15s 轮询。surfaces n=8（`12e78b87`）：首开不拉 chart；近滚后 8/8 挂载且 DOM 保持；占位 320px。
 - 实验室行必须 `publicFeatured: true`。个人自选 fulfill 空名单。
 
 ## 意图预取
 
-`MAX_INTENT=2` 按进行中的 `import()` 计数。1440 主导航 n=8：悬停 8/8 预取 Earnings 块、0 chart；`hover_then_click` 比立即点击快 222ms / 27%，按阈值 **保留**。
+`MAX_INTENT=2` 按进行中的 `import()` 计数。命令面板关闭不预取。1440 主导航 n=8（`12e78b87`）：悬停 8/8 预取 Earnings 块、0 chart、0 额外付费；`hover_then_click` 比立即点击快 203ms / 27%，按阈值 **保留**。关闭面板 / 无意图 0 额外 chunk。
+
+## 测量门禁（V1）
+
+- 汇总只把 `ready_class=content` 计为就绪；错误 / 超时 / 空态 / 未运行分列，超时的 `wall_ms` 不进入 `ready_n`。
+- 意图 `keep` 要求 expectedN 全就绪、chunk_n === expectedN、0 次额外付费。
+- 图表保持检查节点 / canvas，不只看曾经发生过的网络请求。
+- 不满足门禁的 surfaces / i18n 运行以非零退出。
 
 ## 已知限制（不是待确认问题）
 
-- Owner 热路径仍约 6.6s（整窗 `_item()`）。
+- Owner 热路径仍约 5.6s（整窗 `_item()`）。
 - 未优化 Owner+10k 隐藏前缀在 180s 内几乎看不到首条；对照 `comparison_status=incomplete_samples`，不编造 p75 差值。
-- n=20 交错用的是收口前的 `index-uc86EHir.js`；`newsToday` 去 visible 的生产包是收口后的 `index-CS02aZ40.js`。
+- 历史 n=20 交错用的是 `index-uc86EHir.js`。最终产品包是 `index-Bn8dbAUf.js`；V2 交错在该包上重跑，完成前不把 9436/2532 写成最终提交数字。
+- 中文入口+App 约 94.6KB gzip 不是完整首次下载；公共壳 30 脚本约 188KB gzip9。
 - Navbar 纽约时钟仍是全站既有 1Hz。
 - 新前端 + 旧后端可能先空页。

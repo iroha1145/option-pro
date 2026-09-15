@@ -1,0 +1,46 @@
+{
+  "measured_at": "2026-09-15T02:56:51.724Z",
+  "git": {
+    "commit": "4fd819c0e77f03c3653cac65b384f6f0d23bb5ca",
+    "tree": "68b4a986829080f936ee5532dd7487b6a3e109c2",
+    "status": "M docs/performance/04-experiments.md\n M docs/performance/05-status.md\n M docs/performance/13-round6-visible-i18n-earnings.md\n M docs/performance/14-round6-review.md\n M docs/performance/artifacts/r6-bundle-sizes.json\n M docs/performance/artifacts/r6-bundles.json\n M docs/performance/artifacts/r6-feed-n10000.json\n M docs/performance/artifacts/r6-summary.json\n M scripts/perf/measure_round6_browser.mjs\n M scripts/perf/record_round6_bundles.mjs\n M scripts/perf/summarize_round6.mjs\n?? docs/performance/artifacts/r6-i18n.json\n?? docs/performance/artifacts/r6-provenance.json\n?? docs/performance/artifacts/r6-surfaces.json\n?? scripts/perf/record_round6_provenance.mjs",
+    "branch": "cursor/perf-news-i18n-earnings-ac0f"
+  },
+  "scripts": {
+    "measure_round6_surfaces": "0cb2885b31596147c8a06beb90e934b7572715d80d14b02e0a4dbfc1f32c3b14",
+    "measure_round6_i18n": "2a7e4769d7120d270ea28c6a83fe30b0b910ab0f1715f69d3b85a886747a9a56",
+    "measure_round6_browser": "970da84745adb3fa0f2bc90b6d054629d690451f8fdb82190e6da01849c41739",
+    "measure_round6_feed": "3eb0bdd3aa5dae8dfc9644d0736290ee62d1b0a456a3f0dd241b7da815e30ee4",
+    "round6_ready_summary": "9d7499b9bfd0ada3d9197630972c80fe32d18ad5dffcfe24084a1a814a03a072",
+    "round6_intent_decision": "1f9cff3a2dac68f8a6a88b869e797a618962659611643a9651c9a3f925a4250f",
+    "round6_bundle_graph": "33fb33e6dfc32537302c300dc7177e880aabe6dde6a2b9f364eefca8fb191afa"
+  },
+  "frontend_hashes": {
+    "frontend/assets/index-Bn8dbAUf.js": "8cd7ae0b95a8e61520ebf8340e48f7b77623d6bdffd7765aa486838902fe8803",
+    "frontend/assets/App-CumuKCxm.js": "78fb2889268351eada2bded3a20f01482e8246627552f4bf354eed32c8b882e5",
+    "frontend/assets/Earnings-TgFpHEnA.js": "f99819dd9338dcd819601d08c60b842c1c61786d75ba62f5e51ad29bd3a13821",
+    "frontend/assets/Home-CBSeGwH7.js": "4668f66b58ffde282f61f372628ec6f33dd3c1ef6211b6c0f1efca870363b929",
+    "frontend/assets/Catalysts-BNhgIucD.js": "0d0f3602b2a3d91a5a11771813bcbab9f8ca2bd0d45b10a4782a71cd39ae6480"
+  },
+  "measured_product_commit": "12e78b87d78d83c289af74803690173057a82ff0",
+  "measured_product_tree": "216e22428e1439114b40873cfdc266cf900978d8",
+  "seed": {
+    "data_dir": "/home/ubuntu/optix-perf-data/n10000-r6",
+    "sqlite_path": "/home/ubuntu/optix-perf-data/n10000-r6/catalyst-cache.db",
+    "note": "synthetic --count 10000 --hidden-newest 48 --analyze-every 2 --history-every 15 --wall-clock",
+    "sqlite_sha256": "c04b451343384990c099da24be3483680e393a0515e3e1243c5608124d785313",
+    "sqlite_bytes": 239267840,
+    "revisions": 10000,
+    "analysis_links": 5078,
+    "result_audits": 5078
+  },
+  "network_profile": {
+    "name": "mobile-ref",
+    "width": 390,
+    "height": 844,
+    "cpu": 4,
+    "down_bps": 1310720,
+    "up_bps": 262144,
+    "rtt_ms": 180
+  }
+}
