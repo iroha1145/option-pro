@@ -20,7 +20,7 @@ from app.services.research.algorithm_protocol import (
     RISK_SIGNAL_ROUND_ID,
 )
 from app.services.research.candidate_signals import original_top_signals
-from app.services.research.compare import compare_screener_candidates, top10_identity
+from app.services.research.compare import compare_screener_candidates
 from app.services.research.dataset import load_dataset
 from app.services.research.portfolio import simulate_c1_sector_budget, simulate_long_only, summarize_ledger
 from app.services.research.protocol import split_for_date
@@ -126,18 +126,6 @@ def main() -> int:
         if any(split_for_date(row.get("signal_date")) == "sealed" for row in rows):
             raise SystemExit("refusing sealed screener rows")
         compare = compare_screener_candidates(rows, split=args.split)
-        identity = {
-            session: tickers
-            for session, tickers in top10_identity(
-                {
-                    session: [
-                        row
-                        for row in compare["a0_vs_original"]["10"]["daily"]
-                        if False
-                    ]
-                }
-            )
-        }
         a0_tickers = [
             (row["signal_date"], tuple(row["candidate"]["tickers"]))
             for row in compare["a0_vs_original"]["10"]["daily"]
@@ -173,7 +161,6 @@ def main() -> int:
                 if f"{key}_vs_original" in compare
             },
         }
-        _ = identity
         if args.dataset and not args.skip_ledgers:
             dataset = load_dataset(args.dataset)
             signals = original_top_signals(rows)
