@@ -1872,8 +1872,8 @@ def _scan_sync(
             "range_persistence_mode": breakout_settings.range_persistence_mode,
             "range_persistence_version": breakout_settings.range_persistence_version,
             **(
-                {"ranking_algorithm": effective_ranking}
-                if effective_ranking != PRODUCTION_ALGORITHM
+                {"ranking_algorithm": ranking_algorithm}
+                if (ranking_algorithm or PRODUCTION_ALGORITHM) != PRODUCTION_ALGORITHM
                 else {}
             ),
         },
