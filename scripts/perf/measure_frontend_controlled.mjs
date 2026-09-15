@@ -25,13 +25,15 @@ const samples = [];
 const report = () => ({ lab: true, fixed_responses: true, measuredAt: new Date().toISOString(),
   product_commit: process.env.PRODUCT_COMMIT,
   baseline_commit: process.env.BASELINE_COMMIT || 'df1bd5d35e8128805d75291126341be06e38b1e6',
-  entry, entry_sha256: entryHash, fixture_sha256: fixtureHash, fixture_clock: '2026-09-15T07:00:00Z',
+  entry, entry_sha256: entryHash, fixture_sha256: fixtureHash, fixture_as_of: '2026-09-15T07:00:00Z',
   current, baseline, profile: { width: 390, height: 844, cpu: 4, down: 1310720, up: 262144, rtt: 180 },
   pairs: samples.length, samples });
 async function sample(base) {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, locale: 'zh-CN' });
   const page = await context.newPage();
-  await page.clock.setFixedTime(new Date('2026-09-15T07:00:00Z'));
+  // Keep native performance/navigation clocks and resource timing intact.
+  // Playwright clock instrumentation persists across reloads and replaces
+  // resource timing, so it cannot be used for this navigation benchmark.
   const cdp = await context.newCDPSession(page);
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
   await cdp.send('Network.enable');
@@ -60,13 +62,18 @@ async function sample(base) {
   const settle = async () => { await page.waitForLoadState('networkidle', { timeout: 45000 }); await page.waitForTimeout(500); };
   const metrics = () => page.evaluate(() => {
     const p = window.__controlledPerf;
-    return { ready_ms: p.ready, long_tasks: p.long, lcp: p.lcp, resources: performance.getEntriesByType('resource').map(e => ({ name: new URL(e.name).pathname, initiator: e.initiatorType, start: e.startTime, duration: e.duration, transfer: e.transferSize, encoded: e.encodedBodySize })) };
+    return { ready_ms: p.ready, navigation: performance.getEntriesByType('navigation')[0]?.toJSON(), long_tasks: p.long, lcp: p.lcp, resources: performance.getEntriesByType('resource').map(e => ({ name: new URL(e.name).pathname, initiator: e.initiatorType, start: e.startTime, duration: e.duration, transfer: e.transferSize, encoded: e.encodedBodySize })) };
   });
   try {
     await page.goto(base + '/catalysts', { waitUntil: 'domcontentloaded' }); await ready(); await settle();
     const cold = await metrics();
     await page.reload({ waitUntil: 'domcontentloaded' }); await ready(); await settle();
     const warm_direct = await metrics();
+    for (const measured of [cold, warm_direct]) {
+      if (!measured.navigation || measured.navigation.startTime !== 0 || !measured.resources.length) {
+        throw new Error('Native navigation/resource timing unavailable; do not report this sample');
+      }
+    }
     await page.getByRole('navigation', { name: '移动端导航' }).getByRole('link', { name: '首页', exact: true }).click();
     await page.waitForFunction(() => document.querySelector('[data-optix-region="home-indices"]')?.getAttribute('data-optix-state') === 'content', null, { timeout: 45000 });
     await settle();
