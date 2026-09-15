@@ -12,7 +12,7 @@ interface State {
 
 /**
  * 只兜住 EPS 图表懒加载失败，不把财报列表/分析区卸掉。
- * 重试由父组件换一个新的 lazy() 工厂；同一被拒绝的 React.lazy 实例不能复用。
+ * 重试由父组件换一个新的 lazy() 工厂，并用新的模块 URL 绕开浏览器对失败模块的缓存。
  */
 export default class ChartLoadErrorBoundary extends Component<Props, State> {
   state: State = { error: null };

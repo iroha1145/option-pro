@@ -93,7 +93,7 @@ test('earnings page localizes the clock and defers the EPS chart', async () => {
   assert.match(page, /useEtCalendarDate/);
   assert.match(page, /DeferredEpsChart/);
   assert.match(page, /weekPinned/);
-  assert.match(chart, /lazy\(\(\) => import\('\.\/EpsHatchChart'\)\)/);
+  assert.match(chart, /lazy\(\(\) => import\(`\.\/EpsHatchChart\?recover=\$\{generation\}`\)\)/);
   assert.match(chart, /PRELOAD_ROOT_MARGIN = '100% 0px'/);
   assert.match(chart, /PLACEHOLDER_HEIGHT_PX = 320/);
   assert.match(chart, /if \(mounted \|\| !hasRows\) return/);

@@ -10,16 +10,18 @@ interface DeferredEpsChartProps {
   items: EarningsRow[];
 }
 
-function loadEpsHatchChart() {
-  return lazy(() => import('./EpsHatchChart'));
+function loadEpsHatchChart(generation = 0) {
+  // Query must change on retry: browsers cache a rejected module at the same URL.
+  return lazy(() => import(`./EpsHatchChart?recover=${generation}`));
 }
 
 export default function DeferredEpsChart({ items }: DeferredEpsChartProps) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const recoverGen = useRef(0);
   const [mounted, setMounted] = useState(false);
   // 初始化与重试都在 render 之外换新 lazy()：被拒绝的工厂不能复用，
   // 也不能在 render 里 useMemo 出新组件（eslint react-hooks/static-components）。
-  const [EpsHatchChart, setEpsHatchChart] = useState(loadEpsHatchChart);
+  const [EpsHatchChart, setEpsHatchChart] = useState(() => loadEpsHatchChart(0));
   const hasRows = items.some((row) => row.epsEstimate != null || row.epsActual != null);
 
   useEffect(() => {
@@ -45,7 +47,12 @@ export default function DeferredEpsChart({ items }: DeferredEpsChartProps) {
       data-eps-chart-slot=""
     >
       {mounted ? (
-        <ChartLoadErrorBoundary onRetry={() => setEpsHatchChart(loadEpsHatchChart)}>
+        <ChartLoadErrorBoundary
+          onRetry={() => {
+            recoverGen.current += 1;
+            setEpsHatchChart(loadEpsHatchChart(recoverGen.current));
+          }}
+        >
           <Suspense
             fallback={(
               <section
