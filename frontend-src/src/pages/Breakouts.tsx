@@ -64,6 +64,7 @@ import {
 import {
   nextChoiceGeneration,
   shouldApplyRemoteAlgorithmPreference,
+  shouldCommitHistoryPage,
   historyPageDecision,
 } from '@/lib/choiceGeneration';
 import { persistAlgorithmChoice, viewPreferencesApi } from '@/api/modules/viewPreferences';
