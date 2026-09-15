@@ -502,13 +502,14 @@ class BreakoutWorker:
                 when = when.replace(tzinfo=timezone.utc)
             return when <= market.as_of
 
-        def persist_states(states: list[dict[str, Any]]) -> None:
+        def persist_states(states: list[dict[str, Any]], *, required: bool = False) -> None:
             if not states:
                 return
             try:
                 self.repository.save_t1_retry_states(states)
             except Exception:
-                pass
+                if required:
+                    raise
 
         stored = {}
         try:
@@ -557,7 +558,12 @@ class BreakoutWorker:
                 "reason": "t1_retry_budget_exhausted",
             }
 
-        def bump_states(events: Sequence[Mapping[str, Any]], reason: str) -> tuple[list[dict[str, Any]], float | None, int]:
+        def bump_states(
+            events: Sequence[Mapping[str, Any]],
+            reason: str,
+            *,
+            persist_required: bool = False,
+        ) -> tuple[list[dict[str, Any]], float | None, int]:
             updates: list[dict[str, Any]] = []
             delays: list[float] = []
             max_attempt = 0
@@ -607,7 +613,7 @@ class BreakoutWorker:
                     delays.append(delay)
                 stored[key] = current
                 updates.append(current)
-            persist_states(updates)
+            persist_states(updates, required=persist_required)
             return updates, (min(delays) if delays else None), max_attempt
 
         def retry_result(
@@ -647,6 +653,46 @@ class BreakoutWorker:
                 reason="price_adapter_unavailable",
                 events=eligible,
             )
+        if not self.repository.heartbeat_lock(
+            DEFAULT_LOCK_NAME,
+            self.owner_id,
+            lease_token,
+            self.lease_ttl_seconds,
+            self.clock.now(),
+        ):
+            raise LeaseLostError("worker lost its lease before T1 close completion")
+        _, reserved_delay, reserved_attempt = bump_states(
+            eligible,
+            "t1_dispatch_reserved",
+            persist_required=True,
+        )
+
+        def reserved_retry(
+            *,
+            attempted: int,
+            completed: int,
+            pending_count: int,
+            reason: str,
+        ) -> dict[str, Any]:
+            if reserved_delay is None:
+                return {
+                    "attempted": attempted,
+                    "completed": completed,
+                    "pending": pending_count,
+                    "retry": False,
+                    "reason": "t1_retry_budget_exhausted",
+                    "attempt": reserved_attempt,
+                }
+            return {
+                "attempted": attempted,
+                "completed": completed,
+                "pending": pending_count,
+                "retry": True,
+                "reason": reason,
+                "retry_after_seconds": reserved_delay,
+                "attempt": reserved_attempt,
+            }
+
         tickers = list(
             dict.fromkeys(
                 normalize_ticker(item.get("ticker"))
@@ -668,12 +714,11 @@ class BreakoutWorker:
         except (asyncio.CancelledError, LeaseLostError):
             raise
         except Exception:
-            return retry_result(
+            return reserved_retry(
                 attempted=len(eligible),
                 completed=0,
                 pending_count=len(pending),
                 reason="daily_fetch_failed",
-                events=eligible,
             )
         if not isinstance(daily_map, Mapping):
             daily_map = {}
@@ -708,12 +753,11 @@ class BreakoutWorker:
             try:
                 self.repository.persist_t1_evaluations(updated_events)
             except Exception:
-                return retry_result(
+                return reserved_retry(
                     attempted=len(eligible),
                     completed=0,
                     pending_count=len(pending),
                     reason="t1_store_unavailable",
-                    events=eligible,
                 )
         if finished_keys:
             try:
@@ -721,12 +765,11 @@ class BreakoutWorker:
             except Exception:
                 pass
         if still_pending_events:
-            return retry_result(
+            return reserved_retry(
                 attempted=len(eligible),
                 completed=completed,
                 pending_count=len(still_pending_events) + exhausted_count + len(blocked_delays),
                 reason="daily_incomplete",
-                events=still_pending_events,
             )
         leftover_pending = len(pending) - len(eligible) - exhausted_count
         if leftover_pending > 0 and blocked_delays:
