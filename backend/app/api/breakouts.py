@@ -771,6 +771,10 @@ def current(
         )
     stored_scan = dict(scan)
     stored_events = _live_overlay(repository, list(stored_scan.get("events") or []))
+    try:
+        stored_events = repository.overlay_t1_evaluations(stored_events)
+    except (OSError, ValueError, sqlite3.Error, BreakoutRepositoryError):
+        logger.warning("Could not load T1 evaluation overlay")
     if resolution.effective == T1_ALGORITHM:
         stored_events = apply_t1_stable_boost(stored_events)
     stored_scan["events"] = stored_events
@@ -907,6 +911,10 @@ def event_detail(event_id: str) -> BreakoutEventDetailResponse:
         event = repository.get_event(event_id)
         if event is not None:
             event = _live_overlay(repository, [event], with_transitions=True)[0]
+            try:
+                event = repository.overlay_t1_evaluations([event])[0]
+            except (OSError, ValueError, sqlite3.Error, BreakoutRepositoryError):
+                logger.warning("Could not load T1 evaluation overlay")
     except SchemaVersionError as exc:
         raise HTTPException(
             status_code=503,

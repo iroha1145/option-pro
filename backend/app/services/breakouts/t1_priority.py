@@ -7,6 +7,8 @@ qualified result set.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import date, datetime, timezone
 from typing import Any, Mapping, Sequence
 
@@ -35,6 +37,17 @@ T1_MET = "met"
 T1_UNMET = "unmet"
 T1_PENDING = "pending"
 T1_UNAVAILABLE = "unavailable"
+T1_NOT_APPLICABLE = "not_applicable"
+T1_DAILY_SETUP = "DAILY_BASE_BREAKOUT"
+T1_TERMINAL_STATUSES = {T1_MET, T1_UNMET}
+T1_EXPIRED_LIFECYCLES = {"FAILED", "EXPIRED"}
+T1_RETRYABLE_REASONS = {
+    "daily_unavailable",
+    "missing_event_bar",
+    "no_completed_daily_bars",
+    "daily_fetch_failed",
+    "price_adapter_unavailable",
+}
 
 
 def _finite(value: Any) -> float | None:
@@ -91,6 +104,45 @@ def _market_session(value: MarketSession | str | None) -> MarketSession:
         return MarketSession.CLOSED
 
 
+def t1_setup_applicable(event: Mapping[str, Any] | None) -> bool:
+    payload = dict(event or {})
+    setup = str(payload.get("setup_type") or payload.get("origin_setup_type") or "").strip()
+    return setup == T1_DAILY_SETUP
+
+
+def t1_boost_eligible(event: Mapping[str, Any]) -> bool:
+    lifecycle = str(event.get("lifecycle_state") or "").strip()
+    if lifecycle in T1_EXPIRED_LIFECYCLES:
+        return False
+    return event_t1_status(event) == T1_MET
+
+
+def t1_needs_close_eval(event: Mapping[str, Any]) -> bool:
+    if not t1_setup_applicable(event):
+        return False
+    status = event_t1_status(event)
+    if status in {T1_MET, T1_UNMET, T1_NOT_APPLICABLE}:
+        return False
+    if status == T1_PENDING:
+        return True
+    features = event.get("features") if isinstance(event.get("features"), Mapping) else {}
+    payload = event.get("t1_priority")
+    if not isinstance(payload, Mapping):
+        payload = features.get("t1_priority") if isinstance(features, Mapping) else None
+    reason = str((payload or {}).get("reason") or "") if isinstance(payload, Mapping) else ""
+    return status == T1_UNAVAILABLE and reason in T1_RETRYABLE_REASONS
+
+
+def _identity_hash(payload: Mapping[str, Any]) -> str:
+    encoded = json.dumps(
+        dict(payload),
+        allow_nan=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
 def session_daily_complete(
     session_date: date,
     *,
@@ -114,17 +166,21 @@ def evaluate_t1_from_daily(
     session: MarketSession | str | None = None,
     previous: Mapping[str, Any] | None = None,
     settings: Mapping[str, Any] | None = None,
+    event_id: str | None = None,
 ) -> dict[str, Any]:
     """Evaluate T1 from completed daily bars only.
 
-    An incomplete session is pending and never uses today's unfinished bar.
-    ``known_at`` is preserved once a complete met/unmet result existed.
+    Inputs are always trimmed to the event session. A later trading day must
+    not change a settled conclusion for the same event and input identity.
+    ``known_at`` is the first time this identity became met/unmet; later
+    revisions keep that first stamp and record the change.
     """
 
     cfg = {**T1_SETTINGS, **dict(settings or {})}
     computed_at = as_of.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
     prior = dict(previous or {})
-    prior_known = prior.get("known_at") if prior.get("status") in {T1_MET, T1_UNMET} else None
+    prior_known = prior.get("known_at") if prior.get("status") in T1_TERMINAL_STATUSES else None
+    first_known = prior.get("first_known_at") or prior_known
     base = {
         "version": T1_VERSION,
         "variant": T1_ALGORITHM,
@@ -133,7 +189,12 @@ def evaluate_t1_from_daily(
         "data_through": None,
         "session_complete": False,
         "computed_at": computed_at,
-        "known_at": prior_known,
+        "known_at": None,
+        "first_known_at": first_known,
+        "eval_version": int(prior.get("eval_version") or 0) or 1,
+        "identity_hash": prior.get("identity_hash"),
+        "revisions": list(prior.get("revisions") or []),
+        "event_id": event_id or prior.get("event_id"),
         "checks": {
             "clv": False,
             "rvol": False,
@@ -153,7 +214,11 @@ def evaluate_t1_from_daily(
     if daily is None or not isinstance(daily, pd.DataFrame) or daily.empty:
         return {**base, "reason": "daily_unavailable"}
 
-    cutoff = TemporalCutoff(event_at=as_of, session=_market_session(session))
+    cutoff = TemporalCutoff(
+        event_at=as_of,
+        session=MarketSession.CLOSED,
+        completed_daily_session=session_date,
+    )
     raw_session_rows = [
         (idx, daily.loc[idx])
         for idx in daily.index
@@ -194,14 +259,6 @@ def evaluate_t1_from_daily(
             "reason": "missing_event_bar",
         }
     bar_index, bar = session_rows[-1]
-    latest_completed = _bar_date(completed.index.max())
-    if latest_completed != session_date:
-        return {
-            **base,
-            "session_complete": True,
-            "reason": "event_bar_not_last_completed",
-        }
-
     ohlc = _ohlc(bar)
     if valid_daily_ohlc(ohlc["open"], ohlc["high"], ohlc["low"], ohlc["close"]) is None:
         return {
@@ -235,6 +292,48 @@ def evaluate_t1_from_daily(
                 "reason": "missing_prior_volume",
             }
         prior_volumes.append(prior_ohlc["volume"])
+    identity = _identity_hash(
+        {
+            "event_id": event_id or prior.get("event_id") or "",
+            "session_date": session_date.isoformat(),
+            "version": T1_VERSION,
+            "variant": T1_ALGORITHM,
+            "resistance": _finite(resistance_high),
+            "session_bar": {
+                "open": _finite(ohlc["open"]),
+                "high": _finite(ohlc["high"]),
+                "low": _finite(ohlc["low"]),
+                "close": _finite(ohlc["close"]),
+                "volume": _finite(ohlc["volume"]),
+            },
+            "prior_volumes": [_finite(value) for value in prior_volumes],
+            "settings": {
+                "clv_min": cfg.get("clv_min"),
+                "rvol_min": cfg.get("rvol_min"),
+                "upper_shadow_max": cfg.get("upper_shadow_max"),
+                "distance_atr_min": cfg.get("distance_atr_min"),
+                "rvol_lookback": cfg.get("rvol_lookback"),
+                "atr_period": cfg.get("atr_period"),
+            },
+        }
+    )
+    if (
+        prior.get("identity_hash") == identity
+        and prior.get("status") in T1_TERMINAL_STATUSES
+        and prior.get("version") == T1_VERSION
+    ):
+        reused = dict(prior)
+        reused.update(
+            {
+                "computed_at": computed_at,
+                "session_complete": True,
+                "identity_hash": identity,
+                "reused": True,
+                "first_known_at": first_known or prior.get("known_at"),
+                "event_id": event_id or prior.get("event_id"),
+            }
+        )
+        return reused
     rvol = rvol_daily_20med(
         ohlc["volume"],
         prior_volumes,
@@ -271,9 +370,25 @@ def evaluate_t1_from_daily(
     else:
         status = T1_UNMET
         reason = "conditions_not_met"
-    known_at = prior_known
-    if status in {T1_MET, T1_UNMET} and known_at is None:
-        known_at = computed_at
+    known_at = computed_at if status in T1_TERMINAL_STATUSES else None
+    revisions = list(prior.get("revisions") or [])
+    eval_version = int(prior.get("eval_version") or 0) or 1
+    if (
+        prior.get("status") in T1_TERMINAL_STATUSES
+        and prior.get("identity_hash")
+        and prior.get("identity_hash") != identity
+    ):
+        revisions.append(
+            {
+                "eval_version": eval_version,
+                "identity_hash": prior.get("identity_hash"),
+                "status": prior.get("status"),
+                "known_at": prior.get("known_at"),
+                "computed_at": prior.get("computed_at"),
+            }
+        )
+        eval_version += 1
+        first_known = prior.get("first_known_at") or prior.get("known_at") or known_at
     data_through = _bar_date(bar_index)
     return {
         **base,
@@ -281,6 +396,12 @@ def evaluate_t1_from_daily(
         "session_complete": True,
         "data_through": data_through.isoformat() if data_through else session_date.isoformat(),
         "known_at": known_at,
+        "first_known_at": first_known or known_at,
+        "eval_version": eval_version,
+        "identity_hash": identity,
+        "revisions": revisions,
+        "reused": False,
+        "event_id": event_id or prior.get("event_id"),
         "checks": checks["checks"],
         "clv": checks["clv"],
         "rvol_daily_20med": checks["rvol"],
@@ -304,7 +425,7 @@ def event_t1_status(event: Mapping[str, Any]) -> str:
     if not isinstance(payload, Mapping):
         return T1_UNAVAILABLE
     status = str(payload.get("status") or "").strip()
-    if status in {T1_MET, T1_UNMET, T1_PENDING, T1_UNAVAILABLE}:
+    if status in {T1_MET, T1_UNMET, T1_PENDING, T1_UNAVAILABLE, T1_NOT_APPLICABLE}:
         return status
     return T1_UNAVAILABLE
 
@@ -364,8 +485,8 @@ def apply_t1_stable_boost(events: Sequence[Mapping[str, Any]]) -> list[dict[str,
     boosted: list[dict[str, Any]] = []
     for key in group_order:
         bucket = groups[key]
-        met = [item for item in bucket if event_t1_status(item) == T1_MET]
-        rest = [item for item in bucket if event_t1_status(item) != T1_MET]
+        met = [item for item in bucket if t1_boost_eligible(item)]
+        rest = [item for item in bucket if not t1_boost_eligible(item)]
         boosted.extend(met)
         boosted.extend(rest)
     return boosted
@@ -395,13 +516,25 @@ def attach_t1_features(
     features = dict(payload.get("features") or {})
     resistance = t1_resistance_high(payload)
     session_date = _as_date(payload.get("trading_date"))
-    if session_date is None:
+    computed_at = as_of.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+    if not t1_setup_applicable(payload):
+        evaluation = {
+            "version": T1_VERSION,
+            "variant": T1_ALGORITHM,
+            "status": T1_NOT_APPLICABLE,
+            "reason": "setup_not_in_t1_universe",
+            "setup_type": str(payload.get("setup_type") or payload.get("origin_setup_type") or ""),
+            "session_date": session_date.isoformat() if session_date else None,
+            "computed_at": computed_at,
+            "known_at": None,
+        }
+    elif session_date is None:
         evaluation = {
             "version": T1_VERSION,
             "variant": T1_ALGORITHM,
             "status": T1_UNAVAILABLE,
             "reason": "missing_trading_date",
-            "computed_at": as_of.astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "computed_at": computed_at,
         }
     else:
         evaluation = evaluate_t1_from_daily(
@@ -411,6 +544,7 @@ def attach_t1_features(
             as_of=as_of,
             session=session or payload.get("session"),
             previous=features.get("t1_priority") if isinstance(features.get("t1_priority"), Mapping) else None,
+            event_id=str(payload.get("event_id") or "") or None,
         )
     features["t1_priority"] = evaluation
     payload["features"] = features

@@ -16,6 +16,7 @@ from app.services.breakouts.models import MarketSession
 from app.services.market_calendar import prior_trading_sessions
 from app.services.breakouts.t1_priority import (
     T1_MET,
+    T1_NOT_APPLICABLE,
     T1_PENDING,
     T1_UNAVAILABLE,
     T1_UNMET,
@@ -452,18 +453,8 @@ def test_orb_t1_uses_event_anchor_not_daily_base_resistance() -> None:
         session=MarketSession.CLOSED,
     )
     t1 = attached["t1_priority"]
-    assert t1["breakout_distance_atr"] is not None
-    assert t1["breakout_distance_atr"] > 0
-    wrong = evaluate_t1_from_daily(
-        frame,
-        session_date=SESSION,
-        resistance_high=200.0,
-        as_of=datetime(2026, 9, 14, 16, 5, tzinfo=ET),
-        session=MarketSession.CLOSED,
-    )
-    assert wrong["breakout_distance_atr"] is not None
-    assert wrong["breakout_distance_atr"] < 0
-    assert t1["status"] != wrong["status"] or t1["checks"]["distance_atr"] != wrong["checks"]["distance_atr"]
+    assert t1["status"] == T1_NOT_APPLICABLE
+    assert t1["reason"] == "setup_not_in_t1_universe"
 
 
 def test_daily_base_t1_still_uses_structure_resistance() -> None:
@@ -476,3 +467,108 @@ def test_daily_base_t1_still_uses_structure_resistance() -> None:
         "features": {},
     }
     assert t1_resistance_high(event) == 104.5
+
+
+def test_next_session_bar_does_not_erase_event_t_conclusion() -> None:
+    frame = _daily_frame({"open_": 100, "high": 110, "low": 90, "close": 108, "volume": 2_000_000})
+    first = evaluate_t1_from_daily(
+        frame,
+        session_date=SESSION,
+        resistance_high=100,
+        as_of=datetime(2026, 9, 14, 16, 5, tzinfo=ET),
+        session=MarketSession.CLOSED,
+        event_id="evt-daily",
+    )
+    later_frame = _daily_frame(
+        {"open_": 100, "high": 110, "low": 90, "close": 108, "volume": 2_000_000},
+        extra_days=[date(2026, 9, 15)],
+    )
+    later_frame.loc[pd.Timestamp(date(2026, 9, 15)), "Close"] = 50.0
+    later = evaluate_t1_from_daily(
+        later_frame,
+        session_date=SESSION,
+        resistance_high=100,
+        as_of=datetime(2026, 9, 15, 16, 5, tzinfo=ET),
+        session=MarketSession.CLOSED,
+        previous=first,
+        event_id="evt-daily",
+    )
+    fresh = evaluate_t1_from_daily(
+        later_frame,
+        session_date=SESSION,
+        resistance_high=100,
+        as_of=datetime(2026, 9, 15, 16, 5, tzinfo=ET),
+        session=MarketSession.CLOSED,
+        event_id="evt-daily",
+    )
+    assert first["status"] == T1_MET
+    assert later["status"] == T1_MET
+    assert later["known_at"] == first["known_at"]
+    assert later["data_through"] == SESSION.isoformat()
+    assert later.get("reused") is True
+    assert fresh["status"] == T1_MET
+    assert fresh["data_through"] == SESSION.isoformat()
+    assert fresh["reason"] != "event_bar_not_last_completed"
+
+
+def test_unverified_previous_status_is_not_locked() -> None:
+    frame = _daily_frame({"open_": 100, "high": 110, "low": 90, "close": 108, "volume": 2_000_000})
+    result = evaluate_t1_from_daily(
+        frame,
+        session_date=SESSION,
+        resistance_high=100,
+        as_of=datetime(2026, 9, 14, 16, 5, tzinfo=ET),
+        session=MarketSession.CLOSED,
+        previous={"status": T1_MET, "known_at": "2026-09-13T20:00:00Z"},
+    )
+    assert result["status"] == T1_MET
+    assert result["known_at"] != "2026-09-13T20:00:00Z"
+    assert result.get("reused") is not True
+
+
+def test_identity_revision_keeps_first_known_at() -> None:
+    frame = _daily_frame({"open_": 100, "high": 110, "low": 90, "close": 108, "volume": 2_000_000})
+    first = evaluate_t1_from_daily(
+        frame,
+        session_date=SESSION,
+        resistance_high=100,
+        as_of=datetime(2026, 9, 14, 16, 5, tzinfo=ET),
+        session=MarketSession.CLOSED,
+        event_id="evt-rev",
+    )
+    revised = evaluate_t1_from_daily(
+        frame,
+        session_date=SESSION,
+        resistance_high=200,
+        as_of=datetime(2026, 9, 15, 9, 0, tzinfo=ET),
+        session=MarketSession.PREMARKET,
+        previous=first,
+        event_id="evt-rev",
+    )
+    assert revised["eval_version"] == first["eval_version"] + 1
+    assert revised["first_known_at"] == first["known_at"]
+    assert revised["known_at"] != first["known_at"]
+    assert revised["revisions"]
+
+
+def test_expired_historical_met_is_not_boosted() -> None:
+    events = [
+        {
+            "event_id": "active-unmet",
+            "trading_date": "2026-09-14",
+            "event_at": "2026-09-14T18:00:00+00:00",
+            "alert_priority_score": 90,
+            "features": {"t1_priority": {"status": T1_UNMET}},
+            "lifecycle_state": "WATCHING",
+        },
+        {
+            "event_id": "expired-met",
+            "trading_date": "2026-09-14",
+            "event_at": "2026-09-14T17:00:00+00:00",
+            "alert_priority_score": 10,
+            "features": {"t1_priority": {"status": T1_MET}},
+            "lifecycle_state": "EXPIRED",
+        },
+    ]
+    boosted = apply_t1_stable_boost(events)
+    assert [item["event_id"] for item in boosted] == ["active-unmet", "expired-met"]
