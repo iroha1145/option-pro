@@ -26,6 +26,7 @@ from app.services.breakouts.feature_engine import (
     compute_atr,
     trim_daily_bars,
 )
+from app.services.breakouts.anchors import resolve_event_anchor
 from app.services.breakouts.models import MarketSession, TemporalCutoff
 from app.services.market_calendar import ET, is_trading_day, prior_trading_sessions
 
@@ -370,6 +371,19 @@ def apply_t1_stable_boost(events: Sequence[Mapping[str, Any]]) -> list[dict[str,
     return boosted
 
 
+def t1_resistance_high(event: Mapping[str, Any]) -> Any:
+    """Same resistance the detector uses: ORB anchor first, else daily-base zone."""
+
+    anchor = resolve_event_anchor(event)
+    if anchor is not None and anchor.pivot_price is not None:
+        return anchor.pivot_price
+    structure = event.get("structure") if isinstance(event.get("structure"), Mapping) else None
+    zone = structure.get("resistance_zone") if isinstance(structure, Mapping) else None
+    if isinstance(zone, Mapping):
+        return zone.get("high")
+    return None
+
+
 def attach_t1_features(
     event: Mapping[str, Any],
     daily: pd.DataFrame | None,
@@ -379,12 +393,7 @@ def attach_t1_features(
 ) -> dict[str, Any]:
     payload = dict(event)
     features = dict(payload.get("features") or {})
-    structure = payload.get("structure") if isinstance(payload.get("structure"), Mapping) else {}
-    resistance = None
-    if isinstance(structure, Mapping):
-        zone = structure.get("resistance_zone")
-        if isinstance(zone, Mapping):
-            resistance = zone.get("high")
+    resistance = t1_resistance_high(payload)
     session_date = _as_date(payload.get("trading_date"))
     if session_date is None:
         evaluation = {

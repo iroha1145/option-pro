@@ -20,8 +20,10 @@ from app.services.breakouts.t1_priority import (
     T1_UNAVAILABLE,
     T1_UNMET,
     apply_t1_stable_boost,
+    attach_t1_features,
     evaluate_t1_from_daily,
     event_t1_status,
+    t1_resistance_high,
 )
 
 
@@ -400,3 +402,54 @@ def test_boundary_thresholds_still_confirm() -> None:
     )
     assert result["status"] in {T1_MET, T1_UNMET, T1_UNAVAILABLE}
     assert result["status"] != T1_PENDING
+
+
+def test_orb_t1_uses_event_anchor_not_daily_base_resistance() -> None:
+    frame = _daily_frame()
+    event = {
+        "ticker": "AAA",
+        "setup_type": "OPENING_RANGE_BREAKOUT",
+        "origin_setup_type": "OPENING_RANGE_BREAKOUT",
+        "trading_date": SESSION.isoformat(),
+        "event_anchor": {
+            "trading_date": SESSION.isoformat(),
+            "pivot_price": 100.0,
+            "invalidation_price": 90.0,
+            "status": "active",
+            "source": "completed_opening_range",
+        },
+        "structure": {"resistance_zone": {"high": 200.0, "low": 180.0}},
+        "features": {},
+    }
+    assert t1_resistance_high(event) == 100.0
+    attached = attach_t1_features(
+        event,
+        frame,
+        as_of=datetime(2026, 9, 14, 16, 5, tzinfo=ET),
+        session=MarketSession.CLOSED,
+    )
+    t1 = attached["t1_priority"]
+    assert t1["breakout_distance_atr"] is not None
+    assert t1["breakout_distance_atr"] > 0
+    wrong = evaluate_t1_from_daily(
+        frame,
+        session_date=SESSION,
+        resistance_high=200.0,
+        as_of=datetime(2026, 9, 14, 16, 5, tzinfo=ET),
+        session=MarketSession.CLOSED,
+    )
+    assert wrong["breakout_distance_atr"] is not None
+    assert wrong["breakout_distance_atr"] < 0
+    assert t1["status"] != wrong["status"] or t1["checks"]["distance_atr"] != wrong["checks"]["distance_atr"]
+
+
+def test_daily_base_t1_still_uses_structure_resistance() -> None:
+    event = {
+        "ticker": "AAA",
+        "setup_type": "DAILY_BASE_BREAKOUT",
+        "origin_setup_type": "DAILY_BASE_BREAKOUT",
+        "trading_date": SESSION.isoformat(),
+        "structure": {"resistance_zone": {"high": 104.5, "low": 100.0}},
+        "features": {},
+    }
+    assert t1_resistance_high(event) == 104.5
