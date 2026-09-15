@@ -44,6 +44,40 @@ def test_follow_default_uses_admin_screener_default() -> None:
     assert resolution.source == "admin_default"
 
 
+def test_explicit_follow_default_skips_saved_user_production() -> None:
+    resolution = resolve_screener_algorithm(
+        requested=FOLLOW_DEFAULT,
+        user_choice=PRODUCTION_ALGORITHM,
+        admin_default=A0_ALGORITHM,
+        timeframe="all",
+        profile="balanced",
+    )
+    assert resolution.effective == A0_ALGORITHM
+    assert resolution.source == "admin_default"
+    assert resolution.requested == FOLLOW_DEFAULT
+
+
+def test_omitted_request_still_uses_saved_user_production() -> None:
+    resolution = resolve_screener_algorithm(
+        user_choice=PRODUCTION_ALGORITHM,
+        admin_default=A0_ALGORITHM,
+        timeframe="all",
+        profile="balanced",
+    )
+    assert resolution.effective == PRODUCTION_ALGORITHM
+    assert resolution.source == "user_preference"
+
+
+def test_explicit_follow_default_skips_saved_user_radar() -> None:
+    radar = resolve_radar_algorithm(
+        requested=FOLLOW_DEFAULT,
+        user_choice=PRODUCTION_ALGORITHM,
+        admin_default=T1_ALGORITHM,
+    )
+    assert radar.effective == T1_ALGORITHM
+    assert radar.source == "admin_default"
+
+
 def test_saved_user_production_survives_admin_default_change() -> None:
     resolution = resolve_screener_algorithm(
         user_choice=PRODUCTION_ALGORITHM,

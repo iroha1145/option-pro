@@ -443,3 +443,85 @@ def test_saved_user_production_is_not_overwritten_by_admin_a0(
     )
     assert resolution.effective == PRODUCTION_ALGORITHM
     assert resolution.source == "user_preference"
+
+
+def test_explicit_follow_default_scan_skips_saved_user_production(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    default_path = tmp_path / "strength-snapshot-v1.json"
+    a0_parameters = strength.a0_companion_scan_parameters()
+    a0_path = strength._strength_snapshot_path(a0_parameters, base_path=default_path)
+    strength._write_strength_snapshot(
+        default_path,
+        parameters=dict(strength.DEFAULT_STRENGTH_SCAN_PARAMETERS),
+        payload=_payload(ticker="PROD"),
+        saved_at=NOW - 10,
+    )
+    strength._write_strength_snapshot(
+        a0_path,
+        parameters=a0_parameters,
+        payload=_payload(parameters=a0_parameters, ticker="A0ROW"),
+        saved_at=NOW - 10,
+        base_path=default_path,
+    )
+    store = ViewPreferenceStore(tmp_path / "view-preferences.json")
+    store.write(
+        "account:alice",
+        normalize_view_preferences({"screener_ranking_algorithm": PRODUCTION_ALGORITHM}),
+    )
+    monkeypatch.setattr(strength, "_STRENGTH_SNAPSHOT_PATH", default_path)
+    monkeypatch.setattr(strength.time, "time", lambda: NOW)
+    monkeypatch.setattr(strength, "get_view_preference_store", lambda: store)
+    monkeypatch.setattr(strength, "principal_for_request", lambda **_kwargs: "account:alice")
+    monkeypatch.setattr(
+        strength,
+        "get_effective_runtime_settings",
+        lambda: type(
+            "Settings",
+            (),
+            {
+                "algorithms": type(
+                    "Algos",
+                    (),
+                    {
+                        "screener_ranking_algorithm": A0_ALGORITHM,
+                        "radar_sort_algorithm": T1_ALGORITHM,
+                    },
+                )()
+            },
+        )(),
+    )
+    omitted = _rp(
+        asyncio.run(
+            strength.scan(
+                _areq(),
+                universe="themes",
+                timeframe="all",
+                profile="balanced",
+                top=20,
+                sector_id=None,
+                min_price=5.0,
+                min_avg_dollar_volume=10_000_000.0,
+            )
+        )
+    )
+    assert omitted["rows"][0]["ticker"] == "PROD"
+    followed = _rp(
+        asyncio.run(
+            strength.scan(
+                _areq(),
+                universe="themes",
+                timeframe="all",
+                profile="balanced",
+                top=20,
+                sector_id=None,
+                min_price=5.0,
+                min_avg_dollar_volume=10_000_000.0,
+                ranking_algorithm="follow_default",
+            )
+        )
+    )
+    assert followed["rows"][0]["ticker"] == "A0ROW"
+    assert followed["effective_algorithm"] == A0_ALGORITHM
+    assert followed["requested_algorithm"] == "follow_default"

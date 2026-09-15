@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, HTTPException, Query, Response, status
+from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.strength import (
@@ -69,7 +69,7 @@ class StrengthRefreshParameters(BaseModel):
     min_price: float = Field(ge=0)
     min_avg_dollar_volume: float = Field(ge=0)
     include_options: bool
-    ranking_algorithm: Literal["production", "a0_mid_long"] | None = None
+    ranking_algorithm: Literal["production", "a0_mid_long", "follow_default"] | None = None
 
 
 class ManualActionRequest(BaseModel):
@@ -221,11 +221,34 @@ async def get_action(request_id: str) -> dict[str, Any]:
     return _public_action(item)
 
 
+def _resolve_refresh_ranking(request: Request, raw_parameters: dict[str, Any]) -> dict[str, Any]:
+    """Resolve follow_default the same way GET /strength/scan does before hashing."""
+
+    from app.api.strength import _request_screener_resolution
+    from app.services.algorithm_modes import PRODUCTION_ALGORITHM
+
+    payload = dict(raw_parameters)
+    requested = payload.pop("ranking_algorithm", None)
+    try:
+        resolution = _request_screener_resolution(
+            request,
+            requested=requested,
+            timeframe=str(payload.get("timeframe") or "all"),
+            profile=str(payload.get("profile") or "balanced"),
+        )
+    except Exception:
+        return raw_parameters
+    if resolution.effective != PRODUCTION_ALGORITHM:
+        payload["ranking_algorithm"] = resolution.effective
+    return payload
+
+
 @router.post("/actions/{action_type}", status_code=status.HTTP_202_ACCEPTED)
 async def request_action(
     action_type: ActionType,
     body: ManualActionRequest,
     response: Response,
+    request: Request,
 ) -> dict[str, Any]:
     parameters_were_supplied = "parameters" in body.model_fields_set
     action_details: dict[str, Any] = {}
@@ -241,6 +264,8 @@ async def request_action(
             if body.parameters is not None
             else dict(DEFAULT_STRENGTH_SCAN_PARAMETERS)
         )
+        requested_algorithm = raw_parameters.get("ranking_algorithm")
+        raw_parameters = _resolve_refresh_ranking(request, raw_parameters)
         try:
             parameters = normalize_strength_scan_parameters(raw_parameters)
         except ValueError as exc:
@@ -253,6 +278,8 @@ async def request_action(
             "parameters": parameters,
             "parameters_hash": parameters_hash,
         }
+        if requested_algorithm is not None:
+            action_details["requested_algorithm"] = requested_algorithm
     elif parameters_were_supplied:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,

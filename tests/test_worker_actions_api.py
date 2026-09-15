@@ -223,6 +223,26 @@ def test_strength_action_persists_full_parameters_and_hashes_default_idempotency
     assert key.endswith(f":{expected_hash}")
 
 
+def test_follow_default_strength_action_stores_requested_and_resolved_hash(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    _live_repository(tmp_path, monkeypatch)
+    parameters = _strength_parameters(ranking_algorithm="follow_default")
+    expected = dict(DEFAULT_STRENGTH_SCAN_PARAMETERS)
+    expected_hash = strength_scan_parameters_hash(expected)
+    with _client() as client:
+        response = client.post(
+            "/api/worker/actions/strength_refresh",
+            json={"parameters": parameters},
+        )
+    assert response.status_code == 202
+    details = response.json()["details"]
+    assert details["requested_algorithm"] == "follow_default"
+    assert details["parameters_hash"] == expected_hash
+    assert "ranking_algorithm" not in details["parameters"]
+
+
 def test_earnings_analysis_action_applies_paid_work_gate_and_queues(
     tmp_path,
     monkeypatch,

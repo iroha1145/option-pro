@@ -185,6 +185,7 @@ def resolve_screener_algorithm(
     user_id = canonicalize_screener_algorithm(user_choice, allow_follow=True)
     admin_id = canonicalize_screener_algorithm(admin_default) or PRODUCTION_ALGORITHM
 
+    follow_requested = requested_id == FOLLOW_DEFAULT
     if requested_id == FOLLOW_DEFAULT:
         requested_id = None
         explicit_request = False
@@ -194,6 +195,10 @@ def resolve_screener_algorithm(
     if requested_id is not None:
         effective = requested_id
         source = "request"
+    elif follow_requested:
+        # An explicit follow_default skips the saved personal choice.
+        effective = admin_id
+        source = "admin_default" if admin_default not in (None, "") else "system_default"
     elif user_id is not None:
         effective = user_id
         source = "user_preference"
@@ -235,6 +240,7 @@ def resolve_radar_algorithm(
     user_id = canonicalize_radar_algorithm(user_choice, allow_follow=True)
     admin_id = canonicalize_radar_algorithm(admin_default) or PRODUCTION_ALGORITHM
 
+    follow_requested = requested_id == FOLLOW_DEFAULT
     if requested_id == FOLLOW_DEFAULT:
         requested_id = None
     if user_id == FOLLOW_DEFAULT:
@@ -243,6 +249,9 @@ def resolve_radar_algorithm(
     if requested_id is not None:
         effective = requested_id
         source = "request"
+    elif follow_requested:
+        effective = admin_id
+        source = "admin_default" if admin_default not in (None, "") else "system_default"
     elif user_id is not None:
         effective = user_id
         source = "user_preference"
