@@ -1,1 +1,0 @@
-import{n as c,s as n}from"./transitions-C1XuzOwp.js";function f(i){return Array.isArray(i)?i.flatMap(r=>{if(typeof r=="string"){const a=r.trim();return a?[{factor_id:a,label:a}]:[]}const o=n(r),t=c(o,"factor_id");return t?[{factor_id:t,label:c(o,"label")??t}]:[]}):[]}export{f as m};
