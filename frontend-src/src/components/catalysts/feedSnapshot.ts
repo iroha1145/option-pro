@@ -2,8 +2,15 @@
  * from different feed snapshots. Removed / corrected / reclassified rows converge. */
 export interface FeedPage<T> { items: T[]; nextCursor: string | null; total: number; hiddenUnanalyzed: number }
 export interface FeedSnapshot<T> extends FeedPage<T> { pages: number }
-export async function visibleFeedPage<T>(read: (cursor?: string) => Promise<FeedPage<T>>, cursor?: string): Promise<FeedPage<T>> {
+export async function visibleFeedPage<T>(
+  read: (cursor?: string) => Promise<FeedPage<T>>,
+  cursor?: string,
+  options?: { hopEmptyPages?: boolean },
+): Promise<FeedPage<T>> {
   let result = await read(cursor);
+  if (!options?.hopEmptyPages) {
+    return result;
+  }
   let hidden = result.hiddenUnanalyzed;
   const total = result.total;
   const seen = new Set<string>();

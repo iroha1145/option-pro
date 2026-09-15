@@ -1165,6 +1165,7 @@ export interface CatalystFeedQuery {
   themeId?: string;
   limit?: number;
   cursor?: string | null;
+  pageMode?: 'visible' | null;
 }
 
 /* ---------------- 主题与标题模板 ---------------- */
@@ -1552,14 +1553,29 @@ export function getCatalystsFeedV2(q: CatalystFeedQuery = {}): {
   const filtered = catalystsNews.filter((n) => matchNews(n, q));
   const limit = Math.max(1, Math.min(q.limit ?? 12, 100));
   const offset = Math.max(0, parseInt(q.cursor ?? '0', 10) || 0);
-  const page = filtered.slice(offset, offset + limit);
-  const items = page.filter((item) => item.titleZh && item.summaryZh);
-  const nextCursor = offset + limit < filtered.length ? String(offset + limit) : null;
+  const scanBudget = q.pageMode === 'visible' ? 108 : limit;
+  const window = filtered.slice(offset, offset + scanBudget);
+  const items: CatalystNewsItem[] = [];
+  let hiddenUnanalyzed = 0;
+  let consumed = 0;
+  for (const item of window) {
+    consumed += 1;
+    if (item.titleZh && item.summaryZh) {
+      items.push(item);
+      if (q.pageMode === 'visible' && items.length >= limit) break;
+    } else {
+      hiddenUnanalyzed += 1;
+    }
+  }
+  if (q.pageMode !== 'visible') {
+    hiddenUnanalyzed = window.length - items.length;
+  }
+  const nextCursor = offset + consumed < filtered.length ? String(offset + consumed) : null;
   return {
     items,
     nextCursor,
     total: filtered.length,
-    hiddenUnanalyzed: page.length - items.length,
+    hiddenUnanalyzed,
   };
 }
 

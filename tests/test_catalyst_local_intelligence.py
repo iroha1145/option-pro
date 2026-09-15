@@ -5,6 +5,7 @@ import json
 import random
 import sqlite3
 import threading
+import time
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Iterable
@@ -7062,7 +7063,7 @@ def test_public_ticker_batch_scans_the_news_window_once(
 ) -> None:
     _etl, _ai, intelligence = _stack(tmp_path)
     observed = datetime(2030, 7, 16, 18, 35, tzinfo=timezone.utc)
-    original = intelligence._active_revisions
+    original = intelligence._active_revisions_tracked
     calls = 0
 
     def counted_active_revisions(*args, **kwargs):
@@ -7072,7 +7073,7 @@ def test_public_ticker_batch_scans_the_news_window_once(
 
     monkeypatch.setattr(
         intelligence,
-        "_active_revisions",
+        "_active_revisions_tracked",
         counted_active_revisions,
     )
 
@@ -7128,15 +7129,18 @@ def test_directional_batch_keeps_only_the_requested_tickers_nonzero_impact(
     ]
     monkeypatch.setattr(
         intelligence,
-        "_active_revisions",
-        lambda *_args, **_kwargs: [
-            {
-                "index": index,
-                "news_id": items[index]["news_id"],
-                "source_count": 1,
-            }
-            for index in range(3)
-        ],
+        "_active_revisions_tracked",
+        lambda *_args, **_kwargs: (
+            [
+                {
+                    "index": index,
+                    "news_id": items[index]["news_id"],
+                    "source_count": 1,
+                }
+                for index in range(3)
+            ],
+            None,
+        ),
     )
     monkeypatch.setattr(intelligence, "_ai_job_snapshot", lambda **_kwargs: {})
     monkeypatch.setattr(
@@ -7650,3 +7654,548 @@ def test_stale_preparing_focus_unblocks_a_new_revision(tmp_path, monkeypatch):
     assert stale[0] == "failed"
     assert stale[1] == "focus_prepare_expired"
     assert ai.get_job(cycle["job_id"]) is not None
+
+
+def test_anon_complete_cache_hit_fingerprints_once(tmp_path, monkeypatch) -> None:
+    etl, _ai, intelligence = _stack(tmp_path)
+    base = datetime(2026, 7, 21, 14, 30, tzinfo=timezone.utc)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: base)
+    _apply_news(
+        etl,
+        [_news_change(1, 141, available_at=base - timedelta(hours=1))],
+        as_of=base,
+    )
+    intelligence.reconcile()
+
+    with request_owner_access_context(False):
+        first = intelligence.feed(as_of=base, window_hours=24, limit=10)
+        assert [item["news_id"] for item in first["items"]] == [141]
+        cached = local_module._REVISION_CACHE[(str(intelligence.db_path), 24)]
+        assert cached.get("anon_items") is not None
+
+        calls = {"n": 0}
+        original = local_module._revision_store_cursor
+
+        def counted(connection):
+            calls["n"] += 1
+            return original(connection)
+
+        monkeypatch.setattr(local_module, "_revision_store_cursor", counted)
+
+        def _must_not_run(*_args, **_kwargs):
+            raise AssertionError("complete cache hit must not rebuild revisions")
+
+        intelligence._active_revisions_query = _must_not_run  # type: ignore[method-assign]
+        try:
+            second = intelligence.feed(as_of=base, window_hours=24, limit=10)
+        finally:
+            del intelligence._active_revisions_query
+
+    assert [item["news_id"] for item in second["items"]] == [141]
+    assert calls["n"] == 1
+
+
+def test_incomplete_revision_cache_falls_back_to_slow_path(
+    tmp_path, monkeypatch
+) -> None:
+    etl, _ai, intelligence = _stack(tmp_path)
+    base = datetime(2026, 7, 21, 14, 30, tzinfo=timezone.utc)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: base)
+    _apply_news(
+        etl,
+        [_news_change(1, 142, available_at=base - timedelta(hours=1))],
+        as_of=base,
+    )
+    intelligence.reconcile()
+
+    with request_owner_access_context(False):
+        intelligence.feed(as_of=base, window_hours=24, limit=10)
+        cached = local_module._REVISION_CACHE[(str(intelligence.db_path), 24)]
+        cached["anon_items"] = None
+        calls = {"n": 0}
+        original = local_module._revision_store_cursor
+
+        def counted(connection):
+            calls["n"] += 1
+            return original(connection)
+
+        monkeypatch.setattr(local_module, "_revision_store_cursor", counted)
+        again = intelligence.feed(as_of=base, window_hours=24, limit=10)
+
+    assert [item["news_id"] for item in again["items"]] == [142]
+    assert calls["n"] == 2
+    assert local_module._REVISION_CACHE[(str(intelligence.db_path), 24)].get(
+        "anon_items"
+    ) is not None
+
+
+def test_late_revision_build_does_not_clobber_newer_cache() -> None:
+    key = ("/tmp/revision-cache-guard", 24)
+    newer_cursor = (2, 2, 2)
+    older_cursor = (1, 1, 1)
+    local_module._REVISION_CACHE[key] = {
+        "cursor": newer_cursor,
+        "built_at": 20.0,
+        "rows": [{"news_id": 200}],
+        "anon_items": [{"news_id": 200}],
+    }
+    local_module._store_revision_cache(
+        key,
+        older_cursor,
+        [{"news_id": 100}],
+        started_at=10.0,
+    )
+    cached = local_module._REVISION_CACHE[key]
+    assert cached["cursor"] == newer_cursor
+    assert [row["news_id"] for row in cached["rows"]] == [200]
+    local_module._store_revision_cache(
+        key,
+        (3, 3, 3),
+        [{"news_id": 300}],
+        started_at=25.0,
+    )
+    cached = local_module._REVISION_CACHE[key]
+    assert cached["cursor"] == (3, 3, 3)
+    assert [row["news_id"] for row in cached["rows"]] == [300]
+    local_module._REVISION_CACHE.pop(key, None)
+
+
+def test_same_cursor_row_store_does_not_drop_anon_items() -> None:
+    key = ("/tmp/revision-cache-same-cursor", 24)
+    cursor = (4, 4, 4)
+    installed_at = time.monotonic()
+    local_module._REVISION_CACHE[key] = {
+        "cursor": cursor,
+        "built_at": installed_at,
+        "rows": [{"news_id": 4}],
+        "anon_items": [{"news_id": 4, "title": "cached"}],
+    }
+    local_module._store_revision_cache(
+        key,
+        cursor,
+        [{"news_id": 99}],
+        started_at=installed_at - 1.0,
+    )
+    cached = local_module._REVISION_CACHE[key]
+    assert cached["cursor"] == cursor
+    assert cached["built_at"] == installed_at
+    assert [row["news_id"] for row in cached["rows"]] == [4]
+    assert cached["anon_items"][0]["title"] == "cached"
+    local_module._REVISION_CACHE.pop(key, None)
+
+
+def test_expired_same_cursor_store_invalidates_anon_items() -> None:
+    key = ("/tmp/revision-cache-expired-cursor", 24)
+    cursor = (5, 5, 5)
+    expired_at = time.monotonic() - local_module._REVISION_CACHE_MAX_AGE_SECONDS - 10.0
+    local_module._REVISION_CACHE[key] = {
+        "cursor": cursor,
+        "built_at": expired_at,
+        "rows": [{"news_id": 5}],
+        "anon_items": [{"news_id": 5, "title": "cached"}],
+    }
+    started_at = time.monotonic() - 1.0
+    installed = local_module._store_revision_cache(
+        key,
+        cursor,
+        [{"news_id": 55}],
+        started_at=started_at,
+    )
+    cached = local_module._REVISION_CACHE[key]
+    assert installed is True
+    assert cached["cursor"] == cursor
+    assert cached["built_at"] > expired_at
+    assert cached["built_at"] >= started_at
+    assert [row["news_id"] for row in cached["rows"]] == [55]
+    assert cached.get("anon_items") is None
+    assert local_module._revision_cache_fresh(cached, cursor)
+    local_module._REVISION_CACHE.pop(key, None)
+
+
+def test_expired_same_cursor_keeps_concurrent_install() -> None:
+    key = ("/tmp/revision-cache-expired-concurrent", 24)
+    cursor = (6, 6, 6)
+    now = time.monotonic()
+    started_at = now - local_module._REVISION_CACHE_MAX_AGE_SECONDS - 40.0
+    concurrent_at = now - local_module._REVISION_CACHE_MAX_AGE_SECONDS - 10.0
+    local_module._REVISION_CACHE[key] = {
+        "cursor": cursor,
+        "built_at": concurrent_at,
+        "rows": [{"news_id": 6}],
+        "anon_items": [{"news_id": 6, "title": "concurrent"}],
+    }
+    local_module._store_revision_cache(
+        key,
+        cursor,
+        [{"news_id": 66}],
+        started_at=started_at,
+    )
+    cached = local_module._REVISION_CACHE[key]
+    assert [row["news_id"] for row in cached["rows"]] == [6]
+    assert cached["built_at"] == concurrent_at
+    assert cached["anon_items"][0]["title"] == "concurrent"
+    local_module._REVISION_CACHE.pop(key, None)
+
+
+def test_expired_complete_cache_refreshes_once_then_hits(tmp_path, monkeypatch) -> None:
+    etl, _ai, intelligence = _stack(tmp_path)
+    base = datetime(2026, 7, 21, 14, 30, tzinfo=timezone.utc)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: base)
+    _apply_news(
+        etl,
+        [_news_change(1, 143, available_at=base - timedelta(hours=1))],
+        as_of=base,
+    )
+    intelligence.reconcile()
+
+    with request_owner_access_context(False):
+        first = intelligence.feed(as_of=base, window_hours=24, limit=10)
+        assert [item["news_id"] for item in first["items"]] == [143]
+        cached = local_module._REVISION_CACHE[(str(intelligence.db_path), 24)]
+        cached["built_at"] = (
+            time.monotonic() - local_module._REVISION_CACHE_MAX_AGE_SECONDS - 10.0
+        )
+        query_calls = {"n": 0}
+        original_query = intelligence._active_revisions_query
+
+        def counted_query(*args, **kwargs):
+            query_calls["n"] += 1
+            return original_query(*args, **kwargs)
+
+        intelligence._active_revisions_query = counted_query  # type: ignore[method-assign]
+        try:
+            second = intelligence.feed(as_of=base, window_hours=24, limit=10)
+            assert [item["news_id"] for item in second["items"]] == [143]
+            assert query_calls["n"] == 1
+            fingerprint_calls = {"n": 0}
+            original_cursor = local_module._revision_store_cursor
+
+            def counted_cursor(connection):
+                fingerprint_calls["n"] += 1
+                return original_cursor(connection)
+
+            monkeypatch.setattr(local_module, "_revision_store_cursor", counted_cursor)
+
+            def _must_not_run(*_args, **_kwargs):
+                raise AssertionError("refreshed cache must not rebuild revisions")
+
+            intelligence._active_revisions_query = _must_not_run  # type: ignore[method-assign]
+            third = intelligence.feed(as_of=base, window_hours=24, limit=10)
+        finally:
+            intelligence._active_revisions_query = original_query  # type: ignore[method-assign]
+
+    assert [item["news_id"] for item in third["items"]] == [143]
+    assert fingerprint_calls["n"] == 1
+
+
+def test_expired_cache_follows_moved_time_window(tmp_path, monkeypatch) -> None:
+    etl, _ai, intelligence = _stack(tmp_path)
+    base = datetime(2026, 7, 21, 14, 30, tzinfo=timezone.utc)
+    clock = {"now": base}
+    monkeypatch.setattr(local_module, "_utc_now", lambda: clock["now"])
+    _apply_news(
+        etl,
+        [_news_change(1, 141, available_at=base - timedelta(hours=23, minutes=50))],
+        as_of=base,
+    )
+    intelligence.reconcile()
+
+    with request_owner_access_context(False):
+        first = intelligence.feed(as_of=base, window_hours=24, limit=10)
+        assert [item["news_id"] for item in first["items"]] == [141]
+        assert first["summary"]["count"] == 1
+
+        clock["now"] = base + timedelta(minutes=10)
+        cached = local_module._REVISION_CACHE[(str(intelligence.db_path), 24)]
+        cached["built_at"] = (
+            time.monotonic() - local_module._REVISION_CACHE_MAX_AGE_SECONDS - 10.0
+        )
+        later = intelligence.feed(as_of=clock["now"], window_hours=24, limit=10)
+        assert later["items"] == []
+        assert later["summary"]["count"] == 0
+        cached = local_module._REVISION_CACHE[(str(intelligence.db_path), 24)]
+        assert [row["news_id"] for row in cached["rows"]] == []
+        assert cached.get("anon_items") in (None, [])
+
+        hot = intelligence.feed(as_of=clock["now"], window_hours=24, limit=10)
+        assert hot["items"] == []
+        assert hot["summary"]["count"] == 0
+
+
+def test_late_anonymous_items_do_not_pollute_newer_row_cache(
+    tmp_path, monkeypatch
+) -> None:
+    etl, _ai, intelligence = _stack(tmp_path)
+    base = datetime(2026, 7, 21, 14, 30, tzinfo=timezone.utc)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: base)
+    _apply_news(
+        etl,
+        [_news_change(1, 141, available_at=base - timedelta(hours=1))],
+        as_of=base,
+    )
+    intelligence.reconcile()
+
+    queried = threading.Event()
+    resume = threading.Event()
+    original_query = intelligence._active_revisions_query
+    delay_next = {"on": False}
+
+    def gated_query(*args, **kwargs):
+        rows = original_query(*args, **kwargs)
+        if delay_next["on"]:
+            queried.set()
+            if not resume.wait(timeout=5):
+                raise TimeoutError("stale anonymous reader was not resumed")
+        return rows
+
+    intelligence._active_revisions_query = gated_query  # type: ignore[method-assign]
+    errors: list[BaseException] = []
+    stale_payload: dict[str, Any] = {}
+
+    def stale_reader() -> None:
+        try:
+            with request_owner_access_context(False):
+                stale_payload["feed"] = intelligence.feed(
+                    as_of=base, window_hours=24, limit=10
+                )
+        except BaseException as exc:  # noqa: BLE001 — surface in the parent thread
+            errors.append(exc)
+
+    delay_next["on"] = True
+    worker = threading.Thread(target=stale_reader)
+    worker.start()
+    assert queried.wait(timeout=5)
+    delay_next["on"] = False
+    _apply_news(
+        etl,
+        [_news_change(2, 142, available_at=base - timedelta(minutes=10))],
+        as_of=base,
+    )
+    intelligence.reconcile()
+    with request_owner_access_context(True):
+        owner = intelligence.feed(as_of=base, window_hours=24, limit=10)
+    assert {item["news_id"] for item in owner["items"]} == {142, 141}
+    resume.set()
+    worker.join(timeout=5)
+    assert errors == []
+    assert worker.is_alive() is False
+
+    with request_owner_access_context(False):
+        later = intelligence.feed(as_of=base, window_hours=24, limit=10)
+    assert [item["news_id"] for item in later["items"]] == [142, 141]
+    cached = local_module._REVISION_CACHE[(str(intelligence.db_path), 24)]
+    assert [row["news_id"] for row in cached["rows"]] == [142, 141]
+    assert [item["news_id"] for item in cached["anon_items"] or []] == [142, 141]
+
+
+def test_feed_query_hash_omits_page_mode_for_legacy_clients() -> None:
+    legacy = local_module._feed_query_hash(
+        {"window_hours": 72, "include_unanalyzed": True},
+        theme=None,
+    )
+    omitted = local_module._feed_query_hash(
+        {"window_hours": 72, "include_unanalyzed": True, "page_mode": None},
+        theme=None,
+    )
+    visible = local_module._feed_query_hash(
+        {"window_hours": 72, "include_unanalyzed": True, "page_mode": "visible"},
+        theme=None,
+    )
+    assert legacy == omitted
+    assert legacy != visible
+
+
+def test_visible_page_mode_scans_raw_candidates_once(tmp_path, monkeypatch) -> None:
+    etl, _ai, intelligence = _stack(tmp_path)
+    base = datetime(2026, 7, 21, 14, 30, tzinfo=timezone.utc)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: base)
+    _apply_news(
+        etl,
+        [
+            _news_change(index, 300 + index, available_at=base - timedelta(minutes=index))
+            for index in range(1, 20)
+        ],
+        as_of=base,
+    )
+    intelligence.reconcile()
+    raw = intelligence.feed(as_of=base, window_hours=24, limit=5)
+    visible = intelligence.feed(
+        as_of=base, window_hours=24, limit=5, page_mode="visible"
+    )
+    assert raw["summary"]["count"] == visible["summary"]["count"]
+    assert len(raw["items"]) == 5
+    assert len(visible["items"]) == visible["summary"]["count"]
+    assert visible["page_scanned"] == visible["summary"]["count"]
+    assert visible["page_offset"] == 0
+    with pytest.raises(ValueError, match="page_mode"):
+        intelligence.feed(as_of=base, window_hours=24, page_mode="raw")
+
+
+def test_visible_feed_cursor_keeps_fixed_as_of(tmp_path, monkeypatch) -> None:
+    etl, _ai, intelligence = _stack(tmp_path)
+    base = datetime(2026, 7, 21, 14, 30, tzinfo=timezone.utc)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: base)
+    _apply_news(
+        etl,
+        [
+            _news_change(index, 400 + index, available_at=base - timedelta(minutes=index))
+            for index in range(1, 121)
+        ],
+        as_of=base,
+    )
+    intelligence.reconcile()
+    first = intelligence.feed(
+        as_of=base, window_hours=24, limit=5, page_mode="visible"
+    )
+    assert first["next_cursor"]
+    later = base + timedelta(hours=2)
+    monkeypatch.setattr(local_module, "_utc_now", lambda: later)
+    second = intelligence.feed(
+        as_of=later,
+        window_hours=24,
+        limit=5,
+        page_mode="visible",
+        cursor=first["next_cursor"],
+    )
+    assert first["as_of"] == _iso(base)
+    assert second["as_of"] == first["as_of"]
+    assert first["page_scanned"] == 108
+    assert second["page_offset"] == 108
+
+
+def test_rejected_cache_install_keeps_own_rows_for_fixed_as_of_pagination(
+    tmp_path, monkeypatch
+) -> None:
+    """Losing the install race must not adopt a later as_of row set.
+
+    Visible pagination hides items that are not yet public at the request
+    as_of, but the cursor still advances by raw position. Adopting a newer
+    cache makes that hidden slot consume offset and skip the last original
+    item when page 2 is served from the historical cursor.
+    """
+    from app.personal_config import FeatureConfig, PersonalConfig
+    from app.services.catalysts.personal_service import PersonalCatalystService
+
+    etl, ai, intelligence = _stack(tmp_path)
+    t0 = datetime(2026, 3, 20, 0, 0, tzinfo=timezone.utc)
+    clock = {"now": t0}
+    monkeypatch.setattr(local_module, "_utc_now", lambda: clock["now"])
+    originals = [
+        _news_change(
+            index,
+            index,
+            available_at=t0 - timedelta(minutes=30),
+            title="芯片企业公布最新业绩",
+            summary="收入增长，但管理层仍提示需求波动风险。",
+        )
+        for index in range(1, 14)
+    ]
+    _apply_news(etl, originals, as_of=t0)
+    intelligence.reconcile()
+    service = PersonalCatalystService(
+        type(
+            "SettingsStub",
+            (),
+            {
+                "cache_db_path": str(intelligence.db_path),
+                "model": "gpt-5.6-terra",
+                "reasoning": "max",
+            },
+        )(),
+        intelligence=intelligence,
+        ai_repository=ai,
+        personal_config=PersonalConfig(
+            features=FeatureConfig(catalyst_mode="read")
+        ),
+        ai_settings=type(
+            "AISettingsStub", (), {"personal_etl_enabled": True}
+        )(),
+    )
+
+    queried = threading.Event()
+    resume = threading.Event()
+    original_query = intelligence._active_revisions_query
+    delay_next = {"on": False}
+
+    def gated_query(*args, **kwargs):
+        rows = original_query(*args, **kwargs)
+        if delay_next["on"]:
+            queried.set()
+            if not resume.wait(timeout=5):
+                raise TimeoutError("fixed-as-of reader was not resumed")
+        return rows
+
+    intelligence._active_revisions_query = gated_query  # type: ignore[method-assign]
+    errors: list[BaseException] = []
+    first_page: dict[str, Any] = {}
+
+    def early_reader() -> None:
+        try:
+            with request_owner_access_context(False):
+                first_page["feed"] = service.feed(
+                    as_of=t0,
+                    window_hours=24,
+                    limit=12,
+                    page_mode="visible",
+                )
+        except BaseException as exc:  # noqa: BLE001 — surface in the parent thread
+            errors.append(exc)
+
+    delay_next["on"] = True
+    worker = threading.Thread(target=early_reader)
+    worker.start()
+    assert queried.wait(timeout=5)
+    delay_next["on"] = False
+
+    clock["now"] = t0 + timedelta(seconds=1)
+    _apply_news(
+        etl,
+        [
+            _news_change(
+                14,
+                14,
+                available_at=clock["now"],
+                title="芯片企业发布最新进展",
+                summary="公司披露后续安排，市场关注交付节奏。",
+            )
+        ],
+        as_of=clock["now"],
+    )
+    intelligence.reconcile()
+    clock["now"] = t0 + timedelta(seconds=2)
+    with request_owner_access_context(False):
+        later = service.feed(
+            as_of=clock["now"],
+            window_hours=24,
+            limit=12,
+            page_mode="visible",
+        )
+    assert later["summary"]["count"] == 14
+    assert 14 in {item["news_id"] for item in later["items"]}
+
+    resume.set()
+    worker.join(timeout=5)
+    assert errors == []
+    assert worker.is_alive() is False
+    first = first_page["feed"]
+    clock["now"] = t0 + timedelta(minutes=2)
+    with request_owner_access_context(False):
+        second = service.feed(
+            as_of=clock["now"],
+            window_hours=24,
+            limit=12,
+            page_mode="visible",
+            cursor=first["next_cursor"],
+        )
+
+    first_ids = [item["news_id"] for item in first["items"]]
+    second_ids = [item["news_id"] for item in second["items"]]
+    assert first["as_of"] == _iso(t0)
+    assert second["as_of"] == first["as_of"]
+    assert first["summary"]["count"] == 13
+    assert second["summary"]["count"] == 13
+    assert 14 not in first_ids
+    assert 14 not in second_ids
+    assert first_ids == [13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2]
+    assert second_ids == [1]
+    assert set(first_ids + second_ids) == set(range(1, 14))

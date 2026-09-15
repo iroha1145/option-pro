@@ -13,6 +13,7 @@ const bundle = await build({
     export { mapWatchlist, stocksApi } from './src/api/modules/stocks.ts';
     export { industryLabel } from './src/lib/industryLabel.ts';
     export { getLocale, setLocale } from './src/i18n/core.ts';
+    export { installTestDictionaries } from './src/i18n/testing.ts';
     export {
       login as mockLogin,
       logout as mockLogout,
@@ -80,6 +81,7 @@ test('duplicate groups cannot replace a known industry and later metadata can fi
 });
 
 test('provider industry labels follow the selected interface language', () => {
+  api.installTestDictionaries();
   const previous = api.getLocale();
   try {
     for (const [locale, expected] of [

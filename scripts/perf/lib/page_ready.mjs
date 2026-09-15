@@ -62,6 +62,7 @@ export function snapshotFromDocument(doc, path) {
     hasScanError: /扫描失败|扫描数据不可用|Scan failed|スキャンに失敗/i.test(resultsText),
     hasIndexOverview: !!(doc.querySelector('[aria-label="指数概览"]') || doc.querySelector('[aria-label="Index overview"]') || doc.querySelector('[aria-label="指数概要"]')),
     hasIndexCards: !!doc.querySelector('[data-optix-region="home-indices"] a, [data-optix-region="market-indices"] button'),
+    hasNewsArticle: !!doc.querySelector('article h3'),
     hasQuote: !!doc.querySelector('[data-quote-symbol], [aria-label*="K 线"], [aria-label*="candlestick"], [aria-label*="K-line"]'),
     hasNotFound: /页面不存在|Page not found|ページが存在しません/i.test(bodyText),
   };
@@ -81,6 +82,7 @@ export function classifyPageReady(snapshot) {
     if (path === '/earnings') return /财报|Earnings|決算/i.test(heading);
     if (path === '/sectors') return /板块|Sectors|セクター|透視/i.test(heading);
     if (path === '/cta') return /CTA|趋势资金|トレンド資金/i.test(heading);
+    if (path === '/catalysts') return /新闻|催化|Catalyst|ニュース/i.test(heading);
     return Boolean(heading);
   };
   if (region === 'content' || region === 'empty' || region === 'error' || region === 'idle') {
@@ -158,6 +160,13 @@ export function classifyPageReady(snapshot) {
     if (/CTA 估算读取失败|failed to read/i.test(body)) return 'error';
     if (/CTA 估算尚未生成|暂无数据|not generated yet/i.test(body)) return 'empty';
     if (/指数总览|指数详情|Overview/i.test(body)) return 'content';
+    return 'shell';
+  }
+  if (path === '/catalysts') {
+    if (!headingReady()) return 'pending';
+    if (/新闻流不可用|加载失败|Failed to load/i.test(body) && !snapshot.hasNewsArticle) return 'error';
+    if (snapshot.hasNewsArticle) return 'content';
+    if (/暂无新闻|No news|ニュースがありません/i.test(body)) return 'empty';
     return 'shell';
   }
   if (path === '/this-page-is-not-a-route') {

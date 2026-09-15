@@ -236,7 +236,7 @@ export default function FeedPanel({ filters, onOpenNews, patches, onFeedResult, 
     setLoadingMore(true);
     setMoreError(null);
     try {
-      const page = await visibleFeedPage((cursor) => catalystsContract.feed({ ...toFeedQuery(filters), limit: PAGE_SIZE, cursor }), previous.nextCursor!);
+      const page = await visibleFeedPage((cursor) => catalystsContract.feed({ ...toFeedQuery(filters), limit: PAGE_SIZE, pageMode: 'visible', cursor }), previous.nextCursor!);
       if (keyRef.current !== key || generation.current !== requestGeneration) return;
       update((current) => current ? appendFeedPage(current, page) : current, previous);
     } catch (cause) {

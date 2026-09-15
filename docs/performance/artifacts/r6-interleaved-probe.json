@@ -1,0 +1,225 @@
+{
+  "ok": false,
+  "lab": true,
+  "interleaved": true,
+  "notRUM": true,
+  "identity": "loopback-owner",
+  "profile": "mobile-ref",
+  "optBase": "http://127.0.0.1:2000",
+  "unoptBase": "http://127.0.0.1:2001",
+  "measuredAt": "2026-09-14T15:56:47.721Z",
+  "pairs": 1,
+  "summary": {
+    "opt": {
+      "cold": {
+        "n": 1,
+        "ready_n": 1,
+        "timeout_n": 0,
+        "failure_rate": 0,
+        "complete": true,
+        "news_content_ready_p50": 9189,
+        "news_content_ready_p75": 9189,
+        "lcp_p75": 9076,
+        "titles": [
+          "芯片企业发布最新进展"
+        ],
+        "rate_limited_n": 0,
+        "transfer_p50": 339869,
+        "feed_hops_p50": 2,
+        "request_p50": 73
+      },
+      "warm": {
+        "n": 1,
+        "ready_n": 1,
+        "timeout_n": 0,
+        "failure_rate": 0,
+        "complete": true,
+        "news_content_ready_p50": 2731.5,
+        "news_content_ready_p75": 2731.5,
+        "lcp_p75": 2272,
+        "titles": [
+          "芯片企业发布最新进展"
+        ],
+        "rate_limited_n": 0,
+        "transfer_p50": 3646
+      }
+    },
+    "unopt": {
+      "cold": {
+        "n": 1,
+        "ready_n": 0,
+        "timeout_n": 1,
+        "failure_rate": 1,
+        "complete": false,
+        "news_content_ready_p50": null,
+        "news_content_ready_p75": null,
+        "lcp_p75": 1724,
+        "titles": [],
+        "rate_limited_n": 0,
+        "transfer_p50": 528949,
+        "feed_hops_p50": 18,
+        "request_p50": 79
+      },
+      "warm": {
+        "n": 1,
+        "ready_n": 0,
+        "timeout_n": 1,
+        "failure_rate": 1,
+        "complete": false,
+        "news_content_ready_p50": null,
+        "news_content_ready_p75": null,
+        "lcp_p75": 1876,
+        "titles": [],
+        "rate_limited_n": 0,
+        "transfer_p50": 33680
+      }
+    },
+    "comparison_complete": false,
+    "comparison_status": "incomplete_samples",
+    "delta_cold_p75": null,
+    "delta_warm_p75": null
+  },
+  "samples": [
+    {
+      "i": 1,
+      "first": "opt",
+      "opt": {
+        "cold": {
+          "cache": "cold",
+          "rate_limited": 0,
+          "wall_ms": 9266,
+          "news_content_ready_ms": 9189,
+          "news_title": "芯片企业发布最新进展",
+          "feed_hops": 2,
+          "feed_urls": [
+            "/api/catalysts/feed?window_hours=72&include_unanalyzed=true&include_neutral=true&page_mode=visible&limit=12",
+            "/api/catalysts/feed?window_hours=24&include_unanalyzed=true&include_neutral=true&page_mode=visible&limit=50"
+          ],
+          "request_count": 73,
+          "http_error_n": 0,
+          "runtime_en": 0,
+          "runtime_ja": 0,
+          "lcp": {
+            "startTime": 9076,
+            "size": 10835,
+            "url": null
+          },
+          "cls": 0.0007922795292800459,
+          "resourceCount": 61,
+          "transferSize": 339869,
+          "encodedBodySize": 322521
+        },
+        "warm": {
+          "cache": "warm",
+          "rate_limited": 0,
+          "wall_ms": 2801,
+          "news_content_ready_ms": 2731.5,
+          "news_title": "芯片企业发布最新进展",
+          "feed_hops": 2,
+          "feed_urls": [
+            "/api/catalysts/feed?window_hours=72&include_unanalyzed=true&include_neutral=true&page_mode=visible&limit=12",
+            "/api/catalysts/feed?window_hours=24&include_unanalyzed=true&include_neutral=true&page_mode=visible&limit=50"
+          ],
+          "request_count": 80,
+          "http_error_n": 0,
+          "runtime_en": 0,
+          "runtime_ja": 0,
+          "lcp": {
+            "startTime": 2272,
+            "size": 1056,
+            "url": null
+          },
+          "cls": 0.0007922795292800459,
+          "resourceCount": 64,
+          "transferSize": 3646,
+          "encodedBodySize": 321299
+        }
+      },
+      "unopt": {
+        "cold": {
+          "cache": "cold",
+          "rate_limited": 0,
+          "wall_ms": 120916,
+          "news_content_ready_ms": null,
+          "news_title": null,
+          "feed_hops": 18,
+          "feed_urls": [
+            "/api/catalysts/feed?window_hours=72&include_unanalyzed=true&include_neutral=true&limit=12",
+            "/api/catalysts/feed?window_hours=24&include_unanalyzed=true&include_neutral=true&limit=50",
+            "/api/catalysts/feed?window_hours=72&include_unanalyzed=true&include_neutral=true&limit=12&cursor=eyJhbmNob3IiOiIyMDI2LTA5LTE0VDE1OjUyOjQ1LjIxODUxN1oiLCJvZmZzZXQiOjEyLCJxdWVyeV9oYXNoIjoiNTNjYTY1ZGQwNThjMjU4ZmViYmVmMWEzMTIzY2NiYzA4MmVhZmEwNjJjNDliMjk1MDkyYTdiOGY2M2VmMzhmNSIsInYiOjF9",
+            "/api/catalysts/feed?window_hours=72&include_unanalyzed=true&include_neutral=true&limit=12&cursor=eyJhbmNob3IiOiIyMDI2LTA5LTE0VDE1OjUyOjQ1LjIxODUxN1oiLCJvZmZzZXQiOjI0LCJxdWVyeV9oYXNoIjoiNTNjYTY1ZGQwNThjMjU4ZmViYmVmMWEzMTIzY2NiYzA4MmVhZmEwNjJjNDliMjk1MDkyYTdiOGY2M2VmMzhmNSIsInYiOjF9",
+            "/api/catalysts/feed?window_hours=72&include_unanalyzed=true&include_neutral=true&limit=12",
+            "/api/catalysts/feed?window_hours=72&include_unanalyzed=true&include_neutral=true&limit=12&cursor=eyJhbmNob3IiOiIyMDI2LTA5LTE0VDE1OjUyOjQ1LjIxODUxN1oiLCJvZmZzZXQiOjM2LCJxdWVyeV9oYXNoIjoiNTNjYTY1ZGQwNThjMjU4ZmViYmVmMWEzMTIzY2NiYzA4MmVhZmEwNjJjNDliMjk1MDkyYTdiOGY2M2VmMzhmNSIsInYiOjF9",
+            "/api/catalysts/feed?window_hours=72&include_unanalyzed=true&include_neutral=true&limit=12&cursor=eyJhbmNob3IiOiIyMDI2LTA5LTE0VDE1OjUzOjA5LjQ2MDUyMFoiLCJvZmZzZXQiOjEyLCJxdWVyeV9oYXNoIjoiNTNjYTY1ZGQwNThjMjU4ZmViYmVmMWEzMTIzY2NiYzA4MmVhZmEwNjJjNDliMjk1MDkyYTdiOGY2M2VmMzhmNSIsInYiOjF9",
+            "/api/catalysts/feed?window_hours=72&include_unanalyzed=true&include_neutral=true&limit=12&cursor=eyJhbmNob3IiOiIyMDI2LTA5LTE0VDE1OjUyOjQ1LjIxODUxN1oiLCJvZmZzZXQiOjQ4LCJxdWVyeV9oYXNoIjoiNTNjYTY1ZGQwNThjMjU4ZmViYmVmMWEzMTIzY2NiYzA4MmVhZmEwNjJjNDliMjk1MDkyYTdiOGY2M2VmMzhmNSIsInYiOjF9",
+            "/api/catalysts/feed?window_hours=72&include_unanalyzed=true&include_neutral=true&limit=12&cursor=eyJhbmNob3IiOiIyMDI2LTA5LTE0VDE1OjUzOjA5LjQ2MDUyMFoiLCJvZmZzZXQiOjI0LCJxdWVyeV9oYXNoIjoiNTNjYTY1ZGQwNThjMjU4ZmViYmVmMWEzMTIzY2NiYzA4MmVhZmEwNjJjNDliMjk1MDkyYTdiOGY2M2VmMzhmNSIsInYiOjF9",
+            "/api/catalysts/feed?window_hours=72&include_unanalyzed=true&include_neutral=true&limit=12&cursor=eyJhbmNob3IiOiIyMDI2LTA5LTE0VDE1OjUzOjA5LjQ2MDUyMFoiLCJvZmZzZXQiOjM2LCJxdWVyeV9oYXNoIjoiNTNjYTY1ZGQwNThjMjU4ZmViYmVmMWEzMTIzY2NiYzA4MmVhZmEwNjJjNDliMjk1MDkyYTdiOGY2M2VmMzhmNSIsInYiOjF9",
+            "/api/catalysts/feed?window_hours=72&include_unanalyzed=true&include_neutral=true&limit=12&cursor=eyJhbmNob3IiOiIyMDI2LTA5LTE0VDE1OjUzOjA5LjQ2MDUyMFoiLCJvZmZzZXQiOjQ4LCJxdWVyeV9oYXNoIjoiNTNjYTY1ZGQwNThjMjU4ZmViYmVmMWEzMTIzY2NiYzA4MmVhZmEwNjJjNDliMjk1MDkyYTdiOGY2M2VmMzhmNSIsInYiOjF9",
+            "/api/catalysts/feed?window_hours=72&include_unanalyzed=true&include_neutral=true&limit=12",
+            "/api/catalysts/feed?window_hours=72&include_unanalyzed=true&include_neutral=true&limit=12&cursor=eyJhbmNob3IiOiIyMDI2LTA5LTE0VDE1OjUzOjU2LjM0ODE4OVoiLCJvZmZzZXQiOjEyLCJxdWVyeV9oYXNoIjoiNTNjYTY1ZGQwNThjMjU4ZmViYmVmMWEzMTIzY2NiYzA4MmVhZmEwNjJjNDliMjk1MDkyYTdiOGY2M2VmMzhmNSIsInYiOjF9",
+            "/api/catalysts/feed?window_hours=72&include_unanalyzed=true&include_neutral=true&limit=12&cursor=eyJhbmNob3IiOiIyMDI2LTA5LTE0VDE1OjUzOjU2LjM0ODE4OVoiLCJvZmZzZXQiOjI0LCJxdWVyeV9oYXNoIjoiNTNjYTY1ZGQwNThjMjU4ZmViYmVmMWEzMTIzY2NiYzA4MmVhZmEwNjJjNDliMjk1MDkyYTdiOGY2M2VmMzhmNSIsInYiOjF9",
+            "/api/catalysts/feed?window_hours=72&include_unanalyzed=true&include_neutral=true&limit=12&cursor=eyJhbmNob3IiOiIyMDI2LTA5LTE0VDE1OjUzOjU2LjM0ODE4OVoiLCJvZmZzZXQiOjM2LCJxdWVyeV9oYXNoIjoiNTNjYTY1ZGQwNThjMjU4ZmViYmVmMWEzMTIzY2NiYzA4MmVhZmEwNjJjNDliMjk1MDkyYTdiOGY2M2VmMzhmNSIsInYiOjF9",
+            "/api/catalysts/feed?window_hours=72&include_unanalyzed=true&include_neutral=true&limit=12",
+            "/api/catalysts/feed?window_hours=72&include_unanalyzed=true&include_neutral=true&limit=12&cursor=eyJhbmNob3IiOiIyMDI2LTA5LTE0VDE1OjUzOjU2LjM0ODE4OVoiLCJvZmZzZXQiOjQ4LCJxdWVyeV9oYXNoIjoiNTNjYTY1ZGQwNThjMjU4ZmViYmVmMWEzMTIzY2NiYzA4MmVhZmEwNjJjNDliMjk1MDkyYTdiOGY2M2VmMzhmNSIsInYiOjF9",
+            "/api/catalysts/feed?window_hours=72&include_unanalyzed=true&include_neutral=true&limit=12&cursor=eyJhbmNob3IiOiIyMDI2LTA5LTE0VDE1OjU0OjI4LjA4ODkyN1oiLCJvZmZzZXQiOjEyLCJxdWVyeV9oYXNoIjoiNTNjYTY1ZGQwNThjMjU4ZmViYmVmMWEzMTIzY2NiYzA4MmVhZmEwNjJjNDliMjk1MDkyYTdiOGY2M2VmMzhmNSIsInYiOjF9"
+          ],
+          "request_count": 79,
+          "http_error_n": 0,
+          "runtime_en": 0,
+          "runtime_ja": 0,
+          "lcp": {
+            "startTime": 1724,
+            "size": 10835,
+            "url": null
+          },
+          "cls": 0.06037129409975932,
+          "resourceCount": 76,
+          "transferSize": 528949,
+          "encodedBodySize": 507101
+        },
+        "warm": {
+          "cache": "warm",
+          "rate_limited": 0,
+          "wall_ms": 121451,
+          "news_content_ready_ms": null,
+          "news_title": null,
+          "feed_hops": 18,
+          "feed_urls": [
+            "/api/catalysts/feed?window_hours=72&include_unanalyzed=true&include_neutral=true&limit=12",
+            "/api/catalysts/feed?window_hours=24&include_unanalyzed=true&include_neutral=true&limit=50",
+            "/api/catalysts/feed?window_hours=72&include_unanalyzed=true&include_neutral=true&limit=12&cursor=eyJhbmNob3IiOiIyMDI2LTA5LTE0VDE1OjU0OjQ3LjU3MjE1N1oiLCJvZmZzZXQiOjEyLCJxdWVyeV9oYXNoIjoiNTNjYTY1ZGQwNThjMjU4ZmViYmVmMWEzMTIzY2NiYzA4MmVhZmEwNjJjNDliMjk1MDkyYTdiOGY2M2VmMzhmNSIsInYiOjF9",
+            "/api/catalysts/feed?window_hours=72&include_unanalyzed=true&include_neutral=true&limit=12",
+            "/api/catalysts/feed?window_hours=72&include_unanalyzed=true&include_neutral=true&limit=12&cursor=eyJhbmNob3IiOiIyMDI2LTA5LTE0VDE1OjU0OjQ3LjU3MjE1N1oiLCJvZmZzZXQiOjI0LCJxdWVyeV9oYXNoIjoiNTNjYTY1ZGQwNThjMjU4ZmViYmVmMWEzMTIzY2NiYzA4MmVhZmEwNjJjNDliMjk1MDkyYTdiOGY2M2VmMzhmNSIsInYiOjF9",
+            "/api/catalysts/feed?window_hours=72&include_unanalyzed=true&include_neutral=true&limit=12&cursor=eyJhbmNob3IiOiIyMDI2LTA5LTE0VDE1OjU1OjEwLjQ4MjM5NFoiLCJvZmZzZXQiOjEyLCJxdWVyeV9oYXNoIjoiNTNjYTY1ZGQwNThjMjU4ZmViYmVmMWEzMTIzY2NiYzA4MmVhZmEwNjJjNDliMjk1MDkyYTdiOGY2M2VmMzhmNSIsInYiOjF9",
+            "/api/catalysts/feed?window_hours=72&include_unanalyzed=true&include_neutral=true&limit=12&cursor=eyJhbmNob3IiOiIyMDI2LTA5LTE0VDE1OjU0OjQ3LjU3MjE1N1oiLCJvZmZzZXQiOjM2LCJxdWVyeV9oYXNoIjoiNTNjYTY1ZGQwNThjMjU4ZmViYmVmMWEzMTIzY2NiYzA4MmVhZmEwNjJjNDliMjk1MDkyYTdiOGY2M2VmMzhmNSIsInYiOjF9",
+            "/api/catalysts/feed?window_hours=72&include_unanalyzed=true&include_neutral=true&limit=12&cursor=eyJhbmNob3IiOiIyMDI2LTA5LTE0VDE1OjU1OjEwLjQ4MjM5NFoiLCJvZmZzZXQiOjI0LCJxdWVyeV9oYXNoIjoiNTNjYTY1ZGQwNThjMjU4ZmViYmVmMWEzMTIzY2NiYzA4MmVhZmEwNjJjNDliMjk1MDkyYTdiOGY2M2VmMzhmNSIsInYiOjF9",
+            "/api/catalysts/feed?window_hours=72&include_unanalyzed=true&include_neutral=true&limit=12",
+            "/api/catalysts/feed?window_hours=72&include_unanalyzed=true&include_neutral=true&limit=12&cursor=eyJhbmNob3IiOiIyMDI2LTA5LTE0VDE1OjU0OjQ3LjU3MjE1N1oiLCJvZmZzZXQiOjQ4LCJxdWVyeV9oYXNoIjoiNTNjYTY1ZGQwNThjMjU4ZmViYmVmMWEzMTIzY2NiYzA4MmVhZmEwNjJjNDliMjk1MDkyYTdiOGY2M2VmMzhmNSIsInYiOjF9",
+            "/api/catalysts/feed?window_hours=72&include_unanalyzed=true&include_neutral=true&limit=12&cursor=eyJhbmNob3IiOiIyMDI2LTA5LTE0VDE1OjU1OjM5Ljc0MTIzM1oiLCJvZmZzZXQiOjEyLCJxdWVyeV9oYXNoIjoiNTNjYTY1ZGQwNThjMjU4ZmViYmVmMWEzMTIzY2NiYzA4MmVhZmEwNjJjNDliMjk1MDkyYTdiOGY2M2VmMzhmNSIsInYiOjF9",
+            "/api/catalysts/feed?window_hours=72&include_unanalyzed=true&include_neutral=true&limit=12",
+            "/api/catalysts/feed?window_hours=72&include_unanalyzed=true&include_neutral=true&limit=12&cursor=eyJhbmNob3IiOiIyMDI2LTA5LTE0VDE1OjU1OjM5Ljc0MTIzM1oiLCJvZmZzZXQiOjI0LCJxdWVyeV9oYXNoIjoiNTNjYTY1ZGQwNThjMjU4ZmViYmVmMWEzMTIzY2NiYzA4MmVhZmEwNjJjNDliMjk1MDkyYTdiOGY2M2VmMzhmNSIsInYiOjF9",
+            "/api/catalysts/feed?window_hours=72&include_unanalyzed=true&include_neutral=true&limit=12&cursor=eyJhbmNob3IiOiIyMDI2LTA5LTE0VDE1OjU2OjA4LjY5MTU1MVoiLCJvZmZzZXQiOjEyLCJxdWVyeV9oYXNoIjoiNTNjYTY1ZGQwNThjMjU4ZmViYmVmMWEzMTIzY2NiYzA4MmVhZmEwNjJjNDliMjk1MDkyYTdiOGY2M2VmMzhmNSIsInYiOjF9",
+            "/api/catalysts/feed?window_hours=72&include_unanalyzed=true&include_neutral=true&limit=12&cursor=eyJhbmNob3IiOiIyMDI2LTA5LTE0VDE1OjU1OjM5Ljc0MTIzM1oiLCJvZmZzZXQiOjM2LCJxdWVyeV9oYXNoIjoiNTNjYTY1ZGQwNThjMjU4ZmViYmVmMWEzMTIzY2NiYzA4MmVhZmEwNjJjNDliMjk1MDkyYTdiOGY2M2VmMzhmNSIsInYiOjF9",
+            "/api/catalysts/feed?window_hours=72&include_unanalyzed=true&include_neutral=true&limit=12&cursor=eyJhbmNob3IiOiIyMDI2LTA5LTE0VDE1OjU2OjA4LjY5MTU1MVoiLCJvZmZzZXQiOjI0LCJxdWVyeV9oYXNoIjoiNTNjYTY1ZGQwNThjMjU4ZmViYmVmMWEzMTIzY2NiYzA4MmVhZmEwNjJjNDliMjk1MDkyYTdiOGY2M2VmMzhmNSIsInYiOjF9",
+            "/api/catalysts/feed?window_hours=72&include_unanalyzed=true&include_neutral=true&limit=12",
+            "/api/catalysts/feed?window_hours=72&include_unanalyzed=true&include_neutral=true&limit=12&cursor=eyJhbmNob3IiOiIyMDI2LTA5LTE0VDE1OjU1OjM5Ljc0MTIzM1oiLCJvZmZzZXQiOjQ4LCJxdWVyeV9oYXNoIjoiNTNjYTY1ZGQwNThjMjU4ZmViYmVmMWEzMTIzY2NiYzA4MmVhZmEwNjJjNDliMjk1MDkyYTdiOGY2M2VmMzhmNSIsInYiOjF9"
+          ],
+          "request_count": 86,
+          "http_error_n": 0,
+          "runtime_en": 0,
+          "runtime_ja": 0,
+          "lcp": {
+            "startTime": 1876,
+            "size": 10835,
+            "url": null
+          },
+          "cls": 0.06575527020092506,
+          "resourceCount": 74,
+          "transferSize": 33680,
+          "encodedBodySize": 496882
+        }
+      },
+      "rate_limited": 0
+    }
+  ]
+}

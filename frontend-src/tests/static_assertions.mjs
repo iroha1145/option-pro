@@ -119,4 +119,14 @@ assert.deepEqual(
   'assets 目录不得混入 js/css 以外的文件',
 );
 
+const earningsChunk = jsAssets.find((name) => name.startsWith('Earnings-'));
+assert.ok(earningsChunk, '必须存在 Earnings 路由块');
+const earningsSource = await readFile(path.join(artifactDir, 'assets', earningsChunk), 'utf8');
+assert.match(earningsSource, /import\("\.\/EpsHatchChart-[^"]+\.js"\)/, '首次图表加载必须静态指向唯一异步块');
+assert.match(earningsSource, /searchParams\.set\("recover"/, '图表重试必须改模块 URL');
+assert.match(earningsSource, /EpsHatchChart-[^"]+\.js/, '重试解析必须落到同一个哈希块');
+assert.doesNotMatch(earningsSource, /Unknown variable dynamic import/, '不得把 recover 查询编进 Vite 变量导入表');
+const chartChunks = jsAssets.filter((name) => name.startsWith('EpsHatchChart-'));
+assert.equal(chartChunks.length, 1, `只能有一个 EpsHatchChart 异步块，实际：${chartChunks.join(', ') || '无'}`);
+
 console.log(`Frontend build assertions passed for ${artifactDir} (${jsAssets.length} js chunks + ${cssAssets.length} css, entry ${entryJsRefs[0]}).`);

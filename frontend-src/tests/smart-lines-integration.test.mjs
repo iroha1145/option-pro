@@ -12,6 +12,7 @@ import { snapCandidatesFromOverlays } from '../src/components/detail/chart-drawi
 import { isSupportLevel } from '../src/components/detail/chart-drawings/linePresentation.ts';
 import { clipLineToRect } from '../src/components/detail/chart-drawings/clippedLines.ts';
 import { hasTranslation } from '../src/i18n/core.ts';
+import { installTestDictionaries } from '../src/i18n/testing.ts';
 import { overlay } from './fixtures/smart-lines.mjs';
 
 const sourceRoot = fileURLToPath(new URL('../src/', import.meta.url));
@@ -210,6 +211,7 @@ test('broken horizontal levels end at their historical boundary and are not snap
 });
 
 test('level role fallback and support/resistance translations are shared', () => {
+  installTestDictionaries();
   assert.equal(isSupportLevel({ price: 98 }, 100), true);
   assert.equal(isSupportLevel({ price: 102 }, 100), false);
   assert.equal(isSupportLevel({ price: 98, role: 'resistance' }, 100), false);

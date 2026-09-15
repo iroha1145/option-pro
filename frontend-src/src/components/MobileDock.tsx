@@ -17,6 +17,7 @@ import Icon, { type IconName } from '@/components/icons';
 import Segmented from '@/components/shared/Segmented';
 import GlidePill from '@/components/shared/GlidePill';
 import { LOCALES, getLocale, setLocale, t } from '../i18n/core.ts';
+import { prefetchRouteOnIntent, routeIntentHandlers } from '../lib/prefetchRouteChunk.ts';
 import { setColorMode, type ColorMode } from '@/lib/colorPreference.ts';
 import { useColorMode } from '@/hooks/useColorMode.ts';
 import { setThemePreference, type ThemePreference } from '@/lib/themePreference.ts';
@@ -97,6 +98,7 @@ function MobileDockContent() {
           className="relative z-10 flex min-h-[44px] flex-1 flex-col items-center justify-center gap-1 transition-transform duration-fast active:scale-[0.96]"
           aria-label={item.label}
           aria-current={active ? 'page' : undefined}
+          {...routeIntentHandlers(item.path)}
         >
           <Icon name={item.icon} size={19} className={active ? 'text-brand-600' : 'text-ink-400'} />
           <span className={cn('text-[10px] leading-none', active ? 'font-medium text-brand-600' : 'text-ink-400')}>{item.label}</span>
@@ -225,6 +227,8 @@ function MobileDockContent() {
                       setMoreOpen(false);
                       navigate(m.path);
                     }}
+                    onPointerEnter={() => prefetchRouteOnIntent(m.path)}
+                    onFocus={() => prefetchRouteOnIntent(m.path)}
                     aria-current={isNavPathActive(location.pathname, m.path) ? 'page' : undefined}
                     className={cn(
                       'flex w-full items-center gap-3 rounded-md px-3 py-3 text-left transition-[transform,background-color] hover:bg-paper-2 active:bg-line/60',

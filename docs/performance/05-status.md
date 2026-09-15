@@ -1,5 +1,9 @@
 # 当前状态
 
+2026-09-15 Round 6（基线 `df1bd5d`，PR #165，产品提交 `58ffb2da` / `index-DbhCd4NO.js`）：可见分页、按语言词典、财报按需图表；第二轮复审已修固定 `as_of` 分页竞态、图表 `recover` 重试与 surfaces 真实 ready。方法与本轮数字见 [13-round6-visible-i18n-earnings.md](13-round6-visible-i18n-earnings.md)。过期同 cursor 缓存刷新 TTL 时必须作废 `anon_items`。**不要**把下面历史 1651/832 或更早 feed 毫秒数写成 Round 6 结果，也不要把 `index-uc86EHir.js` 的 9436/2532 或本地增量包 `index-G7k80sIV.js` 的 3641/3592 写成当前提交数字。冷/热预算仍未达到。
+
+Round 6 进程内 n=10000 访客 visible 热 p50 **187ms**（指纹 1）vs legacy 5 hop **783ms**（指纹 5）。Owner visible 热 p50 **5292ms**。surfaces n=8（`58ffb2da`）门禁通过：首页 p75 **2664** / 财报 **2482**，意图预取保留（悬停后再点快 206ms / 27%），关闭面板 0 额外 chunk，屏外图表 0→8 且 DOM 保持 8/8；extras/悬停 ready 为真实 content。静态 JS gzip9：公共壳 **188070**，首页 **216767**，财报 **218119**，新闻 **268513**。n=20 交错仍是 `f2c05331` / `index-DDX2TFDT.js`：优化冷/热 p75 **7717 / 1596**，未优化 **112241 / 733**。冷路径优化更快（hops 2 vs 21）；热路径未优化更快，不写成热收益。
+
 2026-09-14 第二轮审查修复：抽屉关闭保留内容、AI 能力 pending 语义、自动重试封顶、预取 URL 按筛选、今日计数随 feed 落地、服务端 Retry-After 不被刷新跳过，见 [12-review-fixes.md](12-review-fixes.md)。本轮没有重新测量速度。
 
 2026-09-14 追加审查修复：详情响应顺序、后台能力核验、行情重试、产物比较失败处理与超时样本统计，见 [11-review-fixes.md](11-review-fixes.md)。此前各批性能数字保留为历史记录，本次没有重新测量速度。

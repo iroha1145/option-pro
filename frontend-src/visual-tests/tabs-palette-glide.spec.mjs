@@ -22,6 +22,7 @@ const glide = (page) => page.locator(GLIDE_SELECTOR);
 const paletteRow = (page, idx) => page.locator(`#command-palette-listbox [data-idx="${idx}"]`);
 
 async function openPalette(page) {
+  await page.getByRole("heading", { level: 1 }).first().waitFor();
   await page.keyboard.press("Control+k");
   await expect(paletteDialog(page)).toBeVisible();
 }
@@ -111,6 +112,8 @@ async function pollGlideOnRow(page, row) {
 test.describe("command palette glide highlight (#113 blocker 1+2)", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
+    // prepareI18n() 之后才挂 App；标题出来才有 Ctrl+K 监听。
+    await page.getByRole("heading", { level: 1 }).first().waitFor();
   });
 
   test("highlight is visible on first open, placed without animating from a stale spot", async ({ page }) => {

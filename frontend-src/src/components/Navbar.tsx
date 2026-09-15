@@ -19,6 +19,7 @@ import LanguageSwitcher from '@/components/LanguageSwitcher';
 import ColorModeSwitcher from '@/components/ColorModeSwitcher';
 import ThemeSwitcher from '@/components/ThemeSwitcher';
 import { t } from '../i18n/core.ts';
+import { routeIntentHandlers } from '../lib/prefetchRouteChunk.ts';
 
 export const NAV_ITEMS = [
   { no: '01', label: t('首页'), path: '/' },
@@ -139,6 +140,7 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
               to={item.path}
               end={item.path === '/'}
               data-active={active}
+              {...routeIntentHandlers(item.path)}
               className={cn(
                 /* R4 加到 9 项后 1440(xl) 逼近满宽：sub-2xl 收 px-2，登录态
                    右侧簇（AI 胶囊+退出）才不会被挤出视口；≥2xl 恢复 3.5。 */
@@ -230,6 +232,7 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
           ) : (
             <Link
               to="/login"
+              {...routeIntentHandlers('/login')}
               className="touch-target flex h-8 shrink-0 items-center whitespace-nowrap rounded-md bg-brand-600 px-3.5 text-caption font-medium text-on-accent shadow-btn-hi transition-[transform,background-color] duration-fast hover:bg-brand-700 active:scale-[0.98]"
             >
               {t('登录')}
