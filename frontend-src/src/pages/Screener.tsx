@@ -85,6 +85,12 @@ import {
   type TierFilter,
 } from '@/components/screener/types';
 import { localeTag, t as __t } from '../i18n/core.ts';
+import {
+  readAlgorithmPreferences,
+  writeAlgorithmPreferences,
+} from '@/lib/algorithmPreferences';
+import { keepServerRankingOrder } from '@/lib/screenerSort';
+import { viewPreferencesApi } from '@/api/modules/viewPreferences';
 
 const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
 const PAGE_SIZE = 20;
@@ -112,7 +118,7 @@ function filtersEqual(a: ScanFilters, b: ScanFilters): boolean {
 }
 
 export default function Screener() {
-  const { isOwner, username } = useAccess();
+  const { isOwner, username, isSignedIn } = useAccess();
   const principal = `${isOwner ? 'owner' : 'visitor'}:${username ?? ''}`;
   const { openTicker } = useShell();
   const toast = useToast();
@@ -157,8 +163,14 @@ export default function Screener() {
   }, [profilesQ.data, universe.sectors]);
 
   /* ---------------- 扫描状态机 ---------------- */
-  const [draft, setDraft] = useState<ScanFilters>(DEFAULT_FILTERS);
-  const [applied, setApplied] = useState<ScanFilters>(DEFAULT_FILTERS);
+  const [draft, setDraft] = useState<ScanFilters>(() => ({
+    ...DEFAULT_FILTERS,
+    rankingAlgorithm: readAlgorithmPreferences().screenerRankingAlgorithm,
+  }));
+  const [applied, setApplied] = useState<ScanFilters>(() => ({
+    ...DEFAULT_FILTERS,
+    rankingAlgorithm: readAlgorithmPreferences().screenerRankingAlgorithm,
+  }));
   const [scanState, setScanState] = useState<ScanState>('idle');
   const [rows, setRows] = useState<ScreenerRow[] | null>(null);
   const [scanError, setScanError] = useState<ApiError | null>(null);
@@ -197,6 +209,36 @@ export default function Screener() {
     setScanState((current) => current === 'scanning' ? 'idle' : current);
     return () => { scanSeq.current += 1; };
   }, [principal]);
+
+  useEffect(() => {
+    if (!isSignedIn) return;
+    let cancelled = false;
+    viewPreferencesApi.read().then((remote) => {
+      if (cancelled) return;
+      writeAlgorithmPreferences({
+        screenerRankingAlgorithm: remote.screenerRankingAlgorithm,
+        radarSortAlgorithm: remote.radarSortAlgorithm,
+      });
+      setDraft((current) => (
+        current.rankingAlgorithm === remote.screenerRankingAlgorithm
+          ? current
+          : { ...current, rankingAlgorithm: remote.screenerRankingAlgorithm }
+      ));
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [isSignedIn, principal]);
+
+  const updateDraft = useCallback((next: ScanFilters) => {
+    setDraft((current) => {
+      if (current.rankingAlgorithm !== next.rankingAlgorithm) {
+        writeAlgorithmPreferences({ screenerRankingAlgorithm: next.rankingAlgorithm });
+        if (isSignedIn) {
+          void viewPreferencesApi.write({ screenerRankingAlgorithm: next.rankingAlgorithm });
+        }
+      }
+      return next;
+    });
+  }, [isSignedIn]);
 
   const dirty = scanState === 'done' && !filtersEqual(draft, applied);
   const scanTriggerLocked = shouldLockScanTrigger({
@@ -402,12 +444,16 @@ export default function Screener() {
       return true;
     } catch (e) {
       if (!isCurrent()) return;
-      setScanError(e instanceof ApiError ? e : new ApiError(500, e instanceof Error ? e.message : __t('扫描失败')));
+      const error = e instanceof ApiError ? e : new ApiError(500, e instanceof Error ? e.message : __t('扫描失败'));
+      if (error.code === 400 && /A0|algorithm|timeframe|profile|中长期/i.test(error.message)) {
+        toast.error(__t('中长期趋势排序仅支持周期=全部且偏好=均衡。请改回兼容视图，或改用原版排序。'), error.message);
+      }
+      setScanError(error);
       setScanState('error');
       setScanPhase('failed');
       return false;
     }
-  }, [isOwner, principal]);
+  }, [isOwner, principal, toast]);
 
   useEffect(() => {
     if (scanState !== 'done' || isMock) return;
@@ -529,7 +575,9 @@ export default function Screener() {
       b.strengthScore - a.strengthScore || Math.abs(b.changePct ?? 0) - Math.abs(a.changePct ?? 0) || a.ticker.localeCompare(b.ticker);
     // 摘要没取齐就维持确定性顺序：用缺失值排名会让结果取决于访问过哪些分页。
     if (sortMode === 'deterministic' || catalystSortIncomplete) {
-      out.sort(byScore);
+      if (!keepServerRankingOrder(scanMeta?.effectiveAlgorithm ?? applied.rankingAlgorithm)) {
+        out.sort(byScore);
+      }
     } else if (sortMode === 'latest') {
       const ts = (r: ScreenerRow) => {
         const c = catalysts[r.ticker];
@@ -545,7 +593,7 @@ export default function Screener() {
       out.sort((a, b) => impact(b) - impact(a) || count(b) - count(a) || byScore(a, b));
     }
     return out;
-  }, [filtered, sortMode, catalysts, catalystSortIncomplete]);
+  }, [filtered, sortMode, catalysts, catalystSortIncomplete, scanMeta?.effectiveAlgorithm, applied.rankingAlgorithm]);
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
@@ -704,7 +752,7 @@ export default function Screener() {
   }, []);
 
   const resetAllFilters = () => {
-    const filters = { ...DEFAULT_FILTERS, sectors: [] };
+    const filters = { ...DEFAULT_FILTERS, sectors: [], rankingAlgorithm: draft.rankingAlgorithm };
     setMacroToneFilter('all');
     setDraft(filters);
     // Defaults include server-side profile/timeframe. Keep the old result's
@@ -770,8 +818,17 @@ export default function Screener() {
 
   /* 服务端参数 chip 的移除只写 draft：分数是哪套参数算的必须与右侧说明同源 */
   const patchDraftOnly = useCallback((p: Partial<ScanFilters>) => {
-    setDraft((d) => ({ ...d, ...p }));
-  }, []);
+    setDraft((current) => {
+      const next = { ...current, ...p };
+      if (current.rankingAlgorithm !== next.rankingAlgorithm) {
+        writeAlgorithmPreferences({ screenerRankingAlgorithm: next.rankingAlgorithm });
+        if (isSignedIn) {
+          void viewPreferencesApi.write({ screenerRankingAlgorithm: next.rankingAlgorithm });
+        }
+      }
+      return next;
+    });
+  }, [isSignedIn]);
   const chips = useMemo(
     () => buildChips(applied, profiles, sectorOptions, patchApplied, patchDraftOnly),
     [applied, profiles, sectorOptions, patchApplied, patchDraftOnly],
@@ -821,7 +878,7 @@ export default function Screener() {
       <div className="mt-6">
         <FilterWorkbench
           draft={draft}
-          onChange={setDraft}
+          onChange={updateDraft}
           universe={universe}
           sectorOptions={sectorOptions}
           presets={profiles}
@@ -875,6 +932,25 @@ export default function Screener() {
                 {scanMeta?.scoreDataThrough && (
                   <SoftBadge className="whitespace-normal">
                     {__t('评分依据：{date} 完整日线', { date: visibleScanDate(scanMeta.scoreDataThrough) ?? scanMeta.scoreDataThrough })}
+                  </SoftBadge>
+                )}
+                {scanMeta?.effectiveAlgorithm === 'a0_mid_long' && (
+                  <SoftBadge data-testid="screener-effective-algorithm">
+                    {__t('中长期趋势（试用）')} · {scanMeta.scoreBasis ?? '0.5 * score_mid + 0.5 * score_long'}
+                  </SoftBadge>
+                )}
+                {scanMeta && scanMeta.effectiveAlgorithm !== 'a0_mid_long' && (
+                  <SoftBadge data-testid="screener-effective-algorithm">
+                    {__t('原版排序')} · {scanMeta.scoreBasis ?? 'ranking_score'}
+                  </SoftBadge>
+                )}
+                {scanMeta?.fallbackReason && (
+                  <SoftBadge tone="warn" className="whitespace-normal">
+                    {scanMeta.fallbackReason === 'incompatible_view'
+                      ? __t('当前视图不支持中长期趋势排序，已回退原版。')
+                      : scanMeta.fallbackReason === 'a0_scores_unavailable'
+                        ? __t('中长期趋势分数不可用，已回退原版。')
+                        : __t('已回退原版排序')}
                   </SoftBadge>
                 )}
                 {scanMeta && (
@@ -1063,6 +1139,7 @@ export default function Screener() {
                         onOpenDetail={openTicker}
                         animKey={animKey}
                         showMacro={showMacro}
+                        effectiveAlgorithm={scanMeta?.effectiveAlgorithm}
                         stale
                       />
                     </div>
@@ -1081,6 +1158,7 @@ export default function Screener() {
                         animKey={animKey}
                         page={safePage}
                         showMacro={showMacro}
+                        effectiveAlgorithm={scanMeta?.effectiveAlgorithm}
                       />
                     </div>
                   </div>
@@ -1128,6 +1206,7 @@ export default function Screener() {
                     onOpenDetail={openTicker}
                     animKey={animKey}
                     showMacro={showMacro}
+                    effectiveAlgorithm={scanMeta?.effectiveAlgorithm}
                   />
                 </div>
                 <div className={cn('md:hidden', scanState === 'scanning' && 'opacity-60')}>
@@ -1146,6 +1225,7 @@ export default function Screener() {
                        被过滤，但卡片上一个宏观读数都不显示 —— 用户看不出这些票
                        为什么留下来了。 */
                     showMacro={showMacro}
+                    effectiveAlgorithm={scanMeta?.effectiveAlgorithm}
                   />
                   {/* 移动端分页 */}
                   {totalPages > 1 && (
@@ -1268,6 +1348,11 @@ function buildChips(
     chips.push({ key: 'dv', label: __t('成交额 {v}', { v: opt?.label ?? `≥${fmtCompact(f.minDollarVol)}` }), onRemove: () => patchServer({ minDollarVol: 0 }) });
   }
   if (f.minScore != null) chips.push({ key: 'ms', label: __t('强度 ≥{n}', { n: f.minScore }), onRemove: () => patchServer({ minScore: null }) });
+  if (f.rankingAlgorithm === 'a0_mid_long') {
+    chips.push({ key: 'algo', label: __t('中长期趋势（试用）'), onRemove: () => patchServer({ rankingAlgorithm: 'follow_default' }) });
+  } else if (f.rankingAlgorithm === 'production') {
+    chips.push({ key: 'algo', label: __t('原版排序'), onRemove: () => patchServer({ rankingAlgorithm: 'follow_default' }) });
+  }
   if (f.presetId) {
     const name = profiles?.find((p) => p.id === f.presetId)?.name ?? f.presetId;
     chips.push({ key: 'preset', label: __t('预设 {name}', { name }), onRemove: () => patch({ presetId: null }) });
@@ -1285,6 +1370,8 @@ function summarizeFilters(f: ScanFilters): string {
   if (f.priceMin != null || f.priceMax != null) parts.push(__t('价格区间'));
   if (f.minDollarVol > 0) parts.push(__t('成交额≥{v}', { v: fmtCompact(f.minDollarVol) }));
   if (f.minScore != null) parts.push(__t('强度≥{n}', { n: f.minScore }));
+  if (f.rankingAlgorithm === 'a0_mid_long') parts.push(__t('中长期趋势（试用）'));
+  else if (f.rankingAlgorithm === 'production') parts.push(__t('原版排序'));
   return parts.join(' · ') || __t('默认条件');
 }
 

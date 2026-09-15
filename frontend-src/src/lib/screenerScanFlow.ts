@@ -40,6 +40,7 @@ export function strengthScanPath(params: ScanParams): string {
     min_price: params.min_price,
     min_avg_dollar_volume: params.min_avg_dollar_volume,
     include_options: params.include_options,
+    ranking_algorithm: params.ranking_algorithm,
   });
   return `/strength/scan${qs ? `?${qs}` : ''}`;
 }
@@ -118,6 +119,7 @@ export function strengthParametersMatch(
     && value.min_price === expected.min_price
     && value.min_avg_dollar_volume === expected.min_avg_dollar_volume
     && value.include_options === expected.include_options
+    && (value.ranking_algorithm ?? 'production') === (expected.ranking_algorithm ?? 'production')
   );
 }
 

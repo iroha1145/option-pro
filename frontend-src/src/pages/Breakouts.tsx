@@ -49,6 +49,13 @@ import type {
 } from '@/components/breakouts/types';
 import { pageRegionProps } from '@/lib/pageRegion';
 import { t as __t } from '../i18n/core.ts';
+import {
+  readAlgorithmPreferences,
+  requestedRadarAlgorithm,
+  writeAlgorithmPreferences,
+  type RadarSortChoice,
+} from '@/lib/algorithmPreferences';
+import { viewPreferencesApi } from '@/api/modules/viewPreferences';
 
 /* ---------------- 筛选维度 ---------------- */
 type StatusFilter = 'ALL' | LifecycleState;
@@ -102,15 +109,41 @@ const breakoutKey = (ev: BreakoutCurrentEvent) => ev.ticker;
 const breakoutPrice = (ev: BreakoutCurrentEvent) => ev.current_price;
 
 export default function Breakouts() {
-  const { isOwner } = useAccess();
+  const { isOwner, isSignedIn } = useAccess();
   const { openTicker } = useShell();
   const toast = useToast();
   const now = useNow(1000);
 
+  const [radarSort, setRadarSort] = useState<RadarSortChoice>(
+    () => readAlgorithmPreferences().radarSortAlgorithm,
+  );
+  const requestedSort = requestedRadarAlgorithm(radarSort);
+  useEffect(() => {
+    if (!isSignedIn) return;
+    let cancelled = false;
+    viewPreferencesApi.read().then((remote) => {
+      if (cancelled) return;
+      writeAlgorithmPreferences({
+        screenerRankingAlgorithm: remote.screenerRankingAlgorithm,
+        radarSortAlgorithm: remote.radarSortAlgorithm,
+      });
+      setRadarSort(remote.radarSortAlgorithm);
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [isSignedIn]);
+
   /* 数据轮询：status 30s / current 30s（§11） */
   const statusQ = usePolling(() => breakoutsApi.status(), 30_000);
-  const currentQ = usePolling(() => breakoutsApi.currentEnvelope(), 30_000);
-  const eventsQ = usePolling(() => breakoutsApi.events({ page: 1, pageSize: HISTORY_PAGE_SIZE }), null);
+  const currentQ = usePolling(
+    () => breakoutsApi.currentEnvelope({ sort_algorithm: requestedSort }),
+    30_000,
+    [requestedSort],
+  );
+  const eventsQ = usePolling(
+    () => breakoutsApi.events({ page: 1, pageSize: HISTORY_PAGE_SIZE, sort_algorithm: requestedSort }),
+    null,
+    [requestedSort],
+  );
   /* 历史事件此前固定只读第一页 100 条，界面还显示一个拼出来的「共 N 条」
      （审计 P2-19）。现在按游标续读，并如实说明是否还有更多。 */
   const [extraEvents, setExtraEvents] = useState<BreakoutEventFull[]>([]);
@@ -132,6 +165,7 @@ export default function Breakouts() {
         page: 1,
         pageSize: HISTORY_PAGE_SIZE,
         cursor: historyCursor,
+        sort_algorithm: requestedSort,
       });
       setExtraEvents((prev) => [...prev, ...next.items.map(asFullEvent)]);
       setHistoryCursor(next.nextCursor);
@@ -141,7 +175,7 @@ export default function Breakouts() {
     } finally {
       setHistoryLoadingMore(false);
     }
-  }, [historyCursor, historyLoadingMore]);
+  }, [historyCursor, historyLoadingMore, requestedSort]);
   const personal = usePersonalWatchlist();
 
   const status = asFullStatus(statusQ.data);
@@ -163,6 +197,22 @@ export default function Breakouts() {
     [eventsQ.data, extraEvents],
   );
   const readiness = useStockDataStatus([...currentAll.map((event) => event.ticker), ...events.map((event) => event.ticker)]);
+
+  const updateRadarSort = useCallback((next: RadarSortChoice) => {
+    setRadarSort(next);
+    writeAlgorithmPreferences({ radarSortAlgorithm: next });
+    if (isSignedIn) {
+      void viewPreferencesApi.write({ radarSortAlgorithm: next });
+    }
+    setExtraEvents([]);
+    setHistoryCursor(null);
+    setHistoryMoreError(null);
+  }, [isSignedIn]);
+  const effectiveRadar = currentQ.data?.effectiveAlgorithm
+    ?? (radarSort === 'follow_default' ? 'production' : radarSort);
+  const showT1 = effectiveRadar === 't1_daily_priority';
+  const t1PendingCount = currentAll.filter((event) => event.t1_status === 'pending').length;
+  const t1UnavailableCount = currentAll.filter((event) => event.t1_status === 'unavailable').length;
 
   /* 筛选行状态：状态 / 评分 / ticker 聚焦 */
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
@@ -300,7 +350,7 @@ export default function Breakouts() {
   /* 历史事件回溯压缩面板（右栏吸顶 / 空态·错误态下整宽兜底，保持历史可访问） */
   const historyRailEl = (
     <HistoryRail
-      filterKey={`${statusFilter}|${minScore}|${tickerFilter}|${onlyWatch}`}
+      filterKey={`${statusFilter}|${minScore}|${tickerFilter}|${onlyWatch}|${requestedSort ?? 'follow_default'}`}
       events={filteredEvents}
       loadedCount={events.length}
       total={eventsQ.data?.total ?? null}
@@ -422,6 +472,20 @@ export default function Breakouts() {
           </div>
           </SelectionViewport>
         </div>
+        <div className="flex max-w-full flex-wrap items-center gap-2">
+          <span className="text-caption text-ink-500">{__t('排序')}</span>
+          <Segmented<RadarSortChoice>
+            options={[
+              { value: 'follow_default', label: __t('跟随默认') },
+              { value: 'production', label: __t('原雷达排序') },
+              { value: 't1_daily_priority', label: __t('日线量价条件优先（试用）') },
+            ]}
+            value={radarSort}
+            onChange={updateRadarSort}
+            scrollable
+            ariaLabel={__t('雷达排序算法')}
+          />
+        </div>
         {tickerFilter && (
           <button
             onClick={() => setTickerFilter('')}
@@ -449,6 +513,20 @@ export default function Breakouts() {
             </button>
           )}
         </span>
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-caption text-ink-500">
+        <span data-testid="radar-effective-algorithm">
+          {showT1 ? __t('日线量价条件优先（试用）') : __t('原雷达排序')}
+        </span>
+        {showT1 && (
+          <span>{__t('满足固定日线量价条件的事件会在同一交易日组内优先。其余事件不删除。待收盘或数据不足时保持原顺序。')}</span>
+        )}
+        {showT1 && t1PendingCount > 0 && (
+          <span className="text-warn-700">{__t('{n} 条待收盘确认', { n: t1PendingCount })}</span>
+        )}
+        {showT1 && t1UnavailableCount > 0 && (
+          <span>{__t('{n} 条日线数据不足', { n: t1UnavailableCount })}</span>
+        )}
       </div>
 
       {/* 当日信号：左大面板（lead 压缩大卡）+ 右吸顶栏（事件队列 + 生命周期分布） */}
@@ -550,6 +628,7 @@ export default function Breakouts() {
                   flash={flashes[current[0].ticker] ?? null}
                   locate={locateTicker === current[0].ticker}
                   onOpen={openFromCard}
+                  showT1={showT1}
                 />
               </div>
               <div className="min-w-0 lg:col-span-5" ref={railRef}>
@@ -579,6 +658,7 @@ export default function Breakouts() {
                   events={current.slice(1)}
                   flashes={flashes}
                   locateTicker={locateTicker}
+                  showT1={showT1}
                   onOpen={openFromCard}
                 />
               </div>

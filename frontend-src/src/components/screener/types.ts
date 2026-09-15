@@ -107,6 +107,8 @@ export interface ScanFilters {
   /** 强度分下限（由预设策略注入；null = 不限） */
   minScore: number | null;
   presetId: string | null;
+  /** 选股排序：跟随默认 / 原版 / A0 中长期趋势 */
+  rankingAlgorithm: 'follow_default' | 'production' | 'a0_mid_long';
 }
 
 /** 与后端每日真实强度快照的默认成交额门槛保持一致。 */
@@ -125,6 +127,7 @@ export const DEFAULT_FILTERS: ScanFilters = {
   minDollarVol: DEFAULT_MIN_DOLLAR_VOLUME,
   minScore: null,
   presetId: null,
+  rankingAlgorithm: 'follow_default',
 };
 
 /** 72h 窗口催化剂汇总（catalystsApi.batchSummaries72h 单次批量） */

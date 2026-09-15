@@ -55,6 +55,10 @@ export interface StrengthScanEnvelope {
   snapshotSavedAt: string | null;
   cacheExpiresAt: string | null;
   priceProvider: string | null;
+  effectiveAlgorithm: string | null;
+  algorithmVersion: string | null;
+  scoreBasis: string | null;
+  fallbackReason: string | null;
 }
 
 export interface ScanParams {
@@ -73,6 +77,7 @@ export interface ScanParams {
   min_price?: number;
   min_avg_dollar_volume?: number;
   include_options?: boolean;
+  ranking_algorithm?: 'production' | 'a0_mid_long';
 }
 
 function applyParams(rows: ScreenerRow[], p: ScanParams): ScreenerRow[] {
@@ -82,6 +87,9 @@ function applyParams(rows: ScreenerRow[], p: ScanParams): ScreenerRow[] {
   if (p.sector && p.sector !== 'all') out = out.filter((r) => r.sector === p.sector || r.sectorId === p.sector);
   if (p.minScore !== undefined) out = out.filter((r) => r.strengthScore >= p.minScore!);
   const sort = p.sort ?? 'score';
+  if (p.ranking_algorithm === 'a0_mid_long' && sort === 'score') {
+    return out;
+  }
   const dir = p.order === 'asc' ? 1 : -1;
   out.sort((a, b) => {
     if (sort === 'ticker') return a.ticker.localeCompare(b.ticker) * dir;
@@ -94,7 +102,11 @@ function applyParams(rows: ScreenerRow[], p: ScanParams): ScreenerRow[] {
       if (right === null) return -1;
       return (left - right) * dir || a.ticker.localeCompare(b.ticker);
     }
-    return (a.strengthScore - b.strengthScore) * dir;
+    const left = a.sortScore ?? a.strengthScore;
+    const right = b.sortScore ?? b.strengthScore;
+    if (a.sortScore == null && b.sortScore != null) return 1;
+    if (a.sortScore != null && b.sortScore == null) return -1;
+    return (left - right) * dir || a.ticker.localeCompare(b.ticker);
   });
   return out;
 }
@@ -148,6 +160,11 @@ function mapScanRow(r: Record<string, unknown>): ScreenerRow | null {
     macroSupporting: mapMacroFitDrivers(r.macro_supporting_factors),
     macroOpposing: mapMacroFitDrivers(r.macro_opposing_factors),
     macroTechnicalGap: pickN(r, 'macro_technical_gap'),
+    rankingScore: pickN(r, 'ranking_score', 'rankingScore') ?? score,
+    sortScore: pickN(r, 'sort_score', 'sortScore', 'a0_score'),
+    sortBasis: pickS(r, 'sort_basis', 'sortBasis'),
+    sortAlgorithm: pickS(r, 'sort_algorithm', 'sortAlgorithm'),
+    a0Available: pickB(r, 'a0_available', 'a0Available'),
   };
 }
 
@@ -162,6 +179,7 @@ function liveScan(params: ScanParams, force = false): Promise<StrengthScanEnvelo
     min_price: params.min_price,
     min_avg_dollar_volume: params.min_avg_dollar_volume,
     include_options: params.include_options,
+    ranking_algorithm: params.ranking_algorithm,
   });
   return marketGet(`/strength/scan${qs ? `?${qs}` : ''}`, {
     ttlMs: 30_000,
@@ -190,6 +208,10 @@ function liveScan(params: ScanParams, force = false): Promise<StrengthScanEnvelo
       snapshotSavedAt: pickS(env, 'snapshot_saved_at'),
       cacheExpiresAt: pickS(env, 'cache_expires_at'),
       priceProvider: pickS(asRec(sources.prices), 'provider'),
+      effectiveAlgorithm: pickS(env, 'effective_algorithm', 'effectiveAlgorithm'),
+      algorithmVersion: pickS(env, 'algorithm_version', 'algorithmVersion'),
+      scoreBasis: pickS(env, 'score_basis', 'scoreBasis'),
+      fallbackReason: pickS(env, 'fallback_reason', 'fallbackReason'),
     };
   });
 }
@@ -349,6 +371,10 @@ export const strengthApi = {
           snapshotSavedAt: null,
           cacheExpiresAt: null,
           priceProvider: 'mock fixtures',
+          effectiveAlgorithm: params.ranking_algorithm ?? 'production',
+          algorithmVersion: params.ranking_algorithm === 'a0_mid_long' ? 'a0-mid-long-v1' : 'strength-v3',
+          scoreBasis: params.ranking_algorithm === 'a0_mid_long' ? '0.5 * score_mid + 0.5 * score_long' : 'ranking_score',
+          fallbackReason: null,
         };
       },
       () => liveScan(params, force),

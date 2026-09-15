@@ -45,6 +45,7 @@ import {
   scoreBarClass,
 } from './types';
 import type { BreakoutCurrentEvent, BreakoutEventFull, BreakoutSession, LifecycleState } from './types';
+import T1StatusChip from './T1StatusChip';
 import { t } from '../../i18n/core.ts';
 
 const MONO = CHART_MONO_FONT;
@@ -558,9 +559,10 @@ interface LeadBigCardProps {
   dailyVersion?: string;
   preparation?: StockDataStatus;
   statusReadFailed?: boolean;
+  showT1?: boolean;
 }
 
-export default function LeadBigCard({ ev: initialEvent, flash, locate, onOpen, dailyVersion = '', preparation, statusReadFailed = false }: LeadBigCardProps) {
+export default function LeadBigCard({ ev: initialEvent, flash, locate, onOpen, dailyVersion = '', preparation, statusReadFailed = false, showT1 = false }: LeadBigCardProps) {
   const ev = useLiveRadarEvent(initialEvent);
   const quote = useLiveQuote(ev.ticker);
   const { openTicker } = useShell();
@@ -643,6 +645,7 @@ export default function LeadBigCard({ ev: initialEvent, flash, locate, onOpen, d
         >
           {LIFECYCLE_CN[e.lifecycle_state] ?? e.lifecycle_state ?? '—'}
         </span>
+        {showT1 && <T1StatusChip status={e.t1_status} />}
         <span className="radar-chip radar-chip-brand">
           {SETUP_CN[e.setup_type] ?? e.setup_type ?? '—'}
         </span>

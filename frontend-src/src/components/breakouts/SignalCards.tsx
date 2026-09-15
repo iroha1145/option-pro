@@ -23,12 +23,13 @@ import PriceScale from './PriceScale';
 import { ScoreBarsMini } from './ScoreBars';
 import { LIFECYCLE_CHIP_CLASS, LIFECYCLE_CN, LIFECYCLE_TONE, SETUP_CN } from './types';
 import type { BreakoutCurrentEvent } from './types';
+import T1StatusChip from './T1StatusChip';
 import { t } from '../../i18n/core.ts';
 
 const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
 
 /* ---------------- chip 行（SETUP + LIFECYCLE + rvol 量能徽标）；live 可空字段显「—」 ---------------- */
-function ChipRow({ ev }: { ev: BreakoutCurrentEvent }) {
+function ChipRow({ ev, showT1 }: { ev: BreakoutCurrentEvent; showT1: boolean }) {
   const rvol = typeof ev.rvol_time_of_day === 'number' && Number.isFinite(ev.rvol_time_of_day) ? ev.rvol_time_of_day : null;
   return (
     <div className="flex flex-wrap items-center gap-1.5">
@@ -43,6 +44,7 @@ function ChipRow({ ev }: { ev: BreakoutCurrentEvent }) {
       >
         {LIFECYCLE_CN[ev.lifecycle_state] ?? ev.lifecycle_state ?? '—'}
       </span>
+      {showT1 && <T1StatusChip status={ev.t1_status} />}
       <span className="radar-chip radar-chip-volume ml-auto tnum">
         {t('量能')} {rvol !== null ? `${rvol.toFixed(1)}×` : '—'}
       </span>
@@ -57,9 +59,10 @@ interface SignalCardProps {
   flash: 'up' | 'down' | null;
   locate: boolean;
   onOpen: (ev: BreakoutCurrentEvent) => void;
+  showT1?: boolean;
 }
 
-function SignalCard({ ev: initialEvent, index, flash, locate, onOpen }: SignalCardProps) {
+function SignalCard({ ev: initialEvent, index, flash, locate, onOpen, showT1 = false }: SignalCardProps) {
   const state = useLiveRadarEvent(initialEvent);
   const quote = useLiveQuote(state.ticker);
   const ev = preferLiveQuote(quote, Number.isFinite(state.current_price)) ? { ...state, current_price: quote!.price! } : state;
@@ -126,7 +129,7 @@ function SignalCard({ ev: initialEvent, index, flash, locate, onOpen }: SignalCa
 
       {/* chip 行 */}
       <div className="mt-2.5">
-        <ChipRow ev={ev} />
+        <ChipRow ev={ev} showT1={showT1} />
         {ev.trigger_source === 'finnhub' && ev.lifecycle_state === 'TRIGGERED' && <p className="mt-1 text-[10px] text-ink-400">{t('实时成交触发 · 完整行情确认中')}</p>}
       </div>
 
@@ -184,9 +187,10 @@ interface SignalCardsProps {
   flashes: Record<string, 'up' | 'down'>;
   locateTicker: string | null;
   onOpen: (ev: BreakoutCurrentEvent) => void;
+  showT1?: boolean;
 }
 
-export default function SignalCards({ events, flashes, locateTicker, onOpen }: SignalCardsProps) {
+export default function SignalCards({ events, flashes, locateTicker, onOpen, showT1 = false }: SignalCardsProps) {
   if (events.length === 0) return null;
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -198,6 +202,7 @@ export default function SignalCards({ events, flashes, locateTicker, onOpen }: S
           flash={flashes[ev.ticker] ?? null}
           locate={locateTicker === ev.ticker}
           onOpen={onOpen}
+          showT1={showT1}
         />
       ))}
     </div>

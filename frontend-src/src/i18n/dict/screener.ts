@@ -32,6 +32,31 @@ export const SCREENER: Dict = {
   '最低价格': ['Minimum price', '最低価格'],
   '最高价格': ['Maximum price', '最高価格'],
   '成交额下限': ['Min dollar volume', '売買代金下限'],
+  '排序算法': ['Ranking algorithm', '順位アルゴリズム'],
+  '跟随默认': ['Follow default', 'デフォルトに従う'],
+  '原版排序': ['Original ranking', '従来の順位'],
+  '中长期趋势（试用）': ['Mid/long trend (trial)', '中長期トレンド（試用）'],
+  '中长期趋势排序仅支持周期=全部且偏好=均衡。请改回兼容视图，或改用原版排序。': [
+    'Mid/long trend ranking only supports timeframe=all and profile=balanced. Switch back to a compatible view, or use original ranking.',
+    '中長期トレンド順位は期間=すべて・スタイル=均衡のみ対応です。互換ビューに戻すか、従来の順位を使ってください。',
+  ],
+  '当前试用固定中长期组合：0.5×中期 + 0.5×长期。原综合分仍可查看，不作为本模式名次。': [
+    'This trial uses a fixed mid/long blend: 0.5× mid + 0.5× long. The original composite score remains visible and does not set rank in this mode.',
+    'この試用は固定の中長期組み合わせ（0.5×中期 + 0.5×長期）です。従来の総合点は表示されますが、このモードの順位には使いません。',
+  ],
+  '排序分': ['Sort score', '並び替えスコア'],
+  '数据不足': ['Insufficient data', 'データ不足'],
+  '综合分 {score}': ['Composite {score}', '総合点 {score}'],
+  '排序分 ·': ['Sort score ·', '並び替えスコア ·'],
+  '当前视图不支持中长期趋势排序，已回退原版。': [
+    'The current view does not support mid/long trend ranking; original ranking was used.',
+    '現在のビューは中長期トレンド順位に未対応のため、従来の順位に戻しました。',
+  ],
+  '中长期趋势分数不可用，已回退原版。': [
+    'Mid/long trend scores were unavailable; original ranking was used.',
+    '中長期トレンドスコアを計算できないため、従来の順位に戻しました。',
+  ],
+  '已回退原版排序': ['Fell back to original ranking', '従来の順位に戻しました'],
 
   /* ---------------- MarketRegimeCard.tsx ---------------- */
   '暂无数据': ['No data', 'データなし'],

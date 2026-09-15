@@ -40,10 +40,17 @@ export interface RuntimeToggles {
 }
 export type RuntimeTogglesPatch = Partial<RuntimeToggles>;
 
+export interface RuntimeAlgorithms {
+  screenerRankingAlgorithm: 'production' | 'a0_mid_long';
+  radarSortAlgorithm: 'production' | 't1_daily_priority';
+}
+export type RuntimeAlgorithmsPatch = Partial<RuntimeAlgorithms>;
+
 export interface RuntimeDoc {
   version: number;
   updatedAt: string;
   toggles: RuntimeToggles;
+  algorithms: RuntimeAlgorithms;
 }
 
 function nTicket(d: unknown): ManualOpTicket {
@@ -88,6 +95,9 @@ function nRuntimeDoc(d: unknown): RuntimeDoc {
   const ai = asRec(settings.ai);
   const catalyst = asRec(settings.catalyst);
   const earnings = asRec(settings.earnings);
+  const algorithms = asRec(settings.algorithms);
+  const screener = pickS(algorithms, 'screener_ranking_algorithm', 'screenerRankingAlgorithm');
+  const radar = pickS(algorithms, 'radar_sort_algorithm', 'radarSortAlgorithm');
   return {
     version: pickN(r, 'version') ?? 1,
     updatedAt: pickS(r, 'updated_at', 'updatedAt') ?? '',
@@ -95,6 +105,10 @@ function nRuntimeDoc(d: unknown): RuntimeDoc {
       manualAnalysisEnabled: pickB(ai, 'manual_analysis_enabled'),
       scheduledAnalysisEnabled: pickB(catalyst, 'scheduled_analysis_enabled'),
       earningsScheduledAnalysisEnabled: pickB(earnings, 'scheduled_analysis_enabled'),
+    },
+    algorithms: {
+      screenerRankingAlgorithm: screener === 'a0_mid_long' ? 'a0_mid_long' : 'production',
+      radarSortAlgorithm: radar === 't1_daily_priority' ? 't1_daily_priority' : 'production',
     },
   };
 }
@@ -105,6 +119,10 @@ let mockToggles: RuntimeToggles = {
   manualAnalysisEnabled: true,
   scheduledAnalysisEnabled: true,
   earningsScheduledAnalysisEnabled: false,
+};
+let mockAlgorithms: RuntimeAlgorithms = {
+  screenerRankingAlgorithm: 'production',
+  radarSortAlgorithm: 'production',
 };
 const MOCK_TASKS = ['focus_refresh', 'strength_refresh', 'breakout_refresh', 'earnings_analysis'];
 
@@ -135,15 +153,30 @@ export const adminApi = {
     ),
   runtimeSettings: (): Promise<RuntimeDoc> =>
     mockOr(
-      () => ({ version: mockRuntimeVersion, updatedAt: new Date().toISOString(), toggles: { ...mockToggles } }),
+      () => ({
+        version: mockRuntimeVersion,
+        updatedAt: new Date().toISOString(),
+        toggles: { ...mockToggles },
+        algorithms: { ...mockAlgorithms },
+      }),
       () => get('/runtime-settings').then(nRuntimeDoc),
     ),
-  updateRuntimeSettings: (expectedVersion: number, toggles: RuntimeTogglesPatch): Promise<RuntimeDoc> =>
+  updateRuntimeSettings: (
+    expectedVersion: number,
+    toggles: RuntimeTogglesPatch,
+    algorithms?: RuntimeAlgorithmsPatch,
+  ): Promise<RuntimeDoc> =>
     mockOr(
       () => {
         mockRuntimeVersion += 1;
         mockToggles = { ...mockToggles, ...toggles };
-        return { version: mockRuntimeVersion, updatedAt: new Date().toISOString(), toggles: { ...mockToggles } };
+        mockAlgorithms = { ...mockAlgorithms, ...algorithms };
+        return {
+          version: mockRuntimeVersion,
+          updatedAt: new Date().toISOString(),
+          toggles: { ...mockToggles },
+          algorithms: { ...mockAlgorithms },
+        };
       },
       () =>
         put('/runtime-settings', {
@@ -160,6 +193,18 @@ export const adminApi = {
               && toggles.earningsScheduledAnalysisEnabled !== undefined
               ? { earnings: { scheduled_analysis_enabled: toggles.earningsScheduledAnalysisEnabled } }
               : {}),
+            ...(algorithms
+              ? {
+                  algorithms: {
+                    ...(algorithms.screenerRankingAlgorithm
+                      ? { screener_ranking_algorithm: algorithms.screenerRankingAlgorithm }
+                      : {}),
+                    ...(algorithms.radarSortAlgorithm
+                      ? { radar_sort_algorithm: algorithms.radarSortAlgorithm }
+                      : {}),
+                  },
+                }
+              : {}),
           },
         }).then(nRuntimeDoc),
     ),
@@ -167,7 +212,12 @@ export const adminApi = {
     mockOr(
       () => {
         mockRuntimeVersion += 1;
-        return { version: mockRuntimeVersion, updatedAt: new Date().toISOString(), toggles: { ...mockToggles } };
+        return {
+          version: mockRuntimeVersion,
+          updatedAt: new Date().toISOString(),
+          toggles: { ...mockToggles },
+          algorithms: { ...mockAlgorithms },
+        };
       },
       () => post('/runtime-settings/rollback', { expected_version: expectedVersion, target_version: targetVersion }).then(nRuntimeDoc),
     ),
