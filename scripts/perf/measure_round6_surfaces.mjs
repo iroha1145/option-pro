@@ -456,6 +456,8 @@ const report = {
   notRUM: true,
   profile: PROFILE,
   base: BASE,
+  product_commit: process.env.OPTIX_PERF_PRODUCT_COMMIT || null,
+  entry: process.env.OPTIX_PERF_ENTRY || null,
   measuredAt: new Date().toISOString(),
   pages: {
     '/': summarize(pages['/']),

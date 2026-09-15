@@ -128,6 +128,7 @@ const report = {
   lab: true,
   notRUM: true,
   base: BASE,
+  product_commit: process.env.OPTIX_PERF_PRODUCT_COMMIT || null,
   measuredAt: new Date().toISOString(),
   cold,
   ready: readySummary,
