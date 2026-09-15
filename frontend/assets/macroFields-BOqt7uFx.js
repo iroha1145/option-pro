@@ -1,1 +1,0 @@
-import{y as c,E as e}from"./transitions-BIh-vpvV.js";function n(i){return Array.isArray(i)?i.flatMap(r=>{if(typeof r=="string"){const a=r.trim();return a?[{factor_id:a,label:a}]:[]}const o=e(r),t=c(o,"factor_id");return t?[{factor_id:t,label:c(o,"label")??t}]:[]}):[]}export{n as m};
