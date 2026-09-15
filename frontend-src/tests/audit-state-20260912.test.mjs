@@ -280,7 +280,9 @@ function accessHarness() {
     '@/api/modules/access': { accessApi }, '@/api/client': { ApiError, PRINCIPAL_INVALID_EVENT: 'invalid' },
     '@/lib/identityRetry': { identityRetryDelayMs: () => 1000 },
     '@/api/sharedRead': { dropSharedReads: h.q.dropQueryRegistry }, '@/api/queryRegistry': h.q,
-    '@/api/marketRead': { resetMarketReadState() {} }, '@/components/catalysts/api': { clearCatalystReadCache() {} }, '../i18n/core.ts': translate,
+    '@/api/marketRead': { resetMarketReadState() {} }, '@/components/catalysts/api': { clearCatalystReadCache() {} },
+    '@/lib/viewPreferenceWrites': { bindPreferenceWritePrincipal() {}, invalidatePreferenceWriteQueue() {} },
+    '../i18n/core.ts': translate,
   }, h.env);
   const result = runner.mount(() => AccessProvider({ children: null }));
   return { ...h, statuses, logins, registrations, ownerLogouts, customerLogouts, read: () => result().props.value, status, unmount: runner.unmount };
