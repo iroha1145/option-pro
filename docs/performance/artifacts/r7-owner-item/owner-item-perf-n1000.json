@@ -1,0 +1,432 @@
+{
+  "scope": "Isolated local in-process official seed; not production latency",
+  "platform": "macOS-27.0-arm64-arm-64bit",
+  "python": "3.12.13",
+  "as_of": "2026-09-15T08:13:31.939554+00:00",
+  "store": {
+    "catalyst_local_news_revisions": 1000,
+    "catalyst_local_analysis_links": 487,
+    "catalyst_local_analysis_result_audit": 487
+  },
+  "samples_per_variant": 8,
+  "cases": {
+    "owner_visible": {
+      "timings": {
+        "before": {
+          "cold_median_ms": 660.1498539999966,
+          "warm_median_ms": 692.4385414998824
+        },
+        "after": {
+          "cold_median_ms": 170.10079149997637,
+          "warm_median_ms": 125.1692495000043
+        }
+      },
+      "counts_separate_untimed_run": {
+        "before": {
+          "linked_job_projection": 959,
+          "public_job_validation": 486
+        },
+        "after": {
+          "linked_job_projection": 503,
+          "public_job_validation": 30
+        }
+      },
+      "hash": "715180555bd4756762897c4e152dac3a0302c53fb6147e1428e3e85d485dcd22",
+      "item_count": 12,
+      "window_count": 959,
+      "samples": [
+        {
+          "iteration": 1,
+          "variant": "before",
+          "cold_ms": 1560.688374999927,
+          "warm_ms": 617.3938749998342,
+          "hash": "715180555bd4756762897c4e152dac3a0302c53fb6147e1428e3e85d485dcd22"
+        },
+        {
+          "iteration": 1,
+          "variant": "after",
+          "cold_ms": 177.89179199985483,
+          "warm_ms": 126.53941600001417,
+          "hash": "715180555bd4756762897c4e152dac3a0302c53fb6147e1428e3e85d485dcd22"
+        },
+        {
+          "iteration": 2,
+          "variant": "after",
+          "cold_ms": 123.02462499997091,
+          "warm_ms": 95.3705419999551,
+          "hash": "715180555bd4756762897c4e152dac3a0302c53fb6147e1428e3e85d485dcd22"
+        },
+        {
+          "iteration": 2,
+          "variant": "before",
+          "cold_ms": 589.7749579999072,
+          "warm_ms": 767.4832079999305,
+          "hash": "715180555bd4756762897c4e152dac3a0302c53fb6147e1428e3e85d485dcd22"
+        },
+        {
+          "iteration": 3,
+          "variant": "before",
+          "cold_ms": 716.5710829999625,
+          "warm_ms": 935.1944999998523,
+          "hash": "715180555bd4756762897c4e152dac3a0302c53fb6147e1428e3e85d485dcd22"
+        },
+        {
+          "iteration": 3,
+          "variant": "after",
+          "cold_ms": 314.1089580001335,
+          "warm_ms": 132.50091700001576,
+          "hash": "715180555bd4756762897c4e152dac3a0302c53fb6147e1428e3e85d485dcd22"
+        },
+        {
+          "iteration": 4,
+          "variant": "after",
+          "cold_ms": 162.3097910000979,
+          "warm_ms": 200.072124999906,
+          "hash": "715180555bd4756762897c4e152dac3a0302c53fb6147e1428e3e85d485dcd22"
+        },
+        {
+          "iteration": 4,
+          "variant": "before",
+          "cold_ms": 825.7564170000933,
+          "warm_ms": 538.4783750000679,
+          "hash": "715180555bd4756762897c4e152dac3a0302c53fb6147e1428e3e85d485dcd22"
+        },
+        {
+          "iteration": 5,
+          "variant": "before",
+          "cold_ms": 635.1704589999372,
+          "warm_ms": 812.2145420002198,
+          "hash": "715180555bd4756762897c4e152dac3a0302c53fb6147e1428e3e85d485dcd22"
+        },
+        {
+          "iteration": 5,
+          "variant": "after",
+          "cold_ms": 135.52904200014382,
+          "warm_ms": 123.79908299999443,
+          "hash": "715180555bd4756762897c4e152dac3a0302c53fb6147e1428e3e85d485dcd22"
+        },
+        {
+          "iteration": 6,
+          "variant": "after",
+          "cold_ms": 226.9679170001382,
+          "warm_ms": 108.98504199985837,
+          "hash": "715180555bd4756762897c4e152dac3a0302c53fb6147e1428e3e85d485dcd22"
+        },
+        {
+          "iteration": 6,
+          "variant": "before",
+          "cold_ms": 545.6524579999495,
+          "warm_ms": 903.9448749999792,
+          "hash": "715180555bd4756762897c4e152dac3a0302c53fb6147e1428e3e85d485dcd22"
+        },
+        {
+          "iteration": 7,
+          "variant": "before",
+          "cold_ms": 675.1473330000408,
+          "warm_ms": 549.5670410000457,
+          "hash": "715180555bd4756762897c4e152dac3a0302c53fb6147e1428e3e85d485dcd22"
+        },
+        {
+          "iteration": 7,
+          "variant": "after",
+          "cold_ms": 139.7140409999338,
+          "warm_ms": 111.58516599994073,
+          "hash": "715180555bd4756762897c4e152dac3a0302c53fb6147e1428e3e85d485dcd22"
+        },
+        {
+          "iteration": 8,
+          "variant": "after",
+          "cold_ms": 214.53412500000013,
+          "warm_ms": 210.61774999998306,
+          "hash": "715180555bd4756762897c4e152dac3a0302c53fb6147e1428e3e85d485dcd22"
+        },
+        {
+          "iteration": 8,
+          "variant": "before",
+          "cold_ms": 645.1523749999524,
+          "warm_ms": 543.9194589998806,
+          "hash": "715180555bd4756762897c4e152dac3a0302c53fb6147e1428e3e85d485dcd22"
+        }
+      ]
+    },
+    "owner_legacy": {
+      "timings": {
+        "before": {
+          "cold_median_ms": 546.2511460001451,
+          "warm_median_ms": 563.7502915000141
+        },
+        "after": {
+          "cold_median_ms": 86.8777714999851,
+          "warm_median_ms": 37.62856250000368
+        }
+      },
+      "counts_separate_untimed_run": {
+        "before": {
+          "linked_job_projection": 959,
+          "public_job_validation": 456
+        },
+        "after": {
+          "linked_job_projection": 503,
+          "public_job_validation": 0
+        }
+      },
+      "hash": "d82e8ef64f535bdbb855e36e0e02f928e813a301aaabf1d6d994daca0495a122",
+      "item_count": 0,
+      "window_count": 959,
+      "samples": [
+        {
+          "iteration": 1,
+          "variant": "before",
+          "cold_ms": 707.7982499999962,
+          "warm_ms": 478.262167000139,
+          "hash": "d82e8ef64f535bdbb855e36e0e02f928e813a301aaabf1d6d994daca0495a122"
+        },
+        {
+          "iteration": 1,
+          "variant": "after",
+          "cold_ms": 51.228541000000405,
+          "warm_ms": 29.126124999947933,
+          "hash": "d82e8ef64f535bdbb855e36e0e02f928e813a301aaabf1d6d994daca0495a122"
+        },
+        {
+          "iteration": 2,
+          "variant": "after",
+          "cold_ms": 123.99766699991233,
+          "warm_ms": 93.75933400019676,
+          "hash": "d82e8ef64f535bdbb855e36e0e02f928e813a301aaabf1d6d994daca0495a122"
+        },
+        {
+          "iteration": 2,
+          "variant": "before",
+          "cold_ms": 686.4805420000266,
+          "warm_ms": 539.2418330000055,
+          "hash": "d82e8ef64f535bdbb855e36e0e02f928e813a301aaabf1d6d994daca0495a122"
+        },
+        {
+          "iteration": 3,
+          "variant": "before",
+          "cold_ms": 509.93512499985627,
+          "warm_ms": 677.1817500000452,
+          "hash": "d82e8ef64f535bdbb855e36e0e02f928e813a301aaabf1d6d994daca0495a122"
+        },
+        {
+          "iteration": 3,
+          "variant": "after",
+          "cold_ms": 81.15958400003365,
+          "warm_ms": 31.902624999929685,
+          "hash": "d82e8ef64f535bdbb855e36e0e02f928e813a301aaabf1d6d994daca0495a122"
+        },
+        {
+          "iteration": 4,
+          "variant": "after",
+          "cold_ms": 92.59595899993656,
+          "warm_ms": 25.325083000097948,
+          "hash": "d82e8ef64f535bdbb855e36e0e02f928e813a301aaabf1d6d994daca0495a122"
+        },
+        {
+          "iteration": 4,
+          "variant": "before",
+          "cold_ms": 544.6880000001784,
+          "warm_ms": 580.1573329999883,
+          "hash": "d82e8ef64f535bdbb855e36e0e02f928e813a301aaabf1d6d994daca0495a122"
+        },
+        {
+          "iteration": 5,
+          "variant": "before",
+          "cold_ms": 519.0498749998369,
+          "warm_ms": 795.5067499999586,
+          "hash": "d82e8ef64f535bdbb855e36e0e02f928e813a301aaabf1d6d994daca0495a122"
+        },
+        {
+          "iteration": 5,
+          "variant": "after",
+          "cold_ms": 118.86200000003555,
+          "warm_ms": 44.661165999968944,
+          "hash": "d82e8ef64f535bdbb855e36e0e02f928e813a301aaabf1d6d994daca0495a122"
+        },
+        {
+          "iteration": 6,
+          "variant": "after",
+          "cold_ms": 78.49479199990128,
+          "warm_ms": 43.35450000007768,
+          "hash": "d82e8ef64f535bdbb855e36e0e02f928e813a301aaabf1d6d994daca0495a122"
+        },
+        {
+          "iteration": 6,
+          "variant": "before",
+          "cold_ms": 494.1592089999176,
+          "warm_ms": 447.45220800018615,
+          "hash": "d82e8ef64f535bdbb855e36e0e02f928e813a301aaabf1d6d994daca0495a122"
+        },
+        {
+          "iteration": 7,
+          "variant": "before",
+          "cold_ms": 615.7499579999239,
+          "warm_ms": 760.8967920000396,
+          "hash": "d82e8ef64f535bdbb855e36e0e02f928e813a301aaabf1d6d994daca0495a122"
+        },
+        {
+          "iteration": 7,
+          "variant": "after",
+          "cold_ms": 94.26891699990847,
+          "warm_ms": 30.160541999975976,
+          "hash": "d82e8ef64f535bdbb855e36e0e02f928e813a301aaabf1d6d994daca0495a122"
+        },
+        {
+          "iteration": 8,
+          "variant": "after",
+          "cold_ms": 75.12391699992804,
+          "warm_ms": 44.99479199989764,
+          "hash": "d82e8ef64f535bdbb855e36e0e02f928e813a301aaabf1d6d994daca0495a122"
+        },
+        {
+          "iteration": 8,
+          "variant": "before",
+          "cold_ms": 547.8142920001119,
+          "warm_ms": 547.3432500000399,
+          "hash": "d82e8ef64f535bdbb855e36e0e02f928e813a301aaabf1d6d994daca0495a122"
+        }
+      ]
+    },
+    "guest_visible": {
+      "timings": {
+        "before": {
+          "cold_median_ms": 89.54327100002502,
+          "warm_median_ms": 45.75116650005384
+        },
+        "after": {
+          "cold_median_ms": 87.24895800003196,
+          "warm_median_ms": 46.37904150001759
+        }
+      },
+      "counts_separate_untimed_run": {
+        "before": {
+          "linked_job_projection": 0,
+          "public_job_validation": 0
+        },
+        "after": {
+          "linked_job_projection": 0,
+          "public_job_validation": 0
+        }
+      },
+      "hash": "e6b8f3e3a0bb9bf3a2c9c83778e12aa04f701a146ef4e6ee89bae52ebcca9865",
+      "item_count": 12,
+      "window_count": 959,
+      "samples": [
+        {
+          "iteration": 1,
+          "variant": "before",
+          "cold_ms": 106.88500000014756,
+          "warm_ms": 44.78679200019542,
+          "hash": "e6b8f3e3a0bb9bf3a2c9c83778e12aa04f701a146ef4e6ee89bae52ebcca9865"
+        },
+        {
+          "iteration": 1,
+          "variant": "after",
+          "cold_ms": 91.09204200012755,
+          "warm_ms": 44.68833300006736,
+          "hash": "e6b8f3e3a0bb9bf3a2c9c83778e12aa04f701a146ef4e6ee89bae52ebcca9865"
+        },
+        {
+          "iteration": 2,
+          "variant": "after",
+          "cold_ms": 100.43912500009355,
+          "warm_ms": 52.128875000107655,
+          "hash": "e6b8f3e3a0bb9bf3a2c9c83778e12aa04f701a146ef4e6ee89bae52ebcca9865"
+        },
+        {
+          "iteration": 2,
+          "variant": "before",
+          "cold_ms": 82.74958299989521,
+          "warm_ms": 39.663999999902444,
+          "hash": "e6b8f3e3a0bb9bf3a2c9c83778e12aa04f701a146ef4e6ee89bae52ebcca9865"
+        },
+        {
+          "iteration": 3,
+          "variant": "before",
+          "cold_ms": 75.38479200002257,
+          "warm_ms": 40.25804100001551,
+          "hash": "e6b8f3e3a0bb9bf3a2c9c83778e12aa04f701a146ef4e6ee89bae52ebcca9865"
+        },
+        {
+          "iteration": 3,
+          "variant": "after",
+          "cold_ms": 75.7231249999677,
+          "warm_ms": 39.30108300005486,
+          "hash": "e6b8f3e3a0bb9bf3a2c9c83778e12aa04f701a146ef4e6ee89bae52ebcca9865"
+        },
+        {
+          "iteration": 4,
+          "variant": "after",
+          "cold_ms": 88.17970800009789,
+          "warm_ms": 40.09233299984771,
+          "hash": "e6b8f3e3a0bb9bf3a2c9c83778e12aa04f701a146ef4e6ee89bae52ebcca9865"
+        },
+        {
+          "iteration": 4,
+          "variant": "before",
+          "cold_ms": 81.69870799997625,
+          "warm_ms": 46.56370800012155,
+          "hash": "e6b8f3e3a0bb9bf3a2c9c83778e12aa04f701a146ef4e6ee89bae52ebcca9865"
+        },
+        {
+          "iteration": 5,
+          "variant": "before",
+          "cold_ms": 100.60695799984387,
+          "warm_ms": 69.9102920000314,
+          "hash": "e6b8f3e3a0bb9bf3a2c9c83778e12aa04f701a146ef4e6ee89bae52ebcca9865"
+        },
+        {
+          "iteration": 5,
+          "variant": "after",
+          "cold_ms": 199.8553329999595,
+          "warm_ms": 48.46070799999325,
+          "hash": "e6b8f3e3a0bb9bf3a2c9c83778e12aa04f701a146ef4e6ee89bae52ebcca9865"
+        },
+        {
+          "iteration": 6,
+          "variant": "after",
+          "cold_ms": 84.24291699998321,
+          "warm_ms": 44.214582999984486,
+          "hash": "e6b8f3e3a0bb9bf3a2c9c83778e12aa04f701a146ef4e6ee89bae52ebcca9865"
+        },
+        {
+          "iteration": 6,
+          "variant": "before",
+          "cold_ms": 90.41275000004134,
+          "warm_ms": 61.9523749999189,
+          "hash": "e6b8f3e3a0bb9bf3a2c9c83778e12aa04f701a146ef4e6ee89bae52ebcca9865"
+        },
+        {
+          "iteration": 7,
+          "variant": "before",
+          "cold_ms": 109.46108299981461,
+          "warm_ms": 45.515000000023065,
+          "hash": "e6b8f3e3a0bb9bf3a2c9c83778e12aa04f701a146ef4e6ee89bae52ebcca9865"
+        },
+        {
+          "iteration": 7,
+          "variant": "after",
+          "cold_ms": 86.31820799996603,
+          "warm_ms": 48.069749999967826,
+          "hash": "e6b8f3e3a0bb9bf3a2c9c83778e12aa04f701a146ef4e6ee89bae52ebcca9865"
+        },
+        {
+          "iteration": 8,
+          "variant": "after",
+          "cold_ms": 77.66958399997748,
+          "warm_ms": 62.12416599987591,
+          "hash": "e6b8f3e3a0bb9bf3a2c9c83778e12aa04f701a146ef4e6ee89bae52ebcca9865"
+        },
+        {
+          "iteration": 8,
+          "variant": "before",
+          "cold_ms": 88.67379200000869,
+          "warm_ms": 45.98733300008462,
+          "hash": "e6b8f3e3a0bb9bf3a2c9c83778e12aa04f701a146ef4e6ee89bae52ebcca9865"
+        }
+      ]
+    }
+  },
+  "databases_unchanged": true
+}

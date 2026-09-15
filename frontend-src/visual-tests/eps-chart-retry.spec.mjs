@@ -1,51 +1,119 @@
 import { expect, test } from '@playwright/test';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { parseStaticJsImports } from '../../scripts/perf/lib/round6_bundle_graph.mjs';
 
-test('chart 503 then 200 retry issues a new module request and shows the canvas', async ({ page }) => {
-  const errors = [];
-  page.on('pageerror', (error) => errors.push(error.message));
-  await page.clock.setFixedTime(new Date('2026-09-12T12:00:00Z'));
-  await page.addInitScript(() => localStorage.setItem('optix:locale', 'zh'));
-  await page.route('**/*', (route) => (
-    ['127.0.0.1', 'localhost'].includes(new URL(route.request().url()).hostname)
-      ? route.continue()
-      : route.abort()
-  ));
-
-  let failChart = true;
-  const chartRequests = [];
-  await page.route(/EpsHatchChart/, async (route) => {
-    const url = route.request().url();
-    chartRequests.push({ url, failed: failChart, at: Date.now() });
-    if (failChart) {
-      await route.fulfill({ status: 503, body: 'chart unavailable', contentType: 'text/plain' });
-      return;
+function chartDependencies() {
+  const assets = fileURLToPath(new URL('../test-results/eps-chart-build/assets/', import.meta.url));
+  const entry = fs.readdirSync(assets).find((name) => /^eps-chart-.*\.js$/.test(name));
+  if (!entry) throw new Error('Run this test with playwright.eps-chart.config.mjs against the production build');
+  const seen = new Set();
+  const visit = (name) => {
+    if (seen.has(name)) return;
+    seen.add(name);
+    for (const dependency of parseStaticJsImports(fs.readFileSync(path.join(assets, name), 'utf8'))) {
+      visit(path.basename(dependency));
     }
-    await route.continue();
+  };
+  visit(entry);
+  seen.delete(entry);
+  return seen;
+}
+
+for (const remount of [false, true]) {
+  test(`production chart recovers after two failed loads${remount ? ' and a page remount' : ''}`, async ({ page }) => {
+    const errors = [];
+    const loaded = new Set();
+    const dependencies = chartDependencies();
+    page.on('pageerror', (error) => errors.push(error.message));
+    page.on('response', (response) => {
+      const url = new URL(response.url());
+      if (response.ok() && url.pathname.endsWith('.js')) loaded.add(path.basename(url.pathname));
+    });
+    await page.clock.setFixedTime(new Date('2026-09-12T12:00:00Z'));
+    await page.addInitScript(() => localStorage.setItem('optix:locale', 'zh'));
+    await page.route('**/*', (route) => (
+      ['127.0.0.1', 'localhost'].includes(new URL(route.request().url()).hostname)
+        ? route.continue() : route.abort()
+    ));
+    let failChart = true;
+    const chartRequests = [];
+    await page.route(/\/assets\/eps-chart-[^/?]+\.js(?:\?|$)/, async (route) => {
+      chartRequests.push({ url: route.request().url(), failed: failChart,
+        unloadedDependencies: [...dependencies].filter((name) => !loaded.has(name)) });
+      if (failChart) return route.fulfill({ status: 503, body: 'chart unavailable', contentType: 'text/plain' });
+      return route.continue();
+    });
+
+    const openChart = async () => {
+      await expect(page.getByRole('heading', { name: '财报日历', exact: true })).toBeVisible();
+      const all = page.getByRole('tab', { name: /^全部公司/ });
+      await all.click();
+      const slot = page.locator('[data-eps-chart-slot]');
+      await expect(slot).toBeAttached();
+      await slot.scrollIntoViewIfNeeded();
+      return all;
+    };
+    await page.goto('/earnings');
+    let all = await openChart();
+    await expect(page.locator('[data-eps-chart-error]')).toBeVisible();
+    expect(chartRequests).toHaveLength(1);
+    expect(new URL(chartRequests[0].url).searchParams.get('eps')).toBe('1');
+    expect(chartRequests[0].unloadedDependencies).toEqual([]);
+    await expect(all).toHaveAttribute('aria-selected', 'true');
+
+    await page.getByRole('button', { name: '重试图表', exact: true }).click();
+    await expect.poll(() => chartRequests.length).toBe(2);
+    await expect(page.locator('[data-eps-chart-error]')).toBeVisible();
+    expect(new URL(chartRequests[1].url).searchParams.get('recover')).toBe('1');
+    if (remount) {
+      await page.getByRole('link', { name: /首页/ }).first().click();
+      await expect(page.getByRole('heading', { name: '首页', exact: true })).toBeVisible();
+      await page.getByRole('link', { name: /财报/ }).first().click();
+      all = await openChart();
+      await expect(page.locator('[data-eps-chart-error]')).toBeVisible();
+      expect(chartRequests).toHaveLength(2);
+    }
+    failChart = false;
+    await page.getByRole('button', { name: '重试图表', exact: true }).click();
+    await expect(page.locator('[data-eps-chart] canvas')).toHaveCount(1);
+    await expect(page.locator('[data-eps-chart]')).toBeVisible();
+    await expect(page.locator('[data-eps-chart-error]')).toHaveCount(0);
+    await expect(all).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('[aria-label="财报主体"]')).toBeVisible();
+    expect(chartRequests).toHaveLength(3);
+    expect(chartRequests.every((row) => new URL(row.url).searchParams.get('eps') === '1')).toBe(true);
+    expect(new URL(chartRequests[2].url).searchParams.get('recover')).toBe('2');
+    expect(chartRequests[2].failed).toBe(false);
+    expect(chartRequests.every((row) => row.unloadedDependencies.length === 0)).toBe(true);
+    if (remount) {
+      await page.getByRole('link', { name: /首页/ }).first().click();
+      await expect(page.getByRole('heading', { name: '首页', exact: true })).toBeVisible();
+      await page.getByRole('link', { name: /财报/ }).first().click();
+      await openChart();
+      await expect(page.locator('[data-eps-chart] canvas')).toHaveCount(1);
+      await expect(page.locator('[data-eps-chart-error]')).toHaveCount(0);
+      expect(chartRequests).toHaveLength(3);
+    }
+
+    // Market statically imports the canonical chart module. EPS failures must
+    // not leave that URL rejected in the browser's module map.
+    await page.locator('a[href="/market"]').first().click();
+    await expect(page.getByRole('heading', { name: '大盘强弱', exact: true })).toBeVisible();
+    expect(chartRequests).toHaveLength(4);
+    expect(new URL(chartRequests[3].url).search).toBe('');
+    expect(chartRequests[3].failed).toBe(false);
+    expect(errors).toEqual([]);
+
+    await page.getByRole('link', { name: /财报/ }).first().click();
+    all = await openChart();
+    await expect(page.locator('[data-eps-chart] canvas')).toHaveCount(1);
+    await expect(page.locator('[data-eps-chart]')).toBeVisible();
+    await expect(page.locator('[data-eps-chart-error]')).toHaveCount(0);
+    await expect(all).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('[aria-label="财报主体"]')).toBeVisible();
+    expect(chartRequests).toHaveLength(4);
+    expect(errors).toEqual([]);
   });
-
-  await page.goto('/earnings');
-  await expect(page.getByRole('heading', { name: '财报日历', exact: true })).toBeVisible();
-  const slot = page.locator('[data-eps-chart-slot]');
-  await expect(slot).toBeAttached();
-  await slot.scrollIntoViewIfNeeded();
-  await expect(page.locator('[data-eps-chart-error]')).toBeVisible();
-  await expect(page.getByText('列表与分析仍可查看。可单独重试图表。')).toBeVisible();
-  expect(chartRequests.length).toBeGreaterThanOrEqual(1);
-  const failedCount = chartRequests.filter((row) => row.failed).length;
-  expect(failedCount).toBeGreaterThanOrEqual(1);
-
-  failChart = false;
-  const probe = await page.request.get(chartRequests[0].url.replace(/([?&])recover=\d+/, '$1recover=probe'));
-  expect(probe.status()).toBe(200);
-
-  const beforeRetry = chartRequests.length;
-  await page.getByRole('button', { name: '重试图表', exact: true }).click();
-  await expect(page.locator('[data-eps-chart]')).toBeVisible({ timeout: 10_000 });
-  await expect(page.locator('[data-eps-chart] canvas')).toHaveCount(1);
-  await expect(page.locator('[data-eps-chart-error]')).toHaveCount(0);
-  const retryRequests = chartRequests.slice(beforeRetry);
-  expect(retryRequests.length, JSON.stringify({ chartRequests, beforeRetry })).toBeGreaterThanOrEqual(1);
-  expect(retryRequests.every((row) => row.failed === false)).toBeTruthy();
-  expect(retryRequests.some((row) => /[?&]recover=1(?:&|$)/.test(row.url))).toBeTruthy();
-  expect(errors.filter((message) => !/loading chunk|Failed to fetch|503|chart unavailable/i.test(message))).toEqual([]);
-});
+}

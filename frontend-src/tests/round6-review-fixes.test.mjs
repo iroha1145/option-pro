@@ -126,11 +126,9 @@ test('chart lazy-load rejection does not unmount the earnings page', async () =>
   const boundarySource = await readFile(src('components', 'earnings', 'ChartLoadErrorBoundary.tsx'), 'utf8');
   assert.match(chart, /ChartLoadErrorBoundary/);
   assert.match(chart, /loadEpsHatchChart/);
-  assert.match(chart, /import\('\.\/EpsHatchChart'\)/);
-  assert.match(chart, /import\.meta\.resolve\('\.\/EpsHatchChart'\)/);
-  assert.match(chart, /@vite-ignore/);
-  assert.match(chart, /searchParams\.set\('recover'/);
-  assert.match(chart, /setEpsHatchChart\(loadEpsHatchChart\(recoverGen\.current\)\)/);
+  assert.match(chart, /importEpsChart/);
+  assert.doesNotMatch(chart, /import\.meta\.resolve|String\(load\)/);
+  assert.match(chart, /setEpsHatchChart\(retryEpsHatchChart\)/);
   assert.doesNotMatch(chart, /useMemo\(\(\) => loadEpsHatchChart/);
   assert.doesNotMatch(chart, /EpsHatchChart\.tsx\?recover/);
   assert.match(boundarySource, /getDerivedStateFromError/);

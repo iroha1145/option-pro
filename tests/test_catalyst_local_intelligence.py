@@ -7387,6 +7387,84 @@ def test_failed_forced_news_revision_preserves_previous_analysis(
     ] == [1]
 
 
+@pytest.mark.parametrize(
+    ("scenario", "expected_status", "has_analysis"),
+    [
+        ("not_requested", "not_requested", False),
+        ("pending", "pending", False),
+        ("completed_unpublished", "pending", False),
+        ("completed", "completed", True),
+        ("historical_before_job", "not_requested", False),
+        ("historical_pending", "pending", False),
+        ("published_new_pending", "completed", True),
+        ("published_new_failed", "completed", True),
+    ],
+)
+def test_owner_item_only_projects_job_state_without_published_analysis(
+    tmp_path, monkeypatch, scenario, expected_status, has_analysis
+) -> None:
+    base = datetime(2030, 7, 16, 20, 0, tzinfo=timezone.utc)
+    clock = {"now": base}
+    monkeypatch.setattr(local_module, "_utc_now", lambda: clock["now"])
+    monkeypatch.setattr(ai_jobs_repository_module, "_utcnow", lambda: clock["now"])
+    etl, ai, intelligence = _stack(tmp_path)
+    _apply_news(
+        etl,
+        [_news_change(1, 231, available_at=base - timedelta(minutes=10))],
+        as_of=base,
+    )
+    intelligence.reconcile()
+    if scenario != "not_requested":
+        job = intelligence.request_analysis(231, force=False)
+        if scenario != "pending":
+            clock["now"] = base + timedelta(minutes=1)
+            _finish_job(
+                ai,
+                job["job_id"],
+                _news_result(news_id=231, change_sequence=1, content_hash="hash-231-1"),
+            )
+            if scenario != "completed_unpublished":
+                intelligence.reconcile()
+    if scenario.startswith("published_new_"):
+        clock["now"] = base + timedelta(minutes=2)
+        forced = intelligence.request_analysis(231, force=True)
+        if scenario == "published_new_failed":
+            _fail_job(ai, forced["job_id"], "forced_news_failed")
+            intelligence.reconcile()
+    as_of = {
+        "historical_before_job": base - timedelta(minutes=1),
+        "historical_pending": base + timedelta(seconds=30),
+    }.get(scenario, clock["now"])
+    original = intelligence._linked_news_job_at
+    calls = []
+
+    def counted(*args, **kwargs):
+        calls.append(kwargs["as_of"])
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(intelligence, "_linked_news_job_at", counted)
+    payload = intelligence.feed(as_of=as_of, window_hours=24, limit=12)
+    assert len(payload["items"]) == 1
+    item = payload["items"][0]
+    assert item["analysis_status"] == expected_status
+    assert (item["analysis"] is not None) == has_analysis
+    assert calls == ([] if has_analysis else [as_of])
+    if has_analysis:
+        assert item["analysis"] == _news_result(
+            news_id=231, change_sequence=1, content_hash="hash-231-1"
+        )
+    if scenario.startswith("published_new_"):
+        # A published result determines the item status, while detail must
+        # still expose the independent state of the newer forced job.
+        detail = intelligence.news(231, as_of=as_of)
+        assert detail is not None
+        assert detail["item"] == item
+        assert detail["analysis_job"]["job_id"] == forced["job_id"]
+        assert detail["analysis_job"]["status"] == (
+            "failed" if scenario == "published_new_failed" else "pending"
+        )
+
+
 def test_feed_serves_revision_cache_and_invalidates_on_new_change(
     tmp_path, monkeypatch
 ) -> None:
@@ -7730,11 +7808,13 @@ def test_incomplete_revision_cache_falls_back_to_slow_path(
 
 
 def test_late_revision_build_does_not_clobber_newer_cache() -> None:
+    as_of = datetime(2026, 7, 21, 14, 30, tzinfo=timezone.utc)
     key = ("/tmp/revision-cache-guard", 24)
     newer_cursor = (2, 2, 2)
     older_cursor = (1, 1, 1)
     local_module._REVISION_CACHE[key] = {
         "cursor": newer_cursor,
+        "query_as_of": as_of,
         "built_at": 20.0,
         "rows": [{"news_id": 200}],
         "anon_items": [{"news_id": 200}],
@@ -7743,6 +7823,7 @@ def test_late_revision_build_does_not_clobber_newer_cache() -> None:
         key,
         older_cursor,
         [{"news_id": 100}],
+        as_of=as_of,
         started_at=10.0,
     )
     cached = local_module._REVISION_CACHE[key]
@@ -7752,6 +7833,7 @@ def test_late_revision_build_does_not_clobber_newer_cache() -> None:
         key,
         (3, 3, 3),
         [{"news_id": 300}],
+        as_of=as_of,
         started_at=25.0,
     )
     cached = local_module._REVISION_CACHE[key]
@@ -7761,11 +7843,13 @@ def test_late_revision_build_does_not_clobber_newer_cache() -> None:
 
 
 def test_same_cursor_row_store_does_not_drop_anon_items() -> None:
+    as_of = datetime(2026, 7, 21, 14, 30, tzinfo=timezone.utc)
     key = ("/tmp/revision-cache-same-cursor", 24)
     cursor = (4, 4, 4)
     installed_at = time.monotonic()
     local_module._REVISION_CACHE[key] = {
         "cursor": cursor,
+        "query_as_of": as_of,
         "built_at": installed_at,
         "rows": [{"news_id": 4}],
         "anon_items": [{"news_id": 4, "title": "cached"}],
@@ -7774,6 +7858,7 @@ def test_same_cursor_row_store_does_not_drop_anon_items() -> None:
         key,
         cursor,
         [{"news_id": 99}],
+        as_of=as_of,
         started_at=installed_at - 1.0,
     )
     cached = local_module._REVISION_CACHE[key]
@@ -7785,11 +7870,13 @@ def test_same_cursor_row_store_does_not_drop_anon_items() -> None:
 
 
 def test_expired_same_cursor_store_invalidates_anon_items() -> None:
+    as_of = datetime(2026, 7, 21, 14, 30, tzinfo=timezone.utc)
     key = ("/tmp/revision-cache-expired-cursor", 24)
     cursor = (5, 5, 5)
     expired_at = time.monotonic() - local_module._REVISION_CACHE_MAX_AGE_SECONDS - 10.0
     local_module._REVISION_CACHE[key] = {
         "cursor": cursor,
+        "query_as_of": as_of,
         "built_at": expired_at,
         "rows": [{"news_id": 5}],
         "anon_items": [{"news_id": 5, "title": "cached"}],
@@ -7799,6 +7886,7 @@ def test_expired_same_cursor_store_invalidates_anon_items() -> None:
         key,
         cursor,
         [{"news_id": 55}],
+        as_of=as_of,
         started_at=started_at,
     )
     cached = local_module._REVISION_CACHE[key]
@@ -7813,6 +7901,7 @@ def test_expired_same_cursor_store_invalidates_anon_items() -> None:
 
 
 def test_expired_same_cursor_keeps_concurrent_install() -> None:
+    as_of = datetime(2026, 7, 21, 14, 30, tzinfo=timezone.utc)
     key = ("/tmp/revision-cache-expired-concurrent", 24)
     cursor = (6, 6, 6)
     now = time.monotonic()
@@ -7820,6 +7909,7 @@ def test_expired_same_cursor_keeps_concurrent_install() -> None:
     concurrent_at = now - local_module._REVISION_CACHE_MAX_AGE_SECONDS - 10.0
     local_module._REVISION_CACHE[key] = {
         "cursor": cursor,
+        "query_as_of": as_of,
         "built_at": concurrent_at,
         "rows": [{"news_id": 6}],
         "anon_items": [{"news_id": 6, "title": "concurrent"}],
@@ -7828,6 +7918,7 @@ def test_expired_same_cursor_keeps_concurrent_install() -> None:
         key,
         cursor,
         [{"news_id": 66}],
+        as_of=as_of,
         started_at=started_at,
     )
     cached = local_module._REVISION_CACHE[key]
@@ -8199,3 +8290,263 @@ def test_rejected_cache_install_keeps_own_rows_for_fixed_as_of_pagination(
     assert first_ids == [13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2]
     assert second_ids == [1]
     assert set(first_ids + second_ids) == set(range(1, 14))
+
+
+@pytest.mark.parametrize("scenario", ["window", "revision"])
+def test_same_cursor_concurrent_rows_remain_bound_to_request_as_of(
+    tmp_path, monkeypatch, scenario
+) -> None:
+    """The same DB cursor can yield different windows or revisions by as_of."""
+    etl, _ai, intelligence = _stack(tmp_path)
+    base = datetime(2026, 7, 21, 14, 30, tzinfo=timezone.utc)
+    later = base + timedelta(seconds=2)
+    clock = {"now": later}
+    monkeypatch.setattr(local_module, "_utc_now", lambda: clock["now"])
+    if scenario == "window":
+        changes = [
+            _news_change(
+                index,
+                index,
+                available_at=(
+                    base - timedelta(hours=23, minutes=54, seconds=59)
+                    if index == 13
+                    else base - timedelta(minutes=30 + index)
+                ),
+            )
+            for index in range(1, 14)
+        ]
+    else:
+        # Both revisions are already in the DB. The first request's as_of
+        # predates revision 2, so the fingerprint is identical for both reads.
+        changes = [
+            _news_change(1, 141, available_at=base - timedelta(hours=1)),
+            _news_change(2, 141, available_at=base + timedelta(seconds=1)),
+        ]
+    _apply_news(etl, changes, as_of=later)
+    intelligence.reconcile()
+
+    captured = threading.Event()
+    resume = threading.Event()
+    original_query = intelligence._active_revisions_query
+    reader_thread = None
+
+    def gated_query(*args, **kwargs):
+        rows = original_query(*args, **kwargs)
+        if threading.current_thread() is reader_thread:
+            captured.set()
+            if not resume.wait(timeout=5):
+                raise TimeoutError("earlier as_of reader was not resumed")
+        return rows
+
+    monkeypatch.setattr(intelligence, "_active_revisions_query", gated_query)
+    first_payloads = []
+    errors = []
+
+    def early_reader():
+        try:
+            with request_owner_access_context(False):
+                first_payloads.append(
+                    intelligence.feed(as_of=base, window_hours=24, limit=12)
+                )
+        except BaseException as error:  # noqa: BLE001 — surface in the main thread
+            errors.append(error)
+
+    reader_thread = threading.Thread(target=early_reader)
+    reader_thread.start()
+    try:
+        assert captured.wait(timeout=5)
+        # A complete anonymous entry exercises late reuse; an owner row-only
+        # entry exercises late item backfill when IDs match but revisions don't.
+        with request_owner_access_context(scenario == "revision"):
+            newer = intelligence.feed(as_of=later, window_hours=24, limit=12)
+        assert newer["summary"]["count"] == (12 if scenario == "window" else 1)
+        with intelligence._connect() as connection:
+            stored_cursor = local_module._revision_store_cursor(connection)
+    finally:
+        resume.set()
+        reader_thread.join(timeout=5)
+    assert not reader_thread.is_alive()
+    assert not errors
+    first = first_payloads[0]
+    with request_owner_access_context(False):
+        hot = intelligence.feed(as_of=later, window_hours=24, limit=12)
+    cached = local_module._REVISION_CACHE[(str(intelligence.db_path), 24)]
+    assert cached["cursor"] == stored_cursor
+
+    if scenario == "window":
+        assert first["summary"]["count"] == 13
+        assert first["has_more"] is True
+        assert [item["news_id"] for item in first["items"]] == list(range(1, 13))
+        assert hot["summary"]["count"] == 12
+        clock["now"] = base + timedelta(minutes=2)
+        with request_owner_access_context(False):
+            second = intelligence.feed(
+                as_of=clock["now"], window_hours=24, limit=12,
+                cursor=first["next_cursor"],
+            )
+        assert second["as_of"] == first["as_of"] == _iso(base)
+        assert second["summary"]["count"] == 13
+        assert [item["news_id"] for item in second["items"]] == [13]
+    else:
+        assert first["items"][0]["change_sequence"] == 1
+        assert hot["items"][0]["change_sequence"] == 2
+        assert cached["rows"][0]["change_sequence"] == 2
+        assert cached["anon_items"][0]["change_sequence"] == 2
+
+
+@pytest.mark.parametrize("scenario", ["future_news", "window_edge"])
+@pytest.mark.parametrize("later_owner", [False, True])
+def test_prelookup_earlier_as_of_bypasses_later_cache(
+    tmp_path, monkeypatch, scenario, later_owner
+) -> None:
+    """Both complete bundles and row-only hits must respect request ordering."""
+    from app.personal_config import FeatureConfig, PersonalConfig
+    from app.services.catalysts.personal_service import PersonalCatalystService
+
+    etl, ai, intelligence = _stack(tmp_path)
+    base = datetime(2026, 7, 21, 14, 30, tzinfo=timezone.utc)
+    clock = {"now": base}
+    monkeypatch.setattr(local_module, "_utc_now", lambda: clock["now"])
+    originals = [
+        _news_change(
+            index, index,
+            available_at=(
+                base - timedelta(hours=23, minutes=54, seconds=59)
+                if scenario == "window_edge" and index == 13
+                else base - timedelta(minutes=30 + index)
+            ),
+            title="芯片企业公布最新业绩",
+            summary="收入增长，但管理层仍提示需求波动风险。",
+        )
+        for index in range(1, 14)
+    ]
+    _apply_news(etl, originals, as_of=base)
+    intelligence.reconcile()
+    service = PersonalCatalystService(
+        type("SettingsStub", (), {
+            "cache_db_path": str(intelligence.db_path),
+            "model": "gpt-5.6-terra", "reasoning": "max",
+        })(),
+        intelligence=intelligence, ai_repository=ai,
+        personal_config=PersonalConfig(features=FeatureConfig(catalyst_mode="read")),
+        ai_settings=type("AISettingsStub", (), {"personal_etl_enabled": True})(),
+    )
+    entered = threading.Event()
+    resume = threading.Event()
+    original_bundle = intelligence._active_revision_bundle
+    reader = None
+
+    def gated_bundle(*args, **kwargs):
+        if threading.current_thread() is reader:
+            entered.set()
+            if not resume.wait(timeout=5):
+                raise TimeoutError("prelookup reader was not resumed")
+        return original_bundle(*args, **kwargs)
+
+    monkeypatch.setattr(intelligence, "_active_revision_bundle", gated_bundle)
+    first_pages = []
+    errors = []
+
+    def earlier_read():
+        try:
+            with request_owner_access_context(False):
+                first_pages.append(service.feed(
+                    as_of=base, window_hours=24, limit=12, page_mode="visible",
+                ))
+        except BaseException as error:  # noqa: BLE001 — surface in the main thread
+            errors.append(error)
+
+    reader = threading.Thread(target=earlier_read)
+    reader.start()
+    try:
+        assert entered.wait(timeout=5)
+        clock["now"] = base + timedelta(seconds=2)
+        if scenario == "future_news":
+            _apply_news(etl, [_news_change(
+                14, 999, available_at=base + timedelta(seconds=1),
+                title="芯片企业公布最新进展",
+                summary="公司披露后续安排，市场关注交付节奏。",
+            )], as_of=clock["now"])
+            intelligence.reconcile()
+        with request_owner_access_context(later_owner):
+            later = intelligence.feed(as_of=clock["now"], window_hours=24, limit=12)
+        assert later["summary"]["count"] == (14 if scenario == "future_news" else 12)
+        cache_key = (str(intelligence.db_path), 24)
+        installed = local_module._REVISION_CACHE[cache_key]
+        installed_rows = [dict(row) for row in installed["rows"]]
+    finally:
+        resume.set()
+        reader.join(timeout=5)
+    assert not reader.is_alive()
+    assert not errors
+    first = first_pages[0]
+    assert first["summary"]["count"] == 13
+    assert [item["news_id"] for item in first["items"]] == list(range(1, 13))
+    assert first["next_cursor"]
+    assert local_module._REVISION_CACHE[cache_key] is installed
+    assert installed["rows"] == installed_rows
+
+    clock["now"] = base + timedelta(minutes=2)
+    with request_owner_access_context(False):
+        second = service.feed(
+            as_of=clock["now"], window_hours=24, limit=12, page_mode="visible",
+            cursor=first["next_cursor"],
+        )
+    assert second["as_of"] == first["as_of"] == _iso(base)
+    assert second["summary"]["count"] == 13
+    assert [item["news_id"] for item in second["items"]] == [13]
+    assert second["next_cursor"] is None
+
+
+def test_later_current_as_of_keeps_complete_cache_single_fingerprint(
+    tmp_path, monkeypatch
+) -> None:
+    etl, _ai, intelligence = _stack(tmp_path)
+    base = datetime(2026, 7, 21, 14, 30, tzinfo=timezone.utc)
+    clock = {"now": base}
+    monkeypatch.setattr(local_module, "_utc_now", lambda: clock["now"])
+    _apply_news(etl, [_news_change(1, 141, available_at=base - timedelta(hours=1))], as_of=base)
+    intelligence.reconcile()
+    with request_owner_access_context(False):
+        intelligence.feed(as_of=base, window_hours=24, limit=12)
+    calls = []
+    original_cursor = local_module._revision_store_cursor
+
+    def counted_cursor(connection):
+        calls.append(None)
+        return original_cursor(connection)
+
+    def unexpected_query(*_args, **_kwargs):
+        raise AssertionError("later current request must retain the hot path")
+
+    monkeypatch.setattr(local_module, "_revision_store_cursor", counted_cursor)
+    monkeypatch.setattr(intelligence, "_active_revisions_query", unexpected_query)
+    clock["now"] += timedelta(seconds=2)
+    with request_owner_access_context(False):
+        hot = intelligence.feed(as_of=clock["now"], window_hours=24, limit=12)
+    assert [item["news_id"] for item in hot["items"]] == [141]
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("same_cursor", [False, True])
+def test_earlier_query_cannot_replace_expired_later_cache(monkeypatch, same_cursor) -> None:
+    key = ("/tmp/query-as-of-install-guard", 24)
+    later = datetime(2026, 7, 21, 14, 30, tzinfo=timezone.utc)
+    cursor = (10, 10, 10)
+    existing = {
+        "cursor": cursor,
+        "query_as_of": later,
+        "built_at": time.monotonic() - local_module._REVISION_CACHE_MAX_AGE_SECONDS - 1,
+        "rows": [{"news_id": 10}],
+        "anon_items": [{"news_id": 10}],
+    }
+    monkeypatch.setitem(local_module._REVISION_CACHE, key, existing)
+    installed = local_module._store_revision_cache(
+        key, cursor if same_cursor else (9, 9, 9), [{"news_id": 9}],
+        started_at=time.monotonic(), as_of=later - timedelta(seconds=2),
+    )
+    assert installed is False
+    assert local_module._REVISION_CACHE[key] is existing
+    assert existing["query_as_of"] == later
+    assert existing["rows"] == [{"news_id": 10}]
+    assert existing["anon_items"] == [{"news_id": 10}]

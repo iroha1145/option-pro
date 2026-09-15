@@ -25,14 +25,32 @@ const LOCALES = ['zh', 'en', 'ja'];
 const PAID = /finnhub|yahoo|yfinance|polygon|massive|fmpcloud|twelvedata|openai|macrolens/i;
 
 function attachNetwork(page) {
-  const state = { requests: 0, runtimeEn: 0, runtimeJa: 0, chart: 0, urls: [] };
+  const state = {
+    requests: 0,
+    runtimeEn: 0,
+    runtimeJa: 0,
+    chart: 0,
+    urls: [],
+    httpErrors: 0,
+    requestFailures: [],
+  };
   page.on('request', (request) => {
     state.requests += 1;
     const url = request.url();
     state.urls.push(url);
     if (url.includes('runtime-en')) state.runtimeEn += 1;
     if (url.includes('runtime-ja')) state.runtimeJa += 1;
-    if (/\/assets\/chart-/.test(url) || url.includes('EpsHatchChart')) state.chart += 1;
+    if (/\/assets\/(?:eps-chart|chart)-/.test(url) || url.includes('EpsHatchChart')) state.chart += 1;
+  });
+  page.on('response', (response) => {
+    if (response.status() >= 400) state.httpErrors += 1;
+  });
+  page.on('requestfailed', (request) => {
+    const url = request.url();
+    if (PAID.test(url)) return;
+    const errorText = request.failure()?.errorText || 'unknown';
+    if (/ERR_ABORTED/i.test(errorText)) return;
+    state.requestFailures.push({ url, error: errorText });
   });
   return state;
 }
@@ -97,6 +115,9 @@ for (const locale of LOCALES) {
         runtime_ja: network.runtimeJa,
         chart: network.chart,
         rate_limited: rateLimit.count,
+        http_error_n: network.httpErrors,
+        request_failed_n: network.requestFailures.length,
+        request_failures: network.requestFailures,
       };
     });
     cold.push(sample);
@@ -106,7 +127,7 @@ for (const locale of LOCALES) {
   }
 }
 
-const switched = await withLocale('zh', async (page, network) => {
+const switched = await withLocale('zh', async (page, network, rateLimit) => {
   await page.goto(`${BASE}/earnings`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
   await page.getByRole('heading', { level: 1 }).first().waitFor();
   const before = { href: page.url(), en: network.runtimeEn, ja: network.runtimeJa };
@@ -119,6 +140,10 @@ const switched = await withLocale('zh', async (page, network) => {
     after: { href: page.url(), en: network.runtimeEn, ja: network.runtimeJa },
     html_lang: await page.locator('html').getAttribute('lang'),
     heading: await page.getByRole('heading', { level: 1 }).first().textContent().catch(() => null),
+    rate_limited: rateLimit.count,
+    http_error_n: network.httpErrors,
+    request_failed_n: network.requestFailures.length,
+    request_failures: network.requestFailures,
   };
 });
 console.log(`switch zh→en stayed=${switched.stayed_on_earnings} en=${switched.after.en} ja=${switched.after.ja} lang=${switched.html_lang} h=${switched.heading}`);
@@ -143,11 +168,18 @@ const report = {
   },
 };
 const gate = [
-  ...readyGateFailures(readySummary, { expectedN: LOCALES.length * ROUTES.length, label: 'i18n_cold' }),
+  ...readyGateFailures(readySummary, {
+    expectedN: LOCALES.length * ROUTES.length,
+    label: 'i18n_cold',
+    requireNetworkTelemetry: true,
+  }),
   ...Object.entries(report.invariants)
     .filter(([, ok]) => !ok)
     .map(([name]) => `invariant:${name}`),
 ];
+if (switched.rate_limited) gate.push(`language_switch: rate_limited=${switched.rate_limited}`);
+if (switched.http_error_n) gate.push(`language_switch: http_error_n=${switched.http_error_n}`);
+if (switched.request_failed_n) gate.push(`language_switch: request_failed_n=${switched.request_failed_n}`);
 report.gate = { ok: gate.length === 0, failures: gate };
 await mkdir(path.dirname(OUT), { recursive: true });
 await writeFile(OUT, JSON.stringify(report, null, 2) + '\n');

@@ -427,13 +427,14 @@ def _store_revision_cache(
     built_rows: list[dict[str, Any]],
     *,
     started_at: float,
+    as_of: datetime,
 ) -> bool:
     """Install a row-set entry.
 
     Returns True when the cache now holds this build's cursor (fresh hit,
     expired same-cursor replacement, or a new write). Returns False when a
-    newer concurrent entry won, so the caller must not attach items from
-    ``built_rows`` onto that newer entry.
+    newer concurrent entry won or an entry has a later query_as_of, so the
+    caller must not attach items from ``built_rows`` onto that entry.
 
     Replacing an expired same-cursor entry always drops ``anon_items``: the
     store version is unchanged, but the time window may have moved, so the
@@ -441,12 +442,15 @@ def _store_revision_cache(
     """
     with _REVISION_CACHE_LOCK:
         existing = _REVISION_CACHE.get(key)
+        if existing is not None and existing["query_as_of"] > as_of:
+            return False
         if existing is not None and existing["cursor"] == store_cursor:
             if _revision_cache_fresh(existing, store_cursor):
                 return True
             if existing["built_at"] >= started_at:
                 return False
             existing["built_at"] = time.monotonic()
+            existing["query_as_of"] = as_of
             existing["rows"] = built_rows
             existing["anon_items"] = None
             return True
@@ -464,6 +468,7 @@ def _store_revision_cache(
         _REVISION_CACHE[key] = {
             "cursor": store_cursor,
             "built_at": time.monotonic(),
+            "query_as_of": as_of,
             "rows": built_rows,
             "anon_items": None,
         }
@@ -473,11 +478,14 @@ def _store_revision_cache(
 def _revision_cache_fresh(
     cached: Mapping[str, Any],
     store_cursor: tuple[Any, ...],
+    *,
+    as_of: datetime | None = None,
 ) -> bool:
     return (
         cached["cursor"] == store_cursor
         and time.monotonic() - cached["built_at"]
         <= _REVISION_CACHE_MAX_AGE_SECONDS
+        and (as_of is None or cached["query_as_of"] <= as_of)
     )
 
 
@@ -3287,8 +3295,13 @@ class LocalCatalystIntelligence:
         as_of: datetime,
         window_hours: int | None = None,
     ) -> tuple[list[dict[str, Any]], tuple[Any, ...] | None]:
-        """Active revision rows plus the store cursor that produced them."""
+        """Rows plus their cacheable cursor; None forbids shared item backfill."""
         key = self._revision_cache_key(as_of=as_of, window_hours=window_hours)
+        if key is not None:
+            with _REVISION_CACHE_LOCK:
+                cached = _REVISION_CACHE.get(key)
+                if cached is not None and cached["query_as_of"] > as_of:
+                    key = None
         if key is None:
             return (
                 self._active_revisions_query(
@@ -3299,17 +3312,26 @@ class LocalCatalystIntelligence:
         store_cursor = _revision_store_cursor(connection)
         with _REVISION_CACHE_LOCK:
             cached = _REVISION_CACHE.get(key)
-            if cached is not None and _revision_cache_fresh(cached, store_cursor):
+            # Recheck after the fingerprint read: a later request may have
+            # installed its snapshot while this SELECT was running.
+            later_snapshot = cached is not None and cached["query_as_of"] > as_of
+            if cached is not None and _revision_cache_fresh(
+                cached, store_cursor, as_of=as_of
+            ):
                 return (
                     [_copy_revision_row(row) for row in cached["rows"]],
                     cached["cursor"],
                 )
+        if later_snapshot:
+            return self._active_revisions_query(
+                connection, as_of=as_of, window_hours=window_hours
+            ), None
         started_at = time.monotonic()
         built_rows = self._active_revisions_query(
             connection, as_of=as_of, window_hours=window_hours
         )
         installed = _store_revision_cache(
-            key, store_cursor, built_rows, started_at=started_at
+            key, store_cursor, built_rows, started_at=started_at, as_of=as_of
         )
         if not installed:
             # A later concurrent write won this (db, window) key. Keep this
@@ -3317,7 +3339,7 @@ class LocalCatalystIntelligence:
             # as_of (near-now keys omit as_of). Adopting those rows lets
             # visible pagination consume a slot that is hidden at this as_of,
             # then skip the last original item on the historical cursor page.
-            return [_copy_revision_row(row) for row in built_rows], store_cursor
+            return [_copy_revision_row(row) for row in built_rows], None
         return [_copy_revision_row(row) for row in built_rows], store_cursor
 
     def _active_revision_bundle(
@@ -3349,6 +3371,7 @@ class LocalCatalystIntelligence:
                 cached = _REVISION_CACHE.get(key)
                 maybe_complete = (
                     cached is not None
+                    and cached["query_as_of"] <= as_of
                     and _anon_items_match_rows(
                         cached.get("anon_items"),
                         cached.get("rows") or (),
@@ -3360,7 +3383,7 @@ class LocalCatalystIntelligence:
                     cached = _REVISION_CACHE.get(key)
                     if (
                         cached is not None
-                        and _revision_cache_fresh(cached, store_cursor)
+                        and _revision_cache_fresh(cached, store_cursor, as_of=as_of)
                         and _anon_items_match_rows(
                             cached.get("anon_items"),
                             cached.get("rows") or (),
@@ -3380,14 +3403,20 @@ class LocalCatalystIntelligence:
             return rows, None
         if key is None or current_request_is_owner():
             return rows, None
-        store_cursor = _revision_store_cursor(connection)
+        store_cursor = (
+            _revision_store_cursor(connection) if source_cursor is not None else None
+        )
         with _REVISION_CACHE_LOCK:
             cached = _REVISION_CACHE.get(key)
             if (
                 cached is not None
+                and source_cursor is not None
                 and source_cursor == store_cursor
                 and cached["cursor"] == source_cursor
-                and _revision_cache_fresh(cached, store_cursor)
+                and _revision_cache_fresh(cached, store_cursor, as_of=as_of)
+                # Equal DB cursors can still represent different as_of row
+                # sets. Do not reuse another request's projected window.
+                and cached["rows"] == rows
                 and _anon_items_match_rows(cached.get("anon_items"), cached.get("rows") or ())
             ):
                 return rows, [
@@ -3397,13 +3426,16 @@ class LocalCatalystIntelligence:
             self._item(connection, row, as_of=as_of, jobs=None)
             for row in rows
         ]
-        if source_cursor == store_cursor:
+        if source_cursor is not None and source_cursor == store_cursor:
             with _REVISION_CACHE_LOCK:
                 cached = _REVISION_CACHE.get(key)
                 if (
                     cached is not None
                     and cached["cursor"] == store_cursor
+                    and cached["query_as_of"] <= as_of
                     and cached.get("anon_items") is None
+                    # IDs alone miss a different revision of the same news.
+                    and cached["rows"] == rows
                     and _anon_items_match_rows(built_items, cached.get("rows") or ())
                 ):
                     cached["anon_items"] = [
@@ -4005,7 +4037,9 @@ class LocalCatalystIntelligence:
         jobs: Mapping[str, dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         result, available = self._analysis_for_revision(connection, row, as_of=as_of)
-        if current_request_is_owner():
+        # Published analysis determines the item status below. Its linked job
+        # may be a newer attempt, but that state is only needed by detail reads.
+        if result is None and current_request_is_owner():
             job_public, _detail_job = self._linked_news_job_at(
                 connection,
                 row,
@@ -4016,8 +4050,8 @@ class LocalCatalystIntelligence:
                 job_public.get("status") if job_public else "not_requested"
             )
         else:
-            # Published local analysis is enough for the visitor view. Do not
-            # read the mutable AI job store merely to expose queue state.
+            # Visitors do not expose queue state; published owner items are
+            # marked completed below without projecting an unused job result.
             status = "not_requested"
         if result is not None:
             status = "completed"

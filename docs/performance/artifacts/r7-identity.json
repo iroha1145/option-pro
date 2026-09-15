@@ -1,0 +1,52 @@
+{
+  "timing_source_commit": "c4b21e31a7332589038e2764af4186220cf5b715",
+  "source_trees": {
+    "backend": "bdfd5e9634a1f2b63c116cc3b79be2da283e8bf5",
+    "frontend-src/src": "c517b9679dfe0ce0ad027066f4400feb6a8f40a9",
+    "frontend-src/vite.config.ts": "6631583f29e73bd16e397bf6e4be087cd0f15ecb",
+    "frontend": "636cbb3b74b2cc38dc604e634140e571f0a2ba25"
+  },
+  "artifacts": {
+    "scripts/perf/measure_frontend_controlled.mjs": "167a1dabcd611556ed4ee169dfbe19a3315d280604f4855a146a4868771ff94e",
+    "scripts/perf/serve_frontend_fixture.py": "9145123e12270d5ad5aa03b6471310b7a1e906fa6f21bf4840e4a28cb59fa78b",
+    "docs/performance/artifacts/r7-controlled-fixtures.json": "5eacc145c1555466a77211d66d300a1d71df1815e77d7bc9a6c40dd750b91de7",
+    "docs/performance/artifacts/r7-controlled-frontend-n20.json": "cddab773debb342dc2aaa7067f8bf2bd91f798cc4a4ca0d976581cf7bddd2813",
+    "frontend/index.html": "4d735529337b6b01305f0759e22770e0cc75d757510904def62899b4247921bb",
+    "frontend/assets/index-BBs02XKu.js": "a7e17a3a9c3615668b385bf6ad84537d16cb84035db0296a558bf2753b0e6d90",
+    "frontend/assets/app-shell-hDLCQw3J.js": "ec1505135fc43a6b0731366d7dc931f08a30308c9bfe63cde2c876f8b5932813",
+    "frontend/assets/eps-chart-B-BsXTot.js": "46450ce8b66916e4168ff1762eafaf4004a407dd3444de8a75899825507f8714"
+  },
+  "environment": {
+    "browser": "152.0.7977.84",
+    "node": "v24.6.0",
+    "platform": "darwin",
+    "release": "27.0.0",
+    "arch": "arm64",
+    "macos_product_version": "27.0"
+  },
+  "scope": "Fixed synthetic API responses served from identical local HTTP/1.1 servers with persistent connections and request queue 128; not the 10000-row backend workload. Native browser clocks; application date is not mocked.",
+  "language_validation": {
+    "mode": "mock production build",
+    "routes": [
+      "/",
+      "/earnings",
+      "/catalysts"
+    ],
+    "locales": [
+      "zh",
+      "en",
+      "ja"
+    ],
+    "ready_samples": 9,
+    "gate_passed": true,
+    "note": "This is translation/loading validation, not an end-to-end production backend measurement."
+  },
+  "fixture_transport_check": {
+    "ports": [
+      3055,
+      3057
+    ],
+    "response_protocol": "HTTP/1.1",
+    "post_then_get_same_socket": true
+  }
+}

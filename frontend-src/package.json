@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test:visual": "playwright test --config=playwright.config.mjs",
+    "test:eps-chart": "playwright test --config=playwright.eps-chart.config.mjs",
     "test:review": "playwright test --config=playwright.review.config.mjs && npm run test:indicators",
     "test:quotes": "playwright test --config=playwright.quotes.config.mjs",
     "test:customer-charts": "playwright test --config=playwright.customer-charts.config.mjs",
