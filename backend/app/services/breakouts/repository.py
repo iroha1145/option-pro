@@ -3027,6 +3027,34 @@ class BreakoutRepository:
         return result
 
     @staticmethod
+    def _encode_sorted_cursor(
+        scan_id: str,
+        event: Mapping[str, Any],
+        filter_hash: str,
+    ) -> str:
+        scores = event.get("scores") if isinstance(event.get("scores"), Mapping) else {}
+        priority = event.get("alert_priority_score")
+        if priority is None and isinstance(scores, Mapping):
+            priority = scores.get("alert_priority_score")
+        event_at = event.get("event_at") or event.get("triggered_at")
+        if hasattr(event_at, "isoformat"):
+            event_at = event_at.isoformat()
+        value = {
+            "v": _CURSOR_VERSION,
+            "scan_run_id": scan_id,
+            "event_at": str(event_at or ""),
+            "priority": float(priority) if priority is not None else -1.0,
+            "event_id": str(event.get("event_id") or ""),
+            "filter_hash": filter_hash,
+        }
+        signature = hashlib.sha256(
+            (_json_dumps(value) + SCHEMA_CHECKSUM).encode("utf-8")
+        ).hexdigest()[:32]
+        value["signature"] = signature
+        raw = _json_dumps(value).encode("utf-8")
+        return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+    @staticmethod
     def _encode_cursor(
         scan_id: str,
         row: sqlite3.Row,
@@ -3096,6 +3124,7 @@ class BreakoutRepository:
         limit: int = 50,
         cursor: str | None = None,
         scan_run_id: str | None = None,
+        sort_algorithm: str | None = None,
     ) -> Mapping[str, Any]:
         """List an immutable completed scan using a scan-bound stable cursor."""
         values = dict(filters or {})
@@ -3108,6 +3137,7 @@ class BreakoutRepository:
         limit = int(values.get("limit", limit))
         cursor = values.get("cursor", cursor)
         scan_run_id = values.get("scan_run_id", scan_run_id)
+        sort_algorithm = values.get("sort_algorithm", sort_algorithm)
         if limit < 1 or limit > 200:
             raise ValueError("limit must be between 1 and 200")
         normalized_filters = {
@@ -3120,6 +3150,8 @@ class BreakoutRepository:
             "session": str(_enum_value(session)) if session is not None else None,
             "min_priority": float(min_priority) if min_priority is not None else None,
         }
+        if sort_algorithm and str(sort_algorithm) not in {"", "production"}:
+            normalized_filters["sort_algorithm"] = str(sort_algorithm)
         filter_hash = hashlib.sha256(
             _json_dumps(normalized_filters).encode("utf-8")
         ).hexdigest()[:24]
@@ -3184,6 +3216,45 @@ class BreakoutRepository:
             if min_priority is not None:
                 clauses.append("alert_priority_score>=?")
                 params.append(float(min_priority))
+            if sort_algorithm and str(sort_algorithm) not in {"", "production"}:
+                from app.services.breakouts.t1_priority import apply_t1_stable_boost
+
+                qualified = connection.execute(
+                    f"""
+                    SELECT event_snapshot_json,event_at,sort_priority,event_id
+                    FROM breakout_scan_events WHERE {' AND '.join(clauses)}
+                    ORDER BY event_at DESC,sort_priority DESC,event_id DESC
+                    """,
+                    params,
+                ).fetchall()
+                events = apply_t1_stable_boost(
+                    [_json_loads(row["event_snapshot_json"], {}) for row in qualified]
+                )
+                start = 0
+                if cursor_data is not None:
+                    cursor_id = str(cursor_data.get("event_id") or "")
+                    start = next(
+                        (
+                            index + 1
+                            for index, item in enumerate(events)
+                            if str(item.get("event_id") or "") == cursor_id
+                        ),
+                        len(events),
+                    )
+                page_events = events[start : start + limit]
+                next_event = events[start + limit] if start + limit < len(events) else None
+                next_cursor = (
+                    self._encode_sorted_cursor(scan_run_id, page_events[-1], filter_hash)
+                    if next_event is not None and page_events
+                    else None
+                )
+                connection.commit()
+                return {
+                    "scan_run_id": scan_run_id,
+                    "completed_scan": self._row_dict(completed),
+                    "events": page_events,
+                    "next_cursor": next_cursor,
+                }
             if cursor_data is not None:
                 clauses.append(
                     """

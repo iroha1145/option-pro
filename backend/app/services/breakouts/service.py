@@ -46,6 +46,8 @@ from app.services.breakouts.models import (
     MarketShapeSnapshot,
     TemporalCutoff,
 )
+from app.services.algorithm_diagnostics import record_t1_attach_ms, record_t1_status
+from app.services.breakouts.t1_priority import attach_t1_features, event_t1_status
 from app.services.breakouts.relative_strength import (
     percentile_rank,
     relative_strength_features,
@@ -1709,6 +1711,31 @@ class BreakoutRadarService:
         }
         return event, event_transitions, shadow
 
+    def _attach_t1_priority(
+        self,
+        events: Sequence[BreakoutEvent],
+        *,
+        daily_map: Mapping[str, Any],
+        observed_at: datetime,
+        observed_session: MarketSession | str | None,
+    ) -> list[BreakoutEvent]:
+        started = time.perf_counter()
+        annotated: list[BreakoutEvent] = []
+        for event in events:
+            snapshot = daily_map.get(event.ticker)
+            frame = getattr(snapshot, "frame", None)
+            payload = attach_t1_features(
+                event.model_dump(mode="python"),
+                frame if isinstance(frame, pd.DataFrame) else None,
+                as_of=observed_at,
+                session=observed_session or event.session,
+            )
+            payload.pop("t1_priority", None)
+            annotated.append(BreakoutEvent.model_validate(payload))
+            record_t1_status(event_t1_status(payload))
+        record_t1_attach_ms((time.perf_counter() - started) * 1000.0, len(annotated))
+        return annotated
+
     async def build_snapshot(
         self,
         discovery: Any,
@@ -2996,6 +3023,18 @@ class BreakoutRadarService:
                 and item["hypothetical_rank"] is not None
                 else None
             )
+        events = self._attach_t1_priority(
+            events,
+            daily_map=daily_map,
+            observed_at=observed_at,
+            observed_session=observed_session,
+        )
+        live_events = self._attach_t1_priority(
+            live_events,
+            daily_map=daily_map,
+            observed_at=observed_at,
+            observed_session=observed_session,
+        )
         return {
             "events": events,
             "realtime_events": live_events,
