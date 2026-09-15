@@ -251,21 +251,19 @@ for (const viewport of EARNINGS_DESKTOP_VIEWPORTS) {
         "EPS 预期 vs 实际",
         "营收预期",
         "市值",
+        "预期波动",
         "AI 影响",
       ]) {
         await expect(header.getByText(column, { exact: true })).toBeVisible();
       }
       const rowAction = list.getByRole("button", { name: / AI 影响分析$/ }).first();
       await expect(rowAction).toBeVisible();
-      // 「预期波动」列跟随数据出现（EarningsList：至少一行有真实数值才渲染整列）。
-      // 直板口径只认 bid/ask 中价：周末/盘后全部报价失效时列会整体消失，这是
-      // 产品行为不是布局回归。两个方向互证：列头与 ±x.x% 数值单元格同生同灭。
+      // 真实报价缺失时仍保留列，并明确说明原因，避免看起来像功能被删除。
       const moveHeader = header.getByText("预期波动", { exact: true });
-      if ((await list.getByText(/^±\d+(\.\d+)?%$/).count()) > 0) {
-        await expect(moveHeader).toBeVisible();
-      } else {
-        await expect(moveHeader).toHaveCount(0);
-      }
+      await expect(moveHeader).toBeVisible();
+      await expect(
+        list.getByText(/^(?:±\d+(?:\.\d+)?%|报价不足|无合适到期合约|报价已过期|报价时间缺失|暂无估算|暂无数据|数据暂不可用)$/).first(),
+      ).toBeVisible();
 
       await expect
         .poll(() =>
