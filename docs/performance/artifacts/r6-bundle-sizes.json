@@ -1,6 +1,6 @@
 {
   "measured_at": "2026-09-14T18:03:24Z",
-  "note": "Historical closeout comparison. Dictionary chunk size is not treated as main-bundle savings. n=20 interleaved used index-uc86EHir.js; later synced entry was index-CS02aZ40.js. Current V2 production entry is index-Bn8dbAUf.js — see r6-bundles.json for the shared static import graph.",
+  "note": "Historical closeout comparison. Dictionary chunk size is not treated as main-bundle savings. n=20 interleaved used index-uc86EHir.js; later synced entries were index-CS02aZ40.js then index-Bn8dbAUf.js. Current V2 production entry is index-G7k80sIV.js — see r6-bundles.json for the shared static import graph.",
   "baseline_commit": "df1bd5d35e8128805d75291126341be06e38b1e6",
   "files": {
     "baseline_index": {"path": "frontend/assets/index-Cnp05EGF.js", "raw": 963385, "gzip9": 326472, "contains_ja": true},
