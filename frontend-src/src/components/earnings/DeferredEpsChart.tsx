@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import type { EarningsRow } from './types';
 import { t } from '../../i18n/core.ts';
 import ChartLoadErrorBoundary from './ChartLoadErrorBoundary';
@@ -17,8 +17,9 @@ function loadEpsHatchChart() {
 export default function DeferredEpsChart({ items }: DeferredEpsChartProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(false);
-  const [loaderKey, setLoaderKey] = useState(0);
-  const EpsHatchChart = useMemo(() => loadEpsHatchChart(), [loaderKey]);
+  // 初始化与重试都在 render 之外换新 lazy()：被拒绝的工厂不能复用，
+  // 也不能在 render 里 useMemo 出新组件（eslint react-hooks/static-components）。
+  const [EpsHatchChart, setEpsHatchChart] = useState(loadEpsHatchChart);
   const hasRows = items.some((row) => row.epsEstimate != null || row.epsActual != null);
 
   useEffect(() => {
@@ -44,7 +45,7 @@ export default function DeferredEpsChart({ items }: DeferredEpsChartProps) {
       data-eps-chart-slot=""
     >
       {mounted ? (
-        <ChartLoadErrorBoundary onRetry={() => setLoaderKey((key) => key + 1)}>
+        <ChartLoadErrorBoundary onRetry={() => setEpsHatchChart(loadEpsHatchChart)}>
           <Suspense
             fallback={(
               <section
