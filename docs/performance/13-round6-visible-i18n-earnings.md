@@ -142,6 +142,7 @@ Owner 热路径仍约 5.6s：瓶颈是整窗投影/复制，不是第二次指�
 - `artifacts/r6-bundles.json`（当前静态导入图）
 - `artifacts/r6-interleaved-probe.json`
 - `artifacts/r6-interleaved-n20.json`（`index-uc86EHir.js` 历史）
+- `artifacts/r6-interleaved-n20-v2.json`（`f2c05331` / `index-DDX2TFDT.js`，20 对原始样本）
 - `artifacts/r6-surfaces.json`（`f2c05331`，含门禁与 extras）
 - `artifacts/r6-i18n.json`（`f2c05331`）
 - `artifacts/r6-provenance.json`（提交 / 入口 / 种子 / 脚本哈希）
