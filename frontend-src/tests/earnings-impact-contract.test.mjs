@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
@@ -16,6 +17,7 @@ const densitySourcePath = path.resolve(here, '..', 'src', 'components', 'earning
 const earningsComponentsPath = path.resolve(here, '..', 'src', 'components', 'earnings');
 const commandPaletteSourcePath = path.resolve(here, '..', 'src', 'components', 'CommandPalette.tsx');
 const earningsTypesSourcePath = path.resolve(here, '..', 'src', 'components', 'earnings', 'types.ts');
+const nativeRequire = createRequire(import.meta.url);
 
 /**
  * i18n/core 的最小桩：这些测试断言的是数据归一/校验逻辑，不是翻译本身，回退原文
@@ -23,6 +25,93 @@ const earningsTypesSourcePath = path.resolve(here, '..', 'src', 'components', 'e
  */
 function stubT(msgid, vars) {
   return vars ? msgid.replace(/\{(\w+)\}/g, (whole, key) => (vars[key] === undefined || vars[key] === null ? whole : String(vars[key]))) : msgid;
+}
+
+function loadEarningsListComponent(translate = stubT) {
+  const React = nativeRequire('react');
+  const source = fs.readFileSync(listSourcePath, 'utf8');
+  const compiled = ts.transpileModule(source, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+      jsx: ts.JsxEmit.ReactJSX,
+      esModuleInterop: true,
+    },
+  }).outputText;
+  const module = { exports: {} };
+  const stubComponent = ({ children }) => React.createElement('span', null, children);
+  const motion = new Proxy({}, {
+    get: (_target, tag) => ({ children, initial, animate, transition, whileInView, viewport, ...props }) => {
+      void initial;
+      void animate;
+      void transition;
+      void whileInView;
+      void viewport;
+      return React.createElement(tag, props, children);
+    },
+  });
+  const exValue = (row, camel) => {
+    const snake = camel.replace(/[A-Z]/g, character => `_${character.toLowerCase()}`);
+    return row[camel] ?? row[snake] ?? null;
+  };
+  const require = (id) => {
+    if (id === 'react' || id === 'react/jsx-runtime') return nativeRequire(id);
+    if (id === 'framer-motion') return { motion };
+    if (id === '@/lib/utils') {
+      return { cn: (...values) => values.flat().filter(Boolean).join(' ') };
+    }
+    if (id === '@/lib/format') return { fmtCompact: value => String(value) };
+    if (id === './types') {
+      return {
+        daysUntil: () => 0,
+        earningsSectorLabel: value => value,
+        exBool: (row, key) => typeof exValue(row, key) === 'boolean' ? exValue(row, key) : null,
+        exNum: (row, key) => {
+          const value = exValue(row, key);
+          return typeof value === 'number' && Number.isFinite(value) ? value : null;
+        },
+        exStr: (row, key) => typeof exValue(row, key) === 'string' ? exValue(row, key) : null,
+        fmtMDCN: value => value,
+        relativeDayCN: () => '今天',
+        weekdayCN: () => '周一',
+      };
+    }
+    if (id === '../../i18n/core.ts') return { t: translate };
+    if (
+      id === '@/components/shared/AnalysisIcon'
+      || id === '@/components/icons'
+      || id === '@/components/shared/TickerLogo'
+      || id === '@/components/shared/EmptyState'
+      || id === '@/components/shared/InfoHint'
+      || id === '@/components/shared/SoftBadge'
+    ) return stubComponent;
+    throw new Error(`unexpected EarningsList dependency: ${id}`);
+  };
+  vm.runInNewContext(compiled, {
+    module,
+    exports: module.exports,
+    require,
+    console,
+    process,
+    setTimeout,
+    clearTimeout,
+  });
+  return { React, ...module.exports };
+}
+
+function earningsRow(ticker, extra = {}) {
+  return {
+    ticker,
+    name: ticker,
+    date: '2026-09-18',
+    timing: 'amc',
+    epsEstimate: 1.2,
+    epsActual: null,
+    revEstimate: null,
+    revActual: null,
+    impactReady: false,
+    ...extra,
+  };
 }
 
 function loadNormalizer() {
@@ -447,18 +536,77 @@ test('财报页面保留近期已公布结果并默认收纳长列表', () => {
   assert.equal(list.includes('fmtCompact(row.revEstimate)'), true);
 });
 
-test('预期波动仅在存在真实数值时显示', () => {
+test('预期波动列始终保留并如实显示数值或缺失原因', async () => {
   const list = fs.readFileSync(listSourcePath, 'utf8');
-  const cell = list.slice(
-    list.indexOf('function ExpectedMoveCell'),
-    list.indexOf('/* ---------------- AI 影响操作钮'),
-  );
+  assert.equal(list.includes('hasExpectedMove'), false);
+  assert.equal(list.includes('<span className="eyebrow">{t(\'预期波动\')}</span>'), true);
 
-  assert.equal(list.includes("items.some((row) => exNum(row, 'expectedMovePct') != null)"), true);
-  assert.equal(list.includes("hasExpectedMove && <span className=\"eyebrow\">{t('预期波动')}</span>"), true);
-  assert.equal(list.includes('hasExpectedMove && <ExpectedMoveCell'), true);
-  assert.equal(cell.includes('if (pct == null) return <span aria-hidden="true" />'), true);
-  assert.equal(cell.includes('—'), false);
+  const loaded = loadEarningsListComponent();
+  const { React, default: EarningsList } = loaded;
+  const { renderToStaticMarkup } = nativeRequire('react-dom/server');
+  const renderLoaded = (componentModule, items) => renderToStaticMarkup(componentModule.React.createElement(componentModule.default, {
+    items,
+    selectedTicker: null,
+    onSelectTicker: () => {},
+    filteredByDay: false,
+    autoSelected: true,
+  }));
+  const render = items => renderLoaded(loaded, items);
+
+  const missingCases = new Map([
+    ['unavailable:no_usable_straddle', '报价不足'],
+    ['unavailable:no_expiration', '无合适到期合约'],
+    ['unavailable:stale_quote', '报价已过期'],
+    ['unavailable:no_quote_time', '报价时间缺失'],
+    ['not_enriched', '暂无估算'],
+    ['unavailable:not_configured', '暂无数据'],
+    ['unavailable:not_permitted', '暂无数据'],
+    ['unavailable:provider_error', '数据暂不可用'],
+    ['unavailable:new_provider_state', '数据暂不可用'],
+    [null, '数据暂不可用'],
+  ]);
+  for (const [status, label] of missingCases) {
+    const markup = render([earningsRow('MISSING', { expected_move_status: status })]);
+    assert.match(markup, new RegExp(label), `unexpected copy for ${status}`);
+  }
+
+  const allMissing = render([
+    earningsRow('NOQUOTE', { expected_move_status: 'unavailable:no_usable_straddle' }),
+    earningsRow('NOEXP', { expected_move_status: 'unavailable:no_expiration' }),
+  ]);
+  assert.match(allMissing, />预期波动</);
+  assert.match(allMissing, /报价不足/);
+  assert.match(allMissing, /无合适到期合约/);
+  assert.doesNotMatch(allMissing, /±0(?:\.0)?%/);
+
+  const mixed = render([
+    earningsRow('VALUE', { expected_move_pct: 5.2, expected_move_status: 'active' }),
+    earningsRow('UNKNOWN', { expected_move_status: 'unavailable:new_provider_state' }),
+  ]);
+  assert.match(mixed, /±5\.2%/);
+  assert.match(mixed, /数据暂不可用/);
+
+  const initialPage = render([
+    earningsRow('FIRST', { expected_move_status: 'not_enriched' }),
+  ]);
+  const expandedPage = render([
+    earningsRow('FIRST', { expected_move_status: 'not_enriched' }),
+    earningsRow('LATER', { expected_move_pct: 4.4, expected_move_status: 'active' }),
+  ]);
+  const fixedGrid = 'md:grid-cols-[minmax(150px,1.4fr)_84px_minmax(140px,1.2fr)_96px_96px]';
+  assert.match(initialPage, new RegExp(fixedGrid.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(expandedPage, new RegExp(fixedGrid.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+
+  const [{ EN }, { JA }] = await Promise.all([
+    import('../src/i18n/dict/runtime-en.ts'),
+    import('../src/i18n/dict/runtime-ja.ts'),
+  ]);
+  const english = loadEarningsListComponent(msgid => EN[msgid] ?? msgid);
+  const japanese = loadEarningsListComponent(msgid => JA[msgid] ?? msgid);
+  assert.match(renderLoaded(english, [earningsRow('EXP', { expected_move_status: 'unavailable:no_expiration' })]), /No suitable expiry/);
+  assert.match(renderLoaded(japanese, [earningsRow('EXP', { expected_move_status: 'unavailable:no_expiration' })]), /適切な満期なし/);
+  assert.match(renderLoaded(english, [earningsRow('UNK', { expected_move_status: 'unavailable:new_state' })]), /Data temporarily unavailable/);
+  assert.match(renderLoaded(japanese, [earningsRow('UNK', { expected_move_status: 'unavailable:new_state' })]), /データは一時的に利用できません/);
 });
 
 test('财报首屏同时保留已公布大市值结果和近期待公布项目', () => {

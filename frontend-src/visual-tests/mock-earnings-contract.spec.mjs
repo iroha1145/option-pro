@@ -40,3 +40,45 @@ test('real mock calendar keeps one report per company while retaining expansion 
   await expect(list.locator('[role="button"][aria-pressed="true"]').filter({ visible: true })).toContainText('CRM');
   expect(errors).toEqual([]);
 });
+
+for (const viewport of [
+  { width: 320, height: 568 },
+  { width: 768, height: 1024 },
+  { width: 1536, height: 960 },
+]) {
+  test.describe(`expected move layout ${viewport.width}x${viewport.height}`, () => {
+    test.use({ viewport });
+
+    test('keeps the expected move label before and after expanding the list', async ({ page }) => {
+      const errors = [];
+      page.on('pageerror', error => errors.push(error.message));
+      await page.clock.setFixedTime(new Date('2026-09-12T12:00:00Z'));
+      await page.addInitScript(() => localStorage.setItem('optix:locale', 'zh'));
+      await page.route('**/*', route => ['127.0.0.1', 'localhost'].includes(new URL(route.request().url()).hostname) ? route.continue() : route.abort());
+      await page.goto('/earnings');
+
+      const list = page.getByRole('region', { name: '即将公布', exact: true });
+      const visibleRows = list.locator('[aria-pressed]').filter({ visible: true });
+      await expect(visibleRows).toHaveCount(24);
+      if (viewport.width < 768) {
+        await expect(visibleRows.first().getByText('预期波动', { exact: true })).toBeVisible();
+      } else {
+        await expect(list.locator(':scope > div').first().getByText('预期波动', { exact: true })).toBeVisible();
+      }
+      await expect(
+        visibleRows.first().getByText(/^(?:±\d+(?:\.\d+)?%|报价不足|无合适到期合约|报价已过期|报价时间缺失|暂无估算|暂无数据|数据暂不可用)$/),
+      ).toBeVisible();
+
+      await page.getByRole('button', { name: /显示更多/ }).click();
+      await expect.poll(() => visibleRows.count()).toBeGreaterThan(24);
+      if (viewport.width < 768) {
+        await expect(visibleRows.last().getByText('预期波动', { exact: true })).toBeVisible();
+      } else {
+        await expect(list.locator(':scope > div').first().getByText('预期波动', { exact: true })).toBeVisible();
+      }
+      await expect.poll(() => list.evaluate(node => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(1);
+      await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+      expect(errors).toEqual([]);
+    });
+  });
+}
