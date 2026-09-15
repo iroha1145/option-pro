@@ -90,5 +90,7 @@ test('local algorithm preferences keep an explicit original choice', () => {
   const stored = readAlgorithmPreferences();
   assert.equal(stored.screenerRankingAlgorithm, 'production');
   assert.equal(stored.radarSortAlgorithm, 'production');
+  writeAlgorithmPreferences({ screenerRankingAlgorithm: 'follow_default' });
+  assert.equal(readAlgorithmPreferences().screenerRankingAlgorithm, 'follow_default');
   delete globalThis.window;
 });

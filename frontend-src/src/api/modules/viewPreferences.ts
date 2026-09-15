@@ -72,3 +72,23 @@ export const viewPreferencesApi = {
         }).then(nDoc),
     ),
 };
+
+/** Persist the visible choice before a follow_default request can read the old one. */
+export async function persistAlgorithmChoice(
+  patch: {
+    screenerRankingAlgorithm?: ScreenerRankingChoice;
+    radarSortAlgorithm?: RadarSortChoice;
+  },
+  persistRemote: boolean,
+): Promise<ViewPreferencesDoc> {
+  const local = writeAlgorithmPreferences(patch);
+  if (!persistRemote) {
+    return {
+      principal: null,
+      persisted: false,
+      screenerRankingAlgorithm: local.screenerRankingAlgorithm,
+      radarSortAlgorithm: local.radarSortAlgorithm,
+    };
+  }
+  return viewPreferencesApi.write(patch);
+}

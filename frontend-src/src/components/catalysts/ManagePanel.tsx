@@ -17,6 +17,8 @@ import {
 } from '@/api/modules/admin';
 import { useAccess } from '@/hooks/useAccess';
 import { useToast } from '@/hooks/useToast';
+import { invalidateQueryPaths } from '@/api/queryRegistry';
+import { resetMarketReadPrefixes } from '@/api/marketRead';
 import { Led } from './bits';
 import Icon from '@/components/icons';
 import { cn } from '@/lib/utils';
@@ -227,6 +229,8 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
         screenerRankingAlgorithm: next.algorithms.screenerRankingAlgorithm,
         radarSortAlgorithm: next.algorithms.radarSortAlgorithm,
       });
+      invalidateQueryPaths(['/breakouts/current', '/breakouts/events'], { reload: true });
+      resetMarketReadPrefixes(['/strength/scan']);
       toast.success(__t('运行设置已保存'), __t('版本 v{version}', { version: next.version }));
     } catch (e) {
       if (e instanceof ApiError && (e.bizCode === 'version_conflict' || e.code === 409)) {
@@ -258,6 +262,8 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
         screenerRankingAlgorithm: next.algorithms.screenerRankingAlgorithm,
         radarSortAlgorithm: next.algorithms.radarSortAlgorithm,
       });
+      invalidateQueryPaths(['/breakouts/current', '/breakouts/events'], { reload: true });
+      resetMarketReadPrefixes(['/strength/scan']);
       toast.success(__t('已回滚到 v{version}', { version: prev.version }), __t('当前版本 v{version}', { version: next.version }));
     } catch (e) {
       toast.error(__t('回滚失败'), errText(e));

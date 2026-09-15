@@ -55,7 +55,7 @@ import {
   writeAlgorithmPreferences,
   type RadarSortChoice,
 } from '@/lib/algorithmPreferences';
-import { viewPreferencesApi } from '@/api/modules/viewPreferences';
+import { persistAlgorithmChoice, viewPreferencesApi } from '@/api/modules/viewPreferences';
 
 /* ---------------- 筛选维度 ---------------- */
 type StatusFilter = 'ALL' | LifecycleState;
@@ -201,14 +201,14 @@ export default function Breakouts() {
   const readiness = useStockDataStatus([...currentAll.map((event) => event.ticker), ...events.map((event) => event.ticker)]);
 
   const updateRadarSort = useCallback((next: RadarSortChoice) => {
-    setRadarSort(next);
-    writeAlgorithmPreferences({ radarSortAlgorithm: next });
-    if (isSignedIn) {
-      void viewPreferencesApi.write({ radarSortAlgorithm: next });
-    }
-    setExtraEvents([]);
-    setHistoryCursor(null);
-    setHistoryMoreError(null);
+    void (async () => {
+      await persistAlgorithmChoice({ radarSortAlgorithm: next }, isSignedIn);
+      invalidateQueryPaths(['/breakouts/current', '/breakouts/events'], { reload: true });
+      setRadarSort(next);
+      setExtraEvents([]);
+      setHistoryCursor(null);
+      setHistoryMoreError(null);
+    })();
   }, [isSignedIn]);
   const effectiveRadar = currentQ.data?.effectiveAlgorithm
     ?? (radarSort === 'follow_default' ? 'production' : radarSort);

@@ -31,6 +31,8 @@ function harness(overrides = {}) {
     getMarketReadGeneration: () => 0,
     __t: (text) => text,
     toast: { error() {}, success() {} },
+    persistAlgorithmChoice: () => {},
+    isSignedIn: false,
     summarizeFilters: () => '',
     buildStrengthScanRequest: (filters) => ({ apiParams: { ...parameters, ...filters }, refreshParameters: { ...parameters, ...filters } }),
     detailsRef: { current: {} },
@@ -92,6 +94,7 @@ test('reset scans default server parameters and keeps old result identity throug
   await h.runScan(aggressive);
   h.state.macroToneFilter = 'neutral';
   resetAll(h);
+  await new Promise(setImmediate);
   assert.equal(h.state.macroToneFilter, 'all');
   assert.equal(h.state.draft.profile, 'balanced');
   assert.equal(h.state.draft.timeframe, 'all');

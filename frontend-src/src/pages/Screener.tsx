@@ -90,7 +90,7 @@ import {
   writeAlgorithmPreferences,
 } from '@/lib/algorithmPreferences';
 import { keepServerRankingOrder } from '@/lib/screenerSort';
-import { viewPreferencesApi } from '@/api/modules/viewPreferences';
+import { persistAlgorithmChoice, viewPreferencesApi } from '@/api/modules/viewPreferences';
 
 const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
 const PAGE_SIZE = 20;
@@ -269,9 +269,15 @@ export default function Screener() {
     // 仅演示数据保留可见扫描过程；真实接口完成后立即呈现结果。
     const minMs = isMock ? 800 + Math.random() * 700 : 0;
     try {
+      await persistAlgorithmChoice(
+        { screenerRankingAlgorithm: filters.rankingAlgorithm },
+        isSignedIn,
+      );
+      requireCurrent();
       const { apiParams: params, refreshParameters: requested } = buildStrengthScanRequest(filters);
 
       const scanPath = strengthScanPath(params);
+      resetMarketReadPaths([scanPath]);
       let completedAction: WorkerAction | null = null;
       const refreshSnapshot = async () => {
         requireCurrent();
@@ -366,7 +372,7 @@ export default function Screener() {
       }
       let result: StrengthScanEnvelope;
       try {
-        result = await readSnapshot(submittedRefresh);
+        result = await readSnapshot(true);
       } catch (error) {
         const snapshotMissing =
           error instanceof ApiError
@@ -455,7 +461,7 @@ export default function Screener() {
       setScanPhase('failed');
       return false;
     }
-  }, [isOwner, principal, toast]);
+  }, [isOwner, isSignedIn, principal, toast]);
 
   useEffect(() => {
     if (scanState !== 'done' || isMock) return;
