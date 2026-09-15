@@ -3,7 +3,7 @@ import AnalysisIcon from '@/components/shared/AnalysisIcon';
  * B2 即将公布表（earnings.md）· 按日期分组
  * 行：TickerLogo+代码/名称 · 时间（sun-bmo 盘前 warn-600 / moon-amc 盘后 ai-600）
  *     EPS 迷你斜纹柱对（预估斜纹 ink-400 / 实际实心 brand-600）· 营收预期 · 市值
- *     预期波动仅在至少一条真实数值存在时出现 · AI 影响钮
+ *     预期波动始终保留，缺失时说明原因 · AI 影响钮
  * days_until=0「今天」高亮 · 行 stagger 40ms · 斜纹柱对 grow 错峰 700ms · <md 转卡片流
  */
 import { useEffect, useRef } from 'react';
@@ -74,11 +74,79 @@ export function TimingBadge({ timing, className }: { timing: EarningsRow['timing
 }
 
 /* ---------------- 预期波动微条（0–15% 映射 ai-600） ---------------- */
-function ExpectedMoveCell({ pct, index, status }: { pct: number | null; index: number; status?: string | null }) {
-  if (pct == null) return <span aria-hidden="true" />;
+function expectedMoveMissingCopy(status: string | null | undefined): { label: string; title: string } {
+  const reason = status?.startsWith('unavailable:') ? status.slice('unavailable:'.length) : status;
+  switch (reason) {
+    case 'no_usable_straddle':
+      return {
+        label: t('报价不足'),
+        title: t('买卖报价不足，暂时无法估算预期波动。'),
+      };
+    case 'no_expiration':
+      return {
+        label: t('无合适到期合约'),
+        title: t('财报后的合适期限内没有可用的期权合约。'),
+      };
+    case 'stale_quote':
+      return {
+        label: t('报价已过期'),
+        title: t('可用期权报价已经过期，暂时不用于估算。'),
+      };
+    case 'no_quote_time':
+      return {
+        label: t('报价时间缺失'),
+        title: t('期权报价缺少时间，无法确认是否仍然有效。'),
+      };
+    case 'not_enriched':
+      return {
+        label: t('暂无估算'),
+        title: t('该公司尚未进入本轮预期波动估算。'),
+      };
+    case 'not_configured':
+    case 'not_permitted':
+      return {
+        label: t('暂无数据'),
+        title: t('当前没有可用的期权数据来源。'),
+      };
+    case 'provider_error':
+      return {
+        label: t('数据暂不可用'),
+        title: t('期权数据来源暂时不可用，请稍后再试。'),
+      };
+    default:
+      return {
+        label: t('数据暂不可用'),
+        title: t('暂时无法取得预期波动数据。'),
+      };
+  }
+}
+
+function ExpectedMoveCell({
+  pct,
+  index,
+  status,
+  align = 'start',
+}: {
+  pct: number | null;
+  index: number;
+  status?: string | null;
+  align?: 'start' | 'end';
+}) {
+  if (pct == null) {
+    const missing = expectedMoveMissingCopy(status);
+    return (
+      <span
+        className={cn('block min-w-0 text-[12px] font-medium leading-4 text-ink-400', align === 'end' && 'text-right')}
+        title={missing.title}
+        data-expected-move-state={status || 'unknown'}
+      >
+        {missing.label}
+      </span>
+    );
+  }
   const unverified = typeof status === 'string' && status.startsWith('degraded:');
   return (
-    <span className="block">
+    <span className={cn('flex flex-col items-start', align === 'end' && 'items-end text-right')}>
       <span className="inline-flex items-center gap-1">
         <span className="font-mono text-data-m text-ink-800 tnum">±{pct.toFixed(1)}%</span>
         {unverified && (
@@ -212,11 +280,8 @@ export default function EarningsList({
     );
   }
 
-  const hasExpectedMove = items.some((row) => exNum(row, 'expectedMovePct') != null);
-  /* 末列 96px：容得下「AI 影响」这一最宽标签且不折行（原 88px 会折） */
-  const gridColumns = hasExpectedMove
-    ? 'md:grid-cols-[minmax(150px,1.4fr)_84px_minmax(140px,1.2fr)_96px_96px] 2xl:grid-cols-[minmax(160px,1.4fr)_84px_minmax(150px,1.2fr)_96px_92px_96px_96px]'
-    : 'md:grid-cols-[minmax(150px,1.4fr)_84px_minmax(140px,1.2fr)_96px] 2xl:grid-cols-[minmax(160px,1.4fr)_84px_minmax(150px,1.2fr)_96px_92px_96px]';
+  /* 固定保留预期波动列，报价恢复或“显示更多”后表格结构不会跳动。 */
+  const gridColumns = 'md:grid-cols-[minmax(150px,1.4fr)_84px_minmax(140px,1.2fr)_96px_96px] 2xl:grid-cols-[minmax(160px,1.4fr)_84px_minmax(150px,1.2fr)_96px_92px_96px_96px]';
 
   /* 按日期分组（升序） */
   const groups: { date: string; rows: EarningsRow[] }[] = [];
@@ -245,7 +310,7 @@ export default function EarningsList({
         <span className="eyebrow">{t('EPS 预期 vs 实际')}</span>
         <span className="eyebrow hidden 2xl:block">{t('营收预期')}</span>
         <span className="eyebrow hidden 2xl:block">{t('市值')}</span>
-        {hasExpectedMove && <span className="eyebrow">{t('预期波动')}</span>}
+        <span className="eyebrow">{t('预期波动')}</span>
         <span className="eyebrow text-right">{t('AI 影响')}</span>
       </div>
 
@@ -333,7 +398,7 @@ export default function EarningsList({
                       <span className="font-mono text-data-m tnum">
                         <span className="text-ink-500">{est != null ? est.toFixed(2) : '—'}</span>
                         <span className="mx-1 text-ink-300">/</span>
-                        <span className={act != null ? 'font-semibold text-ink-900' : 'text-ink-300'}>
+                        <span className={cn('whitespace-nowrap', act != null ? 'font-semibold text-ink-900' : 'text-ink-300')}>
                           {act != null ? act.toFixed(2) : t('未公布')}
                         </span>
                       </span>
@@ -346,7 +411,7 @@ export default function EarningsList({
                     <span className="hidden font-mono text-data-m text-ink-600 tnum 2xl:block">
                       {marketCap != null ? `$${fmtCompact(marketCap)}` : '—'}
                     </span>
-                    {hasExpectedMove && <ExpectedMoveCell pct={move} index={i} status={moveStatus} />}
+                    <ExpectedMoveCell pct={move} index={i} status={moveStatus} />
                     {/* AI 影响 */}
                     <span className="flex justify-end">
                       <ImpactAction row={row} onSelect={() => onSelectTicker(row.ticker)} />
@@ -380,18 +445,23 @@ export default function EarningsList({
                       </span>
                       <TimingBadge timing={row.timing} />
                     </span>
-                    <span className="mt-2.5 flex items-center justify-between gap-3">
-                      <span className="flex items-center gap-2">
+                    <span className="mt-2.5 flex flex-wrap items-end justify-between gap-x-3 gap-y-2">
+                      <span className="flex min-w-[156px] flex-1 items-center gap-2">
                         <EpsPairBars est={est} act={act} index={i} />
                         <span className="font-mono text-micro tnum">
                           <span className="text-ink-500">{est != null ? est.toFixed(2) : '—'}</span>
                           <span className="mx-1 text-ink-300">/</span>
-                          <span className={act != null ? 'text-ink-900' : 'text-ink-300'}>
+                          <span className={cn('whitespace-nowrap', act != null ? 'text-ink-900' : 'text-ink-300')}>
                             {act != null ? act.toFixed(2) : t('未公布')}
                           </span>
                         </span>
                       </span>
-                      {hasExpectedMove && <ExpectedMoveCell pct={move} index={i} status={moveStatus} />}
+                      <span className="ml-auto min-w-[96px] max-w-full text-right">
+                        <span className="mb-0.5 block text-[10px] font-medium leading-4 text-ink-400">
+                          {t('预期波动')}
+                        </span>
+                        <ExpectedMoveCell pct={move} index={i} status={moveStatus} align="end" />
+                      </span>
                     </span>
                   </motion.button>
                 </div>

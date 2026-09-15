@@ -68,6 +68,43 @@ export const EARNINGS: Dict = {
   'EPS 预期 vs 实际': ["EPS est. vs. actual", "EPS予想 vs 実績"],
   '营收预期': ["Revenue estimate", "売上高予想"],
   '预期波动': ["Expected move", "予想変動幅"],
+  '报价不足': ["Insufficient quotes", "気配値不足"],
+  '买卖报价不足，暂时无法估算预期波动。': [
+    "There are not enough bid and ask quotes to estimate the expected move.",
+    "売買気配が不足しているため、予想変動幅を推定できません。",
+  ],
+  '无合适到期合约': ["No suitable expiry", "適切な満期なし"],
+  '财报后的合适期限内没有可用的期权合约。': [
+    "No option contract has a suitable expiry after the earnings date.",
+    "決算発表後の適切な期間内に利用できるオプション契約がありません。",
+  ],
+  '报价已过期': ["Quotes expired", "気配値期限切れ"],
+  '可用期权报价已经过期，暂时不用于估算。': [
+    "The available option quotes have expired and are not used for this estimate.",
+    "利用可能なオプション気配値は期限切れのため、推定には使用していません。",
+  ],
+  '报价时间缺失': ["Quote time missing", "気配時刻なし"],
+  '期权报价缺少时间，无法确认是否仍然有效。': [
+    "The option quotes have no timestamp, so their validity cannot be confirmed.",
+    "オプション気配値に時刻がなく、有効かどうか確認できません。",
+  ],
+  '暂无估算': ["Not estimated", "推定なし"],
+  '该公司尚未进入本轮预期波动估算。': [
+    "This company was not included in the current expected-move estimate.",
+    "この企業は今回の予想変動幅の推定対象に含まれていません。",
+  ],
+  '当前没有可用的期权数据来源。': [
+    "No option data source is currently available.",
+    "現在利用できるオプションデータソースがありません。",
+  ],
+  '期权数据来源暂时不可用，请稍后再试。': [
+    "The option data source is temporarily unavailable. Try again later.",
+    "オプションデータソースは一時的に利用できません。しばらくしてから再度お試しください。",
+  ],
+  '暂时无法取得预期波动数据。': [
+    "Expected-move data is temporarily unavailable.",
+    "予想変動幅のデータを一時的に取得できません。",
+  ],
   '未公布': ["Not reported", "未発表"],
 
   // ---------------- EpsHatchChart.tsx ----------------
