@@ -1,0 +1,22 @@
+{"pair":1,"baseline":{"cold":1452.9000000003725,"warm_direct":733.5,"warm_return":381.89999999990687},"current":{"cold":1319.3999999999069,"warm_direct":726.1000000000931,"warm_return":347.20000000018626},"errors":[[],[]],"failures":[[],[]],"jsErrors":[[],[]]}
+{"pair":2,"baseline":{"cold":1340.8999999999069,"warm_direct":652.9000000003725,"warm_return":335.29999999981374},"current":{"cold":1311,"warm_direct":698.7000000001863,"warm_return":345.5},"errors":[[],[]],"failures":[[],[]],"jsErrors":[[],[]]}
+{"pair":3,"baseline":{"cold":1379.3000000002794,"warm_direct":650.5999999996275,"warm_return":359.89999999990687},"current":{"cold":1292.8999999999069,"warm_direct":720.6000000000931,"warm_return":353.29999999981374},"errors":[[],[]],"failures":[[],[]],"jsErrors":[[],[]]}
+{"pair":4,"baseline":{"cold":1357.3999999999069,"warm_direct":648.7999999998137,"warm_return":335.3000000002794},"current":{"cold":1467.4000000003725,"warm_direct":662.6000000000931,"warm_return":337.60000000009313},"errors":[[],[]],"failures":[[],[]],"jsErrors":[[],[]]}
+{"pair":5,"baseline":{"cold":1346,"warm_direct":640.5,"warm_return":334.89999999990687},"current":{"cold":1316.6999999997206,"warm_direct":645.7999999998137,"warm_return":336.70000000018626},"errors":[[],[]],"failures":[[],[{"url":"http://127.0.0.1:3057/api/earnings/upcoming","error":"net::ERR_SOCKET_NOT_CONNECTED"},{"url":"http://127.0.0.1:3057/api/stocks/watchlist","error":"net::ERR_SOCKET_NOT_CONNECTED"},{"url":"http://127.0.0.1:3057/api/market/cta","error":"net::ERR_SOCKET_NOT_CONNECTED"},{"url":"http://127.0.0.1:3057/api/stocks/data/status?tickers=NVDA","error":"net::ERR_SOCKET_NOT_CONNECTED"}]],"jsErrors":[[],[]]}
+{"pair":6,"baseline":{"cold":1386.4000000003725,"warm_direct":661,"warm_return":333.89999999990687},"current":{"cold":1357.2000000001863,"warm_direct":675.5999999996275,"warm_return":328},"errors":[[],[]],"failures":[[],[]],"jsErrors":[[],[]]}
+{"pair":7,"baseline":{"cold":1451.3999999999069,"warm_direct":634.8999999999069,"warm_return":332.6999999997206},"current":{"cold":1303.4000000003725,"warm_direct":640.1999999997206,"warm_return":328.6999999997206},"errors":[[],[]],"failures":[[],[]],"jsErrors":[[],[]]}
+{"pair":8,"baseline":{"cold":1375.3999999999069,"warm_direct":639.1999999997206,"warm_return":338.89999999990687},"current":{"cold":1324.7999999998137,"warm_direct":644.6000000000931,"warm_return":334.5},"errors":[[],[]],"failures":[[],[]],"jsErrors":[[],[]]}
+{"pair":9,"baseline":{"cold":1537.2000000001863,"warm_direct":664.1000000000931,"warm_return":337.79999999981374},"current":{"cold":1396.8999999999069,"warm_direct":685,"warm_return":411.5},"errors":[[],[]],"failures":[[],[{"url":"http://127.0.0.1:3057/api/earnings/upcoming","error":"net::ERR_SOCKET_NOT_CONNECTED"},{"url":"http://127.0.0.1:3057/api/stocks/watchlist","error":"net::ERR_SOCKET_NOT_CONNECTED"},{"url":"http://127.0.0.1:3057/api/market/cta","error":"net::ERR_SOCKET_NOT_CONNECTED"},{"url":"http://127.0.0.1:3057/api/stocks/data/status?tickers=NVDA","error":"net::ERR_CONNECTION_RESET"}]],"jsErrors":[[],[]]}
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+page.waitForFunction: Timeout 45000ms exceeded.
+    at ready (/Users/admin/Downloads/Codex/option-pro-pr165-release/scripts/perf/measure_frontend_controlled.mjs:63:28)
+    at sample (/Users/admin/Downloads/Codex/option-pro-pr165-release/scripts/perf/measure_frontend_controlled.mjs:70:84)
+    at async file:///Users/admin/Downloads/Codex/option-pro-pr165-release/scripts/perf/measure_frontend_controlled.mjs:94:43 {
+  log: [],
+  name: 'TimeoutError'
+}
+
+Node.js v24.6.0

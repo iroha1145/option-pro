@@ -1,0 +1,40 @@
+analyzed 50/959
+analyzed 100/959
+analyzed 150/959
+analyzed 200/959
+analyzed 250/959
+analyzed 300/959
+analyzed 350/959
+analyzed 400/959
+analyzed 450/959
+{
+  "seed": 42,
+  "count_requested": 1000,
+  "hidden_newest": 48,
+  "analyze_every": 2,
+  "history_every": 15,
+  "revisions_in_72h_window": 959,
+  "analyzed_attached": 456,
+  "rejected_history": 31,
+  "feed_window_72h_count": 959,
+  "feed_first_page": 0,
+  "visible_first_page": 12,
+  "visible_first_ids": [
+    600,
+    601,
+    602,
+    603,
+    604,
+    605,
+    606,
+    607,
+    608,
+    609,
+    610,
+    611
+  ],
+  "has_more": true,
+  "as_of": "2026-09-15T08:13:02Z",
+  "clock": "2026-09-15T08:13:02Z",
+  "data_dir": "/Users/admin/Downloads/Codex/output/option-pro-pr165-release-2026-09-15/owner-item-evidence/data"
+}

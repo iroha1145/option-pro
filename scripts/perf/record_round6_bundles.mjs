@@ -14,6 +14,14 @@ function firstMatch(names, re) {
   return names.find((name) => re.test(name)) || null;
 }
 
+function firstAsset(names, patterns) {
+  for (const pattern of patterns) {
+    const match = firstMatch(names, pattern);
+    if (match) return match;
+  }
+  return null;
+}
+
 async function describe(rel) {
   if (!rel) return null;
   const abs = path.join(FRONTEND, rel);
@@ -32,20 +40,36 @@ const html = await readFile(path.join(FRONTEND, 'index.html'), 'utf8');
 const indexMatch = html.match(/\/assets\/(index-[^"]+\.js)/);
 const cssMatch = html.match(/\/assets\/(index-[^"]+\.css)/);
 const assets = await readdir(path.join(FRONTEND, 'assets'));
+const appName = firstAsset(assets, [/^app-shell-.+\.js$/, /^App-.+\.js$/]);
+const chartName = firstAsset(assets, [/^eps-chart-.+\.js$/, /^chart-.+\.js$/]);
 const files = {
   optimized_index: await describe(indexMatch ? `assets/${indexMatch[1]}` : null),
   optimized_css: await describe(cssMatch ? `assets/${cssMatch[1]}` : null),
-  optimized_app: await describe(firstMatch(assets, /^App-.+\.js$/) && `assets/${firstMatch(assets, /^App-.+\.js$/)}`),
+  optimized_app: await describe(appName && `assets/${appName}`),
   optimized_runtime_en: await describe(firstMatch(assets, /^runtime-en-.+\.js$/) && `assets/${firstMatch(assets, /^runtime-en-.+\.js$/)}`),
   optimized_runtime_ja: await describe(firstMatch(assets, /^runtime-ja-.+\.js$/) && `assets/${firstMatch(assets, /^runtime-ja-.+\.js$/)}`),
-  optimized_chart: await describe(firstMatch(assets, /^chart-.+\.js$/) && `assets/${firstMatch(assets, /^chart-.+\.js$/)}`),
+  optimized_chart: await describe(chartName && `assets/${chartName}`),
   optimized_earnings_page: await describe(firstMatch(assets, /^Earnings-.+\.js$/) && `assets/${firstMatch(assets, /^Earnings-.+\.js$/)}`),
   optimized_eps_chart_wrapper: await describe(firstMatch(assets, /^EpsHatchChart-.+\.js$/) && `assets/${firstMatch(assets, /^EpsHatchChart-.+\.js$/)}`),
 };
 
 const indexRel = indexMatch ? `assets/${indexMatch[1]}` : null;
-const appRel = firstMatch(assets, /^App-.+\.js$/) ? `assets/${firstMatch(assets, /^App-.+\.js$/)}` : null;
-const shared = appRel ? await walkStaticJsGraph(FRONTEND, appRel) : (indexRel ? await walkStaticJsGraph(FRONTEND, indexRel) : null);
+const appRel = appName ? `assets/${appName}` : null;
+const entryGraph = indexRel ? await walkStaticJsGraph(FRONTEND, indexRel) : null;
+const appGraph = appRel ? await walkStaticJsGraph(FRONTEND, appRel) : null;
+const sharedFiles = new Map();
+for (const graph of [entryGraph, appGraph]) {
+  for (const file of graph?.files || []) sharedFiles.set(file.path, file);
+}
+const shared = sharedFiles.size ? {
+  roots: [entryGraph?.entry, appGraph?.entry].filter(Boolean),
+  files: [...sharedFiles.values()].sort((a, b) => a.path.localeCompare(b.path)),
+} : null;
+if (shared) {
+  shared.script_n = shared.files.length;
+  shared.gzip9 = shared.files.reduce((sum, file) => sum + file.gzip9, 0);
+  shared.raw = shared.files.reduce((sum, file) => sum + file.raw, 0);
+}
 const homeGraph = await walkStaticJsGraph(FRONTEND, firstMatch(assets, /^Home-.+\.js$/) ? `assets/${firstMatch(assets, /^Home-.+\.js$/)}` : appRel);
 const earningsGraph = await walkStaticJsGraph(FRONTEND, firstMatch(assets, /^Earnings-.+\.js$/) ? `assets/${firstMatch(assets, /^Earnings-.+\.js$/)}` : appRel);
 const newsGraph = await walkStaticJsGraph(FRONTEND, firstMatch(assets, /^Catalysts-.+\.js$/) ? `assets/${firstMatch(assets, /^Catalysts-.+\.js$/)}` : appRel);
@@ -65,11 +89,17 @@ const report = {
     note: 'Chinese mode does not download runtime-en or runtime-ja. This is not the complete first-download JS.',
   },
   first_js_gzip9: {
-    shared: shared ? { script_n: shared.script_n, gzip9: shared.gzip9, raw: shared.raw } : null,
+    shared: shared ? {
+      roots: shared.roots,
+      script_n: shared.script_n,
+      gzip9: shared.gzip9,
+      raw: shared.raw,
+      files: shared.files,
+    } : null,
     home: plus(homeGraph),
     earnings: plus(earningsGraph),
     catalysts: plus(newsGraph),
-    note: 'gzip -9 of statically imported JS only. Excludes CSS, JSON, fonts, data, and later intent prefetch.',
+    note: 'gzip -9 of the deduplicated HTML module-entry and App/app-shell static JS graphs. Routes add their static graph to that base. Excludes classic theme-boot.js, CSS, JSON, fonts, data, and later dynamic/intent prefetch.',
   },
 };
 

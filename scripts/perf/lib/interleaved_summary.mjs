@@ -11,6 +11,16 @@ export function summarizeInterleavedRows(rows) {
     .filter((sample) => sample.lcp?.startTime != null)
     .map((sample) => sample.lcp.startTime);
   const timeoutN = rows.length - readyRows.length;
+  const hasCount = (sample, key) => sample[key] != null && Number.isFinite(Number(sample[key]));
+  const rateLimitedN = rows.filter((sample) => (sample.rate_limited || 0) > 0).length;
+  const httpTelemetryN = rows.filter((sample) => hasCount(sample, 'http_error_n')).length;
+  const requestFailureTelemetryN = rows.filter((sample) => hasCount(sample, 'request_failed_n')).length;
+  const httpErrorN = rows.reduce((sum, sample) => (
+    sum + (hasCount(sample, 'http_error_n') ? Number(sample.http_error_n) : 0)
+  ), 0);
+  const requestFailedN = rows.reduce((sum, sample) => (
+    sum + (hasCount(sample, 'request_failed_n') ? Number(sample.request_failed_n) : 0)
+  ), 0);
   return {
     n: rows.length,
     ready_n: readyRows.length,
@@ -21,7 +31,13 @@ export function summarizeInterleavedRows(rows) {
     news_content_ready_p75: percentile(ready, 0.75),
     lcp_p75: percentile(lcp, 0.75),
     titles: [...new Set(readyRows.map((sample) => sample.news_title).filter(Boolean))],
-    rate_limited_n: rows.filter((sample) => (sample.rate_limited || 0) > 0).length,
+    rate_limited_n: rateLimitedN,
+    http_error_n: httpErrorN,
+    request_failed_n: requestFailedN,
+    http_telemetry_n: httpTelemetryN,
+    request_failure_telemetry_n: requestFailureTelemetryN,
+    clean: timeoutN === 0 && rateLimitedN === 0 && httpErrorN === 0 && requestFailedN === 0
+      && httpTelemetryN === rows.length && requestFailureTelemetryN === rows.length,
   };
 }
 
@@ -56,6 +72,42 @@ export function buildInterleavedSummary({ optCold, optWarm, unoptCold, unoptWarm
   };
 }
 
-export function interleavedExitCode(summary) {
-  return summary.comparison_complete ? 0 : 1;
+export function interleavedGateFailures(
+  summary,
+  { coldBudgetMs = 2500, warmBudgetMs = 1000, requireNetworkTelemetry = false } = {},
+) {
+  const failures = [];
+  if (!summary?.comparison_complete) failures.push('interleaved: incomplete_samples');
+  for (const side of ['opt', 'unopt']) {
+    for (const cache of ['cold', 'warm']) {
+      const block = summary?.[side]?.[cache];
+      const label = `${side}_${cache}`;
+      if (!block) {
+        failures.push(`${label}: missing_summary`);
+        continue;
+      }
+      if (block.rate_limited_n) failures.push(`${label}: rate_limited_n=${block.rate_limited_n}`);
+      if (block.http_error_n) failures.push(`${label}: http_error_n=${block.http_error_n}`);
+      if (block.request_failed_n) failures.push(`${label}: request_failed_n=${block.request_failed_n}`);
+      if (requireNetworkTelemetry && block.http_telemetry_n !== block.n) {
+        failures.push(`${label}: http_telemetry_n=${block.http_telemetry_n ?? 'missing'} expected=${block.n}`);
+      }
+      if (requireNetworkTelemetry && block.request_failure_telemetry_n !== block.n) {
+        failures.push(`${label}: request_failure_telemetry_n=${block.request_failure_telemetry_n ?? 'missing'} expected=${block.n}`);
+      }
+    }
+  }
+  const optCold = summary?.opt?.cold?.news_content_ready_p75;
+  const optWarm = summary?.opt?.warm?.news_content_ready_p75;
+  if (optCold == null || optCold > coldBudgetMs) {
+    failures.push(`opt_cold: p75=${optCold ?? 'missing'} budget=${coldBudgetMs}`);
+  }
+  if (optWarm == null || optWarm > warmBudgetMs) {
+    failures.push(`opt_warm: p75=${optWarm ?? 'missing'} budget=${warmBudgetMs}`);
+  }
+  return failures;
+}
+
+export function interleavedExitCode(summary, options) {
+  return interleavedGateFailures(summary, options).length ? 1 : 0;
 }

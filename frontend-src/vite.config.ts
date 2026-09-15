@@ -98,6 +98,145 @@ function stripMocksFromLiveBuild(live: boolean): Plugin {
   }
 }
 
+const EPS_CHART_MODULE = path.resolve(__dirname, 'src/components/earnings/EpsHatchChart.tsx');
+const EPS_CHART_URL = 'virtual:eps-chart-url';
+const RESOLVED_EPS_CHART_URL = `\0${EPS_CHART_URL}`;
+const CHART_MODULES = new Set([
+  EPS_CHART_MODULE,
+  path.resolve(__dirname, 'src/components/charts/ReactECharts.tsx'),
+  path.resolve(__dirname, 'src/lib/chart.ts'),
+  path.resolve(__dirname, 'src/lib/chartFonts.ts'),
+]);
+
+/** Keep all not-yet-loaded chart dependencies under the same retryable URL. */
+function chartManualChunk(id: string): string | undefined {
+  const file = id.split('?')[0];
+  if (CHART_MODULES.has(file) || /[/\\]node_modules[/\\](echarts|zrender)[/\\]/.test(file)) {
+    return 'eps-chart';
+  }
+}
+
+/**
+ * Load the application shell in one request after prepareI18n(), rather than
+ * spreading its always-needed code over dozens of small shared chunks. Keep
+ * the entry's static dependencies separate: evaluating module-level t() before
+ * the selected dictionary is installed would freeze navigation in Chinese.
+ */
+function applicationManualChunks() {
+  let shell: Set<string> | undefined;
+  return (id: string, { getModuleInfo }: {
+    getModuleInfo: (moduleId: string) => { importedIds: readonly string[] } | null;
+  }): string | undefined => {
+    const chart = chartManualChunk(id);
+    if (chart) return chart;
+    if (!shell) {
+      const closure = (start: string) => {
+        const seen = new Set<string>();
+        const visit = (moduleId: string) => {
+          if (seen.has(moduleId)) return;
+          seen.add(moduleId);
+          getModuleInfo(moduleId)?.importedIds.forEach(visit);
+        };
+        visit(start);
+        return seen;
+      };
+      const entry = closure(path.resolve(__dirname, 'src/main.tsx'));
+      shell = new Set([...closure(path.resolve(__dirname, 'src/App.tsx'))]
+        .filter((moduleId) => !entry.has(moduleId)));
+    }
+    if (shell.has(id) && !/\.(?:css|scss|sass|less|styl)(?:\?|$)/.test(id)) return 'app-shell';
+  };
+}
+
+function verifyApplicationShell(): Plugin {
+  return {
+    name: 'optix-verify-application-shell',
+    apply: 'build',
+    generateBundle(_options, bundle) {
+      const chunks = Object.values(bundle).filter((asset) => asset.type === 'chunk');
+      const shell = chunks.find((chunk) => Object.keys(chunk.modules)
+        .some((id) => id.replaceAll('\\', '/').endsWith('/src/App.tsx')));
+      if (!shell || shell.name !== 'app-shell') this.error('App must be emitted in the deferred application shell.');
+      const forbidden = Object.keys(shell.modules).filter((id) => {
+        const file = id.replaceAll('\\', '/');
+        return /\/src\/(main\.tsx|i18n\/boot\.ts|i18n\/dict\/runtime-(?:en|ja)\.ts)/.test(file)
+          // NotFound is deliberately a small static child of App; the real
+          // route pages must remain separate dynamic imports.
+          || (/\/src\/pages\//.test(file) && !file.endsWith('/NotFound.tsx'))
+          || chartManualChunk(id) !== undefined;
+      });
+      if (forbidden.length) this.error(`Application shell contains eager or deferred modules: ${forbidden.join(', ')}`);
+      const seen = new Set<string>();
+      const visit = (name: string) => {
+        if (seen.has(name)) return;
+        seen.add(name);
+        const chunk = bundle[name];
+        if (chunk?.type === 'chunk') chunk.imports.forEach(visit);
+      };
+      // The chart is an emitted entry for URL generation, not the document's
+      // startup entry. Only the main module defines eager page evaluation.
+      chunks.filter((chunk) => Object.keys(chunk.modules).some((id) =>
+        id.replaceAll('\\', '/').endsWith('/src/main.tsx'))).forEach((chunk) => visit(chunk.fileName));
+      if (seen.has(shell.fileName)) this.error('Application shell executes before prepareI18n has completed.');
+    },
+  };
+}
+
+function epsChartChunk(): Plugin {
+  let build = false;
+  let referenceId = '';
+  return {
+    name: 'optix-eps-chart-chunk',
+    configResolved(config) { build = config.command === 'build'; },
+    buildStart() {
+      if (build) referenceId = this.emitFile({
+        type: 'chunk', id: EPS_CHART_MODULE, name: 'eps-chart', preserveSignature: 'allow-extension',
+      });
+    },
+    resolveId(id) { if (id === EPS_CHART_URL) return RESOLVED_EPS_CHART_URL; },
+    load(id) {
+      if (id !== RESOLVED_EPS_CHART_URL) return;
+      // Rollup owns the hashed file name and relative URL. Never inspect a
+      // minified function's source or resolve an uncompiled TS specifier.
+      return build
+        ? `export default import.meta.ROLLUP_FILE_URL_${referenceId};`
+        : `export default '/src/components/earnings/EpsHatchChart.tsx';`;
+    },
+    generateBundle(_options, bundle) {
+      const fileName = this.getFileName(referenceId);
+      const chart = bundle[fileName];
+      if (!chart || chart.type !== 'chunk' || !(EPS_CHART_MODULE in chart.modules)) {
+        this.error('EPS recovery must address the chart implementation, not a separate entry facade.');
+      }
+      const closure = (starts: string[]): Set<string> => {
+        const seen = new Set<string>();
+        const visit = (name: string) => {
+          if (seen.has(name)) return;
+          seen.add(name);
+          const chunk = bundle[name];
+          if (chunk?.type === 'chunk') chunk.imports.forEach(visit);
+        };
+        starts.forEach(visit);
+        return seen;
+      };
+      const chunks = Object.values(bundle).filter((asset) => asset.type === 'chunk');
+      const findModule = (suffix: string) => chunks.find((chunk) =>
+        Object.keys(chunk.modules).some((id) => id.replaceAll('\\', '/').endsWith(suffix)))?.fileName;
+      const app = findModule('/src/App.tsx');
+      const earnings = findModule('/src/pages/Earnings.tsx');
+      if (!app || !earnings) this.error('Cannot verify EPS recovery dependencies without App and Earnings chunks.');
+      const loaded = closure([...chunks.filter((chunk) => chunk.isEntry && chunk.fileName !== fileName)
+        .map((chunk) => chunk.fileName), app, earnings]);
+      if (loaded.has(fileName)) this.error('EPS chart must not be a static dependency of the app or Earnings page.');
+      const missing = [...closure(chart.imports)].filter((name) => !loaded.has(name));
+      if (missing.length) this.error(`EPS chart has dependencies outside the loaded page: ${missing.join(', ')}`);
+      if (Object.keys(chart.modules).some((id) => /[/\\]node_modules[/\\](react|react-dom|react-router)[/\\]/.test(id))) {
+        this.error('EPS recovery must reuse the loaded React and router instances.');
+      }
+    },
+  };
+}
+
 // https://vite.dev/config/
 export default defineConfig(() => {
   const live = process.env.VITE_API_MODE === "live"
@@ -106,7 +245,12 @@ export default defineConfig(() => {
     // /stock/assets/*（网关对带扩展名路径如实 404）——硬刷新详情页直接白屏。
     // 详情页改为全屏整页后深链/刷新是常规路径，与 JP 站同口径改为绝对根。
     base: '/',
-    plugins: [react(), stripMocksFromLiveBuild(live)],
+    plugins: [react(), stripMocksFromLiveBuild(live), epsChartChunk(), verifyApplicationShell()],
+    build: {
+      rollupOptions: {
+        output: { manualChunks: applicationManualChunks(), onlyExplicitManualChunks: true },
+      },
+    },
     server: {
       port: 3000,
       proxy: {

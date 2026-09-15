@@ -26,10 +26,21 @@ const html = await readFile(path.join(ROOT, 'frontend/index.html'), 'utf8');
 const indexName = (html.match(/assets\/(index-[^"]+\.js)/) || [])[1] || null;
 const assets = await readdir(path.join(ROOT, 'frontend/assets'));
 const hashed = {};
-for (const name of [indexName, assets.find((n) => /^App-.+\.js$/.test(n)), assets.find((n) => /^Earnings-.+\.js$/.test(n)), assets.find((n) => /^Home-.+\.js$/.test(n)), assets.find((n) => /^Catalysts-.+\.js$/.test(n))]) {
+for (const name of [
+  indexName,
+  assets.find((n) => /^app-shell-.+\.js$/.test(n)) || assets.find((n) => /^App-.+\.js$/.test(n)),
+  assets.find((n) => /^eps-chart-.+\.js$/.test(n)) || assets.find((n) => /^chart-.+\.js$/.test(n)),
+  assets.find((n) => /^Earnings-.+\.js$/.test(n)),
+  assets.find((n) => /^Home-.+\.js$/.test(n)),
+  assets.find((n) => /^Catalysts-.+\.js$/.test(n)),
+]) {
   if (!name) continue;
   hashed[`frontend/assets/${name}`] = await sha256File(path.join(ROOT, 'frontend/assets', name));
 }
+const measuredProductCommit = process.env.OPTIX_PERF_PRODUCT_COMMIT
+  || await sh('git', ['rev-parse', 'HEAD']);
+const measuredProductTree = process.env.OPTIX_PERF_PRODUCT_TREE
+  || await sh('git', ['rev-parse', `${measuredProductCommit}^{tree}`]);
 
 const report = {
   measured_at: new Date().toISOString(),
@@ -49,8 +60,8 @@ const report = {
     round6_bundle_graph: await sha256File(path.join(ROOT, 'scripts/perf/lib/round6_bundle_graph.mjs')),
   },
   frontend_hashes: hashed,
-  measured_product_commit: process.env.OPTIX_PERF_PRODUCT_COMMIT || await sh('git', ['rev-parse', 'HEAD']),
-  measured_product_tree: process.env.OPTIX_PERF_PRODUCT_TREE || await sh('git', ['rev-parse', 'HEAD^{tree}']),
+  measured_product_commit: measuredProductCommit,
+  measured_product_tree: measuredProductTree,
   seed: await (async () => {
     const dataDir = process.env.DATA_DIR || '/home/ubuntu/optix-perf-data/n10000-r6';
     const sqlitePath = process.env.OPTIX_PERF_SQLITE
