@@ -59,10 +59,14 @@ export function writeAlgorithmPreferences(next: Partial<AlgorithmPreferences>): 
   return merged;
 }
 
-export function requestedScreenerAlgorithm(choice: ScreenerRankingChoice): string | undefined {
+export function requestedScreenerAlgorithm(
+  choice: ScreenerRankingChoice,
+): Exclude<ScreenerRankingChoice, 'follow_default'> | undefined {
   return choice === SCREENER_FOLLOW_DEFAULT ? undefined : choice;
 }
 
-export function requestedRadarAlgorithm(choice: RadarSortChoice): string | undefined {
+export function requestedRadarAlgorithm(
+  choice: RadarSortChoice,
+): Exclude<RadarSortChoice, 'follow_default'> | undefined {
   return choice === RADAR_FOLLOW_DEFAULT ? undefined : choice;
 }
