@@ -402,3 +402,24 @@ test('a late discovery failure cannot mark newer parameters or an unmounted page
     assert.equal(h.state.scanMeta.sourceStatus, 'active');
   }
 });
+
+test('signed-in scan continues when algorithm preference persist fails', async () => {
+  const requests = [];
+  const h = harness({
+    isOwner: false,
+    isSignedIn: true,
+    persistAlgorithmChoice: async () => {
+      throw new Error('view preferences unavailable');
+    },
+    strengthApi: {
+      scanEnvelope: async (params) => {
+        requests.push(params);
+        return envelope('ALICE');
+      },
+    },
+  });
+  assert.equal(await h.runScan({ profile: 'balanced' }), true);
+  assert.equal(h.state.scanState, 'done');
+  assert.equal(h.state.rows[0].ticker, 'ALICE');
+  assert.equal(requests.length, 1);
+});

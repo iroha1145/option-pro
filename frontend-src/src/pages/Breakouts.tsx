@@ -202,7 +202,11 @@ export default function Breakouts() {
 
   const updateRadarSort = useCallback((next: RadarSortChoice) => {
     void (async () => {
-      await persistAlgorithmChoice({ radarSortAlgorithm: next }, isSignedIn);
+      try {
+        await persistAlgorithmChoice({ radarSortAlgorithm: next }, isSignedIn);
+      } catch {
+        // Local choice is already saved; still switch the visible radar order.
+      }
       invalidateQueryPaths(['/breakouts/current', '/breakouts/events'], { reload: true });
       setRadarSort(next);
       setExtraEvents([]);

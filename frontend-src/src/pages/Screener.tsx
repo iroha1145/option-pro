@@ -269,10 +269,14 @@ export default function Screener() {
     // 仅演示数据保留可见扫描过程；真实接口完成后立即呈现结果。
     const minMs = isMock ? 800 + Math.random() * 700 : 0;
     try {
-      await persistAlgorithmChoice(
-        { screenerRankingAlgorithm: filters.rankingAlgorithm },
-        isSignedIn,
-      );
+      try {
+        await persistAlgorithmChoice(
+          { screenerRankingAlgorithm: filters.rankingAlgorithm },
+          isSignedIn,
+        );
+      } catch {
+        // Preference copy is best-effort. Scan must still use the visible local choice.
+      }
       requireCurrent();
       const { apiParams: params, refreshParameters: requested } = buildStrengthScanRequest(filters);
 

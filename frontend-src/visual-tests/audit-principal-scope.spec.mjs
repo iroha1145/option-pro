@@ -72,6 +72,23 @@ async function fixture(page, options = {}) {
       if (state.holdWatchlist) { state.held.push(() => route.fulfill({ json })); return; }
       return route.fulfill({ json });
     }
+    if (path === '/api/view-preferences') {
+      if (request.method() === 'PUT') {
+        const body = request.postDataJSON() ?? {};
+        state.prefs = {
+          screener_ranking_algorithm: body.screener_ranking_algorithm
+            ?? state.prefs?.screener_ranking_algorithm ?? 'follow_default',
+          radar_sort_algorithm: body.radar_sort_algorithm
+            ?? state.prefs?.radar_sort_algorithm ?? 'follow_default',
+        };
+      }
+      return route.fulfill({ json: {
+        principal: state.owner ? 'owner' : state.username,
+        persisted: Boolean(state.owner || state.username),
+        screener_ranking_algorithm: state.prefs?.screener_ranking_algorithm ?? 'follow_default',
+        radar_sort_algorithm: state.prefs?.radar_sort_algorithm ?? 'follow_default',
+      } });
+    }
     if (path === '/api/strength/scan') {
       const now = new Date().toISOString();
       const json = { rows: [{ ticker: 'AAA', name: `${principal} scan`, price: 100, final_score: 95, change_pct: 1, avg_dollar_volume_20d: 25_000_000 }],

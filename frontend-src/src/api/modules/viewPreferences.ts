@@ -73,6 +73,15 @@ export const viewPreferencesApi = {
     ),
 };
 
+function asLocalDoc(local: ReturnType<typeof writeAlgorithmPreferences>): ViewPreferencesDoc {
+  return {
+    principal: null,
+    persisted: false,
+    screenerRankingAlgorithm: local.screenerRankingAlgorithm,
+    radarSortAlgorithm: local.radarSortAlgorithm,
+  };
+}
+
 /** Persist the visible choice before a follow_default request can read the old one. */
 export async function persistAlgorithmChoice(
   patch: {
@@ -81,14 +90,12 @@ export async function persistAlgorithmChoice(
   },
   persistRemote: boolean,
 ): Promise<ViewPreferencesDoc> {
-  const local = writeAlgorithmPreferences(patch);
-  if (!persistRemote) {
-    return {
-      principal: null,
-      persisted: false,
-      screenerRankingAlgorithm: local.screenerRankingAlgorithm,
-      radarSortAlgorithm: local.radarSortAlgorithm,
-    };
+  const local = asLocalDoc(writeAlgorithmPreferences(patch));
+  if (!persistRemote) return local;
+  try {
+    return await viewPreferencesApi.write(patch);
+  } catch {
+    // Local choice is already saved. A 503/401 here must not block scanning or radar reload.
+    return local;
   }
-  return viewPreferencesApi.write(patch);
 }
