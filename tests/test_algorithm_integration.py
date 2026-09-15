@@ -48,6 +48,7 @@ def test_view_preferences_api_requires_login_to_write() -> None:
     response = client.put(
         "/api/view-preferences",
         json={"screener_ranking_algorithm": "a0_mid_long"},
+        headers={"Origin": "http://localhost", "X-Optix-Action": "1"},
     )
     assert response.status_code == 401
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal, Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.access import (
@@ -77,6 +77,7 @@ def read_view_preferences(request: Request) -> ViewPreferencesResponse:
 @router.put(
     "",
     response_model=ViewPreferencesResponse,
+    dependencies=[Depends(require_same_origin_json)],
 )
 def update_view_preferences(
     request: Request,
@@ -91,7 +92,6 @@ def update_view_preferences(
                 "message": "登录后才能把算法选择保存到账号",
             },
         )
-    require_same_origin_json(request)
     try:
         current = _store().read(principal).as_dict()
         updates = patch.model_dump(exclude_unset=True)
