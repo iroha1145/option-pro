@@ -140,6 +140,11 @@ export interface ScreenerRow {
   /** 契约 change_pct；缺失如实为 null（ChangeBadge 显「—」，不显 +0.00%） */
   changePct: number | null;
   strengthScore: number;
+  rankingScore?: number | null;
+  sortScore?: number | null;
+  sortBasis?: string | null;
+  sortAlgorithm?: string | null;
+  a0Available?: boolean | null;
   /** 后端 avg_dollar_volume_20d；缺失时为 null，不用当日成交额冒充。 */
   avgDollarVolume20d?: number | null;
   band: StrengthBand;

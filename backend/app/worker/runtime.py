@@ -21,6 +21,7 @@ from .state import (
     WorkerAlreadyRunning,
     WorkerLeaseLost,
     WorkerStateRepository,
+    bump_action_retry,
     utc_now,
 )
 
@@ -210,6 +211,256 @@ class WorkerSupervisor:
                 error,
             )
 
+    async def _requeue_actions_guarded(
+        self,
+        task: TaskSpec,
+        token: int,
+        request_ids: Sequence[str],
+        *,
+        now: datetime | None = None,
+        details_updates: Mapping[str, Mapping[str, Any]] | None = None,
+    ) -> None:
+        def write() -> None:
+            self.repository.requeue_running_actions(
+                self.owner_id,
+                token,
+                list(request_ids),
+                now=now,
+                details_updates=details_updates,
+            )
+
+        try:
+            await self._state_call(write)
+        except sqlite3.OperationalError as error:
+            logger.warning(
+                "worker manual action requeue dropped task=%s error=%s",
+                task.name,
+                error,
+            )
+
+    async def _requeue_or_exhaust(
+        self,
+        task: TaskSpec,
+        token: int,
+        request_ids: Sequence[str],
+        *,
+        now: datetime,
+        reason: str,
+    ) -> None:
+        if not request_ids:
+            return
+        delayed: list[str] = []
+        updates: dict[str, dict[str, Any]] = {}
+        exhausted: list[str] = []
+        for request_id in request_ids:
+            row = self.repository.action_request(request_id)
+            details = dict(row.get("details") or {}) if row else {}
+            merged, done, _next_at = bump_action_retry(details, now=now, reason=reason)
+            if done:
+                exhausted.append(request_id)
+                continue
+            delayed.append(request_id)
+            updates[request_id] = {"retry": merged.get("retry") or {}}
+        if exhausted:
+            await self._finish_actions_guarded(
+                task,
+                token,
+                exhausted,
+                succeeded=False,
+                error_code="retry_exhausted",
+                details={
+                    "task_status": "degraded",
+                    "task_completed_at": now.isoformat().replace("+00:00", "Z"),
+                    "result": {"reason": reason},
+                },
+                now=now,
+            )
+        if delayed:
+            await self._requeue_actions_guarded(
+                task,
+                token,
+                delayed,
+                now=now,
+                details_updates=updates,
+            )
+
+    def _can_commit_manual_actions(self, token: int) -> bool:
+        return (
+            self._token is not None
+            and int(self._token) == int(token)
+            and not self._lease_lost.is_set()
+        )
+
+    async def _finish_action_completion(
+        self,
+        task: TaskSpec,
+        token: int,
+        item: Mapping[str, Any],
+        *,
+        completed: datetime,
+        fallback_error_code: str | None = None,
+    ) -> None:
+        request_id = str(item["request_id"])
+        succeeded = bool(item.get("succeeded"))
+        error_code = item.get("error_code")
+        if not isinstance(error_code, str) or not error_code:
+            error_code = None if succeeded else (fallback_error_code or "task_degraded")
+        payload = item.get("result")
+        if not isinstance(payload, dict):
+            payload = {
+                key: item[key]
+                for key in ("parameters", "parameters_hash")
+                if key in item
+            }
+        await self._finish_actions_guarded(
+            task,
+            token,
+            [request_id],
+            succeeded=succeeded,
+            error_code=error_code or "task_degraded",
+            details={
+                "task_status": "idle" if succeeded else "degraded",
+                "task_completed_at": completed.isoformat().replace("+00:00", "Z"),
+                "result": payload,
+            },
+            now=completed,
+        )
+
+    async def _complete_manual_actions(
+        self,
+        task: TaskSpec,
+        token: int,
+        manual_request_ids: Sequence[str],
+        *,
+        result: TaskResult,
+        degraded: bool,
+        completed: datetime,
+    ) -> None:
+        raw_completions = result.details.get("action_completions") if result.details else None
+        extra = result.details.get("requeued_request_ids") if result.details else None
+        if not isinstance(raw_completions, list):
+            await self._finish_actions_guarded(
+                task,
+                token,
+                manual_request_ids,
+                succeeded=not degraded,
+                error_code=result.error_code or "task_degraded",
+                details={
+                    "task_status": result.status,
+                    "task_completed_at": completed.isoformat().replace(
+                        "+00:00", "Z"
+                    ),
+                    "result": dict(result.details),
+                },
+                now=completed,
+            )
+            return
+        claimed = set(manual_request_ids)
+        finished: set[str] = set()
+        for item in raw_completions:
+            if not isinstance(item, dict) or not item.get("request_id"):
+                continue
+            request_id = str(item["request_id"])
+            if request_id not in claimed or request_id in finished:
+                continue
+            await self._finish_action_completion(
+                task,
+                token,
+                item,
+                completed=completed,
+                fallback_error_code=result.error_code,
+            )
+            finished.add(request_id)
+        leftover = [request_id for request_id in manual_request_ids if request_id not in finished]
+        if isinstance(extra, list):
+            leftover.extend(str(item) for item in extra if item)
+        leftover = list(dict.fromkeys(leftover))
+        leftover_mode = str(
+            (result.details or {}).get("leftover_mode") or "immediate"
+        )
+        if leftover and leftover_mode == "fail":
+            await self._finish_actions_guarded(
+                task,
+                token,
+                leftover,
+                succeeded=False,
+                error_code=result.error_code or "invalid_parameters",
+                details={
+                    "task_status": "degraded",
+                    "task_completed_at": completed.isoformat().replace("+00:00", "Z"),
+                },
+                now=completed,
+            )
+        elif leftover and leftover_mode == "timeout_retry":
+            await self._requeue_or_exhaust(
+                task,
+                token,
+                leftover,
+                now=completed,
+                reason=result.error_code or "task_timeout",
+            )
+        elif leftover:
+            await self._requeue_actions_guarded(
+                task,
+                token,
+                leftover,
+                now=completed,
+            )
+
+    async def _recover_unsettled_manual_actions(
+        self,
+        task: TaskSpec,
+        token: int,
+        manual_request_ids: Sequence[str],
+        *,
+        interrupt_code: str,
+        completed: datetime,
+    ) -> None:
+        if not manual_request_ids or not self._can_commit_manual_actions(token):
+            return
+        progress = getattr(task.runner, "settled_action_progress", None)
+        if not isinstance(progress, Mapping):
+            await self._finish_actions_guarded(
+                task,
+                token,
+                manual_request_ids,
+                succeeded=False,
+                error_code=interrupt_code,
+                details={
+                    "task_status": "degraded",
+                    "task_completed_at": completed.isoformat().replace("+00:00", "Z"),
+                },
+                now=completed,
+            )
+            return
+        error_code = interrupt_code if _ERROR_CODE.fullmatch(interrupt_code) else "task_failed"
+        leftover_mode = (
+            "fail"
+            if error_code == "invalid_parameters"
+            else "timeout_retry"
+            if error_code in {"task_timeout", "task_failed"}
+            else "immediate"
+        )
+        try:
+            await self._complete_manual_actions(
+                task,
+                token,
+                manual_request_ids,
+                result=TaskResult(
+                    status="degraded",
+                    error_code=error_code,
+                    details={
+                        "action_completions": list(progress.get("action_completions") or []),
+                        "requeued_request_ids": list(progress.get("requeued_request_ids") or []),
+                        "leftover_mode": leftover_mode,
+                    },
+                ),
+                degraded=True,
+                completed=completed,
+            )
+        except WorkerLeaseLost:
+            return
+
     async def _heartbeat(self, started: asyncio.Event | None = None) -> None:
         interval = max(0.05, min(30.0, self.lease_seconds / 3.0))
         thread_stop = threading.Event()
@@ -336,6 +587,35 @@ class WorkerSupervisor:
             self._results[task.name] = payload
             return payload
         manual_request_ids = [item["request_id"] for item in manual_actions]
+        persisted_request_ids: set[str] = set()
+        binder = getattr(task.runner, "bind_action_progress_sink", None)
+
+        async def persist_progress(progress: Mapping[str, Any]) -> None:
+            if not self._can_commit_manual_actions(token):
+                return
+            raw = progress.get("action_completions") if isinstance(progress, Mapping) else None
+            if not isinstance(raw, list):
+                return
+            observed = utc_now()
+            for item in raw:
+                if not isinstance(item, dict) or not item.get("request_id"):
+                    continue
+                request_id = str(item["request_id"])
+                if request_id in persisted_request_ids:
+                    continue
+                try:
+                    await self._finish_action_completion(
+                        task,
+                        token,
+                        item,
+                        completed=observed,
+                    )
+                except WorkerLeaseLost:
+                    return
+                persisted_request_ids.add(request_id)
+
+        if callable(binder):
+            binder(persist_progress)
         try:
             action_runner = getattr(task.runner, "run_for_actions", None)
             # Trusted worker entry: bind owner explicitly for this task only.
@@ -354,21 +634,13 @@ class WorkerSupervisor:
             if not isinstance(result, TaskResult):
                 raise TypeError("worker task must return TaskResult")
         except asyncio.CancelledError:
-            if manual_request_ids:
-                await self._finish_actions_guarded(
-                    task,
-                    token,
-                    manual_request_ids,
-                    succeeded=False,
-                    error_code="shutdown_cancelled",
-                    details={
-                        "task_status": "interrupted",
-                        "task_completed_at": utc_now().isoformat().replace(
-                            "+00:00", "Z"
-                        ),
-                    },
-                    now=utc_now(),
-                )
+            await self._recover_unsettled_manual_actions(
+                task,
+                token,
+                manual_request_ids,
+                interrupt_code="shutdown_cancelled",
+                completed=utc_now(),
+            )
             raise
         except Exception as error:
             failures = self._failures[task.name] + 1
@@ -377,35 +649,39 @@ class WorkerSupervisor:
             completed = utc_now()
             error_code = _public_error_code(error)
             details = {"error_type": type(error).__name__}
-            await self._record(
-                task,
-                status="degraded",
-                consecutive_failures=failures,
-                last_completed_at=completed,
-                next_run_at=(
-                    None
-                    if task.manual_only
-                    else completed + timedelta(seconds=delay)
-                ),
-                error_code=error_code,
-                details=details,
-            )
-            if manual_request_ids:
-                await self._finish_actions_guarded(
-                    task,
-                    token,
-                    manual_request_ids,
-                    succeeded=False,
-                    error_code=error_code,
-                    details={
-                        "task_status": "degraded",
-                        "task_completed_at": completed.isoformat().replace(
-                            "+00:00", "Z"
+            if not isinstance(error, WorkerLeaseLost):
+                try:
+                    await self._record(
+                        task,
+                        status="degraded",
+                        consecutive_failures=failures,
+                        last_completed_at=completed,
+                        next_run_at=(
+                            None
+                            if task.manual_only
+                            else completed + timedelta(seconds=delay)
                         ),
-                        "result": details,
-                    },
-                    now=completed,
-                )
+                        error_code=error_code,
+                        details=details,
+                    )
+                except WorkerLeaseLost:
+                    await self._recover_unsettled_manual_actions(
+                        task,
+                        token,
+                        manual_request_ids,
+                        interrupt_code=error_code,
+                        completed=completed,
+                    )
+                    raise
+            await self._recover_unsettled_manual_actions(
+                task,
+                token,
+                manual_request_ids,
+                interrupt_code=error_code,
+                completed=completed,
+            )
+            if isinstance(error, WorkerLeaseLost):
+                raise
             payload = {
                 "status": "degraded",
                 "error_code": error_code,
@@ -418,6 +694,9 @@ class WorkerSupervisor:
                 type(error).__name__,
             )
             return payload
+        finally:
+            if callable(binder):
+                binder(None)
 
         completed = utc_now()
         degraded = result.status == "degraded"
@@ -476,20 +755,13 @@ class WorkerSupervisor:
             "next_delay_seconds": delay,
         }
         if manual_request_ids:
-            await self._finish_actions_guarded(
+            await self._complete_manual_actions(
                 task,
                 token,
                 manual_request_ids,
-                succeeded=not degraded,
-                error_code=result.error_code or "task_degraded",
-                details={
-                    "task_status": result.status,
-                    "task_completed_at": completed.isoformat().replace(
-                        "+00:00", "Z"
-                    ),
-                    "result": dict(result.details),
-                },
-                now=completed,
+                result=result,
+                degraded=degraded,
+                completed=completed,
             )
         self._results[task.name] = payload
         return payload
@@ -523,15 +795,24 @@ class WorkerSupervisor:
         try:
             return bool(
                 await asyncio.to_thread(
-                    self.repository.has_pending_actions,
+                    self.repository.has_claimable_actions,
                     task.name,
                 )
             )
         except sqlite3.OperationalError:
             return False
 
+    async def _next_retry_delay(self, task: TaskSpec) -> float | None:
+        try:
+            return await asyncio.to_thread(
+                self.repository.next_action_retry_delay,
+                task.name,
+            )
+        except sqlite3.OperationalError:
+            return None
+
     async def _wait_for_next(self, task: TaskSpec, delay: float) -> bool:
-        """Wake scheduled loops promptly when the API queues a manual action."""
+        """Wake for claimable actions; delayed retries keep their backoff."""
 
         if self.stop.is_set():
             return False
@@ -541,6 +822,9 @@ class WorkerSupervisor:
             if await self._has_pending_actions(task):
                 return True
             remaining = deadline - loop.time()
+            retry_delay = await self._next_retry_delay(task)
+            if retry_delay is not None:
+                remaining = min(remaining, max(0.0, retry_delay))
             if remaining <= 0:
                 return True
             try:

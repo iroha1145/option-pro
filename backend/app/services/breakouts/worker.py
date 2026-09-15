@@ -15,9 +15,9 @@ import sqlite3
 import threading
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
-from typing import Any, Awaitable, Callable, Mapping
+from typing import Any, Awaitable, Callable, Mapping, Sequence
 
 from app.services.breakouts.clock import MarketClock, MarketClockSnapshot
 from app.services.breakouts.config import BreakoutSettings, get_breakout_settings
@@ -232,6 +232,10 @@ class BreakoutWorker:
             expired_due_limit=expired_due_limit,
         )
         carryover_events = list(carryover_batch.events)
+        try:
+            carryover_events = self.repository.overlay_t1_evaluations(carryover_events)
+        except Exception:
+            pass
         effective_events = self.repository.overlay_live_events(
             carryover_events, as_of=clock_snapshot.as_of,
         )
@@ -441,6 +445,349 @@ class BreakoutWorker:
             if cleanup_cancelled is not None:
                 raise cleanup_cancelled
 
+    async def _complete_pending_t1(
+        self,
+        market: MarketClockSnapshot,
+        lease_token: int,
+    ) -> dict[str, Any]:
+        """Finish T1 for existing events after the regular close.
+
+        This does not rediscover candidates, republish the immutable scan, or
+        emit original breakout notifications.
+        """
+
+        from app.services.algorithm_modes import T1_ALGORITHM
+        from app.services.breakouts.models import TemporalCutoff, normalize_ticker
+        from app.services.breakouts.repository import T1_RETRY_MAX_ATTEMPTS
+        from app.services.breakouts.t1_priority import (
+            T1_MET,
+            T1_NOT_APPLICABLE,
+            T1_RETRYABLE_REASONS,
+            T1_UNMET,
+            attach_t1_features,
+            t1_needs_close_eval,
+        )
+
+        try:
+            scan = self.repository.latest_completed_scan()
+        except Exception:
+            return {"attempted": 0, "completed": 0, "pending": 0, "retry": False}
+        events = list((scan or {}).get("events") or [])
+        if not events:
+            return {"attempted": 0, "completed": 0, "pending": 0, "retry": False}
+        try:
+            events = self.repository.overlay_t1_evaluations(events)
+        except Exception:
+            pass
+        pending = [item for item in events if t1_needs_close_eval(item)]
+        if not pending:
+            return {"attempted": 0, "completed": 0, "pending": 0, "retry": False}
+
+        def retry_identity(event: Mapping[str, Any]) -> tuple[str, str, str]:
+            payload = event.get("t1_priority") if isinstance(event.get("t1_priority"), Mapping) else {}
+            session_date = str(
+                (payload or {}).get("session_date") or event.get("trading_date") or ""
+            )
+            event_id = str(event.get("event_id") or "")
+            return f"{event_id}|{session_date}|{T1_ALGORITHM}", event_id, session_date
+
+        def parse_eligible(raw: Any) -> bool:
+            if not raw:
+                return True
+            try:
+                when = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+            except ValueError:
+                return True
+            if when.tzinfo is None:
+                when = when.replace(tzinfo=timezone.utc)
+            return when <= market.as_of
+
+        def persist_states(states: list[dict[str, Any]], *, required: bool = False) -> None:
+            if not states:
+                return
+            try:
+                self.repository.save_t1_retry_states(states)
+            except Exception:
+                if required:
+                    raise
+
+        stored = {}
+        try:
+            stored = self.repository.load_t1_retry_states(
+                [retry_identity(item)[0] for item in pending]
+            )
+        except Exception:
+            stored = {}
+        eligible: list[dict[str, Any]] = []
+        blocked_delays: list[float] = []
+        exhausted_count = 0
+        for event in pending:
+            key, event_id, session_date = retry_identity(event)
+            state = dict(stored.get(key) or {})
+            if state.get("exhausted"):
+                exhausted_count += 1
+                continue
+            if not parse_eligible(state.get("next_eligible_at")):
+                try:
+                    when = datetime.fromisoformat(
+                        str(state.get("next_eligible_at")).replace("Z", "+00:00")
+                    )
+                    if when.tzinfo is None:
+                        when = when.replace(tzinfo=timezone.utc)
+                    blocked_delays.append(max(0.0, (when - market.as_of).total_seconds()))
+                except (TypeError, ValueError):
+                    blocked_delays.append(30.0)
+                continue
+            eligible.append(event)
+        if not eligible:
+            if blocked_delays:
+                delay = min(blocked_delays)
+                return {
+                    "attempted": 0,
+                    "completed": 0,
+                    "pending": len(pending) - exhausted_count,
+                    "retry": True,
+                    "reason": "t1_retry_not_due",
+                    "retry_after_seconds": delay,
+                }
+            return {
+                "attempted": 0,
+                "completed": 0,
+                "pending": exhausted_count,
+                "retry": False,
+                "reason": "t1_retry_budget_exhausted",
+            }
+
+        def bump_states(
+            events: Sequence[Mapping[str, Any]],
+            reason: str,
+            *,
+            persist_required: bool = False,
+        ) -> tuple[list[dict[str, Any]], float | None, int]:
+            updates: list[dict[str, Any]] = []
+            delays: list[float] = []
+            max_attempt = 0
+            for event in events:
+                key, event_id, session_date = retry_identity(event)
+                current = dict(stored.get(key) or {
+                    "retry_key": key,
+                    "event_id": event_id,
+                    "session_date": session_date,
+                    "algorithm": T1_ALGORITHM,
+                    "attempt": 0,
+                    "max_attempts": T1_RETRY_MAX_ATTEMPTS,
+                })
+                attempt = int(current.get("attempt") or 0) + 1
+                cap = int(current.get("max_attempts") or T1_RETRY_MAX_ATTEMPTS)
+                max_attempt = max(max_attempt, attempt)
+                if attempt >= cap:
+                    current.update(
+                        {
+                            "retry_key": key,
+                            "event_id": event_id,
+                            "session_date": session_date,
+                            "algorithm": T1_ALGORITHM,
+                            "attempt": attempt,
+                            "max_attempts": cap,
+                            "next_eligible_at": None,
+                            "exhausted": True,
+                            "last_reason": reason,
+                        }
+                    )
+                else:
+                    delay = min(300.0, 30.0 * (2 ** min(attempt - 1, 3)))
+                    next_at = market.as_of.astimezone(timezone.utc) + timedelta(seconds=delay)
+                    current.update(
+                        {
+                            "retry_key": key,
+                            "event_id": event_id,
+                            "session_date": session_date,
+                            "algorithm": T1_ALGORITHM,
+                            "attempt": attempt,
+                            "max_attempts": cap,
+                            "next_eligible_at": next_at.isoformat().replace("+00:00", "Z"),
+                            "exhausted": False,
+                            "last_reason": reason,
+                        }
+                    )
+                    delays.append(delay)
+                stored[key] = current
+                updates.append(current)
+            persist_states(updates, required=persist_required)
+            return updates, (min(delays) if delays else None), max_attempt
+
+        def retry_result(
+            *,
+            attempted: int,
+            completed: int,
+            pending_count: int,
+            reason: str,
+            events: Sequence[Mapping[str, Any]],
+        ) -> dict[str, Any]:
+            _, delay, attempt = bump_states(events, reason)
+            if delay is None:
+                return {
+                    "attempted": attempted,
+                    "completed": completed,
+                    "pending": pending_count,
+                    "retry": False,
+                    "reason": "t1_retry_budget_exhausted",
+                    "attempt": attempt,
+                }
+            return {
+                "attempted": attempted,
+                "completed": completed,
+                "pending": pending_count,
+                "retry": True,
+                "reason": reason,
+                "retry_after_seconds": delay,
+                "attempt": attempt,
+            }
+
+        price_data = getattr(self.scan_service, "price_data", None)
+        if price_data is None or not hasattr(price_data, "daily"):
+            return retry_result(
+                attempted=len(eligible),
+                completed=0,
+                pending_count=len(pending),
+                reason="price_adapter_unavailable",
+                events=eligible,
+            )
+        if not self.repository.heartbeat_lock(
+            DEFAULT_LOCK_NAME,
+            self.owner_id,
+            lease_token,
+            self.lease_ttl_seconds,
+            self.clock.now(),
+        ):
+            raise LeaseLostError("worker lost its lease before T1 close completion")
+        _, reserved_delay, reserved_attempt = bump_states(
+            eligible,
+            "t1_dispatch_reserved",
+            persist_required=True,
+        )
+
+        def reserved_retry(
+            *,
+            attempted: int,
+            completed: int,
+            pending_count: int,
+            reason: str,
+        ) -> dict[str, Any]:
+            if reserved_delay is None:
+                return {
+                    "attempted": attempted,
+                    "completed": completed,
+                    "pending": pending_count,
+                    "retry": False,
+                    "reason": "t1_retry_budget_exhausted",
+                    "attempt": reserved_attempt,
+                }
+            return {
+                "attempted": attempted,
+                "completed": completed,
+                "pending": pending_count,
+                "retry": True,
+                "reason": reason,
+                "retry_after_seconds": reserved_delay,
+                "attempt": reserved_attempt,
+            }
+
+        tickers = list(
+            dict.fromkeys(
+                normalize_ticker(item.get("ticker"))
+                for item in eligible
+                if item.get("ticker")
+            )
+        )
+        cutoff = TemporalCutoff(event_at=market.as_of, session=market.session)
+
+        async def fetch_daily() -> Any:
+            return await price_data.daily(tickers, cutoff=cutoff, period="2y")
+
+        try:
+            daily_map = await self._run_with_lease_heartbeat(
+                fetch_daily(),
+                lease_token,
+                None,
+            )
+        except (asyncio.CancelledError, LeaseLostError):
+            raise
+        except Exception:
+            return reserved_retry(
+                attempted=len(eligible),
+                completed=0,
+                pending_count=len(pending),
+                reason="daily_fetch_failed",
+            )
+        if not isinstance(daily_map, Mapping):
+            daily_map = {}
+        completed = 0
+        still_pending_events: list[dict[str, Any]] = []
+        finished_keys: list[str] = []
+        updated_events: list[dict[str, Any]] = []
+        for event in eligible:
+            ticker = normalize_ticker(event.get("ticker")) if event.get("ticker") else ""
+            snapshot = daily_map.get(ticker) if ticker else None
+            frame = getattr(snapshot, "frame", None)
+            attached = attach_t1_features(
+                event,
+                frame if frame is not None else None,
+                as_of=market.as_of,
+                session=market.session,
+            )
+            updated_events.append(attached)
+            evaluation = attached.get("t1_priority") if isinstance(attached.get("t1_priority"), Mapping) else {}
+            status = str((evaluation or {}).get("status") or "")
+            reason = str((evaluation or {}).get("reason") or "")
+            key = retry_identity(event)[0]
+            if status in {T1_MET, T1_UNMET, T1_NOT_APPLICABLE}:
+                completed += 1
+                finished_keys.append(key)
+            elif status == "unavailable" and reason not in T1_RETRYABLE_REASONS:
+                completed += 1
+                finished_keys.append(key)
+            else:
+                still_pending_events.append(attached)
+        if updated_events:
+            try:
+                self.repository.persist_t1_evaluations(updated_events)
+            except Exception:
+                return reserved_retry(
+                    attempted=len(eligible),
+                    completed=0,
+                    pending_count=len(pending),
+                    reason="t1_store_unavailable",
+                )
+        if finished_keys:
+            try:
+                self.repository.clear_t1_retry_states(finished_keys)
+            except Exception:
+                pass
+        if still_pending_events:
+            return reserved_retry(
+                attempted=len(eligible),
+                completed=completed,
+                pending_count=len(still_pending_events) + exhausted_count + len(blocked_delays),
+                reason="daily_incomplete",
+            )
+        leftover_pending = len(pending) - len(eligible) - exhausted_count
+        if leftover_pending > 0 and blocked_delays:
+            return {
+                "attempted": len(eligible),
+                "completed": completed,
+                "pending": leftover_pending,
+                "retry": True,
+                "reason": "t1_retry_not_due",
+                "retry_after_seconds": min(blocked_delays),
+            }
+        return {
+            "attempted": len(eligible),
+            "completed": completed,
+            "pending": leftover_pending + exhausted_count,
+            "retry": False,
+        }
+
     async def _run_cycle(
         self,
         lease_token: int,
@@ -448,11 +795,13 @@ class BreakoutWorker:
     ) -> Mapping[str, Any]:
         market = clock_snapshot or self.clock.snapshot()
         if market.session in {MarketSession.CLOSED, MarketSession.POSTMARKET}:
+            t1_completion = await self._complete_pending_t1(market, lease_token)
             next_session_at = self.clock.next_supported_session_at(market)
             details = {
                 "runtime_reason": "market_closed",
                 "market_session": market.session.value,
                 "next_session_at": next_session_at,
+                "t1_completion": t1_completion,
             }
             self._wait_status = "paused"
             self._wait_details = details
@@ -463,6 +812,7 @@ class BreakoutWorker:
                 "session": market.session.value,
                 "scan_run_id": None,
                 "next_session_at": next_session_at,
+                "t1_retry_after_seconds": t1_completion.get("retry_after_seconds"),
             }
         provider_name = str(getattr(self.settings, "discovery_provider", "tradingview"))
         profile = self.clock.profile_for(market.session)
@@ -539,6 +889,10 @@ class BreakoutWorker:
                 lease_token=lease_token,
                 now=self.clock.now(),
             )
+            try:
+                self.repository.persist_t1_evaluations(publication.get("events") or [])
+            except Exception:
+                pass
             self._last_completed_scan_id = scan_id
             self._last_completed_at = self.clock.now()
             self._wait_status = "idle"
@@ -720,6 +1074,9 @@ class BreakoutWorker:
                 else:
                     consecutive_degraded = 0
                 interval = float(self.clock.interval_seconds(market, self.settings))
+                retry_after = result.get("t1_retry_after_seconds")
+                if retry_after:
+                    interval = min(interval, float(retry_after))
                 if consecutive_degraded:
                     degraded_base = max(
                         interval,

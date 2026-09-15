@@ -82,8 +82,63 @@ class WorkerLeaseLost(RuntimeError):
     pass
 
 
+ACTION_TIMEOUT_RETRY_MAX = 3
+ACTION_TIMEOUT_RETRY_BACKOFF = (15.0, 30.0, 60.0)
+
+
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def action_retry_state(details: Mapping[str, Any] | None) -> dict[str, Any]:
+    payload = details.get("retry") if isinstance(details, Mapping) else None
+    return dict(payload) if isinstance(payload, Mapping) else {}
+
+
+def action_next_eligible_at(details: Mapping[str, Any] | None) -> datetime | None:
+    raw = action_retry_state(details).get("next_eligible_at")
+    if not raw:
+        return None
+    try:
+        return _parse(str(raw))
+    except (TypeError, ValueError):
+        return None
+
+
+def action_is_claimable(details: Mapping[str, Any] | None, observed: datetime) -> bool:
+    eligible = action_next_eligible_at(details)
+    return eligible is None or eligible <= observed
+
+
+def bump_action_retry(
+    details: Mapping[str, Any] | None,
+    *,
+    now: datetime,
+    reason: str,
+    max_attempts: int = ACTION_TIMEOUT_RETRY_MAX,
+) -> tuple[dict[str, Any], bool, datetime | None]:
+    merged = dict(details or {})
+    retry = action_retry_state(merged)
+    attempt = int(retry.get("attempt") or 0) + 1
+    cap = int(retry.get("max_attempts") or max_attempts)
+    if attempt > cap:
+        merged["retry"] = {
+            "attempt": attempt,
+            "max_attempts": cap,
+            "reason": reason,
+            "exhausted": True,
+        }
+        return merged, True, None
+    delay = ACTION_TIMEOUT_RETRY_BACKOFF[min(attempt - 1, len(ACTION_TIMEOUT_RETRY_BACKOFF) - 1)]
+    next_at = _as_utc(now) + timedelta(seconds=delay)
+    merged["retry"] = {
+        "attempt": attempt,
+        "max_attempts": cap,
+        "next_eligible_at": _iso(next_at),
+        "reason": reason,
+        "exhausted": False,
+    }
+    return merged, False, next_at
 
 
 def _as_utc(value: datetime) -> datetime:
@@ -543,18 +598,48 @@ class WorkerStateRepository:
         item.update({"reused": False, "reason": "queued"})
         return item
 
-    def has_pending_actions(self, task_name: str) -> bool:
+    def has_pending_actions(self, task_name: str, *, now: datetime | None = None) -> bool:
+        return self.has_claimable_actions(task_name, now=now)
+
+    def _queued_action_rows(self, task_name: str) -> list[sqlite3.Row]:
         if not self.path.is_file():
-            return False
+            return []
         with self._connect(read_only=True) as connection:
-            row = connection.execute(
-                """
-                SELECT 1 FROM worker_action_requests
-                WHERE task_name=? AND status='queued' LIMIT 1
-                """,
-                (task_name,),
-            ).fetchone()
-        return row is not None
+            return list(
+                connection.execute(
+                    """
+                    SELECT * FROM worker_action_requests
+                    WHERE task_name=? AND status='queued'
+                    ORDER BY requested_at,request_id
+                    """,
+                    (task_name,),
+                ).fetchall()
+            )
+
+    def has_claimable_actions(self, task_name: str, *, now: datetime | None = None) -> bool:
+        observed = _as_utc(now or utc_now())
+        for row in self._queued_action_rows(task_name):
+            try:
+                details = json.loads(row["details_json"])
+            except (TypeError, json.JSONDecodeError):
+                details = {}
+            if action_is_claimable(details if isinstance(details, dict) else {}, observed):
+                return True
+        return False
+
+    def next_action_retry_delay(self, task_name: str, *, now: datetime | None = None) -> float | None:
+        observed = _as_utc(now or utc_now())
+        delays: list[float] = []
+        for row in self._queued_action_rows(task_name):
+            try:
+                details = json.loads(row["details_json"])
+            except (TypeError, json.JSONDecodeError):
+                details = {}
+            eligible = action_next_eligible_at(details if isinstance(details, dict) else {})
+            if eligible is None:
+                return 0.0
+            delays.append(max(0.0, (eligible - observed).total_seconds()))
+        return min(delays) if delays else None
 
     def claim_actions(
         self,
@@ -570,14 +655,25 @@ class WorkerStateRepository:
             connection.execute("BEGIN IMMEDIATE")
             self._assert_fence(connection, owner_id, fencing_token, observed)
             self._recover_orphaned_running_actions_on(connection, observed)
-            rows = connection.execute(
+            candidates = connection.execute(
                 """
                 SELECT * FROM worker_action_requests
                 WHERE task_name=? AND status='queued'
-                ORDER BY requested_at,request_id LIMIT 32
+                ORDER BY requested_at,request_id
                 """,
                 (task_name,),
             ).fetchall()
+            rows = []
+            for row in candidates:
+                try:
+                    details = json.loads(row["details_json"])
+                except (TypeError, json.JSONDecodeError):
+                    details = {}
+                if not action_is_claimable(details if isinstance(details, dict) else {}, observed):
+                    continue
+                rows.append(row)
+                if len(rows) >= 32:
+                    break
             if rows:
                 request_ids = [row["request_id"] for row in rows]
                 placeholders = ",".join("?" for _ in request_ids)
@@ -602,6 +698,68 @@ class WorkerStateRepository:
             item["status"] = "running"
             item["started_at"] = observed_text
         return claimed
+
+    def requeue_running_actions(
+        self,
+        owner_id: str,
+        fencing_token: int,
+        request_ids: Sequence[str],
+        *,
+        now: datetime | None = None,
+        details_updates: Mapping[str, Mapping[str, Any]] | None = None,
+    ) -> int:
+        """Return claimed-but-unfinished actions to queued without marking them done."""
+
+        if not request_ids:
+            return 0
+        observed = _as_utc(now or utc_now())
+        unique_request_ids = list(dict.fromkeys(request_ids))
+        placeholders = ",".join("?" for _ in unique_request_ids)
+        updates = {
+            str(key): dict(value)
+            for key, value in dict(details_updates or {}).items()
+            if isinstance(value, Mapping)
+        }
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            self._assert_fence(connection, owner_id, fencing_token, observed)
+            rows = connection.execute(
+                f"""
+                SELECT request_id,details_json FROM worker_action_requests
+                WHERE request_id IN ({placeholders})
+                  AND status='running' AND owner_id=? AND fencing_token=?
+                """,
+                (*unique_request_ids, owner_id, int(fencing_token)),
+            ).fetchall()
+            updated = 0
+            for row in rows:
+                try:
+                    details = json.loads(row["details_json"])
+                except (TypeError, json.JSONDecodeError):
+                    details = {}
+                if not isinstance(details, dict):
+                    details = {}
+                extra = updates.get(str(row["request_id"]))
+                if extra:
+                    details.update(extra)
+                connection.execute(
+                    """
+                    UPDATE worker_action_requests
+                    SET status='queued',started_at=NULL,owner_id=NULL,
+                        fencing_token=NULL,error_code=NULL,details_json=?,updated_at=?
+                    WHERE request_id=? AND status='running' AND owner_id=? AND fencing_token=?
+                    """,
+                    (
+                        _action_details_json(details),
+                        _iso(observed),
+                        row["request_id"],
+                        owner_id,
+                        int(fencing_token),
+                    ),
+                )
+                updated += 1
+            connection.commit()
+            return updated
 
     def finish_actions(
         self,

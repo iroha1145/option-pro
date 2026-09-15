@@ -61,6 +61,7 @@ import {
   visibleScanDate,
   workerActionPhase,
   writePendingStrengthTask,
+  isStrengthSnapshotPreparing,
   type StrengthScanPhase,
 } from '@/lib/screenerScanFlow';
 import {
@@ -85,6 +86,17 @@ import {
   type TierFilter,
 } from '@/components/screener/types';
 import { localeTag, t as __t } from '../i18n/core.ts';
+import {
+  algorithmPreferencePendingSync,
+  readAlgorithmPreferences,
+  writeAlgorithmPreferences,
+} from '@/lib/algorithmPreferences';
+import {
+  nextChoiceGeneration,
+  shouldApplyRemoteAlgorithmPreference,
+} from '@/lib/choiceGeneration';
+import { keepServerRankingOrder } from '@/lib/screenerSort';
+import { persistAlgorithmChoice, viewPreferencesApi } from '@/api/modules/viewPreferences';
 
 const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
 const PAGE_SIZE = 20;
@@ -112,7 +124,7 @@ function filtersEqual(a: ScanFilters, b: ScanFilters): boolean {
 }
 
 export default function Screener() {
-  const { isOwner, username } = useAccess();
+  const { isOwner, username, isSignedIn } = useAccess();
   const principal = `${isOwner ? 'owner' : 'visitor'}:${username ?? ''}`;
   const { openTicker } = useShell();
   const toast = useToast();
@@ -157,8 +169,14 @@ export default function Screener() {
   }, [profilesQ.data, universe.sectors]);
 
   /* ---------------- 扫描状态机 ---------------- */
-  const [draft, setDraft] = useState<ScanFilters>(DEFAULT_FILTERS);
-  const [applied, setApplied] = useState<ScanFilters>(DEFAULT_FILTERS);
+  const [draft, setDraft] = useState<ScanFilters>(() => ({
+    ...DEFAULT_FILTERS,
+    rankingAlgorithm: readAlgorithmPreferences(principal).screenerRankingAlgorithm,
+  }));
+  const [applied, setApplied] = useState<ScanFilters>(() => ({
+    ...DEFAULT_FILTERS,
+    rankingAlgorithm: readAlgorithmPreferences(principal).screenerRankingAlgorithm,
+  }));
   const [scanState, setScanState] = useState<ScanState>('idle');
   const [rows, setRows] = useState<ScreenerRow[] | null>(null);
   const [scanError, setScanError] = useState<ApiError | null>(null);
@@ -190,6 +208,9 @@ export default function Screener() {
   const [signalsMap, setSignalsMap] = useState<Record<string, RowSignalsState>>({});
   const signalsRef = useRef<Record<string, RowSignalsState>>({});
   const scanSeq = useRef(0);
+  const choiceGeneration = useRef(0);
+  const rankingRef = useRef(draft.rankingAlgorithm);
+  rankingRef.current = draft.rankingAlgorithm;
 
   useEffect(() => {
     // Identity changes and unmounting revoke all older UI/worker continuations.
@@ -197,6 +218,65 @@ export default function Screener() {
     setScanState((current) => current === 'scanning' ? 'idle' : current);
     return () => { scanSeq.current += 1; };
   }, [principal]);
+
+  useEffect(() => {
+    const local = readAlgorithmPreferences(principal);
+    setDraft((current) => (
+      current.rankingAlgorithm === local.screenerRankingAlgorithm
+        ? current
+        : { ...current, rankingAlgorithm: local.screenerRankingAlgorithm }
+    ));
+  }, [principal]);
+
+  useEffect(() => {
+    if (!isSignedIn) return;
+    const started = choiceGeneration.current;
+    let cancelled = false;
+    viewPreferencesApi.read().then((remote) => {
+      if (!shouldApplyRemoteAlgorithmPreference({
+        startedGeneration: started,
+        currentGeneration: choiceGeneration.current,
+        cancelled,
+        pendingLocalSync: algorithmPreferencePendingSync(principal),
+      })) return;
+      writeAlgorithmPreferences({
+        screenerRankingAlgorithm: remote.screenerRankingAlgorithm,
+        radarSortAlgorithm: remote.radarSortAlgorithm,
+      }, principal);
+      setDraft((current) => (
+        current.rankingAlgorithm === remote.screenerRankingAlgorithm
+          ? current
+          : { ...current, rankingAlgorithm: remote.screenerRankingAlgorithm }
+      ));
+    }, () => {
+      // Keep the local preference when the signed-in copy is unavailable.
+    });
+    return () => { cancelled = true; };
+  }, [isSignedIn, principal]);
+
+  const persistVisibleChoice = useCallback((rankingAlgorithm: ScanFilters['rankingAlgorithm']) => {
+    writeAlgorithmPreferences({ screenerRankingAlgorithm: rankingAlgorithm }, principal);
+    void persistAlgorithmChoice(
+      { screenerRankingAlgorithm: rankingAlgorithm },
+      isSignedIn,
+      principal,
+    ).then((result) => {
+      if (result?.syncError) {
+        toast.info?.(__t('选择已生效，但尚未同步到账号'));
+      }
+    }, () => {
+      toast.info?.(__t('选择已生效，但尚未同步到账号'));
+    });
+  }, [isSignedIn, principal, toast]);
+
+  const updateDraft = useCallback((next: ScanFilters) => {
+    const previous = rankingRef.current;
+    if (previous !== next.rankingAlgorithm) {
+      choiceGeneration.current = nextChoiceGeneration(choiceGeneration.current);
+      persistVisibleChoice(next.rankingAlgorithm);
+    }
+    setDraft(next);
+  }, [persistVisibleChoice]);
 
   const dirty = scanState === 'done' && !filtersEqual(draft, applied);
   const scanTriggerLocked = shouldLockScanTrigger({
@@ -225,6 +305,23 @@ export default function Screener() {
     // 仅演示数据保留可见扫描过程；真实接口完成后立即呈现结果。
     const minMs = isMock ? 800 + Math.random() * 700 : 0;
     try {
+      const startedChoice = choiceGeneration.current;
+      void Promise.resolve()
+        .then(() => persistAlgorithmChoice(
+          { screenerRankingAlgorithm: filters.rankingAlgorithm },
+          isSignedIn,
+          principal,
+        ))
+        .then((persisted) => {
+          if (startedChoice !== choiceGeneration.current) return;
+          if (persisted?.syncError) {
+            toast.info?.(__t('选择已生效，但尚未同步到账号'));
+          }
+        }, () => {
+          if (startedChoice !== choiceGeneration.current) return;
+          toast.info?.(__t('选择已生效，但尚未同步到账号'));
+        });
+      requireCurrent();
       const { apiParams: params, refreshParameters: requested } = buildStrengthScanRequest(filters);
 
       const scanPath = strengthScanPath(params);
@@ -283,6 +380,21 @@ export default function Screener() {
         setScanPhase('verifying');
         resetMarketReadPaths([scanPath]);
       };
+      const waitForPreparedSnapshot = async (): Promise<StrengthScanEnvelope> => {
+        const deadline = Date.now() + 120_000;
+        for (;;) {
+          requireCurrent();
+          try {
+            return expireStrengthSnapshot(await strengthApi.scanEnvelope(params, true));
+          } catch (error) {
+            requireCurrent();
+            if (!isStrengthSnapshotPreparing(error instanceof ApiError ? error : null)) throw error;
+            if (Date.now() >= deadline) throw error;
+            setScanPhase('queued');
+            await new Promise((resolve) => setTimeout(resolve, 1_500));
+          }
+        }
+      };
       const readSnapshot = async (force: boolean): Promise<StrengthScanEnvelope> => {
         // A task can finish just before its publication becomes visible on a
         // read replica. Retry that read only, without submitting another task.
@@ -299,6 +411,9 @@ export default function Screener() {
               error.bizCode === 'strength_publication_unverified'
               || error.bizCode === 'strength_snapshot_unavailable'
             );
+            if (isStrengthSnapshotPreparing(error instanceof ApiError ? error : null) && !completedAction) {
+              return waitForPreparedSnapshot();
+            }
             if (!completedAction || !notPublished) throw error;
             if (attempt >= 2) {
               clearPendingStrengthTask(completedAction.requestId);
@@ -320,25 +435,33 @@ export default function Screener() {
         await refreshSnapshot();
         submittedRefresh = true;
       }
+      const forceRead = submittedRefresh || Boolean(options.forceRefresh);
       let result: StrengthScanEnvelope;
       try {
-        result = await readSnapshot(submittedRefresh);
+        result = await readSnapshot(forceRead);
       } catch (error) {
         const snapshotMissing =
           error instanceof ApiError
           && error.code === 503
-          && error.bizCode === 'strength_snapshot_unavailable';
-        const decision = shouldSubmitStrengthRefresh({
-          isOwner,
-          isMock,
-          forceRefresh: Boolean(options.forceRefresh),
-          snapshotMissing,
-          snapshotStale: false,
-        });
-        if (submittedRefresh || !decision.submit || !snapshotMissing) throw error;
-        await refreshSnapshot();
-        submittedRefresh = true;
-        result = await readSnapshot(true);
+          && (
+            error.bizCode === 'strength_snapshot_unavailable'
+            || error.bizCode === 'strength_snapshot_preparing'
+          );
+        if (isStrengthSnapshotPreparing(error instanceof ApiError ? error : null) && !isOwner) {
+          result = await waitForPreparedSnapshot();
+        } else {
+          const decision = shouldSubmitStrengthRefresh({
+            isOwner,
+            isMock,
+            forceRefresh: Boolean(options.forceRefresh),
+            snapshotMissing,
+            snapshotStale: false,
+          });
+          if (submittedRefresh || !decision.submit || !snapshotMissing) throw error;
+          await refreshSnapshot();
+          submittedRefresh = true;
+          result = await readSnapshot(true);
+        }
       }
       const followUp = shouldSubmitStrengthRefresh({
         isOwner,
@@ -402,12 +525,18 @@ export default function Screener() {
       return true;
     } catch (e) {
       if (!isCurrent()) return;
-      setScanError(e instanceof ApiError ? e : new ApiError(500, e instanceof Error ? e.message : __t('扫描失败')));
+      const error = e instanceof ApiError ? e : new ApiError(500, e instanceof Error ? e.message : __t('扫描失败'));
+      if (error.code === 400 && /A0|algorithm|timeframe|profile|中长期/i.test(error.message)) {
+        toast.error(__t('中长期趋势排序仅支持周期=全部且偏好=均衡。请改回兼容视图，或改用原版排序。'), error.message);
+      } else if (isStrengthSnapshotPreparing(error)) {
+        toast.info?.(__t('排序数据准备中'), __t('中长期趋势排序正在后台生成，请稍候。'));
+      }
+      setScanError(error);
       setScanState('error');
       setScanPhase('failed');
       return false;
     }
-  }, [isOwner, principal]);
+  }, [isOwner, isSignedIn, principal, toast]);
 
   useEffect(() => {
     if (scanState !== 'done' || isMock) return;
@@ -529,7 +658,9 @@ export default function Screener() {
       b.strengthScore - a.strengthScore || Math.abs(b.changePct ?? 0) - Math.abs(a.changePct ?? 0) || a.ticker.localeCompare(b.ticker);
     // 摘要没取齐就维持确定性顺序：用缺失值排名会让结果取决于访问过哪些分页。
     if (sortMode === 'deterministic' || catalystSortIncomplete) {
-      out.sort(byScore);
+      if (!keepServerRankingOrder(scanMeta?.effectiveAlgorithm ?? applied.rankingAlgorithm)) {
+        out.sort(byScore);
+      }
     } else if (sortMode === 'latest') {
       const ts = (r: ScreenerRow) => {
         const c = catalysts[r.ticker];
@@ -545,7 +676,7 @@ export default function Screener() {
       out.sort((a, b) => impact(b) - impact(a) || count(b) - count(a) || byScore(a, b));
     }
     return out;
-  }, [filtered, sortMode, catalysts, catalystSortIncomplete]);
+  }, [filtered, sortMode, catalysts, catalystSortIncomplete, scanMeta?.effectiveAlgorithm, applied.rankingAlgorithm]);
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
@@ -704,7 +835,7 @@ export default function Screener() {
   }, []);
 
   const resetAllFilters = () => {
-    const filters = { ...DEFAULT_FILTERS, sectors: [] };
+    const filters = { ...DEFAULT_FILTERS, sectors: [], rankingAlgorithm: draft.rankingAlgorithm };
     setMacroToneFilter('all');
     setDraft(filters);
     // Defaults include server-side profile/timeframe. Keep the old result's
@@ -770,8 +901,14 @@ export default function Screener() {
 
   /* 服务端参数 chip 的移除只写 draft：分数是哪套参数算的必须与右侧说明同源 */
   const patchDraftOnly = useCallback((p: Partial<ScanFilters>) => {
-    setDraft((d) => ({ ...d, ...p }));
-  }, []);
+    const current = rankingRef.current;
+    const nextRanking = p.rankingAlgorithm ?? current;
+    if (current !== nextRanking) {
+      choiceGeneration.current = nextChoiceGeneration(choiceGeneration.current);
+      persistVisibleChoice(nextRanking);
+    }
+    setDraft((value) => ({ ...value, ...p }));
+  }, [persistVisibleChoice]);
   const chips = useMemo(
     () => buildChips(applied, profiles, sectorOptions, patchApplied, patchDraftOnly),
     [applied, profiles, sectorOptions, patchApplied, patchDraftOnly],
@@ -821,7 +958,7 @@ export default function Screener() {
       <div className="mt-6">
         <FilterWorkbench
           draft={draft}
-          onChange={setDraft}
+          onChange={updateDraft}
           universe={universe}
           sectorOptions={sectorOptions}
           presets={profiles}
@@ -875,6 +1012,25 @@ export default function Screener() {
                 {scanMeta?.scoreDataThrough && (
                   <SoftBadge className="whitespace-normal">
                     {__t('评分依据：{date} 完整日线', { date: visibleScanDate(scanMeta.scoreDataThrough) ?? scanMeta.scoreDataThrough })}
+                  </SoftBadge>
+                )}
+                {scanMeta?.effectiveAlgorithm === 'a0_mid_long' && (
+                  <SoftBadge data-testid="screener-effective-algorithm">
+                    {__t('中长期趋势（试用）')} · {scanMeta.scoreBasis ?? '0.5 * score_mid + 0.5 * score_long'}
+                  </SoftBadge>
+                )}
+                {scanMeta && scanMeta.effectiveAlgorithm !== 'a0_mid_long' && (
+                  <SoftBadge data-testid="screener-effective-algorithm">
+                    {__t('原版排序')} · {scanMeta.scoreBasis ?? 'ranking_score'}
+                  </SoftBadge>
+                )}
+                {scanMeta?.fallbackReason && (
+                  <SoftBadge tone="warn" className="whitespace-normal">
+                    {scanMeta.fallbackReason === 'incompatible_view'
+                      ? __t('当前视图不支持中长期趋势排序，已回退原版。')
+                      : scanMeta.fallbackReason === 'a0_scores_unavailable'
+                        ? __t('中长期趋势分数不可用，已回退原版。')
+                        : __t('已回退原版排序')}
                   </SoftBadge>
                 )}
                 {scanMeta && (
@@ -1028,8 +1184,16 @@ export default function Screener() {
                   <EmptyState
                     variant="error"
                     image="/empty-chart.svg"
-                    title={scanError?.code === 503 ? __t('扫描数据不可用') : __t('扫描失败')}
-                    description={scanError?.code === 503 ? __t('稍后刷新再试') : scanError?.message}
+                    title={
+                      isStrengthSnapshotPreparing(scanError)
+                        ? __t('排序数据准备中')
+                        : scanError?.code === 503 ? __t('扫描数据不可用') : __t('扫描失败')
+                    }
+                    description={
+                      isStrengthSnapshotPreparing(scanError)
+                        ? __t('中长期趋势排序正在后台生成，请稍候。')
+                        : scanError?.code === 503 ? __t('稍后刷新再试') : scanError?.message
+                    }
                     action={
                       <button
                         onClick={onScanRetry}
@@ -1063,6 +1227,7 @@ export default function Screener() {
                         onOpenDetail={openTicker}
                         animKey={animKey}
                         showMacro={showMacro}
+                        effectiveAlgorithm={scanMeta?.effectiveAlgorithm}
                         stale
                       />
                     </div>
@@ -1081,6 +1246,7 @@ export default function Screener() {
                         animKey={animKey}
                         page={safePage}
                         showMacro={showMacro}
+                        effectiveAlgorithm={scanMeta?.effectiveAlgorithm}
                       />
                     </div>
                   </div>
@@ -1128,6 +1294,7 @@ export default function Screener() {
                     onOpenDetail={openTicker}
                     animKey={animKey}
                     showMacro={showMacro}
+                    effectiveAlgorithm={scanMeta?.effectiveAlgorithm}
                   />
                 </div>
                 <div className={cn('md:hidden', scanState === 'scanning' && 'opacity-60')}>
@@ -1146,6 +1313,7 @@ export default function Screener() {
                        被过滤，但卡片上一个宏观读数都不显示 —— 用户看不出这些票
                        为什么留下来了。 */
                     showMacro={showMacro}
+                    effectiveAlgorithm={scanMeta?.effectiveAlgorithm}
                   />
                   {/* 移动端分页 */}
                   {totalPages > 1 && (
@@ -1268,6 +1436,11 @@ function buildChips(
     chips.push({ key: 'dv', label: __t('成交额 {v}', { v: opt?.label ?? `≥${fmtCompact(f.minDollarVol)}` }), onRemove: () => patchServer({ minDollarVol: 0 }) });
   }
   if (f.minScore != null) chips.push({ key: 'ms', label: __t('强度 ≥{n}', { n: f.minScore }), onRemove: () => patchServer({ minScore: null }) });
+  if (f.rankingAlgorithm === 'a0_mid_long') {
+    chips.push({ key: 'algo', label: __t('中长期趋势（试用）'), onRemove: () => patchServer({ rankingAlgorithm: 'follow_default' }) });
+  } else if (f.rankingAlgorithm === 'production') {
+    chips.push({ key: 'algo', label: __t('原版排序'), onRemove: () => patchServer({ rankingAlgorithm: 'follow_default' }) });
+  }
   if (f.presetId) {
     const name = profiles?.find((p) => p.id === f.presetId)?.name ?? f.presetId;
     chips.push({ key: 'preset', label: __t('预设 {name}', { name }), onRemove: () => patch({ presetId: null }) });
@@ -1285,6 +1458,8 @@ function summarizeFilters(f: ScanFilters): string {
   if (f.priceMin != null || f.priceMax != null) parts.push(__t('价格区间'));
   if (f.minDollarVol > 0) parts.push(__t('成交额≥{v}', { v: fmtCompact(f.minDollarVol) }));
   if (f.minScore != null) parts.push(__t('强度≥{n}', { n: f.minScore }));
+  if (f.rankingAlgorithm === 'a0_mid_long') parts.push(__t('中长期趋势（试用）'));
+  else if (f.rankingAlgorithm === 'production') parts.push(__t('原版排序'));
   return parts.join(' · ') || __t('默认条件');
 }
 

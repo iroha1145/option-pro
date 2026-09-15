@@ -26,8 +26,25 @@ async function expectNoDocumentOverflow(page) {
     .toBeLessThanOrEqual(1);
 }
 
+async function recoverIdentityGate(page) {
+  // Shared compose backends can 503 /access/status after earlier visual cases.
+  // Use the page's own retry; do not mount earnings behind the identity gate.
+  await expect.poll(async () => {
+    const retry = page
+      .getByRole("status")
+      .filter({ hasText: "身份暂时无法确认，请稍后重试" })
+      .getByRole("button", { name: "重试", exact: true });
+    if (await retry.isVisible()) {
+      await retry.click({ timeout: 1_000 }).catch(() => {});
+      return false;
+    }
+    return true;
+  }, { timeout: 60_000 }).toBe(true);
+}
+
 async function openEarnings(page, width) {
   await page.goto("/", { waitUntil: "domcontentloaded" });
+  await recoverIdentityGate(page);
   if (width < 1280) {
     await page.getByRole("button", { name: "更多" }).click();
     await page.getByRole("dialog", { name: "更多功能" }).getByRole("button", { name: /财报日历/ }).click();
@@ -35,6 +52,7 @@ async function openEarnings(page, width) {
     await page.getByRole("link", { name: /财报/ }).click();
   }
   await expect(page).toHaveURL(/\/earnings$/);
+  await recoverIdentityGate(page);
 }
 
 for (const viewport of VIEWPORTS) {
@@ -170,6 +188,7 @@ for (const viewport of TABLET_VIEWPORTS) {
     test.use({ viewport });
 
     test("keeps the earnings list and analysis in one unclipped column before xl", async ({ page }) => {
+      test.setTimeout(90_000);
       await openEarnings(page, viewport.width);
 
       const subject = page.locator('[aria-label="财报主体"]');

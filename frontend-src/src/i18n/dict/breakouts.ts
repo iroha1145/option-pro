@@ -224,4 +224,18 @@ export const BREAKOUTS: Dict = {
   '该股近 72 小时暂无相关催化剂': ['No catalysts for this stock in the past 72 hours', '直近72時間、この銘柄に関連するカタリストなし'],
   '事件新鲜度': ['Event freshness', 'イベント鮮度'],
   '评分构成不可用（数据不足）': ['Score breakdown unavailable (insufficient data)', 'スコア構成は利用できません（データ不足）'],
+  '排序': ['Sort', '並び替え'],
+  '跟随默认': ['Follow default', 'デフォルトに従う'],
+  '原雷达排序': ['Original radar sort', '従来のレーダー順'],
+  '日线量价条件优先（试用）': ['Daily volume-price first (trial)', '日足の値嵩条件を優先（試用）'],
+  '雷达排序算法': ['Radar sort algorithm', 'レーダー並び替えアルゴリズム'],
+  '满足固定日线量价条件的事件会在同一交易日组内优先。其余事件不删除。待收盘或数据不足时保持原顺序。': [
+    'Events that meet the fixed daily volume-price conditions move first inside the same session group. Other events stay visible. Incomplete or missing daily data keeps the original order.',
+    '固定の日足値嵩条件を満たすイベントは、同じ取引日グループ内で先に並びます。他のイベントは削除しません。未確定やデータ不足のときは従来の順序を保ちます。',
+  ],
+  '{n} 条待收盘确认': ['{n} waiting for the session close', '{n} 件は取引終了待ち'],
+  '{n} 条日线数据不足': ['{n} missing daily data', '{n} 件は日足データ不足'],
+  '日线量价优先': ['Daily volume-price first', '日足値嵩を優先'],
+  '待收盘确认': ['Waiting for the close', '取引終了待ち'],
+  '日线数据不足': ['Daily data unavailable', '日足データ不足'],
 };

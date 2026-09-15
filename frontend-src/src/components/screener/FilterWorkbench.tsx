@@ -307,8 +307,32 @@ export default function FilterWorkbench({
           <FieldLabel>{__t('返回数量')}</FieldLabel>
           <MenuSelect ariaLabel={__t("最多显示数量")} value={draft.topN} onChange={(topN) => patch({ topN })} options={TOPN_OPTIONS} />
         </div>
+        <div className="w-full min-w-0 sm:w-auto">
+          <FieldLabel>{__t('排序算法')}</FieldLabel>
+          <Segmented<ScanFilters['rankingAlgorithm']>
+            options={[
+              { value: 'follow_default', label: __t('跟随默认') },
+              { value: 'production', label: __t('原版排序') },
+              { value: 'a0_mid_long', label: __t('中长期趋势（试用）') },
+            ]}
+            value={draft.rankingAlgorithm}
+            onChange={(rankingAlgorithm) => patch({ rankingAlgorithm })}
+            scrollable
+            ariaLabel={__t('排序算法')}
+          />
+        </div>
         <ScanButton scanning={scanning} dirty={dirty} universeCount={universe.count} onScan={onScan} className="w-full sm:ml-auto sm:w-auto" />
       </motion.div>
+      {draft.rankingAlgorithm === 'a0_mid_long' && (draft.timeframe !== 'all' || draft.profile !== 'balanced') && (
+        <p className="mt-3 text-caption text-warn-700" data-testid="screener-a0-view-warning">
+          {__t('中长期趋势排序仅支持周期=全部且偏好=均衡。请改回兼容视图，或改用原版排序。')}
+        </p>
+      )}
+      {draft.rankingAlgorithm === 'a0_mid_long' && draft.timeframe === 'all' && draft.profile === 'balanced' && (
+        <p className="mt-3 text-caption text-ink-500" data-testid="screener-a0-view-note">
+          {__t('当前试用固定中长期组合：0.5×中期 + 0.5×长期。原综合分仍可查看，不作为本模式名次。')}
+        </p>
+      )}
 
       {/* 次要条件收纳；已选择的范围常驻，避免折叠后忘记当前扫描门槛。 */}
       <details className="group/filters mt-5 border-t border-line/70 pt-3" data-testid="screener-advanced-filters">

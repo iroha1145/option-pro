@@ -30,6 +30,10 @@ function harness(overrides = {}) {
     mounted: { current: true },
     getMarketReadGeneration: () => 0,
     __t: (text) => text,
+    toast: { error() {}, success() {}, info() {} },
+    persistAlgorithmChoice: async () => {},
+    choiceGeneration: { current: 0 },
+    isSignedIn: false,
     summarizeFilters: () => '',
     buildStrengthScanRequest: (filters) => ({ apiParams: { ...parameters, ...filters }, refreshParameters: { ...parameters, ...filters } }),
     detailsRef: { current: {} },
@@ -65,6 +69,7 @@ function retryLastAttempt(h) {
 
 function resetAll(h) {
   h.scope.DEFAULT_FILTERS = DEFAULT_FILTERS;
+  h.scope.draft = h.state.draft ?? DEFAULT_FILTERS;
   const start = source.indexOf('  const resetAllFilters = ');
   const end = source.indexOf('  const onTierFromHistogram', start);
   vm.runInNewContext(ts.transpileModule(`${source.slice(start, end)}\nglobalThis.resetAll = resetAllFilters;`, {
@@ -90,6 +95,7 @@ test('reset scans default server parameters and keeps old result identity throug
   await h.runScan(aggressive);
   h.state.macroToneFilter = 'neutral';
   resetAll(h);
+  await new Promise(setImmediate);
   assert.equal(h.state.macroToneFilter, 'all');
   assert.equal(h.state.draft.profile, 'balanced');
   assert.equal(h.state.draft.timeframe, 'all');
@@ -286,6 +292,49 @@ test('publication visibility retry stays bounded and never creates a second work
   assert.equal(h.state.rows[0].ticker, 'NEW');
 });
 
+test('signed-in customer polls preparing A0 snapshot without posting owner refresh', async () => {
+  let posts = 0;
+  let reads = 0;
+  const h = harness({
+    isOwner: false,
+    isSignedIn: true,
+    principal: 'account:alice',
+    runtimeApi: { workerAction: async () => { posts++; return completed; } },
+    strengthApi: {
+      scanEnvelope: async () => {
+        reads += 1;
+        if (reads < 3) throw new ApiError(503, 'preparing', { bizCode: 'strength_snapshot_preparing' });
+        return envelope('A0ROW');
+      },
+    },
+  });
+  assert.equal(await h.runScan({ rankingAlgorithm: 'a0_mid_long' }), true);
+  assert.equal(posts, 0);
+  assert.equal(reads, 3);
+  assert.equal(h.state.rows[0].ticker, 'A0ROW');
+});
+
+test('unavailable A0 snapshot is a real failure and does not post owner refresh', async () => {
+  let posts = 0;
+  let reads = 0;
+  const h = harness({
+    isOwner: false,
+    isSignedIn: true,
+    principal: 'account:alice',
+    runtimeApi: { workerAction: async () => { posts++; return completed; } },
+    strengthApi: {
+      scanEnvelope: async () => {
+        reads += 1;
+        throw new ApiError(503, 'gone', { bizCode: 'strength_snapshot_unavailable' });
+      },
+    },
+  });
+  assert.equal(await h.runScan({ rankingAlgorithm: 'a0_mid_long' }), false);
+  assert.equal(posts, 0);
+  assert.equal(reads, 1);
+  assert.equal(h.state.scanError.bizCode, 'strength_snapshot_unavailable');
+});
+
 test('post-task missing publication cannot trigger another refresh loop', async () => {
   let posts = 0;
   let reads = 0;
@@ -396,4 +445,25 @@ test('a late discovery failure cannot mark newer parameters or an unmounted page
     assert.equal(h.state.scanMeta.stale, false);
     assert.equal(h.state.scanMeta.sourceStatus, 'active');
   }
+});
+
+test('signed-in scan continues when algorithm preference persist fails', async () => {
+  const requests = [];
+  const h = harness({
+    isOwner: false,
+    isSignedIn: true,
+    persistAlgorithmChoice: async () => {
+      throw new Error('view preferences unavailable');
+    },
+    strengthApi: {
+      scanEnvelope: async (params) => {
+        requests.push(params);
+        return envelope('ALICE');
+      },
+    },
+  });
+  assert.equal(await h.runScan({ profile: 'balanced' }), true);
+  assert.equal(h.state.scanState, 'done');
+  assert.equal(h.state.rows[0].ticker, 'ALICE');
+  assert.equal(requests.length, 1);
 });

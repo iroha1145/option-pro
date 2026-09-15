@@ -16,7 +16,7 @@ from app.data_paths import get_data_paths
 from app.execution_limits import BREAKOUT_TASK_TIMEOUT_SECONDS
 from app.personal_config import get_personal_config
 
-from .runtime import TaskResult, TaskSpec
+from .runtime import TaskResult, TaskSpec, _public_error_code
 
 
 DEFAULT_TASK_NAMES = (
@@ -2005,6 +2005,34 @@ class StrengthRefreshTask:
         self._variant_retry_at: float | None = None
         self._pending_variant_parameters: dict[str, dict[str, Any]] = {}
         self._pending_variant_errors: dict[str, dict[str, Any]] = {}
+        self._action_progress_sink: Callable[[Mapping[str, Any]], Any] | None = None
+        self.settled_action_progress: dict[str, Any] = {
+            "action_completions": [],
+            "requeued_request_ids": [],
+        }
+
+    def bind_action_progress_sink(
+        self,
+        sink: Callable[[Mapping[str, Any]], Any] | None,
+    ) -> None:
+        self._action_progress_sink = sink
+
+    async def _publish_action_progress(
+        self,
+        completions: list[dict[str, Any]],
+        leftover_request_ids: Sequence[str],
+    ) -> None:
+        progress = {
+            "action_completions": list(completions),
+            "requeued_request_ids": list(dict.fromkeys(leftover_request_ids)),
+        }
+        self.settled_action_progress = progress
+        sink = self._action_progress_sink
+        if sink is None:
+            return
+        outcome = sink(progress)
+        if inspect.isawaitable(outcome):
+            await outcome
 
     def _next_scheduled_delay(self) -> float:
         delay = self._next_default_delay()
@@ -2170,34 +2198,189 @@ class StrengthRefreshTask:
             strength_scan_parameters_hash,
         )
 
-        selected: dict[str, Any] | None = None
+        self.settled_action_progress = {
+            "action_completions": [],
+            "requeued_request_ids": [],
+        }
+        selected_groups: list[tuple[str, dict[str, Any], list[str]]] = []
+        group_index: dict[str, int] = {}
+        leftover_request_ids: list[str] = []
+        action_completions: list[dict[str, Any]] = []
         for action in actions:
             details = action.get("details") if isinstance(action, dict) else None
             raw = details.get("parameters") if isinstance(details, dict) else None
-            if not isinstance(raw, dict):
-                raise ValueError("strength refresh action parameters are missing")
-            parameters = normalize_strength_scan_parameters(raw)
-            expected_hash = strength_scan_parameters_hash(parameters)
-            stored_hash = details.get("parameters_hash")
-            if stored_hash is not None and stored_hash != expected_hash:
-                raise ValueError("strength refresh action parameter hash is invalid")
-            if selected is not None and parameters != selected:
-                raise ValueError("strength refresh actions have conflicting parameters")
-            selected = parameters
-        result = await self._run(
-            selected or dict(DEFAULT_STRENGTH_SCAN_PARAMETERS)
-        )
-        if result.status == "idle" and not result.error_code:
-            digest = strength_scan_parameters_hash(
-                selected or dict(DEFAULT_STRENGTH_SCAN_PARAMETERS)
+            request_id = action.get("request_id") if isinstance(action, dict) else None
+            request_ids = [request_id] if isinstance(request_id, str) and request_id else []
+            try:
+                if not isinstance(raw, dict):
+                    raise ValueError("strength refresh action parameters are missing")
+                parameters = normalize_strength_scan_parameters(raw)
+                expected_hash = strength_scan_parameters_hash(parameters)
+                stored_hash = details.get("parameters_hash") if isinstance(details, dict) else None
+                if stored_hash is not None and stored_hash != expected_hash:
+                    raise ValueError("strength refresh action parameter hash is invalid")
+            except ValueError as exc:
+                for item_id in request_ids:
+                    action_completions.append(
+                        {
+                            "request_id": item_id,
+                            "succeeded": False,
+                            "error_code": "invalid_parameters",
+                            "parameters": raw if isinstance(raw, dict) else None,
+                            "result": {
+                                "error_type": "ValueError",
+                                "message": str(exc),
+                            },
+                        }
+                    )
+                continue
+            existing = group_index.get(expected_hash)
+            if existing is not None:
+                selected_groups[existing][2].extend(request_ids)
+                continue
+            if len(selected_groups) >= 4:
+                leftover_request_ids.extend(request_ids)
+                continue
+            group_index[expected_hash] = len(selected_groups)
+            selected_groups.append((expected_hash, parameters, request_ids))
+        selected_jobs = [parameters for _digest, parameters, _ids in selected_groups]
+        seen = set(group_index)
+        if not selected_jobs:
+            await self._publish_action_progress(action_completions, leftover_request_ids)
+            return TaskResult(
+                status="idle",
+                details={
+                    "action_completions": action_completions,
+                    "requeued_request_ids": leftover_request_ids,
+                },
             )
-            self._pending_variant_parameters.pop(digest, None)
-            self._pending_variant_errors.pop(digest, None)
-            if not self._pending_variant_parameters:
-                self._variant_retry_at = None
+        from app.services.strength.variant_demand import (
+            complete_strength_variant_demand,
+            list_pending_strength_variant_demands,
+        )
+
+        result: TaskResult | None = None
+        pending_groups = list(selected_groups)
+
+        def remaining_ids() -> list[str]:
+            leftover = list(leftover_request_ids)
+            leftover.extend(
+                request_id
+                for _digest, _parameters, request_ids in pending_groups
+                for request_id in request_ids
+            )
+            return leftover
+
+        await self._publish_action_progress(action_completions, remaining_ids())
+
+        def record_group(
+            digest: str,
+            selected: dict[str, Any],
+            request_ids: list[str],
+            group_result: TaskResult,
+        ) -> None:
+            outcome = (
+                "completed"
+                if group_result.status == "idle" and not group_result.error_code
+                else "failed"
+            )
+            complete_strength_variant_demand(
+                selected,
+                status=outcome,
+                error_code=group_result.error_code,
+            )
+            if group_result.status == "idle" and not group_result.error_code:
+                self._pending_variant_parameters.pop(digest, None)
+                self._pending_variant_errors.pop(digest, None)
+            compact = {
+                key: value
+                for key, value in dict(group_result.details).items()
+                if key not in {"action_completions", "requeued_request_ids"}
+            }
+            succeeded = group_result.status == "idle" and not group_result.error_code
+            for request_id in request_ids:
+                action_completions.append(
+                    {
+                        "request_id": request_id,
+                        "succeeded": succeeded,
+                        "error_code": group_result.error_code,
+                        "parameters_hash": digest,
+                        "parameters": selected,
+                        "result": compact,
+                    }
+                )
+
+        async def run_side_job(parameters: dict[str, Any]) -> None:
+            try:
+                side = await self._run(parameters)
+            except asyncio.CancelledError:
+                await self._publish_action_progress(action_completions, remaining_ids())
+                raise
+            except Exception as error:
+                complete_strength_variant_demand(
+                    parameters,
+                    status="failed",
+                    error_code=_public_error_code(error),
+                )
+                return
+            complete_strength_variant_demand(
+                parameters,
+                status="completed" if side.status == "idle" and not side.error_code else "failed",
+                error_code=side.error_code,
+            )
+
+        while pending_groups:
+            digest, selected, request_ids = pending_groups.pop(0)
+            try:
+                result = await self._run(selected)
+            except asyncio.CancelledError:
+                pending_groups.insert(0, (digest, selected, request_ids))
+                await self._publish_action_progress(action_completions, remaining_ids())
+                raise
+            except Exception as error:
+                error_code = _public_error_code(error)
+                result = TaskResult(
+                    status="degraded",
+                    error_code=error_code,
+                    details={
+                        "parameters": selected,
+                        "parameters_hash": digest,
+                        "error_type": type(error).__name__,
+                        "published": False,
+                    },
+                )
+                record_group(digest, selected, request_ids, result)
+                await self._publish_action_progress(action_completions, remaining_ids())
+                continue
+            record_group(digest, selected, request_ids, result)
+            await self._publish_action_progress(action_completions, remaining_ids())
+        assert result is not None
+        if result.status == "idle":
+            from app.api.strength import a0_companion_for_admin_default
+
+            companion = a0_companion_for_admin_default(selected_jobs[0])
+            if companion is not None:
+                companion_hash = strength_scan_parameters_hash(companion)
+                if companion_hash not in seen:
+                    await run_side_job(companion)
+        extras = [
+            item
+            for item in list_pending_strength_variant_demands()
+            if strength_scan_parameters_hash(item) not in seen
+        ][:4]
+        for parameters in extras:
+            await run_side_job(parameters)
+        if result.status == "idle" and not result.error_code and not self._pending_variant_parameters:
+            self._variant_retry_at = None
+        details = dict(result.details)
+        details["action_completions"] = action_completions
+        leftover = remaining_ids()
+        details["requeued_request_ids"] = leftover
+        if leftover:
+            details["leftover_mode"] = "immediate"
         return TaskResult(
             status=result.status,
-            details=result.details,
+            details=details,
             next_delay_seconds=self._next_scheduled_delay(),
             error_code=result.error_code,
         )
@@ -2239,11 +2422,57 @@ class StrengthRefreshTask:
                 )
             except (OSError, TypeError, ValueError):
                 extras = []
+            try:
+                from app.api.strength import a0_companion_for_admin_default
+
+                # Do not shadow-scan A0 on every cycle. Preheat only when the
+                # admin default actually needs that snapshot identity.
+                companion = a0_companion_for_admin_default()
+                if companion is not None and companion not in extras:
+                    extras = [companion, *extras][:4]
+            except Exception:
+                pass
         elif self._variant_retry_at is not None and now >= self._variant_retry_at:
             # Retry exactly the failed set, even if reads or successful writes
             # have changed the recent-file ordering since the scheduled round.
             extras = list(self._pending_variant_parameters.values())[:4]
             self._variant_retry_at = None
+        try:
+            from app.services.strength.variant_demand import (
+                complete_strength_variant_demand,
+                list_pending_strength_variant_demands,
+            )
+
+            pending_demands = list_pending_strength_variant_demands()
+        except Exception:
+            complete_strength_variant_demand = None  # type: ignore[assignment]
+            pending_demands = []
+        if pending_demands:
+            merged = list(extras)
+            seen_hashes: set[str] = set()
+            for item in extras:
+                try:
+                    seen_hashes.add(
+                        strength_scan_parameters_hash(
+                            normalize_strength_scan_parameters(item)
+                        )
+                    )
+                except (TypeError, ValueError):
+                    continue
+            for item in pending_demands:
+                try:
+                    digest = strength_scan_parameters_hash(
+                        normalize_strength_scan_parameters(item)
+                    )
+                except (TypeError, ValueError):
+                    continue
+                if digest in seen_hashes:
+                    continue
+                seen_hashes.add(digest)
+                merged.append(item)
+                if len(merged) >= 4:
+                    break
+            extras = merged
         published_count = 0
         kept_count = 0
         failed_count = 0
@@ -2259,8 +2488,24 @@ class StrengthRefreshTask:
                 self._pending_variant_parameters[digest] = dict(parameters)
             try:
                 variant = await self._run(parameters)
+                if complete_strength_variant_demand is not None:
+                    complete_strength_variant_demand(
+                        parameters,
+                        status=(
+                            "completed"
+                            if variant.status == "idle" and not variant.error_code
+                            else "failed"
+                        ),
+                        error_code=variant.error_code,
+                    )
             except Exception as exc:
                 failed_count += 1
+                if complete_strength_variant_demand is not None:
+                    complete_strength_variant_demand(
+                        parameters,
+                        status="failed",
+                        error_code="strength_variant_exception",
+                    )
                 variant_errors.append(
                     {
                         "parameters_hash": digest,
@@ -2354,6 +2599,7 @@ class BreakoutTask:
         self._settings: Any = None
         self._repository: Any = None
         self._service: Any = None
+        self._clock: Any = None
 
     async def _prepare(self) -> bool:
         if self._settings is not None:
@@ -2376,6 +2622,34 @@ class BreakoutTask:
             return float(self._settings.scan_interval_regular_seconds)
         return float(self._settings.scan_interval_closed_seconds)
 
+    def _paused_delay(self, session: Any, payload: Mapping[str, Any]) -> float:
+        delay = self._interval(str(session) if session else None)
+        if str(session or "") in {"premarket", "regular"}:
+            return delay
+        retry_after = payload.get("t1_retry_after_seconds")
+        if retry_after is not None:
+            try:
+                delay = min(delay, max(0.0, float(retry_after)))
+            except (TypeError, ValueError):
+                pass
+        next_session_at = payload.get("next_session_at")
+        if next_session_at:
+            try:
+                if isinstance(next_session_at, datetime):
+                    target = next_session_at
+                else:
+                    target = datetime.fromisoformat(str(next_session_at).replace("Z", "+00:00"))
+                if target.tzinfo is None:
+                    target = target.replace(tzinfo=timezone.utc)
+                clock = self._clock
+                now = clock.now() if clock is not None and hasattr(clock, "now") else datetime.now(timezone.utc)
+                remaining = (target.astimezone(timezone.utc) - now.astimezone(timezone.utc)).total_seconds()
+                if remaining >= 0:
+                    delay = min(delay, remaining)
+            except (TypeError, ValueError):
+                pass
+        return delay
+
     @bind_trusted_system_task
     async def __call__(self) -> TaskResult:
         if not await self._prepare():
@@ -2386,6 +2660,7 @@ class BreakoutTask:
             self._settings,
             self._repository,
             scan_service=self._service,
+            clock=self._clock,
             owner_id=self.owner_id,
             maximum_loop_stall_seconds=(
                 BREAKOUT_TASK_TIMEOUT_SECONDS
@@ -2395,7 +2670,7 @@ class BreakoutTask:
         payload = await worker.run_once()
         status = str(payload.get("status") or "degraded")
         session = payload.get("session")
-        delay = self._interval(str(session) if session else None)
+        delay = self._paused_delay(session, payload)
         if status in {"degraded", "locked"}:
             return TaskResult(
                 status="degraded",
@@ -2410,7 +2685,14 @@ class BreakoutTask:
         if status == "paused":
             return TaskResult(
                 status="paused",
-                details={"reason": payload.get("reason"), "session": session},
+                details={
+                    "reason": payload.get("reason"),
+                    "session": session,
+                    "t1_completion": payload.get("t1_completion")
+                    if isinstance(payload, Mapping)
+                    else None,
+                    "t1_retry_after_seconds": payload.get("t1_retry_after_seconds"),
+                },
                 next_delay_seconds=delay,
             )
         return TaskResult(

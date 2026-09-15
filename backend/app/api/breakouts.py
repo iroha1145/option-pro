@@ -8,9 +8,18 @@ from datetime import date as CalendarDate
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
+from app.access import current_request_is_owner, request_account_session
+from app.services.algorithm_diagnostics import record_radar_resolution
+from app.services.algorithm_modes import (
+    PRODUCTION_ALGORITHM,
+    T1_ALGORITHM,
+    UnknownAlgorithmError,
+    admin_algorithm_defaults,
+    resolve_radar_algorithm,
+)
 from app.services.breakouts.clock import MarketClock
 from app.services.breakouts.anchors import anchor_levels, resolve_event_anchor
 from app.services.breakouts.config import BreakoutSettings, get_breakout_settings
@@ -30,6 +39,9 @@ from app.services.breakouts.repository import (
 from app.services.strength.market_shape import MARKET_SHAPE_VERSION
 from app.services.strength.scoring import SCORE_VERSION as STRENGTH_SCORE_VERSION
 from app.public_stock_data import register_public_stock_demand
+from app.services.runtime_settings import get_effective_runtime_settings
+from app.services.view_preferences import get_view_preference_store, principal_for_request
+from app.services.breakouts.t1_priority import apply_t1_stable_boost, event_t1_status
 
 
 router = APIRouter(prefix="/api/breakouts", tags=["breakouts"])
@@ -129,6 +141,8 @@ class BreakoutEventResponse(_ResponseModel):
     source_status: dict[str, Any]
     provenance: dict[str, Any]
     versions: dict[str, str]
+    t1_status: Optional[str] = None
+    t1_priority: Optional[dict[str, Any]] = None
 
 
 class BreakoutRootResponse(_ResponseModel):
@@ -145,10 +159,18 @@ class BreakoutRootResponse(_ResponseModel):
     market_session: Optional[str] = None
     next_session_at: Optional[AwareDatetime] = None
     failure_domain: Optional[str] = None
+    requested_algorithm: Optional[str] = None
+    effective_algorithm: Optional[str] = None
+    algorithm_version: Optional[str] = None
+    score_basis: Optional[str] = None
+    resolution_source: Optional[str] = None
 
 
 class BreakoutEventPageResponse(BreakoutRootResponse):
     next_cursor: Optional[str] = None
+    cursor_stale: bool = False
+    restart_required: bool = False
+    t1_view: Optional[str] = None
 
 
 class BreakoutEventDetailResponse(_ResponseModel):
@@ -193,6 +215,36 @@ class BreakoutStatusResponse(_ResponseModel):
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def resolve_radar_for_request(request: Any, requested: Any = None) -> Any:
+    account = request_account_session(request)
+    account_id = getattr(account, "user_id", None) if account is not None else None
+    principal = principal_for_request(
+        is_owner=current_request_is_owner(),
+        account_id=str(account_id) if account_id else None,
+    )
+    user_choice = None
+    if principal is not None:
+        user_choice = get_view_preference_store().read(principal).radar_sort_algorithm
+    try:
+        admin_default = admin_algorithm_defaults(get_effective_runtime_settings())
+    except Exception:
+        admin_default = {"radar_sort_algorithm": PRODUCTION_ALGORITHM}
+    return resolve_radar_algorithm(
+        requested=requested,
+        user_choice=user_choice,
+        admin_default=admin_default["radar_sort_algorithm"],
+    )
+
+
+def _with_algorithm_metadata(result: Any, resolution: Any) -> Any:
+    result.requested_algorithm = resolution.requested
+    result.effective_algorithm = resolution.effective
+    result.algorithm_version = resolution.version
+    result.score_basis = resolution.score_basis
+    result.resolution_source = resolution.source
+    return result
 
 
 def _versions(settings: BreakoutSettings, stored: Any = None) -> dict[str, str]:
@@ -486,8 +538,17 @@ def _public_event(
             "pivot_id": stored.get("pivot_id"),
             "feature_cutoff_at": features.get("feature_cutoff_at"),
             "calculation_cutoff_at": features.get("calculation_cutoff_at"),
+            "t1_priority": features.get("t1_priority") or stored.get("t1_priority"),
         },
         versions=_versions(settings, stored.get("versions")),
+        t1_status=event_t1_status(stored),
+        t1_priority=(
+            dict(features.get("t1_priority"))
+            if isinstance(features.get("t1_priority"), dict)
+            else dict(stored.get("t1_priority"))
+            if isinstance(stored.get("t1_priority"), dict)
+            else None
+        ),
     )
 
 
@@ -661,7 +722,17 @@ def _root_from_scan(
 
 
 @router.get("/current", response_model=BreakoutRootResponse)
-def current() -> BreakoutRootResponse:
+def current(
+    request: Request,
+    sort_algorithm: Optional[str] = None,
+) -> BreakoutRootResponse:
+    try:
+        resolution = resolve_radar_for_request(request, sort_algorithm)
+    except UnknownAlgorithmError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
     settings = get_breakout_settings()
     if not settings.enabled:
         return _unavailable_root(
@@ -702,7 +773,14 @@ def current() -> BreakoutRootResponse:
             database_status="active",
         )
     stored_scan = dict(scan)
-    stored_scan["events"] = _live_overlay(repository, list(stored_scan.get("events") or []))
+    stored_events = _live_overlay(repository, list(stored_scan.get("events") or []))
+    try:
+        stored_events = repository.overlay_t1_evaluations(stored_events)
+    except (OSError, ValueError, sqlite3.Error, BreakoutRepositoryError):
+        logger.warning("Could not load T1 evaluation overlay")
+    if resolution.effective == T1_ALGORITHM:
+        stored_events = apply_t1_stable_boost(stored_events)
+    stored_scan["events"] = stored_events
     result = _root_from_scan(
         settings,
         stored_scan,
@@ -712,12 +790,15 @@ def current() -> BreakoutRootResponse:
             completed_snapshot=stored_scan,
         ),
     )
+    result = _with_algorithm_metadata(result, resolution)
+    record_radar_resolution(resolution)
     _register_displayed_stocks(result.events)
     return result
 
 
 @router.get("/events", response_model=BreakoutEventPageResponse)
 def events(
+    request: Request,
     date: Optional[CalendarDate] = Query(default=None),
     ticker: Optional[str] = Query(default=None, max_length=15),
     setup_type: Optional[BreakoutSetupType] = None,
@@ -729,7 +810,15 @@ def events(
     min_priority: Optional[float] = Query(default=None, ge=0, le=100),
     limit: int = Query(default=50, ge=1, le=200),
     cursor: Optional[str] = Query(default=None, max_length=2048),
+    sort_algorithm: Optional[str] = None,
 ) -> BreakoutEventPageResponse:
+    try:
+        resolution = resolve_radar_for_request(request, sort_algorithm)
+    except UnknownAlgorithmError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
     settings = get_breakout_settings()
     if not settings.enabled:
         root = _unavailable_root(
@@ -758,6 +847,7 @@ def events(
             min_priority=min_priority,
             limit=limit,
             cursor=cursor,
+            sort_algorithm=resolution.effective,
         )
     except InvalidCursorError as exc:
         raise HTTPException(status_code=400, detail="Invalid or expired cursor") from exc
@@ -802,12 +892,17 @@ def events(
         ],
         scan_run_id=page.get("scan_run_id"),
         next_cursor=page.get("next_cursor"),
+        cursor_stale=bool(page.get("cursor_stale")),
+        restart_required=bool(page.get("restart_required")),
+        t1_view=page.get("t1_view") if isinstance(page.get("t1_view"), str) else None,
         runtime_status=read_state.status,
         runtime_reason=read_state.reason,
         market_session=read_state.details.get("market_session"),
         next_session_at=read_state.details.get("next_session_at"),
         failure_domain=read_state.details.get("failure_domain"),
     )
+    result = _with_algorithm_metadata(result, resolution)
+    record_radar_resolution(resolution)
     _register_displayed_stocks(result.events)
     return result
 
@@ -822,6 +917,10 @@ def event_detail(event_id: str) -> BreakoutEventDetailResponse:
         event = repository.get_event(event_id)
         if event is not None:
             event = _live_overlay(repository, [event], with_transitions=True)[0]
+            try:
+                event = repository.overlay_t1_evaluations([event])[0]
+            except (OSError, ValueError, sqlite3.Error, BreakoutRepositoryError):
+                logger.warning("Could not load T1 evaluation overlay")
     except SchemaVersionError as exc:
         raise HTTPException(
             status_code=503,

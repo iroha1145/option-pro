@@ -175,6 +175,18 @@ export function resetMarketReadPaths(paths: string[]): void {
   }
 }
 
+/** Drop every cached scan/radar identity that starts with the given prefixes. */
+export function resetMarketReadPrefixes(prefixes: string[]): void {
+  const keys = new Set<string>();
+  for (const key of [...cache.keys(), ...inFlight.keys(), ...pathVersions.keys()]) {
+    if (prefixes.some((prefix) => key === prefix || key.startsWith(`${prefix}?`) || key.startsWith(prefix))) {
+      keys.add(key);
+    }
+  }
+  for (const prefix of prefixes) keys.add(prefix);
+  resetMarketReadPaths([...keys]);
+}
+
 /** 身份切换时作废所有旧请求的写回能力，并清空缓存与退避状态。 */
 export function resetMarketReadState(): void {
   stateGeneration += 1;

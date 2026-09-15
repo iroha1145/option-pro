@@ -17,9 +17,13 @@ import {
 } from '@/api/modules/admin';
 import { useAccess } from '@/hooks/useAccess';
 import { useToast } from '@/hooks/useToast';
+import { invalidateQueryPaths } from '@/api/queryRegistry';
+import { resetMarketReadPrefixes } from '@/api/marketRead';
+import { bumpAlgorithmViewGeneration } from '@/lib/algorithmView';
 import { Led } from './bits';
 import Icon from '@/components/icons';
 import { cn } from '@/lib/utils';
+import Segmented from '@/components/shared/Segmented';
 import Switch from '@/components/shared/Switch';
 import { fmtRelative } from '@/lib/format';
 import { t as __t } from '../../i18n/core.ts';
@@ -103,7 +107,12 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
   const [workerErr, setWorkerErr] = useState<string | null>(null);
   const [doc, setDoc] = useState<RuntimeDoc | null>(null);
   const [docErr, setDocErr] = useState<string | null>(null);
-  const [draft, setDraft] = useState<{ manual: boolean; scheduled: boolean } | null>(null);
+  const [draft, setDraft] = useState<{
+    manual: boolean;
+    scheduled: boolean;
+    screenerRankingAlgorithm: 'production' | 'a0_mid_long';
+    radarSortAlgorithm: 'production' | 't1_daily_priority';
+  } | null>(null);
   const [saving, setSaving] = useState(false);
 
   const loadOwnerState = useCallback(async () => {
@@ -118,7 +127,12 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
       (d) => {
         setDoc(d);
         setDocErr(null);
-        setDraft({ manual: d.toggles.manualAnalysisEnabled ?? false, scheduled: d.toggles.scheduledAnalysisEnabled ?? false });
+        setDraft({
+          manual: d.toggles.manualAnalysisEnabled ?? false,
+          scheduled: d.toggles.scheduledAnalysisEnabled ?? false,
+          screenerRankingAlgorithm: d.algorithms.screenerRankingAlgorithm,
+          radarSortAlgorithm: d.algorithms.radarSortAlgorithm,
+        });
       },
       (e) => setDocErr(errText(e)),
     );
@@ -198,12 +212,27 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
     if (!doc || !draft) return;
     setSaving(true);
     try {
-      const next = await adminApi.updateRuntimeSettings(doc.version, {
-        manualAnalysisEnabled: draft.manual,
-        scheduledAnalysisEnabled: draft.scheduled,
-      });
+      const next = await adminApi.updateRuntimeSettings(
+        doc.version,
+        {
+          manualAnalysisEnabled: draft.manual,
+          scheduledAnalysisEnabled: draft.scheduled,
+        },
+        {
+          screenerRankingAlgorithm: draft.screenerRankingAlgorithm,
+          radarSortAlgorithm: draft.radarSortAlgorithm,
+        },
+      );
       setDoc(next);
-      setDraft({ manual: next.toggles.manualAnalysisEnabled ?? false, scheduled: next.toggles.scheduledAnalysisEnabled ?? false });
+      setDraft({
+        manual: next.toggles.manualAnalysisEnabled ?? false,
+        scheduled: next.toggles.scheduledAnalysisEnabled ?? false,
+        screenerRankingAlgorithm: next.algorithms.screenerRankingAlgorithm,
+        radarSortAlgorithm: next.algorithms.radarSortAlgorithm,
+      });
+      invalidateQueryPaths(['/breakouts/current', '/breakouts/events'], { reload: true });
+      resetMarketReadPrefixes(['/strength/scan']);
+      bumpAlgorithmViewGeneration();
       toast.success(__t('运行设置已保存'), __t('版本 v{version}', { version: next.version }));
     } catch (e) {
       if (e instanceof ApiError && (e.bizCode === 'version_conflict' || e.code === 409)) {
@@ -229,7 +258,15 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
       }
       const next = await adminApi.rollbackRuntimeSettings(doc.version, prev.version);
       setDoc(next);
-      setDraft({ manual: next.toggles.manualAnalysisEnabled ?? false, scheduled: next.toggles.scheduledAnalysisEnabled ?? false });
+      setDraft({
+        manual: next.toggles.manualAnalysisEnabled ?? false,
+        scheduled: next.toggles.scheduledAnalysisEnabled ?? false,
+        screenerRankingAlgorithm: next.algorithms.screenerRankingAlgorithm,
+        radarSortAlgorithm: next.algorithms.radarSortAlgorithm,
+      });
+      invalidateQueryPaths(['/breakouts/current', '/breakouts/events'], { reload: true });
+      resetMarketReadPrefixes(['/strength/scan']);
+      bumpAlgorithmViewGeneration();
       toast.success(__t('已回滚到 v{version}', { version: prev.version }), __t('当前版本 v{version}', { version: next.version }));
     } catch (e) {
       toast.error(__t('回滚失败'), errText(e));
@@ -240,7 +277,12 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
 
   if (!isOwner) return null;
 
-  const dirty = !!doc && !!draft && (draft.manual !== (doc.toggles.manualAnalysisEnabled ?? false) || draft.scheduled !== (doc.toggles.scheduledAnalysisEnabled ?? false));
+  const dirty = !!doc && !!draft && (
+    draft.manual !== (doc.toggles.manualAnalysisEnabled ?? false)
+    || draft.scheduled !== (doc.toggles.scheduledAnalysisEnabled ?? false)
+    || draft.screenerRankingAlgorithm !== doc.algorithms.screenerRankingAlgorithm
+    || draft.radarSortAlgorithm !== doc.algorithms.radarSortAlgorithm
+  );
 
   return (
     /* 后续区块 rise-in 减量：直接呈现 */
@@ -318,6 +360,41 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
                   <div className="space-y-2">
                     <Toggle label={__t("允许手动分析")} value={draft.manual} onChange={(v) => setDraft({ ...draft, manual: v })} />
                     <Toggle label={__t("定时分析")} value={draft.scheduled} onChange={(v) => setDraft({ ...draft, scheduled: v })} />
+                    <div className="rounded-md border border-line bg-card-warm px-3 py-2">
+                      <span className="mb-1.5 block text-caption text-ink-700">{__t('选股默认算法')}</span>
+                      <Segmented<'production' | 'a0_mid_long'>
+                        ariaLabel={__t('选股默认算法')}
+                        scrollable
+                        options={[
+                          { value: 'production', label: __t('原版排序') },
+                          { value: 'a0_mid_long', label: __t('中长期趋势（试用）') },
+                        ]}
+                        value={draft.screenerRankingAlgorithm}
+                        onChange={(screenerRankingAlgorithm) => setDraft({
+                          ...draft,
+                          screenerRankingAlgorithm,
+                        })}
+                      />
+                    </div>
+                    <div className="rounded-md border border-line bg-card-warm px-3 py-2">
+                      <span className="mb-1.5 block text-caption text-ink-700">{__t('雷达默认排序')}</span>
+                      <Segmented<'production' | 't1_daily_priority'>
+                        ariaLabel={__t('雷达默认排序')}
+                        scrollable
+                        options={[
+                          { value: 'production', label: __t('原雷达排序') },
+                          { value: 't1_daily_priority', label: __t('日线量价条件优先（试用）') },
+                        ]}
+                        value={draft.radarSortAlgorithm}
+                        onChange={(radarSortAlgorithm) => setDraft({
+                          ...draft,
+                          radarSortAlgorithm,
+                        })}
+                      />
+                    </div>
+                    <p className="text-micro text-ink-400">
+                      {__t('只影响未指定算法或选择跟随默认的请求。用户已明确选择原版时不会被覆盖。')}
+                    </p>
                     <div className="flex items-center justify-end gap-2 pt-1">
                       <button
                         onClick={() => void rollback()}

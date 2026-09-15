@@ -37,6 +37,17 @@ from app.services.strength.marketdata import (
 )
 from app.services.strength.market_regime import MARKET_BENCHMARKS, compute_market_regime
 from app.services.strength.market_shape import MARKET_SHAPE_VERSION
+from app.services.algorithm_modes import (
+    A0_ALGORITHM,
+    A0_UNAVAILABLE,
+    PRODUCTION_ALGORITHM,
+    screener_score_basis,
+    screener_version,
+)
+from app.services.strength.ranking_variants import (
+    a0_request_can_score,
+    apply_a0_mid_long,
+)
 from app.services.strength.scoring import (
     FEATURE_VERSION as STRENGTH_FEATURE_VERSION,
     NORMALIZATION_VERSION as STRENGTH_NORMALIZATION_VERSION,
@@ -1601,6 +1612,15 @@ def _combined_options_status(yahoo_status: dict[str, Any], marketdata_status: di
     }
 
 
+def _annotate_production_sort(rows: list[dict[str, Any]]) -> None:
+    for item in rows:
+        item.setdefault("sort_score", item.get("ranking_score"))
+        item.setdefault("sort_basis", "ranking_score")
+        item.setdefault("sort_algorithm", PRODUCTION_ALGORITHM)
+        item.setdefault("sort_algorithm_version", STRENGTH_SCORE_VERSION)
+        item.setdefault("a0_available", None)
+
+
 def _scan_sync(
     *,
     universe: str,
@@ -1612,6 +1632,7 @@ def _scan_sync(
     min_avg_dollar_volume: float,
     include_options: bool = True,
     raw_history: pd.DataFrame | None = None,
+    ranking_algorithm: str = PRODUCTION_ALGORITHM,
 ) -> dict[str, Any]:
     from app.services.breakouts.config import get_breakout_settings
 
@@ -1797,9 +1818,19 @@ def _scan_sync(
             "message": "单标的查询跳过期权粗筛（性能优化）",
         }
     _refresh_classifications(view_rows)
-    _sort_scored(view_rows, timeframe)
-    for selected_rank, item in enumerate(view_rows, start=1):
-        item["selected_view_rank"] = selected_rank
+    effective_ranking = ranking_algorithm or PRODUCTION_ALGORITHM
+    ranking_fallback_reason = None
+    if effective_ranking == A0_ALGORITHM:
+        if not a0_request_can_score(view_rows):
+            ranking_fallback_reason = A0_UNAVAILABLE
+            effective_ranking = PRODUCTION_ALGORITHM
+        else:
+            view_rows = apply_a0_mid_long(view_rows)
+    if effective_ranking != A0_ALGORITHM:
+        _sort_scored(view_rows, timeframe)
+        for selected_rank, item in enumerate(view_rows, start=1):
+            item["selected_view_rank"] = selected_rank
+        _annotate_production_sort(view_rows)
     limited = view_rows[:top]
     finnhub_status = enrich_rows_with_finnhub(limited)
     if include_options:
@@ -1807,7 +1838,9 @@ def _scan_sync(
     else:
         marketdata_status = {"provider": "MarketData.app", "status": "skipped", "configured": False, "enriched": 0, "message": "单标的查询跳过期权增强"}
     _refresh_classifications(limited)
-    _sort_scored(limited, timeframe)
+    if effective_ranking != A0_ALGORITHM:
+        _sort_scored(limited, timeframe)
+        _annotate_production_sort(limited)
     # Shadow only, computed after the production ordering is fixed: attaching it
     # earlier would invite it to leak into a sort key. Nothing below reads these
     # fields, and _sort_scored has already run.
@@ -1838,7 +1871,17 @@ def _scan_sync(
             "min_avg_dollar_volume": min_avg_dollar_volume,
             "range_persistence_mode": breakout_settings.range_persistence_mode,
             "range_persistence_version": breakout_settings.range_persistence_version,
+            **(
+                {"ranking_algorithm": ranking_algorithm}
+                if (ranking_algorithm or PRODUCTION_ALGORITHM) != PRODUCTION_ALGORITHM
+                else {}
+            ),
         },
+        "requested_algorithm": ranking_algorithm or PRODUCTION_ALGORITHM,
+        "effective_algorithm": effective_ranking,
+        "algorithm_version": screener_version(effective_ranking),
+        "score_basis": screener_score_basis(effective_ranking),
+        "fallback_reason": ranking_fallback_reason,
         "market_regime": market,
         "market_context": market.get("market_context", {}),
         "spread_matrix": market.get("spread_matrix", {}),
@@ -1900,6 +1943,7 @@ async def scan_strength(
     min_price: float = 5.0,
     min_avg_dollar_volume: float = 10_000_000,
     include_options: bool = True,
+    ranking_algorithm: str = PRODUCTION_ALGORITHM,
     force_refresh: bool = False,
 ) -> dict[str, Any]:
     settings = get_settings()
@@ -1920,6 +1964,11 @@ async def scan_strength(
         f":score:{STRENGTH_SCORE_VERSION}:{STRENGTH_FEATURE_VERSION}:{STRENGTH_NORMALIZATION_VERSION}"
         f":canonical-universe:themes:{MARKET_SHAPE_VERSION}"
     )
+    if (ranking_algorithm or PRODUCTION_ALGORITHM) != PRODUCTION_ALGORITHM:
+        key = (
+            f"{key}:rank:{ranking_algorithm}:"
+            f"{screener_version(ranking_algorithm)}"
+        )
 
     async def produce() -> dict[str, Any]:
         import asyncio
@@ -1976,6 +2025,7 @@ async def scan_strength(
             min_avg_dollar_volume=min_avg_dollar_volume,
             include_options=include_options,
             raw_history=raw_history,
+            ranking_algorithm=ranking_algorithm or PRODUCTION_ALGORITHM,
         )
 
     if force_refresh:

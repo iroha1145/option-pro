@@ -69,6 +69,7 @@ function harness(t) {
     '@/lib/identityRetry': { identityRetryDelayMs: () => 1000 },
     '@/api/sharedRead': { dropSharedReads() {} }, '@/api/queryRegistry': { setQueryPrincipal() {} },
     '@/api/marketRead': { resetMarketReadState() {} }, '@/components/catalysts/api': { clearCatalystReadCache() {} },
+    '@/lib/viewPreferenceWrites': { bindPreferenceWritePrincipal() {}, invalidatePreferenceWriteQueue() {} },
   }, env);
   const read = runner.mount(() => AccessProvider({ children: null }));
   t.after(() => runner.unmount());

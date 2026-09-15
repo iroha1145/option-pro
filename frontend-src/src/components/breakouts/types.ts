@@ -176,6 +176,8 @@ export interface BreakoutEventFull extends BreakoutEventDetail {
   macro_shadow_status: string | null;
   macro_supporting_factors: MacroFitDriver[];
   macro_opposing_factors: MacroFitDriver[];
+  t1_status?: string | null;
+  t1_priority?: Record<string, unknown> | null;
 }
 
 /** 当日信号（/breakouts/current 的 events[]，叠加 BreakoutSignal 展示字段） */

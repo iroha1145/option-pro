@@ -17,31 +17,49 @@ import {
 import { t } from '../../i18n/core.ts';
 
 /* ---------------- 强度分：Mono 15 600 + 64px 强度条（与移动卡片共用固定分档） ---------------- */
-export function ScoreCell({ score }: { score: number; index: number }) {
+export function ScoreCell({
+  score,
+  caption,
+}: {
+  score: number | null;
+  index: number;
+  caption?: string | null;
+}) {
+  if (score == null || !Number.isFinite(score)) {
+    return (
+      <span className="inline-flex flex-col gap-0.5">
+        <span className="font-mono text-body-s text-ink-400 tnum">—</span>
+        {caption ? <span className="text-micro text-ink-400">{caption}</span> : null}
+      </span>
+    );
+  }
   const strength = screenerStrengthPresentation(score);
   return (
-    <span className="inline-flex items-center gap-2.5" title={`${strength.band} ${strength.label}`}>
-      {/* 固定宽度 + 右对齐 + 统一一位小数：分数字符数不一（84 是两位、84.4 是四位）
-          会把后面的横条推到各行不同的 x 上，整列看起来歪歪扭扭。tnum 只保证数字等宽，
-          管不了字符个数，所以既要定宽也要定小数位（JS 数字 84.0 会打印成 84）。 */}
-      <SoftBadge tone={strength.badgeTone} className="metric-value w-[3.25rem] shrink-0 justify-end text-[15px] leading-[20px] font-semibold tnum">
-        {score.toFixed(1)}
-      </SoftBadge>
-      <span
-        className="strength-track h-1 w-16 overflow-hidden rounded-pill bg-paper"
-        role="progressbar"
-        aria-label={t('强度分 {score}，{band} {label}', { score, band: strength.band, label: strength.label })}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={score}
-        data-strength-band={strength.band}
-        data-strength-tone={strength.tone}
-      >
+    <span className="inline-flex flex-col gap-0.5">
+      <span className="inline-flex items-center gap-2.5" title={`${strength.band} ${strength.label}`}>
+        {/* 固定宽度 + 右对齐 + 统一一位小数：分数字符数不一（84 是两位、84.4 是四位）
+            会把后面的横条推到各行不同的 x 上，整列看起来歪歪扭扭。tnum 只保证数字等宽，
+            管不了字符个数，所以既要定宽也要定小数位（JS 数字 84.0 会打印成 84）。 */}
+        <SoftBadge tone={strength.badgeTone} className="metric-value w-[3.25rem] shrink-0 justify-end text-[15px] leading-[20px] font-semibold tnum">
+          {score.toFixed(1)}
+        </SoftBadge>
         <span
-          className={cn('block h-full origin-left rounded-pill', strength.barClass)}
-          style={{ width: `${Math.max(2, Math.min(100, score))}%` }}
-        />
+          className="strength-track h-1 w-16 overflow-hidden rounded-pill bg-paper"
+          role="progressbar"
+          aria-label={t('强度分 {score}，{band} {label}', { score, band: strength.band, label: strength.label })}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={score}
+          data-strength-band={strength.band}
+          data-strength-tone={strength.tone}
+        >
+          <span
+            className={cn('block h-full origin-left rounded-pill', strength.barClass)}
+            style={{ width: `${Math.max(2, Math.min(100, score))}%` }}
+          />
+        </span>
       </span>
+      {caption ? <span className="text-micro text-ink-400">{caption}</span> : null}
     </span>
   );
 }

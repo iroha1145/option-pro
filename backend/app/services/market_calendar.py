@@ -123,6 +123,20 @@ def next_trading_day(start: date, *, include_start: bool = False) -> date:
     raise RuntimeError("Unable to determine the next US trading day")
 
 
+def prior_trading_sessions(end: date, count: int) -> list[date]:
+    """Exact ``count`` NYSE sessions strictly before ``end``, oldest first."""
+
+    if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+        raise ValueError("trading session count is invalid")
+    sessions: list[date] = []
+    cursor = end
+    for _ in range(count):
+        cursor = previous_trading_day(cursor, include_start=False)
+        sessions.append(cursor)
+    sessions.reverse()
+    return sessions
+
+
 def previous_trading_day(start: date, *, include_start: bool = False) -> date:
     candidate = start if include_start else start - timedelta(days=1)
     for _ in range(15):
@@ -192,5 +206,6 @@ __all__ = [
     "next_trading_day",
     "options_close_minutes",
     "previous_trading_day",
+    "prior_trading_sessions",
     "trading_days_between",
 ]

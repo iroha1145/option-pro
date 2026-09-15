@@ -26,6 +26,12 @@ async def cache_diagnostics() -> dict[str, Any]:
 
     return {
         "metrics": cache_metrics.snapshot(),
+        "algorithms": {
+            "note": (
+                "Usage, fallback, and T1 evaluability counters only. "
+                "These are not win-rate or return metrics."
+            ),
+        },
         "layers": {
             "shared_ttl_cache": shared_ttl_cache.stats(),
             "public_home_documents": public_home_snapshot._parsed_documents.stats(),

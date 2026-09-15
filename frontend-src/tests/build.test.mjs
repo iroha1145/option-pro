@@ -98,6 +98,7 @@ test('default screener request matches the daily live snapshot parameters', () =
     min_price: 5,
     min_avg_dollar_volume: 10_000_000,
     include_options: true,
+    ranking_algorithm: 'follow_default',
   });
   assert.deepEqual(request.refreshParameters, {
     universe: 'themes',
@@ -108,6 +109,7 @@ test('default screener request matches the daily live snapshot parameters', () =
     min_price: 5,
     min_avg_dollar_volume: 10_000_000,
     include_options: true,
+    ranking_algorithm: 'follow_default',
   });
 });
 
@@ -238,7 +240,7 @@ test('screener result strength colors use stable score bands on mobile and deskt
     readFile(resultCardsSource, 'utf8'),
     readFile(resultCellsSource, 'utf8'),
   ]);
-  assert.match(cards, /screenerStrengthPresentation\(r\.strengthScore\)/);
+  assert.match(cards, /screenerStrengthPresentation\(primary \?\? r\.strengthScore\)/);
   assert.match(cells, /screenerStrengthPresentation\(score\)/);
   assert.match(cards, /data-strength-band=\{strength\.band\}/);
   assert.match(cards, /data-strength-tone=\{strength\.tone\}/);

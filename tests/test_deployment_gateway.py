@@ -160,6 +160,10 @@ _SAME_ORIGIN_JSON_ONLY_OPERATIONS = {
     ("POST", "/api/account/chart-drawings"),
     ("POST", "/api/account/chart-drawings/replace"),
     ("PUT", "/api/account/chart-drawings/{drawing_id}"),
+    # Signed-in customers persist their own algorithm choice. Same-origin JSON
+    # is required; owner access is not, so an explicit original choice survives
+    # an admin default change.
+    ("PUT", "/api/view-preferences"),
 }
 
 #: Same category, but bodyless — there is no content type to assert, so these

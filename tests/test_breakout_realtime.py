@@ -12,6 +12,7 @@ import pandas as pd
 import pytest
 
 from app.api import breakouts as api
+from tests.http_response_support import anonymous_get_request as _areq
 from app.services.breakouts.config import BreakoutSettings
 from app.services.breakouts.models import BreakoutEvent, MarketSession, MarketShapeSnapshot
 from app.services.breakouts.realtime import BreakoutRealtimeAdapter, RealtimeRadarError
@@ -178,11 +179,11 @@ def test_public_scan_api_has_no_live_signal_until_allowed(seeded, monkeypatch):
     monkeypatch.setattr(api, "get_breakout_settings", lambda: settings)
     monkeypatch.setattr(api, "_now", lambda: AT + timedelta(seconds=20))
     monkeypatch.setattr(quotes, "realtime_visible", lambda **_: False)
-    public = api.current().model_dump(mode="json")
+    public = api.current(_areq()).model_dump(mode="json")
     assert public["events"][0]["lifecycle_state"] == "WATCHING"
     assert public["events"][0]["triggered_at"] is None
     monkeypatch.setattr(quotes, "realtime_visible", lambda **_: True)
-    owner = api.current().model_dump(mode="json")
+    owner = api.current(_areq()).model_dump(mode="json")
     assert owner["events"][0]["lifecycle_state"] == "TRIGGERED"
     assert owner["events"][0]["trigger_source"] == "finnhub"
     assert api.event_detail("event-AAPL").transitions[0]["source"] == "finnhub"

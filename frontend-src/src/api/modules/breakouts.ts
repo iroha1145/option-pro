@@ -16,6 +16,11 @@ export interface BreakoutEventFilters {
   /** 契约参数（mock 忽略）：lifecycle_state / cursor */
   lifecycle_state?: string;
   cursor?: string;
+  sort_algorithm?: 'production' | 't1_daily_priority' | 'follow_default';
+}
+
+export interface BreakoutCurrentFilters {
+  sort_algorithm?: 'production' | 't1_daily_priority' | 'follow_default';
 }
 
 /* ================= live 归一化（契约原始事件 → mock 形状，mock 是 UI 唯一事实源） =================
@@ -225,6 +230,8 @@ export function normalizeBreakoutEvent(raw: unknown): BreakoutSignal & BreakoutE
     warnings: Array.isArray(r.warnings) ? (r.warnings as unknown[]).filter((w): w is string => typeof w === 'string') : [],
     score_version: pickS(r, 'score_version'),
     market_shape: r.market_shape ?? null,
+    t1_status: pickS(r, 't1_status', 't1Status'),
+    t1_priority: r.t1_priority ?? asRec(r.features).t1_priority ?? null,
     /* ---- 详情别名（与 BreakoutEventDetail 对齐） ---- */
     triggerPrice: eventPrice,
     targetPrice,
@@ -278,10 +285,13 @@ export function normalizeBreakoutStatus(raw: unknown): BreakoutStatus {
 
 export const breakoutsApi = {
   // 契约 {as_of, session, status, events:[BreakoutEvent], ...} → events 数组（逐条归一到 mock 形状）
-  current: (): Promise<BreakoutSignal[]> =>
+  current: (filters: BreakoutCurrentFilters = {}): Promise<BreakoutSignal[]> =>
     mockOr(
       () => fx2.getBreakoutsCurrent(),
-      () => get('/breakouts/current').then((d) => unwrap(d, 'events').map(normalizeBreakoutEvent) as unknown as BreakoutSignal[]),
+      () => {
+        const qs = toQuery({ sort_algorithm: filters.sort_algorithm });
+        return get(`/breakouts/current${qs ? `?${qs}` : ''}`).then((d) => unwrap(d, 'events').map(normalizeBreakoutEvent) as unknown as BreakoutSignal[]);
+      },
     ),
   /**
    * 与 current() 相同的数据，但保留快照的业务时间（审计 P2-16）。
@@ -289,14 +299,38 @@ export const breakoutsApi = {
    * 页面此前用 usePolling.lastUpdatedAt 当「快照时间」，那是浏览器收到响应的时刻，
    * 不是数据更新到了什么时候：重新读到一份旧快照也会显示成刚刚更新。
    */
-  currentEnvelope: (): Promise<{ events: BreakoutSignal[]; asOf: string | null }> =>
+  currentEnvelope: (
+    filters: BreakoutCurrentFilters = {},
+  ): Promise<{
+    events: BreakoutSignal[];
+    asOf: string | null;
+    effectiveAlgorithm: string | null;
+    algorithmVersion: string | null;
+    scoreBasis: string | null;
+    fallbackReason: string | null;
+  }> =>
     mockOr(
-      async () => ({ events: await fx2.getBreakoutsCurrent(), asOf: null }),
-      () =>
-        registryGet('/breakouts/current').then((d) => ({
+      async () => ({
+        events: await fx2.getBreakoutsCurrent(),
+        asOf: null,
+        effectiveAlgorithm: filters.sort_algorithm ?? 'production',
+        algorithmVersion: filters.sort_algorithm === 't1_daily_priority' ? 't1-daily-priority-v1' : 'breakout-score-v1',
+        scoreBasis: filters.sort_algorithm === 't1_daily_priority'
+          ? 'production_order + t1_daily_conditions_boost'
+          : 'event_at_desc,alert_priority_score_desc,event_id_desc',
+        fallbackReason: null,
+      }),
+      () => {
+        const qs = toQuery({ sort_algorithm: filters.sort_algorithm });
+        return registryGet(`/breakouts/current${qs ? `?${qs}` : ''}`).then((d) => ({
           events: unwrap(d, 'events').map(normalizeBreakoutEvent) as unknown as BreakoutSignal[],
           asOf: pickS(asRec(d), 'as_of', 'asOf'),
-        })),
+          effectiveAlgorithm: pickS(asRec(d), 'effective_algorithm', 'effectiveAlgorithm'),
+          algorithmVersion: pickS(asRec(d), 'algorithm_version', 'algorithmVersion'),
+          scoreBasis: pickS(asRec(d), 'score_basis', 'scoreBasis'),
+          fallbackReason: pickS(asRec(d), 'fallback_reason', 'fallbackReason'),
+        }));
+      },
     ),
   status: (): Promise<BreakoutStatus> =>
     mockOr(() => fx2.getBreakoutsStatus(), () => registryGet('/breakouts/status').then(normalizeBreakoutStatus)),
@@ -315,6 +349,9 @@ export const breakoutsApi = {
     hasMore: boolean;
     nextCursor: string | null;
     page: number;
+    cursorStale?: boolean;
+    restartRequired?: boolean;
+    t1View?: string | null;
   }> =>
     mockOr(
       async () => {
@@ -325,16 +362,25 @@ export const breakoutsApi = {
       () => {
         const page = filters.page ?? 1;
         const pageSize = filters.pageSize ?? 12;
-        const qs = toQuery({ lifecycle_state: filters.lifecycle_state, limit: pageSize, cursor: filters.cursor });
-        return get(`/breakouts/events${qs ? `?${qs}` : ''}`).then((d) => {
+        const qs = toQuery({
+          lifecycle_state: filters.lifecycle_state,
+          limit: pageSize,
+          cursor: filters.cursor,
+          sort_algorithm: filters.sort_algorithm,
+        });
+        return registryGet(`/breakouts/events${qs ? `?${qs}` : ''}`).then((d) => {
           const events = unwrap(d, 'events', 'items').map(normalizeBreakoutEvent);
           const nextCursor = pickS(asRec(d), 'next_cursor', 'nextCursor');
+          const rec = asRec(d);
           return {
             items: events as unknown as BreakoutEvent[],
             total: pickN(asRec(d), 'total', 'total_count'),
-            hasMore: nextCursor !== null,
+            hasMore: nextCursor !== null && !rec.cursor_stale && !rec.restart_required,
             nextCursor,
             page,
+            cursorStale: Boolean(rec.cursor_stale || rec.cursorStale),
+            restartRequired: Boolean(rec.restart_required || rec.restartRequired),
+            t1View: pickS(rec, 't1_view', 't1View'),
           };
         });
       },
