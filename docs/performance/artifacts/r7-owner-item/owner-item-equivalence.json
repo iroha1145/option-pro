@@ -1,0 +1,79 @@
+[
+  {
+    "case": "not_requested",
+    "identical": true,
+    "hash": "1a03694d7461463133b42a8aac14c0633d8c8836c16cd04fb212ded924914b13",
+    "local_feed_job_projection_calls_before_after": [
+      1,
+      1
+    ],
+    "analysis_status": "not_requested",
+    "has_analysis": false
+  },
+  {
+    "case": "pending",
+    "identical": true,
+    "hash": "2e791d381d81140c053482e3b4e9815213907182f5c6b7832cacff1f7f5a7097",
+    "local_feed_job_projection_calls_before_after": [
+      1,
+      1
+    ],
+    "analysis_status": "pending",
+    "has_analysis": false
+  },
+  {
+    "case": "completed",
+    "identical": true,
+    "hash": "53d53746432233e87654528a913c3b55678cc9162c10d470bbff0724f1133467",
+    "local_feed_job_projection_calls_before_after": [
+      1,
+      0
+    ],
+    "analysis_status": "completed",
+    "has_analysis": true
+  },
+  {
+    "case": "historical_before_job",
+    "identical": true,
+    "hash": "265471422bc6ce555084c4a1e4a8bb92ab717a22c4c9d436e9785967e5df5ddc",
+    "local_feed_job_projection_calls_before_after": [
+      1,
+      1
+    ],
+    "analysis_status": "not_requested",
+    "has_analysis": false
+  },
+  {
+    "case": "historical_pending_before_result",
+    "identical": true,
+    "hash": "d8730412c3122d63ee0d044db1f5e7d36d4c2d7060a4c728758e5cc37c0f6642",
+    "local_feed_job_projection_calls_before_after": [
+      1,
+      1
+    ],
+    "analysis_status": "pending",
+    "has_analysis": false
+  },
+  {
+    "case": "published_old_result_new_pending_job",
+    "identical": true,
+    "hash": "d7c579c98deac822b5d433b197acb7aa85f10e658bbb2e675bb8e974f6b4ca6f",
+    "local_feed_job_projection_calls_before_after": [
+      1,
+      0
+    ],
+    "analysis_status": "completed",
+    "has_analysis": true
+  },
+  {
+    "case": "published_old_result_new_failed_job",
+    "identical": true,
+    "hash": "4bb588f0fdf757353ad86c60cf74caeb93fbddc7eca6c3d7f1eecc4b7e76258c",
+    "local_feed_job_projection_calls_before_after": [
+      1,
+      0
+    ],
+    "analysis_status": "completed",
+    "has_analysis": true
+  }
+]

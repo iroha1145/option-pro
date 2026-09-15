@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -10,6 +10,7 @@ import {
   buildInterleavedSummary,
   interleavedGateFailures,
 } from '../../scripts/perf/lib/interleaved_summary.mjs';
+import { walkStaticJsGraph } from '../../scripts/perf/lib/round6_bundle_graph.mjs';
 import {
   readyGateFailures,
   summarizeReady,
@@ -18,6 +19,7 @@ import {
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '..', '..');
 const summarizeScript = path.join(repo, 'scripts/perf/summarize_round6.mjs');
+const bundleScript = path.join(repo, 'scripts/perf/record_round6_bundles.mjs');
 const frontendHtml = await readFile(path.join(repo, 'frontend/index.html'), 'utf8');
 const entryName = frontendHtml.match(/<script\b[^>]*\btype=["']module["'][^>]*\bsrc=["']\/assets\/(index-[^"']+\.js)["']/i)?.[1]
   || frontendHtml.match(/<script\b[^>]*\bsrc=["']\/assets\/(index-[^"']+\.js)["'][^>]*\btype=["']module["']/i)?.[1];
@@ -173,6 +175,35 @@ test('bundle and provenance record app-shell and eps-chart assets', async () => 
   assert.match(bundles, /\^eps-chart-/);
   assert.match(provenance, /\^app-shell-/);
   assert.match(provenance, /\^eps-chart-/);
+});
+
+test('bundle shared graph unions the HTML entry and app-shell closures', async (t) => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'round6-bundles-'));
+  const output = path.join(dir, 'bundles.json');
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const result = spawnSync(process.execPath, [bundleScript], {
+    cwd: repo,
+    encoding: 'utf8',
+    env: { ...process.env, OPTIX_PERF_BUNDLES: output },
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+
+  const assets = await readdir(path.join(repo, 'frontend/assets'));
+  const appName = assets.find((name) => /^app-shell-.+\.js$/.test(name))
+    || assets.find((name) => /^App-.+\.js$/.test(name));
+  assert.ok(appName, 'built App/app-shell asset is required');
+  const graphs = await Promise.all([
+    walkStaticJsGraph(path.join(repo, 'frontend'), `assets/${entryName}`),
+    walkStaticJsGraph(path.join(repo, 'frontend'), `assets/${appName}`),
+  ]);
+  const expected = new Map(graphs.flatMap((graph) => graph.files.map((file) => [file.path, file])));
+  const report = JSON.parse(await readFile(output, 'utf8'));
+  const shared = report.first_js_gzip9.shared;
+  assert.deepEqual(shared.roots, graphs.map((graph) => graph.entry));
+  assert.deepEqual(shared.files.map((file) => file.path), [...expected.keys()].sort());
+  assert.equal(shared.script_n, expected.size);
+  assert.equal(shared.raw, [...expected.values()].reduce((sum, file) => sum + file.raw, 0));
+  assert.equal(shared.gzip9, [...expected.values()].reduce((sum, file) => sum + file.gzip9, 0));
 });
 
 test('round6 summary succeeds only with complete, matching, in-budget inputs', async (t) => {

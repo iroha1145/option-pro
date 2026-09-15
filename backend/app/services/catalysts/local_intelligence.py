@@ -4037,7 +4037,9 @@ class LocalCatalystIntelligence:
         jobs: Mapping[str, dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         result, available = self._analysis_for_revision(connection, row, as_of=as_of)
-        if current_request_is_owner():
+        # Published analysis determines the item status below. Its linked job
+        # may be a newer attempt, but that state is only needed by detail reads.
+        if result is None and current_request_is_owner():
             job_public, _detail_job = self._linked_news_job_at(
                 connection,
                 row,
@@ -4048,8 +4050,8 @@ class LocalCatalystIntelligence:
                 job_public.get("status") if job_public else "not_requested"
             )
         else:
-            # Published local analysis is enough for the visitor view. Do not
-            # read the mutable AI job store merely to expose queue state.
+            # Visitors do not expose queue state; published owner items are
+            # marked completed below without projecting an unused job result.
             status = "not_requested"
         if result is not None:
             status = "completed"

@@ -55,7 +55,21 @@ const files = {
 
 const indexRel = indexMatch ? `assets/${indexMatch[1]}` : null;
 const appRel = appName ? `assets/${appName}` : null;
-const shared = appRel ? await walkStaticJsGraph(FRONTEND, appRel) : (indexRel ? await walkStaticJsGraph(FRONTEND, indexRel) : null);
+const entryGraph = indexRel ? await walkStaticJsGraph(FRONTEND, indexRel) : null;
+const appGraph = appRel ? await walkStaticJsGraph(FRONTEND, appRel) : null;
+const sharedFiles = new Map();
+for (const graph of [entryGraph, appGraph]) {
+  for (const file of graph?.files || []) sharedFiles.set(file.path, file);
+}
+const shared = sharedFiles.size ? {
+  roots: [entryGraph?.entry, appGraph?.entry].filter(Boolean),
+  files: [...sharedFiles.values()].sort((a, b) => a.path.localeCompare(b.path)),
+} : null;
+if (shared) {
+  shared.script_n = shared.files.length;
+  shared.gzip9 = shared.files.reduce((sum, file) => sum + file.gzip9, 0);
+  shared.raw = shared.files.reduce((sum, file) => sum + file.raw, 0);
+}
 const homeGraph = await walkStaticJsGraph(FRONTEND, firstMatch(assets, /^Home-.+\.js$/) ? `assets/${firstMatch(assets, /^Home-.+\.js$/)}` : appRel);
 const earningsGraph = await walkStaticJsGraph(FRONTEND, firstMatch(assets, /^Earnings-.+\.js$/) ? `assets/${firstMatch(assets, /^Earnings-.+\.js$/)}` : appRel);
 const newsGraph = await walkStaticJsGraph(FRONTEND, firstMatch(assets, /^Catalysts-.+\.js$/) ? `assets/${firstMatch(assets, /^Catalysts-.+\.js$/)}` : appRel);
@@ -75,11 +89,17 @@ const report = {
     note: 'Chinese mode does not download runtime-en or runtime-ja. This is not the complete first-download JS.',
   },
   first_js_gzip9: {
-    shared: shared ? { script_n: shared.script_n, gzip9: shared.gzip9, raw: shared.raw } : null,
+    shared: shared ? {
+      roots: shared.roots,
+      script_n: shared.script_n,
+      gzip9: shared.gzip9,
+      raw: shared.raw,
+      files: shared.files,
+    } : null,
     home: plus(homeGraph),
     earnings: plus(earningsGraph),
     catalysts: plus(newsGraph),
-    note: 'gzip -9 of statically imported JS only. Excludes CSS, JSON, fonts, data, and later intent prefetch.',
+    note: 'gzip -9 of the deduplicated HTML module-entry and App/app-shell static JS graphs. Routes add their static graph to that base. Excludes classic theme-boot.js, CSS, JSON, fonts, data, and later dynamic/intent prefetch.',
   },
 };
 

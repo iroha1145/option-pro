@@ -7387,6 +7387,84 @@ def test_failed_forced_news_revision_preserves_previous_analysis(
     ] == [1]
 
 
+@pytest.mark.parametrize(
+    ("scenario", "expected_status", "has_analysis"),
+    [
+        ("not_requested", "not_requested", False),
+        ("pending", "pending", False),
+        ("completed_unpublished", "pending", False),
+        ("completed", "completed", True),
+        ("historical_before_job", "not_requested", False),
+        ("historical_pending", "pending", False),
+        ("published_new_pending", "completed", True),
+        ("published_new_failed", "completed", True),
+    ],
+)
+def test_owner_item_only_projects_job_state_without_published_analysis(
+    tmp_path, monkeypatch, scenario, expected_status, has_analysis
+) -> None:
+    base = datetime(2030, 7, 16, 20, 0, tzinfo=timezone.utc)
+    clock = {"now": base}
+    monkeypatch.setattr(local_module, "_utc_now", lambda: clock["now"])
+    monkeypatch.setattr(ai_jobs_repository_module, "_utcnow", lambda: clock["now"])
+    etl, ai, intelligence = _stack(tmp_path)
+    _apply_news(
+        etl,
+        [_news_change(1, 231, available_at=base - timedelta(minutes=10))],
+        as_of=base,
+    )
+    intelligence.reconcile()
+    if scenario != "not_requested":
+        job = intelligence.request_analysis(231, force=False)
+        if scenario != "pending":
+            clock["now"] = base + timedelta(minutes=1)
+            _finish_job(
+                ai,
+                job["job_id"],
+                _news_result(news_id=231, change_sequence=1, content_hash="hash-231-1"),
+            )
+            if scenario != "completed_unpublished":
+                intelligence.reconcile()
+    if scenario.startswith("published_new_"):
+        clock["now"] = base + timedelta(minutes=2)
+        forced = intelligence.request_analysis(231, force=True)
+        if scenario == "published_new_failed":
+            _fail_job(ai, forced["job_id"], "forced_news_failed")
+            intelligence.reconcile()
+    as_of = {
+        "historical_before_job": base - timedelta(minutes=1),
+        "historical_pending": base + timedelta(seconds=30),
+    }.get(scenario, clock["now"])
+    original = intelligence._linked_news_job_at
+    calls = []
+
+    def counted(*args, **kwargs):
+        calls.append(kwargs["as_of"])
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(intelligence, "_linked_news_job_at", counted)
+    payload = intelligence.feed(as_of=as_of, window_hours=24, limit=12)
+    assert len(payload["items"]) == 1
+    item = payload["items"][0]
+    assert item["analysis_status"] == expected_status
+    assert (item["analysis"] is not None) == has_analysis
+    assert calls == ([] if has_analysis else [as_of])
+    if has_analysis:
+        assert item["analysis"] == _news_result(
+            news_id=231, change_sequence=1, content_hash="hash-231-1"
+        )
+    if scenario.startswith("published_new_"):
+        # A published result determines the item status, while detail must
+        # still expose the independent state of the newer forced job.
+        detail = intelligence.news(231, as_of=as_of)
+        assert detail is not None
+        assert detail["item"] == item
+        assert detail["analysis_job"]["job_id"] == forced["job_id"]
+        assert detail["analysis_job"]["status"] == (
+            "failed" if scenario == "published_new_failed" else "pending"
+        )
+
+
 def test_feed_serves_revision_cache_and_invalidates_on_new_change(
     tmp_path, monkeypatch
 ) -> None:
