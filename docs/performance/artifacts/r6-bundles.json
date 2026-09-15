@@ -1,11 +1,11 @@
 {
-  "measured_at": "2026-09-15T03:48:32.138Z",
+  "measured_at": "2026-09-15T06:00:29.855Z",
   "note": "Current production frontend/ after the live Vite build. Dictionary gzip is not main-bundle savings. zh_critical_js_gzip_approx is entry+App only; first_js_gzip9 includes the shared static import graph.",
   "files": {
     "optimized_index": {
-      "path": "frontend/assets/index-DDX2TFDT.js",
+      "path": "frontend/assets/index-DbhCd4NO.js",
       "raw": 243867,
-      "gzip9": 79101,
+      "gzip9": 79102,
       "contains_ja": false,
       "contains_en_skip_link": false
     },
@@ -17,9 +17,9 @@
       "contains_en_skip_link": false
     },
     "optimized_app": {
-      "path": "frontend/assets/App-DXA7FE0e.js",
+      "path": "frontend/assets/App-DzsXzax6.js",
       "raw": 47643,
-      "gzip9": 15480,
+      "gzip9": 15482,
       "contains_ja": false,
       "contains_en_skip_link": false
     },
@@ -38,50 +38,50 @@
       "contains_en_skip_link": false
     },
     "optimized_chart": {
-      "path": "frontend/assets/chart-vlH3NqY3.js",
+      "path": "frontend/assets/chart-CpeEK3CR.js",
       "raw": 643516,
       "gzip9": 218262,
       "contains_ja": false,
       "contains_en_skip_link": false
     },
     "optimized_earnings_page": {
-      "path": "frontend/assets/Earnings-Cm0uL3Fe.js",
-      "raw": 63566,
-      "gzip9": 18193,
+      "path": "frontend/assets/Earnings-CbfSDXdh.js",
+      "raw": 64184,
+      "gzip9": 18446,
       "contains_ja": false,
       "contains_en_skip_link": false
     },
     "optimized_eps_chart_wrapper": {
-      "path": "frontend/assets/EpsHatchChart-CS3qDOqi.js",
+      "path": "frontend/assets/EpsHatchChart-DexJjwsO.js",
       "raw": 2011,
-      "gzip9": 1197,
+      "gzip9": 1194,
       "contains_ja": false,
       "contains_en_skip_link": false
     }
   },
   "zh_critical_js_gzip_approx": {
-    "optimized_index_plus_app": 94581,
+    "optimized_index_plus_app": 94584,
     "note": "Chinese mode does not download runtime-en or runtime-ja. This is not the complete first-download JS."
   },
   "first_js_gzip9": {
     "shared": {
       "script_n": 30,
-      "gzip9": 188063,
+      "gzip9": 188070,
       "raw": 555497
     },
     "home": {
-      "route_only_gzip9": 28695,
-      "with_shared_gzip9": 216758,
+      "route_only_gzip9": 28697,
+      "with_shared_gzip9": 216767,
       "script_n": 45
     },
     "earnings": {
-      "route_only_gzip9": 29812,
-      "with_shared_gzip9": 217875,
+      "route_only_gzip9": 30049,
+      "with_shared_gzip9": 218119,
       "script_n": 40
     },
     "catalysts": {
-      "route_only_gzip9": 80456,
-      "with_shared_gzip9": 268519,
+      "route_only_gzip9": 80443,
+      "with_shared_gzip9": 268513,
       "script_n": 42
     },
     "note": "gzip -9 of statically imported JS only. Excludes CSS, JSON, fonts, data, and later intent prefetch."

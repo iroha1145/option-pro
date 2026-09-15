@@ -1,13 +1,13 @@
 {
-  "measured_at": "2026-09-15T03:48:33.712Z",
+  "measured_at": "2026-09-15T06:00:25.904Z",
   "git": {
-    "commit": "84c475cd9b56adc384d75011871868ad4544e980",
-    "tree": "604f6c5b5e12872ae12dc9e5d7f154a3dc14892f",
+    "commit": "58ffb2da5ecb7a310b3b6c0cffcbf0a9cfb76aa1",
+    "tree": "d6763815ffe91a68894b9121ee138f9b5ff9d0cb",
     "status": "",
     "branch": "cursor/perf-news-i18n-earnings-ac0f"
   },
   "scripts": {
-    "measure_round6_surfaces": "d0a48b8a0021f87ff28fd27150200ebd3d349eb5c37caf2d351452633fa4094b",
+    "measure_round6_surfaces": "3c661a5c7e40520ea88084779baa4a2f41ca913134aae895ad20d783ac2af261",
     "measure_round6_i18n": "896cea00964218e1f6c02b6a56fd1b47477a843a5ab643af49a15fbbf9a12174",
     "measure_round6_browser": "970da84745adb3fa0f2bc90b6d054629d690451f8fdb82190e6da01849c41739",
     "measure_round6_feed": "3eb0bdd3aa5dae8dfc9644d0736290ee62d1b0a456a3f0dd241b7da815e30ee4",
@@ -16,14 +16,14 @@
     "round6_bundle_graph": "33fb33e6dfc32537302c300dc7177e880aabe6dde6a2b9f364eefca8fb191afa"
   },
   "frontend_hashes": {
-    "frontend/assets/index-DDX2TFDT.js": "e77bd20eb0b447e8d0bdb09ec770beb5bff19aff8b4916a408c793df550b71b5",
-    "frontend/assets/App-DXA7FE0e.js": "cfca78b9dfa7c12795f3e0ffffb9cca9d98a117e3884055d938a58e26d3cc7e3",
-    "frontend/assets/Earnings-Cm0uL3Fe.js": "c045969698bfb26170041b9f61f1413d02c85b2662b2a413beee00c0fa67df73",
-    "frontend/assets/Home-Bvss68aF.js": "3ef3e09871476878cf63d5a559efea49d579dd17df277f71320ddc79072f7a04",
-    "frontend/assets/Catalysts-DY_0OSb_.js": "09897382533c966ddb9b1939cb4dd1dc195779de20525890e91d3cb8036b12e3"
+    "frontend/assets/index-DbhCd4NO.js": "dd26afa4812edca474648b87a456e8fae8c2bbf85960c6f2e26d157c803771a1",
+    "frontend/assets/App-DzsXzax6.js": "0dffa34b6866c40007394bdaec37fb9199c4a938e9e4be5efc48a24313b1a5f9",
+    "frontend/assets/Earnings-CbfSDXdh.js": "f44e1bba3cdb17d6d74acc4f1b9c977ac7fa88e919d4e9c5b810ba31b933fa58",
+    "frontend/assets/Home-BpBzaA-d.js": "70ea89dd4e4395a4fe83c512c1f1cb5875d94a9cadbadf7c47779a0f721ef680",
+    "frontend/assets/Catalysts-CWKrt09k.js": "397d6bab2fa195694b5e65c5bf4eddc7bf26d095574de230fc33ed2f0d466fa4"
   },
-  "measured_product_commit": "f2c05331fedaf08b67546293880d458036fea5ce",
-  "measured_product_tree": "d4ce739a89238149913de2d1c268b0ef27e3e930",
+  "measured_product_commit": "58ffb2da5ecb7a310b3b6c0cffcbf0a9cfb76aa1",
+  "measured_product_tree": "d6763815ffe91a68894b9121ee138f9b5ff9d0cb",
   "seed": {
     "data_dir": "/home/ubuntu/optix-perf-data/n10000-r6",
     "sqlite_path": "/home/ubuntu/optix-perf-data/n10000-r6/catalyst-cache.db",
