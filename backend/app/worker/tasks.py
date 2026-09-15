@@ -2184,9 +2184,16 @@ class StrengthRefreshTask:
             if selected is not None and parameters != selected:
                 raise ValueError("strength refresh actions have conflicting parameters")
             selected = parameters
-        result = await self._run(
-            selected or dict(DEFAULT_STRENGTH_SCAN_PARAMETERS)
-        )
+        selected = selected or dict(DEFAULT_STRENGTH_SCAN_PARAMETERS)
+        result = await self._run(selected)
+        if result.status == "idle":
+            from app.api.strength import a0_companion_for_admin_default
+
+            companion = a0_companion_for_admin_default(selected)
+            if companion is not None:
+                companion_result = await self._run(companion)
+                if companion_result.status != "idle" or companion_result.error_code:
+                    return companion_result
         if result.status == "idle" and not result.error_code:
             digest = strength_scan_parameters_hash(
                 selected or dict(DEFAULT_STRENGTH_SCAN_PARAMETERS)
@@ -2239,6 +2246,16 @@ class StrengthRefreshTask:
                 )
             except (OSError, TypeError, ValueError):
                 extras = []
+            try:
+                from app.api.strength import a0_companion_for_admin_default
+
+                # Do not shadow-scan A0 on every cycle. Preheat only when the
+                # admin default actually needs that snapshot identity.
+                companion = a0_companion_for_admin_default()
+                if companion is not None and companion not in extras:
+                    extras = [companion, *extras][:4]
+            except Exception:
+                pass
         elif self._variant_retry_at is not None and now >= self._variant_retry_at:
             # Retry exactly the failed set, even if reads or successful writes
             # have changed the recent-file ordering since the scheduled round.

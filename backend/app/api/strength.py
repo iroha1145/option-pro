@@ -14,11 +14,32 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
-from app.access import current_request_is_owner, public_snapshot_unavailable
+from app.access import (
+    current_request_is_owner,
+    public_snapshot_unavailable,
+    request_account_session,
+)
 from app.data_paths import get_data_paths
 from app.personal_config import get_personal_config
+from app.services.algorithm_diagnostics import record_screener_resolution
+from app.services.algorithm_modes import (
+    A0_ALGORITHM,
+    PRODUCTION_ALGORITHM,
+    ConflictingAlgorithmError,
+    UnknownAlgorithmError,
+    admin_algorithm_defaults,
+    canonicalize_screener_algorithm,
+    resolve_screener_algorithm,
+    screener_score_basis,
+    screener_version,
+)
 from app.services.http_read_cache import respond_with_snapshot, snapshot_version_key
+from app.services.runtime_settings import get_effective_runtime_settings
 from app.services.sectors import SECTORS
+from app.services.view_preferences import (
+    get_view_preference_store,
+    principal_for_request,
+)
 from app.services.snapshot_read_cache import FingerprintedFileCache
 from app.services.strength.freshness import (
     decide_published_snapshot_replacement,
@@ -58,10 +79,17 @@ DEFAULT_STRENGTH_SCAN_PARAMETERS: dict[str, Any] = {
 }
 
 
+OPTIONAL_STRENGTH_SCAN_FIELDS = frozenset({"ranking_algorithm"})
+
+
 def normalize_strength_scan_parameters(value: Any) -> dict[str, Any]:
     """Return the one canonical, bounded representation used by API and worker."""
 
-    if not isinstance(value, dict) or set(value) != set(DEFAULT_STRENGTH_SCAN_PARAMETERS):
+    if not isinstance(value, dict):
+        raise ValueError("strength scan parameters are incomplete")
+    extra = set(value) - set(DEFAULT_STRENGTH_SCAN_PARAMETERS) - OPTIONAL_STRENGTH_SCAN_FIELDS
+    missing = set(DEFAULT_STRENGTH_SCAN_PARAMETERS) - set(value)
+    if extra or missing:
         raise ValueError("strength scan parameters are incomplete")
     universe = value.get("universe")
     timeframe = value.get("timeframe")
@@ -98,7 +126,13 @@ def normalize_strength_scan_parameters(value: Any) -> dict[str, Any]:
             raise ValueError(f"strength scan {name} is invalid")
     if not isinstance(include_options, bool):
         raise ValueError("strength scan include_options is invalid")
-    return {
+    try:
+        ranking_algorithm = canonicalize_screener_algorithm(value.get("ranking_algorithm"))
+    except UnknownAlgorithmError as exc:
+        raise ValueError(str(exc)) from exc
+    if ranking_algorithm is None:
+        ranking_algorithm = PRODUCTION_ALGORITHM
+    payload = {
         "universe": str(universe),
         "timeframe": str(timeframe),
         "profile": str(profile),
@@ -112,6 +146,9 @@ def normalize_strength_scan_parameters(value: Any) -> dict[str, Any]:
         ),
         "include_options": include_options,
     }
+    if ranking_algorithm != PRODUCTION_ALGORITHM:
+        payload["ranking_algorithm"] = ranking_algorithm
+    return payload
 
 
 async def _public_strength_snapshot() -> dict[str, Any]:
@@ -349,8 +386,9 @@ def _scan_parameters(
     min_price: float,
     min_avg_dollar_volume: float,
     include_options: bool,
+    ranking_algorithm: str | None = None,
 ) -> dict[str, Any]:
-    return normalize_strength_scan_parameters({
+    payload = {
         "universe": universe,
         "timeframe": timeframe,
         "profile": profile,
@@ -359,7 +397,76 @@ def _scan_parameters(
         "min_price": float(min_price),
         "min_avg_dollar_volume": float(min_avg_dollar_volume),
         "include_options": include_options,
-    })
+    }
+    if ranking_algorithm and ranking_algorithm != PRODUCTION_ALGORITHM:
+        payload["ranking_algorithm"] = ranking_algorithm
+    return normalize_strength_scan_parameters(payload)
+
+
+def a0_companion_scan_parameters(
+    parameters: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Default-view A0 snapshot identity. Production default file stays unchanged."""
+
+    base = dict(parameters or DEFAULT_STRENGTH_SCAN_PARAMETERS)
+    base["ranking_algorithm"] = A0_ALGORITHM
+    return normalize_strength_scan_parameters(base)
+
+
+def a0_companion_for_admin_default(
+    parameters: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    """Preheat A0 only when the admin default actually needs that identity."""
+
+    from app.services.algorithm_modes import a0_view_supported
+
+    try:
+        normalized = normalize_strength_scan_parameters(
+            dict(parameters or DEFAULT_STRENGTH_SCAN_PARAMETERS)
+        )
+    except ValueError:
+        return None
+    if normalized.get("ranking_algorithm") == A0_ALGORITHM:
+        return None
+    if not a0_view_supported(normalized.get("timeframe"), normalized.get("profile")):
+        return None
+    try:
+        defaults = admin_algorithm_defaults(get_effective_runtime_settings())
+    except Exception:
+        return None
+    if defaults.get("screener_ranking_algorithm") != A0_ALGORITHM:
+        return None
+    return a0_companion_scan_parameters(normalized)
+
+
+def _request_screener_resolution(
+    request: Request,
+    *,
+    requested: Any,
+    timeframe: str,
+    profile: str,
+) -> Any:
+    account = request_account_session(request)
+    account_id = getattr(account, "user_id", None) if account is not None else None
+    principal = principal_for_request(
+        is_owner=current_request_is_owner(),
+        account_id=str(account_id) if account_id else None,
+    )
+    user_choice = None
+    if principal is not None:
+        user_choice = get_view_preference_store().read(principal).screener_ranking_algorithm
+    try:
+        admin_default = admin_algorithm_defaults(get_effective_runtime_settings())
+    except Exception:
+        admin_default = {"screener_ranking_algorithm": PRODUCTION_ALGORITHM}
+    return resolve_screener_algorithm(
+        requested=requested,
+        user_choice=user_choice,
+        admin_default=admin_default["screener_ranking_algorithm"],
+        timeframe=timeframe,
+        profile=profile,
+        explicit_request=requested not in (None, "", "follow_default", "default"),
+    )
 
 
 def _clean_strength_snapshot_payload(
@@ -610,6 +717,43 @@ def _write_strength_snapshot(
     return "written"
 
 
+def _overlay_algorithm_metadata(payload: dict[str, Any], resolution: Any | None = None) -> dict[str, Any]:
+    scanner_fallback = payload.get("fallback_reason")
+    scanner_effective = payload.get("effective_algorithm")
+    if resolution is not None:
+        payload["requested_algorithm"] = resolution.requested
+        payload["resolution_source"] = resolution.source
+        if scanner_fallback:
+            # The scanner already fell back (for example A0 scores unavailable).
+            # Keep that truth instead of relabeling production rows as A0.
+            effective = scanner_effective or PRODUCTION_ALGORITHM
+            payload["effective_algorithm"] = effective
+            payload["algorithm_version"] = payload.get("algorithm_version") or screener_version(
+                str(effective)
+            )
+            payload["score_basis"] = payload.get("score_basis") or screener_score_basis(
+                str(effective)
+            )
+            payload["fallback_reason"] = scanner_fallback
+            return payload
+        effective = resolution.effective
+        payload["effective_algorithm"] = effective
+        payload["algorithm_version"] = resolution.version or screener_version(str(effective))
+        payload["score_basis"] = resolution.score_basis or screener_score_basis(str(effective))
+        payload["fallback_reason"] = resolution.fallback_reason
+        return payload
+    effective = scanner_effective or PRODUCTION_ALGORITHM
+    payload["requested_algorithm"] = payload.get("requested_algorithm")
+    payload["effective_algorithm"] = effective
+    payload["algorithm_version"] = payload.get("algorithm_version") or screener_version(
+        str(effective)
+    )
+    payload["score_basis"] = payload.get("score_basis") or screener_score_basis(str(effective))
+    payload["resolution_source"] = payload.get("resolution_source")
+    payload["fallback_reason"] = scanner_fallback
+    return payload
+
+
 async def _scan_snapshot_payload(
     *,
     universe: str = "themes",
@@ -620,6 +764,8 @@ async def _scan_snapshot_payload(
     min_price: float = 5.0,
     min_avg_dollar_volume: float = 10_000_000,
     include_options: bool = True,
+    ranking_algorithm: str | None = None,
+    resolution: Any | None = None,
 ) -> tuple[dict[str, Any], float, bool]:
     """Return (payload, saved_at, stale) for a matching worker snapshot."""
 
@@ -635,6 +781,7 @@ async def _scan_snapshot_payload(
             min_price=min_price,
             min_avg_dollar_volume=min_avg_dollar_volume,
             include_options=include_options,
+            ranking_algorithm=ranking_algorithm,
         )
     except ValueError as exc:
         raise HTTPException(
@@ -709,7 +856,7 @@ async def _scan_snapshot_payload(
             os.utime(path, None)
     except OSError:
         pass
-    return sanitize(payload), saved_at, stale
+    return sanitize(_overlay_algorithm_metadata(payload, resolution)), saved_at, stale
 
 
 @router.get("/scan")
@@ -723,8 +870,26 @@ async def scan(
     min_price: float = Query(5.0, ge=0),
     min_avg_dollar_volume: float = Query(10_000_000, ge=0),
     include_options: bool = True,
+    ranking_algorithm: Optional[str] = Query(None),
 ):
     """Read a matching Strength Radar snapshot produced by the worker."""
+    try:
+        resolution = _request_screener_resolution(
+            request,
+            requested=ranking_algorithm,
+            timeframe=timeframe,
+            profile=profile,
+        )
+    except UnknownAlgorithmError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+    except ConflictingAlgorithmError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
     payload, saved_at, stale = await _scan_snapshot_payload(
         universe=universe,
         timeframe=timeframe,
@@ -734,6 +899,12 @@ async def scan(
         min_price=min_price,
         min_avg_dollar_volume=min_avg_dollar_volume,
         include_options=include_options,
+        ranking_algorithm=resolution.effective,
+        resolution=resolution,
+    )
+    record_screener_resolution(
+        resolution,
+        fallback_reason=payload.get("fallback_reason"),
     )
     return await respond_with_snapshot(
         request,
@@ -753,6 +924,11 @@ async def scan(
             min_price,
             min_avg_dollar_volume,
             include_options,
+            *(
+                (resolution.effective, resolution.version)
+                if resolution.effective != PRODUCTION_ALGORITHM
+                else ()
+            ),
         ),
         cache_control="private, max-age=60, stale-while-revalidate=300",
     )

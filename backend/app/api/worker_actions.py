@@ -69,6 +69,7 @@ class StrengthRefreshParameters(BaseModel):
     min_price: float = Field(ge=0)
     min_avg_dollar_volume: float = Field(ge=0)
     include_options: bool
+    ranking_algorithm: Literal["production", "a0_mid_long"] | None = None
 
 
 class ManualActionRequest(BaseModel):
