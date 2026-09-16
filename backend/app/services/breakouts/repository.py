@@ -21,6 +21,8 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 from urllib.parse import quote
 
+from app.services.breakouts.asset_policy import is_leveraged_etf
+
 
 LEGACY_SCHEMA_VERSION = "breakout-db-v1"
 V2_SCHEMA_VERSION = "breakout-db-v2"
@@ -624,6 +626,10 @@ CROSS JOIN breakout_scan_events AS snapshot
 WHERE latest_rowids.snapshot_rowid IS NOT NULL
   AND snapshot.rowid=latest_rowids.snapshot_rowid
   AND snapshot.lifecycle_state NOT IN ('FAILED','EXPIRED')
+  AND radar_is_leveraged_etf(
+      json_extract(snapshot.event_snapshot_json,'$.asset_type'),
+      json_extract(snapshot.event_snapshot_json,'$.name')
+  )=0
 """
 
 _CARRYOVER_SNAPSHOT_SQL = """
@@ -682,6 +688,7 @@ class BreakoutRepository:
         connection.execute(f"PRAGMA busy_timeout={self.busy_timeout_ms}")
         connection.execute("PRAGMA foreign_keys=ON")
         connection.execute("PRAGMA query_only=ON")
+        connection.create_function("radar_is_leveraged_etf", 2, is_leveraged_etf, deterministic=True)
         return connection
 
     def initialize(self) -> None:
@@ -1186,7 +1193,8 @@ class BreakoutRepository:
         with_transitions: bool = False,
     ) -> list[dict[str, Any]]:
         """Opt-in effective view. Scheduled snapshots and public defaults stay pure."""
-        result = [dict(event) for event in events]
+        result = [dict(event) for event in events
+                  if not is_leveraged_etf(event.get("asset_type"), event.get("name"))]
         if not result:
             return result
         connection = self._read_connection()
@@ -1218,7 +1226,8 @@ class BreakoutRepository:
                         for item in transitions
                     ]
                 result[index] = live
-            return result
+            return [event for event in result
+                    if not is_leveraged_etf(event.get("asset_type"), event.get("name"))]
         finally:
             connection.close()
 
@@ -1237,6 +1246,8 @@ class BreakoutRepository:
             rows = connection.execute(
                 """SELECT event_json FROM breakout_live_events
                    WHERE updated_at>=? AND updated_at<=? AND evidence_at<=?
+                   AND radar_is_leveraged_etf(json_extract(event_json,'$.asset_type'),
+                                             json_extract(event_json,'$.name'))=0
                    ORDER BY updated_at DESC,event_id LIMIT ?""",
                 (_timestamp(observed - timedelta(seconds=lookback_seconds)),
                  _timestamp(observed), _timestamp(observed), limit),
@@ -3464,7 +3475,10 @@ class BreakoutRepository:
         event_rows = connection.execute(
             """
             SELECT event_snapshot_json FROM breakout_scan_events
-            WHERE scan_run_id=? ORDER BY rank
+            WHERE scan_run_id=?
+              AND radar_is_leveraged_etf(json_extract(event_snapshot_json,'$.asset_type'),
+                                        json_extract(event_snapshot_json,'$.name'))=0
+            ORDER BY rank
             """,
             (row["scan_run_id"],),
         ).fetchall()
@@ -3646,7 +3660,11 @@ class BreakoutRepository:
             if completed is None:
                 raise InvalidCursorError("cursor scan is unavailable or incomplete")
 
-            clauses = ["scan_run_id=?"]
+            clauses = [
+                "scan_run_id=?",
+                "radar_is_leveraged_etf(json_extract(event_snapshot_json,'$.asset_type'),"
+                "json_extract(event_snapshot_json,'$.name'))=0",
+            ]
             params: list[Any] = [scan_run_id]
             if date is not None:
                 clauses.append(
@@ -3831,6 +3849,9 @@ class BreakoutRepository:
                 connection.commit()
                 return None
             event = _json_loads(row["event_json"], {})
+            if is_leveraged_etf(event.get("asset_type"), event.get("name")):
+                connection.commit()
+                return None
             transition_rows = connection.execute(
                 """
                 SELECT rowid AS transition_sequence,transition_json FROM breakout_transitions
@@ -3866,7 +3887,10 @@ class BreakoutRepository:
             rows = connection.execute(
                 """
                 SELECT e.event_json FROM breakout_events e
-                WHERE e.ticker=? AND EXISTS(
+                WHERE e.ticker=?
+                AND radar_is_leveraged_etf(json_extract(e.event_json,'$.asset_type'),
+                                          json_extract(e.event_json,'$.name'))=0
+                AND EXISTS(
                     SELECT 1 FROM breakout_scan_events se
                     JOIN breakout_scan_runs sr ON sr.scan_run_id=se.scan_run_id
                     WHERE se.event_id=e.event_id AND sr.status='completed'

@@ -21,6 +21,7 @@ from app.services.breakouts.base_detector import detect_base
 from app.services.breakouts.anchors import anchor_levels, resolve_event_anchor
 from app.services.breakouts.breakout_detector import detect_breakout
 from app.services.breakouts.config import BreakoutSettings, get_breakout_settings
+from app.services.breakouts.asset_policy import is_leveraged_etf
 from app.services.breakouts.errors import BreakoutStageError
 from app.services.breakouts.feature_engine import (
     completed_daily_session,
@@ -1761,14 +1762,20 @@ class BreakoutRadarService:
         cutoff = self._cutoff(observed_at, observed_session)
         candidates = [
             item if isinstance(item, BreakoutCandidate) else BreakoutCandidate.model_validate(item)
-            for item in list(getattr(discovery, "candidates", ()) or ())[
-                : self.settings.provider_result_limit
-            ]
+            for item in (getattr(discovery, "candidates", ()) or ())
         ]
+        # Cached discovery and alternate providers must obey the same policy,
+        # before excluded funds can consume the expensive validation budget.
+        candidates = [
+            item for item in candidates
+            if not is_leveraged_etf(item.asset_type, item.name, item.raw_provider_fields)
+        ][: self.settings.provider_result_limit]
         live_priors = [BreakoutEvent.model_validate(item).model_dump(mode="python")
                        for item in (realtime_events or ())]
         if len(live_priors) > 200:
             raise ValueError("at most 200 realtime events can be evaluated")
+        live_priors = [item for item in live_priors
+                       if not is_leveraged_etf(item.get("asset_type"), item.get("name"))]
         live_events: list[BreakoutEvent] = []
         live_transitions: list[dict[str, Any]] = []
         raw_carryovers = list(carryover_events or ())
@@ -1777,6 +1784,8 @@ class BreakoutRadarService:
         carryovers: list[Mapping[str, Any]] = []
         for value in raw_carryovers:
             event = BreakoutEvent.model_validate(value)
+            if is_leveraged_etf(event.asset_type, event.name):
+                continue
             if (
                 event.lifecycle_state
                 in {

@@ -14,6 +14,7 @@ from app.services.breakouts.clock import MarketClock
 from app.services.breakouts.anchors import resolve_event_anchor
 from app.services.breakouts.config import BreakoutSettings, get_breakout_settings
 from app.services.breakouts.repository import BreakoutRepository, BreakoutRepositoryError
+from app.services.breakouts.asset_policy import is_leveraged_etf
 
 logger = logging.getLogger(__name__)
 
@@ -229,6 +230,8 @@ class BreakoutRealtimeAdapter:
         return active
 
     def _eligible(self, event: Mapping[str, Any], price: float, trade_at: datetime) -> bool:
+        if is_leveraged_etf(event.get("asset_type"), event.get("name")):
+            return False
         if event.get("lifecycle_state") != "WATCHING":
             return False
         if not (0 <= (trade_at - _time(event["first_seen_at"])).total_seconds() <= self.settings.event_ttl_seconds):
