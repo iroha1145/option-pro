@@ -155,8 +155,16 @@ def compute_snapshot(
     blend = tuple(horizon_cfg["momentum_blend"])
     weights = resolve_weights(registry, sector_id, algorithm, profile, horizon)
     target_track = "etf" if sector.get("asset_track") == "etf" else "stock"
+    def _usable(series: SecuritySeries) -> bool:
+        return source_is_available(series, as_of) and has_complete_session_bar(series, session)
+
     market = panel.get("SPY")
+    if market is not None and not _usable(market):
+        market = None
     matched = panel.get(matched_benchmark_id) if matched_benchmark_id else None
+    if matched is not None and not _usable(matched):
+        matched = None
+    residual_panel = {sid: series for sid, series in panel.items() if _usable(series)}
     raws: dict[str, RawComponents] = {}
     candidate_ids: set[str] = set()
     reference_ids: set[str] = set()
@@ -166,7 +174,7 @@ def compute_snapshot(
         raws[sid] = extract_raw(
             series,
             market=market,
-            panel=panel,
+            panel=residual_panel,
             horizon=horizon,
             momentum_blend=blend,  # type: ignore[arg-type]
             sector_gates=sector["gates"],

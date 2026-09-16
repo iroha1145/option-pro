@@ -13,6 +13,7 @@ from app.services.research_eod_v1.constants import (
     RESIDUAL_SUM_END,
     RESIDUAL_SUM_START,
 )
+from app.services.research_eod_v1.calendar_asof import next_session
 from app.services.research_eod_v1.mathutil import ordinary_least_squares
 from app.services.research_eod_v1.series import SecuritySeries
 
@@ -44,6 +45,11 @@ def _session_returns_on_grid(series: SecuritySeries, grid: list[date]) -> np.nda
         prev_i = idx[prev]
         if cur_i != prev_i + 1:
             continue
+        try:
+            if next_session(prev) != day:
+                continue
+        except RuntimeError:
+            continue
         prev_px = float(prices[prev_i])
         cur_px = float(prices[cur_i])
         if np.isfinite(prev_px) and np.isfinite(cur_px) and prev_px > 0:
@@ -72,11 +78,49 @@ def _series_complete_on_grid(series: SecuritySeries, grid: list[date]) -> bool:
     return True
 
 
+def _residual_window(grid_len: int) -> tuple[int, int, int] | None:
+    """Return (price_from, start, end) indices on the common grid, or None if short."""
+
+    t = grid_len - 1
+    start = t - RESIDUAL_SUM_START
+    end = t - RESIDUAL_SUM_END
+    if start < RESIDUAL_FIT_WINDOW + 2 or end <= start:
+        return None
+    price_from = start - RESIDUAL_FIT_WINDOW - 1
+    if price_from < 0:
+        return None
+    return price_from, start, end
+
+
+def _adjacent_legal_sessions(grid: list[date], lo: int, hi: int) -> bool:
+    """True only when every consecutive pair in [lo, hi] is the next legal session."""
+
+    if hi <= lo:
+        return True
+    for i in range(lo + 1, hi + 1):
+        prev, day = grid[i - 1], grid[i]
+        try:
+            if next_session(prev) != day:
+                return False
+        except RuntimeError:
+            return False
+    return True
+
+
+def _finite_returns(values: np.ndarray, lo: int, hi: int) -> bool:
+    window = values[lo : hi + 1]
+    return bool(window.size) and bool(np.isfinite(window).all())
+
+
 def _industry_basket_returns(
     panel: dict[str, SecuritySeries],
     security_id: str,
     industry_id: str | None,
     grid: list[date],
+    *,
+    need_dates: list[date],
+    return_lo: int,
+    return_hi: int,
 ) -> np.ndarray | None:
     if not industry_id:
         return None
@@ -89,9 +133,12 @@ def _industry_basket_returns(
             continue
         if item.asset_track != target.asset_track:
             continue
-        if not _series_complete_on_grid(item, grid):
+        if not _series_complete_on_grid(item, need_dates):
             continue
-        peers.append(_session_returns_on_grid(item, grid))
+        aligned = _session_returns_on_grid(item, grid)
+        if not _finite_returns(aligned, return_lo, return_hi):
+            continue
+        peers.append(aligned)
     if len(peers) < 2:
         return None
     stacked = np.vstack(peers)
@@ -124,16 +171,29 @@ def residual_raw_momentum(
         if len(series.dates) < RESIDUAL_HISTORY_MIN:
             return ResidualMomentum(None, "SHORT_HISTORY")
         return ResidualMomentum(None, "UNALIGNED_BENCHMARK")
-    if not _series_complete_on_grid(series, grid) or not _series_complete_on_grid(benchmark, grid):
+    window = _residual_window(len(grid))
+    if window is None:
+        return ResidualMomentum(None, "SHORT_HISTORY")
+    price_from, start, end = window
+    need_dates = grid[price_from : end + 1]
+    if not _series_complete_on_grid(series, need_dates) or not _series_complete_on_grid(benchmark, need_dates):
         return ResidualMomentum(None, "UNALIGNED_BENCHMARK")
+    if not _adjacent_legal_sessions(grid, price_from, end):
+        return ResidualMomentum(None, "MISSING_DAY_RETURN")
     r_i = _session_returns_on_grid(series, grid)
     r_m = _session_returns_on_grid(benchmark, grid)
-    r_g = _industry_basket_returns(panel, series.security_id, series.industry_id, grid)
-    t = len(grid) - 1
-    start = t - RESIDUAL_SUM_START
-    end = t - RESIDUAL_SUM_END
-    if start < RESIDUAL_FIT_WINDOW + 2 or end <= start:
-        return ResidualMomentum(None, "SHORT_HISTORY")
+    return_lo = price_from + 1
+    if not _finite_returns(r_i, return_lo, end) or not _finite_returns(r_m, return_lo, end):
+        return ResidualMomentum(None, "MISSING_DAY_RETURN")
+    r_g = _industry_basket_returns(
+        panel,
+        series.security_id,
+        series.industry_id,
+        grid,
+        need_dates=need_dates,
+        return_lo=return_lo,
+        return_hi=end,
+    )
     residuals: list[float] = []
     for s in range(start, end + 1):
         fit_slice = slice(s - RESIDUAL_FIT_WINDOW, s)
