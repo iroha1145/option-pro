@@ -75,6 +75,36 @@ def test_family_b_requires_profile_confirm_closes() -> None:
     assert aggressive.passed is True
 
 
+def test_family_b_separates_platform_distance_from_ma_distance() -> None:
+    raw = _raw(
+        frozen_setup={"resistance_high": 10.0, "setup_id": "AAA:frozen"},
+        b_status="observed",
+        sma50=20.0,
+        sma50_prev20=19.0,
+        above_sma50=True,
+        platform_distance_atr=3.1,
+        ma_distance_atr=0.4,
+        breakout_track={
+            "through": True,
+            "still_through": True,
+            "tracking_expired": False,
+            "current_consecutive_closes": 2,
+            "consecutive_closes": 2,
+            "first_day_rvol": 2.0,
+            "first_day_clv": 0.8,
+        },
+    )
+    far_base = setup_b(raw, {"rvol_multiplier": 1.0, "confirm_closes": 1}, GATES)
+    assert "TOO_FAR_FROM_BASE" in far_base.reasons
+    assert "TOO_FAR_FROM_MA" not in far_base.reasons
+    raw.platform_distance_atr = 0.4
+    raw.ma_distance_atr = 9.0
+    gates = {**GATES, "ma_distance_max_atr": 2.0}
+    far_ma = setup_b(raw, {"rvol_multiplier": 1.0, "confirm_closes": 1}, gates)
+    assert "TOO_FAR_FROM_MA" in far_ma.reasons
+    assert "TOO_FAR_FROM_BASE" not in far_ma.reasons
+
+
 def test_family_d_cannot_fall_back_to_ordinary_momentum() -> None:
     raw = _raw()
     raw.residual = ResidualMomentum(None, "INSUFFICIENT_MATCHED_BENCHMARK")

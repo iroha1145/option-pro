@@ -318,6 +318,18 @@ def test_after_close_without_vendor_proof_keeps_last_proven_session() -> None:
     assert last_known_finalized_session(clock, last_proven_finalized=date(2026, 9, 15)) == date(2026, 9, 15)
 
 
+def test_early_close_holiday_and_dst_cutoffs() -> None:
+    half = date(2024, 7, 3)
+    assert last_complete_eod_session(datetime(2024, 7, 3, 12, 59, tzinfo=ET)) == date(2024, 7, 2)
+    assert last_complete_eod_session(datetime(2024, 7, 3, 13, 0, tzinfo=ET)) == half
+    labor = datetime(2026, 9, 7, 10, 0, tzinfo=ET)
+    assert last_complete_eod_session(labor) == date(2026, 9, 4)
+    before_dst = session_close_at(date(2026, 3, 6))
+    after_dst = session_close_at(date(2026, 3, 9))
+    assert before_dst.utcoffset() != after_dst.utcoffset()
+    assert last_complete_eod_session(after_dst) == date(2026, 3, 9)
+
+
 def test_failed_platform_events_include_later_base(monkeypatch) -> None:
     days = trading_days(date(2015, 1, 2), 500)
     closes = np.full(500, 100.0)
@@ -787,3 +799,30 @@ def test_late_security_is_dropped_from_eod_pools() -> None:
     assert "LATE" not in snap["candidate_ids"]
     assert "LATE" not in snap["reference_ids"]
     assert "LATE" in snap["late_securities"]
+
+
+def test_snapshot_rows_carry_halt_and_adjustment_fields() -> None:
+    days = trading_days(date(2018, 1, 2), 80)
+    series = make_series("NVDA", days, trending_close(80, 40, 0.1))
+    series.halted = True
+    series.price_adjustment = tuple(["unverified"] * 80)
+    series.volume_adjustment = tuple(["unverified"] * 80)
+    series.vintage_status = tuple(["download_time_not_pit"] * 80)
+    panel = {
+        "NVDA": series,
+        "SPY": make_series("SPY", days, trending_close(80, 200, 0.08), asset_track="etf", security_type="ETF"),
+    }
+    snap = compute_snapshot(
+        as_of_after_close(days[-1]),
+        panel,
+        "u",
+        load_registry(),
+        sector_id="semiconductors",
+        algorithm="A_trend_quality",
+    )
+    assert snap["rows"]
+    row = next(item for item in snap["rows"] if item["security_id"] == "NVDA")
+    assert row["halted"] is True
+    assert row["currently_tradable"] is False
+    assert row["price_adjustment"] == "unverified"
+    assert row["vintage_status"] == "download_time_not_pit"

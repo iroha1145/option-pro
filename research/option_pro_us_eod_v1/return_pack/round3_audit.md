@@ -85,6 +85,8 @@
 
 - 缺 high/low 的 bar 不能通过 `has_complete_session_bar`。
 - 快照行带 `price_adjustment` / `vintage_status` / `tri_verified` / `identity_confidence` / `industry_source`。
+- 快照行带 `halted` / `currently_tradable` / `zero_volume` / `price_adjustment` / `vintage_status`。
+- 不变量样本：`round3_invariants.json`（种子 174 残差、拆股账本、假期/提前收市/DST、Yahoo 平台事件轨迹）。
 - 断网回放命令：`PYTHONPATH=backend python research/option_pro_us_eod_v1/scripts/export_offline_replay.py`
 - 校验字节哈希：`f8de36f35ffdfcd532f84fecbb2258d0aa99dd2d06a2de3337f09e34bff77044`（见 `offline_replay_hash.json`）。文件不进 Git。
 
@@ -94,7 +96,7 @@
 PYTHONPATH=backend pytest -q tests/test_research_eod_v1_*.py tests/test_pr174_review_regressions.py
 ```
 
-结果：**117 passed**。
+结果：**120 passed**。
 
 本机前端（不是 GitHub CI 终态）：
 

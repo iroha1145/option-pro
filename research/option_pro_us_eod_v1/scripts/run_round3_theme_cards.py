@@ -20,6 +20,7 @@ sys.path.insert(0, str(ROOT / "backend"))
 from app.services.research_eod_v1.calendar_asof import (  # noqa: E402
     capture_as_of,
     last_complete_eod_session,
+    last_known_finalized_session,
     session_close_at,
 )
 from app.services.research_eod_v1.config_load import load_registry  # noqa: E402
@@ -51,10 +52,10 @@ def _venue(track: str) -> dict:
 
 def main() -> int:
     clock = capture_as_of(datetime.now(timezone.utc))
-    session = last_complete_eod_session(clock)
+    session = last_known_finalized_session(clock, last_proven_finalized=ALLOWED)
     if session > ALLOWED:
         raise SystemExit(f"clock {clock.isoformat()} selected {session}, later than {ALLOWED}")
-    as_of = clock if last_complete_eod_session(clock) == session else session_close_at(session) + timedelta(minutes=30)
+    as_of = clock if last_complete_eod_session(clock, source_finalized_through=session) == session else session_close_at(session) + timedelta(minutes=30)
 
     appearances: dict[str, list[str]] = {}
     for theme_id, sector in SECTORS.items():

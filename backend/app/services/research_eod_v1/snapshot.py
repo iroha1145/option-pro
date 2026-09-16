@@ -369,6 +369,9 @@ def compute_snapshot(
                 "reconstruction_mode": series.reconstruction_mode,
                 "identity_confidence": dict(series.venue_metadata).get("identity_confidence"),
                 "industry_source": dict(series.venue_metadata).get("industry_source"),
+                "halted": bool(raw.halted),
+                "currently_tradable": bool(raw.currently_tradable),
+                "zero_volume": bool(raw.zero_volume),
             }
         )
     fingerprint = hashlib.sha256(
