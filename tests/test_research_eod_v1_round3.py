@@ -9,7 +9,11 @@ import numpy as np
 import pytest
 
 from app.services.research_eod_v1 import FEATURE_VERSION, factors
-from app.services.research_eod_v1.calendar_asof import last_complete_eod_session, session_close_at
+from app.services.research_eod_v1.calendar_asof import (
+    last_complete_eod_session,
+    last_known_finalized_session,
+    session_close_at,
+)
 from app.services.research_eod_v1.composite import m1_consensus
 from app.services.research_eod_v1.config_load import load_registry
 from app.services.research_eod_v1.data.capture_store import (
@@ -45,7 +49,7 @@ def _signal(sid: str, session: date, notional: float = 2000.0) -> dict:
 
 
 def test_feature_version_bumped_for_round3() -> None:
-    assert FEATURE_VERSION == "us-eod-research-features-v1.2"
+    assert FEATURE_VERSION == "us-eod-research-features-v1.3"
 
 
 def test_residual_short_ipo_is_not_ok() -> None:
@@ -308,6 +312,12 @@ def test_intraday_clock_cannot_select_same_day_session() -> None:
     assert last_complete_eod_session(clock) == date(2026, 9, 15)
 
 
+def test_after_close_without_vendor_proof_keeps_last_proven_session() -> None:
+    clock = datetime(2026, 9, 16, 16, 9, tzinfo=ET)
+    assert last_complete_eod_session(clock) == date(2026, 9, 16)
+    assert last_known_finalized_session(clock, last_proven_finalized=date(2026, 9, 15)) == date(2026, 9, 15)
+
+
 def test_failed_platform_events_include_later_base(monkeypatch) -> None:
     days = trading_days(date(2015, 1, 2), 500)
     closes = np.full(500, 100.0)
@@ -432,6 +442,34 @@ def test_wide_old_platform_expires_by_age_so_later_base_can_form(monkeypatch) ->
     assert setup["resistance_high"] == 110.0
     kinds = [event["kind"] for event in setup.get("events", [])]
     assert "expired" in kinds
+    assert kinds.count("formed") >= 2
+
+
+def test_two_distinct_platforms_can_be_live_at_once(monkeypatch) -> None:
+    days = trading_days(date(2018, 1, 2), 160)
+    closes = np.full(160, 95.0)
+    series = make_series("BOTH", days, closes)
+    series.low = closes - 1
+    series.high = closes + 1
+
+    def geometry(_series, t, **kwargs):
+        if t == 80:
+            return 70.0, "observed", {"support": 90.0, "resistance_high": 100.0}
+        if t == 120:
+            return 85.0, "observed", {"support": 80.0, "resistance_high": 110.0}
+        return 0.0, "no_base_observed", None
+
+    monkeypatch.setattr(factors, "_base_geometry", geometry)
+    score, status, setup = factors.resolve_frozen_setup(series, 150, min_sessions=20, max_sessions=80, min_touches=2)
+    assert status == "observed"
+    assert setup is not None
+    concurrent = setup.get("concurrent_setups") or []
+    assert len(concurrent) >= 2
+    ids = {item["setup_id"] for item in concurrent}
+    assert len(ids) >= 2
+    assert setup["resistance_high"] == 110.0
+    assert score == 85.0
+    kinds = [event["kind"] for event in setup.get("events", [])]
     assert kinds.count("formed") >= 2
 
 

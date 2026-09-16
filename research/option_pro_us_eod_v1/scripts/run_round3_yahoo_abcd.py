@@ -18,6 +18,7 @@ sys.path.insert(0, str(ROOT / "backend"))
 from app.services.research_eod_v1.calendar_asof import (  # noqa: E402
     capture_as_of,
     last_complete_eod_session,
+    last_known_finalized_session,
     session_close_at,
 )
 from app.services.research_eod_v1.config_load import load_registry  # noqa: E402
@@ -75,7 +76,7 @@ def _as_of_after_complete(session: date) -> datetime:
 
 def main() -> int:
     clock = capture_as_of(datetime.now(timezone.utc))
-    live_session = last_complete_eod_session(clock)
+    live_session = last_known_finalized_session(clock, last_proven_finalized=ALLOWED)
     if live_session > ALLOWED:
         raise SystemExit(f"live clock {clock.isoformat()} selected {live_session}, later than allowed {ALLOWED}")
 

@@ -243,6 +243,86 @@ def _close_below_support(series: SecuritySeries, index: int, support: float) -> 
     return bool(np.isfinite(price) and price < support)
 
 
+def _similar_platform_box(left: dict[str, Any], right: dict[str, Any]) -> bool:
+    if left.get("setup_id") and left.get("setup_id") == right.get("setup_id"):
+        return True
+    l_res = float(left["resistance_high"])
+    r_res = float(right["resistance_high"])
+    l_sup = float(left["support"])
+    r_sup = float(right["support"])
+    res_scale = max(abs(l_res), abs(r_res), 1e-9)
+    sup_scale = max(abs(l_sup), abs(r_sup), 1e-9)
+    return abs(l_res - r_res) / res_scale < 0.02 and abs(l_sup - r_sup) / sup_scale < 0.02
+
+
+def _advance_live_platform(
+    item: dict[str, Any],
+    series: SecuritySeries,
+    eval_t: int,
+    max_sessions: int,
+    events: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    session = series.dates[eval_t]
+    support = float(item["support"])
+    resistance = float(item["resistance_high"])
+    width = max(resistance - support, 1e-9)
+    close = float(series.close[eval_t])
+    formed_index = series.dates.index(date.fromisoformat(str(item["formed_at"])))
+    age = eval_t - formed_index
+    fail_streak = int(item.get("fail_streak") or 0)
+    repair_streak = int(item.get("repair_streak") or 0)
+    if _close_below_support(series, eval_t, support):
+        fail_streak += 1
+        repair_streak = 0
+    else:
+        fail_streak = 0
+        if support <= close <= resistance:
+            repair_streak += 1
+        else:
+            repair_streak = 0
+    item = dict(item)
+    item["fail_streak"] = fail_streak
+    item["repair_streak"] = repair_streak
+    if item.get("lifecycle") != "failed" and fail_streak >= PLATFORM_FAIL_CONFIRM_SESSIONS:
+        item["failed_at"] = session.isoformat()
+        item["lifecycle"] = "failed"
+        item["version"] = int(item.get("version") or 1) + 1
+        item["fail_streak"] = 0
+        item["repair_streak"] = 0
+        events.append(_platform_event(item, session, "failed", "close_below_support"))
+        item["events"] = list(events)
+        return item
+    too_old = age > int(max_sessions) * PLATFORM_EXPIRE_MULTIPLE
+    left_range = np.isfinite(close) and (
+        close > resistance + 2.0 * width or close < support - 2.0 * width
+    )
+    if item.get("lifecycle") != "failed" and too_old:
+        item["expired_at"] = session.isoformat()
+        item["lifecycle"] = "expired"
+        item["version"] = int(item.get("version") or 1) + 1
+        reason = "max_age" if not left_range else "left_range"
+        events.append(_platform_event(item, session, "expired", reason))
+        item["events"] = list(events)
+        return None
+    if item.get("lifecycle") == "failed":
+        if repair_streak >= PLATFORM_FAIL_CONFIRM_SESSIONS:
+            item["repaired_at"] = session.isoformat()
+            item["lifecycle"] = "active"
+            item["failed_at"] = None
+            item["version"] = int(item.get("version") or 1) + 1
+            item["fail_streak"] = 0
+            item["repair_streak"] = 0
+            events.append(_platform_event(item, session, "repaired", "back_in_range"))
+            item["events"] = list(events)
+            return item
+        failed_at = date.fromisoformat(str(item["failed_at"]))
+        failed_index = series.dates.index(failed_at)
+        if eval_t - failed_index >= PLATFORM_REPAIR_WINDOW:
+            events.append(_platform_event(item, session, "terminated", "repair_window_elapsed"))
+            return None
+    return item
+
+
 def resolve_frozen_setup(
     series: SecuritySeries,
     t: int,
@@ -251,81 +331,20 @@ def resolve_frozen_setup(
     max_sessions: int,
     min_touches: int,
 ) -> tuple[float | None, str, dict[str, Any] | None]:
-    """Freeze the currently valid platform. Failed/expired bases may be replaced."""
+    """Freeze currently valid platforms. Distinct live bases can coexist."""
 
     min_eval = int(min_sessions) + 5
     if t < min_eval:
         return None, "insufficient_history", None
     events: list[dict[str, Any]] = []
-    active: dict[str, Any] | None = None
-    active_score: float | None = None
-    fail_streak = 0
-    repair_streak = 0
+    live: list[dict[str, Any]] = []
     for eval_t in range(min_eval, t + 1):
-        session = series.dates[eval_t]
-        if active is not None:
-            support = float(active["support"])
-            resistance = float(active["resistance_high"])
-            width = max(resistance - support, 1e-9)
-            close = float(series.close[eval_t])
-            formed_index = series.dates.index(date.fromisoformat(str(active["formed_at"])))
-            age = eval_t - formed_index
-            if _close_below_support(series, eval_t, support):
-                fail_streak += 1
-                repair_streak = 0
-            else:
-                fail_streak = 0
-                if support <= close <= resistance:
-                    repair_streak += 1
-                else:
-                    repair_streak = 0
-            if active.get("lifecycle") != "failed" and fail_streak >= PLATFORM_FAIL_CONFIRM_SESSIONS:
-                active = dict(active)
-                active["failed_at"] = session.isoformat()
-                active["lifecycle"] = "failed"
-                active["version"] = int(active.get("version") or 1) + 1
-                events.append(_platform_event(active, session, "failed", "close_below_support"))
-                active["events"] = list(events)
-                fail_streak = 0
-                repair_streak = 0
-                continue
-            too_old = age > int(max_sessions) * PLATFORM_EXPIRE_MULTIPLE
-            left_range = np.isfinite(close) and (
-                close > resistance + 2.0 * width or close < support - 2.0 * width
-            )
-            if active.get("lifecycle") != "failed" and too_old:
-                active = dict(active)
-                active["expired_at"] = session.isoformat()
-                active["lifecycle"] = "expired"
-                active["version"] = int(active.get("version") or 1) + 1
-                reason = "max_age" if not left_range else "left_range"
-                events.append(_platform_event(active, session, "expired", reason))
-                active["events"] = list(events)
-                active = None
-                active_score = None
-                fail_streak = 0
-                repair_streak = 0
-                continue
-            if active.get("lifecycle") == "failed":
-                if repair_streak >= PLATFORM_FAIL_CONFIRM_SESSIONS:
-                    active = dict(active)
-                    active["repaired_at"] = session.isoformat()
-                    active["lifecycle"] = "active"
-                    active["failed_at"] = None
-                    active["version"] = int(active.get("version") or 1) + 1
-                    events.append(_platform_event(active, session, "repaired", "back_in_range"))
-                    active["events"] = list(events)
-                    continue
-                failed_at = date.fromisoformat(str(active["failed_at"]))
-                failed_index = series.dates.index(failed_at)
-                if eval_t - failed_index >= PLATFORM_REPAIR_WINDOW:
-                    events.append(_platform_event(active, session, "terminated", "repair_window_elapsed"))
-                    active = None
-                    active_score = None
-                    fail_streak = 0
-                    repair_streak = 0
-                continue
-            continue
+        advanced: list[dict[str, Any]] = []
+        for item in live:
+            updated = _advance_live_platform(item, series, eval_t, max_sessions, events)
+            if updated is not None:
+                advanced.append(updated)
+        live = advanced
         score, _status, setup = _base_geometry(
             series,
             eval_t,
@@ -336,25 +355,28 @@ def resolve_frozen_setup(
         if setup is None:
             continue
         formed_index = eval_t - 1
-        active = dict(setup)
-        active["formed_at"] = series.dates[formed_index].isoformat()
-        active["known_at"] = active["formed_at"]
-        active["confirmed_at"] = None
-        active["failed_at"] = None
-        active["repaired_at"] = None
-        active["expired_at"] = None
-        active["first_cross_at"] = None
-        active["lifecycle"] = "active"
-        active["version"] = 1
-        active["setup_id"] = (
-            f"{series.security_id}:{active['formed_at']}:r{round(float(active['resistance_high']), 4)}"
+        candidate = dict(setup)
+        candidate["formed_at"] = series.dates[formed_index].isoformat()
+        candidate["known_at"] = candidate["formed_at"]
+        candidate["confirmed_at"] = None
+        candidate["failed_at"] = None
+        candidate["repaired_at"] = None
+        candidate["expired_at"] = None
+        candidate["first_cross_at"] = None
+        candidate["lifecycle"] = "active"
+        candidate["version"] = 1
+        candidate["fail_streak"] = 0
+        candidate["repair_streak"] = 0
+        candidate["_score"] = float(score)
+        candidate["setup_id"] = (
+            f"{series.security_id}:{candidate['formed_at']}:r{round(float(candidate['resistance_high']), 4)}"
         )
-        events.append(_platform_event(active, series.dates[formed_index], "formed"))
-        active["events"] = list(events)
-        active_score = score
-        fail_streak = 0
-        repair_streak = 0
-    if active is None:
+        if any(_similar_platform_box(candidate, item) for item in live):
+            continue
+        events.append(_platform_event(candidate, series.dates[formed_index], "formed"))
+        candidate["events"] = list(events)
+        live.append(candidate)
+    if not live:
         return _base_geometry(
             series,
             t,
@@ -362,11 +384,22 @@ def resolve_frozen_setup(
             max_sessions=max_sessions,
             min_touches=min_touches,
         )
-    active = dict(active)
-    active["events"] = list(events)
-    if active.get("lifecycle") == "failed":
-        return active_score, "failed", active
-    return active_score, "observed", active
+    active = [item for item in live if item.get("lifecycle") == "active"]
+    primary = max(active, key=lambda item: float(item.get("_score") or 0.0)) if active else live[-1]
+    primary = dict(primary)
+    primary["events"] = list(events)
+    primary["concurrent_setups"] = [
+        {
+            "setup_id": item.get("setup_id"),
+            "lifecycle": item.get("lifecycle"),
+            "formed_at": item.get("formed_at"),
+            "resistance_high": item.get("resistance_high"),
+            "support": item.get("support"),
+        }
+        for item in live
+    ]
+    status = "observed" if primary.get("lifecycle") != "failed" else "failed"
+    return primary.get("_score"), status, primary
 
 
 def _breakout_track(

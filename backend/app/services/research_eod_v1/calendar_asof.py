@@ -35,6 +35,22 @@ def last_completed_session(as_of: datetime) -> date:
     return candidate
 
 
+def last_known_finalized_session(
+    as_of: datetime,
+    *,
+    last_proven_finalized: date | None = None,
+) -> date:
+    """Calendar close is not vendor finalization. Without proof, keep the last proven day."""
+
+    calendar = last_completed_session(as_of)
+    if last_proven_finalized is None:
+        return calendar
+    proven = last_proven_finalized
+    if not is_trading_day(proven):
+        proven = previous_trading_day(proven, include_start=True)
+    return min(calendar, proven)
+
+
 def last_complete_eod_session(
     as_of: datetime,
     *,
