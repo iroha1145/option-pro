@@ -16,6 +16,7 @@ sys.path.insert(0, str(ROOT / "backend"))
 
 from app.services.research_eod_v1.config_load import load_registry  # noqa: E402
 from app.services.research_eod_v1.data.to_series import bars_to_series  # noqa: E402
+from app.services.research_eod_v1.data.capture_store import ImmutableCaptureStore  # noqa: E402
 from app.services.research_eod_v1.data.yahoo import DOWNLOAD_PARAMS, YahooDiagnosticProvider  # noqa: E402
 from app.services.research_eod_v1.calendar_asof import capture_as_of, last_complete_eod_session  # noqa: E402
 from app.services.research_eod_v1.snapshot import compute_snapshot  # noqa: E402
@@ -62,7 +63,8 @@ def main() -> int:
     for theme_id, sector in SECTORS.items():
         for ticker in sector["tickers"]:
             appearances[ticker].append(theme_id)
-    provider = YahooDiagnosticProvider(allow_network=True)
+    clock = capture_as_of(datetime.now(timezone.utc))
+    provider = YahooDiagnosticProvider(allow_network=True, clock=clock)
     batched: dict[str, list] = {}
     tickers = list(appearances)
     for offset in range(0, len(tickers), 40):
@@ -124,9 +126,16 @@ def main() -> int:
     pd.DataFrame(master_rows).to_csv(master_path, index=False, lineterminator="\n")
 
     registry = load_registry()
-    clock = capture_as_of(datetime.now(timezone.utc))
     session = last_complete_eod_session(clock)
     as_of = clock
+    store = ImmutableCaptureStore()
+    capture = store.record_capture(
+        clock=clock,
+        bars=[bar for bars in batched.values() for bar in bars],
+        claimed_session=session,
+        stamp=False,
+        notes=("yahoo_current_universe_export",),
+    )
     snap_rows: list[dict] = []
     for theme_id in SECTORS:
         payload = compute_snapshot(
@@ -156,12 +165,14 @@ def main() -> int:
             )
     pd.DataFrame(snap_rows).to_parquet(snap_path, index=False)
 
-    retrieved = datetime.now(timezone.utc).isoformat()
+    retrieved = capture.retrieved_at.isoformat()
     manifest = {
         "provider": "yahoo_yfinance",
         "dataset_id": "yahoo-current-universe-diagnostic",
-        "dataset_version": "2026-09-16",
+        "dataset_version": capture.capture_id,
         "retrieved_at": retrieved,
+        "capture_id": capture.capture_id,
+        "predecessor_id": capture.predecessor_id,
         "request_params_redacted": {
             "start": START.isoformat(),
             "end_exclusive": END.isoformat(),
@@ -171,8 +182,11 @@ def main() -> int:
         "bar_rows": len(bar_rows),
         "snapshot_rows": len(snap_rows),
         "session_date": session.isoformat(),
+        "last_complete_eod_session": capture.last_complete_eod_session.isoformat(),
         "capture_clock": clock.isoformat(),
-        "eod_status": "COMPLETE_EOD",
+        "eod_status": capture.eod_status,
+        "isolated_partial_sessions": [item.isoformat() for item in capture.isolated_partial_sessions],
+        "content_sha256": capture.content_sha256,
         "files": {
             "daily_bars.parquet": _sha256(bars_path),
             "security_master.csv": _sha256(master_path),
@@ -185,6 +199,7 @@ def main() -> int:
             "not a 10-year PIT market backtest",
             "industry_id is theme[0] diagnostic tag, not a verified parent industry",
             "venue defaults are unverified diagnostic assumptions",
+            "capture versions are append-only; recapture must not rewrite retrieved_at",
         ],
         "secret_present": False,
     }

@@ -7,7 +7,7 @@
 
 | ID | 问题 | 代码 | 测试 / 命令 |
 |---|---|---|---|
-| F1 | 盘中抓取被写成当日收盘 | `calendar_asof.last_complete_eod_session`；真实 runner 用 `capture_as_of`，不再调用 `as_of_after_close` | `test_ny_1324_capture_is_not_same_day_eod`、`test_regular_close_boundary_and_vendor_late`、`test_next_day_replay_keeps_prior_complete_session`、`test_future_bars_do_not_change_complete_session` |
+| F1 | 盘中抓取被写成当日收盘 | `calendar_asof.last_complete_eod_session`；`ImmutableCaptureStore` 收盘后重抓末根只追加新版本，不改旧 `retrieved_at`；迟到证券退出候选/参考池 | `test_ny_1324_capture_is_not_same_day_eod`、`test_regular_close_boundary_and_vendor_late`、`test_recapture_after_close_is_new_version_and_does_not_mutate_old_retrieved_at`、`test_next_day_replay_and_future_bars_do_not_mutate_prior_capture`、`test_late_security_is_dropped_from_eod_pools` |
 | F2 | 第一个平台永久锁定；B 用历史最大连续 | 失败后保留修复窗，超时终止再换新平台；超过 `max_sessions*3` 硬到期；`setup_b` 用当前连续收盘 | `test_failed_platform_can_repair_before_a_new_base_forms`、`test_event_log_keeps_distinct_setup_ids_for_sequential_platforms`、`test_failed_early_base_is_not_permanently_active`、`test_first_cross_is_frozen_after_known_at`、`test_breakout_gate_checks_current_streak_not_historical_maximum` |
 | F3 | D 按下标回归 | 共同 session 网格；回归窗必须相邻合法日；内部缺日 → `MISSING_DAY_RETURN` | `test_residual_is_invariant_to_unused_benchmark_prefix`、`test_residual_unused_benchmark_prefix_seed_174`、`test_residual_internal_gap_does_not_treat_skip_as_one_day`、`test_residual_short_ipo_is_not_ok`、`test_residual_late_benchmark_uses_common_grid`、`test_residual_peers_with_different_starts_still_align` |
 | F4 | 盯市混用几何价；价格比当净收益 | `_mark_price` 只用 `raw_close`；账本 `net_return` 含分红现金流；`plan_trade` 遇拆股/分红不报现金流净收益；缺 raw 不按几何价 sizing | `test_raw_shares_are_marked_at_raw_close`、`test_split_trade_return_reconciles_to_share_cash_flows`、`test_split_and_cash_dividend_same_day_keep_identity`、`test_special_dividend_uses_dated_pay_event`、`test_plan_trade_price_path_is_not_cashflow_through_a_split`、`test_missing_raw_close_does_not_size_from_geometry_close` |
@@ -22,7 +22,9 @@
 - 旧 manifest `retrieved_at=2026-09-16T17:24:41.368841+00:00` = 纽约 **13:24:41**。
 - 24 主题诊断 clock `2026-09-16T19:24:10Z` = 纽约 **15:24**，仍在常规 16:00 收盘前。
 - `last_complete_eod_session` = **2026-09-15**。
-- 207 根 2026-09-16 部分 bar 标 `PARTIAL` 并排除 EOD。收盘后重抓尚未做：当前时钟仍未过 16:00 ET。
+- 207 根 2026-09-16 部分 bar 标 `PARTIAL` 并排除 EOD。
+- 收盘后重抓已做成不可变版本库：旧 `retrieved_at` 冻结，新版本另记 `capture_id` / `predecessor_id`。真实 Yahoo 末根重抓仍须在 16:00 ET 之后执行，不能把 13:24 那次改成完整日。
+- 单证券迟到不推迟共同 session，只从候选/参考/残差池剔除。
 - 旧 24 个 A/balanced/mid 当日快照：`INVALID_EOD_CAPTURE`，**不计入** `executed_snapshots`。
 - 大批日线只在 gitignore 缓存；公开 Git 只有统计、哈希、合成夹具。
 
@@ -92,7 +94,7 @@
 PYTHONPATH=backend pytest -q tests/test_research_eod_v1_*.py tests/test_pr174_review_regressions.py
 ```
 
-结果：**109 passed**。
+结果：**115 passed**（含本轮新增的 capture 版本 / 迟到证券测试）。
 
 本机前端（不是 GitHub CI 终态）：
 
@@ -101,15 +103,46 @@ PYTHONPATH=backend pytest -q tests/test_research_eod_v1_*.py tests/test_pr174_re
 
 ## CI
 
-GitHub 单个 `test` job 串行包含 pytest → 前端构建/lint/Playwright → compose 镜像 → worker。`8fbdb800` 推送时两个 `CI / test` 仍为 in_progress。镜像与 worker 阶段在 pytest/前端失败时会被跳过。在该 job 变绿之前，不声称端到端 CI 已完成。
+GitHub 单个 `test` job 串行包含 pytest → 前端构建/lint/Playwright → compose 镜像 → worker。
+
+- `8fbdb800` **push** run 35137528626：**success**（约 30m38s，含前端 / 镜像 / worker）。
+- `8fbdb800` **pull_request** run 35137535841：**failure**（对 `origin/main...HEAD` 的空白检查，旧研究 CSV 尾空格；pytest/前端已过）。
+- `0f5c0233` 去掉那些尾空格。push run 35141379097 在记录本段时仍在跑：pytest、前端构建/行为测试/lint 已成功，Playwright 进行中，镜像与 worker **尚未执行**。全部通过前不声称端到端验证完成。
 
 生产默认、A0、T1、日常股票/期权/账户路径未改。`RESEARCH_EOD_V1_ENABLED` 仍为 false。
 
+## 对 CURSOR_FIX_ROUND3 的逐项核对
+
+| 规格项 | 状态 | 证据 / 缺口 |
+|---|---|---|
+| 1 真实 runner 不用 `as_of_after_close` | 已修 | `export_yahoo_snapshot` / `run_current_universe_diagnostic` / 四主题与 24 主题脚本走 `capture_as_of` |
+| 1 日历+来源最终化决定完整日 | 已修 | `last_complete_eod_session`；13:24→9/15；16:00 边界；供应商晚到 |
+| 1 部分 bar 标 PARTIAL 并排除 EOD 池 | 已修 | `session_is_partial` + `has_complete_session_bar`；207 根 9/16 被隔离 |
+| 1 收盘后重抓生成新版本、不改旧 retrieved_at | 代码已修，真实行情未跑 | `ImmutableCaptureStore`；合成测试覆盖重抓/次日重放/未来 bar。Yahoo 网络重抓须 16:00 ET 之后 |
+| 1 旧 9/16 采集标 INVALID | 已修 | `manifest.json` `eod_status=INVALID_EOD_CAPTURE`；24 张卡撤销 |
+| 1 单证券迟到 | 已修（不推迟共同日） | `late_securities` 只剔除候选/参考/残差，不把共同 session 推后 |
+| 2 平台失败/修复/终止/到期与新平台 | 已修 | 修复窗 10、失败确认 3、硬到期 `max*3`；事件 append-only |
+| 2 first_cross 冻结；B 用当前连续 | 已修 | `test_first_cross_is_frozen_after_known_at`；`setup_b` 看 `current_consecutive_closes` |
+| 2 同时多个真实活跃平台 | 未做 | 事件日志可有多个顺序 ID，模型仍是单一 active |
+| 3 D 按日期网格 + 相邻合法日 | 已修 | 种子 174 前缀不变；内部缺日 `MISSING_DAY_RETURN` |
+| 3 市场/行业输入经过可用性过滤 | 已修 | snapshot residual panel 用 `_usable` |
+| 4 统一 raw 账本 | 已修 | raw_close 盯市；缺 raw 不 fallback；分红应收/支付；收购带日期 |
+| 4 未知盯市不抹掉其他仓位 | 已修 | `equity=None` + partial/known/unknown |
+| 4 隐性全仓 | 已修 | 默认拒绝未预尺寸订单 |
+| 5 不把缺失补成已知 | 已修 | NaN 保留；OHLC 违规丢弃；vintage/adjustment 传到快照 |
+| 5 重建 ≠ 下载时间 PIT | 已修 | `source_available_at` 不按下载时刻一刀切 |
+| 5 导出与 LocalParquet 同口径 + 字节哈希 | 已修 | 合成 parquet + `offline_replay_hash.json` |
+| 6 M3 重算边际；M2 要 as_of；M1 折叠后分歧 | 已修 | 对应三项回归 |
+| 7 少量允许日 A/B/C/D 真实快照 | 已做诊断 | 4 主题×2 日 + 24 主题×1 日；0 回测；无赢家 |
+| 7 完整 CI 含前端/镜像/worker | 进行中 | `8fbdb800` push 已绿；`0f5c0233` 前端已过、镜像/worker 未完成 |
+| 7 不合并不晋升 | 遵守 | 本轮不 merge / promote / 调门槛 |
+
 ## 未执行
 
-- 2026-09-16 收盘后重抓末根并生成新数据版本
+- 2026-09-16 收盘后对真实 Yahoo 末根的网络重抓（代码与合成版本库已就绪；时钟未过 16:00 ET 时不得把盘中根改写成完整日）
 - 864 主矩阵回测
 - 退市并集 / 历史 PIT 成员
+- 同时多个真实活跃平台
 - Massive（未使用；若曾在聊天里粘贴密钥，应轮换）
 - GitHub 前端 / 镜像 / worker 终态
 - 合并、晋升、解封 holdout

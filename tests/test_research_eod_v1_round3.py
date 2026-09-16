@@ -12,6 +12,13 @@ from app.services.research_eod_v1 import FEATURE_VERSION, factors
 from app.services.research_eod_v1.calendar_asof import last_complete_eod_session, session_close_at
 from app.services.research_eod_v1.composite import m1_consensus
 from app.services.research_eod_v1.config_load import load_registry
+from app.services.research_eod_v1.data.capture_store import (
+    COMPLETE_EOD,
+    INVALID_EOD_CAPTURE,
+    RECAPTURE_AFTER_CLOSE,
+    VENDOR_LATE,
+    ImmutableCaptureStore,
+)
 from app.services.research_eod_v1.data.contract import ResearchBar, hash_file_bytes
 from app.services.research_eod_v1.data.local_parquet import LocalParquetProvider
 from app.services.research_eod_v1.data.to_series import bars_to_series
@@ -566,3 +573,179 @@ def test_offline_combined_parquet_roundtrip_hashes_bytes(tmp_path: Path) -> None
     meta = provider.export_snapshot(str(tmp_path / "snapshot.txt"))
     assert meta.content_sha256 == hash_file_bytes([path])
     assert meta.content_sha256 != hash_file_bytes([])
+
+
+def _capture_bar(
+    sid: str,
+    session: date,
+    *,
+    close: float = 10.5,
+    retrieved=None,
+    partial: bool = False,
+) -> ResearchBar:
+    return ResearchBar(
+        security_id=sid,
+        session_date=session,
+        open=10.0,
+        high=11.0,
+        low=9.0,
+        close=close,
+        raw_open=10.0,
+        raw_close=close,
+        volume=1000.0,
+        dollar_volume=close * 1000.0,
+        tri=close,
+        retrieved_at=retrieved,
+        vintage_status="PARTIAL" if partial else "download_time_not_pit",
+        partial=partial,
+    )
+
+
+def test_intraday_capture_claiming_same_day_is_invalid_eod() -> None:
+    clock = datetime(2026, 9, 16, 13, 24, 41, tzinfo=ET)
+    store = ImmutableCaptureStore()
+    version = store.record_capture(
+        clock=clock,
+        bars=(
+            _capture_bar("AAA", date(2026, 9, 15), close=10.0),
+            _capture_bar("AAA", date(2026, 9, 16), close=10.4, partial=True),
+        ),
+        claimed_session=date(2026, 9, 16),
+    )
+    assert version.eod_status == INVALID_EOD_CAPTURE
+    assert version.last_complete_eod_session == date(2026, 9, 15)
+    assert date(2026, 9, 16) in version.isolated_partial_sessions
+    assert version.bars[-1].partial
+    assert version.bars[-1].retrieved_at == clock
+
+
+def test_regular_close_and_vendor_late_capture_status() -> None:
+    store = ImmutableCaptureStore()
+    at_close = datetime(2026, 9, 16, 16, 0, tzinfo=ET)
+    complete = store.record_capture(
+        clock=at_close,
+        bars=(_capture_bar("AAA", date(2026, 9, 16), close=10.8),),
+        claimed_session=date(2026, 9, 16),
+    )
+    assert complete.eod_status == COMPLETE_EOD
+    assert complete.last_complete_eod_session == date(2026, 9, 16)
+    late = store.record_capture(
+        clock=datetime(2026, 9, 16, 17, 0, tzinfo=ET),
+        bars=(_capture_bar("AAA", date(2026, 9, 15), close=10.0),),
+        claimed_session=date(2026, 9, 15),
+        source_finalized_through=date(2026, 9, 15),
+    )
+    assert late.eod_status == VENDOR_LATE
+    assert late.last_complete_eod_session == date(2026, 9, 15)
+
+
+def test_recapture_after_close_is_new_version_and_does_not_mutate_old_retrieved_at() -> None:
+    store = ImmutableCaptureStore()
+    first_clock = datetime(2026, 9, 16, 13, 24, 41, tzinfo=ET)
+    first = store.record_capture(
+        clock=first_clock,
+        bars=(
+            _capture_bar("AAA", date(2026, 9, 15), close=10.0),
+            _capture_bar("AAA", date(2026, 9, 16), close=10.4, partial=True),
+        ),
+        claimed_session=date(2026, 9, 16),
+    )
+    after_close = datetime(2026, 9, 16, 16, 30, tzinfo=ET)
+    second = store.recapture_last_bar(
+        predecessor_id=first.capture_id,
+        clock=after_close,
+        bars=(
+            _capture_bar("AAA", date(2026, 9, 15), close=99.0),
+            _capture_bar("AAA", date(2026, 9, 16), close=11.2),
+        ),
+        claimed_session=date(2026, 9, 16),
+        source_finalized_through=date(2026, 9, 16),
+    )
+    stored_first = store.get(first.capture_id)
+    assert second.capture_id != first.capture_id
+    assert stored_first.retrieved_at == first_clock
+    assert stored_first.content_sha256 == first.content_sha256
+    assert stored_first.bars == first.bars
+    assert stored_first.eod_status == INVALID_EOD_CAPTURE
+    prior = next(bar for bar in stored_first.bars if bar.session_date == date(2026, 9, 16))
+    assert prior.partial and prior.close == 10.4
+    hist = next(bar for bar in second.bars if bar.session_date == date(2026, 9, 15))
+    assert hist.retrieved_at == first_clock
+    assert hist.close == 10.0
+    last = next(bar for bar in second.bars if bar.session_date == date(2026, 9, 16))
+    assert last.retrieved_at == after_close
+    assert last.close == 11.2
+    assert last.vintage_status == RECAPTURE_AFTER_CLOSE
+    assert not last.partial
+    assert second.eod_status == COMPLETE_EOD
+    assert second.last_complete_eod_session == date(2026, 9, 16)
+    with pytest.raises(TypeError):
+        store.rewrite_retrieved_at(first.capture_id, after_close)
+    with pytest.raises(TypeError):
+        store.overwrite(first.capture_id, retrieved_at=after_close)
+    with pytest.raises(Exception):
+        stored_first.retrieved_at = after_close  # type: ignore[misc]
+
+
+def test_next_day_replay_and_future_bars_do_not_mutate_prior_capture() -> None:
+    store = ImmutableCaptureStore()
+    evening = datetime(2026, 9, 15, 16, 30, tzinfo=ET)
+    first = store.record_capture(
+        clock=evening,
+        bars=(_capture_bar("AAA", date(2026, 9, 15), close=10.0),),
+        claimed_session=date(2026, 9, 15),
+    )
+    next_morning = datetime(2026, 9, 16, 10, 0, tzinfo=ET)
+    replay = store.recapture_last_bar(
+        predecessor_id=first.capture_id,
+        clock=next_morning,
+        bars=(
+            _capture_bar("AAA", date(2026, 9, 15), close=10.0),
+            _capture_bar("AAA", date(2026, 9, 16), close=10.6, partial=True),
+        ),
+        claimed_session=date(2026, 9, 15),
+        source_finalized_through=date(2026, 9, 15),
+    )
+    stored = store.get(first.capture_id)
+    assert stored.retrieved_at == evening
+    assert stored.content_sha256 == first.content_sha256
+    assert stored.last_complete_eod_session == date(2026, 9, 15)
+    assert replay.last_complete_eod_session == date(2026, 9, 15)
+    assert date(2026, 9, 16) in replay.isolated_partial_sessions
+    later = store.record_capture(
+        clock=datetime(2026, 9, 17, 17, 0, tzinfo=ET),
+        bars=(
+            _capture_bar("AAA", date(2026, 9, 15), close=10.0),
+            _capture_bar("AAA", date(2026, 9, 16), close=11.0),
+            _capture_bar("AAA", date(2026, 9, 17), close=12.0),
+        ),
+        claimed_session=date(2026, 9, 17),
+        predecessor_id=first.capture_id,
+    )
+    assert store.get(first.capture_id).bars == first.bars
+    assert store.get(first.capture_id).content_sha256 == first.content_sha256
+    assert later.capture_id != first.capture_id
+    assert any(bar.session_date == date(2026, 9, 17) for bar in later.bars)
+    assert all(bar.session_date != date(2026, 9, 17) for bar in store.get(first.capture_id).bars)
+
+
+def test_late_security_is_dropped_from_eod_pools() -> None:
+    days = trading_days(date(2018, 1, 2), 80)
+    panel = {
+        "NVDA": make_series("NVDA", days, trending_close(80, 40, 0.1)),
+        "LATE": make_series("LATE", days, trending_close(80, 50, 0.1)),
+        "SPY": make_series("SPY", days, trending_close(80, 200, 0.08), asset_track="etf", security_type="ETF"),
+    }
+    snap = compute_snapshot(
+        as_of_after_close(days[-1]),
+        panel,
+        "u",
+        load_registry(),
+        sector_id="semiconductors",
+        algorithm="A_trend_quality",
+        extra_members={"LATE"},
+        late_securities=("LATE",),
+    )
+    assert "LATE" not in snap["candidate_ids"]
+    assert "LATE" not in snap["reference_ids"]
+    assert "LATE" in snap["late_securities"]

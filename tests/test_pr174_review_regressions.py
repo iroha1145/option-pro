@@ -18,6 +18,7 @@ from app.services.research_eod_v1 import factors
 from app.services.research_eod_v1.algorithms import setup_b
 from app.services.research_eod_v1.calendar_asof import last_complete_eod_session
 from app.services.research_eod_v1.composite import m2_utility, m3_diversified
+from app.services.research_eod_v1.data.capture_store import COMPLETE_EOD, INVALID_EOD_CAPTURE, ImmutableCaptureStore
 from app.services.research_eod_v1.data.contract import ResearchBar
 from app.services.research_eod_v1.data.to_series import bars_to_series
 from app.services.research_eod_v1.fixtures import make_series, trading_days
@@ -190,3 +191,31 @@ def test_regular_close_boundary_and_vendor_late():
     assert last_complete_eod_session(at_close) == date(2026, 9, 16)
     assert last_complete_eod_session(before) == date(2026, 9, 15)
     assert last_complete_eod_session(after, source_finalized_through=date(2026, 9, 15)) == date(2026, 9, 15)
+
+
+def test_recapture_after_close_does_not_rewrite_old_retrieved_at():
+    et = ZoneInfo('America/New_York')
+    first_clock = datetime(2026, 9, 16, 13, 24, 41, tzinfo=et)
+    bar = ResearchBar(
+        security_id='AAA', session_date=date(2026, 9, 16), open=10., high=11.,
+        low=9., close=10.4, raw_open=10., raw_close=10.4, volume=1000.,
+        dollar_volume=10400., tri=10.4, partial=True, vintage_status='PARTIAL',
+    )
+    store = ImmutableCaptureStore()
+    first = store.record_capture(clock=first_clock, bars=(bar,), claimed_session=date(2026, 9, 16))
+    after = datetime(2026, 9, 16, 16, 30, tzinfo=et)
+    recaptured = ResearchBar(
+        security_id='AAA', session_date=date(2026, 9, 16), open=10., high=11.2,
+        low=9., close=11.0, raw_open=10., raw_close=11.0, volume=2000.,
+        dollar_volume=22000., tri=11.0,
+    )
+    second = store.recapture_last_bar(
+        predecessor_id=first.capture_id, clock=after, bars=(recaptured,),
+        claimed_session=date(2026, 9, 16), source_finalized_through=date(2026, 9, 16),
+    )
+    assert first.eod_status == INVALID_EOD_CAPTURE
+    assert store.get(first.capture_id).retrieved_at == first_clock
+    assert store.get(first.capture_id).content_sha256 == first.content_sha256
+    assert second.retrieved_at == after
+    assert second.eod_status == COMPLETE_EOD
+    assert second.bars[0].close == 11.0

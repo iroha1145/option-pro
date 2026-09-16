@@ -14,6 +14,7 @@ sys.path.insert(0, str(ROOT / "backend"))
 
 from app.services.research_eod_v1.config_load import load_registry  # noqa: E402
 from app.services.research_eod_v1.data.to_series import bars_to_series  # noqa: E402
+from app.services.research_eod_v1.data.capture_store import ImmutableCaptureStore  # noqa: E402
 from app.services.research_eod_v1.data.yahoo import YahooDiagnosticProvider  # noqa: E402
 from app.services.research_eod_v1.calendar_asof import capture_as_of, last_complete_eod_session  # noqa: E402
 from app.services.research_eod_v1.snapshot import compute_snapshot  # noqa: E402
@@ -49,7 +50,8 @@ def main() -> int:
     pack = Path(__file__).resolve().parents[1] / "return_pack"
     reports = pack / "sector_reports"
     reports.mkdir(parents=True, exist_ok=True)
-    provider = YahooDiagnosticProvider(allow_network=True)
+    clock = capture_as_of(datetime.now(timezone.utc))
+    provider = YahooDiagnosticProvider(allow_network=True, clock=clock)
     appearances: dict[str, list[str]] = defaultdict(list)
     for theme_id, sector in SECTORS.items():
         for ticker in sector["tickers"]:
@@ -106,9 +108,16 @@ def main() -> int:
     theme_cards = []
     if "SPY" not in series_map and "SPY" in appearances:
         pass
-    clock = capture_as_of(datetime.now(timezone.utc))
     session = last_complete_eod_session(clock) if series_map else None
     as_of = clock if session else None
+    store = ImmutableCaptureStore()
+    capture = store.record_capture(
+        clock=clock,
+        bars=[bar for bars in batched.values() for bar in bars],
+        claimed_session=session,
+        stamp=False,
+        notes=("current_universe_diagnostic",),
+    )
     for theme_id, sector in SECTORS.items():
         if as_of is None:
             card = {"theme_id": theme_id, "status": "DATA_INSUFFICIENT", "candidates": 0, "eligible": 0}
@@ -158,7 +167,18 @@ def main() -> int:
                 encoding="utf-8",
             )
         theme_cards.append(card)
-    (pack / "theme_diagnostic.json").write_text(json.dumps({"as_of": None if as_of is None else as_of.isoformat(), "cards": theme_cards}, indent=2) + "\n", encoding="utf-8")
+    (pack / "theme_diagnostic.json").write_text(
+        json.dumps(
+            {
+                "as_of": None if as_of is None else as_of.isoformat(),
+                "capture": capture.metadata(),
+                "cards": theme_cards,
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     print(json.dumps({"downloaded": len(series_map), "themes": len(theme_cards), "failures": len(failures)}))
     return 0
 

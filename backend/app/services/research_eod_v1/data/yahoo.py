@@ -276,11 +276,12 @@ class YahooDiagnosticProvider:
         return out
 
     def export_snapshot(self, path: str) -> DatasetMeta | str:
+        retrieved = self.clock or datetime.now(timezone.utc)
         return DatasetMeta(
             provider="yahoo_yfinance",
             dataset_id="yahoo-diagnostic",
             dataset_version=LOCKED_YFINANCE,
-            retrieved_at=datetime.now(timezone.utc).isoformat(),
+            retrieved_at=retrieved.isoformat(),
             request_params_redacted=dict(DOWNLOAD_PARAMS),
             content_sha256=hash_payload(self.failures),
         )

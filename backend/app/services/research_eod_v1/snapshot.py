@@ -12,6 +12,7 @@ from typing import Any, Mapping
 from app.services.research_eod_v1 import FEATURE_VERSION, SCORE_VERSION
 from app.services.research_eod_v1.algorithms import setup_for
 from app.services.research_eod_v1.calendar_asof import last_complete_eod_session, require_aware, session_close_at
+from app.services.research_eod_v1.data.capture_store import eod_pool_exclusions, series_is_late
 from app.services.research_eod_v1.cross_section import q_star
 from app.services.research_eod_v1.factors import RawComponents, extract_raw
 from app.services.research_eod_v1.mathutil import clip100
@@ -140,11 +141,17 @@ def compute_snapshot(
     matched_benchmark_id: str | None = None,
     extra_members: set[str] | None = None,
     source_finalized_through: date | None = None,
+    late_securities: tuple[str, ...] = (),
 ) -> dict[str, Any]:
     """Deterministic snapshot. Adding bars after ``as_of`` must not change T."""
 
     require_aware(as_of)
-    session = last_complete_eod_session(as_of, source_finalized_through=source_finalized_through)
+    session = last_complete_eod_session(
+        as_of,
+        source_finalized_through=source_finalized_through,
+        late_securities=late_securities,
+    )
+    late = eod_pool_exclusions(late_securities)
     panel = clip_panel_to_as_of(historical_data, as_of)
     panel = {sid: series.slice_through(session) for sid, series in panel.items()}
     panel = {sid: series for sid, series in panel.items() if series is not None}
@@ -156,6 +163,8 @@ def compute_snapshot(
     weights = resolve_weights(registry, sector_id, algorithm, profile, horizon)
     target_track = "etf" if sector.get("asset_track") == "etf" else "stock"
     def _usable(series: SecuritySeries) -> bool:
+        if series_is_late(series, late):
+            return False
         return source_is_available(series, as_of) and has_complete_session_bar(series, session)
 
     market = panel.get("SPY")
@@ -169,6 +178,8 @@ def compute_snapshot(
     candidate_ids: set[str] = set()
     reference_ids: set[str] = set()
     for sid, series in panel.items():
+        if series_is_late(series, late):
+            continue
         if not source_is_available(series, as_of):
             continue
         raws[sid] = extract_raw(
@@ -380,6 +391,7 @@ def compute_snapshot(
         "fingerprint": fingerprint,
         "candidate_ids": sorted(candidate_ids),
         "reference_ids": sorted(reference_ids),
+        "late_securities": sorted(late),
         "rows": rows,
         "network_calls": 0,
     }
