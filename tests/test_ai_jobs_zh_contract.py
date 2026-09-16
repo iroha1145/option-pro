@@ -149,6 +149,8 @@ def _payload_for(job_type: str) -> dict:
         return _news_payload()
     if job_type == "market_focus":
         return _market_focus_payload()
+    if job_type == "signal_analysis":
+        return {"ticker": "AAA"}
     return {}
 
 
