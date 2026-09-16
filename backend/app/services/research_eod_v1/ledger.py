@@ -275,7 +275,10 @@ def simulate_ledger(
             if item["pay_date"] == day:
                 state.receivables -= item["amount"]
                 state.cash += item["amount"]
-                events.append(LedgerEvent(day, "dividend_pay", item["security_id"], item["amount"], 0.0, None, "pay_date_cash"))
+                sid = item["security_id"]
+                if sid in open_positions:
+                    open_positions[sid]["dividend_cash"] = float(open_positions[sid].get("dividend_cash") or 0.0) + float(item["amount"])
+                events.append(LedgerEvent(day, "dividend_pay", sid, item["amount"], 0.0, None, "pay_date_cash"))
             else:
                 still_pending.append(item)
         pending_div = still_pending
@@ -448,4 +451,5 @@ def _trade_net(pos: Mapping[str, Any], exit_cash: float) -> float:
     cash_out = float(pos.get("cash_out") or pos.get("notional") or 0.0)
     if cash_out <= 0:
         return 0.0
-    return (float(exit_cash) - cash_out) / cash_out
+    dividends = float(pos.get("dividend_cash") or 0.0)
+    return (float(exit_cash) + dividends - cash_out) / cash_out

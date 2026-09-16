@@ -256,6 +256,7 @@ def compute_snapshot(
     for sid, raw in raws.items():
         if sid not in candidate_ids:
             continue
+        series = panel[sid]
         venue = classify_venue(raw.venue_metadata)
         factors = _assemble_factors(
             raw,
@@ -350,6 +351,13 @@ def compute_snapshot(
                 "factors": factors,
                 "residual_status": raw.residual.status if raw.residual is not None else None,
                 "residual_raw": raw.residual.raw if raw.residual is not None else None,
+                "price_adjustment": (series.price_adjustment[-1] if series.price_adjustment else "unverified"),
+                "volume_adjustment": (series.volume_adjustment[-1] if series.volume_adjustment else "unverified"),
+                "vintage_status": (series.vintage_status[-1] if series.vintage_status else None),
+                "tri_verified": bool(series.tri_verified),
+                "reconstruction_mode": series.reconstruction_mode,
+                "identity_confidence": dict(series.venue_metadata).get("identity_confidence"),
+                "industry_source": dict(series.venue_metadata).get("industry_source"),
             }
         )
     fingerprint = hashlib.sha256(

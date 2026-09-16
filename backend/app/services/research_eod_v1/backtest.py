@@ -94,7 +94,23 @@ def plan_trade(
     buy = apply_cost(entry_open, side="buy", bps=bps, fee=fee)
     sell = apply_cost(exit_open, side="sell", bps=bps, fee=fee)
     gross = exit_open / entry_open - 1.0 if entry_open > 0 else None
-    net = sell / buy - 1.0 if buy > 0 else None
+    price_net = sell / buy - 1.0 if buy > 0 else None
+    hold_start = entry_session
+    hold_end = exit_session
+    corporate_in_hold = any(hold_start < day <= hold_end for day, _ratio in series.splits) or any(
+        hold_start < day <= hold_end for day, _amount in series.dividends
+    )
+    if not corporate_in_hold:
+        for action in getattr(series, "dividend_events", ()) or ():
+            ex_day = action.get("ex_date") or action.get("session_date")
+            if ex_day is None:
+                continue
+            ex_date = ex_day if isinstance(ex_day, date) else date.fromisoformat(str(ex_day)[:10])
+            if hold_start < ex_date <= hold_end:
+                corporate_in_hold = True
+                break
+    # Price-path net is not cashflow when splits or dividends occur. Ledger owns that.
+    net = None if corporate_in_hold else price_net
     return PlannedTrade(
         series.security_id, signal_session, entry_session, exit_session,
         holding_sessions, entry_open, exit_open, "MATURE", gross, net, 2.0 * bps,
@@ -158,7 +174,11 @@ def simulate_portfolio(
             sized.append(item)
             continue
         idx = series.dates.index(day)
-        close = float(series.raw_close[idx]) if np_finite(series.raw_close[idx]) else float(series.close[idx])
+        if not np_finite(series.raw_close[idx]) or float(series.raw_close[idx]) <= 0:
+            item["notional"] = 0.0
+            sized.append(item)
+            continue
+        close = float(series.raw_close[idx])
         invalid = float(item.get("planned_invalidation") or 0.0)
         atr = float(item.get("atr") or 0.0)
         adv20 = float(item.get("adv20") or 0.0)

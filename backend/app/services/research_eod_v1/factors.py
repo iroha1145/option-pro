@@ -15,6 +15,7 @@ from app.services.research_eod_v1.constants import (
     BREAKOUT_TRACK_MAX_SESSIONS,
     PLATFORM_EXPIRE_MULTIPLE,
     PLATFORM_FAIL_CONFIRM_SESSIONS,
+    PLATFORM_REPAIR_WINDOW,
     SWING_SPAN,
     TOUCH_MIN_GAP,
 )
@@ -278,15 +279,13 @@ def resolve_frozen_setup(
                     repair_streak += 1
                 else:
                     repair_streak = 0
-            if fail_streak >= PLATFORM_FAIL_CONFIRM_SESSIONS:
+            if active.get("lifecycle") != "failed" and fail_streak >= PLATFORM_FAIL_CONFIRM_SESSIONS:
                 active = dict(active)
                 active["failed_at"] = session.isoformat()
                 active["lifecycle"] = "failed"
                 active["version"] = int(active.get("version") or 1) + 1
                 events.append(_platform_event(active, session, "failed", "close_below_support"))
                 active["events"] = list(events)
-                active = None
-                active_score = None
                 fail_streak = 0
                 repair_streak = 0
                 continue
@@ -294,7 +293,7 @@ def resolve_frozen_setup(
             left_range = np.isfinite(close) and (
                 close > resistance + 2.0 * width or close < support - 2.0 * width
             )
-            if too_old:
+            if active.get("lifecycle") != "failed" and too_old:
                 active = dict(active)
                 active["expired_at"] = session.isoformat()
                 active["lifecycle"] = "expired"
@@ -307,13 +306,25 @@ def resolve_frozen_setup(
                 fail_streak = 0
                 repair_streak = 0
                 continue
-            if active.get("lifecycle") == "failed" and repair_streak >= PLATFORM_FAIL_CONFIRM_SESSIONS:
-                active = dict(active)
-                active["repaired_at"] = session.isoformat()
-                active["lifecycle"] = "active"
-                active["failed_at"] = None
-                active["version"] = int(active.get("version") or 1) + 1
-                events.append(_platform_event(active, session, "repaired", "back_in_range"))
+            if active.get("lifecycle") == "failed":
+                if repair_streak >= PLATFORM_FAIL_CONFIRM_SESSIONS:
+                    active = dict(active)
+                    active["repaired_at"] = session.isoformat()
+                    active["lifecycle"] = "active"
+                    active["failed_at"] = None
+                    active["version"] = int(active.get("version") or 1) + 1
+                    events.append(_platform_event(active, session, "repaired", "back_in_range"))
+                    active["events"] = list(events)
+                    continue
+                failed_at = date.fromisoformat(str(active["failed_at"]))
+                failed_index = series.dates.index(failed_at)
+                if eval_t - failed_index >= PLATFORM_REPAIR_WINDOW:
+                    events.append(_platform_event(active, session, "terminated", "repair_window_elapsed"))
+                    active = None
+                    active_score = None
+                    fail_streak = 0
+                    repair_streak = 0
+                continue
             continue
         score, _status, setup = _base_geometry(
             series,
@@ -353,6 +364,8 @@ def resolve_frozen_setup(
         )
     active = dict(active)
     active["events"] = list(events)
+    if active.get("lifecycle") == "failed":
+        return active_score, "failed", active
     return active_score, "observed", active
 
 

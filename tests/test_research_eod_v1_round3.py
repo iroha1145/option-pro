@@ -16,6 +16,7 @@ from app.services.research_eod_v1.data.contract import ResearchBar, hash_file_by
 from app.services.research_eod_v1.data.local_parquet import LocalParquetProvider
 from app.services.research_eod_v1.data.to_series import bars_to_series
 from app.services.research_eod_v1.fixtures import as_of_after_close, make_series, trading_days, trending_close
+from app.services.research_eod_v1.backtest import plan_trade
 from app.services.research_eod_v1.ledger import simulate_ledger
 from app.services.research_eod_v1.membership import has_complete_session_bar, source_is_available
 from app.services.research_eod_v1.residual import residual_raw_momentum
@@ -119,6 +120,24 @@ def test_residual_peers_with_different_starts_still_align() -> None:
         assert out.raw != pytest.approx(lone.raw, abs=1e-12)
 
 
+def test_missing_raw_close_does_not_size_from_geometry_close() -> None:
+    from app.services.research_eod_v1.backtest import simulate_portfolio
+
+    days = trading_days(date(2021, 1, 4), 12)
+    series = make_series("RAW", days, np.full(12, 50.0))
+    series.raw_close[:] = np.nan
+    series.raw_open[:] = np.nan
+    result = simulate_portfolio(
+        [{"security_id": "RAW", "session_date": days[1].isoformat(), "status": "eligible", "score": 90, "adv20": 80_000_000, "atr": 1.0, "planned_invalidation": 40.0}],
+        {"RAW": series},
+        capital=10_000,
+        holding_sessions=5,
+        profile={"max_name_weight": 0.1, "max_adv_frac": 0.01, "risk_per_trade": 0.01},
+    )
+    assert not result["trades"]
+    assert result["unfilled"] >= 1 or result.get("ending_equity") == 10_000
+
+
 def test_unsized_orders_are_rejected() -> None:
     days = trading_days(date(2021, 1, 4), 12)
     series = make_series("AAA", days, np.full(12, 100.0))
@@ -175,6 +194,50 @@ def test_split_and_cash_dividend_same_day_keep_identity() -> None:
     assert "dividend" in {event["kind"] for event in result["events"]}
     marked = [row for row in result["daily_equity"] if row["identity_ok"]]
     assert marked
+    last = result["daily_equity"][-1]
+    assert last["equity"] == pytest.approx(10_100.0)
+    if result["trades"]:
+        assert result["trades"][0]["net_return"] == pytest.approx(0.02)
+
+
+def test_special_dividend_uses_dated_pay_event() -> None:
+    days = trading_days(date(2021, 1, 4), 12)
+    series = make_series("SPC", days, np.full(12, 40.0))
+    series.raw_open[:] = 40.0
+    series.raw_close[:] = 40.0
+    series.dividend_events = (
+        {"ex_date": days[3], "pay_date": days[6], "amount": 2.0, "kind": "special"},
+    )
+    result = simulate_ledger(
+        start=days[0],
+        end=days[-1],
+        panel={"SPC": series},
+        capital=10_000,
+        holding_sessions=8,
+        cost_multiple=0,
+        signals=[_signal("SPC", days[1], 2000)],
+    )
+    kinds = [event["kind"] for event in result["events"]]
+    assert "dividend" in kinds
+    assert "dividend_pay" in kinds
+    ex_row = next(row for row in result["daily_equity"] if row["session"] == days[3].isoformat())
+    pay_row = next(row for row in result["daily_equity"] if row["session"] == days[6].isoformat())
+    assert ex_row["receivables"] == pytest.approx(100.0)
+    assert pay_row["receivables"] == pytest.approx(0.0)
+    assert pay_row["cash"] >= ex_row["cash"] + 99.0
+
+
+def test_plan_trade_price_path_is_not_cashflow_through_a_split() -> None:
+    days = trading_days(date(2021, 1, 4), 12)
+    series = make_series("SPL", days, np.full(12, 50.0))
+    series.raw_open[:6] = 100.0
+    series.raw_close[:6] = 100.0
+    series.raw_open[6:] = 50.0
+    series.raw_close[6:] = 50.0
+    series.splits = ((days[6], 2.0),)
+    planned = plan_trade(series, days[1], 5, adv20=80_000_000, cost_multiple=0)
+    assert planned.gross_return == pytest.approx(-0.5)
+    assert planned.net_return is None
 
 
 def test_incomplete_exit_is_right_censored_or_deferred() -> None:
@@ -292,6 +355,53 @@ def _platform_series(n: int = 50, extra: int = 0):
     series.raw_open = close.copy()
     series.tri = close.copy()
     return days, series, t_index
+
+
+def test_failed_platform_can_repair_before_a_new_base_forms(monkeypatch) -> None:
+    days = trading_days(date(2018, 1, 2), 80)
+    closes = np.full(80, 100.0)
+    closes[40:43] = 80.0
+    closes[43:] = 95.0
+    series = make_series("FIX", days, closes)
+    series.low = closes - 1
+    series.high = closes + 1
+
+    def geometry(_series, t, **kwargs):
+        if 25 <= t < 40:
+            return 80.0, "observed", {"support": 90.0, "resistance_high": 100.0}
+        return 0.0, "no_base_observed", None
+
+    monkeypatch.setattr(factors, "_base_geometry", geometry)
+    _, status, setup = factors.resolve_frozen_setup(series, 50, min_sessions=20, max_sessions=80, min_touches=2)
+    assert status == "observed"
+    assert setup is not None
+    kinds = [event["kind"] for event in setup.get("events", [])]
+    assert "failed" in kinds
+    assert "repaired" in kinds
+    assert setup["setup_id"] == f"FIX:{days[24].isoformat()}:r100.0"
+
+
+def test_event_log_keeps_distinct_setup_ids_for_sequential_platforms(monkeypatch) -> None:
+    days = trading_days(date(2015, 1, 2), 500)
+    closes = np.full(500, 100.0)
+    closes[40:300] = 70.0
+    closes[300:] = 195.0
+    series = make_series("TWO", days, closes)
+    series.low = closes - 1
+    series.high = closes + 1
+
+    def geometry(_series, t, **kwargs):
+        if t == 25:
+            return 80.0, "observed", {"support": 90.0, "resistance_high": 100.0}
+        if t >= 450:
+            return 80.0, "observed", {"support": 190.0, "resistance_high": 200.0}
+        return 0.0, "no_base_observed", None
+
+    monkeypatch.setattr(factors, "_base_geometry", geometry)
+    _, _, setup = factors.resolve_frozen_setup(series, 499, min_sessions=20, max_sessions=80, min_touches=2)
+    assert setup is not None
+    ids = {event["setup_id"] for event in setup.get("events", [])}
+    assert len(ids) >= 2
 
 
 def test_wide_old_platform_expires_by_age_so_later_base_can_form(monkeypatch) -> None:

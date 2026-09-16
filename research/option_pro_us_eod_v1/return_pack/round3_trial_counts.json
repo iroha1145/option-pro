@@ -1,22 +1,24 @@
 {
   "registered_trials": 1920,
   "revoked_invalid_eod_captures": 24,
-  "executed_snapshots": 48,
+  "executed_snapshots": 144,
   "executed_snapshots_engineering_only": 16,
-  "executed_snapshots_yahoo_abcd": 32,
+  "executed_snapshots_yahoo_abcd_4theme_2dates": 32,
+  "executed_snapshots_yahoo_24theme_2026_09_15": 96,
+  "overlapping_4theme_2026_09_15": 16,
+  "unique_theme_date_algo_snapshots": 128,
   "executed_backtests": 0,
-  "outcomes_inspected": 48,
+  "outcomes_inspected": 144,
   "yahoo_sessions": ["2026-09-15", "2026-09-11"],
-  "yahoo_themes": ["semiconductors", "software", "energy", "etfs"],
-  "yahoo_algorithms": ["A_trend_quality", "B_confirmed_base_breakout", "C_trend_pullback", "D_residual_momentum"],
-  "yahoo_eligible_signal_rows": 5,
+  "yahoo_24theme_session": "2026-09-15",
+  "yahoo_eligible_signal_rows_24theme": 5,
   "market_backtest_run": false,
   "winners": [],
   "notes": [
     "eligible signal rows are not fills, not PnL, and not winners",
     "Yahoo Close is not a verified raw trade price",
     "venue and theme[0] industry tags are diagnostic assumptions",
-    "20 themes were not re-run on this small Yahoo subset",
-    "2026-09-16 bars were isolated as PARTIAL; XLE 2026-09-16 dropped for OHLC_VIOLATION"
+    "2026-09-16 bars were isolated as PARTIAL",
+    "144 includes a second pass of the four 2026-09-15 theme A/B/C/D cards"
   ]
 }
