@@ -12,6 +12,7 @@ import numpy as np
 from app.services.research_eod_v1.constants import (
     ATR_PERIOD,
     BASE_WINDOWS,
+    BREAKOUT_TRACK_MAX_SESSIONS,
     SWING_SPAN,
     TOUCH_MIN_GAP,
 )
@@ -61,6 +62,10 @@ class RawComponents:
     b_score: float | None
     b_status: str
     frozen_setup: dict[str, Any] | None
+    breakout_track: dict[str, Any] | None
+    halted: bool
+    zero_volume: bool
+    currently_tradable: bool
     p_score: float | None
     p_depth: float | None
     p_anchor: float | None
@@ -216,6 +221,86 @@ def _base_geometry(
     return float(best_score), "observed", best
 
 
+def _breakout_track(
+    series: SecuritySeries,
+    t: int,
+    setup: dict[str, Any] | None,
+    sector_gates: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Freeze the first close through resistance and track it for five sessions."""
+
+    if setup is None:
+        return None
+    resistance = float(setup["resistance_high"])
+    close = series.close
+    lookback = min(t, 40)
+    first: int | None = None
+    first_buffer = 0.0
+    for i in range(t - lookback, t + 1):
+        if i < 1:
+            continue
+        atr_prev = atr_sma_at(series.high, series.low, series.close, i - 1, ATR_PERIOD)
+        price = float(close[i])
+        buffer = max(
+            float(sector_gates.get("breakout_buffer_price_fraction", 0.0025)) * price,
+            float(sector_gates.get("breakout_buffer_atr", 0.15)) * (atr_prev or 0.0),
+        )
+        if price > resistance + buffer:
+            first = i
+            first_buffer = buffer
+            break
+    if first is None:
+        return {
+            "through": False,
+            "still_through": False,
+            "first_cross_date": None,
+            "first_day_rvol": None,
+            "first_day_clv": None,
+            "consecutive_closes": 0,
+            "max_consecutive": 0,
+            "days_since_first": None,
+            "tracking_expired": False,
+        }
+    atr_t1 = atr_sma_at(series.high, series.low, series.close, t - 1, ATR_PERIOD) if t >= 1 else None
+    buffer_t = max(
+        float(sector_gates.get("breakout_buffer_price_fraction", 0.0025)) * float(close[t]),
+        float(sector_gates.get("breakout_buffer_atr", 0.15)) * (atr_t1 or 0.0),
+    )
+    run = 0
+    max_run = 0
+    for i in range(first, t + 1):
+        atr_prev = atr_sma_at(series.high, series.low, series.close, i - 1, ATR_PERIOD) if i >= 1 else None
+        buffer = max(
+            float(sector_gates.get("breakout_buffer_price_fraction", 0.0025)) * float(close[i]),
+            float(sector_gates.get("breakout_buffer_atr", 0.15)) * (atr_prev or 0.0),
+        )
+        if float(close[i]) > resistance + buffer:
+            run += 1
+            max_run = max(max_run, run)
+        else:
+            run = 0
+    dv = series.dollar_volume
+    if first >= 20 and np.isfinite(dv[first - 20 : first]).all() and float(np.mean(dv[first - 20 : first])) > 0:
+        first_rvol = float(dv[first] / np.mean(dv[first - 20 : first]))
+    else:
+        first_rvol = None
+    first_clv = clv_at(series.high, series.low, series.close, first)
+    days_since = t - first
+    return {
+        "through": True,
+        "still_through": bool(float(close[t]) > resistance + buffer_t),
+        "first_cross_date": series.dates[first].isoformat(),
+        "first_day_rvol": first_rvol,
+        "first_day_clv": first_clv,
+        "first_day_buffer": first_buffer,
+        "consecutive_closes": run,
+        "max_consecutive": max_run,
+        "days_since_first": days_since,
+        "tracking_expired": days_since >= BREAKOUT_TRACK_MAX_SESSIONS,
+        "setup_id": setup.get("setup_id"),
+    }
+
+
 def extract_raw(
     series: SecuritySeries,
     *,
@@ -312,6 +397,10 @@ def extract_raw(
         max_sessions=int(sector_gates.get("base_max_sessions", 80)),
         min_touches=int(sector_gates.get("base_min_distinct_touches", 2)),
     )
+    breakout_track = _breakout_track(series, t, setup, sector_gates)
+    zero_volume = not np.isfinite(series.volume[t]) or float(series.volume[t]) <= 0
+    halted = bool(series.halted) or zero_volume
+    currently_tradable = not halted
     anchor = known_support if known_support is not None else sma20
     p_score = None
     depth = None
@@ -417,6 +506,10 @@ def extract_raw(
         b_score=b_score,
         b_status=b_status,
         frozen_setup=setup,
+        breakout_track=breakout_track,
+        halted=halted,
+        zero_volume=zero_volume,
+        currently_tradable=currently_tradable,
         p_score=p_score,
         p_depth=depth,
         p_anchor=anchor,

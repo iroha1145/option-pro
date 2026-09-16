@@ -48,6 +48,30 @@ def test_family_c_rejects_broken_support_and_shallow_depth() -> None:
     assert "DEPTH_OUT_OF_RANGE" in setup_c(raw, GATES).reasons
 
 
+def test_family_b_requires_profile_confirm_closes() -> None:
+    raw = _raw(
+        frozen_setup={"resistance_high": 10.0, "setup_id": "AAA:frozen"},
+        b_status="observed",
+        sma50=20.0,
+        sma50_prev20=19.0,
+        above_sma50=True,
+        extension_atr=0.4,
+        breakout_track={
+            "through": True,
+            "still_through": True,
+            "tracking_expired": False,
+            "max_consecutive": 1,
+            "first_day_rvol": 2.0,
+            "first_day_clv": 0.8,
+        },
+    )
+    conservative = setup_b(raw, {"rvol_multiplier": 1.0, "confirm_closes": 2}, GATES)
+    assert conservative.passed is False
+    assert conservative.state == "breakout_confirming"
+    aggressive = setup_b(raw, {"rvol_multiplier": 1.0, "confirm_closes": 1}, GATES)
+    assert aggressive.passed is True
+
+
 def test_family_d_cannot_fall_back_to_ordinary_momentum() -> None:
     raw = _raw()
     raw.residual = ResidualMomentum(None, "INSUFFICIENT_MATCHED_BENCHMARK")

@@ -83,3 +83,6 @@ def test_portfolio_does_not_reuse_cash_same_day_and_keeps_empty_cash() -> None:
     empties = simulate_portfolio([], {"AAA": a}, capital=25_000, holding_sessions=5, profile=profile)
     assert empties["ending_equity"] == 25_000
     assert empties["status"] == "ZERO_SIGNALS"
+    for row in result["daily_equity"]:
+        assert row["cash"] >= -1e-9
+    assert result["ending_equity"] >= 0

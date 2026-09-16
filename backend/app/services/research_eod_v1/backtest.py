@@ -8,7 +8,11 @@ from typing import Any, Mapping, Sequence
 
 from app.services.research_eod_v1.calendar_asof import holding_exit_session, next_session
 from app.services.research_eod_v1.constants import SLIPPAGE_BPS
+from app.services.research_eod_v1.paths import ensure_reference_on_path
 from app.services.research_eod_v1.series import SecuritySeries
+
+ensure_reference_on_path()
+from registry import position_capacity  # type: ignore
 
 
 def slippage_bps(adv20: float) -> float:
@@ -173,8 +177,6 @@ def simulate_portfolio(
             if invalid <= 0 or invalid >= close or atr <= 0 or adv20 <= 0:
                 unfilled += 1
                 continue
-            from registry import position_capacity  # type: ignore
-
             cap = position_capacity(cash + sum(p["notional"] for p in open_positions.values()), close, invalid, atr, adv20, profile)
             if cap.shares <= 0:
                 unfilled += 1

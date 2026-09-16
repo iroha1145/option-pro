@@ -3,11 +3,8 @@
 from __future__ import annotations
 
 import csv
-import hashlib
 import json
 import subprocess
-import sys
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -104,13 +101,17 @@ def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
 
 def write_parquet(path: Path, rows: list[dict[str, Any]], schema: dict[str, str]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        import pandas as pd
+    import pandas as pd
 
-        frame = pd.DataFrame(rows)
+    frame = pd.DataFrame(rows, columns=list(schema))
+    try:
         frame.to_parquet(path, index=False)
-    except Exception:
-        write_csv(path.with_suffix(".csv"), rows)
+    except (ImportError, ValueError, OSError):
+        fallback = path.with_suffix(".csv")
+        if rows:
+            write_csv(fallback, rows)
+        else:
+            fallback.write_text(",".join(schema) + "\n", encoding="utf-8")
     (path.parent / f"{path.stem}.schema.json").write_text(json.dumps(schema, indent=2) + "\n", encoding="utf-8")
 
 
@@ -169,6 +170,34 @@ def build_return_pack(*, test_log: str = "") -> dict[str, Any]:
     write_parquet(RETURN_PACK_DIR / "trades.parquet", [], {**signal_schema, "entry_session": "date", "exit_session": "date"})
     write_parquet(RETURN_PACK_DIR / "daily_equity.parquet", [], {"session": "date", "equity": "float", "cash": "float"})
     write_parquet(RETURN_PACK_DIR / "rejections.parquet", [], {"security_id": "string", "reason": "string", "session_date": "date"})
+    for leftover in ("signals.csv", "trades.csv", "daily_equity.csv", "rejections.csv"):
+        path = RETURN_PACK_DIR / leftover
+        if path.is_file() and path.with_suffix(".parquet").is_file():
+            path.unlink()
+    # Synthetic engineering fixture — not a market trial.
+    from datetime import date as _date
+    from app.services.research_eod_v1.backtest import plan_trade
+    from app.services.research_eod_v1.fixtures import make_series, trading_days, trending_close
+
+    days = trading_days(_date(2021, 1, 4), 40)
+    series = make_series("ENG", days, trending_close(40, 50, 0.2))
+    planned = plan_trade(series, days[5], 5, adv20=80_000_000)
+    write_parquet(
+        RETURN_PACK_DIR / "engineering_fixture_trades.parquet",
+        [
+            {
+                "security_id": planned.security_id,
+                "session_date": planned.signal_session.isoformat(),
+                "algorithm_id": "ENGINEERING_ONLY",
+                "status": planned.label_status,
+                "note": "synthetic fixture; not a market backtest",
+                "entry_session": planned.entry_session.isoformat(),
+                "exit_session": planned.exit_session.isoformat(),
+                "net_return": planned.net_return,
+            }
+        ],
+        {**signal_schema, "entry_session": "date", "exit_session": "date", "net_return": "float"},
+    )
     (RETURN_PACK_DIR / "parquet_index.json").write_text(
         json.dumps(
             {
@@ -176,8 +205,9 @@ def build_return_pack(*, test_log: str = "") -> dict[str, Any]:
                 "trades": "trades.parquet",
                 "daily_equity": "daily_equity.parquet",
                 "rejections": "rejections.parquet",
+                "engineering_fixture_trades": "engineering_fixture_trades.parquet",
                 "rows": 0,
-                "note": "Schemas are published. Bodies are empty because no market trial was executed.",
+                "note": "Market bodies are empty because no licensed trial was executed. engineering_fixture_trades.parquet is synthetic only.",
             },
             indent=2,
         )
@@ -290,7 +320,37 @@ def build_return_pack(*, test_log: str = "") -> dict[str, Any]:
                 "parameter_changes": [],
                 "notes": reason,
             })
-    (RETURN_PACK_DIR / "trial_ledger.json").write_text(json.dumps({"count": len(ledger), "entries": ledger}, indent=2) + "\n", encoding="utf-8")
+    event_reason = (
+        "technical_plus_event_guard is an independent overlay. No point-in-time "
+        "earnings/binary/financing/ADR/fund calendar was licensed, so the overlay "
+        "cannot default to pass."
+    )
+    event_entries = []
+    for spec in primary["experiments"]:
+        event_entries.append({
+            "trial_id": f"{spec['experiment_id']}::technical_plus_event_guard",
+            "layer": "event_overlay",
+            "registered_at": "2026-09-16",
+            "status": "DATA_INSUFFICIENT",
+            "attempts": 1,
+            "market_backtest_run": False,
+            "parameter_changes": [],
+            "notes": event_reason,
+        })
+    ledger.extend(event_entries)
+    (RETURN_PACK_DIR / "trial_ledger.json").write_text(
+        json.dumps(
+            {
+                "count": len(ledger),
+                "technical_only": len(ledger) - len(event_entries),
+                "event_overlay": len(event_entries),
+                "entries": ledger,
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
 
     summary = json.loads(RETURN_SUMMARY_TEMPLATE_PATH.read_text(encoding="utf-8"))
     summary.update({
@@ -352,6 +412,9 @@ def build_return_pack(*, test_log: str = "") -> dict[str, Any]:
             {
                 "batch_downloads": 0,
                 "intraday_provider_calls": 0,
+                "repeat_refresh_fetches": 0,
+                "cache_key": "session_date|feature_version|config_hash|universe_version",
+                "atomic_publish": "tempfile + os.replace; failed publish retains previous snapshot",
                 "note": "Shadow API is default-off. Refresh refuses to fetch without RESEARCH_EOD_V1_ENABLED and licensed data.",
             },
             indent=2,
@@ -359,11 +422,77 @@ def build_return_pack(*, test_log: str = "") -> dict[str, Any]:
         + "\n",
         encoding="utf-8",
     )
+    _write_code_artifacts()
+    (RETURN_PACK_DIR / "README.md").write_text(
+        "\n".join(
+            [
+                "# 第一轮回传包",
+                "",
+                "状态：`DATA_INSUFFICIENT`。没有许可的十年 PIT 行情，因此 **没有市场收益数字，没有赢家，不晋升生产**。",
+                "",
+                "必含文件：",
+                "",
+                "- `audit.md`、`data_audit.json`、`hashes.json`、`trial_ledger.json`",
+                "- `all_experiments.csv`（864 行 + 表头）",
+                "- `etf_subasset_experiments.csv`（180）",
+                "- `composite_experiments.csv`（12）",
+                "- `annual_oos.csv` / `regime_oos.csv` / `subgroup_oos.csv` / `capital_cost_scenarios.csv`",
+                "- `signals.parquet` / `trades.parquet` / `daily_equity.parquet` / `rejections.parquet` + `*.schema.json`",
+                "- `engineering_fixture_trades.parquet`：合成工程夹具，不是市场回测",
+                "- `sector_reports/*.md`（24）",
+                "- `return_summary.json`",
+                "- `engineering_tests.log`、`performance_network.json`、`code_diff_*`",
+                "",
+                "台账另含 864 条 `technical_plus_event_guard` overlay，全部 `DATA_INSUFFICIENT`。",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
     return {
         "primary": len(primary_rows),
         "etf": len(etf_rows),
         "composite": len(composite_rows),
         "ledger": len(ledger),
+        "event_overlay": len(event_entries),
         "source_sha": source_sha,
         "config_sha256": digest,
     }
+
+
+def _write_code_artifacts() -> None:
+    repo = RESEARCH_ROOT.parents[1]
+    baseline = "8b620d760f05020d2c1b51a3c3228a89fd9f3120"
+
+    def _git(*args: str) -> str:
+        try:
+            return subprocess.check_output(["git", *args], cwd=repo, text=True)
+        except Exception:
+            return ""
+
+    (RETURN_PACK_DIR / "code_diff_stat.txt").write_text(
+        _git("diff", "--stat", baseline) or "unavailable\n",
+        encoding="utf-8",
+    )
+    (RETURN_PACK_DIR / "code_diff_integration.patch").write_text(
+        _git("diff", baseline, "--", "backend/app/config.py", "backend/app/main.py") or "unavailable\n",
+        encoding="utf-8",
+    )
+    listed = _git(
+        "ls-files",
+        "backend/app/services/research_eod_v1",
+        "backend/app/api/research_eod_v1.py",
+        "research/option_pro_us_eod_v1",
+        "tests/test_research_eod_v1_algorithms.py",
+        "tests/test_research_eod_v1_backtest.py",
+        "tests/test_research_eod_v1_checklist.py",
+        "tests/test_research_eod_v1_compat.py",
+        "tests/test_research_eod_v1_composite.py",
+        "tests/test_research_eod_v1_eod_shadow.py",
+        "tests/test_research_eod_v1_features.py",
+        "tests/test_research_eod_v1_lookahead.py",
+        "tests/test_research_eod_v1_registry.py",
+        "tests/test_research_eod_v1_reporting.py",
+        "tests/test_research_eod_v1_venue.py",
+    )
+    (RETURN_PACK_DIR / "code_file_index.txt").write_text(listed or "unavailable\n", encoding="utf-8")

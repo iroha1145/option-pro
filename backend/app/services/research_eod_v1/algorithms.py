@@ -41,27 +41,30 @@ def setup_b(
         reasons.append("NO_FROZEN_BASE")
         state = "forming_base" if raw.b_status == "no_base_observed" else "rejected"
         return SetupDecision(False, tuple(reasons), state)
-    resistance = float(raw.frozen_setup["resistance_high"])
-    atr = raw.atr
     if raw.sma50 is None or raw.sma50_prev20 is None or raw.sma50 <= raw.sma50_prev20:
         reasons.append("SMA50_SLOPE")
     if raw.above_sma50 is not True:
         reasons.append("BELOW_SMA50")
-    price = raw.last_close
-    buffer = max(
-        float(sector_gates.get("breakout_buffer_price_fraction", 0.0025)) * (price or 0.0),
-        float(sector_gates.get("breakout_buffer_atr", 0.15)) * (atr or 0.0),
-    )
-    if price is None:
-        reasons.append("MISSING_CLOSE")
-    elif price <= resistance + buffer:
+    track = raw.breakout_track or {}
+    needed = int(profile.get("confirm_closes", 1))
+    if not track.get("through"):
         reasons.append("NOT_THROUGH_RESISTANCE")
+    elif track.get("tracking_expired"):
+        reasons.append("BREAKOUT_TRACK_EXPIRED")
+    elif int(track.get("max_consecutive") or 0) < needed or not track.get("still_through"):
+        reasons.append("BREAKOUT_UNCONFIRMED")
+    rvol = track.get("first_day_rvol")
+    if rvol is None:
+        rvol = raw.rvol
     rvol_min = float(sector_gates.get("breakout_rvol_min", 1.0)) * float(
         profile.get("rvol_multiplier", 1.0)
     )
-    if raw.rvol is None or raw.rvol < rvol_min:
+    if rvol is None or rvol < rvol_min:
         reasons.append("LOW_EVENT_RVOL")
-    if raw.clv is None or raw.clv < 0.65:
+    clv = track.get("first_day_clv")
+    if clv is None:
+        clv = raw.clv
+    if clv is None or clv < 0.65:
         reasons.append("LOW_CLV")
     if raw.extension_atr is not None and raw.extension_atr > 2.0:
         reasons.append("TOO_FAR_FROM_BASE")
@@ -69,6 +72,8 @@ def setup_b(
         state = "eligible"
     elif "NOT_THROUGH_RESISTANCE" in reasons:
         state = "testing_resistance"
+    elif reasons == ("BREAKOUT_UNCONFIRMED",) or set(reasons) == {"BREAKOUT_UNCONFIRMED"}:
+        state = "breakout_confirming"
     else:
         state = "rejected"
     return SetupDecision(not reasons, tuple(reasons), state)

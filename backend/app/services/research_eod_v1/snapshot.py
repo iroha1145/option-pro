@@ -15,14 +15,11 @@ from app.services.research_eod_v1.calendar_asof import last_completed_session, r
 from app.services.research_eod_v1.cross_section import q_star
 from app.services.research_eod_v1.factors import RawComponents, extract_raw
 from app.services.research_eod_v1.mathutil import clip100
-from app.services.research_eod_v1.paths import REFERENCE_DIR
+from app.services.research_eod_v1.paths import ensure_reference_on_path
 from app.services.research_eod_v1.series import SecuritySeries, clip_panel_to_as_of
 from app.services.research_eod_v1.venue import classify_venue
 
-import sys
-
-if str(REFERENCE_DIR) not in sys.path:
-    sys.path.insert(0, str(REFERENCE_DIR))
+ensure_reference_on_path()
 from registry import CommonInputs, common_rejections, resolve_weights, score_features  # type: ignore
 
 
@@ -266,7 +263,7 @@ def compute_snapshot(
                     history_sessions=raw.history_sessions,
                     us_venue_and_security_eligible=venue.eligible,
                     daily_data_complete=True,
-                    currently_tradable=True,
+                    currently_tradable=raw.currently_tradable,
                     unresolved_upthrust=raw.unresolved_upthrust,
                     structure_invalidated=raw.structure_invalidated,
                 ),
@@ -274,6 +271,8 @@ def compute_snapshot(
             )
         elif not venue.eligible:
             common = (venue.reason,)
+        elif not raw.currently_tradable:
+            common = ("NOT_TRADABLE",)
         else:
             common = ("INCOMPLETE_COMMON_INPUTS",)
         reasons = tuple(dict.fromkeys(tuple(common) + setup.reasons))

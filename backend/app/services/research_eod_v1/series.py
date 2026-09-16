@@ -30,6 +30,7 @@ class SecuritySeries:
     theme_ids: tuple[str, ...] = ()
     venue_metadata: Mapping[str, Any] = field(default_factory=dict)
     source_available_at: datetime | None = None
+    halted: bool = False
 
     def __post_init__(self) -> None:
         n = len(self.dates)
@@ -70,6 +71,7 @@ class SecuritySeries:
             theme_ids=self.theme_ids,
             venue_metadata=self.venue_metadata,
             source_available_at=self.source_available_at,
+            halted=self.halted,
         )
 
 

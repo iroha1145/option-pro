@@ -41,6 +41,7 @@
 
 - U_PIT：`INSUFFICIENT_PIT_HISTORY`
 - 864/180/12 市场行：`DATA_INSUFFICIENT`
+- 864 条 `technical_plus_event_guard` overlay：`DATA_INSUFFICIENT`（无 PIT 事件日历时不得默认通过）
 - 不得填写收益数字
 
 ## 生产不变性

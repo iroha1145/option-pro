@@ -18,3 +18,10 @@ ETF_SUBASSET_MANIFEST_PATH = CONFIG_DIR / "etf_subasset_manifest.json"
 COMPOSITE_MANIFEST_PATH = CONFIG_DIR / "composite_manifest.json"
 REFERENCE_REGISTRY_PATH = REFERENCE_DIR / "registry.py"
 RETURN_SUMMARY_TEMPLATE_PATH = TEMPLATES_DIR / "return_summary.json"
+
+
+def ensure_reference_on_path() -> None:
+    import sys
+
+    if str(REFERENCE_DIR) not in sys.path:
+        sys.path.insert(0, str(REFERENCE_DIR))

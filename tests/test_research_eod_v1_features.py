@@ -72,6 +72,28 @@ def test_split_adjusted_close_and_raw_close_are_separate() -> None:
     assert raw.raw_close == raw.last_close * 2.0
 
 
+def test_multi_window_base_freezes_one_setup() -> None:
+    days = trading_days(date(2019, 1, 2), 120)
+    close = trending_close(120, 40, 0.0)
+    high = close * 1.01
+    low = close * 0.99
+    # Flat range so several windows could qualify; only one frozen setup is kept.
+    series = make_series("BASE", days, close)
+    series.high = high
+    series.low = low
+    raw = extract_raw(
+        series,
+        market=series,
+        panel={"BASE": series},
+        horizon="mid",
+        momentum_blend=(0.25, 0.4, 0.35),
+        sector_gates=GATES,
+    )
+    if raw.frozen_setup is not None:
+        assert "setup_id" in raw.frozen_setup
+        assert raw.frozen_setup["window"] in {10, 15, 20, 30, 40, 60, 80}
+
+
 def test_residual_rejects_self_benchmark_and_short_history() -> None:
     days = trading_days(date(2015, 1, 2), 100)
     close = trending_close(100)
