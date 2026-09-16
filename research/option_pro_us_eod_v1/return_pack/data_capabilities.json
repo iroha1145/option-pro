@@ -16,6 +16,8 @@
       "volume_session_scope": "UNKNOWN",
       "delisted_coverage": "survivorship_only",
       "classification_history": "UNSUPPORTED",
+      "snapshot_path": "research/option_pro_us_eod_v1/return_pack/yahoo_current_universe/daily_bars.parquet",
+      "bar_rows": 582198,
       "current_universe_downloaded": 214,
       "current_universe_unique": 214,
       "bar_end": "2026-09-16",

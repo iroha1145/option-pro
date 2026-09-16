@@ -3,7 +3,7 @@
 v1：`DATA_INSUFFICIENT`，无许可 PIT，无市场收益。
 v2：正确性修复 + Yahoo 当前池诊断。**仍无十年 PIT 回测，无赢家，不晋升。**
 
-v2 增量：`correctness_audit.md`、`data_source_decision.md`、`provider_probe.json`、`data_capabilities.json`、`history_budget.json`、`download_coverage.csv`、`theme_membership_crosswalk.csv`、`theme_characteristics.csv`、`theme_diagnostic.json`、`v2_trial_counts.json`、`engineering_tests_v2.log`、`production_boundary.diff`。
+v2 增量：`correctness_audit.md`、`data_source_decision.md`、`provider_probe.json`、`data_capabilities.json`、`history_budget.json`、`download_coverage.csv`、`theme_membership_crosswalk.csv`、`theme_characteristics.csv`、`theme_diagnostic.json`、`v2_trial_counts.json`、`engineering_tests_v2.log`、`production_boundary.diff`、`yahoo_current_universe/`（214 只当前池日线 + 24 主题快照行）。
 
 必含文件：
 

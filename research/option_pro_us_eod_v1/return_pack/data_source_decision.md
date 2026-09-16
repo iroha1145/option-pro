@@ -5,7 +5,7 @@
 ## 路线
 
 1. **LocalParquetProvider**：`RESEARCH_EOD_LOCAL_DATA` 或 `research/option_pro_us_eod_v1/data/local`。本环境无授权离线文件。`probe_status=ACCESS_TESTED`，`daily_bars=empty`。
-2. **YahooDiagnosticProvider**（路线 A）：`yfinance==1.5.1`，参数 `interval=1d, auto_adjust=False, actions=True, repair=False, keepna=True, prepost=False, threads=False`。样本探测 5/5 成功（2020-01-02–2020-03-02，各 40 根）。随后批量下载当前 24 主题 214 只不重复代码，区间 2015-01-02–2026-09-17（end 不含），**214/214 有日线**，末日均为 2026-09-16。
+2. **YahooDiagnosticProvider**（路线 A）：`yfinance==1.5.1`，参数 `interval=1d, auto_adjust=False, actions=True, repair=False, keepna=True, prepost=False, threads=False`。样本探测 5/5 成功（2020-01-02–2020-03-02，各 40 根）。随后批量下载当前 24 主题 214 只不重复代码，区间 2015-01-02–2026-09-17（end 不含），**214/214 有日线**，末日均为 2026-09-16。日线已写入 `return_pack/yahoo_current_universe/daily_bars.parquet`（582198 行）。
 3. **MassiveEnvProvider**（仅环境变量回退）：本轮 Yahoo 已通，**没有**读取或使用任何 Massive 密钥，也没有改生产 `MASSIVE_API_KEY` 配置。`probe_status=AUTH_REQUIRED`（探测时环境未配置）。
 
 未使用 Sharadar / EODHD / Norgate。未购买套餐。未把授权全量行情提交到 GitHub。

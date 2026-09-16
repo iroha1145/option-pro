@@ -1,0 +1,34 @@
+{
+  "provider": "yahoo_yfinance",
+  "dataset_id": "yahoo-current-universe-diagnostic",
+  "dataset_version": "2026-09-16",
+  "retrieved_at": "2026-09-16T17:24:41.368841+00:00",
+  "request_params_redacted": {
+    "start": "2015-01-02",
+    "end_exclusive": "2026-09-17",
+    "interval": "1d",
+    "auto_adjust": false,
+    "actions": true,
+    "repair": false,
+    "keepna": true,
+    "prepost": false,
+    "threads": false,
+    "progress": false
+  },
+  "tickers": 214,
+  "bar_rows": 582198,
+  "snapshot_rows": 228,
+  "session_date": "2026-09-16",
+  "files": {
+    "daily_bars.parquet": "d056327fd03abdb3a276a8f20039ea2af04300bc7ec9c1dd10010343abf7262e",
+    "security_master.csv": "08d7ca7c0435a7dc4b261d624b2aa9d29e3faaf00f99eea2a9d01d645cff680d",
+    "theme_snapshot_rows.parquet": "82866d86d1ebabc2dbf4a910d232ac679eeb78499ac6e7a17ebcbeba8b3bb3de"
+  },
+  "notes": [
+    "CURRENT_UNIVERSE_DIAGNOSTIC",
+    "download_time_not_pit",
+    "Close is not verified raw trade price",
+    "not a 10-year PIT market backtest"
+  ],
+  "secret_present": false
+}
