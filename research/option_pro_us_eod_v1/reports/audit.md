@@ -49,3 +49,4 @@
 - 未修改 A0、T1、日股、订单、期权或账户权限逻辑。
 - `RESEARCH_EOD_V1_ENABLED` 默认 `false`。
 - 新路由挂在 owner 边界，刷新在无许可数据时拒绝拉行情。
+- 未改动生产页面或移动端选股 UI；并发刷新测试只覆盖研究 API，且 `network_calls=0`。

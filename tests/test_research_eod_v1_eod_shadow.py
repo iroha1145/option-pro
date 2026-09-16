@@ -54,6 +54,20 @@ def test_refresh_stays_disabled_without_flag() -> None:
     assert body["status"] == "DISABLED"
 
 
+def test_concurrent_refresh_never_fetches() -> None:
+    import concurrent.futures
+
+    with _client() as client:
+        def hit(_: int) -> dict:
+            return client.post("/api/research/eod/v1/refresh", json={}).json()
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+            bodies = list(pool.map(hit, range(8)))
+    assert all(body["network_calls"] == 0 for body in bodies)
+    assert all(body["status"] == "DISABLED" for body in bodies)
+    assert all(body["production_default_unchanged"] is True for body in bodies)
+
+
 def test_status_endpoint_exists() -> None:
     with _client() as client:
         response = client.get("/api/research/eod/v1/status")
