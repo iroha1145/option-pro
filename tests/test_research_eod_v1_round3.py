@@ -149,6 +149,39 @@ def test_missing_raw_close_does_not_size_from_geometry_close() -> None:
     assert result["unfilled"] >= 1 or result.get("ending_equity") == 10_000
 
 
+def test_halted_entry_session_is_rejected() -> None:
+    days = trading_days(date(2021, 1, 4), 12)
+    series = make_series("AAA", days, np.full(12, 100.0))
+    series.bar_halted = np.zeros(12, dtype=bool)
+    series.bar_halted[2] = True
+    result = simulate_ledger(
+        start=days[0],
+        end=days[-1],
+        panel={"AAA": series},
+        capital=10_000,
+        holding_sessions=5,
+        signals=[_signal("AAA", days[1])],
+    )
+    assert not result["trades"]
+    assert any(event["note"] == "HALTED_SESSION" for event in result["events"])
+
+
+def test_end_of_sample_halt_does_not_block_earlier_entry() -> None:
+    days = trading_days(date(2021, 1, 4), 12)
+    series = make_series("AAA", days, np.full(12, 100.0))
+    series.halted = True
+    result = simulate_ledger(
+        start=days[0],
+        end=days[-1],
+        panel={"AAA": series},
+        capital=10_000,
+        holding_sessions=5,
+        signals=[_signal("AAA", days[1])],
+    )
+    assert result["trades"]
+    assert result["trades"][0]["entry_session"] == days[2]
+
+
 def test_unsized_orders_are_rejected() -> None:
     days = trading_days(date(2021, 1, 4), 12)
     series = make_series("AAA", days, np.full(12, 100.0))

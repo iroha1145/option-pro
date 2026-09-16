@@ -46,6 +46,73 @@ def _identity_field(value: Any, default: str) -> str:
     return text
 
 
+def _as_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value or "").strip().lower() in {"1", "true", "yes"}
+
+
+def _as_datetime(value: Any) -> datetime | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, datetime):
+        return value
+    text = str(value).strip()
+    if not text or text.lower() in {"nan", "none", "null"}:
+        return None
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _optional_contract_field(row: Mapping[str, Any], key: str) -> str | None:
+    if key not in row:
+        return None
+    value = row.get(key)
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text or text.lower() in {"nan", "none", "null"}:
+        return None
+    return text
+
+
+def _research_bar_from_row(
+    row: Mapping[str, Any],
+    *,
+    symbol: str,
+    identity: SecurityIdentity | None,
+    session: date,
+) -> ResearchBar:
+    close = _as_float(row.get("close"))
+    volume = _as_float(row.get("volume"))
+    vintage = _optional_contract_field(row, "vintage_status") or "offline_export"
+    return ResearchBar(
+        security_id=str(row.get("security_id") or (identity.security_id if identity else symbol)),
+        session_date=session,
+        open=_as_float(row.get("open")),
+        high=_as_float(row.get("high")),
+        low=_as_float(row.get("low")),
+        close=close,
+        raw_open=_as_float(row["raw_open"]) if "raw_open" in row else None,
+        raw_close=_as_float(row["raw_close"]) if "raw_close" in row else None,
+        volume=volume,
+        dollar_volume=_as_float(row.get("dollar_volume")),
+        tri=_as_float(row["tri"]) if "tri" in row else None,
+        volume_scope=_optional_contract_field(row, "volume_scope") or "UNKNOWN",
+        price_adjustment=_optional_contract_field(row, "price_adjustment") or "unverified",
+        volume_adjustment=_optional_contract_field(row, "volume_adjustment") or "unverified",
+        halted=_as_bool(row.get("halted")) if "halted" in row else False,
+        economic_known_at=_as_datetime(row.get("economic_known_at")),
+        source_published_at=_as_datetime(row.get("source_published_at")),
+        retrieved_at=_as_datetime(row.get("retrieved_at")),
+        finalized_at=_as_datetime(row.get("finalized_at")),
+        vintage_status=vintage,
+        partial=_as_bool(row.get("partial")),
+    )
+
+
 def _as_float(value: Any) -> float | None:
     if value is None or value == "":
         return None
@@ -206,25 +273,7 @@ class LocalParquetProvider:
                 session = _as_date(row.get("session_date") or row.get("date"))
                 if session is None:
                     continue
-                close = _as_float(row.get("close"))
-                volume = _as_float(row.get("volume"))
-                out.append(
-                    ResearchBar(
-                        security_id=str(row.get("security_id") or (identity.security_id if identity else symbol)),
-                        session_date=session,
-                        open=_as_float(row.get("open")),
-                        high=_as_float(row.get("high")),
-                        low=_as_float(row.get("low")),
-                        close=close,
-                        raw_open=_as_float(row["raw_open"]) if "raw_open" in row else None,
-                        raw_close=_as_float(row["raw_close"]) if "raw_close" in row else None,
-                        volume=volume,
-                        dollar_volume=_as_float(row.get("dollar_volume")),
-                        tri=_as_float(row.get("tri")) if "tri" in (row or {}) and row.get("tri") not in (None, "") else None,
-                        vintage_status=str(row.get("vintage_status") or "offline_export"),
-                        partial=str(row.get("partial") or "").lower() in {"1", "true", "yes"},
-                    )
-                )
+                out.append(_research_bar_from_row(row, symbol=symbol, identity=identity, session=session))
         return out
 
     def _bars_from_parquet(self, path: Path, symbol: str, identity: SecurityIdentity | None) -> list[ResearchBar]:
@@ -242,21 +291,5 @@ class LocalParquetProvider:
             if "security_id" in frame.columns and sid not in {symbol, identity.security_id if identity else symbol}:
                 if str(row.get("security_id")) != (identity.security_id if identity else symbol):
                     continue
-            out.append(
-                ResearchBar(
-                    security_id=sid,
-                    session_date=session,
-                    open=_as_float(row.get("open")),
-                    high=_as_float(row.get("high")),
-                    low=_as_float(row.get("low")),
-                    close=_as_float(row.get("close")),
-                    raw_open=_as_float(row["raw_open"]) if "raw_open" in row else None,
-                    raw_close=_as_float(row["raw_close"]) if "raw_close" in row else None,
-                    volume=_as_float(row.get("volume")),
-                    dollar_volume=_as_float(row.get("dollar_volume")),
-                    tri=_as_float(row.get("tri")) if "tri" in row else None,
-                    vintage_status=str(row.get("vintage_status") or "offline_export"),
-                    partial=bool(row.get("partial")) if row.get("partial") is not None else False,
-                )
-            )
+            out.append(_research_bar_from_row(row, symbol=symbol, identity=identity, session=session))
         return out

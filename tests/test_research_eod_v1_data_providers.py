@@ -27,6 +27,21 @@ def test_local_provider_reads_csv_and_does_not_invent_missing(tmp_path) -> None:
     assert provider.load_classification_history("AAA") == UNSUPPORTED
 
 
+def test_local_provider_preserves_halt_and_adjustment_fields(tmp_path) -> None:
+    bars = tmp_path / "daily_bars"
+    bars.mkdir()
+    (bars / "AAA.csv").write_text(
+        "date,open,high,low,close,volume,halted,price_adjustment,volume_adjustment,vintage_status\n"
+        "2024-01-02,10,11,9,10.5,1000,true,split_adjusted,unverified,PARTIAL\n",
+        encoding="utf-8",
+    )
+    rows = LocalParquetProvider(tmp_path).fetch_daily_bars("AAA", date(2024, 1, 2), date(2024, 1, 3))
+    assert rows[0].halted is True
+    assert rows[0].price_adjustment == "split_adjusted"
+    assert rows[0].volume_adjustment == "unverified"
+    assert rows[0].vintage_status == "PARTIAL"
+
+
 def test_local_provider_does_not_default_us_cs_identity(tmp_path) -> None:
     (tmp_path / "security_master.csv").write_text(
         "security_id,provider_symbol,asset_track\nAAA,AAA,stock\n",

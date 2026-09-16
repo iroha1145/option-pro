@@ -10,7 +10,7 @@ import numpy as np
 
 from app.services.research_eod_v1.backtest import apply_cost, plan_trade, slippage_bps
 from app.services.research_eod_v1.calendar_asof import next_session
-from app.services.research_eod_v1.series import SecuritySeries
+from app.services.research_eod_v1.series import SecuritySeries, session_date_is_halted
 
 
 @dataclass
@@ -334,9 +334,10 @@ def simulate_ledger(
             if row.get("status") != "eligible":
                 continue
             series = panel[sid]
-            if series.halted and (series.bar_halted is None):
-                # series.halted is an end-of-sample flag; do not apply it to every date.
-                pass
+            if session_date_is_halted(series, day):
+                unfilled += 1
+                events.append(LedgerEvent(day, "reject", sid, 0.0, 0.0, None, "HALTED_SESSION"))
+                continue
             planned = plan_trade(
                 series,
                 prior,

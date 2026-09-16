@@ -114,7 +114,9 @@ GitHub 单个 `test` job 串行包含 pytest → 前端构建/lint/Playwright �
   - pull_request run 35141384916：**success**（29m9s），含对 `base...HEAD` 的空白检查、镜像与 worker。
 - `7bb606eb` **push** run 35146365496：**success**（约 28m30s）。pytest、前端构建/行为/生产断言/lint、Playwright、compose 镜像、部署边界、backend+unified worker 全部通过。
 - `7bb606eb` **pull_request** run 35146372035：**success**（约 25m18s），含空白检查、镜像与 worker。
-- 此后若再推送契约修补（停牌按日、缺量、本地身份/raw），新 head 在 GitHub job 完成前不声称端到端已验证。
+- `2510ef2e` **push** run 35151265134：**success**（21:14:41Z–21:43:20Z，约 28m39s）。pytest、前端、Playwright、空白检查、镜像、worker、视觉证据全部通过。
+- `2510ef2e` **pull_request** run 35151267626：**success**（21:14:41Z–21:42:38Z，约 27m57s）。
+- 此后若再推送停牌拒买 / LocalParquet 字段回传，新 head 在 GitHub job 完成前不声称端到端已验证。
 
 生产默认、A0、T1、日常股票/期权/账户路径未改。`RESEARCH_EOD_V1_ENABLED` 仍为 false。
 
@@ -136,12 +138,12 @@ GitHub 单个 `test` job 串行包含 pytest → 前端构建/lint/Playwright �
 | 4 统一 raw 账本 | 已修 | raw_close 盯市；缺 raw 不 fallback；分红应收/支付；收购带日期 |
 | 4 未知盯市不抹掉其他仓位 | 已修 | `equity=None` + partial/known/unknown |
 | 4 隐性全仓 | 已修 | 默认拒绝未预尺寸订单 |
-| 5 不把缺失补成已知 | 已修 | NaN 保留；OHLC 违规丢弃；vintage/adjustment/halt/tradable 传到快照；缺量不当 0 量；本地 parquet 不默认 US/CS、不把 open 当成 raw |
+| 5 不把缺失补成已知 | 已修 | NaN 保留；OHLC 违规丢弃；vintage/adjustment/halt/tradable 传到快照；缺量不当 0 量；本地 parquet 不默认 US/CS、不把 open 当成 raw；读入保留 halt/adjustment；停牌日账本拒买 |
 | 5 重建 ≠ 下载时间 PIT | 已修 | `source_available_at` 不按下载时刻一刀切 |
 | 5 导出与 LocalParquet 同口径 + 字节哈希 | 已修 | 合成 parquet + `offline_replay_hash.json` |
 | 6 M3 重算边际；M2 要 as_of；M1 折叠后分歧 | 已修 | 对应三项回归 |
 | 7 少量允许日 A/B/C/D 真实快照 | 已做诊断 | 4 主题×2 日 + 24 主题×1 日；0 回测；无赢家 |
-| 7 完整 CI 含前端/镜像/worker | `7bb606eb` 已绿 | push 35146365496 与 PR 35146372035 均 success（pytest / 前端 / Playwright / 镜像 / worker）；后续契约修补 SHA 另记 |
+| 7 完整 CI 含前端/镜像/worker | `2510ef2e` 已绿 | push 35151265134 与 PR 35151267626 均 success（pytest / 前端 / Playwright / 镜像 / worker）；后续停牌拒买 SHA 另记 |
 | 7 不合并不晋升 | 遵守 | 本轮不 merge / promote / 调门槛 |
 
 ## 未执行

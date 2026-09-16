@@ -123,12 +123,24 @@ class SecuritySeries:
         )
 
 
+def session_is_halted(series: "SecuritySeries", t: int) -> bool:
+    """Halt is a dated event. A later end-of-sample flag cannot rewrite earlier days."""
+
+    if series.bar_halted is not None:
+        return bool(series.bar_halted[t])
+    return bool(series.halted) and t == len(series.dates) - 1
+
+
+def session_date_is_halted(series: "SecuritySeries", session: date) -> bool:
+    if session not in series.dates:
+        return False
+    return session_is_halted(series, series.dates.index(session))
+
+
 def _halted_through(series: "SecuritySeries", index: int) -> bool:
     """Slice keeps only a halt that is known on the last kept session."""
 
-    if series.bar_halted is not None:
-        return bool(series.bar_halted[index])
-    return bool(series.halted) and index == len(series.dates) - 1
+    return session_is_halted(series, index)
 
 
 def _event_session(event: Mapping[str, Any]) -> date:
