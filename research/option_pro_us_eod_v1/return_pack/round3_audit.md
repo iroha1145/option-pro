@@ -107,7 +107,10 @@ GitHub 单个 `test` job 串行包含 pytest → 前端构建/lint/Playwright �
 
 - `8fbdb800` **push** run 35137528626：**success**（约 30m38s，含前端 / 镜像 / worker）。
 - `8fbdb800` **pull_request** run 35137535841：**failure**（对 `origin/main...HEAD` 的空白检查，旧研究 CSV 尾空格；pytest/前端已过）。
-- `0f5c0233` 去掉那些尾空格。push run 35141379097 在记录本段时仍在跑：pytest、前端构建/行为测试/lint 已成功，Playwright 进行中，镜像与 worker **尚未执行**。全部通过前不声称端到端验证完成。
+- `0f5c0233` 去掉那些尾空格。
+  - push run 35141379097：**success**（27m18s）。pytest、前端构建/行为/生产断言/lint、Playwright、compose 镜像、部署边界、backend+unified worker 及离线 radar/ETL/macro 全部通过。
+  - pull_request run 35141384916：**success**（29m9s），含对 `base...HEAD` 的空白检查、镜像与 worker。
+- 此后 head 若再推 F1 capture-store，须重新记录该 SHA 的 CI；在新 job 变绿前不把新提交说成端到端已验证。
 
 生产默认、A0、T1、日常股票/期权/账户路径未改。`RESEARCH_EOD_V1_ENABLED` 仍为 false。
 
@@ -134,7 +137,7 @@ GitHub 单个 `test` job 串行包含 pytest → 前端构建/lint/Playwright �
 | 5 导出与 LocalParquet 同口径 + 字节哈希 | 已修 | 合成 parquet + `offline_replay_hash.json` |
 | 6 M3 重算边际；M2 要 as_of；M1 折叠后分歧 | 已修 | 对应三项回归 |
 | 7 少量允许日 A/B/C/D 真实快照 | 已做诊断 | 4 主题×2 日 + 24 主题×1 日；0 回测；无赢家 |
-| 7 完整 CI 含前端/镜像/worker | 进行中 | `8fbdb800` push 已绿；`0f5c0233` 前端已过、镜像/worker 未完成 |
+| 7 完整 CI 含前端/镜像/worker | `0f5c0233` 已绿 | push 35141379097 与 PR 35141384916 均 success（pytest / 前端 / Playwright / 镜像 / worker） |
 | 7 不合并不晋升 | 遵守 | 本轮不 merge / promote / 调门槛 |
 
 ## 未执行
@@ -144,5 +147,5 @@ GitHub 单个 `test` job 串行包含 pytest → 前端构建/lint/Playwright �
 - 退市并集 / 历史 PIT 成员
 - 同时多个真实活跃平台
 - Massive（未使用；若曾在聊天里粘贴密钥，应轮换）
-- GitHub 前端 / 镜像 / worker 终态
+- 新 F1 capture-store 提交的 GitHub CI 终态（`0f5c0233` 已绿，后继 SHA 另记）
 - 合并、晋升、解封 holdout
