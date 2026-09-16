@@ -121,7 +121,7 @@ GitHub 单个 `test` job 串行包含 pytest → 前端构建/lint/Playwright �
 | 规格项 | 状态 | 证据 / 缺口 |
 |---|---|---|
 | 1 真实 runner 不用 `as_of_after_close` | 已修 | `export_yahoo_snapshot` / `run_current_universe_diagnostic` / 四主题与 24 主题脚本走 `capture_as_of` |
-| 1 日历+来源最终化决定完整日 | 已修 | `last_complete_eod_session`；13:24→9/15；16:00 边界；供应商晚到 |
+| 1 日历+来源最终化决定完整日 | 已修 | 13:24→9/15；16:00 边界；供应商晚到；7/3 提前收市；2026 劳工节；DST 时区偏移 |
 | 1 部分 bar 标 PARTIAL 并排除 EOD 池 | 已修 | `session_is_partial` + `has_complete_session_bar`；207 根 9/16 被隔离 |
 | 1 收盘后重抓生成新版本、不改旧 retrieved_at | 已跑 | `round3_after_close_capture.json`：16:13 ET 新版本，旧 13:24 `retrieved_at` 未改；`VENDOR_LATE`，不晋升 9/16 |
 | 1 旧 9/16 采集标 INVALID | 已修 | `manifest.json` `eod_status=INVALID_EOD_CAPTURE`；24 张卡撤销 |
@@ -134,7 +134,7 @@ GitHub 单个 `test` job 串行包含 pytest → 前端构建/lint/Playwright �
 | 4 统一 raw 账本 | 已修 | raw_close 盯市；缺 raw 不 fallback；分红应收/支付；收购带日期 |
 | 4 未知盯市不抹掉其他仓位 | 已修 | `equity=None` + partial/known/unknown |
 | 4 隐性全仓 | 已修 | 默认拒绝未预尺寸订单 |
-| 5 不把缺失补成已知 | 已修 | NaN 保留；OHLC 违规丢弃；vintage/adjustment 传到快照 |
+| 5 不把缺失补成已知 | 已修 | NaN 保留；OHLC 违规丢弃；vintage/adjustment/halt/tradable 传到快照 |
 | 5 重建 ≠ 下载时间 PIT | 已修 | `source_available_at` 不按下载时刻一刀切 |
 | 5 导出与 LocalParquet 同口径 + 字节哈希 | 已修 | 合成 parquet + `offline_replay_hash.json` |
 | 6 M3 重算边际；M2 要 as_of；M1 折叠后分歧 | 已修 | 对应三项回归 |
