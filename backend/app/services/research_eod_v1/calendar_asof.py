@@ -35,6 +35,41 @@ def last_completed_session(as_of: datetime) -> date:
     return candidate
 
 
+def last_complete_eod_session(
+    as_of: datetime,
+    *,
+    source_finalized_through: date | None = None,
+    late_securities: tuple[str, ...] = (),
+) -> date:
+    """Calendar close plus vendor finalization. Never invents a later session than ``as_of``.
+
+    ``late_securities`` is recorded for audits; a single late name does not
+    invent a later common session. Callers must drop those names from EOD pools.
+    """
+
+    del late_securities  # audit-only; session is the intersection close, not a promotion
+    session = last_completed_session(as_of)
+    if source_finalized_through is None:
+        return session
+    finalized = source_finalized_through
+    if not is_trading_day(finalized):
+        finalized = previous_trading_day(finalized, include_start=True)
+    return min(session, finalized)
+
+
+def capture_as_of(now: datetime) -> datetime:
+    """Research runners pass the real clock. They must not jump to a future close."""
+
+    return require_aware(now, name="now")
+
+
+def session_is_partial(session: date, as_of: datetime) -> bool:
+    local = require_aware(as_of).astimezone(ET)
+    if local.date() != session:
+        return local.date() < session
+    return local.hour * 60 + local.minute < session_close_minutes(session)
+
+
 def session_close_at(session: date) -> datetime:
     minutes = session_close_minutes(session)
     return datetime(

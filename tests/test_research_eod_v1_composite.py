@@ -1,3 +1,7 @@
+from datetime import date
+
+import pytest
+
 from app.services.research_eod_v1.composite import (
     classify_regime,
     m1_consensus,
@@ -37,6 +41,13 @@ def test_m1_requires_two_families_and_does_not_revive_rejects() -> None:
 
 def test_m2_without_matured_fold_out_labels_is_empty() -> None:
     assert m2_utility([_row("AAA", "A_trend_quality", 90)], "balanced", 10) == []
+    with pytest.raises((ValueError, TypeError)):
+        m2_utility(
+            [_row("AAA", "A_trend_quality", 90)],
+            "balanced",
+            10,
+            matured_returns={"AAA": {"returns": [0.02] * 100, "label_matured_at": date(2099, 1, 1)}},
+        )
 
 
 def test_m3_stops_on_missing_correlation() -> None:

@@ -17,7 +17,7 @@ sys.path.insert(0, str(ROOT / "backend"))
 from app.services.research_eod_v1.config_load import load_registry  # noqa: E402
 from app.services.research_eod_v1.data.to_series import bars_to_series  # noqa: E402
 from app.services.research_eod_v1.data.yahoo import DOWNLOAD_PARAMS, YahooDiagnosticProvider  # noqa: E402
-from app.services.research_eod_v1.fixtures import as_of_after_close  # noqa: E402
+from app.services.research_eod_v1.calendar_asof import capture_as_of, last_complete_eod_session  # noqa: E402
 from app.services.research_eod_v1.snapshot import compute_snapshot  # noqa: E402
 from app.services.research_eod_v1.universe_audit import ETF_SUBASSET_HINTS  # noqa: E402
 from app.services.research_eod_v1.venue import CURRENT_UNIVERSE_VENUE_NOTES  # noqa: E402
@@ -43,12 +43,16 @@ def _venue(ticker: str, track: str) -> dict:
             "listing_country": note.get("listing_country") or "US",
             "exchange": note.get("exchange") or "NASDAQ",
             "security_type": "ETF" if track == "etf" else "CS",
+            "identity_confidence": "unverified_current_universe_note",
+            "industry_source": "theme_tag_diagnostic_not_economic_parent",
         }
     return {
         "listing_country": "US",
         "exchange": "NASDAQ",
         "mic": "XNAS",
         "security_type": "ETF" if track == "etf" else "CS",
+        "identity_confidence": "unverified_default_not_checked",
+        "industry_source": "theme_tag_diagnostic_not_economic_parent",
     }
 
 
@@ -120,9 +124,9 @@ def main() -> int:
     pd.DataFrame(master_rows).to_csv(master_path, index=False, lineterminator="\n")
 
     registry = load_registry()
-    last_dates = [series.dates[-1] for series in series_map.values()]
-    session = max(last_dates)
-    as_of = as_of_after_close(session)
+    clock = capture_as_of(datetime.now(timezone.utc))
+    session = last_complete_eod_session(clock)
+    as_of = clock
     snap_rows: list[dict] = []
     for theme_id in SECTORS:
         payload = compute_snapshot(
@@ -167,6 +171,8 @@ def main() -> int:
         "bar_rows": len(bar_rows),
         "snapshot_rows": len(snap_rows),
         "session_date": session.isoformat(),
+        "capture_clock": clock.isoformat(),
+        "eod_status": "COMPLETE_EOD",
         "files": {
             "daily_bars.parquet": _sha256(bars_path),
             "security_master.csv": _sha256(master_path),
@@ -177,6 +183,8 @@ def main() -> int:
             "download_time_not_pit",
             "Close is not verified raw trade price",
             "not a 10-year PIT market backtest",
+            "industry_id is theme[0] diagnostic tag, not a verified parent industry",
+            "venue defaults are unverified diagnostic assumptions",
         ],
         "secret_present": False,
     }

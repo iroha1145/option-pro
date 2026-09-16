@@ -8,10 +8,15 @@ from typing import Sequence
 import numpy as np
 from zoneinfo import ZoneInfo
 
-from app.services.research_eod_v1.data.contract import ResearchBar
+from app.services.research_eod_v1.calendar_asof import session_close_at
+from app.services.research_eod_v1.data.contract import ResearchBar, validate_research_bars
 from app.services.research_eod_v1.series import SecuritySeries
 
 ET = ZoneInfo("America/New_York")
+
+
+def _optional_float(value: float | None) -> float:
+    return float("nan") if value is None else float(value)
 
 
 def bars_to_series(
@@ -23,27 +28,48 @@ def bars_to_series(
     industry_id: str | None = None,
     parent_industry_id: str | None = None,
     venue_metadata: dict | None = None,
+    reconstruction_mode: str = "historical_reconstruction",
 ) -> SecuritySeries | None:
     usable = [bar for bar in bars if not bar.missing and bar.close is not None and bar.open is not None]
     if not usable:
         return None
     usable = sorted(usable, key=lambda bar: bar.session_date)
+    validate_research_bars(usable)
     close = np.array([float(bar.close) for bar in usable], dtype=float)
     open_ = np.array([float(bar.open) for bar in usable], dtype=float)
-    high = np.array([float(bar.high if bar.high is not None else bar.close) for bar in usable], dtype=float)
-    low = np.array([float(bar.low if bar.low is not None else bar.close) for bar in usable], dtype=float)
-    raw_close = np.array([float(bar.raw_close if bar.raw_close is not None else bar.close) for bar in usable], dtype=float)
-    raw_open = np.array([float(bar.raw_open if bar.raw_open is not None else bar.open) for bar in usable], dtype=float)
-    volume = np.array([float(bar.volume or 0.0) for bar in usable], dtype=float)
+    high = np.array([_optional_float(bar.high) for bar in usable], dtype=float)
+    low = np.array([_optional_float(bar.low) for bar in usable], dtype=float)
+    raw_close = np.array([_optional_float(bar.raw_close) for bar in usable], dtype=float)
+    raw_open = np.array([_optional_float(bar.raw_open) for bar in usable], dtype=float)
+    volume = np.array([_optional_float(bar.volume) for bar in usable], dtype=float)
     dollar = np.array(
         [
-            float(bar.dollar_volume) if bar.dollar_volume is not None else float((bar.close or 0) * (bar.volume or 0))
+            float(bar.dollar_volume)
+            if bar.dollar_volume is not None
+            else (
+                float(bar.close) * float(bar.volume)
+                if bar.close is not None and bar.volume is not None
+                else float("nan")
+            )
             for bar in usable
         ],
         dtype=float,
     )
-    tri = np.array([float(bar.tri if bar.tri is not None else bar.close) for bar in usable], dtype=float)
-    last_pub = usable[-1].source_published_at
+    tri = np.array([_optional_float(bar.tri) for bar in usable], dtype=float)
+    economic = []
+    published = []
+    retrieved = []
+    finalized = []
+    partial = []
+    halted = []
+    for bar in usable:
+        known = bar.economic_known_at or session_close_at(bar.session_date)
+        economic.append(known)
+        published.append(bar.source_published_at)
+        retrieved.append(bar.retrieved_at)
+        finalized.append(bar.finalized_at)
+        partial.append(bar.vintage_status == "PARTIAL" or bar.partial)
+        halted.append(bool(bar.halted))
     return SecuritySeries(
         security_id=security_id,
         ticker_at_signal=security_id,
@@ -63,6 +89,17 @@ def bars_to_series(
         parent_industry_id=parent_industry_id,
         theme_ids=theme_ids,
         venue_metadata=venue_metadata or {},
-        source_available_at=last_pub if last_pub is not None else datetime(usable[-1].session_date.year, usable[-1].session_date.month, usable[-1].session_date.day, 16, 30, tzinfo=ET),
+        source_available_at=None,
         raw_open=raw_open,
+        economic_known_at=economic,
+        source_published_at=published,
+        retrieved_at=retrieved,
+        finalized_at=finalized,
+        bar_partial=np.asarray(partial, dtype=bool),
+        bar_halted=np.asarray(halted, dtype=bool),
+        vintage_status=tuple(bar.vintage_status for bar in usable),
+        price_adjustment=tuple(bar.price_adjustment for bar in usable),
+        volume_adjustment=tuple(bar.volume_adjustment for bar in usable),
+        tri_verified=all(bar.tri is not None and bar.price_adjustment == "verified_tri" for bar in usable),
+        reconstruction_mode=reconstruction_mode,
     )

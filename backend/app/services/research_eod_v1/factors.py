@@ -13,6 +13,8 @@ from app.services.research_eod_v1.constants import (
     ATR_PERIOD,
     BASE_WINDOWS,
     BREAKOUT_TRACK_MAX_SESSIONS,
+    PLATFORM_EXPIRE_MULTIPLE,
+    PLATFORM_FAIL_CONFIRM_SESSIONS,
     SWING_SPAN,
     TOUCH_MIN_GAP,
 )
@@ -224,6 +226,22 @@ def _base_geometry(
     return float(best_score), "observed", best
 
 
+def _platform_event(setup: dict[str, Any], session: date, kind: str, note: str = "") -> dict[str, Any]:
+    version = int(setup.get("version") or 1)
+    return {
+        "setup_id": setup.get("setup_id"),
+        "session": session.isoformat(),
+        "kind": kind,
+        "version": version,
+        "note": note,
+    }
+
+
+def _close_below_support(series: SecuritySeries, index: int, support: float) -> bool:
+    price = float(series.close[index])
+    return bool(np.isfinite(price) and price < support)
+
+
 def resolve_frozen_setup(
     series: SecuritySeries,
     t: int,
@@ -232,15 +250,71 @@ def resolve_frozen_setup(
     max_sessions: int,
     min_touches: int,
 ) -> tuple[float | None, str, dict[str, Any] | None]:
-    """Keep the first formed platform; later highs cannot rewrite frozen levels."""
+    """Freeze the currently valid platform. Failed/expired bases may be replaced."""
 
     min_eval = int(min_sessions) + 5
     if t < min_eval:
         return None, "insufficient_history", None
-    frozen: dict[str, Any] | None = None
-    frozen_score: float | None = None
+    events: list[dict[str, Any]] = []
+    active: dict[str, Any] | None = None
+    active_score: float | None = None
+    fail_streak = 0
+    repair_streak = 0
     for eval_t in range(min_eval, t + 1):
-        score, status, setup = _base_geometry(
+        session = series.dates[eval_t]
+        if active is not None:
+            support = float(active["support"])
+            resistance = float(active["resistance_high"])
+            width = max(resistance - support, 1e-9)
+            close = float(series.close[eval_t])
+            formed_index = series.dates.index(date.fromisoformat(str(active["formed_at"])))
+            age = eval_t - formed_index
+            if _close_below_support(series, eval_t, support):
+                fail_streak += 1
+                repair_streak = 0
+            else:
+                fail_streak = 0
+                if support <= close <= resistance:
+                    repair_streak += 1
+                else:
+                    repair_streak = 0
+            if fail_streak >= PLATFORM_FAIL_CONFIRM_SESSIONS:
+                active = dict(active)
+                active["failed_at"] = session.isoformat()
+                active["lifecycle"] = "failed"
+                active["version"] = int(active.get("version") or 1) + 1
+                events.append(_platform_event(active, session, "failed", "close_below_support"))
+                active["events"] = list(events)
+                active = None
+                active_score = None
+                fail_streak = 0
+                repair_streak = 0
+                continue
+            if (
+                age > int(max_sessions) * PLATFORM_EXPIRE_MULTIPLE
+                and np.isfinite(close)
+                and (close > resistance + 2.0 * width or close < support - 2.0 * width)
+            ):
+                active = dict(active)
+                active["expired_at"] = session.isoformat()
+                active["lifecycle"] = "expired"
+                active["version"] = int(active.get("version") or 1) + 1
+                events.append(_platform_event(active, session, "expired", "left_range"))
+                active["events"] = list(events)
+                active = None
+                active_score = None
+                fail_streak = 0
+                repair_streak = 0
+                continue
+            if active.get("lifecycle") == "failed" and repair_streak >= PLATFORM_FAIL_CONFIRM_SESSIONS:
+                active = dict(active)
+                active["repaired_at"] = session.isoformat()
+                active["lifecycle"] = "active"
+                active["failed_at"] = None
+                active["version"] = int(active.get("version") or 1) + 1
+                events.append(_platform_event(active, session, "repaired", "back_in_range"))
+            continue
+        score, _status, setup = _base_geometry(
             series,
             eval_t,
             min_sessions=min_sessions,
@@ -250,18 +324,25 @@ def resolve_frozen_setup(
         if setup is None:
             continue
         formed_index = eval_t - 1
-        frozen = dict(setup)
-        frozen["formed_at"] = series.dates[formed_index].isoformat()
-        frozen["known_at"] = frozen["formed_at"]
-        frozen["confirmed_at"] = None
-        frozen["failed_at"] = None
-        frozen["repaired_at"] = None
-        frozen["expired_at"] = None
-        frozen["version"] = 1
-        frozen["setup_id"] = f"{series.security_id}:{frozen['formed_at']}:r{round(float(frozen['resistance_high']), 4)}"
-        frozen_score = score
-        break
-    if frozen is None:
+        active = dict(setup)
+        active["formed_at"] = series.dates[formed_index].isoformat()
+        active["known_at"] = active["formed_at"]
+        active["confirmed_at"] = None
+        active["failed_at"] = None
+        active["repaired_at"] = None
+        active["expired_at"] = None
+        active["first_cross_at"] = None
+        active["lifecycle"] = "active"
+        active["version"] = 1
+        active["setup_id"] = (
+            f"{series.security_id}:{active['formed_at']}:r{round(float(active['resistance_high']), 4)}"
+        )
+        events.append(_platform_event(active, series.dates[formed_index], "formed"))
+        active["events"] = list(events)
+        active_score = score
+        fail_streak = 0
+        repair_streak = 0
+    if active is None:
         return _base_geometry(
             series,
             t,
@@ -269,7 +350,9 @@ def resolve_frozen_setup(
             max_sessions=max_sessions,
             min_touches=min_touches,
         )
-    return frozen_score, "observed", frozen
+    active = dict(active)
+    active["events"] = list(events)
+    return active_score, "observed", active
 
 
 def _breakout_track(
@@ -284,22 +367,36 @@ def _breakout_track(
         return None
     resistance = float(setup["resistance_high"])
     close = series.close
-    lookback = min(t, 40)
+    known_at = setup.get("known_at")
+    start_i = 1
+    if known_at:
+        known = date.fromisoformat(str(known_at))
+        if known in series.dates:
+            start_i = max(1, series.dates.index(known) + 1)
     first: int | None = None
     first_buffer = 0.0
-    for i in range(t - lookback, t + 1):
-        if i < 1:
-            continue
-        atr_prev = atr_sma_at(series.high, series.low, series.close, i - 1, ATR_PERIOD)
-        price = float(close[i])
-        buffer = max(
-            float(sector_gates.get("breakout_buffer_price_fraction", 0.0025)) * price,
-            float(sector_gates.get("breakout_buffer_atr", 0.15)) * (atr_prev or 0.0),
-        )
-        if price > resistance + buffer:
-            first = i
-            first_buffer = buffer
-            break
+    frozen_cross = setup.get("first_cross_at")
+    if frozen_cross:
+        cross_day = date.fromisoformat(str(frozen_cross))
+        if cross_day in series.dates:
+            first = series.dates.index(cross_day)
+            atr_prev = atr_sma_at(series.high, series.low, series.close, first - 1, ATR_PERIOD) if first >= 1 else None
+            first_buffer = max(
+                float(sector_gates.get("breakout_buffer_price_fraction", 0.0025)) * float(close[first]),
+                float(sector_gates.get("breakout_buffer_atr", 0.15)) * (atr_prev or 0.0),
+            )
+    if first is None:
+        for i in range(start_i, t + 1):
+            atr_prev = atr_sma_at(series.high, series.low, series.close, i - 1, ATR_PERIOD)
+            price = float(close[i])
+            buffer = max(
+                float(sector_gates.get("breakout_buffer_price_fraction", 0.0025)) * price,
+                float(sector_gates.get("breakout_buffer_atr", 0.15)) * (atr_prev or 0.0),
+            )
+            if price > resistance + buffer:
+                first = i
+                first_buffer = buffer
+                break
     if first is None:
         return {
             "through": False,
@@ -471,10 +568,13 @@ def extract_raw(
     breakout_track = _breakout_track(series, t, setup, sector_gates)
     if setup is not None and breakout_track is not None:
         setup = dict(setup)
-        setup["first_cross_at"] = breakout_track.get("first_cross_date")
+        if breakout_track.get("first_cross_date") and not setup.get("first_cross_at"):
+            setup["first_cross_at"] = breakout_track.get("first_cross_date")
+        elif breakout_track.get("first_cross_date"):
+            setup["first_cross_at"] = setup.get("first_cross_at") or breakout_track.get("first_cross_date")
         setup["confirmed_at"] = breakout_track.get("confirmed_at")
         if breakout_track.get("through") and not breakout_track.get("still_through"):
-            setup["failed_at"] = series.dates[t].isoformat()
+            setup["breakout_failed_at"] = series.dates[t].isoformat()
     zero_volume = not np.isfinite(series.volume[t]) or float(series.volume[t]) <= 0
     halted = bool(series.halted) or zero_volume
     currently_tradable = not halted

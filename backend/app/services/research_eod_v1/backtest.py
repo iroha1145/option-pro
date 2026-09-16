@@ -64,20 +64,32 @@ def plan_trade(
                             holding_sessions, None, None, "SIGNAL_NOT_IN_SERIES", None, None, None)
     entry_session = next_session(signal_session)
     exit_session = holding_exit_session(entry_session, holding_sessions)
-    def _raw_open_at(session: date) -> float:
+    def _raw_open_at(session: date) -> float | None:
+        if session not in dates:
+            return None
         idx = dates.index(session)
-        raw = series.raw_open if series.raw_open is not None else series.open
-        return float(raw[idx])
+        raw = series.raw_open
+        if raw is None:
+            return None
+        value = float(raw[idx])
+        if value != value or value <= 0:
+            return None
+        return value
 
     if entry_session not in dates:
         return PlannedTrade(series.security_id, signal_session, entry_session, exit_session,
                             holding_sessions, None, None, "IMMATURE_ENTRY", None, None, None)
+    entry_open = _raw_open_at(entry_session)
+    if entry_open is None:
+        return PlannedTrade(series.security_id, signal_session, entry_session, exit_session,
+                            holding_sessions, None, None, "NO_RAW_OPEN", None, None, None)
     if exit_session not in dates:
-        entry_open = _raw_open_at(entry_session)
         return PlannedTrade(series.security_id, signal_session, entry_session, exit_session,
                             holding_sessions, entry_open, None, "IMMATURE_LABEL", None, None, None)
-    entry_open = _raw_open_at(entry_session)
     exit_open = _raw_open_at(exit_session)
+    if exit_open is None:
+        return PlannedTrade(series.security_id, signal_session, entry_session, exit_session,
+                            holding_sessions, entry_open, None, "NO_RAW_OPEN", None, None, None)
     bps = slippage_bps(adv20) * cost_multiple
     buy = apply_cost(entry_open, side="buy", bps=bps, fee=fee)
     sell = apply_cost(exit_open, side="sell", bps=bps, fee=fee)
@@ -98,127 +110,84 @@ def simulate_portfolio(
     profile: Mapping[str, Any],
     cost_multiple: float = 1.0,
 ) -> dict[str, Any]:
-    """One position per security. Empty days stay in cash. No interest."""
+    """One position per security. Empty days stay in cash. No interest.
 
-    cash = float(capital)
-    equity = float(capital)
-    open_positions: dict[str, dict[str, Any]] = {}
-    trades: list[dict[str, Any]] = []
-    daily: list[dict[str, Any]] = []
+    Sizing uses the registered capacity function, then the raw-share ledger.
+    """
+
+    from app.services.research_eod_v1.ledger import simulate_ledger
+
     if not signals:
-        return {
-            "starting_capital": capital,
-            "ending_equity": capital,
-            "cash_interest": 0.0,
-            "trades": trades,
-            "daily_equity": daily,
-            "unfilled": 0,
-            "status": "ZERO_SIGNALS",
-        }
+        first = min((series.dates[0] for series in panel.values() if series.dates), default=None)
+        last = max((series.dates[-1] for series in panel.values() if series.dates), default=None)
+        empty = simulate_ledger(
+            start=first or date(2020, 1, 2),
+            end=last or date(2020, 1, 2),
+            panel=panel,
+            capital=capital,
+            holding_sessions=holding_sessions,
+            signals=[],
+            cost_multiple=cost_multiple,
+        )
+        empty["cash_interest"] = 0.0
+        return empty
+
     sessions = sorted({
         date.fromisoformat(row["session_date"]) if isinstance(row["session_date"], str) else row["session_date"]
         for row in signals
     })
-    from app.services.research_eod_v1.calendar_asof import next_session as _next
+    start = sessions[0]
+    end = holding_exit_session(next_session(sessions[-1]), holding_sessions)
+    sized: list[dict[str, Any]] = []
+    leftover = float(capital)
+    for row in sorted(signals, key=lambda r: (-float(r.get("score") or 0), r["security_id"])):
+        item = dict(row)
+        if float(item.get("notional") or 0.0) > 0:
+            leftover -= float(item["notional"])
+            sized.append(item)
+            continue
+        if leftover <= 0:
+            item["notional"] = 0.0
+            sized.append(item)
+            continue
+        sid = str(item["security_id"])
+        series = panel[sid]
+        day = date.fromisoformat(item["session_date"]) if isinstance(item["session_date"], str) else item["session_date"]
+        if day not in series.dates:
+            item["notional"] = 0.0
+            sized.append(item)
+            continue
+        idx = series.dates.index(day)
+        close = float(series.raw_close[idx]) if np_finite(series.raw_close[idx]) else float(series.close[idx])
+        invalid = float(item.get("planned_invalidation") or 0.0)
+        atr = float(item.get("atr") or 0.0)
+        adv20 = float(item.get("adv20") or 0.0)
+        if invalid <= 0 or invalid >= close or atr <= 0 or adv20 <= 0 or close <= 0:
+            item["notional"] = 0.0
+            sized.append(item)
+            continue
+        cap = position_capacity(leftover, close, invalid, atr, adv20, profile)
+        item["notional"] = cap.notional
+        leftover -= cap.notional
+        sized.append(item)
+    result = simulate_ledger(
+        start=start,
+        end=end,
+        panel=panel,
+        capital=capital,
+        holding_sessions=holding_sessions,
+        signals=sized,
+        cost_multiple=cost_multiple,
+        allow_implicit_sizing=False,
+    )
+    result["cash_interest"] = 0.0
+    if result["status"] == "LEDGER":
+        result["status"] = "ENGINEERING_SIMULATION"
+    return result
 
-    all_days = []
-    if sessions:
-        cursor = sessions[0]
-        last = _next(sessions[-1])
-        last = holding_exit_session(last, holding_sessions)
-        while cursor <= last:
-            all_days.append(cursor)
-            try:
-                cursor = _next(cursor)
-            except RuntimeError:
-                break
-    by_day: dict[date, list[Mapping[str, Any]]] = {}
-    for row in signals:
-        day = date.fromisoformat(row["session_date"]) if isinstance(row["session_date"], str) else row["session_date"]
-        by_day.setdefault(day, []).append(row)
 
-    unfilled = 0
-    for day in all_days:
-        # Exits first at the open.
-        for sid, pos in list(open_positions.items()):
-            if pos["exit_session"] == day:
-                series = panel[sid]
-                planned = plan_trade(
-                    series, pos["signal_session"], holding_sessions,
-                    adv20=pos["adv20"], cost_multiple=cost_multiple,
-                )
-                if planned.label_status != "MATURE" or planned.net_return is None:
-                    continue
-                proceeds = pos["notional"] * (1.0 + planned.net_return)
-                cash += proceeds
-                trades.append({**pos, "net_return": planned.net_return, "exit_open": planned.exit_open})
-                del open_positions[sid]
-        # New entries only from yesterday's close signals — never today's open peek.
-        prior = None
-        for candidate in reversed(all_days):
-            if candidate < day:
-                prior = candidate
-                break
-        new_rows = by_day.get(prior, []) if prior is not None else []
-        new_rows = sorted(new_rows, key=lambda r: (-float(r.get("score") or 0), r["security_id"]))
-        for row in new_rows:
-            sid = row["security_id"]
-            if sid in open_positions:
-                continue
-            if row.get("status") != "eligible":
-                continue
-            series = panel[sid]
-            planned = plan_trade(
-                series, prior, holding_sessions,
-                adv20=float(row.get("adv20") or 0.0),
-                cost_multiple=cost_multiple,
-            )
-            if planned.entry_session != day or planned.entry_open is None:
-                continue
-            close = planned.entry_open
-            invalid = float(row.get("planned_invalidation") or 0.0)
-            atr = float(row.get("atr") or 0.0)
-            adv20 = float(row.get("adv20") or 0.0)
-            if invalid <= 0 or invalid >= close or atr <= 0 or adv20 <= 0:
-                unfilled += 1
-                continue
-            cap = position_capacity(cash + sum(p["notional"] for p in open_positions.values()), close, invalid, atr, adv20, profile)
-            if cap.shares <= 0:
-                unfilled += 1
-                continue
-            notional = cap.notional
-            if notional > cash:
-                unfilled += 1
-                continue
-            cash -= notional
-            open_positions[sid] = {
-                "security_id": sid,
-                "signal_session": prior,
-                "entry_session": day,
-                "exit_session": planned.exit_session,
-                "notional": notional,
-                "shares": cap.shares,
-                "adv20": adv20,
-            }
-        marked = cash
-        for sid, pos in open_positions.items():
-            series = panel[sid]
-            if day in series.dates:
-                idx = series.dates.index(day)
-                marked += pos["shares"] * float(series.close[idx])
-            else:
-                marked += pos["notional"]
-        equity = marked
-        daily.append({"session": day.isoformat(), "equity": equity, "cash": cash, "positions": len(open_positions)})
-    return {
-        "starting_capital": capital,
-        "ending_equity": equity,
-        "cash_interest": 0.0,
-        "trades": trades,
-        "daily_equity": daily,
-        "unfilled": unfilled,
-        "status": "ENGINEERING_SIMULATION",
-    }
+def np_finite(value: float) -> bool:
+    return value == value and value not in (float("inf"), float("-inf"))
 
 
 def higher_cost_cannot_increase_net(base_net: float | None, stressed_net: float | None) -> bool:

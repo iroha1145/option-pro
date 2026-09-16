@@ -6,12 +6,12 @@ import hashlib
 import json
 import math
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Mapping
 
 from app.services.research_eod_v1 import FEATURE_VERSION, SCORE_VERSION
 from app.services.research_eod_v1.algorithms import setup_for
-from app.services.research_eod_v1.calendar_asof import last_completed_session, require_aware, session_close_at
+from app.services.research_eod_v1.calendar_asof import last_complete_eod_session, require_aware, session_close_at
 from app.services.research_eod_v1.cross_section import q_star
 from app.services.research_eod_v1.factors import RawComponents, extract_raw
 from app.services.research_eod_v1.mathutil import clip100
@@ -139,12 +139,15 @@ def compute_snapshot(
     spy_residual_allowed: bool = True,
     matched_benchmark_id: str | None = None,
     extra_members: set[str] | None = None,
+    source_finalized_through: date | None = None,
 ) -> dict[str, Any]:
     """Deterministic snapshot. Adding bars after ``as_of`` must not change T."""
 
     require_aware(as_of)
-    session = last_completed_session(as_of)
+    session = last_complete_eod_session(as_of, source_finalized_through=source_finalized_through)
     panel = clip_panel_to_as_of(historical_data, as_of)
+    panel = {sid: series.slice_through(session) for sid, series in panel.items()}
+    panel = {sid: series for sid, series in panel.items() if series is not None}
     registry = config["registry"] if "registry" in config else config
     sector = registry["sectors"][sector_id]
     profile_cfg = registry["profiles"][profile]

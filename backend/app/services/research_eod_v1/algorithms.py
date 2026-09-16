@@ -47,11 +47,12 @@ def setup_b(
         reasons.append("BELOW_SMA50")
     track = raw.breakout_track or {}
     needed = int(profile.get("confirm_closes", 1))
+    current = int(track.get("current_consecutive_closes") if track.get("current_consecutive_closes") is not None else track.get("consecutive_closes") or 0)
     if not track.get("through"):
         reasons.append("NOT_THROUGH_RESISTANCE")
     elif track.get("tracking_expired"):
         reasons.append("BREAKOUT_TRACK_EXPIRED")
-    elif int(track.get("max_consecutive") or 0) < needed or not track.get("still_through"):
+    elif current < needed or not track.get("still_through"):
         reasons.append("BREAKOUT_UNCONFIRMED")
     rvol = track.get("first_day_rvol")
     if rvol is None:
@@ -66,8 +67,11 @@ def setup_b(
         clv = raw.clv
     if clv is None or clv < 0.65:
         reasons.append("LOW_CLV")
-    if raw.extension_atr is not None and raw.extension_atr > 2.0:
+    if raw.platform_distance_atr is not None and raw.platform_distance_atr > 2.0:
         reasons.append("TOO_FAR_FROM_BASE")
+    ma_max = sector_gates.get("ma_distance_max_atr")
+    if ma_max is not None and raw.ma_distance_atr is not None and raw.ma_distance_atr > float(ma_max):
+        reasons.append("TOO_FAR_FROM_MA")
     if not reasons:
         state = "eligible"
     elif "NOT_THROUGH_RESISTANCE" in reasons:

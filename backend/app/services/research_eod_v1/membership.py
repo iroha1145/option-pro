@@ -25,6 +25,8 @@ def has_complete_session_bar(series: SecuritySeries, session: date) -> bool:
     index = series.index_on_or_before(session)
     if index is None or series.dates[index] != session:
         return False
+    if series.bar_partial is not None and bool(series.bar_partial[index]):
+        return False
     return bool(
         np.isfinite(series.open[index])
         and np.isfinite(series.high[index])
@@ -76,6 +78,9 @@ def is_reference_name(series: SecuritySeries, *, session: date, target_track: st
 
 
 def source_is_available(series: SecuritySeries, as_of) -> bool:
-    if series.source_available_at is None:
-        return True
-    return series.source_available_at <= as_of
+    if series.source_available_at is not None:
+        return series.source_available_at <= as_of
+    if series.economic_known_at:
+        last = series.economic_known_at[-1]
+        return last is None or last <= as_of
+    return True

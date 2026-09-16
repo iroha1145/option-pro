@@ -34,6 +34,18 @@ class SecuritySeries:
     raw_open: np.ndarray | None = None
     dividends: tuple[tuple[date, float], ...] = ()
     splits: tuple[tuple[date, float], ...] = ()
+    economic_known_at: list[datetime | None] | None = None
+    source_published_at: list[datetime | None] | None = None
+    retrieved_at: list[datetime | None] | None = None
+    finalized_at: list[datetime | None] | None = None
+    bar_partial: np.ndarray | None = None
+    bar_halted: np.ndarray | None = None
+    vintage_status: tuple[str, ...] = ()
+    price_adjustment: tuple[str, ...] = ()
+    volume_adjustment: tuple[str, ...] = ()
+    tri_verified: bool = False
+    reconstruction_mode: str = "historical_reconstruction"
+    dividend_events: tuple[dict[str, Any], ...] = ()
 
     def __post_init__(self) -> None:
         n = len(self.dates)
@@ -43,11 +55,23 @@ class SecuritySeries:
                 raise ValueError(f"{name} length must match dates")
             setattr(self, name, arr)
         if self.raw_open is None:
-            self.raw_open = self.open.copy()
+            self.raw_open = np.full(n, np.nan)
         else:
             self.raw_open = np.asarray(self.raw_open, dtype=float)
             if self.raw_open.shape != (n,):
                 raise ValueError("raw_open length must match dates")
+        for name in ("bar_partial", "bar_halted"):
+            arr = getattr(self, name)
+            if arr is None:
+                continue
+            arr = np.asarray(arr, dtype=bool)
+            if arr.shape != (n,):
+                raise ValueError(f"{name} length must match dates")
+            setattr(self, name, arr)
+        for name in ("economic_known_at", "source_published_at", "retrieved_at", "finalized_at"):
+            values = getattr(self, name)
+            if values is not None and len(values) != n:
+                raise ValueError(f"{name} length must match dates")
 
     def index_on_or_before(self, session: date) -> int | None:
         for index in range(len(self.dates) - 1, -1, -1):
@@ -84,7 +108,26 @@ class SecuritySeries:
             raw_open=self.raw_open[:end].copy() if self.raw_open is not None else None,
             dividends=tuple(item for item in self.dividends if item[0] <= session),
             splits=tuple(item for item in self.splits if item[0] <= session),
+            economic_known_at=None if self.economic_known_at is None else list(self.economic_known_at[:end]),
+            source_published_at=None if self.source_published_at is None else list(self.source_published_at[:end]),
+            retrieved_at=None if self.retrieved_at is None else list(self.retrieved_at[:end]),
+            finalized_at=None if self.finalized_at is None else list(self.finalized_at[:end]),
+            bar_partial=None if self.bar_partial is None else self.bar_partial[:end].copy(),
+            bar_halted=None if self.bar_halted is None else self.bar_halted[:end].copy(),
+            vintage_status=self.vintage_status[:end] if self.vintage_status else (),
+            price_adjustment=self.price_adjustment[:end] if self.price_adjustment else (),
+            volume_adjustment=self.volume_adjustment[:end] if self.volume_adjustment else (),
+            tri_verified=self.tri_verified,
+            reconstruction_mode=self.reconstruction_mode,
+            dividend_events=tuple(item for item in self.dividend_events if _event_session(item) <= session),
         )
+
+
+def _event_session(event: Mapping[str, Any]) -> date:
+    value = event.get("ex_date") or event.get("session_date") or event.get("effective_at")
+    if isinstance(value, date):
+        return value
+    return date.fromisoformat(str(value)[:10])
 
 
 def daily_returns(tri: np.ndarray) -> np.ndarray:

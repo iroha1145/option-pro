@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
+
+from app.services.research_eod_v1.calendar_asof import session_close_at, session_is_partial
 from typing import Any, Mapping
 
 from app.services.research_eod_v1.data.contract import (
@@ -29,9 +31,10 @@ DOWNLOAD_PARAMS = {
 
 
 class YahooDiagnosticProvider:
-    def __init__(self, *, allow_network: bool = True) -> None:
+    def __init__(self, *, allow_network: bool = True, clock: datetime | None = None) -> None:
         self.allow_network = allow_network
         self.failures: list[dict[str, Any]] = []
+        self.clock = clock
 
     def probe_capabilities(self) -> ProviderCapabilities:
         version = "missing"
@@ -145,7 +148,7 @@ class YahooDiagnosticProvider:
             for symbol in symbols:
                 self.failures.append({"symbol": symbol, "stage": "download", "error": "empty"})
             return out
-        retrieved = datetime.now(timezone.utc)
+        retrieved = self.clock or datetime.now(timezone.utc)
         for symbol in symbols:
             try:
                 sub = frame[symbol] if symbol in frame.columns.get_level_values(0) else None
@@ -163,6 +166,7 @@ class YahooDiagnosticProvider:
                 volume = _finite(row.get("volume"))
                 if close is None and open_ is None:
                     continue
+                partial = session_is_partial(session, retrieved)
                 bars.append(
                     ResearchBar(
                         security_id=symbol,
@@ -175,13 +179,16 @@ class YahooDiagnosticProvider:
                         raw_close=close,
                         volume=volume,
                         dollar_volume=None if close is None or volume is None else close * volume,
-                        tri=_finite(row.get("adj close")) or close,
+                        tri=_finite(row.get("adj close")),
                         volume_scope="UNKNOWN",
                         price_adjustment="yahoo_unverified_raw",
                         volume_adjustment="yahoo_unverified",
                         missing=close is None or open_ is None,
-                        source_published_at=retrieved,
-                        vintage_status="download_time_not_pit",
+                        economic_known_at=session_close_at(session),
+                        source_published_at=None,
+                        retrieved_at=retrieved,
+                        vintage_status="PARTIAL" if partial else "download_time_not_pit",
+                        partial=partial,
                     )
                 )
             out[symbol] = bars
@@ -223,7 +230,7 @@ class YahooDiagnosticProvider:
         else:
             frame = frame.rename(columns=str.lower)
         out: list[ResearchBar] = []
-        retrieved = datetime.now(timezone.utc)
+        retrieved = self.clock or datetime.now(timezone.utc)
         for stamp, row in frame.iterrows():
             session = stamp.date() if hasattr(stamp, "date") else date.fromisoformat(str(stamp)[:10])
             close = _finite(row.get("close"))
@@ -231,6 +238,7 @@ class YahooDiagnosticProvider:
             volume = _finite(row.get("volume"))
             open_ = _finite(row.get("open"))
             missing = close is None or open_ is None
+            partial = session_is_partial(session, retrieved)
             out.append(
                 ResearchBar(
                     security_id=identity.security_id if identity else symbol,
@@ -243,13 +251,16 @@ class YahooDiagnosticProvider:
                     raw_close=raw_close,
                     volume=volume,
                     dollar_volume=None if close is None or volume is None else close * volume,
-                    tri=_finite(row.get("adj close")) or close,
+                    tri=_finite(row.get("adj close")),
                     volume_scope="UNKNOWN",
                     price_adjustment="yahoo_unverified_raw",
                     volume_adjustment="yahoo_unverified",
                     missing=missing,
-                    source_published_at=retrieved,
-                    vintage_status="download_time_not_pit",
+                    economic_known_at=session_close_at(session),
+                    source_published_at=None,
+                    retrieved_at=retrieved,
+                    vintage_status="PARTIAL" if partial else "download_time_not_pit",
+                    partial=partial,
                 )
             )
         return out

@@ -52,6 +52,7 @@ def make_series(
         low=low,
         close=close,
         raw_close=close.copy(),
+        raw_open=open_.copy(),
         volume=vol,
         dollar_volume=close * vol,
         tri=close.copy(),

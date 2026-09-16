@@ -15,7 +15,7 @@ sys.path.insert(0, str(ROOT / "backend"))
 from app.services.research_eod_v1.config_load import load_registry  # noqa: E402
 from app.services.research_eod_v1.data.to_series import bars_to_series  # noqa: E402
 from app.services.research_eod_v1.data.yahoo import YahooDiagnosticProvider  # noqa: E402
-from app.services.research_eod_v1.fixtures import as_of_after_close  # noqa: E402
+from app.services.research_eod_v1.calendar_asof import capture_as_of, last_complete_eod_session  # noqa: E402
 from app.services.research_eod_v1.snapshot import compute_snapshot  # noqa: E402
 from app.services.research_eod_v1.universe_audit import ETF_SUBASSET_HINTS  # noqa: E402
 from app.services.research_eod_v1.venue import CURRENT_UNIVERSE_VENUE_NOTES  # noqa: E402
@@ -32,12 +32,16 @@ def _venue(ticker: str, track: str) -> dict:
             "listing_country": note.get("listing_country") or "US",
             "exchange": note.get("exchange") or "NASDAQ",
             "security_type": "ETF" if track == "etf" else "CS",
+            "identity_confidence": "unverified_current_universe_note",
+            "industry_source": "theme_tag_diagnostic_not_economic_parent",
         }
     return {
         "listing_country": "US",
         "exchange": "NASDAQ",
         "mic": "XNAS",
         "security_type": "ETF" if track == "etf" else "CS",
+        "identity_confidence": "unverified_default_not_checked",
+        "industry_source": "theme_tag_diagnostic_not_economic_parent",
     }
 
 
@@ -102,9 +106,9 @@ def main() -> int:
     theme_cards = []
     if "SPY" not in series_map and "SPY" in appearances:
         pass
-    last_dates = [series.dates[-1] for series in series_map.values()]
-    session = max(last_dates) if last_dates else None
-    as_of = as_of_after_close(session) if session else None
+    clock = capture_as_of(datetime.now(timezone.utc))
+    session = last_complete_eod_session(clock) if series_map else None
+    as_of = clock if session else None
     for theme_id, sector in SECTORS.items():
         if as_of is None:
             card = {"theme_id": theme_id, "status": "DATA_INSUFFICIENT", "candidates": 0, "eligible": 0}

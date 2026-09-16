@@ -106,7 +106,7 @@ def test_unknown_terminal_is_not_marked_at_cost() -> None:
         capital=10_000,
         holding_sessions=5,
         signals=[{"security_id": "DEAD", "session_date": days[1].isoformat(), "status": "eligible", "score": 90, "adv20": 80_000_000, "notional": 2_000}],
-        unknown_terminals={"DEAD"},
+        unknown_terminals={"DEAD": days[3]},
     )
     assert "DEAD" in result["right_censored"] or any(not row["identity_ok"] for row in result["daily_equity"] if row["positions"])
 
@@ -121,7 +121,7 @@ def test_cash_acquisition_clears_shares() -> None:
         capital=10_000,
         holding_sessions=20,
         signals=[{"security_id": "TGT", "session_date": days[1].isoformat(), "status": "eligible", "score": 90, "adv20": 80_000_000, "notional": 2_000}],
-        cash_acquisitions={"TGT": 45.0},
+        cash_acquisitions=[{"security_id": "TGT", "effective_at": days[5], "known_at": days[5], "settlement_at": days[5], "price": 45.0}],
     )
     assert any(event["kind"] == "cash_acquisition" for event in result["events"])
 

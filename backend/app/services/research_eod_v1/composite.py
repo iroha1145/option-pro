@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import math
 from statistics import median
 from typing import Any, Mapping, Sequence
 
 from app.services.research_eod_v1.constants import (
     COMPOSITE_FLOORS,
     M2_LAMBDA_RISK,
+    M3_CORRELATION_PENALTY,
+    M3_HARD_CORR,
     M4_BULL_WEIGHTS,
     M4_DEFENSE_WEIGHTS,
     M4_MIXED_WEIGHTS,
@@ -27,11 +30,29 @@ def _row_rg(row: Mapping[str, Any], key: str) -> float | None:
     return None if value is None else float(value)
 
 
+def _row_identity(row: Mapping[str, Any]) -> tuple[str, ...]:
+    return (
+        str(row.get("security_id")),
+        str(row.get("algorithm_id")),
+        str(row.get("sector_context") or row.get("theme_id") or ""),
+        str(row.get("horizon") or ""),
+        str(row.get("profile") or ""),
+        str(row.get("session_date") or ""),
+    )
+
+
+def _dedup_identical_rows(rows: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
+    seen: dict[tuple[str, ...], Mapping[str, Any]] = {}
+    for row in rows:
+        seen.setdefault(_row_identity(row), row)
+    return list(seen.values())
+
+
 def _collapse_same_family(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
     """Merge the same security+family across themes. Input order cannot change R/G."""
 
     ordered = sorted(
-        rows,
+        _dedup_identical_rows(rows),
         key=lambda r: (str(r.get("security_id")), str(r.get("algorithm_id")), str(r.get("sector_context") or "")),
     )
     family: dict[tuple[str, str], list[Mapping[str, Any]]] = {}
@@ -86,7 +107,8 @@ def m1_consensus(rows: Sequence[Mapping[str, Any]], profile: str, top_k: int) ->
         z = row["consensus_z"]
         if z is None or z < floor:
             continue
-        family_z = [float(item.get("score") or 0) for item in _eligible(rows) if item["security_id"] == row["security_id"]]
+        folded = _collapse_same_family([item for item in _eligible(rows) if item["security_id"] == row["security_id"]])
+        family_z = [float(item["score"]) for item in folded if item.get("score") is not None]
         if family_z and max(family_z) - min(family_z) > 25:
             row["status"] = "watch"
             continue
@@ -103,6 +125,8 @@ def m2_utility(rows: Sequence[Mapping[str, Any]], profile: str, top_k: int,
 
     if not matured_returns:
         return []
+    if as_of is None:
+        raise ValueError("m2_utility requires as_of; future labels cannot be scored without an evaluation date")
     lam = M2_LAMBDA_RISK[profile]
     kept: list[dict[str, Any]] = []
     for row in _dedup_security(_eligible(rows)):
@@ -111,14 +135,20 @@ def m2_utility(rows: Sequence[Mapping[str, Any]], profile: str, top_k: int,
             continue
         if meta.get("label_matured_at") is None:
             continue
-        if as_of is not None and meta["label_matured_at"] > as_of:
+        if meta["label_matured_at"] > as_of:
             continue
-        if meta.get("fold") is None and meta.get("as_of") is None and meta.get("provenance") is None:
-            # Allow explicit matured_at alone, but refuse unlabeled future windows.
-            pass
+        if meta.get("fold") is None and meta.get("provenance") is None:
+            continue
         sample = list(meta.get("returns") or [])
         if any(item is None for item in sample):
             continue
+        try:
+            finite_sample = [float(item) for item in sample]
+        except (TypeError, ValueError):
+            continue
+        if any(not math.isfinite(item) for item in finite_sample):
+            continue
+        sample = finite_sample
         if len(sample) < 100:
             continue
         ordered = sorted(float(item) for item in sample)
@@ -130,11 +160,10 @@ def m2_utility(rows: Sequence[Mapping[str, Any]], profile: str, top_k: int,
             continue
         row = dict(row)
         row["utility_point_estimate"] = u
-        row["utility_lower"] = u
         row["m2_status"] = "RESEARCH_POINT_ESTIMATE"
         row["status"] = "eligible"
         kept.append(row)
-    kept.sort(key=lambda r: (-float(r["utility_lower"]), r["security_id"]))
+    kept.sort(key=lambda r: (-float(r["utility_point_estimate"]), r["security_id"]))
     return kept[:top_k]
 
 
@@ -154,44 +183,62 @@ def m3_diversified(rows: Sequence[Mapping[str, Any]], profile: str, top_k: int,
         item = dict(row)
         item["base"] = base
         candidates.append(item)
-    candidates.sort(key=lambda r: (-r["base"], r["security_id"]))
+    remaining = list(candidates)
     selected: list[dict[str, Any]] = []
     industry_count: dict[str, int] = {}
     cap = max(1, int((0.30 * top_k) + 0.999))
-    for item in candidates:
-        if len(selected) >= top_k:
-            break
-        ind = str(item.get("primary_industry_id") or "unknown")
-        if industry_count.get(ind, 0) >= cap:
-            continue
-        if selected and corr is not None:
-            penalties = []
-            missing = False
-            for other in selected:
-                key = (item["security_id"], other["security_id"])
-                rev = (other["security_id"], item["security_id"])
-                if key in corr:
-                    penalties.append(max(0.0, float(corr[key])))
-                elif rev in corr:
-                    penalties.append(max(0.0, float(corr[rev])))
-                else:
-                    missing = True
+
+    def _penalties(item: Mapping[str, Any]) -> tuple[list[float] | None, bool]:
+        if not selected:
+            return [], False
+        if corr is None:
+            return None, True
+        values: list[float] = []
+        for other in selected:
+            key = (item["security_id"], other["security_id"])
+            rev = (other["security_id"], item["security_id"])
+            if key in corr:
+                values.append(max(0.0, float(corr[key])))
+            elif rev in corr:
+                values.append(max(0.0, float(corr[rev])))
+            else:
+                return None, True
+        return values, False
+
+    while remaining and len(selected) < top_k:
+        scored: list[tuple[float, dict[str, Any]]] = []
+        blocked: list[dict[str, Any]] = []
+        for item in remaining:
+            ind = str(item.get("primary_industry_id") or "unknown")
+            if industry_count.get(ind, 0) >= cap:
+                continue
+            penalties, missing = _penalties(item)
             if missing:
-                item["status"] = "data_insufficient"
+                blocked.append(item)
                 continue
-            if any(p > 0.85 for p in penalties):
+            if penalties and any(p > M3_HARD_CORR for p in penalties):
                 continue
-            marginal = item["base"] - 25.0 * (sum(penalties) / len(penalties))
-        else:
-            if selected and corr is None:
-                item["status"] = "data_insufficient"
+            if penalties:
+                marginal = item["base"] - M3_CORRELATION_PENALTY * (sum(penalties) / len(penalties))
+            else:
+                marginal = item["base"]
+            if marginal < floor - 10:
                 continue
-            marginal = item["base"]
-        if marginal < floor - 10:
-            continue
-        item["status"] = "eligible"
-        selected.append(item)
-        industry_count[ind] = industry_count.get(ind, 0) + 1
+            scored.append((marginal, item))
+        if not scored:
+            break
+        scored.sort(key=lambda pair: (-pair[0], pair[1]["security_id"]))
+        _marginal, winner = scored[0]
+        winner = dict(winner)
+        winner["status"] = "eligible"
+        winner["marginal"] = _marginal
+        selected.append(winner)
+        industry_count[str(winner.get("primary_industry_id") or "unknown")] = (
+            industry_count.get(str(winner.get("primary_industry_id") or "unknown"), 0) + 1
+        )
+        remaining = [item for item in remaining if item["security_id"] != winner["security_id"]]
+        for item in blocked:
+            item["status"] = "data_insufficient"
     return selected
 
 

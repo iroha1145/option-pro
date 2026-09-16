@@ -244,7 +244,13 @@ def test_composite_permutation_dedup_and_m3_skip() -> None:
         as_of=date(2024, 1, 1),
     )
     assert future == []
-    immature = m2_utility(rows, "balanced", 5, matured_returns={"AAA": [0.01] * 100})
+    immature = m2_utility(
+        rows,
+        "balanced",
+        5,
+        matured_returns={"AAA": [0.01] * 100},
+        as_of=date(2024, 1, 1),
+    )
     assert immature == []
     matured = m2_utility(
         rows,

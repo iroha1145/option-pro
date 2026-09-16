@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import os
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -14,7 +15,7 @@ from app.services.research_eod_v1.data.contract import (
     ProviderCapabilities,
     ResearchBar,
     SecurityIdentity,
-    hash_payload,
+    hash_file_bytes,
 )
 
 
@@ -25,13 +26,37 @@ def default_local_root() -> Path:
     return Path(__file__).resolve().parents[5] / "research" / "option_pro_us_eod_v1" / "data" / "local"
 
 
+def _as_date(value: Any) -> date | None:
+    if value is None:
+        return None
+    if hasattr(value, "date"):
+        return value.date()
+    text = str(value)[:10]
+    if not text:
+        return None
+    return date.fromisoformat(text)
+
+
+def _as_float(value: Any) -> float | None:
+    if value is None or value == "":
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if number != number:
+        return None
+    return number
+
+
 class LocalParquetProvider:
     def __init__(self, root: Path | None = None) -> None:
         self.root = Path(root) if root is not None else default_local_root()
 
     def probe_capabilities(self) -> ProviderCapabilities:
         bars = self.root / "daily_bars"
-        present = bars.is_dir() and any(bars.iterdir())
+        combined = self.root / "daily_bars.parquet"
+        present = (bars.is_dir() and any(bars.iterdir())) or combined.is_file()
         return ProviderCapabilities(
             provider="local_parquet",
             dataset_id="research-eod-local",
@@ -65,12 +90,18 @@ class LocalParquetProvider:
         *,
         identity: SecurityIdentity | None = None,
     ) -> list[ResearchBar] | str:
-        parquet = self.root / "daily_bars" / f"{symbol}.parquet"
+        per_file = self.root / "daily_bars" / f"{symbol}.parquet"
         csv_path = self.root / "daily_bars" / f"{symbol}.csv"
-        if parquet.is_file():
-            rows = self._bars_from_parquet(parquet, symbol, identity)
+        combined = self.root / "daily_bars.parquet"
+        combined_csv = self.root / "daily_bars.csv"
+        if per_file.is_file():
+            rows = self._bars_from_parquet(per_file, symbol, identity)
         elif csv_path.is_file():
             rows = self._bars_from_csv(csv_path, symbol, identity)
+        elif combined.is_file():
+            rows = [row for row in self._bars_from_parquet(combined, symbol, identity) if row.security_id == (identity.security_id if identity else symbol)]
+        elif combined_csv.is_file():
+            rows = [row for row in self._bars_from_csv(combined_csv, symbol, identity) if row.security_id == (identity.security_id if identity else symbol)]
         else:
             return []
         return [row for row in rows if start <= row.session_date < end]
@@ -80,13 +111,23 @@ class LocalParquetProvider:
         if not path.is_file():
             return UNSUPPORTED
         out: list[CorporateAction] = []
-        for line in path.read_text(encoding="utf-8").splitlines()[1:]:
-            if not line.strip():
-                continue
-            session_s, kind, value = line.split(",")[:3]
-            session = date.fromisoformat(session_s)
-            if start <= session < end:
-                out.append(CorporateAction(symbol, session, kind, float(value)))
+        with path.open(encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle)
+            for row in reader:
+                session = _as_date(row.get("session_date") or row.get("date"))
+                if session is None or not (start <= session < end):
+                    continue
+                out.append(
+                    CorporateAction(
+                        symbol,
+                        session,
+                        str(row.get("kind") or row.get("type") or ""),
+                        float(row.get("value") or 0.0),
+                        effective_at=_as_date(row.get("effective_at")),
+                        pay_date=_as_date(row.get("pay_date")),
+                        settlement_at=_as_date(row.get("settlement_at")),
+                    )
+                )
         return out
 
     def load_classification_history(self, symbol: str) -> Mapping[str, Any] | str:
@@ -95,9 +136,9 @@ class LocalParquetProvider:
     def export_snapshot(self, path: str) -> DatasetMeta | str:
         target = Path(path)
         target.parent.mkdir(parents=True, exist_ok=True)
-        listing = sorted(str(item) for item in self.root.rglob("*") if item.is_file())
-        digest = hash_payload(listing)
-        target.write_text("\n".join(listing) + "\n", encoding="utf-8")
+        files = sorted(item for item in self.root.rglob("*") if item.is_file())
+        digest = hash_file_bytes(files) if files else ""
+        target.write_text("\n".join(str(item) for item in files) + "\n", encoding="utf-8")
         return DatasetMeta(
             provider="local_parquet",
             dataset_id="research-eod-local",
@@ -109,21 +150,20 @@ class LocalParquetProvider:
 
     def _identities_from_csv(self, path: Path) -> list[SecurityIdentity]:
         rows: list[SecurityIdentity] = []
-        for line in path.read_text(encoding="utf-8").splitlines()[1:]:
-            if not line.strip():
-                continue
-            parts = line.split(",")
-            rows.append(
-                SecurityIdentity(
-                    security_id=parts[0],
-                    provider_symbol=parts[1] if len(parts) > 1 else parts[0],
-                    share_class=None,
-                    security_type=parts[2] if len(parts) > 2 else "CS",
-                    primary_mic=parts[3] if len(parts) > 3 else None,
-                    listing_country=parts[4] if len(parts) > 4 else "US",
-                    asset_track=parts[5] if len(parts) > 5 else "stock",
+        with path.open(encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle)
+            for row in reader:
+                rows.append(
+                    SecurityIdentity(
+                        security_id=str(row.get("security_id") or row.get("ticker")),
+                        provider_symbol=str(row.get("provider_symbol") or row.get("ticker") or row.get("security_id")),
+                        share_class=row.get("share_class") or None,
+                        security_type=str(row.get("security_type") or "CS"),
+                        primary_mic=row.get("primary_mic") or None,
+                        listing_country=str(row.get("listing_country") or "US"),
+                        asset_track=str(row.get("asset_track") or "stock"),
+                    )
                 )
-            )
         return rows
 
     def _identities_from_parquet(self, path: Path) -> list[SecurityIdentity]:
@@ -149,28 +189,31 @@ class LocalParquetProvider:
 
     def _bars_from_csv(self, path: Path, symbol: str, identity: SecurityIdentity | None) -> list[ResearchBar]:
         out: list[ResearchBar] = []
-        for line in path.read_text(encoding="utf-8").splitlines()[1:]:
-            if not line.strip():
-                continue
-            parts = line.split(",")
-            session = date.fromisoformat(parts[0])
-            close = float(parts[4]) if len(parts) > 4 and parts[4] else None
-            volume = float(parts[5]) if len(parts) > 5 and parts[5] else None
-            out.append(
-                ResearchBar(
-                    security_id=identity.security_id if identity else symbol,
-                    session_date=session,
-                    open=float(parts[1]) if parts[1] else None,
-                    high=float(parts[2]) if parts[2] else None,
-                    low=float(parts[3]) if parts[3] else None,
-                    close=close,
-                    raw_open=float(parts[1]) if parts[1] else None,
-                    raw_close=close,
-                    volume=volume,
-                    dollar_volume=(None if close is None or volume is None else close * volume),
-                    tri=close,
+        with path.open(encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle)
+            for row in reader:
+                session = _as_date(row.get("session_date") or row.get("date"))
+                if session is None:
+                    continue
+                close = _as_float(row.get("close"))
+                volume = _as_float(row.get("volume"))
+                out.append(
+                    ResearchBar(
+                        security_id=str(row.get("security_id") or (identity.security_id if identity else symbol)),
+                        session_date=session,
+                        open=_as_float(row.get("open")),
+                        high=_as_float(row.get("high")),
+                        low=_as_float(row.get("low")),
+                        close=close,
+                        raw_open=_as_float(row.get("raw_open") if "raw_open" in row else row.get("open")),
+                        raw_close=_as_float(row.get("raw_close") if "raw_close" in row else row.get("close")),
+                        volume=volume,
+                        dollar_volume=_as_float(row.get("dollar_volume")),
+                        tri=_as_float(row.get("tri")) if "tri" in (row or {}) and row.get("tri") not in (None, "") else None,
+                        vintage_status=str(row.get("vintage_status") or "offline_export"),
+                        partial=str(row.get("partial") or "").lower() in {"1", "true", "yes"},
+                    )
                 )
-            )
         return out
 
     def _bars_from_parquet(self, path: Path, symbol: str, identity: SecurityIdentity | None) -> list[ResearchBar]:
@@ -181,26 +224,28 @@ class LocalParquetProvider:
         frame = pd.read_parquet(path)
         out: list[ResearchBar] = []
         for row in frame.to_dict(orient="records"):
-            session = row.get("session_date") or row.get("date")
-            if hasattr(session, "date"):
-                session = session.date()
-            elif isinstance(session, str):
-                session = date.fromisoformat(session[:10])
-            close = row.get("close")
-            volume = row.get("volume")
+            session = _as_date(row.get("session_date") or row.get("date"))
+            if session is None:
+                continue
+            sid = str(row.get("security_id") or (identity.security_id if identity else symbol))
+            if "security_id" in frame.columns and sid not in {symbol, identity.security_id if identity else symbol}:
+                if str(row.get("security_id")) != (identity.security_id if identity else symbol):
+                    continue
             out.append(
                 ResearchBar(
-                    security_id=identity.security_id if identity else symbol,
+                    security_id=sid,
                     session_date=session,
-                    open=row.get("open"),
-                    high=row.get("high"),
-                    low=row.get("low"),
-                    close=close,
-                    raw_open=row.get("raw_open", row.get("open")),
-                    raw_close=row.get("raw_close", close),
-                    volume=volume,
-                    dollar_volume=row.get("dollar_volume"),
-                    tri=row.get("tri", close),
+                    open=_as_float(row.get("open")),
+                    high=_as_float(row.get("high")),
+                    low=_as_float(row.get("low")),
+                    close=_as_float(row.get("close")),
+                    raw_open=_as_float(row.get("raw_open")) if "raw_open" in row else _as_float(row.get("open")),
+                    raw_close=_as_float(row.get("raw_close")) if "raw_close" in row else _as_float(row.get("close")),
+                    volume=_as_float(row.get("volume")),
+                    dollar_volume=_as_float(row.get("dollar_volume")),
+                    tri=_as_float(row.get("tri")) if "tri" in row else None,
+                    vintage_status=str(row.get("vintage_status") or "offline_export"),
+                    partial=bool(row.get("partial")) if row.get("partial") is not None else False,
                 )
             )
         return out
