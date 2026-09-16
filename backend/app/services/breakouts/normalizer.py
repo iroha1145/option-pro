@@ -10,6 +10,7 @@ from typing import Any, Iterable, Sequence
 from pydantic import ValidationError
 
 from app.services.breakouts.config import BreakoutSettings
+from app.services.breakouts.asset_policy import is_leveraged_etf
 from app.services.breakouts.models import (
     AssetType,
     BreakoutCandidate,
@@ -180,6 +181,9 @@ def filter_and_deduplicate(
         return candidate.provider_change_pct or 0.0
 
     for candidate in candidates:
+        if is_leveraged_etf(candidate.asset_type, candidate.name, candidate.raw_provider_fields):
+            warnings.append(f"{candidate.ticker}:leveraged_etf_excluded")
+            continue
         if candidate.asset_type not in allowed_assets:
             warnings.append(f"{candidate.ticker}:asset_type_excluded")
             continue

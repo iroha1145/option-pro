@@ -916,7 +916,9 @@ def event_detail(event_id: str) -> BreakoutEventDetailResponse:
         repository = _repository(settings)
         event = repository.get_event(event_id)
         if event is not None:
-            event = _live_overlay(repository, [event], with_transitions=True)[0]
+            visible_events = _live_overlay(repository, [event], with_transitions=True)
+            event = visible_events[0] if visible_events else None
+        if event is not None:
             try:
                 event = repository.overlay_t1_evaluations([event])[0]
             except (OSError, ValueError, sqlite3.Error, BreakoutRepositoryError):
