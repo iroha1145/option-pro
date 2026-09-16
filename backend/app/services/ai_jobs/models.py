@@ -2599,6 +2599,9 @@ def validate_job_payload(job_type: str, payload: dict) -> None:
             raise ValueError("allowed_tickers_invalid")
         return
     if job_type == "signal_analysis":
+        ticker = _require_identity_text(payload, "ticker", max_length=12)
+        if _TICKER_PATTERN.fullmatch(ticker) is None:
+            raise ValueError("ticker_invalid")
         # 证据包 v2 的上下文代码表（并入 allowed_codes）。自建载荷始终合规，
         # 这里的检查保护未来的其他调用方不把无界列表带进付费边界。
         if payload.get("context_tickers") is not None:

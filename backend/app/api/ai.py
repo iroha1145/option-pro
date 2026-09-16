@@ -58,7 +58,7 @@ _PROMPT_VERSIONS = {
     # 历史 v5 结果照常可读，不触发任何历史付费任务重投）。
     "signal_analysis": "signal-analysis-zh-cn-v6",
     "news_impact": "news-impact-zh-cn-v6",
-    "market_focus": "market-focus-zh-cn-v5",
+    "market_focus": "market-focus-zh-cn-v6",
 }
 
 
@@ -289,6 +289,12 @@ def _create_job(
         # quota-protected reserve so an explicit report analysis remains usable.
         max_queued += ai_job_runtime.EARNINGS_MANUAL_QUEUE_RESERVE
     ai_job_runtime.validate_job_payload(job_type, payload)
+    try:
+        ai_job_runtime.ensure_provider_input_bound(payload)
+    except ValueError as exc:
+        if str(exc) == "ai_input_too_large":
+            raise ValueError("ai_job_payload_too_large") from exc
+        raise
     schema_version, schema_sha256 = ai_job_runtime.schema_identity(job_type)
     try:
         return _job_repository().create_job(
