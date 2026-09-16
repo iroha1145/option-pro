@@ -294,6 +294,30 @@ def _platform_series(n: int = 50, extra: int = 0):
     return days, series, t_index
 
 
+def test_wide_old_platform_expires_by_age_so_later_base_can_form(monkeypatch) -> None:
+    days = trading_days(date(2015, 1, 2), 500)
+    closes = np.linspace(100.0, 108.0, 500)
+    series = make_series("OLD", days, closes)
+    series.low = closes - 1
+    series.high = closes + 1
+
+    def geometry(_series, t, **kwargs):
+        if t == 25:
+            return 80.0, "observed", {"support": 40.0, "resistance_high": 200.0}
+        if t >= 400:
+            return 80.0, "observed", {"support": 104.0, "resistance_high": 110.0}
+        return 0.0, "no_base_observed", None
+
+    monkeypatch.setattr(factors, "_base_geometry", geometry)
+    _, status, setup = factors.resolve_frozen_setup(series, 499, min_sessions=20, max_sessions=80, min_touches=2)
+    assert status == "observed"
+    assert setup is not None
+    assert setup["resistance_high"] == 110.0
+    kinds = [event["kind"] for event in setup.get("events", [])]
+    assert "expired" in kinds
+    assert kinds.count("formed") >= 2
+
+
 def test_first_cross_is_frozen_after_known_at() -> None:
     days, series, t_index = _platform_series(50, extra=4)
     raw_t = factors.extract_raw(

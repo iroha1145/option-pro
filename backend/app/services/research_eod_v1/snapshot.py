@@ -348,6 +348,8 @@ def compute_snapshot(
                 "pivots": raw.pivots,
                 "frozen_setup": raw.frozen_setup,
                 "factors": factors,
+                "residual_status": raw.residual.status if raw.residual is not None else None,
+                "residual_raw": raw.residual.raw if raw.residual is not None else None,
             }
         )
     fingerprint = hashlib.sha256(

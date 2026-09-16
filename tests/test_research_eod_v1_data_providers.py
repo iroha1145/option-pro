@@ -7,7 +7,7 @@ from app.services.research_eod_v1.data.contract import UNSUPPORTED, ResearchBar
 from app.services.research_eod_v1.data.local_parquet import LocalParquetProvider
 from app.services.research_eod_v1.data.massive_env import MassiveEnvProvider
 from app.services.research_eod_v1.data.probe import run_provider_probe
-from app.services.research_eod_v1.data.yahoo import DOWNLOAD_PARAMS, YahooDiagnosticProvider
+from app.services.research_eod_v1.data.yahoo import DOWNLOAD_PARAMS, YahooDiagnosticProvider, _ohlc_ok
 
 
 def test_local_provider_reads_csv_and_does_not_invent_missing(tmp_path) -> None:
@@ -23,6 +23,12 @@ def test_local_provider_reads_csv_and_does_not_invent_missing(tmp_path) -> None:
     assert isinstance(rows[0], ResearchBar)
     assert provider.fetch_daily_bars("BBB", date(2024, 1, 2), date(2024, 1, 4)) == []
     assert provider.load_classification_history("AAA") == UNSUPPORTED
+
+
+def test_yahoo_rejects_inconsistent_ohlc_without_repair() -> None:
+    assert _ohlc_ok(10.0, 11.0, 9.0, 10.5)
+    assert not _ohlc_ok(10.0, 10.2, 9.0, 10.5)
+    assert _ohlc_ok(10.0, None, 9.0, 10.5)
 
 
 def test_yahoo_params_are_explicit_and_offline_is_unsupported() -> None:

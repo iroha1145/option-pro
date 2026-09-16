@@ -163,8 +163,13 @@ class YahooDiagnosticProvider:
                 session = stamp.date() if hasattr(stamp, "date") else date.fromisoformat(str(stamp)[:10])
                 close = _finite(row.get("close"))
                 open_ = _finite(row.get("open"))
+                high = _finite(row.get("high"))
+                low = _finite(row.get("low"))
                 volume = _finite(row.get("volume"))
                 if close is None and open_ is None:
+                    continue
+                if not _ohlc_ok(open_, high, low, close):
+                    self.failures.append({"symbol": symbol, "stage": "ohlc", "session": session.isoformat(), "error": "OHLC_VIOLATION"})
                     continue
                 partial = session_is_partial(session, retrieved)
                 bars.append(
@@ -172,8 +177,8 @@ class YahooDiagnosticProvider:
                         security_id=symbol,
                         session_date=session,
                         open=open_,
-                        high=_finite(row.get("high")),
-                        low=_finite(row.get("low")),
+                        high=high,
+                        low=low,
                         close=close,
                         raw_open=open_,
                         raw_close=close,
@@ -237,6 +242,11 @@ class YahooDiagnosticProvider:
             raw_close = close
             volume = _finite(row.get("volume"))
             open_ = _finite(row.get("open"))
+            high = _finite(row.get("high"))
+            low = _finite(row.get("low"))
+            if not _ohlc_ok(open_, high, low, close):
+                self.failures.append({"symbol": symbol, "stage": "ohlc", "session": session.isoformat(), "error": "OHLC_VIOLATION"})
+                continue
             missing = close is None or open_ is None
             partial = session_is_partial(session, retrieved)
             out.append(
@@ -244,8 +254,8 @@ class YahooDiagnosticProvider:
                     security_id=identity.security_id if identity else symbol,
                     session_date=session,
                     open=open_,
-                    high=_finite(row.get("high")),
-                    low=_finite(row.get("low")),
+                    high=high,
+                    low=low,
                     close=close,
                     raw_open=open_,
                     raw_close=raw_close,
@@ -284,3 +294,9 @@ def _finite(value: Any) -> float | None:
     if number != number:
         return None
     return number
+
+
+def _ohlc_ok(open_: float | None, high: float | None, low: float | None, close: float | None) -> bool:
+    if None in (open_, high, low, close):
+        return True
+    return bool(high >= max(open_, close) and low <= min(open_, close) and low <= high)

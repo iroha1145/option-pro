@@ -1,0 +1,1725 @@
+{
+  "head_note": "round3 Yahoo A/B/C/D on allowed complete sessions; not market PnL; Close not verified raw",
+  "capture_clock": "2026-09-16T18:51:11.239073+00:00",
+  "last_complete_eod_session": "2026-09-15",
+  "allowed_not_after": "2026-09-15",
+  "sessions": [
+    "2026-09-15",
+    "2026-09-11"
+  ],
+  "downloaded_tickers": 48,
+  "requested_tickers": 48,
+  "partial_bars_isolated": 47,
+  "provider_failures": [
+    {
+      "symbol": "XLE",
+      "stage": "ohlc",
+      "session": "2026-09-16",
+      "error": "OHLC_VIOLATION"
+    }
+  ],
+  "registered": 1920,
+  "executed_snapshots": 32,
+  "executed_backtests": 0,
+  "outcomes_inspected": 32,
+  "revoked_invalid_eod_captures": 24,
+  "market_backtest_run": false,
+  "winners": [],
+  "coverage_ok": 48,
+  "cards": [
+    {
+      "theme_id": "semiconductors",
+      "algorithm": "A_trend_quality",
+      "session_date": "2026-09-15",
+      "candidates": 14,
+      "reference": 38,
+      "eligible": 0,
+      "eligible_ids": [],
+      "family_status": {
+        "eligible": 0,
+        "rejected": 14
+      },
+      "top_rejections": [
+        [
+          "LOW_SCORE",
+          14
+        ],
+        [
+          "TREND_DIRECTION",
+          14
+        ],
+        [
+          "INVALIDATED",
+          5
+        ],
+        [
+          "UNRESOLVED_UPTHRUST",
+          4
+        ],
+        [
+          "WEAK_STRUCTURE",
+          4
+        ]
+      ],
+      "eligible_rows": [],
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ]
+    },
+    {
+      "theme_id": "semiconductors",
+      "algorithm": "B_confirmed_base_breakout",
+      "session_date": "2026-09-15",
+      "candidates": 14,
+      "reference": 38,
+      "eligible": 0,
+      "eligible_ids": [],
+      "family_status": {
+        "eligible": 0,
+        "rejected": 14
+      },
+      "top_rejections": [
+        [
+          "LOW_SCORE",
+          14
+        ],
+        [
+          "BREAKOUT_TRACK_EXPIRED",
+          13
+        ],
+        [
+          "SMA50_SLOPE",
+          13
+        ],
+        [
+          "BELOW_SMA50",
+          10
+        ],
+        [
+          "LOW_EVENT_RVOL",
+          10
+        ]
+      ],
+      "eligible_rows": [],
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ]
+    },
+    {
+      "theme_id": "semiconductors",
+      "algorithm": "C_trend_pullback",
+      "session_date": "2026-09-15",
+      "candidates": 14,
+      "reference": 38,
+      "eligible": 0,
+      "eligible_ids": [],
+      "family_status": {
+        "eligible": 0,
+        "rejected": 14
+      },
+      "top_rejections": [
+        [
+          "LOW_SCORE",
+          14
+        ],
+        [
+          "TREND_DIRECTION",
+          14
+        ],
+        [
+          "NO_REBOUND",
+          13
+        ],
+        [
+          "LOW_CLV",
+          13
+        ],
+        [
+          "DEPTH_OUT_OF_RANGE",
+          8
+        ]
+      ],
+      "eligible_rows": [],
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ]
+    },
+    {
+      "theme_id": "semiconductors",
+      "algorithm": "D_residual_momentum",
+      "session_date": "2026-09-15",
+      "candidates": 14,
+      "reference": 38,
+      "eligible": 0,
+      "eligible_ids": [],
+      "family_status": {
+        "eligible": 0,
+        "rejected": 14
+      },
+      "top_rejections": [
+        [
+          "LOW_SCORE",
+          14
+        ],
+        [
+          "SMA50_SLOPE",
+          13
+        ],
+        [
+          "BELOW_SMA50",
+          10
+        ],
+        [
+          "NONPOSITIVE_RESIDUAL",
+          7
+        ],
+        [
+          "INVALIDATED",
+          5
+        ]
+      ],
+      "eligible_rows": [],
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ]
+    },
+    {
+      "theme_id": "software",
+      "algorithm": "A_trend_quality",
+      "session_date": "2026-09-15",
+      "candidates": 12,
+      "reference": 38,
+      "eligible": 0,
+      "eligible_ids": [],
+      "family_status": {
+        "eligible": 0,
+        "rejected": 12
+      },
+      "top_rejections": [
+        [
+          "LOW_SCORE",
+          12
+        ],
+        [
+          "WEAK_STRUCTURE",
+          4
+        ],
+        [
+          "LH_LL",
+          4
+        ],
+        [
+          "TREND_DIRECTION",
+          3
+        ],
+        [
+          "UNRESOLVED_UPTHRUST",
+          2
+        ]
+      ],
+      "eligible_rows": [],
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ]
+    },
+    {
+      "theme_id": "software",
+      "algorithm": "B_confirmed_base_breakout",
+      "session_date": "2026-09-15",
+      "candidates": 12,
+      "reference": 38,
+      "eligible": 0,
+      "eligible_ids": [],
+      "family_status": {
+        "eligible": 0,
+        "rejected": 12
+      },
+      "top_rejections": [
+        [
+          "LOW_SCORE",
+          12
+        ],
+        [
+          "BREAKOUT_TRACK_EXPIRED",
+          12
+        ],
+        [
+          "TOO_FAR_FROM_BASE",
+          6
+        ],
+        [
+          "WEAK_STRUCTURE",
+          4
+        ],
+        [
+          "LOW_EVENT_RVOL",
+          3
+        ]
+      ],
+      "eligible_rows": [],
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ]
+    },
+    {
+      "theme_id": "software",
+      "algorithm": "C_trend_pullback",
+      "session_date": "2026-09-15",
+      "candidates": 12,
+      "reference": 38,
+      "eligible": 0,
+      "eligible_ids": [],
+      "family_status": {
+        "eligible": 0,
+        "rejected": 12
+      },
+      "top_rejections": [
+        [
+          "LOW_SCORE",
+          12
+        ],
+        [
+          "NO_REBOUND",
+          9
+        ],
+        [
+          "LOW_CLV",
+          9
+        ],
+        [
+          "DEPTH_OUT_OF_RANGE",
+          6
+        ],
+        [
+          "WEAK_STRUCTURE",
+          4
+        ]
+      ],
+      "eligible_rows": [],
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ]
+    },
+    {
+      "theme_id": "software",
+      "algorithm": "D_residual_momentum",
+      "session_date": "2026-09-15",
+      "candidates": 12,
+      "reference": 38,
+      "eligible": 1,
+      "eligible_ids": [
+        "MSFT"
+      ],
+      "family_status": {
+        "eligible": 1,
+        "rejected": 11
+      },
+      "top_rejections": [
+        [
+          "LOW_SCORE",
+          11
+        ],
+        [
+          "NONPOSITIVE_RESIDUAL",
+          4
+        ],
+        [
+          "WEAK_STRUCTURE",
+          4
+        ],
+        [
+          "UNRESOLVED_UPTHRUST",
+          2
+        ],
+        [
+          "BELOW_SMA50",
+          2
+        ]
+      ],
+      "eligible_rows": [
+        {
+          "security_id": "MSFT",
+          "status": "eligible",
+          "score": 78.80212289813815,
+          "setup_state": "eligible",
+          "rejection_reasons": [],
+          "adv20": 10477358963.665924,
+          "platform_distance_atr": 0.4600806310662643,
+          "platform_setup_id": "MSFT:2026-03-30:r492.3",
+          "platform_lifecycle": "active",
+          "platform_events": [
+            "formed",
+            "expired",
+            "formed",
+            "expired",
+            "formed",
+            "failed",
+            "formed",
+            "expired",
+            "formed",
+            "expired",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "expired",
+            "formed",
+            "expired",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "expired",
+            "formed",
+            "failed",
+            "formed"
+          ],
+          "residual_status": "OK",
+          "residual_raw": 0.943960847938213,
+          "M": 89.23933209645715,
+          "T": 80.18279351775539,
+          "source": "yahoo_unverified_close"
+        }
+      ],
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ]
+    },
+    {
+      "theme_id": "energy",
+      "algorithm": "A_trend_quality",
+      "session_date": "2026-09-15",
+      "candidates": 10,
+      "reference": 38,
+      "eligible": 0,
+      "eligible_ids": [],
+      "family_status": {
+        "eligible": 0,
+        "rejected": 10
+      },
+      "top_rejections": [
+        [
+          "LOW_SCORE",
+          7
+        ],
+        [
+          "EXTENDED",
+          7
+        ],
+        [
+          "UNRESOLVED_UPTHRUST",
+          3
+        ]
+      ],
+      "eligible_rows": [],
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ]
+    },
+    {
+      "theme_id": "energy",
+      "algorithm": "B_confirmed_base_breakout",
+      "session_date": "2026-09-15",
+      "candidates": 10,
+      "reference": 38,
+      "eligible": 0,
+      "eligible_ids": [],
+      "family_status": {
+        "eligible": 0,
+        "rejected": 10
+      },
+      "top_rejections": [
+        [
+          "LOW_SCORE",
+          10
+        ],
+        [
+          "BREAKOUT_TRACK_EXPIRED",
+          9
+        ],
+        [
+          "LOW_EVENT_RVOL",
+          9
+        ],
+        [
+          "EXTENDED",
+          7
+        ],
+        [
+          "TOO_FAR_FROM_BASE",
+          6
+        ]
+      ],
+      "eligible_rows": [],
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ]
+    },
+    {
+      "theme_id": "energy",
+      "algorithm": "C_trend_pullback",
+      "session_date": "2026-09-15",
+      "candidates": 10,
+      "reference": 38,
+      "eligible": 0,
+      "eligible_ids": [],
+      "family_status": {
+        "eligible": 0,
+        "rejected": 10
+      },
+      "top_rejections": [
+        [
+          "LOW_SCORE",
+          10
+        ],
+        [
+          "EXTENDED",
+          7
+        ],
+        [
+          "UNRESOLVED_UPTHRUST",
+          3
+        ],
+        [
+          "DEPTH_OUT_OF_RANGE",
+          1
+        ]
+      ],
+      "eligible_rows": [],
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ]
+    },
+    {
+      "theme_id": "energy",
+      "algorithm": "D_residual_momentum",
+      "session_date": "2026-09-15",
+      "candidates": 10,
+      "reference": 38,
+      "eligible": 0,
+      "eligible_ids": [],
+      "family_status": {
+        "eligible": 0,
+        "rejected": 10
+      },
+      "top_rejections": [
+        [
+          "LOW_SCORE",
+          7
+        ],
+        [
+          "NONPOSITIVE_RESIDUAL",
+          7
+        ],
+        [
+          "EXTENDED",
+          7
+        ],
+        [
+          "UNRESOLVED_UPTHRUST",
+          3
+        ]
+      ],
+      "eligible_rows": [],
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ]
+    },
+    {
+      "theme_id": "etfs",
+      "algorithm": "A_trend_quality",
+      "session_date": "2026-09-15",
+      "candidates": 12,
+      "reference": 12,
+      "eligible": 0,
+      "eligible_ids": [],
+      "family_status": {
+        "eligible": 0,
+        "rejected": 12
+      },
+      "top_rejections": [
+        [
+          "LOW_SCORE",
+          12
+        ],
+        [
+          "TREND_DIRECTION",
+          10
+        ],
+        [
+          "INVALIDATED",
+          9
+        ],
+        [
+          "WEAK_STRUCTURE",
+          7
+        ],
+        [
+          "LH_LL",
+          7
+        ]
+      ],
+      "eligible_rows": [],
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ]
+    },
+    {
+      "theme_id": "etfs",
+      "algorithm": "B_confirmed_base_breakout",
+      "session_date": "2026-09-15",
+      "candidates": 12,
+      "reference": 12,
+      "eligible": 0,
+      "eligible_ids": [],
+      "family_status": {
+        "eligible": 0,
+        "rejected": 12
+      },
+      "top_rejections": [
+        [
+          "LOW_SCORE",
+          12
+        ],
+        [
+          "BREAKOUT_TRACK_EXPIRED",
+          10
+        ],
+        [
+          "INVALIDATED",
+          9
+        ],
+        [
+          "BELOW_SMA50",
+          9
+        ],
+        [
+          "TOO_FAR_FROM_BASE",
+          9
+        ]
+      ],
+      "eligible_rows": [],
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ]
+    },
+    {
+      "theme_id": "etfs",
+      "algorithm": "C_trend_pullback",
+      "session_date": "2026-09-15",
+      "candidates": 12,
+      "reference": 12,
+      "eligible": 0,
+      "eligible_ids": [],
+      "family_status": {
+        "eligible": 0,
+        "rejected": 12
+      },
+      "top_rejections": [
+        [
+          "LOW_SCORE",
+          12
+        ],
+        [
+          "DEPTH_OUT_OF_RANGE",
+          11
+        ],
+        [
+          "TREND_DIRECTION",
+          10
+        ],
+        [
+          "NO_REBOUND",
+          10
+        ],
+        [
+          "INVALIDATED",
+          9
+        ]
+      ],
+      "eligible_rows": [],
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ]
+    },
+    {
+      "theme_id": "etfs",
+      "algorithm": "D_residual_momentum",
+      "session_date": "2026-09-15",
+      "candidates": 12,
+      "reference": 12,
+      "eligible": 0,
+      "eligible_ids": [],
+      "family_status": {
+        "eligible": 0,
+        "rejected": 12
+      },
+      "top_rejections": [
+        [
+          "LOW_SCORE",
+          11
+        ],
+        [
+          "INVALIDATED",
+          9
+        ],
+        [
+          "BELOW_SMA50",
+          9
+        ],
+        [
+          "WEAK_STRUCTURE",
+          7
+        ],
+        [
+          "NONPOSITIVE_RESIDUAL",
+          6
+        ]
+      ],
+      "eligible_rows": [],
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ]
+    },
+    {
+      "theme_id": "semiconductors",
+      "algorithm": "A_trend_quality",
+      "session_date": "2026-09-11",
+      "candidates": 14,
+      "reference": 38,
+      "eligible": 0,
+      "eligible_ids": [],
+      "family_status": {
+        "eligible": 0,
+        "rejected": 14
+      },
+      "top_rejections": [
+        [
+          "LOW_SCORE",
+          14
+        ],
+        [
+          "TREND_DIRECTION",
+          13
+        ],
+        [
+          "WEAK_STRUCTURE",
+          6
+        ],
+        [
+          "LH_LL",
+          6
+        ],
+        [
+          "UNRESOLVED_UPTHRUST",
+          5
+        ]
+      ],
+      "eligible_rows": [],
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ]
+    },
+    {
+      "theme_id": "semiconductors",
+      "algorithm": "B_confirmed_base_breakout",
+      "session_date": "2026-09-11",
+      "candidates": 14,
+      "reference": 38,
+      "eligible": 0,
+      "eligible_ids": [],
+      "family_status": {
+        "eligible": 0,
+        "rejected": 14
+      },
+      "top_rejections": [
+        [
+          "LOW_SCORE",
+          14
+        ],
+        [
+          "SMA50_SLOPE",
+          13
+        ],
+        [
+          "BREAKOUT_TRACK_EXPIRED",
+          11
+        ],
+        [
+          "LOW_EVENT_RVOL",
+          10
+        ],
+        [
+          "TOO_FAR_FROM_BASE",
+          9
+        ]
+      ],
+      "eligible_rows": [],
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ]
+    },
+    {
+      "theme_id": "semiconductors",
+      "algorithm": "C_trend_pullback",
+      "session_date": "2026-09-11",
+      "candidates": 14,
+      "reference": 38,
+      "eligible": 0,
+      "eligible_ids": [],
+      "family_status": {
+        "eligible": 0,
+        "rejected": 14
+      },
+      "top_rejections": [
+        [
+          "LOW_SCORE",
+          14
+        ],
+        [
+          "TREND_DIRECTION",
+          13
+        ],
+        [
+          "NO_REBOUND",
+          7
+        ],
+        [
+          "LOW_CLV",
+          7
+        ],
+        [
+          "WEAK_STRUCTURE",
+          6
+        ]
+      ],
+      "eligible_rows": [],
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ]
+    },
+    {
+      "theme_id": "semiconductors",
+      "algorithm": "D_residual_momentum",
+      "session_date": "2026-09-11",
+      "candidates": 14,
+      "reference": 38,
+      "eligible": 0,
+      "eligible_ids": [],
+      "family_status": {
+        "eligible": 0,
+        "rejected": 14
+      },
+      "top_rejections": [
+        [
+          "LOW_SCORE",
+          14
+        ],
+        [
+          "SMA50_SLOPE",
+          13
+        ],
+        [
+          "NONPOSITIVE_RESIDUAL",
+          7
+        ],
+        [
+          "BELOW_SMA50",
+          7
+        ],
+        [
+          "WEAK_STRUCTURE",
+          6
+        ]
+      ],
+      "eligible_rows": [],
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ]
+    },
+    {
+      "theme_id": "software",
+      "algorithm": "A_trend_quality",
+      "session_date": "2026-09-11",
+      "candidates": 12,
+      "reference": 38,
+      "eligible": 0,
+      "eligible_ids": [],
+      "family_status": {
+        "eligible": 0,
+        "rejected": 12
+      },
+      "top_rejections": [
+        [
+          "LOW_SCORE",
+          12
+        ],
+        [
+          "TREND_DIRECTION",
+          6
+        ],
+        [
+          "UNRESOLVED_UPTHRUST",
+          4
+        ],
+        [
+          "WEAK_STRUCTURE",
+          4
+        ],
+        [
+          "LH_LL",
+          4
+        ]
+      ],
+      "eligible_rows": [],
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ]
+    },
+    {
+      "theme_id": "software",
+      "algorithm": "B_confirmed_base_breakout",
+      "session_date": "2026-09-11",
+      "candidates": 12,
+      "reference": 38,
+      "eligible": 0,
+      "eligible_ids": [],
+      "family_status": {
+        "eligible": 0,
+        "rejected": 12
+      },
+      "top_rejections": [
+        [
+          "LOW_SCORE",
+          12
+        ],
+        [
+          "BREAKOUT_TRACK_EXPIRED",
+          12
+        ],
+        [
+          "TOO_FAR_FROM_BASE",
+          5
+        ],
+        [
+          "UNRESOLVED_UPTHRUST",
+          4
+        ],
+        [
+          "BELOW_SMA50",
+          4
+        ]
+      ],
+      "eligible_rows": [],
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ]
+    },
+    {
+      "theme_id": "software",
+      "algorithm": "C_trend_pullback",
+      "session_date": "2026-09-11",
+      "candidates": 12,
+      "reference": 38,
+      "eligible": 0,
+      "eligible_ids": [],
+      "family_status": {
+        "eligible": 0,
+        "rejected": 12
+      },
+      "top_rejections": [
+        [
+          "LOW_SCORE",
+          12
+        ],
+        [
+          "DEPTH_OUT_OF_RANGE",
+          10
+        ],
+        [
+          "NO_REBOUND",
+          9
+        ],
+        [
+          "LOW_RVOL",
+          9
+        ],
+        [
+          "LOW_CLV",
+          8
+        ]
+      ],
+      "eligible_rows": [],
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ]
+    },
+    {
+      "theme_id": "software",
+      "algorithm": "D_residual_momentum",
+      "session_date": "2026-09-11",
+      "candidates": 12,
+      "reference": 38,
+      "eligible": 1,
+      "eligible_ids": [
+        "MSFT"
+      ],
+      "family_status": {
+        "eligible": 1,
+        "rejected": 11
+      },
+      "top_rejections": [
+        [
+          "LOW_SCORE",
+          11
+        ],
+        [
+          "NONPOSITIVE_RESIDUAL",
+          5
+        ],
+        [
+          "UNRESOLVED_UPTHRUST",
+          4
+        ],
+        [
+          "BELOW_SMA50",
+          4
+        ],
+        [
+          "WEAK_STRUCTURE",
+          4
+        ]
+      ],
+      "eligible_rows": [
+        {
+          "security_id": "MSFT",
+          "status": "eligible",
+          "score": 74.58083018181348,
+          "setup_state": "eligible",
+          "rejection_reasons": [],
+          "adv20": 10508314009.870605,
+          "platform_distance_atr": 0.32805709665608324,
+          "platform_setup_id": "MSFT:2026-03-30:r492.3",
+          "platform_lifecycle": "active",
+          "platform_events": [
+            "formed",
+            "expired",
+            "formed",
+            "expired",
+            "formed",
+            "failed",
+            "formed",
+            "expired",
+            "formed",
+            "expired",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "expired",
+            "formed",
+            "expired",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "expired",
+            "formed",
+            "failed",
+            "formed"
+          ],
+          "residual_status": "OK",
+          "residual_raw": 0.9719230120313365,
+          "M": 86.64192949905714,
+          "T": 78.69561731270028,
+          "source": "yahoo_unverified_close"
+        }
+      ],
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ]
+    },
+    {
+      "theme_id": "energy",
+      "algorithm": "A_trend_quality",
+      "session_date": "2026-09-11",
+      "candidates": 10,
+      "reference": 38,
+      "eligible": 1,
+      "eligible_ids": [
+        "PSX"
+      ],
+      "family_status": {
+        "eligible": 1,
+        "rejected": 9
+      },
+      "top_rejections": [
+        [
+          "LOW_SCORE",
+          8
+        ],
+        [
+          "EXTENDED",
+          2
+        ],
+        [
+          "UNRESOLVED_UPTHRUST",
+          1
+        ]
+      ],
+      "eligible_rows": [
+        {
+          "security_id": "PSX",
+          "status": "eligible",
+          "score": 74.34721471062335,
+          "setup_state": "eligible",
+          "rejection_reasons": [],
+          "adv20": 672740161.3075256,
+          "platform_distance_atr": 10.193924788427013,
+          "platform_setup_id": "PSX:2026-04-08:r190.61",
+          "platform_lifecycle": "active",
+          "platform_events": [
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "expired",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "expired",
+            "formed",
+            "expired",
+            "formed",
+            "expired",
+            "formed",
+            "failed",
+            "formed",
+            "expired",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "expired",
+            "formed"
+          ],
+          "residual_status": "OK",
+          "residual_raw": 1.4850499948731348,
+          "M": 67.65873015872126,
+          "T": 89.52538520003179,
+          "source": "yahoo_unverified_close"
+        }
+      ],
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ]
+    },
+    {
+      "theme_id": "energy",
+      "algorithm": "B_confirmed_base_breakout",
+      "session_date": "2026-09-11",
+      "candidates": 10,
+      "reference": 38,
+      "eligible": 0,
+      "eligible_ids": [],
+      "family_status": {
+        "eligible": 0,
+        "rejected": 10
+      },
+      "top_rejections": [
+        [
+          "LOW_SCORE",
+          10
+        ],
+        [
+          "BREAKOUT_TRACK_EXPIRED",
+          9
+        ],
+        [
+          "LOW_EVENT_RVOL",
+          9
+        ],
+        [
+          "TOO_FAR_FROM_BASE",
+          6
+        ],
+        [
+          "LOW_CLV",
+          2
+        ]
+      ],
+      "eligible_rows": [],
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ]
+    },
+    {
+      "theme_id": "energy",
+      "algorithm": "C_trend_pullback",
+      "session_date": "2026-09-11",
+      "candidates": 10,
+      "reference": 38,
+      "eligible": 0,
+      "eligible_ids": [],
+      "family_status": {
+        "eligible": 0,
+        "rejected": 10
+      },
+      "top_rejections": [
+        [
+          "LOW_SCORE",
+          10
+        ],
+        [
+          "NO_REBOUND",
+          5
+        ],
+        [
+          "LOW_CLV",
+          4
+        ],
+        [
+          "EXTENDED",
+          2
+        ],
+        [
+          "UNRESOLVED_UPTHRUST",
+          1
+        ]
+      ],
+      "eligible_rows": [],
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ]
+    },
+    {
+      "theme_id": "energy",
+      "algorithm": "D_residual_momentum",
+      "session_date": "2026-09-11",
+      "candidates": 10,
+      "reference": 38,
+      "eligible": 2,
+      "eligible_ids": [
+        "CVX",
+        "PSX"
+      ],
+      "family_status": {
+        "eligible": 2,
+        "rejected": 8
+      },
+      "top_rejections": [
+        [
+          "LOW_SCORE",
+          6
+        ],
+        [
+          "NONPOSITIVE_RESIDUAL",
+          5
+        ],
+        [
+          "EXTENDED",
+          2
+        ],
+        [
+          "UNRESOLVED_UPTHRUST",
+          1
+        ]
+      ],
+      "eligible_rows": [
+        {
+          "security_id": "CVX",
+          "status": "eligible",
+          "score": 75.02343848052169,
+          "setup_state": "eligible",
+          "rejection_reasons": [],
+          "adv20": 1590428815.3418732,
+          "platform_distance_atr": 5.250612038534193,
+          "platform_setup_id": "CVX:2026-06-30:r192.69",
+          "platform_lifecycle": "active",
+          "platform_events": [
+            "formed",
+            "failed",
+            "formed",
+            "expired",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "expired",
+            "formed",
+            "expired",
+            "formed",
+            "expired",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "expired",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed"
+          ],
+          "residual_status": "OK",
+          "residual_raw": 0.18023443584181795,
+          "M": 61.666666666675,
+          "T": 77.99714293959086,
+          "source": "yahoo_unverified_close"
+        },
+        {
+          "security_id": "PSX",
+          "status": "eligible",
+          "score": 82.97909161936049,
+          "setup_state": "eligible",
+          "rejection_reasons": [],
+          "adv20": 672740161.3075256,
+          "platform_distance_atr": 10.193924788427013,
+          "platform_setup_id": "PSX:2026-04-08:r190.61",
+          "platform_lifecycle": "active",
+          "platform_events": [
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "expired",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "expired",
+            "formed",
+            "expired",
+            "formed",
+            "expired",
+            "formed",
+            "failed",
+            "formed",
+            "expired",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "failed",
+            "formed",
+            "expired",
+            "formed"
+          ],
+          "residual_status": "OK",
+          "residual_raw": 1.4850499948731348,
+          "M": 92.93650793649999,
+          "T": 89.52538520003179,
+          "source": "yahoo_unverified_close"
+        }
+      ],
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ]
+    },
+    {
+      "theme_id": "etfs",
+      "algorithm": "A_trend_quality",
+      "session_date": "2026-09-11",
+      "candidates": 12,
+      "reference": 12,
+      "eligible": 0,
+      "eligible_ids": [],
+      "family_status": {
+        "eligible": 0,
+        "rejected": 12
+      },
+      "top_rejections": [
+        [
+          "LOW_SCORE",
+          12
+        ],
+        [
+          "WEAK_STRUCTURE",
+          7
+        ],
+        [
+          "LH_LL",
+          7
+        ],
+        [
+          "TREND_DIRECTION",
+          6
+        ],
+        [
+          "INVALIDATED",
+          3
+        ]
+      ],
+      "eligible_rows": [],
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ]
+    },
+    {
+      "theme_id": "etfs",
+      "algorithm": "B_confirmed_base_breakout",
+      "session_date": "2026-09-11",
+      "candidates": 12,
+      "reference": 12,
+      "eligible": 0,
+      "eligible_ids": [],
+      "family_status": {
+        "eligible": 0,
+        "rejected": 12
+      },
+      "top_rejections": [
+        [
+          "LOW_SCORE",
+          12
+        ],
+        [
+          "BREAKOUT_TRACK_EXPIRED",
+          11
+        ],
+        [
+          "TOO_FAR_FROM_BASE",
+          9
+        ],
+        [
+          "LOW_EVENT_RVOL",
+          8
+        ],
+        [
+          "WEAK_STRUCTURE",
+          7
+        ]
+      ],
+      "eligible_rows": [],
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ]
+    },
+    {
+      "theme_id": "etfs",
+      "algorithm": "C_trend_pullback",
+      "session_date": "2026-09-11",
+      "candidates": 12,
+      "reference": 12,
+      "eligible": 0,
+      "eligible_ids": [],
+      "family_status": {
+        "eligible": 0,
+        "rejected": 12
+      },
+      "top_rejections": [
+        [
+          "LOW_SCORE",
+          12
+        ],
+        [
+          "DEPTH_OUT_OF_RANGE",
+          12
+        ],
+        [
+          "NO_REBOUND",
+          11
+        ],
+        [
+          "LOW_CLV",
+          11
+        ],
+        [
+          "WEAK_STRUCTURE",
+          7
+        ]
+      ],
+      "eligible_rows": [],
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ]
+    },
+    {
+      "theme_id": "etfs",
+      "algorithm": "D_residual_momentum",
+      "session_date": "2026-09-11",
+      "candidates": 12,
+      "reference": 12,
+      "eligible": 0,
+      "eligible_ids": [],
+      "family_status": {
+        "eligible": 0,
+        "rejected": 12
+      },
+      "top_rejections": [
+        [
+          "LOW_SCORE",
+          11
+        ],
+        [
+          "WEAK_STRUCTURE",
+          7
+        ],
+        [
+          "NONPOSITIVE_RESIDUAL",
+          5
+        ],
+        [
+          "BELOW_SMA50",
+          4
+        ],
+        [
+          "SMA50_SLOPE",
+          3
+        ]
+      ],
+      "eligible_rows": [],
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ]
+    }
+  ]
+}

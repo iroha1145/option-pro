@@ -290,16 +290,17 @@ def resolve_frozen_setup(
                 fail_streak = 0
                 repair_streak = 0
                 continue
-            if (
-                age > int(max_sessions) * PLATFORM_EXPIRE_MULTIPLE
-                and np.isfinite(close)
-                and (close > resistance + 2.0 * width or close < support - 2.0 * width)
-            ):
+            too_old = age > int(max_sessions) * PLATFORM_EXPIRE_MULTIPLE
+            left_range = np.isfinite(close) and (
+                close > resistance + 2.0 * width or close < support - 2.0 * width
+            )
+            if too_old:
                 active = dict(active)
                 active["expired_at"] = session.isoformat()
                 active["lifecycle"] = "expired"
                 active["version"] = int(active.get("version") or 1) + 1
-                events.append(_platform_event(active, session, "expired", "left_range"))
+                reason = "max_age" if not left_range else "left_range"
+                events.append(_platform_event(active, session, "expired", reason))
                 active["events"] = list(events)
                 active = None
                 active_score = None
