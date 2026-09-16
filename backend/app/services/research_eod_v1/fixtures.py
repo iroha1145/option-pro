@@ -67,7 +67,7 @@ def make_series(
             "security_type": security_type,
             "mic": "XNAS" if exchange == "NASDAQ" else "XNYS",
         },
-        source_available_at=datetime(dates[-1].year, dates[-1].month, dates[-1].day, 18, 0, tzinfo=ET),
+        source_available_at=datetime(dates[-1].year, dates[-1].month, dates[-1].day, 16, 30, tzinfo=ET),
     )
 
 

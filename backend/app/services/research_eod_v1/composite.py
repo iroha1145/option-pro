@@ -19,19 +19,58 @@ def _eligible(rows: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
     return [row for row in rows if row.get("status") == "eligible" and row.get("score") is not None]
 
 
+def _row_rg(row: Mapping[str, Any], key: str) -> float | None:
+    factors = row.get("factors")
+    if isinstance(factors, dict) and factors.get(key) is not None:
+        return float(factors[key])
+    value = row.get(key)
+    return None if value is None else float(value)
+
+
+def _collapse_same_family(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Merge the same security+family across themes. Input order cannot change R/G."""
+
+    ordered = sorted(
+        rows,
+        key=lambda r: (str(r.get("security_id")), str(r.get("algorithm_id")), str(r.get("sector_context") or "")),
+    )
+    family: dict[tuple[str, str], list[Mapping[str, Any]]] = {}
+    for row in ordered:
+        family.setdefault((str(row["security_id"]), str(row.get("algorithm_id"))), []).append(row)
+    collapsed: list[dict[str, Any]] = []
+    for (sid, algo), group in family.items():
+        scores = [float(item["score"]) for item in group if item.get("score") is not None]
+        r_vals = [value for item in group if (value := _row_rg(item, "R")) is not None]
+        g_vals = [value for item in group if (value := _row_rg(item, "G")) is not None]
+        merged = dict(group[0])
+        merged["security_id"] = sid
+        merged["algorithm_id"] = algo
+        merged["score"] = median(scores) if scores else None
+        merged["R"] = median(r_vals) if r_vals else None
+        merged["G"] = median(g_vals) if g_vals else None
+        merged["theme_count"] = len(group)
+        collapsed.append(merged)
+    return collapsed
+
+
 def _dedup_security(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
-    by_id: dict[str, list[Mapping[str, Any]]] = {}
-    for row in rows:
+    """Same family across themes first, then across families. Input order cannot change R/G."""
+
+    collapsed = _collapse_same_family(rows)
+    by_id: dict[str, list[dict[str, Any]]] = {}
+    for row in collapsed:
         by_id.setdefault(str(row["security_id"]), []).append(row)
     out: list[dict[str, Any]] = []
     for sid, group in by_id.items():
         scores = [float(item["score"]) for item in group if item.get("score") is not None]
-        merged = dict(group[0])
+        r_vals = [float(item["R"]) for item in group if item.get("R") is not None]
+        g_vals = [float(item["G"]) for item in group if item.get("G") is not None]
+        merged = dict(sorted(group, key=lambda item: str(item.get("algorithm_id")))[0])
         merged["security_id"] = sid
         merged["consensus_z"] = median(scores) if scores else None
         merged["family_votes"] = tuple(sorted({item.get("algorithm_id") for item in group}))
-        merged["R"] = group[0].get("factors", {}).get("R") if isinstance(group[0].get("factors"), dict) else group[0].get("R")
-        merged["G"] = group[0].get("factors", {}).get("G") if isinstance(group[0].get("factors"), dict) else group[0].get("G")
+        merged["R"] = median(r_vals) if r_vals else None
+        merged["G"] = median(g_vals) if g_vals else None
         out.append(merged)
     return out
 
@@ -58,24 +97,41 @@ def m1_consensus(rows: Sequence[Mapping[str, Any]], profile: str, top_k: int) ->
 
 
 def m2_utility(rows: Sequence[Mapping[str, Any]], profile: str, top_k: int,
-               matured_returns: Mapping[str, Sequence[float]] | None = None) -> list[dict[str, Any]]:
+               matured_returns: Mapping[str, Any] | None = None,
+               as_of: Any | None = None) -> list[dict[str, Any]]:
+    """Point-estimate utility. Research-only until block uncertainty is attached."""
+
     if not matured_returns:
         return []
     lam = M2_LAMBDA_RISK[profile]
     kept: list[dict[str, Any]] = []
     for row in _dedup_security(_eligible(rows)):
-        sample = list(matured_returns.get(row["security_id"], []))
+        meta = matured_returns.get(row["security_id"])
+        if not isinstance(meta, Mapping):
+            continue
+        if meta.get("label_matured_at") is None:
+            continue
+        if as_of is not None and meta["label_matured_at"] > as_of:
+            continue
+        if meta.get("fold") is None and meta.get("as_of") is None and meta.get("provenance") is None:
+            # Allow explicit matured_at alone, but refuse unlabeled future windows.
+            pass
+        sample = list(meta.get("returns") or [])
+        if any(item is None for item in sample):
+            continue
         if len(sample) < 100:
             continue
-        ordered = sorted(sample)
+        ordered = sorted(float(item) for item in sample)
         worst = ordered[: max(1, int(0.05 * len(ordered)))]
-        mu = sum(sample) / len(sample)
+        mu = sum(ordered) / len(ordered)
         es = max(0.0, -sum(worst) / len(worst))
         u = mu - lam * es
         if u <= 0:
             continue
         row = dict(row)
+        row["utility_point_estimate"] = u
         row["utility_lower"] = u
+        row["m2_status"] = "RESEARCH_POINT_ESTIMATE"
         row["status"] = "eligible"
         kept.append(row)
     kept.sort(key=lambda r: (-float(r["utility_lower"]), r["security_id"]))
@@ -109,7 +165,20 @@ def m3_diversified(rows: Sequence[Mapping[str, Any]], profile: str, top_k: int,
         if industry_count.get(ind, 0) >= cap:
             continue
         if selected and corr is not None:
-            penalties = [max(0.0, corr.get((item["security_id"], other["security_id"]), 0.0)) for other in selected]
+            penalties = []
+            missing = False
+            for other in selected:
+                key = (item["security_id"], other["security_id"])
+                rev = (other["security_id"], item["security_id"])
+                if key in corr:
+                    penalties.append(max(0.0, float(corr[key])))
+                elif rev in corr:
+                    penalties.append(max(0.0, float(corr[rev])))
+                else:
+                    missing = True
+            if missing:
+                item["status"] = "data_insufficient"
+                continue
             if any(p > 0.85 for p in penalties):
                 continue
             marginal = item["base"] - 25.0 * (sum(penalties) / len(penalties))
@@ -119,7 +188,7 @@ def m3_diversified(rows: Sequence[Mapping[str, Any]], profile: str, top_k: int,
                 continue
             marginal = item["base"]
         if marginal < floor - 10:
-            break
+            continue
         item["status"] = "eligible"
         selected.append(item)
         industry_count[ind] = industry_count.get(ind, 0) + 1
@@ -135,7 +204,7 @@ def m4_regime(rows: Sequence[Mapping[str, Any]], profile: str, top_k: int,
     weights = {"bull": M4_BULL_WEIGHTS, "mixed": M4_MIXED_WEIGHTS, "defense": M4_DEFENSE_WEIGHTS}[regime]
     floor = M4_RANK_FLOORS[profile]
     by_sid: dict[str, dict[str, Mapping[str, Any]]] = {}
-    for row in _eligible(rows):
+    for row in _collapse_same_family(_eligible(rows)):
         by_sid.setdefault(str(row["security_id"]), {})[str(row["algorithm_id"])] = row
     kept: list[dict[str, Any]] = []
     for sid, families in by_sid.items():

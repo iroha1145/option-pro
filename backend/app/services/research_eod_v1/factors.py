@@ -81,6 +81,9 @@ class RawComponents:
     industry_return63: float | None
     above_sma50: bool | None
     extension_atr: float | None
+    ma_distance_atr: float | None
+    platform_distance_atr: float | None
+    invalidation_distance_atr: float | None
     venue_metadata: dict[str, Any] = field(default_factory=dict)
     volume_session_scope: str = "unknown"
     turnover_is_proxy: bool = True
@@ -221,6 +224,54 @@ def _base_geometry(
     return float(best_score), "observed", best
 
 
+def resolve_frozen_setup(
+    series: SecuritySeries,
+    t: int,
+    *,
+    min_sessions: int,
+    max_sessions: int,
+    min_touches: int,
+) -> tuple[float | None, str, dict[str, Any] | None]:
+    """Keep the first formed platform; later highs cannot rewrite frozen levels."""
+
+    min_eval = int(min_sessions) + 5
+    if t < min_eval:
+        return None, "insufficient_history", None
+    frozen: dict[str, Any] | None = None
+    frozen_score: float | None = None
+    for eval_t in range(min_eval, t + 1):
+        score, status, setup = _base_geometry(
+            series,
+            eval_t,
+            min_sessions=min_sessions,
+            max_sessions=max_sessions,
+            min_touches=min_touches,
+        )
+        if setup is None:
+            continue
+        formed_index = eval_t - 1
+        frozen = dict(setup)
+        frozen["formed_at"] = series.dates[formed_index].isoformat()
+        frozen["known_at"] = frozen["formed_at"]
+        frozen["confirmed_at"] = None
+        frozen["failed_at"] = None
+        frozen["repaired_at"] = None
+        frozen["expired_at"] = None
+        frozen["version"] = 1
+        frozen["setup_id"] = f"{series.security_id}:{frozen['formed_at']}:r{round(float(frozen['resistance_high']), 4)}"
+        frozen_score = score
+        break
+    if frozen is None:
+        return _base_geometry(
+            series,
+            t,
+            min_sessions=min_sessions,
+            max_sessions=max_sessions,
+            min_touches=min_touches,
+        )
+    return frozen_score, "observed", frozen
+
+
 def _breakout_track(
     series: SecuritySeries,
     t: int,
@@ -257,7 +308,9 @@ def _breakout_track(
             "first_day_rvol": None,
             "first_day_clv": None,
             "consecutive_closes": 0,
+            "current_consecutive_closes": 0,
             "max_consecutive": 0,
+            "max_consecutive_closes": 0,
             "days_since_first": None,
             "tracking_expired": False,
         }
@@ -286,6 +339,20 @@ def _breakout_track(
         first_rvol = None
     first_clv = clv_at(series.high, series.low, series.close, first)
     days_since = t - first
+    confirmed_at = None
+    streak = 0
+    for i in range(first, t + 1):
+        atr_prev = atr_sma_at(series.high, series.low, series.close, i - 1, ATR_PERIOD) if i >= 1 else None
+        buffer = max(
+            float(sector_gates.get("breakout_buffer_price_fraction", 0.0025)) * float(close[i]),
+            float(sector_gates.get("breakout_buffer_atr", 0.15)) * (atr_prev or 0.0),
+        )
+        if float(close[i]) > resistance + buffer:
+            streak += 1
+            if streak == 2 and confirmed_at is None:
+                confirmed_at = series.dates[i].isoformat()
+        else:
+            streak = 0
     return {
         "through": True,
         "still_through": bool(float(close[t]) > resistance + buffer_t),
@@ -294,10 +361,14 @@ def _breakout_track(
         "first_day_clv": first_clv,
         "first_day_buffer": first_buffer,
         "consecutive_closes": run,
+        "current_consecutive_closes": run,
         "max_consecutive": max_run,
+        "max_consecutive_closes": max_run,
         "days_since_first": days_since,
         "tracking_expired": days_since >= BREAKOUT_TRACK_MAX_SESSIONS,
         "setup_id": setup.get("setup_id"),
+        "confirmed_at": confirmed_at,
+        "frozen_resistance": resistance,
     }
 
 
@@ -390,7 +461,7 @@ def extract_raw(
     lh_ll = structure_label == "LH+LL"
     planned = known_support
     invalidated = bool(planned is not None and close[t] < planned)
-    b_score, b_status, setup = _base_geometry(
+    b_score, b_status, setup = resolve_frozen_setup(
         series,
         t,
         min_sessions=int(sector_gates.get("base_min_sessions", 20)),
@@ -398,6 +469,12 @@ def extract_raw(
         min_touches=int(sector_gates.get("base_min_distinct_touches", 2)),
     )
     breakout_track = _breakout_track(series, t, setup, sector_gates)
+    if setup is not None and breakout_track is not None:
+        setup = dict(setup)
+        setup["first_cross_at"] = breakout_track.get("first_cross_date")
+        setup["confirmed_at"] = breakout_track.get("confirmed_at")
+        if breakout_track.get("through") and not breakout_track.get("still_through"):
+            setup["failed_at"] = series.dates[t].isoformat()
     zero_volume = not np.isfinite(series.volume[t]) or float(series.volume[t]) <= 0
     halted = bool(series.halted) or zero_volume
     currently_tradable = not halted
@@ -421,7 +498,7 @@ def extract_raw(
     dv = series.dollar_volume
     if t >= 20 and np.isfinite(dv[t - 20 : t]).all() and float(np.mean(dv[t - 20 : t])) > 0:
         rvol = float(dv[t] / np.mean(dv[t - 20 : t]))
-        adv20 = float(np.mean(dv[t - 20 : t + 1])) if np.isfinite(dv[t - 20 : t + 1]).all() else float(np.mean(dv[t - 20 : t]))
+        adv20 = float(np.mean(dv[t - 20 : t]))
     else:
         rvol = None
         adv20 = None
@@ -458,6 +535,15 @@ def extract_raw(
     if sma20 is not None and atr_t1 and atr_t1 > 0:
         extension = max(0.0, (close[t] - sma20) / atr_t1)
     above = None if sma50 is None else bool(close[t] > sma50)
+    ma_distance = None
+    if sma20 is not None and atr_t1 and atr_t1 > 0:
+        ma_distance = float((close[t] - sma20) / atr_t1)
+    platform_distance = None
+    if setup is not None and atr_t1 and atr_t1 > 0:
+        platform_distance = float((close[t] - float(setup["resistance_high"])) / atr_t1)
+    invalidation_distance = None
+    if planned is not None and atr_t1 and atr_t1 > 0:
+        invalidation_distance = float((close[t] - planned) / atr_t1)
     return RawComponents(
         security_id=series.security_id,
         ticker_at_signal=series.ticker_at_signal,
@@ -525,6 +611,9 @@ def extract_raw(
         industry_return63=industry_return63,
         above_sma50=above,
         extension_atr=extension,
+        ma_distance_atr=ma_distance,
+        platform_distance_atr=platform_distance,
+        invalidation_distance_atr=invalidation_distance,
         venue_metadata=dict(series.venue_metadata),
         volume_session_scope=series.volume_session_scope,
         turnover_is_proxy=series.turnover_is_proxy,

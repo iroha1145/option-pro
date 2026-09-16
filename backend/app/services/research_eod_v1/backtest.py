@@ -64,15 +64,20 @@ def plan_trade(
                             holding_sessions, None, None, "SIGNAL_NOT_IN_SERIES", None, None, None)
     entry_session = next_session(signal_session)
     exit_session = holding_exit_session(entry_session, holding_sessions)
+    def _raw_open_at(session: date) -> float:
+        idx = dates.index(session)
+        raw = series.raw_open if series.raw_open is not None else series.open
+        return float(raw[idx])
+
     if entry_session not in dates:
         return PlannedTrade(series.security_id, signal_session, entry_session, exit_session,
                             holding_sessions, None, None, "IMMATURE_ENTRY", None, None, None)
     if exit_session not in dates:
-        entry_open = float(series.open[dates.index(entry_session)])
+        entry_open = _raw_open_at(entry_session)
         return PlannedTrade(series.security_id, signal_session, entry_session, exit_session,
                             holding_sessions, entry_open, None, "IMMATURE_LABEL", None, None, None)
-    entry_open = float(series.open[dates.index(entry_session)])
-    exit_open = float(series.open[dates.index(exit_session)])
+    entry_open = _raw_open_at(entry_session)
+    exit_open = _raw_open_at(exit_session)
     bps = slippage_bps(adv20) * cost_multiple
     buy = apply_cost(entry_open, side="buy", bps=bps, fee=fee)
     sell = apply_cost(exit_open, side="sell", bps=bps, fee=fee)

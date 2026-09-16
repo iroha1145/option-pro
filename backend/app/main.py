@@ -56,7 +56,6 @@ from app.api import (
     market,
     options,
     quotes,
-    research_eod_v1,
     runtime_settings,
     sectors,
     settings,
@@ -745,7 +744,6 @@ app.include_router(signals.router, dependencies=_PUBLIC_READ_DEPENDENCIES)
 app.include_router(ai.router, dependencies=_OWNER_DEPENDENCIES)
 app.include_router(catalysts.router, dependencies=_PUBLIC_READ_DEPENDENCIES)
 app.include_router(strength.router, dependencies=_PUBLIC_READ_DEPENDENCIES)
-app.include_router(research_eod_v1.router, dependencies=_OWNER_DEPENDENCIES)
 app.include_router(breakouts.router, dependencies=_PUBLIC_READ_DEPENDENCIES)
 app.include_router(worker_actions.router, dependencies=_OWNER_DEPENDENCIES)
 app.include_router(diagnostics.router, dependencies=_OWNER_DEPENDENCIES)

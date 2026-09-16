@@ -15,6 +15,11 @@ from app.services.research_eod_v1.calendar_asof import last_completed_session, r
 from app.services.research_eod_v1.cross_section import q_star
 from app.services.research_eod_v1.factors import RawComponents, extract_raw
 from app.services.research_eod_v1.mathutil import clip100
+from app.services.research_eod_v1.membership import (
+    has_complete_session_bar,
+    is_theme_candidate,
+    source_is_available,
+)
 from app.services.research_eod_v1.paths import ensure_reference_on_path
 from app.services.research_eod_v1.series import SecuritySeries, clip_panel_to_as_of
 from app.services.research_eod_v1.venue import classify_venue
@@ -133,6 +138,7 @@ def compute_snapshot(
     config_digest: str = "",
     spy_residual_allowed: bool = True,
     matched_benchmark_id: str | None = None,
+    extra_members: set[str] | None = None,
 ) -> dict[str, Any]:
     """Deterministic snapshot. Adding bars after ``as_of`` must not change T."""
 
@@ -145,12 +151,15 @@ def compute_snapshot(
     horizon_cfg = registry["horizons"][horizon]
     blend = tuple(horizon_cfg["momentum_blend"])
     weights = resolve_weights(registry, sector_id, algorithm, profile, horizon)
+    target_track = "etf" if sector.get("asset_track") == "etf" else "stock"
     market = panel.get("SPY")
     matched = panel.get(matched_benchmark_id) if matched_benchmark_id else None
     raws: dict[str, RawComponents] = {}
+    candidate_ids: set[str] = set()
+    reference_ids: set[str] = set()
     for sid, series in panel.items():
-        if sid in {"SPY", "QQQ"} and series.asset_track != sector.get("asset_track", "stock"):
-            pass
+        if not source_is_available(series, as_of):
+            continue
         raws[sid] = extract_raw(
             series,
             market=market,
@@ -161,32 +170,51 @@ def compute_snapshot(
             spy_residual_allowed=spy_residual_allowed,
             matched_market=matched,
         )
-    tracks = {sid: raw.asset_track for sid, raw in raws.items()}
-    industries = {sid: raw.industry_id for sid, raw in raws.items()}
-    parents = {sid: raw.parent_industry_id for sid, raw in raws.items()}
-    q_slope = q_star({s: r.slope50 for s, r in raws.items()}, industry=industries, parent=parents, tracks=tracks)
-    q_m63 = q_star({s: r.m63 for s, r in raws.items()}, industry=industries, parent=parents, tracks=tracks)
-    q_m126 = q_star({s: r.m126_skip21 for s, r in raws.items()}, industry=industries, parent=parents, tracks=tracks)
-    q_m252 = q_star({s: r.m252_skip21 for s, r in raws.items()}, industry=industries, parent=parents, tracks=tracks)
-    q_resid = q_star({s: r.residual.raw for s, r in raws.items()}, industry=industries, parent=parents, tracks=tracks)
-    q_imb = q_star({s: r.imbalance20 for s, r in raws.items()}, industry=industries, parent=parents, tracks=tracks)
-    q_ns = q_star({s: r.sigma20 for s, r in raws.items()}, industry=industries, parent=parents, tracks=tracks, invert=True)
-    q_ng = q_star({s: r.gap_tail252 for s, r in raws.items()}, industry=industries, parent=parents, tracks=tracks, invert=True)
-    q_nd = q_star({s: r.max_drawdown63 for s, r in raws.items()}, industry=industries, parent=parents, tracks=tracks, invert=True)
+        ok, _reason = is_theme_candidate(
+            series,
+            sector_id=sector_id,
+            session=session,
+            target_track=target_track,
+            extra_members=extra_members,
+        )
+        if ok:
+            candidate_ids.add(sid)
+        if has_complete_session_bar(series, session):
+            if sid in {"SPY", "QQQ"} or series.asset_track == target_track:
+                reference_ids.add(sid)
+    if not reference_ids:
+        reference_ids = {
+            sid
+            for sid, series in panel.items()
+            if has_complete_session_bar(series, session)
+        }
+    xref = {sid: raw for sid, raw in raws.items() if sid in reference_ids}
+    tracks = {sid: raw.asset_track for sid, raw in xref.items()}
+    industries = {sid: raw.industry_id for sid, raw in xref.items()}
+    parents = {sid: raw.parent_industry_id for sid, raw in xref.items()}
+    q_slope = q_star({s: r.slope50 for s, r in xref.items()}, industry=industries, parent=parents, tracks=tracks)
+    q_m63 = q_star({s: r.m63 for s, r in xref.items()}, industry=industries, parent=parents, tracks=tracks)
+    q_m126 = q_star({s: r.m126_skip21 for s, r in xref.items()}, industry=industries, parent=parents, tracks=tracks)
+    q_m252 = q_star({s: r.m252_skip21 for s, r in xref.items()}, industry=industries, parent=parents, tracks=tracks)
+    q_resid = q_star({s: r.residual.raw for s, r in xref.items()}, industry=industries, parent=parents, tracks=tracks)
+    q_imb = q_star({s: r.imbalance20 for s, r in xref.items()}, industry=industries, parent=parents, tracks=tracks)
+    q_ns = q_star({s: r.sigma20 for s, r in xref.items()}, industry=industries, parent=parents, tracks=tracks, invert=True)
+    q_ng = q_star({s: r.gap_tail252 for s, r in xref.items()}, industry=industries, parent=parents, tracks=tracks, invert=True)
+    q_nd = q_star({s: r.max_drawdown63 for s, r in xref.items()}, industry=industries, parent=parents, tracks=tracks, invert=True)
 
     industry_ret: dict[str, float | None] = {}
     breadth: dict[str, float | None] = {}
     spy_m63 = raws["SPY"].m63 if "SPY" in raws else None
-    for sid, raw in raws.items():
+    for sid, raw in xref.items():
         peers = [
             other
-            for other, item in raws.items()
+            for other, item in xref.items()
             if other != sid and item.industry_id and item.industry_id == raw.industry_id
         ]
         if len(peers) < 5:
             parent_peers = [
                 other
-                for other, item in raws.items()
+                for other, item in xref.items()
                 if other != sid and item.parent_industry_id and item.parent_industry_id == raw.parent_industry_id
             ]
             peers = parent_peers
@@ -194,12 +222,12 @@ def compute_snapshot(
             industry_ret[sid] = None
             breadth[sid] = None
             continue
-        rets = [raws[p].m63 for p in peers if raws[p].m63 is not None]
+        rets = [xref[p].m63 for p in peers if xref[p].m63 is not None]
         if not rets or spy_m63 is None:
             industry_ret[sid] = None
         else:
             industry_ret[sid] = float(sum(rets) / len(rets) - spy_m63)
-        flags = [raws[p].above_sma50 for p in peers if raws[p].above_sma50 is not None]
+        flags = [xref[p].above_sma50 for p in peers if xref[p].above_sma50 is not None]
         breadth[sid] = None if len(flags) < 5 else sum(1 for flag in flags if flag) / len(flags)
     q_g = q_star(industry_ret, industry=parents, parent=parents, tracks=tracks)
 
@@ -214,13 +242,9 @@ def compute_snapshot(
     if algorithm == "C_trend_pullback":
         required = ("T", "M", "S", "R", "P", "V")
 
-    target_track = "etf" if sector.get("asset_track") == "etf" else "stock"
     for sid, raw in raws.items():
-        if raw.asset_track != target_track and sid not in sector.get("members", []):
-            if target_track == "stock" and raw.asset_track != "stock":
-                continue
-            if target_track == "etf" and raw.asset_track != "etf":
-                continue
+        if sid not in candidate_ids:
+            continue
         venue = classify_venue(raw.venue_metadata)
         factors = _assemble_factors(
             raw,
@@ -284,6 +308,13 @@ def compute_snapshot(
                 "session_date": session.isoformat(),
                 "feature_version": FEATURE_VERSION,
                 "algorithm_id": algorithm,
+                "profile": profile,
+                "horizon": horizon,
+                "adv20": raw.adv20,
+                "atr": raw.atr,
+                "ma_distance_atr": raw.ma_distance_atr,
+                "platform_distance_atr": raw.platform_distance_atr,
+                "invalidation_distance_atr": raw.invalidation_distance_atr,
                 "config_hash": config_digest,
                 "sector_context": sector_id,
                 "theme_ids": list(raw.theme_ids),
@@ -326,6 +357,8 @@ def compute_snapshot(
         "profile": profile,
         "horizon": horizon,
         "fingerprint": fingerprint,
+        "candidate_ids": sorted(candidate_ids),
+        "reference_ids": sorted(reference_ids),
         "rows": rows,
         "network_calls": 0,
     }

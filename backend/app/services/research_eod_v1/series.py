@@ -31,6 +31,9 @@ class SecuritySeries:
     venue_metadata: Mapping[str, Any] = field(default_factory=dict)
     source_available_at: datetime | None = None
     halted: bool = False
+    raw_open: np.ndarray | None = None
+    dividends: tuple[tuple[date, float], ...] = ()
+    splits: tuple[tuple[date, float], ...] = ()
 
     def __post_init__(self) -> None:
         n = len(self.dates)
@@ -39,6 +42,12 @@ class SecuritySeries:
             if arr.shape != (n,):
                 raise ValueError(f"{name} length must match dates")
             setattr(self, name, arr)
+        if self.raw_open is None:
+            self.raw_open = self.open.copy()
+        else:
+            self.raw_open = np.asarray(self.raw_open, dtype=float)
+            if self.raw_open.shape != (n,):
+                raise ValueError("raw_open length must match dates")
 
     def index_on_or_before(self, session: date) -> int | None:
         for index in range(len(self.dates) - 1, -1, -1):
@@ -72,6 +81,9 @@ class SecuritySeries:
             venue_metadata=self.venue_metadata,
             source_available_at=self.source_available_at,
             halted=self.halted,
+            raw_open=self.raw_open[:end].copy() if self.raw_open is not None else None,
+            dividends=tuple(item for item in self.dividends if item[0] <= session),
+            splits=tuple(item for item in self.splits if item[0] <= session),
         )
 
 

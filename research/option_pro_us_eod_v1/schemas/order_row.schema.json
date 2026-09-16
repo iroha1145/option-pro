@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "research_eod_v1_order_row",
+  "type": "object",
+  "required": ["security_id", "signal_session", "entry_session", "exit_session"],
+  "properties": {
+    "security_id": {"type": "string"},
+    "signal_session": {"type": "string"},
+    "entry_session": {"type": "string"},
+    "exit_session": {"type": "string"},
+    "entry_raw_open": {"type": ["number", "null"], "description": "Unadjusted executable open. Not TRI."},
+    "shares": {"type": ["number", "null"]},
+    "notional": {"type": ["number", "null"]}
+  }
+}
