@@ -31,6 +31,7 @@ from app.services.research_eod_v1.backtest import plan_trade
 from app.services.research_eod_v1.ledger import simulate_ledger
 from app.services.research_eod_v1.membership import has_complete_session_bar, source_is_available
 from app.services.research_eod_v1.residual import residual_raw_momentum
+from app.services.research_eod_v1.report_contract import summarize_signal_row
 from app.services.research_eod_v1.snapshot import compute_snapshot
 
 
@@ -887,6 +888,33 @@ def test_later_halt_flag_does_not_rewrite_earlier_session() -> None:
     )
     assert raw.halted is False
     assert raw.currently_tradable is True
+
+
+def test_signal_report_keeps_halt_and_adjustment_fields() -> None:
+    summary = summarize_signal_row(
+        {
+            "security_id": "AAA",
+            "status": "rejected",
+            "score": 10,
+            "setup_state": "rejected",
+            "rejection_reasons": ("NOT_TRADABLE",),
+            "halted": True,
+            "currently_tradable": False,
+            "zero_volume": False,
+            "price_adjustment": "yahoo_unverified_raw",
+            "volume_adjustment": "yahoo_unverified",
+            "vintage_status": "download_time_not_pit",
+            "tri_verified": False,
+            "identity_confidence": "unverified_default_not_checked",
+            "industry_source": "theme_tag_diagnostic_not_economic_parent",
+            "factors": {"M": 1.0, "T": 2.0},
+        }
+    )
+    assert summary["halted"] is True
+    assert summary["currently_tradable"] is False
+    assert summary["price_adjustment"] == "yahoo_unverified_raw"
+    assert summary["vintage_status"] == "download_time_not_pit"
+    assert summary["identity_confidence"] == "unverified_default_not_checked"
 
 
 def test_missing_volume_is_not_a_known_zero_or_halt() -> None:

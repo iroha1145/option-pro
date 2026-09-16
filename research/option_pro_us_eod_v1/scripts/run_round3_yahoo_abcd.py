@@ -25,6 +25,7 @@ from app.services.research_eod_v1.config_load import load_registry  # noqa: E402
 from app.services.research_eod_v1.constants import ALGORITHMS  # noqa: E402
 from app.services.research_eod_v1.data.to_series import bars_to_series  # noqa: E402
 from app.services.research_eod_v1.data.yahoo import YahooDiagnosticProvider  # noqa: E402
+from app.services.research_eod_v1.report_contract import summarize_signal_row  # noqa: E402
 from app.services.research_eod_v1.snapshot import compute_snapshot  # noqa: E402
 from app.services.sectors import SECTORS  # noqa: E402
 
@@ -49,25 +50,7 @@ def _venue(track: str) -> dict:
 
 
 def _row_summary(row: dict) -> dict:
-    setup = row.get("frozen_setup") or {}
-    factors = row.get("factors") or {}
-    return {
-        "security_id": row.get("security_id"),
-        "status": row.get("status"),
-        "score": row.get("score"),
-        "setup_state": row.get("setup_state"),
-        "rejection_reasons": list(row.get("rejection_reasons") or ()),
-        "adv20": row.get("adv20"),
-        "platform_distance_atr": row.get("platform_distance_atr"),
-        "platform_setup_id": setup.get("setup_id"),
-        "platform_lifecycle": setup.get("lifecycle"),
-        "platform_events": [event.get("kind") for event in setup.get("events") or []],
-        "residual_status": row.get("residual_status"),
-        "residual_raw": row.get("residual_raw"),
-        "M": factors.get("M"),
-        "T": factors.get("T"),
-        "source": "yahoo_unverified_close",
-    }
+    return summarize_signal_row(row)
 
 
 def _as_of_after_complete(session: date) -> datetime:

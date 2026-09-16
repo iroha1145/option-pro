@@ -130,6 +130,9 @@ def main() -> int:
                 "eligible": len(eligible_ids),
                 "eligible_ids": eligible_ids,
                 "top_rejections": reasons.most_common(5),
+                "halted_rows": sum(1 for row in payload["rows"] if row.get("halted")),
+                "not_tradable_rows": sum(1 for row in payload["rows"] if row.get("currently_tradable") is False),
+                "tri_verified_rows": sum(1 for row in payload["rows"] if row.get("tri_verified")),
             }
         cards.append(
             {

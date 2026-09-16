@@ -37,6 +37,9 @@ def main() -> int:
                     "tri": bar.tri,
                     "vintage_status": bar.vintage_status,
                     "partial": bar.partial,
+                    "halted": bar.halted,
+                    "price_adjustment": bar.price_adjustment,
+                    "volume_adjustment": bar.volume_adjustment,
                 }
             )
     if not rows:
