@@ -19,12 +19,21 @@
   "bar_rows": 582198,
   "snapshot_rows": 228,
   "session_date": "2026-09-16",
+  "eod_status": "INVALID_EOD_CAPTURE",
+  "last_complete_eod_session": "2026-09-15",
+  "capture_clock_ny": "2026-09-16T13:24:41.368841-04:00",
+  "regular_close_ny": "2026-09-16T16:00:00-04:00",
   "files": {
-    "daily_bars.parquet": "d056327fd03abdb3a276a8f20039ea2af04300bc7ec9c1dd10010343abf7262e",
     "security_master.csv": "08d7ca7c0435a7dc4b261d624b2aa9d29e3faaf00f99eea2a9d01d645cff680d",
-    "theme_snapshot_rows.parquet": "82866d86d1ebabc2dbf4a910d232ac679eeb78499ac6e7a17ebcbeba8b3bb3de"
+    "theme_snapshot_rows.parquet": "82866d86d1ebabc2dbf4a910d232ac679eeb78499ac6e7a17ebcbeba8b3bb3de",
+    "daily_bars.parquet": "removed-from-public-git; see hashes.json historical digest d056327fd03abdb3a276a8f20039ea2af04300bc7ec9c1dd10010343abf7262e"
   },
   "notes": [
+    "INVALID_EOD_CAPTURE",
+    "retrieved_at is 2026-09-16 13:24 NY, before the regular 16:00 close",
+    "as_of_after_close was used to fabricate a same-day close cutoff",
+    "24 theme A/balanced/mid snapshots from this vintage are revoked",
+    "large daily_bars.parquet is not stored in public git",
     "CURRENT_UNIVERSE_DIAGNOSTIC",
     "download_time_not_pit",
     "Close is not verified raw trade price",

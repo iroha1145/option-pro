@@ -1,5 +1,7 @@
 # PR #174 v2 正确性审阅
 
+第三轮续写见 `../return_pack/round3_audit.md`。`797ac6a8` 上的 24 个 2026-09-16 EOD 快照已标 `INVALID_EOD_CAPTURE`。
+
 审阅锚点：`38e570e127d6d47e417c6dffbd09bb44f954c9e0`。
 本轮正确性提交：见 `hashes.json` 的 `code_sha`。
 测试日志：`engineering_tests_v2.log`。命令：`PYTHONPATH=backend pytest -q tests/test_research_eod_v1_*.py` → **68 passed**。

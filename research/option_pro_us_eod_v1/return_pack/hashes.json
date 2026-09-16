@@ -12,5 +12,8 @@
   "yahoo_daily_bars_sha256": "d056327fd03abdb3a276a8f20039ea2af04300bc7ec9c1dd10010343abf7262e",
   "yahoo_security_master_sha256": "08d7ca7c0435a7dc4b261d624b2aa9d29e3faaf00f99eea2a9d01d645cff680d",
   "yahoo_theme_snapshot_sha256": "82866d86d1ebabc2dbf4a910d232ac679eeb78499ac6e7a17ebcbeba8b3bb3de",
-  "note": "Yahoo current-universe diagnostic bars are in return_pack/yahoo_current_universe/."
+  "yahoo_daily_bars_git_status": "removed-from-public-git",
+  "invalid_eod_capture": "2026-09-16T17:24:41.368841+00:00",
+  "last_complete_eod_session": "2026-09-15",
+  "note": "The 2026-09-16 Yahoo tape is INVALID_EOD_CAPTURE and is not stored in public git. Use a controlled offline artifact plus this historical digest to replay."
 }
