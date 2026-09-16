@@ -1,6 +1,9 @@
-# 第一轮回传包
+# 回传包（v1 + v2）
 
-状态：`DATA_INSUFFICIENT`。没有许可的十年 PIT 行情，因此 **没有市场收益数字，没有赢家，不晋升生产**。
+v1：`DATA_INSUFFICIENT`，无许可 PIT，无市场收益。
+v2：正确性修复 + Yahoo 当前池诊断。**仍无十年 PIT 回测，无赢家，不晋升。**
+
+v2 增量：`correctness_audit.md`、`data_source_decision.md`、`provider_probe.json`、`data_capabilities.json`、`history_budget.json`、`download_coverage.csv`、`theme_membership_crosswalk.csv`、`theme_characteristics.csv`、`theme_diagnostic.json`、`v2_trial_counts.json`、`engineering_tests_v2.log`、`production_boundary.diff`。
 
 必含文件：
 

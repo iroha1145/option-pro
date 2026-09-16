@@ -1,0 +1,96 @@
+{
+  "local": {
+    "provider": "local_parquet",
+    "dataset_id": "research-eod-local",
+    "dataset_version": "v1",
+    "probe_status": "DOCUMENTED_ONLY",
+    "daily_bars": "empty",
+    "corporate_actions": "UNSUPPORTED",
+    "classification_history": "UNSUPPORTED",
+    "security_master": "UNSUPPORTED",
+    "delisted_coverage": "unknown",
+    "volume_session_scope": "UNKNOWN",
+    "raw_price_verified": false,
+    "notes": [
+      "Local files are used only when present. Path existence is not market history."
+    ],
+    "capability_level": "ACCESS_TESTED"
+  },
+  "yahoo": {
+    "provider": "yahoo_yfinance",
+    "dataset_id": "yahoo-diagnostic",
+    "dataset_version": "1.5.1",
+    "probe_status": "ACCESS_TESTED",
+    "daily_bars": "available",
+    "corporate_actions": "partial",
+    "classification_history": "UNSUPPORTED",
+    "security_master": "UNSUPPORTED",
+    "delisted_coverage": "survivorship_only",
+    "volume_session_scope": "UNKNOWN",
+    "raw_price_verified": false,
+    "notes": [
+      "locked_target=1.5.1",
+      "imported=1.5.1",
+      "auto_adjust=False does not prove Close is historical raw trade price",
+      "Adj Close is not an executable price",
+      "prepost=False is not proof of regular-session volume",
+      "CURRENT_UNIVERSE / SURVIVORSHIP_RISK / CLASSIFICATION_CURRENT"
+    ],
+    "capability_level": "ACCESS_TESTED"
+  },
+  "massive_env": {
+    "provider": "massive_env",
+    "dataset_id": "massive-research-fallback",
+    "dataset_version": "env-v1",
+    "probe_status": "AUTH_REQUIRED",
+    "daily_bars": "UNSUPPORTED",
+    "corporate_actions": "UNSUPPORTED",
+    "classification_history": "UNSUPPORTED",
+    "security_master": "UNSUPPORTED",
+    "delisted_coverage": "unverified",
+    "volume_session_scope": "UNKNOWN",
+    "raw_price_verified": false,
+    "notes": [
+      "credential_from_env_only",
+      "secret_not_written_to_repo",
+      "research_fallback_not_production_vendor_change",
+      "AUTH_REQUIRED"
+    ],
+    "capability_level": "DOCUMENTED_ONLY"
+  },
+  "sample": [
+    {
+      "symbol": "SPY",
+      "provider": "yahoo_yfinance",
+      "bars": 40,
+      "status": "ok"
+    },
+    {
+      "symbol": "AAPL",
+      "provider": "yahoo_yfinance",
+      "bars": 40,
+      "status": "ok"
+    },
+    {
+      "symbol": "NVDA",
+      "provider": "yahoo_yfinance",
+      "bars": 40,
+      "status": "ok"
+    },
+    {
+      "symbol": "JNJ",
+      "provider": "yahoo_yfinance",
+      "bars": 40,
+      "status": "ok"
+    },
+    {
+      "symbol": "XOM",
+      "provider": "yahoo_yfinance",
+      "bars": 40,
+      "status": "ok"
+    }
+  ],
+  "selected_provider": "yahoo_yfinance",
+  "secret_present_in_report": false,
+  "yahoo_failures": []
+}

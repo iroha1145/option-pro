@@ -114,6 +114,81 @@ class YahooDiagnosticProvider:
                 out.append(CorporateAction(symbol, session, "split", float(row["Stock Splits"])))
         return out
 
+    def fetch_daily_bars_batch(
+        self,
+        symbols: list[str],
+        start: date,
+        end: date,
+    ) -> dict[str, list[ResearchBar]]:
+        """One download call. Empty frame is not a zero-volume print."""
+
+        out: dict[str, list[ResearchBar]] = {symbol: [] for symbol in symbols}
+        if not self.allow_network or not symbols:
+            return out
+        try:
+            import yfinance as yf
+        except Exception as exc:
+            self.failures.append({"symbol": ",".join(symbols), "stage": "batch", "error": type(exc).__name__})
+            return out
+        try:
+            frame = yf.download(
+                symbols,
+                start=start.isoformat(),
+                end=end.isoformat(),
+                group_by="ticker",
+                **DOWNLOAD_PARAMS,
+            )
+        except Exception as exc:
+            self.failures.append({"symbol": "batch", "stage": "download", "error": type(exc).__name__, "detail": str(exc)[:200]})
+            return out
+        if frame is None or getattr(frame, "empty", True):
+            for symbol in symbols:
+                self.failures.append({"symbol": symbol, "stage": "download", "error": "empty"})
+            return out
+        retrieved = datetime.now(timezone.utc)
+        for symbol in symbols:
+            try:
+                sub = frame[symbol] if symbol in frame.columns.get_level_values(0) else None
+            except Exception:
+                sub = None
+            if sub is None:
+                self.failures.append({"symbol": symbol, "stage": "download", "error": "missing_from_batch"})
+                continue
+            sub = sub.rename(columns=str.lower)
+            bars: list[ResearchBar] = []
+            for stamp, row in sub.iterrows():
+                session = stamp.date() if hasattr(stamp, "date") else date.fromisoformat(str(stamp)[:10])
+                close = _finite(row.get("close"))
+                open_ = _finite(row.get("open"))
+                volume = _finite(row.get("volume"))
+                if close is None and open_ is None:
+                    continue
+                bars.append(
+                    ResearchBar(
+                        security_id=symbol,
+                        session_date=session,
+                        open=open_,
+                        high=_finite(row.get("high")),
+                        low=_finite(row.get("low")),
+                        close=close,
+                        raw_open=open_,
+                        raw_close=close,
+                        volume=volume,
+                        dollar_volume=None if close is None or volume is None else close * volume,
+                        tri=_finite(row.get("adj close")) or close,
+                        volume_scope="UNKNOWN",
+                        price_adjustment="yahoo_unverified_raw",
+                        volume_adjustment="yahoo_unverified",
+                        missing=close is None or open_ is None,
+                        source_published_at=retrieved,
+                        vintage_status="download_time_not_pit",
+                    )
+                )
+            out[symbol] = bars
+            if not bars:
+                self.failures.append({"symbol": symbol, "stage": "download", "error": "empty"})
+        return out
+
     def fetch_daily_bars(
         self,
         symbol: str,

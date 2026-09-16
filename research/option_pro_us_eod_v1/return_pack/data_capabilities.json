@@ -1,0 +1,39 @@
+{
+  "generated_at": "2026-09-16T21:00:00Z",
+  "compute_sha_at_probe": "439fb3634ac4a17e54fc8db5fe88dd11458f270d",
+  "providers": {
+    "local_parquet": {
+      "capability_level": "ACCESS_TESTED",
+      "daily_bars": "empty",
+      "classification_history": "UNSUPPORTED",
+      "corporate_actions": "UNSUPPORTED"
+    },
+    "yahoo_yfinance": {
+      "capability_level": "SAMPLE_VERIFIED",
+      "yfinance_version": "1.5.1",
+      "daily_bars": "available",
+      "raw_price_verified": false,
+      "volume_session_scope": "UNKNOWN",
+      "delisted_coverage": "survivorship_only",
+      "classification_history": "UNSUPPORTED",
+      "current_universe_downloaded": 214,
+      "current_universe_unique": 214,
+      "bar_end": "2026-09-16",
+      "request_start": "2015-01-02",
+      "request_end_exclusive": "2026-09-17"
+    },
+    "massive_env": {
+      "capability_level": "DOCUMENTED_ONLY",
+      "used_this_round": false,
+      "probe_status": "AUTH_REQUIRED"
+    }
+  },
+  "experiment_gates": {
+    "engineering_tests": "ok",
+    "current_universe_diagnostic_snapshot": "ok_24_themes_one_session",
+    "market_backtest_864": "not_run",
+    "pit_classification": "MISSING",
+    "execution_data": "UNVERIFIED"
+  },
+  "source_parity": "SOURCE_PARITY_PENDING"
+}

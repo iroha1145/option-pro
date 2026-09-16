@@ -1,5 +1,22 @@
 {
-  "providers": [],
+  "providers": [
+    {
+      "name": "yahoo_yfinance",
+      "capability_level": "SAMPLE_VERIFIED",
+      "used_for": "current_universe_diagnostic",
+      "raw_price_verified": false
+    },
+    {
+      "name": "local_parquet",
+      "capability_level": "ACCESS_TESTED",
+      "used_for": "none"
+    },
+    {
+      "name": "massive_env",
+      "capability_level": "DOCUMENTED_ONLY",
+      "used_for": "none"
+    }
+  ],
   "license_verified": false,
   "delisted_covered": false,
   "pit_classification_covered": false,
