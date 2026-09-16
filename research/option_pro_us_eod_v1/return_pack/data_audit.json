@@ -1,0 +1,140 @@
+{
+  "providers": [],
+  "license_verified": false,
+  "delisted_covered": false,
+  "pit_classification_covered": false,
+  "historical_venue_covered": false,
+  "adjustment_policy": "not_verified_split_vs_dividend",
+  "volume_session_scope": "unknown_regular_vs_full_day",
+  "historical_revisions_limitations": [
+    "No vendor vintage/revision journal was available."
+  ],
+  "corporate_action_gaps": [
+    "No point-in-time split/dividend/merger tape was licensed in this run."
+  ],
+  "current_universe_audit": {
+    "theme_count": 24,
+    "unique_tickers": 214,
+    "overlap_tickers": {
+      "NVDA": [
+        "semiconductors",
+        "ai_cloud"
+      ],
+      "MSFT": [
+        "software",
+        "ai_cloud"
+      ],
+      "PLTR": [
+        "software",
+        "ai_cloud"
+      ],
+      "GOOGL": [
+        "ai_cloud",
+        "social_internet"
+      ],
+      "AMZN": [
+        "ai_cloud",
+        "retail"
+      ],
+      "META": [
+        "ai_cloud",
+        "social_internet"
+      ],
+      "DELL": [
+        "ai_cloud",
+        "consumer_electronics"
+      ],
+      "TSLA": [
+        "automotive",
+        "ev_supply"
+      ],
+      "RIVN": [
+        "automotive",
+        "ev_supply"
+      ],
+      "LCID": [
+        "automotive",
+        "ev_supply"
+      ],
+      "NIO": [
+        "automotive",
+        "china_adr"
+      ],
+      "LI": [
+        "automotive",
+        "china_adr"
+      ],
+      "XPEV": [
+        "automotive",
+        "china_adr"
+      ],
+      "COIN": [
+        "fintech",
+        "crypto"
+      ],
+      "BIDU": [
+        "social_internet",
+        "china_adr"
+      ],
+      "BABA": [
+        "social_internet",
+        "china_adr"
+      ],
+      "PDD": [
+        "social_internet",
+        "china_adr"
+      ]
+    },
+    "dot_tickers_not_a_venue_test": [
+      "RMS.PA"
+    ],
+    "static_venue_notes": {
+      "LVMUY": {
+        "listing_country": "US",
+        "exchange": "OTC",
+        "decision": "OTC_EXCLUDED",
+        "note": "US OTC ADR. Not a major-exchange common share."
+      },
+      "RMS.PA": {
+        "listing_country": "FR",
+        "exchange": "EURONEXT PARIS",
+        "decision": "NON_US_LISTING",
+        "note": "Dot suffix is incidental; the listing country/exchange exclude it."
+      },
+      "CFRUY": {
+        "listing_country": "US",
+        "exchange": "OTC",
+        "decision": "OTC_EXCLUDED",
+        "note": "US OTC ADR. Not a major-exchange common share."
+      }
+    },
+    "etf_subasset_hints_current_only": {
+      "SPY": "broad_equity",
+      "QQQ": "broad_equity",
+      "IWM": "broad_equity",
+      "DIA": "broad_equity",
+      "VTI": "broad_equity",
+      "VOO": "broad_equity",
+      "ARKK": "thematic_equity",
+      "SOXX": "sector_equity",
+      "XLF": "sector_equity",
+      "XLE": "sector_equity",
+      "GLD": "gold",
+      "TLT": "long_bond"
+    },
+    "pit_classification": "MISSING",
+    "primary_sector_rule": "first_listing_wins_not_authoritative",
+    "historical_membership": "NOT_AVAILABLE_IN_REPO"
+  },
+  "massive_mcp": "unavailable_or_unauthenticated",
+  "yahoo_ sufficed": false,
+  "blocking_items": [
+    "Licensed US daily OHLCV with delistings from 2010 (or ten complete calendar years) plus 330-session warmup.",
+    "Point-in-time exchange/MIC/security-type membership.",
+    "Point-in-time economic industry and theme membership with valid-from/valid-to.",
+    "Split-adjusted OHLC, total-return, and raw unadjusted prices as three separate tracks.",
+    "Regular-session vs full-day volume vintage.",
+    "Point-in-time earnings/binary/financing/ADR/fund calendars.",
+    "Historical market-cap buckets as of each session."
+  ]
+}

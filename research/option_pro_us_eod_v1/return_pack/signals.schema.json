@@ -1,0 +1,7 @@
+{
+  "security_id": "string",
+  "session_date": "date",
+  "algorithm_id": "string",
+  "status": "string",
+  "note": "empty until a licensed market run exists"
+}

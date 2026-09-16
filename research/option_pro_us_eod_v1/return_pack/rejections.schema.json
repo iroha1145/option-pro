@@ -1,0 +1,5 @@
+{
+  "security_id": "string",
+  "reason": "string",
+  "session_date": "date"
+}

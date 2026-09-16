@@ -1,0 +1,10 @@
+{
+  "source_sha": "60b2c4cdc2e39263b0768aa63718de727c3914e2",
+  "config_sha256": "4b8f9711f5afe1cb29ad07c84412e54fca0998e8995e3bb19e311b866aed73cd",
+  "data_snapshot_sha256": null,
+  "registry_sha256": "88e8f452432622c3e6fc9846967466350887de7ceb7f64abe2c37eeb859d13bd",
+  "experiment_manifest_sha256": "ce40c971dede0d2aa1266a3d777ca3d8246f7d82fac8dee48c594b9a6bee3110",
+  "etf_subasset_manifest_sha256": "94d347337e19118c0651ed17d47b72030cbb647618b4dbb87f68440039040d44",
+  "composite_manifest_sha256": "5896e1bf937f260748dce5f8e1f223e427f00ccd39cf77f702b3c3cef2d0a2b9",
+  "reference_registry_sha256": "67b0f517ed0c11790d70541f961f4c73d9ee11a53ac25a92ec884093c4d365d6"
+}
