@@ -37,6 +37,15 @@ def _as_date(value: Any) -> date | None:
     return date.fromisoformat(text)
 
 
+def _identity_field(value: Any, default: str) -> str:
+    if value is None:
+        return default
+    text = str(value).strip()
+    if not text or text.lower() in {"nan", "none", "null"}:
+        return default
+    return text
+
+
 def _as_float(value: Any) -> float | None:
     if value is None or value == "":
         return None
@@ -158,10 +167,11 @@ class LocalParquetProvider:
                         security_id=str(row.get("security_id") or row.get("ticker")),
                         provider_symbol=str(row.get("provider_symbol") or row.get("ticker") or row.get("security_id")),
                         share_class=row.get("share_class") or None,
-                        security_type=str(row.get("security_type") or "CS"),
+                        security_type=_identity_field(row.get("security_type"), "UNKNOWN"),
                         primary_mic=row.get("primary_mic") or None,
-                        listing_country=str(row.get("listing_country") or "US"),
+                        listing_country=_identity_field(row.get("listing_country"), ""),
                         asset_track=str(row.get("asset_track") or "stock"),
+                        identity_confidence=_identity_field(row.get("identity_confidence"), "unverified"),
                     )
                 )
         return rows
@@ -179,10 +189,11 @@ class LocalParquetProvider:
                     security_id=str(row.get("security_id") or row.get("ticker")),
                     provider_symbol=str(row.get("provider_symbol") or row.get("ticker")),
                     share_class=row.get("share_class"),
-                    security_type=str(row.get("security_type") or "CS"),
+                    security_type=_identity_field(row.get("security_type"), "UNKNOWN"),
                     primary_mic=row.get("primary_mic"),
-                    listing_country=str(row.get("listing_country") or "US"),
+                    listing_country=_identity_field(row.get("listing_country"), ""),
                     asset_track=str(row.get("asset_track") or "stock"),
+                    identity_confidence=_identity_field(row.get("identity_confidence"), "unverified"),
                 )
             )
         return out
@@ -205,8 +216,8 @@ class LocalParquetProvider:
                         high=_as_float(row.get("high")),
                         low=_as_float(row.get("low")),
                         close=close,
-                        raw_open=_as_float(row.get("raw_open") if "raw_open" in row else row.get("open")),
-                        raw_close=_as_float(row.get("raw_close") if "raw_close" in row else row.get("close")),
+                        raw_open=_as_float(row["raw_open"]) if "raw_open" in row else None,
+                        raw_close=_as_float(row["raw_close"]) if "raw_close" in row else None,
                         volume=volume,
                         dollar_volume=_as_float(row.get("dollar_volume")),
                         tri=_as_float(row.get("tri")) if "tri" in (row or {}) and row.get("tri") not in (None, "") else None,
@@ -239,8 +250,8 @@ class LocalParquetProvider:
                     high=_as_float(row.get("high")),
                     low=_as_float(row.get("low")),
                     close=_as_float(row.get("close")),
-                    raw_open=_as_float(row.get("raw_open")) if "raw_open" in row else _as_float(row.get("open")),
-                    raw_close=_as_float(row.get("raw_close")) if "raw_close" in row else _as_float(row.get("close")),
+                    raw_open=_as_float(row["raw_open"]) if "raw_open" in row else None,
+                    raw_close=_as_float(row["raw_close"]) if "raw_close" in row else None,
                     volume=_as_float(row.get("volume")),
                     dollar_volume=_as_float(row.get("dollar_volume")),
                     tri=_as_float(row.get("tri")) if "tri" in row else None,

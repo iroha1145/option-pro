@@ -141,7 +141,9 @@ def test_one_unknown_mark_does_not_erase_other_known_positions():
                              capital=10_000., holding_sessions=20, cost_multiple=0,
                              signals=[_signal('AAA', days[1]), _signal('BBB', days[1])])
     row = next(r for r in result['daily_equity'] if r['session'] == days[4].isoformat())
-    assert row['equity'] is None or row['equity'] >= row['cash'] + 2000
+    assert row['equity'] is None
+    assert row['known_positions_value'] == pytest.approx(2000)
+    assert row['unknown_exposure'] == ['AAA']
 
 
 def test_missing_high_low_are_not_fabricated_into_complete_bars():

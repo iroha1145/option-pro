@@ -7,7 +7,7 @@ data from ``compute_snapshot``.
 
 from __future__ import annotations
 
-FEATURE_VERSION = "us-eod-research-features-v1.3"
+FEATURE_VERSION = "us-eod-research-features-v1.4"
 ALGORITHM_FAMILY_VERSION = "us-eod-research-abcd-v1"
 COMPOSITE_VERSION = "us-eod-research-m1m4-v1"
 SCORE_VERSION = "us-eod-research-score-v1"

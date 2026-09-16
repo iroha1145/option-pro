@@ -516,6 +516,14 @@ def _breakout_track(
     }
 
 
+def _session_halted(series: SecuritySeries, t: int) -> bool:
+    """Halt is a dated event. A later end-of-sample flag cannot rewrite earlier days."""
+
+    if series.bar_halted is not None:
+        return bool(series.bar_halted[t])
+    return bool(series.halted) and t == len(series.dates) - 1
+
+
 def extract_raw(
     series: SecuritySeries,
     *,
@@ -622,9 +630,11 @@ def extract_raw(
         setup["confirmed_at"] = breakout_track.get("confirmed_at")
         if breakout_track.get("through") and not breakout_track.get("still_through"):
             setup["breakout_failed_at"] = series.dates[t].isoformat()
-    zero_volume = not np.isfinite(series.volume[t]) or float(series.volume[t]) <= 0
-    halted = bool(series.halted) or zero_volume
-    currently_tradable = not halted
+    volume_t = float(series.volume[t])
+    volume_missing = not np.isfinite(volume_t)
+    zero_volume = (not volume_missing) and volume_t <= 0
+    halted = _session_halted(series, t)
+    currently_tradable = not (halted or zero_volume)
     anchor = known_support if known_support is not None else sma20
     p_score = None
     depth = None

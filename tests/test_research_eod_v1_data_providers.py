@@ -21,8 +21,21 @@ def test_local_provider_reads_csv_and_does_not_invent_missing(tmp_path) -> None:
     rows = provider.fetch_daily_bars("AAA", date(2024, 1, 2), date(2024, 1, 4))
     assert isinstance(rows, list) and len(rows) == 2
     assert isinstance(rows[0], ResearchBar)
+    assert rows[0].raw_open is None
+    assert rows[0].raw_close is None
     assert provider.fetch_daily_bars("BBB", date(2024, 1, 2), date(2024, 1, 4)) == []
     assert provider.load_classification_history("AAA") == UNSUPPORTED
+
+
+def test_local_provider_does_not_default_us_cs_identity(tmp_path) -> None:
+    (tmp_path / "security_master.csv").write_text(
+        "security_id,provider_symbol,asset_track\nAAA,AAA,stock\n",
+        encoding="utf-8",
+    )
+    identities = LocalParquetProvider(tmp_path).load_security_master()
+    assert identities[0].security_type == "UNKNOWN"
+    assert identities[0].listing_country == ""
+    assert identities[0].identity_confidence == "unverified"
 
 
 def test_yahoo_rejects_inconsistent_ohlc_without_repair() -> None:

@@ -49,7 +49,7 @@ def _signal(sid: str, session: date, notional: float = 2000.0) -> dict:
 
 
 def test_feature_version_bumped_for_round3() -> None:
-    assert FEATURE_VERSION == "us-eod-research-features-v1.3"
+    assert FEATURE_VERSION == "us-eod-research-features-v1.4"
 
 
 def test_residual_short_ipo_is_not_ok() -> None:
@@ -826,3 +826,48 @@ def test_snapshot_rows_carry_halt_and_adjustment_fields() -> None:
     assert row["currently_tradable"] is False
     assert row["price_adjustment"] == "unverified"
     assert row["vintage_status"] == "download_time_not_pit"
+
+
+def test_later_halt_flag_does_not_rewrite_earlier_session() -> None:
+    days = trading_days(date(2018, 1, 2), 80)
+    flagged = make_series("FLAG", days, trending_close(80, 40, 0.1))
+    flagged.halted = True
+    earlier_flag = flagged.slice_through(days[-5])
+    assert earlier_flag is not None
+    assert earlier_flag.halted is False
+    series = make_series("NVDA", days, trending_close(80, 40, 0.1))
+    series.halted = True
+    series.bar_halted = np.zeros(80, dtype=bool)
+    series.bar_halted[-1] = True
+    earlier = series.slice_through(days[-5])
+    assert earlier is not None
+    assert earlier.halted is False
+    assert earlier.bar_halted is not None
+    assert not bool(earlier.bar_halted[-1])
+    raw = factors.extract_raw(
+        earlier,
+        market=earlier,
+        panel={"NVDA": earlier},
+        horizon="mid",
+        momentum_blend=(0.25, 0.4, 0.35),
+        sector_gates={"base_min_sessions": 20, "base_max_sessions": 80, "base_min_distinct_touches": 2},
+    )
+    assert raw.halted is False
+    assert raw.currently_tradable is True
+
+
+def test_missing_volume_is_not_a_known_zero_or_halt() -> None:
+    days = trading_days(date(2018, 1, 2), 80)
+    series = make_series("NVDA", days, trending_close(80, 40, 0.1))
+    series.volume[-1] = np.nan
+    series.dollar_volume[-1] = np.nan
+    raw = factors.extract_raw(
+        series,
+        market=series,
+        panel={"NVDA": series},
+        horizon="mid",
+        momentum_blend=(0.25, 0.4, 0.35),
+        sector_gates={"base_min_sessions": 20, "base_max_sessions": 80, "base_min_distinct_touches": 2},
+    )
+    assert raw.zero_volume is False
+    assert raw.halted is False

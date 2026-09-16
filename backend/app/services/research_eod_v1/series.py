@@ -104,7 +104,7 @@ class SecuritySeries:
             theme_ids=self.theme_ids,
             venue_metadata=self.venue_metadata,
             source_available_at=self.source_available_at,
-            halted=self.halted,
+            halted=_halted_through(self, index),
             raw_open=self.raw_open[:end].copy() if self.raw_open is not None else None,
             dividends=tuple(item for item in self.dividends if item[0] <= session),
             splits=tuple(item for item in self.splits if item[0] <= session),
@@ -121,6 +121,14 @@ class SecuritySeries:
             reconstruction_mode=self.reconstruction_mode,
             dividend_events=tuple(item for item in self.dividend_events if _event_session(item) <= session),
         )
+
+
+def _halted_through(series: "SecuritySeries", index: int) -> bool:
+    """Slice keeps only a halt that is known on the last kept session."""
+
+    if series.bar_halted is not None:
+        return bool(series.bar_halted[index])
+    return bool(series.halted) and index == len(series.dates) - 1
 
 
 def _event_session(event: Mapping[str, Any]) -> date:
