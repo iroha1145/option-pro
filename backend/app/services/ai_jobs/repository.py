@@ -1004,6 +1004,24 @@ class AIJobRepository:
         now = _iso()
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
+            if job_type == "signal_analysis" and not force_retry:
+                ticker = str(payload.get("ticker") or "").strip().upper()
+                if ticker:
+                    active_row = connection.execute(
+                        """
+                        SELECT j.*,s.submission_source FROM ai_jobs AS j
+                        JOIN ai_job_sources AS s ON s.job_id=j.job_id
+                        WHERE j.job_type=?
+                          AND j.status IN ('pending','queued','in_progress')
+                          AND upper(json_extract(j.payload_json, '$.ticker'))=?
+                        ORDER BY j.created_at DESC,j.job_id DESC
+                        LIMIT 1
+                        """,
+                        (job_type, ticker),
+                    ).fetchone()
+                    if active_row is not None:
+                        connection.commit()
+                        return dict(active_row), False
             matches = [
                 dict(row)
                 for row in connection.execute(

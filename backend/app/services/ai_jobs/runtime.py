@@ -104,6 +104,12 @@ def _bounded_untrusted_json(payload: dict[str, Any]) -> str:
     return raw
 
 
+def ensure_provider_input_bound(payload: dict[str, Any]) -> str:
+    """Reject payloads the worker would fail before they enter the paid queue."""
+
+    return _bounded_untrusted_json(payload)
+
+
 def _shared_instructions() -> str:
     return (
         "所有面向用户的自然语言必须使用简体中文，output_language必须为zh-CN；"

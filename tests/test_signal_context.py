@@ -249,10 +249,20 @@ def test_build_signal_context_drops_blocks_that_exceed_the_time_budget(
     monkeypatch.setattr(signal_context, "_news_block", lambda _symbol: None)
     monkeypatch.setattr(signal_context, "macro_conditions_context", lambda: None)
 
-    context = asyncio.run(signal_context.build_signal_context("AMD"))
+    async def run():
+        context = await signal_context.build_signal_context("AMD")
+        pending = [
+            task
+            for task in asyncio.all_tasks()
+            if not task.done() and task is not asyncio.current_task()
+        ]
+        return context, pending
+
+    context, pending = asyncio.run(run())
 
     assert context["status"]["market_context"] == "unavailable"
     assert context["status"]["upcoming_earnings"] == "ok"
+    assert pending == []
 
 
 def test_market_block_prefers_fresh_snapshot_and_falls_back_to_live(monkeypatch):
@@ -322,7 +332,7 @@ def test_earnings_block_projects_the_matching_calendar_row(monkeypatch):
                 "earnings": [
                     {"ticker": "NVDA", "earnings_date": "2026-08-26"},
                     {
-                        "ticker": "AMD",
+                        "ticker": "amd",
                         "earnings_date": "2026-08-27",
                         "days_until": 25,
                         "timing": "AMC",
@@ -407,6 +417,10 @@ def test_payload_drops_oversized_blocks_in_declared_order():
 
 
 def test_job_payload_validation_bounds_context_tickers():
+    with pytest.raises(ValueError, match="ticker_invalid"):
+        validate_job_payload("signal_analysis", {})
+    with pytest.raises(ValueError, match="ticker_invalid"):
+        validate_job_payload("signal_analysis", {"ticker": "../etc"})
     validate_job_payload("signal_analysis", {"ticker": "AMD"})
     validate_job_payload(
         "signal_analysis", {"ticker": "AMD", "context_tickers": ["NVDA", "TSM"]}

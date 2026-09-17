@@ -93,23 +93,6 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _clamp(
-    value: float | int | None,
-    lo: float = 0.0,
-    hi: float = 100.0,
-    default: float | None = None,
-) -> float | None:
-    if value is None:
-        return default
-    try:
-        number = float(value)
-    except Exception:
-        return default
-    if not math.isfinite(number):
-        return default
-    return max(lo, min(hi, number))
-
-
 def _pct_rank(items: list[dict[str, Any]], key: str) -> dict[str, float]:
     values = sorted((row[key] for row in items if row.get(key) is not None))
     if not values:

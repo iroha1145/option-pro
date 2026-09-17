@@ -386,7 +386,9 @@ async def _earnings_block(symbol: str) -> dict[str, Any] | None:
         return None
     payload = entry["payload"]
     for row in payload.get("earnings") or []:
-        if not isinstance(row, dict) or row.get("ticker") != symbol:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("ticker") or "").strip().upper() != symbol:
             continue
         return {
             "earnings_date": row.get("earnings_date"),
@@ -438,11 +440,29 @@ async def build_signal_context(symbol: str) -> dict[str, Any]:
         ),
     }
     await asyncio.wait(tasks.values(), timeout=CONTEXT_TIMEOUT_SECONDS)
+    timed_out = [task for task in tasks.values() if not task.done()]
+    if timed_out:
+        logger.warning(
+            "signal context assembly timed out after %.1fs (%s)",
+            CONTEXT_TIMEOUT_SECONDS,
+            ",".join(sorted(key for key, task in tasks.items() if not task.done())),
+        )
+        for task in timed_out:
+            task.cancel()
+        await asyncio.gather(*timed_out, return_exceptions=True)
     blocks: dict[str, Any] = {}
     status: dict[str, str] = {}
     context_tickers: list[str] = []
     for key, task in tasks.items():
-        value = task.result() if task.done() else None
+        if task.cancelled():
+            value = None
+        elif task.done():
+            try:
+                value = task.result()
+            except Exception:
+                value = None
+        else:
+            value = None
         if key == "recent_news" and value is not None:
             value, tickers = value
             for ticker in tickers:
@@ -457,12 +477,6 @@ async def build_signal_context(symbol: str) -> dict[str, Any]:
         else:
             blocks[key] = value
             status[key] = "ok"
-    if any(not task.done() for task in tasks.values()):
-        logger.warning(
-            "signal context assembly timed out after %.1fs (%s)",
-            CONTEXT_TIMEOUT_SECONDS,
-            ",".join(sorted(key for key, task in tasks.items() if not task.done())),
-        )
     return {
         "blocks": blocks,
         "status": status,

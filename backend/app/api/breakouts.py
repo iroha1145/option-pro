@@ -968,6 +968,10 @@ def ticker_events(ticker: str) -> BreakoutTickerResponse:
     try:
         repository = _repository(settings)
         items = _live_overlay(repository, list(repository.events_for_ticker(symbol)))
+        try:
+            items = repository.overlay_t1_evaluations(items)
+        except (OSError, ValueError, sqlite3.Error, BreakoutRepositoryError):
+            logger.warning("Could not load T1 evaluation overlay")
     except SchemaVersionError:
         return BreakoutTickerResponse(
             as_of=_now(),
@@ -987,12 +991,14 @@ def ticker_events(ticker: str) -> BreakoutTickerResponse:
             current_state=None,
         )
     macro = _macro_reader() if items else None
+    events = [_public_event(settings, dict(item), macro=macro) for item in items]
+    _register_displayed_stocks(events)
     return BreakoutTickerResponse(
         as_of=_now(),
         status="active" if items else "empty",
         versions=_versions(settings),
         ticker=symbol,
-        events=[_public_event(settings, dict(item), macro=macro) for item in items],
+        events=events,
         current_state=str(items[0].get("lifecycle_state")) if items else None,
     )
 
