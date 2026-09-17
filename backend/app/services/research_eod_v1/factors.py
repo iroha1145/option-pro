@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date
 from typing import Any
 
@@ -516,6 +516,57 @@ def _breakout_track(
     }
 
 
+def _theme_setup_from_gates(
+    series: SecuritySeries,
+    t: int,
+    sector_gates: dict[str, Any],
+    close: np.ndarray,
+    atr_t1: float | None,
+) -> dict[str, Any]:
+    """Theme-gate B/setup/breakout fields. Shared residual and pivots stay elsewhere."""
+
+    b_score, b_status, setup = resolve_frozen_setup(
+        series,
+        t,
+        min_sessions=int(sector_gates.get("base_min_sessions", 20)),
+        max_sessions=int(sector_gates.get("base_max_sessions", 80)),
+        min_touches=int(sector_gates.get("base_min_distinct_touches", 2)),
+    )
+    breakout_track = _breakout_track(series, t, setup, sector_gates)
+    if setup is not None and breakout_track is not None:
+        setup = dict(setup)
+        if breakout_track.get("first_cross_date") and not setup.get("first_cross_at"):
+            setup["first_cross_at"] = breakout_track.get("first_cross_date")
+        elif breakout_track.get("first_cross_date"):
+            setup["first_cross_at"] = setup.get("first_cross_at") or breakout_track.get("first_cross_date")
+        setup["confirmed_at"] = breakout_track.get("confirmed_at")
+        if breakout_track.get("through") and not breakout_track.get("still_through"):
+            setup["breakout_failed_at"] = series.dates[t].isoformat()
+    platform_distance = None
+    if setup is not None and atr_t1 and atr_t1 > 0:
+        platform_distance = float((close[t] - float(setup["resistance_high"])) / atr_t1)
+    return {
+        "b_score": b_score,
+        "b_status": b_status,
+        "frozen_setup": setup,
+        "breakout_track": breakout_track,
+        "platform_distance_atr": platform_distance,
+    }
+
+
+def apply_sector_gates(
+    raw: RawComponents,
+    series: SecuritySeries,
+    sector_gates: dict[str, Any],
+) -> RawComponents:
+    """Re-derive theme-gate fields on a shared extract. Does not recompute residual."""
+
+    t = len(series.dates) - 1
+    atr_t1 = atr_sma_at(series.high, series.low, series.close, t - 1, ATR_PERIOD) if t >= 1 else None
+    gated = _theme_setup_from_gates(series, t, sector_gates, series.close, atr_t1)
+    return replace(raw, **gated)
+
+
 def extract_raw(
     series: SecuritySeries,
     *,
@@ -605,23 +656,13 @@ def extract_raw(
     lh_ll = structure_label == "LH+LL"
     planned = known_support
     invalidated = bool(planned is not None and close[t] < planned)
-    b_score, b_status, setup = resolve_frozen_setup(
-        series,
-        t,
-        min_sessions=int(sector_gates.get("base_min_sessions", 20)),
-        max_sessions=int(sector_gates.get("base_max_sessions", 80)),
-        min_touches=int(sector_gates.get("base_min_distinct_touches", 2)),
+    gated = _theme_setup_from_gates(series, t, sector_gates, close, atr_t1)
+    b_score, b_status, setup, breakout_track = (
+        gated["b_score"],
+        gated["b_status"],
+        gated["frozen_setup"],
+        gated["breakout_track"],
     )
-    breakout_track = _breakout_track(series, t, setup, sector_gates)
-    if setup is not None and breakout_track is not None:
-        setup = dict(setup)
-        if breakout_track.get("first_cross_date") and not setup.get("first_cross_at"):
-            setup["first_cross_at"] = breakout_track.get("first_cross_date")
-        elif breakout_track.get("first_cross_date"):
-            setup["first_cross_at"] = setup.get("first_cross_at") or breakout_track.get("first_cross_date")
-        setup["confirmed_at"] = breakout_track.get("confirmed_at")
-        if breakout_track.get("through") and not breakout_track.get("still_through"):
-            setup["breakout_failed_at"] = series.dates[t].isoformat()
     volume_t = float(series.volume[t])
     volume_missing = not np.isfinite(volume_t)
     zero_volume = (not volume_missing) and volume_t <= 0
@@ -687,9 +728,7 @@ def extract_raw(
     ma_distance = None
     if sma20 is not None and atr_t1 and atr_t1 > 0:
         ma_distance = float((close[t] - sma20) / atr_t1)
-    platform_distance = None
-    if setup is not None and atr_t1 and atr_t1 > 0:
-        platform_distance = float((close[t] - float(setup["resistance_high"])) / atr_t1)
+    platform_distance = gated["platform_distance_atr"]
     invalidation_distance = None
     if planned is not None and atr_t1 and atr_t1 > 0:
         invalidation_distance = float((close[t] - planned) / atr_t1)

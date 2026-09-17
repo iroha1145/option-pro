@@ -15,6 +15,7 @@ import pytest
 
 from app.services.research_eod_v1.calendar_asof import eod_evaluation_as_of, next_session
 from app.services.research_eod_v1.config_load import load_registry
+from app.services.research_eod_v1.factors import extract_raw
 from app.services.research_eod_v1.fixtures import make_series, trading_days, trending_close
 from app.services.research_eod_v1.ledger import simulate_ledger, size_notional
 from app.services.research_eod_v1.measurement import (
@@ -377,6 +378,49 @@ def test_ic_n_is_within_day_family_not_pooled_across_dates() -> None:
     )
     assert pooled.n == 20
     assert by_day["2023-06-12"]["ic"] != pytest.approx(pooled.value or 0.0) or by_day["2023-06-13"]["ic"] is None
+
+
+def test_precomputed_raws_still_classify_theme_candidates() -> None:
+    days, panel = _two_theme_panel()
+    session = days[-1]
+    refs = reference_panel(panel, "semiconductors", session)
+    registry = load_registry()
+    live = compute_snapshot(
+        eod_evaluation_as_of(session),
+        refs,
+        "u_measure_live",
+        registry,
+        sector_id="semiconductors",
+        algorithm="A_trend_quality",
+    )
+    foreign_gates = registry["sectors"]["software"]["gates"]
+    blend = tuple(registry["horizons"]["mid"]["momentum_blend"])
+    raws = {
+        sid: extract_raw(
+            series,
+            market=refs.get("SPY"),
+            panel=refs,
+            horizon="mid",
+            momentum_blend=blend,
+            sector_gates=foreign_gates,
+        )
+        for sid, series in refs.items()
+    }
+    cached = compute_snapshot(
+        eod_evaluation_as_of(session),
+        refs,
+        "u_measure_cached",
+        registry,
+        sector_id="semiconductors",
+        algorithm="A_trend_quality",
+        precomputed_raws=raws,
+    )
+    assert "NVDA" in cached["candidate_ids"]
+    assert "AAPL" not in cached["candidate_ids"]
+    assert cached["candidate_ids"] == live["candidate_ids"]
+    assert {row["security_id"]: row["score"] for row in cached["rows"]} == {
+        row["security_id"]: row["score"] for row in live["rows"]
+    }
 
 
 def test_runner_keeps_foreign_theme_in_reference_not_candidates() -> None:

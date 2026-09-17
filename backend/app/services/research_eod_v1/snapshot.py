@@ -14,7 +14,7 @@ from app.services.research_eod_v1.algorithms import setup_for
 from app.services.research_eod_v1.calendar_asof import last_complete_eod_session, require_aware, session_close_at
 from app.services.research_eod_v1.data.capture_store import eod_pool_exclusions, series_is_late
 from app.services.research_eod_v1.cross_section import q_star
-from app.services.research_eod_v1.factors import RawComponents, extract_raw
+from app.services.research_eod_v1.factors import RawComponents, apply_sector_gates, extract_raw
 from app.services.research_eod_v1.mathutil import clip100
 from app.services.research_eod_v1.membership import (
     has_complete_session_bar,
@@ -286,17 +286,17 @@ def compute_snapshot(
     for sid, series in t_complete.items():
         if precomputed_raws is not None and sid in precomputed_raws:
             raws[sid] = precomputed_raws[sid]
-            continue
-        raws[sid] = extract_raw(
-            series,
-            market=market,
-            panel=residual_panel,
-            horizon=horizon,
-            momentum_blend=blend,  # type: ignore[arg-type]
-            sector_gates=sector["gates"],
-            spy_residual_allowed=spy_residual_allowed,
-            matched_market=matched,
-        )
+        else:
+            raws[sid] = extract_raw(
+                series,
+                market=market,
+                panel=residual_panel,
+                horizon=horizon,
+                momentum_blend=blend,  # type: ignore[arg-type]
+                sector_gates=sector["gates"],
+                spy_residual_allowed=spy_residual_allowed,
+                matched_market=matched,
+            )
         ok, reason = is_theme_candidate(
             series,
             sector_id=sector_id,
@@ -306,6 +306,8 @@ def compute_snapshot(
         )
         if ok:
             candidate_ids.add(sid)
+            if precomputed_raws is not None and sid in precomputed_raws:
+                raws[sid] = apply_sector_gates(raws[sid], series, sector["gates"])
         elif reason == "TRACK_MISMATCH":
             _keep_reject(series, "TRACK_MISMATCH")
         if sid in {"SPY", "QQQ"} or series.asset_track == target_track:

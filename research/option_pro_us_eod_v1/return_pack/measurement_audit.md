@@ -9,6 +9,7 @@ Head is recorded by git. Statistics version is `us-eod-research-stats-v1.0`. Fea
 - Final LOW_SCORE eligibility is not the scorer universe. Event performance is separate.
 - `independent_events` from disjoint-set increments is `SUPERSEDED_METRIC`. Continuous streams use security/family/horizon time overlap.
 - Runner passes the full same-track T-complete pool plus SPY/QQQ. Theme B names stay in A's reference set, not A's candidates. Theme tags are not verified industry.
+- Shared `precomputed_raws` must still run theme membership. A cache hit cannot skip `candidate_ids`. Theme gates are reapplied only on candidates so one residual extract can be reused.
 - `_size_notional` uses a dimensionless risk distance. 1/2/0.5/10 geometry scales and 2-for-1 support 90 vs 45 match.
 - Cash acquisitions share the sell finalize path and write `cash_in` / `filled_at` / `exit_reason`. Later lot dividends recompute the originating trade. Zero consideration is filled; missing price is not.
 - `signal_available_at` sets the earliest open. NEXT_DAY_CONFIRM is a research policy, not vendor `finalized_at`.

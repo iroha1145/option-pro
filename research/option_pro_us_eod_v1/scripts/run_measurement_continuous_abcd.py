@@ -281,6 +281,7 @@ def main() -> int:
                 ],
                 "reason": "pooled-across-days ordinal Spearman and disjoint-set event increment",
                 "old_retrieved_at_unchanged": True,
+                "old_invalid_eod_retrieved_at": "2026-09-16T17:24:41.368841+00:00",
                 "old_code_sha": "0c1d419416f057fba2c8184abb54a2f029edbff7",
                 "statistics_version_new": STATISTICS_VERSION,
             },
@@ -338,6 +339,8 @@ def main() -> int:
                 any_usable = True
                 track = "etf" if theme_id == "etfs" else "stock"
                 if track not in raw_cache:
+                    # Shared residual/pivots once per track. Theme gates reapplied
+                    # on candidates inside compute_snapshot.
                     raw_cache[track] = _extract_raws(refs, registry, "mid")
                 raws = raw_cache[track]
                 any_eligible = False
