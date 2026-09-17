@@ -56,7 +56,8 @@ def reference_panel(
 ) -> dict[str, SecuritySeries]:
     """Full same-track T-complete pool plus SPY/QQQ. Candidates stay theme-limited."""
 
-    target_track = "etf" if (SECTORS.get(theme_id) or {}).get("asset_track") == "etf" else "stock"
+    sector = SECTORS.get(theme_id) or {}
+    target_track = "etf" if theme_id == "etfs" or sector.get("asset_track") == "etf" else "stock"
     out: dict[str, SecuritySeries] = {}
     for sid, series in panel.items():
         if sid in {"SPY", "QQQ"}:

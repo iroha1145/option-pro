@@ -442,6 +442,9 @@ def test_runner_keeps_foreign_theme_in_reference_not_candidates() -> None:
     assert "NVDA" in payload["candidate_ids"] or "NVDA" in {row["security_id"] for row in payload["rows"]}
     assert "AAPL" in payload["reference_ids"]
     assert "SPY" in payload["reference_ids"]
+    etf_refs = reference_panel(panel, "etfs", session)
+    assert "SPY" in etf_refs and "QQQ" in etf_refs
+    assert "NVDA" not in etf_refs
 
 
 def test_forward_label_needs_unclipped_future_bars() -> None:

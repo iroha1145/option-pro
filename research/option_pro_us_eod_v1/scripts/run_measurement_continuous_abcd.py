@@ -32,7 +32,8 @@ from app.services.research_eod_v1.calendar_asof import (  # noqa: E402
 from app.services.research_eod_v1.config_load import load_registry  # noqa: E402
 from app.services.research_eod_v1.constants import ALGORITHMS  # noqa: E402
 from app.services.research_eod_v1.data.to_series import bars_to_series  # noqa: E402
-from app.services.research_eod_v1.factors import extract_raw  # noqa: E402
+from app.services.research_eod_v1.factors import apply_sector_gates, extract_raw  # noqa: E402
+from app.services.research_eod_v1.membership import is_theme_candidate  # noqa: E402
 from app.services.research_eod_v1.measurement import (  # noqa: E402
     attach_forward_label,
     pairing_diff,
@@ -625,10 +626,23 @@ def main() -> int:
                 any_usable = True
                 track = "etf" if theme_id == "etfs" else "stock"
                 if track not in raw_cache:
-                    # Shared residual/pivots once per track. Theme gates reapplied
-                    # on candidates inside compute_snapshot.
+                    # Shared residual/pivots once per track. Theme gates applied
+                    # once per theme below, not four times inside each algorithm.
                     raw_cache[track] = _extract_raws(refs, registry, "mid")
                 raws = raw_cache[track]
+                gates = registry["sectors"][theme_id]["gates"]
+                gated = {}
+                for sid, series in refs.items():
+                    raw = raws.get(sid)
+                    if raw is None:
+                        continue
+                    ok, _reason = is_theme_candidate(
+                        series,
+                        sector_id=theme_id,
+                        session=session,
+                        target_track=track,
+                    )
+                    gated[sid] = apply_sector_gates(raw, series, gates) if ok else raw
                 any_eligible = False
                 for algorithm in ALGORITHMS:
                     payload = compute_snapshot(
@@ -641,7 +655,9 @@ def main() -> int:
                         profile="balanced",
                         horizon="mid",
                         source_finalized_through=session,
-                        precomputed_raws=raws,
+                        precomputed_raws=gated,
+                        reapply_theme_gates=False,
+                        already_session_clipped=True,
                     )
                     executed += 1
                     fam = theme_stats[theme_id]["family"][algorithm]

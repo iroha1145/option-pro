@@ -29,6 +29,8 @@ from app.services.research_eod_v1.venue import classify_venue
 ensure_reference_on_path()
 from registry import CommonInputs, common_rejections, resolve_weights, score_features  # type: ignore
 
+_CS_MEMO: dict[tuple, dict[str, Any]] = {}
+
 
 def _v_state(algorithm: str, raw: RawComponents) -> float | None:
     if raw.rvol is None and algorithm != "C_trend_pullback":
@@ -206,6 +208,8 @@ def compute_snapshot(
     source_finalized_through: date | None = None,
     late_securities: tuple[str, ...] = (),
     precomputed_raws: Mapping[str, RawComponents] | None = None,
+    reapply_theme_gates: bool = True,
+    already_session_clipped: bool = False,
 ) -> dict[str, Any]:
     """Deterministic snapshot. Adding bars after ``as_of`` must not change T."""
 
@@ -216,9 +220,12 @@ def compute_snapshot(
         late_securities=late_securities,
     )
     late = eod_pool_exclusions(late_securities)
-    panel = clip_panel_to_as_of(historical_data, as_of)
-    panel = {sid: series.slice_through(session) for sid, series in panel.items()}
-    panel = {sid: series for sid, series in panel.items() if series is not None}
+    if already_session_clipped:
+        panel = {sid: series for sid, series in historical_data.items() if series is not None}
+    else:
+        panel = clip_panel_to_as_of(historical_data, as_of)
+        panel = {sid: series.slice_through(session) for sid, series in panel.items()}
+        panel = {sid: series for sid, series in panel.items() if series is not None}
     registry = config["registry"] if "registry" in config else config
     sector = registry["sectors"][sector_id]
     profile_cfg = registry["profiles"][profile]
@@ -306,7 +313,7 @@ def compute_snapshot(
         )
         if ok:
             candidate_ids.add(sid)
-            if precomputed_raws is not None and sid in precomputed_raws:
+            if reapply_theme_gates and precomputed_raws is not None and sid in precomputed_raws:
                 raws[sid] = apply_sector_gates(raws[sid], series, sector["gates"])
         elif reason == "TRACK_MISMATCH":
             _keep_reject(series, "TRACK_MISMATCH")
@@ -319,47 +326,88 @@ def compute_snapshot(
             if has_complete_session_bar(series, session)
         }
     xref = {sid: raw for sid, raw in raws.items() if sid in reference_ids}
-    tracks = {sid: raw.asset_track for sid, raw in xref.items()}
-    industries = {sid: raw.industry_id for sid, raw in xref.items()}
-    parents = {sid: raw.parent_industry_id for sid, raw in xref.items()}
-    q_slope = q_star({s: r.slope50 for s, r in xref.items()}, industry=industries, parent=parents, tracks=tracks)
-    q_m63 = q_star({s: r.m63 for s, r in xref.items()}, industry=industries, parent=parents, tracks=tracks)
-    q_m126 = q_star({s: r.m126_skip21 for s, r in xref.items()}, industry=industries, parent=parents, tracks=tracks)
-    q_m252 = q_star({s: r.m252_skip21 for s, r in xref.items()}, industry=industries, parent=parents, tracks=tracks)
-    q_resid = q_star({s: r.residual.raw for s, r in xref.items()}, industry=industries, parent=parents, tracks=tracks)
-    q_imb = q_star({s: r.imbalance20 for s, r in xref.items()}, industry=industries, parent=parents, tracks=tracks)
-    q_ns = q_star({s: r.sigma20 for s, r in xref.items()}, industry=industries, parent=parents, tracks=tracks, invert=True)
-    q_ng = q_star({s: r.gap_tail252 for s, r in xref.items()}, industry=industries, parent=parents, tracks=tracks, invert=True)
-    q_nd = q_star({s: r.max_drawdown63 for s, r in xref.items()}, industry=industries, parent=parents, tracks=tracks, invert=True)
-
-    industry_ret: dict[str, float | None] = {}
-    breadth: dict[str, float | None] = {}
-    spy_m63 = raws["SPY"].m63 if "SPY" in raws else None
-    for sid, raw in xref.items():
-        peers = [
-            other
-            for other, item in xref.items()
-            if other != sid and item.industry_id and item.industry_id == raw.industry_id
-        ]
-        if len(peers) < 5:
-            parent_peers = [
+    cs_key = (
+        session,
+        tuple(
+            sorted(
+                (
+                    sid,
+                    raw.slope50,
+                    raw.m63,
+                    raw.m126_skip21,
+                    raw.m252_skip21,
+                    raw.residual.raw,
+                    raw.imbalance20,
+                    raw.sigma20,
+                    raw.gap_tail252,
+                    raw.max_drawdown63,
+                    raw.industry_id,
+                    raw.parent_industry_id,
+                    raw.asset_track,
+                )
+                for sid, raw in xref.items()
+            )
+        ),
+    )
+    cached_cs = _CS_MEMO.get(cs_key)
+    if cached_cs is None:
+        tracks = {sid: raw.asset_track for sid, raw in xref.items()}
+        industries = {sid: raw.industry_id for sid, raw in xref.items()}
+        parents = {sid: raw.parent_industry_id for sid, raw in xref.items()}
+        cached_cs = {
+            "q_slope": q_star({s: r.slope50 for s, r in xref.items()}, industry=industries, parent=parents, tracks=tracks),
+            "q_m63": q_star({s: r.m63 for s, r in xref.items()}, industry=industries, parent=parents, tracks=tracks),
+            "q_m126": q_star({s: r.m126_skip21 for s, r in xref.items()}, industry=industries, parent=parents, tracks=tracks),
+            "q_m252": q_star({s: r.m252_skip21 for s, r in xref.items()}, industry=industries, parent=parents, tracks=tracks),
+            "q_resid": q_star({s: r.residual.raw for s, r in xref.items()}, industry=industries, parent=parents, tracks=tracks),
+            "q_imb": q_star({s: r.imbalance20 for s, r in xref.items()}, industry=industries, parent=parents, tracks=tracks),
+            "q_ns": q_star({s: r.sigma20 for s, r in xref.items()}, industry=industries, parent=parents, tracks=tracks, invert=True),
+            "q_ng": q_star({s: r.gap_tail252 for s, r in xref.items()}, industry=industries, parent=parents, tracks=tracks, invert=True),
+            "q_nd": q_star({s: r.max_drawdown63 for s, r in xref.items()}, industry=industries, parent=parents, tracks=tracks, invert=True),
+        }
+        industry_ret: dict[str, float | None] = {}
+        breadth: dict[str, float | None] = {}
+        spy_m63 = raws["SPY"].m63 if "SPY" in raws else None
+        for sid, raw in xref.items():
+            peers = [
                 other
                 for other, item in xref.items()
-                if other != sid and item.parent_industry_id and item.parent_industry_id == raw.parent_industry_id
+                if other != sid and item.industry_id and item.industry_id == raw.industry_id
             ]
-            peers = parent_peers
-        if len(peers) < 5:
-            industry_ret[sid] = None
-            breadth[sid] = None
-            continue
-        rets = [xref[p].m63 for p in peers if xref[p].m63 is not None]
-        if not rets or spy_m63 is None:
-            industry_ret[sid] = None
-        else:
-            industry_ret[sid] = float(sum(rets) / len(rets) - spy_m63)
-        flags = [xref[p].above_sma50 for p in peers if xref[p].above_sma50 is not None]
-        breadth[sid] = None if len(flags) < 5 else sum(1 for flag in flags if flag) / len(flags)
-    q_g = q_star(industry_ret, industry=parents, parent=parents, tracks=tracks)
+            if len(peers) < 5:
+                parent_peers = [
+                    other
+                    for other, item in xref.items()
+                    if other != sid and item.parent_industry_id and item.parent_industry_id == raw.parent_industry_id
+                ]
+                peers = parent_peers
+            if len(peers) < 5:
+                industry_ret[sid] = None
+                breadth[sid] = None
+                continue
+            rets = [xref[p].m63 for p in peers if xref[p].m63 is not None]
+            if not rets or spy_m63 is None:
+                industry_ret[sid] = None
+            else:
+                industry_ret[sid] = float(sum(rets) / len(rets) - spy_m63)
+            flags = [xref[p].above_sma50 for p in peers if xref[p].above_sma50 is not None]
+            breadth[sid] = None if len(flags) < 5 else sum(1 for flag in flags if flag) / len(flags)
+        cached_cs["q_g"] = q_star(industry_ret, industry=parents, parent=parents, tracks=tracks)
+        cached_cs["breadth"] = breadth
+        if len(_CS_MEMO) >= 8:
+            _CS_MEMO.clear()
+        _CS_MEMO[cs_key] = cached_cs
+    q_slope = cached_cs["q_slope"]
+    q_m63 = cached_cs["q_m63"]
+    q_m126 = cached_cs["q_m126"]
+    q_m252 = cached_cs["q_m252"]
+    q_resid = cached_cs["q_resid"]
+    q_imb = cached_cs["q_imb"]
+    q_ns = cached_cs["q_ns"]
+    q_ng = cached_cs["q_ng"]
+    q_nd = cached_cs["q_nd"]
+    q_g = cached_cs["q_g"]
+    breadth = cached_cs["breadth"]
 
     rows: list[dict[str, Any]] = []
     required = ("T", "M", "S", "R")
