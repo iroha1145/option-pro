@@ -359,7 +359,7 @@ def main() -> int:
                         elig += 1
                         any_eligible = True
                         day_eligible.add(row["security_id"])
-                        series = session_panel.get(row["security_id"]) or theme_panel.get(row["security_id"])
+                        series = theme_panel.get(row["security_id"])
                         score = row.get("score")
                         if series is not None and score is not None:
                             for horizon in LABELS:
