@@ -224,6 +224,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--max-sessions", type=int, default=0)
     parser.add_argument("--pairing-only", action="store_true")
+    parser.add_argument("--include-pairing", action="store_true")
     args = parser.parse_args()
     if not CACHE.exists():
         raise SystemExit(f"offline Yahoo cache missing: {CACHE}")
@@ -235,7 +236,7 @@ def main() -> int:
     registry = load_registry()
     label_cut = {horizon: shift_sessions(ALLOWED_END, -horizon) for horizon in LABELS}
 
-    if True:
+    if args.pairing_only or args.include_pairing:
         pairing = []
         for session in [day for day in OLD_SESSIONS if day in set(all_sessions) or day <= ALLOWED_END][:3]:
             theme_id = "semiconductors"
