@@ -205,6 +205,7 @@ def compute_snapshot(
     extra_members: set[str] | None = None,
     source_finalized_through: date | None = None,
     late_securities: tuple[str, ...] = (),
+    precomputed_raws: Mapping[str, RawComponents] | None = None,
 ) -> dict[str, Any]:
     """Deterministic snapshot. Adding bars after ``as_of`` must not change T."""
 
@@ -283,6 +284,9 @@ def compute_snapshot(
     candidate_ids: set[str] = set()
     reference_ids: set[str] = set()
     for sid, series in t_complete.items():
+        if precomputed_raws is not None and sid in precomputed_raws:
+            raws[sid] = precomputed_raws[sid]
+            continue
         raws[sid] = extract_raw(
             series,
             market=market,
