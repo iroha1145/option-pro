@@ -12,7 +12,8 @@ import pickle
 import subprocess
 import sys
 from collections import Counter, defaultdict
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from multiprocessing import get_context
 from datetime import date
 from pathlib import Path
 
@@ -197,10 +198,138 @@ def _extract_raws(session_panel: dict[str, SecuritySeries], registry: dict, hori
         )
 
     raws = {}
-    with ThreadPoolExecutor(max_workers=8) as pool:
+    with ThreadPoolExecutor(max_workers=4) as pool:
         for sid, raw in pool.map(_one, session_panel):
             raws[sid] = raw
     return raws
+
+
+_WORKER: dict = {}
+
+
+def _init_session_worker(panel: dict[str, SecuritySeries], registry: dict) -> None:
+    _WORKER["panel"] = panel
+    _WORKER["registry"] = registry
+
+
+def _process_one_session(session: date, panel: dict[str, SecuritySeries], registry: dict) -> tuple[list[str], list[str], int]:
+    as_of = eod_evaluation_as_of(session)
+    clipped = {sid: item for sid, series in panel.items() if (item := _clip(series, session))}
+    raw_cache: dict[str, dict] = {}
+    log_lines: list[str] = []
+    row_lines: list[str] = []
+    executed = 0
+    for theme_id in SECTORS:
+        refs = reference_panel(clipped, theme_id, session)
+        if not refs:
+            continue
+        track = "etf" if theme_id == "etfs" else "stock"
+        if track not in raw_cache:
+            raw_cache[track] = _extract_raws(refs, registry, "mid")
+        raws = raw_cache[track]
+        gates = registry["sectors"][theme_id]["gates"]
+        gated = {}
+        for sid, series in refs.items():
+            raw = raws.get(sid)
+            if raw is None:
+                continue
+            ok, _reason = is_theme_candidate(
+                series,
+                sector_id=theme_id,
+                session=session,
+                target_track=track,
+            )
+            gated[sid] = apply_sector_gates(raw, series, gates) if ok else raw
+        for algorithm in ALGORITHMS:
+            payload = compute_snapshot(
+                as_of,
+                refs,
+                "u_measurement_continuous",
+                registry,
+                sector_id=theme_id,
+                algorithm=algorithm,
+                profile="balanced",
+                horizon="mid",
+                source_finalized_through=session,
+                precomputed_raws=gated,
+                reapply_theme_gates=False,
+                already_session_clipped=True,
+            )
+            executed += 1
+            elig = 0
+            for row in payload["rows"]:
+                if row.get("status") == "eligible":
+                    elig += 1
+                for label_horizon in LABELS:
+                    label = (
+                        attach_forward_label(
+                            panel[row["security_id"]],
+                            session,
+                            label_horizon,
+                            last_allowed=ALLOWED_END,
+                            holdout_start=HOLDOUT_START,
+                        )
+                        if row["security_id"] in panel
+                        else {"label": None, "label_matured_at": None, "reason": "NO_SERIES"}
+                    )
+                    record = {
+                        "security_id": row["security_id"],
+                        "signal_session": session.isoformat(),
+                        "theme_id": theme_id,
+                        "algorithm": algorithm,
+                        "profile": "balanced",
+                        "horizon": "mid",
+                        "label_horizon": label_horizon,
+                        "setup_id": row.get("setup_state"),
+                        "source": "historical_reconstruction",
+                        "feature_version": FEATURE_VERSION,
+                        "score_version": "us-eod-research-score-v1",
+                        "statistics_version": STATISTICS_VERSION,
+                        "label_matured_at": label.get("label_matured_at"),
+                        "factors": row.get("factors"),
+                        "score": row.get("score"),
+                        "setup_gate": row.get("setup_state"),
+                        "final_eligible": row.get("status") == "eligible",
+                        "status": row.get("status"),
+                        "label": label.get("label"),
+                        "label_reason": label.get("reason"),
+                        "rejection_reasons": list(row.get("rejection_reasons") or ()),
+                        "industry_source": row.get("industry_source"),
+                        "snapshot_key": snapshot_identity_key(
+                            session=session.isoformat(),
+                            theme_id=theme_id,
+                            algorithm=algorithm,
+                            profile="balanced",
+                            horizon="mid",
+                            security_id=row["security_id"],
+                        ),
+                    }
+                    row_lines.append(json.dumps(record, sort_keys=True, default=str))
+            log_lines.append(
+                json.dumps(
+                    {
+                        "session": session.isoformat(),
+                        "theme_id": theme_id,
+                        "algorithm": algorithm,
+                        "candidates": len(payload["candidate_ids"]),
+                        "references": len(payload["reference_ids"]),
+                        "eligible": elig,
+                        "eligible_ids": [
+                            row["security_id"] for row in payload["rows"] if row.get("status") == "eligible"
+                        ],
+                    }
+                )
+            )
+    return log_lines, row_lines, executed
+
+
+def _mp_session(session_iso: str) -> tuple[str, list[str], list[str], int]:
+    logs, rows, executed = _process_one_session(
+        date.fromisoformat(session_iso),
+        _WORKER["panel"],
+        _WORKER["registry"],
+    )
+    return session_iso, logs, rows, executed
 
 
 def _empty_theme_stats() -> dict[str, dict]:
@@ -509,6 +638,7 @@ def main() -> int:
     parser.add_argument("--pairing-only", action="store_true")
     parser.add_argument("--include-pairing", action="store_true")
     parser.add_argument("--finalize-only", action="store_true")
+    parser.add_argument("--workers", type=int, default=2)
     args = parser.parse_args()
     if not CACHE.exists():
         raise SystemExit(f"offline Yahoo cache missing: {CACHE}")
@@ -601,143 +731,44 @@ def main() -> int:
         LOG.unlink()
     if ROWS.exists() and not done_sessions:
         ROWS.unlink()
+    remaining = [session for session in all_sessions if session.isoformat() not in done_sessions]
+    if any(session >= HOLDOUT_START for session in remaining):
+        raise SystemExit("holdout leaked")
     log = LOG.open("a", encoding="utf-8")
     rows_handle = ROWS.open("a", encoding="utf-8")
     try:
-        for session in all_sessions:
-            if session.isoformat() in done_sessions:
-                continue
-            if session >= HOLDOUT_START:
-                raise SystemExit(f"holdout leaked: {session}")
-            as_of = eod_evaluation_as_of(session)
-            clipped = {sid: item for sid, series in panel.items() if (item := _clip(series, session))}
-            raw_cache: dict[str, dict] = {}
-            any_usable = False
-            for theme_id in SECTORS:
-                refs = reference_panel(clipped, theme_id, session)
-                if not refs:
-                    theme_stats[theme_id]["missing_data_dates"] += 1
-                    continue
-                warmup = sum(1 for series in refs.values() if series.security_id not in {"SPY", "QQQ"} and len(series.dates) < FEATURE_READY_BARS)
-                members = [series for sid, series in refs.items() if sid not in {"SPY", "QQQ"}]
-                if members and all(len(series.dates) < FEATURE_READY_BARS for series in members):
-                    theme_stats[theme_id]["warmup_dates"] += 1
-                theme_stats[theme_id]["valid_dates"] += 1
-                any_usable = True
-                track = "etf" if theme_id == "etfs" else "stock"
-                if track not in raw_cache:
-                    # Shared residual/pivots once per track. Theme gates applied
-                    # once per theme below, not four times inside each algorithm.
-                    raw_cache[track] = _extract_raws(refs, registry, "mid")
-                raws = raw_cache[track]
-                gates = registry["sectors"][theme_id]["gates"]
-                gated = {}
-                for sid, series in refs.items():
-                    raw = raws.get(sid)
-                    if raw is None:
-                        continue
-                    ok, _reason = is_theme_candidate(
-                        series,
-                        sector_id=theme_id,
-                        session=session,
-                        target_track=track,
-                    )
-                    gated[sid] = apply_sector_gates(raw, series, gates) if ok else raw
-                any_eligible = False
-                for algorithm in ALGORITHMS:
-                    payload = compute_snapshot(
-                        as_of,
-                        refs,
-                        "u_measurement_continuous",
-                        registry,
-                        sector_id=theme_id,
-                        algorithm=algorithm,
-                        profile="balanced",
-                        horizon="mid",
-                        source_finalized_through=session,
-                        precomputed_raws=gated,
-                        reapply_theme_gates=False,
-                        already_session_clipped=True,
-                    )
-                    executed += 1
-                    fam = theme_stats[theme_id]["family"][algorithm]
-                    elig = 0
-                    for row in payload["rows"]:
-                        for reason in row.get("rejection_reasons") or ():
-                            fam["reasons"][str(reason)] += 1
-                        if row.get("status") == "eligible":
-                            elig += 1
-                            any_eligible = True
-                        for label_horizon in LABELS:
-                            label = attach_forward_label(
-                                panel[row["security_id"]],
-                                session,
-                                label_horizon,
-                                last_allowed=ALLOWED_END,
-                                holdout_start=HOLDOUT_START,
-                            ) if row["security_id"] in panel else {"label": None, "label_matured_at": None, "reason": "NO_SERIES"}
-                            record = {
-                                "security_id": row["security_id"],
-                                "signal_session": session.isoformat(),
-                                "theme_id": theme_id,
-                                "algorithm": algorithm,
-                                "profile": "balanced",
-                                "horizon": "mid",
-                                "label_horizon": label_horizon,
-                                "setup_id": row.get("setup_state"),
-                                "source": "historical_reconstruction",
-                                "feature_version": FEATURE_VERSION,
-                                "score_version": "us-eod-research-score-v1",
-                                "statistics_version": STATISTICS_VERSION,
-                                "label_matured_at": label.get("label_matured_at"),
-                                "factors": row.get("factors"),
-                                "score": row.get("score"),
-                                "setup_gate": row.get("setup_state"),
-                                "final_eligible": row.get("status") == "eligible",
-                                "status": row.get("status"),
-                                "label": label.get("label"),
-                                "label_reason": label.get("reason"),
-                                "rejection_reasons": list(row.get("rejection_reasons") or ()),
-                                "industry_source": row.get("industry_source"),
-                                "snapshot_key": snapshot_identity_key(
-                                    session=session.isoformat(),
-                                    theme_id=theme_id,
-                                    algorithm=algorithm,
-                                    profile="balanced",
-                                    horizon="mid",
-                                    security_id=row["security_id"],
-                                ),
-                            }
-                            rows_handle.write(json.dumps(record, sort_keys=True, default=str) + "\n")
-                    fam["eligible"] += elig
-                    fam["rejected"] += max(0, len(payload["rows"]) - elig)
-                    theme_stats[theme_id]["eligible_name_sessions"] += elig
-                    theme_stats[theme_id]["funnel"].update(_funnel_from_rows(payload["rows"]))
-                    log.write(
-                        json.dumps(
-                            {
-                                "session": session.isoformat(),
-                                "theme_id": theme_id,
-                                "algorithm": algorithm,
-                                "candidates": len(payload["candidate_ids"]),
-                                "references": len(payload["reference_ids"]),
-                                "eligible": elig,
-                                "eligible_ids": [
-                                    row["security_id"] for row in payload["rows"] if row.get("status") == "eligible"
-                                ],
-                            }
-                        )
-                        + "\n"
-                    )
-                if not any_eligible:
-                    theme_stats[theme_id]["zero_result_dates"] += 1
-            if not any_usable:
-                pass
+        def _commit_session(session_iso: str, log_lines: list[str], row_lines: list[str], n_exec: int) -> None:
+            nonlocal executed
+            for line in log_lines:
+                log.write(line + "\n")
+            for line in row_lines:
+                rows_handle.write(line + "\n")
+            executed += n_exec
+            done_sessions.add(session_iso)
             rows_handle.flush()
             log.flush()
-            done_sessions.add(session.isoformat())
             CHECKPOINT.write_text(json.dumps({"done_sessions": sorted(done_sessions)}), encoding="utf-8")
-            print(json.dumps({"session": session.isoformat(), "executed": executed, "done": len(done_sessions)}), flush=True)
+            print(json.dumps({"session": session_iso, "executed": executed, "done": len(done_sessions)}), flush=True)
+
+        workers = max(1, int(args.workers))
+        if workers == 1:
+            for session in remaining:
+                log_lines, row_lines, n_exec = _process_one_session(session, panel, registry)
+                _commit_session(session.isoformat(), log_lines, row_lines, n_exec)
+        else:
+            ctx = get_context("fork")
+            with ProcessPoolExecutor(
+                max_workers=workers,
+                mp_context=ctx,
+                initializer=_init_session_worker,
+                initargs=(panel, registry),
+            ) as pool:
+                for session_iso, log_lines, row_lines, n_exec in pool.map(
+                    _mp_session,
+                    [session.isoformat() for session in remaining],
+                    chunksize=1,
+                ):
+                    _commit_session(session_iso, log_lines, row_lines, n_exec)
     finally:
         rows_handle.close()
         log.close()
