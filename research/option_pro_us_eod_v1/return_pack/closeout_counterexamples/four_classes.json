@@ -1,0 +1,50 @@
+{
+  "note": "Synthetic closeout counterexamples after A-E. Not market history.",
+  "cases": [
+    {
+      "class": "A_future_signal_and_leftover",
+      "without_future_notional": 1000.0,
+      "with_future_notional": 1000.0,
+      "later_nonoverlap_amounts": [
+        1000.0,
+        1000.0
+      ]
+    },
+    {
+      "class": "B_pending_exit_and_halt",
+      "deferred_exit_session": "2024-01-08",
+      "deferred_original_planned_exit": "2024-01-05",
+      "halted_sell_sessions": [
+        "2024-01-08"
+      ],
+      "halted_defer_notes": [
+        "HALTED_SESSION"
+      ]
+    },
+    {
+      "class": "C_lot_bound_dividends",
+      "after_exit_equity": 10020.0,
+      "after_exit_trade_net": 0.01,
+      "after_exit_dividend_cash": 20.0,
+      "reentry_nets": [
+        0.01,
+        0.0
+      ],
+      "reentry_dividends": [
+        20.0,
+        0.0
+      ],
+      "pnl_basis": "marked_equity",
+      "trade_pnl_basis": "settled_cash_including_lot_dividends",
+      "dividend_pay_date_policy": "vendor_or_EX_PLUS_ONE_RESEARCH_PROXY"
+    },
+    {
+      "class": "D_excluded_target_residual",
+      "history_sessions": 400,
+      "target_in_panel": false,
+      "status": "OK",
+      "raw_is_finite": true,
+      "raised": false
+    }
+  ]
+}

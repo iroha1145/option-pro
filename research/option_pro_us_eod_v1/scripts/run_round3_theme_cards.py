@@ -10,18 +10,18 @@ import json
 import pickle
 import sys
 from collections import Counter
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "backend"))
 
 from app.services.research_eod_v1.calendar_asof import (  # noqa: E402
+    VENDOR_WITHOUT_FINALIZED_FIELD_POLICY,
     capture_as_of,
+    disclosed_source_finalized_through,
+    eod_evaluation_as_of,
     last_complete_eod_session,
-    last_known_finalized_session,
-    session_close_at,
 )
 from app.services.research_eod_v1.config_load import load_registry  # noqa: E402
 from app.services.research_eod_v1.constants import ALGORITHMS  # noqa: E402
@@ -31,8 +31,6 @@ from app.services.research_eod_v1.snapshot import compute_snapshot  # noqa: E402
 from app.services.research_eod_v1.universe_audit import ETF_SUBASSET_HINTS  # noqa: E402
 from app.services.sectors import SECTORS  # noqa: E402
 
-ET = ZoneInfo("America/New_York")
-ALLOWED = date(2026, 9, 15)
 START = date(2018, 1, 2)
 END = date(2026, 9, 17)
 CACHE = ROOT / "research" / "option_pro_us_eod_v1" / "data" / "cache" / "round3_yahoo_abcd"
@@ -52,10 +50,8 @@ def _venue(track: str) -> dict:
 
 def main() -> int:
     clock = capture_as_of(datetime.now(timezone.utc))
-    session = last_known_finalized_session(clock, last_proven_finalized=ALLOWED)
-    if session > ALLOWED:
-        raise SystemExit(f"clock {clock.isoformat()} selected {session}, later than {ALLOWED}")
-    as_of = clock if last_complete_eod_session(clock, source_finalized_through=session) == session else session_close_at(session) + timedelta(minutes=30)
+    session = disclosed_source_finalized_through(clock)
+    as_of = clock if last_complete_eod_session(clock, source_finalized_through=session) == session else eod_evaluation_as_of(session)
 
     appearances: dict[str, list[str]] = {}
     for theme_id, sector in SECTORS.items():
@@ -160,6 +156,7 @@ def main() -> int:
         "head_note": "24-theme A/B/C/D on one allowed complete session; signal diagnostics only",
         "capture_clock": clock.isoformat(),
         "last_complete_eod_session": session.isoformat(),
+        "vendor_finalization_policy": VENDOR_WITHOUT_FINALIZED_FIELD_POLICY,
         "downloaded_tickers": len(panel),
         "requested_tickers": len(tickers),
         "partial_bars_isolated": partial_bars,

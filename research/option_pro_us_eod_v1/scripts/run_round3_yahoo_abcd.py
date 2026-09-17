@@ -16,10 +16,11 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "backend"))
 
 from app.services.research_eod_v1.calendar_asof import (  # noqa: E402
+    VENDOR_WITHOUT_FINALIZED_FIELD_POLICY,
     capture_as_of,
+    disclosed_source_finalized_through,
+    eod_evaluation_as_of,
     last_complete_eod_session,
-    last_known_finalized_session,
-    session_close_at,
 )
 from app.services.research_eod_v1.config_load import load_registry  # noqa: E402
 from app.services.research_eod_v1.constants import ALGORITHMS  # noqa: E402
@@ -30,7 +31,7 @@ from app.services.research_eod_v1.snapshot import compute_snapshot  # noqa: E402
 from app.services.sectors import SECTORS  # noqa: E402
 
 ET = ZoneInfo("America/New_York")
-ALLOWED = date(2026, 9, 15)
+HOLDOUT_START = date(2024, 7, 1)
 START = date(2018, 1, 2)
 END = date(2026, 9, 17)
 THEMES = ("semiconductors", "software", "energy", "etfs")
@@ -59,9 +60,7 @@ def _as_of_after_complete(session: date) -> datetime:
 
 def main() -> int:
     clock = capture_as_of(datetime.now(timezone.utc))
-    live_session = last_known_finalized_session(clock, last_proven_finalized=ALLOWED)
-    if live_session > ALLOWED:
-        raise SystemExit(f"live clock {clock.isoformat()} selected {live_session}, later than allowed {ALLOWED}")
+    live_session = disclosed_source_finalized_through(clock)
 
     tickers: list[str] = []
     theme_of: dict[str, list[str]] = {}
@@ -132,7 +131,7 @@ def main() -> int:
     cards = []
     executed = 0
     for session in sessions:
-        as_of = _as_of_after_complete(session) if session < live_session else clock
+        as_of = eod_evaluation_as_of(session) if session < live_session else clock
         if last_complete_eod_session(as_of, source_finalized_through=session) != session:
             as_of = _as_of_after_complete(session)
         for theme_id in THEMES:
@@ -181,7 +180,9 @@ def main() -> int:
         "head_note": "round3 Yahoo A/B/C/D on allowed complete sessions; not market PnL; Close not verified raw",
         "capture_clock": clock.isoformat(),
         "last_complete_eod_session": live_session.isoformat(),
-        "allowed_not_after": ALLOWED.isoformat(),
+        "vendor_finalization_policy": VENDOR_WITHOUT_FINALIZED_FIELD_POLICY,
+        "holdout_start": HOLDOUT_START.isoformat(),
+        "holdout_unsealed": False,
         "sessions": [day.isoformat() for day in sessions],
         "downloaded_tickers": len(panel),
         "requested_tickers": len(tickers),

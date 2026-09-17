@@ -16,7 +16,12 @@ from app.services.research_eod_v1.config_load import load_registry  # noqa: E402
 from app.services.research_eod_v1.data.to_series import bars_to_series  # noqa: E402
 from app.services.research_eod_v1.data.capture_store import ImmutableCaptureStore  # noqa: E402
 from app.services.research_eod_v1.data.yahoo import YahooDiagnosticProvider  # noqa: E402
-from app.services.research_eod_v1.calendar_asof import capture_as_of, last_complete_eod_session  # noqa: E402
+from app.services.research_eod_v1.calendar_asof import (  # noqa: E402
+    LIVE_CAPTURE,
+    VENDOR_WITHOUT_FINALIZED_FIELD_POLICY,
+    capture_as_of,
+    disclosed_source_finalized_through,
+)
 from app.services.research_eod_v1.snapshot import compute_snapshot  # noqa: E402
 from app.services.research_eod_v1.universe_audit import ETF_SUBASSET_HINTS  # noqa: E402
 from app.services.research_eod_v1.venue import CURRENT_UNIVERSE_VENUE_NOTES  # noqa: E402
@@ -108,7 +113,7 @@ def main() -> int:
     theme_cards = []
     if "SPY" not in series_map and "SPY" in appearances:
         pass
-    session = last_complete_eod_session(clock) if series_map else None
+    session = disclosed_source_finalized_through(clock) if series_map else None
     as_of = clock if session else None
     store = ImmutableCaptureStore()
     capture = store.record_capture(
@@ -116,7 +121,8 @@ def main() -> int:
         bars=[bar for bars in batched.values() for bar in bars],
         claimed_session=session,
         stamp=False,
-        notes=("current_universe_diagnostic",),
+        notes=("current_universe_diagnostic", VENDOR_WITHOUT_FINALIZED_FIELD_POLICY),
+        capture_mode=LIVE_CAPTURE,
     )
     for theme_id, sector in SECTORS.items():
         if as_of is None:

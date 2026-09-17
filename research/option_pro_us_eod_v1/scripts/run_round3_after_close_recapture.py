@@ -17,10 +17,12 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "backend"))
 
 from app.services.research_eod_v1.calendar_asof import (  # noqa: E402
+    LIVE_CAPTURE,
+    VENDOR_WITHOUT_FINALIZED_FIELD_POLICY,
     capture_as_of,
+    disclosed_source_finalized_through,
     last_complete_eod_session,
     last_completed_session,
-    last_known_finalized_session,
 )
 from app.services.research_eod_v1.data.capture_store import ImmutableCaptureStore  # noqa: E402
 from app.services.research_eod_v1.data.yahoo import YahooDiagnosticProvider  # noqa: E402
@@ -48,7 +50,7 @@ def main() -> int:
     prior_retrieved = prior["retrieved_at"]
     clock = capture_as_of(datetime.now(timezone.utc))
     calendar_session = last_completed_session(clock)
-    eod_session = last_known_finalized_session(clock, last_proven_finalized=KNOWN_FINALIZED)
+    eod_session = disclosed_source_finalized_through(clock)
     tickers: list[str] = []
     for sector in SECTORS.values():
         for ticker in sector["tickers"]:
@@ -81,14 +83,15 @@ def main() -> int:
         claimed_session=date(2026, 9, 16),
         notes=("archived_invalid_eod_manifest", "bars_not_in_public_git"),
         stamp=False,
+        capture_mode=LIVE_CAPTURE,
     )
     recapture = store.recapture_last_bar(
         predecessor_id=predecessor.capture_id,
         clock=clock,
         bars=all_bars,
         claimed_session=eod_session,
-        source_finalized_through=KNOWN_FINALIZED,
-        notes=("yahoo_last_bar_recapture", "vendor_finalization_unproven"),
+        notes=("yahoo_last_bar_recapture", "vendor_finalization_unproven", VENDOR_WITHOUT_FINALIZED_FIELD_POLICY),
+        capture_mode=LIVE_CAPTURE,
     )
     stored_pred = store.get(predecessor.capture_id)
     after_manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
@@ -103,6 +106,9 @@ def main() -> int:
         "calendar_last_completed_session": calendar_session.isoformat(),
         "last_complete_eod_session": recapture.last_complete_eod_session.isoformat(),
         "last_proven_finalized": KNOWN_FINALIZED.isoformat(),
+        "vendor_finalization_policy": VENDOR_WITHOUT_FINALIZED_FIELD_POLICY,
+        "disclosed_source_finalized_through": eod_session.isoformat(),
+        "capture_mode": recapture.capture_mode,
         "eod_status": recapture.eod_status,
         "capture_id": recapture.capture_id,
         "predecessor_id": recapture.predecessor_id,
