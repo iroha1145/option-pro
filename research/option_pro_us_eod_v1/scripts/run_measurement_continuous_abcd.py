@@ -57,7 +57,8 @@ PACK = ROOT / "research" / "option_pro_us_eod_v1" / "return_pack"
 OUT = PACK / "measurement_continuous_abcd.json"
 LOG = PACK / "measurement_continuous_execution_log.jsonl"
 ROWS = PACK / "measurement_factor_rows.jsonl"
-IC_OUT = PACK / "measurement_ic_groups.json"
+IC_OUT = PACK / "measurement_ic_summary.json"
+IC_GROUPS = PACK / "measurement_ic_groups.jsonl"
 PAIR = PACK / "measurement_runner_pairing.json"
 SUPERSEDED = PACK / "closeout_historical_abcd.SUPERSEDED.json"
 REGISTRY = ROOT / "research" / "option_pro_us_eod_v1" / "config" / "registry.json"
@@ -201,6 +202,251 @@ def _extract_raws(session_panel: dict[str, SecuritySeries], registry: dict, hori
     return raws
 
 
+def _empty_theme_stats() -> dict[str, dict]:
+    return {
+        theme_id: {
+            "theme_id": theme_id,
+            "members_in_panel": 0,
+            "valid_dates": 0,
+            "zero_result_dates": 0,
+            "missing_data_dates": 0,
+            "warmup_dates": 0,
+            "family": {algo: {"eligible": 0, "rejected": 0, "reasons": Counter()} for algo in ALGORITHMS},
+            "funnel": Counter(),
+            "eligible_name_sessions": 0,
+        }
+        for theme_id in SECTORS
+    }
+
+
+def _rebuild_theme_stats_from_artifacts(panel: dict[str, SecuritySeries]) -> tuple[dict[str, dict], int]:
+    """Resume-safe: log + label_horizon=5 rows are the source of truth."""
+
+    stats = _empty_theme_stats()
+    for theme_id, sector in SECTORS.items():
+        stats[theme_id]["members_in_panel"] = len([sid for sid in sector["tickers"] if sid in panel])
+    executed = 0
+    seen_theme_dates: dict[str, set[str]] = {theme_id: set() for theme_id in SECTORS}
+    eligible_dates: dict[str, set[str]] = {theme_id: set() for theme_id in SECTORS}
+    if LOG.exists():
+        with LOG.open(encoding="utf-8") as handle:
+            for line in handle:
+                rec = json.loads(line)
+                theme_id = rec["theme_id"]
+                algo = rec["algorithm"]
+                executed += 1
+                fam = stats[theme_id]["family"][algo]
+                elig = int(rec.get("eligible") or 0)
+                cands = int(rec.get("candidates") or 0)
+                fam["eligible"] += elig
+                fam["rejected"] += max(0, cands - elig)
+                stats[theme_id]["eligible_name_sessions"] += elig
+                seen_theme_dates[theme_id].add(rec["session"])
+                if elig:
+                    eligible_dates[theme_id].add(rec["session"])
+    if ROWS.exists():
+        with ROWS.open(encoding="utf-8") as handle:
+            for line in handle:
+                row = json.loads(line)
+                if row.get("label_horizon") != 5:
+                    continue
+                theme_id = row["theme_id"]
+                algo = row["algorithm"]
+                stats[theme_id]["funnel"].update(_funnel_from_rows([row]))
+                for reason in row.get("rejection_reasons") or ():
+                    stats[theme_id]["family"][algo]["reasons"][str(reason)] += 1
+    for theme_id, dates in seen_theme_dates.items():
+        stats[theme_id]["valid_dates"] = len(dates)
+        stats[theme_id]["zero_result_dates"] = len(dates - eligible_dates[theme_id])
+    return stats, executed
+
+
+def _stream_ic_and_events() -> tuple[list[dict], dict, int]:
+    outcomes = 0
+    ic_pairs: list[dict] = []
+    event_rows: list[dict] = []
+    if not ROWS.exists():
+        return [], register_independent_events([], continuous_calendar=True), 0
+    with ROWS.open(encoding="utf-8") as handle:
+        for line in handle:
+            row = json.loads(line)
+            outcomes += 1
+            if factor_ic_universe(row) and row.get("label") is not None:
+                ic_pairs.append(
+                    {
+                        "signal_session": row.get("signal_session"),
+                        "theme_id": row.get("theme_id"),
+                        "algorithm": row.get("algorithm"),
+                        "profile": row.get("profile"),
+                        "horizon": row.get("horizon"),
+                        "label_horizon": row.get("label_horizon"),
+                        "score": row.get("score"),
+                        "label": row.get("label"),
+                    }
+                )
+            if row.get("final_eligible") and row.get("label_horizon") == 5:
+                event_rows.append(
+                    {
+                        "security_id": row.get("security_id"),
+                        "algorithm": row.get("algorithm"),
+                        "profile": row.get("profile"),
+                        "horizon": row.get("horizon"),
+                        "signal_session": row.get("signal_session"),
+                        "final_eligible": True,
+                        "status": "eligible",
+                    }
+                )
+    groups = grouped_ic(ic_pairs)
+    events = register_independent_events(event_rows, continuous_calendar=True)
+    return groups, events, outcomes
+
+
+def _yearly_from_groups(groups: list[dict]) -> dict[str, dict]:
+    years: dict[str, dict] = defaultdict(lambda: {"defined_groups": 0, "undefined_groups": 0, "n_sum": 0, "ic_sum": 0.0})
+    for row in groups:
+        year = str(row.get("signal_session") or "")[:4]
+        if not year:
+            continue
+        bucket = years[year]
+        bucket["n_sum"] += int(row.get("n") or 0)
+        if row.get("ic") is None:
+            bucket["undefined_groups"] += 1
+        else:
+            bucket["defined_groups"] += 1
+            bucket["ic_sum"] += float(row["ic"])
+    out = {}
+    for year, bucket in sorted(years.items()):
+        defined = bucket["defined_groups"]
+        out[year] = {
+            "defined_groups": defined,
+            "undefined_groups": bucket["undefined_groups"],
+            "n_sum": bucket["n_sum"],
+            "mean_grouped_ic": None if not defined else bucket["ic_sum"] / defined,
+            "note": "mean of within-group ICs; pairs were not pooled",
+        }
+    return out
+
+
+def _write_continuous_reports(
+    *,
+    panel: dict[str, SecuritySeries],
+    coverage: list[dict],
+    all_sessions: list[date],
+    done_sessions: set[str],
+    label_cut: dict,
+    recomputes: int,
+) -> dict:
+    theme_stats, executed = _rebuild_theme_stats_from_artifacts(panel)
+    groups, events, outcomes = _stream_ic_and_events()
+    years = [item["raw_history_years"] for item in coverage if item.get("raw_history_years")]
+    firsts = [date.fromisoformat(item["first"]) for item in coverage if item.get("first")]
+    lasts = [date.fromisoformat(item["last"]) for item in coverage if item.get("last")]
+    raw_span = None if not (firsts and lasts) else round((max(lasts) - min(firsts)).days / 365.25, 2)
+    empty_dates = 0
+    valid_dates = 0
+    for stats in theme_stats.values():
+        valid_dates += stats["valid_dates"]
+        empty_dates += stats["zero_result_dates"]
+        stats["family"] = {
+            algo: {
+                "eligible": fam["eligible"],
+                "rejected": fam["rejected"],
+                "top_rejections": Counter(fam["reasons"]).most_common(8),
+            }
+            for algo, fam in stats["family"].items()
+        }
+        stats["funnel"] = dict(stats["funnel"])
+        stats["sampled_eligible_set_changes"] = None
+        stats["independent_events"] = None
+        stats["event_definition"] = events
+        stats["empty_result_ratio"] = None if not stats["valid_dates"] else stats["zero_result_dates"] / stats["valid_dates"]
+    rows_hash = _sha256(ROWS) if ROWS.exists() else ""
+    undefined_reasons = Counter(row.get("undefined_reason") or "defined" for row in groups)
+    with IC_GROUPS.open("w", encoding="utf-8") as handle:
+        for row in groups:
+            handle.write(json.dumps(row, sort_keys=True) + "\n")
+    summary = {
+        "statistics_version": STATISTICS_VERSION,
+        "groups_path": str(IC_GROUPS.relative_to(ROOT)),
+        "groups_sha256": _sha256(IC_GROUPS) if IC_GROUPS.exists() else "",
+        "group_count": len(groups),
+        "defined_groups": sum(1 for row in groups if row["ic"] is not None),
+        "undefined_groups": sum(1 for row in groups if row["ic"] is None),
+        "undefined_reason_counts": dict(undefined_reasons),
+        "valid_group_dates": sorted({row["signal_session"] for row in groups if row["ic"] is not None}),
+        "valid_group_date_count": len({row["signal_session"] for row in groups if row["ic"] is not None}),
+        "by_date_sample": dict(list(aggregate_ic_by_date(groups).items())[:8]),
+        "by_year": _yearly_from_groups(groups),
+        "note": "Full per-group IC is measurement_ic_groups.jsonl; this file is the review summary.",
+    }
+    IC_OUT.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+    report = {
+        "head_note": "continuous balanced/mid A/B/C/D; grouped average-rank IC; holdout sealed",
+        "capture_mode": HISTORICAL_RECONSTRUCTION,
+        "vendor_finalization_policy": VENDOR_WITHOUT_FINALIZED_FIELD_POLICY,
+        "holdout_start": HOLDOUT_START.isoformat(),
+        "holdout_unsealed": False,
+        "allowed_end": ALLOWED_END.isoformat(),
+        "session_first": all_sessions[0].isoformat() if all_sessions else None,
+        "session_last": all_sessions[-1].isoformat() if all_sessions else None,
+        "session_count": len(all_sessions),
+        "completed_sessions": len(done_sessions),
+        "profile": "balanced",
+        "horizon": "mid",
+        "matrix_claimed": "24xABCD_balanced_mid_only_not_864",
+        "label_horizons": list(LABELS),
+        "label_maturity_cuts": {str(k): v.isoformat() for k, v in label_cut.items()},
+        "feature_ready_bars": FEATURE_READY_BARS,
+        "raw_history_years_span": raw_span,
+        "raw_history_years_median": None if not years else float(np.median(years)),
+        "raw_history_years_note": "2018-2024 clipped tape is not a decade",
+        "evaluable_continuous_years": round(len(all_sessions) / 252.0, 2),
+        "coverage": coverage,
+        "themes": theme_stats,
+        "empty_result_ratio_theme_dates": None if not valid_dates else empty_dates / valid_dates,
+        "registered": 1920,
+        "unique_registered_configs": 1920,
+        "unique_snapshots": executed,
+        "executed_snapshots": executed,
+        "actual_function_calls": executed,
+        "recomputes": recomputes,
+        "outcomes_inspected": outcomes,
+        "executed_backtests": 0,
+        "engineering_fixtures": 0,
+        "market_backtest_run": False,
+        "winners": [],
+        "event_ledger": events,
+        "capability_flags": [
+            "CURRENT_UNIVERSE_SURVIVORS",
+            "PIT_CLASSIFICATION_MISSING",
+            "CORPORATE_ACTIONS_INCOMPLETE",
+            "EXECUTION_DATA_UNVERIFIED",
+            "download_time_not_pit",
+            "IC_IS_SIGNAL_DIAGNOSTIC_NOT_PNL",
+            "INDUSTRY_UNVERIFIED",
+        ],
+        "param_hash": _sha256(REGISTRY),
+        "code_sha": _git_head(),
+        "data_hash": _sha256(CACHE),
+        "statistics_version": STATISTICS_VERSION,
+        "feature_version": FEATURE_VERSION,
+        "rows_path": str(ROWS.relative_to(ROOT)),
+        "rows_sha256": rows_hash,
+        "execution_log": str(LOG.relative_to(ROOT)),
+        "ic_groups_path": str(IC_GROUPS.relative_to(ROOT)),
+        "ic_summary_path": str(IC_OUT.relative_to(ROOT)),
+        "superseded_17day": str(SUPERSEDED.relative_to(ROOT)),
+        "notes": [
+            "Cache replay only; no Massive; no network purchase.",
+            "Old 17-day IC/independent_events are SUPERSEDED_METRIC.",
+            "Portfolio PnL not run; executed_backtests stays 0.",
+            "Stop after this fixed-parameter continuous pass.",
+        ],
+    }
+    OUT.write_text(json.dumps(report, indent=2, default=str) + "\n", encoding="utf-8")
+    return report
+
+
 def _funnel_from_rows(rows: list[dict]) -> dict[str, int]:
     counts = Counter()
     for row in rows:
@@ -225,6 +471,7 @@ def main() -> int:
     parser.add_argument("--max-sessions", type=int, default=0)
     parser.add_argument("--pairing-only", action="store_true")
     parser.add_argument("--include-pairing", action="store_true")
+    parser.add_argument("--finalize-only", action="store_true")
     args = parser.parse_args()
     if not CACHE.exists():
         raise SystemExit(f"offline Yahoo cache missing: {CACHE}")
@@ -275,7 +522,8 @@ def main() -> int:
                 "artifact": "closeout_historical_abcd.json",
                 "superseded_fields": ["ic_forward_labels", "independent_events", "ic_pair_counts"],
                 "replacement": [
-                    "measurement_ic_groups.json",
+                    "measurement_ic_summary.json",
+                    "measurement_ic_groups.jsonl",
                     "measurement_continuous_abcd.json",
                     "measurement_factor_rows.jsonl",
                 ],
@@ -294,22 +542,24 @@ def main() -> int:
     done_sessions: set[str] = set()
     if CHECKPOINT.exists():
         done_sessions = set(json.loads(CHECKPOINT.read_text(encoding="utf-8")).get("done_sessions", []))
-    theme_stats: dict[str, dict] = {
-        theme_id: {
-            "theme_id": theme_id,
-            "members_in_panel": len([sid for sid in SECTORS[theme_id]["tickers"] if sid in panel]),
-            "valid_dates": 0,
-            "zero_result_dates": 0,
-            "missing_data_dates": 0,
-            "warmup_dates": 0,
-            "family": {algo: {"eligible": 0, "rejected": 0, "reasons": Counter()} for algo in ALGORITHMS},
-            "funnel": Counter(),
-            "eligible_name_sessions": 0,
-        }
-        for theme_id in SECTORS
-    }
+    theme_stats = _empty_theme_stats()
+    for theme_id in theme_stats:
+        theme_stats[theme_id]["members_in_panel"] = len([sid for sid in SECTORS[theme_id]["tickers"] if sid in panel])
     executed = 0
     recomputes = 0
+    if args.finalize_only:
+        if CHECKPOINT.exists():
+            done_sessions = set(json.loads(CHECKPOINT.read_text(encoding="utf-8")).get("done_sessions", []))
+        report = _write_continuous_reports(
+            panel=panel,
+            coverage=coverage,
+            all_sessions=all_sessions,
+            done_sessions=done_sessions,
+            label_cut=label_cut,
+            recomputes=0,
+        )
+        print(json.dumps({"finalize_only": True, "executed_snapshots": report["executed_snapshots"], "sessions": report["completed_sessions"], "out": str(OUT)}))
+        return 0
     if LOG.exists() and not done_sessions:
         LOG.unlink()
     if ROWS.exists() and not done_sessions:
@@ -440,127 +690,15 @@ def main() -> int:
         rows_handle.close()
         log.close()
 
-    ic_source = []
-    event_rows = []
-    outcomes = 0
-    if ROWS.exists():
-        with ROWS.open(encoding="utf-8") as handle:
-            for line in handle:
-                row = json.loads(line)
-                outcomes += 1
-                if factor_ic_universe(row) and row.get("label") is not None:
-                    ic_source.append(row)
-                if row.get("final_eligible") and row.get("label_horizon") == 5:
-                    event_rows.append(
-                        {
-                            "security_id": row.get("security_id"),
-                            "algorithm": row.get("algorithm"),
-                            "profile": row.get("profile"),
-                            "horizon": row.get("horizon"),
-                            "signal_session": row.get("signal_session"),
-                            "final_eligible": True,
-                            "status": "eligible",
-                        }
-                    )
-    groups = grouped_ic(ic_source)
-    events = register_independent_events(event_rows, continuous_calendar=True)
-    years = []
-    for item in coverage:
-        if item.get("raw_history_years"):
-            years.append(item["raw_history_years"])
-    firsts = [date.fromisoformat(item["first"]) for item in coverage if item.get("first")]
-    lasts = [date.fromisoformat(item["last"]) for item in coverage if item.get("last")]
-    raw_span = None
-    if firsts and lasts:
-        raw_span = round((max(lasts) - min(firsts)).days / 365.25, 2)
-    for stats in theme_stats.values():
-        stats["family"] = {
-            algo: {
-                "eligible": fam["eligible"],
-                "rejected": fam["rejected"],
-                "top_rejections": Counter(fam["reasons"]).most_common(8),
-            }
-            for algo, fam in stats["family"].items()
-        }
-        stats["funnel"] = dict(stats["funnel"])
-        stats["sampled_eligible_set_changes"] = None
-        stats["independent_events"] = None
-        stats["event_definition"] = events
-    rows_hash = _sha256(ROWS) if ROWS.exists() else ""
-    IC_OUT.write_text(
-        json.dumps(
-            {
-                "statistics_version": STATISTICS_VERSION,
-                "groups": groups,
-                "by_date": aggregate_ic_by_date(groups),
-                "defined_groups": sum(1 for row in groups if row["ic"] is not None),
-                "undefined_groups": sum(1 for row in groups if row["ic"] is None),
-                "valid_group_dates": sorted({row["signal_session"] for row in groups if row["ic"] is not None}),
-            },
-            indent=2,
-        )
-        + "\n",
-        encoding="utf-8",
+    report = _write_continuous_reports(
+        panel=panel,
+        coverage=coverage,
+        all_sessions=all_sessions,
+        done_sessions=done_sessions,
+        label_cut=label_cut,
+        recomputes=recomputes,
     )
-    report = {
-        "head_note": "continuous balanced/mid A/B/C/D; grouped average-rank IC; holdout sealed",
-        "capture_mode": HISTORICAL_RECONSTRUCTION,
-        "vendor_finalization_policy": VENDOR_WITHOUT_FINALIZED_FIELD_POLICY,
-        "holdout_start": HOLDOUT_START.isoformat(),
-        "holdout_unsealed": False,
-        "allowed_end": ALLOWED_END.isoformat(),
-        "sessions": [day.isoformat() for day in all_sessions],
-        "session_count": len(all_sessions),
-        "completed_sessions": len(done_sessions),
-        "profile": "balanced",
-        "horizon": "mid",
-        "matrix_claimed": "24xABCD_balanced_mid_only_not_864",
-        "label_horizons": list(LABELS),
-        "label_maturity_cuts": {str(k): v.isoformat() for k, v in label_cut.items()},
-        "feature_ready_bars": FEATURE_READY_BARS,
-        "raw_history_years_span": raw_span,
-        "raw_history_years_note": "2018-2024 clipped tape is not a decade",
-        "evaluable_continuous_years": round(len(all_sessions) / 252.0, 2),
-        "coverage": coverage,
-        "themes": theme_stats,
-        "registered": 1920,
-        "unique_registered_configs": 1920,
-        "executed_snapshots": executed,
-        "actual_function_calls": executed,
-        "recomputes": recomputes,
-        "outcomes_inspected": outcomes,
-        "executed_backtests": 0,
-        "engineering_fixtures": 0,
-        "market_backtest_run": False,
-        "winners": [],
-        "event_ledger": events,
-        "capability_flags": [
-            "CURRENT_UNIVERSE_SURVIVORS",
-            "PIT_CLASSIFICATION_MISSING",
-            "CORPORATE_ACTIONS_INCOMPLETE",
-            "EXECUTION_DATA_UNVERIFIED",
-            "download_time_not_pit",
-            "IC_IS_SIGNAL_DIAGNOSTIC_NOT_PNL",
-            "INDUSTRY_UNVERIFIED",
-        ],
-        "param_hash": _sha256(REGISTRY),
-        "code_sha": _git_head(),
-        "data_hash": _sha256(CACHE),
-        "statistics_version": STATISTICS_VERSION,
-        "feature_version": FEATURE_VERSION,
-        "rows_path": str(ROWS.relative_to(ROOT)),
-        "rows_sha256": rows_hash,
-        "execution_log": str(LOG.relative_to(ROOT)),
-        "superseded_17day": str(SUPERSEDED.relative_to(ROOT)),
-        "notes": [
-            "Cache replay only; no Massive; no network purchase.",
-            "Old 17-day IC/independent_events are SUPERSEDED_METRIC.",
-            "Portfolio PnL not run; executed_backtests stays 0.",
-            "Stop after this fixed-parameter continuous pass.",
-        ],
-    }
-    OUT.write_text(json.dumps(report, indent=2, default=str) + "\n", encoding="utf-8")
-    print(json.dumps({"executed_snapshots": executed, "sessions": len(done_sessions), "out": str(OUT), "rows": str(ROWS)}))
+    print(json.dumps({"executed_snapshots": report["executed_snapshots"], "sessions": report["completed_sessions"], "out": str(OUT), "rows": str(ROWS)}))
     return 0
 
 

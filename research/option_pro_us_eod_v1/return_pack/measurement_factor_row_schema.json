@@ -1,7 +1,10 @@
 {
   "schema_version": "us-eod-research-factor-row-v1.0",
   "path": "research/option_pro_us_eod_v1/return_pack/measurement_factor_rows.jsonl",
-  "command": "PYTHONPATH=backend python research/option_pro_us_eod_v1/scripts/run_measurement_continuous_abcd.py",
+  "command": "PYTHONPATH=/workspace:/workspace/backend python research/option_pro_us_eod_v1/scripts/run_measurement_continuous_abcd.py",
+  "finalize_command": "PYTHONPATH=/workspace:/workspace/backend python research/option_pro_us_eod_v1/scripts/run_measurement_continuous_abcd.py --finalize-only",
+  "ic_groups_path": "research/option_pro_us_eod_v1/return_pack/measurement_ic_groups.jsonl",
+  "ic_summary_path": "research/option_pro_us_eod_v1/return_pack/measurement_ic_summary.json",
   "fields": [
     "security_id",
     "signal_session",
