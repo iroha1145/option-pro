@@ -10,7 +10,11 @@ import numpy as np
 
 from app.services.research_eod_v1.backtest import apply_cost, plan_trade, slippage_bps
 from app.services.research_eod_v1.calendar_asof import next_session
-from app.services.research_eod_v1.series import SecuritySeries, session_date_is_halted
+from app.services.research_eod_v1.paths import ensure_reference_on_path
+from app.services.research_eod_v1.series import SecuritySeries, session_is_halted
+
+ensure_reference_on_path()
+from registry import position_capacity  # type: ignore
 
 
 @dataclass
@@ -142,6 +146,74 @@ def _as_date(value: Any) -> date | None:
     return date.fromisoformat(str(value)[:10])
 
 
+def session_is_executable(series: SecuritySeries, session: date) -> tuple[bool, str, float | None]:
+    """Shared halt / zero-volume / quote gate for buy and sell attempts."""
+
+    if session not in series.dates:
+        return False, "MISSING_SESSION", None
+    idx = series.dates.index(session)
+    if session_is_halted(series, idx):
+        return False, "HALTED_SESSION", None
+    volume = float(series.volume[idx]) if idx < len(series.volume) else float("nan")
+    if np.isfinite(volume) and volume <= 0:
+        return False, "ZERO_VOLUME", None
+    raw = _raw_open(series, session)
+    if raw is None:
+        return False, "NO_RAW_OPEN", None
+    return True, "ok", raw
+
+
+def _size_notional(
+    row: Mapping[str, Any],
+    series: SecuritySeries,
+    signal_day: date,
+    cash: float,
+    profile: Mapping[str, Any] | None,
+    allow_implicit: bool,
+) -> float:
+    explicit = float(row.get("notional") or 0.0)
+    if explicit > 0:
+        return explicit
+    if profile is None:
+        if not allow_implicit:
+            return 0.0
+        return min(cash, max(0.0, float(row.get("adv20") or 0.0) * 0.01))
+    if signal_day not in series.dates:
+        return 0.0
+    idx = series.dates.index(signal_day)
+    close = float(series.raw_close[idx])
+    invalid = float(row.get("planned_invalidation") or 0.0)
+    atr = float(row.get("atr") or 0.0)
+    adv20 = float(row.get("adv20") or 0.0)
+    if not np.isfinite(close) or close <= 0 or invalid <= 0 or invalid >= close or atr <= 0 or adv20 <= 0:
+        return 0.0
+    return float(position_capacity(cash, close, invalid, atr, adv20, profile).notional)
+
+
+def _credit_dividend_to_trade(
+    item: Mapping[str, Any],
+    *,
+    trades: list[dict[str, Any]],
+    open_positions: dict[str, dict[str, Any]],
+) -> bool:
+    trade_id = item.get("trade_id")
+    amount = float(item["amount"])
+    if not trade_id:
+        return False
+    for trade in trades:
+        if trade.get("trade_id") == trade_id:
+            trade["dividend_cash"] = float(trade.get("dividend_cash") or 0.0) + amount
+            cash_in = float(trade.get("cash_in") or 0.0)
+            if cash_in > 0:
+                trade["net_return"] = _trade_net(trade, cash_in)
+            return True
+    for pos in open_positions.values():
+        if pos.get("trade_id") == trade_id:
+            pos["dividend_cash"] = float(pos.get("dividend_cash") or 0.0) + amount
+            return True
+    return False
+
+
 def simulate_ledger(
     *,
     start: date,
@@ -156,6 +228,7 @@ def simulate_ledger(
     cash_acquisitions: Any = None,
     unknown_terminals: Any = None,
     allow_implicit_sizing: bool = False,
+    profile: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Full-period ledger. Empty days stay in cash. Do not peek at T+1 open to cancel."""
 
@@ -211,6 +284,10 @@ def simulate_ledger(
             "daily_equity": daily,
             "unfilled": 0,
             "right_censored": [],
+            "open_at_end": [],
+            "pnl_basis": "marked_equity",
+            "trade_pnl_basis": "settled_cash_including_lot_dividends",
+            "dividend_pay_date_policy": "vendor_or_EX_PLUS_ONE_RESEARCH_PROXY",
         }
 
     unfilled = 0
@@ -227,20 +304,48 @@ def simulate_ledger(
                     qty = state.shares[sid]
             for action in getattr(series, "dividend_events", ()) or ():
                 ex_day = _as_date(action.get("ex_date") or action.get("session_date"))
-                pay_day = _as_date(action.get("pay_date")) or (next_session(ex_day) if ex_day else None)
+                vendor_pay = _as_date(action.get("pay_date"))
+                pay_policy = "VENDOR_PAY_DATE" if vendor_pay is not None else "EX_PLUS_ONE_RESEARCH_PROXY"
+                pay_day = vendor_pay or (next_session(ex_day) if ex_day else None)
                 amount = float(action.get("amount") or 0.0)
                 if ex_day == day and qty and amount:
                     due = qty * amount
                     state.receivables += due
-                    pending_div.append({"security_id": sid, "pay_date": pay_day, "amount": due})
-                    events.append(LedgerEvent(day, "dividend", sid, 0.0, 0.0, amount, "ex_date_receivable"))
+                    lot = open_positions.get(sid)
+                    pending_div.append(
+                        {
+                            "security_id": sid,
+                            "trade_id": None if lot is None else lot.get("trade_id"),
+                            "lot_id": None if lot is None else lot.get("lot_id"),
+                            "pay_date": pay_day,
+                            "pay_date_policy": pay_policy,
+                            "amount": due,
+                            "ex_date": ex_day,
+                        }
+                    )
+                    if lot is not None:
+                        lot["dividend_pay_date_policy"] = pay_policy
+                    events.append(LedgerEvent(day, "dividend", sid, 0.0, 0.0, amount, f"ex_date_receivable:{pay_policy}"))
             if not getattr(series, "dividend_events", ()):
                 for div_day, amount in series.dividends:
                     if div_day == day and qty and amount:
                         due = qty * float(amount)
                         state.receivables += due
-                        pending_div.append({"security_id": sid, "pay_date": next_session(div_day), "amount": due})
-                        events.append(LedgerEvent(day, "dividend", sid, 0.0, 0.0, amount, "ex_date_receivable"))
+                        lot = open_positions.get(sid)
+                        pending_div.append(
+                            {
+                                "security_id": sid,
+                                "trade_id": None if lot is None else lot.get("trade_id"),
+                                "lot_id": None if lot is None else lot.get("lot_id"),
+                                "pay_date": next_session(div_day),
+                                "pay_date_policy": "EX_PLUS_ONE_RESEARCH_PROXY",
+                                "amount": due,
+                                "ex_date": div_day,
+                            }
+                        )
+                        if lot is not None:
+                            lot["dividend_pay_date_policy"] = "EX_PLUS_ONE_RESEARCH_PROXY"
+                        events.append(LedgerEvent(day, "dividend", sid, 0.0, 0.0, amount, "ex_date_receivable:EX_PLUS_ONE_RESEARCH_PROXY"))
             for deal in deals:
                 if str(deal.get("security_id")) != sid:
                     continue
@@ -275,48 +380,50 @@ def simulate_ledger(
             if item["pay_date"] == day:
                 state.receivables -= item["amount"]
                 state.cash += item["amount"]
-                sid = item["security_id"]
-                if sid in open_positions:
-                    open_positions[sid]["dividend_cash"] = float(open_positions[sid].get("dividend_cash") or 0.0) + float(item["amount"])
-                events.append(LedgerEvent(day, "dividend_pay", sid, item["amount"], 0.0, None, "pay_date_cash"))
+                credited = _credit_dividend_to_trade(item, trades=trades, open_positions=open_positions)
+                note = item.get("pay_date_policy") or "pay_date_cash"
+                if not credited:
+                    note = f"UNATTRIBUTED_DIVIDEND:{note}"
+                events.append(LedgerEvent(day, "dividend_pay", item["security_id"], item["amount"], 0.0, None, note))
             else:
                 still_pending.append(item)
         pending_div = still_pending
 
         for sid, pos in list(open_positions.items()):
-            if pos.get("exit_session") != day:
+            if sid in unknown and day >= unknown[sid]:
+                state.status[sid] = "TERMINAL_VALUE_UNKNOWN"
+                right_censored.append(sid)
+                continue
+            attempt = pos.get("current_attempt") or pos.get("exit_session")
+            if attempt != day:
                 continue
             series = panel[sid]
-            planned = plan_trade(
-                series,
-                pos["signal_session"],
-                holding_sessions,
-                adv20=pos["adv20"],
-                fee=fee,
-                cost_multiple=cost_multiple,
-            )
-            raw_exit = _raw_open(series, day)
-            if planned.label_status != "MATURE" or raw_exit is None:
+            ok, reason, raw_exit = session_is_executable(series, day)
+            if not ok:
                 retry = None
                 try:
                     retry = next_session(day)
                 except RuntimeError:
                     retry = None
-                if retry is not None and retry <= end and retry in series.dates:
+                if retry is not None and retry <= end:
+                    pos["current_attempt"] = retry
                     pos["exit_session"] = retry
-                    events.append(LedgerEvent(day, "exit_deferred", sid, 0.0, 0.0, None, "missing_exit_bar"))
+                    events.append(LedgerEvent(day, "exit_deferred", sid, 0.0, 0.0, None, reason))
                     continue
-                state.status[sid] = planned.label_status
+                state.status[sid] = reason
                 right_censored.append(sid)
                 continue
             qty = state.shares.get(sid, 0.0)
-            sell = apply_cost(raw_exit, side="sell", bps=planned.cost_bps_round_trip / 2.0 if planned.cost_bps_round_trip else 0.0, fee=fee)
+            bps = slippage_bps(float(pos.get("adv20") or 0.0)) * cost_multiple
+            sell = apply_cost(raw_exit, side="sell", bps=bps, fee=fee)
             proceeds = qty * sell
             state.cash += proceeds
             state.fees_paid += qty * (raw_exit - sell)
             state.shares[sid] = 0.0
             events.append(LedgerEvent(day, "sell", sid, proceeds, -qty, raw_exit, "raw_open_exit"))
             pos["exit_open"] = raw_exit
+            pos["cash_in"] = proceeds
+            pos["filled_at"] = day
             pos["net_return"] = _trade_net(pos, proceeds)
             trades.append(pos)
             del open_positions[sid]
@@ -331,12 +438,17 @@ def simulate_ledger(
             sid = str(row["security_id"])
             if sid in open_positions or state.shares.get(sid, 0.0):
                 continue
+            if sid in unknown and day >= unknown[sid]:
+                unfilled += 1
+                events.append(LedgerEvent(day, "reject", sid, 0.0, 0.0, None, "TERMINAL_VALUE_UNKNOWN"))
+                continue
             if row.get("status") != "eligible":
                 continue
             series = panel[sid]
-            if session_date_is_halted(series, day):
+            ok, reason, raw_px = session_is_executable(series, day)
+            if not ok:
                 unfilled += 1
-                events.append(LedgerEvent(day, "reject", sid, 0.0, 0.0, None, "HALTED_SESSION"))
+                events.append(LedgerEvent(day, "reject", sid, 0.0, 0.0, None, reason))
                 continue
             planned = plan_trade(
                 series,
@@ -346,24 +458,17 @@ def simulate_ledger(
                 fee=fee,
                 cost_multiple=cost_multiple,
             )
-            if planned.entry_session != day or planned.entry_open is None:
+            if planned.entry_session != day:
                 unfilled += 1
-                continue
-            raw_px = _raw_open(series, day)
-            if raw_px is None:
-                unfilled += 1
-                events.append(LedgerEvent(day, "reject", sid, 0.0, 0.0, None, "NO_RAW_OPEN"))
                 continue
             bps = slippage_bps(float(row.get("adv20") or 0.0)) * cost_multiple
             buy = apply_cost(raw_px, side="buy", bps=bps, fee=fee)
-            notional = float(row.get("notional") or 0.0)
+            notional = _size_notional(row, series, prior, state.cash, profile, allow_implicit_sizing)
             if notional <= 0:
-                if not allow_implicit_sizing:
-                    unfilled += 1
-                    events.append(LedgerEvent(day, "reject", sid, 0.0, 0.0, None, "UNSIZED_ORDER"))
-                    continue
-                notional = min(state.cash, max(0.0, float(row.get("adv20") or 0.0) * 0.01))
-            if notional <= 0 or buy <= 0 or notional > state.cash:
+                unfilled += 1
+                events.append(LedgerEvent(day, "reject", sid, 0.0, 0.0, None, "UNSIZED_ORDER"))
+                continue
+            if buy <= 0 or notional > state.cash + 1e-9:
                 unfilled += 1
                 continue
             qty = notional / buy
@@ -371,17 +476,24 @@ def simulate_ledger(
             state.fees_paid += qty * (buy - raw_px)
             state.shares[sid] = state.shares.get(sid, 0.0) + qty
             state.cost_basis[sid] = buy
+            trade_id = f"{sid}:{prior.isoformat()}:{day.isoformat()}"
             open_positions[sid] = {
                 "security_id": sid,
+                "trade_id": trade_id,
+                "lot_id": trade_id,
                 "signal_session": prior,
                 "entry_session": day,
+                "original_planned_exit": planned.exit_session,
+                "current_attempt": planned.exit_session,
                 "exit_session": planned.exit_session,
+                "filled_at": None,
                 "notional": qty * buy,
                 "shares": qty,
                 "adv20": float(row.get("adv20") or 0.0),
                 "entry_raw_open": raw_px,
                 "cash_out": qty * buy,
                 "cash_in": 0.0,
+                "dividend_cash": 0.0,
             }
             events.append(LedgerEvent(day, "buy", sid, -qty * buy, qty, raw_px, "raw_open_entry"))
 
@@ -424,6 +536,7 @@ def simulate_ledger(
         )
 
     ending = daily[-1]["equity"] if daily else capital
+    open_at_end = [dict(pos) for pos in open_positions.values()]
     return {
         "starting_capital": capital,
         "ending_equity": ending,
@@ -444,7 +557,11 @@ def simulate_ledger(
         "daily_equity": daily,
         "unfilled": unfilled,
         "right_censored": sorted(set(right_censored)),
+        "open_at_end": open_at_end,
         "fees_paid": state.fees_paid,
+        "pnl_basis": "marked_equity",
+        "trade_pnl_basis": "settled_cash_including_lot_dividends",
+        "dividend_pay_date_policy": "vendor_or_EX_PLUS_ONE_RESEARCH_PROXY",
     }
 
 

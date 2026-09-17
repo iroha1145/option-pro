@@ -7,6 +7,8 @@ from datetime import date, datetime
 from typing import Mapping, Sequence
 
 from app.services.research_eod_v1.calendar_asof import (
+    HISTORICAL_RECONSTRUCTION,
+    LIVE_CAPTURE,
     last_complete_eod_session,
     last_completed_session,
     require_aware,
@@ -102,6 +104,7 @@ class CaptureVersion:
     late_securities: tuple[str, ...] = ()
     isolated_partial_sessions: tuple[date, ...] = ()
     notes: tuple[str, ...] = ()
+    capture_mode: str = HISTORICAL_RECONSTRUCTION
 
     def metadata(self) -> dict:
         return {
@@ -120,6 +123,7 @@ class CaptureVersion:
             "isolated_partial_sessions": [item.isoformat() for item in self.isolated_partial_sessions],
             "bar_count": len(self.bars),
             "notes": list(self.notes),
+            "capture_mode": self.capture_mode,
         }
 
 
@@ -158,6 +162,7 @@ class ImmutableCaptureStore:
         predecessor_id: str | None = None,
         notes: Sequence[str] = (),
         stamp: bool = True,
+        capture_mode: str = HISTORICAL_RECONSTRUCTION,
     ) -> CaptureVersion:
         clock = require_aware(clock, name="clock")
         if predecessor_id is not None:
@@ -187,6 +192,7 @@ class ImmutableCaptureStore:
             late_securities=normalize_late_securities(late_securities),
             isolated_partial_sessions=partial_sessions,
             notes=tuple(notes),
+            capture_mode=capture_mode if capture_mode in {LIVE_CAPTURE, HISTORICAL_RECONSTRUCTION} else HISTORICAL_RECONSTRUCTION,
         )
         self._versions[capture_id] = version
         self._order.append(capture_id)
@@ -202,6 +208,7 @@ class ImmutableCaptureStore:
         source_finalized_through: date | None = None,
         late_securities: Sequence[str] = (),
         notes: Sequence[str] = (),
+        capture_mode: str = LIVE_CAPTURE,
     ) -> CaptureVersion:
         """After close, replace the last/partial root in a *new* version.
 
@@ -229,6 +236,7 @@ class ImmutableCaptureStore:
             predecessor_id=predecessor.capture_id,
             notes=tuple(notes) + (RECAPTURE_AFTER_CLOSE,),
             stamp=False,
+            capture_mode=capture_mode,
         )
         stored = self.get(predecessor.capture_id)
         if stored.retrieved_at != predecessor_retrieved:
@@ -267,7 +275,7 @@ def _stamp_recapture_bar(bar: ResearchBar, clock: datetime) -> ResearchBar:
         retrieved_at=clock,
         partial=partial,
         vintage_status=vintage,
-        finalized_at=None if partial else clock,
+        finalized_at=bar.finalized_at,
     )
 
 

@@ -8,11 +8,7 @@ from typing import Any, Mapping, Sequence
 
 from app.services.research_eod_v1.calendar_asof import holding_exit_session, next_session
 from app.services.research_eod_v1.constants import SLIPPAGE_BPS
-from app.services.research_eod_v1.paths import ensure_reference_on_path
 from app.services.research_eod_v1.series import SecuritySeries
-
-ensure_reference_on_path()
-from registry import position_capacity  # type: ignore
 
 
 def slippage_bps(adv20: float) -> float:
@@ -125,82 +121,36 @@ def simulate_portfolio(
     holding_sessions: int,
     profile: Mapping[str, Any],
     cost_multiple: float = 1.0,
+    start: date | None = None,
+    end: date | None = None,
 ) -> dict[str, Any]:
     """One position per security. Empty days stay in cash. No interest.
 
-    Sizing uses the registered capacity function, then the raw-share ledger.
+    Sizing happens in the ledger at each decision using current cash.
+    Future signals cannot rewrite earlier orders. Research dates are explicit
+    or the panel bounds — never inferred from whichever signals happen to exist.
     """
 
     from app.services.research_eod_v1.ledger import simulate_ledger
 
-    if not signals:
-        first = min((series.dates[0] for series in panel.values() if series.dates), default=None)
-        last = max((series.dates[-1] for series in panel.values() if series.dates), default=None)
-        empty = simulate_ledger(
-            start=first or date(2020, 1, 2),
-            end=last or date(2020, 1, 2),
-            panel=panel,
-            capital=capital,
-            holding_sessions=holding_sessions,
-            signals=[],
-            cost_multiple=cost_multiple,
-        )
-        empty["cash_interest"] = 0.0
-        return empty
-
-    sessions = sorted({
-        date.fromisoformat(row["session_date"]) if isinstance(row["session_date"], str) else row["session_date"]
-        for row in signals
-    })
-    start = sessions[0]
-    end = holding_exit_session(next_session(sessions[-1]), holding_sessions)
-    sized: list[dict[str, Any]] = []
-    leftover = float(capital)
-    for row in sorted(signals, key=lambda r: (-float(r.get("score") or 0), r["security_id"])):
-        item = dict(row)
-        if float(item.get("notional") or 0.0) > 0:
-            leftover -= float(item["notional"])
-            sized.append(item)
-            continue
-        if leftover <= 0:
-            item["notional"] = 0.0
-            sized.append(item)
-            continue
-        sid = str(item["security_id"])
-        series = panel[sid]
-        day = date.fromisoformat(item["session_date"]) if isinstance(item["session_date"], str) else item["session_date"]
-        if day not in series.dates:
-            item["notional"] = 0.0
-            sized.append(item)
-            continue
-        idx = series.dates.index(day)
-        if not np_finite(series.raw_close[idx]) or float(series.raw_close[idx]) <= 0:
-            item["notional"] = 0.0
-            sized.append(item)
-            continue
-        close = float(series.raw_close[idx])
-        invalid = float(item.get("planned_invalidation") or 0.0)
-        atr = float(item.get("atr") or 0.0)
-        adv20 = float(item.get("adv20") or 0.0)
-        if invalid <= 0 or invalid >= close or atr <= 0 or adv20 <= 0 or close <= 0:
-            item["notional"] = 0.0
-            sized.append(item)
-            continue
-        cap = position_capacity(leftover, close, invalid, atr, adv20, profile)
-        item["notional"] = cap.notional
-        leftover -= cap.notional
-        sized.append(item)
+    first = min((series.dates[0] for series in panel.values() if series.dates), default=None)
+    last = max((series.dates[-1] for series in panel.values() if series.dates), default=None)
+    research_start = start or first or date(2020, 1, 2)
+    research_end = end or last or date(2020, 1, 2)
     result = simulate_ledger(
-        start=start,
-        end=end,
+        start=research_start,
+        end=research_end,
         panel=panel,
         capital=capital,
         holding_sessions=holding_sessions,
-        signals=sized,
+        signals=list(signals),
         cost_multiple=cost_multiple,
-        allow_implicit_sizing=False,
+        allow_implicit_sizing=True,
+        profile=profile,
     )
     result["cash_interest"] = 0.0
+    result["research_start"] = research_start.isoformat()
+    result["research_end"] = research_end.isoformat()
     if result["status"] == "LEDGER":
         result["status"] = "ENGINEERING_SIMULATION"
     return result

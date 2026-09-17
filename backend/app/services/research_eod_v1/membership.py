@@ -41,14 +41,15 @@ def economic_identity(series: SecuritySeries) -> str:
     return series.security_id
 
 
-def is_theme_candidate(
+def theme_membership(
     series: SecuritySeries,
     *,
     sector_id: str,
-    session: date,
     target_track: str,
     extra_members: set[str] | None = None,
 ) -> tuple[bool, str]:
+    """Theme / track / venue only. Missing T is a separate structured reject."""
+
     ticker = (series.ticker_at_signal or series.security_id).upper()
     members = set(current_theme_tickers(sector_id))
     if extra_members:
@@ -61,6 +62,25 @@ def is_theme_candidate(
     venue = classify_venue(dict(series.venue_metadata))
     if not venue.eligible:
         return False, venue.reason
+    return True, "ok"
+
+
+def is_theme_candidate(
+    series: SecuritySeries,
+    *,
+    sector_id: str,
+    session: date,
+    target_track: str,
+    extra_members: set[str] | None = None,
+) -> tuple[bool, str]:
+    ok, reason = theme_membership(
+        series,
+        sector_id=sector_id,
+        target_track=target_track,
+        extra_members=extra_members,
+    )
+    if not ok:
+        return False, reason
     if not has_complete_session_bar(series, session):
         return False, "MISSING_SESSION_BAR"
     if series.source_available_at is not None:

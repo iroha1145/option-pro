@@ -14,6 +14,10 @@ from app.services.market_calendar import (
 )
 
 NEW_YORK = ZoneInfo("America/New_York")
+LIVE_CAPTURE = "live_capture"
+HISTORICAL_RECONSTRUCTION = "historical_reconstruction"
+VENDOR_WITHOUT_FINALIZED_FIELD_POLICY = "NEXT_DAY_CONFIRM"
+VENDOR_WITHOUT_FINALIZED_LAG_SESSIONS = 1
 
 
 def require_aware(moment: datetime, *, name: str = "as_of") -> datetime:
@@ -77,6 +81,32 @@ def capture_as_of(now: datetime) -> datetime:
     """Research runners pass the real clock. They must not jump to a future close."""
 
     return require_aware(now, name="now")
+
+
+def disclosed_source_finalized_through(
+    as_of: datetime,
+    *,
+    vendor_finalized_through: date | None = None,
+) -> date:
+    """Shared research finalization policy for live_capture and reconstruction.
+
+    A vendor ``finalized_at`` / ``finalized_through`` field is used when present.
+    Yahoo and similar sources have no such field. Missing that field is not a
+    permanent freeze: research uses a disclosed next-session confirmation lag.
+    The recapture clock is never treated as vendor finalization.
+    """
+
+    if vendor_finalized_through is not None:
+        return last_complete_eod_session(as_of, source_finalized_through=vendor_finalized_through)
+    calendar = last_completed_session(as_of)
+    return shift_sessions(calendar, -VENDOR_WITHOUT_FINALIZED_LAG_SESSIONS)
+
+
+def eod_evaluation_as_of(session: date) -> datetime:
+    """Shared post-close evaluation instant for historical reconstruction."""
+
+    close = session_close_at(session)
+    return close + timedelta(minutes=30)
 
 
 def session_is_partial(session: date, as_of: datetime) -> bool:

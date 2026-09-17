@@ -50,7 +50,7 @@ def _signal(sid: str, session: date, notional: float = 2000.0) -> dict:
 
 
 def test_feature_version_bumped_for_round3() -> None:
-    assert FEATURE_VERSION == "us-eod-research-features-v1.4"
+    assert FEATURE_VERSION == "us-eod-research-features-v1.5"
 
 
 def test_residual_short_ipo_is_not_ok() -> None:

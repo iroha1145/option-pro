@@ -20,6 +20,7 @@ from app.services.research_eod_v1.membership import (
     has_complete_session_bar,
     is_theme_candidate,
     source_is_available,
+    theme_membership,
 )
 from app.services.research_eod_v1.paths import ensure_reference_on_path
 from app.services.research_eod_v1.series import SecuritySeries, clip_panel_to_as_of
@@ -125,6 +126,68 @@ class SnapshotRow:
     status: str
 
 
+def _structured_reject_row(
+    series: SecuritySeries,
+    *,
+    session: date,
+    algorithm: str,
+    profile: str,
+    horizon: str,
+    config_digest: str,
+    sector_id: str,
+    reasons: tuple[str, ...],
+    event_status: str,
+) -> dict[str, Any]:
+    return {
+        "security_id": series.security_id,
+        "ticker_at_signal": series.ticker_at_signal,
+        "session_date": session.isoformat(),
+        "feature_version": FEATURE_VERSION,
+        "algorithm_id": algorithm,
+        "profile": profile,
+        "horizon": horizon,
+        "adv20": None,
+        "atr": None,
+        "ma_distance_atr": None,
+        "platform_distance_atr": None,
+        "invalidation_distance_atr": None,
+        "config_hash": config_digest,
+        "sector_context": sector_id,
+        "theme_ids": list(series.theme_ids),
+        "primary_industry_id": series.industry_id,
+        "score": None,
+        "score_components": {},
+        "configured_weights": {},
+        "effective_weights": {},
+        "observed_feature_coverage": 0.0,
+        "setup_state": "rejected",
+        "gate_results": {"setup": (), "common": reasons, "venue": reasons[0] if reasons else ""},
+        "rejection_reasons": reasons,
+        "known_support": None,
+        "known_resistance": None,
+        "planned_invalidation": None,
+        "event_data_status": event_status,
+        "capacity_status": "not_sized",
+        "stock_or_etf_track": series.asset_track,
+        "status": "rejected",
+        "pivots": {},
+        "frozen_setup": None,
+        "factors": {},
+        "residual_status": None,
+        "residual_raw": None,
+        "price_adjustment": (series.price_adjustment[-1] if series.price_adjustment else "unverified"),
+        "volume_adjustment": (series.volume_adjustment[-1] if series.volume_adjustment else "unverified"),
+        "vintage_status": (series.vintage_status[-1] if series.vintage_status else None),
+        "tri_verified": bool(series.tri_verified),
+        "reconstruction_mode": series.reconstruction_mode,
+        "identity_confidence": dict(series.venue_metadata).get("identity_confidence"),
+        "industry_source": dict(series.venue_metadata).get("industry_source"),
+        "halted": bool(series.halted),
+        "currently_tradable": False,
+        "zero_volume": False,
+    }
+
+
 def compute_snapshot(
     as_of: datetime,
     historical_data: Mapping[str, SecuritySeries],
@@ -173,15 +236,53 @@ def compute_snapshot(
     matched = panel.get(matched_benchmark_id) if matched_benchmark_id else None
     if matched is not None and not _usable(matched):
         matched = None
-    residual_panel = {sid: series for sid, series in panel.items() if _usable(series)}
+    event_status = "DATA_INSUFFICIENT" if event_calendar is None else "NOT_REGISTERED"
+    t_complete: dict[str, SecuritySeries] = {}
+    pool_rejects: list[dict[str, Any]] = []
+
+    def _keep_reject(series: SecuritySeries, reason: str) -> None:
+        member, member_reason = theme_membership(
+            series,
+            sector_id=sector_id,
+            target_track=target_track,
+            extra_members=extra_members,
+        )
+        if not member and member_reason != "TRACK_MISMATCH":
+            return
+        reasons = [reason]
+        if member_reason == "TRACK_MISMATCH" and reason != "TRACK_MISMATCH":
+            reasons.append(member_reason)
+        pool_rejects.append(
+            _structured_reject_row(
+                series,
+                session=session,
+                algorithm=algorithm,
+                profile=profile,
+                horizon=horizon,
+                config_digest=config_digest,
+                sector_id=sector_id,
+                reasons=tuple(dict.fromkeys(reasons)),
+                event_status=event_status,
+            )
+        )
+
+    for sid, series in panel.items():
+        if series_is_late(series, late):
+            _keep_reject(series, "LATE_SOURCE")
+            continue
+        if not source_is_available(series, as_of):
+            _keep_reject(series, "SOURCE_UNAVAILABLE")
+            continue
+        if not has_complete_session_bar(series, session):
+            _keep_reject(series, "MISSING_T_BAR")
+            continue
+        t_complete[sid] = series
+
+    residual_panel = dict(t_complete)
     raws: dict[str, RawComponents] = {}
     candidate_ids: set[str] = set()
     reference_ids: set[str] = set()
-    for sid, series in panel.items():
-        if series_is_late(series, late):
-            continue
-        if not source_is_available(series, as_of):
-            continue
+    for sid, series in t_complete.items():
         raws[sid] = extract_raw(
             series,
             market=market,
@@ -192,7 +293,7 @@ def compute_snapshot(
             spy_residual_allowed=spy_residual_allowed,
             matched_market=matched,
         )
-        ok, _reason = is_theme_candidate(
+        ok, reason = is_theme_candidate(
             series,
             sector_id=sector_id,
             session=session,
@@ -201,9 +302,10 @@ def compute_snapshot(
         )
         if ok:
             candidate_ids.add(sid)
-        if has_complete_session_bar(series, session):
-            if sid in {"SPY", "QQQ"} or series.asset_track == target_track:
-                reference_ids.add(sid)
+        elif reason == "TRACK_MISMATCH":
+            _keep_reject(series, "TRACK_MISMATCH")
+        if sid in {"SPY", "QQQ"} or series.asset_track == target_track:
+            reference_ids.add(sid)
     if not reference_ids:
         reference_ids = {
             sid
@@ -252,10 +354,6 @@ def compute_snapshot(
         flags = [xref[p].above_sma50 for p in peers if xref[p].above_sma50 is not None]
         breadth[sid] = None if len(flags) < 5 else sum(1 for flag in flags if flag) / len(flags)
     q_g = q_star(industry_ret, industry=parents, parent=parents, tracks=tracks)
-
-    event_status = "NOT_REGISTERED"
-    if event_calendar is None:
-        event_status = "DATA_INSUFFICIENT"
 
     rows: list[dict[str, Any]] = []
     required = ("T", "M", "S", "R")
@@ -374,6 +472,11 @@ def compute_snapshot(
                 "zero_volume": bool(raw.zero_volume),
             }
         )
+    seen = {row["security_id"] for row in rows}
+    for reject in pool_rejects:
+        if reject["security_id"] not in seen:
+            rows.append(reject)
+            seen.add(reject["security_id"])
     fingerprint = hashlib.sha256(
         json.dumps(
             {"as_of": session.isoformat(), "universe": universe_version, "n": len(rows), "algo": algorithm},

@@ -118,16 +118,17 @@ def _industry_basket_returns(
     industry_id: str | None,
     grid: list[date],
     *,
+    target: SecuritySeries,
     need_dates: list[date],
     return_lo: int,
     return_hi: int,
 ) -> np.ndarray | None:
     if not industry_id:
         return None
-    target = panel[security_id]
+    exclude_id = target.security_id or security_id
     peers: list[np.ndarray] = []
     for sid, item in panel.items():
-        if sid == security_id:
+        if sid == exclude_id:
             continue
         if item.industry_id != industry_id:
             continue
@@ -190,6 +191,7 @@ def residual_raw_momentum(
         series.security_id,
         series.industry_id,
         grid,
+        target=series,
         need_dates=need_dates,
         return_lo=return_lo,
         return_hi=end,
