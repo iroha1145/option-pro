@@ -37,6 +37,7 @@ from app.services.research_eod_v1.factors import apply_sector_gates, extract_raw
 from app.services.research_eod_v1.membership import is_theme_candidate  # noqa: E402
 from app.services.research_eod_v1.measurement import (  # noqa: E402
     attach_forward_label,
+    classify_funnel_row,
     pairing_diff,
     reference_panel,
 )
@@ -61,6 +62,7 @@ LOG = PACK / "measurement_continuous_execution_log.jsonl"
 ROWS = PACK / "measurement_factor_rows.jsonl"
 IC_OUT = PACK / "measurement_ic_summary.json"
 IC_GROUPS = PACK / "measurement_ic_groups.jsonl"
+RESULTS = PACK / "measurement_results.json"
 PAIR = PACK / "measurement_runner_pairing.json"
 SUPERSEDED = PACK / "closeout_historical_abcd.SUPERSEDED.json"
 REGISTRY = ROOT / "research" / "option_pro_us_eod_v1" / "config" / "registry.json"
@@ -149,6 +151,7 @@ def _build_panel(batched: dict) -> tuple[dict[str, SecuritySeries], list[dict]]:
                 "raw_history_years": None
                 if not bars
                 else round((bars[-1].session_date - bars[0].session_date).days / 365.25, 2),
+                "feature_ready": len(bars) >= FEATURE_READY_BARS,
                 "status": "ok" if bars else "empty",
             }
         )
@@ -373,6 +376,7 @@ def _rebuild_theme_stats_from_artifacts(panel: dict[str, SecuritySeries]) -> tup
     executed = 0
     seen_theme_dates: dict[str, set[str]] = {theme_id: set() for theme_id in SECTORS}
     eligible_dates: dict[str, set[str]] = {theme_id: set() for theme_id in SECTORS}
+    date_funnel: dict[str, dict[str, Counter]] = {theme_id: defaultdict(Counter) for theme_id in SECTORS}
     if LOG.exists():
         with LOG.open(encoding="utf-8") as handle:
             for line in handle:
@@ -397,12 +401,29 @@ def _rebuild_theme_stats_from_artifacts(panel: dict[str, SecuritySeries]) -> tup
                     continue
                 theme_id = row["theme_id"]
                 algo = row["algorithm"]
-                stats[theme_id]["funnel"].update(_funnel_from_rows([row]))
+                funnel = _funnel_from_rows([row])
+                stats[theme_id]["funnel"].update(funnel)
+                date_funnel[theme_id][str(row.get("signal_session"))].update(funnel)
                 for reason in row.get("rejection_reasons") or ():
                     stats[theme_id]["family"][algo]["reasons"][str(reason)] += 1
     for theme_id, dates in seen_theme_dates.items():
+        warmup = 0
+        missing = 0
+        for session in dates:
+            flags = date_funnel[theme_id][session]
+            if session in eligible_dates[theme_id]:
+                continue
+            warmup_n = int(flags.get("warmup") or 0)
+            missing_n = int(flags.get("data_missing") or 0)
+            later = sum(int(flags.get(name) or 0) for name in ("setup_not_met", "score_floor", "risk_or_tradability", "other_reject"))
+            if warmup_n and later == 0 and warmup_n >= missing_n:
+                warmup += 1
+            elif missing_n and later == 0:
+                missing += 1
         stats[theme_id]["valid_dates"] = len(dates)
         stats[theme_id]["zero_result_dates"] = len(dates - eligible_dates[theme_id])
+        stats[theme_id]["warmup_dates"] = warmup
+        stats[theme_id]["missing_data_dates"] = missing
     return stats, executed
 
 
@@ -477,6 +498,42 @@ def _stream_ic_and_events() -> tuple[list[dict], dict, int]:
     groups = grouped_ic(ic_pairs)
     events = register_independent_events(event_rows, continuous_calendar=True)
     return groups, events, outcomes
+
+
+def _ic_slices(groups: list[dict]) -> dict[str, dict]:
+    buckets: dict[str, dict] = defaultdict(
+        lambda: {"defined_groups": 0, "undefined_groups": 0, "n_sum": 0, "ic_sum": 0.0, "undefined_reasons": Counter()}
+    )
+    for row in groups:
+        key = "|".join(
+            [
+                str(row.get("theme_id")),
+                str(row.get("algorithm")),
+                str(row.get("profile")),
+                str(row.get("horizon")),
+                str(row.get("label_horizon")),
+            ]
+        )
+        bucket = buckets[key]
+        bucket["n_sum"] += int(row.get("n") or 0)
+        if row.get("ic") is None:
+            bucket["undefined_groups"] += 1
+            bucket["undefined_reasons"][str(row.get("undefined_reason") or "undefined")] += 1
+        else:
+            bucket["defined_groups"] += 1
+            bucket["ic_sum"] += float(row["ic"])
+    out = {}
+    for key, bucket in sorted(buckets.items()):
+        defined = bucket["defined_groups"]
+        out[key] = {
+            "defined_groups": defined,
+            "undefined_groups": bucket["undefined_groups"],
+            "n_sum": bucket["n_sum"],
+            "mean_grouped_ic": None if not defined else bucket["ic_sum"] / defined,
+            "undefined_reasons": dict(bucket["undefined_reasons"]),
+            "note": "mean of within-group ICs; pairs were not pooled across dates",
+        }
+    return out
 
 
 def _yearly_from_groups(groups: list[dict]) -> dict[str, dict]:
@@ -555,6 +612,7 @@ def _write_continuous_reports(
         "valid_group_dates": sorted({row["signal_session"] for row in groups if row["ic"] is not None}),
         "valid_group_date_count": len({row["signal_session"] for row in groups if row["ic"] is not None}),
         "by_date_sample": dict(list(aggregate_ic_by_date(groups).items())[:8]),
+        "by_theme_family_label": _ic_slices(groups),
         "by_year": _yearly_from_groups(groups),
         "note": "Full per-group IC is measurement_ic_groups.jsonl; this file is the review summary.",
     }
@@ -576,6 +634,7 @@ def _write_continuous_reports(
         "label_horizons": list(LABELS),
         "label_maturity_cuts": {str(k): v.isoformat() for k, v in label_cut.items()},
         "feature_ready_bars": FEATURE_READY_BARS,
+        "feature_ready_name_count": sum(1 for item in coverage if item.get("feature_ready") or item.get("bars_clipped", 0) >= FEATURE_READY_BARS),
         "raw_history_years_span": raw_span,
         "raw_history_years_median": None if not years else float(np.median(years)),
         "raw_history_years_note": "2018-2024 clipped tape is not a decade",
@@ -625,25 +684,106 @@ def _write_continuous_reports(
         ],
     }
     OUT.write_text(json.dumps(report, indent=2, default=str) + "\n", encoding="utf-8")
+    _write_measurement_results(report, summary, events)
     return report
+
+
+def _write_measurement_results(report: dict, summary: dict, events: dict) -> None:
+    pairing = {}
+    if PAIR.exists():
+        pairing = json.loads(PAIR.read_text(encoding="utf-8"))
+    counter = {}
+    counter_path = PACK / "measurement_counterexamples" / "two_classes.json"
+    if counter_path.exists():
+        counter = json.loads(counter_path.read_text(encoding="utf-8"))
+    superseded = {}
+    if SUPERSEDED.exists():
+        superseded = json.loads(SUPERSEDED.read_text(encoding="utf-8"))
+    RESULTS.write_text(
+        json.dumps(
+            {
+                "reviewed_head": report.get("code_sha"),
+                "scope": "measurement口径 + continuous 24xABCD balanced/mid approved window",
+                "holdout_start": report.get("holdout_start"),
+                "holdout_unsealed": report.get("holdout_unsealed"),
+                "allowed_end": report.get("allowed_end"),
+                "matrix_claimed": report.get("matrix_claimed"),
+                "executed_backtests": report.get("executed_backtests"),
+                "F1_tests": {
+                    "old_closeout": "tests/test_pr174_followup.py",
+                    "measurement_acceptance": "tests/test_pr174_measurement_acceptance.py",
+                    "local_full_suite": "pending_current_head_rerun",
+                    "github_ci": "pending_artifact_head",
+                },
+                "F2_contracts": {
+                    "pairing_path": str(PAIR.relative_to(ROOT)),
+                    "pairing_note": pairing.get("note"),
+                    "pair_count": len(pairing.get("pairs") or []),
+                    "candidate_identity": [
+                        {
+                            "session": item.get("session"),
+                            "old_candidates": item.get("old_candidates"),
+                            "new_candidates": item.get("new_candidates"),
+                            "n_changed": item.get("n_changed"),
+                        }
+                        for item in (pairing.get("pairs") or [])
+                    ],
+                },
+                "F3_rows": {
+                    "path": report.get("rows_path"),
+                    "schema": str((PACK / "measurement_factor_row_schema.json").relative_to(ROOT)),
+                    "sha256": report.get("rows_sha256"),
+                    "command": "PYTHONPATH=/workspace:/workspace/backend python research/option_pro_us_eod_v1/scripts/run_measurement_continuous_abcd.py --workers 2",
+                    "finalize_command": "PYTHONPATH=/workspace:/workspace/backend python research/option_pro_us_eod_v1/scripts/run_measurement_continuous_abcd.py --finalize-only",
+                },
+                "F4_ic": {
+                    "groups_path": summary.get("groups_path"),
+                    "summary_path": str(IC_OUT.relative_to(ROOT)),
+                    "group_count": summary.get("group_count"),
+                    "defined_groups": summary.get("defined_groups"),
+                    "undefined_groups": summary.get("undefined_groups"),
+                    "valid_group_date_count": summary.get("valid_group_date_count"),
+                    "undefined_reason_counts": summary.get("undefined_reason_counts"),
+                    "by_year": summary.get("by_year"),
+                },
+                "F5_funnel_events": {
+                    "empty_result_ratio_theme_dates": report.get("empty_result_ratio_theme_dates"),
+                    "event_ledger": events,
+                    "theme_empty_ratios": {
+                        theme_id: stats.get("empty_result_ratio")
+                        for theme_id, stats in (report.get("themes") or {}).items()
+                    },
+                    "theme_warmup_dates": {
+                        theme_id: stats.get("warmup_dates")
+                        for theme_id, stats in (report.get("themes") or {}).items()
+                    },
+                },
+                "F6_counts": {
+                    "registered": report.get("registered"),
+                    "unique_registered_configs": report.get("unique_registered_configs"),
+                    "unique_snapshots": report.get("unique_snapshots"),
+                    "actual_function_calls": report.get("actual_function_calls"),
+                    "recomputes": report.get("recomputes"),
+                    "outcomes_inspected": report.get("outcomes_inspected"),
+                    "completed_sessions": report.get("completed_sessions"),
+                    "session_count": report.get("session_count"),
+                },
+                "F7_portfolio_counterexamples": counter,
+                "F8_superseded_17day": superseded,
+                "notes": report.get("notes"),
+            },
+            indent=2,
+            default=str,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
 
 
 def _funnel_from_rows(rows: list[dict]) -> dict[str, int]:
     counts = Counter()
     for row in rows:
-        reasons = [str(item) for item in (row.get("rejection_reasons") or ())]
-        if row.get("status") == "eligible":
-            counts["eligible"] += 1
-        elif any(reason in {"MISSING_T_BAR", "LATE_SOURCE", "SOURCE_UNAVAILABLE", "INCOMPLETE_COMMON_INPUTS"} for reason in reasons):
-            counts["data_missing"] += 1
-        elif any("LOW_SCORE" in reason or reason == "LOW_SCORE" for reason in reasons):
-            counts["score_floor"] += 1
-        elif any(reason in {"ADV_TOO_LOW", "HIGH_ATR", "EXTENDED", "NOT_TRADABLE", "HALTED_SESSION"} for reason in reasons):
-            counts["risk_or_tradability"] += 1
-        elif reasons:
-            counts["setup_not_met"] += 1
-        else:
-            counts["other_reject"] += 1
+        counts[classify_funnel_row(row)] += 1
     return dict(counts)
 
 

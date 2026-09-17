@@ -299,6 +299,25 @@ def run_snapshot_matrix(
     }
 
 
+def classify_funnel_row(row: Mapping[str, Any]) -> str:
+    """One rejection bucket. Warmup is not setup-not-met."""
+
+    reasons = [str(item) for item in (row.get("rejection_reasons") or ())]
+    if row.get("status") == "eligible" or row.get("final_eligible") is True:
+        return "eligible"
+    if any(reason in {"MISSING_T_BAR", "LATE_SOURCE", "SOURCE_UNAVAILABLE", "INCOMPLETE_COMMON_INPUTS"} for reason in reasons):
+        return "data_missing"
+    if any(reason == "SHORT_HISTORY" or "WARMUP" in reason for reason in reasons):
+        return "warmup"
+    if any("LOW_SCORE" in reason or reason == "LOW_SCORE" for reason in reasons):
+        return "score_floor"
+    if any(reason in {"ADV_TOO_LOW", "HIGH_ATR", "EXTENDED", "NOT_TRADABLE", "HALTED_SESSION"} for reason in reasons):
+        return "risk_or_tradability"
+    if reasons:
+        return "setup_not_met"
+    return "other_reject"
+
+
 def pairing_diff(old_payload: Mapping[str, Any], new_payload: Mapping[str, Any]) -> dict[str, Any]:
     old_rows = {row["security_id"]: row for row in old_payload.get("rows") or ()}
     new_rows = {row["security_id"]: row for row in new_payload.get("rows") or ()}

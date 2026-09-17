@@ -20,6 +20,7 @@ from app.services.research_eod_v1.fixtures import make_series, trading_days, tre
 from app.services.research_eod_v1.ledger import simulate_ledger, size_notional
 from app.services.research_eod_v1.measurement import (
     attach_forward_label,
+    classify_funnel_row,
     earliest_entry_session,
     persist_factor_rows,
     reference_panel,
@@ -487,6 +488,15 @@ def test_labels_reject_missing_immature_and_future() -> None:
     assert empty["payloads"][0]["rows"] == [] or all(
         row.get("status") != "eligible" for row in empty["payloads"][0]["rows"]
     )
+
+
+def test_funnel_keeps_warmup_out_of_setup_bucket() -> None:
+    assert classify_funnel_row({"status": "eligible", "rejection_reasons": []}) == "eligible"
+    assert classify_funnel_row({"status": "rejected", "rejection_reasons": ["SHORT_HISTORY"]}) == "warmup"
+    assert classify_funnel_row({"status": "rejected", "rejection_reasons": ["MISSING_T_BAR"]}) == "data_missing"
+    assert classify_funnel_row({"status": "rejected", "rejection_reasons": ["LOW_SCORE"]}) == "score_floor"
+    assert classify_funnel_row({"status": "rejected", "rejection_reasons": ["ADV_TOO_LOW"]}) == "risk_or_tradability"
+    assert classify_funnel_row({"status": "rejected", "rejection_reasons": ["SETUP_NOT_MET"]}) == "setup_not_met"
 
 
 def test_chunked_and_resumed_runs_match_continuous_keys(tmp_path: Path) -> None:
