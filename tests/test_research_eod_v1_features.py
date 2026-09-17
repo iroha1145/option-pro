@@ -45,6 +45,25 @@ def test_pivot_confirmation_delay() -> None:
     assert highs[-1].confirmed_at == days[23]
 
 
+def test_vectorized_pivots_match_loop_oracle() -> None:
+    rng = np.random.default_rng(7)
+    days = trading_days(date(2018, 1, 2), 500)
+    high = 100 + np.cumsum(rng.normal(0, 1.2, 500))
+    low = high - rng.uniform(0.4, 2.0, 500)
+    for as_of in (20, 80, 250, 499):
+        got_h, got_l = find_confirmed_pivots(high, low, days, span=3, as_of_index=as_of)
+        exp_h, exp_l = [], []
+        last = as_of
+        span = 3
+        for i in range(span, last - span + 1):
+            if high[i] > np.max(high[i - span : i]) and high[i] >= np.max(high[i + 1 : i + span + 1]):
+                exp_h.append((i, float(high[i]), days[i], days[i + span]))
+            if low[i] < np.min(low[i - span : i]) and low[i] <= np.min(low[i + 1 : i + span + 1]):
+                exp_l.append((i, float(low[i]), days[i], days[i + span]))
+        assert [(p.index, p.price, p.pivot_at, p.confirmed_at) for p in got_h] == exp_h
+        assert [(p.index, p.price, p.pivot_at, p.confirmed_at) for p in got_l] == exp_l
+
+
 def test_no_base_is_zero_insufficient_is_null() -> None:
     days = trading_days(date(2019, 1, 2), 80)
     close = trending_close(80, start=30, drift=0.4)
