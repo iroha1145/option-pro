@@ -428,6 +428,8 @@ def main() -> int:
                     theme_stats[theme_id]["zero_result_dates"] += 1
             if not any_usable:
                 pass
+            rows_handle.flush()
+            log.flush()
             done_sessions.add(session.isoformat())
             CHECKPOINT.write_text(json.dumps({"done_sessions": sorted(done_sessions)}), encoding="utf-8")
             print(json.dumps({"session": session.isoformat(), "executed": executed, "done": len(done_sessions)}), flush=True)
