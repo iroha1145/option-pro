@@ -577,6 +577,7 @@ def extract_raw(
     sector_gates: dict[str, Any],
     spy_residual_allowed: bool = True,
     matched_market: SecuritySeries | None = None,
+    include_setup: bool = True,
 ) -> RawComponents:
     t = len(series.dates) - 1
     session = series.dates[t]
@@ -656,7 +657,16 @@ def extract_raw(
     lh_ll = structure_label == "LH+LL"
     planned = known_support
     invalidated = bool(planned is not None and close[t] < planned)
-    gated = _theme_setup_from_gates(series, t, sector_gates, close, atr_t1)
+    if include_setup:
+        gated = _theme_setup_from_gates(series, t, sector_gates, close, atr_t1)
+    else:
+        gated = {
+            "b_score": None,
+            "b_status": "deferred_theme_gates",
+            "frozen_setup": None,
+            "breakout_track": None,
+            "platform_distance_atr": None,
+        }
     b_score, b_status, setup, breakout_track = (
         gated["b_score"],
         gated["b_status"],

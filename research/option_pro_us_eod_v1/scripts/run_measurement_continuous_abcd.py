@@ -195,10 +195,11 @@ def _extract_raws(session_panel: dict[str, SecuritySeries], registry: dict, hori
             horizon=horizon,
             momentum_blend=blend,
             sector_gates=gates,
+            include_setup=False,
         )
 
     raws = {}
-    with ThreadPoolExecutor(max_workers=4) as pool:
+    with ThreadPoolExecutor(max_workers=2) as pool:
         for sid, raw in pool.map(_one, session_panel):
             raws[sid] = raw
     return raws
@@ -228,7 +229,15 @@ def _process_one_session(session: date, panel: dict[str, SecuritySeries], regist
             raw_cache[track] = _extract_raws(refs, registry, "mid")
         raws = raw_cache[track]
         gates = registry["sectors"][theme_id]["gates"]
+        gate_key = (
+            int(gates.get("base_min_sessions", 20)),
+            int(gates.get("base_max_sessions", 80)),
+            int(gates.get("base_min_distinct_touches", 2)),
+            float(gates.get("breakout_buffer_atr", 0.15)),
+            float(gates.get("breakout_buffer_price_fraction", 0.0025)),
+        )
         gated = {}
+        setup_memo = raw_cache.setdefault("_setup_memo", {})
         for sid, series in refs.items():
             raw = raws.get(sid)
             if raw is None:
@@ -239,7 +248,13 @@ def _process_one_session(session: date, panel: dict[str, SecuritySeries], regist
                 session=session,
                 target_track=track,
             )
-            gated[sid] = apply_sector_gates(raw, series, gates) if ok else raw
+            if not ok:
+                gated[sid] = raw
+                continue
+            memo_key = (sid, gate_key)
+            if memo_key not in setup_memo:
+                setup_memo[memo_key] = apply_sector_gates(raw, series, gates)
+            gated[sid] = setup_memo[memo_key]
         for algorithm in ALGORITHMS:
             payload = compute_snapshot(
                 as_of,
