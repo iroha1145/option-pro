@@ -444,6 +444,18 @@ def test_runner_keeps_foreign_theme_in_reference_not_candidates() -> None:
     assert "SPY" in payload["reference_ids"]
 
 
+def test_forward_label_needs_unclipped_future_bars() -> None:
+    days, panel = _two_theme_panel()
+    session = days[-20]
+    clipped = panel["NVDA"].slice_through(session)
+    assert clipped is not None
+    clipped_label = attach_forward_label(clipped, session, 5, last_allowed=days[-1], holdout_start=date(2024, 7, 1))
+    full_label = attach_forward_label(panel["NVDA"], session, 5, last_allowed=days[-1], holdout_start=date(2024, 7, 1))
+    assert clipped_label["label"] is None
+    assert clipped_label["reason"] in {"LABEL_IMMATURE", "LABEL_MISSING"}
+    assert full_label["label"] is not None
+
+
 def test_labels_reject_missing_immature_and_future() -> None:
     days, panel = _two_theme_panel()
     series = panel["NVDA"]

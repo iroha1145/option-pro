@@ -261,6 +261,39 @@ def _rebuild_theme_stats_from_artifacts(panel: dict[str, SecuritySeries]) -> tup
     return stats, executed
 
 
+def _relabel_factor_rows(panel: dict[str, SecuritySeries]) -> int:
+    """Repair labels written from session-clipped series (no forward bars)."""
+
+    if not ROWS.exists():
+        return 0
+    tmp = ROWS.with_suffix(".relabel.jsonl")
+    updated = 0
+    with ROWS.open(encoding="utf-8") as src, tmp.open("w", encoding="utf-8") as dst:
+        for line in src:
+            row = json.loads(line)
+            series = panel.get(row.get("security_id"))
+            horizon = int(row.get("label_horizon") or 0)
+            session = date.fromisoformat(str(row.get("signal_session")))
+            if series is None or not horizon:
+                label = {"label": None, "label_matured_at": None, "reason": "NO_SERIES"}
+            else:
+                label = attach_forward_label(
+                    series,
+                    session,
+                    horizon,
+                    last_allowed=ALLOWED_END,
+                    holdout_start=HOLDOUT_START,
+                )
+            if row.get("label") != label.get("label") or row.get("label_reason") != label.get("reason"):
+                updated += 1
+            row["label"] = label.get("label")
+            row["label_matured_at"] = label.get("label_matured_at")
+            row["label_reason"] = label.get("reason")
+            dst.write(json.dumps(row, sort_keys=True, default=str) + "\n")
+    tmp.replace(ROWS)
+    return updated
+
+
 def _stream_ic_and_events() -> tuple[list[dict], dict, int]:
     outcomes = 0
     ic_pairs: list[dict] = []
@@ -336,6 +369,7 @@ def _write_continuous_reports(
     label_cut: dict,
     recomputes: int,
 ) -> dict:
+    relabeled = _relabel_factor_rows(panel)
     theme_stats, executed = _rebuild_theme_stats_from_artifacts(panel)
     groups, events, outcomes = _stream_ic_and_events()
     years = [item["raw_history_years"] for item in coverage if item.get("raw_history_years")]
@@ -436,10 +470,12 @@ def _write_continuous_reports(
         "ic_groups_path": str(IC_GROUPS.relative_to(ROOT)),
         "ic_summary_path": str(IC_OUT.relative_to(ROOT)),
         "superseded_17day": str(SUPERSEDED.relative_to(ROOT)),
+        "relabeled_rows": relabeled,
         "notes": [
             "Cache replay only; no Massive; no network purchase.",
             "Old 17-day IC/independent_events are SUPERSEDED_METRIC.",
             "Portfolio PnL not run; executed_backtests stays 0.",
+            "Forward labels use the unclipped series through allowed_end.",
             "Stop after this fixed-parameter continuous pass.",
         ],
     }
@@ -618,12 +654,12 @@ def main() -> int:
                             any_eligible = True
                         for label_horizon in LABELS:
                             label = attach_forward_label(
-                                clipped[row["security_id"]],
+                                panel[row["security_id"]],
                                 session,
                                 label_horizon,
                                 last_allowed=ALLOWED_END,
                                 holdout_start=HOLDOUT_START,
-                            ) if row["security_id"] in clipped else {"label": None, "label_matured_at": None, "reason": "NO_SERIES"}
+                            ) if row["security_id"] in panel else {"label": None, "label_matured_at": None, "reason": "NO_SERIES"}
                             record = {
                                 "security_id": row["security_id"],
                                 "signal_session": session.isoformat(),
