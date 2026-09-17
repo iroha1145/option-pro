@@ -1,0 +1,2059 @@
+{
+  "note": "old theme+SPY/QQQ vs full same-track pool; not a tune",
+  "pairs": [
+    {
+      "session": "2023-06-12",
+      "old_candidates": [
+        "AMAT",
+        "AMD",
+        "ASML",
+        "AVGO",
+        "INTC",
+        "KLAC",
+        "LRCX",
+        "MRVL",
+        "MU",
+        "NVDA",
+        "QCOM",
+        "TSM",
+        "TXN"
+      ],
+      "new_candidates": [
+        "AMAT",
+        "AMD",
+        "ASML",
+        "AVGO",
+        "INTC",
+        "KLAC",
+        "LRCX",
+        "MRVL",
+        "MU",
+        "NVDA",
+        "QCOM",
+        "TSM",
+        "TXN"
+      ],
+      "old_references": [
+        "AMAT",
+        "AMD",
+        "ASML",
+        "AVGO",
+        "INTC",
+        "KLAC",
+        "LRCX",
+        "MRVL",
+        "MU",
+        "NVDA",
+        "QCOM",
+        "QQQ",
+        "SPY",
+        "TSM",
+        "TXN"
+      ],
+      "new_references": [
+        "AAL",
+        "AAPL",
+        "ABBV",
+        "ABT",
+        "ADBE",
+        "AEP",
+        "AFRM",
+        "ALB",
+        "ALK",
+        "AMAT",
+        "AMD",
+        "AMGN",
+        "AMT",
+        "AMX",
+        "AMZN",
+        "ANET",
+        "ASML",
+        "AVGO",
+        "AXP",
+        "BA",
+        "BABA",
+        "BAC",
+        "BIDU",
+        "BIIB",
+        "BILI",
+        "BLNK",
+        "BMY",
+        "BNTX",
+        "BTBT",
+        "C",
+        "CAT",
+        "CCI",
+        "CEG",
+        "CFRUY",
+        "CHPT",
+        "CHTR",
+        "CIFR",
+        "CLSK",
+        "CMCSA",
+        "COIN",
+        "COP",
+        "COST",
+        "CPA",
+        "CRM",
+        "CRWD",
+        "CVX",
+        "D",
+        "DAL",
+        "DDOG",
+        "DE",
+        "DELL",
+        "DHR",
+        "DIS",
+        "DLR",
+        "DUK",
+        "DVN",
+        "EL",
+        "EMR",
+        "ENPH",
+        "EOG",
+        "EQIX",
+        "ETN",
+        "EXC",
+        "F",
+        "FDX",
+        "FSLR",
+        "FUBO",
+        "GD",
+        "GE",
+        "GILD",
+        "GM",
+        "GOOGL",
+        "GS",
+        "HD",
+        "HEI",
+        "HON",
+        "HOOD",
+        "HPQ",
+        "HUT",
+        "INTC",
+        "IQ",
+        "ISRG",
+        "ITW",
+        "JBLU",
+        "JD",
+        "JNJ",
+        "JPM",
+        "KLAC",
+        "LCID",
+        "LHX",
+        "LI",
+        "LLY",
+        "LMT",
+        "LOGI",
+        "LOW",
+        "LRCX",
+        "LUV",
+        "LVMUY",
+        "MA",
+        "MARA",
+        "MCD",
+        "MDB",
+        "MDT",
+        "META",
+        "MMM",
+        "MPC",
+        "MRK",
+        "MRNA",
+        "MRVL",
+        "MS",
+        "MSFT",
+        "MSTR",
+        "MU",
+        "NEE",
+        "NET",
+        "NFLX",
+        "NIO",
+        "NKE",
+        "NOC",
+        "NOW",
+        "NTES",
+        "NVDA",
+        "NVO",
+        "O",
+        "ORCL",
+        "OXY",
+        "PANW",
+        "PCG",
+        "PDD",
+        "PFE",
+        "PINS",
+        "PLD",
+        "PLTR",
+        "PLUG",
+        "PNC",
+        "PSA",
+        "PSKY",
+        "PSX",
+        "PVH",
+        "PYPL",
+        "QCOM",
+        "QQQ",
+        "REGN",
+        "RIOT",
+        "RIVN",
+        "RL",
+        "RMS.PA",
+        "ROKU",
+        "RTX",
+        "RUN",
+        "RYAAY",
+        "SBUX",
+        "SCHW",
+        "SLB",
+        "SMCI",
+        "SNAP",
+        "SNOW",
+        "SO",
+        "SOFI",
+        "SONY",
+        "SPG",
+        "SPOT",
+        "SPY",
+        "SRE",
+        "STLA",
+        "T",
+        "TAL",
+        "TDG",
+        "TFC",
+        "TGT",
+        "TJX",
+        "TKO",
+        "TM",
+        "TME",
+        "TMO",
+        "TMUS",
+        "TPR",
+        "TSLA",
+        "TSM",
+        "TXN",
+        "TXT",
+        "UAL",
+        "UNH",
+        "UPS",
+        "UPST",
+        "USB",
+        "V",
+        "VICI",
+        "VLO",
+        "VOD",
+        "VRTX",
+        "VST",
+        "VZ",
+        "WBD",
+        "WELL",
+        "WFC",
+        "WMT",
+        "WULF",
+        "XOM",
+        "XPEV",
+        "XYZ"
+      ],
+      "row_diffs": [
+        {
+          "security_id": "AMAT",
+          "old_score": 58.21095269531584,
+          "new_score": 67.99003796400925,
+          "old_reasons": [
+            "EXTENDED",
+            "LOW_SCORE"
+          ],
+          "new_reasons": [
+            "EXTENDED",
+            "LOW_SCORE"
+          ],
+          "old_factors": {
+            "T": 59.2679649541339,
+            "M": 46.666666666655,
+            "S": 82.0,
+            "B": 75.04067504020419,
+            "P": 42.93450925852785,
+            "V": 39.35866353405966,
+            "R": 58.3333333333,
+            "G": null
+          },
+          "new_factors": {
+            "T": 75.0255407117339,
+            "M": 66.717171717185,
+            "S": 82.0,
+            "B": 75.04067504020419,
+            "P": 42.93450925852785,
+            "V": 57.338461513859656,
+            "R": 40.40404040402,
+            "G": null
+          }
+        },
+        {
+          "security_id": "AMD",
+          "old_score": 70.93499424033119,
+          "new_score": 72.19757563786456,
+          "old_reasons": [
+            "EXTENDED",
+            "LOW_SCORE"
+          ],
+          "new_reasons": [
+            "HIGH_ATR",
+            "EXTENDED",
+            "LOW_SCORE"
+          ],
+          "old_factors": {
+            "T": 84.47017388483309,
+            "M": 72.08333333335,
+            "S": 82.0,
+            "B": 67.44724210338134,
+            "P": 40.2708042212071,
+            "V": 74.77684598810713,
+            "R": 17.916666666675,
+            "G": null
+          },
+          "new_factors": {
+            "T": 81.74290115755309,
+            "M": 77.373737373705,
+            "S": 82.0,
+            "B": 67.44724210338134,
+            "P": 40.2708042212071,
+            "V": 73.36270457394713,
+            "R": 23.989898989874998,
+            "G": null
+          }
+        },
+        {
+          "security_id": "ASML",
+          "old_score": 63.92783403587235,
+          "new_score": 70.20909204722948,
+          "old_reasons": [
+            "LOW_SCORE"
+          ],
+          "new_reasons": [
+            "LOW_SCORE"
+          ],
+          "old_factors": {
+            "T": 66.05718960925421,
+            "M": 59.58333333333999,
+            "S": 82.0,
+            "B": 68.58254074625333,
+            "P": 52.691315734696296,
+            "V": 35.701081057118664,
+            "R": 60.4166666667,
+            "G": null
+          },
+          "new_factors": {
+            "T": 77.3703209223742,
+            "M": 72.62626262624,
+            "S": 82.0,
+            "B": 68.58254074625333,
+            "P": 52.691315734696296,
+            "V": 52.26673762275867,
+            "R": 40.78282828283,
+            "G": null
+          }
+        },
+        {
+          "security_id": "AVGO",
+          "old_score": 75.60410969145416,
+          "new_score": 74.92165699177457,
+          "old_reasons": [
+            "EXTENDED"
+          ],
+          "new_reasons": [
+            "EXTENDED"
+          ],
+          "old_factors": {
+            "T": 82.48193788587731,
+            "M": 81.249999999975,
+            "S": 82.0,
+            "B": 76.3587895908564,
+            "P": 25.0,
+            "V": 58.007143087156194,
+            "R": 63.333333333344996,
+            "G": null
+          },
+          "new_factors": {
+            "T": 82.8859782899173,
+            "M": 81.13636363636499,
+            "S": 82.0,
+            "B": 76.3587895908564,
+            "P": 25.0,
+            "V": 66.5930016730362,
+            "R": 48.030303030309994,
+            "G": null
+          }
+        },
+        {
+          "security_id": "INTC",
+          "old_score": 50.143120391980844,
+          "new_score": 60.01214054304771,
+          "old_reasons": [
+            "EXTENDED",
+            "LOW_SCORE",
+            "NONPOSITIVE_MOMENTUM"
+          ],
+          "new_reasons": [
+            "EXTENDED",
+            "LOW_SCORE",
+            "NONPOSITIVE_MOMENTUM"
+          ],
+          "old_factors": {
+            "T": 51.900203953596574,
+            "M": 26.66666666665,
+            "S": 79.85040606827863,
+            "B": 68.2212890028566,
+            "P": 42.760899444802014,
+            "V": 71.4383598436842,
+            "R": 36.6666666667,
+            "G": null
+          },
+          "new_factors": {
+            "T": 68.86990092327657,
+            "M": 46.515151515155,
+            "S": 79.85040606827863,
+            "B": 68.2212890028566,
+            "P": 42.760899444802014,
+            "V": 74.16563257096422,
+            "R": 29.267676767664998,
+            "G": null
+          }
+        },
+        {
+          "security_id": "KLAC",
+          "old_score": 66.28507506349669,
+          "new_score": 68.9980679367467,
+          "old_reasons": [
+            "EXTENDED",
+            "UNRESOLVED_UPTHRUST",
+            "LOW_SCORE"
+          ],
+          "new_reasons": [
+            "EXTENDED",
+            "UNRESOLVED_UPTHRUST",
+            "LOW_SCORE"
+          ],
+          "old_factors": {
+            "T": 73.35870819603203,
+            "M": 50.833333333325,
+            "S": 82.0,
+            "B": 82.22530462151799,
+            "P": 43.6187612640674,
+            "V": 59.87838660563443,
+            "R": 72.083333333345,
+            "G": null
+          },
+          "new_factors": {
+            "T": 79.01527385259202,
+            "M": 62.752525252530006,
+            "S": 82.0,
+            "B": 82.22530462151799,
+            "P": 43.6187612640674,
+            "V": 65.73697246419442,
+            "R": 42.3232323232,
+            "G": null
+          }
+        },
+        {
+          "security_id": "LRCX",
+          "old_score": 69.49345118834644,
+          "new_score": 71.29082851452829,
+          "old_reasons": [
+            "LOW_SCORE"
+          ],
+          "new_reasons": [
+            "LOW_SCORE"
+          ],
+          "old_factors": {
+            "T": 76.61020984912211,
+            "M": 70.00000000002,
+            "S": 79.85040606827863,
+            "B": 62.76704599601895,
+            "P": 39.51682828735785,
+            "V": 43.48784139343701,
+            "R": 64.166666666675,
+            "G": null
+          },
+          "new_factors": {
+            "T": 79.94354318244213,
+            "M": 75.22727272726,
+            "S": 79.85040606827863,
+            "B": 62.76704599601895,
+            "P": 39.51682828735785,
+            "V": 60.35652826211702,
+            "R": 43.585858585875,
+            "G": null
+          }
+        },
+        {
+          "security_id": "MRVL",
+          "old_score": 50.008121563898044,
+          "new_score": 56.683318969352854,
+          "old_reasons": [
+            "HIGH_ATR",
+            "EXTENDED",
+            "LOW_SCORE"
+          ],
+          "new_reasons": [
+            "HIGH_ATR",
+            "EXTENDED",
+            "LOW_SCORE"
+          ],
+          "old_factors": {
+            "T": 71.0767951176046,
+            "M": 29.583333333355,
+            "S": 62.0,
+            "B": 70.01063561160065,
+            "P": 59.53741916403135,
+            "V": 59.29864965670927,
+            "R": 7.916666666655,
+            "G": null
+          },
+          "new_factors": {
+            "T": 79.2586132994446,
+            "M": 42.626262626249996,
+            "S": 62.0,
+            "B": 70.01063561160065,
+            "P": 59.53741916403135,
+            "V": 60.51077086882927,
+            "R": 14.3181818182,
+            "G": null
+          }
+        },
+        {
+          "security_id": "MU",
+          "old_score": 58.92878741907516,
+          "new_score": 65.58721176396864,
+          "old_reasons": [
+            "LOW_SCORE"
+          ],
+          "new_reasons": [
+            "LOW_SCORE"
+          ],
+          "old_factors": {
+            "T": 62.00818742023192,
+            "M": 50.833333333335,
+            "S": 82.0,
+            "B": 75.17047829459581,
+            "P": 25.0,
+            "V": 29.67310984742505,
+            "R": 61.666666666655004,
+            "G": null
+          },
+          "new_factors": {
+            "T": 76.04859146063191,
+            "M": 64.04040404040501,
+            "S": 82.0,
+            "B": 75.17047829459581,
+            "P": 25.0,
+            "V": 47.14785732218505,
+            "R": 36.893939393935,
+            "G": null
+          }
+        },
+        {
+          "security_id": "NVDA",
+          "old_score": 79.2861337948795,
+          "new_score": 78.58883081502877,
+          "old_reasons": [],
+          "new_reasons": [
+            "HIGH_ATR"
+          ],
+          "old_factors": {
+            "T": 89.33965065976798,
+            "M": 100.0,
+            "S": 82.0,
+            "B": 66.819200639293,
+            "P": 64.8428286408489,
+            "V": 40.16674147894903,
+            "R": 22.083333333325,
+            "G": null
+          },
+          "new_factors": {
+            "T": 86.30934762944798,
+            "M": 95.95959595957001,
+            "S": 82.0,
+            "B": 66.819200639293,
+            "P": 64.8428286408489,
+            "V": 54.71219602442903,
+            "R": 24.3686868687,
+            "G": null
+          }
+        },
+        {
+          "security_id": "QCOM",
+          "old_score": 39.711001032117835,
+          "new_score": 45.03979019284469,
+          "old_reasons": [
+            "EXTENDED",
+            "LOW_SCORE",
+            "TREND_DIRECTION",
+            "NONPOSITIVE_MOMENTUM"
+          ],
+          "new_reasons": [
+            "EXTENDED",
+            "LOW_SCORE",
+            "TREND_DIRECTION",
+            "NONPOSITIVE_MOMENTUM"
+          ],
+          "old_factors": {
+            "T": 27.022204161040754,
+            "M": 7.916666666669999,
+            "S": 82.0,
+            "B": 69.34004229896522,
+            "P": 39.72380506526431,
+            "V": 56.954009521532825,
+            "R": 63.749999999985,
+            "G": null
+          },
+          "new_factors": {
+            "T": 33.28483042368075,
+            "M": 26.414141414164998,
+            "S": 82.0,
+            "B": 69.34004229896522,
+            "P": 39.72380506526431,
+            "V": 66.65097921849284,
+            "R": 36.691919191905,
+            "G": null
+          }
+        },
+        {
+          "security_id": "TSM",
+          "old_score": 53.668522019255846,
+          "new_score": 64.10343587894687,
+          "old_reasons": [
+            "EXTENDED",
+            "LOW_SCORE"
+          ],
+          "new_reasons": [
+            "EXTENDED",
+            "LOW_SCORE"
+          ],
+          "old_factors": {
+            "T": 56.43872296171233,
+            "M": 33.750000000005,
+            "S": 82.0,
+            "B": 74.18993897164475,
+            "P": 41.62414042679836,
+            "V": 71.00166263124821,
+            "R": 33.3333333333,
+            "G": null
+          },
+          "new_factors": {
+            "T": 71.48922801223233,
+            "M": 56.666666666655,
+            "S": 82.0,
+            "B": 74.18993897164475,
+            "P": 41.62414042679836,
+            "V": 71.10267273224821,
+            "R": 30.101010100989996,
+            "G": null
+          }
+        },
+        {
+          "security_id": "TXN",
+          "old_score": 48.53451259291789,
+          "new_score": 55.589798959145654,
+          "old_reasons": [
+            "LOW_SCORE",
+            "TREND_DIRECTION",
+            "NONPOSITIVE_MOMENTUM"
+          ],
+          "new_reasons": [
+            "LOW_SCORE",
+            "TREND_DIRECTION",
+            "NONPOSITIVE_MOMENTUM"
+          ],
+          "old_factors": {
+            "T": 37.521321534805,
+            "M": 20.83333333332,
+            "S": 82.0,
+            "B": 73.72270346335898,
+            "P": 53.52905846490928,
+            "V": 46.26473100464028,
+            "R": 88.33333333334,
+            "G": null
+          },
+          "new_factors": {
+            "T": 47.319301332805,
+            "M": 41.010101010110006,
+            "S": 82.0,
+            "B": 73.72270346335898,
+            "P": 53.52905846490928,
+            "V": 58.486953226840285,
+            "R": 62.37373737375499,
+            "G": null
+          }
+        }
+      ],
+      "n_changed": 13
+    },
+    {
+      "session": "2023-06-13",
+      "old_candidates": [
+        "AMAT",
+        "AMD",
+        "ASML",
+        "AVGO",
+        "INTC",
+        "KLAC",
+        "LRCX",
+        "MRVL",
+        "MU",
+        "NVDA",
+        "QCOM",
+        "TSM",
+        "TXN"
+      ],
+      "new_candidates": [
+        "AMAT",
+        "AMD",
+        "ASML",
+        "AVGO",
+        "INTC",
+        "KLAC",
+        "LRCX",
+        "MRVL",
+        "MU",
+        "NVDA",
+        "QCOM",
+        "TSM",
+        "TXN"
+      ],
+      "old_references": [
+        "AMAT",
+        "AMD",
+        "ASML",
+        "AVGO",
+        "INTC",
+        "KLAC",
+        "LRCX",
+        "MRVL",
+        "MU",
+        "NVDA",
+        "QCOM",
+        "QQQ",
+        "SPY",
+        "TSM",
+        "TXN"
+      ],
+      "new_references": [
+        "AAL",
+        "AAPL",
+        "ABBV",
+        "ABT",
+        "ADBE",
+        "AEP",
+        "AFRM",
+        "ALB",
+        "ALK",
+        "AMAT",
+        "AMD",
+        "AMGN",
+        "AMT",
+        "AMX",
+        "AMZN",
+        "ANET",
+        "ASML",
+        "AVGO",
+        "AXP",
+        "BA",
+        "BABA",
+        "BAC",
+        "BIDU",
+        "BIIB",
+        "BILI",
+        "BLNK",
+        "BMY",
+        "BNTX",
+        "BTBT",
+        "C",
+        "CAT",
+        "CCI",
+        "CEG",
+        "CFRUY",
+        "CHPT",
+        "CHTR",
+        "CIFR",
+        "CLSK",
+        "CMCSA",
+        "COIN",
+        "COP",
+        "COST",
+        "CPA",
+        "CRM",
+        "CRWD",
+        "CVX",
+        "D",
+        "DAL",
+        "DDOG",
+        "DE",
+        "DELL",
+        "DHR",
+        "DIS",
+        "DLR",
+        "DUK",
+        "DVN",
+        "EL",
+        "EMR",
+        "ENPH",
+        "EOG",
+        "EQIX",
+        "ETN",
+        "EXC",
+        "F",
+        "FDX",
+        "FSLR",
+        "FUBO",
+        "GD",
+        "GE",
+        "GILD",
+        "GM",
+        "GOOGL",
+        "GS",
+        "HD",
+        "HEI",
+        "HON",
+        "HOOD",
+        "HPQ",
+        "HUT",
+        "INTC",
+        "IQ",
+        "ISRG",
+        "ITW",
+        "JBLU",
+        "JD",
+        "JNJ",
+        "JPM",
+        "KLAC",
+        "LCID",
+        "LHX",
+        "LI",
+        "LLY",
+        "LMT",
+        "LOGI",
+        "LOW",
+        "LRCX",
+        "LUV",
+        "LVMUY",
+        "MA",
+        "MARA",
+        "MCD",
+        "MDB",
+        "MDT",
+        "META",
+        "MMM",
+        "MPC",
+        "MRK",
+        "MRNA",
+        "MRVL",
+        "MS",
+        "MSFT",
+        "MSTR",
+        "MU",
+        "NEE",
+        "NET",
+        "NFLX",
+        "NIO",
+        "NKE",
+        "NOC",
+        "NOW",
+        "NTES",
+        "NVDA",
+        "NVO",
+        "O",
+        "ORCL",
+        "OXY",
+        "PANW",
+        "PCG",
+        "PDD",
+        "PFE",
+        "PINS",
+        "PLD",
+        "PLTR",
+        "PLUG",
+        "PNC",
+        "PSA",
+        "PSKY",
+        "PSX",
+        "PVH",
+        "PYPL",
+        "QCOM",
+        "QQQ",
+        "REGN",
+        "RIOT",
+        "RIVN",
+        "RL",
+        "RMS.PA",
+        "ROKU",
+        "RTX",
+        "RUN",
+        "RYAAY",
+        "SBUX",
+        "SCHW",
+        "SLB",
+        "SMCI",
+        "SNAP",
+        "SNOW",
+        "SO",
+        "SOFI",
+        "SONY",
+        "SPG",
+        "SPOT",
+        "SPY",
+        "SRE",
+        "STLA",
+        "T",
+        "TAL",
+        "TDG",
+        "TFC",
+        "TGT",
+        "TJX",
+        "TKO",
+        "TM",
+        "TME",
+        "TMO",
+        "TMUS",
+        "TPR",
+        "TSLA",
+        "TSM",
+        "TXN",
+        "TXT",
+        "UAL",
+        "UNH",
+        "UPS",
+        "UPST",
+        "USB",
+        "V",
+        "VICI",
+        "VLO",
+        "VOD",
+        "VRTX",
+        "VST",
+        "VZ",
+        "WBD",
+        "WELL",
+        "WFC",
+        "WMT",
+        "WULF",
+        "XOM",
+        "XPEV",
+        "XYZ"
+      ],
+      "row_diffs": [
+        {
+          "security_id": "AMAT",
+          "old_score": 58.98253667840907,
+          "new_score": 69.08905875182482,
+          "old_reasons": [
+            "EXTENDED",
+            "LOW_SCORE"
+          ],
+          "new_reasons": [
+            "EXTENDED",
+            "LOW_SCORE"
+          ],
+          "old_factors": {
+            "T": 58.950288197569634,
+            "M": 47.500000000019995,
+            "S": 82.0,
+            "B": 75.04067504020419,
+            "P": 48.250625860608736,
+            "V": 44.325579274930945,
+            "R": 58.3333333333,
+            "G": null
+          },
+          "new_factors": {
+            "T": 75.31392456120965,
+            "M": 68.56060606062499,
+            "S": 82.0,
+            "B": 75.04067504020419,
+            "P": 48.250625860608736,
+            "V": 59.17406412341094,
+            "R": 41.540404040405,
+            "G": null
+          }
+        },
+        {
+          "security_id": "AMD",
+          "old_score": 68.43525678138622,
+          "new_score": 70.0833301547035,
+          "old_reasons": [
+            "UNRESOLVED_UPTHRUST",
+            "LOW_SCORE"
+          ],
+          "new_reasons": [
+            "HIGH_ATR",
+            "UNRESOLVED_UPTHRUST",
+            "LOW_SCORE"
+          ],
+          "old_factors": {
+            "T": 80.02248758568027,
+            "M": 72.08333333335,
+            "S": 79.0,
+            "B": 67.44724210338134,
+            "P": 31.84187273422083,
+            "V": 70.12718208038963,
+            "R": 17.916666666675,
+            "G": null
+          },
+          "new_factors": {
+            "T": 80.42652798972026,
+            "M": 76.43939393938001,
+            "S": 79.0,
+            "B": 67.44724210338134,
+            "P": 31.84187273422083,
+            "V": 67.39990935310962,
+            "R": 23.080808080784998,
+            "G": null
+          }
+        },
+        {
+          "security_id": "ASML",
+          "old_score": 64.00812668017375,
+          "new_score": 69.41744832281347,
+          "old_reasons": [
+            "LOW_SCORE"
+          ],
+          "new_reasons": [
+            "LOW_SCORE"
+          ],
+          "old_factors": {
+            "T": 65.86424470869204,
+            "M": 61.666666666664995,
+            "S": 82.0,
+            "B": 68.58254074625333,
+            "P": 46.08609509340862,
+            "V": 33.36505797899598,
+            "R": 60.4166666667,
+            "G": null
+          },
+          "new_factors": {
+            "T": 76.97535581981205,
+            "M": 72.12121212122,
+            "S": 82.0,
+            "B": 68.58254074625333,
+            "P": 46.08609509340862,
+            "V": 49.930714544635975,
+            "R": 40.101010100989996,
+            "G": null
+          }
+        },
+        {
+          "security_id": "AVGO",
+          "old_score": 73.28380887231029,
+          "new_score": 72.9226657144548,
+          "old_reasons": [
+            "EXTENDED",
+            "LOW_SCORE"
+          ],
+          "new_reasons": [
+            "EXTENDED",
+            "LOW_SCORE"
+          ],
+          "old_factors": {
+            "T": 85.36812894878572,
+            "M": 77.916666666655,
+            "S": 82.0,
+            "B": 76.3587895908564,
+            "P": 0.5351496109202825,
+            "V": 44.56225672479515,
+            "R": 63.333333333344996,
+            "G": null
+          },
+          "new_factors": {
+            "T": 83.44893702958572,
+            "M": 79.97474747473,
+            "S": 82.0,
+            "B": 76.3587895908564,
+            "P": 0.5351496109202825,
+            "V": 57.08750925007514,
+            "R": 48.20707070706,
+            "G": null
+          }
+        },
+        {
+          "security_id": "INTC",
+          "old_score": 50.55421814409705,
+          "new_score": 60.3038848624709,
+          "old_reasons": [
+            "EXTENDED",
+            "LOW_SCORE",
+            "NONPOSITIVE_MOMENTUM"
+          ],
+          "new_reasons": [
+            "EXTENDED",
+            "LOW_SCORE",
+            "NONPOSITIVE_MOMENTUM"
+          ],
+          "old_factors": {
+            "T": 51.816820691457615,
+            "M": 26.66666666665,
+            "S": 80.45974864290223,
+            "B": 68.2212890028566,
+            "P": 44.32273546581726,
+            "V": 74.72402106327,
+            "R": 36.6666666667,
+            "G": null
+          },
+          "new_factors": {
+            "T": 68.1804570550976,
+            "M": 47.398989899025004,
+            "S": 80.45974864290223,
+            "B": 68.2212890028566,
+            "P": 44.32273546581726,
+            "V": 75.12806146731,
+            "R": 28.81313131312,
+            "G": null
+          }
+        },
+        {
+          "security_id": "KLAC",
+          "old_score": 66.20501636390954,
+          "new_score": 69.36734395482759,
+          "old_reasons": [
+            "EXTENDED",
+            "UNRESOLVED_UPTHRUST",
+            "LOW_SCORE"
+          ],
+          "new_reasons": [
+            "EXTENDED",
+            "UNRESOLVED_UPTHRUST",
+            "LOW_SCORE"
+          ],
+          "old_factors": {
+            "T": 73.07194484228216,
+            "M": 52.916666666675,
+            "S": 82.0,
+            "B": 82.22530462151799,
+            "P": 45.09211969268829,
+            "V": 55.376185835812564,
+            "R": 68.33333333336,
+            "G": null
+          },
+          "new_factors": {
+            "T": 78.93053070084217,
+            "M": 64.94949494949,
+            "S": 82.0,
+            "B": 82.22530462151799,
+            "P": 45.09211969268829,
+            "V": 60.628711088332565,
+            "R": 43.03030303027,
+            "G": null
+          }
+        },
+        {
+          "security_id": "LRCX",
+          "old_score": 68.29757066416852,
+          "new_score": 70.31111986157698,
+          "old_reasons": [
+            "LOW_SCORE"
+          ],
+          "new_reasons": [
+            "LOW_SCORE"
+          ],
+          "old_factors": {
+            "T": 76.17826622031035,
+            "M": 68.3333333333,
+            "S": 80.45974864290223,
+            "B": 62.76704599601895,
+            "P": 27.411939055543034,
+            "V": 36.784599717260384,
+            "R": 67.91666666666,
+            "G": null
+          },
+          "new_factors": {
+            "T": 79.51159955363036,
+            "M": 76.035353535365,
+            "S": 80.45974864290223,
+            "B": 62.76704599601895,
+            "P": 27.411939055543034,
+            "V": 49.91591284854039,
+            "R": 44.848484848489996,
+            "G": null
+          }
+        },
+        {
+          "security_id": "MRVL",
+          "old_score": 50.27494655789786,
+          "new_score": 57.62401465017107,
+          "old_reasons": [
+            "HIGH_ATR",
+            "EXTENDED",
+            "LOW_SCORE"
+          ],
+          "new_reasons": [
+            "HIGH_ATR",
+            "EXTENDED",
+            "LOW_SCORE"
+          ],
+          "old_factors": {
+            "T": 71.1345231520117,
+            "M": 29.583333333355,
+            "S": 62.0,
+            "B": 70.01063561160065,
+            "P": 55.15996830082378,
+            "V": 65.34718988935614,
+            "R": 7.916666666655,
+            "G": null
+          },
+          "new_factors": {
+            "T": 79.7203817378917,
+            "M": 46.01010101007999,
+            "S": 62.0,
+            "B": 70.01063561160065,
+            "P": 55.15996830082378,
+            "V": 60.90274544491614,
+            "R": 14.3181818182,
+            "G": null
+          }
+        },
+        {
+          "security_id": "MU",
+          "old_score": 58.13802988178506,
+          "new_score": 64.64848981103941,
+          "old_reasons": [
+            "LOW_SCORE"
+          ],
+          "new_reasons": [
+            "LOW_SCORE"
+          ],
+          "old_factors": {
+            "T": 62.0169661569223,
+            "M": 50.833333333335,
+            "S": 82.0,
+            "B": 75.17047829459581,
+            "P": 12.230902192710419,
+            "V": 26.862166178692316,
+            "R": 61.666666666655004,
+            "G": null
+          },
+          "new_factors": {
+            "T": 75.8553499952823,
+            "M": 64.01515151512,
+            "S": 82.0,
+            "B": 75.17047829459581,
+            "P": 12.230902192710419,
+            "V": 41.50863082517232,
+            "R": 38.25757575757,
+            "G": null
+          }
+        },
+        {
+          "security_id": "NVDA",
+          "old_score": 79.23171917266839,
+          "new_score": 78.3895795011885,
+          "old_reasons": [
+            "EXTENDED"
+          ],
+          "new_reasons": [
+            "HIGH_ATR",
+            "EXTENDED"
+          ],
+          "old_factors": {
+            "T": 89.45024626105923,
+            "M": 100.0,
+            "S": 82.0,
+            "B": 66.819200639293,
+            "P": 46.229991083559774,
+            "V": 50.43588499964114,
+            "R": 22.083333333325,
+            "G": null
+          },
+          "new_factors": {
+            "T": 86.82398363477924,
+            "M": 95.833333333325,
+            "S": 82.0,
+            "B": 66.819200639293,
+            "P": 46.229991083559774,
+            "V": 62.05204661580114,
+            "R": 24.393939393975,
+            "G": null
+          }
+        },
+        {
+          "security_id": "QCOM",
+          "old_score": 39.86227371352,
+          "new_score": 45.777921306478255,
+          "old_reasons": [
+            "EXTENDED",
+            "LOW_SCORE",
+            "TREND_DIRECTION",
+            "NONPOSITIVE_MOMENTUM"
+          ],
+          "new_reasons": [
+            "EXTENDED",
+            "LOW_SCORE",
+            "TREND_DIRECTION",
+            "NONPOSITIVE_MOMENTUM"
+          ],
+          "old_factors": {
+            "T": 27.046600267366607,
+            "M": 7.916666666669999,
+            "S": 82.0,
+            "B": 69.34004229896522,
+            "P": 41.37812555868703,
+            "V": 57.88079315374691,
+            "R": 63.749999999985,
+            "G": null
+          },
+          "new_factors": {
+            "T": 34.319327540086604,
+            "M": 28.484848484845,
+            "S": 82.0,
+            "B": 69.34004229896522,
+            "P": 41.37812555868703,
+            "V": 63.43634870930691,
+            "R": 36.919191919155,
+            "G": null
+          }
+        },
+        {
+          "security_id": "TSM",
+          "old_score": 51.414274452518356,
+          "new_score": 61.95833818648778,
+          "old_reasons": [
+            "EXTENDED",
+            "LOW_SCORE"
+          ],
+          "new_reasons": [
+            "EXTENDED",
+            "LOW_SCORE"
+          ],
+          "old_factors": {
+            "T": 56.124187510044315,
+            "M": 33.750000000005,
+            "S": 82.0,
+            "B": 74.18993897164475,
+            "P": 15.181228676511987,
+            "V": 58.11097601748766,
+            "R": 33.3333333333,
+            "G": null
+          },
+          "new_factors": {
+            "T": 71.78075316660431,
+            "M": 55.883838383835,
+            "S": 82.0,
+            "B": 74.18993897164475,
+            "P": 15.181228676511987,
+            "V": 60.838248744767654,
+            "R": 29.87373737374,
+            "G": null
+          }
+        },
+        {
+          "security_id": "TXN",
+          "old_score": 48.43842235174244,
+          "new_score": 55.90390202170721,
+          "old_reasons": [
+            "LOW_SCORE",
+            "TREND_DIRECTION"
+          ],
+          "new_reasons": [
+            "LOW_SCORE",
+            "TREND_DIRECTION"
+          ],
+          "old_factors": {
+            "T": 37.735880505421946,
+            "M": 20.83333333332,
+            "S": 82.0,
+            "B": 73.72270346335898,
+            "P": 40.59611761894119,
+            "V": 52.12445729604941,
+            "R": 88.33333333334,
+            "G": null
+          },
+          "new_factors": {
+            "T": 47.53386030342194,
+            "M": 43.23232323231,
+            "S": 82.0,
+            "B": 73.72270346335898,
+            "P": 40.59611761894119,
+            "V": 60.81132598292941,
+            "R": 62.651515151515,
+            "G": null
+          }
+        }
+      ],
+      "n_changed": 13
+    },
+    {
+      "session": "2023-06-14",
+      "old_candidates": [
+        "AMAT",
+        "AMD",
+        "ASML",
+        "AVGO",
+        "INTC",
+        "KLAC",
+        "LRCX",
+        "MRVL",
+        "MU",
+        "NVDA",
+        "QCOM",
+        "TSM",
+        "TXN"
+      ],
+      "new_candidates": [
+        "AMAT",
+        "AMD",
+        "ASML",
+        "AVGO",
+        "INTC",
+        "KLAC",
+        "LRCX",
+        "MRVL",
+        "MU",
+        "NVDA",
+        "QCOM",
+        "TSM",
+        "TXN"
+      ],
+      "old_references": [
+        "AMAT",
+        "AMD",
+        "ASML",
+        "AVGO",
+        "INTC",
+        "KLAC",
+        "LRCX",
+        "MRVL",
+        "MU",
+        "NVDA",
+        "QCOM",
+        "QQQ",
+        "SPY",
+        "TSM",
+        "TXN"
+      ],
+      "new_references": [
+        "AAL",
+        "AAPL",
+        "ABBV",
+        "ABT",
+        "ADBE",
+        "AEP",
+        "AFRM",
+        "ALB",
+        "ALK",
+        "AMAT",
+        "AMD",
+        "AMGN",
+        "AMT",
+        "AMX",
+        "AMZN",
+        "ANET",
+        "ASML",
+        "AVGO",
+        "AXP",
+        "BA",
+        "BABA",
+        "BAC",
+        "BIDU",
+        "BIIB",
+        "BILI",
+        "BLNK",
+        "BMY",
+        "BNTX",
+        "BTBT",
+        "C",
+        "CAT",
+        "CCI",
+        "CEG",
+        "CFRUY",
+        "CHPT",
+        "CHTR",
+        "CIFR",
+        "CLSK",
+        "CMCSA",
+        "COIN",
+        "COP",
+        "COST",
+        "CPA",
+        "CRM",
+        "CRWD",
+        "CVX",
+        "D",
+        "DAL",
+        "DDOG",
+        "DE",
+        "DELL",
+        "DHR",
+        "DIS",
+        "DLR",
+        "DUK",
+        "DVN",
+        "EL",
+        "EMR",
+        "ENPH",
+        "EOG",
+        "EQIX",
+        "ETN",
+        "EXC",
+        "F",
+        "FDX",
+        "FSLR",
+        "FUBO",
+        "GD",
+        "GE",
+        "GILD",
+        "GM",
+        "GOOGL",
+        "GS",
+        "HD",
+        "HEI",
+        "HON",
+        "HOOD",
+        "HPQ",
+        "HUT",
+        "INTC",
+        "IQ",
+        "ISRG",
+        "ITW",
+        "JBLU",
+        "JD",
+        "JNJ",
+        "JPM",
+        "KLAC",
+        "LCID",
+        "LHX",
+        "LI",
+        "LLY",
+        "LMT",
+        "LOGI",
+        "LOW",
+        "LRCX",
+        "LUV",
+        "LVMUY",
+        "MA",
+        "MARA",
+        "MCD",
+        "MDB",
+        "MDT",
+        "META",
+        "MMM",
+        "MPC",
+        "MRK",
+        "MRNA",
+        "MRVL",
+        "MS",
+        "MSFT",
+        "MSTR",
+        "MU",
+        "NEE",
+        "NET",
+        "NFLX",
+        "NIO",
+        "NKE",
+        "NOC",
+        "NOW",
+        "NTES",
+        "NVDA",
+        "NVO",
+        "O",
+        "ORCL",
+        "OXY",
+        "PANW",
+        "PCG",
+        "PDD",
+        "PFE",
+        "PINS",
+        "PLD",
+        "PLTR",
+        "PLUG",
+        "PNC",
+        "PSA",
+        "PSKY",
+        "PSX",
+        "PVH",
+        "PYPL",
+        "QCOM",
+        "QQQ",
+        "REGN",
+        "RIOT",
+        "RIVN",
+        "RL",
+        "RMS.PA",
+        "ROKU",
+        "RTX",
+        "RUN",
+        "RYAAY",
+        "SBUX",
+        "SCHW",
+        "SLB",
+        "SMCI",
+        "SNAP",
+        "SNOW",
+        "SO",
+        "SOFI",
+        "SONY",
+        "SPG",
+        "SPOT",
+        "SPY",
+        "SRE",
+        "STLA",
+        "T",
+        "TAL",
+        "TDG",
+        "TFC",
+        "TGT",
+        "TJX",
+        "TKO",
+        "TM",
+        "TME",
+        "TMO",
+        "TMUS",
+        "TPR",
+        "TSLA",
+        "TSM",
+        "TXN",
+        "TXT",
+        "UAL",
+        "UNH",
+        "UPS",
+        "UPST",
+        "USB",
+        "V",
+        "VICI",
+        "VLO",
+        "VOD",
+        "VRTX",
+        "VST",
+        "VZ",
+        "WBD",
+        "WELL",
+        "WFC",
+        "WMT",
+        "WULF",
+        "XOM",
+        "XPEV",
+        "XYZ"
+      ],
+      "row_diffs": [
+        {
+          "security_id": "AMAT",
+          "old_score": 58.822696451970494,
+          "new_score": 68.92324508550413,
+          "old_reasons": [
+            "EXTENDED",
+            "LOW_SCORE"
+          ],
+          "new_reasons": [
+            "EXTENDED",
+            "LOW_SCORE"
+          ],
+          "old_factors": {
+            "T": 59.16477745469001,
+            "M": 50.83333333333999,
+            "S": 82.0,
+            "B": 75.04067504020419,
+            "P": 18.178915887042322,
+            "V": 46.785794627389805,
+            "R": 58.3333333333,
+            "G": null
+          },
+          "new_factors": {
+            "T": 75.52841381833002,
+            "M": 72.44949494948999,
+            "S": 82.0,
+            "B": 75.04067504020419,
+            "P": 18.178915887042322,
+            "V": 59.412057253669815,
+            "R": 41.51515151513,
+            "G": null
+          }
+        },
+        {
+          "security_id": "AMD",
+          "old_score": 69.64766911954032,
+          "new_score": 71.80640751880823,
+          "old_reasons": [
+            "UNRESOLVED_UPTHRUST",
+            "LOW_SCORE"
+          ],
+          "new_reasons": [
+            "HIGH_ATR",
+            "UNRESOLVED_UPTHRUST",
+            "LOW_SCORE"
+          ],
+          "old_factors": {
+            "T": 80.07128913956274,
+            "M": 72.91666666668,
+            "S": 79.85040606827863,
+            "B": 67.44724210338134,
+            "P": 46.65619798258639,
+            "V": 71.68347904138459,
+            "R": 17.916666666675,
+            "G": null
+          },
+          "new_factors": {
+            "T": 81.08139014968273,
+            "M": 78.838383838355,
+            "S": 79.85040606827863,
+            "B": 67.44724210338134,
+            "P": 46.65619798258639,
+            "V": 68.14812550602458,
+            "R": 22.5505050505,
+            "G": null
+          }
+        },
+        {
+          "security_id": "ASML",
+          "old_score": 63.731250671180796,
+          "new_score": 70.63320165287818,
+          "old_reasons": [
+            "LOW_SCORE"
+          ],
+          "new_reasons": [
+            "LOW_SCORE"
+          ],
+          "old_factors": {
+            "T": 66.40879466189206,
+            "M": 58.333333333344996,
+            "S": 82.0,
+            "B": 68.58254074625333,
+            "P": 48.03850662024114,
+            "V": 39.54180299114149,
+            "R": 60.4166666667,
+            "G": null
+          },
+          "new_factors": {
+            "T": 77.72192597501206,
+            "M": 73.762626262635,
+            "S": 82.0,
+            "B": 68.58254074625333,
+            "P": 48.03850662024114,
+            "V": 55.40038884974148,
+            "R": 40.530303030305,
+            "G": null
+          }
+        },
+        {
+          "security_id": "AVGO",
+          "old_score": 74.90927743537021,
+          "new_score": 75.80176192463539,
+          "old_reasons": [
+            "EXTENDED"
+          ],
+          "new_reasons": [
+            "EXTENDED"
+          ],
+          "old_factors": {
+            "T": 86.2172947405916,
+            "M": 73.750000000005,
+            "S": 82.0,
+            "B": 76.3587895908564,
+            "P": 44.179807792428946,
+            "V": 52.87264876348857,
+            "R": 63.333333333344996,
+            "G": null
+          },
+          "new_factors": {
+            "T": 85.10618362947159,
+            "M": 80.10101010098,
+            "S": 82.0,
+            "B": 76.3587895908564,
+            "P": 44.179807792428946,
+            "V": 63.27668916752857,
+            "R": 47.575757575764996,
+            "G": null
+          }
+        },
+        {
+          "security_id": "INTC",
+          "old_score": 50.690165703787464,
+          "new_score": 61.47923020730644,
+          "old_reasons": [
+            "EXTENDED",
+            "LOW_SCORE"
+          ],
+          "new_reasons": [
+            "EXTENDED",
+            "LOW_SCORE"
+          ],
+          "old_factors": {
+            "T": 52.2856086537912,
+            "M": 23.749999999994998,
+            "S": 82.0,
+            "B": 68.2212890028566,
+            "P": 38.40800616560982,
+            "V": 85.93144015574492,
+            "R": 36.6666666667,
+            "G": null
+          },
+          "new_factors": {
+            "T": 68.2452046133912,
+            "M": 49.898989899010004,
+            "S": 82.0,
+            "B": 68.2212890028566,
+            "P": 38.40800616560982,
+            "V": 81.48699571130493,
+            "R": 28.030303030324998,
+            "G": null
+          }
+        },
+        {
+          "security_id": "KLAC",
+          "old_score": 68.21775397087825,
+          "new_score": 71.33215944736679,
+          "old_reasons": [
+            "LOW_SCORE"
+          ],
+          "new_reasons": [
+            "LOW_SCORE"
+          ],
+          "old_factors": {
+            "T": 73.51180824828394,
+            "M": 55.83333333333,
+            "S": 85.0,
+            "B": 82.22530462151799,
+            "P": 45.59077123053985,
+            "V": 61.341377917262136,
+            "R": 68.33333333336,
+            "G": null
+          },
+          "new_factors": {
+            "T": 79.37039410684393,
+            "M": 68.333333333335,
+            "S": 85.0,
+            "B": 82.22530462151799,
+            "P": 45.59077123053985,
+            "V": 64.37168094754213,
+            "R": 42.82828282829,
+            "G": null
+          }
+        },
+        {
+          "security_id": "LRCX",
+          "old_score": 69.5913802525735,
+          "new_score": 72.8507890610715,
+          "old_reasons": [
+            "LOW_SCORE"
+          ],
+          "new_reasons": [
+            "LOW_SCORE"
+          ],
+          "old_factors": {
+            "T": 76.51319915365457,
+            "M": 68.3333333333,
+            "S": 82.0,
+            "B": 62.76704599601895,
+            "P": 51.46751553185564,
+            "V": 34.231833761957716,
+            "R": 67.91666666666,
+            "G": null
+          },
+          "new_factors": {
+            "T": 80.25057289101457,
+            "M": 78.66161616162,
+            "S": 82.0,
+            "B": 62.76704599601895,
+            "P": 51.46751553185564,
+            "V": 52.21163174175772,
+            "R": 44.94949494951,
+            "G": null
+          }
+        },
+        {
+          "security_id": "MRVL",
+          "old_score": 51.21123713865054,
+          "new_score": 57.975049116326424,
+          "old_reasons": [
+            "HIGH_ATR",
+            "LOW_SCORE"
+          ],
+          "new_reasons": [
+            "HIGH_ATR",
+            "LOW_SCORE"
+          ],
+          "old_factors": {
+            "T": 71.39174434684611,
+            "M": 35.416666666699996,
+            "S": 62.0,
+            "B": 70.01063561160065,
+            "P": 37.91722724830292,
+            "V": 64.71018091624163,
+            "R": 7.916666666655,
+            "G": null
+          },
+          "new_factors": {
+            "T": 80.3816433367661,
+            "M": 48.434343434345,
+            "S": 62.0,
+            "B": 70.01063561160065,
+            "P": 37.91722724830292,
+            "V": 64.30614051220162,
+            "R": 14.3181818182,
+            "G": null
+          }
+        },
+        {
+          "security_id": "MU",
+          "old_score": 61.47734556805132,
+          "new_score": 69.10506950796847,
+          "old_reasons": [
+            "LOW_SCORE"
+          ],
+          "new_reasons": [
+            "LOW_SCORE"
+          ],
+          "old_factors": {
+            "T": 62.26706841587692,
+            "M": 54.166666666655,
+            "S": 85.0,
+            "B": 75.17047829459581,
+            "P": 36.37374945882003,
+            "V": 35.1810436594314,
+            "R": 61.666666666655004,
+            "G": null
+          },
+          "new_factors": {
+            "T": 76.10545225423692,
+            "M": 71.18686868687999,
+            "S": 85.0,
+            "B": 75.17047829459581,
+            "P": 36.37374945882003,
+            "V": 49.3224578008314,
+            "R": 38.636363636374995,
+            "G": null
+          }
+        },
+        {
+          "security_id": "NVDA",
+          "old_score": 80.45987981801662,
+          "new_score": 79.25273219933918,
+          "old_reasons": [
+            "EXTENDED"
+          ],
+          "new_reasons": [
+            "HIGH_ATR",
+            "EXTENDED"
+          ],
+          "old_factors": {
+            "T": 89.879242833549,
+            "M": 100.0,
+            "S": 82.0,
+            "B": 66.819200639293,
+            "P": 47.57000407378598,
+            "V": 64.53360685890847,
+            "R": 22.083333333325,
+            "G": null
+          },
+          "new_factors": {
+            "T": 87.45500040930901,
+            "M": 95.808080808085,
+            "S": 82.0,
+            "B": 66.819200639293,
+            "P": 47.57000407378598,
+            "V": 70.29118261650848,
+            "R": 24.671717171725003,
+            "G": null
+          }
+        },
+        {
+          "security_id": "QCOM",
+          "old_score": 37.216273851376094,
+          "new_score": 43.48302768431681,
+          "old_reasons": [
+            "EXTENDED",
+            "LOW_SCORE",
+            "TREND_DIRECTION",
+            "NONPOSITIVE_MOMENTUM"
+          ],
+          "new_reasons": [
+            "EXTENDED",
+            "LOW_SCORE",
+            "TREND_DIRECTION",
+            "NONPOSITIVE_MOMENTUM"
+          ],
+          "old_factors": {
+            "T": 27.05154190105526,
+            "M": 4.99999999998,
+            "S": 82.0,
+            "B": 69.34004229896522,
+            "P": 6.842568404316262,
+            "V": 54.95599427762186,
+            "R": 63.749999999985,
+            "G": null
+          },
+          "new_factors": {
+            "T": 34.930329779855256,
+            "M": 25.404040404015,
+            "S": 82.0,
+            "B": 69.34004229896522,
+            "P": 6.842568404316262,
+            "V": 62.22872155034186,
+            "R": 38.10606060604,
+            "G": null
+          }
+        },
+        {
+          "security_id": "TSM",
+          "old_score": 52.4109296415894,
+          "new_score": 64.19107244034358,
+          "old_reasons": [
+            "EXTENDED",
+            "LOW_SCORE"
+          ],
+          "new_reasons": [
+            "EXTENDED",
+            "LOW_SCORE"
+          ],
+          "old_factors": {
+            "T": 56.889307888094315,
+            "M": 33.750000000005,
+            "S": 82.0,
+            "B": 74.18993897164475,
+            "P": 31.209968415777233,
+            "V": 58.90580994045263,
+            "R": 33.3333333333,
+            "G": null
+          },
+          "new_factors": {
+            "T": 73.15193415073432,
+            "M": 59.898989898995,
+            "S": 82.0,
+            "B": 74.18993897164475,
+            "P": 31.209968415777233,
+            "V": 61.02702206165263,
+            "R": 29.2929292929,
+            "G": null
+          }
+        },
+        {
+          "security_id": "TXN",
+          "old_score": 46.02169913398714,
+          "new_score": 54.42364370650534,
+          "old_reasons": [
+            "LOW_SCORE",
+            "TREND_DIRECTION"
+          ],
+          "new_reasons": [
+            "LOW_SCORE",
+            "TREND_DIRECTION"
+          ],
+          "old_factors": {
+            "T": 37.88655985552509,
+            "M": 17.916666666665,
+            "S": 82.0,
+            "B": 73.72270346335898,
+            "P": 16.530514283241487,
+            "V": 45.33863550360931,
+            "R": 88.33333333334,
+            "G": null
+          },
+          "new_factors": {
+            "T": 46.67443864340508,
+            "M": 43.358585858590004,
+            "S": 82.0,
+            "B": 73.72270346335898,
+            "P": 16.530514283241487,
+            "V": 58.67196883696932,
+            "R": 62.348484848489996,
+            "G": null
+          }
+        }
+      ],
+      "n_changed": 13
+    }
+  ]
+}

@@ -12,6 +12,7 @@ import pickle
 import subprocess
 import sys
 from collections import Counter, defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from pathlib import Path
 
@@ -183,16 +184,20 @@ def _extract_raws(session_panel: dict[str, SecuritySeries], registry: dict, hori
     blend = tuple(registry["horizons"][horizon]["momentum_blend"])
     gates = registry["sectors"]["semiconductors"]["gates"]
     market = session_panel.get("SPY")
-    raws = {}
-    for sid, series in session_panel.items():
-        raws[sid] = extract_raw(
-            series,
+    def _one(sid: str):
+        return sid, extract_raw(
+            session_panel[sid],
             market=market,
             panel=session_panel,
             horizon=horizon,
             momentum_blend=blend,
             sector_gates=gates,
         )
+
+    raws = {}
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        for sid, raw in pool.map(_one, session_panel):
+            raws[sid] = raw
     return raws
 
 
