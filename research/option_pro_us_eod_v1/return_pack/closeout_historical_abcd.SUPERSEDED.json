@@ -1,0 +1,19 @@
+{
+  "status": "SUPERSEDED_METRIC",
+  "artifact": "closeout_historical_abcd.json",
+  "superseded_fields": [
+    "ic_forward_labels",
+    "independent_events",
+    "ic_pair_counts"
+  ],
+  "replacement": [
+    "measurement_ic_groups.json",
+    "measurement_continuous_abcd.json",
+    "measurement_factor_rows.jsonl"
+  ],
+  "reason": "pooled-across-days ordinal Spearman and disjoint-set event increment",
+  "old_retrieved_at_unchanged": true,
+  "old_invalid_eod_retrieved_at": "2026-09-16T17:24:41.368841+00:00",
+  "old_code_sha": "0c1d419416f057fba2c8184abb54a2f029edbff7",
+  "statistics_version_new": "us-eod-research-stats-v1.0"
+}

@@ -1,0 +1,34 @@
+{
+  "note": "Synthetic measurement counterexamples after D1/D2. Not market history.",
+  "market_backtest_run": false,
+  "executed_backtests": 0,
+  "cases": [
+    {
+      "class": "D1_geometry_unit_sizing",
+      "raw_execution_close": 100.0,
+      "equivalent_support_levels": [
+        90.0,
+        45.0
+      ],
+      "scale_notionals": {
+        "1.0": 1000.0,
+        "2.0": 1000.0,
+        "0.5": 1000.0,
+        "10.0": 1000.0
+      },
+      "split_adjusted_notional": 1000.0,
+      "expected_same_risk_fraction": 0.1
+    },
+    {
+      "class": "D2_acquisition_then_lot_dividend",
+      "ending_equity": 10050.0,
+      "cash_in": 5000.0,
+      "filled_at": "2024-01-05",
+      "exit_reason": "CASH_ACQUISITION",
+      "dividend_cash": 50.0,
+      "trade_net": 0.01,
+      "pnl_basis": "marked_equity",
+      "trade_pnl_basis": "settled_cash_including_lot_dividends"
+    }
+  ]
+}

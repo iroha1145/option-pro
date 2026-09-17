@@ -20,22 +20,25 @@ from app.services.research_eod_v1.snapshot import compute_snapshot  # noqa: E402
 from app.services.research_eod_v1.universe_audit import ETF_SUBASSET_HINTS  # noqa: E402
 from app.services.sectors import SECTORS  # noqa: E402
 
+from app.services.research_eod_v1.stats import spearman  # noqa: E402
+
 from run_closeout_historical_abcd import (  # noqa: E402
     ALLOWED_END,
     CACHE,
     HOLDOUT_START,
     LABELS,
     LOG,
-    OUT,
     _forward_return,
-    _spearman,
     _tail_history,
     _venue,
 )
 
+OUT = ROOT / "research" / "option_pro_us_eod_v1" / "return_pack" / "measurement_legacy_ic_recompute.json"
+SOURCE = ROOT / "research" / "option_pro_us_eod_v1" / "return_pack" / "closeout_historical_abcd.json"
+
 
 def main() -> int:
-    report = json.loads(OUT.read_text(encoding="utf-8"))
+    report = json.loads(SOURCE.read_text(encoding="utf-8"))
     batched = pickle.loads(CACHE.read_bytes())
     appearances: dict[str, list[str]] = {}
     for theme_id, sector in SECTORS.items():
@@ -131,14 +134,15 @@ def main() -> int:
 
     for theme_id, stats in report["themes"].items():
         stats["ic_forward_labels"] = {
-            str(horizon): _spearman(
+            str(horizon): spearman(
                 [a for a, _ in pairs[theme_id][horizon]],
                 [b for _, b in pairs[theme_id][horizon]],
-            )
+            ).value
             for horizon in LABELS
         }
         stats["ic_pair_counts"] = {str(horizon): len(pairs[theme_id][horizon]) for horizon in LABELS}
-        stats["ic_note"] = "Spearman of eligible score vs TRI forward label; signal diagnostic only"
+        stats["ic_note"] = "SUPERSEDED pooled estimator kept only as a recompute; use measurement_ic_groups.json"
+        stats["metric_status"] = "SUPERSEDED_METRIC"
     report["ic_eligible_snapshots_rerun"] = rerun
     report["label_maturity_cuts"] = {str(k): v.isoformat() for k, v in label_cut.items()}
     OUT.write_text(json.dumps(report, indent=2, default=str) + "\n", encoding="utf-8")
