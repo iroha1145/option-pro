@@ -1,0 +1,8 @@
+{
+  "batch_downloads": 0,
+  "intraday_provider_calls": 0,
+  "repeat_refresh_fetches": 0,
+  "cache_key": "session_date|feature_version|config_hash|universe_version",
+  "atomic_publish": "tempfile + os.replace; failed publish retains previous snapshot",
+  "note": "Shadow API is default-off. Refresh refuses to fetch without RESEARCH_EOD_V1_ENABLED and licensed data."
+}

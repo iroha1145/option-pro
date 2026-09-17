@@ -1,0 +1,18 @@
+{
+  "schema_version": "option-pro-us-eod-research-v1.0",
+  "repo_commit_reviewed": "8b620d760f05020d2c1b51a3c3228a89fd9f3120",
+  "sources": [
+    {"id": "R1", "topic": "12-1 momentum", "use": "control definition, not a copy of the original paper returns"},
+    {"id": "R2", "topic": "industry relative strength / breadth", "use": "G factor research prior"},
+    {"id": "R4", "topic": "residual momentum", "use": "idea source for family D; this implementation is a daily two-factor freeze, not a replica"},
+    {"id": "R5", "topic": "volatility risk management", "use": "supports studying risk caps, not a return guarantee"},
+    {"id": "R6", "topic": "multiple testing / DSR", "use": "864 correlated configs are not 864 independent trials"},
+    {"id": "R7", "topic": "PBO / selection bias", "use": "record every trial; do not crown a winner from a search"},
+    {"id": "R8", "topic": "NYSE calendar / early close", "use": "America/New_York session close, not a hardcoded Japan clock"},
+    {"id": "R9", "topic": "delisted history products", "use": "no-survivor-bias tape is not automatically PIT industry/news/revisions"},
+    {"id": "R10", "topic": "Norgate volume FAQ", "use": "stock volume may include extended hours; do not call it regular-session volume"},
+    {"id": "R11", "topic": "Massive split vs dividend adjustment", "use": "split-adjusted is not dividend-adjusted"},
+    {"id": "R12", "topic": "adjustment tracks", "use": "raw price / split OHLC / total return stay separate"},
+    {"id": "R13", "topic": "grouped daily APIs", "use": "batch download is an engineering option; license still required"}
+  ]
+}
