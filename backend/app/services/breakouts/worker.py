@@ -102,6 +102,13 @@ async def _maybe_await(value: Any) -> Any:
     return value
 
 
+def _scan_event_payload(event: Mapping[str, Any]) -> dict[str, Any]:
+    """Keep the stored T1 feature, excluding its read-API projection alias."""
+    payload = dict(event)
+    payload.pop("t1_priority", None)
+    return payload
+
+
 class BreakoutWorker:
     """Coordinate discovery and publication without holding a database lock."""
 
@@ -236,10 +243,17 @@ class BreakoutWorker:
             carryover_events = self.repository.overlay_t1_evaluations(carryover_events)
         except Exception:
             pass
+        # The read overlay exposes a top-level alias that BreakoutEvent forbids.
+        # Retain features.t1_priority for evaluation and all previous-event paths.
+        carryover_events = [_scan_event_payload(event) for event in carryover_events]
         effective_events = self.repository.overlay_live_events(
             carryover_events, as_of=clock_snapshot.as_of,
         )
-        realtime_events = [event for event in effective_events if event.get("state_version")]
+        realtime_events = [
+            _scan_event_payload(event)
+            for event in effective_events
+            if event.get("state_version")
+        ]
         previous_events: dict[str, list[Mapping[str, Any]]] = {}
         for event in carryover_events:
             ticker = str(event.get("ticker") or "").strip().upper()
