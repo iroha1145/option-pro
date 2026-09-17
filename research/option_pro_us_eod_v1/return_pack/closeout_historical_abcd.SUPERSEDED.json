@@ -7,7 +7,8 @@
     "ic_pair_counts"
   ],
   "replacement": [
-    "measurement_ic_groups.json",
+    "measurement_ic_summary.json",
+    "measurement_ic_groups.jsonl",
     "measurement_continuous_abcd.json",
     "measurement_factor_rows.jsonl"
   ],
