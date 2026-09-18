@@ -1,0 +1,15 @@
+{
+  "access": "licensed or already-held membership tape; do not assume API rights; do not auto-buy",
+  "coverage": "add/drop dates for all 24 themes through 2024-06-28, plus survivorship-complete names in each window",
+  "field": "historical_constituent_membership_and_delist_tape",
+  "optional_parallel_entry": {
+    "access": "do not assume API key; extend history backward only",
+    "coverage": "ten complete evaluable years after 330-session warmup and label maturity, ending 2024-06-28",
+    "field": "licensed_us_eod_with_delistings_from_2010"
+  },
+  "recovered_cache_already_usable_for": [
+    "A_close_signal_diagnostic"
+  ],
+  "user_must_provide": true,
+  "why_unique": "The 214-name Yahoo cache already unlocks A-layer current-list close diagnostics. The next evidence layer for 24-theme generality is as-of membership, delist, and rename \u2014 not another weight grid."
+}

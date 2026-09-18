@@ -1,0 +1,39 @@
+{
+  "composite_layer": {
+    "history_validation": "not_done",
+    "implementation": "composite.py M1-M4 candidate code exists",
+    "not": "\u6ca1\u6709\u7efc\u5408\u5c42",
+    "portfolio_validation": "not_done",
+    "production_promotion": "not_done",
+    "status": "\u5df2\u6709\u5019\u9009\u5b9e\u73b0\uff0c\u5386\u53f2\u9a8c\u8bc1/\u7ec4\u5408\u9a8c\u8bc1/\u751f\u4ea7\u664b\u5347\u5c1a\u672a\u5b8c\u6210"
+  },
+  "eod_research_snapshot": {
+    "production_deploy": "not_wired",
+    "status": "ENGINEERING_AND_DIAGNOSTIC"
+  },
+  "family_e_weekly_volume_macro_radar_composite": {
+    "cancelled_by_freeze": false,
+    "in_this_recovery_round": false,
+    "status": "\u540e\u7eed\u9879\u76ee\u9879"
+  },
+  "freeze_small_pool": {
+    "automotive_d_v": "FROZEN_EXPLORATORY_CANDIDATE",
+    "do_not_rerun_1152": true,
+    "do_not_retune_frozen_vector": true,
+    "etfs_d_p": "KEEP_BASELINE",
+    "fintech_b_s": "KEEP_BASELINE",
+    "leave_one_n10_conclusion": "unchanged; if N stays sufficient after a pool expansion, recompute both ranks and ICs",
+    "status": "closed"
+  },
+  "holdout": {
+    "start": "2024-07-01",
+    "unsealed": false
+  },
+  "production_surfaces": "unchanged",
+  "three_profiles_three_horizons": {
+    "implementation": "registry_present",
+    "label_63_is_not_horizon_long": true,
+    "status": "\u5df2\u5b9e\u73b0\u672a\u9a8c\u8bc1",
+    "validation": "only_balanced_mid_label_20_on_b0"
+  }
+}

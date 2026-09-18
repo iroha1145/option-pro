@@ -1,0 +1,42 @@
+[
+  {
+    "command": "load_trusted_research_bars + inspect_yahoo_cache + verify_contract_bars",
+    "split_sample": "TSLA 2020-08-31 and 2022-08-25 already sit in a split-adjusted-looking close series; raw_close equals close, so C stays blocked",
+    "spy": {
+      "after_holdout": 0,
+      "allowed_n": 1633,
+      "complete_t_days": 1633,
+      "contract": "ok",
+      "dollar_volume_mismatch": 0,
+      "duplicates": 0,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "last_allowed": "2024-06-28",
+      "n": 1633,
+      "ohlc_violations": 0,
+      "overnight_gt_40pct": 0,
+      "partial": 0,
+      "raw_ne_close": 0,
+      "tri_ne_close": 1633,
+      "unsorted": false
+    },
+    "tsla": {
+      "after_holdout": 0,
+      "allowed_n": 1633,
+      "complete_t_days": 1633,
+      "contract": "ok",
+      "dollar_volume_mismatch": 0,
+      "duplicates": 0,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "last_allowed": "2024-06-28",
+      "n": 1633,
+      "ohlc_violations": 0,
+      "overnight_gt_40pct": 0,
+      "partial": 0,
+      "raw_ne_close": 0,
+      "tri_ne_close": 0,
+      "unsorted": false
+    }
+  }
+]

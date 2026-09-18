@@ -1,0 +1,8 @@
+{
+  "do_not_merge": true,
+  "executed_backtests": 0,
+  "holdout_unsealed": false,
+  "outcome": "RECOVERED_CACHE_ARCHIVED",
+  "reason": "Existing Yahoo diagnostic cache is present, hashed, and A/B checks ran. C stays blocked. Unique remaining user gap is membership/delist tape.",
+  "weights_retuned": false
+}

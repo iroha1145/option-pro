@@ -1,0 +1,56 @@
+{
+  "b0_feature_version": "us-eod-research-features-v1.5",
+  "g_track": "keep_missing_G_and_PRICE_ONLY",
+  "invent_neutral_g": false,
+  "layers": {
+    "A_close_signal_diagnostic": {
+      "note": "Complete T-day OHLC supports close-signal diagnostics. PRICE_ONLY / missing-G tracks stay.",
+      "status": "available"
+    },
+    "B_total_return_vs_quote": {
+      "note": "TRI (Yahoo Adj Close) can be compared with quote returns when it differs. No licensed split/dividend ledger. Not a verified total-return benchmark.",
+      "status": "partial",
+      "tri_ne_close_bars": 2126
+    },
+    "C_unadjusted_execution": {
+      "note": "raw_open/raw_close copy the structure session prices. Do not treat them as unadjusted prints. NAV/win-rate/capacity stay uninvented.",
+      "raw_ne_close_bars": 0,
+      "raw_price_verified": false,
+      "silent_raw_equals_close": true,
+      "status": "blocked"
+    },
+    "D_historical_membership": {
+      "note": "known_theme_members / SECTORS only. Current-list replay is not a survivorship-free market proof.",
+      "status": "current_list_only"
+    }
+  },
+  "protocol": "us-eod-research-recovery-v1",
+  "recovery_dataset_version": "us-eod-recovered-yahoo-cache-v1",
+  "sources": {
+    "b0_tape": {
+      "expected": "b490ba6d83965a0c3fe60c76afab8205fc2a0d76cc6577cdf23cb838e447f75a",
+      "is_raw_eod": false,
+      "note": "Feature/label tape. Cannot invert scores into unadjusted prints.",
+      "sha256": "b490ba6d83965a0c3fe60c76afab8205fc2a0d76cc6577cdf23cb838e447f75a",
+      "status": "present"
+    },
+    "offline_replay_fixture": {
+      "note": "SPY/NVDA only. Not a substitute for the 214-name cache inventory.",
+      "status": "present"
+    },
+    "public_yahoo_daily_bars": {
+      "historical_digest": "d056327fd03abdb3a276a8f20039ea2af04300bc7ec9c1dd10010343abf7262e",
+      "locator": "return_pack/yahoo_current_universe/manifest.json plus hashes.json historical digest",
+      "status": "missing"
+    },
+    "yahoo_cache": {
+      "feeds": [
+        "A_close_signal_diagnostic",
+        "B_total_return_vs_quote"
+      ],
+      "sha256": "d910d86505e1914eb14aaacea2ddabc8d61b1f097ab83c513f07750539f32d48",
+      "status": "present"
+    }
+  },
+  "versions_not_spliced": true
+}

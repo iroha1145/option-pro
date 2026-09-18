@@ -90,6 +90,7 @@ def research_code_hashes(root: Path | None = None) -> dict[str, str]:
         "round1b.py",
         "round2.py",
         "freeze.py",
+        "data_readiness.py",
         "source_bind.py",
     )
     out = {}

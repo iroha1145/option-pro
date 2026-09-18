@@ -1,0 +1,114 @@
+[
+  {
+    "authorization": "project_gitignored_yahoo_diagnostic_cache",
+    "bytes": 90212441,
+    "exists": true,
+    "mode": "-rw-r--r--",
+    "path": "research/option_pro_us_eod_v1/data/cache/round3_yahoo_abcd/bars.pkl",
+    "readable": true,
+    "role": "continuous_runner_yahoo_cache",
+    "sha256": "d910d86505e1914eb14aaacea2ddabc8d61b1f097ab83c513f07750539f32d48",
+    "status": "present"
+  },
+  {
+    "authorization": "project_gitignored_yahoo_diagnostic_cache",
+    "bytes": 770090,
+    "exists": true,
+    "mode": "-rw-r--r--",
+    "path": "research/option_pro_us_eod_v1/data/cache/round3_after_close/last_bars.pkl",
+    "readable": true,
+    "role": "after_close_recapture_cache",
+    "sha256": "827d706e76ea2abeca82616d0a6d8ab227c96160dbd08e5def52c91a17cbbfdc",
+    "status": "present"
+  },
+  {
+    "authorization": "derived_from_yahoo_cache_not_a_substitute_inventory",
+    "bytes": 7820,
+    "exists": true,
+    "mode": "-rw-r--r--",
+    "path": "research/option_pro_us_eod_v1/data/cache/offline_replay/daily_bars.parquet",
+    "readable": true,
+    "role": "offline_replay_spy_nvda_fixture",
+    "sha256": "f8de36f35ffdfcd532f84fecbb2258d0aa99dd2d06a2de3337f09e34bff77044",
+    "status": "present"
+  },
+  {
+    "authorization": "frozen_b0_offline_tape",
+    "bytes": 4129370382,
+    "exists": true,
+    "mode": "-rw-r--r--",
+    "path": "research/option_pro_us_eod_v1/return_pack/measurement_factor_rows.jsonl",
+    "readable": true,
+    "role": "b0_feature_label_tape",
+    "sha256": "b490ba6d83965a0c3fe60c76afab8205fc2a0d76cc6577cdf23cb838e447f75a",
+    "status": "present"
+  },
+  {
+    "authorization": "removed_from_public_git",
+    "exists": false,
+    "path": "research/option_pro_us_eod_v1/return_pack/yahoo_current_universe/daily_bars.parquet",
+    "readable": false,
+    "role": "public_yahoo_current_universe_bars",
+    "status": "missing"
+  },
+  {
+    "authorization": "public_return_pack",
+    "bytes": 11284,
+    "exists": true,
+    "mode": "-rw-r--r--",
+    "path": "research/option_pro_us_eod_v1/return_pack/yahoo_current_universe/security_master.csv",
+    "readable": true,
+    "role": "current_universe_security_master",
+    "sha256": "08d7ca7c0435a7dc4b261d624b2aa9d29e3faaf00f99eea2a9d01d645cff680d",
+    "status": "present"
+  },
+  {
+    "authorization": "public_return_pack_revoked_same_day_capture",
+    "bytes": 13327,
+    "exists": true,
+    "mode": "-rw-r--r--",
+    "path": "research/option_pro_us_eod_v1/return_pack/yahoo_current_universe/theme_snapshot_rows.parquet",
+    "readable": true,
+    "role": "revoked_invalid_eod_snapshot_rows",
+    "sha256": "82866d86d1ebabc2dbf4a910d232ac679eeb78499ac6e7a17ebcbeba8b3bb3de",
+    "status": "present"
+  },
+  {
+    "authorization": "public_return_pack",
+    "bytes": 1606,
+    "exists": true,
+    "mode": "-rw-r--r--",
+    "path": "research/option_pro_us_eod_v1/return_pack/yahoo_current_universe/manifest.json",
+    "readable": true,
+    "role": "missing_parquet_locator",
+    "sha256": "e21cb1dfaaba58552ddb2e027c35b577f80967ee3f0b894338ceafdcc50fa385",
+    "status": "present"
+  },
+  {
+    "authorization": "synthetic",
+    "bytes": 6904,
+    "exists": true,
+    "mode": "-rw-r--r--",
+    "path": "research/option_pro_us_eod_v1/return_pack/fixtures/synthetic_daily_bars.parquet",
+    "readable": true,
+    "role": "ci_fixture_not_market_history",
+    "sha256": "3b94c24280ad30662ea3dc6384e4dc90662cefd37c264f77fe2a99fa8002566c",
+    "status": "present"
+  },
+  {
+    "authorization": "RESEARCH_EOD_LOCAL_DATA_or_default_local",
+    "exists": false,
+    "path": "research/option_pro_us_eod_v1/data/local",
+    "readable": false,
+    "role": "authorized_local_export_root",
+    "status": "missing"
+  },
+  {
+    "authorization": "unset",
+    "exists": false,
+    "path": null,
+    "readable": false,
+    "role": "RESEARCH_EOD_LOCAL_DATA",
+    "status": "unset"
+  }
+]
