@@ -1,0 +1,19 @@
+{
+  "schema_version": "us-eod-research-factor-row-v1.0",
+  "source": "research/option_pro_us_eod_v1/return_pack/measurement_factor_rows.jsonl",
+  "fields": [
+    "security_id",
+    "signal_session",
+    "theme_id",
+    "algorithm",
+    "profile",
+    "horizon",
+    "label_horizon",
+    "factors",
+    "score",
+    "label",
+    "final_eligible",
+    "rejection_reasons"
+  ],
+  "note": "Authorized cache-derived tape stays gitignored. Summaries plus this schema are the public replay handle. sha256 is filled after the ablation pass."
+}

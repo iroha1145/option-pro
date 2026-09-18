@@ -1,0 +1,96 @@
+{
+  "allowed_end": "2024-06-28",
+  "b0_not_overwritten": true,
+  "b0_restricted": true,
+  "cache_hits": {
+    "checkpoint": "Signed done keys are (session, theme, algorithm, profile, horizon). A signature mismatch rejects the file. Row uniqueness uses committed_row_key.",
+    "event_cache": "Deduped event groups keyed by security, family, profile, score horizon, and label horizon under trading-session adjacency. Not N_eff.",
+    "feature_cache": "Raw/cross-section factors keyed by session, security, universe, feature_version, and reference policy. Independent of profile, horizon tilt, and score weights.",
+    "ic_cache": "Grouped Spearman keyed by session, theme, family, profile, horizon, label horizon, and the score vector identity. Eligible-only subsets are not this cache.",
+    "score_cache": "Scores and eligibility keyed by run_signature plus security. A weight, profile, horizon, floor, or label-horizon change must miss this layer."
+  },
+  "date_blocks_preregistered_before_ic": [
+    {
+      "end": "2018-12-31",
+      "id": "Y2018",
+      "start": "2018-01-02"
+    },
+    {
+      "end": "2019-12-31",
+      "id": "Y2019",
+      "start": "2019-01-01"
+    },
+    {
+      "end": "2020-12-31",
+      "id": "Y2020",
+      "start": "2020-01-01"
+    },
+    {
+      "end": "2021-12-31",
+      "id": "Y2021",
+      "start": "2021-01-01"
+    },
+    {
+      "end": "2022-12-31",
+      "id": "Y2022",
+      "start": "2022-01-01"
+    },
+    {
+      "end": "2023-12-31",
+      "id": "Y2023",
+      "start": "2023-01-01"
+    },
+    {
+      "end": "2024-06-28",
+      "id": "Y2024H1",
+      "start": "2024-01-01"
+    },
+    {
+      "end": "2019-12-31",
+      "id": "B2018_2019",
+      "start": "2018-01-02"
+    },
+    {
+      "end": "2021-12-31",
+      "id": "B2020_2021",
+      "start": "2020-01-01"
+    },
+    {
+      "end": "2023-12-31",
+      "id": "B2022_2023",
+      "start": "2022-01-01"
+    }
+  ],
+  "feature_version": "us-eod-research-features-v1.5",
+  "holdout_start": "2024-07-01",
+  "holdout_unsealed": false,
+  "horizon": "mid",
+  "insufficient_cells": 14,
+  "neighbors_preregistered_before_ic": [
+    {
+      "delta": 0.05,
+      "factor": "M",
+      "kind": "weight",
+      "variant_id": "N_M_PLUS_5PP"
+    },
+    {
+      "delta": 0.05,
+      "factor": "S",
+      "kind": "weight",
+      "variant_id": "N_S_PLUS_5PP"
+    },
+    {
+      "field": "score_floor",
+      "kind": "threshold",
+      "scale": 1.1,
+      "variant_id": "N_SCORE_FLOOR_PLUS_10PCT"
+    }
+  ],
+  "profile": "balanced",
+  "reviewed_anchor": "155685daf93982d480fa06a06eb095f7bf8ae984",
+  "round": "algorithm_round1",
+  "run_signature": "a8ceb257e38e521922736f8dd41eac3edd44214a48bde87df785c9fb3b2502c3",
+  "score_version": "us-eod-research-score-v1",
+  "statistics_version": "us-eod-research-stats-v1.0",
+  "status": "NEIGHBORS_REGISTERED_ABLATION_PENDING"
+}

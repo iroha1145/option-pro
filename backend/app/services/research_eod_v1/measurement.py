@@ -16,6 +16,14 @@ from app.services.research_eod_v1.calendar_asof import eod_evaluation_as_of, nex
 from app.services.research_eod_v1.membership import has_complete_session_bar
 from app.services.research_eod_v1.series import SecuritySeries
 from app.services.research_eod_v1.snapshot import compute_snapshot
+from app.services.research_eod_v1.runs import (
+    CheckpointSignatureError,
+    cache_hit_definitions,
+    committed_row_key,
+    load_signed_checkpoint,
+    run_signature,
+    write_signed_checkpoint,
+)
 from app.services.research_eod_v1.stats import STATISTICS_VERSION, snapshot_identity_key
 from app.services.sectors import SECTORS
 
@@ -115,7 +123,8 @@ def _row_payload(
         "profile": profile,
         "horizon": horizon,
         "label_horizon": label_horizon,
-        "setup_id": row.get("setup_state") or row.get("frozen_setup"),
+        "setup_id": _setup_or_episode(row, theme_id, algorithm, profile, horizon),
+        "signal_episode_id": _signal_episode_id(row, theme_id, algorithm, profile, horizon),
         "source": row.get("reconstruction_mode") or "historical_reconstruction",
         "feature_version": row.get("feature_version") or FEATURE_VERSION,
         "score_version": SCORE_VERSION,
@@ -131,7 +140,52 @@ def _row_payload(
         "rejection_reasons": list(row.get("rejection_reasons") or ()),
         "industry_source": row.get("industry_source"),
         "primary_industry_id": row.get("primary_industry_id"),
+        "geometry_close": row.get("geometry_close") if row.get("geometry_close") is not None else row.get("last_close"),
+        "last_close": row.get("last_close"),
+        "raw_close": row.get("raw_close"),
+        "risk_distance_fraction": row.get("risk_distance_fraction"),
+        "planned_invalidation": row.get("planned_invalidation"),
+        "atr": row.get("atr"),
+        "adv20": row.get("adv20"),
+        "frozen_setup": row.get("frozen_setup"),
     }
+
+
+def _signal_episode_id(
+    row: Mapping[str, Any],
+    theme_id: str,
+    algorithm: str,
+    profile: str,
+    horizon: str,
+) -> str:
+    session = row.get("session_date") or row.get("signal_session")
+    return "|".join(
+        [
+            str(row.get("security_id")),
+            str(theme_id),
+            str(algorithm),
+            str(profile),
+            str(horizon),
+            str(session),
+        ]
+    )
+
+
+def _setup_or_episode(
+    row: Mapping[str, Any],
+    theme_id: str,
+    algorithm: str,
+    profile: str,
+    horizon: str,
+) -> str | None:
+    if algorithm == "B_confirmed_base_breakout":
+        frozen = row.get("frozen_setup")
+        if isinstance(frozen, Mapping) and frozen.get("setup_id"):
+            return str(frozen.get("setup_id"))
+        if isinstance(row.get("setup_id"), str) and ":" in str(row.get("setup_id")):
+            return str(row.get("setup_id"))
+        return None
+    return _signal_episode_id(row, theme_id, algorithm, profile, horizon)
 
 
 def persist_factor_rows(rows: Sequence[Mapping[str, Any]], path: Path) -> str:
@@ -192,34 +246,76 @@ def run_snapshot_matrix(
     chunk_size: int | None = None,
     checkpoint_path: Path | None = None,
     precomputed_raws: Mapping[str, Any] | None = None,
+    data_hash: str = "unspecified",
+    universe_version: str = "u_measurement",
+    registry_version: Any = None,
+    row_store_path: Path | None = None,
 ) -> dict[str, Any]:
     """Deterministic theme/family snapshots. Input dict order must not matter."""
 
     del precomputed_raws
     ordered_sessions = sorted(sessions)
+    signature = run_signature(
+        registry=registry,
+        profile=profile,
+        horizon=horizon,
+        label_horizons=label_horizons,
+        feature_version=FEATURE_VERSION,
+        statistics_version=STATISTICS_VERSION,
+        data_hash=data_hash,
+        universe_version=universe_version,
+        member_policy="known_theme_members",
+        reference_policy="same_track_t_complete_plus_spy_qqq",
+        start=ordered_sessions[0] if ordered_sessions else "",
+        end=ordered_sessions[-1] if ordered_sessions else "",
+        available_factors=("T", "M", "S", "B", "P", "V", "R", "G"),
+        timing_policy="NEXT_DAY_CONFIRM",
+        registry_version=registry_version,
+    )
+    done: set[tuple[str, str, str, str, str]] = set()
+    committed: set[str] = set()
+    payloads: list[Any] = []
+    rows: list[Any] = []
+    calls = 0
+    recomputes = 0
     if checkpoint_path and checkpoint_path.exists():
-        saved = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+        saved = load_signed_checkpoint(checkpoint_path, signature)
         done = {tuple(item) for item in saved.get("done", [])}
         payloads = list(saved.get("payloads", []))
         rows = list(saved.get("rows", []))
         calls = int(saved.get("function_calls", 0))
         recomputes = int(saved.get("recomputes", 0))
-    else:
-        done = set()
-        payloads = []
-        rows = []
-        calls = 0
-        recomputes = 0
+        committed = set(saved.get("committed_row_keys") or ())
+    elif row_store_path and row_store_path.exists():
+        # Rows without a signed checkpoint are not done. Replay the session,
+        # skip committed keys, and do not treat a partial write as complete.
+        for line in row_store_path.read_text(encoding="utf-8").splitlines():
+            rec = json.loads(line)
+            key = committed_row_key(
+                session=str(rec.get("signal_session")),
+                theme_id=str(rec.get("theme_id")),
+                algorithm=str(rec.get("algorithm")),
+                profile=str(rec.get("profile")),
+                horizon=str(rec.get("horizon")),
+                security_id=str(rec.get("security_id")),
+                label_horizon=rec.get("label_horizon"),
+            )
+            committed.add(key)
+            rows.append(rec)
     work: list[tuple[date, str, str]] = []
     for session in ordered_sessions:
         for theme_id in themes:
             for algorithm in algorithms:
                 work.append((session, theme_id, algorithm))
     if chunk_size:
-        remaining = [item for item in work if (item[0].isoformat(), item[1], item[2]) not in done]
+        remaining = [
+            item
+            for item in work
+            if (item[0].isoformat(), item[1], item[2], profile, horizon) not in done
+        ]
         work = remaining[:chunk_size]
     for session, theme_id, algorithm in work:
-        tuple_key = (session.isoformat(), theme_id, algorithm)
+        tuple_key = (session.isoformat(), theme_id, algorithm, profile, horizon)
         if tuple_key in done:
             continue
         refs = reference_panel(panel, theme_id, session)
@@ -236,58 +332,68 @@ def run_snapshot_matrix(
         )
         calls += 1
         payloads.append(payload)
+        new_rows: list[dict[str, Any]] = []
         for row in payload.get("rows") or ():
+            horizons = label_horizons if attach_labels else (None,)
             if attach_labels:
                 series = panel.get(str(row.get("security_id")))
-                for label_horizon in label_horizons:
+            else:
+                series = None
+            for label_horizon in horizons:
+                label = None
+                if attach_labels:
                     label = (
                         {"label": None, "label_matured_at": None, "reason": "NO_SERIES"}
                         if series is None
                         else attach_forward_label(
                             series,
                             session,
-                            label_horizon,
+                            int(label_horizon),
                             last_allowed=last_allowed or session,
                             holdout_start=holdout_start,
                         )
                     )
-                    rows.append(
-                        _row_payload(
-                            row,
-                            theme_id=theme_id,
-                            algorithm=algorithm,
-                            profile=profile,
-                            horizon=horizon,
-                            label_horizon=label_horizon,
-                            label=label,
-                        )
-                    )
-            else:
-                rows.append(
-                    _row_payload(
-                        row,
-                        theme_id=theme_id,
-                        algorithm=algorithm,
-                        profile=profile,
-                        horizon=horizon,
-                        label_horizon=None,
-                        label=None,
-                    )
+                record = _row_payload(
+                    row,
+                    theme_id=theme_id,
+                    algorithm=algorithm,
+                    profile=profile,
+                    horizon=horizon,
+                    label_horizon=label_horizon,
+                    label=label,
                 )
+                key = committed_row_key(
+                    session=session.isoformat(),
+                    theme_id=theme_id,
+                    algorithm=algorithm,
+                    profile=profile,
+                    horizon=horizon,
+                    security_id=str(row.get("security_id")),
+                    label_horizon=label_horizon,
+                )
+                if key in committed:
+                    continue
+                committed.add(key)
+                new_rows.append(record)
+                rows.append(record)
+        if row_store_path and new_rows:
+            row_store_path.parent.mkdir(parents=True, exist_ok=True)
+            with row_store_path.open("a", encoding="utf-8") as handle:
+                for record in new_rows:
+                    handle.write(json.dumps(record, sort_keys=True, default=str) + "\n")
         done.add(tuple_key)
         if checkpoint_path:
-            checkpoint_path.write_text(
-                json.dumps(
-                    {
-                        "done": [list(item) for item in sorted(done)],
-                        "payloads": payloads,
-                        "rows": rows,
-                        "function_calls": calls,
-                        "recomputes": recomputes,
-                    },
-                    default=str,
-                ),
-                encoding="utf-8",
+            write_signed_checkpoint(
+                checkpoint_path,
+                {
+                    "done": [list(item) for item in sorted(done)],
+                    "payloads": payloads,
+                    "rows": rows,
+                    "function_calls": calls,
+                    "recomputes": recomputes,
+                    "committed_row_keys": sorted(committed),
+                },
+                signature,
             )
     return {
         "payloads": payloads,
@@ -296,6 +402,9 @@ def run_snapshot_matrix(
         "function_calls": calls,
         "recomputes": recomputes,
         "unique_snapshots": len(payloads),
+        "unique_committed_rows": len(committed),
+        "run_signature": signature,
+        "cache_hits": cache_hit_definitions(),
     }
 
 

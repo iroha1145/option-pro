@@ -172,12 +172,13 @@ def factor_ic_universe(row: Mapping[str, Any]) -> bool:
         return False
 
 
-def event_span_key(row: Mapping[str, Any]) -> tuple[str, str, str, str]:
+def event_span_key(row: Mapping[str, Any]) -> tuple[str, str, str, str, str]:
     return (
         str(row.get("security_id")),
         str(row.get("algorithm")),
         str(row.get("profile")),
         str(row.get("horizon")),
+        str(row.get("label_horizon") if row.get("label_horizon") is not None else row.get("score_horizon") or "mid"),
     )
 
 
@@ -186,17 +187,24 @@ def register_independent_events(
     *,
     continuous_calendar: bool,
 ) -> dict[str, Any]:
-    """Overlap-aware events. Sampled streams are not independent-sample qualified."""
+    """Trading-session overlap groups. Weekend/holiday gaps are not new events.
+
+    The count is 去重事件组数. It is not N_eff. Calendar-day gap>1 is SUPERSEDED.
+    """
+
+    from app.services.research_eod_v1.calendar_asof import next_session
 
     if not continuous_calendar:
         return {
             "independent_events": None,
+            "deduped_event_groups": None,
             "sampled_eligible_set_changes": None,
             "usable_for_independent_sample": False,
-            "definition": "SECURITY_FAMILY_HORIZON_TIME_OVERLAP",
+            "definition": "SECURITY_FAMILY_HORIZON_LABEL_TRADING_SESSION_OVERLAP",
             "reason": "SAMPLED_STREAM_CANNOT_CONFIRM_CONTINUITY",
+            "old_count_4514": "SUPERSEDED_EVENT_COUNT",
         }
-    by_key: dict[tuple[str, str, str, str], list[date]] = defaultdict(list)
+    by_key: dict[tuple[str, str, str, str, str], list[date]] = defaultdict(list)
     for row in rows:
         if row.get("final_eligible") is not True and row.get("status") != "eligible":
             continue
@@ -205,24 +213,25 @@ def register_independent_events(
             continue
         day = session if isinstance(session, date) else date.fromisoformat(str(session)[:10])
         by_key[event_span_key(row)].append(day)
-    events = 0
+    groups = 0
     for days in by_key.values():
         ordered = sorted(set(days))
         if not ordered:
             continue
-        events += 1
+        groups += 1
         previous = ordered[0]
         for day in ordered[1:]:
-            gap = (day - previous).days
-            if gap > 1:
-                events += 1
+            if next_session(previous) != day:
+                groups += 1
             previous = day
     return {
-        "independent_events": events,
+        "independent_events": None,
+        "deduped_event_groups": groups,
         "sampled_eligible_set_changes": None,
-        "usable_for_independent_sample": True,
-        "definition": "SECURITY_FAMILY_HORIZON_TIME_OVERLAP",
-        "reason": None,
+        "usable_for_independent_sample": False,
+        "definition": "SECURITY_FAMILY_HORIZON_LABEL_TRADING_SESSION_OVERLAP",
+        "reason": "DEDUPE_GROUP_IS_NOT_N_EFF",
+        "old_count_4514": "SUPERSEDED_EVENT_COUNT",
     }
 
 

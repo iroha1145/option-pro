@@ -32,6 +32,44 @@ from registry import CommonInputs, common_rejections, resolve_weights, score_fea
 _CS_MEMO: dict[tuple, dict[str, Any]] = {}
 
 
+def _series_geometry_close(series: SecuritySeries) -> float | None:
+    if series.close is None or len(series.close) == 0:
+        return None
+    value = float(series.close[-1])
+    return value if math.isfinite(value) and value > 0 else None
+
+
+def _geometry_fields(raw: RawComponents) -> dict[str, Any]:
+    """Pass geometry through to sizing. Do not import ledger here (cycle)."""
+
+    geometry = raw.last_close
+    execution = raw.raw_close if raw.raw_close is not None else geometry
+    fraction = None
+    invalid = raw.planned_invalidation
+    atr = raw.atr
+    if (
+        geometry is not None
+        and execution is not None
+        and invalid is not None
+        and atr is not None
+        and geometry > 0
+        and execution > 0
+        and invalid > 0
+        and invalid < geometry
+        and atr > 0
+    ):
+        scale = execution / geometry
+        inv_exec = invalid * scale
+        atr_exec = atr * scale
+        fraction = max((execution - inv_exec) / execution, atr_exec / execution)
+    return {
+        "geometry_close": geometry,
+        "last_close": geometry,
+        "raw_close": raw.raw_close,
+        "risk_distance_fraction": fraction,
+    }
+
+
 def _v_state(algorithm: str, raw: RawComponents) -> float | None:
     if raw.rvol is None and algorithm != "C_trend_pullback":
         return None
@@ -187,6 +225,10 @@ def _structured_reject_row(
         "halted": bool(series.halted),
         "currently_tradable": False,
         "zero_volume": False,
+        "geometry_close": _series_geometry_close(series),
+        "last_close": _series_geometry_close(series),
+        "raw_close": None,
+        "risk_distance_fraction": None,
     }
 
 
@@ -524,6 +566,7 @@ def compute_snapshot(
                 "halted": bool(raw.halted),
                 "currently_tradable": bool(raw.currently_tradable),
                 "zero_volume": bool(raw.zero_volume),
+                **_geometry_fields(raw),
             }
         )
     seen = {row["security_id"] for row in rows}

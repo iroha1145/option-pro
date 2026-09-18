@@ -1,0 +1,1538 @@
+[
+  {
+    "G_weight": 0.0888066605,
+    "family": "A_trend_quality",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9111933395,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "semiconductors",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.0543724513,
+    "family": "B_confirmed_base_breakout",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9456275487,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "semiconductors",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.05842259009415774,
+    "family": "C_trend_pullback",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9415774099058423,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "semiconductors",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.11188811188881119,
+    "family": "D_residual_momentum",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.8881118881111888,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "DATA_INSUFFICIENT",
+    "score_with_other_seven_factors_at_100": null,
+    "theme": "semiconductors",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.0705009276070501,
+    "family": "A_trend_quality",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9294990723929499,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "software",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.04547630449545237,
+    "family": "B_confirmed_base_breakout",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9545236955045476,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "software",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.0438799076,
+    "family": "C_trend_pullback",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9561200924,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "software",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.08812615959118739,
+    "family": "D_residual_momentum",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9118738404088126,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "software",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.0847926267,
+    "family": "A_trend_quality",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9152073733,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "ai_cloud",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.05227272730522727,
+    "family": "B_confirmed_base_breakout",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9477272726947727,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "ai_cloud",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.0552618933,
+    "family": "C_trend_pullback",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9447381067,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "ai_cloud",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.10468821121046883,
+    "family": "D_residual_momentum",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.8953117887895312,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "DATA_INSUFFICIENT",
+    "score_with_other_seven_factors_at_100": null,
+    "theme": "ai_cloud",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.06582768639341723,
+    "family": "A_trend_quality",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9341723136065828,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "biotech",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.0393154487,
+    "family": "B_confirmed_base_breakout",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9606845513,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "biotech",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.0396640224039664,
+    "family": "C_trend_pullback",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9603359775960336,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "biotech",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.0806069227,
+    "family": "D_residual_momentum",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9193930773,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "biotech",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.07575757579242424,
+    "family": "A_trend_quality",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9242424242075757,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "healthcare",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.0509683996,
+    "family": "B_confirmed_base_breakout",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9490316004,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "healthcare",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.0455996352,
+    "family": "C_trend_pullback",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9544003648,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "healthcare",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.09372071230937207,
+    "family": "D_residual_momentum",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9062792876906279,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "healthcare",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.06837606839316239,
+    "family": "A_trend_quality",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9316239316068377,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "consumer_electronics",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.0441609421,
+    "family": "B_confirmed_base_breakout",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9558390579,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "consumer_electronics",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.041189931404118994,
+    "family": "C_trend_pullback",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.958810068595881,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.00000000000001,
+    "theme": "consumer_electronics",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.0855513308,
+    "family": "D_residual_momentum",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9144486692,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "consumer_electronics",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.0677009872932299,
+    "family": "A_trend_quality",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9322990127067701,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "automotive",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.04115226340411523,
+    "family": "B_confirmed_base_breakout",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9588477365958847,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "automotive",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.0425129901,
+    "family": "C_trend_pullback",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9574870099,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "automotive",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.08253094909174691,
+    "family": "D_residual_momentum",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.917469050908253,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "automotive",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.07640878700764088,
+    "family": "A_trend_quality",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9235912129923591,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "ev_supply",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.0449640288,
+    "family": "B_confirmed_base_breakout",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9550359712000001,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 99.99999999999999,
+    "theme": "ev_supply",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.0478927203,
+    "family": "C_trend_pullback",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9521072797,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "ev_supply",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.09229349329077065,
+    "family": "D_residual_momentum",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9077065067092294,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "ev_supply",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.0852641335,
+    "family": "A_trend_quality",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9147358665,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "finance",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.0557981562,
+    "family": "B_confirmed_base_breakout",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9442018438,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.00000000000001,
+    "theme": "finance",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.05166217430516622,
+    "family": "C_trend_pullback",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9483378256948338,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "finance",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.105649977,
+    "family": "D_residual_momentum",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.894350023,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "DATA_INSUFFICIENT",
+    "score_with_other_seven_factors_at_100": null,
+    "theme": "finance",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.07448789570744879,
+    "family": "A_trend_quality",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9255121042925512,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "fintech",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.0464037123,
+    "family": "B_confirmed_base_breakout",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9535962877,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "fintech",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.046992481204699246,
+    "family": "C_trend_pullback",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9530075187953008,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "fintech",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.09066183139093383,
+    "family": "D_residual_momentum",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9093381686090661,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "fintech",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.0824355972,
+    "family": "A_trend_quality",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9175644028,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "retail",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.05549949549445005,
+    "family": "B_confirmed_base_breakout",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9445005045055499,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "retail",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.04946043169505396,
+    "family": "C_trend_pullback",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.950539568304946,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "retail",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.1031894934,
+    "family": "D_residual_momentum",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.8968105066000001,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "DATA_INSUFFICIENT",
+    "score_with_other_seven_factors_at_100": null,
+    "theme": "retail",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.0716981132,
+    "family": "A_trend_quality",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9283018868,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 99.99999999999999,
+    "theme": "luxury",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.0487930149,
+    "family": "B_confirmed_base_breakout",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9512069851,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "luxury",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.0425436632,
+    "family": "C_trend_pullback",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9574563368,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "luxury",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.08800370540880038,
+    "family": "D_residual_momentum",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9119962945911996,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "luxury",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.06713286708657341,
+    "family": "A_trend_quality",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9328671329134266,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.00000000000001,
+    "theme": "media_streaming",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.0409649522,
+    "family": "B_confirmed_base_breakout",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9590350478,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "media_streaming",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.041647385495835264,
+    "family": "C_trend_pullback",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9583526145041648,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "media_streaming",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.08302583029169743,
+    "family": "D_residual_momentum",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9169741697083026,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "media_streaming",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.07699358389230064,
+    "family": "A_trend_quality",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9230064161076994,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "social_internet",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.04941176470494118,
+    "family": "B_confirmed_base_breakout",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9505882352950589,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "social_internet",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.04955167529504483,
+    "family": "C_trend_pullback",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9504483247049552,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.00000000000001,
+    "theme": "social_internet",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.09502262439049775,
+    "family": "D_residual_momentum",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9049773756095023,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "social_internet",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.1145038168,
+    "family": "A_trend_quality",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.8854961832,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "DATA_INSUFFICIENT",
+    "score_with_other_seven_factors_at_100": null,
+    "theme": "energy",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.07440476191488096,
+    "family": "B_confirmed_base_breakout",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.925595238085119,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "energy",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.0706880302,
+    "family": "C_trend_pullback",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9293119698,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "energy",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.1404494382,
+    "family": "D_residual_momentum",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.8595505618,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "DATA_INSUFFICIENT",
+    "score_with_other_seven_factors_at_100": null,
+    "theme": "energy",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.08178438659182155,
+    "family": "A_trend_quality",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9182156134081785,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 99.99999999999999,
+    "theme": "utilities",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.0566426365,
+    "family": "B_confirmed_base_breakout",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9433573635,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "utilities",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.048543689304854365,
+    "family": "C_trend_pullback",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9514563106951457,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "utilities",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.1012425219,
+    "family": "D_residual_momentum",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.8987574781000001,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "DATA_INSUFFICIENT",
+    "score_with_other_seven_factors_at_100": null,
+    "theme": "utilities",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.0834088849,
+    "family": "A_trend_quality",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9165911151,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "defense_aero",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.0553416747,
+    "family": "B_confirmed_base_breakout",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9446583253,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "defense_aero",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.05159264240515926,
+    "family": "C_trend_pullback",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9484073575948407,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "defense_aero",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.1045454545,
+    "family": "D_residual_momentum",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.8954545455,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "DATA_INSUFFICIENT",
+    "score_with_other_seven_factors_at_100": null,
+    "theme": "defense_aero",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.093676815,
+    "family": "A_trend_quality",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.906323185,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "airlines",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.0586029067,
+    "family": "B_confirmed_base_breakout",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9413970933,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "airlines",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.05679236709432076,
+    "family": "C_trend_pullback",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9432076329056792,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "airlines",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.1141031492,
+    "family": "D_residual_momentum",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.8858968508,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "DATA_INSUFFICIENT",
+    "score_with_other_seven_factors_at_100": null,
+    "theme": "airlines",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.08148148149185185,
+    "family": "A_trend_quality",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9185185185081481,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.00000000000001,
+    "theme": "real_estate",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.0567010309,
+    "family": "B_confirmed_base_breakout",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9432989691,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "real_estate",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.04816112080481611,
+    "family": "C_trend_pullback",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9518388791951838,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "real_estate",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.100456621,
+    "family": "D_residual_momentum",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.899543379,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "DATA_INSUFFICIENT",
+    "score_with_other_seven_factors_at_100": null,
+    "theme": "real_estate",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.08409506399159049,
+    "family": "A_trend_quality",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9159049360084095,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "crypto",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.05006530259499347,
+    "family": "B_confirmed_base_breakout",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9499346974050066,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "crypto",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.0544507576,
+    "family": "C_trend_pullback",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9455492424,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "crypto",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.100174216,
+    "family": "D_residual_momentum",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.899825784,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "DATA_INSUFFICIENT",
+    "score_with_other_seven_factors_at_100": null,
+    "theme": "crypto",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.0939849624,
+    "family": "A_trend_quality",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9060150376,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "china_adr",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.05822077320582208,
+    "family": "B_confirmed_base_breakout",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9417792267941779,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "china_adr",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.058058523,
+    "family": "C_trend_pullback",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.941941477,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "china_adr",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.1130198915,
+    "family": "D_residual_momentum",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.8869801085,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "DATA_INSUFFICIENT",
+    "score_with_other_seven_factors_at_100": null,
+    "theme": "china_adr",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.0817084494,
+    "family": "A_trend_quality",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9182915506,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "telecom",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.05798629411159726,
+    "family": "B_confirmed_base_breakout",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9420137058884027,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "telecom",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.04763967089523603,
+    "family": "C_trend_pullback",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.952360329104764,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "telecom",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.1011959522,
+    "family": "D_residual_momentum",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.8988040478,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "DATA_INSUFFICIENT",
+    "score_with_other_seven_factors_at_100": null,
+    "theme": "telecom",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.08860175359113982,
+    "family": "A_trend_quality",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9113982464088601,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.00000000000001,
+    "theme": "industrials",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.05847953219415205,
+    "family": "B_confirmed_base_breakout",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.941520467805848,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "industrials",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.054225033894577494,
+    "family": "C_trend_pullback",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9457749661054226,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "industrials",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.11095700418890429,
+    "family": "D_residual_momentum",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.8890429958110957,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "DATA_INSUFFICIENT",
+    "score_with_other_seven_factors_at_100": null,
+    "theme": "industrials",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.08007279339199272,
+    "family": "A_trend_quality",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9199272066080073,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "etfs",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.0590128755,
+    "family": "B_confirmed_base_breakout",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9409871245,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "etfs",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.0502053857,
+    "family": "C_trend_pullback",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9497946143,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "etfs",
+    "track": "FULL_EIGHT_FACTOR"
+  },
+  {
+    "G_weight": 0.09795191450979518,
+    "family": "D_residual_momentum",
+    "horizon": "mid",
+    "maximum_coverage_without_G": 0.9020480854902049,
+    "minimum_coverage": 0.9,
+    "missing": [
+      "G"
+    ],
+    "note": "G missing is a data-capability failure, not a strategy loss",
+    "profile": "balanced",
+    "score_status": "SCORED_NOT_SETUP_VALIDATED",
+    "score_with_other_seven_factors_at_100": 100.0,
+    "theme": "etfs",
+    "track": "FULL_EIGHT_FACTOR"
+  }
+]
