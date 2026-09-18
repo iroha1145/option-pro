@@ -49,7 +49,10 @@ def _audit(result: dict, head: str) -> str:
     for row in result["inventory"]:
         lines.append(
             f"- `{row.get('path')}` role={row.get('role')} status={row.get('status')} "
-            f"sha256={row.get('sha256') or 'n/a'}"
+            f"sha256={row.get('sha256') or 'n/a'} securities_n={row.get('securities_n')} "
+            f"first={row.get('first_session')} last={row.get('last_session')} "
+            f"last_allowed={row.get('last_allowed_session')} "
+            f"actions={row.get('corporate_actions')} vintage={row.get('vintage_status')}"
         )
     lines.extend(
         [
@@ -59,6 +62,17 @@ def _audit(result: dict, head: str) -> str:
             f"- symbols {summary.get('symbols')} bars {summary.get('bar_rows')} ohlc_violations {summary.get('ohlc_violations')}",
             f"- SPY allowed complete T-days {spy.get('allowed_n')} first {spy.get('first')} last_allowed {spy.get('last_allowed')}",
             f"- raw_ne_close_bars {summary.get('raw_ne_close_bars')} (C stays blocked)",
+            "",
+            "## Split-window samples",
+            "",
+        ]
+    )
+    for command in result.get("validation") or []:
+        samples = command.get("split_window_samples") or []
+        for sample in samples:
+            lines.append(f"- TSLA {sample.get('event')}: {sample.get('invariant')}")
+    lines.extend(
+        [
             "",
             "## Decade budget",
             "",

@@ -3,7 +3,7 @@
     "ablation.py": "6edc6492fabcff095c259b64cf0b49b0b86367ca3c6ab05b7b5bb6e949166a52",
     "bootstrap.py": "6d3a962696c576eb7f4c80ba32bf63fbdb3a33e30868efba2e85ed439ca0b86b",
     "capability.py": "971b43c9aa5a795e86e6801b1f27a6798d5f01258ab841499ed314ec249ddab4",
-    "data_readiness.py": "9fed78a4ae500555ff90df272dc2674264f297addeb79bb030f4b77ecc11184b",
+    "data_readiness.py": "4d8d452f509130be26a4df7eb09b4b37ed899d4896a1d1a5a17f24885498c726",
     "event_groups.py": "c068aec202b10691d800eee9e58612e10a52ee40991ca269e5698bc3f641ff39",
     "freeze.py": "a1d064bad089176c91800c056ca33c37b4ada208ab792990c768c1ffcf0dcb8a",
     "pairing.py": "3064304a5d9b9a1202ae838c035e0ff8e7cab52c3db6dad12208d931747c58ac",
@@ -13,7 +13,7 @@
     "source_bind.py": "130b2176901a7b0b68651db13e45c5f6f365fd58a3675d360ba568b1eb815b70",
     "stats.py": "584ec46e533ab3a2b096262e6f0f41d28624c5136b52d1508fdf583e5d75acc9"
   },
-  "generated_at": "2026-09-18T15:09:11.517132+00:00",
-  "head": "35d8a08769174f4a56a9eae5af793852f3e1189d",
+  "generated_at": "2026-09-18T15:22:15.701146+00:00",
+  "head": "ffc8cb1e99897e54272033b986678e057542b8a7",
   "protocol": "us-eod-research-recovery-v1"
 }

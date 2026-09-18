@@ -1,7 +1,91 @@
 [
   {
-    "command": "load_trusted_research_bars + inspect_yahoo_cache + verify_contract_bars",
+    "command": "load_trusted_research_bars + inspect_yahoo_cache + verify_contract_bars + split_window_samples",
     "split_sample": "TSLA 2020-08-31 and 2022-08-25 already sit in a split-adjusted-looking close series; raw_close equals close, so C stays blocked",
+    "split_window_samples": [
+      {
+        "bars": [
+          {
+            "close": 166.10667419433594,
+            "open": 148.20333862304688,
+            "overnight_open_over_prev_close": 1.0043598609046986,
+            "raw_close": 166.10667419433594,
+            "raw_equals_close": true,
+            "session": "2020-08-31",
+            "tri": 166.10667419433594,
+            "volume": 355123200.0
+          },
+          {
+            "close": 158.35000610351562,
+            "open": 167.3800048828125,
+            "overnight_open_over_prev_close": 1.0076657406732907,
+            "raw_close": 158.35000610351562,
+            "raw_equals_close": true,
+            "session": "2020-09-01",
+            "tri": 158.35000610351562,
+            "volume": 269523300.0
+          },
+          {
+            "close": 149.1233367919922,
+            "open": 159.663330078125,
+            "overnight_open_over_prev_close": 1.0082938043826208,
+            "raw_close": 149.1233367919922,
+            "raw_equals_close": true,
+            "session": "2020-09-02",
+            "tri": 149.1233367919922,
+            "volume": 288528300.0
+          }
+        ],
+        "event": "2020-08-31",
+        "invariant": "no 4-for-1 or 5-for-1 raw gap; close already looks split-adjusted; C blocked"
+      },
+      {
+        "bars": [
+          {
+            "close": 296.4533386230469,
+            "open": 291.4533386230469,
+            "overnight_open_over_prev_close": 1.0053119618353075,
+            "raw_close": 296.4533386230469,
+            "raw_equals_close": true,
+            "session": "2022-08-23",
+            "tri": 296.4533386230469,
+            "volume": 63984900.0
+          },
+          {
+            "close": 297.0966796875,
+            "open": 297.5633239746094,
+            "overnight_open_over_prev_close": 1.0037442160601668,
+            "raw_close": 297.0966796875,
+            "raw_equals_close": true,
+            "session": "2022-08-24",
+            "tri": 297.0966796875,
+            "volume": 57259800.0
+          },
+          {
+            "close": 296.07000732421875,
+            "open": 302.3599853515625,
+            "overnight_open_over_prev_close": 1.017715801030152,
+            "raw_close": 296.07000732421875,
+            "raw_equals_close": true,
+            "session": "2022-08-25",
+            "tri": 296.07000732421875,
+            "volume": 53230000.0
+          },
+          {
+            "close": 288.0899963378906,
+            "open": 297.42999267578125,
+            "overnight_open_over_prev_close": 1.0045934587020604,
+            "raw_close": 288.0899963378906,
+            "raw_equals_close": true,
+            "session": "2022-08-26",
+            "tri": 288.0899963378906,
+            "volume": 57163900.0
+          }
+        ],
+        "event": "2022-08-25",
+        "invariant": "no 4-for-1 or 5-for-1 raw gap; close already looks split-adjusted; C blocked"
+      }
+    ],
     "spy": {
       "after_holdout": 0,
       "allowed_n": 1633,
@@ -38,5 +122,213 @@
       "tri_ne_close": 0,
       "unsorted": false
     }
+  },
+  {
+    "after_close": {
+      "automotive": {
+        "F": {
+          "after_holdout": 19,
+          "allowed_n": 0,
+          "complete_t_days": 0,
+          "dollar_volume_mismatch": 0,
+          "duplicates": 0,
+          "first": "2026-08-20",
+          "last": "2026-09-16",
+          "last_allowed": null,
+          "n": 19,
+          "ohlc_violations": 0,
+          "overnight_gt_40pct": 0,
+          "partial": 0,
+          "raw_ne_close": 0,
+          "tri_ne_close": 0,
+          "unsorted": false
+        },
+        "GM": {
+          "after_holdout": 19,
+          "allowed_n": 0,
+          "complete_t_days": 0,
+          "dollar_volume_mismatch": 0,
+          "duplicates": 0,
+          "first": "2026-08-20",
+          "last": "2026-09-16",
+          "last_allowed": null,
+          "n": 19,
+          "ohlc_violations": 0,
+          "overnight_gt_40pct": 0,
+          "partial": 0,
+          "raw_ne_close": 0,
+          "tri_ne_close": 11,
+          "unsorted": false
+        },
+        "LCID": {
+          "after_holdout": 19,
+          "allowed_n": 0,
+          "complete_t_days": 0,
+          "dollar_volume_mismatch": 0,
+          "duplicates": 0,
+          "first": "2026-08-20",
+          "last": "2026-09-16",
+          "last_allowed": null,
+          "n": 19,
+          "ohlc_violations": 0,
+          "overnight_gt_40pct": 0,
+          "partial": 0,
+          "raw_ne_close": 0,
+          "tri_ne_close": 0,
+          "unsorted": false
+        },
+        "LI": {
+          "after_holdout": 19,
+          "allowed_n": 0,
+          "complete_t_days": 0,
+          "dollar_volume_mismatch": 0,
+          "duplicates": 0,
+          "first": "2026-08-20",
+          "last": "2026-09-16",
+          "last_allowed": null,
+          "n": 19,
+          "ohlc_violations": 0,
+          "overnight_gt_40pct": 0,
+          "partial": 0,
+          "raw_ne_close": 0,
+          "tri_ne_close": 0,
+          "unsorted": false
+        },
+        "NIO": {
+          "after_holdout": 19,
+          "allowed_n": 0,
+          "complete_t_days": 0,
+          "dollar_volume_mismatch": 0,
+          "duplicates": 0,
+          "first": "2026-08-20",
+          "last": "2026-09-16",
+          "last_allowed": null,
+          "n": 19,
+          "ohlc_violations": 0,
+          "overnight_gt_40pct": 0,
+          "partial": 0,
+          "raw_ne_close": 0,
+          "tri_ne_close": 0,
+          "unsorted": false
+        },
+        "RIVN": {
+          "after_holdout": 19,
+          "allowed_n": 0,
+          "complete_t_days": 0,
+          "dollar_volume_mismatch": 0,
+          "duplicates": 0,
+          "first": "2026-08-20",
+          "last": "2026-09-16",
+          "last_allowed": null,
+          "n": 19,
+          "ohlc_violations": 0,
+          "overnight_gt_40pct": 0,
+          "partial": 0,
+          "raw_ne_close": 0,
+          "tri_ne_close": 0,
+          "unsorted": false
+        },
+        "STLA": {
+          "after_holdout": 19,
+          "allowed_n": 0,
+          "complete_t_days": 0,
+          "dollar_volume_mismatch": 0,
+          "duplicates": 0,
+          "first": "2026-08-20",
+          "last": "2026-09-16",
+          "last_allowed": null,
+          "n": 19,
+          "ohlc_violations": 0,
+          "overnight_gt_40pct": 0,
+          "partial": 0,
+          "raw_ne_close": 0,
+          "tri_ne_close": 0,
+          "unsorted": false
+        },
+        "TM": {
+          "after_holdout": 19,
+          "allowed_n": 0,
+          "complete_t_days": 0,
+          "dollar_volume_mismatch": 0,
+          "duplicates": 0,
+          "first": "2026-08-20",
+          "last": "2026-09-16",
+          "last_allowed": null,
+          "n": 19,
+          "ohlc_violations": 0,
+          "overnight_gt_40pct": 0,
+          "partial": 0,
+          "raw_ne_close": 0,
+          "tri_ne_close": 0,
+          "unsorted": false
+        },
+        "TSLA": {
+          "after_holdout": 19,
+          "allowed_n": 0,
+          "complete_t_days": 0,
+          "dollar_volume_mismatch": 0,
+          "duplicates": 0,
+          "first": "2026-08-20",
+          "last": "2026-09-16",
+          "last_allowed": null,
+          "n": 19,
+          "ohlc_violations": 0,
+          "overnight_gt_40pct": 0,
+          "partial": 0,
+          "raw_ne_close": 0,
+          "tri_ne_close": 0,
+          "unsorted": false
+        },
+        "XPEV": {
+          "after_holdout": 19,
+          "allowed_n": 0,
+          "complete_t_days": 0,
+          "dollar_volume_mismatch": 0,
+          "duplicates": 0,
+          "first": "2026-08-20",
+          "last": "2026-09-16",
+          "last_allowed": null,
+          "n": 19,
+          "ohlc_violations": 0,
+          "overnight_gt_40pct": 0,
+          "partial": 0,
+          "raw_ne_close": 0,
+          "tri_ne_close": 0,
+          "unsorted": false
+        }
+      },
+      "bar_rows": 4060,
+      "empty_symbols": 0,
+      "first_session_counts": {
+        "2026-08-20": 214
+      },
+      "last_session_counts": {
+        "2026-09-15": 6,
+        "2026-09-16": 208
+      },
+      "not_spliced_onto_b0": true,
+      "ohlc_violations": 0,
+      "raw_ne_close_bars": 0,
+      "spy": {
+        "after_holdout": 19,
+        "allowed_n": 0,
+        "complete_t_days": 0,
+        "dollar_volume_mismatch": 0,
+        "duplicates": 0,
+        "first": "2026-08-20",
+        "last": "2026-09-16",
+        "last_allowed": null,
+        "n": 19,
+        "ohlc_violations": 0,
+        "overnight_gt_40pct": 0,
+        "partial": 0,
+        "raw_ne_close": 0,
+        "tri_ne_close": 0,
+        "unsorted": false
+      },
+      "symbols": 214
+    },
+    "command": "load_trusted_research_bars(after_close) + inspect_yahoo_cache",
+    "not_used_for_evaluation": true
   }
 ]

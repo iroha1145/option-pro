@@ -3,9 +3,12 @@
   "coverage": "add/drop dates for all 24 themes through 2024-06-28, plus survivorship-complete names in each window",
   "field": "historical_constituent_membership_and_delist_tape",
   "optional_parallel_entry": {
-    "access": "do not assume API key; extend history backward only",
-    "coverage": "ten complete evaluable years after 330-session warmup and label maturity, ending 2024-06-28",
-    "field": "licensed_us_eod_with_delistings_from_2010"
+    "access": "do not assume API key; do not auto-buy",
+    "classification": "as-of industry and theme tags; do not backfill current lists",
+    "corporate_actions": "point-in-time split/dividend/merger ledger separate from adjusted close",
+    "delistings": "survivorship-complete names, including names absent from today's SECTORS list",
+    "field": "licensed_us_eod_with_delistings_from_2010",
+    "interval": "raw start on or before 2010-01-02 through allowed_end 2024-06-28; backward only"
   },
   "recovered_cache_already_usable_for": [
     "A_close_signal_diagnostic"

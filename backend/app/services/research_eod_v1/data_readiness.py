@@ -103,7 +103,358 @@ def _file_record(path: Path, *, role: str, authorization: str) -> dict[str, Any]
     elif path.is_dir():
         record["status"] = "directory"
         record["entries"] = sum(1 for _ in path.iterdir())
+    record.update(empty_source_fields())
     return record
+
+
+INVENTORY_COVERAGE_KEYS = (
+    "securities_n",
+    "first_session",
+    "last_session",
+    "last_allowed_session",
+    "field_capabilities",
+    "corporate_actions",
+    "vintage_status",
+    "known_at_vs_retrieved",
+    "backup_locator",
+)
+
+
+def empty_source_fields() -> dict[str, Any]:
+    return {
+        "securities_n": None,
+        "first_session": None,
+        "last_session": None,
+        "last_allowed_session": None,
+        "field_capabilities": None,
+        "corporate_actions": None,
+        "vintage_status": None,
+        "known_at_vs_retrieved": None,
+        "backup_locator": None,
+    }
+
+
+def coverage_from_bars(bars: Mapping[str, Sequence[ResearchBar]]) -> dict[str, Any]:
+    firsts: list[date] = []
+    lasts: list[date] = []
+    allowed_lasts: list[date] = []
+    raw_ne = 0
+    tri_ne = 0
+    retrieved_after_close = 0
+    known_missing = 0
+    for rows in bars.values():
+        if not rows:
+            continue
+        firsts.append(rows[0].session_date)
+        lasts.append(rows[-1].session_date)
+        allowed = [bar.session_date for bar in rows if bar.session_date <= ALLOWED_END]
+        if allowed:
+            allowed_lasts.append(allowed[-1])
+        for bar in rows:
+            if bar.raw_close is not None and bar.close is not None and abs(bar.raw_close - bar.close) > 1e-9:
+                raw_ne += 1
+            if bar.tri is not None and bar.close is not None and abs(bar.tri - bar.close) > 1e-6:
+                tri_ne += 1
+            if bar.economic_known_at is None:
+                known_missing += 1
+            if bar.retrieved_at is not None and bar.economic_known_at is not None:
+                if bar.retrieved_at.timestamp() > bar.economic_known_at.timestamp():
+                    retrieved_after_close += 1
+    return {
+        "securities_n": len(bars),
+        "first_session": min(firsts).isoformat() if firsts else None,
+        "last_session": max(lasts).isoformat() if lasts else None,
+        "last_allowed_session": max(allowed_lasts).isoformat() if allowed_lasts else None,
+        "field_capabilities": {
+            "ohlcv": True,
+            "raw_equals_structure_close": raw_ne == 0,
+            "tri_present": True,
+            "tri_differs_from_close_bars": tri_ne,
+            "dollar_volume_is_close_times_volume": True,
+            "is_raw_unadjusted_eod": False,
+        },
+        "corporate_actions": "no_licensed_ledger; splits_already_in_close_series",
+        "vintage_status": "download_time_not_pit",
+        "known_at_vs_retrieved": {
+            "economic_known_at": "session_close_America_New_York",
+            "source_published_at": None,
+            "retrieved_at": "download_clock",
+            "bars_with_retrieved_after_session_close": retrieved_after_close,
+            "bars_missing_economic_known_at": known_missing,
+        },
+        "backup_locator": None,
+    }
+
+
+def inspect_offline_parquet(path: Path) -> dict[str, Any]:
+    if not path.is_file():
+        return empty_source_fields()
+    try:
+        import pandas as pd
+    except ImportError:
+        return empty_source_fields()
+    frame = pd.read_parquet(path)
+    dates = [str(item)[:10] for item in frame.get("session_date", [])]
+    symbols = sorted({str(item) for item in frame.get("security_id", [])})
+    return {
+        "securities_n": len(symbols),
+        "first_session": min(dates) if dates else None,
+        "last_session": max(dates) if dates else None,
+        "last_allowed_session": max((item for item in dates if item <= ALLOWED_END.isoformat()), default=None),
+        "field_capabilities": {
+            "ohlcv": True,
+            "rows": int(len(frame)),
+            "symbols": symbols,
+            "is_raw_unadjusted_eod": False,
+            "not_a_substitute_for_214_name_cache": True,
+        },
+        "corporate_actions": "absent",
+        "vintage_status": str(frame["vintage_status"].iloc[0]) if "vintage_status" in frame.columns and len(frame) else "offline_export",
+        "known_at_vs_retrieved": "fixture_download_time_not_pit",
+        "backup_locator": None,
+    }
+
+
+def inspect_security_master(path: Path) -> dict[str, Any]:
+    if not path.is_file():
+        return empty_source_fields()
+    import csv
+
+    with path.open(encoding="utf-8") as handle:
+        rows = list(csv.DictReader(handle))
+    firsts = [str(row["first"])[:10] for row in rows if row.get("first")]
+    lasts = [str(row["last"])[:10] for row in rows if row.get("last")]
+    return {
+        "securities_n": len(rows),
+        "first_session": min(firsts) if firsts else None,
+        "last_session": max(lasts) if lasts else None,
+        "last_allowed_session": None,
+        "field_capabilities": {
+            "kind": "current_list_metadata_not_bars",
+            "claimed_bar_counts": True,
+            "bars_file_missing": True,
+            "claimed_last_includes_post_holdout": bool(lasts and max(lasts) >= HOLDOUT_START.isoformat()),
+            "is_raw_unadjusted_eod": False,
+        },
+        "corporate_actions": "not_in_this_file",
+        "vintage_status": "current_list_locator_for_missing_parquet",
+        "known_at_vs_retrieved": "not_a_price_tape",
+        "backup_locator": (
+            "research/option_pro_us_eod_v1/return_pack/yahoo_current_universe/manifest.json "
+            "and hashes.json yahoo_daily_bars_sha256 "
+            "d056327fd03abdb3a276a8f20039ea2af04300bc7ec9c1dd10010343abf7262e"
+        ),
+    }
+
+
+def inspect_revoked_snapshot(path: Path) -> dict[str, Any]:
+    if not path.is_file():
+        return empty_source_fields()
+    try:
+        import pandas as pd
+    except ImportError:
+        return empty_source_fields()
+    frame = pd.read_parquet(path)
+    dates = [str(item)[:10] for item in frame.get("session_date", [])]
+    symbols = sorted({str(item) for item in frame.get("security_id", [])})
+    allowed = [item for item in dates if item <= ALLOWED_END.isoformat()]
+    return {
+        "securities_n": len(symbols),
+        "first_session": min(dates) if dates else None,
+        "last_session": max(dates) if dates else None,
+        "last_allowed_session": max(allowed) if allowed else None,
+        "field_capabilities": {
+            "kind": "revoked_same_day_theme_snapshot",
+            "is_raw_unadjusted_eod": False,
+            "is_market_history": False,
+            "rows": int(len(frame)),
+            "invalid_eod_capture": True,
+        },
+        "corporate_actions": "absent",
+        "vintage_status": "INVALID_EOD_CAPTURE",
+        "known_at_vs_retrieved": "same_day_preclose_capture_revoked",
+        "backup_locator": None,
+    }
+
+
+def inspect_cache_tree(path: Path) -> dict[str, Any]:
+    files: list[str] = []
+    if path.is_dir():
+        files = sorted(_rel(item) for item in path.rglob("*") if item.is_file())
+    return {
+        "securities_n": None,
+        "first_session": None,
+        "last_session": None,
+        "last_allowed_session": None,
+        "field_capabilities": {
+            "kind": "project_cache_tree",
+            "file_count": len(files),
+            "files": files,
+            "unknown_pickles_loaded": False,
+        },
+        "corporate_actions": None,
+        "vintage_status": "scanned",
+        "known_at_vs_retrieved": None,
+        "backup_locator": None,
+    }
+
+
+def cursor_artifact_inventory() -> dict[str, Any]:
+    roots = [
+        Path("/opt/cursor/artifacts"),
+        Path("/home/ubuntu/.cursor/projects/workspace/uploads"),
+    ]
+    market_like = []
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for path in root.rglob("*"):
+            if not path.is_file():
+                continue
+            name = path.name.lower()
+            if name.endswith((".pkl", ".pickle")) or name in {"daily_bars.parquet", "measurement_factor_rows.jsonl"}:
+                market_like.append(_rel(path) if path.exists() else str(path))
+    return {
+        "role": "authorized_cursor_artifact_dirs",
+        "authorization": "this_run_uploads_and_walkthrough_artifacts",
+        "exists": True,
+        "status": "scanned_no_additional_market_tape" if not market_like else "found_market_like_files",
+        "path": [str(root) for root in roots if root.is_dir()],
+        "market_like_files": market_like,
+        "untrusted_pickles_loaded": False,
+        **empty_source_fields(),
+        "field_capabilities": {"research_specs_and_audits_only": True, "additional_eod_tape": False},
+        "backup_locator": None,
+    }
+
+
+def split_window_samples(bars: Sequence[ResearchBar], targets: Sequence[date]) -> list[dict[str, Any]]:
+    ordered = list(bars)
+    index = {bar.session_date: i for i, bar in enumerate(ordered)}
+    out = []
+    for target in targets:
+        nearby = [bar for bar in ordered if abs((bar.session_date - target).days) <= 2]
+        rows = []
+        for bar in nearby:
+            loc = index[bar.session_date]
+            prev = ordered[loc - 1] if loc else None
+            overnight = None
+            if prev is not None and prev.close and bar.open:
+                overnight = bar.open / prev.close
+            rows.append(
+                {
+                    "session": bar.session_date.isoformat(),
+                    "open": bar.open,
+                    "close": bar.close,
+                    "raw_close": bar.raw_close,
+                    "tri": bar.tri,
+                    "volume": bar.volume,
+                    "raw_equals_close": bar.raw_close == bar.close,
+                    "overnight_open_over_prev_close": overnight,
+                }
+            )
+        out.append(
+            {
+                "event": target.isoformat(),
+                "bars": rows,
+                "invariant": "no 4-for-1 or 5-for-1 raw gap; close already looks split-adjusted; C blocked",
+            }
+        )
+    return out
+
+
+def annotate_inventory(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    yahoo_bars: Mapping[str, Sequence[ResearchBar]] | None = None,
+    after_close_bars: Mapping[str, Sequence[ResearchBar]] | None = None,
+    root: Path | None = None,
+) -> list[dict[str, Any]]:
+    base = root or REPO_ROOT
+    research = base / "research" / "option_pro_us_eod_v1"
+    out = [dict(row) for row in rows]
+    for row in out:
+        role = row.get("role")
+        if role == "continuous_runner_yahoo_cache" and yahoo_bars is not None:
+            row.update(coverage_from_bars(yahoo_bars))
+        elif role == "after_close_recapture_cache" and after_close_bars is not None:
+            row.update(coverage_from_bars(after_close_bars))
+            row["last_allowed_session"] = None
+            row["field_capabilities"] = {
+                **(row.get("field_capabilities") or {}),
+                "entirely_after_holdout": True,
+                "not_used_for_evaluation": True,
+            }
+        elif role == "offline_replay_spy_nvda_fixture":
+            row.update(inspect_offline_parquet(research / "data" / "cache" / "offline_replay" / "daily_bars.parquet"))
+        elif role == "b0_feature_label_tape":
+            row.update(
+                {
+                    "securities_n": None,
+                    "first_session": "2018-01-02",
+                    "last_session": "2024-06-28",
+                    "last_allowed_session": "2024-06-28",
+                    "field_capabilities": {
+                        "is_raw_unadjusted_eod": False,
+                        "kind": "feature_label_rows",
+                        "cannot_invert_to_prints": True,
+                    },
+                    "corporate_actions": "not_in_this_tape",
+                    "vintage_status": "frozen_b0",
+                    "known_at_vs_retrieved": "b0_signal_session_only",
+                    "backup_locator": None,
+                }
+            )
+        elif role == "public_yahoo_current_universe_bars":
+            row["backup_locator"] = (
+                "research/option_pro_us_eod_v1/return_pack/yahoo_current_universe/manifest.json "
+                "and hashes.json digest d056327fd03abdb3a276a8f20039ea2af04300bc7ec9c1dd10010343abf7262e"
+            )
+            row["field_capabilities"] = {"missing_from_public_git": True, "historical_bar_rows_claimed": 582198}
+            row["corporate_actions"] = "unknown_until_file_restored"
+            row["vintage_status"] = "removed_from_public_git"
+        elif role == "current_universe_security_master":
+            row.update(inspect_security_master(research / "return_pack" / "yahoo_current_universe" / "security_master.csv"))
+        elif role == "revoked_invalid_eod_snapshot_rows":
+            row.update(inspect_revoked_snapshot(research / "return_pack" / "yahoo_current_universe" / "theme_snapshot_rows.parquet"))
+        elif role == "missing_parquet_locator":
+            row["backup_locator"] = "hashes.json yahoo_daily_bars_sha256"
+            row["field_capabilities"] = {"kind": "manifest_locator", "locates_missing_daily_bars": True}
+            row["corporate_actions"] = "unknown_until_file_restored"
+            row["vintage_status"] = "INVALID_EOD_CAPTURE_locator"
+        elif role == "historical_public_bars_digest":
+            digest_path = research / "return_pack" / "hashes.json"
+            payload: dict[str, Any] = {}
+            if digest_path.is_file():
+                payload = __import__("json").loads(digest_path.read_text(encoding="utf-8"))
+            row["field_capabilities"] = {
+                "kind": "locator_not_tape",
+                "yahoo_daily_bars_sha256": payload.get("yahoo_daily_bars_sha256"),
+                "yahoo_daily_bars_git_status": payload.get("yahoo_daily_bars_git_status"),
+            }
+            row["backup_locator"] = (
+                "hashes.json yahoo_daily_bars_sha256 "
+                f"{payload.get('yahoo_daily_bars_sha256')}; file not present in this environment"
+            )
+            row["corporate_actions"] = "unknown_until_file_restored"
+            row["vintage_status"] = payload.get("invalid_eod_capture")
+        elif role == "project_cache_tree":
+            row.update(inspect_cache_tree(research / "data" / "cache"))
+        elif role == "ci_fixture_not_market_history":
+            row.update(inspect_offline_parquet(research / "return_pack" / "fixtures" / "synthetic_daily_bars.parquet"))
+            row["field_capabilities"] = {
+                **(row.get("field_capabilities") or {}),
+                "synthetic": True,
+                "is_market_history": False,
+            }
+        elif role == "RESEARCH_EOD_LOCAL_DATA" and row.get("status") == "unset":
+            row["backup_locator"] = "set RESEARCH_EOD_LOCAL_DATA to an authorized export tree"
+            row["field_capabilities"] = {"kind": "optional_authorized_export", "present": False}
+        elif role == "authorized_local_export_root" and row.get("status") == "missing":
+            row["backup_locator"] = "user-provided authorized parquet/csv under data/local"
+            row["field_capabilities"] = {"kind": "optional_authorized_export", "present": False}
+    out.append(cursor_artifact_inventory())
+    return out
 
 
 def inventory_sources(*, root: Path | None = None) -> list[dict[str, Any]]:
@@ -152,6 +503,16 @@ def inventory_sources(*, root: Path | None = None) -> list[dict[str, Any]]:
             authorization="public_return_pack",
         ),
         _file_record(
+            research / "return_pack" / "hashes.json",
+            role="historical_public_bars_digest",
+            authorization="public_return_pack",
+        ),
+        _file_record(
+            research / "data" / "cache",
+            role="project_cache_tree",
+            authorization="project_gitignored_and_fixture_tree",
+        ),
+        _file_record(
             research / "return_pack" / "fixtures" / "synthetic_daily_bars.parquet",
             role="ci_fixture_not_market_history",
             authorization="synthetic",
@@ -165,16 +526,16 @@ def inventory_sources(*, root: Path | None = None) -> list[dict[str, Any]]:
     if env_root:
         rows.append(_file_record(Path(env_root), role="RESEARCH_EOD_LOCAL_DATA", authorization="user_env"))
     else:
-        rows.append(
-            {
-                "path": None,
-                "role": "RESEARCH_EOD_LOCAL_DATA",
-                "authorization": "unset",
-                "exists": False,
-                "readable": False,
-                "status": "unset",
-            }
-        )
+        unset = {
+            "path": None,
+            "role": "RESEARCH_EOD_LOCAL_DATA",
+            "authorization": "unset",
+            "exists": False,
+            "readable": False,
+            "status": "unset",
+        }
+        unset.update(empty_source_fields())
+        rows.append(unset)
     return rows
 
 
@@ -668,8 +1029,11 @@ def next_unique_gap(inventory: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
             "access": "licensed or already-held membership tape; do not assume API rights; do not auto-buy",
             "optional_parallel_entry": {
                 "field": "licensed_us_eod_with_delistings_from_2010",
-                "coverage": "ten complete evaluable years after 330-session warmup and label maturity, ending 2024-06-28",
-                "access": "do not assume API key; extend history backward only",
+                "interval": "raw start on or before 2010-01-02 through allowed_end 2024-06-28; backward only",
+                "corporate_actions": "point-in-time split/dividend/merger ledger separate from adjusted close",
+                "delistings": "survivorship-complete names, including names absent from today's SECTORS list",
+                "classification": "as-of industry and theme tags; do not backfill current lists",
+                "access": "do not assume API key; do not auto-buy",
             },
             "user_must_provide": True,
             "recovered_cache_already_usable_for": [LAYER_A],
@@ -743,8 +1107,11 @@ def stop_rule(inventory: Sequence[Mapping[str, Any]], layers: Mapping[str, Any])
 
 def run_readiness(*, root: Path | None = None, load_yahoo: bool = True) -> dict[str, Any]:
     inventory = inventory_sources(root=root)
-    yahoo_path = (root or REPO_ROOT) / TRUSTED_RELATIVE_PICKLES[0]
+    base = root or REPO_ROOT
+    yahoo_path = base / TRUSTED_RELATIVE_PICKLES[0]
+    after_close_path = base / TRUSTED_RELATIVE_PICKLES[1]
     yahoo_bars = None
+    after_close_bars = None
     yahoo_summary = None
     theme_rows = []
     budget = decade_budget([])
@@ -762,14 +1129,38 @@ def run_readiness(*, root: Path | None = None, load_yahoo: bool = True) -> dict[
         tsla_check = verify_contract_bars(
             [bar for bar in (yahoo_bars.get("TSLA") or []) if bar.session_date <= ALLOWED_END]
         )
+        tsla_splits = split_window_samples(
+            yahoo_bars.get("TSLA") or [],
+            [date(2020, 8, 31), date(2022, 8, 25)],
+        )
         validation_commands.append(
             {
-                "command": "load_trusted_research_bars + inspect_yahoo_cache + verify_contract_bars",
+                "command": "load_trusted_research_bars + inspect_yahoo_cache + verify_contract_bars + split_window_samples",
                 "spy": spy_check,
                 "tsla": tsla_check,
-                "split_sample": "TSLA 2020-08-31 and 2022-08-25 already sit in a split-adjusted-looking close series; raw_close equals close, so C stays blocked",
+                "split_window_samples": tsla_splits,
+                "split_sample": (
+                    "TSLA 2020-08-31 and 2022-08-25 already sit in a split-adjusted-looking close series; "
+                    "raw_close equals close, so C stays blocked"
+                ),
             }
         )
+    if load_yahoo and after_close_path.is_file():
+        after_close_bars = load_trusted_research_bars(after_close_path, root=root)
+        after_summary = inspect_yahoo_cache(after_close_bars)
+        validation_commands.append(
+            {
+                "command": "load_trusted_research_bars(after_close) + inspect_yahoo_cache",
+                "after_close": after_summary,
+                "not_used_for_evaluation": True,
+            }
+        )
+    inventory = annotate_inventory(
+        inventory,
+        yahoo_bars=yahoo_bars,
+        after_close_bars=after_close_bars,
+        root=root,
+    )
     layers = capability_matrix(inventory, yahoo_summary)
     stop = stop_rule(inventory, layers["layers"])
     return {
@@ -789,6 +1180,8 @@ def run_readiness(*, root: Path | None = None, load_yahoo: bool = True) -> dict[
             "inventory existing caches",
             "trusted pickle load of project Yahoo cache only",
             "calendar / OHLC / raw-vs-close / TRI-vs-close / dollar-volume checks",
+            "inventory coverage fields (securities/dates/fields/actions/vintage)",
+            "TSLA split-window raw-vs-structure samples",
             "layered A/B/C/D matrix",
             "24-theme current-list field table",
             "decade budget from recovered SPY sessions",

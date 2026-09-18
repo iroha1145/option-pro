@@ -15,10 +15,12 @@ from app.services.research_eod_v1.data_readiness import (
     ALLOWED_END,
     AUTOMOTIVE_MEMBERS,
     HOLDOUT_START,
+    INVENTORY_COVERAGE_KEYS,
     LAYER_A,
     LAYER_C,
     LAYER_D,
     TRUSTED_RELATIVE_PICKLES,
+    annotate_inventory,
     automotive_descriptive,
     capability_matrix,
     decade_budget,
@@ -28,6 +30,8 @@ from app.services.research_eod_v1.data_readiness import (
     load_trusted_research_bars,
     local_verification_arithmetic,
     next_unique_gap,
+    run_readiness,
+    split_window_samples,
     stage_status,
     stop_rule,
     theme_capability_table,
@@ -219,3 +223,59 @@ def test_stop_and_gap_do_not_invent_bars() -> None:
     gap = next_unique_gap(inventory)
     assert gap["field"] == "historical_constituent_membership_and_delist_tape"
     assert gap["user_must_provide"] is True
+    optional = gap["optional_parallel_entry"]
+    assert optional["interval"]
+    assert optional["corporate_actions"]
+    assert optional["delistings"]
+    assert optional["classification"]
+
+
+def test_inventory_rows_carry_coverage_fields() -> None:
+    rows = annotate_inventory(inventory_sources())
+    roles = {row["role"] for row in rows}
+    assert "authorized_cursor_artifact_dirs" in roles
+    assert "project_cache_tree" in roles
+    assert "historical_public_bars_digest" in roles
+    for row in rows:
+        missing = [key for key in INVENTORY_COVERAGE_KEYS if key not in row]
+        assert missing == [], (row.get("role"), missing)
+    missing_public = next(row for row in rows if row["role"] == "public_yahoo_current_universe_bars")
+    assert missing_public["backup_locator"]
+    assert "d056327fd03abdb3a276a8f20039ea2af04300bc7ec9c1dd10010343abf7262e" in missing_public["backup_locator"]
+
+
+def test_split_window_samples_keep_raw_equal_close() -> None:
+    bars = [
+        _bar(date(2020, 8, 28), 498.32),
+        _bar(date(2020, 8, 31), 498.32),
+        _bar(date(2020, 9, 1), 475.05),
+    ]
+    samples = split_window_samples(bars, [date(2020, 8, 31)])
+    assert samples[0]["event"] == "2020-08-31"
+    assert samples[0]["bars"]
+    assert all(item["raw_equals_close"] for item in samples[0]["bars"])
+    assert "C blocked" in samples[0]["invariant"]
+
+
+def test_run_readiness_annotates_inventory_and_split_samples(tmp_path: Path) -> None:
+    yahoo = tmp_path / TRUSTED_RELATIVE_PICKLES[0]
+    yahoo.parent.mkdir(parents=True)
+    payload = {
+        "SPY": [_bar(date(2020, 8, 28), 350.0), _bar(date(2020, 8, 31), 351.0)],
+        "TSLA": [_bar(date(2020, 8, 28), 498.0), _bar(date(2020, 8, 31), 498.3), _bar(date(2020, 9, 1), 475.0)],
+    }
+    for symbol, rows in payload.items():
+        payload[symbol] = [ResearchBar(**{**bar.__dict__, "security_id": symbol}) for bar in rows]
+    yahoo.write_bytes(pickle.dumps(payload))
+    result = run_readiness(root=tmp_path, load_yahoo=True)
+    for row in result["inventory"]:
+        missing = [key for key in INVENTORY_COVERAGE_KEYS if key not in row]
+        assert missing == [], (row.get("role"), missing)
+    yahoo_row = next(row for row in result["inventory"] if row["role"] == "continuous_runner_yahoo_cache")
+    assert yahoo_row["securities_n"] == 2
+    assert yahoo_row["first_session"] == "2020-08-28"
+    assert yahoo_row["field_capabilities"]["is_raw_unadjusted_eod"] is False
+    assert result["validation"]
+    samples = result["validation"][0]["split_window_samples"]
+    assert {item["event"] for item in samples} == {"2020-08-31", "2022-08-25"}
+    assert result["stop"]["executed_backtests"] == 0

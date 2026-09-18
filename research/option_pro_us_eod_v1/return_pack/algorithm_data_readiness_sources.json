@@ -3,6 +3,8 @@
     "inventory existing caches",
     "trusted pickle load of project Yahoo cache only",
     "calendar / OHLC / raw-vs-close / TRI-vs-close / dollar-volume checks",
+    "inventory coverage fields (securities/dates/fields/actions/vintage)",
+    "TSLA split-window raw-vs-structure samples",
     "layered A/B/C/D matrix",
     "24-theme current-list field table",
     "decade budget from recovered SPY sessions",
