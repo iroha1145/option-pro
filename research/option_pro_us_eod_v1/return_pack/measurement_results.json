@@ -1,5 +1,6 @@
 {
-  "reviewed_head": "4cb63b3a9141ae4012d327431793d134e89e6cca",
+  "reviewed_head": "d84259ac95342a9fdd6085ae0659eefb5b9b4e2b",
+  "snapshot_code_sha": "4cb63b3a9141ae4012d327431793d134e89e6cca",
   "scope": "measurement\u53e3\u5f84 + continuous 24xABCD balanced/mid approved window",
   "holdout_start": "2024-07-01",
   "holdout_unsealed": false,
@@ -9,8 +10,9 @@
   "F1_tests": {
     "old_closeout": "tests/test_pr174_followup.py",
     "measurement_acceptance": "tests/test_pr174_measurement_acceptance.py",
-    "local_full_suite": "pending_current_head_rerun",
-    "github_ci": "pending_artifact_head"
+    "local_pr174": "31 passed",
+    "local_full_suite": "3882 passed, 6 skipped",
+    "github_ci": "pending_current_head"
   },
   "F2_contracts": {
     "pairing_path": "research/option_pro_us_eod_v1/return_pack/measurement_runner_pairing.json",
