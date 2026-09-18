@@ -106,7 +106,10 @@ def circular_block_bootstrap(
     idx = (starts[..., None] + offsets) % n
     sampled = arr[idx].reshape(int(n_boot), -1)
     with np.errstate(all="ignore"):
-        means = np.nanmean(sampled, axis=1)
+        valid = ~np.isnan(sampled)
+        counts = valid.sum(axis=1)
+        totals = np.nansum(sampled, axis=1)
+        means = np.divide(totals, counts, out=np.full(totals.shape, np.nan), where=counts > 0)
     means = [float(item) for item in means if np.isfinite(item)]
     if len(means) < 20:
         return {

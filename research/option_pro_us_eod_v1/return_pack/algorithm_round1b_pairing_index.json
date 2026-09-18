@@ -1,0 +1,146 @@
+[
+  {
+    "theme": "ai_cloud",
+    "path": "research/option_pro_us_eod_v1/return_pack/algorithm_round1b_pairing/ai_cloud.json",
+    "bytes": 291461,
+    "rows": 144
+  },
+  {
+    "theme": "airlines",
+    "path": "research/option_pro_us_eod_v1/return_pack/algorithm_round1b_pairing/airlines.json",
+    "bytes": 291423,
+    "rows": 144
+  },
+  {
+    "theme": "automotive",
+    "path": "research/option_pro_us_eod_v1/return_pack/algorithm_round1b_pairing/automotive.json",
+    "bytes": 383760,
+    "rows": 144
+  },
+  {
+    "theme": "biotech",
+    "path": "research/option_pro_us_eod_v1/return_pack/algorithm_round1b_pairing/biotech.json",
+    "bytes": 411304,
+    "rows": 144
+  },
+  {
+    "theme": "china_adr",
+    "path": "research/option_pro_us_eod_v1/return_pack/algorithm_round1b_pairing/china_adr.json",
+    "bytes": 424756,
+    "rows": 144
+  },
+  {
+    "theme": "consumer_electronics",
+    "path": "research/option_pro_us_eod_v1/return_pack/algorithm_round1b_pairing/consumer_electronics.json",
+    "bytes": 292923,
+    "rows": 144
+  },
+  {
+    "theme": "crypto",
+    "path": "research/option_pro_us_eod_v1/return_pack/algorithm_round1b_pairing/crypto.json",
+    "bytes": 288628,
+    "rows": 144
+  },
+  {
+    "theme": "defense_aero",
+    "path": "research/option_pro_us_eod_v1/return_pack/algorithm_round1b_pairing/defense_aero.json",
+    "bytes": 292279,
+    "rows": 144
+  },
+  {
+    "theme": "energy",
+    "path": "research/option_pro_us_eod_v1/return_pack/algorithm_round1b_pairing/energy.json",
+    "bytes": 423360,
+    "rows": 144
+  },
+  {
+    "theme": "etfs",
+    "path": "research/option_pro_us_eod_v1/return_pack/algorithm_round1b_pairing/etfs.json",
+    "bytes": 423662,
+    "rows": 144
+  },
+  {
+    "theme": "ev_supply",
+    "path": "research/option_pro_us_eod_v1/return_pack/algorithm_round1b_pairing/ev_supply.json",
+    "bytes": 383471,
+    "rows": 144
+  },
+  {
+    "theme": "finance",
+    "path": "research/option_pro_us_eod_v1/return_pack/algorithm_round1b_pairing/finance.json",
+    "bytes": 423409,
+    "rows": 144
+  },
+  {
+    "theme": "fintech",
+    "path": "research/option_pro_us_eod_v1/return_pack/algorithm_round1b_pairing/fintech.json",
+    "bytes": 387353,
+    "rows": 144
+  },
+  {
+    "theme": "healthcare",
+    "path": "research/option_pro_us_eod_v1/return_pack/algorithm_round1b_pairing/healthcare.json",
+    "bytes": 424325,
+    "rows": 144
+  },
+  {
+    "theme": "industrials",
+    "path": "research/option_pro_us_eod_v1/return_pack/algorithm_round1b_pairing/industrials.json",
+    "bytes": 424506,
+    "rows": 144
+  },
+  {
+    "theme": "luxury",
+    "path": "research/option_pro_us_eod_v1/return_pack/algorithm_round1b_pairing/luxury.json",
+    "bytes": 291421,
+    "rows": 144
+  },
+  {
+    "theme": "media_streaming",
+    "path": "research/option_pro_us_eod_v1/return_pack/algorithm_round1b_pairing/media_streaming.json",
+    "bytes": 292807,
+    "rows": 144
+  },
+  {
+    "theme": "real_estate",
+    "path": "research/option_pro_us_eod_v1/return_pack/algorithm_round1b_pairing/real_estate.json",
+    "bytes": 424889,
+    "rows": 144
+  },
+  {
+    "theme": "retail",
+    "path": "research/option_pro_us_eod_v1/return_pack/algorithm_round1b_pairing/retail.json",
+    "bytes": 423480,
+    "rows": 144
+  },
+  {
+    "theme": "semiconductors",
+    "path": "research/option_pro_us_eod_v1/return_pack/algorithm_round1b_pairing/semiconductors.json",
+    "bytes": 424583,
+    "rows": 144
+  },
+  {
+    "theme": "social_internet",
+    "path": "research/option_pro_us_eod_v1/return_pack/algorithm_round1b_pairing/social_internet.json",
+    "bytes": 292536,
+    "rows": 144
+  },
+  {
+    "theme": "software",
+    "path": "research/option_pro_us_eod_v1/return_pack/algorithm_round1b_pairing/software.json",
+    "bytes": 410993,
+    "rows": 144
+  },
+  {
+    "theme": "telecom",
+    "path": "research/option_pro_us_eod_v1/return_pack/algorithm_round1b_pairing/telecom.json",
+    "bytes": 291353,
+    "rows": 144
+  },
+  {
+    "theme": "utilities",
+    "path": "research/option_pro_us_eod_v1/return_pack/algorithm_round1b_pairing/utilities.json",
+    "bytes": 374770,
+    "rows": 144
+  }
+]

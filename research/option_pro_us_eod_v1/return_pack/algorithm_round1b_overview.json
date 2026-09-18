@@ -1,0 +1,1178 @@
+[
+  {
+    "families": [
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "A_trend_quality",
+        "mean_common_n": 13.0,
+        "next_neighbors": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_T",
+          "N_M_PLUS_5PP_REALLOC_V1"
+        ]
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": 13.0,
+        "next_neighbors": [
+          "PRICE_DROP_T",
+          "PRICE_DROP_M",
+          "PRICE_DROP_V"
+        ]
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "C_trend_pullback",
+        "mean_common_n": 12.992852163830705,
+        "next_neighbors": [
+          "PRICE_DROP_T",
+          "PRICE_DROP_P",
+          "PRICE_DROP_M"
+        ]
+      },
+      {
+        "conclusion": "EIGHT_FACTOR_NOT_SCOREABLE",
+        "decision": "DATA_CAPABILITY_BLOCKED",
+        "family": "D_residual_momentum",
+        "mean_common_n": 13.0,
+        "next_neighbors": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_S",
+          "PRICE_DROP_T"
+        ]
+      }
+    ],
+    "theme": "semiconductors"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "A_trend_quality",
+        "mean_common_n": 14.804344408519409,
+        "next_neighbors": [
+          "PRICE_DROP_R",
+          "PRICE_DROP_M",
+          "PRICE_DROP_S"
+        ]
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": 14.804344408519409,
+        "next_neighbors": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_B",
+          "PRICE_DROP_R"
+        ]
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "C_trend_pullback",
+        "mean_common_n": 14.836426477280476,
+        "next_neighbors": [
+          "PRICE_DROP_T",
+          "PRICE_DROP_P",
+          "PRICE_DROP_M"
+        ]
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "D_residual_momentum",
+        "mean_common_n": 13.192256483130564,
+        "next_neighbors": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_R",
+          "PRICE_DROP_T"
+        ]
+      }
+    ],
+    "theme": "software"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "family": "A_trend_quality",
+        "mean_common_n": null,
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ]
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": null,
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ]
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "family": "C_trend_pullback",
+        "mean_common_n": null,
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ]
+      },
+      {
+        "conclusion": "EIGHT_FACTOR_NOT_SCOREABLE",
+        "decision": "DATA_CAPABILITY_BLOCKED",
+        "family": "D_residual_momentum",
+        "mean_common_n": null,
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ]
+      }
+    ],
+    "theme": "ai_cloud"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "A_trend_quality",
+        "mean_common_n": 14.23884573017431,
+        "next_neighbors": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_R",
+          "PRICE_DROP_S"
+        ]
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": 14.322990658693803,
+        "next_neighbors": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_R",
+          "PRICE_DROP_S"
+        ]
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "C_trend_pullback",
+        "mean_common_n": 14.451915378685438,
+        "next_neighbors": [
+          "PRICE_DROP_T",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ]
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "D_residual_momentum",
+        "mean_common_n": 12.390310082805316,
+        "next_neighbors": [
+          "PRICE_DROP_R",
+          "PRICE_DROP_M",
+          "PRICE_DROP_T"
+        ]
+      }
+    ],
+    "theme": "biotech"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "A_trend_quality",
+        "mean_common_n": 10.0,
+        "next_neighbors": [
+          "PRICE_DROP_T",
+          "PRICE_DROP_R",
+          "PRICE_DROP_M"
+        ]
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": 10.0,
+        "next_neighbors": [
+          "PRICE_DROP_R",
+          "PRICE_DROP_T",
+          "PRICE_DROP_M"
+        ]
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "C_trend_pullback",
+        "mean_common_n": 10.094225994253211,
+        "next_neighbors": [
+          "PRICE_DROP_R",
+          "PRICE_DROP_T",
+          "PRICE_DROP_S"
+        ]
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "D_residual_momentum",
+        "mean_common_n": 10.0,
+        "next_neighbors": [
+          "PRICE_DROP_R",
+          "PRICE_DROP_T",
+          "PRICE_DROP_M"
+        ]
+      }
+    ],
+    "theme": "healthcare"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "family": "A_trend_quality",
+        "mean_common_n": null,
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ]
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": null,
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ]
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "family": "C_trend_pullback",
+        "mean_common_n": null,
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ]
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "family": "D_residual_momentum",
+        "mean_common_n": null,
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ]
+      }
+    ],
+    "theme": "consumer_electronics"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "A_trend_quality",
+        "mean_common_n": 27.390673386104677,
+        "next_neighbors": [
+          "PRICE_DROP_R",
+          "PRICE_DROP_S",
+          "PRICE_DROP_T"
+        ]
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": 27.390673386104677,
+        "next_neighbors": [
+          "PRICE_DROP_R",
+          "PRICE_DROP_S",
+          "PRICE_DROP_T"
+        ]
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "C_trend_pullback",
+        "mean_common_n": 28.028213963523164,
+        "next_neighbors": [
+          "PRICE_DROP_T",
+          "PRICE_DROP_R",
+          "PRICE_DROP_S"
+        ]
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "D_residual_momentum",
+        "mean_common_n": 27.961940837887262,
+        "next_neighbors": [
+          "PRICE_DROP_R",
+          "PRICE_DROP_M",
+          "PRICE_DROP_S"
+        ]
+      }
+    ],
+    "theme": "automotive"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "A_trend_quality",
+        "mean_common_n": 30.20270347576535,
+        "next_neighbors": [
+          "PRICE_DROP_S",
+          "PRICE_DROP_M",
+          "PRICE_DROP_T"
+        ]
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": 30.20270347576535,
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_S"
+        ]
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "C_trend_pullback",
+        "mean_common_n": 30.486602491076177,
+        "next_neighbors": [
+          "PRICE_DROP_S",
+          "PRICE_DROP_P",
+          "PRICE_DROP_T"
+        ]
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "D_residual_momentum",
+        "mean_common_n": 30.16767648810383,
+        "next_neighbors": [
+          "PRICE_DROP_R",
+          "PRICE_DROP_M",
+          "PRICE_DROP_S"
+        ]
+      }
+    ],
+    "theme": "ev_supply"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "A_trend_quality",
+        "mean_common_n": 10.0,
+        "next_neighbors": [
+          "PRICE_DROP_T",
+          "PRICE_DROP_M",
+          "PRICE_DROP_S"
+        ]
+      },
+      {
+        "conclusion": "NO_ROBUST_INCREMENT",
+        "decision": "NO_ROBUST_INCREMENT",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": 10.0,
+        "next_neighbors": [
+          "PRICE_DROP_S",
+          "PRICE_DROP_V",
+          "PRICE_DROP_M"
+        ]
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "C_trend_pullback",
+        "mean_common_n": 10.018543045152063,
+        "next_neighbors": [
+          "PRICE_DROP_S",
+          "PRICE_DROP_P",
+          "PRICE_DROP_T"
+        ]
+      },
+      {
+        "conclusion": "EIGHT_FACTOR_NOT_SCOREABLE",
+        "decision": "DATA_CAPABILITY_BLOCKED",
+        "family": "D_residual_momentum",
+        "mean_common_n": 10.0,
+        "next_neighbors": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_S",
+          "PRICE_DROP_T"
+        ]
+      }
+    ],
+    "theme": "finance"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "NO_ROBUST_INCREMENT",
+        "decision": "NO_ROBUST_INCREMENT",
+        "family": "A_trend_quality",
+        "mean_common_n": 21.083720162163896,
+        "next_neighbors": [
+          "PRICE_DROP_R",
+          "PRICE_DROP_S",
+          "PRICE_DROP_T"
+        ]
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": 21.083720162163896,
+        "next_neighbors": [
+          "PRICE_DROP_R",
+          "PRICE_DROP_S",
+          "PRICE_DROP_B"
+        ]
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "C_trend_pullback",
+        "mean_common_n": 21.070425016027755,
+        "next_neighbors": [
+          "PRICE_DROP_R",
+          "PRICE_DROP_S",
+          "PRICE_DROP_P"
+        ]
+      },
+      {
+        "conclusion": "NO_ROBUST_INCREMENT",
+        "decision": "NO_ROBUST_INCREMENT",
+        "family": "D_residual_momentum",
+        "mean_common_n": 20.366295726690463,
+        "next_neighbors": [
+          "PRICE_DROP_R",
+          "PRICE_DROP_M",
+          "PRICE_DROP_T"
+        ]
+      }
+    ],
+    "theme": "fintech"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "A_trend_quality",
+        "mean_common_n": 10.0,
+        "next_neighbors": [
+          "PRICE_DROP_T",
+          "PRICE_DROP_M",
+          "PRICE_DROP_S"
+        ]
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": 10.0,
+        "next_neighbors": [
+          "PRICE_DROP_T",
+          "PRICE_DROP_M",
+          "PRICE_DROP_V"
+        ]
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "C_trend_pullback",
+        "mean_common_n": 10.079151064193784,
+        "next_neighbors": [
+          "PRICE_DROP_T",
+          "PRICE_DROP_P",
+          "PRICE_DROP_M"
+        ]
+      },
+      {
+        "conclusion": "EIGHT_FACTOR_NOT_SCOREABLE",
+        "decision": "DATA_CAPABILITY_BLOCKED",
+        "family": "D_residual_momentum",
+        "mean_common_n": 10.0,
+        "next_neighbors": [
+          "PRICE_DROP_T",
+          "PRICE_DROP_R",
+          "PRICE_DROP_M"
+        ]
+      }
+    ],
+    "theme": "retail"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "family": "A_trend_quality",
+        "mean_common_n": null,
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ]
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": null,
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ]
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "family": "C_trend_pullback",
+        "mean_common_n": null,
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ]
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "family": "D_residual_momentum",
+        "mean_common_n": null,
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ]
+      }
+    ],
+    "theme": "luxury"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "family": "A_trend_quality",
+        "mean_common_n": null,
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ]
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": null,
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ]
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "family": "C_trend_pullback",
+        "mean_common_n": null,
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ]
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "family": "D_residual_momentum",
+        "mean_common_n": null,
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ]
+      }
+    ],
+    "theme": "media_streaming"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "family": "A_trend_quality",
+        "mean_common_n": null,
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ]
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": null,
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ]
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "family": "C_trend_pullback",
+        "mean_common_n": null,
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ]
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "family": "D_residual_momentum",
+        "mean_common_n": null,
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ]
+      }
+    ],
+    "theme": "social_internet"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "EIGHT_FACTOR_NOT_SCOREABLE",
+        "decision": "DATA_CAPABILITY_BLOCKED",
+        "family": "A_trend_quality",
+        "mean_common_n": 10.0,
+        "next_neighbors": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_S",
+          "PRICE_DROP_R"
+        ]
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": 10.0,
+        "next_neighbors": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_V",
+          "PRICE_DROP_S"
+        ]
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "C_trend_pullback",
+        "mean_common_n": 10.094225994253211,
+        "next_neighbors": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_S",
+          "PRICE_DROP_P"
+        ]
+      },
+      {
+        "conclusion": "EIGHT_FACTOR_NOT_SCOREABLE",
+        "decision": "DATA_CAPABILITY_BLOCKED",
+        "family": "D_residual_momentum",
+        "mean_common_n": 10.0,
+        "next_neighbors": [
+          "PRICE_DROP_R",
+          "PRICE_DROP_M",
+          "PRICE_DROP_T"
+        ]
+      }
+    ],
+    "theme": "energy"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "A_trend_quality",
+        "mean_common_n": 37.72570196887063,
+        "next_neighbors": [
+          "PRICE_DROP_T",
+          "PRICE_DROP_S",
+          "PRICE_DROP_M"
+        ]
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": 37.72570196887063,
+        "next_neighbors": [
+          "PRICE_DROP_T",
+          "PRICE_DROP_S",
+          "PRICE_DROP_M"
+        ]
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "C_trend_pullback",
+        "mean_common_n": 38.008454307014375,
+        "next_neighbors": [
+          "PRICE_DROP_T",
+          "PRICE_DROP_P",
+          "PRICE_DROP_S"
+        ]
+      },
+      {
+        "conclusion": "EIGHT_FACTOR_NOT_SCOREABLE",
+        "decision": "DATA_CAPABILITY_BLOCKED",
+        "family": "D_residual_momentum",
+        "mean_common_n": 38.2255518321556,
+        "next_neighbors": [
+          "PRICE_DROP_T",
+          "PRICE_DROP_S",
+          "PRICE_DROP_M"
+        ]
+      }
+    ],
+    "theme": "utilities"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "family": "A_trend_quality",
+        "mean_common_n": null,
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ]
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": null,
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ]
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "family": "C_trend_pullback",
+        "mean_common_n": null,
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ]
+      },
+      {
+        "conclusion": "EIGHT_FACTOR_NOT_SCOREABLE",
+        "decision": "DATA_CAPABILITY_BLOCKED",
+        "family": "D_residual_momentum",
+        "mean_common_n": null,
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ]
+      }
+    ],
+    "theme": "defense_aero"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "family": "A_trend_quality",
+        "mean_common_n": null,
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ]
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": null,
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ]
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "family": "C_trend_pullback",
+        "mean_common_n": null,
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ]
+      },
+      {
+        "conclusion": "EIGHT_FACTOR_NOT_SCOREABLE",
+        "decision": "DATA_CAPABILITY_BLOCKED",
+        "family": "D_residual_momentum",
+        "mean_common_n": null,
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ]
+      }
+    ],
+    "theme": "airlines"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "A_trend_quality",
+        "mean_common_n": 10.0,
+        "next_neighbors": [
+          "PRICE_DROP_T",
+          "PRICE_DROP_R",
+          "PRICE_DROP_S"
+        ]
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": 10.033427085284865,
+        "next_neighbors": [
+          "PRICE_DROP_T",
+          "PRICE_DROP_S",
+          "PRICE_DROP_R"
+        ]
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "C_trend_pullback",
+        "mean_common_n": 10.132961887089701,
+        "next_neighbors": [
+          "PRICE_DROP_S",
+          "PRICE_DROP_T",
+          "PRICE_DROP_R"
+        ]
+      },
+      {
+        "conclusion": "EIGHT_FACTOR_NOT_SCOREABLE",
+        "decision": "DATA_CAPABILITY_BLOCKED",
+        "family": "D_residual_momentum",
+        "mean_common_n": 10.0,
+        "next_neighbors": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_R",
+          "PRICE_DROP_T"
+        ]
+      }
+    ],
+    "theme": "real_estate"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "family": "A_trend_quality",
+        "mean_common_n": null,
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ]
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": null,
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ]
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "family": "C_trend_pullback",
+        "mean_common_n": null,
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ]
+      },
+      {
+        "conclusion": "EIGHT_FACTOR_NOT_SCOREABLE",
+        "decision": "DATA_CAPABILITY_BLOCKED",
+        "family": "D_residual_momentum",
+        "mean_common_n": null,
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ]
+      }
+    ],
+    "theme": "crypto"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "A_trend_quality",
+        "mean_common_n": 12.777994914481443,
+        "next_neighbors": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_T",
+          "PRICE_DROP_R"
+        ]
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": 12.777994914481443,
+        "next_neighbors": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_T",
+          "PRICE_DROP_S"
+        ]
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "C_trend_pullback",
+        "mean_common_n": 12.817768521903641,
+        "next_neighbors": [
+          "PRICE_DROP_T",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ]
+      },
+      {
+        "conclusion": "EIGHT_FACTOR_NOT_SCOREABLE",
+        "decision": "DATA_CAPABILITY_BLOCKED",
+        "family": "D_residual_momentum",
+        "mean_common_n": 11.302175104269299,
+        "next_neighbors": [
+          "PRICE_DROP_R",
+          "PRICE_DROP_M",
+          "PRICE_DROP_T"
+        ]
+      }
+    ],
+    "theme": "china_adr"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "family": "A_trend_quality",
+        "mean_common_n": null,
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ]
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": null,
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ]
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "family": "C_trend_pullback",
+        "mean_common_n": null,
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ]
+      },
+      {
+        "conclusion": "EIGHT_FACTOR_NOT_SCOREABLE",
+        "decision": "DATA_CAPABILITY_BLOCKED",
+        "family": "D_residual_momentum",
+        "mean_common_n": null,
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ]
+      }
+    ],
+    "theme": "telecom"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "A_trend_quality",
+        "mean_common_n": 10.0,
+        "next_neighbors": [
+          "PRICE_DROP_R",
+          "PRICE_DROP_T",
+          "PRICE_DROP_S"
+        ]
+      },
+      {
+        "conclusion": "NO_ROBUST_INCREMENT",
+        "decision": "NO_ROBUST_INCREMENT",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": 10.0,
+        "next_neighbors": [
+          "PRICE_DROP_T",
+          "PRICE_DROP_V",
+          "PRICE_DROP_B"
+        ]
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "C_trend_pullback",
+        "mean_common_n": 10.046867571806152,
+        "next_neighbors": [
+          "PRICE_DROP_T",
+          "PRICE_DROP_P",
+          "PRICE_DROP_S"
+        ]
+      },
+      {
+        "conclusion": "EIGHT_FACTOR_NOT_SCOREABLE",
+        "decision": "DATA_CAPABILITY_BLOCKED",
+        "family": "D_residual_momentum",
+        "mean_common_n": 10.0,
+        "next_neighbors": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_T",
+          "PRICE_DROP_R"
+        ]
+      }
+    ],
+    "theme": "industrials"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "A_trend_quality",
+        "mean_common_n": 12.152966044131631,
+        "next_neighbors": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_T",
+          "PRICE_DROP_R"
+        ]
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": 12.152966044131631,
+        "next_neighbors": [
+          "PRICE_DROP_R",
+          "PRICE_DROP_M",
+          "PRICE_DROP_T"
+        ]
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "C_trend_pullback",
+        "mean_common_n": 12.14235782381741,
+        "next_neighbors": [
+          "PRICE_DROP_T",
+          "PRICE_DROP_M",
+          "PRICE_DROP_R"
+        ]
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "family": "D_residual_momentum",
+        "mean_common_n": 11.0,
+        "next_neighbors": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_T",
+          "PRICE_DROP_R"
+        ]
+      }
+    ],
+    "theme": "etfs"
+  }
+]

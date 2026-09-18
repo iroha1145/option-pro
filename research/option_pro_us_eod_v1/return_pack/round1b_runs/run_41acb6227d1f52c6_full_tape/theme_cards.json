@@ -1,0 +1,4845 @@
+[
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1387,
+        "post_warmup": 1402
+      },
+      "empty_all_window": 0.7974296205630355,
+      "empty_data_capable": 0.7613554434030281,
+      "empty_post_warmup": 0.7639087018544936,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 232
+    },
+    "families": [
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_T",
+          "N_M_PLUS_5PP_REALLOC_V1"
+        ],
+        "pair_days_price_ablations": 28385,
+        "robust_variants": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_T"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2019": {
+              "direction": "positive",
+              "mean": 0.002123374633334792,
+              "n": 251
+            },
+            "2020": {
+              "direction": "negative",
+              "mean": -0.002692959214698344,
+              "n": 253
+            },
+            "2021": {
+              "direction": "positive",
+              "mean": 0.0023765916623059466,
+              "n": 252
+            },
+            "2022": {
+              "direction": "negative",
+              "mean": -0.005275600893130772,
+              "n": 251
+            },
+            "2023": {
+              "direction": "positive",
+              "mean": 0.0020219780219780225,
+              "n": 250
+            },
+            "2024": {
+              "direction": "negative",
+              "mean": -0.0013511079084849564,
+              "n": 61
+            }
+          }
+        }
+      },
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_T",
+          "PRICE_DROP_M",
+          "PRICE_DROP_V"
+        ],
+        "pair_days_price_ablations": 28385,
+        "robust_variants": [
+          "PRICE_DROP_T"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2019": {
+              "direction": "positive",
+              "mean": 0.03581279278490434,
+              "n": 251
+            },
+            "2020": {
+              "direction": "negative",
+              "mean": -0.007948573165964472,
+              "n": 253
+            },
+            "2021": {
+              "direction": "positive",
+              "mean": 0.03353392639106925,
+              "n": 252
+            },
+            "2022": {
+              "direction": "negative",
+              "mean": -0.063526115318944,
+              "n": 251
+            },
+            "2023": {
+              "direction": "positive",
+              "mean": 0.031186813186813187,
+              "n": 250
+            },
+            "2024": {
+              "direction": "positive",
+              "mean": 0.02900378310214375,
+              "n": 61
+            }
+          }
+        }
+      },
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_T",
+          "PRICE_DROP_P",
+          "PRICE_DROP_M"
+        ],
+        "pair_days_price_ablations": 28385,
+        "robust_variants": [
+          "PRICE_DROP_T"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2019": {
+              "direction": "positive",
+              "mean": 0.0010288516264611884,
+              "n": 251
+            },
+            "2020": {
+              "direction": "positive",
+              "mean": 0.0003040437823046521,
+              "n": 253
+            },
+            "2021": {
+              "direction": "positive",
+              "mean": 0.0021585557299843012,
+              "n": 252
+            },
+            "2022": {
+              "direction": "negative",
+              "mean": -0.0028019788975964274,
+              "n": 251
+            },
+            "2023": {
+              "direction": "positive",
+              "mean": 0.0033186813186813183,
+              "n": 250
+            },
+            "2024": {
+              "direction": "negative",
+              "mean": -0.003152585119798238,
+              "n": 61
+            }
+          }
+        }
+      },
+      {
+        "action": "evaluate_price_track_only",
+        "actual_G_observed": false,
+        "can_score_without_G": false,
+        "conclusion": "EIGHT_FACTOR_NOT_SCOREABLE",
+        "decision": "DATA_CAPABILITY_BLOCKED",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "DATA_INSUFFICIENT",
+        "family": "D_residual_momentum",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_S",
+          "PRICE_DROP_T"
+        ],
+        "pair_days_price_ablations": 22043,
+        "robust_variants": [
+          "PRICE_DROP_V"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2020": {
+              "direction": "positive",
+              "mean": 0.00029920574475029955,
+              "n": 202
+            },
+            "2021": {
+              "direction": "negative",
+              "mean": -0.00017442874585731684,
+              "n": 252
+            },
+            "2022": {
+              "direction": "negative",
+              "mean": -0.0025392933759467613,
+              "n": 251
+            },
+            "2023": {
+              "direction": "positive",
+              "mean": 0.00024175824175824137,
+              "n": 250
+            },
+            "2024": {
+              "direction": "positive",
+              "mean": 0.004053323725454872,
+              "n": 61
+            }
+          }
+        }
+      }
+    ],
+    "theme": "semiconductors"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1396,
+        "post_warmup": 1412
+      },
+      "empty_all_window": 0.7692778457772338,
+      "empty_data_capable": 0.7299426934097422,
+      "empty_post_warmup": 0.7330028328611898,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 222
+    },
+    "families": [
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_R",
+          "PRICE_DROP_M",
+          "PRICE_DROP_S"
+        ],
+        "pair_days_price_ablations": 19334,
+        "robust_variants": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_V"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2020": {
+              "direction": "positive",
+              "mean": 0.011955168119551681,
+              "n": 73
+            },
+            "2021": {
+              "direction": "positive",
+              "mean": 0.0025372775372775372,
+              "n": 252
+            },
+            "2022": {
+              "direction": "negative",
+              "mean": -0.00036218761318362983,
+              "n": 251
+            },
+            "2023": {
+              "direction": "negative",
+              "mean": -0.0006713286713286713,
+              "n": 250
+            },
+            "2024": {
+              "direction": "positive",
+              "mean": 0.004012381061561389,
+              "n": 61
+            }
+          }
+        }
+      },
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_B",
+          "PRICE_DROP_R"
+        ],
+        "pair_days_price_ablations": 19334,
+        "robust_variants": [
+          "PRICE_DROP_B"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2020": {
+              "direction": "positive",
+              "mean": 0.14429223744292238,
+              "n": 73
+            },
+            "2021": {
+              "direction": "positive",
+              "mean": 0.021274096274096276,
+              "n": 252
+            },
+            "2022": {
+              "direction": "positive",
+              "mean": 0.0033711308611707024,
+              "n": 251
+            },
+            "2023": {
+              "direction": "negative",
+              "mean": -0.014013986013986015,
+              "n": 250
+            },
+            "2024": {
+              "direction": "positive",
+              "mean": 0.04814857273873668,
+              "n": 61
+            }
+          }
+        }
+      },
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_T",
+          "PRICE_DROP_P",
+          "PRICE_DROP_M"
+        ],
+        "pair_days_price_ablations": 19271,
+        "robust_variants": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_P",
+          "PRICE_DROP_T"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2020": {
+              "direction": "positive",
+              "mean": 0.007912457912457914,
+              "n": 72
+            },
+            "2021": {
+              "direction": "positive",
+              "mean": 0.0017678321678321685,
+              "n": 250
+            },
+            "2022": {
+              "direction": "positive",
+              "mean": 3.900481988131387e-05,
+              "n": 251
+            },
+            "2023": {
+              "direction": "negative",
+              "mean": -0.002072727272727274,
+              "n": 250
+            },
+            "2024": {
+              "direction": "positive",
+              "mean": 0.0010317551301157854,
+              "n": 61
+            }
+          }
+        }
+      },
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "D_residual_momentum",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_R",
+          "PRICE_DROP_T"
+        ],
+        "pair_days_price_ablations": 17717,
+        "robust_variants": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_T",
+          "PRICE_DROP_V"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2021": {
+              "direction": "positive",
+              "mean": 0.0006353861192570871,
+              "n": 248
+            },
+            "2022": {
+              "direction": "positive",
+              "mean": 0.0010587022539213778,
+              "n": 251
+            },
+            "2023": {
+              "direction": "negative",
+              "mean": -0.0004755244755244764,
+              "n": 250
+            },
+            "2024": {
+              "direction": "positive",
+              "mean": 0.0014903129657228024,
+              "n": 61
+            }
+          }
+        }
+      }
+    ],
+    "theme": "software"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1386,
+        "post_warmup": 1402
+      },
+      "empty_all_window": 0.8372093023255814,
+      "empty_data_capable": 0.8080808080808081,
+      "empty_post_warmup": 0.8102710413694721,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 232
+    },
+    "families": [
+      {
+        "action": "inherit_shared_prior",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ],
+        "pair_days_price_ablations": 0,
+        "robust_variants": [],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {}
+        }
+      },
+      {
+        "action": "inherit_shared_prior",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ],
+        "pair_days_price_ablations": 0,
+        "robust_variants": [],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {}
+        }
+      },
+      {
+        "action": "inherit_shared_prior",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ],
+        "pair_days_price_ablations": 0,
+        "robust_variants": [],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {}
+        }
+      },
+      {
+        "action": "evaluate_price_track_only",
+        "actual_G_observed": false,
+        "can_score_without_G": false,
+        "conclusion": "EIGHT_FACTOR_NOT_SCOREABLE",
+        "decision": "DATA_CAPABILITY_BLOCKED",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "DATA_INSUFFICIENT",
+        "family": "D_residual_momentum",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ],
+        "pair_days_price_ablations": 0,
+        "robust_variants": [],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {}
+        }
+      }
+    ],
+    "theme": "ai_cloud"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1386,
+        "post_warmup": 1402
+      },
+      "empty_all_window": 0.6621787025703795,
+      "empty_data_capable": 0.6017316017316018,
+      "empty_post_warmup": 0.6062767475035663,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 232
+    },
+    "families": [
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_R",
+          "PRICE_DROP_S"
+        ],
+        "pair_days_price_ablations": 18929,
+        "robust_variants": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_M",
+          "N_S_PLUS_5PP_REALLOC_V1",
+          "N_S_PLUS_5PP_REALLOC_V1"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2020": {
+              "direction": "negative",
+              "mean": -0.0018808777429467096,
+              "n": 58
+            },
+            "2021": {
+              "direction": "negative",
+              "mean": -0.00024050024050024024,
+              "n": 252
+            },
+            "2022": {
+              "direction": "positive",
+              "mean": 0.0014004587709767003,
+              "n": 251
+            },
+            "2023": {
+              "direction": "negative",
+              "mean": -0.0010666666666666665,
+              "n": 250
+            },
+            "2024": {
+              "direction": "negative",
+              "mean": -0.0007948335817188266,
+              "n": 61
+            }
+          }
+        }
+      },
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_R",
+          "PRICE_DROP_S"
+        ],
+        "pair_days_price_ablations": 18809,
+        "robust_variants": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_S",
+          "PRICE_DROP_T",
+          "N_M_PLUS_5PP_REALLOC_V1",
+          "N_M_PLUS_5PP_REALLOC_V1",
+          "N_S_PLUS_5PP_REALLOC_V1"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2020": {
+              "direction": "positive",
+              "mean": 0.0823327615780446,
+              "n": 53
+            },
+            "2021": {
+              "direction": "positive",
+              "mean": 0.02275132275132275,
+              "n": 252
+            },
+            "2022": {
+              "direction": "negative",
+              "mean": -0.0070022938548834944,
+              "n": 251
+            },
+            "2023": {
+              "direction": "positive",
+              "mean": 0.008756957328385898,
+              "n": 245
+            },
+            "2024": {
+              "direction": "negative",
+              "mean": -0.0007948335817188291,
+              "n": 61
+            }
+          }
+        }
+      },
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_T",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ],
+        "pair_days_price_ablations": 18627,
+        "robust_variants": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P",
+          "PRICE_DROP_T",
+          "PRICE_DROP_T",
+          "N_M_PLUS_5PP_REALLOC_V1"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2020": {
+              "direction": "positive",
+              "mean": 0.00411663807890223,
+              "n": 53
+            },
+            "2021": {
+              "direction": "negative",
+              "mean": -0.00029207740051113724,
+              "n": 249
+            },
+            "2022": {
+              "direction": "negative",
+              "mean": -0.000387878787878787,
+              "n": 250
+            },
+            "2023": {
+              "direction": "positive",
+              "mean": 5.0295485980134355e-05,
+              "n": 241
+            },
+            "2024": {
+              "direction": "positive",
+              "mean": 0.0005961251862891205,
+              "n": 61
+            }
+          }
+        }
+      },
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "D_residual_momentum",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_R",
+          "PRICE_DROP_M",
+          "PRICE_DROP_T"
+        ],
+        "pair_days_price_ablations": 17402,
+        "robust_variants": [
+          "PRICE_DROP_B"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2021": {
+              "direction": "positive",
+              "mean": 0.0013005592404734048,
+              "n": 233
+            },
+            "2022": {
+              "direction": "positive",
+              "mean": 0.00043462513582035497,
+              "n": 251
+            },
+            "2023": {
+              "direction": "negative",
+              "mean": -0.00019393939393939363,
+              "n": 250
+            },
+            "2024": {
+              "direction": "negative",
+              "mean": -0.001788375558867362,
+              "n": 61
+            }
+          }
+        }
+      }
+    ],
+    "theme": "biotech"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1392,
+        "post_warmup": 1408
+      },
+      "empty_all_window": 0.6407588739290085,
+      "empty_data_capable": 0.5783045977011494,
+      "empty_post_warmup": 0.5830965909090909,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 226
+    },
+    "families": [
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_T",
+          "PRICE_DROP_R",
+          "PRICE_DROP_M"
+        ],
+        "pair_days_price_ablations": 28385,
+        "robust_variants": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P",
+          "PRICE_DROP_R",
+          "PRICE_DROP_R",
+          "PRICE_DROP_T"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2019": {
+              "direction": "negative",
+              "mean": -0.002994084268984667,
+              "n": 251
+            },
+            "2020": {
+              "direction": "negative",
+              "mean": -0.004359803569289735,
+              "n": 253
+            },
+            "2021": {
+              "direction": "positive",
+              "mean": 0.00404040404040404,
+              "n": 252
+            },
+            "2022": {
+              "direction": "positive",
+              "mean": 0.003187250996015936,
+              "n": 251
+            },
+            "2023": {
+              "direction": "negative",
+              "mean": -0.00048484848484848603,
+              "n": 250
+            },
+            "2024": {
+              "direction": "positive",
+              "mean": 0.0023845007451564837,
+              "n": 61
+            }
+          }
+        }
+      },
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_R",
+          "PRICE_DROP_T",
+          "PRICE_DROP_M"
+        ],
+        "pair_days_price_ablations": 28385,
+        "robust_variants": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_M",
+          "PRICE_DROP_R",
+          "PRICE_DROP_R",
+          "PRICE_DROP_R",
+          "PRICE_DROP_T"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2019": {
+              "direction": "negative",
+              "mean": -0.023856090788361706,
+              "n": 251
+            },
+            "2020": {
+              "direction": "negative",
+              "mean": -0.05667744640076656,
+              "n": 253
+            },
+            "2021": {
+              "direction": "positive",
+              "mean": 0.05848965848965849,
+              "n": 252
+            },
+            "2022": {
+              "direction": "positive",
+              "mean": 0.016274296752384402,
+              "n": 251
+            },
+            "2023": {
+              "direction": "negative",
+              "mean": -0.03597575757575758,
+              "n": 250
+            },
+            "2024": {
+              "direction": "negative",
+              "mean": -0.02503725782414307,
+              "n": 61
+            }
+          }
+        }
+      },
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_R",
+          "PRICE_DROP_T",
+          "PRICE_DROP_S"
+        ],
+        "pair_days_price_ablations": 28091,
+        "robust_variants": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_R",
+          "PRICE_DROP_R",
+          "N_M_PLUS_5PP_REALLOC_V1"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2019": {
+              "direction": "positive",
+              "mean": 0.0017666543982333455,
+              "n": 247
+            },
+            "2020": {
+              "direction": "negative",
+              "mean": -0.002068302068302069,
+              "n": 252
+            },
+            "2021": {
+              "direction": "negative",
+              "mean": -0.0004398826979472138,
+              "n": 248
+            },
+            "2022": {
+              "direction": "positive",
+              "mean": 4.887585532746777e-05,
+              "n": 248
+            },
+            "2023": {
+              "direction": "negative",
+              "mean": -0.00038943653401484716,
+              "n": 249
+            },
+            "2024": {
+              "direction": "negative",
+              "mean": -0.002020202020202021,
+              "n": 60
+            }
+          }
+        }
+      },
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "D_residual_momentum",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_R",
+          "PRICE_DROP_T",
+          "PRICE_DROP_M"
+        ],
+        "pair_days_price_ablations": 22043,
+        "robust_variants": [
+          "PRICE_DROP_R",
+          "PRICE_DROP_R",
+          "PRICE_DROP_R",
+          "PRICE_DROP_S",
+          "PRICE_DROP_T",
+          "PRICE_DROP_V"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2020": {
+              "direction": "negative",
+              "mean": -0.003300330033003301,
+              "n": 202
+            },
+            "2021": {
+              "direction": "positive",
+              "mean": 0.0002405002405002417,
+              "n": 252
+            },
+            "2022": {
+              "direction": "negative",
+              "mean": -0.00019316672703126753,
+              "n": 251
+            },
+            "2023": {
+              "direction": "negative",
+              "mean": -0.0019393939393939402,
+              "n": 250
+            },
+            "2024": {
+              "direction": "negative",
+              "mean": -0.002980625931445603,
+              "n": 61
+            }
+          }
+        }
+      }
+    ],
+    "theme": "healthcare"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1388,
+        "post_warmup": 1404
+      },
+      "empty_all_window": 0.8384332925336597,
+      "empty_data_capable": 0.8097982708933718,
+      "empty_post_warmup": 0.811965811965812,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 230
+    },
+    "families": [
+      {
+        "action": "inherit_shared_prior",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ],
+        "pair_days_price_ablations": 0,
+        "robust_variants": [],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {}
+        }
+      },
+      {
+        "action": "inherit_shared_prior",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ],
+        "pair_days_price_ablations": 0,
+        "robust_variants": [],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {}
+        }
+      },
+      {
+        "action": "inherit_shared_prior",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ],
+        "pair_days_price_ablations": 0,
+        "robust_variants": [],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {}
+        }
+      },
+      {
+        "action": "inherit_shared_prior",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "D_residual_momentum",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ],
+        "pair_days_price_ablations": 0,
+        "robust_variants": [],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {}
+        }
+      }
+    ],
+    "theme": "consumer_electronics"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1386,
+        "post_warmup": 1402
+      },
+      "empty_all_window": 0.9473684210526315,
+      "empty_data_capable": 0.937950937950938,
+      "empty_post_warmup": 0.9386590584878745,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 232
+    },
+    "families": [
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_R",
+          "PRICE_DROP_S",
+          "PRICE_DROP_T"
+        ],
+        "pair_days_price_ablations": 7973,
+        "robust_variants": [
+          "PRICE_DROP_R",
+          "PRICE_DROP_R",
+          "N_S_PLUS_5PP_REALLOC_V1"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2022": {
+              "direction": "negative",
+              "mean": -0.003116883116883117,
+              "n": 35
+            },
+            "2023": {
+              "direction": "positive",
+              "mean": 0.0018424242424242422,
+              "n": 250
+            },
+            "2024": {
+              "direction": "positive",
+              "mean": 0.001987083954297072,
+              "n": 61
+            }
+          }
+        }
+      },
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_R",
+          "PRICE_DROP_S",
+          "PRICE_DROP_T"
+        ],
+        "pair_days_price_ablations": 7973,
+        "robust_variants": [
+          "PRICE_DROP_R",
+          "PRICE_DROP_R",
+          "N_S_PLUS_5PP_REALLOC_V1"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2022": {
+              "direction": "positive",
+              "mean": 0.018354978354978353,
+              "n": 35
+            },
+            "2023": {
+              "direction": "positive",
+              "mean": 0.019975757575757574,
+              "n": 250
+            },
+            "2024": {
+              "direction": "positive",
+              "mean": 0.022255340288127173,
+              "n": 61
+            }
+          }
+        }
+      },
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_T",
+          "PRICE_DROP_R",
+          "PRICE_DROP_S"
+        ],
+        "pair_days_price_ablations": 7784,
+        "robust_variants": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_R",
+          "PRICE_DROP_R",
+          "PRICE_DROP_T"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2022": {
+              "direction": "negative",
+              "mean": -0.001731601731601731,
+              "n": 35
+            },
+            "2023": {
+              "direction": "positive",
+              "mean": 5.0295485980133406e-05,
+              "n": 241
+            },
+            "2024": {
+              "direction": "positive",
+              "mean": 0.0013909587680079496,
+              "n": 61
+            }
+          }
+        }
+      },
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "D_residual_momentum",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_R",
+          "PRICE_DROP_M",
+          "PRICE_DROP_S"
+        ],
+        "pair_days_price_ablations": 6356,
+        "robust_variants": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_R",
+          "PRICE_DROP_R",
+          "PRICE_DROP_V",
+          "PRICE_DROP_V"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2023": {
+              "direction": "positive",
+              "mean": 0.0023310023310023314,
+              "n": 208
+            },
+            "2024": {
+              "direction": "positive",
+              "mean": 0.0031793343268753083,
+              "n": 61
+            }
+          }
+        }
+      }
+    ],
+    "theme": "automotive"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1388,
+        "post_warmup": 1403
+      },
+      "empty_all_window": 0.9810281517747858,
+      "empty_data_capable": 0.9776657060518732,
+      "empty_post_warmup": 0.977904490377762,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 231
+    },
+    "families": [
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_S",
+          "PRICE_DROP_M",
+          "PRICE_DROP_T"
+        ],
+        "pair_days_price_ablations": 7973,
+        "robust_variants": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_M",
+          "PRICE_DROP_R",
+          "PRICE_DROP_S",
+          "PRICE_DROP_S"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2022": {
+              "direction": "positive",
+              "mean": 0.0024242424242424255,
+              "n": 35
+            },
+            "2023": {
+              "direction": "positive",
+              "mean": 0.004121212121212121,
+              "n": 250
+            },
+            "2024": {
+              "direction": "positive",
+              "mean": 0.002185792349726778,
+              "n": 61
+            }
+          }
+        }
+      },
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_S"
+        ],
+        "pair_days_price_ablations": 7973,
+        "robust_variants": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_M",
+          "PRICE_DROP_R",
+          "PRICE_DROP_R"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2022": {
+              "direction": "positive",
+              "mean": 0.010735930735930736,
+              "n": 35
+            },
+            "2023": {
+              "direction": "positive",
+              "mean": 0.08286060606060607,
+              "n": 250
+            },
+            "2024": {
+              "direction": "negative",
+              "mean": -0.0774962742175857,
+              "n": 61
+            }
+          }
+        }
+      },
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_S",
+          "PRICE_DROP_P",
+          "PRICE_DROP_T"
+        ],
+        "pair_days_price_ablations": 7889,
+        "robust_variants": [
+          "PRICE_DROP_S",
+          "N_S_PLUS_5PP_REALLOC_V1",
+          "N_S_PLUS_5PP_REALLOC_V1"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2022": {
+              "direction": "positive",
+              "mean": 0.0031168831168831164,
+              "n": 35
+            },
+            "2023": {
+              "direction": "positive",
+              "mean": 0.0037940379403794042,
+              "n": 246
+            },
+            "2024": {
+              "direction": "negative",
+              "mean": -0.007153502235469449,
+              "n": 61
+            }
+          }
+        }
+      },
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "D_residual_momentum",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_R",
+          "PRICE_DROP_M",
+          "PRICE_DROP_S"
+        ],
+        "pair_days_price_ablations": 6356,
+        "robust_variants": [
+          "N_M_PLUS_5PP_REALLOC_V1",
+          "N_S_PLUS_5PP_REALLOC_V1",
+          "N_S_PLUS_5PP_REALLOC_V1"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2023": {
+              "direction": "positive",
+              "mean": 0.0030303030303030316,
+              "n": 208
+            },
+            "2024": {
+              "direction": "negative",
+              "mean": -0.0023845007451564837,
+              "n": 61
+            }
+          }
+        }
+      }
+    ],
+    "theme": "ev_supply"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1391,
+        "post_warmup": 1407
+      },
+      "empty_all_window": 0.927172582619339,
+      "empty_data_capable": 0.914450035945363,
+      "empty_post_warmup": 0.9154228855721394,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 227
+    },
+    "families": [
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_T",
+          "PRICE_DROP_M",
+          "PRICE_DROP_S"
+        ],
+        "pair_days_price_ablations": 28385,
+        "robust_variants": [
+          "PRICE_DROP_B"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2019": {
+              "direction": "negative",
+              "mean": -0.0005312084993359878,
+              "n": 251
+            },
+            "2020": {
+              "direction": "negative",
+              "mean": -0.00713857947059528,
+              "n": 253
+            },
+            "2021": {
+              "direction": "negative",
+              "mean": -0.0014430014430014428,
+              "n": 252
+            },
+            "2022": {
+              "direction": "positive",
+              "mean": 0.0022697090426174087,
+              "n": 251
+            },
+            "2023": {
+              "direction": "negative",
+              "mean": -0.004945454545454547,
+              "n": 250
+            },
+            "2024": {
+              "direction": "negative",
+              "mean": -0.003974167908594137,
+              "n": 61
+            }
+          }
+        }
+      },
+      {
+        "action": "keep_price_baseline_no_champion",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_ROBUST_INCREMENT",
+        "decision": "NO_ROBUST_INCREMENT",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_S",
+          "PRICE_DROP_V",
+          "PRICE_DROP_M"
+        ],
+        "pair_days_price_ablations": 28385,
+        "robust_variants": [],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2019": {
+              "direction": "positive",
+              "mean": 0.008692502716407098,
+              "n": 251
+            },
+            "2020": {
+              "direction": "negative",
+              "mean": -0.025296442687747032,
+              "n": 253
+            },
+            "2021": {
+              "direction": "positive",
+              "mean": 0.027320827320827322,
+              "n": 252
+            },
+            "2022": {
+              "direction": "positive",
+              "mean": 0.023662924061330436,
+              "n": 251
+            },
+            "2023": {
+              "direction": "positive",
+              "mean": 0.004896969696969702,
+              "n": 250
+            },
+            "2024": {
+              "direction": "negative",
+              "mean": -0.012319920516641826,
+              "n": 61
+            }
+          }
+        }
+      },
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_S",
+          "PRICE_DROP_P",
+          "PRICE_DROP_T"
+        ],
+        "pair_days_price_ablations": 28322,
+        "robust_variants": [
+          "PRICE_DROP_V"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2019": {
+              "direction": "negative",
+              "mean": -0.0004381161007667035,
+              "n": 249
+            },
+            "2020": {
+              "direction": "negative",
+              "mean": -0.00047909929332854307,
+              "n": 253
+            },
+            "2021": {
+              "direction": "negative",
+              "mean": -0.002789802789802789,
+              "n": 252
+            },
+            "2022": {
+              "direction": "negative",
+              "mean": -0.0007243752263672588,
+              "n": 251
+            },
+            "2023": {
+              "direction": "negative",
+              "mean": -0.0022879396373372283,
+              "n": 249
+            },
+            "2024": {
+              "direction": "positive",
+              "mean": 0.0023845007451564846,
+              "n": 61
+            }
+          }
+        }
+      },
+      {
+        "action": "evaluate_price_track_only",
+        "actual_G_observed": false,
+        "can_score_without_G": false,
+        "conclusion": "EIGHT_FACTOR_NOT_SCOREABLE",
+        "decision": "DATA_CAPABILITY_BLOCKED",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "DATA_INSUFFICIENT",
+        "family": "D_residual_momentum",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_S",
+          "PRICE_DROP_T"
+        ],
+        "pair_days_price_ablations": 22043,
+        "robust_variants": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_V"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2020": {
+              "direction": "negative",
+              "mean": -0.00018001800180018004,
+              "n": 202
+            },
+            "2021": {
+              "direction": "negative",
+              "mean": -4.810004810004731e-05,
+              "n": 252
+            },
+            "2022": {
+              "direction": "positive",
+              "mean": 0.003718459495351924,
+              "n": 251
+            },
+            "2023": {
+              "direction": "negative",
+              "mean": -0.00029090909090909075,
+              "n": 250
+            },
+            "2024": {
+              "direction": "negative",
+              "mean": -0.0007948335817188275,
+              "n": 61
+            }
+          }
+        }
+      }
+    ],
+    "theme": "finance"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1389,
+        "post_warmup": 1405
+      },
+      "empty_all_window": 0.8623011015911872,
+      "empty_data_capable": 0.838012958963283,
+      "empty_post_warmup": 0.8398576512455516,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 229
+    },
+    "families": [
+      {
+        "action": "keep_price_baseline_no_champion",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_ROBUST_INCREMENT",
+        "decision": "NO_ROBUST_INCREMENT",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_R",
+          "PRICE_DROP_S",
+          "PRICE_DROP_T"
+        ],
+        "pair_days_price_ablations": 9506,
+        "robust_variants": [],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2022": {
+              "direction": "negative",
+              "mean": -0.0032547699214365874,
+              "n": 108
+            },
+            "2023": {
+              "direction": "positive",
+              "mean": 0.001745454545454545,
+              "n": 250
+            },
+            "2024": {
+              "direction": "positive",
+              "mean": 0.0067560854446100365,
+              "n": 61
+            }
+          }
+        }
+      },
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_R",
+          "PRICE_DROP_S",
+          "PRICE_DROP_B"
+        ],
+        "pair_days_price_ablations": 9506,
+        "robust_variants": [
+          "PRICE_DROP_S",
+          "PRICE_DROP_S"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2022": {
+              "direction": "negative",
+              "mean": -0.009203142536475872,
+              "n": 108
+            },
+            "2023": {
+              "direction": "positive",
+              "mean": 0.024387878787878788,
+              "n": 250
+            },
+            "2024": {
+              "direction": "positive",
+              "mean": 0.09855936413313462,
+              "n": 61
+            }
+          }
+        }
+      },
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_R",
+          "PRICE_DROP_S",
+          "PRICE_DROP_P"
+        ],
+        "pair_days_price_ablations": 9506,
+        "robust_variants": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_R",
+          "N_S_PLUS_5PP_REALLOC_V1",
+          "N_S_PLUS_5PP_REALLOC_V1"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2022": {
+              "direction": "negative",
+              "mean": -0.0032547699214365883,
+              "n": 108
+            },
+            "2023": {
+              "direction": "positive",
+              "mean": 0.001503030303030303,
+              "n": 250
+            },
+            "2024": {
+              "direction": "positive",
+              "mean": 0.004371584699453554,
+              "n": 61
+            }
+          }
+        }
+      },
+      {
+        "action": "keep_price_baseline_no_champion",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_ROBUST_INCREMENT",
+        "decision": "NO_ROBUST_INCREMENT",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "D_residual_momentum",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_R",
+          "PRICE_DROP_M",
+          "PRICE_DROP_T"
+        ],
+        "pair_days_price_ablations": 7889,
+        "robust_variants": [],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2022": {
+              "direction": "positive",
+              "mean": 0.005474095796676441,
+              "n": 31
+            },
+            "2023": {
+              "direction": "negative",
+              "mean": -0.0005333333333333343,
+              "n": 250
+            },
+            "2024": {
+              "direction": "positive",
+              "mean": 0.0051664182811723795,
+              "n": 61
+            }
+          }
+        }
+      }
+    ],
+    "theme": "fintech"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1392,
+        "post_warmup": 1408
+      },
+      "empty_all_window": 0.780905752753978,
+      "empty_data_capable": 0.742816091954023,
+      "empty_post_warmup": 0.7457386363636364,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 226
+    },
+    "families": [
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_T",
+          "PRICE_DROP_M",
+          "PRICE_DROP_S"
+        ],
+        "pair_days_price_ablations": 28385,
+        "robust_variants": [
+          "PRICE_DROP_P",
+          "PRICE_DROP_P",
+          "PRICE_DROP_T"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2019": {
+              "direction": "positive",
+              "mean": 0.0009175419533985266,
+              "n": 251
+            },
+            "2020": {
+              "direction": "positive",
+              "mean": 0.0027308659719726914,
+              "n": 253
+            },
+            "2021": {
+              "direction": "positive",
+              "mean": 4.81000481000483e-05,
+              "n": 252
+            },
+            "2022": {
+              "direction": "negative",
+              "mean": -0.0010141253169141612,
+              "n": 251
+            },
+            "2023": {
+              "direction": "negative",
+              "mean": -0.0019393939393939376,
+              "n": 250
+            },
+            "2024": {
+              "direction": "negative",
+              "mean": -0.001788375558867362,
+              "n": 61
+            }
+          }
+        }
+      },
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_T",
+          "PRICE_DROP_M",
+          "PRICE_DROP_V"
+        ],
+        "pair_days_price_ablations": 28385,
+        "robust_variants": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_M",
+          "PRICE_DROP_M",
+          "PRICE_DROP_T",
+          "N_M_PLUS_5PP_REALLOC_V1"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2019": {
+              "direction": "positive",
+              "mean": 0.028492092237112156,
+              "n": 251
+            },
+            "2020": {
+              "direction": "negative",
+              "mean": -0.012217031979877828,
+              "n": 253
+            },
+            "2021": {
+              "direction": "negative",
+              "mean": -0.01111111111111111,
+              "n": 252
+            },
+            "2022": {
+              "direction": "negative",
+              "mean": -0.02062054811058795,
+              "n": 251
+            },
+            "2023": {
+              "direction": "negative",
+              "mean": -0.03015757575757576,
+              "n": 250
+            },
+            "2024": {
+              "direction": "negative",
+              "mean": -0.04590163934426229,
+              "n": 61
+            }
+          }
+        }
+      },
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_T",
+          "PRICE_DROP_P",
+          "PRICE_DROP_M"
+        ],
+        "pair_days_price_ablations": 28133,
+        "robust_variants": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P",
+          "PRICE_DROP_P",
+          "PRICE_DROP_V"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2019": {
+              "direction": "positive",
+              "mean": 0.0011332840601133278,
+              "n": 246
+            },
+            "2020": {
+              "direction": "negative",
+              "mean": -0.00048100048100048123,
+              "n": 252
+            },
+            "2021": {
+              "direction": "positive",
+              "mean": 0.0012606060606060617,
+              "n": 250
+            },
+            "2022": {
+              "direction": "negative",
+              "mean": -0.00120729204394543,
+              "n": 251
+            },
+            "2023": {
+              "direction": "positive",
+              "mean": 0.0001970928800197097,
+              "n": 246
+            },
+            "2024": {
+              "direction": "negative",
+              "mean": -0.0031793343268753105,
+              "n": 61
+            }
+          }
+        }
+      },
+      {
+        "action": "evaluate_price_track_only",
+        "actual_G_observed": false,
+        "can_score_without_G": false,
+        "conclusion": "EIGHT_FACTOR_NOT_SCOREABLE",
+        "decision": "DATA_CAPABILITY_BLOCKED",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "DATA_INSUFFICIENT",
+        "family": "D_residual_momentum",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_T",
+          "PRICE_DROP_R",
+          "PRICE_DROP_M"
+        ],
+        "pair_days_price_ablations": 22043,
+        "robust_variants": [],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2020": {
+              "direction": "positive",
+              "mean": 0.0020402040204020398,
+              "n": 202
+            },
+            "2021": {
+              "direction": "negative",
+              "mean": -0.0006734006734006732,
+              "n": 252
+            },
+            "2022": {
+              "direction": "negative",
+              "mean": -0.00048291681757817244,
+              "n": 251
+            },
+            "2023": {
+              "direction": "negative",
+              "mean": -0.0005333333333333333,
+              "n": 250
+            },
+            "2024": {
+              "direction": "positive",
+              "mean": 0.00039741679085941414,
+              "n": 61
+            }
+          }
+        }
+      }
+    ],
+    "theme": "retail"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1386,
+        "post_warmup": 1400
+      },
+      "empty_all_window": 0.9008567931456548,
+      "empty_data_capable": 0.8831168831168831,
+      "empty_post_warmup": 0.8842857142857142,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 234
+    },
+    "families": [
+      {
+        "action": "inherit_shared_prior",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ],
+        "pair_days_price_ablations": 0,
+        "robust_variants": [],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {}
+        }
+      },
+      {
+        "action": "inherit_shared_prior",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ],
+        "pair_days_price_ablations": 0,
+        "robust_variants": [],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {}
+        }
+      },
+      {
+        "action": "inherit_shared_prior",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ],
+        "pair_days_price_ablations": 0,
+        "robust_variants": [],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {}
+        }
+      },
+      {
+        "action": "inherit_shared_prior",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "D_residual_momentum",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ],
+        "pair_days_price_ablations": 0,
+        "robust_variants": [],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {}
+        }
+      }
+    ],
+    "theme": "luxury"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1386,
+        "post_warmup": 1402
+      },
+      "empty_all_window": 0.8378212974296205,
+      "empty_data_capable": 0.8088023088023089,
+      "empty_post_warmup": 0.8109843081312411,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 232
+    },
+    "families": [
+      {
+        "action": "inherit_shared_prior",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ],
+        "pair_days_price_ablations": 0,
+        "robust_variants": [],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {}
+        }
+      },
+      {
+        "action": "inherit_shared_prior",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ],
+        "pair_days_price_ablations": 0,
+        "robust_variants": [],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {}
+        }
+      },
+      {
+        "action": "inherit_shared_prior",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ],
+        "pair_days_price_ablations": 0,
+        "robust_variants": [],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {}
+        }
+      },
+      {
+        "action": "inherit_shared_prior",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "D_residual_momentum",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ],
+        "pair_days_price_ablations": 0,
+        "robust_variants": [],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {}
+        }
+      }
+    ],
+    "theme": "media_streaming"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1386,
+        "post_warmup": 1402
+      },
+      "empty_all_window": 0.8880048959608323,
+      "empty_data_capable": 0.8679653679653679,
+      "empty_post_warmup": 0.869472182596291,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 232
+    },
+    "families": [
+      {
+        "action": "inherit_shared_prior",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ],
+        "pair_days_price_ablations": 0,
+        "robust_variants": [],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {}
+        }
+      },
+      {
+        "action": "inherit_shared_prior",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ],
+        "pair_days_price_ablations": 0,
+        "robust_variants": [],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {}
+        }
+      },
+      {
+        "action": "inherit_shared_prior",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ],
+        "pair_days_price_ablations": 0,
+        "robust_variants": [],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {}
+        }
+      },
+      {
+        "action": "inherit_shared_prior",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "D_residual_momentum",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ],
+        "pair_days_price_ablations": 0,
+        "robust_variants": [],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {}
+        }
+      }
+    ],
+    "theme": "social_internet"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1386,
+        "post_warmup": 1402
+      },
+      "empty_all_window": 0.9902080783353733,
+      "empty_data_capable": 0.9884559884559885,
+      "empty_post_warmup": 0.9885877318116976,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 232
+    },
+    "families": [
+      {
+        "action": "evaluate_price_track_only",
+        "actual_G_observed": false,
+        "can_score_without_G": false,
+        "conclusion": "EIGHT_FACTOR_NOT_SCOREABLE",
+        "decision": "DATA_CAPABILITY_BLOCKED",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "DATA_INSUFFICIENT",
+        "family": "A_trend_quality",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_S",
+          "PRICE_DROP_R"
+        ],
+        "pair_days_price_ablations": 28385,
+        "robust_variants": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_S",
+          "N_M_PLUS_5PP_REALLOC_V1"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2019": {
+              "direction": "positive",
+              "mean": 0.007147168900156948,
+              "n": 251
+            },
+            "2020": {
+              "direction": "positive",
+              "mean": 0.0025392262546412745,
+              "n": 253
+            },
+            "2021": {
+              "direction": "negative",
+              "mean": -0.0010101010101010103,
+              "n": 252
+            },
+            "2022": {
+              "direction": "negative",
+              "mean": -0.0028492092237112163,
+              "n": 251
+            },
+            "2023": {
+              "direction": "positive",
+              "mean": 0.0009212121212121216,
+              "n": 250
+            },
+            "2024": {
+              "direction": "positive",
+              "mean": 0.005365126676602085,
+              "n": 61
+            }
+          }
+        }
+      },
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_V",
+          "PRICE_DROP_S"
+        ],
+        "pair_days_price_ablations": 28385,
+        "robust_variants": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_T"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2019": {
+              "direction": "positive",
+              "mean": 0.04302788844621514,
+              "n": 251
+            },
+            "2020": {
+              "direction": "negative",
+              "mean": -0.008815426997245178,
+              "n": 253
+            },
+            "2021": {
+              "direction": "negative",
+              "mean": -0.015295815295815297,
+              "n": 252
+            },
+            "2022": {
+              "direction": "negative",
+              "mean": -0.02477363274176023,
+              "n": 251
+            },
+            "2023": {
+              "direction": "negative",
+              "mean": -0.002424242424242425,
+              "n": 250
+            },
+            "2024": {
+              "direction": "positive",
+              "mean": 0.0717337307501242,
+              "n": 61
+            }
+          }
+        }
+      },
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_S",
+          "PRICE_DROP_P"
+        ],
+        "pair_days_price_ablations": 28091,
+        "robust_variants": [
+          "PRICE_DROP_T"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2019": {
+              "direction": "positive",
+              "mean": 0.002084848484848485,
+              "n": 250
+            },
+            "2020": {
+              "direction": "negative",
+              "mean": -0.002639296187683284,
+              "n": 248
+            },
+            "2021": {
+              "direction": "negative",
+              "mean": -0.002212602212602212,
+              "n": 252
+            },
+            "2022": {
+              "direction": "positive",
+              "mean": 3.065374816987129e-19,
+              "n": 249
+            },
+            "2023": {
+              "direction": "negative",
+              "mean": -0.00014662756598240526,
+              "n": 248
+            },
+            "2024": {
+              "direction": "positive",
+              "mean": 0.007442849548112704,
+              "n": 57
+            }
+          }
+        }
+      },
+      {
+        "action": "evaluate_price_track_only",
+        "actual_G_observed": false,
+        "can_score_without_G": false,
+        "conclusion": "EIGHT_FACTOR_NOT_SCOREABLE",
+        "decision": "DATA_CAPABILITY_BLOCKED",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "DATA_INSUFFICIENT",
+        "family": "D_residual_momentum",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_R",
+          "PRICE_DROP_M",
+          "PRICE_DROP_T"
+        ],
+        "pair_days_price_ablations": 22043,
+        "robust_variants": [
+          "N_M_PLUS_5PP_REALLOC_V1"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2020": {
+              "direction": "negative",
+              "mean": -0.00042004200420042053,
+              "n": 202
+            },
+            "2021": {
+              "direction": "negative",
+              "mean": -0.0017797017797017802,
+              "n": 252
+            },
+            "2022": {
+              "direction": "negative",
+              "mean": -0.0007726669081250758,
+              "n": 251
+            },
+            "2023": {
+              "direction": "negative",
+              "mean": -0.0004848484848484829,
+              "n": 250
+            },
+            "2024": {
+              "direction": "positive",
+              "mean": 0.0023845007451564824,
+              "n": 61
+            }
+          }
+        }
+      }
+    ],
+    "theme": "energy"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1386,
+        "post_warmup": 1402
+      },
+      "empty_all_window": 0.7478580171358629,
+      "empty_data_capable": 0.7027417027417028,
+      "empty_post_warmup": 0.7061340941512125,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 232
+    },
+    "families": [
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_T",
+          "PRICE_DROP_S",
+          "PRICE_DROP_M"
+        ],
+        "pair_days_price_ablations": 6986,
+        "robust_variants": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_M",
+          "PRICE_DROP_S",
+          "PRICE_DROP_V",
+          "N_M_PLUS_5PP_REALLOC_V1",
+          "N_S_PLUS_5PP_REALLOC_V1"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2023": {
+              "direction": "negative",
+              "mean": -0.00020371785077667392,
+              "n": 238
+            },
+            "2024": {
+              "direction": "negative",
+              "mean": -0.0021857923497267755,
+              "n": 61
+            }
+          }
+        }
+      },
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_T",
+          "PRICE_DROP_S",
+          "PRICE_DROP_M"
+        ],
+        "pair_days_price_ablations": 6986,
+        "robust_variants": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_M",
+          "PRICE_DROP_M",
+          "PRICE_DROP_S",
+          "PRICE_DROP_S",
+          "PRICE_DROP_T"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2023": {
+              "direction": "positive",
+              "mean": 0.004278074866310163,
+              "n": 238
+            },
+            "2024": {
+              "direction": "negative",
+              "mean": -0.005365126676602086,
+              "n": 61
+            }
+          }
+        }
+      },
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_T",
+          "PRICE_DROP_P",
+          "PRICE_DROP_S"
+        ],
+        "pair_days_price_ablations": 6923,
+        "robust_variants": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_M",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P",
+          "PRICE_DROP_S",
+          "PRICE_DROP_T"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2023": {
+              "direction": "negative",
+              "mean": -0.0009676597911892016,
+              "n": 238
+            },
+            "2024": {
+              "direction": "positive",
+              "mean": 0.0006269592476489031,
+              "n": 58
+            }
+          }
+        }
+      },
+      {
+        "action": "evaluate_price_track_only",
+        "actual_G_observed": false,
+        "can_score_without_G": false,
+        "conclusion": "EIGHT_FACTOR_NOT_SCOREABLE",
+        "decision": "DATA_CAPABILITY_BLOCKED",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "DATA_INSUFFICIENT",
+        "family": "D_residual_momentum",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_T",
+          "PRICE_DROP_S",
+          "PRICE_DROP_M"
+        ],
+        "pair_days_price_ablations": 5369,
+        "robust_variants": [
+          "PRICE_DROP_T",
+          "PRICE_DROP_T",
+          "PRICE_DROP_T"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2023": {
+              "direction": "negative",
+              "mean": -1.0343692776010775e-18,
+              "n": 161
+            },
+            "2024": {
+              "direction": "positive",
+              "mean": 0.004967709885742673,
+              "n": 61
+            }
+          }
+        }
+      }
+    ],
+    "theme": "utilities"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1390,
+        "post_warmup": 1406
+      },
+      "empty_all_window": 0.7949816401468788,
+      "empty_data_capable": 0.7589928057553957,
+      "empty_post_warmup": 0.7617354196301565,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 228
+    },
+    "families": [
+      {
+        "action": "inherit_shared_prior",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ],
+        "pair_days_price_ablations": 0,
+        "robust_variants": [],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {}
+        }
+      },
+      {
+        "action": "inherit_shared_prior",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ],
+        "pair_days_price_ablations": 0,
+        "robust_variants": [],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {}
+        }
+      },
+      {
+        "action": "inherit_shared_prior",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ],
+        "pair_days_price_ablations": 0,
+        "robust_variants": [],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {}
+        }
+      },
+      {
+        "action": "evaluate_price_track_only",
+        "actual_G_observed": false,
+        "can_score_without_G": false,
+        "conclusion": "EIGHT_FACTOR_NOT_SCOREABLE",
+        "decision": "DATA_CAPABILITY_BLOCKED",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "DATA_INSUFFICIENT",
+        "family": "D_residual_momentum",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ],
+        "pair_days_price_ablations": 0,
+        "robust_variants": [],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {}
+        }
+      }
+    ],
+    "theme": "defense_aero"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1386,
+        "post_warmup": 1402
+      },
+      "empty_all_window": 0.9871481028151775,
+      "empty_data_capable": 0.9848484848484849,
+      "empty_post_warmup": 0.985021398002853,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 232
+    },
+    "families": [
+      {
+        "action": "inherit_shared_prior",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ],
+        "pair_days_price_ablations": 0,
+        "robust_variants": [],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {}
+        }
+      },
+      {
+        "action": "inherit_shared_prior",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ],
+        "pair_days_price_ablations": 0,
+        "robust_variants": [],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {}
+        }
+      },
+      {
+        "action": "inherit_shared_prior",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ],
+        "pair_days_price_ablations": 0,
+        "robust_variants": [],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {}
+        }
+      },
+      {
+        "action": "evaluate_price_track_only",
+        "actual_G_observed": false,
+        "can_score_without_G": false,
+        "conclusion": "EIGHT_FACTOR_NOT_SCOREABLE",
+        "decision": "DATA_CAPABILITY_BLOCKED",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "DATA_INSUFFICIENT",
+        "family": "D_residual_momentum",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ],
+        "pair_days_price_ablations": 0,
+        "robust_variants": [],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {}
+        }
+      }
+    ],
+    "theme": "airlines"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1386,
+        "post_warmup": 1402
+      },
+      "empty_all_window": 0.7851897184822522,
+      "empty_data_capable": 0.7467532467532467,
+      "empty_post_warmup": 0.7496433666191156,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 232
+    },
+    "families": [
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_T",
+          "PRICE_DROP_R",
+          "PRICE_DROP_S"
+        ],
+        "pair_days_price_ablations": 28385,
+        "robust_variants": [
+          "PRICE_DROP_R",
+          "PRICE_DROP_S",
+          "PRICE_DROP_T",
+          "PRICE_DROP_T",
+          "PRICE_DROP_T",
+          "N_S_PLUS_5PP_REALLOC_V1"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2019": {
+              "direction": "positive",
+              "mean": 0.0004829168175781713,
+              "n": 251
+            },
+            "2020": {
+              "direction": "positive",
+              "mean": 0.0033536950532997967,
+              "n": 253
+            },
+            "2021": {
+              "direction": "positive",
+              "mean": 0.005868205868205867,
+              "n": 252
+            },
+            "2022": {
+              "direction": "positive",
+              "mean": 0.004491126403477002,
+              "n": 251
+            },
+            "2023": {
+              "direction": "negative",
+              "mean": -0.0036363636363636364,
+              "n": 250
+            },
+            "2024": {
+              "direction": "negative",
+              "mean": -0.0069547938400397425,
+              "n": 61
+            }
+          }
+        }
+      },
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_T",
+          "PRICE_DROP_S",
+          "PRICE_DROP_R"
+        ],
+        "pair_days_price_ablations": 28280,
+        "robust_variants": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_P",
+          "PRICE_DROP_P",
+          "PRICE_DROP_R",
+          "PRICE_DROP_S",
+          "PRICE_DROP_T"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2019": {
+              "direction": "negative",
+              "mean": -0.028202342146565255,
+              "n": 251
+            },
+            "2020": {
+              "direction": "positive",
+              "mean": 0.05078201368523949,
+              "n": 248
+            },
+            "2021": {
+              "direction": "positive",
+              "mean": 0.061664261664261664,
+              "n": 252
+            },
+            "2022": {
+              "direction": "positive",
+              "mean": 0.023324882289025715,
+              "n": 251
+            },
+            "2023": {
+              "direction": "negative",
+              "mean": -0.0176969696969697,
+              "n": 250
+            },
+            "2024": {
+              "direction": "negative",
+              "mean": -0.023646299056135123,
+              "n": 61
+            }
+          }
+        }
+      },
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_S",
+          "PRICE_DROP_T",
+          "PRICE_DROP_R"
+        ],
+        "pair_days_price_ablations": 27965,
+        "robust_variants": [
+          "PRICE_DROP_P",
+          "PRICE_DROP_R",
+          "PRICE_DROP_S",
+          "PRICE_DROP_T",
+          "PRICE_DROP_T",
+          "N_S_PLUS_5PP_REALLOC_V1"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2019": {
+              "direction": "negative",
+              "mean": -0.0025252525252525255,
+              "n": 240
+            },
+            "2020": {
+              "direction": "positive",
+              "mean": 0.0021505376344086026,
+              "n": 248
+            },
+            "2021": {
+              "direction": "positive",
+              "mean": 0.0019471826700742368,
+              "n": 249
+            },
+            "2022": {
+              "direction": "positive",
+              "mean": 0.003248484848484848,
+              "n": 250
+            },
+            "2023": {
+              "direction": "positive",
+              "mean": 0.0005333333333333336,
+              "n": 250
+            },
+            "2024": {
+              "direction": "negative",
+              "mean": -0.003974167908594138,
+              "n": 61
+            }
+          }
+        }
+      },
+      {
+        "action": "evaluate_price_track_only",
+        "actual_G_observed": false,
+        "can_score_without_G": false,
+        "conclusion": "EIGHT_FACTOR_NOT_SCOREABLE",
+        "decision": "DATA_CAPABILITY_BLOCKED",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "DATA_INSUFFICIENT",
+        "family": "D_residual_momentum",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_R",
+          "PRICE_DROP_T"
+        ],
+        "pair_days_price_ablations": 22043,
+        "robust_variants": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_M",
+          "PRICE_DROP_R",
+          "PRICE_DROP_S",
+          "PRICE_DROP_T"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2020": {
+              "direction": "positive",
+              "mean": 0.0038403840384038405,
+              "n": 202
+            },
+            "2021": {
+              "direction": "positive",
+              "mean": 0.001298701298701299,
+              "n": 252
+            },
+            "2022": {
+              "direction": "positive",
+              "mean": 0.0002897500905469035,
+              "n": 251
+            },
+            "2023": {
+              "direction": "negative",
+              "mean": -0.0030545454545454543,
+              "n": 250
+            },
+            "2024": {
+              "direction": "negative",
+              "mean": -0.0011922503725782401,
+              "n": 61
+            }
+          }
+        }
+      }
+    ],
+    "theme": "real_estate"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1381,
+        "post_warmup": 1382
+      },
+      "empty_all_window": 1.0,
+      "empty_data_capable": 1.0,
+      "empty_post_warmup": 1.0,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 252
+    },
+    "families": [
+      {
+        "action": "inherit_shared_prior",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ],
+        "pair_days_price_ablations": 0,
+        "robust_variants": [],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {}
+        }
+      },
+      {
+        "action": "inherit_shared_prior",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ],
+        "pair_days_price_ablations": 0,
+        "robust_variants": [],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {}
+        }
+      },
+      {
+        "action": "inherit_shared_prior",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ],
+        "pair_days_price_ablations": 0,
+        "robust_variants": [],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {}
+        }
+      },
+      {
+        "action": "evaluate_price_track_only",
+        "actual_G_observed": false,
+        "can_score_without_G": false,
+        "conclusion": "EIGHT_FACTOR_NOT_SCOREABLE",
+        "decision": "DATA_CAPABILITY_BLOCKED",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "DATA_INSUFFICIENT",
+        "family": "D_residual_momentum",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ],
+        "pair_days_price_ablations": 0,
+        "robust_variants": [],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {}
+        }
+      }
+    ],
+    "theme": "crypto"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1386,
+        "post_warmup": 1402
+      },
+      "empty_all_window": 0.9528763769889841,
+      "empty_data_capable": 0.9444444444444444,
+      "empty_post_warmup": 0.9450784593437945,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 232
+    },
+    "families": [
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_T",
+          "PRICE_DROP_R"
+        ],
+        "pair_days_price_ablations": 23387,
+        "robust_variants": [
+          "PRICE_DROP_S",
+          "PRICE_DROP_T"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2019": {
+              "direction": "negative",
+              "mean": -0.011188811188811189,
+              "n": 13
+            },
+            "2020": {
+              "direction": "positive",
+              "mean": 0.003545334770631213,
+              "n": 253
+            },
+            "2021": {
+              "direction": "negative",
+              "mean": -0.0023189773189773184,
+              "n": 252
+            },
+            "2022": {
+              "direction": "positive",
+              "mean": 0.000529351126960689,
+              "n": 251
+            },
+            "2023": {
+              "direction": "negative",
+              "mean": -0.0009790209790209797,
+              "n": 250
+            },
+            "2024": {
+              "direction": "negative",
+              "mean": -0.007910122664221024,
+              "n": 61
+            }
+          }
+        }
+      },
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_T",
+          "PRICE_DROP_S"
+        ],
+        "pair_days_price_ablations": 23387,
+        "robust_variants": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P",
+          "PRICE_DROP_T",
+          "PRICE_DROP_T",
+          "N_M_PLUS_5PP_REALLOC_V1"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2019": {
+              "direction": "negative",
+              "mean": -0.03449883449883449,
+              "n": 13
+            },
+            "2020": {
+              "direction": "positive",
+              "mean": 0.007090669541262427,
+              "n": 253
+            },
+            "2021": {
+              "direction": "positive",
+              "mean": 0.002014652014652013,
+              "n": 252
+            },
+            "2022": {
+              "direction": "negative",
+              "mean": -0.028111330900175525,
+              "n": 251
+            },
+            "2023": {
+              "direction": "positive",
+              "mean": 0.003860139860139861,
+              "n": 250
+            },
+            "2024": {
+              "direction": "negative",
+              "mean": -0.0692422331766594,
+              "n": 61
+            }
+          }
+        }
+      },
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_T",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ],
+        "pair_days_price_ablations": 23303,
+        "robust_variants": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_M",
+          "PRICE_DROP_T",
+          "PRICE_DROP_T",
+          "PRICE_DROP_T"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2019": {
+              "direction": "negative",
+              "mean": -0.011188811188811189,
+              "n": 13
+            },
+            "2020": {
+              "direction": "negative",
+              "mean": -0.0014487504527345167,
+              "n": 251
+            },
+            "2021": {
+              "direction": "negative",
+              "mean": -0.002405594405594405,
+              "n": 250
+            },
+            "2022": {
+              "direction": "negative",
+              "mean": -0.0040676455019084505,
+              "n": 251
+            },
+            "2023": {
+              "direction": "positive",
+              "mean": 0.001482517482517482,
+              "n": 250
+            },
+            "2024": {
+              "direction": "positive",
+              "mean": 0.0002292789178035076,
+              "n": 61
+            }
+          }
+        }
+      },
+      {
+        "action": "evaluate_price_track_only",
+        "actual_G_observed": false,
+        "can_score_without_G": false,
+        "conclusion": "EIGHT_FACTOR_NOT_SCOREABLE",
+        "decision": "DATA_CAPABILITY_BLOCKED",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "DATA_INSUFFICIENT",
+        "family": "D_residual_momentum",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_R",
+          "PRICE_DROP_M",
+          "PRICE_DROP_T"
+        ],
+        "pair_days_price_ablations": 21770,
+        "robust_variants": [
+          "PRICE_DROP_T"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2020": {
+              "direction": "positive",
+              "mean": 0.001539201539201539,
+              "n": 189
+            },
+            "2021": {
+              "direction": "negative",
+              "mean": -0.0007344507344507354,
+              "n": 252
+            },
+            "2022": {
+              "direction": "negative",
+              "mean": -0.0002786058562951001,
+              "n": 251
+            },
+            "2023": {
+              "direction": "positive",
+              "mean": 0.002293706293706294,
+              "n": 250
+            },
+            "2024": {
+              "direction": "negative",
+              "mean": -0.004241659979364898,
+              "n": 61
+            }
+          }
+        }
+      }
+    ],
+    "theme": "china_adr"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1386,
+        "post_warmup": 1402
+      },
+      "empty_all_window": 0.8665850673194615,
+      "empty_data_capable": 0.8427128427128427,
+      "empty_post_warmup": 0.8445078459343794,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 232
+    },
+    "families": [
+      {
+        "action": "inherit_shared_prior",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ],
+        "pair_days_price_ablations": 0,
+        "robust_variants": [],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {}
+        }
+      },
+      {
+        "action": "inherit_shared_prior",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ],
+        "pair_days_price_ablations": 0,
+        "robust_variants": [],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {}
+        }
+      },
+      {
+        "action": "inherit_shared_prior",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ],
+        "pair_days_price_ablations": 0,
+        "robust_variants": [],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {}
+        }
+      },
+      {
+        "action": "evaluate_price_track_only",
+        "actual_G_observed": false,
+        "can_score_without_G": false,
+        "conclusion": "EIGHT_FACTOR_NOT_SCOREABLE",
+        "decision": "DATA_CAPABILITY_BLOCKED",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "DATA_INSUFFICIENT",
+        "family": "D_residual_momentum",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P"
+        ],
+        "pair_days_price_ablations": 0,
+        "robust_variants": [],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {}
+        }
+      }
+    ],
+    "theme": "telecom"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1386,
+        "post_warmup": 1402
+      },
+      "empty_all_window": 0.817625458996328,
+      "empty_data_capable": 0.784992784992785,
+      "empty_post_warmup": 0.7874465049928673,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 232
+    },
+    "families": [
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_R",
+          "PRICE_DROP_T",
+          "PRICE_DROP_S"
+        ],
+        "pair_days_price_ablations": 28385,
+        "robust_variants": [
+          "PRICE_DROP_P"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2019": {
+              "direction": "positive",
+              "mean": 0.0012072920439454295,
+              "n": 251
+            },
+            "2020": {
+              "direction": "positive",
+              "mean": 0.002874595759971255,
+              "n": 253
+            },
+            "2021": {
+              "direction": "negative",
+              "mean": -0.002212602212602212,
+              "n": 252
+            },
+            "2022": {
+              "direction": "positive",
+              "mean": 0.00555354340214898,
+              "n": 251
+            },
+            "2023": {
+              "direction": "negative",
+              "mean": -0.0008242424242424237,
+              "n": 250
+            },
+            "2024": {
+              "direction": "negative",
+              "mean": -0.0025832091405861898,
+              "n": 61
+            }
+          }
+        }
+      },
+      {
+        "action": "keep_price_baseline_no_champion",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_ROBUST_INCREMENT",
+        "decision": "NO_ROBUST_INCREMENT",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_T",
+          "PRICE_DROP_V",
+          "PRICE_DROP_B"
+        ],
+        "pair_days_price_ablations": 28385,
+        "robust_variants": [],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2019": {
+              "direction": "positive",
+              "mean": 0.0011590003621876135,
+              "n": 251
+            },
+            "2020": {
+              "direction": "positive",
+              "mean": 0.0220864774224458,
+              "n": 253
+            },
+            "2021": {
+              "direction": "negative",
+              "mean": -0.017604617604617602,
+              "n": 252
+            },
+            "2022": {
+              "direction": "positive",
+              "mean": 0.025642883013400942,
+              "n": 251
+            },
+            "2023": {
+              "direction": "negative",
+              "mean": -0.002521212121212121,
+              "n": 250
+            },
+            "2024": {
+              "direction": "negative",
+              "mean": -0.061798310978638846,
+              "n": 61
+            }
+          }
+        }
+      },
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_T",
+          "PRICE_DROP_P",
+          "PRICE_DROP_S"
+        ],
+        "pair_days_price_ablations": 28238,
+        "robust_variants": [
+          "PRICE_DROP_B"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2019": {
+              "direction": "negative",
+              "mean": -0.001835083906797054,
+              "n": 251
+            },
+            "2020": {
+              "direction": "positive",
+              "mean": 0.003736974487962631,
+              "n": 253
+            },
+            "2021": {
+              "direction": "negative",
+              "mean": -0.0024628757696486775,
+              "n": 251
+            },
+            "2022": {
+              "direction": "positive",
+              "mean": 0.005034213098729227,
+              "n": 248
+            },
+            "2023": {
+              "direction": "positive",
+              "mean": 0.0008833271991166725,
+              "n": 247
+            },
+            "2024": {
+              "direction": "negative",
+              "mean": -0.004371584699453553,
+              "n": 61
+            }
+          }
+        }
+      },
+      {
+        "action": "evaluate_price_track_only",
+        "actual_G_observed": false,
+        "can_score_without_G": false,
+        "conclusion": "EIGHT_FACTOR_NOT_SCOREABLE",
+        "decision": "DATA_CAPABILITY_BLOCKED",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "DATA_INSUFFICIENT",
+        "family": "D_residual_momentum",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_T",
+          "PRICE_DROP_R"
+        ],
+        "pair_days_price_ablations": 22043,
+        "robust_variants": [
+          "PRICE_DROP_V"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2020": {
+              "direction": "positive",
+              "mean": 0.0013801380138013795,
+              "n": 202
+            },
+            "2021": {
+              "direction": "negative",
+              "mean": -0.00048100048100048167,
+              "n": 252
+            },
+            "2022": {
+              "direction": "positive",
+              "mean": 0.001931667270312689,
+              "n": 251
+            },
+            "2023": {
+              "direction": "negative",
+              "mean": -0.0009212121212121206,
+              "n": 250
+            },
+            "2024": {
+              "direction": "positive",
+              "mean": 0.0009935419771485345,
+              "n": 61
+            }
+          }
+        }
+      }
+    ],
+    "theme": "industrials"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1400,
+        "post_warmup": 1420
+      },
+      "empty_all_window": 0.6988984088127295,
+      "empty_data_capable": 0.6485714285714286,
+      "empty_post_warmup": 0.6535211267605634,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 214
+    },
+    "families": [
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_T",
+          "PRICE_DROP_R"
+        ],
+        "pair_days_price_ablations": 26369,
+        "robust_variants": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_M",
+          "PRICE_DROP_P",
+          "PRICE_DROP_V",
+          "N_M_PLUS_5PP_REALLOC_V1"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2019": {
+              "direction": "positive",
+              "mean": 0.0006767426122264835,
+              "n": 155
+            },
+            "2020": {
+              "direction": "negative",
+              "mean": -0.0010503330661433415,
+              "n": 253
+            },
+            "2021": {
+              "direction": "negative",
+              "mean": -0.0026362526362526356,
+              "n": 252
+            },
+            "2022": {
+              "direction": "positive",
+              "mean": 0.0003343270275541197,
+              "n": 251
+            },
+            "2023": {
+              "direction": "negative",
+              "mean": -0.0006713286713286712,
+              "n": 250
+            },
+            "2024": {
+              "direction": "negative",
+              "mean": -0.003324544308150866,
+              "n": 61
+            }
+          }
+        }
+      },
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_R",
+          "PRICE_DROP_M",
+          "PRICE_DROP_T"
+        ],
+        "pair_days_price_ablations": 26369,
+        "robust_variants": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_R",
+          "N_M_PLUS_5PP_REALLOC_V1",
+          "N_M_PLUS_5PP_REALLOC_V1"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2019": {
+              "direction": "negative",
+              "mean": -0.02161064741709903,
+              "n": 155
+            },
+            "2020": {
+              "direction": "positive",
+              "mean": 0.018132065562895604,
+              "n": 253
+            },
+            "2021": {
+              "direction": "negative",
+              "mean": -0.03071928071928072,
+              "n": 252
+            },
+            "2022": {
+              "direction": "negative",
+              "mean": -0.009221853843367786,
+              "n": 251
+            },
+            "2023": {
+              "direction": "negative",
+              "mean": -0.011636363636363637,
+              "n": 250
+            },
+            "2024": {
+              "direction": "negative",
+              "mean": -0.024532844204975354,
+              "n": 61
+            }
+          }
+        }
+      },
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_T",
+          "PRICE_DROP_M",
+          "PRICE_DROP_R"
+        ],
+        "pair_days_price_ablations": 26369,
+        "robust_variants": [
+          "PRICE_DROP_B",
+          "PRICE_DROP_M",
+          "PRICE_DROP_T",
+          "N_M_PLUS_5PP_REALLOC_V1",
+          "N_M_PLUS_5PP_REALLOC_V1"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2019": {
+              "direction": "negative",
+              "mean": -0.0026167381006090666,
+              "n": 155
+            },
+            "2020": {
+              "direction": "positive",
+              "mean": 0.00107797340998922,
+              "n": 253
+            },
+            "2021": {
+              "direction": "negative",
+              "mean": -0.001692751692751693,
+              "n": 252
+            },
+            "2022": {
+              "direction": "negative",
+              "mean": -0.0008358175688852964,
+              "n": 251
+            },
+            "2023": {
+              "direction": "negative",
+              "mean": -0.0013426573426573425,
+              "n": 250
+            },
+            "2024": {
+              "direction": "negative",
+              "mean": -0.004241659979364897,
+              "n": 61
+            }
+          }
+        }
+      },
+      {
+        "action": "inspect_named_neighbors_only",
+        "actual_G_observed": false,
+        "can_score_without_G": true,
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout ledger PnL",
+          "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+        ],
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "D_residual_momentum",
+        "mean_common_n": null,
+        "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+        "next_neighbors": [
+          "PRICE_DROP_M",
+          "PRICE_DROP_T",
+          "PRICE_DROP_R"
+        ],
+        "pair_days_price_ablations": 22043,
+        "robust_variants": [
+          "PRICE_DROP_P",
+          "PRICE_DROP_T",
+          "N_S_PLUS_5PP_REALLOC_V1"
+        ],
+        "track": "PRICE_ONLY_DIAGNOSTIC",
+        "yearly_direction_sample": {
+          "PRICE_DROP_B": {
+            "2020": {
+              "direction": "negative",
+              "mean": -0.0036003600360035993,
+              "n": 202
+            },
+            "2021": {
+              "direction": "negative",
+              "mean": -0.00010822510822510804,
+              "n": 252
+            },
+            "2022": {
+              "direction": "positive",
+              "mean": 7.243752263672579e-05,
+              "n": 251
+            },
+            "2023": {
+              "direction": "negative",
+              "mean": -0.00010909090909090938,
+              "n": 250
+            },
+            "2024": {
+              "direction": "negative",
+              "mean": -0.00014903129657228023,
+              "n": 61
+            }
+          }
+        }
+      }
+    ],
+    "theme": "etfs"
+  }
+]

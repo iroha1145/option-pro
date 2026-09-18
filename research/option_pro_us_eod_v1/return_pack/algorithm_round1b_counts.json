@@ -1,0 +1,25 @@
+{
+  "actual_rescore_calls": 16821216,
+  "executed_backtests": 0,
+  "feature_reuse_hits": 2803536,
+  "head": "0252d3f6f77160554b03ff5a9f10b8bb74ada112",
+  "historical_g_ablations_confounded": 82,
+  "holdout_unsealed": false,
+  "inspected_outcomes": 4205304,
+  "pairing_cells": 3456,
+  "price_baseline_global_overlap_groups": 5984,
+  "price_baseline_theme_overlap_groups": 6257,
+  "registered_configurations": 1152,
+  "research_code_head": "0252d3f6f77160554b03ff5a9f10b8bb74ada112",
+  "run_signature": "41acb6227d1f52c69262cac49bb46270cadbc062c38d0dd61433f9be0a589e92",
+  "source_row_sha256": "b490ba6d83965a0c3fe60c76afab8205fc2a0d76cc6577cdf23cb838e447f75a",
+  "theme_family_decisions": {
+    "CONTINUE_CANDIDATE": 47,
+    "CROSS_SECTION_THIN": 31,
+    "DATA_CAPABILITY_BLOCKED": 14,
+    "NO_ROBUST_INCREMENT": 4,
+    "\u5220\u51cf": 0
+  },
+  "transformed_label_rows": 4205304,
+  "unique_snapshots": 1401768
+}
