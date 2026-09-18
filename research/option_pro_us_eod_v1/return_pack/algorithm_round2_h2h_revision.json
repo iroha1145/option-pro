@@ -1,0 +1,122 @@
+{
+  "bootstrap_seed": 174,
+  "common_cells": 3456,
+  "examples": [
+    {
+      "band": "H",
+      "family": "A_trend_quality",
+      "label_horizon": 20,
+      "r1b_ci95": [
+        -0.007923708667930154,
+        0.008766321044546853
+      ],
+      "r1b_mean": 0.0006543584949754632,
+      "r2_ci95": [
+        -0.008001551776503343,
+        0.008801968401968407
+      ],
+      "r2_mean": 0.0006543584949754632,
+      "r2_n_samples_per_replicate": 1634,
+      "theme": "automotive",
+      "variant_id": "N_M_PLUS_5PP_REALLOC_V1"
+    },
+    {
+      "band": "2H",
+      "family": "A_trend_quality",
+      "label_horizon": 20,
+      "r1b_ci95": [
+        -0.008941392921097333,
+        0.009788698460009921
+      ],
+      "r1b_mean": 0.0006543584949754632,
+      "r2_ci95": [
+        -0.009063371769804362,
+        0.009779594078957139
+      ],
+      "r2_mean": 0.0006543584949754632,
+      "r2_n_samples_per_replicate": 1634,
+      "theme": "automotive",
+      "variant_id": "N_M_PLUS_5PP_REALLOC_V1"
+    },
+    {
+      "band": "H",
+      "family": "A_trend_quality",
+      "label_horizon": 20,
+      "r1b_ci95": [
+        -0.016981604048257593,
+        0.004054113004696675
+      ],
+      "r1b_mean": -0.007010983874737088,
+      "r2_ci95": [
+        -0.016939222775505833,
+        0.004054113004696675
+      ],
+      "r2_mean": -0.007010983874737088,
+      "r2_n_samples_per_replicate": 1634,
+      "theme": "automotive",
+      "variant_id": "N_S_PLUS_5PP_REALLOC_V1"
+    },
+    {
+      "band": "2H",
+      "family": "A_trend_quality",
+      "label_horizon": 20,
+      "r1b_ci95": [
+        -0.018540731995277452,
+        0.005303696512867365
+      ],
+      "r1b_mean": -0.007010983874737088,
+      "r2_ci95": [
+        -0.01857507135346252,
+        0.005381205531661009
+      ],
+      "r2_mean": -0.007010983874737088,
+      "r2_n_samples_per_replicate": 1634,
+      "theme": "automotive",
+      "variant_id": "N_S_PLUS_5PP_REALLOC_V1"
+    },
+    {
+      "band": "H",
+      "family": "A_trend_quality",
+      "label_horizon": 20,
+      "r1b_ci95": [
+        -0.004376192643147926,
+        0.0038314634574010626
+      ],
+      "r1b_mean": -0.0002804393549894821,
+      "r2_ci95": [
+        -0.004463608345187292,
+        0.0038662988492145635
+      ],
+      "r2_mean": -0.0002804393549894821,
+      "r2_n_samples_per_replicate": 1634,
+      "theme": "automotive",
+      "variant_id": "PRICE_DROP_B"
+    },
+    {
+      "band": "2H",
+      "family": "A_trend_quality",
+      "label_horizon": 20,
+      "r1b_ci95": [
+        -0.0040830297177472455,
+        0.0036372483963724796
+      ],
+      "r1b_mean": -0.0002804393549894821,
+      "r2_ci95": [
+        -0.00409159685647406,
+        0.0036372483963724796
+      ],
+      "r2_mean": -0.0002804393549894821,
+      "r2_n_samples_per_replicate": 1634,
+      "theme": "automotive",
+      "variant_id": "PRICE_DROP_B"
+    }
+  ],
+  "interval_pairs_compared": 3600,
+  "intervals_changed_after_trim": 3183,
+  "intervals_identical": 417,
+  "mean_width_r1b": 0.02907177704492601,
+  "mean_width_r2": 0.02910603130136293,
+  "note": "R1b intervals were computed on padded circular stitches (ceil(n/L)*L). R2 crops each replicate to the original timeline n. Point IC estimates are unchanged; intervals can shift. No price re-download and no full feature re-extract.",
+  "r2_n_samples_per_replicate": 1634,
+  "repeats": 2000
+}

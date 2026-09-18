@@ -1,0 +1,282 @@
+[
+  {
+    "actual_rescore_calls": 83284,
+    "aliases": [
+      "D_MARKET_RESIDUAL_DIAGNOSTIC"
+    ],
+    "candidate_id": "R2_automotive_D_residual_momentum_V_DOWNWEIGHT_5PP",
+    "delta": -0.05,
+    "eligible_signal_n": 103,
+    "executed": true,
+    "exploratory_seen_window": true,
+    "factor": "V",
+    "family": "D_residual_momentum",
+    "hard_gates_unchanged": true,
+    "insufficient_date_n": 1321,
+    "kind": "reduce_weight",
+    "label_horizon": 20,
+    "mean_common_n": 10.0,
+    "not_a_sealed_winner": true,
+    "own_ic_days": 1059,
+    "pair_days": 312,
+    "paired_diff_block_bootstrap": {
+      "2H": {
+        "block_len": 40,
+        "ci95": [
+          0.0031815054211843195,
+          0.014897760658252279
+        ],
+        "mean": 0.008663558663558665,
+        "method": "CIRCULAR_DATE_BLOCK_BOOTSTRAP",
+        "n_blocks": 41,
+        "n_observed": 312,
+        "n_samples_per_replicate": 1634,
+        "n_timeline": 1634,
+        "nonfinite_inputs_marked_missing": 0,
+        "note": "Year/two-year tables are descriptive. They are not this block bootstrap interval.",
+        "reason": null,
+        "repeats": 2000,
+        "seed": 174
+      },
+      "H": {
+        "block_len": 20,
+        "ci95": [
+          0.00357467629010894,
+          0.01442819904110227
+        ],
+        "mean": 0.008663558663558665,
+        "method": "CIRCULAR_DATE_BLOCK_BOOTSTRAP",
+        "n_blocks": 82,
+        "n_observed": 312,
+        "n_samples_per_replicate": 1634,
+        "n_timeline": 1634,
+        "nonfinite_inputs_marked_missing": 0,
+        "note": "Year/two-year tables are descriptive. They are not this block bootstrap interval.",
+        "reason": null,
+        "repeats": 2000,
+        "seed": 174
+      },
+      "block_lengths_preregistered": {
+        "2H": 40,
+        "H": 20
+      },
+      "descriptive_normal_on_observed_only": {
+        "ci95": [
+          0.004203577146806102,
+          0.013123540180311227
+        ],
+        "mean": 0.008663558663558665,
+        "method": "PREREGISTERED_NORMAL_APPROX",
+        "n": 312,
+        "reason": null
+      },
+      "repeats": 2000,
+      "seed": 174
+    },
+    "profile": "balanced",
+    "reason": "label-20 drop/realloc H and 2H both above 0 with yearly same-side; register a small downweight, not an automatic delete",
+    "reference_pool_unchanged": true,
+    "result": "executed",
+    "score_horizon": "mid",
+    "source_variant": "PRICE_DROP_V",
+    "status": "registered",
+    "theme": "automotive",
+    "track": "PRICE_ONLY_DIAGNOSTIC",
+    "weights": {
+      "B": 0.023152411095848695,
+      "G": 0.0,
+      "M": 0.3157146968346037,
+      "P": 0.029992896254947065,
+      "R": 0.2946670503942651,
+      "S": 0.1515430545081527,
+      "T": 0.1799573771853955,
+      "V": 0.004972513726787288
+    }
+  },
+  {
+    "actual_rescore_calls": 83284,
+    "aliases": [
+      "D_MARKET_RESIDUAL_DIAGNOSTIC"
+    ],
+    "candidate_id": "R2_etfs_D_residual_momentum_P_DOWNWEIGHT_5PP",
+    "delta": -0.05,
+    "eligible_signal_n": 461,
+    "executed": true,
+    "exploratory_seen_window": true,
+    "factor": "P",
+    "family": "D_residual_momentum",
+    "hard_gates_unchanged": true,
+    "insufficient_date_n": 574,
+    "kind": "reduce_weight",
+    "label_horizon": 20,
+    "mean_common_n": 11.0,
+    "not_a_sealed_winner": true,
+    "own_ic_days": 1059,
+    "pair_days": 1059,
+    "paired_diff_block_bootstrap": {
+      "2H": {
+        "block_len": 40,
+        "ci95": [
+          -0.0002208241874561275,
+          0.0029303834390372596
+        ],
+        "mean": 0.0013477551721177785,
+        "method": "CIRCULAR_DATE_BLOCK_BOOTSTRAP",
+        "n_blocks": 41,
+        "n_observed": 1059,
+        "n_samples_per_replicate": 1634,
+        "n_timeline": 1634,
+        "nonfinite_inputs_marked_missing": 0,
+        "note": "Year/two-year tables are descriptive. They are not this block bootstrap interval.",
+        "reason": null,
+        "repeats": 2000,
+        "seed": 174
+      },
+      "H": {
+        "block_len": 20,
+        "ci95": [
+          -0.0001719109597561733,
+          0.002822006541910427
+        ],
+        "mean": 0.0013477551721177785,
+        "method": "CIRCULAR_DATE_BLOCK_BOOTSTRAP",
+        "n_blocks": 82,
+        "n_observed": 1059,
+        "n_samples_per_replicate": 1634,
+        "n_timeline": 1634,
+        "nonfinite_inputs_marked_missing": 0,
+        "note": "Year/two-year tables are descriptive. They are not this block bootstrap interval.",
+        "reason": null,
+        "repeats": 2000,
+        "seed": 174
+      },
+      "block_lengths_preregistered": {
+        "2H": 40,
+        "H": 20
+      },
+      "descriptive_normal_on_observed_only": {
+        "ci95": [
+          6.049593895579163e-05,
+          0.0026350144052797652
+        ],
+        "mean": 0.0013477551721177785,
+        "method": "PREREGISTERED_NORMAL_APPROX",
+        "n": 1059,
+        "reason": null
+      },
+      "repeats": 2000,
+      "seed": 174
+    },
+    "profile": "balanced",
+    "reason": "label-20 drop/realloc H and 2H both above 0 with yearly same-side; register a small downweight, not an automatic delete",
+    "reference_pool_unchanged": true,
+    "result": "executed",
+    "score_horizon": "mid",
+    "source_variant": "PRICE_DROP_P",
+    "status": "registered",
+    "theme": "etfs",
+    "track": "PRICE_ONLY_DIAGNOSTIC",
+    "weights": {
+      "B": 0.014042108724141605,
+      "G": 0.0,
+      "M": 0.270812096822731,
+      "P": 0.01554787757659377,
+      "R": 0.29087225214293333,
+      "S": 0.13239702511333518,
+      "T": 0.2437308871967768,
+      "V": 0.032597752423488176
+    }
+  },
+  {
+    "actual_rescore_calls": 83284,
+    "aliases": [],
+    "candidate_id": "R2_fintech_B_confirmed_base_breakout_S_DOWNWEIGHT_5PP",
+    "delta": -0.05,
+    "eligible_signal_n": 0,
+    "executed": true,
+    "exploratory_seen_window": true,
+    "factor": "S",
+    "family": "B_confirmed_base_breakout",
+    "hard_gates_unchanged": true,
+    "insufficient_date_n": 1171,
+    "kind": "reduce_weight",
+    "label_horizon": 20,
+    "mean_common_n": 10.0,
+    "not_a_sealed_winner": true,
+    "own_ic_days": 1361,
+    "pair_days": 462,
+    "paired_diff_block_bootstrap": {
+      "2H": {
+        "block_len": 40,
+        "ci95": [
+          -0.0008713816992866292,
+          0.0202531813598055
+        ],
+        "mean": 0.009471336744064017,
+        "method": "CIRCULAR_DATE_BLOCK_BOOTSTRAP",
+        "n_blocks": 41,
+        "n_observed": 462,
+        "n_samples_per_replicate": 1634,
+        "n_timeline": 1634,
+        "nonfinite_inputs_marked_missing": 0,
+        "note": "Year/two-year tables are descriptive. They are not this block bootstrap interval.",
+        "reason": null,
+        "repeats": 2000,
+        "seed": 174
+      },
+      "H": {
+        "block_len": 20,
+        "ci95": [
+          -0.0012821039855923587,
+          0.02089273415977961
+        ],
+        "mean": 0.009471336744064017,
+        "method": "CIRCULAR_DATE_BLOCK_BOOTSTRAP",
+        "n_blocks": 82,
+        "n_observed": 462,
+        "n_samples_per_replicate": 1634,
+        "n_timeline": 1634,
+        "nonfinite_inputs_marked_missing": 0,
+        "note": "Year/two-year tables are descriptive. They are not this block bootstrap interval.",
+        "reason": null,
+        "repeats": 2000,
+        "seed": 174
+      },
+      "block_lengths_preregistered": {
+        "2H": 40,
+        "H": 20
+      },
+      "descriptive_normal_on_observed_only": {
+        "ci95": [
+          0.0035894348256315864,
+          0.015353238662496448
+        ],
+        "mean": 0.009471336744064017,
+        "method": "PREREGISTERED_NORMAL_APPROX",
+        "n": 462,
+        "reason": null
+      },
+      "repeats": 2000,
+      "seed": 174
+    },
+    "profile": "balanced",
+    "reason": "label-20 drop/realloc H and 2H both above 0 with yearly same-side; register a small downweight, not an automatic delete",
+    "reference_pool_unchanged": true,
+    "result": "executed",
+    "score_horizon": "mid",
+    "source_variant": "PRICE_DROP_S",
+    "status": "registered",
+    "theme": "fintech",
+    "track": "PRICE_ONLY_DIAGNOSTIC",
+    "weights": {
+      "B": 0.3248302126646297,
+      "G": 0.0,
+      "M": 0.10827673751783906,
+      "P": 0.030936210751129033,
+      "R": 0.09744906374383264,
+      "S": 0.1105839416272719,
+      "T": 0.12374484289340358,
+      "V": 0.20417899080189406
+    }
+  }
+]
