@@ -1,0 +1,22 @@
+{
+  "check_runs": [
+    {
+      "conclusion": "success",
+      "name": "test",
+      "url": "https://github.com/iroha1145/option-pro/actions/runs/35377688980/job/105706179463"
+    },
+    {
+      "conclusion": "success",
+      "name": "test",
+      "url": "https://github.com/iroha1145/option-pro/actions/runs/35377695198/job/105706195761"
+    }
+  ],
+  "github_python_tests_step": "success",
+  "github_pip_audit_step": "success",
+  "local_pytest": "3976 passed, 6 skipped",
+  "pull_request_run": "https://github.com/iroha1145/option-pro/actions/runs/35377695198",
+  "push_run": "https://github.com/iroha1145/option-pro/actions/runs/35377688980",
+  "research_head": "431bc7929e69cd3b7375d7427a09345107345967",
+  "stamp_is_docs_only": true,
+  "terminal_status": "AUTH_REQUIRED"
+}

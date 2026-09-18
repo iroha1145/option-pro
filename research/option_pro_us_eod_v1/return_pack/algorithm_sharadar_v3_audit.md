@@ -12,4 +12,10 @@
 第 7 节：母组分位改为同轨母组≥20 有限成员时用母组秩；B 突破使用冻结首日 rvol，缺失首日 rvol/clv 拒绝。
 旧小池结果不按新定义重算，不新开权重搜索。
 
+研究头 `431bc792` 的 GitHub CI 已通过：
+- push https://github.com/iroha1145/option-pro/actions/runs/35377688980
+- PR https://github.com/iroha1145/option-pro/actions/runs/35377695198
+
+本地 pytest：`3976 passed, 6 skipped`。本稿 stamp 只追加 CI 记录，不回写 B0/R1/R1b/R2/Freeze/就绪/固定矩阵。
+
 终态：`AUTH_REQUIRED`。这不是策略赢家状态。

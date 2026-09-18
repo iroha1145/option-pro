@@ -1,6 +1,6 @@
 {
-  "head": "91c95ac3465c5d90e061ad8b0475b6892868a5bc",
-  "generated_at": "2026-09-18T17:53:05.185452+00:00",
+  "head": "431bc7929e69cd3b7375d7427a09345107345967",
+  "generated_at": "2026-09-18T18:32:26Z",
   "feature_version": "us-eod-research-features-v1.6",
   "archived_feature_version": "us-eod-research-features-v1.5",
   "archive_label": "CONTROL_CURRENT_LIST_214",
@@ -9,5 +9,12 @@
   "yahoo_fallback_used": false,
   "massive_key_used": false,
   "weight_search": false,
-  "probe": "sharadar_v3/provider_probe.json"
+  "probe": "sharadar_v3/provider_probe.json",
+  "github_ci": {
+    "research_head": "431bc7929e69cd3b7375d7427a09345107345967",
+    "push_run": "https://github.com/iroha1145/option-pro/actions/runs/35377688980",
+    "pull_request_run": "https://github.com/iroha1145/option-pro/actions/runs/35377695198",
+    "stamp_is_docs_only": true,
+    "stamped_at": "2026-09-18T18:32:26Z"
+  }
 }
