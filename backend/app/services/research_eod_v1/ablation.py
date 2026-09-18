@@ -237,6 +237,10 @@ def _update_event(store: dict[tuple, tuple[date, int]], key: tuple, day: date) -
         store[key] = (day, 1)
         return
     last, count = previous
+    if day == last:
+        return
+    if day < last:
+        raise ValueError("event sessions must be nondecreasing")
     if next_session(last) != day:
         count += 1
     store[key] = (day, count)
@@ -495,6 +499,13 @@ def analyze_rows(
             "usable_for_independent_sample": False,
             "old_count_4514": "SUPERSEDED_EVENT_COUNT",
         }
+    event_by_theme_family_label: dict[str, int] = {}
+    for key, (_last, count) in theme_events.items():
+        variant_id, theme, family, _profile, _horizon, label_h, _sid = key
+        if variant_id != BASELINE_ID:
+            continue
+        label = f"{theme}|{family}|{label_h}"
+        event_by_theme_family_label[label] = event_by_theme_family_label.get(label, 0) + count
 
     sessions = sorted({session for _theme, session in theme_dates})
     theme_empty: dict[str, dict[str, Any]] = {}
@@ -585,6 +596,7 @@ def analyze_rows(
             "usable_for_independent_sample": False,
             "old_count_4514": "SUPERSEDED_EVENT_COUNT",
             "by_variant": event_by_variant,
+            "baseline_by_theme_family_label": dict(sorted(event_by_theme_family_label.items())),
         },
         "empty_ratios": theme_empty,
         "date_ranges_window": {

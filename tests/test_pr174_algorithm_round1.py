@@ -208,6 +208,21 @@ def test_crash_after_rows_without_checkpoint_does_not_duplicate(tmp_path: Path) 
     assert first["unique_committed_rows"] == len(set(keys))
 
 
+def test_same_day_cross_theme_does_not_inflate_global_events() -> None:
+    from app.services.research_eod_v1.ablation import _update_event
+
+    friday = date(2024, 1, 5)
+    monday = date(2024, 1, 8)
+    theme: dict[tuple, tuple[date, int]] = {}
+    globe: dict[tuple, tuple[date, int]] = {}
+    for day in (friday, monday):
+        for sector in ("software", "ai_cloud"):
+            _update_event(theme, ("BASELINE_FULL_EIGHT", sector, "A_trend_quality", "balanced", "mid", 5, "AAA"), day)
+            _update_event(globe, ("BASELINE_FULL_EIGHT", "A_trend_quality", "balanced", "mid", 5, "AAA"), day)
+    assert sum(count for _last, count in theme.values()) == 2
+    assert sum(count for _last, count in globe.values()) == 1
+
+
 def test_weekend_and_holiday_are_not_new_events() -> None:
     friday = date(2024, 1, 5)
     monday = date(2024, 1, 8)
