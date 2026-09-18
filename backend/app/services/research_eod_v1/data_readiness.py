@@ -29,11 +29,12 @@ HOLDOUT_START = date(2024, 7, 1)
 LABEL_HORIZONS = (5, 20, 63)
 MAIN_LABEL = 20
 AUTOMOTIVE_MEMBERS = ("F", "GM", "LCID", "LI", "NIO", "RIVN", "STLA", "TM", "TSLA", "XPEV")
+# Registry min_history is 252 for A/B/C and 330 for D. Do not invent 200/80/200.
 FAMILY_WARMUP_SESSIONS = {
-    "A_trend_quality": 200,
-    "B_confirmed_base_breakout": 80,
-    "C_trend_pullback": 200,
-    "D_residual_momentum": RESIDUAL_HISTORY_MIN,
+    "A_trend_quality": 252,
+    "B_confirmed_base_breakout": 252,
+    "C_trend_pullback": 252,
+    "D_residual_momentum": max(330, RESIDUAL_HISTORY_MIN),
 }
 STATIC_VENUE_NOTES = {
     "LVMUY": "OTC_EXCLUDED",
@@ -168,7 +169,11 @@ def coverage_from_bars(bars: Mapping[str, Sequence[ResearchBar]]) -> dict[str, A
         "field_capabilities": {
             "ohlcv": True,
             "raw_equals_structure_close": raw_ne == 0,
-            "tri_present": True,
+            "tri_present": any(
+                bar.tri is not None
+                for rows in bars.values()
+                for bar in rows
+            ),
             "tri_differs_from_close_bars": tri_ne,
             "dollar_volume_is_close_times_volume": True,
             "is_raw_unadjusted_eod": False,
@@ -539,10 +544,18 @@ def inventory_sources(*, root: Path | None = None) -> list[dict[str, Any]]:
     return rows
 
 
+def _finite_positive(value: float | None) -> bool:
+    if value is None:
+        return False
+    return value == value and value not in (float("inf"), float("-inf")) and value > 0
+
+
 def _complete_t_day(bar: ResearchBar) -> bool:
     if bar.missing or bar.partial or bar.vintage_status == "PARTIAL":
         return False
-    return None not in (bar.open, bar.high, bar.low, bar.close)
+    if not all(_finite_positive(price) for price in (bar.open, bar.high, bar.low, bar.close)):
+        return False
+    return _ohlc_ok(bar)
 
 
 def _ohlc_ok(bar: ResearchBar) -> bool:
@@ -678,11 +691,12 @@ def decade_budget(sessions: Sequence[date]) -> dict[str, Any]:
     raw_end = sessions[-1] if sessions else None
     families = {}
     for family, warmup in FAMILY_WARMUP_SESSIONS.items():
-        first_scoreable = sessions[warmup] if len(sessions) > warmup else None
+        # history_sessions counts the signal day. First scoreable is sessions[warmup - 1].
+        first_scoreable = sessions[warmup - 1] if len(sessions) >= warmup else None
         labels = {}
         for horizon in LABEL_HORIZONS:
-            mature = sessions[warmup + horizon] if len(sessions) > warmup + horizon else None
-            evaluable_n = max(0, len(sessions) - warmup - horizon)
+            mature = sessions[warmup - 1 + horizon] if len(sessions) >= warmup + horizon else None
+            evaluable_n = max(0, len(sessions) - warmup - horizon + 1)
             labels[str(horizon)] = {
                 "mature_label_day": mature.isoformat() if mature else None,
                 "evaluable_sessions": evaluable_n,
@@ -712,12 +726,21 @@ def decade_budget(sessions: Sequence[date]) -> dict[str, Any]:
 
 def layer_status_for_cache(summary: Mapping[str, Any]) -> dict[str, Any]:
     has_complete = int(summary.get("complete_t_days") or 0) > 0
+    ohlc_bad = int(summary.get("ohlc_violations") or 0) > 0
+    duplicates = int(summary.get("duplicates") or 0) > 0
+    unsorted = bool(summary.get("unsorted"))
+    contract = str(summary.get("contract") or "ok")
+    a_ok = has_complete and not ohlc_bad and not duplicates and not unsorted and contract == "ok"
     raw_unverified = int(summary.get("raw_ne_close") or 0) == 0
     tri_differs = int(summary.get("tri_ne_close") or 0) > 0
     return {
         LAYER_A: {
-            "status": "available" if has_complete else "blocked",
-            "note": "Complete T-day OHLC supports close-signal diagnostics. PRICE_ONLY / missing-G tracks stay.",
+            "status": "available" if a_ok else "blocked",
+            "note": (
+                "Complete T-day OHLC supports close-signal diagnostics. PRICE_ONLY / missing-G tracks stay."
+                if a_ok
+                else "validate_research_bars / OHLC / finite / duplicate checks blocked A for this unit."
+            ),
         },
         LAYER_B: {
             "status": "partial" if has_complete else "blocked",

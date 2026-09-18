@@ -8,6 +8,13 @@ from zoneinfo import ZoneInfo
 
 
 ET = ZoneInfo("America/New_York")
+CALENDAR_VERSION = "nyse-official-adhoc-v1"
+# Official full-session closures that are not weekday/holiday formulas.
+# 2018-12-05: NYSE Group and Nasdaq US markets closed for the National Day of
+# Mourning for President George H. W. Bush. Not derived from SPY quote presence.
+ADHOC_FULL_CLOSURES: dict[date, str] = {
+    date(2018, 12, 5): "national_day_of_mourning_george_h_w_bush",
+}
 
 
 def _nth_weekday(year: int, month: int, weekday: int, n: int) -> date:
@@ -79,6 +86,9 @@ def market_holidays(year: int) -> dict[date, str]:
         holidays[
             _friday_or_monday_observed(date(year, 6, 19))
         ] = "juneteenth"
+    for day, name in ADHOC_FULL_CLOSURES.items():
+        if day.year == year:
+            holidays[day] = name
 
     # A Sunday New Year in the next calendar year is observed on Monday in
     # that next year. A Saturday New Year deliberately adds no prior-Friday
@@ -163,6 +173,18 @@ def last_completed_trading_day(now: datetime | None = None) -> date:
     return candidate
 
 
+def trading_sessions(start: date, end: date) -> list[date]:
+    """Inclusive official NYSE sessions in [start, end]. Not a tape-derived calendar."""
+
+    out: list[date] = []
+    cursor = start
+    while cursor <= end:
+        if is_trading_day(cursor):
+            out.append(cursor)
+        cursor += timedelta(days=1)
+    return out
+
+
 def trading_days_between(start: date, end: date) -> int:
     """Count completed NYSE sessions in (start, end]. Zero when end <= start."""
 
@@ -197,6 +219,8 @@ _market_datetime = market_datetime
 
 
 __all__ = [
+    "ADHOC_FULL_CLOSURES",
+    "CALENDAR_VERSION",
     "ET",
     "early_close_minutes",
     "is_trading_day",
@@ -208,4 +232,5 @@ __all__ = [
     "previous_trading_day",
     "prior_trading_sessions",
     "trading_days_between",
+    "trading_sessions",
 ]

@@ -116,6 +116,15 @@ def test_layer_c_blocks_when_raw_copies_close() -> None:
     assert matrix["layers"][LAYER_D]["status"] == "current_list_only"
 
 
+def test_malformed_ohlc_blocks_layer_a() -> None:
+    bad = ResearchBar(**{**_bar(date(2024, 4, 1), 10.0).__dict__, "high": 9.0, "low": 8.0})
+    summary = inspect_symbol_bars([bad])
+    assert summary["ohlc_violations"] == 1
+    assert summary["complete_t_days"] == 0
+    matrix = capability_matrix(inventory_sources(), {"spy": {**summary, "contract": "OHLC relationship violated"}})
+    assert matrix["layers"][LAYER_A]["status"] == "blocked"
+
+
 def test_ohlc_and_duplicate_fail_contract() -> None:
     from app.services.research_eod_v1.data.contract import validate_research_bars
 
@@ -139,6 +148,9 @@ def test_decade_budget_does_not_use_holdout() -> None:
     assert budget["label_63_is_not_horizon_long"] is True
     assert budget["allowed_end"] <= ALLOWED_END.isoformat()
     assert budget["families"]["D_residual_momentum"]["warmup_sessions"] == 330
+    assert budget["families"]["A_trend_quality"]["warmup_sessions"] == 252
+    assert budget["families"]["B_confirmed_base_breakout"]["warmup_sessions"] == 252
+    assert budget["families"]["C_trend_pullback"]["warmup_sessions"] == 252
 
 
 def test_theme_table_covers_twenty_four_without_pit() -> None:
