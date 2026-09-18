@@ -1,0 +1,76 @@
+{
+  "protocol": "us-eod-research-freeze-v1",
+  "pre_read_manifest": "research/option_pro_us_eod_v1/return_pack/algorithm_round2_freeze_checklist.json",
+  "pre_read_daily_effects_read": false,
+  "pre_read_head": "6159b2388d5bf36eefa7f7aba6c12455c3817585",
+  "validation_head": "54ad5d7684d7c1eae086333ea756c7514a3f3635",
+  "research_head": "3b1d27e9da7dce65b98633438306fff63e3ec595",
+  "note": "The pre-read checklist stays PENDING by contract. This file records fulfillment after the targeted replay.",
+  "items": [
+    {
+      "item": "valid_date_start_end",
+      "status": "DONE",
+      "evidence": "valid_start=2023-03-06 valid_end=2024-05-30 valid_pair_days=312 timeline_n=1634"
+    },
+    {
+      "item": "yearly_counts",
+      "status": "DONE",
+      "evidence": "2023 n=208 positive; 2024 n=104 positive; both retained"
+    },
+    {
+      "item": "quarterly_counts",
+      "status": "DONE",
+      "evidence": "2023Q1-2024Q1 positive; 2024Q2 n=43 negative retained"
+    },
+    {
+      "item": "rejection_reasons_n0_label_unmature_common_n_below_10",
+      "status": "DONE",
+      "evidence": "DEFINED_PAIR 312, COMMON_N_BELOW_10 747, N0_OR_NO_COMMON 553, LABEL_NOT_MATURE 21, N0_NO_THEME_ROWS 1"
+    },
+    {
+      "item": "daily_member_hash_N_baseline_ic_variant_ic_delta",
+      "status": "DONE",
+      "evidence": "algorithm_round2_freeze_table.json 312 rows; daily sha256 bf25dae04f7b096f1028f791aa258bd17d2540be0435ecb0fe519fe88a66d25d"
+    },
+    {
+      "item": "own_ic_with_N_below_10_is_not_a_pair",
+      "status": "DONE",
+      "evidence": "COMMON_N_BELOW_10 747; own_ic_is_not_a_pair true"
+    },
+    {
+      "item": "persistent_members_churn_repeat_events_concentration",
+      "status": "DONE",
+      "evidence": "same 10 ids on all 312 days; constant member hash; fragments 38; overlap groups 14"
+    },
+    {
+      "item": "eligible_n_vs_matured_labels_vs_overlap_groups",
+      "status": "DONE",
+      "evidence": "eligible_signal_records 103; matured_label 102; overlap_groups 14; not independent trades"
+    },
+    {
+      "item": "frozen_H_2H_seed174_2000_not_cherry_picked",
+      "status": "DONE",
+      "evidence": "seed 174 repeats 2000 n_samples_per_replicate 1634; H and 2H match R2 executed band"
+    },
+    {
+      "item": "leave_one_member_N10_becomes_insufficient",
+      "status": "DONE",
+      "evidence": "every leave-one loses all 312 days; remaining_defined_days=0; N=9 not used"
+    },
+    {
+      "item": "absolute_common_set_ICs",
+      "status": "DONE",
+      "evidence": "mean_baseline_ic_common 0.10365190365190365; mean_variant_ic_common 0.1123154623154623; delta 0.008663558663558665"
+    },
+    {
+      "item": "descriptive_forward_only_if_cache_supports",
+      "status": "DONE",
+      "evidence": "local cache 10 rows NVDA/SPY; execution_prices MISSING; NAV not invented"
+    },
+    {
+      "item": "stop_rule_one_of_three",
+      "status": "DONE",
+      "evidence": "FROZEN_EXPLORATORY_CANDIDATE; not a champion; no retune; holdout sealed"
+    }
+  ]
+}

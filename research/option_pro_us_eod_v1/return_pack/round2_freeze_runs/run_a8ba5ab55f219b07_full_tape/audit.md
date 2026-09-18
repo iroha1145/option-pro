@@ -65,3 +65,12 @@ B0 / Round 1 / Round 1b / Round 2 files are not rewritten. Holdout 2024-07-01 st
 - 经济执行与生产EOD接入: 未做
 
 No production champion. No unseal. No new weight grid.
+
+## Current-head GitHub CI
+
+Research-head GitHub CI on `3b1d27e9` is terminal success:
+
+- push: https://github.com/iroha1145/option-pro/actions/runs/35352505494
+- pull_request: https://github.com/iroha1145/option-pro/actions/runs/35352511710
+
+A later URL-stamp commit is docs-only and is not a new research revision.
