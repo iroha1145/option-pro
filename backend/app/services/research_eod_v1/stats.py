@@ -12,7 +12,7 @@ from typing import Any, Iterable, Mapping, Sequence
 
 import numpy as np
 
-STATISTICS_VERSION = "us-eod-research-stats-v1.0"
+STATISTICS_VERSION = "us-eod-research-stats-v1.1"
 IC_MIN_CROSS_SECTION = 10
 IC_GROUP_KEYS = (
     "signal_session",

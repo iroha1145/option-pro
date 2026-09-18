@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date
-from typing import Any, Iterable, Mapping
+from typing import Any, Iterable, Mapping, Sequence
 
 from app.services.research_eod_v1.bootstrap import paired_diff_intervals
 from app.services.research_eod_v1.capability import (
@@ -64,9 +64,11 @@ LEGACY_NEIGHBORS = (
 LABEL_HORIZONS = (5, 20, 63)
 PAIRING_RULE = "COMMON_MEMBER_RERANK_THEN_IC_DIFF"
 EVENT_RULE = "FRAGMENT_AND_LABEL_HORIZON_OVERLAP"
-STATISTICS_RULE = "CIRCULAR_DATE_BLOCK_BOOTSTRAP_SEED174_2000"
+STATISTICS_RULE = "CIRCULAR_DATE_BLOCK_BOOTSTRAP_SEED174_2000_TRIM_TO_TIMELINE"
 THIN_DEFINED_IC_DAYS = 10
 HISTORICAL_G_ABLATION_COUNT = 82
+MAIN_LABEL_HORIZON = 20
+DIAGNOSTIC_LABEL_HORIZONS = (5, 63)
 
 
 @dataclass(frozen=True)
@@ -197,6 +199,7 @@ def _empty_cell() -> dict[str, Any]:
         "pair_by_session": {},
         "yearly_diffs": defaultdict(list),
         "common_n_sum": 0,
+        "common_n_by_session": {},
         "baseline_only_n_sum": 0,
         "variant_only_n_sum": 0,
         "raw_sessions": set(),
@@ -275,7 +278,6 @@ def analyze_rows_r1b(
                 cell["pair_by_session"][session] = None
                 continue
             pair = common_member_pair(baseline_members, members)
-            cell["common_n_sum"] += pair["common_n"]
             cell["baseline_only_n_sum"] += pair["baseline_only_n"]
             cell["variant_only_n_sum"] += pair["variant_only_n"]
             if pair["paired_diff"] is None:
@@ -283,12 +285,15 @@ def analyze_rows_r1b(
                 if pair["undefined_reason"] == "CROSS_SECTION_BELOW_N":
                     cell["thin_pair_days"] += 1
                 cell["pair_by_session"][session] = None
+                cell["common_n_by_session"][session] = None
             else:
                 cell["pair_days"] += 1
+                cell["common_n_sum"] += pair["common_n"]
                 cell["pair_defined_sessions"].add(session)
                 cell["daily_pair_diffs"].append(pair["paired_diff"])
                 cell["yearly_diffs"][year].append(pair["paired_diff"])
                 cell["pair_by_session"][session] = pair["paired_diff"]
+                cell["common_n_by_session"][session] = pair["common_n"]
         buckets.clear()
 
     for row in rows:
@@ -394,6 +399,9 @@ def analyze_rows_r1b(
         )
         yearly = {year: _sign_year(values) for year, values in sorted(cell["yearly_diffs"].items())}
         eligible_labels = cell["eligible_forward"].get(label_h) or []
+        is_baseline = variant_id in {PRICE_BASELINE_ID, FULL_BASELINE_ID}
+        thin_basis = "own_ic_days" if is_baseline else "pair_days"
+        thin_n = cell["own_ic_days"] if is_baseline else cell["pair_days"]
         pairing.append(
             {
                 "theme": theme,
@@ -403,8 +411,11 @@ def analyze_rows_r1b(
                 "kind": variant.kind,
                 "dropped": variant.dropped,
                 "aliases": list(variant.aliases),
+                "profile": profile,
+                "score_horizon": horizon,
                 "label_horizon": label_h,
-                "statistically_thin": cell["pair_days"] < THIN_DEFINED_IC_DAYS,
+                "statistically_thin": thin_n < THIN_DEFINED_IC_DAYS,
+                "statistically_thin_basis": thin_basis,
                 "scorer_rows_label5": gate_n,
                 "scorer_pass_rate": None if not gate_n else cell["scored_label5"] / gate_n,
                 "eligible_rate": None if not gate_n else cell["eligible_label5"] / gate_n,
@@ -417,7 +428,9 @@ def analyze_rows_r1b(
                 "pair_days": cell["pair_days"],
                 "thin_pair_days": cell["thin_pair_days"],
                 "undefined_pair_days": cell["undefined_pair_days"],
+                "insufficient_date_n": cell["undefined_pair_days"],
                 "mean_common_n": None if not cell["pair_days"] else cell["common_n_sum"] / cell["pair_days"],
+                "common_n_formula": "sum common_n over defined-pair dates / pair_days",
                 "mean_baseline_only_n": None if not (cell["pair_days"] + cell["undefined_pair_days"]) else cell["baseline_only_n_sum"] / max(1, cell["pair_days"] + cell["undefined_pair_days"]),
                 "mean_variant_only_n": None if not (cell["pair_days"] + cell["undefined_pair_days"]) else cell["variant_only_n_sum"] / max(1, cell["pair_days"] + cell["undefined_pair_days"]),
                 "paired_diff_block_bootstrap": intervals,
@@ -429,6 +442,8 @@ def analyze_rows_r1b(
                     "Family B IC is not breakout ledger PnL",
                     "Tracks are not cross-compared for a champion",
                     "N_SCORE_FLOOR_PLUS_10PCT scorer IC must match PRICE_ONLY; judge it on eligible signals",
+                    "own-set IC value is not a defined N>=10 pair",
+                    "baseline thinness uses own_ic_days, not a missing self-pair",
                     "executed_backtests stays 0; close-to-close labels are descriptive signal diagnostics",
                 ],
             }
@@ -497,7 +512,36 @@ def analyze_rows_r1b(
             "note": "G-missing coverage failures are data-capability, not strategy loss",
         }
 
-    cards = [_theme_card(theme, families, pairing, coverage_map, theme_empty[theme]) for theme in themes]
+    daily_pair_series = []
+    for (theme, family, variant_id, label_h), cell in sorted(cells.items()):
+        variant = next(item for item in catalog[(theme, family)] if item.variant_id == variant_id)
+        if variant_id in {PRICE_BASELINE_ID, FULL_BASELINE_ID}:
+            continue
+        daily_pair_series.append(
+            {
+                "theme": theme,
+                "family": family,
+                "variant_id": variant_id,
+                "track": variant.track,
+                "profile": profile,
+                "score_horizon": horizon,
+                "label_horizon": label_h,
+                "paired_diffs": [cell["pair_by_session"].get(session) for session in session_order],
+                "common_ns": [cell["common_n_by_session"].get(session) for session in session_order],
+            }
+        )
+    cards = [
+        _theme_card(
+            theme,
+            families,
+            pairing,
+            coverage_map,
+            theme_empty[theme],
+            profile=profile,
+            horizon=horizon,
+        )
+        for theme in themes
+    ]
     g_confounded = [
         {"theme": row["theme"], "family": row["family"], "status": "capability-confounded"}
         for row in coverage_rows
@@ -533,6 +577,8 @@ def analyze_rows_r1b(
         },
         "empty_ratios": theme_empty,
         "theme_cards": cards,
+        "daily_pair_sessions": list(session_order),
+        "daily_pair_series": daily_pair_series,
         "neighbors_preregistered": preregistered_realloc_neighbors()
         + [{"variant_id": SCORE_FLOOR_ID, "kind": "threshold", "field": "score_floor", "scale": 1.1}],
         "factors": list(FACTORS),
@@ -555,76 +601,277 @@ def _sign_year(values: list[float]) -> dict[str, Any]:
     return {"n": len(values), "mean": mean, "direction": direction}
 
 
+def qualified_mean_common_n(
+    common_counts: Sequence[int | float | None],
+    defined_flags: Sequence[bool],
+) -> float | None:
+    """Mean common_n uses the same qualified dates as the pair-day denominator."""
+
+    values = [
+        float(count)
+        for count, defined in zip(common_counts, defined_flags)
+        if defined and count is not None
+    ]
+    if not values:
+        return None
+    return sum(values) / len(values)
+
+
+def _bootstrap_band(item: Mapping[str, Any], key: str) -> dict[str, Any]:
+    return ((item.get("paired_diff_block_bootstrap") or {}).get(key) or {})
+
+
+def ci_location(ci: Any) -> str | None:
+    if not ci or len(ci) != 2 or ci[0] is None or ci[1] is None:
+        return None
+    low, high = float(ci[0]), float(ci[1])
+    if high < 0:
+        return "below_zero"
+    if low > 0:
+        return "above_zero"
+    return "crosses_zero"
+
+
+def signed_ablation_direction(item: Mapping[str, Any]) -> str:
+    """Drop Δ<0 with H entirely below 0 keeps the factor. |Δ| is not improvement."""
+
+    pair_days = item.get("pair_days") or 0
+    if item.get("statistically_thin") or pair_days < THIN_DEFINED_IC_DAYS:
+        return "THIN"
+    band = _bootstrap_band(item, "H")
+    mean = band.get("mean")
+    side = ci_location(band.get("ci95"))
+    if side == "below_zero" and mean is not None and float(mean) < 0:
+        return "KEEP_FACTOR"
+    if side == "above_zero" and mean is not None and float(mean) > 0:
+        return "REDUCE_WEIGHT_CANDIDATE"
+    return "INCONCLUSIVE"
+
+
+def price_track_status(price_base: Sequence[Mapping[str, Any]], drops: Sequence[Mapping[str, Any]]) -> str:
+    if not price_base:
+        return "NO_PRICE_BASELINE"
+    base = price_base[0]
+    if (base.get("own_ic_days") or 0) >= THIN_DEFINED_IC_DAYS:
+        return "EVALUABLE"
+    if any((item.get("pair_days") or 0) >= THIN_DEFINED_IC_DAYS for item in drops):
+        return "EVALUABLE"
+    if (base.get("own_ic_days") or 0) > 0 or any((item.get("pair_days") or 0) > 0 for item in drops):
+        return "CROSS_SECTION_THIN"
+    return "NO_DEFINED_PAIR"
+
+
+def _neighbor_record(
+    item: Mapping[str, Any],
+    *,
+    direction: str,
+    reason: str,
+    profile: str,
+    score_horizon: str,
+) -> dict[str, Any]:
+    h_band = _bootstrap_band(item, "H")
+    h2_band = _bootstrap_band(item, "2H")
+    return {
+        "family": item.get("family"),
+        "profile": item.get("profile") or profile,
+        "score_horizon": item.get("score_horizon") or score_horizon,
+        "label_horizon": item.get("label_horizon"),
+        "track": item.get("track"),
+        "variant_id": item.get("variant_id"),
+        "direction": direction,
+        "reason": reason,
+        "delta": h_band.get("mean"),
+        "interval_H": h_band.get("ci95"),
+        "interval_2H": h2_band.get("ci95"),
+        "pair_days": item.get("pair_days"),
+        "H_side": ci_location(h_band.get("ci95")),
+        "H2_side": ci_location(h2_band.get("ci95")),
+    }
+
+
+def _horizon_note(item: Mapping[str, Any]) -> str:
+    h_side = ci_location(_bootstrap_band(item, "H").get("ci95"))
+    h2_side = ci_location(_bootstrap_band(item, "2H").get("ci95"))
+    if h_side in {"above_zero", "below_zero"} and h2_side == "crosses_zero":
+        return "H_SIGNIFICANT_2H_CROSSES_ZERO; robustness is not a single 95% CI"
+    if h_side == "crosses_zero" and h2_side in {"above_zero", "below_zero"}:
+        return "2H_SIGNIFICANT_H_CROSSES_ZERO; do not switch the main 20-day target"
+    if h_side in {"above_zero", "below_zero"} and h2_side == h_side:
+        return "H_AND_2H_SAME_SIDE"
+    return "INTERVAL_WIDE_OR_MIXED"
+
+
 def _theme_card(
     theme: str,
     families: list[str],
     pairing: list[dict[str, Any]],
     coverage_map: Mapping[tuple[str, str], Mapping[str, Any]],
     empty_ratios: Mapping[str, Any],
+    *,
+    profile: str = "balanced",
+    horizon: str = "mid",
 ) -> dict[str, Any]:
     family_cards = []
     for family in families:
         coverage = coverage_map[(theme, family)]
         rows = [item for item in pairing if item["theme"] == theme and item["family"] == family]
-        price_base = [item for item in rows if item["variant_id"] == PRICE_BASELINE_ID]
-        drops = [item for item in rows if item["kind"] == "ablation" and item["track"] == PRICE_ONLY_DIAGNOSTIC]
-        neighbors = [item for item in rows if item["kind"] == "neighbor"]
-        robust = []
-        for item in drops + neighbors:
-            interval = ((item.get("paired_diff_block_bootstrap") or {}).get("H") or {})
-            ci = interval.get("ci95")
-            pair_days = item.get("pair_days") or 0
-            if item.get("statistically_thin") or pair_days < THIN_DEFINED_IC_DAYS:
-                continue
-            if ci and (ci[0] > 0 or ci[1] < 0):
-                robust.append(item)
-        if not coverage.get("can_score_without_G") and coverage.get("score_status") == "DATA_INSUFFICIENT":
-            decision = "DATA_CAPABILITY_BLOCKED"
-            action = "evaluate_price_track_only"
-            conclusion = "EIGHT_FACTOR_NOT_SCOREABLE"
-        elif not price_base or all(item.get("statistically_thin") for item in drops):
+        rows20 = [item for item in rows if int(item.get("label_horizon") or 0) == MAIN_LABEL_HORIZON]
+        price_base = [item for item in rows20 if item["variant_id"] == PRICE_BASELINE_ID]
+        if not price_base:
+            price_base = [item for item in rows if item["variant_id"] == PRICE_BASELINE_ID]
+        drops20 = [
+            item
+            for item in rows20
+            if item["kind"] == "ablation" and item["track"] == PRICE_ONLY_DIAGNOSTIC
+        ]
+        neighbors20 = [item for item in rows20 if item["kind"] == "neighbor"]
+        floor_rows = [item for item in rows20 if item["variant_id"] == SCORE_FLOOR_ID]
+        eight_insufficient = (
+            not coverage.get("can_score_without_G") and coverage.get("score_status") == "DATA_INSUFFICIENT"
+        )
+        track_status = price_track_status(price_base, drops20)
+        signed = [(item, signed_ablation_direction(item)) for item in drops20 + neighbors20]
+        keep = [item for item, direction in signed if direction == "KEEP_FACTOR"]
+        reduce = [item for item, direction in signed if direction == "REDUCE_WEIGHT_CANDIDATE"]
+        thin_drops = [item for item, direction in signed if item in drops20 and direction == "THIN"]
+        if track_status == "EVALUABLE":
+            if reduce:
+                decision = "CONTINUE_CANDIDATE"
+                action = "register_reduce_weight_or_keep_named_direction"
+                conclusion = "NO_CHAMPION"
+            elif keep:
+                decision = "KEEP_FACTOR_EVIDENCE"
+                action = "keep_original_score_contribution"
+                conclusion = "KEEP_FACTOR"
+            elif not drops20 or (drops20 and all(item.get("statistically_thin") for item in drops20)):
+                decision = "CROSS_SECTION_THIN"
+                action = "inherit_shared_prior"
+                conclusion = "NO_CONCLUSION"
+            else:
+                decision = "NO_ROBUST_INCREMENT"
+                action = "keep_price_baseline_limited_continue"
+                conclusion = "NO_ROBUST_INCREMENT"
+        elif track_status == "CROSS_SECTION_THIN":
             decision = "CROSS_SECTION_THIN"
             action = "inherit_shared_prior"
             conclusion = "NO_CONCLUSION"
-        elif not robust:
-            decision = "NO_ROBUST_INCREMENT"
-            action = "keep_price_baseline_no_champion"
-            conclusion = "NO_ROBUST_INCREMENT"
+        elif eight_insufficient:
+            decision = "DATA_CAPABILITY_BLOCKED"
+            action = "price_track_also_not_evaluable"
+            conclusion = "EIGHT_FACTOR_NOT_SCOREABLE"
         else:
-            decision = "CONTINUE_CANDIDATE"
-            action = "inspect_named_neighbors_only"
-            conclusion = "NO_CHAMPION"
-        next_neighbors = []
-        for item in sorted(drops + neighbors, key=lambda row: abs(((row.get("paired_diff_block_bootstrap") or {}).get("H") or {}).get("mean") or 0), reverse=True):
+            decision = "CROSS_SECTION_THIN"
+            action = "inherit_shared_prior"
+            conclusion = "NO_CONCLUSION"
+        next_neighbors: list[dict[str, Any]] = []
+        for item in reduce:
             if item["variant_id"] == SCORE_FLOOR_ID:
                 continue
-            if item["variant_id"] not in next_neighbors:
-                next_neighbors.append(item["variant_id"])
+            next_neighbors.append(
+                _neighbor_record(
+                    item,
+                    direction="REDUCE_WEIGHT_CANDIDATE",
+                    reason=f"drop/realloc reliably better on label {MAIN_LABEL_HORIZON}; {_horizon_note(item)}",
+                    profile=profile,
+                    score_horizon=horizon,
+                )
+            )
             if len(next_neighbors) == 3:
                 break
-        if not next_neighbors:
-            next_neighbors = [spec["variant_id"] for spec in REALLOC_NEIGHBORS] + [SCORE_FLOOR_ID]
+        if len(next_neighbors) < 3:
+            for item in keep:
+                if item["variant_id"] == SCORE_FLOOR_ID:
+                    continue
+                next_neighbors.append(
+                    _neighbor_record(
+                        item,
+                        direction="KEEP_FACTOR",
+                        reason=(
+                            "reliable worse after drop is keep-that-factor evidence, "
+                            f"not an abs-magnitude improvement; {_horizon_note(item)}"
+                        ),
+                        profile=profile,
+                        score_horizon=horizon,
+                    )
+                )
+                if len(next_neighbors) == 3:
+                    break
+        horizon_diagnostics = {}
+        for label_h in DIAGNOSTIC_LABEL_HORIZONS:
+            labeled = [
+                item
+                for item in rows
+                if int(item.get("label_horizon") or 0) == label_h
+                and item["kind"] in {"ablation", "neighbor"}
+                and item.get("variant_id") != SCORE_FLOOR_ID
+            ]
+            horizon_diagnostics[str(label_h)] = [
+                _neighbor_record(
+                    item,
+                    direction=signed_ablation_direction(item),
+                    reason=f"preregistered diagnostic label {label_h}; not a horizon=long model validation",
+                    profile=profile,
+                    score_horizon=horizon,
+                )
+                for item in labeled
+                if signed_ablation_direction(item) in {"KEEP_FACTOR", "REDUCE_WEIGHT_CANDIDATE"}
+            ]
+        qualified_counts = [item.get("mean_common_n") for item in drops20 if item.get("pair_days")]
+        qualified_flags = [True] * len(qualified_counts)
+        mean_n = qualified_mean_common_n(qualified_counts, qualified_flags)
+        insufficient_n = sum(item.get("insufficient_date_n") or item.get("undefined_pair_days") or 0 for item in drops20)
+        floor = floor_rows[0] if floor_rows else None
+        aliases = [D_MARKET_RESIDUAL_DIAGNOSTIC] if family == "D_residual_momentum" else []
         family_cards.append(
             {
                 "family": family,
                 "track": PRICE_ONLY_DIAGNOSTIC,
+                "track_alias": D_MARKET_RESIDUAL_DIAGNOSTIC if family == "D_residual_momentum" else None,
+                "aliases": aliases,
+                "not_a_second_experiment": family == "D_residual_momentum",
                 "eight_factor_status": coverage.get("score_status"),
+                "price_track_status": track_status,
                 "actual_G_observed": coverage.get("actual_G_observed"),
                 "can_score_without_G": coverage.get("can_score_without_G"),
+                "main_label_horizon": MAIN_LABEL_HORIZON,
+                "profile": profile,
+                "score_horizon": horizon,
                 "decision": decision,
                 "action": action,
                 "conclusion": conclusion,
-                "pair_days_price_ablations": sum(item.get("pair_days") or 0 for item in drops),
-                "mean_common_n": None if not price_base else price_base[0].get("mean_common_n"),
-                "robust_variants": [item["variant_id"] for item in robust[:6]],
-                "yearly_direction_sample": {item["variant_id"]: item.get("yearly_direction") for item in drops[:3]},
+                "decision_basis": (
+                    "PRICE_ONLY label=20 evidence; eight-factor DATA_INSUFFICIENT does not overwrite "
+                    "an evaluable price track. D on the price track is D_MARKET_RESIDUAL_DIAGNOSTIC, "
+                    "not a second experiment."
+                ),
+                "pair_days_price_ablations": sum(item.get("pair_days") or 0 for item in drops20),
+                "mean_common_n": mean_n,
+                "insufficient_date_n": insufficient_n,
+                "keep_factor_variants": [item["variant_id"] for item in keep],
+                "reduce_weight_variants": [item["variant_id"] for item in reduce],
+                "robust_variants": [item["variant_id"] for item in reduce],
+                "thin_variants": [item["variant_id"] for item in thin_drops],
+                "yearly_direction_sample": {
+                    item["variant_id"]: item.get("yearly_direction") for item in drops20[:3]
+                },
                 "next_neighbors": next_neighbors[:3],
-                "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+                "horizon_diagnostics": horizon_diagnostics,
+                "score_floor_eligible_rate": None if not floor else floor.get("eligible_rate"),
+                "score_floor_pair_diff_mean": None
+                if not floor
+                else (_bootstrap_band(floor, "H").get("mean")),
+                "neighbor_reason": (
+                    "signed label-20 evidence only; drop-worse is KEEP_FACTOR; "
+                    "63-day diagnostics are not the main target"
+                ),
                 "do_not": [
                     "do not invert or delete the family because software IC is negative",
                     "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
                     "do not treat B IC as breakout ledger PnL",
                     "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless",
+                    "do not rank drop-worse by abs(Δ) as an improvement",
+                    "do not switch the main 20-day target because 63 looks better",
+                    "do not write please-run-price-track when PRICE_ONLY already ran",
                 ],
             }
         )
