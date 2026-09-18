@@ -27,7 +27,16 @@
   "event_rule_version": "us-eod-event-groups-v1.1",
   "expected_b0_sha256": "b490ba6d83965a0c3fe60c76afab8205fc2a0d76cc6577cdf23cb838e447f75a",
   "feature_version": "us-eod-research-features-v1.5",
-  "head": "0252d3f6f77160554b03ff5a9f10b8bb74ada112",
+  "github_ci": {
+    "conclusion": "success",
+    "head": "355bab413c389e5a177bf7b6d87763d5d73bee8a",
+    "note": "Both GitHub test jobs completed success on 355bab41. Research analysis ran from 0252d3f6; this SHA only adds return-pack/audit whitespace fixes.",
+    "pull_request": "https://github.com/iroha1145/option-pro/actions/runs/35323542199",
+    "pull_request_job": "https://github.com/iroha1145/option-pro/actions/runs/35323542199/job/105531359300",
+    "push": "https://github.com/iroha1145/option-pro/actions/runs/35323537598",
+    "push_job": "https://github.com/iroha1145/option-pro/actions/runs/35323537598/job/105531337989"
+  },
+  "head": "355bab413c389e5a177bf7b6d87763d5d73bee8a",
   "holdout_start": "2024-07-01",
   "holdout_unsealed": false,
   "horizon": "mid",

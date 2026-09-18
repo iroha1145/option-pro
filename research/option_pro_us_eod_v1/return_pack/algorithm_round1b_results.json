@@ -505,7 +505,16 @@
     "G"
   ],
   "feature_reuse_hits": 2803536,
-  "head": "0252d3f6f77160554b03ff5a9f10b8bb74ada112",
+  "github_ci": {
+    "conclusion": "success",
+    "head": "355bab413c389e5a177bf7b6d87763d5d73bee8a",
+    "note": "Both GitHub test jobs completed success on 355bab41. Research analysis ran from 0252d3f6; this SHA only adds return-pack/audit whitespace fixes.",
+    "pull_request": "https://github.com/iroha1145/option-pro/actions/runs/35323542199",
+    "pull_request_job": "https://github.com/iroha1145/option-pro/actions/runs/35323542199/job/105531359300",
+    "push": "https://github.com/iroha1145/option-pro/actions/runs/35323537598",
+    "push_job": "https://github.com/iroha1145/option-pro/actions/runs/35323537598/job/105531337989"
+  },
+  "head": "355bab413c389e5a177bf7b6d87763d5d73bee8a",
   "historical_g_ablations": {
     "cells": [
       {

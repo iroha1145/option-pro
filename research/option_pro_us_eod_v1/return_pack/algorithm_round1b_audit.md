@@ -1,6 +1,6 @@
 # PR #174 algorithm round 1b
 
-Head `184e8b75` records the driver path fix. The full-tape analysis ran from `0252d3f6`. Review anchor `70a57ce5b60acfedb7ac4337b13aa2ee3a627d5f`.
+Head `355bab413c389e5a177bf7b6d87763d5d73bee8a`. Analysis code `0252d3f6`. Review anchor `70a57ce5b60acfedb7ac4337b13aa2ee3a627d5f`.
 B0 and Round 1 files are not rewritten. Holdout 2024-07-01 stays sealed. executed_backtests = 0.
 
 ## Isolation
@@ -39,5 +39,9 @@ B0 and Round 1 files are not rewritten. Holdout 2024-07-01 stays sealed. execute
 
 - Portfolio / raw corporate-action book remains unrun.
 - New E / weekly / macro stay planned.
-- Current-head GitHub CI is recorded after both test jobs succeed on this SHA.
+- Current-head GitHub CI on `355bab41`: push `35323537598` and PR `35323542199` both `test` jobs completed success.
 - Holdout remains sealed. Search stops after these registered realloc/floor neighbors.
+
+GitHub `test` on research head `355bab41` is terminal success:
+push https://github.com/iroha1145/option-pro/actions/runs/35323537598
+pull_request https://github.com/iroha1145/option-pro/actions/runs/35323542199
