@@ -1,0 +1,462 @@
+{
+  "absolute_ics_may_be_negative": true,
+  "absolute_variant_ic_negative": false,
+  "candidate_id": "R2_automotive_D_residual_momentum_V_DOWNWEIGHT_5PP",
+  "checklist": [
+    "valid_date_start_end",
+    "yearly_counts",
+    "quarterly_counts",
+    "rejection_reasons_n0_label_unmature_common_n_below_10",
+    "daily_member_hash_N_baseline_ic_variant_ic_delta",
+    "own_ic_with_N_below_10_is_not_a_pair",
+    "persistent_members_churn_repeat_events_concentration",
+    "eligible_n_vs_matured_labels_vs_overlap_groups",
+    "frozen_H_2H_seed174_2000_not_cherry_picked",
+    "leave_one_member_N10_becomes_insufficient",
+    "absolute_common_set_ICs",
+    "descriptive_forward_only_if_cache_supports",
+    "stop_rule_one_of_three"
+  ],
+  "checklist_items": [
+    "valid_date_start_end",
+    "yearly_counts",
+    "quarterly_counts",
+    "rejection_reasons_n0_label_unmature_common_n_below_10",
+    "daily_member_hash_N_baseline_ic_variant_ic_delta",
+    "own_ic_with_N_below_10_is_not_a_pair",
+    "persistent_members_churn_repeat_events_concentration",
+    "eligible_n_vs_matured_labels_vs_overlap_groups",
+    "frozen_H_2H_seed174_2000_not_cherry_picked",
+    "leave_one_member_N10_becomes_insufficient",
+    "absolute_common_set_ICs",
+    "descriptive_forward_only_if_cache_supports",
+    "stop_rule_one_of_three"
+  ],
+  "daily_validation": {
+    "defined_pair_days": 312,
+    "note": "Controlled frozen-candidate daily artifact. Raw B0 tape is not copied here.",
+    "path": "research/option_pro_us_eod_v1/return_pack/round2_freeze_runs/run_a8ba5ab55f219b07_full_tape/daily_validation.jsonl",
+    "public_git": false,
+    "rows": 1634,
+    "sha256": "bf25dae04f7b096f1028f791aa258bd17d2540be0435ecb0fe519fe88a66d25d"
+  },
+  "delta_positive_is_not_absolute_skill": true,
+  "earliest_trade_if_executed": "NEXT_DAY_CONFIRM",
+  "eligible_matured_label_records": 102,
+  "eligible_not_independent_trades": true,
+  "eligible_signal_records": 103,
+  "etfs_parameter_correction": {
+    "after": {
+      "B": 0.014042108724141605,
+      "G": 0.0,
+      "M": 0.270812096822731,
+      "P": 0.01554787757659377,
+      "R": 0.29087225214293333,
+      "S": 0.13239702511333518,
+      "T": 0.2437308871967768,
+      "V": 0.032597752423488176
+    },
+    "after_P": 0.01554787757659377,
+    "before": {
+      "B": 0.013820335635956551,
+      "G": 0.0,
+      "M": 0.2665350444077335,
+      "P": 0.03109575515318754,
+      "R": 0.2862783810305286,
+      "S": 0.1303060217104475,
+      "T": 0.2398815400223896,
+      "V": 0.032082922039756705
+    },
+    "before_P": 0.03109575515318754,
+    "boundary_policy": "HALVE_AT_BOUNDARY",
+    "candidate_id": "R2_etfs_D_residual_momentum_P_DOWNWEIGHT_5PP",
+    "do_not_rewrite_old_run_as_true_minus_5pp": true,
+    "effective_delta": -0.01554787757659377,
+    "immutable_original_delta_field": -0.05,
+    "keep_historical_result": true,
+    "new_policy": "REJECT_INFEASIBLE",
+    "note": "Registered -5pp from P=0.03109575515318754 was infeasible. The executed vector halved P to 0.01554787757659377. Future runs raise instead of silent fallback.",
+    "recompute_full_history": false,
+    "requested_delta": -0.05,
+    "status": "keep_baseline",
+    "superseded_fallback": -0.01554787757659377,
+    "vector_hash": "0313e7bea73b8f06108a53d4ee2711dd92cc33684704fffcc81422124219ae97"
+  },
+  "event_fragments": 38,
+  "event_overlap_groups": 14,
+  "executed_backtests": 0,
+  "execution_prices": "MISSING",
+  "frozen": {
+    "after_V": 0.004972513726787288,
+    "before_V": 0.05497251372678729,
+    "candidate_id": "R2_automotive_D_residual_momentum_V_DOWNWEIGHT_5PP",
+    "do_not_retune_to_1_2_3pp": true,
+    "effective_delta": -0.05,
+    "exploratory_seen_window": true,
+    "factor": "V",
+    "family": "D_residual_momentum",
+    "label_horizon": 20,
+    "not_a_sealed_winner": true,
+    "not_a_second_experiment": true,
+    "not_a_small_relative_cut": true,
+    "profile": "balanced",
+    "protocol": "us-eod-research-freeze-v1",
+    "relative_reduction": 0.9095454548158264,
+    "requested_delta": -0.05,
+    "score_horizon": "mid",
+    "source_r2_eligible_signal_n": 103,
+    "source_r2_intervals": {
+      "2H": {
+        "block_len": 40,
+        "ci95": [
+          0.0031815054211843195,
+          0.014897760658252279
+        ],
+        "mean": 0.008663558663558665,
+        "method": "CIRCULAR_DATE_BLOCK_BOOTSTRAP",
+        "n_blocks": 41,
+        "n_observed": 312,
+        "n_samples_per_replicate": 1634,
+        "n_timeline": 1634,
+        "nonfinite_inputs_marked_missing": 0,
+        "note": "Year/two-year tables are descriptive. They are not this block bootstrap interval.",
+        "reason": null,
+        "repeats": 2000,
+        "seed": 174
+      },
+      "H": {
+        "block_len": 20,
+        "ci95": [
+          0.00357467629010894,
+          0.01442819904110227
+        ],
+        "mean": 0.008663558663558665,
+        "method": "CIRCULAR_DATE_BLOCK_BOOTSTRAP",
+        "n_blocks": 82,
+        "n_observed": 312,
+        "n_samples_per_replicate": 1634,
+        "n_timeline": 1634,
+        "nonfinite_inputs_marked_missing": 0,
+        "note": "Year/two-year tables are descriptive. They are not this block bootstrap interval.",
+        "reason": null,
+        "repeats": 2000,
+        "seed": 174
+      },
+      "block_lengths_preregistered": {
+        "2H": 40,
+        "H": 20
+      },
+      "descriptive_normal_on_observed_only": {
+        "ci95": [
+          0.004203577146806102,
+          0.013123540180311227
+        ],
+        "mean": 0.008663558663558665,
+        "method": "PREREGISTERED_NORMAL_APPROX",
+        "n": 312,
+        "reason": null
+      },
+      "repeats": 2000,
+      "seed": 174
+    },
+    "source_r2_mean_common_n": 10.0,
+    "source_r2_pair_days": 312,
+    "theme": "automotive",
+    "track": "PRICE_ONLY_DIAGNOSTIC",
+    "track_alias": "D_MARKET_RESIDUAL_DIAGNOSTIC",
+    "vector_hash": "e7a0c31d9f4173685d9909f75aaf5e40cdd03adc02960a4fdfd20c157603e6ab",
+    "weights": {
+      "B": 0.023152411095848695,
+      "G": 0.0,
+      "M": 0.3157146968346037,
+      "P": 0.029992896254947065,
+      "R": 0.2946670503942651,
+      "S": 0.1515430545081527,
+      "T": 0.1799573771853955,
+      "V": 0.004972513726787288
+    }
+  },
+  "head": "54ad5d7684d7c1eae086333ea756c7514a3f3635",
+  "holdout_unsealed": false,
+  "independent_events": null,
+  "leave_one_member": [
+    {
+      "days_lost_below_n": 312,
+      "days_present": 312,
+      "remaining_defined_days": 0,
+      "remaining_mean_delta": null,
+      "remaining_statistically_thin": true,
+      "security_id": "F"
+    },
+    {
+      "days_lost_below_n": 312,
+      "days_present": 312,
+      "remaining_defined_days": 0,
+      "remaining_mean_delta": null,
+      "remaining_statistically_thin": true,
+      "security_id": "GM"
+    },
+    {
+      "days_lost_below_n": 312,
+      "days_present": 312,
+      "remaining_defined_days": 0,
+      "remaining_mean_delta": null,
+      "remaining_statistically_thin": true,
+      "security_id": "LCID"
+    },
+    {
+      "days_lost_below_n": 312,
+      "days_present": 312,
+      "remaining_defined_days": 0,
+      "remaining_mean_delta": null,
+      "remaining_statistically_thin": true,
+      "security_id": "LI"
+    },
+    {
+      "days_lost_below_n": 312,
+      "days_present": 312,
+      "remaining_defined_days": 0,
+      "remaining_mean_delta": null,
+      "remaining_statistically_thin": true,
+      "security_id": "NIO"
+    },
+    {
+      "days_lost_below_n": 312,
+      "days_present": 312,
+      "remaining_defined_days": 0,
+      "remaining_mean_delta": null,
+      "remaining_statistically_thin": true,
+      "security_id": "RIVN"
+    },
+    {
+      "days_lost_below_n": 312,
+      "days_present": 312,
+      "remaining_defined_days": 0,
+      "remaining_mean_delta": null,
+      "remaining_statistically_thin": true,
+      "security_id": "STLA"
+    },
+    {
+      "days_lost_below_n": 312,
+      "days_present": 312,
+      "remaining_defined_days": 0,
+      "remaining_mean_delta": null,
+      "remaining_statistically_thin": true,
+      "security_id": "TM"
+    },
+    {
+      "days_lost_below_n": 312,
+      "days_present": 312,
+      "remaining_defined_days": 0,
+      "remaining_mean_delta": null,
+      "remaining_statistically_thin": true,
+      "security_id": "TSLA"
+    },
+    {
+      "days_lost_below_n": 312,
+      "days_present": 312,
+      "remaining_defined_days": 0,
+      "remaining_mean_delta": null,
+      "remaining_statistically_thin": true,
+      "security_id": "XPEV"
+    }
+  ],
+  "local_execution_cache": {
+    "execution_prices": "MISSING",
+    "nav_winrate_capacity": "NOT_INVENTED",
+    "path": "research/option_pro_us_eod_v1/data/cache/offline_replay/daily_bars.parquet",
+    "reason": "cache has 10 rows for ['NVDA', 'SPY']; not the automotive eligible set, and vintage_status is download_time_not_pit. Descriptive forward is skipped.",
+    "rows": 10,
+    "securities": [
+      "NVDA",
+      "SPY"
+    ],
+    "status": "INSUFFICIENT"
+  },
+  "mean_baseline_ic_common": 0.10365190365190365,
+  "mean_common_n": 10.0,
+  "mean_delta": 0.008663558663558665,
+  "mean_variant_ic_common": 0.1123154623154623,
+  "member_counts": {
+    "F": 312,
+    "GM": 312,
+    "LCID": 312,
+    "LI": 312,
+    "NIO": 312,
+    "RIVN": 312,
+    "STLA": 312,
+    "TM": 312,
+    "TSLA": 312,
+    "XPEV": 312
+  },
+  "nav_winrate_capacity": "NOT_INVENTED",
+  "paired_diff_block_bootstrap": {
+    "2H": {
+      "block_len": 40,
+      "ci95": [
+        0.0031815054211843195,
+        0.014897760658252279
+      ],
+      "mean": 0.008663558663558665,
+      "method": "CIRCULAR_DATE_BLOCK_BOOTSTRAP",
+      "n_blocks": 41,
+      "n_observed": 312,
+      "n_samples_per_replicate": 1634,
+      "n_timeline": 1634,
+      "nonfinite_inputs_marked_missing": 0,
+      "note": "Year/two-year tables are descriptive. They are not this block bootstrap interval.",
+      "reason": null,
+      "repeats": 2000,
+      "seed": 174
+    },
+    "H": {
+      "block_len": 20,
+      "ci95": [
+        0.00357467629010894,
+        0.01442819904110227
+      ],
+      "mean": 0.008663558663558665,
+      "method": "CIRCULAR_DATE_BLOCK_BOOTSTRAP",
+      "n_blocks": 82,
+      "n_observed": 312,
+      "n_samples_per_replicate": 1634,
+      "n_timeline": 1634,
+      "nonfinite_inputs_marked_missing": 0,
+      "note": "Year/two-year tables are descriptive. They are not this block bootstrap interval.",
+      "reason": null,
+      "repeats": 2000,
+      "seed": 174
+    },
+    "block_lengths_preregistered": {
+      "2H": 40,
+      "H": 20
+    },
+    "descriptive_normal_on_observed_only": {
+      "ci95": [
+        0.004203577146806102,
+        0.013123540180311227
+      ],
+      "mean": 0.008663558663558665,
+      "method": "PREREGISTERED_NORMAL_APPROX",
+      "n": 312,
+      "reason": null
+    },
+    "repeats": 2000,
+    "seed": 174
+  },
+  "project_gaps": [
+    {
+      "gap": "\u4e09\u6863\u4e09\u5468\u671f",
+      "note": "Registry has conservative/balanced/aggressive and short/mid/long. Only balanced/mid with main label 20 was validated on B0.",
+      "status": "\u5df2\u5b9e\u73b0\u672a\u9a8c\u8bc1"
+    },
+    {
+      "gap": "\u5341\u5e74\u4ee5\u4e0a\u6570\u636e",
+      "note": "Frozen B0 window is 2018-01-02 through 2024-06-28. No 10-year-plus tape.",
+      "status": "\u672a\u505a"
+    },
+    {
+      "gap": "\u5386\u53f2\u6210\u5458/\u9000\u5e02/\u884c\u4e1a",
+      "note": "known_theme_members only. No as-of membership, delist, rename, or historical industry reconstitution tape.",
+      "status": "\u672a\u505a"
+    },
+    {
+      "gap": "\u72ec\u7acb\u7efc\u5408\u5c42",
+      "note": "No independent combiner or portfolio layer. Theme-family cards stay separate.",
+      "status": "\u672a\u505a"
+    },
+    {
+      "gap": "\u7ecf\u6d4e\u6267\u884c\u4e0e\u751f\u4ea7EOD\u63a5\u5165",
+      "note": "No raw trade prices or corporate-action evidence for the automotive pool. NAV, win-rate, slippage, and capacity are not invented. Production EOD is not wired.",
+      "status": "\u672a\u505a"
+    }
+  ],
+  "protocol": "us-eod-research-freeze-v1",
+  "quarterly": {
+    "2023Q1": {
+      "direction": "positive",
+      "mean_baseline_ic": -0.05393939393939394,
+      "mean_delta": 0.002424242424242422,
+      "mean_variant_ic": -0.051515151515151514,
+      "n": 20
+    },
+    "2023Q2": {
+      "direction": "positive",
+      "mean_baseline_ic": -0.05180840664711632,
+      "mean_delta": 0.007233626588465299,
+      "mean_variant_ic": -0.04457478005865103,
+      "n": 62
+    },
+    "2023Q3": {
+      "direction": "positive",
+      "mean_baseline_ic": 0.10437710437710439,
+      "mean_delta": 0.01924001924001924,
+      "mean_variant_ic": 0.12361712361712363,
+      "n": 63
+    },
+    "2023Q4": {
+      "direction": "positive",
+      "mean_baseline_ic": 0.20346320346320346,
+      "mean_delta": 0.007888407888407892,
+      "mean_variant_ic": 0.21135161135161137,
+      "n": 63
+    },
+    "2024Q1": {
+      "direction": "positive",
+      "mean_baseline_ic": 0.42513661202185793,
+      "mean_delta": 0.009538002980625937,
+      "mean_variant_ic": 0.4346746150024839,
+      "n": 61
+    },
+    "2024Q2": {
+      "direction": "negative",
+      "mean_baseline_ic": -0.2022551092318534,
+      "mean_delta": -0.0019732205778717443,
+      "mean_variant_ic": -0.20422832980972513,
+      "n": 43
+    }
+  },
+  "r2_files_not_overwritten": true,
+  "rejection_counts": {
+    "COMMON_N_BELOW_10": 747,
+    "DEFINED_PAIR": 312,
+    "LABEL_NOT_MATURE": 21,
+    "N0_NO_THEME_ROWS": 1,
+    "N0_OR_NO_COMMON": 553
+  },
+  "rescore_calls": 26368,
+  "run_signature": "a8ba5ab55f219b07c5796f1a3cd36e8ed9154eada2e21c58530f05d392306987",
+  "signal_label_only": "T_close_to_T_plus_H_close",
+  "source_row_sha256": "b490ba6d83965a0c3fe60c76afab8205fc2a0d76cc6577cdf23cb838e447f75a",
+  "stop": {
+    "do_not_retune_weights": true,
+    "holdout_unsealed": false,
+    "not_a_production_champion": true,
+    "outcome": "FROZEN_EXPLORATORY_CANDIDATE",
+    "reason": "H/2H incremental intervals stay positive on the seen window, but every leave-one member drops N below 10. Keep as a frozen exploratory candidate, not a winner.",
+    "two_cis_not_a_winner": true
+  },
+  "stop_rule": "FROZEN_EXPLORATORY_CANDIDATE",
+  "theme_family_status_n": 96,
+  "timeline_n": 1634,
+  "valid_end": "2024-05-30",
+  "valid_fraction": 0.1909424724602203,
+  "valid_pair_days": 312,
+  "valid_start": "2023-03-06",
+  "yearly": {
+    "2023": {
+      "direction": "positive",
+      "mean_baseline_ic": 0.07261072261072261,
+      "mean_delta": 0.010606060606060607,
+      "mean_variant_ic": 0.08321678321678322,
+      "n": 208
+    },
+    "2024": {
+      "direction": "positive",
+      "mean_baseline_ic": 0.16573426573426572,
+      "mean_delta": 0.00477855477855478,
+      "mean_variant_ic": 0.17051282051282052,
+      "n": 104
+    }
+  }
+}

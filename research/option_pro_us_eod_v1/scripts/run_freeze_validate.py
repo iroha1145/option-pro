@@ -325,6 +325,10 @@ def main() -> None:
             f"- {year}: n={row['n']} mean_delta={row['mean_delta']} baseline_ic={row['mean_baseline_ic']} variant_ic={row['mean_variant_ic']} ({row['direction']})"
             for year, row in (result.get("yearly") or {}).items()
         ]
+        quarter_lines = [
+            f"- {quarter}: n={row['n']} mean_delta={row['mean_delta']} baseline_ic={row['mean_baseline_ic']} variant_ic={row['mean_variant_ic']} ({row['direction']})"
+            for quarter, row in (result.get("quarterly") or {}).items()
+        ]
         leave_lines = [
             f"- {item['security_id']}: present={item['days_present']} lost_below_n={item['days_lost_below_n']} remain={item['remaining_defined_days']} thin={item['remaining_statistically_thin']}"
             for item in (result.get("leave_one_member") or [])
@@ -345,21 +349,27 @@ def main() -> None:
             "",
             "## Validation",
             "",
-            f"- timeline_n {result['timeline_n']}; valid_pair_days {result['valid_pair_days']}; start {result['valid_start']}; end {result['valid_end']}",
+            f"- timeline_n {result['timeline_n']}; valid_pair_days {result['valid_pair_days']}; start {result['valid_start']}; end {result['valid_end']}; fraction {result['valid_fraction']}",
             f"- rejection_counts {result['rejection_counts']}",
             f"- mean_common_n {result['mean_common_n']}",
             f"- mean_delta {result['mean_delta']}",
             f"- mean_baseline_ic_common {result['mean_baseline_ic_common']}",
             f"- mean_variant_ic_common {result['mean_variant_ic_common']}",
-            f"- eligible_signal_records {result['eligible_signal_records']}; matured_label {result['eligible_matured_label_records']}; overlap_groups {result['event_overlap_groups']}",
+            "- 312 is the defined common-set pair count on 2023-03-06 through 2024-05-30, not the 2018-2024 tape length.",
+            f"- eligible_signal_records {result['eligible_signal_records']}; matured_label {result['eligible_matured_label_records']}; fragments {result['event_fragments']}; overlap_groups {result['event_overlap_groups']}. Not 103 independent trades.",
             f"- daily sha256 `{daily_meta['sha256']}`",
             f"- public table rows {len(table)} (limit 500)",
             f"- execution_prices {result['execution_prices']}; nav_winrate_capacity {result['nav_winrate_capacity']}",
             f"- stop `{stop['outcome']}`: {stop['reason']}",
+            "- Two CIs above 0 are not a production winner. 2024Q2 mean_delta is negative and is retained.",
             "",
             "## Yearly (all retained)",
             "",
             *(yearly_lines or ["- none"]),
+            "",
+            "## Quarterly (all retained)",
+            "",
+            *(quarter_lines or ["- none"]),
             "",
             "## Leave-one member (N=10 to N=9 is insufficient)",
             "",
@@ -370,7 +380,6 @@ def main() -> None:
             *[f"- {item['gap']}: {item['status']}" for item in project_gaps()],
             "",
             "No production champion. No unseal. No new weight grid.",
-            "",
         ]
         text = "\n".join(audit) + "\n"
         (PACK / "algorithm_round2_freeze_audit.md").write_text(text, encoding="utf-8")
