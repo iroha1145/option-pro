@@ -1,6 +1,6 @@
 # PR #174 algorithm round 1
 
-Head `b44b18866b889d231335f7c6d88cba18ec967b4b`. Review anchor `155685daf93982d480fa06a06eb095f7bf8ae984` remains the B0 code/data freeze.
+Head `68ff3b787b53d21baf8f3746518a339ac86038a5`. Review anchor `155685daf93982d480fa06a06eb095f7bf8ae984` remains the B0 code/data freeze.
 B0 continuous files are not rewritten. Holdout 2024-07-01 stays sealed. executed_backtests = 0.
 
 ## Isolation
@@ -21,7 +21,7 @@ B0 continuous files are not rewritten. Holdout 2024-07-01 stays sealed. executed
 - Trading-session adjacency. Weekend/holiday gaps are not new events.
 - Count name: 去重事件组数. `independent_events` is null. 4514 is SUPERSEDED_EVENT_COUNT.
 - Baseline theme-report groups: 10203.
-- Baseline global-book groups: 10761.
+- Baseline global-book groups: 9813.
 
 ## Ablation
 
@@ -37,9 +37,9 @@ B0 continuous files are not rewritten. Holdout 2024-07-01 stays sealed. executed
 
 ## Date ranges
 
-- Raw window: 2018-01-02 through 2024-06-28, 1634 sessions, 2370 calendar days. `/252` is not evaluable years.
-- Empty all-window ratios match the B0 measurement pack for all 24 themes. Post-warmup and data-capable denominators are extra.
-- Local tests on this head: 56 PR174 round-1/measurement cases; full suite 3894 passed, 6 skipped.
+- Raw window: {'start': '2018-01-02', 'end': '2024-06-28', 'n_sessions': 1634, 'n_calendar_days': 2370, 'evaluable_years_div_252': None, 'note': 'session count is not evaluable years; /252 is SUPERSEDED'}.
+- Empty ratios use all-window / post-warmup / data-capable denominators.
+- `len(sessions)/252` is not evaluable years.
 
 ## Not done
 

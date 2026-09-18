@@ -28,7 +28,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 4055,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "run_preregistered_neighbors_only",
@@ -45,7 +56,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 4055,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "run_preregistered_neighbors_only",
@@ -62,7 +84,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 4055,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "inherit_shared_prior",
@@ -79,7 +112,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "无结论",
+        "action_zh": "继承共享先验",
+        "keep_or_cut": "不删减",
+        "evidence": {
+          "defined_ic_days_all_labels": 0,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       }
     ],
     "theme": "semiconductors"
@@ -113,7 +157,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 2762,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "run_preregistered_neighbors_only",
@@ -130,7 +185,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 2762,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "run_preregistered_neighbors_only",
@@ -147,7 +213,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 2753,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "run_preregistered_neighbors_only",
@@ -164,7 +241,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 2531,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       }
     ],
     "theme": "software"
@@ -198,7 +286,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "无结论",
+        "action_zh": "继承共享先验",
+        "keep_or_cut": "不删减",
+        "evidence": {
+          "defined_ic_days_all_labels": 0,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "inherit_shared_prior",
@@ -215,7 +314,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "无结论",
+        "action_zh": "继承共享先验",
+        "keep_or_cut": "不删减",
+        "evidence": {
+          "defined_ic_days_all_labels": 0,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "inherit_shared_prior",
@@ -232,7 +342,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "无结论",
+        "action_zh": "继承共享先验",
+        "keep_or_cut": "不删减",
+        "evidence": {
+          "defined_ic_days_all_labels": 0,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "inherit_shared_prior",
@@ -249,7 +370,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "无结论",
+        "action_zh": "继承共享先验",
+        "keep_or_cut": "不删减",
+        "evidence": {
+          "defined_ic_days_all_labels": 0,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       }
     ],
     "theme": "ai_cloud"
@@ -283,7 +415,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 2687,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "run_preregistered_neighbors_only",
@@ -300,7 +443,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 2687,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "run_preregistered_neighbors_only",
@@ -317,7 +471,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 2661,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "run_preregistered_neighbors_only",
@@ -334,7 +499,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 2471,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       }
     ],
     "theme": "biotech"
@@ -368,7 +544,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 4055,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "run_preregistered_neighbors_only",
@@ -385,7 +572,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 4055,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "run_preregistered_neighbors_only",
@@ -402,7 +600,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 4013,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "run_preregistered_neighbors_only",
@@ -419,7 +628,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 3149,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       }
     ],
     "theme": "healthcare"
@@ -453,7 +673,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "无结论",
+        "action_zh": "继承共享先验",
+        "keep_or_cut": "不删减",
+        "evidence": {
+          "defined_ic_days_all_labels": 0,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "inherit_shared_prior",
@@ -470,7 +701,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "无结论",
+        "action_zh": "继承共享先验",
+        "keep_or_cut": "不删减",
+        "evidence": {
+          "defined_ic_days_all_labels": 0,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "inherit_shared_prior",
@@ -487,7 +729,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "无结论",
+        "action_zh": "继承共享先验",
+        "keep_or_cut": "不删减",
+        "evidence": {
+          "defined_ic_days_all_labels": 0,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "inherit_shared_prior",
@@ -504,7 +757,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "无结论",
+        "action_zh": "继承共享先验",
+        "keep_or_cut": "不删减",
+        "evidence": {
+          "defined_ic_days_all_labels": 0,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       }
     ],
     "theme": "consumer_electronics"
@@ -538,7 +802,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 1139,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "run_preregistered_neighbors_only",
@@ -555,7 +830,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 1139,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "run_preregistered_neighbors_only",
@@ -572,7 +858,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 1112,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "run_preregistered_neighbors_only",
@@ -589,7 +886,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 908,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       }
     ],
     "theme": "automotive"
@@ -623,7 +931,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 1139,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "run_preregistered_neighbors_only",
@@ -640,7 +959,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 1139,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "run_preregistered_neighbors_only",
@@ -657,7 +987,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 1127,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "run_preregistered_neighbors_only",
@@ -674,7 +1015,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 908,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       }
     ],
     "theme": "ev_supply"
@@ -708,7 +1060,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 4055,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "run_preregistered_neighbors_only",
@@ -725,7 +1088,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 4055,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "run_preregistered_neighbors_only",
@@ -742,7 +1116,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 4046,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "inherit_shared_prior",
@@ -759,7 +1144,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "无结论",
+        "action_zh": "继承共享先验",
+        "keep_or_cut": "不删减",
+        "evidence": {
+          "defined_ic_days_all_labels": 0,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       }
     ],
     "theme": "finance"
@@ -793,7 +1189,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 1358,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "run_preregistered_neighbors_only",
@@ -810,7 +1217,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 1358,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "run_preregistered_neighbors_only",
@@ -827,7 +1245,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 1358,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "run_preregistered_neighbors_only",
@@ -844,7 +1273,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 1127,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       }
     ],
     "theme": "fintech"
@@ -878,7 +1318,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 4055,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "run_preregistered_neighbors_only",
@@ -895,7 +1346,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 4055,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "run_preregistered_neighbors_only",
@@ -912,7 +1374,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 4019,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "inherit_shared_prior",
@@ -929,7 +1402,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "无结论",
+        "action_zh": "继承共享先验",
+        "keep_or_cut": "不删减",
+        "evidence": {
+          "defined_ic_days_all_labels": 0,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       }
     ],
     "theme": "retail"
@@ -963,7 +1447,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "无结论",
+        "action_zh": "继承共享先验",
+        "keep_or_cut": "不删减",
+        "evidence": {
+          "defined_ic_days_all_labels": 0,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "inherit_shared_prior",
@@ -980,7 +1475,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "无结论",
+        "action_zh": "继承共享先验",
+        "keep_or_cut": "不删减",
+        "evidence": {
+          "defined_ic_days_all_labels": 0,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "inherit_shared_prior",
@@ -997,7 +1503,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "无结论",
+        "action_zh": "继承共享先验",
+        "keep_or_cut": "不删减",
+        "evidence": {
+          "defined_ic_days_all_labels": 0,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "inherit_shared_prior",
@@ -1014,7 +1531,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "无结论",
+        "action_zh": "继承共享先验",
+        "keep_or_cut": "不删减",
+        "evidence": {
+          "defined_ic_days_all_labels": 0,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       }
     ],
     "theme": "luxury"
@@ -1048,7 +1576,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "无结论",
+        "action_zh": "继承共享先验",
+        "keep_or_cut": "不删减",
+        "evidence": {
+          "defined_ic_days_all_labels": 0,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "inherit_shared_prior",
@@ -1065,7 +1604,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "无结论",
+        "action_zh": "继承共享先验",
+        "keep_or_cut": "不删减",
+        "evidence": {
+          "defined_ic_days_all_labels": 0,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "inherit_shared_prior",
@@ -1082,7 +1632,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "无结论",
+        "action_zh": "继承共享先验",
+        "keep_or_cut": "不删减",
+        "evidence": {
+          "defined_ic_days_all_labels": 0,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "inherit_shared_prior",
@@ -1099,7 +1660,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "无结论",
+        "action_zh": "继承共享先验",
+        "keep_or_cut": "不删减",
+        "evidence": {
+          "defined_ic_days_all_labels": 0,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       }
     ],
     "theme": "media_streaming"
@@ -1133,7 +1705,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "无结论",
+        "action_zh": "继承共享先验",
+        "keep_or_cut": "不删减",
+        "evidence": {
+          "defined_ic_days_all_labels": 0,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "inherit_shared_prior",
@@ -1150,7 +1733,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "无结论",
+        "action_zh": "继承共享先验",
+        "keep_or_cut": "不删减",
+        "evidence": {
+          "defined_ic_days_all_labels": 0,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "inherit_shared_prior",
@@ -1167,7 +1761,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "无结论",
+        "action_zh": "继承共享先验",
+        "keep_or_cut": "不删减",
+        "evidence": {
+          "defined_ic_days_all_labels": 0,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "inherit_shared_prior",
@@ -1184,7 +1789,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "无结论",
+        "action_zh": "继承共享先验",
+        "keep_or_cut": "不删减",
+        "evidence": {
+          "defined_ic_days_all_labels": 0,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       }
     ],
     "theme": "social_internet"
@@ -1218,7 +1834,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "无结论",
+        "action_zh": "继承共享先验",
+        "keep_or_cut": "不删减",
+        "evidence": {
+          "defined_ic_days_all_labels": 0,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "run_preregistered_neighbors_only",
@@ -1235,7 +1862,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 4055,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "run_preregistered_neighbors_only",
@@ -1252,7 +1890,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 4013,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "inherit_shared_prior",
@@ -1269,7 +1918,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "无结论",
+        "action_zh": "继承共享先验",
+        "keep_or_cut": "不删减",
+        "evidence": {
+          "defined_ic_days_all_labels": 0,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       }
     ],
     "theme": "energy"
@@ -1303,7 +1963,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 998,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "run_preregistered_neighbors_only",
@@ -1320,7 +1991,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 998,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "run_preregistered_neighbors_only",
@@ -1337,7 +2019,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 989,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "inherit_shared_prior",
@@ -1354,7 +2047,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "无结论",
+        "action_zh": "继承共享先验",
+        "keep_or_cut": "不删减",
+        "evidence": {
+          "defined_ic_days_all_labels": 0,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       }
     ],
     "theme": "utilities"
@@ -1388,7 +2092,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "无结论",
+        "action_zh": "继承共享先验",
+        "keep_or_cut": "不删减",
+        "evidence": {
+          "defined_ic_days_all_labels": 0,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "inherit_shared_prior",
@@ -1405,7 +2120,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "无结论",
+        "action_zh": "继承共享先验",
+        "keep_or_cut": "不删减",
+        "evidence": {
+          "defined_ic_days_all_labels": 0,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "inherit_shared_prior",
@@ -1422,7 +2148,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "无结论",
+        "action_zh": "继承共享先验",
+        "keep_or_cut": "不删减",
+        "evidence": {
+          "defined_ic_days_all_labels": 0,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "inherit_shared_prior",
@@ -1439,7 +2176,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "无结论",
+        "action_zh": "继承共享先验",
+        "keep_or_cut": "不删减",
+        "evidence": {
+          "defined_ic_days_all_labels": 0,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       }
     ],
     "theme": "defense_aero"
@@ -1473,7 +2221,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "无结论",
+        "action_zh": "继承共享先验",
+        "keep_or_cut": "不删减",
+        "evidence": {
+          "defined_ic_days_all_labels": 0,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "inherit_shared_prior",
@@ -1490,7 +2249,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "无结论",
+        "action_zh": "继承共享先验",
+        "keep_or_cut": "不删减",
+        "evidence": {
+          "defined_ic_days_all_labels": 0,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "inherit_shared_prior",
@@ -1507,7 +2277,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "无结论",
+        "action_zh": "继承共享先验",
+        "keep_or_cut": "不删减",
+        "evidence": {
+          "defined_ic_days_all_labels": 0,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "inherit_shared_prior",
@@ -1524,7 +2305,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "无结论",
+        "action_zh": "继承共享先验",
+        "keep_or_cut": "不删减",
+        "evidence": {
+          "defined_ic_days_all_labels": 0,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       }
     ],
     "theme": "airlines"
@@ -1558,7 +2350,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 4040,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "run_preregistered_neighbors_only",
@@ -1575,7 +2378,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 4040,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "run_preregistered_neighbors_only",
@@ -1592,7 +2406,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 3995,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "inherit_shared_prior",
@@ -1609,7 +2434,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "无结论",
+        "action_zh": "继承共享先验",
+        "keep_or_cut": "不删减",
+        "evidence": {
+          "defined_ic_days_all_labels": 0,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       }
     ],
     "theme": "real_estate"
@@ -1643,7 +2479,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "无结论",
+        "action_zh": "继承共享先验",
+        "keep_or_cut": "不删减",
+        "evidence": {
+          "defined_ic_days_all_labels": 0,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "inherit_shared_prior",
@@ -1660,7 +2507,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "无结论",
+        "action_zh": "继承共享先验",
+        "keep_or_cut": "不删减",
+        "evidence": {
+          "defined_ic_days_all_labels": 0,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "inherit_shared_prior",
@@ -1677,7 +2535,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "无结论",
+        "action_zh": "继承共享先验",
+        "keep_or_cut": "不删减",
+        "evidence": {
+          "defined_ic_days_all_labels": 0,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "inherit_shared_prior",
@@ -1694,7 +2563,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "无结论",
+        "action_zh": "继承共享先验",
+        "keep_or_cut": "不删减",
+        "evidence": {
+          "defined_ic_days_all_labels": 0,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       }
     ],
     "theme": "crypto"
@@ -1728,7 +2608,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 3341,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "run_preregistered_neighbors_only",
@@ -1745,7 +2636,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 3341,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "run_preregistered_neighbors_only",
@@ -1762,7 +2664,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 3329,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "inherit_shared_prior",
@@ -1779,7 +2692,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "无结论",
+        "action_zh": "继承共享先验",
+        "keep_or_cut": "不删减",
+        "evidence": {
+          "defined_ic_days_all_labels": 0,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       }
     ],
     "theme": "china_adr"
@@ -1813,7 +2737,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "无结论",
+        "action_zh": "继承共享先验",
+        "keep_or_cut": "不删减",
+        "evidence": {
+          "defined_ic_days_all_labels": 0,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "inherit_shared_prior",
@@ -1830,7 +2765,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "无结论",
+        "action_zh": "继承共享先验",
+        "keep_or_cut": "不删减",
+        "evidence": {
+          "defined_ic_days_all_labels": 0,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "inherit_shared_prior",
@@ -1847,7 +2793,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "无结论",
+        "action_zh": "继承共享先验",
+        "keep_or_cut": "不删减",
+        "evidence": {
+          "defined_ic_days_all_labels": 0,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "inherit_shared_prior",
@@ -1864,7 +2821,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "无结论",
+        "action_zh": "继承共享先验",
+        "keep_or_cut": "不删减",
+        "evidence": {
+          "defined_ic_days_all_labels": 0,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       }
     ],
     "theme": "telecom"
@@ -1898,7 +2866,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 4055,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "run_preregistered_neighbors_only",
@@ -1915,7 +2894,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 4055,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "run_preregistered_neighbors_only",
@@ -1932,7 +2922,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 4034,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "inherit_shared_prior",
@@ -1949,7 +2950,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "无结论",
+        "action_zh": "继承共享先验",
+        "keep_or_cut": "不删减",
+        "evidence": {
+          "defined_ic_days_all_labels": 0,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       }
     ],
     "theme": "industrials"
@@ -1983,7 +2995,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 3767,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "run_preregistered_neighbors_only",
@@ -2000,7 +3023,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 3767,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "run_preregistered_neighbors_only",
@@ -2017,7 +3051,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 3767,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       },
       {
         "action": "run_preregistered_neighbors_only",
@@ -2034,7 +3079,18 @@
           "N_M_PLUS_5PP",
           "N_S_PLUS_5PP",
           "N_SCORE_FLOOR_PLUS_10PCT"
-        ]
+        ],
+        "verdict": "继续检验",
+        "action_zh": "只跑已预登记的三个邻近变体后暂停",
+        "keep_or_cut": "不删减不晋升",
+        "evidence": {
+          "defined_ic_days_all_labels": 3149,
+          "next_neighbors": [
+            "N_M_PLUS_5PP",
+            "N_S_PLUS_5PP",
+            "N_SCORE_FLOOR_PLUS_10PCT"
+          ]
+        }
       }
     ],
     "theme": "etfs"
