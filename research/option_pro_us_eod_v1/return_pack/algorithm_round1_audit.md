@@ -1,9 +1,9 @@
 # PR #174 algorithm round 1
 
-Head `432ac3f6660bc5abdc38df2712d34ce2501bc6de`. Review anchor `155685daf93982d480fa06a06eb095f7bf8ae984` remains the B0 code/data freeze.
+Head `5754b4652c618e51f9eee42a958ee9fa58a109d0`. Review anchor `155685daf93982d480fa06a06eb095f7bf8ae984` remains the B0 code/data freeze.
 B0 continuous files are not rewritten. Holdout 2024-07-01 stays sealed. executed_backtests = 0.
 
-Local full suite on this head: 3895 passed, 6 skipped, 325.49s. GitHub `test` on the same SHA is still in progress (Python tests already green; browser/container steps remaining). Do not treat this file as current-head CI success until both workflow runs are terminal success.
+Local full suite on predecessor `432ac3f6`: 3895 passed, 6 skipped, 325.49s. This head only removes the extra EOF blank that failed `git diff --check`. GitHub `test` on `5754b465` is terminal success on both jobs.
 
 ## Isolation
 
@@ -64,11 +64,13 @@ Status key: PROVED = current file/test/command evidence; UNVERIFIED = required b
 | 24-theme balanced/mid ablation + 3 neighbors | `algorithm_round1_ablation_pairing.json` 3774 cells; neighbors registered in manifest before IC | PROVED |
 | Theme cards keep/cut/continue/inherit | 51 继续检验 / 45 无结论+继承共享先验 / 0 删减; no champion | PROVED |
 | Snapshot `geometry_close` | `snapshot.py` + `ledger.py`; `test_snapshot_rows_carry_geometry_close` | PROVED |
-| Local full suite this head | `/opt/cursor/artifacts/pytest_432ac3f6.log`: 3895 passed, 6 skipped | PROVED |
-| Current-head GitHub CI | `432ac3f6` PR `35311320321` failed on `git diff --check` (`algorithm_round1_audit.md` new blank line at EOF). Push `35311315536` was still in browser steps. This commit removes the extra EOF blank. New-head CI is not yet recorded. | FAILED_THEN_FIX |
+| Local full suite this head | `/opt/cursor/artifacts/pytest_432ac3f6.log`: 3895 passed, 6 skipped on `432ac3f6`; this SHA only removes the EOF blank | PROVED |
+| Current-head GitHub CI | `5754b465` push `35312765304` and PR `35312768981` both `test` jobs completed success. `432ac3f6` PR `35311320321` failed on EOF blank and is historical only. | PROVED |
 | Portfolio / raw CA book | not run | NOT_DONE |
 | New E / weekly / macro | planned only | NOT_DONE |
 | Holdout / merge / 864 / executed_backtests | sealed; no merge; 864 not claimed; `executed_backtests=0` | PROVED invariant |
 
-Current-head CI is the remaining gate. This audit is not a pass slip for GitHub.
-GitHub `test` on `432ac3f6` PR run 35311320321 failed at `Check changed source lines for whitespace errors` (`algorithm_round1_audit.md` new blank line at EOF). Push run 35311315536 was still in browser steps. This file is rewritten without a trailing blank line.
+GitHub `test` on research head `5754b465` is terminal success:
+push https://github.com/iroha1145/option-pro/actions/runs/35312765304
+pull_request https://github.com/iroha1145/option-pro/actions/runs/35312768981
+`432ac3f6` PR run 35311320321 remains the historical EOF-blank failure.
