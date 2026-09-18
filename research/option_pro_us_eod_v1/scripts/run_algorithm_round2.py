@@ -31,8 +31,8 @@ from app.services.research_eod_v1.round1b import (  # noqa: E402
     preregistered_realloc_neighbors,
 )
 from app.services.research_eod_v1.round2 import (  # noqa: E402
+    _is_nonfinite,
     analyze_targeted_candidates,
-    scan_tape_nonfinite,
     select_targeted_candidates,
 )
 from app.services.research_eod_v1.runs import cache_hit_definitions, run_dir_name, run_signature  # noqa: E402
@@ -66,16 +66,51 @@ def _rel(path: Path) -> str:
     return str(path.relative_to(ROOT) if path.is_relative_to(ROOT) else path)
 
 
-def _iter_rows(path: Path, *, limit: int | None):
+def _iter_rows(path: Path, *, limit: int | None, scan_box: dict | None = None):
     count = 0
     with path.open("rb") as handle:
         for raw in handle:
             count += 1
             if count % 200_000 == 0:
                 print(json.dumps({"rows_read": count}), flush=True)
-            yield json.loads(raw)
+            row = json.loads(raw)
+            if scan_box is not None:
+                score_bad = _is_nonfinite(row.get("score"))
+                label_bad = _is_nonfinite(row.get("label"))
+                if score_bad:
+                    scan_box["nonfinite_score_rows"] += 1
+                if label_bad:
+                    scan_box["nonfinite_label_rows"] += 1
+                if (score_bad or label_bad) and len(scan_box["examples"]) < 5:
+                    scan_box["examples"].append(
+                        {
+                            "signal_session": row.get("signal_session"),
+                            "theme_id": row.get("theme_id"),
+                            "security_id": row.get("security_id"),
+                            "score": row.get("score"),
+                            "label": row.get("label"),
+                        }
+                    )
+                scan_box["rows_scanned"] += 1
+            yield row
             if limit is not None and count >= limit:
                 return
+
+
+def _finalize_scan(scan_box: dict) -> dict:
+    present = scan_box["nonfinite_score_rows"] > 0 or scan_box["nonfinite_label_rows"] > 0
+    return {
+        **scan_box,
+        "present_on_tape": present,
+        "implication": (
+            "B0 tape contains non-finite score/label rows; pairing now rejects them before the common set."
+            if present
+            else (
+                "B0 tape scan found no non-finite score/label. This round only adds a guard. "
+                "It does not imply that prior pairing results are invalid."
+            )
+        ),
+    }
 
 
 def _write_daily_artifact(out: Path, sessions: list[str], series: list[dict], *, public: bool) -> dict[str, str]:
@@ -156,7 +191,19 @@ def main() -> None:
     out = args.out_dir if args.out_dir is not None else RUNS / f"{run_dir_name(signature)}_{kind}"
     out.mkdir(parents=True, exist_ok=True)
     public = args.limit is None
-    scan = scan_tape_nonfinite(ROWS, limit=args.limit)
+    scan_box = {
+        "rows_scanned": 0,
+        "nonfinite_score_rows": 0,
+        "nonfinite_label_rows": 0,
+        "examples": [],
+    }
+    analysis = analyze_rows_r1b(
+        _iter_rows(ROWS, limit=args.limit, scan_box=scan_box),
+        registry,
+        profile="balanced",
+        horizon="mid",
+    )
+    scan = _finalize_scan(scan_box)
     manifest = {
         "round": "algorithm_round2",
         "reviewed_anchor": REVIEW_ANCHOR,
@@ -199,12 +246,6 @@ def main() -> None:
         _write(PACK / "algorithm_round2_manifest.json", manifest)
         _write(PACK / "algorithm_round2_capability_matrix.json", coverage)
         _write(PACK / "algorithm_round2_b0_nonfinite_scan.json", scan)
-    analysis = analyze_rows_r1b(
-        _iter_rows(ROWS, limit=args.limit),
-        registry,
-        profile="balanced",
-        horizon="mid",
-    )
     sessions = analysis.pop("daily_pair_sessions")
     series = analysis.pop("daily_pair_series")
     daily_meta = _write_daily_artifact(out, sessions, series, public=public)
