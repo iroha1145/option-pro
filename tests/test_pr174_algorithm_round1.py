@@ -319,9 +319,11 @@ def test_g_ablation_is_absent_when_coverage_fails() -> None:
     semi_d = iter_variants("semiconductors", "D_residual_momentum", registry, matrix[("semiconductors", "D_residual_momentum")])
     software_d = iter_variants("software", "D_residual_momentum", registry, matrix[("software", "D_residual_momentum")])
     assert not g_is_available(matrix[("semiconductors", "D_residual_momentum")])
-    assert g_is_available(matrix[("software", "D_residual_momentum")])
+    assert not g_is_available(matrix[("software", "D_residual_momentum")])
+    assert matrix[("software", "D_residual_momentum")]["can_score_without_G"] is True
+    assert matrix[("software", "D_residual_momentum")]["actual_G_observed"] is False
     assert "ABLATION_DROP_G" not in {item.variant_id for item in semi_d}
-    assert "ABLATION_DROP_G" in {item.variant_id for item in software_d}
+    assert "ABLATION_DROP_G" not in {item.variant_id for item in software_d}
     assert PRICE_ONLY_DIAGNOSTIC in {item.variant_id for item in semi_d}
     assert D_MARKET_RESIDUAL_DIAGNOSTIC in {item.variant_id for item in semi_d}
     assert {spec["variant_id"] for spec in NEIGHBOR_SPECS} <= {item.variant_id for item in semi_d}

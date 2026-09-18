@@ -192,8 +192,6 @@ def register_independent_events(
     The count is 去重事件组数. It is not N_eff. Calendar-day gap>1 is SUPERSEDED.
     """
 
-    from app.services.research_eod_v1.calendar_asof import next_session
-
     if not continuous_calendar:
         return {
             "independent_events": None,
@@ -204,6 +202,8 @@ def register_independent_events(
             "reason": "SAMPLED_STREAM_CANNOT_CONFIRM_CONTINUITY",
             "old_count_4514": "SUPERSEDED_EVENT_COUNT",
         }
+    from app.services.research_eod_v1.event_groups import cluster_fragments, count_groups
+
     by_key: dict[tuple[str, str, str, str, str], list[date]] = defaultdict(list)
     for row in rows:
         if row.get("final_eligible") is not True and row.get("status") != "eligible":
@@ -214,19 +214,21 @@ def register_independent_events(
         day = session if isinstance(session, date) else date.fromisoformat(str(session)[:10])
         by_key[event_span_key(row)].append(day)
     groups = 0
-    for days in by_key.values():
-        ordered = sorted(set(days))
-        if not ordered:
-            continue
-        groups += 1
-        previous = ordered[0]
-        for day in ordered[1:]:
-            if next_session(previous) != day:
-                groups += 1
-            previous = day
+    overlap_groups = 0
+    for key, days in by_key.items():
+        fragments = cluster_fragments(days)
+        groups += len(fragments)
+        label_h = 5
+        try:
+            label_h = int(key[-1])
+        except (TypeError, ValueError):
+            label_h = 5
+        overlap_groups += count_groups(days, label_horizon=label_h)["label_horizon_overlap_groups"]
     return {
         "independent_events": None,
         "deduped_event_groups": groups,
+        "label_horizon_overlap_groups": overlap_groups,
+        "consecutive_trigger_fragments": groups,
         "sampled_eligible_set_changes": None,
         "usable_for_independent_sample": False,
         "definition": "SECURITY_FAMILY_HORIZON_LABEL_TRADING_SESSION_OVERLAP",

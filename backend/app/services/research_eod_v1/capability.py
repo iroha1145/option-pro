@@ -78,6 +78,10 @@ def coverage_row(
     elif family == "C_trend_pullback":
         required = ("T", "M", "S", "R", "P", "V")
     scored = score_features(features, weights, coverage_min=coverage_min, required=required)
+    availability = g_availability(
+        {"score_status": scored.status, "missing": list(scored.missing), "actual_G_observed": False},
+        factors=features,
+    )
     return {
         "theme": theme,
         "family": family,
@@ -89,6 +93,9 @@ def coverage_row(
         "score_with_other_seven_factors_at_100": scored.score,
         "score_status": scored.status,
         "missing": list(scored.missing),
+        "actual_G_observed": availability["actual_G_observed"],
+        "can_score_without_G": availability["can_score_without_G"],
+        "g_is_available": availability["g_is_available"],
         "track": FULL_EIGHT_FACTOR,
         "note": "G missing is a data-capability failure, not a strategy loss",
     }
@@ -128,6 +135,8 @@ def ablation_weights(weights: Mapping[str, float], dropped: str) -> dict[str, fl
 
 
 def neighbor_weights(weights: Mapping[str, float], factor: str, delta: float) -> dict[str, float]:
+    """Legacy raw bump: add delta then divide by 1+delta. Historical R1 only."""
+
     updated = {key: float(weights.get(key) or 0.0) for key in FACTORS}
     updated[factor] = updated[factor] + delta
     if updated[factor] <= 0:
@@ -135,10 +144,67 @@ def neighbor_weights(weights: Mapping[str, float], factor: str, delta: float) ->
     return renormalize(updated)
 
 
-def g_is_available(coverage: Mapping[str, Any]) -> bool:
-    """G is available only when the eight-factor model can still score without it."""
+def realloc_plus_pp(weights: Mapping[str, float], factor: str, delta: float) -> dict[str, float]:
+    """True +N pp: new_f = old_f + delta; other nonzero weights * (1-new_f)/(1-old_f).
 
+    Frozen-zero G is not resurrected. Out-of-range targets are rejected.
+    """
+
+    current = {key: float(weights.get(key) or 0.0) for key in FACTORS}
+    old_f = current.get(factor) or 0.0
+    new_f = old_f + float(delta)
+    if new_f <= 0.0 or new_f >= 1.0:
+        raise ValueError(f"neighbor {factor}={new_f} is outside (0, 1)")
+    if old_f >= 1.0:
+        raise ValueError("cannot reallocate from a one-factor weight")
+    scale = (1.0 - new_f) / (1.0 - old_f)
+    out: dict[str, float] = {}
+    for key in FACTORS:
+        value = current.get(key) or 0.0
+        if key == factor:
+            out[key] = new_f
+        elif value <= 0.0:
+            out[key] = 0.0
+        else:
+            out[key] = value * scale
+    return out
+
+
+def can_score_without_g(coverage: Mapping[str, Any]) -> bool:
     return coverage.get("score_status") == "SCORED_NOT_SETUP_VALIDATED"
+
+
+def actual_g_observed(coverage: Mapping[str, Any], *, factors: Mapping[str, Any] | None = None) -> bool:
+    """G is observed only when a finite G value is present. Missing G is not 'available'."""
+
+    if factors is not None:
+        value = factors.get("G")
+        try:
+            return value is not None and float(value) == float(value)
+        except (TypeError, ValueError):
+            return False
+    if "actual_G_observed" in coverage:
+        return bool(coverage.get("actual_G_observed"))
+    missing = coverage.get("missing") or ()
+    if "G" in set(missing):
+        return False
+    return False
+
+
+def g_availability(coverage: Mapping[str, Any], *, factors: Mapping[str, Any] | None = None) -> dict[str, bool]:
+    observed = actual_g_observed(coverage, factors=factors)
+    scoreable = can_score_without_g(coverage)
+    return {
+        "actual_G_observed": observed,
+        "can_score_without_G": scoreable,
+        "g_is_available": observed,
+    }
+
+
+def g_is_available(coverage: Mapping[str, Any]) -> bool:
+    """True only when G is actually observed. Scoring without G is a different flag."""
+
+    return g_availability(coverage)["g_is_available"]
 
 
 def rescore_row(

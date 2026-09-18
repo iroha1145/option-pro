@@ -8,6 +8,8 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from app.services.research_eod_v1.source_bind import FORBIDDEN_LITERAL_HASH, assert_content_hash
+
 
 class CheckpointSignatureError(ValueError):
     """Saved done_sessions belong to another run signature."""
@@ -34,23 +36,44 @@ def run_signature(
     available_factors: Sequence[str],
     timing_policy: str,
     registry_version: Any = None,
+    capability_mask: Mapping[str, Any] | None = None,
+    variant_definitions: Sequence[Mapping[str, Any]] | None = None,
+    event_rule: str | None = None,
+    pairing_rule: str | None = None,
+    statistics_rule: str | None = None,
+    block_lengths: Mapping[str, Any] | None = None,
+    bootstrap_seed: int | None = None,
+    code_hashes: Mapping[str, str] | None = None,
+    require_content_hash: bool = False,
 ) -> str:
+    if data_hash == FORBIDDEN_LITERAL_HASH:
+        raise ValueError("literal b0_measurement_factor_rows is not a content hash")
+    if require_content_hash:
+        assert_content_hash(data_hash)
     body = {
         "available_factors": list(available_factors),
+        "block_lengths": dict(block_lengths or {}),
+        "bootstrap_seed": bootstrap_seed,
+        "capability_mask": dict(capability_mask or {}),
+        "code_hashes": dict(code_hashes or {}),
         "data_hash": data_hash,
         "end": str(end),
+        "event_rule": event_rule,
         "feature_version": feature_version,
         "horizon": horizon,
         "label_horizons": list(label_horizons),
         "member_policy": member_policy,
+        "pairing_rule": pairing_rule,
         "profile": profile,
         "reference_policy": reference_policy,
         "registry": registry,
         "registry_version": registry_version if registry_version is not None else registry.get("schema_version"),
         "start": str(start),
+        "statistics_rule": statistics_rule,
         "statistics_version": statistics_version,
         "timing_policy": timing_policy,
         "universe_version": universe_version,
+        "variant_definitions": list(variant_definitions or []),
     }
     return hashlib.sha256(canonical_json(body).encode()).hexdigest()
 

@@ -185,7 +185,37 @@ def _setup_or_episode(
         if isinstance(row.get("setup_id"), str) and ":" in str(row.get("setup_id")):
             return str(row.get("setup_id"))
         return None
-    return _signal_episode_id(row, theme_id, algorithm, profile, horizon)
+    episode = _signal_episode_id(row, theme_id, algorithm, profile, horizon)
+    if episode in {"eligible", "rejected"}:
+        raise ValueError("eligible/rejected is not a structural setup_id")
+    return episode
+
+
+def setup_identity(
+    row: Mapping[str, Any],
+    theme_id: str,
+    algorithm: str,
+    profile: str,
+    horizon: str,
+) -> dict[str, Any]:
+    """Keep frozen setup_id, episode id, and statistical cluster_id separate."""
+
+    episode = _signal_episode_id(row, theme_id, algorithm, profile, horizon)
+    cluster = row.get("cluster_id")
+    if algorithm == "B_confirmed_base_breakout":
+        setup = _setup_or_episode(row, theme_id, algorithm, profile, horizon)
+        return {
+            "setup_id": setup,
+            "signal_episode_id": episode,
+            "cluster_id": cluster,
+            "setup_id_status": "FROZEN_SETUP" if setup else "SOURCE_SETUP_ID_UNRECOVERABLE",
+        }
+    return {
+        "setup_id": None,
+        "signal_episode_id": episode,
+        "cluster_id": cluster,
+        "setup_id_status": "SIGNAL_EPISODE",
+    }
 
 
 def persist_factor_rows(rows: Sequence[Mapping[str, Any]], path: Path) -> str:
