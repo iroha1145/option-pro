@@ -1,0 +1,27 @@
+{
+  "left_tail_p05": {
+    "algorithm": "order_statistics_index_floor_0.05*(n-1)",
+    "index": 0,
+    "meaning": "worst name that day under this lower-order convention, not a time-series portfolio VaR",
+    "n_names": 10,
+    "object": "cross_section_name_return_on_session"
+  },
+  "not_baseline_strategy_return": true,
+  "not_candidate_strategy_return": true,
+  "overnight_gap": "T_close_to_T_plus_1_open_is_not_NEXT_DAY_CONFIRM",
+  "source_pack": "algorithm_data_readiness_automotive_descriptive.json",
+  "statistic": "equal_weight_close_to_close_current_list_background",
+  "universe": [
+    "F",
+    "GM",
+    "LCID",
+    "LI",
+    "NIO",
+    "RIVN",
+    "STLA",
+    "TM",
+    "TSLA",
+    "XPEV"
+  ],
+  "window": "T_close_to_T_plus_20_close_allowed_development"
+}

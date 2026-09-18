@@ -1,0 +1,7 @@
+{
+  "actual_helper_earliest_entry": "2024-04-03",
+  "descriptive_overnight_endpoint": "2024-04-02",
+  "interpretation": "T-to-T+1 gap is descriptive, not a tradable NEXT_DAY_CONFIRM return",
+  "policy_available_at": "2024-04-02T16:30:00-04:00",
+  "signal_date": "2024-04-01"
+}

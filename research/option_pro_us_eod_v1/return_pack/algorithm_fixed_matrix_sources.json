@@ -1,0 +1,12 @@
+{
+  "calendar_version": "nyse-official-adhoc-v1",
+  "dataset_version": "us-eod-fixed-matrix-yahoo-v1",
+  "executed_backtests": 0,
+  "expected_b0_sha256": "b490ba6d83965a0c3fe60c76afab8205fc2a0d76cc6577cdf23cb838e447f75a",
+  "expected_yahoo_sha256": "d910d86505e1914eb14aaacea2ddabc8d61b1f097ab83c513f07750539f32d48",
+  "file_rows_are_not_ten_year_evaluable": true,
+  "freeze_readiness_b0_not_overwritten": true,
+  "protocol": "us-eod-research-fixed-matrix-v1",
+  "trusted_yahoo_relative": "research/option_pro_us_eod_v1/data/cache/round3_yahoo_abcd/bars.pkl",
+  "versions_not_spliced": true
+}

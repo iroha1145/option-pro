@@ -1,0 +1,6 @@
+{
+  "allowed_development_rows": 331010,
+  "file_rows": 449597,
+  "file_span_is_not_ten_year_evaluable": true,
+  "holdout_isolated_rows": 118587
+}

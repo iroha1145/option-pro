@@ -1,0 +1,27 @@
+{
+  "counts": {
+    "INSUFFICIENT": 1,
+    "VALID": 213
+  },
+  "execution_gates": "EXECUTION_GATES_UNVERIFIED",
+  "insufficient_n": 1,
+  "invalid_n": 0,
+  "isolated_invalid_does_not_fail_pool": true,
+  "isolated_outliers": {
+    "CRWV": {
+      "after_holdout": 369,
+      "allowed_n": 0,
+      "complete_t_days": 0,
+      "contract": "ok",
+      "first": "2025-03-28",
+      "last": "2026-09-16",
+      "rejections": {},
+      "status": "INSUFFICIENT"
+    }
+  },
+  "pool_has_valid_members": true,
+  "spy_status": "VALID",
+  "spy_valid_does_not_pass_pool": true,
+  "unverified_n": 0,
+  "valid_n": 213
+}
