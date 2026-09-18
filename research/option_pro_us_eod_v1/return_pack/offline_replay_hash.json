@@ -1,0 +1,10 @@
+{
+  "command": "PYTHONPATH=backend python research/option_pro_us_eod_v1/scripts/export_offline_replay.py",
+  "content_sha256": "f8de36f35ffdfcd532f84fecbb2258d0aa99dd2d06a2de3337f09e34bff77044",
+  "rows": 5,
+  "symbols": ["SPY", "NVDA"],
+  "format": "LocalParquetProvider combined daily_bars.parquet",
+  "path": "research/option_pro_us_eod_v1/data/cache/offline_replay/daily_bars.parquet",
+  "in_git": false,
+  "note": "Hash is of the offline parquet bytes, not the path list. File stays gitignored."
+}

@@ -1,0 +1,71 @@
+{
+  "head_note": "after-close recapture is a new version; old 13:24 retrieved_at stays frozen",
+  "capture_clock": "2026-09-16T20:13:53.209991+00:00",
+  "calendar_last_completed_session": "2026-09-16",
+  "last_complete_eod_session": "2026-09-15",
+  "last_proven_finalized": "2026-09-15",
+  "eod_status": "VENDOR_LATE",
+  "capture_id": "cap_0001_174b14e6aa93",
+  "predecessor_id": "cap_0000_4f53cda18c2b",
+  "predecessor_retrieved_at": "2026-09-16T17:24:41.368841+00:00",
+  "recapture_retrieved_at": "2026-09-16T20:13:53.209991+00:00",
+  "old_manifest_retrieved_at": "2026-09-16T17:24:41.368841+00:00",
+  "old_manifest_retrieved_at_unchanged": true,
+  "requested_tickers": 214,
+  "downloaded_tickers": 214,
+  "bar_count": 4060,
+  "calendar_session_bar_count": 208,
+  "isolated_unfinalized_or_partial_bars": 208,
+  "content_sha256": "174b14e6aa93f059a2fa2d8b6550f881a571f5c16fa071861a8a7f494501caa5",
+  "cache_sha256": "827d706e76ea2abeca82616d0a6d8ab227c96160dbd08e5def52c91a17cbbfdc",
+  "cache_path": "research/option_pro_us_eod_v1/data/cache/round3_after_close/last_bars.pkl",
+  "provider_failures": [
+    {
+      "symbol": "C",
+      "stage": "ohlc",
+      "session": "2026-09-16",
+      "error": "OHLC_VIOLATION"
+    },
+    {
+      "symbol": "TFC",
+      "stage": "ohlc",
+      "session": "2026-09-16",
+      "error": "OHLC_VIOLATION"
+    },
+    {
+      "symbol": "XYZ",
+      "stage": "ohlc",
+      "session": "2026-09-16",
+      "error": "OHLC_VIOLATION"
+    },
+    {
+      "symbol": "UPS",
+      "stage": "ohlc",
+      "session": "2026-09-16",
+      "error": "OHLC_VIOLATION"
+    },
+    {
+      "symbol": "FDX",
+      "stage": "ohlc",
+      "session": "2026-09-16",
+      "error": "OHLC_VIOLATION"
+    },
+    {
+      "symbol": "XLE",
+      "stage": "ohlc",
+      "session": "2026-09-16",
+      "error": "OHLC_VIOLATION"
+    }
+  ],
+  "calendar_only_session_without_finalization": "2026-09-16",
+  "executed_snapshots": 0,
+  "executed_backtests": 0,
+  "winners": [],
+  "notes": [
+    "Yahoo last-root recapture after the regular 16:00 ET close",
+    "vendor finalized_at is unavailable; 2026-09-16 is not promoted to COMPLETE_EOD",
+    "old INVALID_EOD_CAPTURE retrieved_at was not rewritten",
+    "tape is gitignored; only hashes and metadata are committed"
+  ],
+  "secret_present": false
+}

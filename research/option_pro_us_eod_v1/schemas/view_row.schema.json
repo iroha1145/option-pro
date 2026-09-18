@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "research_eod_v1_intraday_view",
+  "type": "object",
+  "required": ["status", "rows", "network_calls"],
+  "properties": {
+    "status": {"type": "string"},
+    "session_date": {"type": ["string", "null"]},
+    "integrity": {"type": ["string", "null"]},
+    "rows": {"type": "array"},
+    "network_calls": {"type": "integer", "maximum": 0}
+  }
+}

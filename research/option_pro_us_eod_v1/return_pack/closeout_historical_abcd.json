@@ -1,0 +1,6426 @@
+{
+  "head_note": "closeout historical A/B/C/D on registered balanced/mid; signal diagnostics; holdout sealed",
+  "capture_mode": "historical_reconstruction",
+  "vendor_finalization_policy": "NEXT_DAY_CONFIRM",
+  "holdout_start": "2024-07-01",
+  "holdout_unsealed": false,
+  "allowed_end": "2024-06-28",
+  "sessions": [
+    "2023-06-12",
+    "2023-06-13",
+    "2023-06-14",
+    "2023-06-15",
+    "2023-06-16",
+    "2023-06-20",
+    "2023-06-21",
+    "2023-06-22",
+    "2023-06-23",
+    "2018-12-31",
+    "2019-12-31",
+    "2020-12-31",
+    "2021-12-31",
+    "2022-12-30",
+    "2023-12-29",
+    "2024-03-28",
+    "2024-06-28"
+  ],
+  "session_count": 17,
+  "dense_window": [
+    "2023-06-12",
+    "2023-06-23"
+  ],
+  "other_years": "selected year/quarter-end sessions through allowed_end",
+  "remaining_daily_dates": "REGISTERED_NOT_RUN after this first pass",
+  "profile": "balanced",
+  "horizon": "mid",
+  "label_horizons": [
+    5,
+    20,
+    63
+  ],
+  "label_maturity_cuts": {
+    "5": "2024-06-21",
+    "20": "2024-05-30",
+    "63": "2024-03-28"
+  },
+  "yahoo_audit": {
+    "names": 213,
+    "complete_ohlc_bars": 331010,
+    "missing_high_or_low_bars": 0,
+    "missing_volume_bars": 0,
+    "missing_or_nonpositive_tri_bars": 0,
+    "field_capability": {
+      "yahoo_ohlc": "present_unverified",
+      "yahoo_volume": "present_unverified_session_scope_unknown",
+      "yahoo_tri": "vendor_adj_close_not_verified_total_return",
+      "industry": "theme_tag_not_economic_parent",
+      "fundamentals": "unused_not_a_stop"
+    },
+    "experiment_eligibility": "price_factor_diagnostics_may_run_without_fundamentals"
+  },
+  "coverage": [
+    {
+      "ticker": "NVDA",
+      "themes": [
+        "semiconductors",
+        "ai_cloud"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "AMD",
+      "themes": [
+        "semiconductors"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "TSM",
+      "themes": [
+        "semiconductors"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "AVGO",
+      "themes": [
+        "semiconductors"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "ASML",
+      "themes": [
+        "semiconductors"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "MU",
+      "themes": [
+        "semiconductors"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "INTC",
+      "themes": [
+        "semiconductors"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "ARM",
+      "themes": [
+        "semiconductors"
+      ],
+      "bars_clipped": 199,
+      "first": "2023-09-14",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "QCOM",
+      "themes": [
+        "semiconductors"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "MRVL",
+      "themes": [
+        "semiconductors"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "TXN",
+      "themes": [
+        "semiconductors"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "LRCX",
+      "themes": [
+        "semiconductors"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "KLAC",
+      "themes": [
+        "semiconductors"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "AMAT",
+      "themes": [
+        "semiconductors"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "MSFT",
+      "themes": [
+        "software",
+        "ai_cloud"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "ORCL",
+      "themes": [
+        "software"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "CRM",
+      "themes": [
+        "software"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "ADBE",
+      "themes": [
+        "software"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "NOW",
+      "themes": [
+        "software"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "SNOW",
+      "themes": [
+        "software"
+      ],
+      "bars_clipped": 952,
+      "first": "2020-09-16",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "PLTR",
+      "themes": [
+        "software",
+        "ai_cloud"
+      ],
+      "bars_clipped": 942,
+      "first": "2020-09-30",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "PANW",
+      "themes": [
+        "software"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "NET",
+      "themes": [
+        "software"
+      ],
+      "bars_clipped": 1206,
+      "first": "2019-09-13",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "CRWD",
+      "themes": [
+        "software"
+      ],
+      "bars_clipped": 1271,
+      "first": "2019-06-12",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "DDOG",
+      "themes": [
+        "software"
+      ],
+      "bars_clipped": 1202,
+      "first": "2019-09-19",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "MDB",
+      "themes": [
+        "software"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "GOOGL",
+      "themes": [
+        "ai_cloud",
+        "social_internet"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "AMZN",
+      "themes": [
+        "ai_cloud",
+        "retail"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "META",
+      "themes": [
+        "ai_cloud",
+        "social_internet"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "SMCI",
+      "themes": [
+        "ai_cloud"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "ANET",
+      "themes": [
+        "ai_cloud"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "DELL",
+      "themes": [
+        "ai_cloud",
+        "consumer_electronics"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "CRWV",
+      "themes": [
+        "ai_cloud"
+      ],
+      "bars_clipped": 0,
+      "first": null,
+      "last": null,
+      "status": "empty"
+    },
+    {
+      "ticker": "LLY",
+      "themes": [
+        "biotech"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "NVO",
+      "themes": [
+        "biotech"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "ABBV",
+      "themes": [
+        "biotech"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "AMGN",
+      "themes": [
+        "biotech"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "GILD",
+      "themes": [
+        "biotech"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "VRTX",
+      "themes": [
+        "biotech"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "REGN",
+      "themes": [
+        "biotech"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "BIIB",
+      "themes": [
+        "biotech"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "MRNA",
+      "themes": [
+        "biotech"
+      ],
+      "bars_clipped": 1398,
+      "first": "2018-12-07",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "BNTX",
+      "themes": [
+        "biotech"
+      ],
+      "bars_clipped": 1187,
+      "first": "2019-10-10",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "UNH",
+      "themes": [
+        "healthcare"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "JNJ",
+      "themes": [
+        "healthcare"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "PFE",
+      "themes": [
+        "healthcare"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "MRK",
+      "themes": [
+        "healthcare"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "TMO",
+      "themes": [
+        "healthcare"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "ABT",
+      "themes": [
+        "healthcare"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "DHR",
+      "themes": [
+        "healthcare"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "ISRG",
+      "themes": [
+        "healthcare"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "MDT",
+      "themes": [
+        "healthcare"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "BMY",
+      "themes": [
+        "healthcare"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "AAPL",
+      "themes": [
+        "consumer_electronics"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "SONY",
+      "themes": [
+        "consumer_electronics"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "HPQ",
+      "themes": [
+        "consumer_electronics"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "LOGI",
+      "themes": [
+        "consumer_electronics"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "TSLA",
+      "themes": [
+        "automotive",
+        "ev_supply"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "RIVN",
+      "themes": [
+        "automotive",
+        "ev_supply"
+      ],
+      "bars_clipped": 661,
+      "first": "2021-11-10",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "F",
+      "themes": [
+        "automotive"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "GM",
+      "themes": [
+        "automotive"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "LCID",
+      "themes": [
+        "automotive",
+        "ev_supply"
+      ],
+      "bars_clipped": 950,
+      "first": "2020-09-18",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "NIO",
+      "themes": [
+        "automotive",
+        "china_adr"
+      ],
+      "bars_clipped": 1458,
+      "first": "2018-09-12",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "LI",
+      "themes": [
+        "automotive",
+        "china_adr"
+      ],
+      "bars_clipped": 985,
+      "first": "2020-07-30",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "XPEV",
+      "themes": [
+        "automotive",
+        "china_adr"
+      ],
+      "bars_clipped": 965,
+      "first": "2020-08-27",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "STLA",
+      "themes": [
+        "automotive"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "TM",
+      "themes": [
+        "automotive"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "ALB",
+      "themes": [
+        "ev_supply"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "PLUG",
+      "themes": [
+        "ev_supply"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "BLNK",
+      "themes": [
+        "ev_supply"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "CHPT",
+      "themes": [
+        "ev_supply"
+      ],
+      "bars_clipped": 1205,
+      "first": "2019-09-16",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "ENPH",
+      "themes": [
+        "ev_supply"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "FSLR",
+      "themes": [
+        "ev_supply"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "RUN",
+      "themes": [
+        "ev_supply"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "JPM",
+      "themes": [
+        "finance"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "BAC",
+      "themes": [
+        "finance"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "WFC",
+      "themes": [
+        "finance"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "C",
+      "themes": [
+        "finance"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "GS",
+      "themes": [
+        "finance"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "MS",
+      "themes": [
+        "finance"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "USB",
+      "themes": [
+        "finance"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "PNC",
+      "themes": [
+        "finance"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "TFC",
+      "themes": [
+        "finance"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "SCHW",
+      "themes": [
+        "finance"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "V",
+      "themes": [
+        "fintech"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "MA",
+      "themes": [
+        "fintech"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "PYPL",
+      "themes": [
+        "fintech"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "XYZ",
+      "themes": [
+        "fintech"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "AXP",
+      "themes": [
+        "fintech"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "COIN",
+      "themes": [
+        "fintech",
+        "crypto"
+      ],
+      "bars_clipped": 808,
+      "first": "2021-04-14",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "HOOD",
+      "themes": [
+        "fintech"
+      ],
+      "bars_clipped": 734,
+      "first": "2021-07-29",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "SOFI",
+      "themes": [
+        "fintech"
+      ],
+      "bars_clipped": 877,
+      "first": "2021-01-04",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "AFRM",
+      "themes": [
+        "fintech"
+      ],
+      "bars_clipped": 870,
+      "first": "2021-01-13",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "UPST",
+      "themes": [
+        "fintech"
+      ],
+      "bars_clipped": 888,
+      "first": "2020-12-16",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "WMT",
+      "themes": [
+        "retail"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "COST",
+      "themes": [
+        "retail"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "HD",
+      "themes": [
+        "retail"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "TGT",
+      "themes": [
+        "retail"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "LOW",
+      "themes": [
+        "retail"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "NKE",
+      "themes": [
+        "retail"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "SBUX",
+      "themes": [
+        "retail"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "MCD",
+      "themes": [
+        "retail"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "TJX",
+      "themes": [
+        "retail"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "LVMUY",
+      "themes": [
+        "luxury"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "RMS.PA",
+      "themes": [
+        "luxury"
+      ],
+      "bars_clipped": 1664,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "CFRUY",
+      "themes": [
+        "luxury"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "EL",
+      "themes": [
+        "luxury"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "TPR",
+      "themes": [
+        "luxury"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "RL",
+      "themes": [
+        "luxury"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "PVH",
+      "themes": [
+        "luxury"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "NFLX",
+      "themes": [
+        "media_streaming"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "DIS",
+      "themes": [
+        "media_streaming"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "WBD",
+      "themes": [
+        "media_streaming"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "PSKY",
+      "themes": [
+        "media_streaming"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "ROKU",
+      "themes": [
+        "media_streaming"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "SPOT",
+      "themes": [
+        "media_streaming"
+      ],
+      "bars_clipped": 1571,
+      "first": "2018-04-03",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "FUBO",
+      "themes": [
+        "media_streaming"
+      ],
+      "bars_clipped": 1324,
+      "first": "2019-03-27",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "TKO",
+      "themes": [
+        "media_streaming"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "SNAP",
+      "themes": [
+        "social_internet"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "PINS",
+      "themes": [
+        "social_internet"
+      ],
+      "bars_clipped": 1308,
+      "first": "2019-04-18",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "RDDT",
+      "themes": [
+        "social_internet"
+      ],
+      "bars_clipped": 69,
+      "first": "2024-03-21",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "BIDU",
+      "themes": [
+        "social_internet",
+        "china_adr"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "BABA",
+      "themes": [
+        "social_internet",
+        "china_adr"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "PDD",
+      "themes": [
+        "social_internet",
+        "china_adr"
+      ],
+      "bars_clipped": 1491,
+      "first": "2018-07-26",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "XOM",
+      "themes": [
+        "energy"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "CVX",
+      "themes": [
+        "energy"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "COP",
+      "themes": [
+        "energy"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "SLB",
+      "themes": [
+        "energy"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "EOG",
+      "themes": [
+        "energy"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "MPC",
+      "themes": [
+        "energy"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "VLO",
+      "themes": [
+        "energy"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "PSX",
+      "themes": [
+        "energy"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "OXY",
+      "themes": [
+        "energy"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "DVN",
+      "themes": [
+        "energy"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "NEE",
+      "themes": [
+        "utilities"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "DUK",
+      "themes": [
+        "utilities"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "SO",
+      "themes": [
+        "utilities"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "AEP",
+      "themes": [
+        "utilities"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "EXC",
+      "themes": [
+        "utilities"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "SRE",
+      "themes": [
+        "utilities"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "D",
+      "themes": [
+        "utilities"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "PCG",
+      "themes": [
+        "utilities"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "VST",
+      "themes": [
+        "utilities"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "CEG",
+      "themes": [
+        "utilities"
+      ],
+      "bars_clipped": 614,
+      "first": "2022-01-19",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "LMT",
+      "themes": [
+        "defense_aero"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "RTX",
+      "themes": [
+        "defense_aero"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "NOC",
+      "themes": [
+        "defense_aero"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "GD",
+      "themes": [
+        "defense_aero"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "BA",
+      "themes": [
+        "defense_aero"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "LHX",
+      "themes": [
+        "defense_aero"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "TDG",
+      "themes": [
+        "defense_aero"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "HEI",
+      "themes": [
+        "defense_aero"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "TXT",
+      "themes": [
+        "defense_aero"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "DAL",
+      "themes": [
+        "airlines"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "UAL",
+      "themes": [
+        "airlines"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "AAL",
+      "themes": [
+        "airlines"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "LUV",
+      "themes": [
+        "airlines"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "ALK",
+      "themes": [
+        "airlines"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "JBLU",
+      "themes": [
+        "airlines"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "RYAAY",
+      "themes": [
+        "airlines"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "CPA",
+      "themes": [
+        "airlines"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "PLD",
+      "themes": [
+        "real_estate"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "AMT",
+      "themes": [
+        "real_estate"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "EQIX",
+      "themes": [
+        "real_estate"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "CCI",
+      "themes": [
+        "real_estate"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "SPG",
+      "themes": [
+        "real_estate"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "O",
+      "themes": [
+        "real_estate"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "PSA",
+      "themes": [
+        "real_estate"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "DLR",
+      "themes": [
+        "real_estate"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "WELL",
+      "themes": [
+        "real_estate"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "VICI",
+      "themes": [
+        "real_estate"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "MARA",
+      "themes": [
+        "crypto"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "RIOT",
+      "themes": [
+        "crypto"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "MSTR",
+      "themes": [
+        "crypto"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "HUT",
+      "themes": [
+        "crypto"
+      ],
+      "bars_clipped": 1588,
+      "first": "2018-03-08",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "CLSK",
+      "themes": [
+        "crypto"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "WULF",
+      "themes": [
+        "crypto"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "CIFR",
+      "themes": [
+        "crypto"
+      ],
+      "bars_clipped": 928,
+      "first": "2020-10-20",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "BTBT",
+      "themes": [
+        "crypto"
+      ],
+      "bars_clipped": 1580,
+      "first": "2018-03-20",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "JD",
+      "themes": [
+        "china_adr"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "NTES",
+      "themes": [
+        "china_adr"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "TME",
+      "themes": [
+        "china_adr"
+      ],
+      "bars_clipped": 1395,
+      "first": "2018-12-12",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "TAL",
+      "themes": [
+        "china_adr"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "BILI",
+      "themes": [
+        "china_adr"
+      ],
+      "bars_clipped": 1574,
+      "first": "2018-03-28",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "IQ",
+      "themes": [
+        "china_adr"
+      ],
+      "bars_clipped": 1573,
+      "first": "2018-03-29",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "T",
+      "themes": [
+        "telecom"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "VZ",
+      "themes": [
+        "telecom"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "TMUS",
+      "themes": [
+        "telecom"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "CHTR",
+      "themes": [
+        "telecom"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "CMCSA",
+      "themes": [
+        "telecom"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "VOD",
+      "themes": [
+        "telecom"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "AMX",
+      "themes": [
+        "telecom"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "CAT",
+      "themes": [
+        "industrials"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "DE",
+      "themes": [
+        "industrials"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "HON",
+      "themes": [
+        "industrials"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "GE",
+      "themes": [
+        "industrials"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "MMM",
+      "themes": [
+        "industrials"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "UPS",
+      "themes": [
+        "industrials"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "FDX",
+      "themes": [
+        "industrials"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "EMR",
+      "themes": [
+        "industrials"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "ETN",
+      "themes": [
+        "industrials"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "ITW",
+      "themes": [
+        "industrials"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "SPY",
+      "themes": [
+        "etfs"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "QQQ",
+      "themes": [
+        "etfs"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "IWM",
+      "themes": [
+        "etfs"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "DIA",
+      "themes": [
+        "etfs"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "VTI",
+      "themes": [
+        "etfs"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "VOO",
+      "themes": [
+        "etfs"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "ARKK",
+      "themes": [
+        "etfs"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "SOXX",
+      "themes": [
+        "etfs"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "XLF",
+      "themes": [
+        "etfs"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "XLE",
+      "themes": [
+        "etfs"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "GLD",
+      "themes": [
+        "etfs"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    },
+    {
+      "ticker": "TLT",
+      "themes": [
+        "etfs"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "status": "ok"
+    }
+  ],
+  "themes": {
+    "semiconductors": {
+      "theme_id": "semiconductors",
+      "members_in_panel": 14,
+      "valid_dates": 17,
+      "zero_result_dates": 11,
+      "missing_data_dates": 0,
+      "independent_events": 6,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 2,
+          "rejected": 222,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              199
+            ],
+            [
+              "TREND_DIRECTION",
+              57
+            ],
+            [
+              "EXTENDED",
+              48
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              41
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              40
+            ],
+            [
+              "WEAK_STRUCTURE",
+              30
+            ],
+            [
+              "LH_LL",
+              30
+            ],
+            [
+              "INVALIDATED",
+              16
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 0,
+          "rejected": 224,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              208
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              182
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              150
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              74
+            ],
+            [
+              "LOW_CLV",
+              61
+            ],
+            [
+              "EXTENDED",
+              48
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              41
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              40
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 0,
+          "rejected": 224,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              208
+            ],
+            [
+              "NO_REBOUND",
+              146
+            ],
+            [
+              "LOW_RVOL",
+              134
+            ],
+            [
+              "LOW_CLV",
+              110
+            ],
+            [
+              "TREND_DIRECTION",
+              57
+            ],
+            [
+              "EXTENDED",
+              48
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              47
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              40
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 6,
+          "rejected": 218,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              185
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              94
+            ],
+            [
+              "EXTENDED",
+              48
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              40
+            ],
+            [
+              "SMA50_SLOPE",
+              39
+            ],
+            [
+              "WEAK_STRUCTURE",
+              30
+            ],
+            [
+              "BELOW_SMA50",
+              29
+            ],
+            [
+              "MISSING_SCORE",
+              29
+            ]
+          ]
+        }
+      },
+      "eligible_name_sessions": 8,
+      "ic_forward_labels": {
+        "5": null,
+        "20": null,
+        "63": null
+      },
+      "ic_pair_counts": {
+        "5": 7,
+        "20": 7,
+        "63": 7
+      },
+      "ic_note": "Spearman of eligible score vs TRI forward label; signal diagnostic only"
+    },
+    "software": {
+      "theme_id": "software",
+      "members_in_panel": 12,
+      "valid_dates": 17,
+      "zero_result_dates": 10,
+      "missing_data_dates": 0,
+      "independent_events": 5,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 3,
+          "rejected": 194,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              177
+            ],
+            [
+              "TREND_DIRECTION",
+              51
+            ],
+            [
+              "EXTENDED",
+              41
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              29
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              26
+            ],
+            [
+              "WEAK_STRUCTURE",
+              22
+            ],
+            [
+              "LH_LL",
+              22
+            ],
+            [
+              "SHORT_HISTORY",
+              12
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 0,
+          "rejected": 197,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              179
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              161
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              119
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              89
+            ],
+            [
+              "EXTENDED",
+              41
+            ],
+            [
+              "BELOW_SMA50",
+              38
+            ],
+            [
+              "SMA50_SLOPE",
+              34
+            ],
+            [
+              "LOW_CLV",
+              30
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 0,
+          "rejected": 197,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              185
+            ],
+            [
+              "NO_REBOUND",
+              116
+            ],
+            [
+              "LOW_RVOL",
+              107
+            ],
+            [
+              "LOW_CLV",
+              98
+            ],
+            [
+              "TREND_DIRECTION",
+              51
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              47
+            ],
+            [
+              "EXTENDED",
+              41
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              26
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 7,
+          "rejected": 190,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              153
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              90
+            ],
+            [
+              "EXTENDED",
+              41
+            ],
+            [
+              "BELOW_SMA50",
+              38
+            ],
+            [
+              "SMA50_SLOPE",
+              34
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              26
+            ],
+            [
+              "MISSING_SCORE",
+              23
+            ],
+            [
+              "LOW_COVERAGE",
+              23
+            ]
+          ]
+        }
+      },
+      "eligible_name_sessions": 10,
+      "ic_forward_labels": {
+        "5": 0.19999999999999998,
+        "20": -0.16363636363636364,
+        "63": 0.04242424242424241
+      },
+      "ic_pair_counts": {
+        "5": 10,
+        "20": 10,
+        "63": 10
+      },
+      "ic_note": "Spearman of eligible score vs TRI forward label; signal diagnostic only"
+    },
+    "ai_cloud": {
+      "theme_id": "ai_cloud",
+      "members_in_panel": 9,
+      "valid_dates": 17,
+      "zero_result_dates": 13,
+      "missing_data_dates": 0,
+      "independent_events": 4,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 1,
+          "rejected": 150,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              139
+            ],
+            [
+              "TREND_DIRECTION",
+              40
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              24
+            ],
+            [
+              "EXTENDED",
+              23
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              19
+            ],
+            [
+              "HIGH_ATR",
+              16
+            ],
+            [
+              "WEAK_STRUCTURE",
+              16
+            ],
+            [
+              "LH_LL",
+              16
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 0,
+          "rejected": 151,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              141
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              133
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              115
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              66
+            ],
+            [
+              "LOW_CLV",
+              37
+            ],
+            [
+              "SMA50_SLOPE",
+              29
+            ],
+            [
+              "BELOW_SMA50",
+              28
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              24
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 0,
+          "rejected": 151,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              142
+            ],
+            [
+              "NO_REBOUND",
+              94
+            ],
+            [
+              "LOW_CLV",
+              74
+            ],
+            [
+              "LOW_RVOL",
+              65
+            ],
+            [
+              "TREND_DIRECTION",
+              40
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              29
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              24
+            ],
+            [
+              "EXTENDED",
+              23
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 4,
+          "rejected": 147,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              84
+            ],
+            [
+              "MISSING_SCORE",
+              61
+            ],
+            [
+              "LOW_COVERAGE",
+              61
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              41
+            ],
+            [
+              "SMA50_SLOPE",
+              29
+            ],
+            [
+              "BELOW_SMA50",
+              28
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              24
+            ],
+            [
+              "EXTENDED",
+              23
+            ]
+          ]
+        }
+      },
+      "eligible_name_sessions": 5,
+      "ic_forward_labels": {
+        "5": null,
+        "20": null,
+        "63": null
+      },
+      "ic_pair_counts": {
+        "5": 4,
+        "20": 4,
+        "63": 4
+      },
+      "ic_note": "Spearman of eligible score vs TRI forward label; signal diagnostic only"
+    },
+    "biotech": {
+      "theme_id": "biotech",
+      "members_in_panel": 10,
+      "valid_dates": 17,
+      "zero_result_dates": 8,
+      "missing_data_dates": 0,
+      "independent_events": 4,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 2,
+          "rejected": 167,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              157
+            ],
+            [
+              "TREND_DIRECTION",
+              117
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              65
+            ],
+            [
+              "WEAK_STRUCTURE",
+              49
+            ],
+            [
+              "LH_LL",
+              49
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              24
+            ],
+            [
+              "INVALIDATED",
+              19
+            ],
+            [
+              "EXTENDED",
+              16
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 0,
+          "rejected": 169,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              150
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              123
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              94
+            ],
+            [
+              "BELOW_SMA50",
+              86
+            ],
+            [
+              "SMA50_SLOPE",
+              77
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              75
+            ],
+            [
+              "LOW_CLV",
+              51
+            ],
+            [
+              "WEAK_STRUCTURE",
+              49
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 0,
+          "rejected": 169,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              154
+            ],
+            [
+              "TREND_DIRECTION",
+              117
+            ],
+            [
+              "NO_REBOUND",
+              103
+            ],
+            [
+              "LOW_CLV",
+              83
+            ],
+            [
+              "LOW_RVOL",
+              68
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              64
+            ],
+            [
+              "WEAK_STRUCTURE",
+              49
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              24
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 8,
+          "rejected": 161,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              137
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              89
+            ],
+            [
+              "BELOW_SMA50",
+              88
+            ],
+            [
+              "SMA50_SLOPE",
+              79
+            ],
+            [
+              "WEAK_STRUCTURE",
+              50
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              24
+            ],
+            [
+              "INVALIDATED",
+              19
+            ],
+            [
+              "MISSING_SCORE",
+              19
+            ]
+          ]
+        }
+      },
+      "eligible_name_sessions": 10,
+      "ic_forward_labels": {
+        "5": -0.01818181818181818,
+        "20": -0.6484848484848483,
+        "63": -0.22424242424242422
+      },
+      "ic_pair_counts": {
+        "5": 10,
+        "20": 10,
+        "63": 10
+      },
+      "ic_note": "Spearman of eligible score vs TRI forward label; signal diagnostic only"
+    },
+    "healthcare": {
+      "theme_id": "healthcare",
+      "members_in_panel": 10,
+      "valid_dates": 17,
+      "zero_result_dates": 15,
+      "missing_data_dates": 0,
+      "independent_events": 1,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 2,
+          "rejected": 168,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              157
+            ],
+            [
+              "TREND_DIRECTION",
+              116
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              88
+            ],
+            [
+              "WEAK_STRUCTURE",
+              33
+            ],
+            [
+              "LH_LL",
+              33
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              27
+            ],
+            [
+              "EXTENDED",
+              26
+            ],
+            [
+              "SHORT_HISTORY",
+              10
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 0,
+          "rejected": 170,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              159
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              87
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              85
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              83
+            ],
+            [
+              "BELOW_SMA50",
+              77
+            ],
+            [
+              "LOW_CLV",
+              62
+            ],
+            [
+              "SMA50_SLOPE",
+              61
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              49
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 0,
+          "rejected": 170,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              160
+            ],
+            [
+              "TREND_DIRECTION",
+              116
+            ],
+            [
+              "NO_REBOUND",
+              91
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              90
+            ],
+            [
+              "LOW_RVOL",
+              76
+            ],
+            [
+              "LOW_CLV",
+              66
+            ],
+            [
+              "WEAK_STRUCTURE",
+              33
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              27
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 0,
+          "rejected": 170,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              145
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              83
+            ],
+            [
+              "BELOW_SMA50",
+              77
+            ],
+            [
+              "SMA50_SLOPE",
+              61
+            ],
+            [
+              "WEAK_STRUCTURE",
+              33
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              27
+            ],
+            [
+              "EXTENDED",
+              26
+            ],
+            [
+              "MISSING_SCORE",
+              20
+            ]
+          ]
+        }
+      },
+      "eligible_name_sessions": 2,
+      "ic_forward_labels": {
+        "5": null,
+        "20": null,
+        "63": null
+      },
+      "ic_pair_counts": {
+        "5": 2,
+        "20": 2,
+        "63": 2
+      },
+      "ic_note": "Spearman of eligible score vs TRI forward label; signal diagnostic only"
+    },
+    "consumer_electronics": {
+      "theme_id": "consumer_electronics",
+      "members_in_panel": 5,
+      "valid_dates": 17,
+      "zero_result_dates": 12,
+      "missing_data_dates": 0,
+      "independent_events": 5,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 4,
+          "rejected": 81,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              65
+            ],
+            [
+              "TREND_DIRECTION",
+              32
+            ],
+            [
+              "WEAK_STRUCTURE",
+              18
+            ],
+            [
+              "LH_LL",
+              18
+            ],
+            [
+              "EXTENDED",
+              14
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              14
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              13
+            ],
+            [
+              "INVALIDATED",
+              10
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 0,
+          "rejected": 85,
+          "top_rejections": [
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              78
+            ],
+            [
+              "LOW_SCORE",
+              73
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              57
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              36
+            ],
+            [
+              "BELOW_SMA50",
+              25
+            ],
+            [
+              "WEAK_STRUCTURE",
+              18
+            ],
+            [
+              "EXTENDED",
+              14
+            ],
+            [
+              "LOW_CLV",
+              14
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 0,
+          "rejected": 85,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              79
+            ],
+            [
+              "NO_REBOUND",
+              53
+            ],
+            [
+              "LOW_CLV",
+              40
+            ],
+            [
+              "LOW_RVOL",
+              38
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              38
+            ],
+            [
+              "TREND_DIRECTION",
+              32
+            ],
+            [
+              "WEAK_STRUCTURE",
+              18
+            ],
+            [
+              "EXTENDED",
+              14
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 2,
+          "rejected": 83,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              63
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              25
+            ],
+            [
+              "BELOW_SMA50",
+              25
+            ],
+            [
+              "WEAK_STRUCTURE",
+              18
+            ],
+            [
+              "EXTENDED",
+              14
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              13
+            ],
+            [
+              "SMA50_SLOPE",
+              11
+            ],
+            [
+              "INVALIDATED",
+              10
+            ]
+          ]
+        }
+      },
+      "eligible_name_sessions": 6,
+      "ic_forward_labels": {
+        "5": null,
+        "20": null,
+        "63": null
+      },
+      "ic_pair_counts": {
+        "5": 5,
+        "20": 5,
+        "63": 5
+      },
+      "ic_note": "Spearman of eligible score vs TRI forward label; signal diagnostic only"
+    },
+    "automotive": {
+      "theme_id": "automotive",
+      "members_in_panel": 10,
+      "valid_dates": 17,
+      "zero_result_dates": 12,
+      "missing_data_dates": 0,
+      "independent_events": 2,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 2,
+          "rejected": 159,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              148
+            ],
+            [
+              "TREND_DIRECTION",
+              126
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              81
+            ],
+            [
+              "WEAK_STRUCTURE",
+              67
+            ],
+            [
+              "LH_LL",
+              67
+            ],
+            [
+              "EXTENDED",
+              54
+            ],
+            [
+              "INVALIDATED",
+              20
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              12
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 0,
+          "rejected": 161,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              151
+            ],
+            [
+              "LOW_CLV",
+              87
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              83
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              80
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              71
+            ],
+            [
+              "SMA50_SLOPE",
+              70
+            ],
+            [
+              "WEAK_STRUCTURE",
+              67
+            ],
+            [
+              "EXTENDED",
+              54
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 0,
+          "rejected": 161,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              148
+            ],
+            [
+              "TREND_DIRECTION",
+              126
+            ],
+            [
+              "NO_REBOUND",
+              114
+            ],
+            [
+              "LOW_CLV",
+              99
+            ],
+            [
+              "WEAK_STRUCTURE",
+              67
+            ],
+            [
+              "LOW_RVOL",
+              55
+            ],
+            [
+              "EXTENDED",
+              54
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              54
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 4,
+          "rejected": 157,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              132
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              70
+            ],
+            [
+              "SMA50_SLOPE",
+              70
+            ],
+            [
+              "WEAK_STRUCTURE",
+              67
+            ],
+            [
+              "EXTENDED",
+              54
+            ],
+            [
+              "BELOW_SMA50",
+              51
+            ],
+            [
+              "INVALIDATED",
+              20
+            ],
+            [
+              "MISSING_SCORE",
+              18
+            ]
+          ]
+        }
+      },
+      "eligible_name_sessions": 6,
+      "ic_forward_labels": {
+        "5": null,
+        "20": null,
+        "63": null
+      },
+      "ic_pair_counts": {
+        "5": 6,
+        "20": 6,
+        "63": 6
+      },
+      "ic_note": "Spearman of eligible score vs TRI forward label; signal diagnostic only"
+    },
+    "ev_supply": {
+      "theme_id": "ev_supply",
+      "members_in_panel": 10,
+      "valid_dates": 17,
+      "zero_result_dates": 15,
+      "missing_data_dates": 0,
+      "independent_events": 2,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 0,
+          "rejected": 164,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              153
+            ],
+            [
+              "TREND_DIRECTION",
+              152
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              123
+            ],
+            [
+              "WEAK_STRUCTURE",
+              59
+            ],
+            [
+              "LH_LL",
+              59
+            ],
+            [
+              "INVALIDATED",
+              28
+            ],
+            [
+              "EXTENDED",
+              22
+            ],
+            [
+              "HIGH_ATR",
+              21
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 0,
+          "rejected": 164,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              154
+            ],
+            [
+              "SMA50_SLOPE",
+              107
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              90
+            ],
+            [
+              "LOW_CLV",
+              87
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              86
+            ],
+            [
+              "BELOW_SMA50",
+              86
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              66
+            ],
+            [
+              "WEAK_STRUCTURE",
+              59
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 0,
+          "rejected": 164,
+          "top_rejections": [
+            [
+              "TREND_DIRECTION",
+              152
+            ],
+            [
+              "LOW_SCORE",
+              151
+            ],
+            [
+              "NO_REBOUND",
+              118
+            ],
+            [
+              "LOW_CLV",
+              102
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              75
+            ],
+            [
+              "WEAK_STRUCTURE",
+              59
+            ],
+            [
+              "LOW_RVOL",
+              53
+            ],
+            [
+              "INVALIDATED",
+              28
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 2,
+          "rejected": 162,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              134
+            ],
+            [
+              "SMA50_SLOPE",
+              108
+            ],
+            [
+              "BELOW_SMA50",
+              87
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              77
+            ],
+            [
+              "WEAK_STRUCTURE",
+              59
+            ],
+            [
+              "INVALIDATED",
+              28
+            ],
+            [
+              "EXTENDED",
+              22
+            ],
+            [
+              "HIGH_ATR",
+              21
+            ]
+          ]
+        }
+      },
+      "eligible_name_sessions": 2,
+      "ic_forward_labels": {
+        "5": null,
+        "20": null,
+        "63": null
+      },
+      "ic_pair_counts": {
+        "5": 2,
+        "20": 2,
+        "63": 2
+      },
+      "ic_note": "Spearman of eligible score vs TRI forward label; signal diagnostic only"
+    },
+    "finance": {
+      "theme_id": "finance",
+      "members_in_panel": 10,
+      "valid_dates": 17,
+      "zero_result_dates": 9,
+      "missing_data_dates": 0,
+      "independent_events": 2,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 8,
+          "rejected": 162,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              147
+            ],
+            [
+              "TREND_DIRECTION",
+              118
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              66
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              42
+            ],
+            [
+              "WEAK_STRUCTURE",
+              36
+            ],
+            [
+              "LH_LL",
+              35
+            ],
+            [
+              "EXTENDED",
+              23
+            ],
+            [
+              "SHORT_HISTORY",
+              10
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 0,
+          "rejected": 170,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              149
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              106
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              103
+            ],
+            [
+              "LOW_CLV",
+              78
+            ],
+            [
+              "SMA50_SLOPE",
+              72
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              62
+            ],
+            [
+              "BELOW_SMA50",
+              44
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              42
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 0,
+          "rejected": 170,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              160
+            ],
+            [
+              "TREND_DIRECTION",
+              118
+            ],
+            [
+              "NO_REBOUND",
+              103
+            ],
+            [
+              "LOW_CLV",
+              85
+            ],
+            [
+              "LOW_RVOL",
+              73
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              42
+            ],
+            [
+              "WEAK_STRUCTURE",
+              36
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              30
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 6,
+          "rejected": 164,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              141
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              77
+            ],
+            [
+              "SMA50_SLOPE",
+              72
+            ],
+            [
+              "BELOW_SMA50",
+              44
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              42
+            ],
+            [
+              "WEAK_STRUCTURE",
+              36
+            ],
+            [
+              "EXTENDED",
+              23
+            ],
+            [
+              "MISSING_SCORE",
+              20
+            ]
+          ]
+        }
+      },
+      "eligible_name_sessions": 14,
+      "ic_forward_labels": {
+        "5": 0.24835164835164836,
+        "20": -0.48571428571428577,
+        "63": -0.059340659340659345
+      },
+      "ic_pair_counts": {
+        "5": 14,
+        "20": 14,
+        "63": 14
+      },
+      "ic_note": "Spearman of eligible score vs TRI forward label; signal diagnostic only"
+    },
+    "fintech": {
+      "theme_id": "fintech",
+      "members_in_panel": 10,
+      "valid_dates": 17,
+      "zero_result_dates": 14,
+      "missing_data_dates": 0,
+      "independent_events": 3,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 2,
+          "rejected": 154,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              144
+            ],
+            [
+              "TREND_DIRECTION",
+              100
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              46
+            ],
+            [
+              "HIGH_ATR",
+              43
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              30
+            ],
+            [
+              "EXTENDED",
+              28
+            ],
+            [
+              "WEAK_STRUCTURE",
+              24
+            ],
+            [
+              "LH_LL",
+              24
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 0,
+          "rejected": 156,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              144
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              129
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              81
+            ],
+            [
+              "SMA50_SLOPE",
+              66
+            ],
+            [
+              "BELOW_SMA50",
+              57
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              56
+            ],
+            [
+              "HIGH_ATR",
+              43
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              30
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 0,
+          "rejected": 156,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              146
+            ],
+            [
+              "TREND_DIRECTION",
+              100
+            ],
+            [
+              "NO_REBOUND",
+              93
+            ],
+            [
+              "LOW_CLV",
+              77
+            ],
+            [
+              "LOW_RVOL",
+              61
+            ],
+            [
+              "HIGH_ATR",
+              43
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              39
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              30
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 2,
+          "rejected": 154,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              136
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              87
+            ],
+            [
+              "SMA50_SLOPE",
+              67
+            ],
+            [
+              "BELOW_SMA50",
+              58
+            ],
+            [
+              "HIGH_ATR",
+              43
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              30
+            ],
+            [
+              "EXTENDED",
+              28
+            ],
+            [
+              "WEAK_STRUCTURE",
+              25
+            ]
+          ]
+        }
+      },
+      "eligible_name_sessions": 4,
+      "ic_forward_labels": {
+        "5": null,
+        "20": null,
+        "63": null
+      },
+      "ic_pair_counts": {
+        "5": 4,
+        "20": 4,
+        "63": 4
+      },
+      "ic_note": "Spearman of eligible score vs TRI forward label; signal diagnostic only"
+    },
+    "retail": {
+      "theme_id": "retail",
+      "members_in_panel": 10,
+      "valid_dates": 17,
+      "zero_result_dates": 14,
+      "missing_data_dates": 0,
+      "independent_events": 3,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 1,
+          "rejected": 169,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              159
+            ],
+            [
+              "TREND_DIRECTION",
+              85
+            ],
+            [
+              "WEAK_STRUCTURE",
+              48
+            ],
+            [
+              "LH_LL",
+              48
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              35
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              27
+            ],
+            [
+              "EXTENDED",
+              21
+            ],
+            [
+              "SHORT_HISTORY",
+              10
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 0,
+          "rejected": 170,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              160
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              120
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              110
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              70
+            ],
+            [
+              "BELOW_SMA50",
+              65
+            ],
+            [
+              "SMA50_SLOPE",
+              53
+            ],
+            [
+              "WEAK_STRUCTURE",
+              48
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              44
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 0,
+          "rejected": 170,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              160
+            ],
+            [
+              "NO_REBOUND",
+              96
+            ],
+            [
+              "TREND_DIRECTION",
+              85
+            ],
+            [
+              "LOW_RVOL",
+              78
+            ],
+            [
+              "LOW_CLV",
+              74
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              62
+            ],
+            [
+              "WEAK_STRUCTURE",
+              48
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              35
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 3,
+          "rejected": 167,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              129
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              75
+            ],
+            [
+              "BELOW_SMA50",
+              65
+            ],
+            [
+              "SMA50_SLOPE",
+              53
+            ],
+            [
+              "WEAK_STRUCTURE",
+              48
+            ],
+            [
+              "MISSING_SCORE",
+              35
+            ],
+            [
+              "LOW_COVERAGE",
+              35
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              35
+            ]
+          ]
+        }
+      },
+      "eligible_name_sessions": 4,
+      "ic_forward_labels": {
+        "5": null,
+        "20": null,
+        "63": null
+      },
+      "ic_pair_counts": {
+        "5": 2,
+        "20": 2,
+        "63": 2
+      },
+      "ic_note": "Spearman of eligible score vs TRI forward label; signal diagnostic only"
+    },
+    "luxury": {
+      "theme_id": "luxury",
+      "members_in_panel": 7,
+      "valid_dates": 17,
+      "zero_result_dates": 14,
+      "missing_data_dates": 0,
+      "independent_events": 3,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 3,
+          "rejected": 116,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              103
+            ],
+            [
+              "TREND_DIRECTION",
+              68
+            ],
+            [
+              "WEAK_STRUCTURE",
+              35
+            ],
+            [
+              "LH_LL",
+              35
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              30
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              25
+            ],
+            [
+              "LOW_ADV",
+              21
+            ],
+            [
+              "EXTENDED",
+              15
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 0,
+          "rejected": 119,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              108
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              81
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              70
+            ],
+            [
+              "LOW_CLV",
+              63
+            ],
+            [
+              "BELOW_SMA50",
+              54
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              53
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              49
+            ],
+            [
+              "WEAK_STRUCTURE",
+              35
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 0,
+          "rejected": 119,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              111
+            ],
+            [
+              "LOW_RVOL",
+              78
+            ],
+            [
+              "NO_REBOUND",
+              71
+            ],
+            [
+              "TREND_DIRECTION",
+              68
+            ],
+            [
+              "LOW_CLV",
+              54
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              49
+            ],
+            [
+              "WEAK_STRUCTURE",
+              35
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              30
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 0,
+          "rejected": 119,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              90
+            ],
+            [
+              "BELOW_SMA50",
+              54
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              49
+            ],
+            [
+              "WEAK_STRUCTURE",
+              35
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              30
+            ],
+            [
+              "MISSING_SCORE",
+              29
+            ],
+            [
+              "LOW_COVERAGE",
+              29
+            ],
+            [
+              "SMA50_SLOPE",
+              26
+            ]
+          ]
+        }
+      },
+      "eligible_name_sessions": 3,
+      "ic_forward_labels": {
+        "5": null,
+        "20": null,
+        "63": null
+      },
+      "ic_pair_counts": {
+        "5": 3,
+        "20": 3,
+        "63": 3
+      },
+      "ic_note": "Spearman of eligible score vs TRI forward label; signal diagnostic only"
+    },
+    "media_streaming": {
+      "theme_id": "media_streaming",
+      "members_in_panel": 8,
+      "valid_dates": 17,
+      "zero_result_dates": 13,
+      "missing_data_dates": 0,
+      "independent_events": 2,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 3,
+          "rejected": 132,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              120
+            ],
+            [
+              "TREND_DIRECTION",
+              91
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              67
+            ],
+            [
+              "WEAK_STRUCTURE",
+              52
+            ],
+            [
+              "LH_LL",
+              52
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              24
+            ],
+            [
+              "EXTENDED",
+              20
+            ],
+            [
+              "HIGH_ATR",
+              12
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 0,
+          "rejected": 135,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              118
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              88
+            ],
+            [
+              "SMA50_SLOPE",
+              64
+            ],
+            [
+              "BELOW_SMA50",
+              62
+            ],
+            [
+              "LOW_CLV",
+              58
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              58
+            ],
+            [
+              "WEAK_STRUCTURE",
+              52
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              52
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 1,
+          "rejected": 134,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              121
+            ],
+            [
+              "TREND_DIRECTION",
+              91
+            ],
+            [
+              "NO_REBOUND",
+              88
+            ],
+            [
+              "LOW_CLV",
+              73
+            ],
+            [
+              "LOW_RVOL",
+              61
+            ],
+            [
+              "WEAK_STRUCTURE",
+              52
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              46
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              24
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 1,
+          "rejected": 134,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              114
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              66
+            ],
+            [
+              "SMA50_SLOPE",
+              64
+            ],
+            [
+              "BELOW_SMA50",
+              62
+            ],
+            [
+              "WEAK_STRUCTURE",
+              52
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              24
+            ],
+            [
+              "EXTENDED",
+              20
+            ],
+            [
+              "MISSING_SCORE",
+              15
+            ]
+          ]
+        }
+      },
+      "eligible_name_sessions": 5,
+      "ic_forward_labels": {
+        "5": null,
+        "20": null,
+        "63": null
+      },
+      "ic_pair_counts": {
+        "5": 5,
+        "20": 5,
+        "63": 5
+      },
+      "ic_note": "Spearman of eligible score vs TRI forward label; signal diagnostic only"
+    },
+    "social_internet": {
+      "theme_id": "social_internet",
+      "members_in_panel": 8,
+      "valid_dates": 17,
+      "zero_result_dates": 5,
+      "missing_data_dates": 0,
+      "independent_events": 5,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 12,
+          "rejected": 108,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              92
+            ],
+            [
+              "TREND_DIRECTION",
+              81
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              60
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              27
+            ],
+            [
+              "WEAK_STRUCTURE",
+              25
+            ],
+            [
+              "LH_LL",
+              24
+            ],
+            [
+              "EXTENDED",
+              21
+            ],
+            [
+              "SHORT_HISTORY",
+              8
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 0,
+          "rejected": 120,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              102
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              76
+            ],
+            [
+              "SMA50_SLOPE",
+              71
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              57
+            ],
+            [
+              "LOW_CLV",
+              54
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              42
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              41
+            ],
+            [
+              "BELOW_SMA50",
+              30
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 0,
+          "rejected": 120,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              110
+            ],
+            [
+              "TREND_DIRECTION",
+              81
+            ],
+            [
+              "NO_REBOUND",
+              78
+            ],
+            [
+              "LOW_CLV",
+              68
+            ],
+            [
+              "LOW_RVOL",
+              56
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              27
+            ],
+            [
+              "WEAK_STRUCTURE",
+              25
+            ],
+            [
+              "EXTENDED",
+              21
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 14,
+          "rejected": 106,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              83
+            ],
+            [
+              "SMA50_SLOPE",
+              73
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              45
+            ],
+            [
+              "BELOW_SMA50",
+              32
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              27
+            ],
+            [
+              "WEAK_STRUCTURE",
+              26
+            ],
+            [
+              "EXTENDED",
+              21
+            ],
+            [
+              "MISSING_SCORE",
+              14
+            ]
+          ]
+        }
+      },
+      "eligible_name_sessions": 26,
+      "ic_forward_labels": {
+        "5": -0.18347826086956517,
+        "20": 0.13130434782608694,
+        "63": 0.28782608695652173
+      },
+      "ic_pair_counts": {
+        "5": 24,
+        "20": 24,
+        "63": 24
+      },
+      "ic_note": "Spearman of eligible score vs TRI forward label; signal diagnostic only"
+    },
+    "energy": {
+      "theme_id": "energy",
+      "members_in_panel": 10,
+      "valid_dates": 17,
+      "zero_result_dates": 16,
+      "missing_data_dates": 0,
+      "independent_events": 1,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 1,
+          "rejected": 169,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              158
+            ],
+            [
+              "TREND_DIRECTION",
+              154
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              95
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              50
+            ],
+            [
+              "WEAK_STRUCTURE",
+              39
+            ],
+            [
+              "LH_LL",
+              39
+            ],
+            [
+              "EXTENDED",
+              14
+            ],
+            [
+              "INVALIDATED",
+              11
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 0,
+          "rejected": 170,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              160
+            ],
+            [
+              "BELOW_SMA50",
+              123
+            ],
+            [
+              "SMA50_SLOPE",
+              111
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              108
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              83
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              60
+            ],
+            [
+              "LOW_CLV",
+              58
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              50
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 0,
+          "rejected": 170,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              159
+            ],
+            [
+              "TREND_DIRECTION",
+              154
+            ],
+            [
+              "NO_REBOUND",
+              112
+            ],
+            [
+              "LOW_CLV",
+              99
+            ],
+            [
+              "LOW_RVOL",
+              72
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              50
+            ],
+            [
+              "WEAK_STRUCTURE",
+              39
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              21
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 0,
+          "rejected": 170,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              149
+            ],
+            [
+              "BELOW_SMA50",
+              123
+            ],
+            [
+              "SMA50_SLOPE",
+              111
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              68
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              50
+            ],
+            [
+              "WEAK_STRUCTURE",
+              39
+            ],
+            [
+              "MISSING_SCORE",
+              20
+            ],
+            [
+              "LOW_COVERAGE",
+              20
+            ]
+          ]
+        }
+      },
+      "eligible_name_sessions": 1,
+      "ic_forward_labels": {
+        "5": null,
+        "20": null,
+        "63": null
+      },
+      "ic_pair_counts": {
+        "5": 1,
+        "20": 1,
+        "63": 1
+      },
+      "ic_note": "Spearman of eligible score vs TRI forward label; signal diagnostic only"
+    },
+    "utilities": {
+      "theme_id": "utilities",
+      "members_in_panel": 10,
+      "valid_dates": 17,
+      "zero_result_dates": 16,
+      "missing_data_dates": 0,
+      "independent_events": 1,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 0,
+          "rejected": 166,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              155
+            ],
+            [
+              "TREND_DIRECTION",
+              125
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              76
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              46
+            ],
+            [
+              "WEAK_STRUCTURE",
+              45
+            ],
+            [
+              "LH_LL",
+              45
+            ],
+            [
+              "EXTENDED",
+              15
+            ],
+            [
+              "INVALIDATED",
+              10
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 0,
+          "rejected": 166,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              156
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              94
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              93
+            ],
+            [
+              "BELOW_SMA50",
+              91
+            ],
+            [
+              "SMA50_SLOPE",
+              71
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              70
+            ],
+            [
+              "LOW_CLV",
+              70
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              47
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 0,
+          "rejected": 166,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              155
+            ],
+            [
+              "TREND_DIRECTION",
+              125
+            ],
+            [
+              "NO_REBOUND",
+              93
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              78
+            ],
+            [
+              "LOW_RVOL",
+              78
+            ],
+            [
+              "LOW_CLV",
+              77
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              46
+            ],
+            [
+              "WEAK_STRUCTURE",
+              45
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 1,
+          "rejected": 165,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              146
+            ],
+            [
+              "BELOW_SMA50",
+              91
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              84
+            ],
+            [
+              "SMA50_SLOPE",
+              71
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              46
+            ],
+            [
+              "WEAK_STRUCTURE",
+              45
+            ],
+            [
+              "MISSING_SCORE",
+              19
+            ],
+            [
+              "LOW_COVERAGE",
+              19
+            ]
+          ]
+        }
+      },
+      "eligible_name_sessions": 1,
+      "ic_forward_labels": {
+        "5": null,
+        "20": null,
+        "63": null
+      },
+      "ic_pair_counts": {
+        "5": 1,
+        "20": 1,
+        "63": 1
+      },
+      "ic_note": "Spearman of eligible score vs TRI forward label; signal diagnostic only"
+    },
+    "defense_aero": {
+      "theme_id": "defense_aero",
+      "members_in_panel": 9,
+      "valid_dates": 17,
+      "zero_result_dates": 14,
+      "missing_data_dates": 0,
+      "independent_events": 3,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 1,
+          "rejected": 152,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              139
+            ],
+            [
+              "TREND_DIRECTION",
+              103
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              62
+            ],
+            [
+              "WEAK_STRUCTURE",
+              53
+            ],
+            [
+              "LH_LL",
+              53
+            ],
+            [
+              "EXTENDED",
+              27
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              24
+            ],
+            [
+              "SHORT_HISTORY",
+              9
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 0,
+          "rejected": 153,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              144
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              97
+            ],
+            [
+              "SMA50_SLOPE",
+              93
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              78
+            ],
+            [
+              "BELOW_SMA50",
+              64
+            ],
+            [
+              "WEAK_STRUCTURE",
+              53
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              45
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              45
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 0,
+          "rejected": 153,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              144
+            ],
+            [
+              "TREND_DIRECTION",
+              103
+            ],
+            [
+              "NO_REBOUND",
+              89
+            ],
+            [
+              "LOW_CLV",
+              71
+            ],
+            [
+              "LOW_RVOL",
+              65
+            ],
+            [
+              "WEAK_STRUCTURE",
+              53
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              40
+            ],
+            [
+              "EXTENDED",
+              27
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 2,
+          "rejected": 151,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              133
+            ],
+            [
+              "SMA50_SLOPE",
+              93
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              73
+            ],
+            [
+              "BELOW_SMA50",
+              64
+            ],
+            [
+              "WEAK_STRUCTURE",
+              53
+            ],
+            [
+              "EXTENDED",
+              27
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              24
+            ],
+            [
+              "MISSING_SCORE",
+              18
+            ]
+          ]
+        }
+      },
+      "eligible_name_sessions": 3,
+      "ic_forward_labels": {
+        "5": null,
+        "20": null,
+        "63": null
+      },
+      "ic_pair_counts": {
+        "5": 3,
+        "20": 3,
+        "63": 3
+      },
+      "ic_note": "Spearman of eligible score vs TRI forward label; signal diagnostic only"
+    },
+    "airlines": {
+      "theme_id": "airlines",
+      "members_in_panel": 8,
+      "valid_dates": 17,
+      "zero_result_dates": 12,
+      "missing_data_dates": 0,
+      "independent_events": 2,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 3,
+          "rejected": 133,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              120
+            ],
+            [
+              "TREND_DIRECTION",
+              80
+            ],
+            [
+              "EXTENDED",
+              54
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              49
+            ],
+            [
+              "WEAK_STRUCTURE",
+              24
+            ],
+            [
+              "LH_LL",
+              24
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              13
+            ],
+            [
+              "SHORT_HISTORY",
+              8
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 0,
+          "rejected": 136,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              126
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              107
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              81
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              73
+            ],
+            [
+              "EXTENDED",
+              54
+            ],
+            [
+              "LOW_CLV",
+              39
+            ],
+            [
+              "BELOW_SMA50",
+              32
+            ],
+            [
+              "SMA50_SLOPE",
+              30
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 1,
+          "rejected": 135,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              121
+            ],
+            [
+              "TREND_DIRECTION",
+              80
+            ],
+            [
+              "NO_REBOUND",
+              79
+            ],
+            [
+              "LOW_CLV",
+              60
+            ],
+            [
+              "LOW_RVOL",
+              56
+            ],
+            [
+              "EXTENDED",
+              54
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              31
+            ],
+            [
+              "WEAK_STRUCTURE",
+              24
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 5,
+          "rejected": 131,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              111
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              57
+            ],
+            [
+              "EXTENDED",
+              54
+            ],
+            [
+              "BELOW_SMA50",
+              32
+            ],
+            [
+              "SMA50_SLOPE",
+              30
+            ],
+            [
+              "WEAK_STRUCTURE",
+              24
+            ],
+            [
+              "MISSING_SCORE",
+              16
+            ],
+            [
+              "LOW_COVERAGE",
+              16
+            ]
+          ]
+        }
+      },
+      "eligible_name_sessions": 9,
+      "ic_forward_labels": {
+        "5": null,
+        "20": null,
+        "63": null
+      },
+      "ic_pair_counts": {
+        "5": 9,
+        "20": 9,
+        "63": 9
+      },
+      "ic_note": "Spearman of eligible score vs TRI forward label; signal diagnostic only"
+    },
+    "real_estate": {
+      "theme_id": "real_estate",
+      "members_in_panel": 10,
+      "valid_dates": 17,
+      "zero_result_dates": 17,
+      "missing_data_dates": 0,
+      "independent_events": 0,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 0,
+          "rejected": 170,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              158
+            ],
+            [
+              "TREND_DIRECTION",
+              126
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              75
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              33
+            ],
+            [
+              "WEAK_STRUCTURE",
+              27
+            ],
+            [
+              "LH_LL",
+              27
+            ],
+            [
+              "EXTENDED",
+              17
+            ],
+            [
+              "SHORT_HISTORY",
+              10
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 0,
+          "rejected": 170,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              160
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              100
+            ],
+            [
+              "SMA50_SLOPE",
+              86
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              81
+            ],
+            [
+              "BELOW_SMA50",
+              80
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              80
+            ],
+            [
+              "LOW_CLV",
+              54
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              33
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 0,
+          "rejected": 170,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              160
+            ],
+            [
+              "TREND_DIRECTION",
+              126
+            ],
+            [
+              "NO_REBOUND",
+              103
+            ],
+            [
+              "LOW_CLV",
+              80
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              71
+            ],
+            [
+              "LOW_RVOL",
+              69
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              33
+            ],
+            [
+              "WEAK_STRUCTURE",
+              27
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 0,
+          "rejected": 170,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              148
+            ],
+            [
+              "SMA50_SLOPE",
+              86
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              86
+            ],
+            [
+              "BELOW_SMA50",
+              80
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              33
+            ],
+            [
+              "WEAK_STRUCTURE",
+              27
+            ],
+            [
+              "MISSING_SCORE",
+              20
+            ],
+            [
+              "LOW_COVERAGE",
+              20
+            ]
+          ]
+        }
+      },
+      "eligible_name_sessions": 0,
+      "ic_forward_labels": {
+        "5": null,
+        "20": null,
+        "63": null
+      },
+      "ic_pair_counts": {
+        "5": 0,
+        "20": 0,
+        "63": 0
+      },
+      "ic_note": "Spearman of eligible score vs TRI forward label; signal diagnostic only"
+    },
+    "crypto": {
+      "theme_id": "crypto",
+      "members_in_panel": 9,
+      "valid_dates": 17,
+      "zero_result_dates": 16,
+      "missing_data_dates": 0,
+      "independent_events": 1,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 1,
+          "rejected": 147,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              135
+            ],
+            [
+              "HIGH_ATR",
+              81
+            ],
+            [
+              "TREND_DIRECTION",
+              79
+            ],
+            [
+              "LOW_ADV",
+              66
+            ],
+            [
+              "LH_LL",
+              60
+            ],
+            [
+              "WEAK_STRUCTURE",
+              59
+            ],
+            [
+              "LOW_PRICE",
+              57
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              32
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 0,
+          "rejected": 148,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              137
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              109
+            ],
+            [
+              "HIGH_ATR",
+              81
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              73
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              71
+            ],
+            [
+              "BELOW_SMA50",
+              67
+            ],
+            [
+              "LOW_ADV",
+              66
+            ],
+            [
+              "WEAK_STRUCTURE",
+              59
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 0,
+          "rejected": 148,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              137
+            ],
+            [
+              "NO_REBOUND",
+              91
+            ],
+            [
+              "HIGH_ATR",
+              81
+            ],
+            [
+              "TREND_DIRECTION",
+              79
+            ],
+            [
+              "LOW_CLV",
+              78
+            ],
+            [
+              "LOW_ADV",
+              66
+            ],
+            [
+              "WEAK_STRUCTURE",
+              59
+            ],
+            [
+              "LOW_PRICE",
+              57
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 1,
+          "rejected": 147,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              116
+            ],
+            [
+              "HIGH_ATR",
+              81
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              74
+            ],
+            [
+              "BELOW_SMA50",
+              68
+            ],
+            [
+              "LOW_ADV",
+              66
+            ],
+            [
+              "WEAK_STRUCTURE",
+              60
+            ],
+            [
+              "LOW_PRICE",
+              57
+            ],
+            [
+              "SMA50_SLOPE",
+              50
+            ]
+          ]
+        }
+      },
+      "eligible_name_sessions": 2,
+      "ic_forward_labels": {
+        "5": null,
+        "20": null,
+        "63": null
+      },
+      "ic_pair_counts": {
+        "5": 2,
+        "20": 2,
+        "63": 2
+      },
+      "ic_note": "Spearman of eligible score vs TRI forward label; signal diagnostic only"
+    },
+    "china_adr": {
+      "theme_id": "china_adr",
+      "members_in_panel": 12,
+      "valid_dates": 17,
+      "zero_result_dates": 8,
+      "missing_data_dates": 0,
+      "independent_events": 6,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 4,
+          "rejected": 196,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              177
+            ],
+            [
+              "TREND_DIRECTION",
+              158
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              115
+            ],
+            [
+              "WEAK_STRUCTURE",
+              64
+            ],
+            [
+              "LH_LL",
+              64
+            ],
+            [
+              "EXTENDED",
+              40
+            ],
+            [
+              "INVALIDATED",
+              20
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              15
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 0,
+          "rejected": 200,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              187
+            ],
+            [
+              "SMA50_SLOPE",
+              133
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              125
+            ],
+            [
+              "LOW_CLV",
+              115
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              107
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              80
+            ],
+            [
+              "BELOW_SMA50",
+              69
+            ],
+            [
+              "WEAK_STRUCTURE",
+              64
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 0,
+          "rejected": 200,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              186
+            ],
+            [
+              "TREND_DIRECTION",
+              158
+            ],
+            [
+              "NO_REBOUND",
+              156
+            ],
+            [
+              "LOW_CLV",
+              140
+            ],
+            [
+              "LOW_RVOL",
+              93
+            ],
+            [
+              "WEAK_STRUCTURE",
+              64
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              58
+            ],
+            [
+              "EXTENDED",
+              40
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 6,
+          "rejected": 194,
+          "top_rejections": [
+            [
+              "SMA50_SLOPE",
+              135
+            ],
+            [
+              "MISSING_SCORE",
+              109
+            ],
+            [
+              "LOW_COVERAGE",
+              109
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              83
+            ],
+            [
+              "LOW_SCORE",
+              79
+            ],
+            [
+              "BELOW_SMA50",
+              71
+            ],
+            [
+              "WEAK_STRUCTURE",
+              65
+            ],
+            [
+              "EXTENDED",
+              40
+            ]
+          ]
+        }
+      },
+      "eligible_name_sessions": 10,
+      "ic_forward_labels": {
+        "5": -0.5636363636363636,
+        "20": -0.41818181818181815,
+        "63": -0.4545454545454545
+      },
+      "ic_pair_counts": {
+        "5": 10,
+        "20": 10,
+        "63": 10
+      },
+      "ic_note": "Spearman of eligible score vs TRI forward label; signal diagnostic only"
+    },
+    "telecom": {
+      "theme_id": "telecom",
+      "members_in_panel": 7,
+      "valid_dates": 17,
+      "zero_result_dates": 15,
+      "missing_data_dates": 0,
+      "independent_events": 2,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 2,
+          "rejected": 117,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              108
+            ],
+            [
+              "TREND_DIRECTION",
+              85
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              61
+            ],
+            [
+              "WEAK_STRUCTURE",
+              50
+            ],
+            [
+              "LH_LL",
+              48
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              22
+            ],
+            [
+              "INVALIDATED",
+              13
+            ],
+            [
+              "SHORT_HISTORY",
+              7
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 0,
+          "rejected": 119,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              111
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              80
+            ],
+            [
+              "SMA50_SLOPE",
+              69
+            ],
+            [
+              "BELOW_SMA50",
+              68
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              65
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              51
+            ],
+            [
+              "WEAK_STRUCTURE",
+              50
+            ],
+            [
+              "LOW_CLV",
+              48
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 0,
+          "rejected": 119,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              111
+            ],
+            [
+              "TREND_DIRECTION",
+              85
+            ],
+            [
+              "NO_REBOUND",
+              76
+            ],
+            [
+              "LOW_RVOL",
+              67
+            ],
+            [
+              "LOW_CLV",
+              57
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              52
+            ],
+            [
+              "WEAK_STRUCTURE",
+              50
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              22
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 1,
+          "rejected": 118,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              103
+            ],
+            [
+              "SMA50_SLOPE",
+              69
+            ],
+            [
+              "BELOW_SMA50",
+              68
+            ],
+            [
+              "WEAK_STRUCTURE",
+              50
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              49
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              22
+            ],
+            [
+              "MISSING_SCORE",
+              14
+            ],
+            [
+              "LOW_COVERAGE",
+              14
+            ]
+          ]
+        }
+      },
+      "eligible_name_sessions": 3,
+      "ic_forward_labels": {
+        "5": null,
+        "20": null,
+        "63": null
+      },
+      "ic_pair_counts": {
+        "5": 3,
+        "20": 3,
+        "63": 3
+      },
+      "ic_note": "Spearman of eligible score vs TRI forward label; signal diagnostic only"
+    },
+    "industrials": {
+      "theme_id": "industrials",
+      "members_in_panel": 10,
+      "valid_dates": 17,
+      "zero_result_dates": 12,
+      "missing_data_dates": 0,
+      "independent_events": 3,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 3,
+          "rejected": 167,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              156
+            ],
+            [
+              "TREND_DIRECTION",
+              110
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              67
+            ],
+            [
+              "WEAK_STRUCTURE",
+              56
+            ],
+            [
+              "LH_LL",
+              56
+            ],
+            [
+              "EXTENDED",
+              49
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              25
+            ],
+            [
+              "SHORT_HISTORY",
+              10
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 0,
+          "rejected": 170,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              159
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              101
+            ],
+            [
+              "SMA50_SLOPE",
+              74
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              69
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              65
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              64
+            ],
+            [
+              "LOW_CLV",
+              57
+            ],
+            [
+              "WEAK_STRUCTURE",
+              56
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 0,
+          "rejected": 170,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              160
+            ],
+            [
+              "TREND_DIRECTION",
+              110
+            ],
+            [
+              "NO_REBOUND",
+              87
+            ],
+            [
+              "LOW_RVOL",
+              74
+            ],
+            [
+              "LOW_CLV",
+              67
+            ],
+            [
+              "WEAK_STRUCTURE",
+              56
+            ],
+            [
+              "EXTENDED",
+              49
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              45
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 3,
+          "rejected": 167,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              144
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              82
+            ],
+            [
+              "SMA50_SLOPE",
+              74
+            ],
+            [
+              "WEAK_STRUCTURE",
+              56
+            ],
+            [
+              "EXTENDED",
+              49
+            ],
+            [
+              "BELOW_SMA50",
+              41
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              25
+            ],
+            [
+              "MISSING_SCORE",
+              20
+            ]
+          ]
+        }
+      },
+      "eligible_name_sessions": 6,
+      "ic_forward_labels": {
+        "5": null,
+        "20": null,
+        "63": null
+      },
+      "ic_pair_counts": {
+        "5": 5,
+        "20": 5,
+        "63": 5
+      },
+      "ic_note": "Spearman of eligible score vs TRI forward label; signal diagnostic only"
+    },
+    "etfs": {
+      "theme_id": "etfs",
+      "members_in_panel": 10,
+      "valid_dates": 17,
+      "zero_result_dates": 14,
+      "missing_data_dates": 0,
+      "independent_events": 3,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 1,
+          "rejected": 203,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              183
+            ],
+            [
+              "TREND_DIRECTION",
+              90
+            ],
+            [
+              "EXTENDED",
+              59
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              42
+            ],
+            [
+              "HIGH_ATR",
+              32
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              28
+            ],
+            [
+              "WEAK_STRUCTURE",
+              20
+            ],
+            [
+              "LH_LL",
+              20
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 0,
+          "rejected": 204,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              186
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              144
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              115
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              90
+            ],
+            [
+              "EXTENDED",
+              59
+            ],
+            [
+              "BELOW_SMA50",
+              58
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              55
+            ],
+            [
+              "LOW_CLV",
+              50
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 0,
+          "rejected": 204,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              192
+            ],
+            [
+              "NO_REBOUND",
+              126
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              106
+            ],
+            [
+              "LOW_CLV",
+              96
+            ],
+            [
+              "TREND_DIRECTION",
+              90
+            ],
+            [
+              "EXTENDED",
+              59
+            ],
+            [
+              "LOW_RVOL",
+              51
+            ],
+            [
+              "HIGH_ATR",
+              32
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 4,
+          "rejected": 200,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              153
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              90
+            ],
+            [
+              "EXTENDED",
+              59
+            ],
+            [
+              "BELOW_SMA50",
+              58
+            ],
+            [
+              "SMA50_SLOPE",
+              46
+            ],
+            [
+              "MISSING_SCORE",
+              39
+            ],
+            [
+              "LOW_COVERAGE",
+              39
+            ],
+            [
+              "HIGH_ATR",
+              32
+            ]
+          ]
+        }
+      },
+      "eligible_name_sessions": 5,
+      "ic_forward_labels": {
+        "5": null,
+        "20": null,
+        "63": null
+      },
+      "ic_pair_counts": {
+        "5": 5,
+        "20": 5,
+        "63": 5
+      },
+      "ic_note": "Spearman of eligible score vs TRI forward label; signal diagnostic only"
+    }
+  },
+  "registered": 1920,
+  "executed_snapshots": 1632,
+  "executed_backtests": 0,
+  "outcomes_inspected": 1632,
+  "engineering_fixtures": 0,
+  "market_backtest_run": false,
+  "winners": [],
+  "capability_flags": [
+    "CURRENT_UNIVERSE_SURVIVORS",
+    "PIT_CLASSIFICATION_MISSING",
+    "CORPORATE_ACTIONS_INCOMPLETE",
+    "EXECUTION_DATA_UNVERIFIED",
+    "download_time_not_pit",
+    "IC_IS_SIGNAL_DIAGNOSTIC_NOT_PNL"
+  ],
+  "param_hash": "88e8f452432622c3e6fc9846967466350887de7ceb7f64abe2c37eeb859d13bd",
+  "code_sha": "0c1d419416f057fba2c8184abb54a2f029edbff7",
+  "data_hash": "d910d86505e1914eb14aaacea2ddabc8d61b1f097ab83c513f07750539f32d48",
+  "feature_version": "us-eod-research-features-v1.5",
+  "cache_path": "research/option_pro_us_eod_v1/data/cache/round3_yahoo_abcd/bars.pkl",
+  "execution_log": "research/option_pro_us_eod_v1/return_pack/closeout_historical_execution_log.jsonl",
+  "notes": [
+    "Cache replay only; no Massive; no network purchase.",
+    "Bars after 2024-06-28 were dropped before compute_snapshot.",
+    "Portfolio win-rate is not reported: Yahoo Close is not a verified raw executable print.",
+    "Stop after this fixed-parameter first pass."
+  ],
+  "ic_eligible_snapshots_rerun": 137
+}

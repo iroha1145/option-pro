@@ -7,11 +7,14 @@ import pytest
 from app.services.breakouts.clock import MarketClock
 from app.services.breakouts.models import MarketSession
 from app.services.market_calendar import (
+    ADHOC_FULL_CLOSURES,
+    CALENDAR_VERSION,
     early_close_minutes,
     is_trading_day,
     market_holidays,
     next_trading_day,
     options_close_minutes,
+    trading_sessions,
 )
 
 
@@ -31,6 +34,18 @@ def test_new_year_on_saturday_does_not_close_the_preceding_friday() -> None:
 )
 def test_known_nyse_holidays_are_closed(holiday: date) -> None:
     assert is_trading_day(holiday) is False
+
+
+def test_2018_12_05_official_closure_is_not_a_trading_day() -> None:
+    closed = date(2018, 12, 5)
+    assert closed in ADHOC_FULL_CLOSURES
+    assert is_trading_day(closed) is False
+    assert closed in market_holidays(2018)
+    assert next_trading_day(date(2018, 12, 4)) == date(2018, 12, 6)
+    sessions = trading_sessions(date(2018, 1, 2), date(2024, 6, 28))
+    assert closed not in sessions
+    assert len(sessions) == 1633
+    assert CALENDAR_VERSION == "nyse-official-adhoc-v1"
 
 
 def test_early_close_is_shared_with_breakout_clock() -> None:

@@ -1,0 +1,28 @@
+{
+  "registered_trials": 1920,
+  "registered_breakdown": {
+    "primary_864": 864,
+    "etf_180": 180,
+    "composite_12": 12,
+    "event_overlay_864": 864
+  },
+  "executed_snapshots": 0,
+  "round3_executed_snapshots": 144,
+  "executed_backtests": 0,
+  "outcomes_inspected": 0,
+  "executed_trials": 0,
+  "revoked_invalid_eod_captures": 24,
+  "revoked_description": "The 24 A_trend_quality / balanced / mid snapshots dated 2026-09-16 were generated from an intraday Yahoo download (13:24 NY) labeled as that day's close. Status INVALID_EOD_CAPTURE. They are not valid executed EOD experiments.",
+  "executed_description": "The 24 snapshots from the 2026-09-16 capture stay revoked. Round-3 added engineering fixtures plus Yahoo A/B/C/D on allowed complete sessions, including 24-theme cards for 2026-09-15. See round3_trial_counts.json. Those are signal diagnostics, not market backtests.",
+  "market_backtest_run": false,
+  "winners": [],
+  "holdout_2024_07_01": "not_unsealed",
+  "capability_flags_on_executed": [
+    "INVALID_EOD_CAPTURE",
+    "CURRENT_UNIVERSE_DIAGNOSTIC",
+    "PIT_CLASSIFICATION_MISSING",
+    "CORPORATE_ACTIONS_INCOMPLETE",
+    "EXECUTION_DATA_UNVERIFIED",
+    "SURVIVORSHIP_RISK"
+  ]
+}

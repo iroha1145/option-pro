@@ -1,0 +1,2764 @@
+[
+  {
+    "families": [
+      {
+        "conclusion": "KEEP_FACTOR",
+        "decision": "KEEP_FACTOR_EVIDENCE",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "main_label_horizon": 20,
+        "next_neighbors": [
+          {
+            "H2_side": "below_zero",
+            "H_side": "below_zero",
+            "delta": -0.021134266174677636,
+            "direction": "KEEP_FACTOR",
+            "family": "A_trend_quality",
+            "interval_2H": [
+              -0.04388132974875221,
+              -0.00020642531477620867
+            ],
+            "interval_H": [
+              -0.0414204210950547,
+              -0.0030162392493473683
+            ],
+            "label_horizon": 20,
+            "pair_days": 1361,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_T"
+          }
+        ],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_ROBUST_INCREMENT",
+        "decision": "NO_ROBUST_INCREMENT",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "KEEP_FACTOR",
+        "decision": "KEEP_FACTOR_EVIDENCE",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "main_label_horizon": 20,
+        "next_neighbors": [
+          {
+            "H2_side": "below_zero",
+            "H_side": "below_zero",
+            "delta": -0.022240067060052365,
+            "direction": "KEEP_FACTOR",
+            "family": "C_trend_pullback",
+            "interval_2H": [
+              -0.042102278833295384,
+              -0.0035252244385548977
+            ],
+            "interval_H": [
+              -0.03984199799040333,
+              -0.004343518110028266
+            ],
+            "label_horizon": 20,
+            "pair_days": 1361,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_T"
+          }
+        ],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "KEEP_FACTOR",
+        "decision": "KEEP_FACTOR_EVIDENCE",
+        "eight_factor_status": "DATA_INSUFFICIENT",
+        "family": "D_residual_momentum",
+        "main_label_horizon": 20,
+        "next_neighbors": [
+          {
+            "H2_side": "below_zero",
+            "H_side": "below_zero",
+            "delta": -0.0035644242443109288,
+            "direction": "KEEP_FACTOR",
+            "family": "D_residual_momentum",
+            "interval_2H": [
+              -0.006397738421238658,
+              -0.0008548399428171782
+            ],
+            "interval_H": [
+              -0.006569065040555875,
+              -0.0006103582362910715
+            ],
+            "label_horizon": 20,
+            "pair_days": 1059,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_V"
+          }
+        ],
+        "price_track_status": "EVALUABLE"
+      }
+    ],
+    "theme": "semiconductors"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "NO_ROBUST_INCREMENT",
+        "decision": "NO_ROBUST_INCREMENT",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "main_label_horizon": 20,
+        "next_neighbors": [
+          {
+            "H2_side": "above_zero",
+            "H_side": "above_zero",
+            "delta": 0.02571446474672281,
+            "direction": "REDUCE_WEIGHT_CANDIDATE",
+            "family": "B_confirmed_base_breakout",
+            "interval_2H": [
+              0.005791871555558124,
+              0.04662856898078452
+            ],
+            "interval_H": [
+              0.00698950646831298,
+              0.04656042649151564
+            ],
+            "label_horizon": 20,
+            "pair_days": 930,
+            "profile": "balanced",
+            "reason": "drop/realloc reliably better on label 20; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_B"
+          }
+        ],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "main_label_horizon": 20,
+        "next_neighbors": [
+          {
+            "H2_side": "above_zero",
+            "H_side": "above_zero",
+            "delta": 0.002438122826472341,
+            "direction": "REDUCE_WEIGHT_CANDIDATE",
+            "family": "C_trend_pullback",
+            "interval_2H": [
+              0.00010472486770157312,
+              0.0046788213428100404
+            ],
+            "interval_H": [
+              0.0005336054880940167,
+              0.004563893373201541
+            ],
+            "label_horizon": 20,
+            "pair_days": 927,
+            "profile": "balanced",
+            "reason": "drop/realloc reliably better on label 20; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_B"
+          },
+          {
+            "H2_side": "crosses_zero",
+            "H_side": "below_zero",
+            "delta": -0.024699069359263533,
+            "direction": "KEEP_FACTOR",
+            "family": "C_trend_pullback",
+            "interval_2H": [
+              -0.051060370274728796,
+              0.0005254797383913763
+            ],
+            "interval_H": [
+              -0.048924343415131015,
+              -0.00022398599693854013
+            ],
+            "label_horizon": 20,
+            "pair_days": 927,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_SIGNIFICANT_2H_CROSSES_ZERO; robustness is not a single 95% CI",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_P"
+          }
+        ],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "D_residual_momentum",
+        "main_label_horizon": 20,
+        "next_neighbors": [
+          {
+            "H2_side": "above_zero",
+            "H_side": "above_zero",
+            "delta": 0.0016647674326455092,
+            "direction": "REDUCE_WEIGHT_CANDIDATE",
+            "family": "D_residual_momentum",
+            "interval_2H": [
+              0.00016765756364842696,
+              0.0032743301982321392
+            ],
+            "interval_H": [
+              0.00018296854002024918,
+              0.0031419797170207206
+            ],
+            "label_horizon": 20,
+            "pair_days": 853,
+            "profile": "balanced",
+            "reason": "drop/realloc reliably better on label 20; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_B"
+          }
+        ],
+        "price_track_status": "EVALUABLE"
+      }
+    ],
+    "theme": "software"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "eight_factor_status": "DATA_INSUFFICIENT",
+        "family": "D_residual_momentum",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      }
+    ],
+    "theme": "ai_cloud"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "KEEP_FACTOR",
+        "decision": "KEEP_FACTOR_EVIDENCE",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "main_label_horizon": 20,
+        "next_neighbors": [
+          {
+            "H2_side": "below_zero",
+            "H_side": "below_zero",
+            "delta": -0.002397747971518463,
+            "direction": "KEEP_FACTOR",
+            "family": "A_trend_quality",
+            "interval_2H": [
+              -0.00463193226252842,
+              -0.00027367445847938646
+            ],
+            "interval_H": [
+              -0.004704053768617363,
+              -0.0001678275804828105
+            ],
+            "label_horizon": 20,
+            "pair_days": 915,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_B"
+          },
+          {
+            "H2_side": "crosses_zero",
+            "H_side": "below_zero",
+            "delta": -0.04101121714381383,
+            "direction": "KEEP_FACTOR",
+            "family": "A_trend_quality",
+            "interval_2H": [
+              -0.0807942948129796,
+              0.0014056489375593804
+            ],
+            "interval_H": [
+              -0.07996412192427092,
+              -0.0036254875414443465
+            ],
+            "label_horizon": 20,
+            "pair_days": 905,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_SIGNIFICANT_2H_CROSSES_ZERO; robustness is not a single 95% CI",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_M"
+          },
+          {
+            "H2_side": "below_zero",
+            "H_side": "below_zero",
+            "delta": -0.01034608378870674,
+            "direction": "KEEP_FACTOR",
+            "family": "A_trend_quality",
+            "interval_2H": [
+              -0.01757171783310267,
+              -0.0033235029353126675
+            ],
+            "interval_H": [
+              -0.017549154880993446,
+              -0.0032665007040995125
+            ],
+            "label_horizon": 20,
+            "pair_days": 915,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "N_S_PLUS_5PP_REALLOC_V1"
+          }
+        ],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "main_label_horizon": 20,
+        "next_neighbors": [
+          {
+            "H2_side": "above_zero",
+            "H_side": "above_zero",
+            "delta": 0.02831408002678721,
+            "direction": "REDUCE_WEIGHT_CANDIDATE",
+            "family": "B_confirmed_base_breakout",
+            "interval_2H": [
+              0.0022479724234761365,
+              0.05379322416658037
+            ],
+            "interval_H": [
+              0.0008569519084906298,
+              0.05422870865258236
+            ],
+            "label_horizon": 20,
+            "pair_days": 905,
+            "profile": "balanced",
+            "reason": "drop/realloc reliably better on label 20; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_S"
+          },
+          {
+            "H2_side": "above_zero",
+            "H_side": "above_zero",
+            "delta": 0.016768792901389586,
+            "direction": "REDUCE_WEIGHT_CANDIDATE",
+            "family": "B_confirmed_base_breakout",
+            "interval_2H": [
+              0.004282301163447637,
+              0.02845113954870648
+            ],
+            "interval_H": [
+              0.005211573737491663,
+              0.028391288104750008
+            ],
+            "label_horizon": 20,
+            "pair_days": 905,
+            "profile": "balanced",
+            "reason": "drop/realloc reliably better on label 20; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "N_M_PLUS_5PP_REALLOC_V1"
+          }
+        ],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "main_label_horizon": 20,
+        "next_neighbors": [
+          {
+            "H2_side": "above_zero",
+            "H_side": "above_zero",
+            "delta": 0.011485389610389609,
+            "direction": "REDUCE_WEIGHT_CANDIDATE",
+            "family": "C_trend_pullback",
+            "interval_2H": [
+              0.000866885073842513,
+              0.021939389179631064
+            ],
+            "interval_H": [
+              0.0015853947649940702,
+              0.021828735950212706
+            ],
+            "label_horizon": 20,
+            "pair_days": 896,
+            "profile": "balanced",
+            "reason": "drop/realloc reliably better on label 20; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "N_M_PLUS_5PP_REALLOC_V1"
+          },
+          {
+            "H2_side": "below_zero",
+            "H_side": "below_zero",
+            "delta": -0.02150974025974026,
+            "direction": "KEEP_FACTOR",
+            "family": "C_trend_pullback",
+            "interval_2H": [
+              -0.03974056798255754,
+              -0.0021727407411479597
+            ],
+            "interval_H": [
+              -0.038675997369419124,
+              -0.0054487950596646606
+            ],
+            "label_horizon": 20,
+            "pair_days": 896,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_M"
+          }
+        ],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_ROBUST_INCREMENT",
+        "decision": "NO_ROBUST_INCREMENT",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "D_residual_momentum",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      }
+    ],
+    "theme": "biotech"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "main_label_horizon": 20,
+        "next_neighbors": [
+          {
+            "H2_side": "crosses_zero",
+            "H_side": "above_zero",
+            "delta": 0.01308307171642954,
+            "direction": "REDUCE_WEIGHT_CANDIDATE",
+            "family": "A_trend_quality",
+            "interval_2H": [
+              -0.0010188898523039206,
+              0.026550703558836278
+            ],
+            "interval_H": [
+              0.000645058023209284,
+              0.024883495798288992
+            ],
+            "label_horizon": 20,
+            "pair_days": 1361,
+            "profile": "balanced",
+            "reason": "drop/realloc reliably better on label 20; H_SIGNIFICANT_2H_CROSSES_ZERO; robustness is not a single 95% CI",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_R"
+          },
+          {
+            "H2_side": "below_zero",
+            "H_side": "below_zero",
+            "delta": -0.027136909135439626,
+            "direction": "KEEP_FACTOR",
+            "family": "A_trend_quality",
+            "interval_2H": [
+              -0.04705591814673367,
+              -0.007575354895517904
+            ],
+            "interval_H": [
+              -0.04605280961431174,
+              -0.008969986493173756
+            ],
+            "label_horizon": 20,
+            "pair_days": 1361,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_M"
+          }
+        ],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "main_label_horizon": 20,
+        "next_neighbors": [
+          {
+            "H2_side": "crosses_zero",
+            "H_side": "above_zero",
+            "delta": 0.013786654198116359,
+            "direction": "REDUCE_WEIGHT_CANDIDATE",
+            "family": "B_confirmed_base_breakout",
+            "interval_2H": [
+              -0.00061584595959596,
+              0.02784083327810969
+            ],
+            "interval_H": [
+              0.0003881347167440545,
+              0.026278760532764876
+            ],
+            "label_horizon": 20,
+            "pair_days": 1361,
+            "profile": "balanced",
+            "reason": "drop/realloc reliably better on label 20; H_SIGNIFICANT_2H_CROSSES_ZERO; robustness is not a single 95% CI",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_R"
+          },
+          {
+            "H2_side": "above_zero",
+            "H_side": "above_zero",
+            "delta": 0.01726003606973482,
+            "direction": "REDUCE_WEIGHT_CANDIDATE",
+            "family": "B_confirmed_base_breakout",
+            "interval_2H": [
+              0.0036459806488555453,
+              0.03131848765043658
+            ],
+            "interval_H": [
+              0.004877874737807913,
+              0.029918034754718166
+            ],
+            "label_horizon": 20,
+            "pair_days": 1361,
+            "profile": "balanced",
+            "reason": "drop/realloc reliably better on label 20; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_V"
+          },
+          {
+            "H2_side": "above_zero",
+            "H_side": "above_zero",
+            "delta": 0.008140182129895576,
+            "direction": "REDUCE_WEIGHT_CANDIDATE",
+            "family": "B_confirmed_base_breakout",
+            "interval_2H": [
+              0.0019160972248011357,
+              0.013985788584850726
+            ],
+            "interval_H": [
+              0.0024601240532112507,
+              0.013842464788477726
+            ],
+            "label_horizon": 20,
+            "pair_days": 1361,
+            "profile": "balanced",
+            "reason": "drop/realloc reliably better on label 20; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "N_M_PLUS_5PP_REALLOC_V1"
+          }
+        ],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "main_label_horizon": 20,
+        "next_neighbors": [
+          {
+            "H2_side": "crosses_zero",
+            "H_side": "above_zero",
+            "delta": 0.011824255922251468,
+            "direction": "REDUCE_WEIGHT_CANDIDATE",
+            "family": "C_trend_pullback",
+            "interval_2H": [
+              -0.0014363114629341786,
+              0.024224816580543953
+            ],
+            "interval_H": [
+              0.0007622187050417838,
+              0.02255561189485041
+            ],
+            "label_horizon": 20,
+            "pair_days": 1347,
+            "profile": "balanced",
+            "reason": "drop/realloc reliably better on label 20; H_SIGNIFICANT_2H_CROSSES_ZERO; robustness is not a single 95% CI",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_R"
+          },
+          {
+            "H2_side": "above_zero",
+            "H_side": "above_zero",
+            "delta": 0.007279926210883895,
+            "direction": "REDUCE_WEIGHT_CANDIDATE",
+            "family": "C_trend_pullback",
+            "interval_2H": [
+              0.0011466665066057623,
+              0.013845620413802232
+            ],
+            "interval_H": [
+              0.001198484180747723,
+              0.013828172547491357
+            ],
+            "label_horizon": 20,
+            "pair_days": 1347,
+            "profile": "balanced",
+            "reason": "drop/realloc reliably better on label 20; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "N_M_PLUS_5PP_REALLOC_V1"
+          },
+          {
+            "H2_side": "below_zero",
+            "H_side": "below_zero",
+            "delta": -0.010294481563969313,
+            "direction": "KEEP_FACTOR",
+            "family": "C_trend_pullback",
+            "interval_2H": [
+              -0.01940620978731581,
+              -0.000506317326923933
+            ],
+            "interval_H": [
+              -0.01981458044497421,
+              -0.0012840503927391683
+            ],
+            "label_horizon": 20,
+            "pair_days": 1347,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_M"
+          }
+        ],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "D_residual_momentum",
+        "main_label_horizon": 20,
+        "next_neighbors": [
+          {
+            "H2_side": "above_zero",
+            "H_side": "above_zero",
+            "delta": 0.04173176524451312,
+            "direction": "REDUCE_WEIGHT_CANDIDATE",
+            "family": "D_residual_momentum",
+            "interval_2H": [
+              0.01661298370206301,
+              0.06769388692115966
+            ],
+            "interval_H": [
+              0.018375112018321222,
+              0.06398660850933575
+            ],
+            "label_horizon": 20,
+            "pair_days": 1059,
+            "profile": "balanced",
+            "reason": "drop/realloc reliably better on label 20; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_R"
+          },
+          {
+            "H2_side": "above_zero",
+            "H_side": "above_zero",
+            "delta": 0.007577188313732223,
+            "direction": "REDUCE_WEIGHT_CANDIDATE",
+            "family": "D_residual_momentum",
+            "interval_2H": [
+              0.002786475964917686,
+              0.012534691746686632
+            ],
+            "interval_H": [
+              0.0019925229079967954,
+              0.012895891030984196
+            ],
+            "label_horizon": 20,
+            "pair_days": 1059,
+            "profile": "balanced",
+            "reason": "drop/realloc reliably better on label 20; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "N_S_PLUS_5PP_REALLOC_V1"
+          }
+        ],
+        "price_track_status": "EVALUABLE"
+      }
+    ],
+    "theme": "healthcare"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "D_residual_momentum",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      }
+    ],
+    "theme": "consumer_electronics"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "KEEP_FACTOR",
+        "decision": "KEEP_FACTOR_EVIDENCE",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "main_label_horizon": 20,
+        "next_neighbors": [
+          {
+            "H2_side": "below_zero",
+            "H_side": "below_zero",
+            "delta": -0.03365272259873802,
+            "direction": "KEEP_FACTOR",
+            "family": "A_trend_quality",
+            "interval_2H": [
+              -0.06005255604618589,
+              -0.004827317439721371
+            ],
+            "interval_H": [
+              -0.058144206530094354,
+              -0.009938169281745544
+            ],
+            "label_horizon": 20,
+            "pair_days": 389,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_R"
+          }
+        ],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "KEEP_FACTOR",
+        "decision": "KEEP_FACTOR_EVIDENCE",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "main_label_horizon": 20,
+        "next_neighbors": [
+          {
+            "H2_side": "below_zero",
+            "H_side": "below_zero",
+            "delta": -0.030162810625535563,
+            "direction": "KEEP_FACTOR",
+            "family": "B_confirmed_base_breakout",
+            "interval_2H": [
+              -0.05247639663827943,
+              -0.00542679468481608
+            ],
+            "interval_H": [
+              -0.05089307711258931,
+              -0.009139815205665775
+            ],
+            "label_horizon": 20,
+            "pair_days": 389,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_R"
+          }
+        ],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "KEEP_FACTOR",
+        "decision": "KEEP_FACTOR_EVIDENCE",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "main_label_horizon": 20,
+        "next_neighbors": [
+          {
+            "H2_side": "below_zero",
+            "H_side": "below_zero",
+            "delta": -0.04197767145135566,
+            "direction": "KEEP_FACTOR",
+            "family": "C_trend_pullback",
+            "interval_2H": [
+              -0.07228722856848821,
+              -0.013800776731692685
+            ],
+            "interval_H": [
+              -0.06905040470610348,
+              -0.015401117034780396
+            ],
+            "label_horizon": 20,
+            "pair_days": 380,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_R"
+          }
+        ],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "D_residual_momentum",
+        "main_label_horizon": 20,
+        "next_neighbors": [
+          {
+            "H2_side": "above_zero",
+            "H_side": "above_zero",
+            "delta": 0.009013209013209015,
+            "direction": "REDUCE_WEIGHT_CANDIDATE",
+            "family": "D_residual_momentum",
+            "interval_2H": [
+              0.002977816518456915,
+              0.015750619839197132
+            ],
+            "interval_H": [
+              0.0033894333868123823,
+              0.01520009283228925
+            ],
+            "label_horizon": 20,
+            "pair_days": 312,
+            "profile": "balanced",
+            "reason": "drop/realloc reliably better on label 20; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_V"
+          },
+          {
+            "H2_side": "crosses_zero",
+            "H_side": "below_zero",
+            "delta": -0.07125097125097125,
+            "direction": "KEEP_FACTOR",
+            "family": "D_residual_momentum",
+            "interval_2H": [
+              -0.15007915854394727,
+              0.010276014381099116
+            ],
+            "interval_H": [
+              -0.13929312354312356,
+              -0.005220498495576067
+            ],
+            "label_horizon": 20,
+            "pair_days": 312,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_SIGNIFICANT_2H_CROSSES_ZERO; robustness is not a single 95% CI",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_R"
+          }
+        ],
+        "price_track_status": "EVALUABLE"
+      }
+    ],
+    "theme": "automotive"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "main_label_horizon": 20,
+        "next_neighbors": [
+          {
+            "H2_side": "crosses_zero",
+            "H_side": "above_zero",
+            "delta": 0.03985354833683883,
+            "direction": "REDUCE_WEIGHT_CANDIDATE",
+            "family": "A_trend_quality",
+            "interval_2H": [
+              -0.0018022844561832215,
+              0.0813982427457477
+            ],
+            "interval_H": [
+              0.0007842078325479581,
+              0.08014627058132931
+            ],
+            "label_horizon": 20,
+            "pair_days": 389,
+            "profile": "balanced",
+            "reason": "drop/realloc reliably better on label 20; H_SIGNIFICANT_2H_CROSSES_ZERO; robustness is not a single 95% CI",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_S"
+          },
+          {
+            "H2_side": "below_zero",
+            "H_side": "below_zero",
+            "delta": -0.03885643063020955,
+            "direction": "KEEP_FACTOR",
+            "family": "A_trend_quality",
+            "interval_2H": [
+              -0.06988727971820863,
+              -0.013071897644215557
+            ],
+            "interval_H": [
+              -0.0721382738702229,
+              -0.013147400779909627
+            ],
+            "label_horizon": 20,
+            "pair_days": 389,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_M"
+          },
+          {
+            "H2_side": "below_zero",
+            "H_side": "below_zero",
+            "delta": -0.011653813196229651,
+            "direction": "KEEP_FACTOR",
+            "family": "A_trend_quality",
+            "interval_2H": [
+              -0.025191238281077298,
+              -3.28376798828009e-18
+            ],
+            "interval_H": [
+              -0.023462663302235495,
+              -0.0005948720702819156
+            ],
+            "label_horizon": 20,
+            "pair_days": 389,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_R"
+          }
+        ],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "KEEP_FACTOR",
+        "decision": "KEEP_FACTOR_EVIDENCE",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "main_label_horizon": 20,
+        "next_neighbors": [
+          {
+            "H2_side": "below_zero",
+            "H_side": "below_zero",
+            "delta": -0.03087948897717535,
+            "direction": "KEEP_FACTOR",
+            "family": "B_confirmed_base_breakout",
+            "interval_2H": [
+              -0.06290236127508854,
+              -0.004863959459919074
+            ],
+            "interval_H": [
+              -0.060690337844464065,
+              -0.006448207808589688
+            ],
+            "label_horizon": 20,
+            "pair_days": 389,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_M"
+          },
+          {
+            "H2_side": "below_zero",
+            "H_side": "below_zero",
+            "delta": -0.010719015346264705,
+            "direction": "KEEP_FACTOR",
+            "family": "B_confirmed_base_breakout",
+            "interval_2H": [
+              -0.019576785092302332,
+              -0.0014049145734098738
+            ],
+            "interval_H": [
+              -0.01937729406743491,
+              -0.00132381355398094
+            ],
+            "label_horizon": 20,
+            "pair_days": 389,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_R"
+          }
+        ],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "KEEP_FACTOR",
+        "decision": "KEEP_FACTOR_EVIDENCE",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "main_label_horizon": 20,
+        "next_neighbors": [
+          {
+            "H2_side": "below_zero",
+            "H_side": "below_zero",
+            "delta": -0.009287682014954743,
+            "direction": "KEEP_FACTOR",
+            "family": "C_trend_pullback",
+            "interval_2H": [
+              -0.016334657879434,
+              -0.0017893083930679223
+            ],
+            "interval_H": [
+              -0.018070307086481097,
+              -0.0010062658691595851
+            ],
+            "label_horizon": 20,
+            "pair_days": 385,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "N_S_PLUS_5PP_REALLOC_V1"
+          }
+        ],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "KEEP_FACTOR",
+        "decision": "KEEP_FACTOR_EVIDENCE",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "D_residual_momentum",
+        "main_label_horizon": 20,
+        "next_neighbors": [
+          {
+            "H2_side": "below_zero",
+            "H_side": "below_zero",
+            "delta": -0.013752913752913752,
+            "direction": "KEEP_FACTOR",
+            "family": "D_residual_momentum",
+            "interval_2H": [
+              -0.029400326276336645,
+              -0.0014140840220385655
+            ],
+            "interval_H": [
+              -0.028843950595638157,
+              -0.001756854485707396
+            ],
+            "label_horizon": 20,
+            "pair_days": 312,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "N_S_PLUS_5PP_REALLOC_V1"
+          }
+        ],
+        "price_track_status": "EVALUABLE"
+      }
+    ],
+    "theme": "ev_supply"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "NO_ROBUST_INCREMENT",
+        "decision": "NO_ROBUST_INCREMENT",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_ROBUST_INCREMENT",
+        "decision": "NO_ROBUST_INCREMENT",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_ROBUST_INCREMENT",
+        "decision": "NO_ROBUST_INCREMENT",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_ROBUST_INCREMENT",
+        "decision": "NO_ROBUST_INCREMENT",
+        "eight_factor_status": "DATA_INSUFFICIENT",
+        "family": "D_residual_momentum",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      }
+    ],
+    "theme": "finance"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "NO_ROBUST_INCREMENT",
+        "decision": "NO_ROBUST_INCREMENT",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "main_label_horizon": 20,
+        "next_neighbors": [
+          {
+            "H2_side": "above_zero",
+            "H_side": "above_zero",
+            "delta": 0.02715466351829988,
+            "direction": "REDUCE_WEIGHT_CANDIDATE",
+            "family": "B_confirmed_base_breakout",
+            "interval_2H": [
+              0.0038765151515151516,
+              0.05172552801777933
+            ],
+            "interval_H": [
+              0.0002206337080286667,
+              0.0565386679292929
+            ],
+            "label_horizon": 20,
+            "pair_days": 462,
+            "profile": "balanced",
+            "reason": "drop/realloc reliably better on label 20; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_S"
+          }
+        ],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "KEEP_FACTOR",
+        "decision": "KEEP_FACTOR_EVIDENCE",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "main_label_horizon": 20,
+        "next_neighbors": [
+          {
+            "H2_side": "below_zero",
+            "H_side": "below_zero",
+            "delta": -0.0022038567493112954,
+            "direction": "KEEP_FACTOR",
+            "family": "C_trend_pullback",
+            "interval_2H": [
+              -0.0044914283411623835,
+              -0.00021203221227540542
+            ],
+            "interval_H": [
+              -0.004684584980237155,
+              -2.8005170185270326e-05
+            ],
+            "label_horizon": 20,
+            "pair_days": 462,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_B"
+          },
+          {
+            "H2_side": "below_zero",
+            "H_side": "below_zero",
+            "delta": -0.0572215663124754,
+            "direction": "KEEP_FACTOR",
+            "family": "C_trend_pullback",
+            "interval_2H": [
+              -0.10170721500721498,
+              -0.009166014622547672
+            ],
+            "interval_H": [
+              -0.10379143139274641,
+              -0.01168064348720269
+            ],
+            "label_horizon": 20,
+            "pair_days": 462,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_R"
+          },
+          {
+            "H2_side": "crosses_zero",
+            "H_side": "below_zero",
+            "delta": -0.008553063098517645,
+            "direction": "KEEP_FACTOR",
+            "family": "C_trend_pullback",
+            "interval_2H": [
+              -0.019490062756925945,
+              0.00043871510806994015
+            ],
+            "interval_H": [
+              -0.017823790745659714,
+              -0.00018737282076665461
+            ],
+            "label_horizon": 20,
+            "pair_days": 462,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_SIGNIFICANT_2H_CROSSES_ZERO; robustness is not a single 95% CI",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "N_S_PLUS_5PP_REALLOC_V1"
+          }
+        ],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_ROBUST_INCREMENT",
+        "decision": "NO_ROBUST_INCREMENT",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "D_residual_momentum",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      }
+    ],
+    "theme": "fintech"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "KEEP_FACTOR",
+        "decision": "KEEP_FACTOR_EVIDENCE",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "main_label_horizon": 20,
+        "next_neighbors": [
+          {
+            "H2_side": "below_zero",
+            "H_side": "below_zero",
+            "delta": -0.005521786565137043,
+            "direction": "KEEP_FACTOR",
+            "family": "A_trend_quality",
+            "interval_2H": [
+              -0.009448936187207584,
+              -0.0015664217613996058
+            ],
+            "interval_H": [
+              -0.009627742536141085,
+              -0.0013551105252678412
+            ],
+            "label_horizon": 20,
+            "pair_days": 1361,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_P"
+          }
+        ],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "main_label_horizon": 20,
+        "next_neighbors": [
+          {
+            "H2_side": "above_zero",
+            "H_side": "above_zero",
+            "delta": 0.020430610291007057,
+            "direction": "REDUCE_WEIGHT_CANDIDATE",
+            "family": "B_confirmed_base_breakout",
+            "interval_2H": [
+              0.006752231614843242,
+              0.03478948902772696
+            ],
+            "interval_H": [
+              0.007904433745555243,
+              0.03487264951153456
+            ],
+            "label_horizon": 20,
+            "pair_days": 1361,
+            "profile": "balanced",
+            "reason": "drop/realloc reliably better on label 20; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_M"
+          }
+        ],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "main_label_horizon": 20,
+        "next_neighbors": [
+          {
+            "H2_side": "above_zero",
+            "H_side": "above_zero",
+            "delta": 0.009281847384145383,
+            "direction": "REDUCE_WEIGHT_CANDIDATE",
+            "family": "C_trend_pullback",
+            "interval_2H": [
+              0.00024678791322921354,
+              0.018470083992666947
+            ],
+            "interval_H": [
+              0.0010278295876492434,
+              0.01831148187551993
+            ],
+            "label_horizon": 20,
+            "pair_days": 1349,
+            "profile": "balanced",
+            "reason": "drop/realloc reliably better on label 20; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_M"
+          },
+          {
+            "H2_side": "below_zero",
+            "H_side": "below_zero",
+            "delta": -0.025985578543028506,
+            "direction": "KEEP_FACTOR",
+            "family": "C_trend_pullback",
+            "interval_2H": [
+              -0.052602058805682785,
+              -0.0013182942382246583
+            ],
+            "interval_H": [
+              -0.05037676569931627,
+              -0.003865110745080936
+            ],
+            "label_horizon": 20,
+            "pair_days": 1349,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_P"
+          },
+          {
+            "H2_side": "below_zero",
+            "H_side": "below_zero",
+            "delta": -0.00623582002381113,
+            "direction": "KEEP_FACTOR",
+            "family": "C_trend_pullback",
+            "interval_2H": [
+              -0.011832511543087726,
+              -0.0010460734341014573
+            ],
+            "interval_H": [
+              -0.01172741851129006,
+              -0.001100961583735104
+            ],
+            "label_horizon": 20,
+            "pair_days": 1349,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_V"
+          }
+        ],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_ROBUST_INCREMENT",
+        "decision": "NO_ROBUST_INCREMENT",
+        "eight_factor_status": "DATA_INSUFFICIENT",
+        "family": "D_residual_momentum",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      }
+    ],
+    "theme": "retail"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "D_residual_momentum",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      }
+    ],
+    "theme": "luxury"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "D_residual_momentum",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      }
+    ],
+    "theme": "media_streaming"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "D_residual_momentum",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      }
+    ],
+    "theme": "social_internet"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "NO_ROBUST_INCREMENT",
+        "decision": "NO_ROBUST_INCREMENT",
+        "eight_factor_status": "DATA_INSUFFICIENT",
+        "family": "A_trend_quality",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_ROBUST_INCREMENT",
+        "decision": "NO_ROBUST_INCREMENT",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_ROBUST_INCREMENT",
+        "decision": "NO_ROBUST_INCREMENT",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_ROBUST_INCREMENT",
+        "decision": "NO_ROBUST_INCREMENT",
+        "eight_factor_status": "DATA_INSUFFICIENT",
+        "family": "D_residual_momentum",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      }
+    ],
+    "theme": "energy"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "KEEP_FACTOR",
+        "decision": "KEEP_FACTOR_EVIDENCE",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "main_label_horizon": 20,
+        "next_neighbors": [
+          {
+            "H2_side": "below_zero",
+            "H_side": "below_zero",
+            "delta": -0.009037745879851143,
+            "direction": "KEEP_FACTOR",
+            "family": "A_trend_quality",
+            "interval_2H": [
+              -0.014940044704750586,
+              -0.0025847486872417657
+            ],
+            "interval_H": [
+              -0.016162033558727775,
+              -0.002263021147297228
+            ],
+            "label_horizon": 20,
+            "pair_days": 342,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_V"
+          }
+        ],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "main_label_horizon": 20,
+        "next_neighbors": [
+          {
+            "H2_side": "above_zero",
+            "H_side": "above_zero",
+            "delta": 0.050434166223639915,
+            "direction": "REDUCE_WEIGHT_CANDIDATE",
+            "family": "B_confirmed_base_breakout",
+            "interval_2H": [
+              0.011423210662857088,
+              0.10075035681747202
+            ],
+            "interval_H": [
+              0.0028902136115250853,
+              0.10538531166411033
+            ],
+            "label_horizon": 20,
+            "pair_days": 342,
+            "profile": "balanced",
+            "reason": "drop/realloc reliably better on label 20; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_S"
+          },
+          {
+            "H2_side": "above_zero",
+            "H_side": "above_zero",
+            "delta": 0.01952861952861953,
+            "direction": "REDUCE_WEIGHT_CANDIDATE",
+            "family": "B_confirmed_base_breakout",
+            "interval_2H": [
+              0.006853047200630848,
+              0.03465334516501426
+            ],
+            "interval_H": [
+              0.004208014739751267,
+              0.03563992992494812
+            ],
+            "label_horizon": 20,
+            "pair_days": 342,
+            "profile": "balanced",
+            "reason": "drop/realloc reliably better on label 20; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "N_M_PLUS_5PP_REALLOC_V1"
+          },
+          {
+            "H2_side": "below_zero",
+            "H_side": "below_zero",
+            "delta": -0.03349282296650717,
+            "direction": "KEEP_FACTOR",
+            "family": "B_confirmed_base_breakout",
+            "interval_2H": [
+              -0.06243430230978146,
+              -0.009189476609426416
+            ],
+            "interval_H": [
+              -0.06205859285948334,
+              -0.006969341061622941
+            ],
+            "label_horizon": 20,
+            "pair_days": 342,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_M"
+          }
+        ],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "main_label_horizon": 20,
+        "next_neighbors": [
+          {
+            "H2_side": "above_zero",
+            "H_side": "above_zero",
+            "delta": 0.04237060874229016,
+            "direction": "REDUCE_WEIGHT_CANDIDATE",
+            "family": "C_trend_pullback",
+            "interval_2H": [
+              0.005128656696838519,
+              0.08321402128437748
+            ],
+            "interval_H": [
+              0.005507172733573042,
+              0.08023857990016099
+            ],
+            "label_horizon": 20,
+            "pair_days": 339,
+            "profile": "balanced",
+            "reason": "drop/realloc reliably better on label 20; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_P"
+          },
+          {
+            "H2_side": "below_zero",
+            "H_side": "below_zero",
+            "delta": -0.028354339858764642,
+            "direction": "KEEP_FACTOR",
+            "family": "C_trend_pullback",
+            "interval_2H": [
+              -0.04684362397003369,
+              -0.009613177973620393
+            ],
+            "interval_H": [
+              -0.04725249774756692,
+              -0.009762228502485513
+            ],
+            "label_horizon": 20,
+            "pair_days": 339,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_M"
+          },
+          {
+            "H2_side": "below_zero",
+            "H_side": "below_zero",
+            "delta": -0.08434790381693036,
+            "direction": "KEEP_FACTOR",
+            "family": "C_trend_pullback",
+            "interval_2H": [
+              -0.14927792207792207,
+              -0.025481365803130755
+            ],
+            "interval_H": [
+              -0.13866590534196166,
+              -0.03378285013473536
+            ],
+            "label_horizon": 20,
+            "pair_days": 339,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_T"
+          }
+        ],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "KEEP_FACTOR",
+        "decision": "KEEP_FACTOR_EVIDENCE",
+        "eight_factor_status": "DATA_INSUFFICIENT",
+        "family": "D_residual_momentum",
+        "main_label_horizon": 20,
+        "next_neighbors": [
+          {
+            "H2_side": "below_zero",
+            "H_side": "below_zero",
+            "delta": -0.07414522584333905,
+            "direction": "KEEP_FACTOR",
+            "family": "D_residual_momentum",
+            "interval_2H": [
+              -0.13929447585906915,
+              -0.008449019270123346
+            ],
+            "interval_H": [
+              -0.13235344962566678,
+              -0.015551967640202962
+            ],
+            "label_horizon": 20,
+            "pair_days": 265,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_T"
+          }
+        ],
+        "price_track_status": "EVALUABLE"
+      }
+    ],
+    "theme": "utilities"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "eight_factor_status": "DATA_INSUFFICIENT",
+        "family": "D_residual_momentum",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      }
+    ],
+    "theme": "defense_aero"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "eight_factor_status": "DATA_INSUFFICIENT",
+        "family": "D_residual_momentum",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      }
+    ],
+    "theme": "airlines"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "main_label_horizon": 20,
+        "next_neighbors": [
+          {
+            "H2_side": "above_zero",
+            "H_side": "above_zero",
+            "delta": 0.02440273417496048,
+            "direction": "REDUCE_WEIGHT_CANDIDATE",
+            "family": "A_trend_quality",
+            "interval_2H": [
+              0.0025067920615739897,
+              0.04594254473459619
+            ],
+            "interval_H": [
+              0.0024802767758315665,
+              0.04794525971812907
+            ],
+            "label_horizon": 20,
+            "pair_days": 1361,
+            "profile": "balanced",
+            "reason": "drop/realloc reliably better on label 20; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_S"
+          },
+          {
+            "H2_side": "below_zero",
+            "H_side": "below_zero",
+            "delta": -0.044405851312537575,
+            "direction": "KEEP_FACTOR",
+            "family": "A_trend_quality",
+            "interval_2H": [
+              -0.07018705000124567,
+              -0.022428521140244677
+            ],
+            "interval_H": [
+              -0.06972290132366556,
+              -0.02135382096977372
+            ],
+            "label_horizon": 20,
+            "pair_days": 1361,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_T"
+          },
+          {
+            "H2_side": "below_zero",
+            "H_side": "below_zero",
+            "delta": -0.007026918709505043,
+            "direction": "KEEP_FACTOR",
+            "family": "A_trend_quality",
+            "interval_2H": [
+              -0.011891413831717523,
+              -0.0018496816123398409
+            ],
+            "interval_H": [
+              -0.012536405539274117,
+              -0.0017174224890125437
+            ],
+            "label_horizon": 20,
+            "pair_days": 1361,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "N_S_PLUS_5PP_REALLOC_V1"
+          }
+        ],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "main_label_horizon": 20,
+        "next_neighbors": [
+          {
+            "H2_side": "above_zero",
+            "H_side": "above_zero",
+            "delta": 0.03221596495932779,
+            "direction": "REDUCE_WEIGHT_CANDIDATE",
+            "family": "B_confirmed_base_breakout",
+            "interval_2H": [
+              0.006725959409127727,
+              0.05854473339951857
+            ],
+            "interval_H": [
+              0.007421774851116733,
+              0.05921636437321584
+            ],
+            "label_horizon": 20,
+            "pair_days": 1356,
+            "profile": "balanced",
+            "reason": "drop/realloc reliably better on label 20; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_S"
+          },
+          {
+            "H2_side": "crosses_zero",
+            "H_side": "below_zero",
+            "delta": -0.012326807902029141,
+            "direction": "KEEP_FACTOR",
+            "family": "B_confirmed_base_breakout",
+            "interval_2H": [
+              -0.024219696969696974,
+              0.00013133034523408758
+            ],
+            "interval_H": [
+              -0.024337358989248905,
+              -0.0007888621287024211
+            ],
+            "label_horizon": 20,
+            "pair_days": 1356,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_SIGNIFICANT_2H_CROSSES_ZERO; robustness is not a single 95% CI",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_M"
+          },
+          {
+            "H2_side": "below_zero",
+            "H_side": "below_zero",
+            "delta": -0.005077321891481183,
+            "direction": "KEEP_FACTOR",
+            "family": "B_confirmed_base_breakout",
+            "interval_2H": [
+              -0.008897871381696423,
+              -0.0012229635807617467
+            ],
+            "interval_H": [
+              -0.008682231232809269,
+              -0.0013848283981027381
+            ],
+            "label_horizon": 20,
+            "pair_days": 1356,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_P"
+          }
+        ],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "main_label_horizon": 20,
+        "next_neighbors": [
+          {
+            "H2_side": "above_zero",
+            "H_side": "above_zero",
+            "delta": 0.03986170429123449,
+            "direction": "REDUCE_WEIGHT_CANDIDATE",
+            "family": "C_trend_pullback",
+            "interval_2H": [
+              0.014875811584174701,
+              0.06498876565349478
+            ],
+            "interval_H": [
+              0.014820269930454447,
+              0.06508101200402333
+            ],
+            "label_horizon": 20,
+            "pair_days": 1341,
+            "profile": "balanced",
+            "reason": "drop/realloc reliably better on label 20; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_S"
+          },
+          {
+            "H2_side": "below_zero",
+            "H_side": "below_zero",
+            "delta": -0.027604908141820893,
+            "direction": "KEEP_FACTOR",
+            "family": "C_trend_pullback",
+            "interval_2H": [
+              -0.05187619457214669,
+              -0.004078118246027039
+            ],
+            "interval_H": [
+              -0.05019901241686273,
+              -0.0055159225453525595
+            ],
+            "label_horizon": 20,
+            "pair_days": 1341,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_T"
+          },
+          {
+            "H2_side": "below_zero",
+            "H_side": "below_zero",
+            "delta": -0.004718324181411429,
+            "direction": "KEEP_FACTOR",
+            "family": "C_trend_pullback",
+            "interval_2H": [
+              -0.009062465525188185,
+              -0.00029615681114246727
+            ],
+            "interval_H": [
+              -0.009655317439478572,
+              -0.0001004442098781728
+            ],
+            "label_horizon": 20,
+            "pair_days": 1341,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "N_S_PLUS_5PP_REALLOC_V1"
+          }
+        ],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "eight_factor_status": "DATA_INSUFFICIENT",
+        "family": "D_residual_momentum",
+        "main_label_horizon": 20,
+        "next_neighbors": [
+          {
+            "H2_side": "above_zero",
+            "H_side": "above_zero",
+            "delta": 0.0017855609923598588,
+            "direction": "REDUCE_WEIGHT_CANDIDATE",
+            "family": "D_residual_momentum",
+            "interval_2H": [
+              0.0005039392711887977,
+              0.003107526616733703
+            ],
+            "interval_H": [
+              0.0004845162500334908,
+              0.003078057155918176
+            ],
+            "label_horizon": 20,
+            "pair_days": 1059,
+            "profile": "balanced",
+            "reason": "drop/realloc reliably better on label 20; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_B"
+          },
+          {
+            "H2_side": "above_zero",
+            "H_side": "above_zero",
+            "delta": 0.02443700460697628,
+            "direction": "REDUCE_WEIGHT_CANDIDATE",
+            "family": "D_residual_momentum",
+            "interval_2H": [
+              0.00792791717586681,
+              0.041338491259829906
+            ],
+            "interval_H": [
+              0.006996594201737391,
+              0.04139881280264086
+            ],
+            "label_horizon": 20,
+            "pair_days": 1059,
+            "profile": "balanced",
+            "reason": "drop/realloc reliably better on label 20; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_S"
+          },
+          {
+            "H2_side": "above_zero",
+            "H_side": "above_zero",
+            "delta": 0.013403153346496123,
+            "direction": "REDUCE_WEIGHT_CANDIDATE",
+            "family": "D_residual_momentum",
+            "interval_2H": [
+              0.0019463859828443145,
+              0.027231920668308592
+            ],
+            "interval_H": [
+              0.0028387138853227718,
+              0.025766800214778403
+            ],
+            "label_horizon": 20,
+            "pair_days": 1059,
+            "profile": "balanced",
+            "reason": "drop/realloc reliably better on label 20; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "N_M_PLUS_5PP_REALLOC_V1"
+          }
+        ],
+        "price_track_status": "EVALUABLE"
+      }
+    ],
+    "theme": "real_estate"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "eight_factor_status": "DATA_INSUFFICIENT",
+        "family": "D_residual_momentum",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      }
+    ],
+    "theme": "crypto"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "NO_ROBUST_INCREMENT",
+        "decision": "NO_ROBUST_INCREMENT",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "main_label_horizon": 20,
+        "next_neighbors": [
+          {
+            "H2_side": "above_zero",
+            "H_side": "above_zero",
+            "delta": 0.010740325824102911,
+            "direction": "REDUCE_WEIGHT_CANDIDATE",
+            "family": "B_confirmed_base_breakout",
+            "interval_2H": [
+              0.0029353243367756295,
+              0.019138617715768518
+            ],
+            "interval_H": [
+              0.002467268600976326,
+              0.019025940738791082
+            ],
+            "label_horizon": 20,
+            "pair_days": 1123,
+            "profile": "balanced",
+            "reason": "drop/realloc reliably better on label 20; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "N_M_PLUS_5PP_REALLOC_V1"
+          },
+          {
+            "H2_side": "below_zero",
+            "H_side": "below_zero",
+            "delta": -0.022962580872339662,
+            "direction": "KEEP_FACTOR",
+            "family": "B_confirmed_base_breakout",
+            "interval_2H": [
+              -0.039125446800905524,
+              -0.008533214628124041
+            ],
+            "interval_H": [
+              -0.03851027707752766,
+              -0.006882565083732278
+            ],
+            "label_horizon": 20,
+            "pair_days": 1123,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_M"
+          },
+          {
+            "H2_side": "below_zero",
+            "H_side": "below_zero",
+            "delta": -0.01759686727147625,
+            "direction": "KEEP_FACTOR",
+            "family": "B_confirmed_base_breakout",
+            "interval_2H": [
+              -0.029614354284096964,
+              -0.006209863689740952
+            ],
+            "interval_H": [
+              -0.029033194914535432,
+              -0.005695239616094349
+            ],
+            "label_horizon": 20,
+            "pair_days": 1123,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_T"
+          }
+        ],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "KEEP_FACTOR",
+        "decision": "KEEP_FACTOR_EVIDENCE",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "main_label_horizon": 20,
+        "next_neighbors": [
+          {
+            "H2_side": "below_zero",
+            "H_side": "below_zero",
+            "delta": -0.0019579169713217965,
+            "direction": "KEEP_FACTOR",
+            "family": "C_trend_pullback",
+            "interval_2H": [
+              -0.0037438262230882987,
+              -0.0003521813302501345
+            ],
+            "interval_H": [
+              -0.0035771178763808055,
+              -0.0005019800987542921
+            ],
+            "label_horizon": 20,
+            "pair_days": 1119,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_B"
+          },
+          {
+            "H2_side": "below_zero",
+            "H_side": "below_zero",
+            "delta": -0.015793738581942336,
+            "direction": "KEEP_FACTOR",
+            "family": "C_trend_pullback",
+            "interval_2H": [
+              -0.03151162898075329,
+              -0.0019437936088969618
+            ],
+            "interval_H": [
+              -0.02980130235833757,
+              -0.0014222978338333191
+            ],
+            "label_horizon": 20,
+            "pair_days": 1119,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_M"
+          },
+          {
+            "H2_side": "below_zero",
+            "H_side": "below_zero",
+            "delta": -0.025951293917778083,
+            "direction": "KEEP_FACTOR",
+            "family": "C_trend_pullback",
+            "interval_2H": [
+              -0.0444028801725441,
+              -0.007697599026825017
+            ],
+            "interval_H": [
+              -0.04328953312886216,
+              -0.00862857904489399
+            ],
+            "label_horizon": 20,
+            "pair_days": 1119,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_T"
+          }
+        ],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_ROBUST_INCREMENT",
+        "decision": "NO_ROBUST_INCREMENT",
+        "eight_factor_status": "DATA_INSUFFICIENT",
+        "family": "D_residual_momentum",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      }
+    ],
+    "theme": "china_adr"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CONCLUSION",
+        "decision": "CROSS_SECTION_THIN",
+        "eight_factor_status": "DATA_INSUFFICIENT",
+        "family": "D_residual_momentum",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      }
+    ],
+    "theme": "telecom"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "NO_ROBUST_INCREMENT",
+        "decision": "NO_ROBUST_INCREMENT",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_ROBUST_INCREMENT",
+        "decision": "NO_ROBUST_INCREMENT",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_ROBUST_INCREMENT",
+        "decision": "NO_ROBUST_INCREMENT",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_ROBUST_INCREMENT",
+        "decision": "NO_ROBUST_INCREMENT",
+        "eight_factor_status": "DATA_INSUFFICIENT",
+        "family": "D_residual_momentum",
+        "main_label_horizon": 20,
+        "next_neighbors": [],
+        "price_track_status": "EVALUABLE"
+      }
+    ],
+    "theme": "industrials"
+  },
+  {
+    "families": [
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "A_trend_quality",
+        "main_label_horizon": 20,
+        "next_neighbors": [
+          {
+            "H2_side": "above_zero",
+            "H_side": "above_zero",
+            "delta": 0.006854805273777606,
+            "direction": "REDUCE_WEIGHT_CANDIDATE",
+            "family": "A_trend_quality",
+            "interval_2H": [
+              0.0014262639859237737,
+              0.01231632427101296
+            ],
+            "interval_H": [
+              0.0013323577448714947,
+              0.012528399302698421
+            ],
+            "label_horizon": 20,
+            "pair_days": 1265,
+            "profile": "balanced",
+            "reason": "drop/realloc reliably better on label 20; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "N_M_PLUS_5PP_REALLOC_V1"
+          },
+          {
+            "H2_side": "crosses_zero",
+            "H_side": "below_zero",
+            "delta": -0.03153210425937698,
+            "direction": "KEEP_FACTOR",
+            "family": "A_trend_quality",
+            "interval_2H": [
+              -0.06549904903427625,
+              0.0004700601770913949
+            ],
+            "interval_H": [
+              -0.062043082170310584,
+              -0.002437154086899145
+            ],
+            "label_horizon": 20,
+            "pair_days": 1265,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_SIGNIFICANT_2H_CROSSES_ZERO; robustness is not a single 95% CI",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_M"
+          }
+        ],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "B_confirmed_base_breakout",
+        "main_label_horizon": 20,
+        "next_neighbors": [
+          {
+            "H2_side": "above_zero",
+            "H_side": "above_zero",
+            "delta": 0.011382293595732333,
+            "direction": "REDUCE_WEIGHT_CANDIDATE",
+            "family": "B_confirmed_base_breakout",
+            "interval_2H": [
+              0.00011692012018475248,
+              0.023438217900243214
+            ],
+            "interval_H": [
+              0.0015293667235347199,
+              0.021887526349248843
+            ],
+            "label_horizon": 20,
+            "pair_days": 1265,
+            "profile": "balanced",
+            "reason": "drop/realloc reliably better on label 20; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "N_M_PLUS_5PP_REALLOC_V1"
+          },
+          {
+            "H2_side": "crosses_zero",
+            "H_side": "below_zero",
+            "delta": -0.020592056165178695,
+            "direction": "KEEP_FACTOR",
+            "family": "B_confirmed_base_breakout",
+            "interval_2H": [
+              -0.04515740359491836,
+              0.0026069879651436567
+            ],
+            "interval_H": [
+              -0.04222675802507735,
+              -0.0009352483006440125
+            ],
+            "label_horizon": 20,
+            "pair_days": 1265,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_SIGNIFICANT_2H_CROSSES_ZERO; robustness is not a single 95% CI",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_M"
+          }
+        ],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "C_trend_pullback",
+        "main_label_horizon": 20,
+        "next_neighbors": [
+          {
+            "H2_side": "above_zero",
+            "H_side": "above_zero",
+            "delta": 0.009441941457751735,
+            "direction": "REDUCE_WEIGHT_CANDIDATE",
+            "family": "C_trend_pullback",
+            "interval_2H": [
+              0.0010139016769285846,
+              0.018125439819562324
+            ],
+            "interval_H": [
+              0.0018880207535477962,
+              0.017724601339487122
+            ],
+            "label_horizon": 20,
+            "pair_days": 1265,
+            "profile": "balanced",
+            "reason": "drop/realloc reliably better on label 20; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "N_M_PLUS_5PP_REALLOC_V1"
+          },
+          {
+            "H2_side": "below_zero",
+            "H_side": "below_zero",
+            "delta": -0.0011166698913734482,
+            "direction": "KEEP_FACTOR",
+            "family": "C_trend_pullback",
+            "interval_2H": [
+              -0.001977449816134557,
+              -0.00025130420909888815
+            ],
+            "interval_H": [
+              -0.001966740787179556,
+              -0.00024691628443888826
+            ],
+            "label_horizon": 20,
+            "pair_days": 1265,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_B"
+          },
+          {
+            "H2_side": "below_zero",
+            "H_side": "below_zero",
+            "delta": -0.021788145977869298,
+            "direction": "KEEP_FACTOR",
+            "family": "C_trend_pullback",
+            "interval_2H": [
+              -0.03898636102968409,
+              -0.005827153885575445
+            ],
+            "interval_H": [
+              -0.03752326956166321,
+              -0.007070667019688583
+            ],
+            "label_horizon": 20,
+            "pair_days": 1265,
+            "profile": "balanced",
+            "reason": "reliable worse after drop is keep-that-factor evidence, not an abs-magnitude improvement; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_M"
+          }
+        ],
+        "price_track_status": "EVALUABLE"
+      },
+      {
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_CANDIDATE",
+        "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+        "family": "D_residual_momentum",
+        "main_label_horizon": 20,
+        "next_neighbors": [
+          {
+            "H2_side": "above_zero",
+            "H_side": "above_zero",
+            "delta": 0.002609666065756718,
+            "direction": "REDUCE_WEIGHT_CANDIDATE",
+            "family": "D_residual_momentum",
+            "interval_2H": [
+              0.0005675244325305875,
+              0.004662671687815376
+            ],
+            "interval_H": [
+              0.0006213133684875463,
+              0.004672159760292313
+            ],
+            "label_horizon": 20,
+            "pair_days": 1059,
+            "profile": "balanced",
+            "reason": "drop/realloc reliably better on label 20; H_AND_2H_SAME_SIDE",
+            "score_horizon": "mid",
+            "track": "PRICE_ONLY_DIAGNOSTIC",
+            "variant_id": "PRICE_DROP_P"
+          }
+        ],
+        "price_track_status": "EVALUABLE"
+      }
+    ],
+    "theme": "etfs"
+  }
+]

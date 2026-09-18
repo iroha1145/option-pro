@@ -1,0 +1,327 @@
+{
+  "reviewed_head": "d84259ac95342a9fdd6085ae0659eefb5b9b4e2b",
+  "snapshot_code_sha": "4cb63b3a9141ae4012d327431793d134e89e6cca",
+  "scope": "measurement\u53e3\u5f84 + continuous 24xABCD balanced/mid approved window",
+  "holdout_start": "2024-07-01",
+  "holdout_unsealed": false,
+  "allowed_end": "2024-06-28",
+  "matrix_claimed": "24xABCD_balanced_mid_only_not_864",
+  "executed_backtests": 0,
+  "F1_tests": {
+    "old_closeout": "tests/test_pr174_followup.py",
+    "measurement_acceptance": "tests/test_pr174_measurement_acceptance.py",
+    "local_pr174": "31 passed",
+    "local_full_suite": "3882 passed, 6 skipped",
+    "github_ci": {
+      "head": "1dfc2a258ef05574fa318d8f640a324311405a5d",
+      "conclusion": "success",
+      "push": "https://github.com/iroha1145/option-pro/actions/runs/35289393841",
+      "pull_request": "https://github.com/iroha1145/option-pro/actions/runs/35289397735"
+    }
+  },
+  "F2_contracts": {
+    "pairing_path": "research/option_pro_us_eod_v1/return_pack/measurement_runner_pairing.json",
+    "pairing_note": "old theme+SPY/QQQ vs full same-track pool; not a tune",
+    "pair_count": 3,
+    "candidate_identity": [
+      {
+        "session": "2023-06-12",
+        "old_candidates": [
+          "AMAT",
+          "AMD",
+          "ASML",
+          "AVGO",
+          "INTC",
+          "KLAC",
+          "LRCX",
+          "MRVL",
+          "MU",
+          "NVDA",
+          "QCOM",
+          "TSM",
+          "TXN"
+        ],
+        "new_candidates": [
+          "AMAT",
+          "AMD",
+          "ASML",
+          "AVGO",
+          "INTC",
+          "KLAC",
+          "LRCX",
+          "MRVL",
+          "MU",
+          "NVDA",
+          "QCOM",
+          "TSM",
+          "TXN"
+        ],
+        "n_changed": 13
+      },
+      {
+        "session": "2023-06-13",
+        "old_candidates": [
+          "AMAT",
+          "AMD",
+          "ASML",
+          "AVGO",
+          "INTC",
+          "KLAC",
+          "LRCX",
+          "MRVL",
+          "MU",
+          "NVDA",
+          "QCOM",
+          "TSM",
+          "TXN"
+        ],
+        "new_candidates": [
+          "AMAT",
+          "AMD",
+          "ASML",
+          "AVGO",
+          "INTC",
+          "KLAC",
+          "LRCX",
+          "MRVL",
+          "MU",
+          "NVDA",
+          "QCOM",
+          "TSM",
+          "TXN"
+        ],
+        "n_changed": 13
+      },
+      {
+        "session": "2023-06-14",
+        "old_candidates": [
+          "AMAT",
+          "AMD",
+          "ASML",
+          "AVGO",
+          "INTC",
+          "KLAC",
+          "LRCX",
+          "MRVL",
+          "MU",
+          "NVDA",
+          "QCOM",
+          "TSM",
+          "TXN"
+        ],
+        "new_candidates": [
+          "AMAT",
+          "AMD",
+          "ASML",
+          "AVGO",
+          "INTC",
+          "KLAC",
+          "LRCX",
+          "MRVL",
+          "MU",
+          "NVDA",
+          "QCOM",
+          "TSM",
+          "TXN"
+        ],
+        "n_changed": 13
+      }
+    ]
+  },
+  "F3_rows": {
+    "path": "research/option_pro_us_eod_v1/return_pack/measurement_factor_rows.jsonl",
+    "schema": "research/option_pro_us_eod_v1/return_pack/measurement_factor_row_schema.json",
+    "sha256": "b490ba6d83965a0c3fe60c76afab8205fc2a0d76cc6577cdf23cb838e447f75a",
+    "command": "PYTHONPATH=/workspace:/workspace/backend python research/option_pro_us_eod_v1/scripts/run_measurement_continuous_abcd.py --workers 2",
+    "finalize_command": "PYTHONPATH=/workspace:/workspace/backend python research/option_pro_us_eod_v1/scripts/run_measurement_continuous_abcd.py --finalize-only"
+  },
+  "F4_ic": {
+    "groups_path": "research/option_pro_us_eod_v1/return_pack/measurement_ic_groups.jsonl",
+    "summary_path": "research/option_pro_us_eod_v1/return_pack/measurement_ic_summary.json",
+    "group_count": 322544,
+    "defined_groups": 146581,
+    "undefined_groups": 175963,
+    "valid_group_date_count": 1376,
+    "undefined_reason_counts": {
+      "CROSS_SECTION_BELOW_N": 175963,
+      "defined": 146581
+    },
+    "by_year": {
+      "2019": {
+        "defined_groups": 16503,
+        "undefined_groups": 36960,
+        "n_sum": 424749,
+        "mean_grouped_ic": -0.03314696977667325,
+        "note": "mean of within-group ICs; pairs were not pooled"
+      },
+      "2020": {
+        "defined_groups": 22005,
+        "undefined_groups": 38550,
+        "n_sum": 506172,
+        "mean_grouped_ic": 0.012894780151195821,
+        "note": "mean of within-group ICs; pairs were not pooled"
+      },
+      "2021": {
+        "defined_groups": 27096,
+        "undefined_groups": 34896,
+        "n_sum": 538563,
+        "mean_grouped_ic": 0.005101657028140908,
+        "note": "mean of within-group ICs; pairs were not pooled"
+      },
+      "2022": {
+        "defined_groups": 28773,
+        "undefined_groups": 32973,
+        "n_sum": 569880,
+        "mean_grouped_ic": 0.010714181843365346,
+        "note": "mean of within-group ICs; pairs were not pooled"
+      },
+      "2023": {
+        "defined_groups": 37746,
+        "undefined_groups": 23754,
+        "n_sum": 579063,
+        "mean_grouped_ic": 0.028228885691521745,
+        "note": "mean of within-group ICs; pairs were not pooled"
+      },
+      "2024": {
+        "defined_groups": 14458,
+        "undefined_groups": 8830,
+        "n_sum": 219465,
+        "mean_grouped_ic": 0.08205333148378606,
+        "note": "mean of within-group ICs; pairs were not pooled"
+      }
+    }
+  },
+  "F5_funnel_events": {
+    "empty_result_ratio_theme_dates": 0.8463382292941657,
+    "event_ledger": {
+      "independent_events": 4514,
+      "sampled_eligible_set_changes": null,
+      "usable_for_independent_sample": true,
+      "definition": "SECURITY_FAMILY_HORIZON_TIME_OVERLAP",
+      "reason": null
+    },
+    "theme_empty_ratios": {
+      "semiconductors": 0.7974296205630355,
+      "software": 0.7692778457772338,
+      "ai_cloud": 0.8372093023255814,
+      "biotech": 0.6621787025703795,
+      "healthcare": 0.6407588739290085,
+      "consumer_electronics": 0.8384332925336597,
+      "automotive": 0.9473684210526315,
+      "ev_supply": 0.9810281517747858,
+      "finance": 0.927172582619339,
+      "fintech": 0.8623011015911872,
+      "retail": 0.780905752753978,
+      "luxury": 0.9008567931456548,
+      "media_streaming": 0.8378212974296205,
+      "social_internet": 0.8880048959608323,
+      "energy": 0.9902080783353733,
+      "utilities": 0.7478580171358629,
+      "defense_aero": 0.7949816401468788,
+      "airlines": 0.9871481028151775,
+      "real_estate": 0.7851897184822522,
+      "crypto": 1.0,
+      "china_adr": 0.9528763769889841,
+      "telecom": 0.8665850673194615,
+      "industrials": 0.817625458996328,
+      "etfs": 0.6988984088127295
+    },
+    "theme_warmup_dates": {
+      "semiconductors": 221,
+      "software": 213,
+      "ai_cloud": 221,
+      "biotech": 218,
+      "healthcare": 221,
+      "consumer_electronics": 221,
+      "automotive": 224,
+      "ev_supply": 221,
+      "finance": 214,
+      "fintech": 216,
+      "retail": 216,
+      "luxury": 218,
+      "media_streaming": 222,
+      "social_internet": 221,
+      "energy": 221,
+      "utilities": 227,
+      "defense_aero": 224,
+      "airlines": 228,
+      "real_estate": 222,
+      "crypto": 144,
+      "china_adr": 221,
+      "telecom": 227,
+      "industrials": 215,
+      "etfs": 213
+    }
+  },
+  "F6_counts": {
+    "registered": 1920,
+    "unique_registered_configs": 1920,
+    "unique_snapshots": 156864,
+    "actual_function_calls": 156864,
+    "recomputes": 0,
+    "outcomes_inspected": 4205304,
+    "completed_sessions": 1634,
+    "session_count": 1634
+  },
+  "F7_portfolio_counterexamples": {
+    "note": "Synthetic measurement counterexamples after D1/D2. Not market history.",
+    "market_backtest_run": false,
+    "executed_backtests": 0,
+    "cases": [
+      {
+        "class": "D1_geometry_unit_sizing",
+        "raw_execution_close": 100.0,
+        "equivalent_support_levels": [
+          90.0,
+          45.0
+        ],
+        "scale_notionals": {
+          "1.0": 1000.0,
+          "2.0": 1000.0,
+          "0.5": 1000.0,
+          "10.0": 1000.0
+        },
+        "split_adjusted_notional": 1000.0,
+        "expected_same_risk_fraction": 0.1
+      },
+      {
+        "class": "D2_acquisition_then_lot_dividend",
+        "ending_equity": 10050.0,
+        "cash_in": 5000.0,
+        "filled_at": "2024-01-05",
+        "exit_reason": "CASH_ACQUISITION",
+        "dividend_cash": 50.0,
+        "trade_net": 0.01,
+        "pnl_basis": "marked_equity",
+        "trade_pnl_basis": "settled_cash_including_lot_dividends"
+      }
+    ]
+  },
+  "F8_superseded_17day": {
+    "status": "SUPERSEDED_METRIC",
+    "artifact": "closeout_historical_abcd.json",
+    "superseded_fields": [
+      "ic_forward_labels",
+      "independent_events",
+      "ic_pair_counts"
+    ],
+    "replacement": [
+      "measurement_ic_summary.json",
+      "measurement_ic_groups.jsonl",
+      "measurement_continuous_abcd.json",
+      "measurement_factor_rows.jsonl"
+    ],
+    "reason": "pooled-across-days ordinal Spearman and disjoint-set event increment",
+    "old_retrieved_at_unchanged": true,
+    "old_invalid_eod_retrieved_at": "2026-09-16T17:24:41.368841+00:00",
+    "old_code_sha": "0c1d419416f057fba2c8184abb54a2f029edbff7",
+    "statistics_version_new": "us-eod-research-stats-v1.0"
+  },
+  "notes": [
+    "Cache replay only; no Massive; no network purchase.",
+    "Old 17-day IC/independent_events are SUPERSEDED_METRIC.",
+    "Portfolio PnL not run; executed_backtests stays 0.",
+    "Forward labels use the unclipped series through allowed_end.",
+    "Stop after this fixed-parameter continuous pass."
+  ]
+}

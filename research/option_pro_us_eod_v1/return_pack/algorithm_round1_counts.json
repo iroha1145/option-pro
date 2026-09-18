@@ -1,0 +1,45 @@
+{
+  "actual_rescore_calls": 18354834,
+  "b0_function_calls": 156864,
+  "b0_registered_configs": 1920,
+  "baseline_global_book_deduped_event_groups": 9813,
+  "baseline_theme_report_deduped_event_groups": 10203,
+  "executed_backtests": 0,
+  "feature_reuse_hits": 2803536,
+  "github_ci": {
+    "conclusion": "success",
+    "head": "5754b4652c618e51f9eee42a958ee9fa58a109d0",
+    "historical_failure": {
+      "conclusion": "failure",
+      "failed_step": "Check changed source lines for whitespace errors",
+      "head": "432ac3f6660bc5abdc38df2712d34ce2501bc6de",
+      "pull_request": "https://github.com/iroha1145/option-pro/actions/runs/35311320321"
+    },
+    "note": "Both GitHub test jobs completed success on 5754b465. 432ac3f6 PR 35311320321 failed on extra EOF blank and is historical only.",
+    "pull_request": "https://github.com/iroha1145/option-pro/actions/runs/35312768981",
+    "pull_request_job": "https://github.com/iroha1145/option-pro/actions/runs/35312768981/job/105498021097",
+    "push": "https://github.com/iroha1145/option-pro/actions/runs/35312765304",
+    "push_job": "https://github.com/iroha1145/option-pro/actions/runs/35312765304/job/105498027433"
+  },
+  "head": "5754b4652c618e51f9eee42a958ee9fa58a109d0",
+  "holdout_unsealed": false,
+  "independent_events": null,
+  "inspected_outcomes": 4205304,
+  "local_full_suite": "3895 passed, 6 skipped",
+  "local_pr174": "30 passed after event-dedupe fix",
+  "note": "Global book < theme report because the same security is not counted twice across themes on one session.",
+  "old_count_4514": "SUPERSEDED_EVENT_COUNT",
+  "pairing_cells": 3774,
+  "pairing_thin_cells": 1848,
+  "registered_configurations": 1258,
+  "run_signature": "a8ceb257e38e521922736f8dd41eac3edd44214a48bde87df785c9fb3b2502c3",
+  "source_row_sha256": "b490ba6d83965a0c3fe60c76afab8205fc2a0d76cc6577cdf23cb838e447f75a",
+  "superseded_global_count_10761": "SAME_DAY_CROSS_THEME_DOUBLE_COUNT",
+  "theme_family_decisions": {
+    "\u5220\u51cf": 0,
+    "\u65e0\u7ed3\u8bba_\u7ee7\u627f\u5171\u4eab\u5148\u9a8c": 45,
+    "\u7ee7\u7eed\u68c0\u9a8c": 51
+  },
+  "transformed_label_rows": 4205304,
+  "unique_snapshots": 1401768
+}

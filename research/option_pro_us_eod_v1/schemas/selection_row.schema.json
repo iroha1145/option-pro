@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "research_eod_v1_selection_row",
+  "type": "object",
+  "required": ["security_id", "status", "algorithm_id"],
+  "properties": {
+    "security_id": {"type": "string"},
+    "algorithm_id": {"type": "string"},
+    "status": {"type": "string"},
+    "score": {"type": ["number", "null"]},
+    "consensus_z": {"type": ["number", "null"]},
+    "R": {"type": ["number", "null"]},
+    "G": {"type": ["number", "null"]}
+  }
+}

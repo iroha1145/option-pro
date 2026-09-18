@@ -1,0 +1,9 @@
+{
+  "signals": "signals.parquet",
+  "trades": "trades.parquet",
+  "daily_equity": "daily_equity.parquet",
+  "rejections": "rejections.parquet",
+  "engineering_fixture_trades": "engineering_fixture_trades.parquet",
+  "rows": 0,
+  "note": "Market bodies are empty because no licensed trial was executed. engineering_fixture_trades.parquet is synthetic only."
+}

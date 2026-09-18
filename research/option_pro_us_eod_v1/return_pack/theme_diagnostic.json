@@ -1,0 +1,416 @@
+{
+  "as_of": "2026-09-16T17:00:00-04:00",
+  "cards": [
+    {
+      "theme_id": "semiconductors",
+      "status": "INVALID_EOD_CAPTURE",
+      "session_date": "2026-09-16",
+      "candidates": 14,
+      "reference": 204,
+      "eligible": 0,
+      "capability_flags": [
+        "INVALID_EOD_CAPTURE",
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "SURVIVORSHIP_RISK"
+      ],
+      "revoked": true
+    },
+    {
+      "theme_id": "software",
+      "status": "INVALID_EOD_CAPTURE",
+      "session_date": "2026-09-16",
+      "candidates": 12,
+      "reference": 204,
+      "eligible": 0,
+      "capability_flags": [
+        "INVALID_EOD_CAPTURE",
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "SURVIVORSHIP_RISK"
+      ],
+      "revoked": true
+    },
+    {
+      "theme_id": "ai_cloud",
+      "status": "INVALID_EOD_CAPTURE",
+      "session_date": "2026-09-16",
+      "candidates": 10,
+      "reference": 204,
+      "eligible": 0,
+      "capability_flags": [
+        "INVALID_EOD_CAPTURE",
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "SURVIVORSHIP_RISK"
+      ],
+      "revoked": true
+    },
+    {
+      "theme_id": "biotech",
+      "status": "INVALID_EOD_CAPTURE",
+      "session_date": "2026-09-16",
+      "candidates": 10,
+      "reference": 204,
+      "eligible": 0,
+      "capability_flags": [
+        "INVALID_EOD_CAPTURE",
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "SURVIVORSHIP_RISK"
+      ],
+      "revoked": true
+    },
+    {
+      "theme_id": "healthcare",
+      "status": "INVALID_EOD_CAPTURE",
+      "session_date": "2026-09-16",
+      "candidates": 10,
+      "reference": 204,
+      "eligible": 0,
+      "capability_flags": [
+        "INVALID_EOD_CAPTURE",
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "SURVIVORSHIP_RISK"
+      ],
+      "revoked": true
+    },
+    {
+      "theme_id": "consumer_electronics",
+      "status": "INVALID_EOD_CAPTURE",
+      "session_date": "2026-09-16",
+      "candidates": 5,
+      "reference": 204,
+      "eligible": 0,
+      "capability_flags": [
+        "INVALID_EOD_CAPTURE",
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "SURVIVORSHIP_RISK"
+      ],
+      "revoked": true
+    },
+    {
+      "theme_id": "automotive",
+      "status": "INVALID_EOD_CAPTURE",
+      "session_date": "2026-09-16",
+      "candidates": 10,
+      "reference": 204,
+      "eligible": 0,
+      "capability_flags": [
+        "INVALID_EOD_CAPTURE",
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "SURVIVORSHIP_RISK"
+      ],
+      "revoked": true
+    },
+    {
+      "theme_id": "ev_supply",
+      "status": "INVALID_EOD_CAPTURE",
+      "session_date": "2026-09-16",
+      "candidates": 10,
+      "reference": 204,
+      "eligible": 0,
+      "capability_flags": [
+        "INVALID_EOD_CAPTURE",
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "SURVIVORSHIP_RISK"
+      ],
+      "revoked": true
+    },
+    {
+      "theme_id": "finance",
+      "status": "INVALID_EOD_CAPTURE",
+      "session_date": "2026-09-16",
+      "candidates": 10,
+      "reference": 204,
+      "eligible": 0,
+      "capability_flags": [
+        "INVALID_EOD_CAPTURE",
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "SURVIVORSHIP_RISK"
+      ],
+      "revoked": true
+    },
+    {
+      "theme_id": "fintech",
+      "status": "INVALID_EOD_CAPTURE",
+      "session_date": "2026-09-16",
+      "candidates": 10,
+      "reference": 204,
+      "eligible": 0,
+      "capability_flags": [
+        "INVALID_EOD_CAPTURE",
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "SURVIVORSHIP_RISK"
+      ],
+      "revoked": true
+    },
+    {
+      "theme_id": "retail",
+      "status": "INVALID_EOD_CAPTURE",
+      "session_date": "2026-09-16",
+      "candidates": 10,
+      "reference": 204,
+      "eligible": 0,
+      "capability_flags": [
+        "INVALID_EOD_CAPTURE",
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "SURVIVORSHIP_RISK"
+      ],
+      "revoked": true
+    },
+    {
+      "theme_id": "luxury",
+      "status": "INVALID_EOD_CAPTURE",
+      "session_date": "2026-09-16",
+      "candidates": 4,
+      "reference": 204,
+      "eligible": 0,
+      "capability_flags": [
+        "INVALID_EOD_CAPTURE",
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "SURVIVORSHIP_RISK"
+      ],
+      "revoked": true
+    },
+    {
+      "theme_id": "media_streaming",
+      "status": "INVALID_EOD_CAPTURE",
+      "session_date": "2026-09-16",
+      "candidates": 8,
+      "reference": 204,
+      "eligible": 0,
+      "capability_flags": [
+        "INVALID_EOD_CAPTURE",
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "SURVIVORSHIP_RISK"
+      ],
+      "revoked": true
+    },
+    {
+      "theme_id": "social_internet",
+      "status": "INVALID_EOD_CAPTURE",
+      "session_date": "2026-09-16",
+      "candidates": 8,
+      "reference": 204,
+      "eligible": 0,
+      "capability_flags": [
+        "INVALID_EOD_CAPTURE",
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "SURVIVORSHIP_RISK"
+      ],
+      "revoked": true
+    },
+    {
+      "theme_id": "energy",
+      "status": "INVALID_EOD_CAPTURE",
+      "session_date": "2026-09-16",
+      "candidates": 10,
+      "reference": 204,
+      "eligible": 1,
+      "capability_flags": [
+        "INVALID_EOD_CAPTURE",
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "SURVIVORSHIP_RISK"
+      ],
+      "revoked": true
+    },
+    {
+      "theme_id": "utilities",
+      "status": "INVALID_EOD_CAPTURE",
+      "session_date": "2026-09-16",
+      "candidates": 10,
+      "reference": 204,
+      "eligible": 0,
+      "capability_flags": [
+        "INVALID_EOD_CAPTURE",
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "SURVIVORSHIP_RISK"
+      ],
+      "revoked": true
+    },
+    {
+      "theme_id": "defense_aero",
+      "status": "INVALID_EOD_CAPTURE",
+      "session_date": "2026-09-16",
+      "candidates": 9,
+      "reference": 204,
+      "eligible": 0,
+      "capability_flags": [
+        "INVALID_EOD_CAPTURE",
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "SURVIVORSHIP_RISK"
+      ],
+      "revoked": true
+    },
+    {
+      "theme_id": "airlines",
+      "status": "INVALID_EOD_CAPTURE",
+      "session_date": "2026-09-16",
+      "candidates": 8,
+      "reference": 204,
+      "eligible": 0,
+      "capability_flags": [
+        "INVALID_EOD_CAPTURE",
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "SURVIVORSHIP_RISK"
+      ],
+      "revoked": true
+    },
+    {
+      "theme_id": "real_estate",
+      "status": "INVALID_EOD_CAPTURE",
+      "session_date": "2026-09-16",
+      "candidates": 10,
+      "reference": 204,
+      "eligible": 0,
+      "capability_flags": [
+        "INVALID_EOD_CAPTURE",
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "SURVIVORSHIP_RISK"
+      ],
+      "revoked": true
+    },
+    {
+      "theme_id": "crypto",
+      "status": "INVALID_EOD_CAPTURE",
+      "session_date": "2026-09-16",
+      "candidates": 9,
+      "reference": 204,
+      "eligible": 0,
+      "capability_flags": [
+        "INVALID_EOD_CAPTURE",
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "SURVIVORSHIP_RISK"
+      ],
+      "revoked": true
+    },
+    {
+      "theme_id": "china_adr",
+      "status": "INVALID_EOD_CAPTURE",
+      "session_date": "2026-09-16",
+      "candidates": 12,
+      "reference": 204,
+      "eligible": 0,
+      "capability_flags": [
+        "INVALID_EOD_CAPTURE",
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "SURVIVORSHIP_RISK"
+      ],
+      "revoked": true
+    },
+    {
+      "theme_id": "telecom",
+      "status": "INVALID_EOD_CAPTURE",
+      "session_date": "2026-09-16",
+      "candidates": 7,
+      "reference": 204,
+      "eligible": 0,
+      "capability_flags": [
+        "INVALID_EOD_CAPTURE",
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "SURVIVORSHIP_RISK"
+      ],
+      "revoked": true
+    },
+    {
+      "theme_id": "industrials",
+      "status": "INVALID_EOD_CAPTURE",
+      "session_date": "2026-09-16",
+      "candidates": 10,
+      "reference": 204,
+      "eligible": 0,
+      "capability_flags": [
+        "INVALID_EOD_CAPTURE",
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "SURVIVORSHIP_RISK"
+      ],
+      "revoked": true
+    },
+    {
+      "theme_id": "etfs",
+      "status": "INVALID_EOD_CAPTURE",
+      "session_date": "2026-09-16",
+      "candidates": 12,
+      "reference": 12,
+      "eligible": 0,
+      "capability_flags": [
+        "INVALID_EOD_CAPTURE",
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "SURVIVORSHIP_RISK"
+      ],
+      "revoked": true
+    }
+  ],
+  "eod_status": "INVALID_EOD_CAPTURE",
+  "as_of_note": "fabricated by fixtures.as_of_after_close; capture clock was 13:24 NY",
+  "last_complete_eod_session": "2026-09-15"
+}

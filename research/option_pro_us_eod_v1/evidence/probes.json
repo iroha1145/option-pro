@@ -1,0 +1,112 @@
+{
+  "scope": "Synthetic offline tests of hash-matched source. No market tape or complete repository rerun.",
+  "head": "70a57ce5b60acfedb7ac4337b13aa2ee3a627d5f",
+  "source_hashes": {
+    "capability.py": "8ddbd28ed63034999877c7d31c3f7d7787758a21",
+    "ablation.py": "4fd7c251a4ce490616890f8e3711faa1649c160d",
+    "runs.py": "9c584e92987eb21a5705af5008164c4ce3e43f78",
+    "registry.py": "8b884575d29cca3dc5e88baa6b03d674d5a20f64",
+    "registry.json": "61a366ee643dcf8beb793f1f934868074fe454dd"
+  },
+  "matrix": {
+    "cells": 96,
+    "G_missing_unscoreable": 14,
+    "g_available_true_despite_G_missing": 82
+  },
+  "coverage_confound": {
+    "theme": "semiconductors",
+    "family": "A_trend_quality",
+    "all_other_factors": 100,
+    "G": null,
+    "baseline": {
+      "score": 100.0,
+      "coverage": 0.9111933395,
+      "status": "SCORED_NOT_SETUP_VALIDATED",
+      "final_eligible": true,
+      "rejection_reasons": []
+    },
+    "drop_M_full_track": {
+      "score": null,
+      "coverage": 0.8790170132332867,
+      "status": "DATA_INSUFFICIENT",
+      "final_eligible": false,
+      "rejection_reasons": [
+        "DATA_INSUFFICIENT"
+      ]
+    },
+    "drop_M_price_track_oracle": {
+      "score": 100.00000000000001,
+      "coverage": 1.0,
+      "status": "SCORED_NOT_SETUP_VALIDATED",
+      "final_eligible": true,
+      "rejection_reasons": []
+    },
+    "diagnostic_ablation_count": 0
+  },
+  "common_pair": {
+    "baseline_n": 12,
+    "variant_n": 10,
+    "common_n": 10,
+    "baseline_ic_own_set": 0.1576184553761279,
+    "variant_ic_own_set": 1.0,
+    "reported_pair_diff": 0.842381544623872,
+    "correct_pair_diff_common_set": 0.0,
+    "common_security_ids": [
+      "S00",
+      "S01",
+      "S02",
+      "S03",
+      "S04",
+      "S05",
+      "S06",
+      "S07",
+      "S08",
+      "S09"
+    ]
+  },
+  "event": {
+    "signals": [
+      "2024-01-02",
+      "2024-01-04"
+    ],
+    "label_horizon_sessions": 20,
+    "current_group_count": 2,
+    "expected_overlap_group_count": 1
+  },
+  "neighbor": {
+    "old_M": 0.2659574468,
+    "requested_delta_pp": 5,
+    "actual_M": 0.3009118540952381,
+    "actual_delta_pp": 3.495440729523808,
+    "exact_5pp_target": 0.3159574468
+  },
+  "ci_dependence": {
+    "independent_block_means_n": 20,
+    "same_20_blocks_repeated_to_daily_n": 400,
+    "CI_on_20_blocks": {
+      "n": 20,
+      "mean": 0.03,
+      "ci95": [
+        -0.014965483838630105,
+        0.07496548383863011
+      ],
+      "method": "PREREGISTERED_NORMAL_APPROX",
+      "reason": null
+    },
+    "CI_on_400_dependent_daily_values": {
+      "n": 400,
+      "mean": 0.03,
+      "ci95": [
+        0.020187726983293523,
+        0.03981227301670648
+      ],
+      "method": "PREREGISTERED_NORMAL_APPROX",
+      "reason": null
+    }
+  },
+  "signature_control": {
+    "profile_change_rejected_by_signature": true,
+    "actual_driver_data_hash_argument": "b0_measurement_factor_rows",
+    "driver_binds_real_content_before_scoring": false
+  }
+}

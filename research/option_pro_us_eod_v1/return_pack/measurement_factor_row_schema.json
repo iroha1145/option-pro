@@ -1,0 +1,37 @@
+{
+  "schema_version": "us-eod-research-factor-row-v1.0",
+  "path": "research/option_pro_us_eod_v1/return_pack/measurement_factor_rows.jsonl",
+  "command": "PYTHONPATH=/workspace:/workspace/backend python research/option_pro_us_eod_v1/scripts/run_measurement_continuous_abcd.py",
+  "finalize_command": "PYTHONPATH=/workspace:/workspace/backend python research/option_pro_us_eod_v1/scripts/run_measurement_continuous_abcd.py --finalize-only",
+  "ic_groups_path": "research/option_pro_us_eod_v1/return_pack/measurement_ic_groups.jsonl",
+  "ic_summary_path": "research/option_pro_us_eod_v1/return_pack/measurement_ic_summary.json",
+  "fields": [
+    "security_id",
+    "signal_session",
+    "theme_id",
+    "algorithm",
+    "profile",
+    "horizon",
+    "label_horizon",
+    "setup_id",
+    "source",
+    "feature_version",
+    "score_version",
+    "statistics_version",
+    "label_matured_at",
+    "factors",
+    "score",
+    "setup_gate",
+    "final_eligible",
+    "status",
+    "label",
+    "label_reason",
+    "rejection_reasons",
+    "industry_source",
+    "snapshot_key"
+  ],
+  "notes": [
+    "Private or authorized cache-derived rows. The jsonl itself is gitignored when large.",
+    "Review summaries do not replace this file."
+  ]
+}

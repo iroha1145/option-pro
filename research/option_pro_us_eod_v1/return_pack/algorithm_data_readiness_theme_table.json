@@ -1,0 +1,1153 @@
+[
+  {
+    "common_complete_days_vs_spy_allowed": 199,
+    "historical_theme_rebuild": "NOT_AVAILABLE",
+    "industry_parent_is_not_theme": true,
+    "late_listed_vs_2018": [
+      {
+        "first": "2023-09-14",
+        "ticker": "ARM"
+      }
+    ],
+    "layers": {
+      "A_close_signal_diagnostic": "available",
+      "B_total_return_vs_quote": "partial",
+      "C_unadjusted_execution": "blocked",
+      "D_historical_membership": "current_list_only"
+    },
+    "members": [
+      "NVDA",
+      "AMD",
+      "TSM",
+      "AVGO",
+      "ASML",
+      "MU",
+      "INTC",
+      "ARM",
+      "QCOM",
+      "MRVL",
+      "TXN",
+      "LRCX",
+      "KLAC",
+      "AMAT"
+    ],
+    "members_in_cache": [
+      "NVDA",
+      "AMD",
+      "TSM",
+      "AVGO",
+      "ASML",
+      "MU",
+      "INTC",
+      "ARM",
+      "QCOM",
+      "MRVL",
+      "TXN",
+      "LRCX",
+      "KLAC",
+      "AMAT"
+    ],
+    "membership": "CURRENT_LIST_ONLY",
+    "missing_from_cache": [],
+    "new_version_minted": false,
+    "static_venue_notes": [],
+    "theme": "semiconductors"
+  },
+  {
+    "common_complete_days_vs_spy_allowed": 942,
+    "historical_theme_rebuild": "NOT_AVAILABLE",
+    "industry_parent_is_not_theme": true,
+    "late_listed_vs_2018": [
+      {
+        "first": "2020-09-16",
+        "ticker": "SNOW"
+      },
+      {
+        "first": "2020-09-30",
+        "ticker": "PLTR"
+      },
+      {
+        "first": "2019-09-13",
+        "ticker": "NET"
+      },
+      {
+        "first": "2019-06-12",
+        "ticker": "CRWD"
+      },
+      {
+        "first": "2019-09-19",
+        "ticker": "DDOG"
+      }
+    ],
+    "layers": {
+      "A_close_signal_diagnostic": "available",
+      "B_total_return_vs_quote": "partial",
+      "C_unadjusted_execution": "blocked",
+      "D_historical_membership": "current_list_only"
+    },
+    "members": [
+      "MSFT",
+      "ORCL",
+      "CRM",
+      "ADBE",
+      "NOW",
+      "SNOW",
+      "PLTR",
+      "PANW",
+      "NET",
+      "CRWD",
+      "DDOG",
+      "MDB"
+    ],
+    "members_in_cache": [
+      "MSFT",
+      "ORCL",
+      "CRM",
+      "ADBE",
+      "NOW",
+      "SNOW",
+      "PLTR",
+      "PANW",
+      "NET",
+      "CRWD",
+      "DDOG",
+      "MDB"
+    ],
+    "membership": "CURRENT_LIST_ONLY",
+    "missing_from_cache": [],
+    "new_version_minted": false,
+    "static_venue_notes": [],
+    "theme": "software"
+  },
+  {
+    "common_complete_days_vs_spy_allowed": 0,
+    "historical_theme_rebuild": "NOT_AVAILABLE",
+    "industry_parent_is_not_theme": true,
+    "late_listed_vs_2018": [
+      {
+        "first": "2020-09-30",
+        "ticker": "PLTR"
+      },
+      {
+        "first": "2025-03-28",
+        "ticker": "CRWV"
+      }
+    ],
+    "layers": {
+      "A_close_signal_diagnostic": "available",
+      "B_total_return_vs_quote": "partial",
+      "C_unadjusted_execution": "blocked",
+      "D_historical_membership": "current_list_only"
+    },
+    "members": [
+      "NVDA",
+      "MSFT",
+      "GOOGL",
+      "AMZN",
+      "META",
+      "PLTR",
+      "SMCI",
+      "ANET",
+      "DELL",
+      "CRWV"
+    ],
+    "members_in_cache": [
+      "NVDA",
+      "MSFT",
+      "GOOGL",
+      "AMZN",
+      "META",
+      "PLTR",
+      "SMCI",
+      "ANET",
+      "DELL",
+      "CRWV"
+    ],
+    "membership": "CURRENT_LIST_ONLY",
+    "missing_from_cache": [],
+    "new_version_minted": false,
+    "static_venue_notes": [],
+    "theme": "ai_cloud"
+  },
+  {
+    "common_complete_days_vs_spy_allowed": 1187,
+    "historical_theme_rebuild": "NOT_AVAILABLE",
+    "industry_parent_is_not_theme": true,
+    "late_listed_vs_2018": [
+      {
+        "first": "2018-12-07",
+        "ticker": "MRNA"
+      },
+      {
+        "first": "2019-10-10",
+        "ticker": "BNTX"
+      }
+    ],
+    "layers": {
+      "A_close_signal_diagnostic": "available",
+      "B_total_return_vs_quote": "partial",
+      "C_unadjusted_execution": "blocked",
+      "D_historical_membership": "current_list_only"
+    },
+    "members": [
+      "LLY",
+      "NVO",
+      "ABBV",
+      "AMGN",
+      "GILD",
+      "VRTX",
+      "REGN",
+      "BIIB",
+      "MRNA",
+      "BNTX"
+    ],
+    "members_in_cache": [
+      "LLY",
+      "NVO",
+      "ABBV",
+      "AMGN",
+      "GILD",
+      "VRTX",
+      "REGN",
+      "BIIB",
+      "MRNA",
+      "BNTX"
+    ],
+    "membership": "CURRENT_LIST_ONLY",
+    "missing_from_cache": [],
+    "new_version_minted": false,
+    "static_venue_notes": [],
+    "theme": "biotech"
+  },
+  {
+    "common_complete_days_vs_spy_allowed": 1633,
+    "historical_theme_rebuild": "NOT_AVAILABLE",
+    "industry_parent_is_not_theme": true,
+    "late_listed_vs_2018": [],
+    "layers": {
+      "A_close_signal_diagnostic": "available",
+      "B_total_return_vs_quote": "partial",
+      "C_unadjusted_execution": "blocked",
+      "D_historical_membership": "current_list_only"
+    },
+    "members": [
+      "UNH",
+      "JNJ",
+      "PFE",
+      "MRK",
+      "TMO",
+      "ABT",
+      "DHR",
+      "ISRG",
+      "MDT",
+      "BMY"
+    ],
+    "members_in_cache": [
+      "UNH",
+      "JNJ",
+      "PFE",
+      "MRK",
+      "TMO",
+      "ABT",
+      "DHR",
+      "ISRG",
+      "MDT",
+      "BMY"
+    ],
+    "membership": "CURRENT_LIST_ONLY",
+    "missing_from_cache": [],
+    "new_version_minted": false,
+    "static_venue_notes": [],
+    "theme": "healthcare"
+  },
+  {
+    "common_complete_days_vs_spy_allowed": 1633,
+    "historical_theme_rebuild": "NOT_AVAILABLE",
+    "industry_parent_is_not_theme": true,
+    "late_listed_vs_2018": [],
+    "layers": {
+      "A_close_signal_diagnostic": "available",
+      "B_total_return_vs_quote": "partial",
+      "C_unadjusted_execution": "blocked",
+      "D_historical_membership": "current_list_only"
+    },
+    "members": [
+      "AAPL",
+      "SONY",
+      "DELL",
+      "HPQ",
+      "LOGI"
+    ],
+    "members_in_cache": [
+      "AAPL",
+      "SONY",
+      "DELL",
+      "HPQ",
+      "LOGI"
+    ],
+    "membership": "CURRENT_LIST_ONLY",
+    "missing_from_cache": [],
+    "new_version_minted": false,
+    "static_venue_notes": [],
+    "theme": "consumer_electronics"
+  },
+  {
+    "common_complete_days_vs_spy_allowed": 661,
+    "historical_theme_rebuild": "NOT_AVAILABLE",
+    "industry_parent_is_not_theme": true,
+    "late_listed_vs_2018": [
+      {
+        "first": "2021-11-10",
+        "ticker": "RIVN"
+      },
+      {
+        "first": "2020-09-18",
+        "ticker": "LCID"
+      },
+      {
+        "first": "2018-09-12",
+        "ticker": "NIO"
+      },
+      {
+        "first": "2020-07-30",
+        "ticker": "LI"
+      },
+      {
+        "first": "2020-08-27",
+        "ticker": "XPEV"
+      }
+    ],
+    "layers": {
+      "A_close_signal_diagnostic": "available",
+      "B_total_return_vs_quote": "partial",
+      "C_unadjusted_execution": "blocked",
+      "D_historical_membership": "current_list_only"
+    },
+    "members": [
+      "TSLA",
+      "RIVN",
+      "F",
+      "GM",
+      "LCID",
+      "NIO",
+      "LI",
+      "XPEV",
+      "STLA",
+      "TM"
+    ],
+    "members_in_cache": [
+      "TSLA",
+      "RIVN",
+      "F",
+      "GM",
+      "LCID",
+      "NIO",
+      "LI",
+      "XPEV",
+      "STLA",
+      "TM"
+    ],
+    "membership": "CURRENT_LIST_ONLY",
+    "missing_from_cache": [],
+    "new_version_minted": false,
+    "static_venue_notes": [],
+    "theme": "automotive"
+  },
+  {
+    "common_complete_days_vs_spy_allowed": 661,
+    "historical_theme_rebuild": "NOT_AVAILABLE",
+    "industry_parent_is_not_theme": true,
+    "late_listed_vs_2018": [
+      {
+        "first": "2020-09-18",
+        "ticker": "LCID"
+      },
+      {
+        "first": "2021-11-10",
+        "ticker": "RIVN"
+      },
+      {
+        "first": "2019-09-16",
+        "ticker": "CHPT"
+      }
+    ],
+    "layers": {
+      "A_close_signal_diagnostic": "available",
+      "B_total_return_vs_quote": "partial",
+      "C_unadjusted_execution": "blocked",
+      "D_historical_membership": "current_list_only"
+    },
+    "members": [
+      "TSLA",
+      "LCID",
+      "RIVN",
+      "ALB",
+      "PLUG",
+      "BLNK",
+      "CHPT",
+      "ENPH",
+      "FSLR",
+      "RUN"
+    ],
+    "members_in_cache": [
+      "TSLA",
+      "LCID",
+      "RIVN",
+      "ALB",
+      "PLUG",
+      "BLNK",
+      "CHPT",
+      "ENPH",
+      "FSLR",
+      "RUN"
+    ],
+    "membership": "CURRENT_LIST_ONLY",
+    "missing_from_cache": [],
+    "new_version_minted": false,
+    "static_venue_notes": [],
+    "theme": "ev_supply"
+  },
+  {
+    "common_complete_days_vs_spy_allowed": 1633,
+    "historical_theme_rebuild": "NOT_AVAILABLE",
+    "industry_parent_is_not_theme": true,
+    "late_listed_vs_2018": [],
+    "layers": {
+      "A_close_signal_diagnostic": "available",
+      "B_total_return_vs_quote": "partial",
+      "C_unadjusted_execution": "blocked",
+      "D_historical_membership": "current_list_only"
+    },
+    "members": [
+      "JPM",
+      "BAC",
+      "WFC",
+      "C",
+      "GS",
+      "MS",
+      "USB",
+      "PNC",
+      "TFC",
+      "SCHW"
+    ],
+    "members_in_cache": [
+      "JPM",
+      "BAC",
+      "WFC",
+      "C",
+      "GS",
+      "MS",
+      "USB",
+      "PNC",
+      "TFC",
+      "SCHW"
+    ],
+    "membership": "CURRENT_LIST_ONLY",
+    "missing_from_cache": [],
+    "new_version_minted": false,
+    "static_venue_notes": [],
+    "theme": "finance"
+  },
+  {
+    "common_complete_days_vs_spy_allowed": 734,
+    "historical_theme_rebuild": "NOT_AVAILABLE",
+    "industry_parent_is_not_theme": true,
+    "late_listed_vs_2018": [
+      {
+        "first": "2021-04-14",
+        "ticker": "COIN"
+      },
+      {
+        "first": "2021-07-29",
+        "ticker": "HOOD"
+      },
+      {
+        "first": "2021-01-04",
+        "ticker": "SOFI"
+      },
+      {
+        "first": "2021-01-13",
+        "ticker": "AFRM"
+      },
+      {
+        "first": "2020-12-16",
+        "ticker": "UPST"
+      }
+    ],
+    "layers": {
+      "A_close_signal_diagnostic": "available",
+      "B_total_return_vs_quote": "partial",
+      "C_unadjusted_execution": "blocked",
+      "D_historical_membership": "current_list_only"
+    },
+    "members": [
+      "V",
+      "MA",
+      "PYPL",
+      "XYZ",
+      "AXP",
+      "COIN",
+      "HOOD",
+      "SOFI",
+      "AFRM",
+      "UPST"
+    ],
+    "members_in_cache": [
+      "V",
+      "MA",
+      "PYPL",
+      "XYZ",
+      "AXP",
+      "COIN",
+      "HOOD",
+      "SOFI",
+      "AFRM",
+      "UPST"
+    ],
+    "membership": "CURRENT_LIST_ONLY",
+    "missing_from_cache": [],
+    "new_version_minted": false,
+    "static_venue_notes": [],
+    "theme": "fintech"
+  },
+  {
+    "common_complete_days_vs_spy_allowed": 1633,
+    "historical_theme_rebuild": "NOT_AVAILABLE",
+    "industry_parent_is_not_theme": true,
+    "late_listed_vs_2018": [],
+    "layers": {
+      "A_close_signal_diagnostic": "available",
+      "B_total_return_vs_quote": "partial",
+      "C_unadjusted_execution": "blocked",
+      "D_historical_membership": "current_list_only"
+    },
+    "members": [
+      "AMZN",
+      "WMT",
+      "COST",
+      "HD",
+      "TGT",
+      "LOW",
+      "NKE",
+      "SBUX",
+      "MCD",
+      "TJX"
+    ],
+    "members_in_cache": [
+      "AMZN",
+      "WMT",
+      "COST",
+      "HD",
+      "TGT",
+      "LOW",
+      "NKE",
+      "SBUX",
+      "MCD",
+      "TJX"
+    ],
+    "membership": "CURRENT_LIST_ONLY",
+    "missing_from_cache": [],
+    "new_version_minted": false,
+    "static_venue_notes": [],
+    "theme": "retail"
+  },
+  {
+    "common_complete_days_vs_spy_allowed": 1618,
+    "historical_theme_rebuild": "NOT_AVAILABLE",
+    "industry_parent_is_not_theme": true,
+    "late_listed_vs_2018": [],
+    "layers": {
+      "A_close_signal_diagnostic": "available",
+      "B_total_return_vs_quote": "partial",
+      "C_unadjusted_execution": "blocked",
+      "D_historical_membership": "current_list_only"
+    },
+    "members": [
+      "LVMUY",
+      "RMS.PA",
+      "CFRUY",
+      "EL",
+      "TPR",
+      "RL",
+      "PVH"
+    ],
+    "members_in_cache": [
+      "LVMUY",
+      "RMS.PA",
+      "CFRUY",
+      "EL",
+      "TPR",
+      "RL",
+      "PVH"
+    ],
+    "membership": "CURRENT_LIST_ONLY",
+    "missing_from_cache": [],
+    "new_version_minted": false,
+    "static_venue_notes": [
+      {
+        "decision": "OTC_EXCLUDED",
+        "ticker": "LVMUY"
+      },
+      {
+        "decision": "NON_US_LISTING",
+        "ticker": "RMS.PA"
+      },
+      {
+        "decision": "OTC_EXCLUDED",
+        "ticker": "CFRUY"
+      }
+    ],
+    "theme": "luxury"
+  },
+  {
+    "common_complete_days_vs_spy_allowed": 1324,
+    "historical_theme_rebuild": "NOT_AVAILABLE",
+    "industry_parent_is_not_theme": true,
+    "late_listed_vs_2018": [
+      {
+        "first": "2018-04-03",
+        "ticker": "SPOT"
+      },
+      {
+        "first": "2019-03-27",
+        "ticker": "FUBO"
+      }
+    ],
+    "layers": {
+      "A_close_signal_diagnostic": "available",
+      "B_total_return_vs_quote": "partial",
+      "C_unadjusted_execution": "blocked",
+      "D_historical_membership": "current_list_only"
+    },
+    "members": [
+      "NFLX",
+      "DIS",
+      "WBD",
+      "PSKY",
+      "ROKU",
+      "SPOT",
+      "FUBO",
+      "TKO"
+    ],
+    "members_in_cache": [
+      "NFLX",
+      "DIS",
+      "WBD",
+      "PSKY",
+      "ROKU",
+      "SPOT",
+      "FUBO",
+      "TKO"
+    ],
+    "membership": "CURRENT_LIST_ONLY",
+    "missing_from_cache": [],
+    "new_version_minted": false,
+    "static_venue_notes": [],
+    "theme": "media_streaming"
+  },
+  {
+    "common_complete_days_vs_spy_allowed": 69,
+    "historical_theme_rebuild": "NOT_AVAILABLE",
+    "industry_parent_is_not_theme": true,
+    "late_listed_vs_2018": [
+      {
+        "first": "2019-04-18",
+        "ticker": "PINS"
+      },
+      {
+        "first": "2024-03-21",
+        "ticker": "RDDT"
+      },
+      {
+        "first": "2018-07-26",
+        "ticker": "PDD"
+      }
+    ],
+    "layers": {
+      "A_close_signal_diagnostic": "available",
+      "B_total_return_vs_quote": "partial",
+      "C_unadjusted_execution": "blocked",
+      "D_historical_membership": "current_list_only"
+    },
+    "members": [
+      "META",
+      "GOOGL",
+      "SNAP",
+      "PINS",
+      "RDDT",
+      "BIDU",
+      "BABA",
+      "PDD"
+    ],
+    "members_in_cache": [
+      "META",
+      "GOOGL",
+      "SNAP",
+      "PINS",
+      "RDDT",
+      "BIDU",
+      "BABA",
+      "PDD"
+    ],
+    "membership": "CURRENT_LIST_ONLY",
+    "missing_from_cache": [],
+    "new_version_minted": false,
+    "static_venue_notes": [],
+    "theme": "social_internet"
+  },
+  {
+    "common_complete_days_vs_spy_allowed": 1633,
+    "historical_theme_rebuild": "NOT_AVAILABLE",
+    "industry_parent_is_not_theme": true,
+    "late_listed_vs_2018": [],
+    "layers": {
+      "A_close_signal_diagnostic": "available",
+      "B_total_return_vs_quote": "partial",
+      "C_unadjusted_execution": "blocked",
+      "D_historical_membership": "current_list_only"
+    },
+    "members": [
+      "XOM",
+      "CVX",
+      "COP",
+      "SLB",
+      "EOG",
+      "MPC",
+      "VLO",
+      "PSX",
+      "OXY",
+      "DVN"
+    ],
+    "members_in_cache": [
+      "XOM",
+      "CVX",
+      "COP",
+      "SLB",
+      "EOG",
+      "MPC",
+      "VLO",
+      "PSX",
+      "OXY",
+      "DVN"
+    ],
+    "membership": "CURRENT_LIST_ONLY",
+    "missing_from_cache": [],
+    "new_version_minted": false,
+    "static_venue_notes": [],
+    "theme": "energy"
+  },
+  {
+    "common_complete_days_vs_spy_allowed": 614,
+    "historical_theme_rebuild": "NOT_AVAILABLE",
+    "industry_parent_is_not_theme": true,
+    "late_listed_vs_2018": [
+      {
+        "first": "2022-01-19",
+        "ticker": "CEG"
+      }
+    ],
+    "layers": {
+      "A_close_signal_diagnostic": "available",
+      "B_total_return_vs_quote": "partial",
+      "C_unadjusted_execution": "blocked",
+      "D_historical_membership": "current_list_only"
+    },
+    "members": [
+      "NEE",
+      "DUK",
+      "SO",
+      "AEP",
+      "EXC",
+      "SRE",
+      "D",
+      "PCG",
+      "VST",
+      "CEG"
+    ],
+    "members_in_cache": [
+      "NEE",
+      "DUK",
+      "SO",
+      "AEP",
+      "EXC",
+      "SRE",
+      "D",
+      "PCG",
+      "VST",
+      "CEG"
+    ],
+    "membership": "CURRENT_LIST_ONLY",
+    "missing_from_cache": [],
+    "new_version_minted": false,
+    "static_venue_notes": [],
+    "theme": "utilities"
+  },
+  {
+    "common_complete_days_vs_spy_allowed": 1633,
+    "historical_theme_rebuild": "NOT_AVAILABLE",
+    "industry_parent_is_not_theme": true,
+    "late_listed_vs_2018": [],
+    "layers": {
+      "A_close_signal_diagnostic": "available",
+      "B_total_return_vs_quote": "partial",
+      "C_unadjusted_execution": "blocked",
+      "D_historical_membership": "current_list_only"
+    },
+    "members": [
+      "LMT",
+      "RTX",
+      "NOC",
+      "GD",
+      "BA",
+      "LHX",
+      "TDG",
+      "HEI",
+      "TXT"
+    ],
+    "members_in_cache": [
+      "LMT",
+      "RTX",
+      "NOC",
+      "GD",
+      "BA",
+      "LHX",
+      "TDG",
+      "HEI",
+      "TXT"
+    ],
+    "membership": "CURRENT_LIST_ONLY",
+    "missing_from_cache": [],
+    "new_version_minted": false,
+    "static_venue_notes": [],
+    "theme": "defense_aero"
+  },
+  {
+    "common_complete_days_vs_spy_allowed": 1633,
+    "historical_theme_rebuild": "NOT_AVAILABLE",
+    "industry_parent_is_not_theme": true,
+    "late_listed_vs_2018": [],
+    "layers": {
+      "A_close_signal_diagnostic": "available",
+      "B_total_return_vs_quote": "partial",
+      "C_unadjusted_execution": "blocked",
+      "D_historical_membership": "current_list_only"
+    },
+    "members": [
+      "DAL",
+      "UAL",
+      "AAL",
+      "LUV",
+      "ALK",
+      "JBLU",
+      "RYAAY",
+      "CPA"
+    ],
+    "members_in_cache": [
+      "DAL",
+      "UAL",
+      "AAL",
+      "LUV",
+      "ALK",
+      "JBLU",
+      "RYAAY",
+      "CPA"
+    ],
+    "membership": "CURRENT_LIST_ONLY",
+    "missing_from_cache": [],
+    "new_version_minted": false,
+    "static_venue_notes": [],
+    "theme": "airlines"
+  },
+  {
+    "common_complete_days_vs_spy_allowed": 1633,
+    "historical_theme_rebuild": "NOT_AVAILABLE",
+    "industry_parent_is_not_theme": true,
+    "late_listed_vs_2018": [],
+    "layers": {
+      "A_close_signal_diagnostic": "available",
+      "B_total_return_vs_quote": "partial",
+      "C_unadjusted_execution": "blocked",
+      "D_historical_membership": "current_list_only"
+    },
+    "members": [
+      "PLD",
+      "AMT",
+      "EQIX",
+      "CCI",
+      "SPG",
+      "O",
+      "PSA",
+      "DLR",
+      "WELL",
+      "VICI"
+    ],
+    "members_in_cache": [
+      "PLD",
+      "AMT",
+      "EQIX",
+      "CCI",
+      "SPG",
+      "O",
+      "PSA",
+      "DLR",
+      "WELL",
+      "VICI"
+    ],
+    "membership": "CURRENT_LIST_ONLY",
+    "missing_from_cache": [],
+    "new_version_minted": false,
+    "static_venue_notes": [],
+    "theme": "real_estate"
+  },
+  {
+    "common_complete_days_vs_spy_allowed": 808,
+    "historical_theme_rebuild": "NOT_AVAILABLE",
+    "industry_parent_is_not_theme": true,
+    "late_listed_vs_2018": [
+      {
+        "first": "2021-04-14",
+        "ticker": "COIN"
+      },
+      {
+        "first": "2018-03-08",
+        "ticker": "HUT"
+      },
+      {
+        "first": "2020-10-20",
+        "ticker": "CIFR"
+      },
+      {
+        "first": "2018-03-20",
+        "ticker": "BTBT"
+      }
+    ],
+    "layers": {
+      "A_close_signal_diagnostic": "available",
+      "B_total_return_vs_quote": "partial",
+      "C_unadjusted_execution": "blocked",
+      "D_historical_membership": "current_list_only"
+    },
+    "members": [
+      "COIN",
+      "MARA",
+      "RIOT",
+      "MSTR",
+      "HUT",
+      "CLSK",
+      "WULF",
+      "CIFR",
+      "BTBT"
+    ],
+    "members_in_cache": [
+      "COIN",
+      "MARA",
+      "RIOT",
+      "MSTR",
+      "HUT",
+      "CLSK",
+      "WULF",
+      "CIFR",
+      "BTBT"
+    ],
+    "membership": "CURRENT_LIST_ONLY",
+    "missing_from_cache": [],
+    "new_version_minted": false,
+    "static_venue_notes": [],
+    "theme": "crypto"
+  },
+  {
+    "common_complete_days_vs_spy_allowed": 965,
+    "historical_theme_rebuild": "NOT_AVAILABLE",
+    "industry_parent_is_not_theme": true,
+    "late_listed_vs_2018": [
+      {
+        "first": "2018-07-26",
+        "ticker": "PDD"
+      },
+      {
+        "first": "2018-09-12",
+        "ticker": "NIO"
+      },
+      {
+        "first": "2020-07-30",
+        "ticker": "LI"
+      },
+      {
+        "first": "2020-08-27",
+        "ticker": "XPEV"
+      },
+      {
+        "first": "2018-12-12",
+        "ticker": "TME"
+      },
+      {
+        "first": "2018-03-28",
+        "ticker": "BILI"
+      },
+      {
+        "first": "2018-03-29",
+        "ticker": "IQ"
+      }
+    ],
+    "layers": {
+      "A_close_signal_diagnostic": "available",
+      "B_total_return_vs_quote": "partial",
+      "C_unadjusted_execution": "blocked",
+      "D_historical_membership": "current_list_only"
+    },
+    "members": [
+      "BABA",
+      "PDD",
+      "JD",
+      "BIDU",
+      "NIO",
+      "LI",
+      "XPEV",
+      "NTES",
+      "TME",
+      "TAL",
+      "BILI",
+      "IQ"
+    ],
+    "members_in_cache": [
+      "BABA",
+      "PDD",
+      "JD",
+      "BIDU",
+      "NIO",
+      "LI",
+      "XPEV",
+      "NTES",
+      "TME",
+      "TAL",
+      "BILI",
+      "IQ"
+    ],
+    "membership": "CURRENT_LIST_ONLY",
+    "missing_from_cache": [],
+    "new_version_minted": false,
+    "static_venue_notes": [],
+    "theme": "china_adr"
+  },
+  {
+    "common_complete_days_vs_spy_allowed": 1633,
+    "historical_theme_rebuild": "NOT_AVAILABLE",
+    "industry_parent_is_not_theme": true,
+    "late_listed_vs_2018": [],
+    "layers": {
+      "A_close_signal_diagnostic": "available",
+      "B_total_return_vs_quote": "partial",
+      "C_unadjusted_execution": "blocked",
+      "D_historical_membership": "current_list_only"
+    },
+    "members": [
+      "T",
+      "VZ",
+      "TMUS",
+      "CHTR",
+      "CMCSA",
+      "VOD",
+      "AMX"
+    ],
+    "members_in_cache": [
+      "T",
+      "VZ",
+      "TMUS",
+      "CHTR",
+      "CMCSA",
+      "VOD",
+      "AMX"
+    ],
+    "membership": "CURRENT_LIST_ONLY",
+    "missing_from_cache": [],
+    "new_version_minted": false,
+    "static_venue_notes": [],
+    "theme": "telecom"
+  },
+  {
+    "common_complete_days_vs_spy_allowed": 1633,
+    "historical_theme_rebuild": "NOT_AVAILABLE",
+    "industry_parent_is_not_theme": true,
+    "late_listed_vs_2018": [],
+    "layers": {
+      "A_close_signal_diagnostic": "available",
+      "B_total_return_vs_quote": "partial",
+      "C_unadjusted_execution": "blocked",
+      "D_historical_membership": "current_list_only"
+    },
+    "members": [
+      "CAT",
+      "DE",
+      "HON",
+      "GE",
+      "MMM",
+      "UPS",
+      "FDX",
+      "EMR",
+      "ETN",
+      "ITW"
+    ],
+    "members_in_cache": [
+      "CAT",
+      "DE",
+      "HON",
+      "GE",
+      "MMM",
+      "UPS",
+      "FDX",
+      "EMR",
+      "ETN",
+      "ITW"
+    ],
+    "membership": "CURRENT_LIST_ONLY",
+    "missing_from_cache": [],
+    "new_version_minted": false,
+    "static_venue_notes": [],
+    "theme": "industrials"
+  },
+  {
+    "common_complete_days_vs_spy_allowed": 1633,
+    "historical_theme_rebuild": "NOT_AVAILABLE",
+    "industry_parent_is_not_theme": true,
+    "late_listed_vs_2018": [],
+    "layers": {
+      "A_close_signal_diagnostic": "available",
+      "B_total_return_vs_quote": "partial",
+      "C_unadjusted_execution": "blocked",
+      "D_historical_membership": "current_list_only"
+    },
+    "members": [
+      "SPY",
+      "QQQ",
+      "IWM",
+      "DIA",
+      "VTI",
+      "VOO",
+      "ARKK",
+      "SOXX",
+      "XLF",
+      "XLE",
+      "GLD",
+      "TLT"
+    ],
+    "members_in_cache": [
+      "SPY",
+      "QQQ",
+      "IWM",
+      "DIA",
+      "VTI",
+      "VOO",
+      "ARKK",
+      "SOXX",
+      "XLF",
+      "XLE",
+      "GLD",
+      "TLT"
+    ],
+    "membership": "CURRENT_LIST_ONLY",
+    "missing_from_cache": [],
+    "new_version_minted": false,
+    "static_venue_notes": [],
+    "theme": "etfs"
+  }
+]

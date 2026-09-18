@@ -1,0 +1,25 @@
+{
+  "executed": [
+    "inventory existing caches",
+    "trusted pickle load of project Yahoo cache only",
+    "calendar / OHLC / raw-vs-close / TRI-vs-close / dollar-volume checks",
+    "inventory coverage fields (securities/dates/fields/actions/vintage)",
+    "TSLA split-window raw-vs-structure samples",
+    "layered A/B/C/D matrix",
+    "24-theme current-list field table",
+    "decade budget from recovered SPY sessions",
+    "automotive descriptive overlay if quotes exist"
+  ],
+  "executed_backtests": 0,
+  "freeze_files_not_overwritten": true,
+  "not_executed": [
+    "1152-cell rerun",
+    "frozen vector retune",
+    "holdout unseal",
+    "NAV / win-rate / slippage / capacity",
+    "Massive download or auto-buy",
+    "family E / weekly / macro",
+    "production merge",
+    "vendor splice onto B0"
+  ]
+}

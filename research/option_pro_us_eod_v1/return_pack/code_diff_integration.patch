@@ -1,0 +1,33 @@
+diff --git a/backend/app/config.py b/backend/app/config.py
+index 4b2e60bd..d778734c 100644
+--- a/backend/app/config.py
++++ b/backend/app/config.py
+@@ -217,6 +217,8 @@ class Settings(BaseSettings):
+     option_empty_discovery_seconds: int = Field(default=900, ge=30, le=86_400, alias="OPTION_EMPTY_DISCOVERY_SECONDS")
+     massive_api_key: str = Field(default="", alias="MASSIVE_API_KEY")
+     massive_base_url: str = Field(default="https://api.massive.com", alias="MASSIVE_BASE_URL")
++    # Isolated research track. False keeps production ranking / A0 / T1 untouched.
++    research_eod_v1_enabled: bool = Field(default=False, alias="RESEARCH_EOD_V1_ENABLED")
+     # FMP（Financial Modeling Prep）是可选的第二财报日历来源 + 批量市值来源。
+     # 未配置密钥时所有 FMP 路径都必须干净地短路（不影响启动与刷新）。
+     fmp_api_key: str = Field(default="", alias="FMP_API_KEY")
+diff --git a/backend/app/main.py b/backend/app/main.py
+index cc317ac5..8799bb04 100644
+--- a/backend/app/main.py
++++ b/backend/app/main.py
+@@ -56,6 +56,7 @@ from app.api import (
+     market,
+     options,
+     quotes,
++    research_eod_v1,
+     runtime_settings,
+     sectors,
+     settings,
+@@ -744,6 +745,7 @@ app.include_router(signals.router, dependencies=_PUBLIC_READ_DEPENDENCIES)
+ app.include_router(ai.router, dependencies=_OWNER_DEPENDENCIES)
+ app.include_router(catalysts.router, dependencies=_PUBLIC_READ_DEPENDENCIES)
+ app.include_router(strength.router, dependencies=_PUBLIC_READ_DEPENDENCIES)
++app.include_router(research_eod_v1.router, dependencies=_OWNER_DEPENDENCIES)
+ app.include_router(breakouts.router, dependencies=_PUBLIC_READ_DEPENDENCIES)
+ app.include_router(worker_actions.router, dependencies=_OWNER_DEPENDENCIES)
+ app.include_router(diagnostics.router, dependencies=_OWNER_DEPENDENCIES)

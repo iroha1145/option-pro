@@ -1,0 +1,97 @@
+{
+  "allowed_end": "2024-06-28",
+  "families": {
+    "A_trend_quality": {
+      "first_scoreable_day": "2018-10-17",
+      "labels": {
+        "20": {
+          "evaluable_sessions": 1413,
+          "mature_label_day": "2018-11-14",
+          "not_a_long_horizon_validation": false
+        },
+        "5": {
+          "evaluable_sessions": 1428,
+          "mature_label_day": "2018-10-24",
+          "not_a_long_horizon_validation": false
+        },
+        "63": {
+          "evaluable_sessions": 1370,
+          "mature_label_day": "2019-01-18",
+          "not_a_long_horizon_validation": true
+        }
+      },
+      "warmup_sessions": 200
+    },
+    "B_confirmed_base_breakout": {
+      "first_scoreable_day": "2018-04-27",
+      "labels": {
+        "20": {
+          "evaluable_sessions": 1533,
+          "mature_label_day": "2018-05-25",
+          "not_a_long_horizon_validation": false
+        },
+        "5": {
+          "evaluable_sessions": 1548,
+          "mature_label_day": "2018-05-04",
+          "not_a_long_horizon_validation": false
+        },
+        "63": {
+          "evaluable_sessions": 1490,
+          "mature_label_day": "2018-07-27",
+          "not_a_long_horizon_validation": true
+        }
+      },
+      "warmup_sessions": 80
+    },
+    "C_trend_pullback": {
+      "first_scoreable_day": "2018-10-17",
+      "labels": {
+        "20": {
+          "evaluable_sessions": 1413,
+          "mature_label_day": "2018-11-14",
+          "not_a_long_horizon_validation": false
+        },
+        "5": {
+          "evaluable_sessions": 1428,
+          "mature_label_day": "2018-10-24",
+          "not_a_long_horizon_validation": false
+        },
+        "63": {
+          "evaluable_sessions": 1370,
+          "mature_label_day": "2019-01-18",
+          "not_a_long_horizon_validation": true
+        }
+      },
+      "warmup_sessions": 200
+    },
+    "D_residual_momentum": {
+      "first_scoreable_day": "2019-04-26",
+      "labels": {
+        "20": {
+          "evaluable_sessions": 1283,
+          "mature_label_day": "2019-05-24",
+          "not_a_long_horizon_validation": false
+        },
+        "5": {
+          "evaluable_sessions": 1298,
+          "mature_label_day": "2019-05-03",
+          "not_a_long_horizon_validation": false
+        },
+        "63": {
+          "evaluable_sessions": 1240,
+          "mature_label_day": "2019-07-26",
+          "not_a_long_horizon_validation": true
+        }
+      },
+      "warmup_sessions": 330
+    }
+  },
+  "holdout_start": "2024-07-01",
+  "holdout_used_for_labels": false,
+  "label_63_is_not_horizon_long": true,
+  "note": "Long history extends backward only. Holdout sessions are not read to pad a decade.",
+  "profiles_and_horizons_are_separate_experiments": true,
+  "raw_span_years": 6.485968514715948,
+  "raw_start": "2018-01-02",
+  "ten_year_evaluable": false
+}

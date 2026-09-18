@@ -1,0 +1,39 @@
+{
+  "as_requested_start": "2010-01-01",
+  "actual_request_start": "2015-01-02",
+  "actual_request_end_exclusive": "2026-09-17",
+  "last_bar": "2026-09-16",
+  "universe": "current_SECTORS_214_survivors",
+  "counts": {
+    "unique_tickers": 214,
+    "listed_membership_rows": 231,
+    "downloaded_ok": 214,
+    "empty": 0,
+    "start_year_2015": 174,
+    "ipo_or_short_names": ["ARM", "CRWV", "RDDT"]
+  },
+  "bars": {
+    "min": 369,
+    "median": 2943,
+    "max": 2996,
+    "min_name": "CRWV"
+  },
+  "nested_warmup": {
+    "daily_252": "most names have >=252 raw bars; ARM/CRWV/RDDT shorter than 1000",
+    "residual_330": "CRWV 369 barely covers; ARM 754 covers; not all names have residual-ready history from 2015",
+    "weekly_52": "not computed this round",
+    "label_20_63": "registered, not matured on a holdout"
+  },
+  "years": {
+    "raw_years_max": 11.7,
+    "raw_years_is_not_evaluable_years": true,
+    "feature_ready_years": "varies_by_feature_not_a_single_number",
+    "evaluable_years": null,
+    "oos_years": 0
+  },
+  "notes": [
+    "2010 was the preferred application start; this run used 2015-01-02 after Yahoo succeeded on the 2020 probe window.",
+    "Ten years of raw Yahoo bars on today's survivors is not ten evaluable PIT years and not ten OOS years.",
+    "No delisted file. No historical theme membership."
+  ]
+}

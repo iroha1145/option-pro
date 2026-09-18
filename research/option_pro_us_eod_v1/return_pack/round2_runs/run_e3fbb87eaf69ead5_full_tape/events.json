@@ -1,0 +1,202 @@
+{
+  "by_variant": {
+    "BASELINE_FULL_EIGHT": {
+      "global_book": {
+        "consecutive_trigger_fragments": 9813,
+        "independent_events": null,
+        "label_horizon_overlap_groups": 4054,
+        "old_count_4514": "SUPERSEDED_EVENT_COUNT",
+        "usable_for_independent_sample": false
+      },
+      "theme_report": {
+        "consecutive_trigger_fragments": 10203,
+        "independent_events": null,
+        "label_horizon_overlap_groups": 4211,
+        "old_count_4514": "SUPERSEDED_EVENT_COUNT",
+        "usable_for_independent_sample": false
+      }
+    },
+    "BASELINE_PRICE_ONLY": {
+      "global_book": {
+        "consecutive_trigger_fragments": 15120,
+        "independent_events": null,
+        "label_horizon_overlap_groups": 5984,
+        "old_count_4514": "SUPERSEDED_EVENT_COUNT",
+        "usable_for_independent_sample": false
+      },
+      "theme_report": {
+        "consecutive_trigger_fragments": 15822,
+        "independent_events": null,
+        "label_horizon_overlap_groups": 6257,
+        "old_count_4514": "SUPERSEDED_EVENT_COUNT",
+        "usable_for_independent_sample": false
+      }
+    },
+    "N_M_PLUS_5PP_REALLOC_V1": {
+      "global_book": {
+        "consecutive_trigger_fragments": 15993,
+        "independent_events": null,
+        "label_horizon_overlap_groups": 6230,
+        "old_count_4514": "SUPERSEDED_EVENT_COUNT",
+        "usable_for_independent_sample": false
+      },
+      "theme_report": {
+        "consecutive_trigger_fragments": 16809,
+        "independent_events": null,
+        "label_horizon_overlap_groups": 6522,
+        "old_count_4514": "SUPERSEDED_EVENT_COUNT",
+        "usable_for_independent_sample": false
+      }
+    },
+    "N_SCORE_FLOOR_PLUS_10PCT": {
+      "global_book": {
+        "consecutive_trigger_fragments": 2739,
+        "independent_events": null,
+        "label_horizon_overlap_groups": 1280,
+        "old_count_4514": "SUPERSEDED_EVENT_COUNT",
+        "usable_for_independent_sample": false
+      },
+      "theme_report": {
+        "consecutive_trigger_fragments": 2820,
+        "independent_events": null,
+        "label_horizon_overlap_groups": 1311,
+        "old_count_4514": "SUPERSEDED_EVENT_COUNT",
+        "usable_for_independent_sample": false
+      }
+    },
+    "N_S_PLUS_5PP_REALLOC_V1": {
+      "global_book": {
+        "consecutive_trigger_fragments": 15705,
+        "independent_events": null,
+        "label_horizon_overlap_groups": 6357,
+        "old_count_4514": "SUPERSEDED_EVENT_COUNT",
+        "usable_for_independent_sample": false
+      },
+      "theme_report": {
+        "consecutive_trigger_fragments": 16461,
+        "independent_events": null,
+        "label_horizon_overlap_groups": 6650,
+        "old_count_4514": "SUPERSEDED_EVENT_COUNT",
+        "usable_for_independent_sample": false
+      }
+    },
+    "PRICE_DROP_B": {
+      "global_book": {
+        "consecutive_trigger_fragments": 15207,
+        "independent_events": null,
+        "label_horizon_overlap_groups": 5995,
+        "old_count_4514": "SUPERSEDED_EVENT_COUNT",
+        "usable_for_independent_sample": false
+      },
+      "theme_report": {
+        "consecutive_trigger_fragments": 15915,
+        "independent_events": null,
+        "label_horizon_overlap_groups": 6272,
+        "old_count_4514": "SUPERSEDED_EVENT_COUNT",
+        "usable_for_independent_sample": false
+      }
+    },
+    "PRICE_DROP_M": {
+      "global_book": {
+        "consecutive_trigger_fragments": 13842,
+        "independent_events": null,
+        "label_horizon_overlap_groups": 5699,
+        "old_count_4514": "SUPERSEDED_EVENT_COUNT",
+        "usable_for_independent_sample": false
+      },
+      "theme_report": {
+        "consecutive_trigger_fragments": 14301,
+        "independent_events": null,
+        "label_horizon_overlap_groups": 5879,
+        "old_count_4514": "SUPERSEDED_EVENT_COUNT",
+        "usable_for_independent_sample": false
+      }
+    },
+    "PRICE_DROP_P": {
+      "global_book": {
+        "consecutive_trigger_fragments": 21642,
+        "independent_events": null,
+        "label_horizon_overlap_groups": 8776,
+        "old_count_4514": "SUPERSEDED_EVENT_COUNT",
+        "usable_for_independent_sample": false
+      },
+      "theme_report": {
+        "consecutive_trigger_fragments": 22710,
+        "independent_events": null,
+        "label_horizon_overlap_groups": 9202,
+        "old_count_4514": "SUPERSEDED_EVENT_COUNT",
+        "usable_for_independent_sample": false
+      }
+    },
+    "PRICE_DROP_R": {
+      "global_book": {
+        "consecutive_trigger_fragments": 19614,
+        "independent_events": null,
+        "label_horizon_overlap_groups": 7568,
+        "old_count_4514": "SUPERSEDED_EVENT_COUNT",
+        "usable_for_independent_sample": false
+      },
+      "theme_report": {
+        "consecutive_trigger_fragments": 20985,
+        "independent_events": null,
+        "label_horizon_overlap_groups": 8070,
+        "old_count_4514": "SUPERSEDED_EVENT_COUNT",
+        "usable_for_independent_sample": false
+      }
+    },
+    "PRICE_DROP_S": {
+      "global_book": {
+        "consecutive_trigger_fragments": 14151,
+        "independent_events": null,
+        "label_horizon_overlap_groups": 5373,
+        "old_count_4514": "SUPERSEDED_EVENT_COUNT",
+        "usable_for_independent_sample": false
+      },
+      "theme_report": {
+        "consecutive_trigger_fragments": 14733,
+        "independent_events": null,
+        "label_horizon_overlap_groups": 5611,
+        "old_count_4514": "SUPERSEDED_EVENT_COUNT",
+        "usable_for_independent_sample": false
+      }
+    },
+    "PRICE_DROP_T": {
+      "global_book": {
+        "consecutive_trigger_fragments": 11826,
+        "independent_events": null,
+        "label_horizon_overlap_groups": 4963,
+        "old_count_4514": "SUPERSEDED_EVENT_COUNT",
+        "usable_for_independent_sample": false
+      },
+      "theme_report": {
+        "consecutive_trigger_fragments": 12267,
+        "independent_events": null,
+        "label_horizon_overlap_groups": 5149,
+        "old_count_4514": "SUPERSEDED_EVENT_COUNT",
+        "usable_for_independent_sample": false
+      }
+    },
+    "PRICE_DROP_V": {
+      "global_book": {
+        "consecutive_trigger_fragments": 17943,
+        "independent_events": null,
+        "label_horizon_overlap_groups": 7018,
+        "old_count_4514": "SUPERSEDED_EVENT_COUNT",
+        "usable_for_independent_sample": false
+      },
+      "theme_report": {
+        "consecutive_trigger_fragments": 18810,
+        "independent_events": null,
+        "label_horizon_overlap_groups": 7343,
+        "old_count_4514": "SUPERSEDED_EVENT_COUNT",
+        "usable_for_independent_sample": false
+      }
+    }
+  },
+  "definition": "FRAGMENT_AND_LABEL_HORIZON_OVERLAP",
+  "independent_events": null,
+  "old_count_4514": "SUPERSEDED_EVENT_COUNT",
+  "pairing_rule": "COMMON_MEMBER_RERANK_THEN_IC_DIFF",
+  "setup_id_unrecoverable_rows": 1051326,
+  "statistics_rule": "CIRCULAR_DATE_BLOCK_BOOTSTRAP_SEED174_2000_TRIM_TO_TIMELINE"
+}

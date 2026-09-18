@@ -1,0 +1,5 @@
+{
+  "session": "date",
+  "equity": "float",
+  "cash": "float"
+}

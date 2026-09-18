@@ -1,0 +1,77 @@
+{
+  "allowed_end": "2024-06-28",
+  "b0_not_overwritten": true,
+  "b0_restricted": true,
+  "bootstrap": {
+    "repeats": 2000,
+    "seed": 174
+  },
+  "cache_hits": {
+    "checkpoint": "Signed done keys are (session, theme, algorithm, profile, horizon). A signature mismatch rejects the file. Row uniqueness uses committed_row_key.",
+    "event_cache": "Deduped event groups keyed by security, family, profile, score horizon, and label horizon under trading-session adjacency. Not N_eff.",
+    "feature_cache": "Raw/cross-section factors keyed by session, security, universe, feature_version, and reference policy. Independent of profile, horizon tilt, and score weights.",
+    "ic_cache": "Grouped Spearman keyed by session, theme, family, profile, horizon, label horizon, and the score vector identity. Eligible-only subsets are not this cache.",
+    "score_cache": "Scores and eligibility keyed by run_signature plus security. A weight, profile, horizon, floor, or label-horizon change must miss this layer."
+  },
+  "code_hashes": {
+    "ablation.py": "6edc6492fabcff095c259b64cf0b49b0b86367ca3c6ab05b7b5bb6e949166a52",
+    "bootstrap.py": "b0fa0040955e9fd818a7edb2a01e9817972f75fd9f1952c8dc512b43b870615f",
+    "capability.py": "971b43c9aa5a795e86e6801b1f27a6798d5f01258ab841499ed314ec249ddab4",
+    "event_groups.py": "c068aec202b10691d800eee9e58612e10a52ee40991ca269e5698bc3f641ff39",
+    "pairing.py": "295651a078cc886fa822fad368fdd8c49415cd2e7eb5ad46411797fcf628bd8c",
+    "round1b.py": "01508fc7c3225a0eeaa6e78fcc8f8f4f0e0285bc56890121142eab1c761a987e",
+    "runs.py": "3e13b44fb7c8923f38be2681557c38fc1992b0c11c6b5ea9546e99ac1edf00b8",
+    "source_bind.py": "99dbdf2795cb7063633afae1e26804df03f63a54aa48b41b598f02fb0a62dd21",
+    "stats.py": "b0766e715b7347e6daa57d4263bc230dd5890ba7d47cf7b3be1ff3efff553d60"
+  },
+  "event_rule_version": "us-eod-event-groups-v1.1",
+  "expected_b0_sha256": "b490ba6d83965a0c3fe60c76afab8205fc2a0d76cc6577cdf23cb838e447f75a",
+  "feature_version": "us-eod-research-features-v1.5",
+  "github_ci": {
+    "conclusion": "success",
+    "head": "355bab413c389e5a177bf7b6d87763d5d73bee8a",
+    "note": "Both GitHub test jobs completed success on 355bab41. Research analysis ran from 0252d3f6; this SHA only adds return-pack/audit whitespace fixes.",
+    "pull_request": "https://github.com/iroha1145/option-pro/actions/runs/35323542199",
+    "pull_request_job": "https://github.com/iroha1145/option-pro/actions/runs/35323542199/job/105531359300",
+    "push": "https://github.com/iroha1145/option-pro/actions/runs/35323537598",
+    "push_job": "https://github.com/iroha1145/option-pro/actions/runs/35323537598/job/105531337989"
+  },
+  "head": "355bab413c389e5a177bf7b6d87763d5d73bee8a",
+  "holdout_start": "2024-07-01",
+  "holdout_unsealed": false,
+  "horizon": "mid",
+  "neighbors_preregistered_before_ic": [
+    {
+      "delta": 0.05,
+      "factor": "M",
+      "kind": "weight",
+      "note": "true +5pp reallocation; G stays frozen at zero",
+      "variant_id": "N_M_PLUS_5PP_REALLOC_V1"
+    },
+    {
+      "delta": 0.05,
+      "factor": "S",
+      "kind": "weight",
+      "note": "true +5pp reallocation; G stays frozen at zero",
+      "variant_id": "N_S_PLUS_5PP_REALLOC_V1"
+    }
+  ],
+  "notes": [
+    "Round 1 files stay untouched. R1b writes algorithm_round1b_* and a signed run directory.",
+    "URL/CI metadata is not part of run_signature.",
+    "82 historical G ablations are capability-confounded and are not re-run.",
+    "N_M_PLUS_5PP / N_S_PLUS_5PP remain legacy_raw_weight_bump.",
+    "executed_backtests stays 0."
+  ],
+  "profile": "balanced",
+  "reviewed_anchor": "70a57ce5b60acfedb7ac4337b13aa2ee3a627d5f",
+  "round": "algorithm_round1b",
+  "round1_not_overwritten": true,
+  "run_dir": "research/option_pro_us_eod_v1/return_pack/round1b_runs/run_41acb6227d1f52c6_full_tape",
+  "run_kind": "full_tape",
+  "run_signature": "41acb6227d1f52c69262cac49bb46270cadbc062c38d0dd61433f9be0a589e92",
+  "score_version": "us-eod-research-score-v1",
+  "source_row_sha256": "b490ba6d83965a0c3fe60c76afab8205fc2a0d76cc6577cdf23cb838e447f75a",
+  "statistics_version": "us-eod-research-stats-v1.0",
+  "written_at": "2026-09-18T07:48:36.647660+00:00"
+}

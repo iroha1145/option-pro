@@ -1,0 +1,25 @@
+theme_id,n_members,label_window,label_mature_cutoff,lambda,prior_status,independent_events,evaluable_years
+semiconductors,14,20/63 registered,not_run_on_market_history,n/(n+30) industry shrink; theme lambda<=0.5 reserved,REGISTERED_NOT_RUN,na,na
+software,12,20/63 registered,not_run_on_market_history,n/(n+30) industry shrink; theme lambda<=0.5 reserved,REGISTERED_NOT_RUN,na,na
+ai_cloud,10,20/63 registered,not_run_on_market_history,n/(n+30) industry shrink; theme lambda<=0.5 reserved,REGISTERED_NOT_RUN,na,na
+biotech,10,20/63 registered,not_run_on_market_history,n/(n+30) industry shrink; theme lambda<=0.5 reserved,REGISTERED_NOT_RUN,na,na
+healthcare,10,20/63 registered,not_run_on_market_history,n/(n+30) industry shrink; theme lambda<=0.5 reserved,REGISTERED_NOT_RUN,na,na
+consumer_electronics,5,20/63 registered,not_run_on_market_history,n/(n+30) industry shrink; theme lambda<=0.5 reserved,REGISTERED_NOT_RUN,na,na
+automotive,10,20/63 registered,not_run_on_market_history,n/(n+30) industry shrink; theme lambda<=0.5 reserved,REGISTERED_NOT_RUN,na,na
+ev_supply,10,20/63 registered,not_run_on_market_history,n/(n+30) industry shrink; theme lambda<=0.5 reserved,REGISTERED_NOT_RUN,na,na
+finance,10,20/63 registered,not_run_on_market_history,n/(n+30) industry shrink; theme lambda<=0.5 reserved,REGISTERED_NOT_RUN,na,na
+fintech,10,20/63 registered,not_run_on_market_history,n/(n+30) industry shrink; theme lambda<=0.5 reserved,REGISTERED_NOT_RUN,na,na
+retail,10,20/63 registered,not_run_on_market_history,n/(n+30) industry shrink; theme lambda<=0.5 reserved,REGISTERED_NOT_RUN,na,na
+luxury,7,20/63 registered,not_run_on_market_history,n/(n+30) industry shrink; theme lambda<=0.5 reserved,REGISTERED_NOT_RUN,na,na
+media_streaming,8,20/63 registered,not_run_on_market_history,n/(n+30) industry shrink; theme lambda<=0.5 reserved,REGISTERED_NOT_RUN,na,na
+social_internet,8,20/63 registered,not_run_on_market_history,n/(n+30) industry shrink; theme lambda<=0.5 reserved,REGISTERED_NOT_RUN,na,na
+energy,10,20/63 registered,not_run_on_market_history,n/(n+30) industry shrink; theme lambda<=0.5 reserved,REGISTERED_NOT_RUN,na,na
+utilities,10,20/63 registered,not_run_on_market_history,n/(n+30) industry shrink; theme lambda<=0.5 reserved,REGISTERED_NOT_RUN,na,na
+defense_aero,9,20/63 registered,not_run_on_market_history,n/(n+30) industry shrink; theme lambda<=0.5 reserved,REGISTERED_NOT_RUN,na,na
+airlines,8,20/63 registered,not_run_on_market_history,n/(n+30) industry shrink; theme lambda<=0.5 reserved,REGISTERED_NOT_RUN,na,na
+real_estate,10,20/63 registered,not_run_on_market_history,n/(n+30) industry shrink; theme lambda<=0.5 reserved,REGISTERED_NOT_RUN,na,na
+crypto,9,20/63 registered,not_run_on_market_history,n/(n+30) industry shrink; theme lambda<=0.5 reserved,REGISTERED_NOT_RUN,na,na
+china_adr,12,20/63 registered,not_run_on_market_history,n/(n+30) industry shrink; theme lambda<=0.5 reserved,REGISTERED_NOT_RUN,na,na
+telecom,7,20/63 registered,not_run_on_market_history,n/(n+30) industry shrink; theme lambda<=0.5 reserved,REGISTERED_NOT_RUN,na,na
+industrials,10,20/63 registered,not_run_on_market_history,n/(n+30) industry shrink; theme lambda<=0.5 reserved,REGISTERED_NOT_RUN,na,na
+etfs,12,20/63 registered,not_run_on_market_history,n/(n+30) industry shrink; theme lambda<=0.5 reserved,REGISTERED_NOT_RUN,na,na

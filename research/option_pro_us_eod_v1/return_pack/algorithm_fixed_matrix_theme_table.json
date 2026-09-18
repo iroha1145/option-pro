@@ -1,0 +1,4970 @@
+[
+  {
+    "days_with_quote_label": 1377,
+    "days_with_tri_label": 1377,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 5,
+    "missing_endpoint_events": 1183,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.026511179748192674,
+        "mean_tri": 0.02651118617299726,
+        "n_quote": 13,
+        "n_tri": 13,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.09849157585562154,
+        "mean_tri": 0.09849158230909906,
+        "n_quote": 13,
+        "n_tri": 13,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.05538253461733839,
+        "mean_tri": 0.0553825495136943,
+        "n_quote": 13,
+        "n_tri": 13,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.01551168416232178,
+        "mean_tri": 0.015511589338975536,
+        "n_quote": 13,
+        "n_tri": 13,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.024458736247068104,
+        "mean_tri": 0.024458733324498695,
+        "n_quote": 13,
+        "n_tri": 13,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": -0.012586674430277526,
+        "mean_tri": -0.012586692762925856,
+        "n_quote": 13,
+        "n_tri": 13,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": -0.008121846430154123,
+        "mean_tri": -0.008121842942604762,
+        "n_quote": 13,
+        "n_tri": 13,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.010862143687193234,
+        "mean_tri": 0.010862240885164205,
+        "n_quote": 13,
+        "n_tri": 13,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "semiconductors",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1362,
+    "days_with_tri_label": 1362,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 20,
+    "missing_endpoint_events": 1183,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.10346080715812328,
+        "mean_tri": 0.10408851460749845,
+        "n_quote": 13,
+        "n_tri": 13,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.18528641358567172,
+        "mean_tri": 0.1859622096713297,
+        "n_quote": 13,
+        "n_tri": 13,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.13306988539434383,
+        "mean_tri": 0.13371526342719783,
+        "n_quote": 13,
+        "n_tri": 13,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.10840862440671033,
+        "mean_tri": 0.10904626175041393,
+        "n_quote": 13,
+        "n_tri": 13,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.14208275417119973,
+        "mean_tri": 0.14325677937215756,
+        "n_quote": 13,
+        "n_tri": 13,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.08655680955067746,
+        "mean_tri": 0.08769222060810405,
+        "n_quote": 13,
+        "n_tri": 13,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.07934485737993671,
+        "mean_tri": 0.08046531625594129,
+        "n_quote": 13,
+        "n_tri": 13,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.074611681204407,
+        "mean_tri": 0.07572346118565135,
+        "n_quote": 13,
+        "n_tri": 13,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "semiconductors",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1319,
+    "days_with_tri_label": 1319,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 63,
+    "missing_endpoint_events": 1183,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.2707746444873636,
+        "mean_tri": 0.2760590704395553,
+        "n_quote": 13,
+        "n_tri": 13,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.3524633678712293,
+        "mean_tri": 0.35807027374682243,
+        "n_quote": 13,
+        "n_tri": 13,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.2969837960398533,
+        "mean_tri": 0.30240584637458623,
+        "n_quote": 13,
+        "n_tri": 13,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.26581788917974447,
+        "mean_tri": 0.27117790131871683,
+        "n_quote": 13,
+        "n_tri": 13,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.2604533235302026,
+        "mean_tri": 0.26581650770412085,
+        "n_quote": 13,
+        "n_tri": 13,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.2393918741535542,
+        "mean_tri": 0.2446352829654382,
+        "n_quote": 13,
+        "n_tri": 13,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.23122239446942056,
+        "mean_tri": 0.2364267591338033,
+        "n_quote": 13,
+        "n_tri": 13,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.23773449300614524,
+        "mean_tri": 0.2429933650513609,
+        "n_quote": 13,
+        "n_tri": 13,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "semiconductors",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1377,
+    "days_with_tri_label": 1377,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 5,
+    "missing_endpoint_events": 1337,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.05982017941530967,
+        "mean_tri": 0.059820192456955815,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.08093501412307781,
+        "mean_tri": 0.08093498379845576,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.029387400134483155,
+        "mean_tri": 0.029387421025765255,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": -0.00349930625971124,
+        "mean_tri": -0.0034992320819442163,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.0029981447700875136,
+        "mean_tri": 0.0035695794447291,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": -0.0065227473908053835,
+        "mean_tri": -0.0059537957562042975,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.015901243547657793,
+        "mean_tri": 0.016475821933053254,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.03590512174800815,
+        "mean_tri": 0.036482129406153106,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "software",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1362,
+    "days_with_tri_label": 1362,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 20,
+    "missing_endpoint_events": 1337,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.13282826656100194,
+        "mean_tri": 0.13345656595945693,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.18410597589308342,
+        "mean_tri": 0.1847476809181499,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.14501784833499576,
+        "mean_tri": 0.14563573798737764,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.126369421228999,
+        "mean_tri": 0.12698021956989788,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.09914478852368701,
+        "mean_tri": 0.09975026373750248,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.0906333382017387,
+        "mean_tri": 0.09122780112035304,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.12718426938020566,
+        "mean_tri": 0.12778779896570322,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.13233263736540743,
+        "mean_tri": 0.1329326506786154,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "software",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1319,
+    "days_with_tri_label": 1319,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 63,
+    "missing_endpoint_events": 1337,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.3332249143357992,
+        "mean_tri": 0.33462491170928377,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.34997977339467695,
+        "mean_tri": 0.3514071149990538,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.277131612694189,
+        "mean_tri": 0.27850220425803796,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.2414576620722175,
+        "mean_tri": 0.24281493221731543,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.22376955870109572,
+        "mean_tri": 0.22511334821924686,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.2465852451313275,
+        "mean_tri": 0.24865290986339622,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.28318346692338453,
+        "mean_tri": 0.28525079033479667,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.28273064768022155,
+        "mean_tri": 0.28481170723985416,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "software",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1377,
+    "days_with_tri_label": 1377,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 5,
+    "missing_endpoint_events": 440,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.03745447890170242,
+        "mean_tri": 0.03745445915528513,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.06642423492347738,
+        "mean_tri": 0.06642427308717824,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.022744978142440683,
+        "mean_tri": 0.022744968000024998,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": -3.957562040746154e-06,
+        "mean_tri": -3.924157752008273e-06,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.00947929698975633,
+        "mean_tri": 0.009479228246210017,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": -0.001269846818465481,
+        "mean_tri": -0.001269870979235782,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.009115136447813851,
+        "mean_tri": 0.009115121289625286,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.03208116894190115,
+        "mean_tri": 0.0320811502361201,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "ai_cloud",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1362,
+    "days_with_tri_label": 1362,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 20,
+    "missing_endpoint_events": 440,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.06900734043079498,
+        "mean_tri": 0.0690072972794673,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.09943879822456095,
+        "mean_tri": 0.09943877869982809,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.07772729939571231,
+        "mean_tri": 0.07772729979759689,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.07461980089061207,
+        "mean_tri": 0.07461982748669385,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.06070782375378514,
+        "mean_tri": 0.06070779001165369,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.03383913225457019,
+        "mean_tri": 0.03383914310265351,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.043860812799576654,
+        "mean_tri": 0.04386080539577464,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.05180578071145091,
+        "mean_tri": 0.05180582521256469,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "ai_cloud",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1319,
+    "days_with_tri_label": 1319,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 63,
+    "missing_endpoint_events": 440,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.30932578737437305,
+        "mean_tri": 0.31013746234941164,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.3427260874783725,
+        "mean_tri": 0.3435696928981118,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.3057201449748741,
+        "mean_tri": 0.30652857241987275,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.28724064678371136,
+        "mean_tri": 0.2880402428660488,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.27286877527494724,
+        "mean_tri": 0.27366254715969773,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.27567000433823474,
+        "mean_tri": 0.27645892964622143,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.2817666264658767,
+        "mean_tri": 0.282556522982794,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.2937275781549483,
+        "mean_tri": 0.2945201852850655,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "ai_cloud",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1377,
+    "days_with_tri_label": 1377,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 5,
+    "missing_endpoint_events": 195,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.05389401222646248,
+        "mean_tri": 0.05389398436437845,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.06477192400223587,
+        "mean_tri": 0.0647719695212133,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.02462833551474523,
+        "mean_tri": 0.024628327858378207,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": -0.0004165305009568761,
+        "mean_tri": 0.0008615527312995579,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.0012332245245919211,
+        "mean_tri": 0.002516609074133264,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": -0.00402047319575374,
+        "mean_tri": -0.0026927354641875668,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.006840480051081214,
+        "mean_tri": 0.008187824082144246,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.010263002723394631,
+        "mean_tri": 0.011644130115659394,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "biotech",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1362,
+    "days_with_tri_label": 1362,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 20,
+    "missing_endpoint_events": 195,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.05790006038076274,
+        "mean_tri": 0.05912622266226212,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.06256496020051229,
+        "mean_tri": 0.06383625107991078,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.01128524733832782,
+        "mean_tri": 0.012486745501692376,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.012775595736208753,
+        "mean_tri": 0.013977265417988629,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.0008817752807533941,
+        "mean_tri": 0.002068870496728498,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": -0.021756648766977877,
+        "mean_tri": -0.020527987413339437,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": -0.014804844485166193,
+        "mean_tri": -0.013573888901899181,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": -0.01955536268333972,
+        "mean_tri": -0.018324352346256352,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "biotech",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1319,
+    "days_with_tri_label": 1319,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 63,
+    "missing_endpoint_events": 195,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.0637015101240572,
+        "mean_tri": 0.0694918256741798,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.0748936923139306,
+        "mean_tri": 0.08068541955521635,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.057613427449786626,
+        "mean_tri": 0.06330939063253299,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.06449010008510135,
+        "mean_tri": 0.07016185471122442,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.04032486480065313,
+        "mean_tri": 0.04590028702889501,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.05320732108019959,
+        "mean_tri": 0.0588317680807969,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.022719766276306723,
+        "mean_tri": 0.02828464596358355,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": -0.002193068990792746,
+        "mean_tri": 0.004669535011291304,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "biotech",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1377,
+    "days_with_tri_label": 1377,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 5,
+    "missing_endpoint_events": 0,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.009273678371043047,
+        "mean_tri": 0.009982961090838006,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.05273737185082045,
+        "mean_tri": 0.05273735371738836,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.023335711516171607,
+        "mean_tri": 0.023335745936872033,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.013093707199740179,
+        "mean_tri": 0.013551674712967643,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.022609264635363523,
+        "mean_tri": 0.02308769037453453,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.0097480451237963,
+        "mean_tri": 0.01021422153552214,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.019805500409545505,
+        "mean_tri": 0.020278939402325412,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.02847812822040805,
+        "mean_tri": 0.02895583239209747,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "healthcare",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1362,
+    "days_with_tri_label": 1362,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 20,
+    "missing_endpoint_events": 0,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.046156358387310505,
+        "mean_tri": 0.04824269023442418,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.09186989124111297,
+        "mean_tri": 0.09326747082045046,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.05959640473053936,
+        "mean_tri": 0.06095200679213906,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.05868224466697016,
+        "mean_tri": 0.06002339112709777,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.05520527140007895,
+        "mean_tri": 0.05655546853459181,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.03251927680104921,
+        "mean_tri": 0.03384521683925027,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.03466939479060863,
+        "mean_tri": 0.036033370348783775,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.03213596226926173,
+        "mean_tri": 0.03347674498253146,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "healthcare",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1319,
+    "days_with_tri_label": 1319,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 63,
+    "missing_endpoint_events": 0,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.1019416364773023,
+        "mean_tri": 0.10670113250511348,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.14103160241872836,
+        "mean_tri": 0.14608960881606317,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.11083097748641446,
+        "mean_tri": 0.11576092471312205,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.11166347181001637,
+        "mean_tri": 0.11660333962668608,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.09760445994116074,
+        "mean_tri": 0.10249074348256289,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.085300539111355,
+        "mean_tri": 0.09018541916809023,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.07599973004819063,
+        "mean_tri": 0.08085309620939689,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.06530995862409412,
+        "mean_tri": 0.07055073356751333,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "healthcare",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1377,
+    "days_with_tri_label": 1377,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 5,
+    "missing_endpoint_events": 0,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.01699628583696,
+        "mean_tri": 0.01699621055601579,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.06771930122225264,
+        "mean_tri": 0.0677194245495902,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.01741913990564643,
+        "mean_tri": 0.01741906318616284,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": -0.012188725127589884,
+        "mean_tri": -0.012188809904521957,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": -0.011815994923449003,
+        "mean_tri": -0.011815981398400788,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": -0.01985278095280345,
+        "mean_tri": -0.01985265389326014,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": -0.0059452257330128155,
+        "mean_tri": -0.005945317405293626,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.011951565469689406,
+        "mean_tri": 0.011951611708877995,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "consumer_electronics",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1362,
+    "days_with_tri_label": 1362,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 20,
+    "missing_endpoint_events": 0,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.06960785656265345,
+        "mean_tri": 0.06960779597128056,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.1194353176422384,
+        "mean_tri": 0.11943523089373136,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.08988418367296361,
+        "mean_tri": 0.08988418205174493,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.08418484568233611,
+        "mean_tri": 0.08418472611009187,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.06792890999878862,
+        "mean_tri": 0.06792901936252019,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.039730557899666216,
+        "mean_tri": 0.039730596780069405,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.056427993434147415,
+        "mean_tri": 0.05737827297173781,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.06488652271713642,
+        "mean_tri": 0.06584086775903826,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "consumer_electronics",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1319,
+    "days_with_tri_label": 1319,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 63,
+    "missing_endpoint_events": 0,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.13300403988910783,
+        "mean_tri": 0.13643508143323757,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.19721190687849038,
+        "mean_tri": 0.20084967734497336,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.16311746720882064,
+        "mean_tri": 0.1666278816235808,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.17384084547776493,
+        "mean_tri": 0.17741936745561873,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.14790002226625315,
+        "mean_tri": 0.15139609005177104,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.15059697529240967,
+        "mean_tri": 0.15410807137735566,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.16181495909591098,
+        "mean_tri": 0.16530767102402913,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.17887325207257748,
+        "mean_tri": 0.18243565073235224,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "consumer_electronics",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1377,
+    "days_with_tri_label": 1377,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 5,
+    "missing_endpoint_events": 1967,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.07802215942401063,
+        "mean_tri": 0.07802215371244973,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.1101876497699575,
+        "mean_tri": 0.11018768346837653,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.07761014457468969,
+        "mean_tri": 0.07761026045082124,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.05390167608590355,
+        "mean_tri": 0.053901579894609884,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.055288933938911246,
+        "mean_tri": 0.05528884902756829,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.02093274804010949,
+        "mean_tri": 0.02093273330804059,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.022791122243603856,
+        "mean_tri": 0.022791028607591097,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": -0.010984456108770987,
+        "mean_tri": -0.010984525991113528,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "automotive",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1362,
+    "days_with_tri_label": 1362,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 20,
+    "missing_endpoint_events": 1967,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.13250914055827476,
+        "mean_tri": 0.1357435079035268,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.15813463775816874,
+        "mean_tri": 0.16138907862641616,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.10541467765917506,
+        "mean_tri": 0.1085411167319844,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.08832809493560419,
+        "mean_tri": 0.09139276575012112,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.09458183675151428,
+        "mean_tri": 0.09760685840312265,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.016547020018856145,
+        "mean_tri": 0.01931411325834259,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": -0.0008353866747091154,
+        "mean_tri": 0.001974468575817123,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": -0.025255368953107055,
+        "mean_tri": -0.02251312093059314,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "automotive",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1319,
+    "days_with_tri_label": 1319,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 63,
+    "missing_endpoint_events": 1967,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.03467930182164083,
+        "mean_tri": 0.03992252145599826,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.05316097540605552,
+        "mean_tri": 0.05859896102398197,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.012478890869099554,
+        "mean_tri": 0.017735388273969144,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": -0.010488977039661654,
+        "mean_tri": -0.005351451184073745,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": -0.027864426001695013,
+        "mean_tri": -0.022822942471284597,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": -0.041276340114976384,
+        "mean_tri": -0.03632413787025666,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": -0.050621669399923054,
+        "mean_tri": -0.04560375957982782,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": -0.06090955926423506,
+        "mean_tri": -0.056031977199657655,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "automotive",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1377,
+    "days_with_tri_label": 1377,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 5,
+    "missing_endpoint_events": 1330,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.07741381563904053,
+        "mean_tri": 0.07741387351398035,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.12771546663514388,
+        "mean_tri": 0.12771550991516922,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.06763322451421867,
+        "mean_tri": 0.06763321511828181,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.01962493974505803,
+        "mean_tri": 0.01962492574996146,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.014572264068631451,
+        "mean_tri": 0.014572291488525504,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.01071618738935931,
+        "mean_tri": 0.010716127953458443,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.018728245121685663,
+        "mean_tri": 0.0187282393195146,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": -0.004530828443083691,
+        "mean_tri": -0.004530802040060019,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "ev_supply",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1362,
+    "days_with_tri_label": 1362,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 20,
+    "missing_endpoint_events": 1330,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.17076057231256167,
+        "mean_tri": 0.17076058369312136,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.20710204065702578,
+        "mean_tri": 0.2071020683900986,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.1511972380619254,
+        "mean_tri": 0.1511971975669402,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.12075534322143557,
+        "mean_tri": 0.12075531401207508,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.11300393586780169,
+        "mean_tri": 0.11300391372741261,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.09295522567482435,
+        "mean_tri": 0.09295515002468153,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.09238360004680805,
+        "mean_tri": 0.09238356330746347,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.10355762906006027,
+        "mean_tri": 0.10355764899102153,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "ev_supply",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1319,
+    "days_with_tri_label": 1319,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 63,
+    "missing_endpoint_events": 1330,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.45180125872996774,
+        "mean_tri": 0.45246150283698716,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.5088899976595115,
+        "mean_tri": 0.509610860109082,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.45947617306459915,
+        "mean_tri": 0.46016815437796205,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.43883844183868437,
+        "mean_tri": 0.4395337260200804,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.39624506781030583,
+        "mean_tri": 0.39691647078371306,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.4107831329833446,
+        "mean_tri": 0.41146496910315733,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.38443646079556515,
+        "mean_tri": 0.3850920130849302,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.3758884089803679,
+        "mean_tri": 0.37655024923452335,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "ev_supply",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1377,
+    "days_with_tri_label": 1377,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 5,
+    "missing_endpoint_events": 0,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.030703165119170105,
+        "mean_tri": 0.031524157888293346,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.04286387197945414,
+        "mean_tri": 0.04286373033172737,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.010163170642245612,
+        "mean_tri": 0.010163178952156437,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.020191837698948646,
+        "mean_tri": 0.020191918801955734,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.02799929583895654,
+        "mean_tri": 0.027999270520814024,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.05696841071968393,
+        "mean_tri": 0.057761538879028775,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.06389125541639182,
+        "mean_tri": 0.06469709371992763,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.07995923490019605,
+        "mean_tri": 0.08078398004790485,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "finance",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1362,
+    "days_with_tri_label": 1362,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 20,
+    "missing_endpoint_events": 0,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.09874498185249185,
+        "mean_tri": 0.10209665290888606,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.11236726538487327,
+        "mean_tri": 0.1157404902777757,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.08331481147073123,
+        "mean_tri": 0.08660295326192043,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.07617060404118223,
+        "mean_tri": 0.07944267644591663,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.07241627408725011,
+        "mean_tri": 0.0756918586192862,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.05394004964525304,
+        "mean_tri": 0.05714551799662389,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.04769131612728348,
+        "mean_tri": 0.050866469489242304,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.043602728745922956,
+        "mean_tri": 0.046754647239289904,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "finance",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1319,
+    "days_with_tri_label": 1319,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 63,
+    "missing_endpoint_events": 0,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.10361499377295544,
+        "mean_tri": 0.11106648168242354,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.1283473789141024,
+        "mean_tri": 0.13590887135876423,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.08673753097789172,
+        "mean_tri": 0.09402581156453568,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.08752673936170681,
+        "mean_tri": 0.09482470994290175,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.07458645977953356,
+        "mean_tri": 0.08179628762731032,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.07007632897552118,
+        "mean_tri": 0.0772561832715752,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.07772682037917084,
+        "mean_tri": 0.08496338747653125,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.10048039339724149,
+        "mean_tri": 0.1078610014118365,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "finance",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1377,
+    "days_with_tri_label": 1377,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 5,
+    "missing_endpoint_events": 2733,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.06058858671330665,
+        "mean_tri": 0.061790835363429865,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.11737023403533056,
+        "mean_tri": 0.11774606376871347,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.05276159079818079,
+        "mean_tri": 0.05311848380013222,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.029224955705689393,
+        "mean_tri": 0.02957847038290349,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.01939926542702448,
+        "mean_tri": 0.019399342032826828,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.0038131958680104995,
+        "mean_tri": 0.003813229454558953,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.010524293871031532,
+        "mean_tri": 0.01052435979776396,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.029967690804049197,
+        "mean_tri": 0.0299676885093215,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "fintech",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1362,
+    "days_with_tri_label": 1362,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 20,
+    "missing_endpoint_events": 2733,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.09686121967048336,
+        "mean_tri": 0.09812449871632971,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.16477365895392615,
+        "mean_tri": 0.16518157926715027,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.10923769672884313,
+        "mean_tri": 0.10962911172141751,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.09731765471180434,
+        "mean_tri": 0.09770795014670068,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.08185801484677505,
+        "mean_tri": 0.08185785545050131,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.05355322172279795,
+        "mean_tri": 0.05355322180869955,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.06008199537567149,
+        "mean_tri": 0.06008214612955474,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.06846570713687994,
+        "mean_tri": 0.06846560770407253,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "fintech",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1319,
+    "days_with_tri_label": 1319,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 63,
+    "missing_endpoint_events": 2733,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.23496323592199914,
+        "mean_tri": 0.23676051289235095,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.28119064153613416,
+        "mean_tri": 0.28290501704691484,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.21563573062962144,
+        "mean_tri": 0.21728310108300267,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.1967499951300334,
+        "mean_tri": 0.1987260145184671,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.17581682734982435,
+        "mean_tri": 0.17734970000771236,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.16106376565570885,
+        "mean_tri": 0.1625908940044855,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.15415673602427757,
+        "mean_tri": 0.15568041774622216,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.16684108792495297,
+        "mean_tri": 0.16838198772125104,
+        "n_quote": 5,
+        "n_tri": 5,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "fintech",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1377,
+    "days_with_tri_label": 1377,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 5,
+    "missing_endpoint_events": 0,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.03816428833998875,
+        "mean_tri": 0.03816420235339989,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.0531727546834436,
+        "mean_tri": 0.05317265334085908,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.028426585938302495,
+        "mean_tri": 0.028426564663087527,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.0028286925341060587,
+        "mean_tri": 0.0028286408172943033,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.00025747679664903653,
+        "mean_tri": 0.0002574931192360852,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": -0.003712360568702067,
+        "mean_tri": -0.0037123291440609328,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.005021169192436814,
+        "mean_tri": 0.005021154151810481,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.018162645669152145,
+        "mean_tri": 0.01816269964501379,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "retail",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1362,
+    "days_with_tri_label": 1362,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 20,
+    "missing_endpoint_events": 0,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.06909151359948074,
+        "mean_tri": 0.06962081378528351,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.07329007275704132,
+        "mean_tri": 0.07383100807491987,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.05182027142088761,
+        "mean_tri": 0.05234979097422615,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.04003629307137839,
+        "mean_tri": 0.04055724652530548,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.025126064583046236,
+        "mean_tri": 0.026196595997299767,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.018985589077268838,
+        "mean_tri": 0.020326667992392956,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.0198858117689391,
+        "mean_tri": 0.021233517836321703,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.018741831060496962,
+        "mean_tri": 0.020088533771586557,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "retail",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1319,
+    "days_with_tri_label": 1319,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 63,
+    "missing_endpoint_events": 0,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.1523692609137118,
+        "mean_tri": 0.1578275916374055,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.1855820225134697,
+        "mean_tri": 0.191203696399522,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.16090449460003492,
+        "mean_tri": 0.16642473317099796,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.143260782975963,
+        "mean_tri": 0.1486950316825098,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.12354259344823751,
+        "mean_tri": 0.1288908806003746,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.12548876842498918,
+        "mean_tri": 0.1308329123912781,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.1301999192331503,
+        "mean_tri": 0.13558756813941805,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.13591237965523517,
+        "mean_tri": 0.1413159530354872,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "retail",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1377,
+    "days_with_tri_label": 1377,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 5,
+    "missing_endpoint_events": 24,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.04456881904404971,
+        "mean_tri": 0.04456883632865833,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.06654454494683239,
+        "mean_tri": 0.0665445443583899,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.04198166192341617,
+        "mean_tri": 0.04198170182068116,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.01813805109568678,
+        "mean_tri": 0.01813805202079664,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": -0.0021901696451002944,
+        "mean_tri": -0.0021902434620588718,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": -0.0210124498078273,
+        "mean_tri": -0.021012482269476114,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.008991010790511915,
+        "mean_tri": 0.008991034864571328,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.017651870539307675,
+        "mean_tri": 0.017651882551538028,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "luxury",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1362,
+    "days_with_tri_label": 1362,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 20,
+    "missing_endpoint_events": 24,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.10243231761413847,
+        "mean_tri": 0.10243228483624438,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.14685981594531325,
+        "mean_tri": 0.14685988318769821,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.10187589127270111,
+        "mean_tri": 0.1018759045850094,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.13248286816929924,
+        "mean_tri": 0.13248286321460806,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.1093676912227777,
+        "mean_tri": 0.1093676226410182,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.06533750113212562,
+        "mean_tri": 0.06533750359115373,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.08887286214013308,
+        "mean_tri": 0.08887285706335292,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.0836744678845899,
+        "mean_tri": 0.08367444995156062,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "luxury",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1319,
+    "days_with_tri_label": 1319,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 63,
+    "missing_endpoint_events": 22,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.21017962633779153,
+        "mean_tri": 0.2134834955609892,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.2661418635906554,
+        "mean_tri": 0.26961328614950825,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.2172514095425427,
+        "mean_tri": 0.22058678715260407,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.19740722940927796,
+        "mean_tri": 0.20069477341515515,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.15957005438330987,
+        "mean_tri": 0.1627691083903444,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.157406859911907,
+        "mean_tri": 0.1605527379830991,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.1833840867478433,
+        "mean_tri": 0.1865833963675672,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.17722342962506188,
+        "mean_tri": 0.18041615423908755,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "luxury",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1377,
+    "days_with_tri_label": 1377,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 5,
+    "missing_endpoint_events": 58,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.10991245204113229,
+        "mean_tri": 0.10991256642201964,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.12694715899728184,
+        "mean_tri": 0.12694717387450877,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.06165058734115113,
+        "mean_tri": 0.061650657774320806,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.015439313148088172,
+        "mean_tri": 0.015439350986611502,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.029491524691246544,
+        "mean_tri": 0.029491541002217687,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.02159043432511568,
+        "mean_tri": 0.021590391916598346,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.0367274069745814,
+        "mean_tri": 0.036727350960107645,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.034183025077412964,
+        "mean_tri": 0.034183008560389236,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "media_streaming",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1362,
+    "days_with_tri_label": 1362,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 20,
+    "missing_endpoint_events": 58,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.1652429333295476,
+        "mean_tri": 0.16524301616647136,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.19631883676132958,
+        "mean_tri": 0.19631885588208692,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.13980981619168542,
+        "mean_tri": 0.13980987473837342,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.08876233744835431,
+        "mean_tri": 0.08876228909962831,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.07457585738847336,
+        "mean_tri": 0.07457583006333435,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.05438404982880015,
+        "mean_tri": 0.05438400295452601,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.08017689630725519,
+        "mean_tri": 0.08017688402334432,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.06915711947931637,
+        "mean_tri": 0.06915714993733803,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "media_streaming",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1319,
+    "days_with_tri_label": 1319,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 63,
+    "missing_endpoint_events": 58,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.3052664101602308,
+        "mean_tri": 0.30606339374252906,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.32763951046205275,
+        "mean_tri": 0.32844560515285576,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.24287563058159295,
+        "mean_tri": 0.2436633043491033,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.1590177317427743,
+        "mean_tri": 0.1598053384734149,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.15495867602334104,
+        "mean_tri": 0.15573470668098002,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.161922828450649,
+        "mean_tri": 0.16272403574585606,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.16859979052847154,
+        "mean_tri": 0.16940216738843547,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.1748626365601966,
+        "mean_tri": 0.17566591800605774,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "media_streaming",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1377,
+    "days_with_tri_label": 1377,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 5,
+    "missing_endpoint_events": 1387,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.07692410842178847,
+        "mean_tri": 0.07692410265690149,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.11952867506736797,
+        "mean_tri": 0.11952867605576056,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.05883916968858329,
+        "mean_tri": 0.05883915619236144,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.023720714009050365,
+        "mean_tri": 0.023720714702641903,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.02343969100908409,
+        "mean_tri": 0.023439689744119696,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": -0.008245491931897867,
+        "mean_tri": -0.008245493683259256,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": -0.012148365461684019,
+        "mean_tri": -0.012148371175390082,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.0153758702072516,
+        "mean_tri": 0.015375866274505101,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "social_internet",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1362,
+    "days_with_tri_label": 1362,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 20,
+    "missing_endpoint_events": 1387,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.17691428881659424,
+        "mean_tri": 0.17691424541191944,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.21735779006924552,
+        "mean_tri": 0.21735779215227513,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.1738330137195805,
+        "mean_tri": 0.17383301098577017,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.17257416780978377,
+        "mean_tri": 0.17257410834821565,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.16200298456017892,
+        "mean_tri": 0.16200297639581093,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.11787940465110647,
+        "mean_tri": 0.11787945355153777,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.1235772637831271,
+        "mean_tri": 0.12357728818280493,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.12672076700762905,
+        "mean_tri": 0.12672078103936404,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "social_internet",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1319,
+    "days_with_tri_label": 1319,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 63,
+    "missing_endpoint_events": 1387,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.2992596473376555,
+        "mean_tri": 0.29925965090528767,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.3509451443065334,
+        "mean_tri": 0.35094514483928796,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.29894672167830505,
+        "mean_tri": 0.29894667613068643,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.29103156367932564,
+        "mean_tri": 0.29103155936699215,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.2663128655226377,
+        "mean_tri": 0.2663128210632506,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.2349515658207342,
+        "mean_tri": 0.2349515663486056,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.22053876008642717,
+        "mean_tri": 0.22053872146436118,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.23662807654326432,
+        "mean_tri": 0.23662808209774036,
+        "n_quote": 6,
+        "n_tri": 6,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "social_internet",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1377,
+    "days_with_tri_label": 1377,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 5,
+    "missing_endpoint_events": 0,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.06316707168124694,
+        "mean_tri": 0.0631670223786112,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.07911794736851811,
+        "mean_tri": 0.0791179086901809,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.03761723967953103,
+        "mean_tri": 0.03761731921135301,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.023188056282098846,
+        "mean_tri": 0.023188019829234963,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.017700952245083702,
+        "mean_tri": 0.017700912829412895,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": -0.0016711104369170116,
+        "mean_tri": -0.0014486639982448923,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.004472453030120949,
+        "mean_tri": 0.004695791892058154,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.03127888794940017,
+        "mean_tri": 0.031512094898683826,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "energy",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1362,
+    "days_with_tri_label": 1362,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 20,
+    "missing_endpoint_events": 0,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.10198260247949335,
+        "mean_tri": 0.10222739663326193,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.11915914498349074,
+        "mean_tri": 0.11940476046363031,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.08184619315273452,
+        "mean_tri": 0.0820829599707887,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.07146359514021391,
+        "mean_tri": 0.0716962983717742,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.05786841589447933,
+        "mean_tri": 0.05809361927192058,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.012306533253544439,
+        "mean_tri": 0.012516171094392159,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.0006850398952512494,
+        "mean_tri": 0.002476451625933418,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.007127729621955814,
+        "mean_tri": 0.008948615142112492,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "energy",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1319,
+    "days_with_tri_label": 1319,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 63,
+    "missing_endpoint_events": 0,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.11168265185311568,
+        "mean_tri": 0.12075283575498916,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.1305798014129533,
+        "mean_tri": 0.13982983398990287,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.11573464563460836,
+        "mean_tri": 0.12483928519683014,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.10737958413092677,
+        "mean_tri": 0.1164249885323744,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.08398114369251018,
+        "mean_tri": 0.09285091308261921,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.07851564221890979,
+        "mean_tri": 0.08736269539835008,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.07115781774959633,
+        "mean_tri": 0.07996869717744323,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.07691042031420119,
+        "mean_tri": 0.08562758354346876,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "energy",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1377,
+    "days_with_tri_label": 1377,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 5,
+    "missing_endpoint_events": 768,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": -0.006110414363089863,
+        "mean_tri": -0.006110511306535356,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.007011074079983508,
+        "mean_tri": 0.007011105225252784,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": -0.017346348659193697,
+        "mean_tri": -0.017346301021025006,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": -0.062301714208028165,
+        "mean_tri": -0.06230170587430503,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": -0.06752625822035788,
+        "mean_tri": -0.06752633751696091,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": -0.056911978208968685,
+        "mean_tri": -0.05691193314652391,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": -0.0708439459032564,
+        "mean_tri": -0.0708438900866719,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": -0.06043731392243691,
+        "mean_tri": -0.06043743839510344,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "utilities",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1362,
+    "days_with_tri_label": 1362,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 20,
+    "missing_endpoint_events": 768,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.013449244697630338,
+        "mean_tri": 0.013449214378076854,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.012239301134212233,
+        "mean_tri": 0.012239303280555681,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": -0.001405551721701623,
+        "mean_tri": -0.0014055584055426592,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.0211875710687582,
+        "mean_tri": 0.02118756025211357,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.012238994276507086,
+        "mean_tri": 0.012238924025924303,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.030785573244882528,
+        "mean_tri": 0.03181194609797736,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.02189302316883484,
+        "mean_tri": 0.022908172177811086,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.027316375448938415,
+        "mean_tri": 0.02833616011585892,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "utilities",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1319,
+    "days_with_tri_label": 1319,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 63,
+    "missing_endpoint_events": 768,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.09231791465000684,
+        "mean_tri": 0.10117625389466191,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.09054655750184633,
+        "mean_tri": 0.09937256531284663,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.0806353365640918,
+        "mean_tri": 0.08939192038959039,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.10267632586207233,
+        "mean_tri": 0.11140176709479338,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.09284428048785169,
+        "mean_tri": 0.10144498481751957,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.09777385634555993,
+        "mean_tri": 0.10642031955215232,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.090572955936976,
+        "mean_tri": 0.09915604634851324,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.12659725102835973,
+        "mean_tri": 0.13527357188989797,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "utilities",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1377,
+    "days_with_tri_label": 1377,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 5,
+    "missing_endpoint_events": 0,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.023196708611311623,
+        "mean_tri": 0.02319663096984481,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.07375619377347996,
+        "mean_tri": 0.07375619253379775,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.03866395438510575,
+        "mean_tri": 0.038663981162573746,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.038187851665770545,
+        "mean_tri": 0.03818783128446062,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.02345482549075754,
+        "mean_tri": 0.023454808097530557,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.015293235854188871,
+        "mean_tri": 0.015293286392513657,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.0155141219904804,
+        "mean_tri": 0.016162204685119284,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.03028541231060284,
+        "mean_tri": 0.03093906593495503,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "defense_aero",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1362,
+    "days_with_tri_label": 1362,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 20,
+    "missing_endpoint_events": 0,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.12795674350865605,
+        "mean_tri": 0.12864820526457948,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.16706074935408913,
+        "mean_tri": 0.1677608076545724,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.14867700283198138,
+        "mean_tri": 0.1493800409118172,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.15862044141198145,
+        "mean_tri": 0.15931000341550364,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.14468677050684547,
+        "mean_tri": 0.1453784454753381,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.13576258161408847,
+        "mean_tri": 0.13710578256136782,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.12425945909667153,
+        "mean_tri": 0.12557354393739428,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.12356556443914554,
+        "mean_tri": 0.12486739084154021,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "defense_aero",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1319,
+    "days_with_tri_label": 1319,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 63,
+    "missing_endpoint_events": 0,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.18092797892766427,
+        "mean_tri": 0.18509090026071165,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.23332934984285064,
+        "mean_tri": 0.2376853126437448,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.1987367829246656,
+        "mean_tri": 0.2029880395873068,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.190210012476047,
+        "mean_tri": 0.19442071998310098,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.1595836172215727,
+        "mean_tri": 0.1636987067612623,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.15311616449499318,
+        "mean_tri": 0.15718306808557758,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.15120184990467908,
+        "mean_tri": 0.1559778830168398,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.16663355888085618,
+        "mean_tri": 0.17148445426167444,
+        "n_quote": 9,
+        "n_tri": 9,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "defense_aero",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1377,
+    "days_with_tri_label": 1377,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 5,
+    "missing_endpoint_events": 0,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.02310656113870345,
+        "mean_tri": 0.023106468099246158,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.0655826258130833,
+        "mean_tri": 0.0655826370346432,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.017985911371344365,
+        "mean_tri": 0.017985913939493545,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.0058327039361740635,
+        "mean_tri": 0.005832734390067457,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.007816615141626279,
+        "mean_tri": 0.00781666366026379,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.0006591601301978028,
+        "mean_tri": 0.0006591605290006824,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.015142188216364413,
+        "mean_tri": 0.015142133089977389,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.02390106787094641,
+        "mean_tri": 0.023901061475940608,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "airlines",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1362,
+    "days_with_tri_label": 1362,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 20,
+    "missing_endpoint_events": 0,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.07921885381085508,
+        "mean_tri": 0.0792188619032112,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.13589889370557862,
+        "mean_tri": 0.13589891706805313,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.09905527768136249,
+        "mean_tri": 0.09905527060035087,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.09752541776926546,
+        "mean_tri": 0.09790739388055904,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.099006668814924,
+        "mean_tri": 0.0993930925362631,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.06535500715889238,
+        "mean_tri": 0.0657238723017673,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.0735152275907316,
+        "mean_tri": 0.07389812285702112,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.0867496191612462,
+        "mean_tri": 0.08714173678124242,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "airlines",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1319,
+    "days_with_tri_label": 1319,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 63,
+    "missing_endpoint_events": 0,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.04161566801929467,
+        "mean_tri": 0.04494291306418624,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.09761230657754882,
+        "mean_tri": 0.10116369612650647,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.05564209820514908,
+        "mean_tri": 0.05906685615380032,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.03992689654027441,
+        "mean_tri": 0.04329934599885031,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.03288806127578671,
+        "mean_tri": 0.0362062092004212,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.024084080353478435,
+        "mean_tri": 0.02737248839765212,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.047580126446995635,
+        "mean_tri": 0.0509119333794935,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.0499979388039508,
+        "mean_tri": 0.05331521729430709,
+        "n_quote": 8,
+        "n_tri": 8,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "airlines",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1377,
+    "days_with_tri_label": 1377,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 5,
+    "missing_endpoint_events": 0,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.029290221055305675,
+        "mean_tri": 0.029290335468497776,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.04217874371087904,
+        "mean_tri": 0.042178759442655145,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.035159252778394726,
+        "mean_tri": 0.03515909262342896,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.028029756288053452,
+        "mean_tri": 0.028029761303839894,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.022173530392555672,
+        "mean_tri": 0.0221735238148446,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.034165228382282975,
+        "mean_tri": 0.03416516356131701,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.019406783618261602,
+        "mean_tri": 0.019406899866548498,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.01634300454361457,
+        "mean_tri": 0.01634295052794108,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "real_estate",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1362,
+    "days_with_tri_label": 1362,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 20,
+    "missing_endpoint_events": 0,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.12148791653473615,
+        "mean_tri": 0.12186009377989024,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.11024778684384207,
+        "mean_tri": 0.11061220947993913,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.10454197904394424,
+        "mean_tri": 0.10491157991597662,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.10458215946113561,
+        "mean_tri": 0.10495563616881938,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.07597330283179135,
+        "mean_tri": 0.07634079203499451,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.09469562171309809,
+        "mean_tri": 0.09506934269381426,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.08160594460343776,
+        "mean_tri": 0.08197378716500554,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.08251156927180732,
+        "mean_tri": 0.08287918991016996,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "real_estate",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1319,
+    "days_with_tri_label": 1319,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 63,
+    "missing_endpoint_events": 0,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.19601690155221113,
+        "mean_tri": 0.20625654614432998,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.18824687102004153,
+        "mean_tri": 0.1984093720715369,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.18400372237633034,
+        "mean_tri": 0.19412428055807124,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.1711720428603633,
+        "mean_tri": 0.18117417614353593,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.14928866034636623,
+        "mean_tri": 0.15909231578932745,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.16839007159710753,
+        "mean_tri": 0.17892488622216646,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.14519750908575021,
+        "mean_tri": 0.15553264458724197,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.14704221820754015,
+        "mean_tri": 0.15738035666796563,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "real_estate",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1377,
+    "days_with_tri_label": 1377,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 5,
+    "missing_endpoint_events": 1028,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.06980955175770125,
+        "mean_tri": 0.06980954870460784,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.03896453475557512,
+        "mean_tri": 0.03896453170248171,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.01001563563774599,
+        "mean_tri": 0.010015632875351852,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.009483437442382827,
+        "mean_tri": 0.009483438895378568,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.01204587724757465,
+        "mean_tri": 0.012045882626131614,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.01646210844005453,
+        "mean_tri": 0.016462115793103464,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": -0.0004558937318518578,
+        "mean_tri": -0.0004558863788029261,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.012090539333709722,
+        "mean_tri": 0.012090546991448894,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "crypto",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1362,
+    "days_with_tri_label": 1362,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 20,
+    "missing_endpoint_events": 1028,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.05720233844446497,
+        "mean_tri": 0.05720234261098774,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.02845433056625113,
+        "mean_tri": 0.028454329305719814,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.062384718791122284,
+        "mean_tri": 0.06238471753059097,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.02353854257292181,
+        "mean_tri": 0.02353853952082972,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.02326624465038834,
+        "mean_tri": 0.023266250813859024,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.05027630247533131,
+        "mean_tri": 0.05027630444982328,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.18019694917935533,
+        "mean_tri": 0.18019695115384726,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.15747843278837154,
+        "mean_tri": 0.1574784407392775,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "crypto",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1319,
+    "days_with_tri_label": 1319,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 63,
+    "missing_endpoint_events": 1028,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.46510569003546115,
+        "mean_tri": 0.4651056949274805,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.35482594088617664,
+        "mean_tri": 0.354825945778196,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.37042386064543514,
+        "mean_tri": 0.37042386103236663,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.396484587109009,
+        "mean_tri": 0.3964845847824135,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.3609676759524566,
+        "mean_tri": 0.3609676829252563,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.5240445415447018,
+        "mean_tri": 0.5240445450666851,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.4714800992391897,
+        "mean_tri": 0.4714800992391897,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.487712786429504,
+        "mean_tri": 0.4877127951403626,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "crypto",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1377,
+    "days_with_tri_label": 1377,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 5,
+    "missing_endpoint_events": 814,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.09507571918649452,
+        "mean_tri": 0.09507576342550417,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.15847644349344384,
+        "mean_tri": 0.1584764926160107,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.06879958585199078,
+        "mean_tri": 0.06879957727369221,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.017833842541626753,
+        "mean_tri": 0.017833822586316363,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.02200079336305726,
+        "mean_tri": 0.022000814982912086,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": -0.0003011517220875892,
+        "mean_tri": -0.0003011785215633944,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": -0.00814632934095475,
+        "mean_tri": -0.008146335934248138,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.03695674651934751,
+        "mean_tri": 0.03695672789229558,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "china_adr",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1362,
+    "days_with_tri_label": 1362,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 20,
+    "missing_endpoint_events": 814,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.2102650546618312,
+        "mean_tri": 0.21026505178295976,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.24986289195655723,
+        "mean_tri": 0.24986293078675326,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.18702550330952797,
+        "mean_tri": 0.1870254972657663,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.1855075551951499,
+        "mean_tri": 0.185507544828238,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.16041244747636813,
+        "mean_tri": 0.16041247524925545,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.07752135047245509,
+        "mean_tri": 0.07752133164611849,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.06428683658159046,
+        "mean_tri": 0.06428680477232566,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.09071018892202745,
+        "mean_tri": 0.09071023134976111,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "china_adr",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1319,
+    "days_with_tri_label": 1319,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 63,
+    "missing_endpoint_events": 814,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.26058967401068855,
+        "mean_tri": 0.2608313621163557,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.30771344375056575,
+        "mean_tri": 0.3079668874026642,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.24053669264773747,
+        "mean_tri": 0.24078931240134582,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.2120791088363577,
+        "mean_tri": 0.21232063299640255,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.19106977415918885,
+        "mean_tri": 0.19130666158728293,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.1406562176007482,
+        "mean_tri": 0.1408753190783642,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.11770486018534565,
+        "mean_tri": 0.11792735808709982,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.15525637136337506,
+        "mean_tri": 0.15549034284296348,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "china_adr",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1377,
+    "days_with_tri_label": 1377,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 5,
+    "missing_endpoint_events": 0,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.031213931765252,
+        "mean_tri": 0.03594393329753563,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.0331336167128447,
+        "mean_tri": 0.03790055740844397,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.010754074277734718,
+        "mean_tri": 0.015495864483940056,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.0005522220089428613,
+        "mean_tri": 0.005201936165801764,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": -0.012240006433128201,
+        "mean_tri": -0.007672857091042896,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": -0.005587617957935387,
+        "mean_tri": -0.005587621312184298,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": -0.005197317692881009,
+        "mean_tri": -0.0051973389254775315,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": -0.004591314906131754,
+        "mean_tri": -0.004591258468154732,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "telecom",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1362,
+    "days_with_tri_label": 1362,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 20,
+    "missing_endpoint_events": 0,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.042512935293151366,
+        "mean_tri": 0.04718571579529222,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.048592039992128785,
+        "mean_tri": 0.053235410580875886,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.015725260691879215,
+        "mean_tri": 0.020230892512951387,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.010659007693601699,
+        "mean_tri": 0.015105472222028214,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": -0.00047124546478916063,
+        "mean_tri": 0.003881123646375162,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.009601079457178077,
+        "mean_tri": 0.009601091916512197,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.010283341175240704,
+        "mean_tri": 0.01028326782105704,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.0019586052385693886,
+        "mean_tri": 0.0019586674600930998,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "telecom",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1319,
+    "days_with_tri_label": 1319,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 63,
+    "missing_endpoint_events": 0,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.07041700317994684,
+        "mean_tri": 0.07626067672549476,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.07887277971438464,
+        "mean_tri": 0.08471759243582631,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.058843242525888476,
+        "mean_tri": 0.06461161031752245,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.061234209201657626,
+        "mean_tri": 0.0669530626817393,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.048691810974792346,
+        "mean_tri": 0.05888516646083127,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.060235940593889974,
+        "mean_tri": 0.06582181943677799,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.06085694303466776,
+        "mean_tri": 0.06643200802100753,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.06019923735040795,
+        "mean_tri": 0.06572922822101422,
+        "n_quote": 7,
+        "n_tri": 7,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "telecom",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1377,
+    "days_with_tri_label": 1377,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 5,
+    "missing_endpoint_events": 0,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.027892533229294303,
+        "mean_tri": 0.02789247116845308,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.07306876464162707,
+        "mean_tri": 0.07306866645444972,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.03150305882827229,
+        "mean_tri": 0.031503170603035445,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.0209740912740616,
+        "mean_tri": 0.020974116969759215,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.00959324611216208,
+        "mean_tri": 0.009593165597806897,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.009897604387148307,
+        "mean_tri": 0.009897693580816536,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.008991505939030208,
+        "mean_tri": 0.008991538454957315,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.031053721493863606,
+        "mean_tri": 0.031718976530132295,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "industrials",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1362,
+    "days_with_tri_label": 1362,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 20,
+    "missing_endpoint_events": 0,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.10256464367520604,
+        "mean_tri": 0.10324256000090941,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.13164795681350241,
+        "mean_tri": 0.1323409049765925,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.10396887321628738,
+        "mean_tri": 0.10462598371275474,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.0987990075901792,
+        "mean_tri": 0.09946118260124821,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.09398638828693226,
+        "mean_tri": 0.09463338983366727,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.07416669829169878,
+        "mean_tri": 0.07480276123029198,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.052052947320432495,
+        "mean_tri": 0.052675172444444675,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.062036906822265134,
+        "mean_tri": 0.06266472756809005,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "industrials",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1319,
+    "days_with_tri_label": 1319,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 63,
+    "missing_endpoint_events": 0,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.17312306627801363,
+        "mean_tri": 0.1801436354140813,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.20909367849220922,
+        "mean_tri": 0.21635195336083163,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.1702685990992413,
+        "mean_tri": 0.17729296586606313,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.15506198775759225,
+        "mean_tri": 0.16206802886878552,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.13121821940448614,
+        "mean_tri": 0.13807780278023202,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.1279362309573383,
+        "mean_tri": 0.13477310881338606,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.11650918585701701,
+        "mean_tri": 0.12330228654055082,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.1328049847017217,
+        "mean_tri": 0.13971224188442313,
+        "n_quote": 10,
+        "n_tri": 10,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "industrials",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1377,
+    "days_with_tri_label": 1377,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 5,
+    "missing_endpoint_events": 0,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.036094825372842976,
+        "mean_tri": 0.03609488642197306,
+        "n_quote": 12,
+        "n_tri": 12,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.061742457446906755,
+        "mean_tri": 0.061742451989513385,
+        "n_quote": 12,
+        "n_tri": 12,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.030739576773701604,
+        "mean_tri": 0.030739602270282513,
+        "n_quote": 12,
+        "n_tri": 12,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.012729160388464972,
+        "mean_tri": 0.012729151718305123,
+        "n_quote": 12,
+        "n_tri": 12,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.01638894925260967,
+        "mean_tri": 0.016389032963407945,
+        "n_quote": 12,
+        "n_tri": 12,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.009530006029505081,
+        "mean_tri": 0.009529953464614827,
+        "n_quote": 12,
+        "n_tri": 12,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.013620169345488348,
+        "mean_tri": 0.013620130691819499,
+        "n_quote": 12,
+        "n_tri": 12,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.023371502311248283,
+        "mean_tri": 0.023432780098310985,
+        "n_quote": 12,
+        "n_tri": 12,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "etfs",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1362,
+    "days_with_tri_label": 1362,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 20,
+    "missing_endpoint_events": 0,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.0789672536714343,
+        "mean_tri": 0.07903106950700779,
+        "n_quote": 12,
+        "n_tri": 12,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.10553940855951538,
+        "mean_tri": 0.10578955179729337,
+        "n_quote": 12,
+        "n_tri": 12,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.0786135212056782,
+        "mean_tri": 0.07886330638837115,
+        "n_quote": 12,
+        "n_tri": 12,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.06990797496759323,
+        "mean_tri": 0.07015926619141738,
+        "n_quote": 12,
+        "n_tri": 12,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.06456367306149312,
+        "mean_tri": 0.06481495852389745,
+        "n_quote": 12,
+        "n_tri": 12,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.04195322177528541,
+        "mean_tri": 0.042205138050831814,
+        "n_quote": 12,
+        "n_tri": 12,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.0403511264136609,
+        "mean_tri": 0.040604656434739116,
+        "n_quote": 12,
+        "n_tri": 12,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.0413541990380071,
+        "mean_tri": 0.04160622235507805,
+        "n_quote": 12,
+        "n_tri": 12,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "etfs",
+    "warmup_sessions": 252
+  },
+  {
+    "days_with_quote_label": 1319,
+    "days_with_tri_label": 1319,
+    "first_scoreable_day": "2019-01-02",
+    "holding_sessions": 63,
+    "missing_endpoint_events": 0,
+    "public_day_limit": 8,
+    "public_days": [
+      {
+        "mean_quote": 0.14190691310767675,
+        "mean_tri": 0.1463849852232994,
+        "n_quote": 12,
+        "n_tri": 12,
+        "session": "2019-01-02"
+      },
+      {
+        "mean_quote": 0.17055470976594997,
+        "mean_tri": 0.1751437218417211,
+        "n_quote": 12,
+        "n_tri": 12,
+        "session": "2019-01-03"
+      },
+      {
+        "mean_quote": 0.14161437391356643,
+        "mean_tri": 0.14610096951094856,
+        "n_quote": 12,
+        "n_tri": 12,
+        "session": "2019-01-04"
+      },
+      {
+        "mean_quote": 0.12868669917957262,
+        "mean_tri": 0.13313881671788003,
+        "n_quote": 12,
+        "n_tri": 12,
+        "session": "2019-01-07"
+      },
+      {
+        "mean_quote": 0.11551033521256994,
+        "mean_tri": 0.11990513657138224,
+        "n_quote": 12,
+        "n_tri": 12,
+        "session": "2019-01-08"
+      },
+      {
+        "mean_quote": 0.11042335762701844,
+        "mean_tri": 0.11480352478228419,
+        "n_quote": 12,
+        "n_tri": 12,
+        "session": "2019-01-09"
+      },
+      {
+        "mean_quote": 0.10466318101999988,
+        "mean_tri": 0.10903058452423547,
+        "n_quote": 12,
+        "n_tri": 12,
+        "session": "2019-01-10"
+      },
+      {
+        "mean_quote": 0.10995627651308626,
+        "mean_tri": 0.11434911385282288,
+        "n_quote": 12,
+        "n_tri": 12,
+        "session": "2019-01-11"
+      }
+    ],
+    "quote_and_tri_are_separate_metrics": true,
+    "theme": "etfs",
+    "warmup_sessions": 252
+  }
+]

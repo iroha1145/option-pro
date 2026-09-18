@@ -1,0 +1,866 @@
+[
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "A_trend_quality",
+    "final_status": "KEEP_BASELINE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "KEEP_FACTOR_EVIDENCE",
+    "theme": "semiconductors"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "B_confirmed_base_breakout",
+    "final_status": "KEEP_BASELINE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "NO_ROBUST_INCREMENT",
+    "theme": "semiconductors"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "C_trend_pullback",
+    "final_status": "KEEP_BASELINE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "KEEP_FACTOR_EVIDENCE",
+    "theme": "semiconductors"
+  },
+  {
+    "eight_factor_status": "DATA_INSUFFICIENT",
+    "family": "D_residual_momentum",
+    "final_status": "KEEP_BASELINE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "KEEP_FACTOR_EVIDENCE",
+    "theme": "semiconductors"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "A_trend_quality",
+    "final_status": "KEEP_BASELINE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "NO_ROBUST_INCREMENT",
+    "theme": "software"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "B_confirmed_base_breakout",
+    "final_status": "KEEP_BASELINE_LIMITED_CONTINUE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CONTINUE_CANDIDATE",
+    "theme": "software"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "C_trend_pullback",
+    "final_status": "KEEP_BASELINE_LIMITED_CONTINUE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CONTINUE_CANDIDATE",
+    "theme": "software"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "D_residual_momentum",
+    "final_status": "KEEP_BASELINE_LIMITED_CONTINUE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CONTINUE_CANDIDATE",
+    "theme": "software"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "A_trend_quality",
+    "final_status": "THIN_INHERIT",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CROSS_SECTION_THIN",
+    "theme": "ai_cloud"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "B_confirmed_base_breakout",
+    "final_status": "THIN_INHERIT",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CROSS_SECTION_THIN",
+    "theme": "ai_cloud"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "C_trend_pullback",
+    "final_status": "THIN_INHERIT",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CROSS_SECTION_THIN",
+    "theme": "ai_cloud"
+  },
+  {
+    "eight_factor_status": "DATA_INSUFFICIENT",
+    "family": "D_residual_momentum",
+    "final_status": "THIN_INHERIT",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CROSS_SECTION_THIN",
+    "theme": "ai_cloud"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "A_trend_quality",
+    "final_status": "KEEP_BASELINE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "KEEP_FACTOR_EVIDENCE",
+    "theme": "biotech"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "B_confirmed_base_breakout",
+    "final_status": "KEEP_BASELINE_LIMITED_CONTINUE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CONTINUE_CANDIDATE",
+    "theme": "biotech"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "C_trend_pullback",
+    "final_status": "KEEP_BASELINE_LIMITED_CONTINUE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CONTINUE_CANDIDATE",
+    "theme": "biotech"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "D_residual_momentum",
+    "final_status": "KEEP_BASELINE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "NO_ROBUST_INCREMENT",
+    "theme": "biotech"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "A_trend_quality",
+    "final_status": "KEEP_BASELINE_LIMITED_CONTINUE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CONTINUE_CANDIDATE",
+    "theme": "healthcare"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "B_confirmed_base_breakout",
+    "final_status": "KEEP_BASELINE_LIMITED_CONTINUE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CONTINUE_CANDIDATE",
+    "theme": "healthcare"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "C_trend_pullback",
+    "final_status": "KEEP_BASELINE_LIMITED_CONTINUE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CONTINUE_CANDIDATE",
+    "theme": "healthcare"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "D_residual_momentum",
+    "final_status": "KEEP_BASELINE_LIMITED_CONTINUE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CONTINUE_CANDIDATE",
+    "theme": "healthcare"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "A_trend_quality",
+    "final_status": "THIN_INHERIT",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CROSS_SECTION_THIN",
+    "theme": "consumer_electronics"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "B_confirmed_base_breakout",
+    "final_status": "THIN_INHERIT",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CROSS_SECTION_THIN",
+    "theme": "consumer_electronics"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "C_trend_pullback",
+    "final_status": "THIN_INHERIT",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CROSS_SECTION_THIN",
+    "theme": "consumer_electronics"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "D_residual_momentum",
+    "final_status": "THIN_INHERIT",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CROSS_SECTION_THIN",
+    "theme": "consumer_electronics"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "A_trend_quality",
+    "final_status": "KEEP_BASELINE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "KEEP_FACTOR_EVIDENCE",
+    "theme": "automotive"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "B_confirmed_base_breakout",
+    "final_status": "KEEP_BASELINE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "KEEP_FACTOR_EVIDENCE",
+    "theme": "automotive"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "C_trend_pullback",
+    "final_status": "KEEP_BASELINE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "KEEP_FACTOR_EVIDENCE",
+    "theme": "automotive"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "D_residual_momentum",
+    "final_status": "FROZEN_EXPLORATORY_CANDIDATE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CONTINUE_CANDIDATE",
+    "theme": "automotive"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "A_trend_quality",
+    "final_status": "KEEP_BASELINE_LIMITED_CONTINUE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CONTINUE_CANDIDATE",
+    "theme": "ev_supply"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "B_confirmed_base_breakout",
+    "final_status": "KEEP_BASELINE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "KEEP_FACTOR_EVIDENCE",
+    "theme": "ev_supply"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "C_trend_pullback",
+    "final_status": "KEEP_BASELINE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "KEEP_FACTOR_EVIDENCE",
+    "theme": "ev_supply"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "D_residual_momentum",
+    "final_status": "KEEP_BASELINE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "KEEP_FACTOR_EVIDENCE",
+    "theme": "ev_supply"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "A_trend_quality",
+    "final_status": "KEEP_BASELINE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "NO_ROBUST_INCREMENT",
+    "theme": "finance"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "B_confirmed_base_breakout",
+    "final_status": "KEEP_BASELINE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "NO_ROBUST_INCREMENT",
+    "theme": "finance"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "C_trend_pullback",
+    "final_status": "KEEP_BASELINE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "NO_ROBUST_INCREMENT",
+    "theme": "finance"
+  },
+  {
+    "eight_factor_status": "DATA_INSUFFICIENT",
+    "family": "D_residual_momentum",
+    "final_status": "KEEP_BASELINE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "NO_ROBUST_INCREMENT",
+    "theme": "finance"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "A_trend_quality",
+    "final_status": "KEEP_BASELINE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "NO_ROBUST_INCREMENT",
+    "theme": "fintech"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "B_confirmed_base_breakout",
+    "final_status": "KEEP_BASELINE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CONTINUE_CANDIDATE",
+    "theme": "fintech"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "C_trend_pullback",
+    "final_status": "KEEP_BASELINE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "KEEP_FACTOR_EVIDENCE",
+    "theme": "fintech"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "D_residual_momentum",
+    "final_status": "KEEP_BASELINE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "NO_ROBUST_INCREMENT",
+    "theme": "fintech"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "A_trend_quality",
+    "final_status": "KEEP_BASELINE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "KEEP_FACTOR_EVIDENCE",
+    "theme": "retail"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "B_confirmed_base_breakout",
+    "final_status": "KEEP_BASELINE_LIMITED_CONTINUE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CONTINUE_CANDIDATE",
+    "theme": "retail"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "C_trend_pullback",
+    "final_status": "KEEP_BASELINE_LIMITED_CONTINUE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CONTINUE_CANDIDATE",
+    "theme": "retail"
+  },
+  {
+    "eight_factor_status": "DATA_INSUFFICIENT",
+    "family": "D_residual_momentum",
+    "final_status": "KEEP_BASELINE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "NO_ROBUST_INCREMENT",
+    "theme": "retail"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "A_trend_quality",
+    "final_status": "THIN_INHERIT",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CROSS_SECTION_THIN",
+    "theme": "luxury"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "B_confirmed_base_breakout",
+    "final_status": "THIN_INHERIT",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CROSS_SECTION_THIN",
+    "theme": "luxury"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "C_trend_pullback",
+    "final_status": "THIN_INHERIT",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CROSS_SECTION_THIN",
+    "theme": "luxury"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "D_residual_momentum",
+    "final_status": "THIN_INHERIT",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CROSS_SECTION_THIN",
+    "theme": "luxury"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "A_trend_quality",
+    "final_status": "THIN_INHERIT",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CROSS_SECTION_THIN",
+    "theme": "media_streaming"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "B_confirmed_base_breakout",
+    "final_status": "THIN_INHERIT",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CROSS_SECTION_THIN",
+    "theme": "media_streaming"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "C_trend_pullback",
+    "final_status": "THIN_INHERIT",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CROSS_SECTION_THIN",
+    "theme": "media_streaming"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "D_residual_momentum",
+    "final_status": "THIN_INHERIT",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CROSS_SECTION_THIN",
+    "theme": "media_streaming"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "A_trend_quality",
+    "final_status": "THIN_INHERIT",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CROSS_SECTION_THIN",
+    "theme": "social_internet"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "B_confirmed_base_breakout",
+    "final_status": "THIN_INHERIT",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CROSS_SECTION_THIN",
+    "theme": "social_internet"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "C_trend_pullback",
+    "final_status": "THIN_INHERIT",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CROSS_SECTION_THIN",
+    "theme": "social_internet"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "D_residual_momentum",
+    "final_status": "THIN_INHERIT",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CROSS_SECTION_THIN",
+    "theme": "social_internet"
+  },
+  {
+    "eight_factor_status": "DATA_INSUFFICIENT",
+    "family": "A_trend_quality",
+    "final_status": "KEEP_BASELINE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "NO_ROBUST_INCREMENT",
+    "theme": "energy"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "B_confirmed_base_breakout",
+    "final_status": "KEEP_BASELINE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "NO_ROBUST_INCREMENT",
+    "theme": "energy"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "C_trend_pullback",
+    "final_status": "KEEP_BASELINE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "NO_ROBUST_INCREMENT",
+    "theme": "energy"
+  },
+  {
+    "eight_factor_status": "DATA_INSUFFICIENT",
+    "family": "D_residual_momentum",
+    "final_status": "KEEP_BASELINE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "NO_ROBUST_INCREMENT",
+    "theme": "energy"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "A_trend_quality",
+    "final_status": "KEEP_BASELINE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "KEEP_FACTOR_EVIDENCE",
+    "theme": "utilities"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "B_confirmed_base_breakout",
+    "final_status": "KEEP_BASELINE_LIMITED_CONTINUE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CONTINUE_CANDIDATE",
+    "theme": "utilities"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "C_trend_pullback",
+    "final_status": "KEEP_BASELINE_LIMITED_CONTINUE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CONTINUE_CANDIDATE",
+    "theme": "utilities"
+  },
+  {
+    "eight_factor_status": "DATA_INSUFFICIENT",
+    "family": "D_residual_momentum",
+    "final_status": "KEEP_BASELINE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "KEEP_FACTOR_EVIDENCE",
+    "theme": "utilities"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "A_trend_quality",
+    "final_status": "THIN_INHERIT",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CROSS_SECTION_THIN",
+    "theme": "defense_aero"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "B_confirmed_base_breakout",
+    "final_status": "THIN_INHERIT",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CROSS_SECTION_THIN",
+    "theme": "defense_aero"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "C_trend_pullback",
+    "final_status": "THIN_INHERIT",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CROSS_SECTION_THIN",
+    "theme": "defense_aero"
+  },
+  {
+    "eight_factor_status": "DATA_INSUFFICIENT",
+    "family": "D_residual_momentum",
+    "final_status": "THIN_INHERIT",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CROSS_SECTION_THIN",
+    "theme": "defense_aero"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "A_trend_quality",
+    "final_status": "THIN_INHERIT",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CROSS_SECTION_THIN",
+    "theme": "airlines"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "B_confirmed_base_breakout",
+    "final_status": "THIN_INHERIT",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CROSS_SECTION_THIN",
+    "theme": "airlines"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "C_trend_pullback",
+    "final_status": "THIN_INHERIT",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CROSS_SECTION_THIN",
+    "theme": "airlines"
+  },
+  {
+    "eight_factor_status": "DATA_INSUFFICIENT",
+    "family": "D_residual_momentum",
+    "final_status": "THIN_INHERIT",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CROSS_SECTION_THIN",
+    "theme": "airlines"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "A_trend_quality",
+    "final_status": "KEEP_BASELINE_LIMITED_CONTINUE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CONTINUE_CANDIDATE",
+    "theme": "real_estate"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "B_confirmed_base_breakout",
+    "final_status": "KEEP_BASELINE_LIMITED_CONTINUE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CONTINUE_CANDIDATE",
+    "theme": "real_estate"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "C_trend_pullback",
+    "final_status": "KEEP_BASELINE_LIMITED_CONTINUE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CONTINUE_CANDIDATE",
+    "theme": "real_estate"
+  },
+  {
+    "eight_factor_status": "DATA_INSUFFICIENT",
+    "family": "D_residual_momentum",
+    "final_status": "KEEP_BASELINE_LIMITED_CONTINUE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CONTINUE_CANDIDATE",
+    "theme": "real_estate"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "A_trend_quality",
+    "final_status": "THIN_INHERIT",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CROSS_SECTION_THIN",
+    "theme": "crypto"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "B_confirmed_base_breakout",
+    "final_status": "THIN_INHERIT",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CROSS_SECTION_THIN",
+    "theme": "crypto"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "C_trend_pullback",
+    "final_status": "THIN_INHERIT",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CROSS_SECTION_THIN",
+    "theme": "crypto"
+  },
+  {
+    "eight_factor_status": "DATA_INSUFFICIENT",
+    "family": "D_residual_momentum",
+    "final_status": "THIN_INHERIT",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CROSS_SECTION_THIN",
+    "theme": "crypto"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "A_trend_quality",
+    "final_status": "KEEP_BASELINE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "NO_ROBUST_INCREMENT",
+    "theme": "china_adr"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "B_confirmed_base_breakout",
+    "final_status": "KEEP_BASELINE_LIMITED_CONTINUE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CONTINUE_CANDIDATE",
+    "theme": "china_adr"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "C_trend_pullback",
+    "final_status": "KEEP_BASELINE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "KEEP_FACTOR_EVIDENCE",
+    "theme": "china_adr"
+  },
+  {
+    "eight_factor_status": "DATA_INSUFFICIENT",
+    "family": "D_residual_momentum",
+    "final_status": "KEEP_BASELINE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "NO_ROBUST_INCREMENT",
+    "theme": "china_adr"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "A_trend_quality",
+    "final_status": "THIN_INHERIT",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CROSS_SECTION_THIN",
+    "theme": "telecom"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "B_confirmed_base_breakout",
+    "final_status": "THIN_INHERIT",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CROSS_SECTION_THIN",
+    "theme": "telecom"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "C_trend_pullback",
+    "final_status": "THIN_INHERIT",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CROSS_SECTION_THIN",
+    "theme": "telecom"
+  },
+  {
+    "eight_factor_status": "DATA_INSUFFICIENT",
+    "family": "D_residual_momentum",
+    "final_status": "THIN_INHERIT",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CROSS_SECTION_THIN",
+    "theme": "telecom"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "A_trend_quality",
+    "final_status": "KEEP_BASELINE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "NO_ROBUST_INCREMENT",
+    "theme": "industrials"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "B_confirmed_base_breakout",
+    "final_status": "KEEP_BASELINE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "NO_ROBUST_INCREMENT",
+    "theme": "industrials"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "C_trend_pullback",
+    "final_status": "KEEP_BASELINE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "NO_ROBUST_INCREMENT",
+    "theme": "industrials"
+  },
+  {
+    "eight_factor_status": "DATA_INSUFFICIENT",
+    "family": "D_residual_momentum",
+    "final_status": "KEEP_BASELINE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "NO_ROBUST_INCREMENT",
+    "theme": "industrials"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "A_trend_quality",
+    "final_status": "KEEP_BASELINE_LIMITED_CONTINUE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CONTINUE_CANDIDATE",
+    "theme": "etfs"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "B_confirmed_base_breakout",
+    "final_status": "KEEP_BASELINE_LIMITED_CONTINUE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CONTINUE_CANDIDATE",
+    "theme": "etfs"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "C_trend_pullback",
+    "final_status": "KEEP_BASELINE_LIMITED_CONTINUE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CONTINUE_CANDIDATE",
+    "theme": "etfs"
+  },
+  {
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "family": "D_residual_momentum",
+    "final_status": "KEEP_BASELINE",
+    "new_version_minted": false,
+    "price_track_status": "EVALUABLE",
+    "r2_decision": "CONTINUE_CANDIDATE",
+    "theme": "etfs"
+  }
+]

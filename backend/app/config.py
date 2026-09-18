@@ -217,6 +217,8 @@ class Settings(BaseSettings):
     option_empty_discovery_seconds: int = Field(default=900, ge=30, le=86_400, alias="OPTION_EMPTY_DISCOVERY_SECONDS")
     massive_api_key: str = Field(default="", alias="MASSIVE_API_KEY")
     massive_base_url: str = Field(default="https://api.massive.com", alias="MASSIVE_BASE_URL")
+    # Isolated research track. False keeps production ranking / A0 / T1 untouched.
+    research_eod_v1_enabled: bool = Field(default=False, alias="RESEARCH_EOD_V1_ENABLED")
     # FMP（Financial Modeling Prep）是可选的第二财报日历来源 + 批量市值来源。
     # 未配置密钥时所有 FMP 路径都必须干净地短路（不影响启动与刷新）。
     fmp_api_key: str = Field(default="", alias="FMP_API_KEY")

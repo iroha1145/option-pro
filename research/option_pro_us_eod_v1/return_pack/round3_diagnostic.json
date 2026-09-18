@@ -1,0 +1,237 @@
+{
+  "head_note": "round3 engineering diagnostic; synthetic bars; not market PnL",
+  "capture_clock": "2026-09-16T13:24:41-04:00",
+  "last_complete_eod_session": "2026-09-15",
+  "registered": 1920,
+  "executed_snapshots": 16,
+  "executed_backtests": 0,
+  "outcomes_inspected": 16,
+  "revoked_invalid_eod_captures": 24,
+  "market_backtest_run": false,
+  "cards": [
+    {
+      "theme_id": "semiconductors",
+      "algorithm": "A_trend_quality",
+      "session_date": "2026-09-15",
+      "candidates": 3,
+      "reference": 10,
+      "eligible": 0,
+      "capability_flags": [
+        "ENGINEERING_ONLY",
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "EXECUTION_DATA_UNVERIFIED"
+      ],
+      "status": "ENGINEERING_ONLY"
+    },
+    {
+      "theme_id": "semiconductors",
+      "algorithm": "B_confirmed_base_breakout",
+      "session_date": "2026-09-15",
+      "candidates": 3,
+      "reference": 10,
+      "eligible": 0,
+      "capability_flags": [
+        "ENGINEERING_ONLY",
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "EXECUTION_DATA_UNVERIFIED"
+      ],
+      "status": "ENGINEERING_ONLY"
+    },
+    {
+      "theme_id": "semiconductors",
+      "algorithm": "C_trend_pullback",
+      "session_date": "2026-09-15",
+      "candidates": 3,
+      "reference": 10,
+      "eligible": 0,
+      "capability_flags": [
+        "ENGINEERING_ONLY",
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "EXECUTION_DATA_UNVERIFIED"
+      ],
+      "status": "ENGINEERING_ONLY"
+    },
+    {
+      "theme_id": "semiconductors",
+      "algorithm": "D_residual_momentum",
+      "session_date": "2026-09-15",
+      "candidates": 3,
+      "reference": 10,
+      "eligible": 0,
+      "capability_flags": [
+        "ENGINEERING_ONLY",
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "EXECUTION_DATA_UNVERIFIED"
+      ],
+      "status": "ENGINEERING_ONLY"
+    },
+    {
+      "theme_id": "software",
+      "algorithm": "A_trend_quality",
+      "session_date": "2026-09-15",
+      "candidates": 1,
+      "reference": 10,
+      "eligible": 0,
+      "capability_flags": [
+        "ENGINEERING_ONLY",
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "EXECUTION_DATA_UNVERIFIED"
+      ],
+      "status": "ENGINEERING_ONLY"
+    },
+    {
+      "theme_id": "software",
+      "algorithm": "B_confirmed_base_breakout",
+      "session_date": "2026-09-15",
+      "candidates": 1,
+      "reference": 10,
+      "eligible": 0,
+      "capability_flags": [
+        "ENGINEERING_ONLY",
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "EXECUTION_DATA_UNVERIFIED"
+      ],
+      "status": "ENGINEERING_ONLY"
+    },
+    {
+      "theme_id": "software",
+      "algorithm": "C_trend_pullback",
+      "session_date": "2026-09-15",
+      "candidates": 1,
+      "reference": 10,
+      "eligible": 0,
+      "capability_flags": [
+        "ENGINEERING_ONLY",
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "EXECUTION_DATA_UNVERIFIED"
+      ],
+      "status": "ENGINEERING_ONLY"
+    },
+    {
+      "theme_id": "software",
+      "algorithm": "D_residual_momentum",
+      "session_date": "2026-09-15",
+      "candidates": 1,
+      "reference": 10,
+      "eligible": 0,
+      "capability_flags": [
+        "ENGINEERING_ONLY",
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "EXECUTION_DATA_UNVERIFIED"
+      ],
+      "status": "ENGINEERING_ONLY"
+    },
+    {
+      "theme_id": "energy",
+      "algorithm": "A_trend_quality",
+      "session_date": "2026-09-15",
+      "candidates": 1,
+      "reference": 10,
+      "eligible": 0,
+      "capability_flags": [
+        "ENGINEERING_ONLY",
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "EXECUTION_DATA_UNVERIFIED"
+      ],
+      "status": "ENGINEERING_ONLY"
+    },
+    {
+      "theme_id": "energy",
+      "algorithm": "B_confirmed_base_breakout",
+      "session_date": "2026-09-15",
+      "candidates": 1,
+      "reference": 10,
+      "eligible": 0,
+      "capability_flags": [
+        "ENGINEERING_ONLY",
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "EXECUTION_DATA_UNVERIFIED"
+      ],
+      "status": "ENGINEERING_ONLY"
+    },
+    {
+      "theme_id": "energy",
+      "algorithm": "C_trend_pullback",
+      "session_date": "2026-09-15",
+      "candidates": 1,
+      "reference": 10,
+      "eligible": 0,
+      "capability_flags": [
+        "ENGINEERING_ONLY",
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "EXECUTION_DATA_UNVERIFIED"
+      ],
+      "status": "ENGINEERING_ONLY"
+    },
+    {
+      "theme_id": "energy",
+      "algorithm": "D_residual_momentum",
+      "session_date": "2026-09-15",
+      "candidates": 1,
+      "reference": 10,
+      "eligible": 0,
+      "capability_flags": [
+        "ENGINEERING_ONLY",
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "EXECUTION_DATA_UNVERIFIED"
+      ],
+      "status": "ENGINEERING_ONLY"
+    },
+    {
+      "theme_id": "etfs",
+      "algorithm": "A_trend_quality",
+      "session_date": "2026-09-15",
+      "candidates": 2,
+      "reference": 2,
+      "eligible": 0,
+      "capability_flags": [
+        "ENGINEERING_ONLY",
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "EXECUTION_DATA_UNVERIFIED"
+      ],
+      "status": "ENGINEERING_ONLY"
+    },
+    {
+      "theme_id": "etfs",
+      "algorithm": "B_confirmed_base_breakout",
+      "session_date": "2026-09-15",
+      "candidates": 2,
+      "reference": 2,
+      "eligible": 0,
+      "capability_flags": [
+        "ENGINEERING_ONLY",
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "EXECUTION_DATA_UNVERIFIED"
+      ],
+      "status": "ENGINEERING_ONLY"
+    },
+    {
+      "theme_id": "etfs",
+      "algorithm": "C_trend_pullback",
+      "session_date": "2026-09-15",
+      "candidates": 2,
+      "reference": 2,
+      "eligible": 0,
+      "capability_flags": [
+        "ENGINEERING_ONLY",
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "EXECUTION_DATA_UNVERIFIED"
+      ],
+      "status": "ENGINEERING_ONLY"
+    },
+    {
+      "theme_id": "etfs",
+      "algorithm": "D_residual_momentum",
+      "session_date": "2026-09-15",
+      "candidates": 2,
+      "reference": 2,
+      "eligible": 0,
+      "capability_flags": [
+        "ENGINEERING_ONLY",
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "EXECUTION_DATA_UNVERIFIED"
+      ],
+      "status": "ENGINEERING_ONLY"
+    }
+  ]
+}

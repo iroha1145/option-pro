@@ -1,0 +1,425 @@
+{
+  "schema_version": 1,
+  "status": "DATA_INSUFFICIENT",
+  "source_sha": "60b2c4cdc2e39263b0768aa63718de727c3914e2",
+  "config_sha256": "4b8f9711f5afe1cb29ad07c84412e54fca0998e8995e3bb19e311b866aed73cd",
+  "data_snapshot_sha256": null,
+  "history_start": null,
+  "history_end": null,
+  "market_backtests_run": false,
+  "holdout_contaminated": null,
+  "universe_tracks": {
+    "U_current": {
+      "status": "DATA_INSUFFICIENT",
+      "limitations": [
+        "Current theme list is a 2026 survivor watchlist.",
+        "primary_sector_id is first-listing-wins, not an economic industry.",
+        "No licensed replay of the current list was executed."
+      ]
+    },
+    "U_PIT": {
+      "status": "INSUFFICIENT_PIT_HISTORY",
+      "limitations": [
+        "Licensed US daily OHLCV with delistings from 2010 (or ten complete calendar years) plus 330-session warmup.",
+        "Point-in-time exchange/MIC/security-type membership.",
+        "Point-in-time economic industry and theme membership with valid-from/valid-to.",
+        "Split-adjusted OHLC, total-return, and raw unadjusted prices as three separate tracks.",
+        "Regular-session vs full-day volume vintage.",
+        "Point-in-time earnings/binary/financing/ADR/fund calendars.",
+        "Historical market-cap buckets as of each session."
+      ]
+    }
+  },
+  "data_audit": {
+    "providers": [],
+    "license_verified": false,
+    "delisted_covered": false,
+    "pit_classification_covered": false,
+    "historical_venue_covered": false,
+    "adjustment_policy": "not_verified_split_vs_dividend",
+    "volume_session_scope": "unknown_regular_vs_full_day",
+    "historical_revisions_limitations": [
+      "No vendor vintage/revision journal was available."
+    ],
+    "corporate_action_gaps": [
+      "No point-in-time split/dividend/merger tape was licensed in this run."
+    ],
+    "massive_mcp": "unavailable_or_unauthenticated",
+    "yahoo_ sufficed": false,
+    "blocking_items": [
+      "Licensed US daily OHLCV with delistings from 2010 (or ten complete calendar years) plus 330-session warmup.",
+      "Point-in-time exchange/MIC/security-type membership.",
+      "Point-in-time economic industry and theme membership with valid-from/valid-to.",
+      "Split-adjusted OHLC, total-return, and raw unadjusted prices as three separate tracks.",
+      "Regular-session vs full-day volume vintage.",
+      "Point-in-time earnings/binary/financing/ADR/fund calendars.",
+      "Historical market-cap buckets as of each session."
+    ]
+  },
+  "expected_primary_rows": 864,
+  "expected_etf_subasset_rows": 180,
+  "expected_composite_rows": 12,
+  "primary_results_file": "all_experiments.csv",
+  "etf_subasset_results_file": "etf_subasset_experiments.csv",
+  "composite_results_file": "composite_experiments.csv",
+  "annual_oos_file": "annual_oos.csv",
+  "regime_oos_file": "regime_oos.csv",
+  "subgroup_oos_file": "subgroup_oos.csv",
+  "capital_cost_file": "capital_cost_scenarios.csv",
+  "signals_file": "signals.parquet",
+  "trades_file": "trades.parquet",
+  "daily_equity_file": "daily_equity.parquet",
+  "rejections_file": "rejections.parquet",
+  "trial_ledger_file": "trial_ledger.json",
+  "engineering_test_log": "engineering_tests.log",
+  "performance_report_file": "performance_network.json",
+  "sector_results": [
+    {
+      "sector_id": "semiconductors",
+      "expected_main_rows": 36,
+      "status": "INSUFFICIENT_PIT_HISTORY",
+      "pit_years": null,
+      "independent_event_count": null,
+      "provisional_finalists": [],
+      "no_winner_allowed": true,
+      "data_limitations": [
+        "No licensed point-in-time US daily tape, delist file, corporate-action journal, or historical venue/industry vintages were verified in this environment."
+      ],
+      "report_file": "sector_reports/semiconductors.md"
+    },
+    {
+      "sector_id": "software",
+      "expected_main_rows": 36,
+      "status": "INSUFFICIENT_PIT_HISTORY",
+      "pit_years": null,
+      "independent_event_count": null,
+      "provisional_finalists": [],
+      "no_winner_allowed": true,
+      "data_limitations": [
+        "No licensed point-in-time US daily tape, delist file, corporate-action journal, or historical venue/industry vintages were verified in this environment."
+      ],
+      "report_file": "sector_reports/software.md"
+    },
+    {
+      "sector_id": "ai_cloud",
+      "expected_main_rows": 36,
+      "status": "INSUFFICIENT_PIT_HISTORY",
+      "pit_years": null,
+      "independent_event_count": null,
+      "provisional_finalists": [],
+      "no_winner_allowed": true,
+      "data_limitations": [
+        "No licensed point-in-time US daily tape, delist file, corporate-action journal, or historical venue/industry vintages were verified in this environment."
+      ],
+      "report_file": "sector_reports/ai_cloud.md"
+    },
+    {
+      "sector_id": "biotech",
+      "expected_main_rows": 36,
+      "status": "INSUFFICIENT_PIT_HISTORY",
+      "pit_years": null,
+      "independent_event_count": null,
+      "provisional_finalists": [],
+      "no_winner_allowed": true,
+      "data_limitations": [
+        "No licensed point-in-time US daily tape, delist file, corporate-action journal, or historical venue/industry vintages were verified in this environment."
+      ],
+      "report_file": "sector_reports/biotech.md"
+    },
+    {
+      "sector_id": "healthcare",
+      "expected_main_rows": 36,
+      "status": "INSUFFICIENT_PIT_HISTORY",
+      "pit_years": null,
+      "independent_event_count": null,
+      "provisional_finalists": [],
+      "no_winner_allowed": true,
+      "data_limitations": [
+        "No licensed point-in-time US daily tape, delist file, corporate-action journal, or historical venue/industry vintages were verified in this environment."
+      ],
+      "report_file": "sector_reports/healthcare.md"
+    },
+    {
+      "sector_id": "consumer_electronics",
+      "expected_main_rows": 36,
+      "status": "INSUFFICIENT_PIT_HISTORY",
+      "pit_years": null,
+      "independent_event_count": null,
+      "provisional_finalists": [],
+      "no_winner_allowed": true,
+      "data_limitations": [
+        "No licensed point-in-time US daily tape, delist file, corporate-action journal, or historical venue/industry vintages were verified in this environment."
+      ],
+      "report_file": "sector_reports/consumer_electronics.md"
+    },
+    {
+      "sector_id": "automotive",
+      "expected_main_rows": 36,
+      "status": "INSUFFICIENT_PIT_HISTORY",
+      "pit_years": null,
+      "independent_event_count": null,
+      "provisional_finalists": [],
+      "no_winner_allowed": true,
+      "data_limitations": [
+        "No licensed point-in-time US daily tape, delist file, corporate-action journal, or historical venue/industry vintages were verified in this environment."
+      ],
+      "report_file": "sector_reports/automotive.md"
+    },
+    {
+      "sector_id": "ev_supply",
+      "expected_main_rows": 36,
+      "status": "INSUFFICIENT_PIT_HISTORY",
+      "pit_years": null,
+      "independent_event_count": null,
+      "provisional_finalists": [],
+      "no_winner_allowed": true,
+      "data_limitations": [
+        "No licensed point-in-time US daily tape, delist file, corporate-action journal, or historical venue/industry vintages were verified in this environment."
+      ],
+      "report_file": "sector_reports/ev_supply.md"
+    },
+    {
+      "sector_id": "finance",
+      "expected_main_rows": 36,
+      "status": "INSUFFICIENT_PIT_HISTORY",
+      "pit_years": null,
+      "independent_event_count": null,
+      "provisional_finalists": [],
+      "no_winner_allowed": true,
+      "data_limitations": [
+        "No licensed point-in-time US daily tape, delist file, corporate-action journal, or historical venue/industry vintages were verified in this environment."
+      ],
+      "report_file": "sector_reports/finance.md"
+    },
+    {
+      "sector_id": "fintech",
+      "expected_main_rows": 36,
+      "status": "INSUFFICIENT_PIT_HISTORY",
+      "pit_years": null,
+      "independent_event_count": null,
+      "provisional_finalists": [],
+      "no_winner_allowed": true,
+      "data_limitations": [
+        "No licensed point-in-time US daily tape, delist file, corporate-action journal, or historical venue/industry vintages were verified in this environment."
+      ],
+      "report_file": "sector_reports/fintech.md"
+    },
+    {
+      "sector_id": "retail",
+      "expected_main_rows": 36,
+      "status": "INSUFFICIENT_PIT_HISTORY",
+      "pit_years": null,
+      "independent_event_count": null,
+      "provisional_finalists": [],
+      "no_winner_allowed": true,
+      "data_limitations": [
+        "No licensed point-in-time US daily tape, delist file, corporate-action journal, or historical venue/industry vintages were verified in this environment."
+      ],
+      "report_file": "sector_reports/retail.md"
+    },
+    {
+      "sector_id": "luxury",
+      "expected_main_rows": 36,
+      "status": "INSUFFICIENT_PIT_HISTORY",
+      "pit_years": null,
+      "independent_event_count": null,
+      "provisional_finalists": [],
+      "no_winner_allowed": true,
+      "data_limitations": [
+        "No licensed point-in-time US daily tape, delist file, corporate-action journal, or historical venue/industry vintages were verified in this environment."
+      ],
+      "report_file": "sector_reports/luxury.md"
+    },
+    {
+      "sector_id": "media_streaming",
+      "expected_main_rows": 36,
+      "status": "INSUFFICIENT_PIT_HISTORY",
+      "pit_years": null,
+      "independent_event_count": null,
+      "provisional_finalists": [],
+      "no_winner_allowed": true,
+      "data_limitations": [
+        "No licensed point-in-time US daily tape, delist file, corporate-action journal, or historical venue/industry vintages were verified in this environment."
+      ],
+      "report_file": "sector_reports/media_streaming.md"
+    },
+    {
+      "sector_id": "social_internet",
+      "expected_main_rows": 36,
+      "status": "INSUFFICIENT_PIT_HISTORY",
+      "pit_years": null,
+      "independent_event_count": null,
+      "provisional_finalists": [],
+      "no_winner_allowed": true,
+      "data_limitations": [
+        "No licensed point-in-time US daily tape, delist file, corporate-action journal, or historical venue/industry vintages were verified in this environment."
+      ],
+      "report_file": "sector_reports/social_internet.md"
+    },
+    {
+      "sector_id": "energy",
+      "expected_main_rows": 36,
+      "status": "INSUFFICIENT_PIT_HISTORY",
+      "pit_years": null,
+      "independent_event_count": null,
+      "provisional_finalists": [],
+      "no_winner_allowed": true,
+      "data_limitations": [
+        "No licensed point-in-time US daily tape, delist file, corporate-action journal, or historical venue/industry vintages were verified in this environment."
+      ],
+      "report_file": "sector_reports/energy.md"
+    },
+    {
+      "sector_id": "utilities",
+      "expected_main_rows": 36,
+      "status": "INSUFFICIENT_PIT_HISTORY",
+      "pit_years": null,
+      "independent_event_count": null,
+      "provisional_finalists": [],
+      "no_winner_allowed": true,
+      "data_limitations": [
+        "No licensed point-in-time US daily tape, delist file, corporate-action journal, or historical venue/industry vintages were verified in this environment."
+      ],
+      "report_file": "sector_reports/utilities.md"
+    },
+    {
+      "sector_id": "defense_aero",
+      "expected_main_rows": 36,
+      "status": "INSUFFICIENT_PIT_HISTORY",
+      "pit_years": null,
+      "independent_event_count": null,
+      "provisional_finalists": [],
+      "no_winner_allowed": true,
+      "data_limitations": [
+        "No licensed point-in-time US daily tape, delist file, corporate-action journal, or historical venue/industry vintages were verified in this environment."
+      ],
+      "report_file": "sector_reports/defense_aero.md"
+    },
+    {
+      "sector_id": "airlines",
+      "expected_main_rows": 36,
+      "status": "INSUFFICIENT_PIT_HISTORY",
+      "pit_years": null,
+      "independent_event_count": null,
+      "provisional_finalists": [],
+      "no_winner_allowed": true,
+      "data_limitations": [
+        "No licensed point-in-time US daily tape, delist file, corporate-action journal, or historical venue/industry vintages were verified in this environment."
+      ],
+      "report_file": "sector_reports/airlines.md"
+    },
+    {
+      "sector_id": "real_estate",
+      "expected_main_rows": 36,
+      "status": "INSUFFICIENT_PIT_HISTORY",
+      "pit_years": null,
+      "independent_event_count": null,
+      "provisional_finalists": [],
+      "no_winner_allowed": true,
+      "data_limitations": [
+        "No licensed point-in-time US daily tape, delist file, corporate-action journal, or historical venue/industry vintages were verified in this environment."
+      ],
+      "report_file": "sector_reports/real_estate.md"
+    },
+    {
+      "sector_id": "crypto",
+      "expected_main_rows": 36,
+      "status": "INSUFFICIENT_PIT_HISTORY",
+      "pit_years": null,
+      "independent_event_count": null,
+      "provisional_finalists": [],
+      "no_winner_allowed": true,
+      "data_limitations": [
+        "No licensed point-in-time US daily tape, delist file, corporate-action journal, or historical venue/industry vintages were verified in this environment."
+      ],
+      "report_file": "sector_reports/crypto.md"
+    },
+    {
+      "sector_id": "china_adr",
+      "expected_main_rows": 36,
+      "status": "INSUFFICIENT_PIT_HISTORY",
+      "pit_years": null,
+      "independent_event_count": null,
+      "provisional_finalists": [],
+      "no_winner_allowed": true,
+      "data_limitations": [
+        "No licensed point-in-time US daily tape, delist file, corporate-action journal, or historical venue/industry vintages were verified in this environment."
+      ],
+      "report_file": "sector_reports/china_adr.md"
+    },
+    {
+      "sector_id": "telecom",
+      "expected_main_rows": 36,
+      "status": "INSUFFICIENT_PIT_HISTORY",
+      "pit_years": null,
+      "independent_event_count": null,
+      "provisional_finalists": [],
+      "no_winner_allowed": true,
+      "data_limitations": [
+        "No licensed point-in-time US daily tape, delist file, corporate-action journal, or historical venue/industry vintages were verified in this environment."
+      ],
+      "report_file": "sector_reports/telecom.md"
+    },
+    {
+      "sector_id": "industrials",
+      "expected_main_rows": 36,
+      "status": "INSUFFICIENT_PIT_HISTORY",
+      "pit_years": null,
+      "independent_event_count": null,
+      "provisional_finalists": [],
+      "no_winner_allowed": true,
+      "data_limitations": [
+        "No licensed point-in-time US daily tape, delist file, corporate-action journal, or historical venue/industry vintages were verified in this environment."
+      ],
+      "report_file": "sector_reports/industrials.md"
+    },
+    {
+      "sector_id": "etfs",
+      "expected_main_rows": 36,
+      "status": "INSUFFICIENT_PIT_HISTORY",
+      "pit_years": null,
+      "independent_event_count": null,
+      "provisional_finalists": [],
+      "no_winner_allowed": true,
+      "data_limitations": [
+        "No licensed point-in-time US daily tape, delist file, corporate-action journal, or historical venue/industry vintages were verified in this environment."
+      ],
+      "report_file": "sector_reports/etfs.md"
+    }
+  ],
+  "required_metrics": {
+    "net_cagr": null,
+    "max_drawdown": null,
+    "sharpe": null,
+    "sortino": null,
+    "calmar": null,
+    "es95_loss": null,
+    "net_excess_return_mean": null,
+    "net_excess_return_block_ci": null,
+    "win_rate": null,
+    "payoff_ratio": null,
+    "median_return": null,
+    "worst_decile": null,
+    "rank_ic": null,
+    "benchmark_beat_rate": null,
+    "mean_exposure": null,
+    "peak_exposure": null,
+    "turnover": null,
+    "empty_selection_day_fraction": null,
+    "cost_2x_return": null,
+    "cost_4x_return": null,
+    "independent_events": null,
+    "raw_signals": 0,
+    "deduped_events": 0,
+    "data_missing_rejections": null,
+    "pit_qualify_rate": null,
+    "delisted_coverage": null,
+    "history_coverage": null
+  },
+  "promotion_to_production": false,
+  "next_review_questions": [
+    "Which licensed vendor covers delistings, regular-session volume, and PIT industry from 2010?",
+    "Confirm 2024-2025 must be labeled holdout_contaminated=true if previously viewed.",
+    "Do not promote any A/B/C/D or M1-M4 candidate from this pack."
+  ]
+}

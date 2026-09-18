@@ -1,0 +1,3172 @@
+{
+  "head_note": "24-theme A/B/C/D on one allowed complete session; signal diagnostics only",
+  "capture_clock": "2026-09-16T19:24:10.256949+00:00",
+  "last_complete_eod_session": "2026-09-15",
+  "downloaded_tickers": 214,
+  "requested_tickers": 214,
+  "partial_bars_isolated": 207,
+  "provider_failures": [],
+  "empty_tickers": [],
+  "registered": 1920,
+  "executed_snapshots": 96,
+  "executed_backtests": 0,
+  "outcomes_inspected": 96,
+  "revoked_invalid_eod_captures": 24,
+  "market_backtest_run": false,
+  "winners": [],
+  "cards": [
+    {
+      "theme_id": "semiconductors",
+      "session_date": "2026-09-15",
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "families": {
+        "A_trend_quality": {
+          "candidates": 14,
+          "reference": 16,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              14
+            ],
+            [
+              "TREND_DIRECTION",
+              14
+            ],
+            [
+              "INVALIDATED",
+              5
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              4
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "candidates": 14,
+          "reference": 16,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              14
+            ],
+            [
+              "SMA50_SLOPE",
+              13
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              12
+            ],
+            [
+              "BELOW_SMA50",
+              10
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              10
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "candidates": 14,
+          "reference": 16,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              14
+            ],
+            [
+              "TREND_DIRECTION",
+              14
+            ],
+            [
+              "NO_REBOUND",
+              13
+            ],
+            [
+              "LOW_CLV",
+              13
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              8
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "candidates": 14,
+          "reference": 16,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              13
+            ],
+            [
+              "SMA50_SLOPE",
+              13
+            ],
+            [
+              "BELOW_SMA50",
+              10
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              7
+            ],
+            [
+              "INVALIDATED",
+              5
+            ]
+          ]
+        }
+      },
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ],
+      "limitations": [
+        "current survivor list only",
+        "theme[0] is not an economic parent",
+        "Yahoo Close is not verified raw",
+        "not a 10-year PIT backtest"
+      ]
+    },
+    {
+      "theme_id": "software",
+      "session_date": "2026-09-15",
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "families": {
+        "A_trend_quality": {
+          "candidates": 12,
+          "reference": 14,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              12
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4
+            ],
+            [
+              "LH_LL",
+              4
+            ],
+            [
+              "TREND_DIRECTION",
+              3
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              2
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "candidates": 12,
+          "reference": 14,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              12
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              12
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              8
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              3
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "candidates": 12,
+          "reference": 14,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              12
+            ],
+            [
+              "NO_REBOUND",
+              9
+            ],
+            [
+              "LOW_CLV",
+              9
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              6
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "candidates": 12,
+          "reference": 14,
+          "eligible": 2,
+          "eligible_ids": [
+            "MSFT",
+            "CRM"
+          ],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              4
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              2
+            ],
+            [
+              "BELOW_SMA50",
+              2
+            ]
+          ]
+        }
+      },
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ],
+      "limitations": [
+        "current survivor list only",
+        "theme[0] is not an economic parent",
+        "Yahoo Close is not verified raw",
+        "not a 10-year PIT backtest"
+      ]
+    },
+    {
+      "theme_id": "ai_cloud",
+      "session_date": "2026-09-15",
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "families": {
+        "A_trend_quality": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "TREND_DIRECTION",
+              5
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3
+            ],
+            [
+              "LH_LL",
+              3
+            ],
+            [
+              "INVALIDATED",
+              2
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              9
+            ],
+            [
+              "LOW_CLV",
+              5
+            ],
+            [
+              "BELOW_SMA50",
+              4
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              4
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "NO_REBOUND",
+              9
+            ],
+            [
+              "LOW_CLV",
+              9
+            ],
+            [
+              "TREND_DIRECTION",
+              5
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              3
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              7
+            ],
+            [
+              "BELOW_SMA50",
+              4
+            ],
+            [
+              "MISSING_SCORE",
+              3
+            ],
+            [
+              "LOW_COVERAGE",
+              3
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3
+            ]
+          ]
+        }
+      },
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ],
+      "limitations": [
+        "current survivor list only",
+        "theme[0] is not an economic parent",
+        "Yahoo Close is not verified raw",
+        "not a 10-year PIT backtest"
+      ]
+    },
+    {
+      "theme_id": "biotech",
+      "session_date": "2026-09-15",
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "families": {
+        "A_trend_quality": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "INVALIDATED",
+              6
+            ],
+            [
+              "TREND_DIRECTION",
+              4
+            ],
+            [
+              "WEAK_STRUCTURE",
+              2
+            ],
+            [
+              "LH_LL",
+              2
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              10
+            ],
+            [
+              "INVALIDATED",
+              6
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              5
+            ],
+            [
+              "BELOW_SMA50",
+              4
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              9
+            ],
+            [
+              "NO_REBOUND",
+              9
+            ],
+            [
+              "LOW_CLV",
+              7
+            ],
+            [
+              "INVALIDATED",
+              6
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "INVALIDATED",
+              6
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              6
+            ],
+            [
+              "BELOW_SMA50",
+              4
+            ],
+            [
+              "WEAK_STRUCTURE",
+              2
+            ]
+          ]
+        }
+      },
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ],
+      "limitations": [
+        "current survivor list only",
+        "theme[0] is not an economic parent",
+        "Yahoo Close is not verified raw",
+        "not a 10-year PIT backtest"
+      ]
+    },
+    {
+      "theme_id": "healthcare",
+      "session_date": "2026-09-15",
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "families": {
+        "A_trend_quality": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "INVALIDATED",
+              5
+            ],
+            [
+              "TREND_DIRECTION",
+              4
+            ],
+            [
+              "WEAK_STRUCTURE",
+              2
+            ],
+            [
+              "LH_LL",
+              2
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              8
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              8
+            ],
+            [
+              "INVALIDATED",
+              5
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              4
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              8
+            ],
+            [
+              "NO_REBOUND",
+              7
+            ],
+            [
+              "INVALIDATED",
+              5
+            ],
+            [
+              "SUPPORT_BROKEN",
+              5
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "INVALIDATED",
+              5
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              3
+            ],
+            [
+              "BELOW_SMA50",
+              2
+            ],
+            [
+              "SMA50_SLOPE",
+              2
+            ]
+          ]
+        }
+      },
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ],
+      "limitations": [
+        "current survivor list only",
+        "theme[0] is not an economic parent",
+        "Yahoo Close is not verified raw",
+        "not a 10-year PIT backtest"
+      ]
+    },
+    {
+      "theme_id": "consumer_electronics",
+      "session_date": "2026-09-15",
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "families": {
+        "A_trend_quality": {
+          "candidates": 5,
+          "reference": 7,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              5
+            ],
+            [
+              "HIGH_ATR",
+              1
+            ],
+            [
+              "TREND_DIRECTION",
+              1
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "candidates": 5,
+          "reference": 7,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              5
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              5
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              3
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              3
+            ],
+            [
+              "HIGH_ATR",
+              1
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "candidates": 5,
+          "reference": 7,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              5
+            ],
+            [
+              "NO_REBOUND",
+              4
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              3
+            ],
+            [
+              "LOW_CLV",
+              2
+            ],
+            [
+              "LOW_RVOL",
+              1
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "candidates": 5,
+          "reference": 7,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              4
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              2
+            ],
+            [
+              "HIGH_ATR",
+              1
+            ],
+            [
+              "BELOW_SMA50",
+              1
+            ],
+            [
+              "SMA50_SLOPE",
+              1
+            ]
+          ]
+        }
+      },
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ],
+      "limitations": [
+        "current survivor list only",
+        "theme[0] is not an economic parent",
+        "Yahoo Close is not verified raw",
+        "not a 10-year PIT backtest"
+      ]
+    },
+    {
+      "theme_id": "automotive",
+      "session_date": "2026-09-15",
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "families": {
+        "A_trend_quality": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "TREND_DIRECTION",
+              9
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              7
+            ],
+            [
+              "INVALIDATED",
+              4
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              8
+            ],
+            [
+              "SMA50_SLOPE",
+              7
+            ],
+            [
+              "LOW_CLV",
+              6
+            ],
+            [
+              "BELOW_SMA50",
+              6
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "NO_REBOUND",
+              10
+            ],
+            [
+              "TREND_DIRECTION",
+              9
+            ],
+            [
+              "LOW_CLV",
+              8
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              5
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 1,
+          "eligible_ids": [
+            "TM"
+          ],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              9
+            ],
+            [
+              "SMA50_SLOPE",
+              8
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              7
+            ],
+            [
+              "BELOW_SMA50",
+              7
+            ],
+            [
+              "INVALIDATED",
+              4
+            ]
+          ]
+        }
+      },
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ],
+      "limitations": [
+        "current survivor list only",
+        "theme[0] is not an economic parent",
+        "Yahoo Close is not verified raw",
+        "not a 10-year PIT backtest"
+      ]
+    },
+    {
+      "theme_id": "ev_supply",
+      "session_date": "2026-09-15",
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "families": {
+        "A_trend_quality": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "TREND_DIRECTION",
+              10
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              6
+            ],
+            [
+              "LOW_PRICE",
+              3
+            ],
+            [
+              "INVALIDATED",
+              3
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "SMA50_SLOPE",
+              8
+            ],
+            [
+              "BELOW_SMA50",
+              7
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              7
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              3
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "TREND_DIRECTION",
+              10
+            ],
+            [
+              "NO_REBOUND",
+              8
+            ],
+            [
+              "LOW_CLV",
+              7
+            ],
+            [
+              "LOW_RVOL",
+              5
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "SMA50_SLOPE",
+              9
+            ],
+            [
+              "BELOW_SMA50",
+              8
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              7
+            ],
+            [
+              "LOW_PRICE",
+              3
+            ]
+          ]
+        }
+      },
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ],
+      "limitations": [
+        "current survivor list only",
+        "theme[0] is not an economic parent",
+        "Yahoo Close is not verified raw",
+        "not a 10-year PIT backtest"
+      ]
+    },
+    {
+      "theme_id": "finance",
+      "session_date": "2026-09-15",
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "families": {
+        "A_trend_quality": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "TREND_DIRECTION",
+              7
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              3
+            ],
+            [
+              "INVALIDATED",
+              3
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              7
+            ],
+            [
+              "BELOW_SMA50",
+              6
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              5
+            ],
+            [
+              "LOW_CLV",
+              5
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "NO_REBOUND",
+              8
+            ],
+            [
+              "TREND_DIRECTION",
+              7
+            ],
+            [
+              "LOW_CLV",
+              6
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              5
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 1,
+          "eligible_ids": [
+            "JPM"
+          ],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              9
+            ],
+            [
+              "BELOW_SMA50",
+              6
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              5
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              3
+            ]
+          ]
+        }
+      },
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ],
+      "limitations": [
+        "current survivor list only",
+        "theme[0] is not an economic parent",
+        "Yahoo Close is not verified raw",
+        "not a 10-year PIT backtest"
+      ]
+    },
+    {
+      "theme_id": "fintech",
+      "session_date": "2026-09-15",
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "families": {
+        "A_trend_quality": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "TREND_DIRECTION",
+              7
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              3
+            ],
+            [
+              "WEAK_STRUCTURE",
+              2
+            ],
+            [
+              "LH_LL",
+              2
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              6
+            ],
+            [
+              "LOW_CLV",
+              6
+            ],
+            [
+              "BELOW_SMA50",
+              6
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              5
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "NO_REBOUND",
+              9
+            ],
+            [
+              "TREND_DIRECTION",
+              7
+            ],
+            [
+              "LOW_CLV",
+              7
+            ],
+            [
+              "LOW_RVOL",
+              4
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 1,
+          "eligible_ids": [
+            "MA"
+          ],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              9
+            ],
+            [
+              "BELOW_SMA50",
+              6
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              4
+            ],
+            [
+              "WEAK_STRUCTURE",
+              2
+            ],
+            [
+              "SMA50_SLOPE",
+              2
+            ]
+          ]
+        }
+      },
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ],
+      "limitations": [
+        "current survivor list only",
+        "theme[0] is not an economic parent",
+        "Yahoo Close is not verified raw",
+        "not a 10-year PIT backtest"
+      ]
+    },
+    {
+      "theme_id": "retail",
+      "session_date": "2026-09-15",
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "families": {
+        "A_trend_quality": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "TREND_DIRECTION",
+              9
+            ],
+            [
+              "INVALIDATED",
+              7
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              7
+            ],
+            [
+              "WEAK_STRUCTURE",
+              6
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "INVALIDATED",
+              7
+            ],
+            [
+              "WEAK_STRUCTURE",
+              6
+            ],
+            [
+              "BELOW_SMA50",
+              5
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              4
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "NO_REBOUND",
+              10
+            ],
+            [
+              "LOW_CLV",
+              10
+            ],
+            [
+              "TREND_DIRECTION",
+              9
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              9
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "BELOW_SMA50",
+              9
+            ],
+            [
+              "LOW_SCORE",
+              9
+            ],
+            [
+              "INVALIDATED",
+              7
+            ],
+            [
+              "SMA50_SLOPE",
+              7
+            ],
+            [
+              "WEAK_STRUCTURE",
+              6
+            ]
+          ]
+        }
+      },
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ],
+      "limitations": [
+        "current survivor list only",
+        "theme[0] is not an economic parent",
+        "Yahoo Close is not verified raw",
+        "not a 10-year PIT backtest"
+      ]
+    },
+    {
+      "theme_id": "luxury",
+      "session_date": "2026-09-15",
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "families": {
+        "A_trend_quality": {
+          "candidates": 7,
+          "reference": 9,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              7
+            ],
+            [
+              "TREND_DIRECTION",
+              7
+            ],
+            [
+              "INVALIDATED",
+              4
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              3
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "candidates": 7,
+          "reference": 9,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              7
+            ],
+            [
+              "INVALIDATED",
+              4
+            ],
+            [
+              "BELOW_SMA50",
+              4
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              4
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              4
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "candidates": 7,
+          "reference": 9,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              7
+            ],
+            [
+              "TREND_DIRECTION",
+              7
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              7
+            ],
+            [
+              "NO_REBOUND",
+              7
+            ],
+            [
+              "LOW_CLV",
+              5
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "candidates": 7,
+          "reference": 9,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              6
+            ],
+            [
+              "BELOW_SMA50",
+              6
+            ],
+            [
+              "SMA50_SLOPE",
+              5
+            ],
+            [
+              "INVALIDATED",
+              4
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              4
+            ]
+          ]
+        }
+      },
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ],
+      "limitations": [
+        "current survivor list only",
+        "theme[0] is not an economic parent",
+        "Yahoo Close is not verified raw",
+        "not a 10-year PIT backtest"
+      ]
+    },
+    {
+      "theme_id": "media_streaming",
+      "session_date": "2026-09-15",
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "families": {
+        "A_trend_quality": {
+          "candidates": 8,
+          "reference": 10,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              8
+            ],
+            [
+              "TREND_DIRECTION",
+              6
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              5
+            ],
+            [
+              "LOW_ADV",
+              1
+            ],
+            [
+              "HIGH_ATR",
+              1
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "candidates": 8,
+          "reference": 10,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              8
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              6
+            ],
+            [
+              "LOW_CLV",
+              5
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              5
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              3
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "candidates": 8,
+          "reference": 10,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              8
+            ],
+            [
+              "TREND_DIRECTION",
+              6
+            ],
+            [
+              "NO_REBOUND",
+              6
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              5
+            ],
+            [
+              "LOW_CLV",
+              5
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "candidates": 8,
+          "reference": 10,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              8
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              3
+            ],
+            [
+              "LOW_ADV",
+              1
+            ],
+            [
+              "HIGH_ATR",
+              1
+            ],
+            [
+              "WEAK_STRUCTURE",
+              1
+            ]
+          ]
+        }
+      },
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ],
+      "limitations": [
+        "current survivor list only",
+        "theme[0] is not an economic parent",
+        "Yahoo Close is not verified raw",
+        "not a 10-year PIT backtest"
+      ]
+    },
+    {
+      "theme_id": "social_internet",
+      "session_date": "2026-09-15",
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "families": {
+        "A_trend_quality": {
+          "candidates": 8,
+          "reference": 10,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              8
+            ],
+            [
+              "TREND_DIRECTION",
+              8
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              7
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3
+            ],
+            [
+              "LH_LL",
+              3
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "candidates": 8,
+          "reference": 10,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              8
+            ],
+            [
+              "BELOW_SMA50",
+              5
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              5
+            ],
+            [
+              "LOW_CLV",
+              4
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              4
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "candidates": 8,
+          "reference": 10,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              8
+            ],
+            [
+              "TREND_DIRECTION",
+              8
+            ],
+            [
+              "NO_REBOUND",
+              7
+            ],
+            [
+              "LOW_CLV",
+              7
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              4
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "candidates": 8,
+          "reference": 10,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              8
+            ],
+            [
+              "BELOW_SMA50",
+              6
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              4
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3
+            ],
+            [
+              "SMA50_SLOPE",
+              3
+            ]
+          ]
+        }
+      },
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ],
+      "limitations": [
+        "current survivor list only",
+        "theme[0] is not an economic parent",
+        "Yahoo Close is not verified raw",
+        "not a 10-year PIT backtest"
+      ]
+    },
+    {
+      "theme_id": "energy",
+      "session_date": "2026-09-15",
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "families": {
+        "A_trend_quality": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              8
+            ],
+            [
+              "EXTENDED",
+              7
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              3
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              8
+            ],
+            [
+              "EXTENDED",
+              7
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              6
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              4
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "EXTENDED",
+              7
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              3
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              1
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              9
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              7
+            ],
+            [
+              "EXTENDED",
+              7
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              3
+            ]
+          ]
+        }
+      },
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ],
+      "limitations": [
+        "current survivor list only",
+        "theme[0] is not an economic parent",
+        "Yahoo Close is not verified raw",
+        "not a 10-year PIT backtest"
+      ]
+    },
+    {
+      "theme_id": "utilities",
+      "session_date": "2026-09-15",
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "families": {
+        "A_trend_quality": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "TREND_DIRECTION",
+              10
+            ],
+            [
+              "WEAK_STRUCTURE",
+              7
+            ],
+            [
+              "LH_LL",
+              7
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              7
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "WEAK_STRUCTURE",
+              7
+            ],
+            [
+              "BELOW_SMA50",
+              7
+            ],
+            [
+              "INVALIDATED",
+              6
+            ],
+            [
+              "SMA50_SLOPE",
+              6
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "TREND_DIRECTION",
+              10
+            ],
+            [
+              "NO_REBOUND",
+              10
+            ],
+            [
+              "LOW_CLV",
+              10
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              9
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "BELOW_SMA50",
+              10
+            ],
+            [
+              "SMA50_SLOPE",
+              9
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              8
+            ],
+            [
+              "WEAK_STRUCTURE",
+              7
+            ]
+          ]
+        }
+      },
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ],
+      "limitations": [
+        "current survivor list only",
+        "theme[0] is not an economic parent",
+        "Yahoo Close is not verified raw",
+        "not a 10-year PIT backtest"
+      ]
+    },
+    {
+      "theme_id": "defense_aero",
+      "session_date": "2026-09-15",
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "families": {
+        "A_trend_quality": {
+          "candidates": 9,
+          "reference": 11,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "WEAK_STRUCTURE",
+              9
+            ],
+            [
+              "LOW_SCORE",
+              9
+            ],
+            [
+              "TREND_DIRECTION",
+              9
+            ],
+            [
+              "LH_LL",
+              9
+            ],
+            [
+              "INVALIDATED",
+              4
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "candidates": 9,
+          "reference": 11,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "WEAK_STRUCTURE",
+              9
+            ],
+            [
+              "LOW_SCORE",
+              9
+            ],
+            [
+              "BELOW_SMA50",
+              8
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              6
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              6
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "candidates": 9,
+          "reference": 11,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "WEAK_STRUCTURE",
+              9
+            ],
+            [
+              "LOW_SCORE",
+              9
+            ],
+            [
+              "TREND_DIRECTION",
+              9
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              9
+            ],
+            [
+              "NO_REBOUND",
+              5
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "candidates": 9,
+          "reference": 11,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "WEAK_STRUCTURE",
+              9
+            ],
+            [
+              "LOW_SCORE",
+              9
+            ],
+            [
+              "BELOW_SMA50",
+              9
+            ],
+            [
+              "SMA50_SLOPE",
+              5
+            ],
+            [
+              "INVALIDATED",
+              4
+            ]
+          ]
+        }
+      },
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ],
+      "limitations": [
+        "current survivor list only",
+        "theme[0] is not an economic parent",
+        "Yahoo Close is not verified raw",
+        "not a 10-year PIT backtest"
+      ]
+    },
+    {
+      "theme_id": "airlines",
+      "session_date": "2026-09-15",
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "families": {
+        "A_trend_quality": {
+          "candidates": 8,
+          "reference": 10,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              8
+            ],
+            [
+              "TREND_DIRECTION",
+              8
+            ],
+            [
+              "INVALIDATED",
+              4
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3
+            ],
+            [
+              "LH_LL",
+              3
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "candidates": 8,
+          "reference": 10,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              8
+            ],
+            [
+              "SMA50_SLOPE",
+              8
+            ],
+            [
+              "BELOW_SMA50",
+              8
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              6
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              5
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "candidates": 8,
+          "reference": 10,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              8
+            ],
+            [
+              "TREND_DIRECTION",
+              8
+            ],
+            [
+              "NO_REBOUND",
+              8
+            ],
+            [
+              "LOW_CLV",
+              7
+            ],
+            [
+              "INVALIDATED",
+              4
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "candidates": 8,
+          "reference": 10,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              8
+            ],
+            [
+              "BELOW_SMA50",
+              8
+            ],
+            [
+              "SMA50_SLOPE",
+              8
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              4
+            ],
+            [
+              "INVALIDATED",
+              4
+            ]
+          ]
+        }
+      },
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ],
+      "limitations": [
+        "current survivor list only",
+        "theme[0] is not an economic parent",
+        "Yahoo Close is not verified raw",
+        "not a 10-year PIT backtest"
+      ]
+    },
+    {
+      "theme_id": "real_estate",
+      "session_date": "2026-09-15",
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "families": {
+        "A_trend_quality": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "TREND_DIRECTION",
+              10
+            ],
+            [
+              "INVALIDATED",
+              7
+            ],
+            [
+              "WEAK_STRUCTURE",
+              6
+            ],
+            [
+              "LH_LL",
+              6
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "BELOW_SMA50",
+              9
+            ],
+            [
+              "SMA50_SLOPE",
+              8
+            ],
+            [
+              "INVALIDATED",
+              7
+            ],
+            [
+              "WEAK_STRUCTURE",
+              6
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "TREND_DIRECTION",
+              10
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              8
+            ],
+            [
+              "INVALIDATED",
+              7
+            ],
+            [
+              "SUPPORT_BROKEN",
+              7
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "BELOW_SMA50",
+              9
+            ],
+            [
+              "SMA50_SLOPE",
+              8
+            ],
+            [
+              "INVALIDATED",
+              7
+            ],
+            [
+              "WEAK_STRUCTURE",
+              6
+            ]
+          ]
+        }
+      },
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ],
+      "limitations": [
+        "current survivor list only",
+        "theme[0] is not an economic parent",
+        "Yahoo Close is not verified raw",
+        "not a 10-year PIT backtest"
+      ]
+    },
+    {
+      "theme_id": "crypto",
+      "session_date": "2026-09-15",
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "families": {
+        "A_trend_quality": {
+          "candidates": 9,
+          "reference": 11,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              9
+            ],
+            [
+              "TREND_DIRECTION",
+              9
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              6
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              4
+            ],
+            [
+              "HIGH_ATR",
+              3
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "candidates": 9,
+          "reference": 11,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              9
+            ],
+            [
+              "SMA50_SLOPE",
+              7
+            ],
+            [
+              "LOW_CLV",
+              6
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              6
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              6
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "candidates": 9,
+          "reference": 11,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              9
+            ],
+            [
+              "TREND_DIRECTION",
+              9
+            ],
+            [
+              "NO_REBOUND",
+              9
+            ],
+            [
+              "LOW_CLV",
+              9
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              6
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "candidates": 9,
+          "reference": 11,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              8
+            ],
+            [
+              "SMA50_SLOPE",
+              7
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              6
+            ],
+            [
+              "BELOW_SMA50",
+              6
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              5
+            ]
+          ]
+        }
+      },
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ],
+      "limitations": [
+        "current survivor list only",
+        "theme[0] is not an economic parent",
+        "Yahoo Close is not verified raw",
+        "not a 10-year PIT backtest"
+      ]
+    },
+    {
+      "theme_id": "china_adr",
+      "session_date": "2026-09-15",
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "families": {
+        "A_trend_quality": {
+          "candidates": 12,
+          "reference": 14,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              12
+            ],
+            [
+              "TREND_DIRECTION",
+              11
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              11
+            ],
+            [
+              "WEAK_STRUCTURE",
+              8
+            ],
+            [
+              "LH_LL",
+              8
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "candidates": 12,
+          "reference": 14,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              12
+            ],
+            [
+              "WEAK_STRUCTURE",
+              8
+            ],
+            [
+              "BELOW_SMA50",
+              8
+            ],
+            [
+              "SMA50_SLOPE",
+              6
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              6
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "candidates": 12,
+          "reference": 14,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              12
+            ],
+            [
+              "TREND_DIRECTION",
+              11
+            ],
+            [
+              "NO_REBOUND",
+              10
+            ],
+            [
+              "WEAK_STRUCTURE",
+              8
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              8
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "candidates": 12,
+          "reference": 14,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "BELOW_SMA50",
+              11
+            ],
+            [
+              "WEAK_STRUCTURE",
+              8
+            ],
+            [
+              "SMA50_SLOPE",
+              8
+            ],
+            [
+              "MISSING_SCORE",
+              6
+            ],
+            [
+              "LOW_COVERAGE",
+              6
+            ]
+          ]
+        }
+      },
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ],
+      "limitations": [
+        "current survivor list only",
+        "theme[0] is not an economic parent",
+        "Yahoo Close is not verified raw",
+        "not a 10-year PIT backtest"
+      ]
+    },
+    {
+      "theme_id": "telecom",
+      "session_date": "2026-09-15",
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "families": {
+        "A_trend_quality": {
+          "candidates": 7,
+          "reference": 9,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              7
+            ],
+            [
+              "TREND_DIRECTION",
+              5
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              4
+            ],
+            [
+              "WEAK_STRUCTURE",
+              2
+            ],
+            [
+              "LH_LL",
+              2
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "candidates": 7,
+          "reference": 9,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              7
+            ],
+            [
+              "LOW_CLV",
+              5
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              4
+            ],
+            [
+              "BELOW_SMA50",
+              4
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              3
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "candidates": 7,
+          "reference": 9,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              7
+            ],
+            [
+              "TREND_DIRECTION",
+              5
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              5
+            ],
+            [
+              "NO_REBOUND",
+              4
+            ],
+            [
+              "LOW_CLV",
+              4
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "candidates": 7,
+          "reference": 9,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              7
+            ],
+            [
+              "BELOW_SMA50",
+              4
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              2
+            ],
+            [
+              "WEAK_STRUCTURE",
+              2
+            ],
+            [
+              "HIGH_ATR",
+              1
+            ]
+          ]
+        }
+      },
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ],
+      "limitations": [
+        "current survivor list only",
+        "theme[0] is not an economic parent",
+        "Yahoo Close is not verified raw",
+        "not a 10-year PIT backtest"
+      ]
+    },
+    {
+      "theme_id": "industrials",
+      "session_date": "2026-09-15",
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "families": {
+        "A_trend_quality": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "TREND_DIRECTION",
+              9
+            ],
+            [
+              "WEAK_STRUCTURE",
+              6
+            ],
+            [
+              "LH_LL",
+              6
+            ],
+            [
+              "INVALIDATED",
+              3
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "BELOW_SMA50",
+              9
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              9
+            ],
+            [
+              "WEAK_STRUCTURE",
+              6
+            ],
+            [
+              "SMA50_SLOPE",
+              5
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "TREND_DIRECTION",
+              9
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              8
+            ],
+            [
+              "NO_REBOUND",
+              8
+            ],
+            [
+              "LOW_CLV",
+              7
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "candidates": 10,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "BELOW_SMA50",
+              9
+            ],
+            [
+              "WEAK_STRUCTURE",
+              6
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              5
+            ],
+            [
+              "SMA50_SLOPE",
+              5
+            ]
+          ]
+        }
+      },
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ],
+      "limitations": [
+        "current survivor list only",
+        "theme[0] is not an economic parent",
+        "Yahoo Close is not verified raw",
+        "not a 10-year PIT backtest"
+      ]
+    },
+    {
+      "theme_id": "etfs",
+      "session_date": "2026-09-15",
+      "status": "CURRENT_UNIVERSE_DIAGNOSTIC",
+      "families": {
+        "A_trend_quality": {
+          "candidates": 12,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              12
+            ],
+            [
+              "TREND_DIRECTION",
+              10
+            ],
+            [
+              "INVALIDATED",
+              9
+            ],
+            [
+              "WEAK_STRUCTURE",
+              7
+            ],
+            [
+              "LH_LL",
+              7
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "candidates": 12,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              12
+            ],
+            [
+              "INVALIDATED",
+              9
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              9
+            ],
+            [
+              "BELOW_SMA50",
+              8
+            ],
+            [
+              "WEAK_STRUCTURE",
+              7
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "candidates": 12,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              12
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              11
+            ],
+            [
+              "TREND_DIRECTION",
+              10
+            ],
+            [
+              "NO_REBOUND",
+              10
+            ],
+            [
+              "INVALIDATED",
+              9
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "candidates": 12,
+          "reference": 12,
+          "eligible": 0,
+          "eligible_ids": [],
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              11
+            ],
+            [
+              "INVALIDATED",
+              9
+            ],
+            [
+              "BELOW_SMA50",
+              9
+            ],
+            [
+              "WEAK_STRUCTURE",
+              7
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              6
+            ]
+          ]
+        }
+      },
+      "capability_flags": [
+        "CURRENT_UNIVERSE_DIAGNOSTIC",
+        "PIT_CLASSIFICATION_MISSING",
+        "CORPORATE_ACTIONS_INCOMPLETE",
+        "EXECUTION_DATA_UNVERIFIED",
+        "download_time_not_pit"
+      ],
+      "limitations": [
+        "current survivor list only",
+        "theme[0] is not an economic parent",
+        "Yahoo Close is not verified raw",
+        "not a 10-year PIT backtest"
+      ]
+    }
+  ]
+}

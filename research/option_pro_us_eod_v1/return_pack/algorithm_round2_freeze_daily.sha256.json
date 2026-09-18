@@ -1,0 +1,8 @@
+{
+  "defined_pair_days": 312,
+  "note": "Controlled frozen-candidate daily artifact. Raw B0 tape is not copied here.",
+  "path": "research/option_pro_us_eod_v1/return_pack/round2_freeze_runs/run_a8ba5ab55f219b07_full_tape/daily_validation.jsonl",
+  "public_git": false,
+  "rows": 1634,
+  "sha256": "bf25dae04f7b096f1028f791aa258bd17d2540be0435ecb0fe519fe88a66d25d"
+}

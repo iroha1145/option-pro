@@ -1,0 +1,121 @@
+{
+  "combos": [
+    {
+      "feature_cache_key": "2024-03-19|TSLA|short|us-eod-research-features-v1.5",
+      "momentum_blend": [
+        0.5,
+        0.3,
+        0.2
+      ],
+      "profile": "conservative",
+      "score_cache_key": "conservative|short|option-pro-us-eod-research-v1.0|TSLA",
+      "score_horizon": "short"
+    },
+    {
+      "feature_cache_key": "2024-03-19|TSLA|short|us-eod-research-features-v1.5",
+      "momentum_blend": [
+        0.5,
+        0.3,
+        0.2
+      ],
+      "profile": "balanced",
+      "score_cache_key": "balanced|short|option-pro-us-eod-research-v1.0|TSLA",
+      "score_horizon": "short"
+    },
+    {
+      "feature_cache_key": "2024-03-19|TSLA|short|us-eod-research-features-v1.5",
+      "momentum_blend": [
+        0.5,
+        0.3,
+        0.2
+      ],
+      "profile": "aggressive",
+      "score_cache_key": "aggressive|short|option-pro-us-eod-research-v1.0|TSLA",
+      "score_horizon": "short"
+    },
+    {
+      "feature_cache_key": "2024-03-19|TSLA|mid|us-eod-research-features-v1.5",
+      "momentum_blend": [
+        0.25,
+        0.4,
+        0.35
+      ],
+      "profile": "conservative",
+      "score_cache_key": "conservative|mid|option-pro-us-eod-research-v1.0|TSLA",
+      "score_horizon": "mid"
+    },
+    {
+      "feature_cache_key": "2024-03-19|TSLA|mid|us-eod-research-features-v1.5",
+      "momentum_blend": [
+        0.25,
+        0.4,
+        0.35
+      ],
+      "profile": "balanced",
+      "score_cache_key": "balanced|mid|option-pro-us-eod-research-v1.0|TSLA",
+      "score_horizon": "mid"
+    },
+    {
+      "feature_cache_key": "2024-03-19|TSLA|mid|us-eod-research-features-v1.5",
+      "momentum_blend": [
+        0.25,
+        0.4,
+        0.35
+      ],
+      "profile": "aggressive",
+      "score_cache_key": "aggressive|mid|option-pro-us-eod-research-v1.0|TSLA",
+      "score_horizon": "mid"
+    },
+    {
+      "feature_cache_key": "2024-03-19|TSLA|long|us-eod-research-features-v1.5",
+      "momentum_blend": [
+        0.1,
+        0.35,
+        0.55
+      ],
+      "profile": "conservative",
+      "score_cache_key": "conservative|long|option-pro-us-eod-research-v1.0|TSLA",
+      "score_horizon": "long"
+    },
+    {
+      "feature_cache_key": "2024-03-19|TSLA|long|us-eod-research-features-v1.5",
+      "momentum_blend": [
+        0.1,
+        0.35,
+        0.55
+      ],
+      "profile": "balanced",
+      "score_cache_key": "balanced|long|option-pro-us-eod-research-v1.0|TSLA",
+      "score_horizon": "long"
+    },
+    {
+      "feature_cache_key": "2024-03-19|TSLA|long|us-eod-research-features-v1.5",
+      "momentum_blend": [
+        0.1,
+        0.35,
+        0.55
+      ],
+      "profile": "aggressive",
+      "score_cache_key": "aggressive|long|option-pro-us-eod-research-v1.0|TSLA",
+      "score_horizon": "long"
+    }
+  ],
+  "distinct_feature_horizon_keys": 3,
+  "distinct_score_keys": 9,
+  "elapsed_s": 2.0630002836696804e-05,
+  "kind": "engineering_pilot",
+  "mid_blend_not_reused": true,
+  "not_for_winner_selection": true,
+  "session_n": 8,
+  "sessions": [
+    "2024-03-19",
+    "2024-03-20",
+    "2024-03-21",
+    "2024-03-22",
+    "2024-03-25",
+    "2024-03-26",
+    "2024-03-27",
+    "2024-03-28"
+  ],
+  "yahoo_bars_present": true
+}

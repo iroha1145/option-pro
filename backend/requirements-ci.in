@@ -4,3 +4,4 @@
 # test or audit packages.
 pip-audit==2.10.1
 pytest==9.1.1
+pyarrow==25.0.1

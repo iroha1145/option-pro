@@ -1,0 +1,20 @@
+{
+  "schema_version": "us-eod-research-factor-row-v1.0",
+  "source": "research/option_pro_us_eod_v1/return_pack/measurement_factor_rows.jsonl",
+  "sha256": "b490ba6d83965a0c3fe60c76afab8205fc2a0d76cc6577cdf23cb838e447f75a",
+  "fields": [
+    "security_id",
+    "signal_session",
+    "theme_id",
+    "algorithm",
+    "profile",
+    "horizon",
+    "label_horizon",
+    "factors",
+    "score",
+    "label",
+    "final_eligible",
+    "rejection_reasons"
+  ],
+  "note": "Authorized cache-derived tape stays gitignored. This schema plus hash is the public replay handle."
+}

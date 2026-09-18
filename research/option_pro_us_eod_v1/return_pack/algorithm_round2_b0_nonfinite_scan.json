@@ -1,0 +1,8 @@
+{
+  "examples": [],
+  "implication": "B0 tape scan found no non-finite score/label. This round only adds a guard. It does not imply that prior pairing results are invalid.",
+  "nonfinite_label_rows": 0,
+  "nonfinite_score_rows": 0,
+  "present_on_tape": false,
+  "rows_scanned": 4205304
+}

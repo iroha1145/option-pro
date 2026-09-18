@@ -1,0 +1,296 @@
+{
+  "reviewed_head": "ddbd042004fd28b1cb84d8427ab920b1f0c71776",
+  "market_backtests_executed_by_reviewer": 0,
+  "full_repo_tests_executed_by_reviewer": false,
+  "scope": "five hash-verified source modules; registry; _theme_card exact function excerpt; weekday-only calendar fixture",
+  "common_member_pair_fixed": {
+    "baseline_n": 12,
+    "variant_n": 10,
+    "common_n": 10,
+    "baseline_only": [
+      "S10",
+      "S11"
+    ],
+    "variant_only": [],
+    "baseline_only_n": 2,
+    "variant_only_n": 0,
+    "missing_reasons": {
+      "S10": "ABSENT_FROM_VARIANT_UNIVERSE",
+      "S11": "ABSENT_FROM_VARIANT_UNIVERSE"
+    },
+    "common_security_ids": [
+      "S00",
+      "S01",
+      "S02",
+      "S03",
+      "S04",
+      "S05",
+      "S06",
+      "S07",
+      "S08",
+      "S09"
+    ],
+    "baseline_ic_own_set": 0.16083916083916083,
+    "variant_ic_own_set": 1.0,
+    "own_set_ic_diff_is_not_a_pair": true,
+    "paired_diff": 0.0,
+    "baseline_ic_common": 1.0,
+    "variant_ic_common": 1.0,
+    "undefined_reason": null
+  },
+  "g_capability_fixed": {
+    "cells": 96,
+    "actual_G_observed": 0,
+    "can_score_without_G": 82
+  },
+  "true_five_pp_fixed": {
+    "before_M": 0.29187817257964055,
+    "after_M": 0.34187817257964054,
+    "delta": 0.04999999999999999,
+    "G": 0.0,
+    "sum": 1.0
+  },
+  "overlap_fixed": {
+    "consecutive_trigger_fragments": 2,
+    "label_horizon_overlap_groups": 1,
+    "independent_events": null,
+    "usable_for_independent_sample": false,
+    "old_count_4514": "SUPERSEDED_EVENT_COUNT",
+    "event_rule_version": "us-eod-event-groups-v1.1",
+    "label_horizon": 20,
+    "endpoint_rule": "inclusive_signal_to_signal_plus_H_sessions"
+  },
+  "source_hash_fixed": {
+    "correct_content_accepted": true,
+    "changed_content_rejected": true
+  },
+  "date_block_vs_iid": {
+    "H": {
+      "n_timeline": 400,
+      "n_observed": 400,
+      "n_blocks": 20,
+      "block_len": 20,
+      "mean": 0.03,
+      "ci95": [
+        -0.016001250000000005,
+        0.07876249999999993
+      ],
+      "method": "CIRCULAR_DATE_BLOCK_BOOTSTRAP",
+      "seed": 174,
+      "repeats": 2000,
+      "reason": null,
+      "note": "Year/two-year tables are descriptive. They are not this block bootstrap interval."
+    },
+    "2H": {
+      "n_timeline": 400,
+      "n_observed": 400,
+      "n_blocks": 10,
+      "block_len": 40,
+      "mean": 0.03,
+      "ci95": [
+        -0.03361,
+        0.09380249999999998
+      ],
+      "method": "CIRCULAR_DATE_BLOCK_BOOTSTRAP",
+      "seed": 174,
+      "repeats": 2000,
+      "reason": null,
+      "note": "Year/two-year tables are descriptive. They are not this block bootstrap interval."
+    },
+    "descriptive_normal_on_observed_only": {
+      "n": 400,
+      "mean": 0.03,
+      "ci95": [
+        0.018683934723883334,
+        0.04131606527611666
+      ],
+      "method": "PREREGISTERED_NORMAL_APPROX",
+      "reason": null
+    },
+    "block_lengths_preregistered": {
+      "H": 20,
+      "2H": 40
+    },
+    "seed": 174,
+    "repeats": 2000
+  },
+  "nonfinite_score_guard": {
+    "current": {
+      "baseline_n": 10,
+      "variant_n": 10,
+      "common_n": 10,
+      "baseline_only": [],
+      "variant_only": [],
+      "baseline_only_n": 0,
+      "variant_only_n": 0,
+      "missing_reasons": {},
+      "common_security_ids": [
+        "S00",
+        "S01",
+        "S02",
+        "S03",
+        "S04",
+        "S05",
+        "S06",
+        "S07",
+        "S08",
+        "S09"
+      ],
+      "baseline_ic_own_set": 1.0,
+      "variant_ic_own_set": 1.0,
+      "own_set_ic_diff_is_not_a_pair": true,
+      "paired_diff": 0.0,
+      "baseline_ic_common": 1.0,
+      "variant_ic_common": 1.0,
+      "undefined_reason": null
+    },
+    "expected_common_n": 9,
+    "expected_pair_diff": null
+  },
+  "nonfinite_label_guard": {
+    "current": {
+      "baseline_n": 10,
+      "variant_n": 10,
+      "common_n": 10,
+      "baseline_only": [],
+      "variant_only": [],
+      "baseline_only_n": 0,
+      "variant_only_n": 0,
+      "missing_reasons": {},
+      "common_security_ids": [
+        "S00",
+        "S01",
+        "S02",
+        "S03",
+        "S04",
+        "S05",
+        "S06",
+        "S07",
+        "S08",
+        "S09"
+      ],
+      "baseline_ic_own_set": 1.0,
+      "variant_ic_own_set": 1.0,
+      "own_set_ic_diff_is_not_a_pair": true,
+      "paired_diff": 0.0,
+      "baseline_ic_common": 1.0,
+      "variant_ic_common": 1.0,
+      "undefined_reason": null
+    },
+    "expected_pair_diff": null
+  },
+  "bootstrap_padding": {
+    "timeline": 1634,
+    "block_len": 40,
+    "actual_samples_per_replicate": 1640,
+    "expected_samples_per_replicate": 1634,
+    "extra_fraction": 0.0036719706242350062
+  },
+  "price_track_card_block": {
+    "family": "D_residual_momentum",
+    "track": "PRICE_ONLY_DIAGNOSTIC",
+    "eight_factor_status": "DATA_INSUFFICIENT",
+    "actual_G_observed": false,
+    "can_score_without_G": false,
+    "decision": "DATA_CAPABILITY_BLOCKED",
+    "action": "evaluate_price_track_only",
+    "conclusion": "EIGHT_FACTOR_NOT_SCOREABLE",
+    "pair_days_price_ablations": 100,
+    "mean_common_n": 13,
+    "robust_variants": [
+      "PRICE_DROP_R"
+    ],
+    "yearly_direction_sample": {
+      "PRICE_DROP_R": {}
+    },
+    "next_neighbors": [
+      "PRICE_DROP_R"
+    ],
+    "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+    "do_not": [
+      "do not invert or delete the family because software IC is negative",
+      "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+      "do not treat B IC as breakout ledger PnL",
+      "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+    ]
+  },
+  "negative_ablation_card_observation": {
+    "family": "A_trend_quality",
+    "track": "PRICE_ONLY_DIAGNOSTIC",
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "actual_G_observed": false,
+    "can_score_without_G": true,
+    "decision": "CONTINUE_CANDIDATE",
+    "action": "inspect_named_neighbors_only",
+    "conclusion": "NO_CHAMPION",
+    "pair_days_price_ablations": 100,
+    "mean_common_n": 13,
+    "robust_variants": [
+      "PRICE_DROP_R"
+    ],
+    "yearly_direction_sample": {
+      "PRICE_DROP_R": {}
+    },
+    "next_neighbors": [
+      "PRICE_DROP_R"
+    ],
+    "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+    "do_not": [
+      "do not invert or delete the family because software IC is negative",
+      "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+      "do not treat B IC as breakout ledger PnL",
+      "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+    ]
+  },
+  "H_significant_but_2H_not_card_observation": {
+    "family": "A_trend_quality",
+    "track": "PRICE_ONLY_DIAGNOSTIC",
+    "eight_factor_status": "SCORED_NOT_SETUP_VALIDATED",
+    "actual_G_observed": false,
+    "can_score_without_G": true,
+    "decision": "CONTINUE_CANDIDATE",
+    "action": "inspect_named_neighbors_only",
+    "conclusion": "NO_CHAMPION",
+    "pair_days_price_ablations": 100,
+    "mean_common_n": 13,
+    "robust_variants": [
+      "PRICE_DROP_R"
+    ],
+    "yearly_direction_sample": {
+      "PRICE_DROP_R": {}
+    },
+    "next_neighbors": [
+      "PRICE_DROP_R"
+    ],
+    "neighbor_reason": "unified realloc/floor neighbors already executed; not a theme-specific discovery",
+    "do_not": [
+      "do not invert or delete the family because software IC is negative",
+      "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+      "do not treat B IC as breakout ledger PnL",
+      "do not treat N_SCORE_FLOOR_PLUS_10PCT unchanged IC as proof the floor is useless"
+    ]
+  },
+  "mean_common_n_formula_observation": {
+    "code": "sum common_n over all dates / pair_days",
+    "fixture_common_counts": [
+      9,
+      10
+    ],
+    "fixture_defined_pair_flags": [
+      false,
+      true
+    ],
+    "current_formula_value": 19.0,
+    "correct_defined_pair_mean": 10.0,
+    "changes_IC_point_estimate": false
+  },
+  "pytest": {
+    "passed": 12,
+    "failed": 4,
+    "failures_classes": [
+      "nonfinite inputs (two tests)",
+      "bootstrap sample-length padding",
+      "price-track card wrongly blocked by full-track capability"
+    ]
+  }
+}

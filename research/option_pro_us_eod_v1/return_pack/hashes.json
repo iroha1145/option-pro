@@ -1,0 +1,19 @@
+{
+  "source_sha": "439fb3634ac4a17e54fc8db5fe88dd11458f270d",
+  "config_sha256": "4b8f9711f5afe1cb29ad07c84412e54fca0998e8995e3bb19e311b866aed73cd",
+  "data_snapshot_sha256": "d056327fd03abdb3a276a8f20039ea2af04300bc7ec9c1dd10010343abf7262e",
+  "registry_sha256": "88e8f452432622c3e6fc9846967466350887de7ceb7f64abe2c37eeb859d13bd",
+  "experiment_manifest_sha256": "ce40c971dede0d2aa1266a3d777ca3d8246f7d82fac8dee48c594b9a6bee3110",
+  "etf_subasset_manifest_sha256": "94d347337e19118c0651ed17d47b72030cbb647618b4dbb87f68440039040d44",
+  "composite_manifest_sha256": "5896e1bf937f260748dce5f8e1f223e427f00ccd39cf77f702b3c3cef2d0a2b9",
+  "reference_registry_sha256": "67b0f517ed0c11790d70541f961f4c73d9ee11a53ac25a92ec884093c4d365d6",
+  "provider_probe_sha256": "2db05166e2bcce711ef475440a2d85f4e242873787fb1e78cfbce95b2bf26830",
+  "download_coverage_sha256": "0d19f9811aec72e98693a02d37a2840ed46ba1a113cd8afb9c41251091110fc8",
+  "yahoo_daily_bars_sha256": "d056327fd03abdb3a276a8f20039ea2af04300bc7ec9c1dd10010343abf7262e",
+  "yahoo_security_master_sha256": "08d7ca7c0435a7dc4b261d624b2aa9d29e3faaf00f99eea2a9d01d645cff680d",
+  "yahoo_theme_snapshot_sha256": "82866d86d1ebabc2dbf4a910d232ac679eeb78499ac6e7a17ebcbeba8b3bb3de",
+  "yahoo_daily_bars_git_status": "removed-from-public-git",
+  "invalid_eod_capture": "2026-09-16T17:24:41.368841+00:00",
+  "last_complete_eod_session": "2026-09-15",
+  "note": "The 2026-09-16 Yahoo tape is INVALID_EOD_CAPTURE and is not stored in public git. Use a controlled offline artifact plus this historical digest to replay."
+}

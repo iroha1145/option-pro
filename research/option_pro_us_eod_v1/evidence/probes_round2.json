@@ -1,0 +1,46 @@
+{
+  "reviewed_head": "ddbd042004fd28b1cb84d8427ab920b1f0c71776",
+  "round": "algorithm_round2",
+  "market_backtests_executed_by_reviewer": 0,
+  "nonfinite_score_guard": {
+    "expected_common_n": 9,
+    "expected_pair_diff": null,
+    "expected_undefined_reason": "CROSS_SECTION_BELOW_N",
+    "expected_invalid_reason": "NONFINITE_SCORE"
+  },
+  "nonfinite_label_guard": {
+    "expected_common_n": 9,
+    "expected_pair_diff": null,
+    "expected_undefined_reason": "CROSS_SECTION_BELOW_N",
+    "expected_invalid_reason": "NONFINITE_LABEL"
+  },
+  "bootstrap_padding": {
+    "timeline": 1634,
+    "block_len": 40,
+    "expected_samples_per_replicate": 1634,
+    "even_timeline": 400,
+    "even_block_len": 20
+  },
+  "mean_common_n_formula": {
+    "fixture_common_counts": [9, 10],
+    "fixture_defined_pair_flags": [false, true],
+    "wrong_formula_value": 19.0,
+    "correct_defined_pair_mean": 10.0,
+    "changes_IC_point_estimate": false
+  },
+  "price_track_card_block": {
+    "family": "D_residual_momentum",
+    "track": "PRICE_ONLY_DIAGNOSTIC",
+    "eight_factor_status": "DATA_INSUFFICIENT",
+    "actual_G_observed": false,
+    "can_score_without_G": false,
+    "pair_days_price_ablations": 100,
+    "mean_common_n": 13,
+    "do_not_decision": "DATA_CAPABILITY_BLOCKED",
+    "alias": "D_MARKET_RESIDUAL_DIAGNOSTIC"
+  },
+  "statistics_version": "us-eod-research-stats-v1.1",
+  "main_label_horizon": 20,
+  "holdout_start": "2024-07-01",
+  "executed_backtests": 0
+}

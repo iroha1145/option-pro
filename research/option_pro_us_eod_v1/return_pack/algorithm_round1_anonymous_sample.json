@@ -1,0 +1,27 @@
+{
+  "note": "Synthetic anonymous sample. Not a market print and not copied from the private tape.",
+  "rows": [
+    {
+      "algorithm": "A_trend_quality",
+      "factors": {
+        "B": 40.0,
+        "G": null,
+        "M": 68.0,
+        "P": 35.0,
+        "R": 70.0,
+        "S": 64.0,
+        "T": 72.0,
+        "V": 55.0
+      },
+      "final_eligible": false,
+      "horizon": "mid",
+      "label": 0.012,
+      "label_horizon": 5,
+      "profile": "balanced",
+      "score": null,
+      "security_id": "SEC_ANON_1",
+      "signal_session": "2020-06-15",
+      "theme_id": "software"
+    }
+  ]
+}

@@ -1,0 +1,63 @@
+{
+  "protocol": "us-eod-research-freeze-v1",
+  "research_head": "54ad5d7684d7c1eae086333ea756c7514a3f3635",
+  "review_anchor": "6159b2388d5bf36eefa7f7aba6c12455c3817585",
+  "run_signature": "a8ba5ab55f219b07c5796f1a3cd36e8ed9154eada2e21c58530f05d392306987",
+  "sources": {
+    "b0_tape": {
+      "path": "research/option_pro_us_eod_v1/return_pack/measurement_factor_rows.jsonl",
+      "sha256": "b490ba6d83965a0c3fe60c76afab8205fc2a0d76cc6577cdf23cb838e447f75a",
+      "used": true,
+      "overwritten": false
+    },
+    "r2_candidates": {
+      "path": "research/option_pro_us_eod_v1/return_pack/algorithm_round2_candidates.json",
+      "used": true,
+      "overwritten": false
+    },
+    "r2_theme_cards": {
+      "path": "research/option_pro_us_eod_v1/return_pack/algorithm_round2_theme_cards.json",
+      "used": true,
+      "overwritten": false
+    },
+    "r2_daily_header_sessions": {
+      "path": "research/option_pro_us_eod_v1/return_pack/round2_runs/run_e3fbb87eaf69ead5_full_tape/daily_paired_diffs.jsonl",
+      "used": "first_line_sessions_only",
+      "candidate_effects_reused": false
+    },
+    "local_bar_cache": {
+      "path": "research/option_pro_us_eod_v1/data/cache/offline_replay/daily_bars.parquet",
+      "used": false,
+      "status": "INSUFFICIENT",
+      "reason": "10 rows for NVDA and SPY only"
+    }
+  },
+  "method": {
+    "pairing": "common_member_pair then IC delta",
+    "control": "PRICE_ONLY_DIAGNOSTIC",
+    "alias": "D_MARKET_RESIDUAL_DIAGNOSTIC",
+    "label_horizon": 20,
+    "bootstrap": {"seed": 174, "repeats": 2000, "trim_to_timeline": true},
+    "own_set_ic_is_not_a_pair": true
+  },
+  "executed": [
+    "refuse infeasible candidate_weights",
+    "interpret drop vs increase vs threshold",
+    "ETF D/P historical HALVE_AT_BOUNDARY correction metadata",
+    "freeze automotive D/V vector",
+    "targeted B0 rescore of frozen candidate vs PRICE_ONLY only",
+    "24-theme inherit/keep/candidate/thin status",
+    "project-gap inventory"
+  ],
+  "not_executed": [
+    "1152-cell rerun",
+    "new weight-search grid",
+    "retune V to -1/-2/-3pp",
+    "NAV / win-rate / slippage / capacity",
+    "holdout unseal",
+    "family E / weekly / macro",
+    "Massive download or auto-buy",
+    "production merge or champion promotion"
+  ],
+  "executed_backtests": 0
+}

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "research_eod_v1_snapshot_row",
+  "type": "object",
+  "required": [
+    "security_id",
+    "session_date",
+    "algorithm_id",
+    "profile",
+    "horizon",
+    "adv20",
+    "atr",
+    "status"
+  ],
+  "properties": {
+    "security_id": {"type": "string"},
+    "ticker_at_signal": {"type": "string"},
+    "session_date": {"type": "string"},
+    "algorithm_id": {"type": "string"},
+    "profile": {"type": "string"},
+    "horizon": {"type": "string"},
+    "adv20": {"type": ["number", "null"], "description": "Mean dollar volume of T-20:T-1, 20 bars, exclude T. USD."},
+    "atr": {"type": ["number", "null"], "description": "ATR14 in price units at T."},
+    "ma_distance_atr": {"type": ["number", "null"], "description": "(close-sma20)/atr_t1"},
+    "platform_distance_atr": {"type": ["number", "null"], "description": "(close-frozen_resistance)/atr_t1"},
+    "invalidation_distance_atr": {"type": ["number", "null"], "description": "(close-planned_invalidation)/atr_t1"},
+    "score": {"type": ["number", "null"]},
+    "status": {"type": "string"}
+  }
+}

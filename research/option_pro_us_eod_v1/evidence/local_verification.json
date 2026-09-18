@@ -1,0 +1,59 @@
+{
+  "reviewed_head": "35d8a08769174f4a56a9eae5af793852f3e1189d",
+  "scope": "Source-excerpt synthetic checks plus arithmetic checks of published quarterly aggregates; not raw-market replay",
+  "pytest_result": "14 passed",
+  "full_repo_tests_run_locally": false,
+  "full_private_tape_replayed": false,
+  "quarterly_weighted_aggregate": {
+    "baseline": 0.10365190365190366,
+    "candidate": 0.11231546231546233,
+    "mean_delta": 0.008663558663558665
+  },
+  "rejection_counts_sum": 1634,
+  "valid_pair_fraction": 0.1909424724602203,
+  "valid_span": {
+    "start": "2023-03-06",
+    "end": "2024-05-30"
+  },
+  "count_quarters": 6,
+  "quarterly_delta_positive": 5,
+  "quarterly_candidate_absolute_negative": 3,
+  "automotive_plan": {
+    "requested_delta": -0.05,
+    "effective_delta": -0.05,
+    "boundary_policy": "REJECT_INFEASIBLE",
+    "before": {
+      "T": 0.1709145427075556,
+      "M": 0.29985007494274596,
+      "S": 0.14392803599867696,
+      "B": 0.021989005490714912,
+      "P": 0.028485757172423687,
+      "V": 0.05497251372678729,
+      "R": 0.27986006996109564,
+      "G": 0.0
+    },
+    "after": {
+      "T": 0.1799573771853955,
+      "M": 0.3157146968346037,
+      "S": 0.1515430545081527,
+      "B": 0.023152411095848695,
+      "P": 0.029992896254947065,
+      "V": 0.004972513726787288,
+      "R": 0.2946670503942651,
+      "G": 0.0
+    },
+    "before_factor": 0.05497251372678729,
+    "after_factor": 0.004972513726787288,
+    "vector_hash": "e7a0c31d9f4173685d9909f75aaf5e40cdd03adc02960a4fdfd20c157603e6ab",
+    "transform_kind": "REALLOC_DECREASE"
+  },
+  "relative_weight_reduction": 0.9095454548158264,
+  "quarterly_decomposition_NOT_an_additional_significance_test": {
+    "without_2024Q1": {
+      "baseline": 0.0255221538090064,
+      "candidate": 0.03397319811662442,
+      "mean_delta": 0.008451044307618014
+    },
+    "note": "Arithmetic decomposition of already-published means only; not an additional fitted model or new market test"
+  }
+}

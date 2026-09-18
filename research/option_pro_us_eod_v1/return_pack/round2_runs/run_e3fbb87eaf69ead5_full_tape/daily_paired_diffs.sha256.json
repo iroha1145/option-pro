@@ -1,0 +1,7 @@
+{
+  "note": "Controlled daily paired-diff artifact. Raw B0 tape is not copied here.",
+  "path": "research/option_pro_us_eod_v1/return_pack/round2_runs/run_e3fbb87eaf69ead5_full_tape/daily_paired_diffs.jsonl",
+  "public_git": false,
+  "rows": 2881,
+  "sha256": "a19a07f4237ac7430365e2ea082a97ffce9b312b34284aa0dc9a2b9380cc0aff"
+}

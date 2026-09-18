@@ -1,0 +1,25 @@
+{
+  "code_hashes": {
+    "ablation.py": "6edc6492fabcff095c259b64cf0b49b0b86367ca3c6ab05b7b5bb6e949166a52",
+    "bootstrap.py": "6d3a962696c576eb7f4c80ba32bf63fbdb3a33e30868efba2e85ed439ca0b86b",
+    "capability.py": "971b43c9aa5a795e86e6801b1f27a6798d5f01258ab841499ed314ec249ddab4",
+    "data_readiness.py": "4d8d452f509130be26a4df7eb09b4b37ed899d4896a1d1a5a17f24885498c726",
+    "event_groups.py": "c068aec202b10691d800eee9e58612e10a52ee40991ca269e5698bc3f641ff39",
+    "freeze.py": "a1d064bad089176c91800c056ca33c37b4ada208ab792990c768c1ffcf0dcb8a",
+    "pairing.py": "3064304a5d9b9a1202ae838c035e0ff8e7cab52c3db6dad12208d931747c58ac",
+    "round1b.py": "2312cf297e91414bae96aaa71c5d00cb3730af300fadbfb4aba1a7c7e8277839",
+    "round2.py": "f7359adda2e94e7f55d395322791d38daaa2eb15243b678d539bc4252c7051af",
+    "runs.py": "3e13b44fb7c8923f38be2681557c38fc1992b0c11c6b5ea9546e99ac1edf00b8",
+    "source_bind.py": "130b2176901a7b0b68651db13e45c5f6f365fd58a3675d360ba568b1eb815b70",
+    "stats.py": "584ec46e533ab3a2b096262e6f0f41d28624c5136b52d1508fdf583e5d75acc9"
+  },
+  "generated_at": "2026-09-18T15:22:15.701146+00:00",
+  "github_ci": {
+    "pull_request_run": "https://github.com/iroha1145/option-pro/actions/runs/35362073797",
+    "push_run": "https://github.com/iroha1145/option-pro/actions/runs/35362068092",
+    "research_head": "ec1f8e3dda5908c3d2c113c7ade5a6d3a7d321db",
+    "stamp_is_docs_only": true
+  },
+  "head": "ec1f8e3dda5908c3d2c113c7ade5a6d3a7d321db",
+  "protocol": "us-eod-research-recovery-v1"
+}

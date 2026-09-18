@@ -1,0 +1,8 @@
+{
+  "do_not_retune_weights": true,
+  "holdout_unsealed": false,
+  "not_a_production_champion": true,
+  "outcome": "FROZEN_EXPLORATORY_CANDIDATE",
+  "reason": "H/2H incremental intervals stay positive on the seen window, but every leave-one member drops N below 10. Keep as a frozen exploratory candidate, not a winner.",
+  "two_cis_not_a_winner": true
+}

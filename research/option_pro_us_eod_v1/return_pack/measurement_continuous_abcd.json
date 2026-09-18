@@ -1,0 +1,7010 @@
+{
+  "head_note": "continuous balanced/mid A/B/C/D; grouped average-rank IC; holdout sealed",
+  "capture_mode": "historical_reconstruction",
+  "vendor_finalization_policy": "NEXT_DAY_CONFIRM",
+  "holdout_start": "2024-07-01",
+  "holdout_unsealed": false,
+  "allowed_end": "2024-06-28",
+  "session_first": "2018-01-02",
+  "session_last": "2024-06-28",
+  "session_count": 1634,
+  "completed_sessions": 1634,
+  "profile": "balanced",
+  "horizon": "mid",
+  "matrix_claimed": "24xABCD_balanced_mid_only_not_864",
+  "label_horizons": [
+    5,
+    20,
+    63
+  ],
+  "label_maturity_cuts": {
+    "5": "2024-06-21",
+    "20": "2024-05-30",
+    "63": "2024-03-28"
+  },
+  "feature_ready_bars": 420,
+  "feature_ready_name_count": 211,
+  "raw_history_years_span": 6.49,
+  "raw_history_years_median": 6.49,
+  "raw_history_years_note": "2018-2024 clipped tape is not a decade",
+  "evaluable_continuous_years": 6.48,
+  "coverage": [
+    {
+      "ticker": "NVDA",
+      "themes": [
+        "semiconductors",
+        "ai_cloud"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "AMD",
+      "themes": [
+        "semiconductors"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "TSM",
+      "themes": [
+        "semiconductors"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "AVGO",
+      "themes": [
+        "semiconductors"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "ASML",
+      "themes": [
+        "semiconductors"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "MU",
+      "themes": [
+        "semiconductors"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "INTC",
+      "themes": [
+        "semiconductors"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "ARM",
+      "themes": [
+        "semiconductors"
+      ],
+      "bars_clipped": 199,
+      "first": "2023-09-14",
+      "last": "2024-06-28",
+      "raw_history_years": 0.79,
+      "feature_ready": false,
+      "status": "ok"
+    },
+    {
+      "ticker": "QCOM",
+      "themes": [
+        "semiconductors"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "MRVL",
+      "themes": [
+        "semiconductors"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "TXN",
+      "themes": [
+        "semiconductors"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "LRCX",
+      "themes": [
+        "semiconductors"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "KLAC",
+      "themes": [
+        "semiconductors"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "AMAT",
+      "themes": [
+        "semiconductors"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "MSFT",
+      "themes": [
+        "software",
+        "ai_cloud"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "ORCL",
+      "themes": [
+        "software"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "CRM",
+      "themes": [
+        "software"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "ADBE",
+      "themes": [
+        "software"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "NOW",
+      "themes": [
+        "software"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "SNOW",
+      "themes": [
+        "software"
+      ],
+      "bars_clipped": 952,
+      "first": "2020-09-16",
+      "last": "2024-06-28",
+      "raw_history_years": 3.78,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "PLTR",
+      "themes": [
+        "software",
+        "ai_cloud"
+      ],
+      "bars_clipped": 942,
+      "first": "2020-09-30",
+      "last": "2024-06-28",
+      "raw_history_years": 3.74,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "PANW",
+      "themes": [
+        "software"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "NET",
+      "themes": [
+        "software"
+      ],
+      "bars_clipped": 1206,
+      "first": "2019-09-13",
+      "last": "2024-06-28",
+      "raw_history_years": 4.79,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "CRWD",
+      "themes": [
+        "software"
+      ],
+      "bars_clipped": 1271,
+      "first": "2019-06-12",
+      "last": "2024-06-28",
+      "raw_history_years": 5.05,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "DDOG",
+      "themes": [
+        "software"
+      ],
+      "bars_clipped": 1202,
+      "first": "2019-09-19",
+      "last": "2024-06-28",
+      "raw_history_years": 4.77,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "MDB",
+      "themes": [
+        "software"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "GOOGL",
+      "themes": [
+        "ai_cloud",
+        "social_internet"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "AMZN",
+      "themes": [
+        "ai_cloud",
+        "retail"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "META",
+      "themes": [
+        "ai_cloud",
+        "social_internet"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "SMCI",
+      "themes": [
+        "ai_cloud"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "ANET",
+      "themes": [
+        "ai_cloud"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "DELL",
+      "themes": [
+        "ai_cloud",
+        "consumer_electronics"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "CRWV",
+      "themes": [
+        "ai_cloud"
+      ],
+      "bars_clipped": 0,
+      "first": null,
+      "last": null,
+      "raw_history_years": null,
+      "feature_ready": false,
+      "status": "empty"
+    },
+    {
+      "ticker": "LLY",
+      "themes": [
+        "biotech"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "NVO",
+      "themes": [
+        "biotech"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "ABBV",
+      "themes": [
+        "biotech"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "AMGN",
+      "themes": [
+        "biotech"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "GILD",
+      "themes": [
+        "biotech"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "VRTX",
+      "themes": [
+        "biotech"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "REGN",
+      "themes": [
+        "biotech"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "BIIB",
+      "themes": [
+        "biotech"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "MRNA",
+      "themes": [
+        "biotech"
+      ],
+      "bars_clipped": 1398,
+      "first": "2018-12-07",
+      "last": "2024-06-28",
+      "raw_history_years": 5.56,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "BNTX",
+      "themes": [
+        "biotech"
+      ],
+      "bars_clipped": 1187,
+      "first": "2019-10-10",
+      "last": "2024-06-28",
+      "raw_history_years": 4.72,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "UNH",
+      "themes": [
+        "healthcare"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "JNJ",
+      "themes": [
+        "healthcare"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "PFE",
+      "themes": [
+        "healthcare"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "MRK",
+      "themes": [
+        "healthcare"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "TMO",
+      "themes": [
+        "healthcare"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "ABT",
+      "themes": [
+        "healthcare"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "DHR",
+      "themes": [
+        "healthcare"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "ISRG",
+      "themes": [
+        "healthcare"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "MDT",
+      "themes": [
+        "healthcare"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "BMY",
+      "themes": [
+        "healthcare"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "AAPL",
+      "themes": [
+        "consumer_electronics"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "SONY",
+      "themes": [
+        "consumer_electronics"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "HPQ",
+      "themes": [
+        "consumer_electronics"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "LOGI",
+      "themes": [
+        "consumer_electronics"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "TSLA",
+      "themes": [
+        "automotive",
+        "ev_supply"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "RIVN",
+      "themes": [
+        "automotive",
+        "ev_supply"
+      ],
+      "bars_clipped": 661,
+      "first": "2021-11-10",
+      "last": "2024-06-28",
+      "raw_history_years": 2.63,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "F",
+      "themes": [
+        "automotive"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "GM",
+      "themes": [
+        "automotive"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "LCID",
+      "themes": [
+        "automotive",
+        "ev_supply"
+      ],
+      "bars_clipped": 950,
+      "first": "2020-09-18",
+      "last": "2024-06-28",
+      "raw_history_years": 3.78,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "NIO",
+      "themes": [
+        "automotive",
+        "china_adr"
+      ],
+      "bars_clipped": 1458,
+      "first": "2018-09-12",
+      "last": "2024-06-28",
+      "raw_history_years": 5.79,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "LI",
+      "themes": [
+        "automotive",
+        "china_adr"
+      ],
+      "bars_clipped": 985,
+      "first": "2020-07-30",
+      "last": "2024-06-28",
+      "raw_history_years": 3.91,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "XPEV",
+      "themes": [
+        "automotive",
+        "china_adr"
+      ],
+      "bars_clipped": 965,
+      "first": "2020-08-27",
+      "last": "2024-06-28",
+      "raw_history_years": 3.84,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "STLA",
+      "themes": [
+        "automotive"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "TM",
+      "themes": [
+        "automotive"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "ALB",
+      "themes": [
+        "ev_supply"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "PLUG",
+      "themes": [
+        "ev_supply"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "BLNK",
+      "themes": [
+        "ev_supply"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "CHPT",
+      "themes": [
+        "ev_supply"
+      ],
+      "bars_clipped": 1205,
+      "first": "2019-09-16",
+      "last": "2024-06-28",
+      "raw_history_years": 4.78,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "ENPH",
+      "themes": [
+        "ev_supply"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "FSLR",
+      "themes": [
+        "ev_supply"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "RUN",
+      "themes": [
+        "ev_supply"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "JPM",
+      "themes": [
+        "finance"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "BAC",
+      "themes": [
+        "finance"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "WFC",
+      "themes": [
+        "finance"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "C",
+      "themes": [
+        "finance"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "GS",
+      "themes": [
+        "finance"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "MS",
+      "themes": [
+        "finance"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "USB",
+      "themes": [
+        "finance"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "PNC",
+      "themes": [
+        "finance"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "TFC",
+      "themes": [
+        "finance"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "SCHW",
+      "themes": [
+        "finance"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "V",
+      "themes": [
+        "fintech"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "MA",
+      "themes": [
+        "fintech"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "PYPL",
+      "themes": [
+        "fintech"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "XYZ",
+      "themes": [
+        "fintech"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "AXP",
+      "themes": [
+        "fintech"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "COIN",
+      "themes": [
+        "fintech",
+        "crypto"
+      ],
+      "bars_clipped": 808,
+      "first": "2021-04-14",
+      "last": "2024-06-28",
+      "raw_history_years": 3.21,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "HOOD",
+      "themes": [
+        "fintech"
+      ],
+      "bars_clipped": 734,
+      "first": "2021-07-29",
+      "last": "2024-06-28",
+      "raw_history_years": 2.92,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "SOFI",
+      "themes": [
+        "fintech"
+      ],
+      "bars_clipped": 877,
+      "first": "2021-01-04",
+      "last": "2024-06-28",
+      "raw_history_years": 3.48,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "AFRM",
+      "themes": [
+        "fintech"
+      ],
+      "bars_clipped": 870,
+      "first": "2021-01-13",
+      "last": "2024-06-28",
+      "raw_history_years": 3.46,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "UPST",
+      "themes": [
+        "fintech"
+      ],
+      "bars_clipped": 888,
+      "first": "2020-12-16",
+      "last": "2024-06-28",
+      "raw_history_years": 3.53,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "WMT",
+      "themes": [
+        "retail"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "COST",
+      "themes": [
+        "retail"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "HD",
+      "themes": [
+        "retail"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "TGT",
+      "themes": [
+        "retail"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "LOW",
+      "themes": [
+        "retail"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "NKE",
+      "themes": [
+        "retail"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "SBUX",
+      "themes": [
+        "retail"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "MCD",
+      "themes": [
+        "retail"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "TJX",
+      "themes": [
+        "retail"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "LVMUY",
+      "themes": [
+        "luxury"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "RMS.PA",
+      "themes": [
+        "luxury"
+      ],
+      "bars_clipped": 1664,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "CFRUY",
+      "themes": [
+        "luxury"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "EL",
+      "themes": [
+        "luxury"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "TPR",
+      "themes": [
+        "luxury"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "RL",
+      "themes": [
+        "luxury"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "PVH",
+      "themes": [
+        "luxury"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "NFLX",
+      "themes": [
+        "media_streaming"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "DIS",
+      "themes": [
+        "media_streaming"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "WBD",
+      "themes": [
+        "media_streaming"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "PSKY",
+      "themes": [
+        "media_streaming"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "ROKU",
+      "themes": [
+        "media_streaming"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "SPOT",
+      "themes": [
+        "media_streaming"
+      ],
+      "bars_clipped": 1571,
+      "first": "2018-04-03",
+      "last": "2024-06-28",
+      "raw_history_years": 6.24,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "FUBO",
+      "themes": [
+        "media_streaming"
+      ],
+      "bars_clipped": 1324,
+      "first": "2019-03-27",
+      "last": "2024-06-28",
+      "raw_history_years": 5.26,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "TKO",
+      "themes": [
+        "media_streaming"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "SNAP",
+      "themes": [
+        "social_internet"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "PINS",
+      "themes": [
+        "social_internet"
+      ],
+      "bars_clipped": 1308,
+      "first": "2019-04-18",
+      "last": "2024-06-28",
+      "raw_history_years": 5.2,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "RDDT",
+      "themes": [
+        "social_internet"
+      ],
+      "bars_clipped": 69,
+      "first": "2024-03-21",
+      "last": "2024-06-28",
+      "raw_history_years": 0.27,
+      "feature_ready": false,
+      "status": "ok"
+    },
+    {
+      "ticker": "BIDU",
+      "themes": [
+        "social_internet",
+        "china_adr"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "BABA",
+      "themes": [
+        "social_internet",
+        "china_adr"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "PDD",
+      "themes": [
+        "social_internet",
+        "china_adr"
+      ],
+      "bars_clipped": 1491,
+      "first": "2018-07-26",
+      "last": "2024-06-28",
+      "raw_history_years": 5.92,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "XOM",
+      "themes": [
+        "energy"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "CVX",
+      "themes": [
+        "energy"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "COP",
+      "themes": [
+        "energy"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "SLB",
+      "themes": [
+        "energy"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "EOG",
+      "themes": [
+        "energy"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "MPC",
+      "themes": [
+        "energy"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "VLO",
+      "themes": [
+        "energy"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "PSX",
+      "themes": [
+        "energy"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "OXY",
+      "themes": [
+        "energy"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "DVN",
+      "themes": [
+        "energy"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "NEE",
+      "themes": [
+        "utilities"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "DUK",
+      "themes": [
+        "utilities"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "SO",
+      "themes": [
+        "utilities"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "AEP",
+      "themes": [
+        "utilities"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "EXC",
+      "themes": [
+        "utilities"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "SRE",
+      "themes": [
+        "utilities"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "D",
+      "themes": [
+        "utilities"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "PCG",
+      "themes": [
+        "utilities"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "VST",
+      "themes": [
+        "utilities"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "CEG",
+      "themes": [
+        "utilities"
+      ],
+      "bars_clipped": 614,
+      "first": "2022-01-19",
+      "last": "2024-06-28",
+      "raw_history_years": 2.44,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "LMT",
+      "themes": [
+        "defense_aero"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "RTX",
+      "themes": [
+        "defense_aero"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "NOC",
+      "themes": [
+        "defense_aero"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "GD",
+      "themes": [
+        "defense_aero"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "BA",
+      "themes": [
+        "defense_aero"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "LHX",
+      "themes": [
+        "defense_aero"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "TDG",
+      "themes": [
+        "defense_aero"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "HEI",
+      "themes": [
+        "defense_aero"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "TXT",
+      "themes": [
+        "defense_aero"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "DAL",
+      "themes": [
+        "airlines"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "UAL",
+      "themes": [
+        "airlines"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "AAL",
+      "themes": [
+        "airlines"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "LUV",
+      "themes": [
+        "airlines"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "ALK",
+      "themes": [
+        "airlines"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "JBLU",
+      "themes": [
+        "airlines"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "RYAAY",
+      "themes": [
+        "airlines"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "CPA",
+      "themes": [
+        "airlines"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "PLD",
+      "themes": [
+        "real_estate"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "AMT",
+      "themes": [
+        "real_estate"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "EQIX",
+      "themes": [
+        "real_estate"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "CCI",
+      "themes": [
+        "real_estate"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "SPG",
+      "themes": [
+        "real_estate"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "O",
+      "themes": [
+        "real_estate"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "PSA",
+      "themes": [
+        "real_estate"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "DLR",
+      "themes": [
+        "real_estate"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "WELL",
+      "themes": [
+        "real_estate"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "VICI",
+      "themes": [
+        "real_estate"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "MARA",
+      "themes": [
+        "crypto"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "RIOT",
+      "themes": [
+        "crypto"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "MSTR",
+      "themes": [
+        "crypto"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "HUT",
+      "themes": [
+        "crypto"
+      ],
+      "bars_clipped": 1588,
+      "first": "2018-03-08",
+      "last": "2024-06-28",
+      "raw_history_years": 6.31,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "CLSK",
+      "themes": [
+        "crypto"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "WULF",
+      "themes": [
+        "crypto"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "CIFR",
+      "themes": [
+        "crypto"
+      ],
+      "bars_clipped": 928,
+      "first": "2020-10-20",
+      "last": "2024-06-28",
+      "raw_history_years": 3.69,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "BTBT",
+      "themes": [
+        "crypto"
+      ],
+      "bars_clipped": 1580,
+      "first": "2018-03-20",
+      "last": "2024-06-28",
+      "raw_history_years": 6.28,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "JD",
+      "themes": [
+        "china_adr"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "NTES",
+      "themes": [
+        "china_adr"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "TME",
+      "themes": [
+        "china_adr"
+      ],
+      "bars_clipped": 1395,
+      "first": "2018-12-12",
+      "last": "2024-06-28",
+      "raw_history_years": 5.54,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "TAL",
+      "themes": [
+        "china_adr"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "BILI",
+      "themes": [
+        "china_adr"
+      ],
+      "bars_clipped": 1574,
+      "first": "2018-03-28",
+      "last": "2024-06-28",
+      "raw_history_years": 6.25,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "IQ",
+      "themes": [
+        "china_adr"
+      ],
+      "bars_clipped": 1573,
+      "first": "2018-03-29",
+      "last": "2024-06-28",
+      "raw_history_years": 6.25,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "T",
+      "themes": [
+        "telecom"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "VZ",
+      "themes": [
+        "telecom"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "TMUS",
+      "themes": [
+        "telecom"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "CHTR",
+      "themes": [
+        "telecom"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "CMCSA",
+      "themes": [
+        "telecom"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "VOD",
+      "themes": [
+        "telecom"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "AMX",
+      "themes": [
+        "telecom"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "CAT",
+      "themes": [
+        "industrials"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "DE",
+      "themes": [
+        "industrials"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "HON",
+      "themes": [
+        "industrials"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "GE",
+      "themes": [
+        "industrials"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "MMM",
+      "themes": [
+        "industrials"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "UPS",
+      "themes": [
+        "industrials"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "FDX",
+      "themes": [
+        "industrials"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "EMR",
+      "themes": [
+        "industrials"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "ETN",
+      "themes": [
+        "industrials"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "ITW",
+      "themes": [
+        "industrials"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "SPY",
+      "themes": [
+        "etfs"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "QQQ",
+      "themes": [
+        "etfs"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "IWM",
+      "themes": [
+        "etfs"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "DIA",
+      "themes": [
+        "etfs"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "VTI",
+      "themes": [
+        "etfs"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "VOO",
+      "themes": [
+        "etfs"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "ARKK",
+      "themes": [
+        "etfs"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "SOXX",
+      "themes": [
+        "etfs"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "XLF",
+      "themes": [
+        "etfs"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "XLE",
+      "themes": [
+        "etfs"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "GLD",
+      "themes": [
+        "etfs"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    },
+    {
+      "ticker": "TLT",
+      "themes": [
+        "etfs"
+      ],
+      "bars_clipped": 1633,
+      "first": "2018-01-02",
+      "last": "2024-06-28",
+      "raw_history_years": 6.49,
+      "feature_ready": true,
+      "status": "ok"
+    }
+  ],
+  "themes": {
+    "semiconductors": {
+      "theme_id": "semiconductors",
+      "members_in_panel": 14,
+      "valid_dates": 1634,
+      "zero_result_dates": 1303,
+      "missing_data_dates": 30,
+      "warmup_dates": 221,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 452,
+          "rejected": 20976,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              16835
+            ],
+            [
+              "TREND_DIRECTION",
+              13507
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              8024
+            ],
+            [
+              "WEAK_STRUCTURE",
+              5703
+            ],
+            [
+              "LH_LL",
+              5697
+            ],
+            [
+              "EXTENDED",
+              3560
+            ],
+            [
+              "INVALIDATED",
+              3270
+            ],
+            [
+              "MISSING_SCORE",
+              3077
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 0,
+          "rejected": 21428,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              17593
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              13614
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              10559
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              9074
+            ],
+            [
+              "BELOW_SMA50",
+              8407
+            ],
+            [
+              "SMA50_SLOPE",
+              8224
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              6758
+            ],
+            [
+              "LOW_CLV",
+              6472
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 7,
+          "rejected": 21421,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              17908
+            ],
+            [
+              "TREND_DIRECTION",
+              13507
+            ],
+            [
+              "NO_REBOUND",
+              13281
+            ],
+            [
+              "LOW_CLV",
+              11173
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              7889
+            ],
+            [
+              "LOW_RVOL",
+              7292
+            ],
+            [
+              "WEAK_STRUCTURE",
+              5703
+            ],
+            [
+              "EXTENDED",
+              3560
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 0,
+          "rejected": 21428,
+          "top_rejections": [
+            [
+              "MISSING_SCORE",
+              21030
+            ],
+            [
+              "LOW_COVERAGE",
+              21030
+            ],
+            [
+              "BELOW_SMA50",
+              8853
+            ],
+            [
+              "SMA50_SLOPE",
+              8668
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              6724
+            ],
+            [
+              "WEAK_STRUCTURE",
+              6097
+            ],
+            [
+              "SHORT_HISTORY",
+              4476
+            ],
+            [
+              "EXTENDED",
+              3560
+            ]
+          ]
+        }
+      },
+      "funnel": {
+        "data_missing": 1592,
+        "warmup": 13270,
+        "setup_not_met": 13410,
+        "risk_or_tradability": 4645,
+        "score_floor": 52336,
+        "eligible": 459
+      },
+      "eligible_name_sessions": 459,
+      "sampled_eligible_set_changes": null,
+      "independent_events": null,
+      "event_definition": {
+        "independent_events": 4514,
+        "sampled_eligible_set_changes": null,
+        "usable_for_independent_sample": true,
+        "definition": "SECURITY_FAMILY_HORIZON_TIME_OVERLAP",
+        "reason": null
+      },
+      "empty_result_ratio": 0.7974296205630355
+    },
+    "software": {
+      "theme_id": "software",
+      "members_in_panel": 12,
+      "valid_dates": 1634,
+      "zero_result_dates": 1257,
+      "missing_data_dates": 38,
+      "warmup_dates": 213,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 321,
+          "rejected": 16683,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              13132
+            ],
+            [
+              "TREND_DIRECTION",
+              11199
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              6813
+            ],
+            [
+              "HIGH_ATR",
+              4584
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3948
+            ],
+            [
+              "LH_LL",
+              3942
+            ],
+            [
+              "EXTENDED",
+              2756
+            ],
+            [
+              "MISSING_SCORE",
+              2624
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 0,
+          "rejected": 17004,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              13423
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              11378
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              9454
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              7198
+            ],
+            [
+              "BELOW_SMA50",
+              6464
+            ],
+            [
+              "SMA50_SLOPE",
+              6431
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              4760
+            ],
+            [
+              "HIGH_ATR",
+              4584
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 2,
+          "rejected": 17002,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              13937
+            ],
+            [
+              "TREND_DIRECTION",
+              11199
+            ],
+            [
+              "NO_REBOUND",
+              10340
+            ],
+            [
+              "LOW_CLV",
+              8802
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              7170
+            ],
+            [
+              "LOW_RVOL",
+              6439
+            ],
+            [
+              "HIGH_ATR",
+              4584
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3948
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 378,
+          "rejected": 16626,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10615
+            ],
+            [
+              "BELOW_SMA50",
+              6839
+            ],
+            [
+              "SMA50_SLOPE",
+              6806
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              5857
+            ],
+            [
+              "MISSING_SCORE",
+              5123
+            ],
+            [
+              "LOW_COVERAGE",
+              5123
+            ],
+            [
+              "HIGH_ATR",
+              4584
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4335
+            ]
+          ]
+        }
+      },
+      "funnel": {
+        "data_missing": 1600,
+        "warmup": 11384,
+        "setup_not_met": 1747,
+        "risk_or_tradability": 1477,
+        "score_floor": 51107,
+        "eligible": 701
+      },
+      "eligible_name_sessions": 701,
+      "sampled_eligible_set_changes": null,
+      "independent_events": null,
+      "event_definition": {
+        "independent_events": 4514,
+        "sampled_eligible_set_changes": null,
+        "usable_for_independent_sample": true,
+        "definition": "SECURITY_FAMILY_HORIZON_TIME_OVERLAP",
+        "reason": null
+      },
+      "empty_result_ratio": 0.7692778457772338
+    },
+    "ai_cloud": {
+      "theme_id": "ai_cloud",
+      "members_in_panel": 9,
+      "valid_dates": 1634,
+      "zero_result_dates": 1368,
+      "missing_data_dates": 30,
+      "warmup_dates": 221,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 349,
+          "rejected": 13657,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10729
+            ],
+            [
+              "TREND_DIRECTION",
+              8574
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              5366
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3306
+            ],
+            [
+              "LH_LL",
+              3255
+            ],
+            [
+              "EXTENDED",
+              2492
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              2028
+            ],
+            [
+              "MISSING_SCORE",
+              2011
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 0,
+          "rejected": 14006,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              11296
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              9417
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              7978
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              6340
+            ],
+            [
+              "BELOW_SMA50",
+              5137
+            ],
+            [
+              "SMA50_SLOPE",
+              4961
+            ],
+            [
+              "LOW_CLV",
+              4093
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              3926
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 7,
+          "rejected": 13999,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              11697
+            ],
+            [
+              "TREND_DIRECTION",
+              8574
+            ],
+            [
+              "NO_REBOUND",
+              8527
+            ],
+            [
+              "LOW_CLV",
+              7283
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              5053
+            ],
+            [
+              "LOW_RVOL",
+              5019
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3306
+            ],
+            [
+              "EXTENDED",
+              2492
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 0,
+          "rejected": 14006,
+          "top_rejections": [
+            [
+              "MISSING_SCORE",
+              13744
+            ],
+            [
+              "LOW_COVERAGE",
+              13744
+            ],
+            [
+              "BELOW_SMA50",
+              5424
+            ],
+            [
+              "SMA50_SLOPE",
+              5248
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              4417
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3562
+            ],
+            [
+              "SHORT_HISTORY",
+              2961
+            ],
+            [
+              "EXTENDED",
+              2492
+            ]
+          ]
+        }
+      },
+      "funnel": {
+        "data_missing": 1048,
+        "warmup": 8690,
+        "setup_not_met": 8273,
+        "score_floor": 33722,
+        "risk_or_tradability": 3935,
+        "eligible": 356
+      },
+      "eligible_name_sessions": 356,
+      "sampled_eligible_set_changes": null,
+      "independent_events": null,
+      "event_definition": {
+        "independent_events": 4514,
+        "sampled_eligible_set_changes": null,
+        "usable_for_independent_sample": true,
+        "definition": "SECURITY_FAMILY_HORIZON_TIME_OVERLAP",
+        "reason": null
+      },
+      "empty_result_ratio": 0.8372093023255814
+    },
+    "biotech": {
+      "theme_id": "biotech",
+      "members_in_panel": 10,
+      "valid_dates": 1634,
+      "zero_result_dates": 1082,
+      "missing_data_dates": 33,
+      "warmup_dates": 218,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 537,
+          "rejected": 15112,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              12004
+            ],
+            [
+              "TREND_DIRECTION",
+              10923
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              6438
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4289
+            ],
+            [
+              "LH_LL",
+              4280
+            ],
+            [
+              "INVALIDATED",
+              2433
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              2340
+            ],
+            [
+              "MISSING_SCORE",
+              2191
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 0,
+          "rejected": 15649,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              12435
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              9716
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              9294
+            ],
+            [
+              "BELOW_SMA50",
+              6678
+            ],
+            [
+              "SMA50_SLOPE",
+              6525
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              5713
+            ],
+            [
+              "LOW_CLV",
+              5079
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              5039
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 11,
+          "rejected": 15638,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              12999
+            ],
+            [
+              "TREND_DIRECTION",
+              10923
+            ],
+            [
+              "NO_REBOUND",
+              9771
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              8283
+            ],
+            [
+              "LOW_CLV",
+              8253
+            ],
+            [
+              "LOW_RVOL",
+              5785
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4289
+            ],
+            [
+              "SUPPORT_BROKEN",
+              2467
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 739,
+          "rejected": 14910,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              8960
+            ],
+            [
+              "BELOW_SMA50",
+              7184
+            ],
+            [
+              "SMA50_SLOPE",
+              7035
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              5595
+            ],
+            [
+              "MISSING_SCORE",
+              4761
+            ],
+            [
+              "LOW_COVERAGE",
+              4761
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4624
+            ],
+            [
+              "SHORT_HISTORY",
+              3290
+            ]
+          ]
+        }
+      },
+      "funnel": {
+        "data_missing": 1356,
+        "warmup": 9464,
+        "setup_not_met": 2710,
+        "score_floor": 46398,
+        "eligible": 1287,
+        "risk_or_tradability": 1381
+      },
+      "eligible_name_sessions": 1287,
+      "sampled_eligible_set_changes": null,
+      "independent_events": null,
+      "event_definition": {
+        "independent_events": 4514,
+        "sampled_eligible_set_changes": null,
+        "usable_for_independent_sample": true,
+        "definition": "SECURITY_FAMILY_HORIZON_TIME_OVERLAP",
+        "reason": null
+      },
+      "empty_result_ratio": 0.6621787025703795
+    },
+    "healthcare": {
+      "theme_id": "healthcare",
+      "members_in_panel": 10,
+      "valid_dates": 1634,
+      "zero_result_dates": 1047,
+      "missing_data_dates": 30,
+      "warmup_dates": 221,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 377,
+          "rejected": 15953,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              12933
+            ],
+            [
+              "TREND_DIRECTION",
+              11730
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              6931
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4533
+            ],
+            [
+              "LH_LL",
+              4533
+            ],
+            [
+              "INVALIDATED",
+              2531
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              2476
+            ],
+            [
+              "MISSING_SCORE",
+              2192
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 2,
+          "rejected": 16328,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              13216
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              9611
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              8241
+            ],
+            [
+              "BELOW_SMA50",
+              6860
+            ],
+            [
+              "SMA50_SLOPE",
+              6663
+            ],
+            [
+              "LOW_CLV",
+              6449
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              5859
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              5338
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 5,
+          "rejected": 16325,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              13738
+            ],
+            [
+              "TREND_DIRECTION",
+              11730
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              10474
+            ],
+            [
+              "NO_REBOUND",
+              10125
+            ],
+            [
+              "LOW_CLV",
+              8568
+            ],
+            [
+              "LOW_RVOL",
+              5160
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4533
+            ],
+            [
+              "SUPPORT_BROKEN",
+              2579
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 732,
+          "rejected": 15598,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              9126
+            ],
+            [
+              "BELOW_SMA50",
+              7365
+            ],
+            [
+              "SMA50_SLOPE",
+              7178
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              5859
+            ],
+            [
+              "MISSING_SCORE",
+              5212
+            ],
+            [
+              "LOW_COVERAGE",
+              5212
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4861
+            ],
+            [
+              "SHORT_HISTORY",
+              3290
+            ]
+          ]
+        }
+      },
+      "funnel": {
+        "data_missing": 1312,
+        "warmup": 9508,
+        "setup_not_met": 3227,
+        "score_floor": 49013,
+        "eligible": 1116,
+        "risk_or_tradability": 1144
+      },
+      "eligible_name_sessions": 1116,
+      "sampled_eligible_set_changes": null,
+      "independent_events": null,
+      "event_definition": {
+        "independent_events": 4514,
+        "sampled_eligible_set_changes": null,
+        "usable_for_independent_sample": true,
+        "definition": "SECURITY_FAMILY_HORIZON_TIME_OVERLAP",
+        "reason": null
+      },
+      "empty_result_ratio": 0.6407588739290085
+    },
+    "consumer_electronics": {
+      "theme_id": "consumer_electronics",
+      "members_in_panel": 5,
+      "valid_dates": 1634,
+      "zero_result_dates": 1370,
+      "missing_data_dates": 30,
+      "warmup_dates": 221,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 145,
+          "rejected": 8020,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              6476
+            ],
+            [
+              "TREND_DIRECTION",
+              5511
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              3508
+            ],
+            [
+              "WEAK_STRUCTURE",
+              2042
+            ],
+            [
+              "LH_LL",
+              2025
+            ],
+            [
+              "EXTENDED",
+              1626
+            ],
+            [
+              "INVALIDATED",
+              1305
+            ],
+            [
+              "MISSING_SCORE",
+              1080
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 0,
+          "rejected": 8165,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              6705
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              5619
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              4673
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              3585
+            ],
+            [
+              "SMA50_SLOPE",
+              3240
+            ],
+            [
+              "BELOW_SMA50",
+              3171
+            ],
+            [
+              "LOW_CLV",
+              2489
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              2073
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 5,
+          "rejected": 8160,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              6883
+            ],
+            [
+              "TREND_DIRECTION",
+              5511
+            ],
+            [
+              "NO_REBOUND",
+              5195
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              4510
+            ],
+            [
+              "LOW_CLV",
+              4285
+            ],
+            [
+              "LOW_RVOL",
+              3096
+            ],
+            [
+              "WEAK_STRUCTURE",
+              2042
+            ],
+            [
+              "EXTENDED",
+              1626
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 238,
+          "rejected": 7927,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              4777
+            ],
+            [
+              "SMA50_SLOPE",
+              3434
+            ],
+            [
+              "BELOW_SMA50",
+              3361
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              2592
+            ],
+            [
+              "MISSING_SCORE",
+              2590
+            ],
+            [
+              "LOW_COVERAGE",
+              2590
+            ],
+            [
+              "WEAK_STRUCTURE",
+              2222
+            ],
+            [
+              "SHORT_HISTORY",
+              1645
+            ]
+          ]
+        }
+      },
+      "funnel": {
+        "data_missing": 720,
+        "warmup": 4690,
+        "setup_not_met": 1180,
+        "score_floor": 24841,
+        "risk_or_tradability": 841,
+        "eligible": 388
+      },
+      "eligible_name_sessions": 388,
+      "sampled_eligible_set_changes": null,
+      "independent_events": null,
+      "event_definition": {
+        "independent_events": 4514,
+        "sampled_eligible_set_changes": null,
+        "usable_for_independent_sample": true,
+        "definition": "SECURITY_FAMILY_HORIZON_TIME_OVERLAP",
+        "reason": null
+      },
+      "empty_result_ratio": 0.8384332925336597
+    },
+    "automotive": {
+      "theme_id": "automotive",
+      "members_in_panel": 10,
+      "valid_dates": 1634,
+      "zero_result_dates": 1548,
+      "missing_data_dates": 27,
+      "warmup_dates": 224,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 18,
+          "rejected": 13166,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10557
+            ],
+            [
+              "TREND_DIRECTION",
+              10523
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              7671
+            ],
+            [
+              "HIGH_ATR",
+              5401
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4468
+            ],
+            [
+              "LH_LL",
+              4430
+            ],
+            [
+              "INVALIDATED",
+              2559
+            ],
+            [
+              "MISSING_SCORE",
+              2250
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 0,
+          "rejected": 13184,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10612
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              7185
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              6891
+            ],
+            [
+              "SMA50_SLOPE",
+              6828
+            ],
+            [
+              "BELOW_SMA50",
+              6777
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              5608
+            ],
+            [
+              "LOW_CLV",
+              5574
+            ],
+            [
+              "HIGH_ATR",
+              5401
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 0,
+          "rejected": 13184,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10646
+            ],
+            [
+              "TREND_DIRECTION",
+              10523
+            ],
+            [
+              "NO_REBOUND",
+              8821
+            ],
+            [
+              "LOW_CLV",
+              7315
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              5981
+            ],
+            [
+              "HIGH_ATR",
+              5401
+            ],
+            [
+              "LOW_RVOL",
+              5069
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4468
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 79,
+          "rejected": 13105,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              8474
+            ],
+            [
+              "SMA50_SLOPE",
+              7163
+            ],
+            [
+              "BELOW_SMA50",
+              7112
+            ],
+            [
+              "HIGH_ATR",
+              5401
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4734
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              4618
+            ],
+            [
+              "MISSING_SCORE",
+              4195
+            ],
+            [
+              "LOW_COVERAGE",
+              4195
+            ]
+          ]
+        }
+      },
+      "funnel": {
+        "data_missing": 1080,
+        "warmup": 9740,
+        "risk_or_tradability": 574,
+        "setup_not_met": 956,
+        "score_floor": 40289,
+        "eligible": 97
+      },
+      "eligible_name_sessions": 97,
+      "sampled_eligible_set_changes": null,
+      "independent_events": null,
+      "event_definition": {
+        "independent_events": 4514,
+        "sampled_eligible_set_changes": null,
+        "usable_for_independent_sample": true,
+        "definition": "SECURITY_FAMILY_HORIZON_TIME_OVERLAP",
+        "reason": null
+      },
+      "empty_result_ratio": 0.9473684210526315
+    },
+    "ev_supply": {
+      "theme_id": "ev_supply",
+      "members_in_panel": 10,
+      "valid_dates": 1634,
+      "zero_result_dates": 1603,
+      "missing_data_dates": 29,
+      "warmup_dates": 221,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 32,
+          "rejected": 14215,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              11622
+            ],
+            [
+              "TREND_DIRECTION",
+              11417
+            ],
+            [
+              "HIGH_ATR",
+              9862
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              8364
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4346
+            ],
+            [
+              "LH_LL",
+              4264
+            ],
+            [
+              "INVALIDATED",
+              2673
+            ],
+            [
+              "MISSING_SCORE",
+              2237
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 0,
+          "rejected": 14247,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              11678
+            ],
+            [
+              "HIGH_ATR",
+              9862
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              8280
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              7586
+            ],
+            [
+              "SMA50_SLOPE",
+              7360
+            ],
+            [
+              "BELOW_SMA50",
+              7221
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              5789
+            ],
+            [
+              "LOW_CLV",
+              5201
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 0,
+          "rejected": 14247,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              11708
+            ],
+            [
+              "TREND_DIRECTION",
+              11417
+            ],
+            [
+              "HIGH_ATR",
+              9862
+            ],
+            [
+              "NO_REBOUND",
+              9342
+            ],
+            [
+              "LOW_CLV",
+              8012
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              7110
+            ],
+            [
+              "LOW_RVOL",
+              6145
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4346
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 11,
+          "rejected": 14236,
+          "top_rejections": [
+            [
+              "HIGH_ATR",
+              9862
+            ],
+            [
+              "LOW_SCORE",
+              9353
+            ],
+            [
+              "SMA50_SLOPE",
+              7825
+            ],
+            [
+              "BELOW_SMA50",
+              7687
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              5185
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4629
+            ],
+            [
+              "MISSING_SCORE",
+              4582
+            ],
+            [
+              "LOW_COVERAGE",
+              4582
+            ]
+          ]
+        }
+      },
+      "funnel": {
+        "data_missing": 1080,
+        "risk_or_tradability": 1329,
+        "warmup": 9701,
+        "setup_not_met": 474,
+        "score_floor": 44361,
+        "eligible": 43
+      },
+      "eligible_name_sessions": 43,
+      "sampled_eligible_set_changes": null,
+      "independent_events": null,
+      "event_definition": {
+        "independent_events": 4514,
+        "sampled_eligible_set_changes": null,
+        "usable_for_independent_sample": true,
+        "definition": "SECURITY_FAMILY_HORIZON_TIME_OVERLAP",
+        "reason": null
+      },
+      "empty_result_ratio": 0.9810281517747858
+    },
+    "finance": {
+      "theme_id": "finance",
+      "members_in_panel": 10,
+      "valid_dates": 1634,
+      "zero_result_dates": 1515,
+      "missing_data_dates": 37,
+      "warmup_dates": 214,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 162,
+          "rejected": 16168,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              13464
+            ],
+            [
+              "TREND_DIRECTION",
+              12086
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              8754
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4607
+            ],
+            [
+              "LH_LL",
+              4589
+            ],
+            [
+              "INVALIDATED",
+              2740
+            ],
+            [
+              "EXTENDED",
+              2245
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              2227
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 0,
+          "rejected": 16330,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              13591
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              9712
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              8275
+            ],
+            [
+              "SMA50_SLOPE",
+              7484
+            ],
+            [
+              "BELOW_SMA50",
+              7334
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              7324
+            ],
+            [
+              "LOW_CLV",
+              6484
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4607
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 4,
+          "rejected": 16326,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              13782
+            ],
+            [
+              "TREND_DIRECTION",
+              12086
+            ],
+            [
+              "NO_REBOUND",
+              10435
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              8760
+            ],
+            [
+              "LOW_CLV",
+              8630
+            ],
+            [
+              "LOW_RVOL",
+              5201
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4607
+            ],
+            [
+              "SUPPORT_BROKEN",
+              2761
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 0,
+          "rejected": 16330,
+          "top_rejections": [
+            [
+              "MISSING_SCORE",
+              15967
+            ],
+            [
+              "LOW_COVERAGE",
+              15967
+            ],
+            [
+              "SMA50_SLOPE",
+              7799
+            ],
+            [
+              "BELOW_SMA50",
+              7649
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              5441
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4970
+            ],
+            [
+              "SHORT_HISTORY",
+              3290
+            ],
+            [
+              "INVALIDATED",
+              2740
+            ]
+          ]
+        }
+      },
+      "funnel": {
+        "data_missing": 1452,
+        "warmup": 9368,
+        "setup_not_met": 11001,
+        "score_floor": 40837,
+        "risk_or_tradability": 2496,
+        "eligible": 166
+      },
+      "eligible_name_sessions": 166,
+      "sampled_eligible_set_changes": null,
+      "independent_events": null,
+      "event_definition": {
+        "independent_events": 4514,
+        "sampled_eligible_set_changes": null,
+        "usable_for_independent_sample": true,
+        "definition": "SECURITY_FAMILY_HORIZON_TIME_OVERLAP",
+        "reason": null
+      },
+      "empty_result_ratio": 0.927172582619339
+    },
+    "fintech": {
+      "theme_id": "fintech",
+      "members_in_panel": 10,
+      "valid_dates": 1634,
+      "zero_result_dates": 1409,
+      "missing_data_dates": 35,
+      "warmup_dates": 216,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 186,
+          "rejected": 12156,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              9436
+            ],
+            [
+              "TREND_DIRECTION",
+              9244
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              6260
+            ],
+            [
+              "HIGH_ATR",
+              4678
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3303
+            ],
+            [
+              "LH_LL",
+              3294
+            ],
+            [
+              "MISSING_SCORE",
+              2237
+            ],
+            [
+              "LOW_COVERAGE",
+              2237
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 0,
+          "rejected": 12342,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              9499
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              7860
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              7576
+            ],
+            [
+              "BELOW_SMA50",
+              5758
+            ],
+            [
+              "SMA50_SLOPE",
+              5485
+            ],
+            [
+              "HIGH_ATR",
+              4678
+            ],
+            [
+              "LOW_CLV",
+              4258
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              4101
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 10,
+          "rejected": 12332,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              9788
+            ],
+            [
+              "TREND_DIRECTION",
+              9244
+            ],
+            [
+              "NO_REBOUND",
+              7704
+            ],
+            [
+              "LOW_CLV",
+              6539
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              4876
+            ],
+            [
+              "LOW_RVOL",
+              4684
+            ],
+            [
+              "HIGH_ATR",
+              4678
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3303
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 137,
+          "rejected": 12205,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              7572
+            ],
+            [
+              "BELOW_SMA50",
+              6082
+            ],
+            [
+              "SMA50_SLOPE",
+              5809
+            ],
+            [
+              "HIGH_ATR",
+              4678
+            ],
+            [
+              "MISSING_SCORE",
+              4132
+            ],
+            [
+              "LOW_COVERAGE",
+              4132
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              3986
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3585
+            ]
+          ]
+        }
+      },
+      "funnel": {
+        "data_missing": 1132,
+        "warmup": 9688,
+        "setup_not_met": 1330,
+        "score_floor": 36295,
+        "risk_or_tradability": 590,
+        "eligible": 333
+      },
+      "eligible_name_sessions": 333,
+      "sampled_eligible_set_changes": null,
+      "independent_events": null,
+      "event_definition": {
+        "independent_events": 4514,
+        "sampled_eligible_set_changes": null,
+        "usable_for_independent_sample": true,
+        "definition": "SECURITY_FAMILY_HORIZON_TIME_OVERLAP",
+        "reason": null
+      },
+      "empty_result_ratio": 0.8623011015911872
+    },
+    "retail": {
+      "theme_id": "retail",
+      "members_in_panel": 10,
+      "valid_dates": 1634,
+      "zero_result_dates": 1276,
+      "missing_data_dates": 35,
+      "warmup_dates": 216,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 479,
+          "rejected": 15851,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              12788
+            ],
+            [
+              "TREND_DIRECTION",
+              10741
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              5959
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3937
+            ],
+            [
+              "LH_LL",
+              3927
+            ],
+            [
+              "EXTENDED",
+              2619
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              2403
+            ],
+            [
+              "INVALIDATED",
+              2346
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 0,
+          "rejected": 16330,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              13199
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              10594
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              8280
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              6982
+            ],
+            [
+              "BELOW_SMA50",
+              6301
+            ],
+            [
+              "SMA50_SLOPE",
+              6054
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              5006
+            ],
+            [
+              "LOW_CLV",
+              4766
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 15,
+          "rejected": 16315,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              13723
+            ],
+            [
+              "TREND_DIRECTION",
+              10741
+            ],
+            [
+              "NO_REBOUND",
+              10040
+            ],
+            [
+              "LOW_CLV",
+              8565
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              8438
+            ],
+            [
+              "LOW_RVOL",
+              5333
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3937
+            ],
+            [
+              "EXTENDED",
+              2619
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 0,
+          "rejected": 16330,
+          "top_rejections": [
+            [
+              "MISSING_SCORE",
+              16005
+            ],
+            [
+              "LOW_COVERAGE",
+              16005
+            ],
+            [
+              "BELOW_SMA50",
+              6654
+            ],
+            [
+              "SMA50_SLOPE",
+              6405
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              5686
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4262
+            ],
+            [
+              "SHORT_HISTORY",
+              3290
+            ],
+            [
+              "EXTENDED",
+              2619
+            ]
+          ]
+        }
+      },
+      "funnel": {
+        "data_missing": 1300,
+        "warmup": 9520,
+        "setup_not_met": 11411,
+        "score_floor": 39710,
+        "eligible": 494,
+        "risk_or_tradability": 2885
+      },
+      "eligible_name_sessions": 494,
+      "sampled_eligible_set_changes": null,
+      "independent_events": null,
+      "event_definition": {
+        "independent_events": 4514,
+        "sampled_eligible_set_changes": null,
+        "usable_for_independent_sample": true,
+        "definition": "SECURITY_FAMILY_HORIZON_TIME_OVERLAP",
+        "reason": null
+      },
+      "empty_result_ratio": 0.780905752753978
+    },
+    "luxury": {
+      "theme_id": "luxury",
+      "members_in_panel": 7,
+      "valid_dates": 1634,
+      "zero_result_dates": 1472,
+      "missing_data_dates": 30,
+      "warmup_dates": 218,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 152,
+          "rejected": 11265,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              9245
+            ],
+            [
+              "TREND_DIRECTION",
+              8263
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              5256
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3059
+            ],
+            [
+              "LH_LL",
+              3027
+            ],
+            [
+              "LOW_ADV",
+              2469
+            ],
+            [
+              "EXTENDED",
+              1932
+            ],
+            [
+              "INVALIDATED",
+              1825
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 0,
+          "rejected": 11417,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              9417
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              7043
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              6873
+            ],
+            [
+              "SMA50_SLOPE",
+              4984
+            ],
+            [
+              "BELOW_SMA50",
+              4932
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              4789
+            ],
+            [
+              "LOW_CLV",
+              4252
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              3790
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 5,
+          "rejected": 11412,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              9610
+            ],
+            [
+              "TREND_DIRECTION",
+              8263
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              7240
+            ],
+            [
+              "NO_REBOUND",
+              7209
+            ],
+            [
+              "LOW_CLV",
+              5825
+            ],
+            [
+              "LOW_RVOL",
+              4378
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3059
+            ],
+            [
+              "LOW_ADV",
+              2469
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 55,
+          "rejected": 11362,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              6272
+            ],
+            [
+              "SMA50_SLOPE",
+              5283
+            ],
+            [
+              "BELOW_SMA50",
+              5229
+            ],
+            [
+              "MISSING_SCORE",
+              4727
+            ],
+            [
+              "LOW_COVERAGE",
+              4727
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              3335
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3275
+            ],
+            [
+              "MISSING_DAY_RETURN",
+              2639
+            ]
+          ]
+        }
+      },
+      "funnel": {
+        "data_missing": 864,
+        "warmup": 6684,
+        "setup_not_met": 2468,
+        "score_floor": 34544,
+        "risk_or_tradability": 896,
+        "eligible": 212
+      },
+      "eligible_name_sessions": 212,
+      "sampled_eligible_set_changes": null,
+      "independent_events": null,
+      "event_definition": {
+        "independent_events": 4514,
+        "sampled_eligible_set_changes": null,
+        "usable_for_independent_sample": true,
+        "definition": "SECURITY_FAMILY_HORIZON_TIME_OVERLAP",
+        "reason": null
+      },
+      "empty_result_ratio": 0.9008567931456548
+    },
+    "media_streaming": {
+      "theme_id": "media_streaming",
+      "members_in_panel": 8,
+      "valid_dates": 1634,
+      "zero_result_dates": 1369,
+      "missing_data_dates": 29,
+      "warmup_dates": 222,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 146,
+          "rejected": 12547,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10226
+            ],
+            [
+              "TREND_DIRECTION",
+              9915
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              7172
+            ],
+            [
+              "HIGH_ATR",
+              4121
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3931
+            ],
+            [
+              "LH_LL",
+              3888
+            ],
+            [
+              "INVALIDATED",
+              2300
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              1893
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 0,
+          "rejected": 12693,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10454
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              7021
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              6989
+            ],
+            [
+              "BELOW_SMA50",
+              6308
+            ],
+            [
+              "SMA50_SLOPE",
+              6196
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              5051
+            ],
+            [
+              "LOW_CLV",
+              4637
+            ],
+            [
+              "HIGH_ATR",
+              4121
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 7,
+          "rejected": 12686,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10627
+            ],
+            [
+              "TREND_DIRECTION",
+              9915
+            ],
+            [
+              "NO_REBOUND",
+              8075
+            ],
+            [
+              "LOW_CLV",
+              6900
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              6045
+            ],
+            [
+              "LOW_RVOL",
+              5455
+            ],
+            [
+              "HIGH_ATR",
+              4121
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3931
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 198,
+          "rejected": 12495,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              8055
+            ],
+            [
+              "BELOW_SMA50",
+              6582
+            ],
+            [
+              "SMA50_SLOPE",
+              6470
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              4450
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4157
+            ],
+            [
+              "HIGH_ATR",
+              4121
+            ],
+            [
+              "MISSING_SCORE",
+              3923
+            ],
+            [
+              "LOW_COVERAGE",
+              3923
+            ]
+          ]
+        }
+      },
+      "funnel": {
+        "data_missing": 912,
+        "warmup": 7744,
+        "setup_not_met": 1411,
+        "risk_or_tradability": 992,
+        "score_floor": 39362,
+        "eligible": 351
+      },
+      "eligible_name_sessions": 351,
+      "sampled_eligible_set_changes": null,
+      "independent_events": null,
+      "event_definition": {
+        "independent_events": 4514,
+        "sampled_eligible_set_changes": null,
+        "usable_for_independent_sample": true,
+        "definition": "SECURITY_FAMILY_HORIZON_TIME_OVERLAP",
+        "reason": null
+      },
+      "empty_result_ratio": 0.8378212974296205
+    },
+    "social_internet": {
+      "theme_id": "social_internet",
+      "members_in_panel": 8,
+      "valid_dates": 1634,
+      "zero_result_dates": 1451,
+      "missing_data_dates": 30,
+      "warmup_dates": 221,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 135,
+          "rejected": 10898,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              8761
+            ],
+            [
+              "TREND_DIRECTION",
+              7827
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              5456
+            ],
+            [
+              "HIGH_ATR",
+              3250
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3198
+            ],
+            [
+              "LH_LL",
+              3188
+            ],
+            [
+              "INVALIDATED",
+              1920
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              1648
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 0,
+          "rejected": 11033,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              9092
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              6335
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              5726
+            ],
+            [
+              "SMA50_SLOPE",
+              5273
+            ],
+            [
+              "BELOW_SMA50",
+              5145
+            ],
+            [
+              "LOW_CLV",
+              4551
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              4152
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              3777
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 4,
+          "rejected": 11029,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              9178
+            ],
+            [
+              "TREND_DIRECTION",
+              7827
+            ],
+            [
+              "NO_REBOUND",
+              7136
+            ],
+            [
+              "LOW_CLV",
+              5982
+            ],
+            [
+              "LOW_RVOL",
+              4499
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              4397
+            ],
+            [
+              "HIGH_ATR",
+              3250
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3198
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 133,
+          "rejected": 10900,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              7081
+            ],
+            [
+              "SMA50_SLOPE",
+              5517
+            ],
+            [
+              "BELOW_SMA50",
+              5389
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              3749
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3430
+            ],
+            [
+              "MISSING_SCORE",
+              3348
+            ],
+            [
+              "LOW_COVERAGE",
+              3348
+            ],
+            [
+              "HIGH_ATR",
+              3250
+            ]
+          ]
+        }
+      },
+      "funnel": {
+        "data_missing": 928,
+        "warmup": 6922,
+        "setup_not_met": 1052,
+        "risk_or_tradability": 846,
+        "score_floor": 34112,
+        "eligible": 272
+      },
+      "eligible_name_sessions": 272,
+      "sampled_eligible_set_changes": null,
+      "independent_events": null,
+      "event_definition": {
+        "independent_events": 4514,
+        "sampled_eligible_set_changes": null,
+        "usable_for_independent_sample": true,
+        "definition": "SECURITY_FAMILY_HORIZON_TIME_OVERLAP",
+        "reason": null
+      },
+      "empty_result_ratio": 0.8880048959608323
+    },
+    "energy": {
+      "theme_id": "energy",
+      "members_in_panel": 10,
+      "valid_dates": 1634,
+      "zero_result_dates": 1618,
+      "missing_data_dates": 30,
+      "warmup_dates": 221,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 0,
+          "rejected": 16330,
+          "top_rejections": [
+            [
+              "MISSING_SCORE",
+              16027
+            ],
+            [
+              "LOW_COVERAGE",
+              16027
+            ],
+            [
+              "TREND_DIRECTION",
+              12423
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              7945
+            ],
+            [
+              "WEAK_STRUCTURE",
+              5060
+            ],
+            [
+              "LH_LL",
+              5042
+            ],
+            [
+              "INVALIDATED",
+              2776
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              2482
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 1,
+          "rejected": 16329,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              13296
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              9686
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              8398
+            ],
+            [
+              "BELOW_SMA50",
+              7748
+            ],
+            [
+              "SMA50_SLOPE",
+              7590
+            ],
+            [
+              "LOW_CLV",
+              6378
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              5924
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              5269
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 15,
+          "rejected": 16315,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              13748
+            ],
+            [
+              "TREND_DIRECTION",
+              12423
+            ],
+            [
+              "NO_REBOUND",
+              10516
+            ],
+            [
+              "LOW_CLV",
+              8907
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              6025
+            ],
+            [
+              "WEAK_STRUCTURE",
+              5060
+            ],
+            [
+              "LOW_RVOL",
+              4920
+            ],
+            [
+              "SUPPORT_BROKEN",
+              2829
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 0,
+          "rejected": 16330,
+          "top_rejections": [
+            [
+              "MISSING_SCORE",
+              16027
+            ],
+            [
+              "LOW_COVERAGE",
+              16027
+            ],
+            [
+              "BELOW_SMA50",
+              8036
+            ],
+            [
+              "SMA50_SLOPE",
+              7878
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              5467
+            ],
+            [
+              "WEAK_STRUCTURE",
+              5360
+            ],
+            [
+              "SHORT_HISTORY",
+              3290
+            ],
+            [
+              "INVALIDATED",
+              2776
+            ]
+          ]
+        }
+      },
+      "funnel": {
+        "data_missing": 1212,
+        "warmup": 9608,
+        "setup_not_met": 20822,
+        "score_floor": 27044,
+        "risk_or_tradability": 6618,
+        "eligible": 16
+      },
+      "eligible_name_sessions": 16,
+      "sampled_eligible_set_changes": null,
+      "independent_events": null,
+      "event_definition": {
+        "independent_events": 4514,
+        "sampled_eligible_set_changes": null,
+        "usable_for_independent_sample": true,
+        "definition": "SECURITY_FAMILY_HORIZON_TIME_OVERLAP",
+        "reason": null
+      },
+      "empty_result_ratio": 0.9902080783353733
+    },
+    "utilities": {
+      "theme_id": "utilities",
+      "members_in_panel": 10,
+      "valid_dates": 1634,
+      "zero_result_dates": 1222,
+      "missing_data_dates": 24,
+      "warmup_dates": 227,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 681,
+          "rejected": 14630,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              11343
+            ],
+            [
+              "TREND_DIRECTION",
+              10796
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              6685
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3841
+            ],
+            [
+              "LH_LL",
+              3811
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              2614
+            ],
+            [
+              "MISSING_SCORE",
+              2277
+            ],
+            [
+              "LOW_COVERAGE",
+              2277
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 0,
+          "rejected": 15311,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              11884
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              9532
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              7535
+            ],
+            [
+              "SMA50_SLOPE",
+              6161
+            ],
+            [
+              "BELOW_SMA50",
+              6126
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              5178
+            ],
+            [
+              "LOW_CLV",
+              5097
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              5026
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 18,
+          "rejected": 15293,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              12612
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              10906
+            ],
+            [
+              "TREND_DIRECTION",
+              10796
+            ],
+            [
+              "NO_REBOUND",
+              9183
+            ],
+            [
+              "LOW_CLV",
+              7917
+            ],
+            [
+              "LOW_RVOL",
+              4933
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3841
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              2614
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 0,
+          "rejected": 15311,
+          "top_rejections": [
+            [
+              "MISSING_SCORE",
+              15068
+            ],
+            [
+              "LOW_COVERAGE",
+              15068
+            ],
+            [
+              "SMA50_SLOPE",
+              6562
+            ],
+            [
+              "BELOW_SMA50",
+              6524
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              5410
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4080
+            ],
+            [
+              "SHORT_HISTORY",
+              3290
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              2614
+            ]
+          ]
+        }
+      },
+      "funnel": {
+        "data_missing": 972,
+        "warmup": 9848,
+        "setup_not_met": 11352,
+        "score_floor": 35839,
+        "eligible": 699,
+        "risk_or_tradability": 2534
+      },
+      "eligible_name_sessions": 699,
+      "sampled_eligible_set_changes": null,
+      "independent_events": null,
+      "event_definition": {
+        "independent_events": 4514,
+        "sampled_eligible_set_changes": null,
+        "usable_for_independent_sample": true,
+        "definition": "SECURITY_FAMILY_HORIZON_TIME_OVERLAP",
+        "reason": null
+      },
+      "empty_result_ratio": 0.7478580171358629
+    },
+    "defense_aero": {
+      "theme_id": "defense_aero",
+      "members_in_panel": 9,
+      "valid_dates": 1634,
+      "zero_result_dates": 1299,
+      "missing_data_dates": 27,
+      "warmup_dates": 224,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 433,
+          "rejected": 14264,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              11449
+            ],
+            [
+              "TREND_DIRECTION",
+              10362
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              6450
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3974
+            ],
+            [
+              "LH_LL",
+              3967
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              2407
+            ],
+            [
+              "INVALIDATED",
+              2186
+            ],
+            [
+              "MISSING_SCORE",
+              2019
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 0,
+          "rejected": 14697,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              11900
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              8158
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              7558
+            ],
+            [
+              "SMA50_SLOPE",
+              6283
+            ],
+            [
+              "BELOW_SMA50",
+              6156
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              5876
+            ],
+            [
+              "LOW_CLV",
+              5507
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              4160
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 11,
+          "rejected": 14686,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              12332
+            ],
+            [
+              "TREND_DIRECTION",
+              10362
+            ],
+            [
+              "NO_REBOUND",
+              9140
+            ],
+            [
+              "LOW_CLV",
+              7866
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              7634
+            ],
+            [
+              "LOW_RVOL",
+              5212
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3974
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              2407
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 0,
+          "rejected": 14697,
+          "top_rejections": [
+            [
+              "MISSING_SCORE",
+              14448
+            ],
+            [
+              "LOW_COVERAGE",
+              14448
+            ],
+            [
+              "SMA50_SLOPE",
+              6606
+            ],
+            [
+              "BELOW_SMA50",
+              6479
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              5024
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4223
+            ],
+            [
+              "SHORT_HISTORY",
+              2961
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              2407
+            ]
+          ]
+        }
+      },
+      "funnel": {
+        "data_missing": 996,
+        "warmup": 8742,
+        "setup_not_met": 10669,
+        "score_floor": 35681,
+        "risk_or_tradability": 2256,
+        "eligible": 444
+      },
+      "eligible_name_sessions": 444,
+      "sampled_eligible_set_changes": null,
+      "independent_events": null,
+      "event_definition": {
+        "independent_events": 4514,
+        "sampled_eligible_set_changes": null,
+        "usable_for_independent_sample": true,
+        "definition": "SECURITY_FAMILY_HORIZON_TIME_OVERLAP",
+        "reason": null
+      },
+      "empty_result_ratio": 0.7949816401468788
+    },
+    "airlines": {
+      "theme_id": "airlines",
+      "members_in_panel": 8,
+      "valid_dates": 1634,
+      "zero_result_dates": 1613,
+      "missing_data_dates": 23,
+      "warmup_dates": 228,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 22,
+          "rejected": 13042,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10999
+            ],
+            [
+              "TREND_DIRECTION",
+              10742
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              7757
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3943
+            ],
+            [
+              "LH_LL",
+              3924
+            ],
+            [
+              "INVALIDATED",
+              2469
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              2053
+            ],
+            [
+              "MISSING_SCORE",
+              1807
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 0,
+          "rejected": 13064,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              11015
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              7812
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              7149
+            ],
+            [
+              "SMA50_SLOPE",
+              6611
+            ],
+            [
+              "BELOW_SMA50",
+              6579
+            ],
+            [
+              "LOW_CLV",
+              5294
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              5215
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3943
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 2,
+          "rejected": 13062,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              11032
+            ],
+            [
+              "TREND_DIRECTION",
+              10742
+            ],
+            [
+              "NO_REBOUND",
+              8608
+            ],
+            [
+              "LOW_CLV",
+              7278
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              6087
+            ],
+            [
+              "LOW_RVOL",
+              4896
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3943
+            ],
+            [
+              "SUPPORT_BROKEN",
+              2499
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 0,
+          "rejected": 13064,
+          "top_rejections": [
+            [
+              "MISSING_SCORE",
+              12855
+            ],
+            [
+              "LOW_COVERAGE",
+              12855
+            ],
+            [
+              "SMA50_SLOPE",
+              6881
+            ],
+            [
+              "BELOW_SMA50",
+              6857
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4151
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              3987
+            ],
+            [
+              "SHORT_HISTORY",
+              2632
+            ],
+            [
+              "INVALIDATED",
+              2469
+            ]
+          ]
+        }
+      },
+      "funnel": {
+        "data_missing": 836,
+        "warmup": 7820,
+        "setup_not_met": 8012,
+        "score_floor": 33046,
+        "risk_or_tradability": 2518,
+        "eligible": 24
+      },
+      "eligible_name_sessions": 24,
+      "sampled_eligible_set_changes": null,
+      "independent_events": null,
+      "event_definition": {
+        "independent_events": 4514,
+        "sampled_eligible_set_changes": null,
+        "usable_for_independent_sample": true,
+        "definition": "SECURITY_FAMILY_HORIZON_TIME_OVERLAP",
+        "reason": null
+      },
+      "empty_result_ratio": 0.9871481028151775
+    },
+    "real_estate": {
+      "theme_id": "real_estate",
+      "members_in_panel": 10,
+      "valid_dates": 1634,
+      "zero_result_dates": 1283,
+      "missing_data_dates": 29,
+      "warmup_dates": 222,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 528,
+          "rejected": 15802,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              12666
+            ],
+            [
+              "TREND_DIRECTION",
+              11506
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              7094
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4535
+            ],
+            [
+              "LH_LL",
+              4495
+            ],
+            [
+              "INVALIDATED",
+              2617
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              2521
+            ],
+            [
+              "MISSING_SCORE",
+              2248
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 1,
+          "rejected": 16329,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              13002
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              10258
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              9500
+            ],
+            [
+              "BELOW_SMA50",
+              6752
+            ],
+            [
+              "SMA50_SLOPE",
+              6677
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              5229
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              4965
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4535
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 20,
+          "rejected": 16310,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              13673
+            ],
+            [
+              "TREND_DIRECTION",
+              11506
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              10477
+            ],
+            [
+              "NO_REBOUND",
+              9830
+            ],
+            [
+              "LOW_CLV",
+              8400
+            ],
+            [
+              "LOW_RVOL",
+              5442
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4535
+            ],
+            [
+              "SUPPORT_BROKEN",
+              2650
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 0,
+          "rejected": 16330,
+          "top_rejections": [
+            [
+              "MISSING_SCORE",
+              16053
+            ],
+            [
+              "LOW_COVERAGE",
+              16053
+            ],
+            [
+              "BELOW_SMA50",
+              7167
+            ],
+            [
+              "SMA50_SLOPE",
+              7095
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              6057
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4807
+            ],
+            [
+              "SHORT_HISTORY",
+              3290
+            ],
+            [
+              "INVALIDATED",
+              2617
+            ]
+          ]
+        }
+      },
+      "funnel": {
+        "data_missing": 1108,
+        "warmup": 9712,
+        "setup_not_met": 11972,
+        "score_floor": 39341,
+        "eligible": 549,
+        "risk_or_tradability": 2638
+      },
+      "eligible_name_sessions": 549,
+      "sampled_eligible_set_changes": null,
+      "independent_events": null,
+      "event_definition": {
+        "independent_events": 4514,
+        "sampled_eligible_set_changes": null,
+        "usable_for_independent_sample": true,
+        "definition": "SECURITY_FAMILY_HORIZON_TIME_OVERLAP",
+        "reason": null
+      },
+      "empty_result_ratio": 0.7851897184822522
+    },
+    "crypto": {
+      "theme_id": "crypto",
+      "members_in_panel": 9,
+      "valid_dates": 1634,
+      "zero_result_dates": 1634,
+      "missing_data_dates": 0,
+      "warmup_dates": 144,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 0,
+          "rejected": 13069,
+          "top_rejections": [
+            [
+              "HIGH_ATR",
+              11180
+            ],
+            [
+              "TREND_DIRECTION",
+              10554
+            ],
+            [
+              "LOW_SCORE",
+              10305
+            ],
+            [
+              "LOW_ADV",
+              7814
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              7560
+            ],
+            [
+              "LOW_PRICE",
+              4244
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4229
+            ],
+            [
+              "LH_LL",
+              4080
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 0,
+          "rejected": 13069,
+          "top_rejections": [
+            [
+              "HIGH_ATR",
+              11180
+            ],
+            [
+              "LOW_SCORE",
+              10315
+            ],
+            [
+              "LOW_ADV",
+              7814
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              7306
+            ],
+            [
+              "BELOW_SMA50",
+              7038
+            ],
+            [
+              "SMA50_SLOPE",
+              6823
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              6674
+            ],
+            [
+              "LOW_CLV",
+              5042
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 0,
+          "rejected": 13069,
+          "top_rejections": [
+            [
+              "HIGH_ATR",
+              11180
+            ],
+            [
+              "TREND_DIRECTION",
+              10554
+            ],
+            [
+              "LOW_SCORE",
+              10318
+            ],
+            [
+              "NO_REBOUND",
+              9171
+            ],
+            [
+              "LOW_CLV",
+              7938
+            ],
+            [
+              "LOW_ADV",
+              7814
+            ],
+            [
+              "LOW_RVOL",
+              6709
+            ],
+            [
+              "LOW_PRICE",
+              4244
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 0,
+          "rejected": 13069,
+          "top_rejections": [
+            [
+              "MISSING_SCORE",
+              12632
+            ],
+            [
+              "LOW_COVERAGE",
+              12632
+            ],
+            [
+              "HIGH_ATR",
+              11180
+            ],
+            [
+              "LOW_ADV",
+              7814
+            ],
+            [
+              "BELOW_SMA50",
+              7455
+            ],
+            [
+              "SMA50_SLOPE",
+              7248
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4631
+            ],
+            [
+              "LOW_PRICE",
+              4244
+            ]
+          ]
+        }
+      },
+      "funnel": {
+        "data_missing": 940,
+        "risk_or_tradability": 11026,
+        "warmup": 8442,
+        "setup_not_met": 930,
+        "score_floor": 30938
+      },
+      "eligible_name_sessions": 0,
+      "sampled_eligible_set_changes": null,
+      "independent_events": null,
+      "event_definition": {
+        "independent_events": 4514,
+        "sampled_eligible_set_changes": null,
+        "usable_for_independent_sample": true,
+        "definition": "SECURITY_FAMILY_HORIZON_TIME_OVERLAP",
+        "reason": null
+      },
+      "empty_result_ratio": 1.0
+    },
+    "china_adr": {
+      "theme_id": "china_adr",
+      "members_in_panel": 12,
+      "valid_dates": 1634,
+      "zero_result_dates": 1557,
+      "missing_data_dates": 30,
+      "warmup_dates": 221,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 97,
+          "rejected": 17509,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              14322
+            ],
+            [
+              "TREND_DIRECTION",
+              13992
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              9957
+            ],
+            [
+              "HIGH_ATR",
+              9248
+            ],
+            [
+              "WEAK_STRUCTURE",
+              5475
+            ],
+            [
+              "LH_LL",
+              5430
+            ],
+            [
+              "INVALIDATED",
+              3326
+            ],
+            [
+              "MISSING_SCORE",
+              2686
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 0,
+          "rejected": 17606,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              14376
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              9897
+            ],
+            [
+              "SMA50_SLOPE",
+              9367
+            ],
+            [
+              "HIGH_ATR",
+              9248
+            ],
+            [
+              "BELOW_SMA50",
+              9030
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              8905
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              7798
+            ],
+            [
+              "LOW_CLV",
+              7064
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 1,
+          "rejected": 17605,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              14567
+            ],
+            [
+              "TREND_DIRECTION",
+              13992
+            ],
+            [
+              "NO_REBOUND",
+              12025
+            ],
+            [
+              "LOW_CLV",
+              9861
+            ],
+            [
+              "HIGH_ATR",
+              9248
+            ],
+            [
+              "LOW_RVOL",
+              7602
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              7436
+            ],
+            [
+              "WEAK_STRUCTURE",
+              5475
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 0,
+          "rejected": 17606,
+          "top_rejections": [
+            [
+              "MISSING_SCORE",
+              17268
+            ],
+            [
+              "LOW_COVERAGE",
+              17268
+            ],
+            [
+              "SMA50_SLOPE",
+              9884
+            ],
+            [
+              "BELOW_SMA50",
+              9542
+            ],
+            [
+              "HIGH_ATR",
+              9248
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              6261
+            ],
+            [
+              "WEAK_STRUCTURE",
+              5813
+            ],
+            [
+              "SHORT_HISTORY",
+              3948
+            ]
+          ]
+        }
+      },
+      "funnel": {
+        "data_missing": 1352,
+        "warmup": 11632,
+        "setup_not_met": 5856,
+        "risk_or_tradability": 8221,
+        "score_floor": 43265,
+        "eligible": 98
+      },
+      "eligible_name_sessions": 98,
+      "sampled_eligible_set_changes": null,
+      "independent_events": null,
+      "event_definition": {
+        "independent_events": 4514,
+        "sampled_eligible_set_changes": null,
+        "usable_for_independent_sample": true,
+        "definition": "SECURITY_FAMILY_HORIZON_TIME_OVERLAP",
+        "reason": null
+      },
+      "empty_result_ratio": 0.9528763769889841
+    },
+    "telecom": {
+      "theme_id": "telecom",
+      "members_in_panel": 7,
+      "valid_dates": 1634,
+      "zero_result_dates": 1416,
+      "missing_data_dates": 24,
+      "warmup_dates": 227,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 230,
+          "rejected": 11201,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              9242
+            ],
+            [
+              "TREND_DIRECTION",
+              8535
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              5945
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3393
+            ],
+            [
+              "LH_LL",
+              3332
+            ],
+            [
+              "INVALIDATED",
+              1982
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              1727
+            ],
+            [
+              "MISSING_SCORE",
+              1581
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 0,
+          "rejected": 11431,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              9423
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              6372
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              5685
+            ],
+            [
+              "BELOW_SMA50",
+              5487
+            ],
+            [
+              "SMA50_SLOPE",
+              5435
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              5170
+            ],
+            [
+              "LOW_CLV",
+              4636
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3393
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 7,
+          "rejected": 11424,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              9597
+            ],
+            [
+              "TREND_DIRECTION",
+              8535
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              8456
+            ],
+            [
+              "NO_REBOUND",
+              7242
+            ],
+            [
+              "LOW_CLV",
+              6145
+            ],
+            [
+              "LOW_RVOL",
+              3966
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3393
+            ],
+            [
+              "SUPPORT_BROKEN",
+              2003
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 0,
+          "rejected": 11431,
+          "top_rejections": [
+            [
+              "MISSING_SCORE",
+              11248
+            ],
+            [
+              "LOW_COVERAGE",
+              11248
+            ],
+            [
+              "BELOW_SMA50",
+              5816
+            ],
+            [
+              "SMA50_SLOPE",
+              5764
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              4054
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3574
+            ],
+            [
+              "SHORT_HISTORY",
+              2303
+            ],
+            [
+              "INVALIDATED",
+              1982
+            ]
+          ]
+        }
+      },
+      "funnel": {
+        "data_missing": 732,
+        "warmup": 6842,
+        "setup_not_met": 8256,
+        "score_floor": 28262,
+        "eligible": 237,
+        "risk_or_tradability": 1395
+      },
+      "eligible_name_sessions": 237,
+      "sampled_eligible_set_changes": null,
+      "independent_events": null,
+      "event_definition": {
+        "independent_events": 4514,
+        "sampled_eligible_set_changes": null,
+        "usable_for_independent_sample": true,
+        "definition": "SECURITY_FAMILY_HORIZON_TIME_OVERLAP",
+        "reason": null
+      },
+      "empty_result_ratio": 0.8665850673194615
+    },
+    "industrials": {
+      "theme_id": "industrials",
+      "members_in_panel": 10,
+      "valid_dates": 1634,
+      "zero_result_dates": 1336,
+      "missing_data_dates": 36,
+      "warmup_dates": 215,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 358,
+          "rejected": 15972,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              13043
+            ],
+            [
+              "TREND_DIRECTION",
+              11791
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              7717
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4536
+            ],
+            [
+              "LH_LL",
+              4518
+            ],
+            [
+              "INVALIDATED",
+              2709
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              2517
+            ],
+            [
+              "EXTENDED",
+              2362
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 4,
+          "rejected": 16326,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              13430
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              8657
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              8438
+            ],
+            [
+              "SMA50_SLOPE",
+              7277
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              7087
+            ],
+            [
+              "BELOW_SMA50",
+              7054
+            ],
+            [
+              "LOW_CLV",
+              5793
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              4651
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 5,
+          "rejected": 16325,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              13761
+            ],
+            [
+              "TREND_DIRECTION",
+              11791
+            ],
+            [
+              "NO_REBOUND",
+              10225
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              8890
+            ],
+            [
+              "LOW_CLV",
+              8605
+            ],
+            [
+              "LOW_RVOL",
+              5695
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4536
+            ],
+            [
+              "SUPPORT_BROKEN",
+              2726
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 0,
+          "rejected": 16330,
+          "top_rejections": [
+            [
+              "MISSING_SCORE",
+              15974
+            ],
+            [
+              "LOW_COVERAGE",
+              15974
+            ],
+            [
+              "SMA50_SLOPE",
+              7680
+            ],
+            [
+              "BELOW_SMA50",
+              7457
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              5444
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4892
+            ],
+            [
+              "SHORT_HISTORY",
+              3290
+            ],
+            [
+              "INVALIDATED",
+              2709
+            ]
+          ]
+        }
+      },
+      "funnel": {
+        "data_missing": 1424,
+        "warmup": 9396,
+        "setup_not_met": 11303,
+        "score_floor": 40234,
+        "eligible": 367,
+        "risk_or_tradability": 2596
+      },
+      "eligible_name_sessions": 367,
+      "sampled_eligible_set_changes": null,
+      "independent_events": null,
+      "event_definition": {
+        "independent_events": 4514,
+        "sampled_eligible_set_changes": null,
+        "usable_for_independent_sample": true,
+        "definition": "SECURITY_FAMILY_HORIZON_TIME_OVERLAP",
+        "reason": null
+      },
+      "empty_result_ratio": 0.817625458996328
+    },
+    "etfs": {
+      "theme_id": "etfs",
+      "members_in_panel": 12,
+      "valid_dates": 1634,
+      "zero_result_dates": 1142,
+      "missing_data_dates": 38,
+      "warmup_dates": 213,
+      "family": {
+        "A_trend_quality": {
+          "eligible": 392,
+          "rejected": 15724,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              14722
+            ],
+            [
+              "TREND_DIRECTION",
+              9504
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              5062
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3852
+            ],
+            [
+              "LH_LL",
+              3829
+            ],
+            [
+              "EXTENDED",
+              3128
+            ],
+            [
+              "INVALIDATED",
+              2535
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              1836
+            ]
+          ]
+        },
+        "B_confirmed_base_breakout": {
+          "eligible": 0,
+          "rejected": 16116,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              15186
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              10297
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              9020
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              6447
+            ],
+            [
+              "BELOW_SMA50",
+              6157
+            ],
+            [
+              "SMA50_SLOPE",
+              5774
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              5374
+            ],
+            [
+              "LOW_CLV",
+              4751
+            ]
+          ]
+        },
+        "C_trend_pullback": {
+          "eligible": 3,
+          "rejected": 16113,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              15546
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              11682
+            ],
+            [
+              "NO_REBOUND",
+              9557
+            ],
+            [
+              "TREND_DIRECTION",
+              9504
+            ],
+            [
+              "LOW_CLV",
+              7881
+            ],
+            [
+              "LOW_RVOL",
+              4832
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3852
+            ],
+            [
+              "EXTENDED",
+              3128
+            ]
+          ]
+        },
+        "D_residual_momentum": {
+          "eligible": 418,
+          "rejected": 15698,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10894
+            ],
+            [
+              "BELOW_SMA50",
+              6231
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              6076
+            ],
+            [
+              "SMA50_SLOPE",
+              5848
+            ],
+            [
+              "MISSING_SCORE",
+              4165
+            ],
+            [
+              "LOW_COVERAGE",
+              4165
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3934
+            ],
+            [
+              "EXTENDED",
+              3128
+            ]
+          ]
+        }
+      },
+      "funnel": {
+        "data_missing": 328,
+        "warmup": 1836,
+        "setup_not_met": 3317,
+        "score_floor": 56348,
+        "risk_or_tradability": 1822,
+        "eligible": 813
+      },
+      "eligible_name_sessions": 813,
+      "sampled_eligible_set_changes": null,
+      "independent_events": null,
+      "event_definition": {
+        "independent_events": 4514,
+        "sampled_eligible_set_changes": null,
+        "usable_for_independent_sample": true,
+        "definition": "SECURITY_FAMILY_HORIZON_TIME_OVERLAP",
+        "reason": null
+      },
+      "empty_result_ratio": 0.6988984088127295
+    }
+  },
+  "empty_result_ratio_theme_dates": 0.8463382292941657,
+  "registered": 1920,
+  "unique_registered_configs": 1920,
+  "unique_snapshots": 156864,
+  "executed_snapshots": 156864,
+  "actual_function_calls": 156864,
+  "recomputes": 0,
+  "outcomes_inspected": 4205304,
+  "executed_backtests": 0,
+  "engineering_fixtures": 0,
+  "market_backtest_run": false,
+  "winners": [],
+  "event_ledger": {
+    "independent_events": 4514,
+    "sampled_eligible_set_changes": null,
+    "usable_for_independent_sample": true,
+    "definition": "SECURITY_FAMILY_HORIZON_TIME_OVERLAP",
+    "reason": null
+  },
+  "capability_flags": [
+    "CURRENT_UNIVERSE_SURVIVORS",
+    "PIT_CLASSIFICATION_MISSING",
+    "CORPORATE_ACTIONS_INCOMPLETE",
+    "EXECUTION_DATA_UNVERIFIED",
+    "download_time_not_pit",
+    "IC_IS_SIGNAL_DIAGNOSTIC_NOT_PNL",
+    "INDUSTRY_UNVERIFIED"
+  ],
+  "param_hash": "88e8f452432622c3e6fc9846967466350887de7ceb7f64abe2c37eeb859d13bd",
+  "code_sha": "4cb63b3a9141ae4012d327431793d134e89e6cca",
+  "data_hash": "d910d86505e1914eb14aaacea2ddabc8d61b1f097ab83c513f07750539f32d48",
+  "statistics_version": "us-eod-research-stats-v1.0",
+  "feature_version": "us-eod-research-features-v1.5",
+  "rows_path": "research/option_pro_us_eod_v1/return_pack/measurement_factor_rows.jsonl",
+  "rows_sha256": "b490ba6d83965a0c3fe60c76afab8205fc2a0d76cc6577cdf23cb838e447f75a",
+  "execution_log": "research/option_pro_us_eod_v1/return_pack/measurement_continuous_execution_log.jsonl",
+  "ic_groups_path": "research/option_pro_us_eod_v1/return_pack/measurement_ic_groups.jsonl",
+  "ic_summary_path": "research/option_pro_us_eod_v1/return_pack/measurement_ic_summary.json",
+  "superseded_17day": "research/option_pro_us_eod_v1/return_pack/closeout_historical_abcd.SUPERSEDED.json",
+  "relabeled_rows": 764916,
+  "notes": [
+    "Cache replay only; no Massive; no network purchase.",
+    "Old 17-day IC/independent_events are SUPERSEDED_METRIC.",
+    "Portfolio PnL not run; executed_backtests stays 0.",
+    "Forward labels use the unclipped series through allowed_end.",
+    "Stop after this fixed-parameter continuous pass."
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "security_id": "string",
+  "session_date": "date",
+  "algorithm_id": "string",
+  "status": "string",
+  "note": "empty until a licensed market run exists",
+  "entry_session": "date",
+  "exit_session": "date",
+  "net_return": "float"
+}
