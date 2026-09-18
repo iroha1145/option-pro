@@ -57,3 +57,10 @@ B0 / Round 1 / Round 1b / Round 2 / freeze files are not rewritten. Holdout 2024
 - unique gap: historical_constituent_membership_and_delist_tape
 
 No production champion. No unseal. No new weight grid.
+
+## GitHub CI on ec1f8e3d
+
+- push: https://github.com/iroha1145/option-pro/actions/runs/35362068092
+- pull_request: https://github.com/iroha1145/option-pro/actions/runs/35362073797
+- pytest: 3951 passed, 1 skipped
+- This stamp is docs-only.

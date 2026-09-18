@@ -14,6 +14,12 @@
     "stats.py": "584ec46e533ab3a2b096262e6f0f41d28624c5136b52d1508fdf583e5d75acc9"
   },
   "generated_at": "2026-09-18T15:22:15.701146+00:00",
-  "head": "ffc8cb1e99897e54272033b986678e057542b8a7",
+  "github_ci": {
+    "pull_request_run": "https://github.com/iroha1145/option-pro/actions/runs/35362073797",
+    "push_run": "https://github.com/iroha1145/option-pro/actions/runs/35362068092",
+    "research_head": "ec1f8e3dda5908c3d2c113c7ade5a6d3a7d321db",
+    "stamp_is_docs_only": true
+  },
+  "head": "ec1f8e3dda5908c3d2c113c7ade5a6d3a7d321db",
   "protocol": "us-eod-research-recovery-v1"
 }
