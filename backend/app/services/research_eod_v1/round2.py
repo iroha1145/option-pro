@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 from dataclasses import dataclass
@@ -24,7 +25,9 @@ from app.services.research_eod_v1.round1b import (
     SCORE_FLOOR_ID,
     ci_location,
     signed_ablation_direction,
+    transform_kind,
 )
+from app.services.research_eod_v1.runs import canonical_json
 from app.services.research_eod_v1.bootstrap import paired_diff_intervals
 
 ensure_reference_on_path()
@@ -187,21 +190,59 @@ def select_targeted_candidates(
     return chosen[:max_candidates]
 
 
-def candidate_weights(
+def weight_vector_hash(weights: Mapping[str, float]) -> str:
+    return hashlib.sha256(canonical_json(dict(weights)).encode()).hexdigest()
+
+
+def planned_candidate_weights(
     registry: Mapping[str, Any],
     candidate: TargetedCandidate,
-) -> dict[str, float]:
+) -> dict[str, Any]:
+    """Refuse infeasible deltas. Do not silently halve at the boundary."""
+
     if candidate.status != "registered" or not candidate.factor or candidate.delta is None:
         raise ValueError(f"{candidate.candidate_id} is not an executable weight change")
     base = resolve_weights(registry, candidate.theme, candidate.family, candidate.profile, candidate.score_horizon)
     price = diagnostic_weights(base, track=PRICE_ONLY_DIAGNOSTIC, family=candidate.family)
     current = float(price.get(candidate.factor) or 0.0)
-    delta = float(candidate.delta)
-    if current + delta <= 0:
-        delta = -0.5 * current
-    if current + delta <= 0 or current + delta >= 1:
-        raise ValueError(f"cannot downweight {candidate.factor} from {current} by {candidate.delta}")
-    return realloc_plus_pp(price, candidate.factor, delta)
+    requested = float(candidate.delta)
+    target = current + requested
+    if target <= 0.0 or target >= 1.0:
+        raise ValueError(
+            f"{candidate.candidate_id}: requested_delta={requested} is infeasible from "
+            f"{candidate.factor}={current}; refuse silent HALVE_AT_BOUNDARY; "
+            "register a replacement candidate before execution"
+        )
+    after = realloc_plus_pp(price, candidate.factor, requested)
+    effective = float(after[candidate.factor]) - current
+    return {
+        "requested_delta": requested,
+        "effective_delta": effective,
+        "boundary_policy": "REJECT_INFEASIBLE",
+        "before": dict(price),
+        "after": after,
+        "before_factor": current,
+        "after_factor": float(after[candidate.factor]),
+        "vector_hash": weight_vector_hash(after),
+        "transform_kind": transform_kind(
+            {"kind": candidate.kind, "variant_id": candidate.candidate_id, "delta": requested}
+        ),
+    }
+
+
+def candidate_weights(
+    registry: Mapping[str, Any],
+    candidate: TargetedCandidate,
+) -> dict[str, float]:
+    return planned_candidate_weights(registry, candidate)["after"]
+
+
+def historical_halve_at_boundary(current: float, requested_delta: float) -> float:
+    """Document the superseded R2 fallback. Not used for new execution."""
+
+    if current + requested_delta <= 0:
+        return -0.5 * current
+    return requested_delta
 
 
 def analyze_targeted_candidates(

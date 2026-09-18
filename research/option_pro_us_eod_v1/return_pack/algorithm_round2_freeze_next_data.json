@@ -1,0 +1,27 @@
+[
+  {
+    "access": "licensed or already-held membership tape; do not assume API rights",
+    "coverage": "add/drop dates for all 24 themes through allowed_end",
+    "field": "historical_constituent_membership"
+  },
+  {
+    "access": "licensed corporate action / delist feed; do not auto-buy",
+    "coverage": "survivorship-complete names in each theme window",
+    "field": "delisted_and_renamed_securities"
+  },
+  {
+    "access": "point-in-time classification vendor; do not assume current tags are historical",
+    "coverage": "industry and theme tags as-of each session",
+    "field": "as_of_industry_classification"
+  },
+  {
+    "access": "existing legal cache or licensed EOD; do not assume API rights; current local cache is SPY/NVDA only",
+    "coverage": "OHLCV plus split/dividend events for candidate names",
+    "field": "split_and_unadjusted_eod_with_corporate_actions"
+  },
+  {
+    "access": "same legal cache; do not auto-buy; do not invent NAV from T-close to T+H-close labels",
+    "coverage": "T+1 open/close after signal_available_at for NEXT_DAY_CONFIRM",
+    "field": "next_day_confirm_trade_prices"
+  }
+]

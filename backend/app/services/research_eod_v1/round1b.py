@@ -632,8 +632,34 @@ def ci_location(ci: Any) -> str | None:
     return "crosses_zero"
 
 
+def transform_kind(item: Mapping[str, Any]) -> str:
+    """Classify the signed transform. Drop, increase, decrease, and threshold stay distinct."""
+
+    variant_id = str(item.get("variant_id") or "")
+    kind = str(item.get("kind") or "")
+    if variant_id == SCORE_FLOOR_ID or kind == "threshold":
+        return "THRESHOLD"
+    if kind == "ablation" or variant_id.startswith("PRICE_DROP_"):
+        return "DROP"
+    if kind == "reduce_weight" or "DOWNWEIGHT" in variant_id:
+        return "REALLOC_DECREASE"
+    if kind in {"neighbor", "increase"} or "PLUS" in variant_id:
+        return "REALLOC_INCREASE"
+    if item.get("dropped"):
+        return "DROP"
+    delta = item.get("delta")
+    if delta is not None:
+        return "REALLOC_INCREASE" if float(delta) > 0 else "REALLOC_DECREASE"
+    return "UNKNOWN"
+
+
 def signed_ablation_direction(item: Mapping[str, Any]) -> str:
-    """Drop Δ<0 with H entirely below 0 keeps the factor. |Δ| is not improvement."""
+    """Map H-side evidence through the actual transform. |Δ| is not improvement.
+
+    DROP Δ>0 → reduce-weight research. INCREASE Δ>0 → increase-weight research.
+    INCREASE Δ<0 → reject that increase / keep baseline, not delete the factor.
+    THRESHOLD crossing zero is inconclusive, not proof the floor is useless.
+    """
 
     pair_days = item.get("pair_days") or 0
     if item.get("statistically_thin") or pair_days < THIN_DEFINED_IC_DAYS:
@@ -641,10 +667,23 @@ def signed_ablation_direction(item: Mapping[str, Any]) -> str:
     band = _bootstrap_band(item, "H")
     mean = band.get("mean")
     side = ci_location(band.get("ci95"))
-    if side == "below_zero" and mean is not None and float(mean) < 0:
-        return "KEEP_FACTOR"
-    if side == "above_zero" and mean is not None and float(mean) > 0:
-        return "REDUCE_WEIGHT_CANDIDATE"
+    transform = transform_kind(item)
+    worse = side == "below_zero" and mean is not None and float(mean) < 0
+    better = side == "above_zero" and mean is not None and float(mean) > 0
+    if transform == "THRESHOLD":
+        return "THRESHOLD_SIGNED_DIAGNOSTIC" if worse or better else "THRESHOLD_INCONCLUSIVE"
+    if transform == "REALLOC_INCREASE":
+        if better:
+            return "INCREASE_WEIGHT_CANDIDATE"
+        if worse:
+            return "REJECT_INCREASE"
+        return "INCONCLUSIVE"
+    if transform in {"DROP", "REALLOC_DECREASE"}:
+        if worse:
+            return "KEEP_FACTOR"
+        if better:
+            return "REDUCE_WEIGHT_CANDIDATE"
+        return "INCONCLUSIVE"
     return "INCONCLUSIVE"
 
 
@@ -733,6 +772,8 @@ def _theme_card(
         signed = [(item, signed_ablation_direction(item)) for item in drops20 + neighbors20]
         keep = [item for item, direction in signed if direction == "KEEP_FACTOR"]
         reduce = [item for item, direction in signed if direction == "REDUCE_WEIGHT_CANDIDATE"]
+        increase = [item for item, direction in signed if direction == "INCREASE_WEIGHT_CANDIDATE"]
+        reject_increase = [item for item, direction in signed if direction == "REJECT_INCREASE"]
         thin_drops = [item for item, direction in signed if item in drops20 and direction == "THIN"]
         if track_status == "EVALUABLE":
             if reduce:
@@ -779,6 +820,36 @@ def _theme_card(
             if len(next_neighbors) == 3:
                 break
         if len(next_neighbors) < 3:
+            for item in increase:
+                if item["variant_id"] == SCORE_FLOOR_ID:
+                    continue
+                next_neighbors.append(
+                    _neighbor_record(
+                        item,
+                        direction="INCREASE_WEIGHT_CANDIDATE",
+                        reason=f"increase reliably better on label {MAIN_LABEL_HORIZON}; not a drop; {_horizon_note(item)}",
+                        profile=profile,
+                        score_horizon=horizon,
+                    )
+                )
+                if len(next_neighbors) == 3:
+                    break
+        if len(next_neighbors) < 3:
+            for item in reject_increase:
+                if item["variant_id"] == SCORE_FLOOR_ID:
+                    continue
+                next_neighbors.append(
+                    _neighbor_record(
+                        item,
+                        direction="REJECT_INCREASE",
+                        reason="increase reliably worse: reject this bump and keep baseline; not proof the factor should be deleted",
+                        profile=profile,
+                        score_horizon=horizon,
+                    )
+                )
+                if len(next_neighbors) == 3:
+                    break
+        if len(next_neighbors) < 3:
             for item in keep:
                 if item["variant_id"] == SCORE_FLOOR_ID:
                     continue
@@ -814,7 +885,8 @@ def _theme_card(
                     score_horizon=horizon,
                 )
                 for item in labeled
-                if signed_ablation_direction(item) in {"KEEP_FACTOR", "REDUCE_WEIGHT_CANDIDATE"}
+                if signed_ablation_direction(item)
+                in {"KEEP_FACTOR", "REDUCE_WEIGHT_CANDIDATE", "INCREASE_WEIGHT_CANDIDATE", "REJECT_INCREASE"}
             ]
         qualified_counts = [item.get("mean_common_n") for item in drops20 if item.get("pair_days")]
         qualified_flags = [True] * len(qualified_counts)

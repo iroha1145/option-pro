@@ -1,0 +1,27 @@
+[
+  {
+    "gap": "\u4e09\u6863\u4e09\u5468\u671f",
+    "note": "Registry has conservative/balanced/aggressive and short/mid/long. Only balanced/mid with main label 20 was validated on B0.",
+    "status": "\u5df2\u5b9e\u73b0\u672a\u9a8c\u8bc1"
+  },
+  {
+    "gap": "\u5341\u5e74\u4ee5\u4e0a\u6570\u636e",
+    "note": "Frozen B0 window is 2018-01-02 through 2024-06-28. No 10-year-plus tape.",
+    "status": "\u672a\u505a"
+  },
+  {
+    "gap": "\u5386\u53f2\u6210\u5458/\u9000\u5e02/\u884c\u4e1a",
+    "note": "known_theme_members only. No as-of membership, delist, rename, or historical industry reconstitution tape.",
+    "status": "\u672a\u505a"
+  },
+  {
+    "gap": "\u72ec\u7acb\u7efc\u5408\u5c42",
+    "note": "No independent combiner or portfolio layer. Theme-family cards stay separate.",
+    "status": "\u672a\u505a"
+  },
+  {
+    "gap": "\u7ecf\u6d4e\u6267\u884c\u4e0e\u751f\u4ea7EOD\u63a5\u5165",
+    "note": "No raw trade prices or corporate-action evidence for the automotive pool. NAV, win-rate, slippage, and capacity are not invented. Production EOD is not wired.",
+    "status": "\u672a\u505a"
+  }
+]

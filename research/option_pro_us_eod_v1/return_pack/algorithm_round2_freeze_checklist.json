@@ -1,0 +1,94 @@
+{
+  "allowed_end": "2024-06-28",
+  "bootstrap": {
+    "block_choice": "frozen_H_and_2H",
+    "not_cherry_picked": true,
+    "repeats": 2000,
+    "seed": 174
+  },
+  "candidate_id": "R2_automotive_D_residual_momentum_V_DOWNWEIGHT_5PP",
+  "checklist": [
+    {
+      "item": "valid_date_start_end",
+      "required": true,
+      "status": "PENDING"
+    },
+    {
+      "item": "yearly_counts",
+      "required": true,
+      "status": "PENDING"
+    },
+    {
+      "item": "quarterly_counts",
+      "required": true,
+      "status": "PENDING"
+    },
+    {
+      "item": "rejection_reasons_n0_label_unmature_common_n_below_10",
+      "required": true,
+      "status": "PENDING"
+    },
+    {
+      "item": "daily_member_hash_N_baseline_ic_variant_ic_delta",
+      "required": true,
+      "status": "PENDING"
+    },
+    {
+      "item": "own_ic_with_N_below_10_is_not_a_pair",
+      "required": true,
+      "status": "PENDING"
+    },
+    {
+      "item": "persistent_members_churn_repeat_events_concentration",
+      "required": true,
+      "status": "PENDING"
+    },
+    {
+      "item": "eligible_n_vs_matured_labels_vs_overlap_groups",
+      "required": true,
+      "status": "PENDING"
+    },
+    {
+      "item": "frozen_H_2H_seed174_2000_not_cherry_picked",
+      "required": true,
+      "status": "PENDING"
+    },
+    {
+      "item": "leave_one_member_N10_becomes_insufficient",
+      "required": true,
+      "status": "PENDING"
+    },
+    {
+      "item": "absolute_common_set_ICs",
+      "required": true,
+      "status": "PENDING"
+    },
+    {
+      "item": "descriptive_forward_only_if_cache_supports",
+      "required": true,
+      "status": "PENDING"
+    },
+    {
+      "item": "stop_rule_one_of_three",
+      "required": true,
+      "status": "PENDING"
+    }
+  ],
+  "control": "PRICE_ONLY_DIAGNOSTIC",
+  "control_alias": "D_MARKET_RESIDUAL_DIAGNOSTIC",
+  "daily_effects_read": false,
+  "do_not_overwrite_b0_r1_r1b_r2": true,
+  "do_not_rerun_1152": true,
+  "do_not_retune_to_1_2_3pp": true,
+  "do_not_unseal_or_merge": true,
+  "executed_backtests": 0,
+  "family": "D_residual_momentum",
+  "head": "6159b2388d5bf36eefa7f7aba6c12455c3817585",
+  "holdout_start": "2024-07-01",
+  "holdout_unsealed": false,
+  "label_horizon": 20,
+  "not_a_second_experiment": true,
+  "note": "This manifest is the pre-read contract. Yearly/quarter/leave-one rows are kept even when negative. N=10 leave-one to N=9 is insufficient. Missing daily detail is NOT_VERIFIABLE, not an invented summary.",
+  "protocol": "us-eod-research-freeze-v1",
+  "theme": "automotive"
+}

@@ -48,6 +48,8 @@ research/option_pro_us_eod_v1/return_pack/measurement_continuous_execution_log.j
 research/option_pro_us_eod_v1/return_pack/measurement_ic_groups.jsonl
 research/option_pro_us_eod_v1/return_pack/**/daily_paired_diffs.jsonl
 research/option_pro_us_eod_v1/return_pack/algorithm_round2_daily_paired_diffs.jsonl
+research/option_pro_us_eod_v1/return_pack/**/daily_validation.jsonl
+research/option_pro_us_eod_v1/return_pack/algorithm_round2_freeze_daily_validation.jsonl
 
 # worktree 里手工 symlink 过一次 node_modules,结果被 git add -A 收进了提交(#84);
 # 路径级忽略让这类链接从一开始就进不了暂存区。

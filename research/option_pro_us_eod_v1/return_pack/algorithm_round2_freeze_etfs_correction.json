@@ -1,0 +1,37 @@
+{
+  "after": {
+    "B": 0.014042108724141605,
+    "G": 0.0,
+    "M": 0.270812096822731,
+    "P": 0.01554787757659377,
+    "R": 0.29087225214293333,
+    "S": 0.13239702511333518,
+    "T": 0.2437308871967768,
+    "V": 0.032597752423488176
+  },
+  "after_P": 0.01554787757659377,
+  "before": {
+    "B": 0.013820335635956551,
+    "G": 0.0,
+    "M": 0.2665350444077335,
+    "P": 0.03109575515318754,
+    "R": 0.2862783810305286,
+    "S": 0.1303060217104475,
+    "T": 0.2398815400223896,
+    "V": 0.032082922039756705
+  },
+  "before_P": 0.03109575515318754,
+  "boundary_policy": "HALVE_AT_BOUNDARY",
+  "candidate_id": "R2_etfs_D_residual_momentum_P_DOWNWEIGHT_5PP",
+  "do_not_rewrite_old_run_as_true_minus_5pp": true,
+  "effective_delta": -0.01554787757659377,
+  "immutable_original_delta_field": -0.05,
+  "keep_historical_result": true,
+  "new_policy": "REJECT_INFEASIBLE",
+  "note": "Registered -5pp from P=0.03109575515318754 was infeasible. The executed vector halved P to 0.01554787757659377. Future runs raise instead of silent fallback.",
+  "recompute_full_history": false,
+  "requested_delta": -0.05,
+  "status": "keep_baseline",
+  "superseded_fallback": -0.01554787757659377,
+  "vector_hash": "0313e7bea73b8f06108a53d4ee2711dd92cc33684704fffcc81422124219ae97"
+}

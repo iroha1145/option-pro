@@ -1,0 +1,90 @@
+{
+  "after_V": 0.004972513726787288,
+  "before_V": 0.05497251372678729,
+  "candidate_id": "R2_automotive_D_residual_momentum_V_DOWNWEIGHT_5PP",
+  "do_not_retune_to_1_2_3pp": true,
+  "effective_delta": -0.05,
+  "exploratory_seen_window": true,
+  "factor": "V",
+  "family": "D_residual_momentum",
+  "label_horizon": 20,
+  "not_a_sealed_winner": true,
+  "not_a_second_experiment": true,
+  "not_a_small_relative_cut": true,
+  "profile": "balanced",
+  "protocol": "us-eod-research-freeze-v1",
+  "relative_reduction": 0.9095454548158264,
+  "requested_delta": -0.05,
+  "score_horizon": "mid",
+  "source_r2_eligible_signal_n": 103,
+  "source_r2_intervals": {
+    "2H": {
+      "block_len": 40,
+      "ci95": [
+        0.0031815054211843195,
+        0.014897760658252279
+      ],
+      "mean": 0.008663558663558665,
+      "method": "CIRCULAR_DATE_BLOCK_BOOTSTRAP",
+      "n_blocks": 41,
+      "n_observed": 312,
+      "n_samples_per_replicate": 1634,
+      "n_timeline": 1634,
+      "nonfinite_inputs_marked_missing": 0,
+      "note": "Year/two-year tables are descriptive. They are not this block bootstrap interval.",
+      "reason": null,
+      "repeats": 2000,
+      "seed": 174
+    },
+    "H": {
+      "block_len": 20,
+      "ci95": [
+        0.00357467629010894,
+        0.01442819904110227
+      ],
+      "mean": 0.008663558663558665,
+      "method": "CIRCULAR_DATE_BLOCK_BOOTSTRAP",
+      "n_blocks": 82,
+      "n_observed": 312,
+      "n_samples_per_replicate": 1634,
+      "n_timeline": 1634,
+      "nonfinite_inputs_marked_missing": 0,
+      "note": "Year/two-year tables are descriptive. They are not this block bootstrap interval.",
+      "reason": null,
+      "repeats": 2000,
+      "seed": 174
+    },
+    "block_lengths_preregistered": {
+      "2H": 40,
+      "H": 20
+    },
+    "descriptive_normal_on_observed_only": {
+      "ci95": [
+        0.004203577146806102,
+        0.013123540180311227
+      ],
+      "mean": 0.008663558663558665,
+      "method": "PREREGISTERED_NORMAL_APPROX",
+      "n": 312,
+      "reason": null
+    },
+    "repeats": 2000,
+    "seed": 174
+  },
+  "source_r2_mean_common_n": 10.0,
+  "source_r2_pair_days": 312,
+  "theme": "automotive",
+  "track": "PRICE_ONLY_DIAGNOSTIC",
+  "track_alias": "D_MARKET_RESIDUAL_DIAGNOSTIC",
+  "vector_hash": "e7a0c31d9f4173685d9909f75aaf5e40cdd03adc02960a4fdfd20c157603e6ab",
+  "weights": {
+    "B": 0.023152411095848695,
+    "G": 0.0,
+    "M": 0.3157146968346037,
+    "P": 0.029992896254947065,
+    "R": 0.2946670503942651,
+    "S": 0.1515430545081527,
+    "T": 0.1799573771853955,
+    "V": 0.004972513726787288
+  }
+}

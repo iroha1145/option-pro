@@ -1,0 +1,71 @@
+{
+  "reviewed_head": "6159b2388d5bf36eefa7f7aba6c12455c3817585",
+  "round": "algorithm_round2_freeze",
+  "protocol": "us-eod-research-freeze-v1",
+  "market_backtests_executed_by_reviewer": 0,
+  "executed_backtests": 0,
+  "holdout_start": "2024-07-01",
+  "frozen_candidate_id": "R2_automotive_D_residual_momentum_V_DOWNWEIGHT_5PP",
+  "reviewer_tests": {
+    "passed": 12,
+    "failed": 2,
+    "failed_names": [
+      "test_low_weight_candidate_must_not_silently_change_registered_delta",
+      "test_positive_increase_must_not_be_labeled_reduce"
+    ]
+  },
+  "automotive_v": {
+    "theme": "automotive",
+    "family": "D_residual_momentum",
+    "factor": "V",
+    "requested_delta": -0.05,
+    "before_weight": 0.05497251372678729,
+    "after_weight": 0.004972513726787288,
+    "effective_delta": -0.05,
+    "relative_reduction": 0.9095454548158263,
+    "not_a_small_relative_cut": true
+  },
+  "etfs_p_historical": {
+    "theme": "etfs",
+    "family": "D_residual_momentum",
+    "factor": "P",
+    "requested_delta": -0.05,
+    "before_weight": 0.03109575515318754,
+    "after_weight": 0.01554787757659377,
+    "effective_delta": -0.01554787757659377,
+    "boundary_policy": "HALVE_AT_BOUNDARY",
+    "new_policy": "REJECT_INFEASIBLE",
+    "do_not_rewrite_as_true_minus_5pp": true
+  },
+  "fintech_s": {
+    "theme": "fintech",
+    "family": "B_confirmed_base_breakout",
+    "factor": "S",
+    "requested_delta": -0.05,
+    "keep_baseline": true
+  },
+  "neighbor_semantics": {
+    "input_variant": "N_S_PLUS_5PP_REALLOC_V1",
+    "input_kind": "neighbor",
+    "H_mean": 0.02,
+    "H_ci95": [0.01, 0.03],
+    "must_not_be": "REDUCE_WEIGHT_CANDIDATE",
+    "expected_direction": "INCREASE_WEIGHT_CANDIDATE"
+  },
+  "drop_semantics": {
+    "reduce_variant": "PRICE_DROP_R",
+    "keep_variant": "PRICE_DROP_M",
+    "reduce_expected": "REDUCE_WEIGHT_CANDIDATE",
+    "keep_expected": "KEEP_FACTOR"
+  },
+  "threshold_semantics": {
+    "variant_id": "N_SCORE_FLOOR_PLUS_10PCT",
+    "cross_zero_expected": "THRESHOLD_INCONCLUSIVE"
+  },
+  "public_table_limit": 500,
+  "stop_outcomes": [
+    "FROZEN_EXPLORATORY_CANDIDATE",
+    "REVERT_BASELINE",
+    "INSUFFICIENT"
+  ]
+}
