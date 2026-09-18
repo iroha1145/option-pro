@@ -1,0 +1,26 @@
+{
+  "actual_rescore_calls": 18354834,
+  "b0_function_calls": 156864,
+  "b0_registered_configs": 1920,
+  "baseline_global_book_deduped_event_groups": 10761,
+  "baseline_theme_report_deduped_event_groups": 10203,
+  "executed_backtests": 0,
+  "feature_reuse_hits": 2803536,
+  "holdout_unsealed": false,
+  "independent_events": null,
+  "inspected_outcomes": 4205304,
+  "local_full_suite": "3894 passed, 6 skipped",
+  "note": "Row counts are not independent experiments. Feature reuse is label-horizon repeats of the same snapshot.",
+  "old_count_4514": "SUPERSEDED_EVENT_COUNT",
+  "pairing_cells": 3774,
+  "pairing_thin_cells": 1848,
+  "registered_configurations": 1258,
+  "run_signature": "a8ceb257e38e521922736f8dd41eac3edd44214a48bde87df785c9fb3b2502c3",
+  "source_row_sha256": "b490ba6d83965a0c3fe60c76afab8205fc2a0d76cc6577cdf23cb838e447f75a",
+  "theme_family_decisions": {
+    "CONTINUE_INSPECT": 51,
+    "STATISTICALLY_THIN": 45
+  },
+  "transformed_label_rows": 4205304,
+  "unique_snapshots": 1401768
+}

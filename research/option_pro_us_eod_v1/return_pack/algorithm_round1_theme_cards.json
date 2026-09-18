@@ -1,0 +1,2042 @@
+[
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1387,
+        "post_warmup": 1402
+      },
+      "empty_all_window": 0.7974296205630355,
+      "empty_data_capable": 0.7613554434030281,
+      "empty_post_warmup": 0.7639087018544936,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 232
+    },
+    "families": [
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 4055,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "A_trend_quality",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 4055,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "B_confirmed_base_breakout",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 4055,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "C_trend_pullback",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "inherit_shared_prior",
+        "conclusion": "NO_CONCLUSION",
+        "decision": "STATISTICALLY_THIN",
+        "defined_ic_days_all_labels": 0,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "D_residual_momentum",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      }
+    ],
+    "theme": "semiconductors"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1396,
+        "post_warmup": 1412
+      },
+      "empty_all_window": 0.7692778457772338,
+      "empty_data_capable": 0.7299426934097422,
+      "empty_post_warmup": 0.7330028328611898,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 222
+    },
+    "families": [
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 2762,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "A_trend_quality",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 2762,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "B_confirmed_base_breakout",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 2753,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "C_trend_pullback",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 2531,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "D_residual_momentum",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      }
+    ],
+    "theme": "software"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1386,
+        "post_warmup": 1402
+      },
+      "empty_all_window": 0.8372093023255814,
+      "empty_data_capable": 0.8080808080808081,
+      "empty_post_warmup": 0.8102710413694721,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 232
+    },
+    "families": [
+      {
+        "action": "inherit_shared_prior",
+        "conclusion": "NO_CONCLUSION",
+        "decision": "STATISTICALLY_THIN",
+        "defined_ic_days_all_labels": 0,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "A_trend_quality",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "inherit_shared_prior",
+        "conclusion": "NO_CONCLUSION",
+        "decision": "STATISTICALLY_THIN",
+        "defined_ic_days_all_labels": 0,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "B_confirmed_base_breakout",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "inherit_shared_prior",
+        "conclusion": "NO_CONCLUSION",
+        "decision": "STATISTICALLY_THIN",
+        "defined_ic_days_all_labels": 0,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "C_trend_pullback",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "inherit_shared_prior",
+        "conclusion": "NO_CONCLUSION",
+        "decision": "STATISTICALLY_THIN",
+        "defined_ic_days_all_labels": 0,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "D_residual_momentum",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      }
+    ],
+    "theme": "ai_cloud"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1386,
+        "post_warmup": 1402
+      },
+      "empty_all_window": 0.6621787025703795,
+      "empty_data_capable": 0.6017316017316018,
+      "empty_post_warmup": 0.6062767475035663,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 232
+    },
+    "families": [
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 2687,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "A_trend_quality",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 2687,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "B_confirmed_base_breakout",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 2661,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "C_trend_pullback",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 2471,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "D_residual_momentum",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      }
+    ],
+    "theme": "biotech"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1392,
+        "post_warmup": 1408
+      },
+      "empty_all_window": 0.6407588739290085,
+      "empty_data_capable": 0.5783045977011494,
+      "empty_post_warmup": 0.5830965909090909,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 226
+    },
+    "families": [
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 4055,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "A_trend_quality",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 4055,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "B_confirmed_base_breakout",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 4013,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "C_trend_pullback",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 3149,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "D_residual_momentum",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      }
+    ],
+    "theme": "healthcare"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1388,
+        "post_warmup": 1404
+      },
+      "empty_all_window": 0.8384332925336597,
+      "empty_data_capable": 0.8097982708933718,
+      "empty_post_warmup": 0.811965811965812,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 230
+    },
+    "families": [
+      {
+        "action": "inherit_shared_prior",
+        "conclusion": "NO_CONCLUSION",
+        "decision": "STATISTICALLY_THIN",
+        "defined_ic_days_all_labels": 0,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "A_trend_quality",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "inherit_shared_prior",
+        "conclusion": "NO_CONCLUSION",
+        "decision": "STATISTICALLY_THIN",
+        "defined_ic_days_all_labels": 0,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "B_confirmed_base_breakout",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "inherit_shared_prior",
+        "conclusion": "NO_CONCLUSION",
+        "decision": "STATISTICALLY_THIN",
+        "defined_ic_days_all_labels": 0,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "C_trend_pullback",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "inherit_shared_prior",
+        "conclusion": "NO_CONCLUSION",
+        "decision": "STATISTICALLY_THIN",
+        "defined_ic_days_all_labels": 0,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "D_residual_momentum",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      }
+    ],
+    "theme": "consumer_electronics"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1386,
+        "post_warmup": 1402
+      },
+      "empty_all_window": 0.9473684210526315,
+      "empty_data_capable": 0.937950937950938,
+      "empty_post_warmup": 0.9386590584878745,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 232
+    },
+    "families": [
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 1139,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "A_trend_quality",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 1139,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "B_confirmed_base_breakout",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 1112,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "C_trend_pullback",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 908,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "D_residual_momentum",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      }
+    ],
+    "theme": "automotive"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1388,
+        "post_warmup": 1403
+      },
+      "empty_all_window": 0.9810281517747858,
+      "empty_data_capable": 0.9776657060518732,
+      "empty_post_warmup": 0.977904490377762,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 231
+    },
+    "families": [
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 1139,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "A_trend_quality",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 1139,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "B_confirmed_base_breakout",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 1127,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "C_trend_pullback",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 908,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "D_residual_momentum",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      }
+    ],
+    "theme": "ev_supply"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1391,
+        "post_warmup": 1407
+      },
+      "empty_all_window": 0.927172582619339,
+      "empty_data_capable": 0.914450035945363,
+      "empty_post_warmup": 0.9154228855721394,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 227
+    },
+    "families": [
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 4055,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "A_trend_quality",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 4055,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "B_confirmed_base_breakout",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 4046,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "C_trend_pullback",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "inherit_shared_prior",
+        "conclusion": "NO_CONCLUSION",
+        "decision": "STATISTICALLY_THIN",
+        "defined_ic_days_all_labels": 0,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "D_residual_momentum",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      }
+    ],
+    "theme": "finance"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1389,
+        "post_warmup": 1405
+      },
+      "empty_all_window": 0.8623011015911872,
+      "empty_data_capable": 0.838012958963283,
+      "empty_post_warmup": 0.8398576512455516,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 229
+    },
+    "families": [
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 1358,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "A_trend_quality",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 1358,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "B_confirmed_base_breakout",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 1358,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "C_trend_pullback",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 1127,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "D_residual_momentum",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      }
+    ],
+    "theme": "fintech"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1392,
+        "post_warmup": 1408
+      },
+      "empty_all_window": 0.780905752753978,
+      "empty_data_capable": 0.742816091954023,
+      "empty_post_warmup": 0.7457386363636364,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 226
+    },
+    "families": [
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 4055,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "A_trend_quality",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 4055,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "B_confirmed_base_breakout",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 4019,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "C_trend_pullback",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "inherit_shared_prior",
+        "conclusion": "NO_CONCLUSION",
+        "decision": "STATISTICALLY_THIN",
+        "defined_ic_days_all_labels": 0,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "D_residual_momentum",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      }
+    ],
+    "theme": "retail"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1386,
+        "post_warmup": 1400
+      },
+      "empty_all_window": 0.9008567931456548,
+      "empty_data_capable": 0.8831168831168831,
+      "empty_post_warmup": 0.8842857142857142,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 234
+    },
+    "families": [
+      {
+        "action": "inherit_shared_prior",
+        "conclusion": "NO_CONCLUSION",
+        "decision": "STATISTICALLY_THIN",
+        "defined_ic_days_all_labels": 0,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "A_trend_quality",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "inherit_shared_prior",
+        "conclusion": "NO_CONCLUSION",
+        "decision": "STATISTICALLY_THIN",
+        "defined_ic_days_all_labels": 0,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "B_confirmed_base_breakout",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "inherit_shared_prior",
+        "conclusion": "NO_CONCLUSION",
+        "decision": "STATISTICALLY_THIN",
+        "defined_ic_days_all_labels": 0,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "C_trend_pullback",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "inherit_shared_prior",
+        "conclusion": "NO_CONCLUSION",
+        "decision": "STATISTICALLY_THIN",
+        "defined_ic_days_all_labels": 0,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "D_residual_momentum",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      }
+    ],
+    "theme": "luxury"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1386,
+        "post_warmup": 1402
+      },
+      "empty_all_window": 0.8378212974296205,
+      "empty_data_capable": 0.8088023088023089,
+      "empty_post_warmup": 0.8109843081312411,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 232
+    },
+    "families": [
+      {
+        "action": "inherit_shared_prior",
+        "conclusion": "NO_CONCLUSION",
+        "decision": "STATISTICALLY_THIN",
+        "defined_ic_days_all_labels": 0,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "A_trend_quality",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "inherit_shared_prior",
+        "conclusion": "NO_CONCLUSION",
+        "decision": "STATISTICALLY_THIN",
+        "defined_ic_days_all_labels": 0,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "B_confirmed_base_breakout",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "inherit_shared_prior",
+        "conclusion": "NO_CONCLUSION",
+        "decision": "STATISTICALLY_THIN",
+        "defined_ic_days_all_labels": 0,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "C_trend_pullback",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "inherit_shared_prior",
+        "conclusion": "NO_CONCLUSION",
+        "decision": "STATISTICALLY_THIN",
+        "defined_ic_days_all_labels": 0,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "D_residual_momentum",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      }
+    ],
+    "theme": "media_streaming"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1386,
+        "post_warmup": 1402
+      },
+      "empty_all_window": 0.8880048959608323,
+      "empty_data_capable": 0.8679653679653679,
+      "empty_post_warmup": 0.869472182596291,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 232
+    },
+    "families": [
+      {
+        "action": "inherit_shared_prior",
+        "conclusion": "NO_CONCLUSION",
+        "decision": "STATISTICALLY_THIN",
+        "defined_ic_days_all_labels": 0,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "A_trend_quality",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "inherit_shared_prior",
+        "conclusion": "NO_CONCLUSION",
+        "decision": "STATISTICALLY_THIN",
+        "defined_ic_days_all_labels": 0,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "B_confirmed_base_breakout",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "inherit_shared_prior",
+        "conclusion": "NO_CONCLUSION",
+        "decision": "STATISTICALLY_THIN",
+        "defined_ic_days_all_labels": 0,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "C_trend_pullback",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "inherit_shared_prior",
+        "conclusion": "NO_CONCLUSION",
+        "decision": "STATISTICALLY_THIN",
+        "defined_ic_days_all_labels": 0,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "D_residual_momentum",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      }
+    ],
+    "theme": "social_internet"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1386,
+        "post_warmup": 1402
+      },
+      "empty_all_window": 0.9902080783353733,
+      "empty_data_capable": 0.9884559884559885,
+      "empty_post_warmup": 0.9885877318116976,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 232
+    },
+    "families": [
+      {
+        "action": "inherit_shared_prior",
+        "conclusion": "NO_CONCLUSION",
+        "decision": "STATISTICALLY_THIN",
+        "defined_ic_days_all_labels": 0,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "A_trend_quality",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 4055,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "B_confirmed_base_breakout",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 4013,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "C_trend_pullback",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "inherit_shared_prior",
+        "conclusion": "NO_CONCLUSION",
+        "decision": "STATISTICALLY_THIN",
+        "defined_ic_days_all_labels": 0,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "D_residual_momentum",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      }
+    ],
+    "theme": "energy"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1386,
+        "post_warmup": 1402
+      },
+      "empty_all_window": 0.7478580171358629,
+      "empty_data_capable": 0.7027417027417028,
+      "empty_post_warmup": 0.7061340941512125,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 232
+    },
+    "families": [
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 998,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "A_trend_quality",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 998,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "B_confirmed_base_breakout",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 989,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "C_trend_pullback",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "inherit_shared_prior",
+        "conclusion": "NO_CONCLUSION",
+        "decision": "STATISTICALLY_THIN",
+        "defined_ic_days_all_labels": 0,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "D_residual_momentum",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      }
+    ],
+    "theme": "utilities"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1390,
+        "post_warmup": 1406
+      },
+      "empty_all_window": 0.7949816401468788,
+      "empty_data_capable": 0.7589928057553957,
+      "empty_post_warmup": 0.7617354196301565,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 228
+    },
+    "families": [
+      {
+        "action": "inherit_shared_prior",
+        "conclusion": "NO_CONCLUSION",
+        "decision": "STATISTICALLY_THIN",
+        "defined_ic_days_all_labels": 0,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "A_trend_quality",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "inherit_shared_prior",
+        "conclusion": "NO_CONCLUSION",
+        "decision": "STATISTICALLY_THIN",
+        "defined_ic_days_all_labels": 0,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "B_confirmed_base_breakout",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "inherit_shared_prior",
+        "conclusion": "NO_CONCLUSION",
+        "decision": "STATISTICALLY_THIN",
+        "defined_ic_days_all_labels": 0,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "C_trend_pullback",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "inherit_shared_prior",
+        "conclusion": "NO_CONCLUSION",
+        "decision": "STATISTICALLY_THIN",
+        "defined_ic_days_all_labels": 0,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "D_residual_momentum",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      }
+    ],
+    "theme": "defense_aero"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1386,
+        "post_warmup": 1402
+      },
+      "empty_all_window": 0.9871481028151775,
+      "empty_data_capable": 0.9848484848484849,
+      "empty_post_warmup": 0.985021398002853,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 232
+    },
+    "families": [
+      {
+        "action": "inherit_shared_prior",
+        "conclusion": "NO_CONCLUSION",
+        "decision": "STATISTICALLY_THIN",
+        "defined_ic_days_all_labels": 0,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "A_trend_quality",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "inherit_shared_prior",
+        "conclusion": "NO_CONCLUSION",
+        "decision": "STATISTICALLY_THIN",
+        "defined_ic_days_all_labels": 0,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "B_confirmed_base_breakout",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "inherit_shared_prior",
+        "conclusion": "NO_CONCLUSION",
+        "decision": "STATISTICALLY_THIN",
+        "defined_ic_days_all_labels": 0,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "C_trend_pullback",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "inherit_shared_prior",
+        "conclusion": "NO_CONCLUSION",
+        "decision": "STATISTICALLY_THIN",
+        "defined_ic_days_all_labels": 0,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "D_residual_momentum",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      }
+    ],
+    "theme": "airlines"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1386,
+        "post_warmup": 1402
+      },
+      "empty_all_window": 0.7851897184822522,
+      "empty_data_capable": 0.7467532467532467,
+      "empty_post_warmup": 0.7496433666191156,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 232
+    },
+    "families": [
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 4040,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "A_trend_quality",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 4040,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "B_confirmed_base_breakout",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 3995,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "C_trend_pullback",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "inherit_shared_prior",
+        "conclusion": "NO_CONCLUSION",
+        "decision": "STATISTICALLY_THIN",
+        "defined_ic_days_all_labels": 0,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "D_residual_momentum",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      }
+    ],
+    "theme": "real_estate"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1381,
+        "post_warmup": 1382
+      },
+      "empty_all_window": 1.0,
+      "empty_data_capable": 1.0,
+      "empty_post_warmup": 1.0,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 252
+    },
+    "families": [
+      {
+        "action": "inherit_shared_prior",
+        "conclusion": "NO_CONCLUSION",
+        "decision": "STATISTICALLY_THIN",
+        "defined_ic_days_all_labels": 0,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "A_trend_quality",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "inherit_shared_prior",
+        "conclusion": "NO_CONCLUSION",
+        "decision": "STATISTICALLY_THIN",
+        "defined_ic_days_all_labels": 0,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "B_confirmed_base_breakout",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "inherit_shared_prior",
+        "conclusion": "NO_CONCLUSION",
+        "decision": "STATISTICALLY_THIN",
+        "defined_ic_days_all_labels": 0,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "C_trend_pullback",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "inherit_shared_prior",
+        "conclusion": "NO_CONCLUSION",
+        "decision": "STATISTICALLY_THIN",
+        "defined_ic_days_all_labels": 0,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "D_residual_momentum",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      }
+    ],
+    "theme": "crypto"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1386,
+        "post_warmup": 1402
+      },
+      "empty_all_window": 0.9528763769889841,
+      "empty_data_capable": 0.9444444444444444,
+      "empty_post_warmup": 0.9450784593437945,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 232
+    },
+    "families": [
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 3341,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "A_trend_quality",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 3341,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "B_confirmed_base_breakout",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 3329,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "C_trend_pullback",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "inherit_shared_prior",
+        "conclusion": "NO_CONCLUSION",
+        "decision": "STATISTICALLY_THIN",
+        "defined_ic_days_all_labels": 0,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "D_residual_momentum",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      }
+    ],
+    "theme": "china_adr"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1386,
+        "post_warmup": 1402
+      },
+      "empty_all_window": 0.8665850673194615,
+      "empty_data_capable": 0.8427128427128427,
+      "empty_post_warmup": 0.8445078459343794,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 232
+    },
+    "families": [
+      {
+        "action": "inherit_shared_prior",
+        "conclusion": "NO_CONCLUSION",
+        "decision": "STATISTICALLY_THIN",
+        "defined_ic_days_all_labels": 0,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "A_trend_quality",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "inherit_shared_prior",
+        "conclusion": "NO_CONCLUSION",
+        "decision": "STATISTICALLY_THIN",
+        "defined_ic_days_all_labels": 0,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "B_confirmed_base_breakout",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "inherit_shared_prior",
+        "conclusion": "NO_CONCLUSION",
+        "decision": "STATISTICALLY_THIN",
+        "defined_ic_days_all_labels": 0,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "C_trend_pullback",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "inherit_shared_prior",
+        "conclusion": "NO_CONCLUSION",
+        "decision": "STATISTICALLY_THIN",
+        "defined_ic_days_all_labels": 0,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "D_residual_momentum",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      }
+    ],
+    "theme": "telecom"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1386,
+        "post_warmup": 1402
+      },
+      "empty_all_window": 0.817625458996328,
+      "empty_data_capable": 0.784992784992785,
+      "empty_post_warmup": 0.7874465049928673,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 232
+    },
+    "families": [
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 4055,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "A_trend_quality",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 4055,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "B_confirmed_base_breakout",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 4034,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "C_trend_pullback",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "inherit_shared_prior",
+        "conclusion": "NO_CONCLUSION",
+        "decision": "STATISTICALLY_THIN",
+        "defined_ic_days_all_labels": 0,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "D_residual_momentum",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      }
+    ],
+    "theme": "industrials"
+  },
+  {
+    "empty_ratios": {
+      "denominators": {
+        "all_window": 1634,
+        "data_capable": 1400,
+        "post_warmup": 1420
+      },
+      "empty_all_window": 0.6988984088127295,
+      "empty_data_capable": 0.6485714285714286,
+      "empty_post_warmup": 0.6535211267605634,
+      "note": "G-missing coverage failures are data-capability, not strategy loss",
+      "warmup_dates": 214
+    },
+    "families": [
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 3767,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "A_trend_quality",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 3767,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "B_confirmed_base_breakout",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 3767,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "C_trend_pullback",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      },
+      {
+        "action": "run_preregistered_neighbors_only",
+        "conclusion": "NO_CHAMPION",
+        "decision": "CONTINUE_INSPECT",
+        "defined_ic_days_all_labels": 3149,
+        "do_not": [
+          "do not invert or delete the family because software IC is negative",
+          "do not cross-track champion PRICE_ONLY vs FULL_EIGHT",
+          "do not treat B IC as breakout PnL"
+        ],
+        "family": "D_residual_momentum",
+        "next_neighbors": [
+          "N_M_PLUS_5PP",
+          "N_S_PLUS_5PP",
+          "N_SCORE_FLOOR_PLUS_10PCT"
+        ]
+      }
+    ],
+    "theme": "etfs"
+  }
+]

@@ -1,43 +1,75 @@
 {
-  "preregistered": true,
-  "preregistered_before_ic": true,
-  "profile": "balanced",
-  "horizon": "mid",
-  "specs": [
+  "date_blocks": [
     {
-      "variant_id": "N_M_PLUS_5PP",
-      "kind": "weight",
-      "factor": "M",
-      "delta": 0.05
+      "end": "2018-12-31",
+      "id": "Y2018",
+      "start": "2018-01-02"
     },
     {
-      "variant_id": "N_S_PLUS_5PP",
-      "kind": "weight",
-      "factor": "S",
-      "delta": 0.05
+      "end": "2019-12-31",
+      "id": "Y2019",
+      "start": "2019-01-01"
     },
     {
-      "variant_id": "N_SCORE_FLOOR_PLUS_10PCT",
-      "kind": "threshold",
-      "field": "score_floor",
-      "scale": 1.1
+      "end": "2020-12-31",
+      "id": "Y2020",
+      "start": "2020-01-01"
+    },
+    {
+      "end": "2021-12-31",
+      "id": "Y2021",
+      "start": "2021-01-01"
+    },
+    {
+      "end": "2022-12-31",
+      "id": "Y2022",
+      "start": "2022-01-01"
+    },
+    {
+      "end": "2023-12-31",
+      "id": "Y2023",
+      "start": "2023-01-01"
+    },
+    {
+      "end": "2024-06-28",
+      "id": "Y2024H1",
+      "start": "2024-01-01"
+    },
+    {
+      "end": "2019-12-31",
+      "id": "B2018_2019",
+      "start": "2018-01-02"
+    },
+    {
+      "end": "2021-12-31",
+      "id": "B2020_2021",
+      "start": "2020-01-01"
+    },
+    {
+      "end": "2023-12-31",
+      "id": "B2022_2023",
+      "start": "2022-01-01"
     }
   ],
-  "date_blocks": [
-    {"id": "Y2018", "start": "2018-01-02", "end": "2018-12-31"},
-    {"id": "Y2019", "start": "2019-01-01", "end": "2019-12-31"},
-    {"id": "Y2020", "start": "2020-01-01", "end": "2020-12-31"},
-    {"id": "Y2021", "start": "2021-01-01", "end": "2021-12-31"},
-    {"id": "Y2022", "start": "2022-01-01", "end": "2022-12-31"},
-    {"id": "Y2023", "start": "2023-01-01", "end": "2023-12-31"},
-    {"id": "Y2024H1", "start": "2024-01-01", "end": "2024-06-28"},
-    {"id": "B2018_2019", "start": "2018-01-02", "end": "2019-12-31"},
-    {"id": "B2020_2021", "start": "2020-01-01", "end": "2021-12-31"},
-    {"id": "B2022_2023", "start": "2022-01-01", "end": "2023-12-31"}
-  ],
-  "notes": [
-    "Registered before any ablation IC is read.",
-    "At most these three neighbors per theme. No extra search.",
-    "Do not invert a family because software IC is negative."
+  "preregistered": true,
+  "specs": [
+    {
+      "delta": 0.05,
+      "factor": "M",
+      "kind": "weight",
+      "variant_id": "N_M_PLUS_5PP"
+    },
+    {
+      "delta": 0.05,
+      "factor": "S",
+      "kind": "weight",
+      "variant_id": "N_S_PLUS_5PP"
+    },
+    {
+      "field": "score_floor",
+      "kind": "threshold",
+      "scale": 1.1,
+      "variant_id": "N_SCORE_FLOOR_PLUS_10PCT"
+    }
   ]
 }

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import subprocess
@@ -52,14 +53,23 @@ def _write(path: Path, payload: object) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True, default=str) + "\n", encoding="utf-8")
 
 
-def _hashed_rows(path: Path, digest):
+def _hashed_rows(path: Path, digest, limit: int | None = None):
+    count = 0
     with path.open("rb") as handle:
         for raw in handle:
             digest.update(raw)
+            count += 1
+            if count % 200_000 == 0:
+                print(json.dumps({"rows_read": count}), flush=True)
             yield json.loads(raw)
+            if limit is not None and count >= limit:
+                return
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--limit", type=int, default=None)
+    args = parser.parse_args()
     if not ROWS.exists():
         raise SystemExit(f"missing frozen B0 tape: {ROWS}")
     registry = load_registry()
@@ -115,7 +125,13 @@ def main() -> None:
     _write(MATRIX, coverage)
     _write(NEIGHBORS, {"preregistered": True, "specs": list(NEIGHBOR_SPECS), "date_blocks": list(DATE_BLOCKS)})
     digest = hashlib.sha256()
-    analysis = analyze_rows(_hashed_rows(ROWS, digest), registry, profile="balanced", horizon="mid")
+    analysis = analyze_rows(
+        _hashed_rows(ROWS, digest, limit=args.limit),
+        registry,
+        profile="balanced",
+        horizon="mid",
+    )
+    analysis["row_limit"] = args.limit
     row_hash = digest.hexdigest()
     analysis["source_row_sha256"] = row_hash
     analysis["run_signature"] = signature

@@ -1,0 +1,107 @@
+{
+  "by_variant": {
+    "ABLATION_DROP_B": {
+      "global_book_deduped_event_groups": 10827,
+      "independent_events": null,
+      "old_count_4514": "SUPERSEDED_EVENT_COUNT",
+      "theme_report_deduped_event_groups": 10269,
+      "usable_for_independent_sample": false
+    },
+    "ABLATION_DROP_G": {
+      "global_book_deduped_event_groups": 10761,
+      "independent_events": null,
+      "old_count_4514": "SUPERSEDED_EVENT_COUNT",
+      "theme_report_deduped_event_groups": 10203,
+      "usable_for_independent_sample": false
+    },
+    "ABLATION_DROP_M": {
+      "global_book_deduped_event_groups": 4518,
+      "independent_events": null,
+      "old_count_4514": "SUPERSEDED_EVENT_COUNT",
+      "theme_report_deduped_event_groups": 4515,
+      "usable_for_independent_sample": false
+    },
+    "ABLATION_DROP_P": {
+      "global_book_deduped_event_groups": 16917,
+      "independent_events": null,
+      "old_count_4514": "SUPERSEDED_EVENT_COUNT",
+      "theme_report_deduped_event_groups": 15882,
+      "usable_for_independent_sample": false
+    },
+    "ABLATION_DROP_R": {
+      "global_book_deduped_event_groups": 9540,
+      "independent_events": null,
+      "old_count_4514": "SUPERSEDED_EVENT_COUNT",
+      "theme_report_deduped_event_groups": 8604,
+      "usable_for_independent_sample": false
+    },
+    "ABLATION_DROP_S": {
+      "global_book_deduped_event_groups": 3942,
+      "independent_events": null,
+      "old_count_4514": "SUPERSEDED_EVENT_COUNT",
+      "theme_report_deduped_event_groups": 3939,
+      "usable_for_independent_sample": false
+    },
+    "ABLATION_DROP_T": {
+      "global_book_deduped_event_groups": 2130,
+      "independent_events": null,
+      "old_count_4514": "SUPERSEDED_EVENT_COUNT",
+      "theme_report_deduped_event_groups": 2127,
+      "usable_for_independent_sample": false
+    },
+    "ABLATION_DROP_V": {
+      "global_book_deduped_event_groups": 12777,
+      "independent_events": null,
+      "old_count_4514": "SUPERSEDED_EVENT_COUNT",
+      "theme_report_deduped_event_groups": 11934,
+      "usable_for_independent_sample": false
+    },
+    "BASELINE_FULL_EIGHT": {
+      "global_book_deduped_event_groups": 10761,
+      "independent_events": null,
+      "old_count_4514": "SUPERSEDED_EVENT_COUNT",
+      "theme_report_deduped_event_groups": 10203,
+      "usable_for_independent_sample": false
+    },
+    "D_MARKET_RESIDUAL_DIAGNOSTIC": {
+      "global_book_deduped_event_groups": 8466,
+      "independent_events": null,
+      "old_count_4514": "SUPERSEDED_EVENT_COUNT",
+      "theme_report_deduped_event_groups": 7896,
+      "usable_for_independent_sample": false
+    },
+    "N_M_PLUS_5PP": {
+      "global_book_deduped_event_groups": 15120,
+      "independent_events": null,
+      "old_count_4514": "SUPERSEDED_EVENT_COUNT",
+      "theme_report_deduped_event_groups": 13920,
+      "usable_for_independent_sample": false
+    },
+    "N_SCORE_FLOOR_PLUS_10PCT": {
+      "global_book_deduped_event_groups": 1164,
+      "independent_events": null,
+      "old_count_4514": "SUPERSEDED_EVENT_COUNT",
+      "theme_report_deduped_event_groups": 1164,
+      "usable_for_independent_sample": false
+    },
+    "N_S_PLUS_5PP": {
+      "global_book_deduped_event_groups": 15105,
+      "independent_events": null,
+      "old_count_4514": "SUPERSEDED_EVENT_COUNT",
+      "theme_report_deduped_event_groups": 13962,
+      "usable_for_independent_sample": false
+    },
+    "PRICE_ONLY_DIAGNOSTIC": {
+      "global_book_deduped_event_groups": 16950,
+      "independent_events": null,
+      "old_count_4514": "SUPERSEDED_EVENT_COUNT",
+      "theme_report_deduped_event_groups": 15822,
+      "usable_for_independent_sample": false
+    }
+  },
+  "definition": "SECURITY_FAMILY_PROFILE_HORIZON_LABEL_TRADING_SESSION_OVERLAP",
+  "independent_events": null,
+  "name": "deduped_event_groups",
+  "old_count_4514": "SUPERSEDED_EVENT_COUNT",
+  "usable_for_independent_sample": false
+}

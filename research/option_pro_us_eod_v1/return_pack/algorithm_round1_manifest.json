@@ -1,7 +1,12 @@
 {
+  "actual_rescore_calls": 18354834,
   "allowed_end": "2024-06-28",
   "b0_not_overwritten": true,
   "b0_restricted": true,
+  "b0_results": "research/option_pro_us_eod_v1/return_pack/measurement_results.json",
+  "b0_rows": "research/option_pro_us_eod_v1/return_pack/measurement_factor_rows.jsonl",
+  "baseline_global_book_deduped_event_groups": 10761,
+  "baseline_theme_report_deduped_event_groups": 10203,
   "cache_hits": {
     "checkpoint": "Signed done keys are (session, theme, algorithm, profile, horizon). A signature mismatch rejects the file. Row uniqueness uses committed_row_key.",
     "event_cache": "Deduped event groups keyed by security, family, profile, score horizon, and label horizon under trading-session adjacency. Not N_eff.",
@@ -9,6 +14,7 @@
     "ic_cache": "Grouped Spearman keyed by session, theme, family, profile, horizon, label horizon, and the score vector identity. Eligible-only subsets are not this cache.",
     "score_cache": "Scores and eligibility keyed by run_signature plus security. A weight, profile, horizon, floor, or label-horizon change must miss this layer."
   },
+  "completed_at": "2026-09-18T05:18:00.634982+00:00",
   "date_blocks_preregistered_before_ic": [
     {
       "end": "2018-12-31",
@@ -61,11 +67,19 @@
       "start": "2022-01-01"
     }
   ],
+  "executed_backtests": 0,
+  "feature_reuse_hits": 2803536,
   "feature_version": "us-eod-research-features-v1.5",
+  "head": "b44b18866b889d231335f7c6d88cba18ec967b4b",
   "holdout_start": "2024-07-01",
   "holdout_unsealed": false,
   "horizon": "mid",
-  "insufficient_cells": 14,
+  "inspected_outcomes": 4205304,
+  "local_tests": {
+    "command": "PYTHONPATH=/workspace:/workspace/backend python -m pytest -q",
+    "full_suite": "3894 passed, 6 skipped",
+    "pr174_round1_bundle": "56 passed"
+  },
   "neighbors_preregistered_before_ic": [
     {
       "delta": 0.05,
@@ -86,11 +100,24 @@
       "variant_id": "N_SCORE_FLOOR_PLUS_10PCT"
     }
   ],
+  "notes": [
+    "Neighbors and date blocks are registered in this file before the tape is scored.",
+    "PRICE_ONLY_DIAGNOSTIC and D_MARKET_RESIDUAL_DIAGNOSTIC are separate tracks.",
+    "G-missing coverage failures are data-capability, not strategy loss.",
+    "4514 remains SUPERSEDED_EVENT_COUNT.",
+    "executed_backtests stays 0."
+  ],
+  "old_count_4514": "SUPERSEDED_EVENT_COUNT",
   "profile": "balanced",
+  "registered_configurations": 1258,
   "reviewed_anchor": "155685daf93982d480fa06a06eb095f7bf8ae984",
   "round": "algorithm_round1",
   "run_signature": "a8ceb257e38e521922736f8dd41eac3edd44214a48bde87df785c9fb3b2502c3",
   "score_version": "us-eod-research-score-v1",
+  "source_row_sha256": "b490ba6d83965a0c3fe60c76afab8205fc2a0d76cc6577cdf23cb838e447f75a",
   "statistics_version": "us-eod-research-stats-v1.0",
-  "status": "NEIGHBORS_REGISTERED_ABLATION_PENDING"
+  "status": "FIRST_ABLATION_AND_NEIGHBORS_EXECUTED",
+  "transformed_label_rows": 4205304,
+  "unique_snapshots": 1401768,
+  "written_at": "2026-09-18T05:07:52.932097+00:00"
 }

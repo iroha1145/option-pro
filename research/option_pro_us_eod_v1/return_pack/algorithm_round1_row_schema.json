@@ -1,6 +1,4 @@
 {
-  "schema_version": "us-eod-research-factor-row-v1.0",
-  "source": "research/option_pro_us_eod_v1/return_pack/measurement_factor_rows.jsonl",
   "fields": [
     "security_id",
     "signal_session",
@@ -15,5 +13,8 @@
     "final_eligible",
     "rejection_reasons"
   ],
-  "note": "Authorized cache-derived tape stays gitignored. Summaries plus this schema are the public replay handle. sha256 is filled after the ablation pass."
+  "note": "Authorized cache-derived tape stays gitignored. This schema plus hash is the public replay handle.",
+  "schema_version": "us-eod-research-factor-row-v1.0",
+  "sha256": "b490ba6d83965a0c3fe60c76afab8205fc2a0d76cc6577cdf23cb838e447f75a",
+  "source": "research/option_pro_us_eod_v1/return_pack/measurement_factor_rows.jsonl"
 }
