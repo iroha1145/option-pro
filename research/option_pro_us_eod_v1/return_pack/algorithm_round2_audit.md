@@ -46,4 +46,9 @@ Score-floor neighbor IC is expected to match the scorer; judge floors on eligibl
 
 Only the automotive D / V small downweight still has same-side H and 2H after execution, and even that cell is N=10 with 1321 insufficient dates. Recommend at most that one limited continue, plus keep-baseline everywhere else. Do not expand family E, weekly, macro, or a full-market collect on the next call. No winner is allowed and none is claimed.
 
-Current-head GitHub CI is recorded after the workflow finishes.
+Research-head GitHub CI on `4581c932` is terminal success:
+
+- push: https://github.com/iroha1145/option-pro/actions/runs/35341041661
+- pull_request: https://github.com/iroha1145/option-pro/actions/runs/35341047095
+
+A later URL-stamp commit is docs-only and is not a new research revision.
