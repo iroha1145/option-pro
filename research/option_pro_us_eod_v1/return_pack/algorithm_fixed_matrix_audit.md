@@ -37,3 +37,12 @@ Holdout 2024-07-01 stays sealed. No new weight search.
 - historical master/delist/classification blocks full-market PIT claims
 
 No production champion. No unseal. No new weight grid.
+
+## Current-head GitHub CI
+
+Research-head GitHub CI on `af5a1116` is terminal success:
+
+- push: https://github.com/iroha1145/option-pro/actions/runs/35370139053
+- pull_request: https://github.com/iroha1145/option-pro/actions/runs/35370143182
+
+A later URL-stamp commit is docs-only and is not a new research revision.

@@ -15,6 +15,13 @@
     "stats.py": "584ec46e533ab3a2b096262e6f0f41d28624c5136b52d1508fdf583e5d75acc9"
   },
   "generated_at": "2026-09-18T16:43:08.393362+00:00",
+  "github_ci": {
+    "pull_request_run": "https://github.com/iroha1145/option-pro/actions/runs/35370143182",
+    "push_run": "https://github.com/iroha1145/option-pro/actions/runs/35370139053",
+    "research_head": "af5a111612e945f99f9f9bc6e895ffa60ef3ab7f",
+    "stamp_is_docs_only": true,
+    "stamped_at": "2026-09-18T17:13:14.710999+00:00"
+  },
   "head": "77c667bf70d4af9fdf995353de945c0fe74974dc",
   "protocol": "us-eod-research-fixed-matrix-v1",
   "review_anchor": "c8cd25931f007ce826c7b1e3cd1a1726d48ffae0",

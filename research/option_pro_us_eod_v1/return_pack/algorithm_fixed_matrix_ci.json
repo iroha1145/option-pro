@@ -1,0 +1,20 @@
+{
+  "check_runs": [
+    {
+      "conclusion": "success",
+      "name": "test",
+      "url": "https://github.com/iroha1145/option-pro/actions/runs/35370139053/job/105681898923"
+    },
+    {
+      "conclusion": "success",
+      "name": "test",
+      "url": "https://github.com/iroha1145/option-pro/actions/runs/35370143182/job/105681913164"
+    }
+  ],
+  "github_python_tests_step": "success",
+  "local_pytest": "3956 passed, 6 skipped",
+  "pull_request_run": "https://github.com/iroha1145/option-pro/actions/runs/35370143182",
+  "push_run": "https://github.com/iroha1145/option-pro/actions/runs/35370139053",
+  "research_head": "af5a111612e945f99f9f9bc6e895ffa60ef3ab7f",
+  "stamp_is_docs_only": true
+}
