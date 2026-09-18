@@ -321,7 +321,7 @@ def test_g_ablation_is_absent_when_coverage_fails() -> None:
 def test_rescore_keeps_hard_gates_and_uses_scorer_universe() -> None:
     weights = {key: 0.125 for key in ("T", "M", "S", "B", "P", "V", "R", "G")}
     row = {
-        "factors": {"T": 80, "M": 80, "S": 80, "B": 80, "P": 80, "V": 80, "R": 80, "G": None},
+            "factors": {"T": 80, "M": 80, "S": 80, "B": 80, "P": 80, "V": 80, "R": 80, "G": 80},
         "rejection_reasons": ["SETUP_NOT_MET", "LOW_SCORE", "MISSING_SCORE"],
     }
     scored = rescore_row(row, weights, coverage_min=0.9, required=family_required("A_trend_quality"), score_floor=74)

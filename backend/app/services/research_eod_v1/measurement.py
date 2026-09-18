@@ -250,6 +250,8 @@ def run_snapshot_matrix(
     universe_version: str = "u_measurement",
     registry_version: Any = None,
     row_store_path: Path | None = None,
+    window_start: date | str | None = None,
+    window_end: date | str | None = None,
 ) -> dict[str, Any]:
     """Deterministic theme/family snapshots. Input dict order must not matter."""
 
@@ -266,8 +268,8 @@ def run_snapshot_matrix(
         universe_version=universe_version,
         member_policy="known_theme_members",
         reference_policy="same_track_t_complete_plus_spy_qqq",
-        start=ordered_sessions[0] if ordered_sessions else "",
-        end=ordered_sessions[-1] if ordered_sessions else "",
+        start=window_start if window_start is not None else (ordered_sessions[0] if ordered_sessions else ""),
+        end=window_end if window_end is not None else (ordered_sessions[-1] if ordered_sessions else ""),
         available_factors=("T", "M", "S", "B", "P", "V", "R", "G"),
         timing_policy="NEXT_DAY_CONFIRM",
         registry_version=registry_version,

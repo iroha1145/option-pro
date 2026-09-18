@@ -508,6 +508,8 @@ def test_chunked_and_resumed_runs_match_continuous_keys(tmp_path: Path) -> None:
         themes=("semiconductors",),
         algorithms=("A_trend_quality",),
         registry=registry,
+        window_start=sessions[0],
+        window_end=sessions[-1],
     )
     continuous = run_snapshot_matrix(sessions=sessions, **common)
     chunk_path = tmp_path / "chunks.json"
