@@ -145,18 +145,19 @@ def reconciliation_csv(result: Mapping[str, Any]) -> str:
     writer = csv.DictWriter(
         buffer,
         fieldnames=["security_id", "session_date", "return_diff_bp", "volume_ratio", "return_marked", "volume_marked", "reason_class"],
+        lineterminator="\n",
     )
     writer.writeheader()
     for row in result.get("rows") or []:
         writer.writerow(row)
     if not result.get("rows"):
         writer.writerow({
-            "security_id": "",
-            "session_date": "",
-            "return_diff_bp": "",
-            "volume_ratio": "",
-            "return_marked": "",
-            "volume_marked": "",
+            "security_id": "NONE",
+            "session_date": "NONE",
+            "return_diff_bp": "NA",
+            "volume_ratio": "NA",
+            "return_marked": "false",
+            "volume_marked": "false",
             "reason_class": result.get("status") or "AUTH_REQUIRED",
         })
     return buffer.getvalue()
