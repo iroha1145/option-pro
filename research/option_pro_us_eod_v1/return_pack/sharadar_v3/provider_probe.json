@@ -1,0 +1,63 @@
+{
+  "credential_present": false,
+  "runtime": {
+    "platform": "Linux-6.12.94+-x86_64-with-glibc2.39",
+    "python": "3.12.3",
+    "hostname_hash": "46a4eebd20d881ec",
+    "env_key_name": "SHARADAR_API_KEY"
+  },
+  "provider": "sharadar",
+  "channel": "api.sharadar.com",
+  "channel_confirmed": "official_docs_mapped; live_channel_unconfirmed_without_secret",
+  "nasdaq_data_link_attempted": false,
+  "chat_credentials_read": false,
+  "massive_key_used": false,
+  "yahoo_fallback_used": false,
+  "tables": {
+    "stocks": {
+      "alias": "SEP",
+      "status": "AUTH_REQUIRED",
+      "row_count": 0,
+      "redacted_url": "https://api.sharadar.com/v1.0/data/stocks?format=json",
+      "schema_gap": []
+    },
+    "funds": {
+      "alias": "SFP",
+      "status": "AUTH_REQUIRED",
+      "row_count": 0,
+      "redacted_url": "https://api.sharadar.com/v1.0/data/funds?format=json",
+      "schema_gap": []
+    },
+    "tickers": {
+      "alias": "TICKERS",
+      "status": "AUTH_REQUIRED",
+      "row_count": 0,
+      "redacted_url": "https://api.sharadar.com/v1.0/data/tickers?format=json",
+      "schema_gap": []
+    },
+    "actions": {
+      "alias": "ACTIONS",
+      "status": "AUTH_REQUIRED",
+      "row_count": 0,
+      "redacted_url": "https://api.sharadar.com/v1.0/data/actions?format=json",
+      "schema_gap": []
+    }
+  },
+  "samples": {
+    "non_free_example": "AUTH_REQUIRED",
+    "delisted": "AUTH_REQUIRED",
+    "history_2010": "AUTH_REQUIRED",
+    "funds_scope": "AUTH_REQUIRED",
+    "aapl_earliest": null
+  },
+  "entitlement": {
+    "status": "AUTH_REQUIRED",
+    "bulk_years": null,
+    "earliest": null,
+    "research_start": null,
+    "continue": false
+  },
+  "volume_session_scope": "UNKNOWN",
+  "secret_present_in_report": false,
+  "terminal_status": "AUTH_REQUIRED"
+}

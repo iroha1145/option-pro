@@ -1,0 +1,17 @@
+{
+  "actions_fields_passthrough": [
+    "date",
+    "action",
+    "ticker",
+    "name",
+    "value",
+    "contraticker",
+    "contraname"
+  ],
+  "no_secondary_merge": true,
+  "terminal_rules": {
+    "bankruptcy": "last_trade",
+    "acquisition": "actions.acquisitioncash",
+    "else": "TERMINAL_UNKNOWN_exclude"
+  }
+}

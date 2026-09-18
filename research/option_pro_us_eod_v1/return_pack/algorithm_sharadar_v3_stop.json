@@ -1,0 +1,8 @@
+{
+  "terminal_status": "AUTH_REQUIRED",
+  "do_not_start_weight_search": true,
+  "do_not_fallback_yahoo": true,
+  "do_not_merge": true,
+  "holdout_unsealed": false,
+  "executed_backtests": 0
+}

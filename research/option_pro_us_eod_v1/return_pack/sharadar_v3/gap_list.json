@@ -1,0 +1,37 @@
+[
+  {
+    "item": "SHARADAR_API_KEY",
+    "status": "AUTH_REQUIRED",
+    "action": "inject Cursor secret and start a new agent"
+  },
+  {
+    "item": "live_table_read",
+    "status": "AUTH_REQUIRED",
+    "action": "do not fall back to Yahoo or Massive"
+  },
+  {
+    "item": "entitlement_years",
+    "status": "AUTH_REQUIRED",
+    "action": "stop on 5Y; tag 10Y; continue full from 2010-01-01"
+  },
+  {
+    "item": "yahoo_overlap_reconcile",
+    "status": "AUTH_REQUIRED",
+    "action": "align security/currency/split scale before comparing"
+  },
+  {
+    "item": "volume_session_scope",
+    "status": "UNKNOWN",
+    "action": "do not start volume experiments"
+  },
+  {
+    "item": "persistent_offline_export",
+    "status": "UNSUPPORTED",
+    "action": "authorized store outside public git; hash alone on a temp VM is not handover"
+  },
+  {
+    "item": "members_and_factors",
+    "status": "NOT_THIS_ROUND",
+    "action": "wait for data-gate review"
+  }
+]

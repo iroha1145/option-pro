@@ -1,0 +1,16 @@
+{
+  "aligned_n": 0,
+  "marked_n": 0,
+  "marked_share": 0.0,
+  "status": "AUTH_REQUIRED",
+  "rows": [],
+  "yahoo_is_not_truth": true,
+  "thresholds": {
+    "return_abs_bp": 50.0,
+    "volume_ratio": [
+      0.8,
+      1.25
+    ],
+    "fail_share": 0.02
+  }
+}

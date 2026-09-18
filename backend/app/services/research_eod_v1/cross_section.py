@@ -21,6 +21,10 @@ def ranked_q(
     return dict(zip(names, ranks))
 
 
+def _finite_members(signed: dict[str, float | None], members: Iterable[str]) -> int:
+    return sum(1 for sid in members if signed.get(sid) is not None)
+
+
 def q_star(
     values: dict[str, float | None],
     *,
@@ -34,31 +38,39 @@ def q_star(
     by_track: dict[str, list[str]] = defaultdict(list)
     by_industry: dict[tuple[str, str], list[str]] = defaultdict(list)
     by_parent: dict[tuple[str, str], list[str]] = defaultdict(list)
-    for sid, value in signed.items():
+    for sid in signed:
         track = tracks.get(sid, "stock")
         by_track[track].append(sid)
         if industry.get(sid):
             by_industry[(track, industry[sid] or "")].append(sid)
         if parent.get(sid):
             by_parent[(track, parent[sid] or "")].append(sid)
-    q_all: dict[str, float | None] = {}
-    for track, members in by_track.items():
-        q_all.update(ranked_q(signed, members if len(members) >= PARENT_MIN_FOR_Q else members))
-        if len(members) < 2:
+    q_track: dict[str, float | None] = {}
+    for _track, members in by_track.items():
+        if _finite_members(signed, members) < 2:
             for sid in members:
-                q_all[sid] = None
+                q_track[sid] = None
+        else:
+            q_track.update(ranked_q(signed, members))
+    q_parent: dict[str, float | None] = {}
+    for _key, members in by_parent.items():
+        if _finite_members(signed, members) >= PARENT_MIN_FOR_Q:
+            q_parent.update(ranked_q(signed, members))
     q_ind: dict[str, float | None] = {}
     n_ind: dict[str, int] = {}
-    for key, members in by_industry.items():
+    for _key, members in by_industry.items():
         ranks = ranked_q(signed, members)
         for sid in members:
             q_ind[sid] = ranks[sid]
-            n_ind[sid] = sum(1 for item in members if signed.get(item) is not None)
+            n_ind[sid] = _finite_members(signed, members)
     for sid in signed:
-        track = tracks.get(sid, "stock")
-        q_p = q_all.get(sid)
-        if q_p is None and parent.get(sid):
-            fallback = by_parent.get((track, parent[sid] or ""), [])
-            q_p = ranked_q(signed, fallback).get(sid)
-        out[sid] = shrink_q(q_ind.get(sid), q_p, n_ind.get(sid, 0) if n_ind.get(sid, 0) >= INDUSTRY_MIN_FOR_LAMBDA else 0)
+        q_p = q_parent.get(sid)
+        if q_p is None:
+            q_p = q_track.get(sid)
+        n_industry = n_ind.get(sid, 0)
+        out[sid] = shrink_q(
+            q_ind.get(sid),
+            q_p,
+            n_industry if n_industry >= INDUSTRY_MIN_FOR_LAMBDA else 0,
+        )
     return out

@@ -15,7 +15,7 @@ from app.services.research_eod_v1.calendar_asof import last_complete_eod_session
 from app.services.research_eod_v1.data.capture_store import eod_pool_exclusions, series_is_late
 from app.services.research_eod_v1.cross_section import q_star
 from app.services.research_eod_v1.factors import RawComponents, apply_sector_gates, extract_raw
-from app.services.research_eod_v1.mathutil import clip100
+from app.services.research_eod_v1.mathutil import clip100, finite
 from app.services.research_eod_v1.membership import (
     has_complete_session_bar,
     is_theme_candidate,
@@ -78,9 +78,11 @@ def _v_state(algorithm: str, raw: RawComponents) -> float | None:
             return None
         return clip100(50.0 + 30.0 * math.log(raw.rvol))
     if algorithm == "B_confirmed_base_breakout":
-        if raw.rvol is None or raw.rvol <= 0:
+        track = raw.breakout_track or {}
+        first_day_rvol = finite(track.get("first_day_rvol"))
+        if first_day_rvol is None or first_day_rvol <= 0:
             return None
-        return clip100(50.0 + 30.0 * math.log(raw.rvol))
+        return clip100(50.0 + 30.0 * math.log(first_day_rvol))
     if raw.down_ratio is None or raw.rvol is None:
         return None
     return 0.5 * (clip100(100.0 * (1.0 - raw.down_ratio / 1.5)) or 0.0) + 0.5 * (

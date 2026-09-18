@@ -1,0 +1,15 @@
+{
+  "adapter_code": "PASS",
+  "synthetic_three_track": "PASS",
+  "identity_contract": "PASS",
+  "delist_fixture_table": "PASS",
+  "parent_rank_fix": "PASS",
+  "breakout_first_day_fix": "PASS",
+  "feature_version_bump": "PASS",
+  "control_archive_index": "PASS",
+  "live_sharadar_read": "AUTH_REQUIRED",
+  "yahoo_reconcile_live": "AUTH_REQUIRED",
+  "volume_scope": "UNSUPPORTED",
+  "persistent_handover": "UNSUPPORTED",
+  "chat_or_massive_credential_used": "PASS_NOT_USED"
+}

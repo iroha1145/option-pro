@@ -1,0 +1,8 @@
+{
+  "official_daily_volume_definition": "stocks.volume is split-adjusted; tape volume = volume * close / closeunadj",
+  "session_scope": "UNKNOWN",
+  "minute_entitlement": false,
+  "status": "UNSUPPORTED",
+  "rvol_thresholds_not_migrated": true,
+  "note": "No minute rights in this runtime; do not claim regular-session volume verification."
+}

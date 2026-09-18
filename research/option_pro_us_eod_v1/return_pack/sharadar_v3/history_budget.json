@@ -1,0 +1,19 @@
+{
+  "status": "AUTH_REQUIRED",
+  "entitlement_status": "AUTH_REQUIRED",
+  "raw_start": null,
+  "allowed_end": "2024-06-28",
+  "holdout_start": "2024-07-01",
+  "warmup_sessions": {
+    "A_trend_quality": 252,
+    "B_confirmed_base_breakout": 252,
+    "C_trend_pullback": 252,
+    "D_residual_momentum": 330
+  },
+  "residual_history_min": 330,
+  "first_score_day": null,
+  "mature_labels": "holding_horizon after first_score_day",
+  "evaluable_years_not_claimed_from_2010_alone": true,
+  "calendar_sessions_in_window": null,
+  "young_names_have_independent_insufficient": true
+}

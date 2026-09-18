@@ -1,0 +1,13 @@
+{
+  "head": "ec14a1663051ec3425cb4fcfeecc8dc34cc698f3",
+  "generated_at": "2026-09-18T17:51:55.070004+00:00",
+  "feature_version": "us-eod-research-features-v1.6",
+  "archived_feature_version": "us-eod-research-features-v1.5",
+  "archive_label": "CONTROL_CURRENT_LIST_214",
+  "terminal_status": "AUTH_REQUIRED",
+  "executed_backtests": 0,
+  "yahoo_fallback_used": false,
+  "massive_key_used": false,
+  "weight_search": false,
+  "probe": "sharadar_v3/provider_probe.json"
+}
