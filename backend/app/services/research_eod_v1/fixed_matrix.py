@@ -47,7 +47,7 @@ from app.services.research_eod_v1.freeze import FROZEN_CANDIDATE_ID, FROZEN_FAMI
 from app.services.research_eod_v1.measurement import earliest_entry_session, next_day_confirm_available_at
 from app.services.research_eod_v1.paths import REPO_ROOT, RETURN_PACK_DIR, ensure_reference_on_path
 from app.services.research_eod_v1.runs import run_signature, scorer_cache_key, write_signed_checkpoint
-from app.services.research_eod_v1.source_bind import EXPECTED_B0_SHA256, sha256_file
+from app.services.research_eod_v1.source_bind import EXPECTED_B0_SHA256
 from app.services.sectors import SECTORS
 
 ensure_reference_on_path()
@@ -94,7 +94,7 @@ def classify_symbol(bars: Sequence[ResearchBar]) -> dict[str, Any]:
     except ValueError as exc:
         contract = str(exc)
         rejection["CONTRACT"] += 1
-    summary = inspect_symbol_bars(allowed, allowed_end=ALLOWED_END)
+    summary = inspect_symbol_bars(bars, allowed_end=ALLOWED_END)
     if summary["ohlc_violations"]:
         rejection["OHLC"] += summary["ohlc_violations"]
     if summary["duplicates"]:
@@ -139,9 +139,86 @@ def quality_pool(bars: Mapping[str, Sequence[ResearchBar]]) -> dict[str, Any]:
         "valid_n": counts[STATUS_VALID],
         "invalid_n": counts[STATUS_INVALID],
         "insufficient_n": counts[STATUS_INSUFFICIENT],
+        "unverified_n": counts[STATUS_UNVERIFIED],
         "isolated_invalid_does_not_fail_pool": True,
         "spy_valid_does_not_pass_pool": True,
         "execution_gates": "EXECUTION_GATES_UNVERIFIED",
+    }
+
+
+def quality_public(quality: Mapping[str, Any]) -> dict[str, Any]:
+    per = quality.get("per_security") or {}
+    outliers: dict[str, dict[str, Any]] = {}
+    for name, row in sorted(per.items()):
+        if row.get("status") == STATUS_VALID:
+            continue
+        outliers[name] = {
+            "status": row.get("status"),
+            "complete_t_days": row.get("complete_t_days"),
+            "allowed_n": row.get("allowed_n"),
+            "after_holdout": row.get("after_holdout"),
+            "first": row.get("first"),
+            "last": row.get("last"),
+            "rejections": row.get("rejections"),
+            "contract": row.get("contract"),
+        }
+    return {
+        "counts": quality.get("counts") or {},
+        "valid_n": int(quality.get("valid_n") or 0),
+        "invalid_n": int(quality.get("invalid_n") or 0),
+        "insufficient_n": int(quality.get("insufficient_n") or 0),
+        "unverified_n": int(quality.get("unverified_n") or 0),
+        "spy_status": quality.get("spy_status") or STATUS_UNVERIFIED,
+        "execution_gates": quality.get("execution_gates") or "EXECUTION_GATES_UNVERIFIED",
+        "isolated_outliers": outliers,
+        "isolated_invalid_does_not_fail_pool": True,
+        "spy_valid_does_not_pass_pool": True,
+        "pool_has_valid_members": int(quality.get("valid_n") or 0) > 0,
+    }
+
+
+def selection_summary(selections: Mapping[str, Any]) -> dict[str, Any]:
+    days = list(selections.get("days") or [])
+    differ = [day for day in days if not day.get("own_sets_identical")]
+    out = dict(selections)
+    out["own_sets_differ_days"] = len(differ)
+    out["differ_sample"] = [
+        {
+            "signal_date": day.get("signal_date"),
+            "baseline_selected": day.get("baseline_selected"),
+            "candidate_selected": day.get("candidate_selected"),
+            "common_scoreable_n": day.get("common_scoreable_n"),
+            "common_scoreable_is_not_selection": True,
+        }
+        for day in differ[:8]
+    ]
+    return out
+
+
+def progress_record(
+    *,
+    plan: Sequence[Mapping[str, Any]],
+    mid: Mapping[str, Any],
+    theme_rows: Sequence[Mapping[str, Any]],
+    signature: str,
+) -> dict[str, Any]:
+    completed = [row["experiment_id"] for row in (mid.get("configs") or []) if row.get("completed")]
+    pending = [row["experiment_id"] for row in plan if row["experiment_id"] not in set(completed)]
+    return {
+        "signature": signature,
+        "plan_n": len(plan),
+        "structured_n": len(plan),
+        "theme_structure_n": len(theme_rows),
+        "scored_n": len(completed),
+        "score_pending_n": len(pending),
+        "completed_experiment_ids": completed,
+        "completed_n": len(completed),
+        "pending_n": len(pending),
+        "pending_sample": pending[:12],
+        "pending_reason": "SCORE_HORIZON_FEATURES_NOT_IN_B0",
+        "do_not_reuse_mid_features_for_short_long": True,
+        "completed_means_mid_rescore_only": True,
+        "resume": "PYTHONPATH=/workspace:/workspace/backend python research/option_pro_us_eod_v1/scripts/run_fixed_matrix.py",
     }
 
 
@@ -413,16 +490,18 @@ def _iter_b0(path: Path) -> Iterator[dict[str, Any]]:
             yield json.loads(line)
 
 
-def rescore_mid_from_b0(
+def rescore_mid_and_selections(
     *,
     path: Path | None = None,
     registry: Mapping[str, Any] | None = None,
-) -> dict[str, Any]:
+) -> tuple[dict[str, Any], dict[str, Any]]:
     tape = path or B0_ROWS
     if not tape.is_file():
-        return {"status": STATUS_UNVERIFIED, "reason": "b0_tape_missing"}
+        missing = {"status": STATUS_UNVERIFIED, "reason": "b0_tape_missing"}
+        return missing, missing
     data = registry or load_registry()
     stats: dict[str, dict[str, Any]] = {}
+    weight_cache: dict[tuple[str, str, str], dict[str, float]] = {}
     for item in load_experiment_manifest()["experiments"]:
         if item["horizon"] != "mid":
             continue
@@ -433,12 +512,33 @@ def rescore_mid_from_b0(
             "profile": item["profile"],
             "score_horizon": "mid",
             "label_horizon": 20,
-            "sessions": 0,
-            "eligible_rows": 0,
             "scored_rows": 0,
+            "eligible_rows": 0,
             "source": "b0_factors_rescored_not_spliced",
             "completed": True,
         }
+        key = (item["sector_id"], item["algorithm"], item["profile"])
+        if key not in weight_cache:
+            family = item["algorithm"]
+            weight_cache[key] = diagnostic_weights(
+                resolve_weights(data, item["sector_id"], family, item["profile"], "mid"),
+                track=D_MARKET_RESIDUAL_DIAGNOSTIC if family == FROZEN_FAMILY else PRICE_ONLY_DIAGNOSTIC,
+                family=family,
+            )
+    frozen = load_frozen_candidate(CANDIDATES_PATH) if CANDIDATES_PATH.is_file() else None
+    base = None
+    cand = None
+    required_d = family_required(FROZEN_FAMILY)
+    floor = float(data["profiles"]["balanced"]["score_floor"])
+    coverage_min = float(data["profiles"]["balanced"]["coverage_min"])
+    if frozen is not None:
+        base = diagnostic_weights(
+            resolve_weights(data, FROZEN_THEME, FROZEN_FAMILY, "balanced", "mid"),
+            track=PRICE_ONLY_DIAGNOSTIC,
+            family=FROZEN_FAMILY,
+        )
+        cand = {key: float(value) for key, value in frozen["weights"].items()}
+    by_session: dict[str, dict[str, list[dict[str, Any]]]] = defaultdict(lambda: {"baseline": [], "candidate": []})
     for raw in _iter_b0(tape):
         if raw.get("horizon") != "mid" or int(raw.get("label_horizon") or 0) != 20:
             continue
@@ -451,71 +551,50 @@ def rescore_mid_from_b0(
             bucket = stats.get(experiment_id)
             if bucket is None:
                 continue
-            weights = diagnostic_weights(
-                resolve_weights(data, theme, family, profile, "mid"),
-                track=D_MARKET_RESIDUAL_DIAGNOSTIC if family == FROZEN_FAMILY else PRICE_ONLY_DIAGNOSTIC,
-                family=family,
-            )
             scored = rescore_row(
                 raw,
-                weights,
+                weight_cache[(theme, family, profile)],
                 coverage_min=float(data["profiles"][profile]["coverage_min"]),
                 required=family_required(family),
                 score_floor=float(data["profiles"][profile]["score_floor"]),
             )
             bucket["scored_rows"] += 1
-            if scored["score"] is not None:
-                bucket["sessions"] += 1
             if scored["final_eligible"]:
                 bucket["eligible_rows"] += 1
-    return {
+        if (
+            frozen is not None
+            and theme == FROZEN_THEME
+            and family == FROZEN_FAMILY
+            and base is not None
+            and cand is not None
+        ):
+            session = str(raw.get("signal_session"))
+            for side, weights in (("baseline", base), ("candidate", cand)):
+                scored = rescore_row(
+                    raw,
+                    weights,
+                    coverage_min=coverage_min,
+                    required=required_d,
+                    score_floor=floor,
+                )
+                if scored["score"] is None:
+                    continue
+                by_session[session][side].append(
+                    {
+                        "security_id": raw.get("security_id"),
+                        "score": scored["score"],
+                        "final_eligible": scored["final_eligible"],
+                        "label": raw.get("label"),
+                    }
+                )
+    mid = {
         "status": "COMPLETED_MID_RESCORE",
-        "sha256": sha256_file(tape),
+        "sha256": EXPECTED_B0_SHA256,
         "expected_sha256": EXPECTED_B0_SHA256,
         "configs": list(stats.values()),
         "completed_n": sum(1 for row in stats.values() if row["completed"]),
         "versions_not_spliced": True,
     }
-
-
-def recover_selection_sets(
-    *,
-    path: Path | None = None,
-    registry: Mapping[str, Any] | None = None,
-) -> dict[str, Any]:
-    tape = path or B0_ROWS
-    if not tape.is_file() or not CANDIDATES_PATH.is_file():
-        return {"status": STATUS_UNVERIFIED, "reason": "b0_or_candidates_missing"}
-    data = registry or load_registry()
-    frozen = load_frozen_candidate(CANDIDATES_PATH)
-    base = diagnostic_weights(
-        resolve_weights(data, FROZEN_THEME, FROZEN_FAMILY, "balanced", "mid"),
-        track=PRICE_ONLY_DIAGNOSTIC,
-        family=FROZEN_FAMILY,
-    )
-    cand = {key: float(value) for key, value in frozen["weights"].items()}
-    required = family_required(FROZEN_FAMILY)
-    floor = float(data["profiles"]["balanced"]["score_floor"])
-    coverage_min = float(data["profiles"]["balanced"]["coverage_min"])
-    by_session: dict[str, dict[str, list[dict[str, Any]]]] = defaultdict(lambda: {"baseline": [], "candidate": []})
-    for raw in _iter_b0(tape):
-        if raw.get("theme_id") != FROZEN_THEME or raw.get("algorithm") != FROZEN_FAMILY:
-            continue
-        if raw.get("horizon") != "mid" or int(raw.get("label_horizon") or 0) != 20:
-            continue
-        session = str(raw.get("signal_session"))
-        for side, weights in (("baseline", base), ("candidate", cand)):
-            scored = rescore_row(raw, weights, coverage_min=coverage_min, required=required, score_floor=floor)
-            if scored["score"] is None:
-                continue
-            by_session[session][side].append(
-                {
-                    "security_id": raw.get("security_id"),
-                    "score": scored["score"],
-                    "final_eligible": scored["final_eligible"],
-                    "label": raw.get("label"),
-                }
-            )
     days = []
     identical = 0
     for session, sides in sorted(by_session.items()):
@@ -547,8 +626,8 @@ def recover_selection_sets(
                 "common_scoreable_is_not_selection": True,
             }
         )
-    return {
-        "status": "RECOVERED",
+    selections = {
+        "status": "RECOVERED" if frozen is not None else STATUS_UNVERIFIED,
         "theme": FROZEN_THEME,
         "family": FROZEN_FAMILY,
         "candidate_id": FROZEN_CANDIDATE_ID,
@@ -558,6 +637,7 @@ def recover_selection_sets(
         "own_sets_identical_days": identical,
         "do_not_infer_same_selection_from_common_score_set": True,
     }
+    return mid, selection_summary(selections)
 
 
 def background_basket_note() -> dict[str, Any]:
@@ -648,11 +728,10 @@ def run_fixed_matrix(*, root: Path | None = None, load_yahoo: bool = True, resco
     mid = {"status": "SKIPPED", "reason": "rescore_b0_false"}
     selections = {"status": "SKIPPED"}
     if rescore_b0:
-        mid = rescore_mid_from_b0(registry=registry)
-        selections = recover_selection_sets(registry=registry)
+        mid, selections = rescore_mid_and_selections(registry=registry)
+    else:
+        selections = selection_summary(selections)
     pilot = engineering_pilot(yahoo_bars)
-    completed = [row["experiment_id"] for row in (mid.get("configs") or []) if row.get("completed")]
-    pending = [row["experiment_id"] for row in plan if row["experiment_id"] not in set(completed)]
     signature = run_signature(
         registry={"protocol": PROTOCOL, "calendar_version": CALENDAR_VERSION},
         profile="all_three",
@@ -678,13 +757,7 @@ def run_fixed_matrix(*, root: Path | None = None, load_yahoo: bool = True, resco
         "b0_feature_version": "us-eod-research-features-v1.5",
         "versions_not_spliced": True,
         "calendar": calendar,
-        "quality": {
-            "counts": quality.get("counts"),
-            "valid_n": quality.get("valid_n"),
-            "invalid_n": quality.get("invalid_n"),
-            "spy_status": quality.get("spy_status"),
-            "execution_gates": "EXECUTION_GATES_UNVERIFIED",
-        },
+        "quality": quality_public(quality),
         "bar_counts": bar_count_split(yahoo_bars) if yahoo_bars else {},
         "capability_plan": plan,
         "plan_n": len(plan),
@@ -695,14 +768,7 @@ def run_fixed_matrix(*, root: Path | None = None, load_yahoo: bool = True, resco
         "background_basket": background_basket_note(),
         "next_day_confirm": next_day_confirm_example(),
         "layer_gaps": layer_gaps(),
-        "progress": {
-            "signature": signature,
-            "completed_experiment_ids": completed,
-            "completed_n": len(completed),
-            "pending_n": len(pending),
-            "pending_sample": pending[:12],
-            "resume": "PYTHONPATH=/workspace:/workspace/backend python research/option_pro_us_eod_v1/scripts/run_fixed_matrix.py",
-        },
+        "progress": progress_record(plan=plan, mid=mid, theme_rows=theme_rows, signature=signature),
         "stop": {
             "new_weight_search": False,
             "holdout_unsealed": False,
@@ -732,6 +798,9 @@ def write_return_pack(result: Mapping[str, Any], *, dest: Path | None = None) ->
         "selection": dump("algorithm_fixed_matrix_selection_sets.json", result["selection_sets"]),
         "gaps": dump("algorithm_fixed_matrix_layer_gaps.json", result["layer_gaps"]),
         "progress": dump("algorithm_fixed_matrix_progress.json", result["progress"]),
+        "bar_counts": dump("algorithm_fixed_matrix_bar_counts.json", result.get("bar_counts") or {}),
+        "background": dump("algorithm_fixed_matrix_background.json", result["background_basket"]),
+        "next_day": dump("algorithm_fixed_matrix_next_day_confirm.json", result["next_day_confirm"]),
         "stop": dump("algorithm_fixed_matrix_stop.json", result["stop"]),
         "sources": dump(
             "algorithm_fixed_matrix_sources.json",
@@ -742,6 +811,10 @@ def write_return_pack(result: Mapping[str, Any], *, dest: Path | None = None) ->
                 "versions_not_spliced": True,
                 "freeze_readiness_b0_not_overwritten": True,
                 "executed_backtests": 0,
+                "trusted_yahoo_relative": TRUSTED_RELATIVE_PICKLES[0],
+                "expected_yahoo_sha256": "d910d86505e1914eb14aaacea2ddabc8d61b1f097ab83c513f07750539f32d48",
+                "expected_b0_sha256": EXPECTED_B0_SHA256,
+                "file_rows_are_not_ten_year_evaluable": True,
             },
         ),
     }

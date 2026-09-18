@@ -14,6 +14,7 @@ from app.services.research_eod_v1.data.contract import ResearchBar, validate_res
 from app.services.research_eod_v1.data_readiness import LAYER_A, LAYER_C
 from app.services.research_eod_v1.fixed_matrix import (
     MISSING_ENDPOINT,
+    STATUS_INSUFFICIENT,
     STATUS_INVALID,
     STATUS_VALID,
     background_basket_note,
@@ -27,8 +28,10 @@ from app.services.research_eod_v1.fixed_matrix import (
     next_day_confirm_example,
     official_allowed_sessions,
     quality_pool,
+    quality_public,
     registered_warmup,
     run_fixed_matrix,
+    selection_summary,
 )
 from app.services.research_eod_v1.measurement import earliest_entry_session, next_day_confirm_available_at
 from app.services.sectors import SECTORS
@@ -98,6 +101,17 @@ def test_malformed_and_nonfinite_bars_are_invalid() -> None:
     assert pool["valid_n"] == 1
     assert pool["isolated_invalid_does_not_fail_pool"] is True
     assert pool["execution_gates"] == "EXECUTION_GATES_UNVERIFIED"
+    holdout_only = [_bar(date(2025, 1, 2), 10.0)]
+    thin = quality_pool({"SPY": good, "CRWV": holdout_only})
+    assert thin["per_security"]["CRWV"]["status"] == STATUS_INSUFFICIENT
+    assert thin["per_security"]["CRWV"]["allowed_n"] == 0
+    assert thin["per_security"]["CRWV"]["after_holdout"] == 1
+    assert thin["insufficient_n"] == 1
+    assert thin["valid_n"] == 1
+    public = quality_public(thin)
+    assert "CRWV" in public["isolated_outliers"]
+    assert public["isolated_outliers"]["CRWV"]["after_holdout"] == 1
+    assert public["spy_valid_does_not_pass_pool"] is True
 
 
 def test_registered_warmup_is_not_the_old_readiness_constants() -> None:
@@ -150,3 +164,30 @@ def test_run_fixed_matrix_without_yahoo_still_plans_864() -> None:
     assert result["stop"]["executed_backtests"] == 0
     assert result["engineering_pilot"]["mid_blend_not_reused"] is True
     assert result["capability_plan"][0]["layers"][LAYER_A] in {"available", "blocked"}
+    assert result["progress"]["structured_n"] == 864
+    assert result["progress"]["scored_n"] == 0
+    assert result["progress"]["score_pending_n"] == 864
+    assert result["progress"]["pending_reason"] == "SCORE_HORIZON_FEATURES_NOT_IN_B0"
+    assert result["quality"]["execution_gates"] == "EXECUTION_GATES_UNVERIFIED"
+    summary = selection_summary(
+        {
+            "days": [
+                {
+                    "signal_date": "2020-10-13",
+                    "own_sets_identical": False,
+                    "baseline_selected": [],
+                    "candidate_selected": ["STLA"],
+                    "common_scoreable_n": 6,
+                },
+                {
+                    "signal_date": "2020-10-14",
+                    "own_sets_identical": True,
+                    "baseline_selected": ["TSLA"],
+                    "candidate_selected": ["TSLA"],
+                    "common_scoreable_n": 6,
+                },
+            ]
+        }
+    )
+    assert summary["own_sets_differ_days"] == 1
+    assert summary["differ_sample"][0]["candidate_selected"] == ["STLA"]
