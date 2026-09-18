@@ -67,7 +67,14 @@
     }
   ],
   "feature_version": "us-eod-research-features-v1.5",
-  "head": "68ff3b787b53d21baf8f3746518a339ac86038a5",
+  "github_ci": {
+    "conclusion": "failure",
+    "failed_step": "Check changed source lines for whitespace errors",
+    "head": "432ac3f6660bc5abdc38df2712d34ce2501bc6de",
+    "pull_request": "https://github.com/iroha1145/option-pro/actions/runs/35311320321",
+    "push": "https://github.com/iroha1145/option-pro/actions/runs/35311315536"
+  },
+  "head": "432ac3f6660bc5abdc38df2712d34ce2501bc6de",
   "holdout_start": "2024-07-01",
   "holdout_unsealed": false,
   "horizon": "mid",
