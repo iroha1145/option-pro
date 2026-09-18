@@ -138,7 +138,7 @@ def main() -> None:
         "b0_not_overwritten": True,
         "round1_not_overwritten": True,
         "run_kind": kind,
-        "run_dir": str(out.relative_to(ROOT)),
+        "run_dir": str(out.relative_to(ROOT) if out.is_relative_to(ROOT) else out),
         "run_signature": signature,
         "source_row_sha256": data_hash,
         "expected_b0_sha256": EXPECTED_B0_SHA256 if args.limit is None else None,
@@ -185,7 +185,14 @@ def main() -> None:
     for theme, rows in by_theme.items():
         path = shard_dir / f"{theme}.json"
         _write(path, rows)
-        shards.append({"theme": theme, "path": str(path.relative_to(ROOT)), "bytes": path.stat().st_size, "rows": len(rows)})
+        shards.append(
+            {
+                "theme": theme,
+                "path": str(path.relative_to(ROOT) if path.is_relative_to(ROOT) else path),
+                "bytes": path.stat().st_size,
+                "rows": len(rows),
+            }
+        )
         if path.stat().st_size > 1_000_000:
             raise SystemExit(f"pairing shard exceeds 1MB: {path}")
     public_payload = {key: value for key, value in analysis.items() if key not in {"pairing", "registered", "coverage_matrix"}}
