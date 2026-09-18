@@ -12,7 +12,12 @@
     "measurement_acceptance": "tests/test_pr174_measurement_acceptance.py",
     "local_pr174": "31 passed",
     "local_full_suite": "3882 passed, 6 skipped",
-    "github_ci": "pending_current_head"
+    "github_ci": {
+      "head": "1dfc2a258ef05574fa318d8f640a324311405a5d",
+      "conclusion": "success",
+      "push": "https://github.com/iroha1145/option-pro/actions/runs/35289393841",
+      "pull_request": "https://github.com/iroha1145/option-pro/actions/runs/35289397735"
+    }
   },
   "F2_contracts": {
     "pairing_path": "research/option_pro_us_eod_v1/return_pack/measurement_runner_pairing.json",
