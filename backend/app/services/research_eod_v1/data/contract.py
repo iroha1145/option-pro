@@ -58,12 +58,17 @@ class CorporateAction:
     security_id: str
     session_date: date
     kind: str
-    value: float
+    value: float | None
     economic_known_at: datetime | None = None
     known_at: datetime | None = None
     effective_at: date | None = None
     pay_date: date | None = None
     settlement_at: date | None = None
+    raw_value: str | None = None
+    contraticker: str | None = None
+    contraname: str | None = None
+    economic_status: str = "ok"
+    reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -81,6 +86,7 @@ class ProviderCapabilities:
     raw_price_verified: bool
     notes: tuple[str, ...] = ()
     capability_level: str = "DOCUMENTED_ONLY"
+    account_scope: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

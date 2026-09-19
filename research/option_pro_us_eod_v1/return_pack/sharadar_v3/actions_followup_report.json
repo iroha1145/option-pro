@@ -1,0 +1,434 @@
+{
+  "generated_at": "2026-09-19T16:14:37.763057+00:00",
+  "code_sha": "42be3ea02a45d84ea671c572cdc81140025dfd19",
+  "credential_present": true,
+  "note": "single ticker and short windows after Exceeds free tier on multi-ticker or 2010-2024 spans",
+  "actions": [
+    {
+      "ticker": "AAPL",
+      "window": {
+        "from": "2023-01-01",
+        "to": "2024-06-28"
+      },
+      "status": "READ_OK",
+      "http_status": 200,
+      "row_count": 6,
+      "first_date": "2023-02-10",
+      "last_date": "2024-05-10",
+      "rows_inside_allowed_end": 6,
+      "rows_after_allowed_end": 0,
+      "vendor_error": null,
+      "artifact": {
+        "path": "/home/ubuntu/optix-data/authorized_sharadar_samples/actions_history_identity/followup/actions_AAPL_2023-01-01_2024-06-28.jsonl",
+        "rows": 6,
+        "bytes": 858,
+        "not_committed_to_git": true
+      }
+    },
+    {
+      "ticker": "MSFT",
+      "window": {
+        "from": "2023-01-01",
+        "to": "2024-06-28"
+      },
+      "status": "READ_OK",
+      "http_status": 200,
+      "row_count": 7,
+      "first_date": "2023-02-15",
+      "last_date": "2024-05-15",
+      "rows_inside_allowed_end": 7,
+      "rows_after_allowed_end": 0,
+      "vendor_error": null,
+      "artifact": {
+        "path": "/home/ubuntu/optix-data/authorized_sharadar_samples/actions_history_identity/followup/actions_MSFT_2023-01-01_2024-06-28.jsonl",
+        "rows": 7,
+        "bytes": 1065,
+        "not_committed_to_git": true
+      }
+    },
+    {
+      "ticker": "AAPL",
+      "window": {
+        "from": "2024-06-24",
+        "to": "2024-06-28"
+      },
+      "status": "READ_OK",
+      "http_status": 200,
+      "row_count": 0,
+      "first_date": null,
+      "last_date": null,
+      "rows_inside_allowed_end": 0,
+      "rows_after_allowed_end": 0,
+      "vendor_error": null,
+      "artifact": {
+        "path": "/home/ubuntu/optix-data/authorized_sharadar_samples/actions_history_identity/followup/actions_AAPL_2024-06-24_2024-06-28.jsonl",
+        "rows": 0,
+        "bytes": 0,
+        "not_committed_to_git": true
+      }
+    },
+    {
+      "ticker": "BBBYQ",
+      "window": {
+        "from": "2023-01-01",
+        "to": "2023-05-31"
+      },
+      "status": "AUTH_FAILED",
+      "http_status": 403,
+      "row_count": 0,
+      "first_date": null,
+      "last_date": null,
+      "rows_inside_allowed_end": 0,
+      "rows_after_allowed_end": 0,
+      "vendor_error": {
+        "http_status": 403,
+        "http_401_distinct_from_403": true,
+        "body_kind": "error",
+        "vendor_code": null,
+        "vendor_message": "Exceeds free tier",
+        "excerpt": null,
+        "not_collapsed_to_upgrade_sku": true
+      },
+      "artifact": {
+        "path": "/home/ubuntu/optix-data/authorized_sharadar_samples/actions_history_identity/followup/actions_BBBYQ_2023-01-01_2023-05-31.jsonl",
+        "rows": 0,
+        "bytes": 0,
+        "not_committed_to_git": true
+      }
+    }
+  ],
+  "prices": [
+    {
+      "ticker": "BBBYQ",
+      "window": {
+        "from": "2023-04-03",
+        "to": "2023-05-02"
+      },
+      "status": "AUTH_FAILED",
+      "http_status": 403,
+      "row_count": 0,
+      "first_date": null,
+      "last_date": null,
+      "rows_inside_allowed_end": 0,
+      "rows_after_allowed_end": 0,
+      "vendor_error": {
+        "http_status": 403,
+        "http_401_distinct_from_403": true,
+        "body_kind": "error",
+        "vendor_code": null,
+        "vendor_message": "Exceeds free tier",
+        "excerpt": null,
+        "not_collapsed_to_upgrade_sku": true
+      },
+      "artifact": {
+        "path": "/home/ubuntu/optix-data/authorized_sharadar_samples/actions_history_identity/followup/stocks_BBBYQ_2023-04-03_2023-05-02.jsonl",
+        "rows": 0,
+        "bytes": 0,
+        "not_committed_to_git": true
+      }
+    },
+    {
+      "ticker": "BBBYQ",
+      "window": {
+        "from": "2024-05-20",
+        "to": "2024-06-28"
+      },
+      "status": "AUTH_FAILED",
+      "http_status": 403,
+      "row_count": 0,
+      "first_date": null,
+      "last_date": null,
+      "rows_inside_allowed_end": 0,
+      "rows_after_allowed_end": 0,
+      "vendor_error": {
+        "http_status": 403,
+        "http_401_distinct_from_403": true,
+        "body_kind": "error",
+        "vendor_code": null,
+        "vendor_message": "Exceeds free tier",
+        "excerpt": null,
+        "not_collapsed_to_upgrade_sku": true
+      },
+      "artifact": {
+        "path": "/home/ubuntu/optix-data/authorized_sharadar_samples/actions_history_identity/followup/stocks_BBBYQ_2024-05-20_2024-06-28.jsonl",
+        "rows": 0,
+        "bytes": 0,
+        "not_committed_to_git": true
+      }
+    },
+    {
+      "ticker": "XOM",
+      "window": {
+        "from": "2024-05-20",
+        "to": "2024-06-28"
+      },
+      "status": "AUTH_FAILED",
+      "http_status": 403,
+      "row_count": 0,
+      "first_date": null,
+      "last_date": null,
+      "rows_inside_allowed_end": 0,
+      "rows_after_allowed_end": 0,
+      "vendor_error": {
+        "http_status": 403,
+        "http_401_distinct_from_403": true,
+        "body_kind": "error",
+        "vendor_code": null,
+        "vendor_message": "Exceeds free tier",
+        "excerpt": null,
+        "not_collapsed_to_upgrade_sku": true
+      },
+      "artifact": {
+        "path": "/home/ubuntu/optix-data/authorized_sharadar_samples/actions_history_identity/followup/stocks_XOM_2024-05-20_2024-06-28.jsonl",
+        "rows": 0,
+        "bytes": 0,
+        "not_committed_to_git": true
+      }
+    },
+    {
+      "ticker": "HD",
+      "window": {
+        "from": "2024-05-20",
+        "to": "2024-06-28"
+      },
+      "status": "READ_OK",
+      "http_status": 200,
+      "row_count": 28,
+      "first_date": "2024-05-20",
+      "last_date": "2024-06-28",
+      "rows_inside_allowed_end": 28,
+      "rows_after_allowed_end": 0,
+      "vendor_error": null,
+      "artifact": {
+        "path": "/home/ubuntu/optix-data/authorized_sharadar_samples/actions_history_identity/followup/stocks_HD_2024-05-20_2024-06-28.jsonl",
+        "rows": 28,
+        "bytes": 5404,
+        "not_committed_to_git": true
+      }
+    },
+    {
+      "ticker": "CSCO",
+      "window": {
+        "from": "2024-05-20",
+        "to": "2024-06-28"
+      },
+      "status": "READ_OK",
+      "http_status": 200,
+      "row_count": 28,
+      "first_date": "2024-05-20",
+      "last_date": "2024-06-28",
+      "rows_inside_allowed_end": 28,
+      "rows_after_allowed_end": 0,
+      "vendor_error": null,
+      "artifact": {
+        "path": "/home/ubuntu/optix-data/authorized_sharadar_samples/actions_history_identity/followup/stocks_CSCO_2024-05-20_2024-06-28.jsonl",
+        "rows": 28,
+        "bytes": 5330,
+        "not_committed_to_git": true
+      }
+    }
+  ],
+  "hd_identity": {
+    "security_id": "sharadar:198999",
+    "permaticker": "198999",
+    "ticker": "HD",
+    "name": "HOME DEPOT INC",
+    "share_class": null,
+    "category": "Domestic Common Stock",
+    "currency": "USD",
+    "exchange": "NYSE",
+    "isdelisted": false,
+    "relatedtickers": [],
+    "issuer_id": "sharadar-issuer:HD",
+    "asset_track": "stock",
+    "security_type": "common_stock",
+    "firstpricedate": "1997-12-31",
+    "lastpricedate": "2026-09-18",
+    "flags": [
+      "VENUE_HISTORY_UNVERIFIED",
+      "PRICE_HISTORY_RECONSTRUCTED",
+      "CLASSIFICATION_CURRENT"
+    ],
+    "identity_confidence": "permaticker",
+    "ticker_base": "HD",
+    "ticker_suffix": null,
+    "master_table": "stocks"
+  },
+  "extra_identities": {
+    "XOM": null,
+    "HD": {
+      "security_id": "sharadar:198999",
+      "permaticker": "198999",
+      "ticker": "HD",
+      "name": "HOME DEPOT INC",
+      "share_class": null,
+      "category": "Domestic Common Stock",
+      "currency": "USD",
+      "exchange": "NYSE",
+      "isdelisted": false,
+      "relatedtickers": [],
+      "issuer_id": "sharadar-issuer:HD",
+      "asset_track": "stock",
+      "security_type": "common_stock",
+      "firstpricedate": "1997-12-31",
+      "lastpricedate": "2026-09-18",
+      "flags": [
+        "VENUE_HISTORY_UNVERIFIED",
+        "PRICE_HISTORY_RECONSTRUCTED",
+        "CLASSIFICATION_CURRENT"
+      ],
+      "identity_confidence": "permaticker",
+      "ticker_base": "HD",
+      "ticker_suffix": null,
+      "master_table": "stocks"
+    },
+    "CSCO": {
+      "security_id": "sharadar:198061",
+      "permaticker": "198061",
+      "ticker": "CSCO",
+      "name": "CISCO SYSTEMS INC",
+      "share_class": null,
+      "category": "Domestic Common Stock",
+      "currency": "USD",
+      "exchange": "NASDAQ",
+      "isdelisted": false,
+      "relatedtickers": [],
+      "issuer_id": "sharadar-issuer:CSCO",
+      "asset_track": "stock",
+      "security_type": "common_stock",
+      "firstpricedate": "1997-12-31",
+      "lastpricedate": "2026-09-18",
+      "flags": [
+        "VENUE_HISTORY_UNVERIFIED",
+        "PRICE_HISTORY_RECONSTRUCTED",
+        "CLASSIFICATION_CURRENT"
+      ],
+      "identity_confidence": "permaticker",
+      "ticker_base": "CSCO",
+      "ticker_suffix": null,
+      "master_table": "stocks"
+    }
+  },
+  "reconcile": {
+    "aligned_n": 297,
+    "comparison_source": {
+      "kind": "massive_unadjusted_daily",
+      "available": true,
+      "not_sent_to_api_sharadar_com": true,
+      "price_basis": "sharadar_closeunadj_vs_massive_adjusted_false",
+      "older_windows_empty_on_this_account": true
+    },
+    "sharadar_n": 297,
+    "yahoo_n": 324,
+    "return_coverage_n": 297,
+    "volume_coverage_n": 297,
+    "securities_n": 11,
+    "marked_n": 0,
+    "marked_share": 0.0,
+    "return_marked_share": 0.0,
+    "volume_marked_share": 0.0,
+    "status": "PASS",
+    "insufficient_reason": null,
+    "yahoo_is_not_truth": true,
+    "thresholds": {
+      "return_abs_bp": 50.0,
+      "volume_ratio": [
+        0.8,
+        1.25
+      ],
+      "fail_share": 0.02,
+      "min_return_coverage": 250,
+      "min_securities": 10
+    }
+  },
+  "per_security": [
+    {
+      "ticker": "MSFT",
+      "security_id": "sharadar:198508",
+      "sharadar_pairs": 27,
+      "control_pairs": 27,
+      "control_status": "READ_OK"
+    },
+    {
+      "ticker": "AAPL",
+      "security_id": "sharadar:199059",
+      "sharadar_pairs": 27,
+      "control_pairs": 27,
+      "control_status": "READ_OK"
+    },
+    {
+      "ticker": "JNJ",
+      "security_id": "sharadar:199185",
+      "sharadar_pairs": 27,
+      "control_pairs": 27,
+      "control_status": "READ_OK"
+    },
+    {
+      "ticker": "JPM",
+      "security_id": "sharadar:199853",
+      "sharadar_pairs": 27,
+      "control_pairs": 27,
+      "control_status": "READ_OK"
+    },
+    {
+      "ticker": "WMT",
+      "security_id": "sharadar:199233",
+      "sharadar_pairs": 27,
+      "control_pairs": 27,
+      "control_status": "READ_OK"
+    },
+    {
+      "ticker": "PG",
+      "security_id": "sharadar:199411",
+      "sharadar_pairs": 27,
+      "control_pairs": 27,
+      "control_status": "READ_OK"
+    },
+    {
+      "ticker": "KO",
+      "security_id": "sharadar:199839",
+      "sharadar_pairs": 27,
+      "control_pairs": 27,
+      "control_status": "READ_OK"
+    },
+    {
+      "ticker": "IBM",
+      "security_id": "sharadar:199623",
+      "sharadar_pairs": 27,
+      "control_pairs": 27,
+      "control_status": "READ_OK"
+    },
+    {
+      "ticker": "SPY",
+      "security_id": "sharadar:118691",
+      "sharadar_pairs": 27,
+      "control_pairs": 27,
+      "control_status": "READ_OK"
+    },
+    {
+      "ticker": "XOM",
+      "security_id": "sharadar:199739",
+      "sharadar_pairs": 0,
+      "control_pairs": 27,
+      "control_status": "READ_OK"
+    },
+    {
+      "ticker": "HD",
+      "security_id": "sharadar:198999",
+      "sharadar_pairs": 27,
+      "control_pairs": 27,
+      "control_status": "READ_OK"
+    },
+    {
+      "ticker": "CSCO",
+      "security_id": "sharadar:198061",
+      "sharadar_pairs": 27,
+      "control_pairs": 27,
+      "control_status": "READ_OK"
+    }
+  ],
+  "real_supplier_requests": 11,
+  "channel_confirmed": true,
+  "purchase_attempted": false,
+  "full_market_bulk_started": false
+}

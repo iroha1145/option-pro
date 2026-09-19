@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping
 
 from app.services.research_eod_v1.factors import RawComponents
+from app.services.research_eod_v1.mathutil import finite
 
 
 @dataclass(frozen=True)
@@ -54,18 +55,18 @@ def setup_b(
         reasons.append("BREAKOUT_TRACK_EXPIRED")
     elif current < needed or not track.get("still_through"):
         reasons.append("BREAKOUT_UNCONFIRMED")
-    rvol = track.get("first_day_rvol")
-    if rvol is None:
-        rvol = raw.rvol
+    rvol = finite(track.get("first_day_rvol"))
     rvol_min = float(sector_gates.get("breakout_rvol_min", 1.0)) * float(
         profile.get("rvol_multiplier", 1.0)
     )
-    if rvol is None or rvol < rvol_min:
+    if rvol is None:
+        reasons.append("MISSING_FIRST_DAY_RVOL")
+    elif rvol < rvol_min:
         reasons.append("LOW_EVENT_RVOL")
-    clv = track.get("first_day_clv")
+    clv = finite(track.get("first_day_clv"))
     if clv is None:
-        clv = raw.clv
-    if clv is None or clv < 0.65:
+        reasons.append("MISSING_FIRST_DAY_CLV")
+    elif clv < 0.65:
         reasons.append("LOW_CLV")
     if raw.platform_distance_atr is not None and raw.platform_distance_atr > 2.0:
         reasons.append("TOO_FAR_FROM_BASE")

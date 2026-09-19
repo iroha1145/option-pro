@@ -1,0 +1,57 @@
+{
+  "check_runs": [
+    {
+      "conclusion": "success",
+      "name": "test",
+      "url": "https://github.com/iroha1145/option-pro/actions/runs/35433685791/job/105872641038"
+    },
+    {
+      "conclusion": "success",
+      "name": "test",
+      "url": "https://github.com/iroha1145/option-pro/actions/runs/35433688282/job/105872647664"
+    }
+  ],
+  "push_run": "https://github.com/iroha1145/option-pro/actions/runs/35433685791",
+  "pull_request_run": "https://github.com/iroha1145/option-pro/actions/runs/35433688282",
+  "github_python_tests_step": "success",
+  "github_pip_audit_step": "success",
+  "research_head": "b5c6669c1d953c95cb45f960af1b025f8a4df763",
+  "review_anchor": "183b5d29f6d9e2c10b39b06ba2eb5f4f6c1cc5f9",
+  "anchor_ci": {
+    "push_run": "https://github.com/iroha1145/option-pro/actions/runs/35431370360",
+    "pull_request_run": "https://github.com/iroha1145/option-pro/actions/runs/35431373010",
+    "conclusion": "success"
+  },
+  "local_pytest": "4039 passed, 6 skipped",
+  "local_closeout_pytest": "12 passed",
+  "local_sharadar_suites_pytest": "72 passed",
+  "offline_chain": {
+    "harness": "research/option_pro_us_eod_v1/scripts/fake_sharadar_server.py",
+    "is_synthetic_not_vendor": true,
+    "bulk_first": {
+      "exit": 0,
+      "terminal_status": "DATA_GATE_ACCEPTED",
+      "requests": 28,
+      "modes": {"stocks": "bulk", "funds": "bulk", "tickers": "bulk", "actions": "paged"},
+      "execution_stage": "UNSUPPORTED"
+    },
+    "paged": {
+      "exit": 0,
+      "terminal_status": "DATA_GATE_ACCEPTED",
+      "requests": 48,
+      "modes": {"stocks": "paged", "funds": "paged", "tickers": "paged", "actions": "paged"},
+      "execution_stage": "UNSUPPORTED"
+    }
+  },
+  "real_run": {
+    "credential_present": false,
+    "live_sharadar_request_count": 0,
+    "terminal_status": "AUTH_REQUIRED",
+    "real_sample_executed": false,
+    "env_var": "SHARADAR_API_KEY",
+    "scope": "process_environment_variable_absent_on_this_vm"
+  },
+  "delist_rule_version": "delist-terminal-rule-v2",
+  "stamp_is_docs_only": true,
+  "requirement_audit": "sharadar_v3/closeout_requirement_audit.md"
+}

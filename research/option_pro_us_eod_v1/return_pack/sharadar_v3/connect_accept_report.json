@@ -1,0 +1,308 @@
+{
+  "credential_present": false,
+  "live_sharadar_request_count": 0,
+  "channel_confirmed": "official_docs_mapped; live_channel_unconfirmed_without_secret",
+  "tables": {
+    "stocks": {
+      "status": "AUTH_REQUIRED",
+      "row_count": 0,
+      "pages": 0,
+      "complete": false,
+      "session_row_count": 0,
+      "request": {
+        "extra": {
+          "from": "2010-01-01",
+          "to": "2024-06-28",
+          "sort": "date.asc"
+        },
+        "limit": 10000,
+        "date_bound": true,
+        "plan_version": "sharadar-request-plan-v2",
+        "source_version": "api.sharadar.com/v1.0",
+        "shard": "pinned_from_to",
+        "order_not_assumed_dedupe_by_primary_key": true,
+        "explicit_sort": "date.asc"
+      },
+      "download_started": false,
+      "not_started_reason": "credential_absent",
+      "download_mode": null
+    },
+    "funds": {
+      "status": "AUTH_REQUIRED",
+      "row_count": 0,
+      "pages": 0,
+      "complete": false,
+      "session_row_count": 0,
+      "request": {
+        "extra": {
+          "from": "2010-01-01",
+          "to": "2024-06-28",
+          "sort": "date.asc"
+        },
+        "limit": 10000,
+        "date_bound": true,
+        "plan_version": "sharadar-request-plan-v2",
+        "source_version": "api.sharadar.com/v1.0",
+        "shard": "pinned_from_to",
+        "order_not_assumed_dedupe_by_primary_key": true,
+        "explicit_sort": "date.asc"
+      },
+      "download_started": false,
+      "not_started_reason": "credential_absent",
+      "download_mode": null
+    },
+    "tickers": {
+      "status": "AUTH_REQUIRED",
+      "row_count": 0,
+      "pages": 0,
+      "complete": false,
+      "session_row_count": 0,
+      "request": {
+        "extra": {},
+        "limit": 10000,
+        "date_bound": false,
+        "plan_version": "sharadar-request-plan-v2",
+        "source_version": "api.sharadar.com/v1.0",
+        "shard": "full_master_no_date_param",
+        "order_not_assumed_dedupe_by_primary_key": true,
+        "explicit_sort": null
+      },
+      "download_started": false,
+      "not_started_reason": "credential_absent",
+      "download_mode": null
+    },
+    "actions": {
+      "status": "AUTH_REQUIRED",
+      "row_count": 0,
+      "pages": 0,
+      "complete": false,
+      "session_row_count": 0,
+      "request": {
+        "extra": {
+          "from": "2010-01-01",
+          "to": "2024-06-28",
+          "sort": "date.asc"
+        },
+        "limit": 10000,
+        "date_bound": true,
+        "plan_version": "sharadar-request-plan-v2",
+        "source_version": "api.sharadar.com/v1.0",
+        "shard": "pinned_from_to",
+        "order_not_assumed_dedupe_by_primary_key": true,
+        "explicit_sort": "date.asc"
+      },
+      "download_started": false,
+      "not_started_reason": "credential_absent",
+      "download_mode": null
+    }
+  },
+  "raw_row_counts": {
+    "stocks": 0,
+    "funds": 0,
+    "tickers": 0,
+    "actions": 0
+  },
+  "isolated_row_counts": {
+    "stocks": 0,
+    "funds": 0,
+    "actions": 0,
+    "tickers": 0
+  },
+  "store": {
+    "path": "/workspace/research/option_pro_us_eod_v1/data/sharadar_raw",
+    "public_git": false,
+    "resume": "load checkpoints/<table>.json; verify page hashes; continue from next_skip; rows already on disk are read whatever the last status was",
+    "unique_key_index": "keys/<table>.sqlite (lookup) + keys/<table>.keys (append-only listing)",
+    "merged_file": "append-only per committed page; rebuilt only after an orphan-page adoption or a replaced page",
+    "paid_rows_must_stay_outside_git": true,
+    "bounded_reads": "isolated views stream jsonl; transform is a two-pass bucketed stream under a temporary directory; no whole-table list",
+    "allowed_window": {
+      "start": "2010-01-01",
+      "end": "2024-06-28",
+      "isolated_after_raw_persist": true,
+      "acceptance_consumers_see_allowed_window_only": true
+    }
+  },
+  "stages": {
+    "AUTH": "AUTH_REQUIRED",
+    "TABLE_ACCESS": "AUTH_REQUIRED",
+    "DOWNLOAD": "AUTH_REQUIRED",
+    "TRANSFORM": "AUTH_REQUIRED",
+    "IDENTITY": "AUTH_REQUIRED",
+    "RECONCILE": "INSUFFICIENT",
+    "HISTORY": "AUTH_REQUIRED",
+    "VOLUME_SCOPE": "UNSUPPORTED",
+    "EXECUTION": "UNSUPPORTED"
+  },
+  "stage_summary": {
+    "required": [
+      "AUTH",
+      "TABLE_ACCESS",
+      "DOWNLOAD",
+      "TRANSFORM",
+      "IDENTITY",
+      "RECONCILE",
+      "HISTORY"
+    ],
+    "optional": [
+      "VOLUME_SCOPE",
+      "EXECUTION"
+    ],
+    "accepted": false,
+    "observed_status": {
+      "AUTH": "AUTH_REQUIRED",
+      "TABLE_ACCESS": "AUTH_REQUIRED",
+      "DOWNLOAD": "AUTH_REQUIRED",
+      "TRANSFORM": "AUTH_REQUIRED",
+      "IDENTITY": "AUTH_REQUIRED",
+      "RECONCILE": "INSUFFICIENT",
+      "HISTORY": "AUTH_REQUIRED"
+    },
+    "not_pass": [
+      {
+        "stage": "AUTH",
+        "status": "AUTH_REQUIRED",
+        "reason": "blocked"
+      },
+      {
+        "stage": "TABLE_ACCESS",
+        "status": "AUTH_REQUIRED",
+        "reason": "blocked"
+      },
+      {
+        "stage": "DOWNLOAD",
+        "status": "AUTH_REQUIRED",
+        "reason": "blocked"
+      },
+      {
+        "stage": "TRANSFORM",
+        "status": "AUTH_REQUIRED",
+        "reason": "blocked"
+      },
+      {
+        "stage": "IDENTITY",
+        "status": "AUTH_REQUIRED",
+        "reason": "blocked"
+      },
+      {
+        "stage": "RECONCILE",
+        "status": "INSUFFICIENT",
+        "reason": "insufficient"
+      },
+      {
+        "stage": "HISTORY",
+        "status": "AUTH_REQUIRED",
+        "reason": "blocked"
+      }
+    ],
+    "missing": [],
+    "failed": [],
+    "partial": [],
+    "insufficient": [
+      "RECONCILE"
+    ],
+    "blocked": [
+      "AUTH",
+      "TABLE_ACCESS",
+      "DOWNLOAD",
+      "TRANSFORM",
+      "IDENTITY",
+      "HISTORY"
+    ],
+    "unknown": [],
+    "accepted_requires_explicit_pass": true,
+    "download_complete_is_not_acceptance": true
+  },
+  "raw_download_status": "AUTH_REQUIRED",
+  "entitlement": {
+    "status": "AUTH_REQUIRED",
+    "verified_access": false,
+    "observed_coverage": {
+      "earliest_observed_row": null,
+      "earliest_is_coverage_not_license": true,
+      "requested_from": "2010-01-01",
+      "requested_to": "2024-06-28"
+    },
+    "authorized_range_unknown": true,
+    "bulk_years": null,
+    "earliest": null,
+    "research_start": null,
+    "continue": false,
+    "needs_review": false
+  },
+  "entitlement_probe": {
+    "bulk_years": null,
+    "status": "AUTH_REQUIRED",
+    "attempts": []
+  },
+  "transform": {
+    "converted_rows": 0,
+    "skipped_n": 0,
+    "skipped_share": null,
+    "skipped_by_reason": {},
+    "skipped_rows_capped_at": 1000,
+    "source_row_counts": {}
+  },
+  "daily_pool": {
+    "computed": false,
+    "session_n": 0,
+    "first_session": null,
+    "last_session": null,
+    "pool_rows_total": 0,
+    "pool_size_median": null,
+    "pool_size_min": null,
+    "pool_size_max": null,
+    "venue_unverified_rows": 0,
+    "venue_unverified_share": null,
+    "venue_unverified_signal_share": null,
+    "exclusion_reason_counts": {},
+    "by_year": {},
+    "rule": {
+      "category": "Domestic Common Stock or ADR Common Stock incl. Primary/Secondary Class",
+      "currency": "USD",
+      "closeunadj_min": 5.0,
+      "unadj_adv20_min": 20000000,
+      "adv20_prior_sessions_only": true,
+      "exchange_is_tag_not_drop": true
+    }
+  },
+  "terminal_status": "AUTH_REQUIRED",
+  "checks": {
+    "feature_version_bump": "PASS",
+    "parent_rank_fix": "PASS",
+    "breakout_first_day_fix": "PASS",
+    "identity_contract": "AUTH_REQUIRED",
+    "delist_fixture_table": "PASS",
+    "delist_live_verified": null,
+    "delist_resolved_n": 0,
+    "delist_concrete_terminal_n": 0,
+    "control_archive_index": "PASS",
+    "live_sharadar_read": "AUTH_REQUIRED",
+    "yahoo_reconcile_live": "INSUFFICIENT",
+    "volume_scope": "UNSUPPORTED",
+    "persistent_handover": "AUTH_REQUIRED",
+    "chat_or_massive_credential_used": "PASS_NOT_USED",
+    "four_table_mock_or_live_not_empty_placeholder": "AUTH_REQUIRED",
+    "explicit_history_request_bounds": "NOT_EXERCISED",
+    "channel_confirmed": "official_docs_mapped; live_channel_unconfirmed_without_secret",
+    "download_modes": {}
+  },
+  "delist_verification": [
+    "fixture_list_only",
+    "fixture_list_only",
+    "fixture_list_only",
+    "fixture_list_only",
+    "fixture_list_only",
+    "fixture_list_only",
+    "fixture_list_only",
+    "fixture_list_only",
+    "fixture_list_only",
+    "fixture_list_only",
+    "fixture_list_only",
+    "fixture_list_only",
+    "fixture_list_only",
+    "fixture_list_only",
+    "fixture_list_only",
+    "fixture_list_only"
+  ]
+}

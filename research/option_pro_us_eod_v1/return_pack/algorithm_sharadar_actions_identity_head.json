@@ -1,0 +1,39 @@
+{
+  "head": "42be3ea02a45d84ea671c572cdc81140025dfd19",
+  "code_sha_at_run": "42be3ea02a45d84ea671c572cdc81140025dfd19",
+  "review_anchor": "3de4bdf5ecb211c3faff9ed1652bdf5df80c1795",
+  "credential_present": true,
+  "actions": {
+    "distinct_http": [200, 400, 403],
+    "http_401_seen": false,
+    "nonempty_inside_allowed_end": true,
+    "aapl_dividends_2023_2024": 6,
+    "msft_rows_2023_2024": 7,
+    "bulk_status": "403 Forbidden",
+    "multi_ticker_window": "403 Exceeds free tier"
+  },
+  "identity": {
+    "direct_bbby": "READ_OK_EMPTY",
+    "permaticker": "197799",
+    "vendor_ticker": "BBBYQ",
+    "name": "BED BATH & BEYOND INC",
+    "prices_for_vendor_ticker": "403 Exceeds free tier",
+    "smoke_only": true
+  },
+  "coverage": {
+    "older_windows_http_200_empty": true,
+    "window_2024_rows": 28,
+    "firstpricedate_is_not_row_evidence": true
+  },
+  "reconcile": {
+    "status": "PASS",
+    "return_coverage_n": 297,
+    "securities_n": 11,
+    "volume_experiment_claimed": false,
+    "economic_ledger_claimed": false
+  },
+  "share_basis_proof_binds_target": true,
+  "yahoo_fallback": false,
+  "purchase_attempted": false,
+  "full_market_bulk_started": false
+}
