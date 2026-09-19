@@ -9,6 +9,7 @@
       "expected_terminal": "acquisition_or_unknown",
       "note": "2013 take-private; later ticker reuse must use permaticker",
       "live_status": "AUTH_REQUIRED",
+      "verification": "fixture_list_only",
       "observed_terminal": {
         "label": "TERMINAL_UNKNOWN",
         "reason": "no_settlement_action",
@@ -22,6 +23,7 @@
       "expected_terminal": "acquisition_cash",
       "note": "AT&T acquisition",
       "live_status": "AUTH_REQUIRED",
+      "verification": "fixture_list_only",
       "observed_terminal": {
         "label": "TERMINAL_UNKNOWN",
         "reason": "no_settlement_action",
@@ -35,6 +37,7 @@
       "expected_terminal": "acquisition_cash",
       "note": "Verizon / Altaba",
       "live_status": "AUTH_REQUIRED",
+      "verification": "fixture_list_only",
       "observed_terminal": {
         "label": "TERMINAL_UNKNOWN",
         "reason": "no_settlement_action",
@@ -48,6 +51,7 @@
       "expected_terminal": "acquisition_cash",
       "note": "Amazon acquisition",
       "live_status": "AUTH_REQUIRED",
+      "verification": "fixture_list_only",
       "observed_terminal": {
         "label": "TERMINAL_UNKNOWN",
         "reason": "no_settlement_action",
@@ -61,6 +65,7 @@
       "expected_terminal": "acquisition_cash",
       "note": "Bayer acquisition",
       "live_status": "AUTH_REQUIRED",
+      "verification": "fixture_list_only",
       "observed_terminal": {
         "label": "TERMINAL_UNKNOWN",
         "reason": "no_settlement_action",
@@ -74,6 +79,7 @@
       "expected_terminal": "bankruptcy_last_trade",
       "note": "Sears bankruptcy / OTC",
       "live_status": "AUTH_REQUIRED",
+      "verification": "fixture_list_only",
       "observed_terminal": {
         "label": "TERMINAL_UNKNOWN",
         "reason": "no_settlement_action",
@@ -87,6 +93,7 @@
       "expected_terminal": "acquisition_cash",
       "note": "BMS acquisition",
       "live_status": "AUTH_REQUIRED",
+      "verification": "fixture_list_only",
       "observed_terminal": {
         "label": "TERMINAL_UNKNOWN",
         "reason": "no_settlement_action",
@@ -100,6 +107,7 @@
       "expected_terminal": "acquisition_cash",
       "note": "Morgan Stanley acquisition",
       "live_status": "AUTH_REQUIRED",
+      "verification": "fixture_list_only",
       "observed_terminal": {
         "label": "TERMINAL_UNKNOWN",
         "reason": "no_settlement_action",
@@ -113,6 +121,7 @@
       "expected_terminal": "bankruptcy_last_trade",
       "note": "J.C. Penney bankruptcy",
       "live_status": "AUTH_REQUIRED",
+      "verification": "fixture_list_only",
       "observed_terminal": {
         "label": "TERMINAL_UNKNOWN",
         "reason": "no_settlement_action",
@@ -126,6 +135,7 @@
       "expected_terminal": "acquisition_cash",
       "note": "AMD acquisition; cash may be mixed with stock",
       "live_status": "AUTH_REQUIRED",
+      "verification": "fixture_list_only",
       "observed_terminal": {
         "label": "TERMINAL_UNKNOWN",
         "reason": "no_settlement_action",
@@ -139,6 +149,7 @@
       "expected_terminal": "acquisition_cash",
       "note": "take-private cash",
       "live_status": "AUTH_REQUIRED",
+      "verification": "fixture_list_only",
       "observed_terminal": {
         "label": "TERMINAL_UNKNOWN",
         "reason": "no_settlement_action",
@@ -152,6 +163,7 @@
       "expected_terminal": "acquisition_cash",
       "note": "Microsoft acquisition",
       "live_status": "AUTH_REQUIRED",
+      "verification": "fixture_list_only",
       "observed_terminal": {
         "label": "TERMINAL_UNKNOWN",
         "reason": "no_settlement_action",
@@ -165,6 +177,7 @@
       "expected_terminal": "bankruptcy_last_trade",
       "note": "FDIC failure; confirm on actions before treating as last trade",
       "live_status": "AUTH_REQUIRED",
+      "verification": "fixture_list_only",
       "observed_terminal": {
         "label": "TERMINAL_UNKNOWN",
         "reason": "no_settlement_action",
@@ -178,6 +191,7 @@
       "expected_terminal": "bankruptcy_last_trade",
       "note": "Bed Bath & Beyond bankruptcy",
       "live_status": "AUTH_REQUIRED",
+      "verification": "fixture_list_only",
       "observed_terminal": {
         "label": "TERMINAL_UNKNOWN",
         "reason": "no_settlement_action",
@@ -191,6 +205,7 @@
       "expected_terminal": "bankruptcy_last_trade",
       "note": "Pier 1 bankruptcy",
       "live_status": "AUTH_REQUIRED",
+      "verification": "fixture_list_only",
       "observed_terminal": {
         "label": "TERMINAL_UNKNOWN",
         "reason": "no_settlement_action",
@@ -204,6 +219,7 @@
       "expected_terminal": "bankruptcy_last_trade",
       "note": "Ascena bankruptcy",
       "live_status": "AUTH_REQUIRED",
+      "verification": "fixture_list_only",
       "observed_terminal": {
         "label": "TERMINAL_UNKNOWN",
         "reason": "no_settlement_action",

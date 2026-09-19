@@ -70,7 +70,7 @@ def test_pagination_does_not_treat_first_10000_as_universe(tmp_path: Path, monke
 
     pages = {
         0: [_row("A", i) for i in range(DEFAULT_PAGE_LIMIT)],
-        DEFAULT_PAGE_LIMIT: [_row("B", 1)],
+        DEFAULT_PAGE_LIMIT: [_row("B", DEFAULT_PAGE_LIMIT)],
     }
 
     def opener(url: str, follow_redirects: bool = False):

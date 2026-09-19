@@ -1,0 +1,100 @@
+{
+  "credential_present": false,
+  "live_sharadar_request_count": 0,
+  "mock_red_green": {
+    "probe_replay": "sharadar_v3/connect_accept_probe_replay.json",
+    "checks": 14,
+    "satisfied": 14,
+    "not_satisfied": 0,
+    "local_pytest": {"passed": 3989, "skipped": 6}
+  },
+  "tables": {
+    "stocks": {
+      "status": "AUTH_REQUIRED",
+      "row_count": 0,
+      "pages": 0,
+      "complete": false,
+      "session_row_count": 0
+    },
+    "funds": {
+      "status": "AUTH_REQUIRED",
+      "row_count": 0,
+      "pages": 0,
+      "complete": false,
+      "session_row_count": 0
+    },
+    "tickers": {
+      "status": "AUTH_REQUIRED",
+      "row_count": 0,
+      "pages": 0,
+      "complete": false,
+      "session_row_count": 0
+    },
+    "actions": {
+      "status": "AUTH_REQUIRED",
+      "row_count": 0,
+      "pages": 0,
+      "complete": false,
+      "session_row_count": 0
+    }
+  },
+  "raw_row_counts": {
+    "stocks": 0,
+    "funds": 0,
+    "tickers": 0,
+    "actions": 0
+  },
+  "isolated_row_counts": {
+    "stocks": 0,
+    "funds": 0,
+    "actions": 0,
+    "tickers": 0
+  },
+  "store": {
+    "path": "/workspace/research/option_pro_us_eod_v1/data/sharadar_raw",
+    "public_git": false,
+    "resume": "load checkpoints/<table>.json; verify page hashes; continue from next_skip",
+    "paid_rows_must_stay_outside_git": true,
+    "allowed_window": {
+      "start": "2010-01-01",
+      "end": "2024-06-28",
+      "isolated_after_raw_persist": true
+    }
+  },
+  "terminal_status": "AUTH_REQUIRED",
+  "checks": {
+    "adapter_code": "PASS",
+    "synthetic_three_track": "PASS",
+    "identity_contract": "PASS",
+    "delist_fixture_table": "PASS",
+    "delist_live_verified": "AUTH_REQUIRED",
+    "parent_rank_fix": "PASS",
+    "breakout_first_day_fix": "PASS",
+    "feature_version_bump": "PASS",
+    "control_archive_index": "PASS",
+    "live_sharadar_read": "AUTH_REQUIRED",
+    "yahoo_reconcile_live": "AUTH_REQUIRED",
+    "volume_scope": "UNSUPPORTED",
+    "persistent_handover": "AUTH_REQUIRED",
+    "chat_or_massive_credential_used": "PASS_NOT_USED",
+    "four_table_mock_or_live_not_empty_placeholder": "AUTH_REQUIRED"
+  },
+  "delist_verification": [
+    "fixture_list_only",
+    "fixture_list_only",
+    "fixture_list_only",
+    "fixture_list_only",
+    "fixture_list_only",
+    "fixture_list_only",
+    "fixture_list_only",
+    "fixture_list_only",
+    "fixture_list_only",
+    "fixture_list_only",
+    "fixture_list_only",
+    "fixture_list_only",
+    "fixture_list_only",
+    "fixture_list_only",
+    "fixture_list_only",
+    "fixture_list_only"
+  ]
+}

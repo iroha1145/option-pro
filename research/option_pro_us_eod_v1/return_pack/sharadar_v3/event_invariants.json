@@ -1,17 +1,7 @@
 {
-  "actions_fields_passthrough": [
-    "date",
-    "action",
-    "ticker",
-    "name",
-    "value",
-    "contraticker",
-    "contraname"
-  ],
-  "no_secondary_merge": true,
-  "terminal_rules": {
-    "bankruptcy": "last_trade",
-    "acquisition": "actions.acquisitioncash",
-    "else": "TERMINAL_UNKNOWN_exclude"
-  }
+  "actions_passthrough": true,
+  "missing_value_not_coerced_to_zero": true,
+  "last_trade_is_last_observed_quote": true,
+  "mixed_acquisition_not_forced_cash": true,
+  "failed_securities_retained": true
 }

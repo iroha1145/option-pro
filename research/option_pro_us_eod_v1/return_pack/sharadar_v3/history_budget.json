@@ -12,8 +12,10 @@
   },
   "residual_history_min": 330,
   "first_score_day": null,
+  "evaluable_sessions_after_warmup": null,
   "mature_labels": "holding_horizon after first_score_day",
   "evaluable_years_not_claimed_from_2010_alone": true,
+  "ten_year_raw_length_is_not_ten_year_evaluable": true,
   "calendar_sessions_in_window": null,
   "young_names_have_independent_insufficient": true
 }

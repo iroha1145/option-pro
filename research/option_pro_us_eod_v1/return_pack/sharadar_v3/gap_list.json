@@ -12,22 +12,33 @@
   {
     "item": "entitlement_years",
     "status": "AUTH_REQUIRED",
-    "action": "stop on 5Y; tag 10Y; continue full from 2010-01-01"
+    "action": "stop on 5Y; tag 10Y; continue full from 2010-01-01; filename is not entitlement"
   },
   {
     "item": "yahoo_overlap_reconcile",
     "status": "AUTH_REQUIRED",
-    "action": "align security/currency/split scale before comparing"
+    "action": "align security/currency/split scale before comparing; missing fields are insufficient"
   },
   {
     "item": "volume_session_scope",
-    "status": "UNKNOWN",
+    "status": "UNSUPPORTED",
     "action": "do not start volume experiments"
   },
   {
     "item": "persistent_offline_export",
-    "status": "UNSUPPORTED",
-    "action": "authorized store outside public git; hash alone on a temp VM is not handover"
+    "status": "AUTH_REQUIRED",
+    "action": "authorized store outside public git; resume from checkpoints",
+    "store": {
+      "path": "/workspace/research/option_pro_us_eod_v1/data/sharadar_raw",
+      "public_git": false,
+      "resume": "load checkpoints/<table>.json; verify page hashes; continue from next_skip",
+      "paid_rows_must_stay_outside_git": true,
+      "allowed_window": {
+        "start": "2010-01-01",
+        "end": "2024-06-28",
+        "isolated_after_raw_persist": true
+      }
+    }
   },
   {
     "item": "members_and_factors",
