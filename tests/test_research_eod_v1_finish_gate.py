@@ -270,7 +270,9 @@ def test_reused_ticker_resolves_by_permaticker_and_event_year(tmp_path: Path, mo
     assert window["covering_n"] == 1
     assert window["bounded_by_resolved_coverage"] is True
     assert window["start"] == "2013-01-01"
-    assert window["end"] == "2013-10-29"
+    # Events run past the final quote but stop before the reused ticker restarts.
+    assert window["end"] == "2018-12-27"
+    assert window["quote_end"] == "2013-10-29"
     assert case["identity_resolution"]["security_id"] == "sharadar:24420"
     assert case["identity_resolution"]["permaticker"] == "24420"
     assert case["observed_terminal"]["value"] == 13.75

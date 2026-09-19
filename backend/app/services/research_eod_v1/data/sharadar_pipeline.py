@@ -13,7 +13,7 @@ import json
 import tempfile
 import zlib
 from collections import Counter, deque
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any, Iterable, Iterator, Mapping, Sequence
 from urllib.parse import parse_qs, urlsplit
@@ -28,6 +28,8 @@ from app.services.research_eod_v1.data.sharadar import (
 )
 from app.services.research_eod_v1.data.sharadar_acceptance import (
     DELIST_FIXTURES,
+    DELIST_RULE_VERSION,
+    FAMILY_WARMUP_SESSIONS,
     evaluate_delist_fixture,
     history_budget,
     reconcile_aligned_returns,
@@ -200,8 +202,8 @@ def _delist_identity(fixture: Mapping[str, Any], identities_by_base: Mapping[str
     }
 
 
-def _event_bounds(identity: Any | None, year: int) -> tuple[date, date]:
-    """Rows come from the event year up to the resolved coverage end, never a later reuse."""
+def _quote_bounds(identity: Any | None, year: int) -> tuple[date, date]:
+    """Quotes exist only where the vendor has price coverage."""
 
     start = date(year, 1, 1)
     end = ALLOWED_END
@@ -212,6 +214,31 @@ def _event_bounds(identity: Any | None, year: int) -> tuple[date, date]:
     return start, end
 
 
+def _event_bounds(identity: Any | None, year: int, successors: Sequence[Any] = ()) -> tuple[date, date]:
+    """Legal and settlement events can post after the tape stops.
+
+    The window therefore runs past ``lastpricedate`` to the allowed end, stopping
+    before a same-ticker successor identity starts and never entering the sealed
+    region. A cash settlement dated days after the final quote stays visible.
+    """
+
+    start = date(year, 1, 1)
+    end = ALLOWED_END
+    last = None if identity is None else _parse_date(identity.lastpricedate)
+    for other in successors:
+        if identity is not None and other.security_id == identity.security_id:
+            continue
+        begins = _parse_date(other.firstpricedate)
+        if begins is None:
+            continue
+        if last is not None and begins <= last:
+            continue
+        if begins <= start:
+            continue
+        end = min(end, begins - timedelta(days=1))
+    return start, end
+
+
 def _fixture_actions_for(
     identity: Any,
     fixture_ticker: str,
@@ -219,25 +246,36 @@ def _fixture_actions_for(
     *,
     start: date,
     end: date,
-) -> list[dict[str, Any]]:
-    """Action rows for the resolved identity: its stored ticker, plus bare-ticker rows inside its coverage."""
+    siblings: Sequence[Any] = (),
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Action rows for the resolved identity, plus the bare-ticker rows it cannot claim.
+
+    A settlement can post after the last quote, so price coverage does not bound
+    the event window. A bare-ticker row is only dropped when a different identity
+    that shares the ticker actually covers that date; those go back as UNRESOLVED
+    rather than being attributed to either side.
+    """
 
     out: list[dict[str, Any]] = []
+    unresolved: list[dict[str, Any]] = []
     stored = identity.ticker
     for row in fixture_actions.get(stored, []):
         session = _parse_date(row.get("date"))
         if session is not None and start <= session <= end:
             out.append(dict(row))
     if stored != fixture_ticker:
+        others = [item for item in siblings if item.security_id != identity.security_id]
         for row in fixture_actions.get(fixture_ticker, []):
             session = _parse_date(row.get("date"))
             if session is None or session < start or session > end:
                 continue
-            if identity.covers(session) is False:
+            claimed_by_other = any(item.covers(session) is True for item in others)
+            if claimed_by_other and identity.covers(session) is not True:
+                unresolved.append({**dict(row), "reason": "bare_ticker_inside_another_identity_coverage"})
                 continue
             out.append(dict(row))
     out.sort(key=lambda item: str(item.get("date") or ""))
-    return out
+    return out, unresolved
 
 
 def _last_trade_for(
@@ -259,6 +297,43 @@ def _last_trade_for(
             if best is None or session > best[0]:
                 best = (session, close)
     return None if best is None else best[1]
+
+
+WARMUP_THRESHOLDS = tuple(sorted({int(value) for value in FAMILY_WARMUP_SESSIONS.values()}))
+_CALENDAR_INDEX: dict[date, int] | None = None
+
+
+def _calendar_index() -> dict[date, int]:
+    global _CALENDAR_INDEX
+    if _CALENDAR_INDEX is None:
+        _CALENDAR_INDEX = {
+            session: position
+            for position, session in enumerate(trading_calendar_sessions(FULL_HISTORY_START, ALLOWED_END))
+        }
+    return _CALENDAR_INDEX
+
+
+def _record_warmup_hit(summary: dict[str, Any], session: date) -> None:
+    """Remember the date each warmup count was actually reached, plus the widest gap.
+
+    Rows arrive in session order per security, so the n-th observation is the
+    n-th call. A gap in the tape therefore pushes the warmup date later instead
+    of being filled in from the exchange calendar.
+    """
+
+    count = int(summary["n"])
+    for threshold in WARMUP_THRESHOLDS:
+        if count == threshold:
+            summary["warmup_hits"][str(threshold)] = session.isoformat()
+    index = _calendar_index()
+    position = index.get(session)
+    previous = summary.get("_prev_position")
+    if position is not None and previous is not None:
+        gap = position - int(previous)
+        if gap > int(summary.get("max_gap_sessions") or 1):
+            summary["max_gap_sessions"] = gap
+    if position is not None:
+        summary["_prev_position"] = position
 
 
 def _transform_streaming(
@@ -348,13 +423,21 @@ def _transform_streaming(
                 converted += 1
                 summary = sessions.get(sid)
                 if summary is None:
-                    sessions[sid] = {"first": tracks.session_date, "last": tracks.session_date, "n": 1}
+                    summary = {
+                        "first": tracks.session_date,
+                        "last": tracks.session_date,
+                        "n": 1,
+                        "warmup_hits": {},
+                        "max_gap_sessions": 1,
+                    }
+                    sessions[sid] = summary
                 else:
                     summary["n"] += 1
                     if tracks.session_date < summary["first"]:
                         summary["first"] = tracks.session_date
                     if tracks.session_date > summary["last"]:
                         summary["last"] = tracks.session_date
+                _record_warmup_hit(summary, tracks.session_date)
                 if earliest is None or tracks.session_date < earliest:
                     earliest = tracks.session_date
                 if latest is None or tracks.session_date > latest:
@@ -426,6 +509,8 @@ def _transform_streaming(
             "exchange_is_tag_not_drop": True,
         },
     }
+    for summary in sessions.values():
+        summary.pop("_prev_position", None)
     return {
         "converted_rows": converted,
         "skipped_total": skipped_total,
@@ -512,34 +597,65 @@ def _stage(status: str, evidence: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def summarize_stages(stages: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
-    """Acceptance follows the pre-registered required stages, never download completion alone."""
+    """Acceptance needs an explicit PASS on every required stage.
 
-    missing = [name for name in REQUIRED_GATE_STAGES if name not in stages]
-    failed = [name for name in REQUIRED_GATE_STAGES if stages.get(name, {}).get("status") == "FAIL"]
-    partial = [name for name in REQUIRED_GATE_STAGES if stages.get(name, {}).get("status") == "PARTIAL"]
-    insufficient = [
-        name
-        for name in REQUIRED_GATE_STAGES
-        if stages.get(name, {}).get("status") in {"INSUFFICIENT", "UNSUPPORTED", "NOT_COMPUTED", "RECONCILIATION_MISSING"}
-    ]
-    blocked = [
-        name
-        for name in REQUIRED_GATE_STAGES
-        if stages.get(name, {}).get("status") in {
+    The rule is a whitelist, not a list of known bad states: a missing stage, a
+    missing status, ``None``, ``SKIPPED``, ``PENDING`` or any word this gate has
+    never seen fails closed and is reported with the status actually observed.
+    """
+
+    observed: dict[str, Any] = {}
+    missing: list[str] = []
+    failed: list[str] = []
+    partial: list[str] = []
+    insufficient: list[str] = []
+    blocked: list[str] = []
+    unknown: list[str] = []
+    not_pass: list[dict[str, Any]] = []
+    for name in REQUIRED_GATE_STAGES:
+        if name not in stages:
+            missing.append(name)
+            not_pass.append({"stage": name, "status": None, "reason": "stage_absent"})
+            observed[name] = None
+            continue
+        raw = stages.get(name) or {}
+        status = raw.get("status")
+        observed[name] = status
+        if status == "PASS":
+            continue
+        if status == "FAIL":
+            failed.append(name)
+            reason = "failed"
+        elif status == "PARTIAL":
+            partial.append(name)
+            reason = "partial"
+        elif status in {"INSUFFICIENT", "UNSUPPORTED", "NOT_COMPUTED", "RECONCILIATION_MISSING"}:
+            insufficient.append(name)
+            reason = "insufficient"
+        elif status in {
             "AUTH_REQUIRED", "AUTH_FAILED", "ENTITLEMENT_MISSING", "NETWORK_UNAVAILABLE", "SCHEMA_MISMATCH",
             "VENDOR_ERROR", "CHECKPOINT_QUERY_MISMATCH", "REDIRECT_UNEXPECTED", "EMPTY_BODY", "PAGING_UNSUPPORTED",
-        }
-    ]
-    accepted = not (missing or failed or partial or insufficient or blocked)
+        }:
+            blocked.append(name)
+            reason = "blocked"
+        else:
+            unknown.append(name)
+            reason = "status_is_not_pass_and_not_a_known_state"
+        not_pass.append({"stage": name, "status": status, "reason": reason})
+    accepted = not not_pass
     return {
         "required": list(REQUIRED_GATE_STAGES),
         "optional": [name for name in GATE_STAGES if name not in REQUIRED_GATE_STAGES],
         "accepted": accepted,
+        "observed_status": observed,
+        "not_pass": not_pass,
         "missing": missing,
         "failed": failed,
         "partial": partial,
         "insufficient": insufficient,
         "blocked": blocked,
+        "unknown": unknown,
+        "accepted_requires_explicit_pass": True,
         "download_complete_is_not_acceptance": True,
     }
 
@@ -749,14 +865,23 @@ def execute_data_gate(
         year = int(fixture["year"])
         resolved = _delist_identity(fixture, identities["by_base"])
         identity = resolved["identity"]
-        start, end = _event_bounds(identity, year)
-        actions = (
-            _fixture_actions_for(identity, ticker, actions_scan["fixture_actions"], start=start, end=end)
+        siblings = list(identities["by_base"].get(ticker) or [])
+        start, end = _event_bounds(identity, year, siblings)
+        quote_start, quote_end = _quote_bounds(identity, year)
+        actions, unresolved_actions = (
+            _fixture_actions_for(
+                identity,
+                ticker,
+                actions_scan["fixture_actions"],
+                start=start,
+                end=end,
+                siblings=siblings,
+            )
             if identity is not None
-            else []
+            else ([], [])
         )
         last_trade = (
-            _last_trade_for(identity, converted["fixture_rows"], start=start, end=end)
+            _last_trade_for(identity, converted["fixture_rows"], start=quote_start, end=quote_end)
             if identity is not None
             else None
         )
@@ -769,12 +894,17 @@ def execute_data_gate(
                 event_window={
                     "start": start.isoformat(),
                     "end": end.isoformat(),
+                    "quote_start": quote_start.isoformat(),
+                    "quote_end": quote_end.isoformat(),
+                    "events_may_post_after_final_quote": True,
+                    "bounded_by_successor_identity_and_sealed_window": True,
                     "bounded_by_resolved_coverage": identity is not None,
                     "candidates_n": resolved["candidates_n"],
                     "candidate_tickers": resolved["candidate_tickers"],
                     "covering_n": resolved["covering_n"],
                     "unresolved_reason": resolved["unresolved_reason"],
                     "relatedticker_hints_not_verified_aliases": resolved["relatedticker_hints_not_verified_aliases"],
+                    "unresolved_bare_ticker_actions": unresolved_actions,
                     "rows_are_allowed_window_only": True,
                 },
             )
@@ -1091,16 +1221,17 @@ def _build_stages(
     transform = _cap(transform, download_status)
 
     resolved = [item for item in delist if item.get("identity_resolved")]
+    determinate = [item for item in delist if item.get("determinate_terminal")]
     concrete = [item for item in delist if item.get("concrete_terminal")]
     unresolved = [item["ticker"] for item in delist if not item.get("identity_resolved")]
-    unknown = [item["ticker"] for item in delist if item.get("identity_resolved") and not item.get("concrete_terminal")]
+    unknown = [item["ticker"] for item in delist if item.get("identity_resolved") and not item.get("determinate_terminal")]
     failed_cases = [item["ticker"] for item in delist if item.get("live_status") == "FAIL"]
     fixture_only = all(item.get("verification") == "fixture_list_only" for item in delist)
     if fixture_only:
         delist_live = "AUTH_REQUIRED" if not present else "INSUFFICIENT"
     elif failed_cases:
         delist_live = "FAIL"
-    elif len(resolved) == len(delist) and len(concrete) >= IDENTITY_MIN_CONCRETE_TERMINALS:
+    elif len(resolved) == len(delist) and len(determinate) >= IDENTITY_MIN_CONCRETE_TERMINALS:
         delist_live = "PASS"
     else:
         delist_live = "PARTIAL"
@@ -1108,8 +1239,13 @@ def _build_stages(
         "identities": len(identities.get("by_id") or {}),
         "delist_live": delist_live,
         "resolved_n": len(resolved),
-        "concrete_terminal_n": len(concrete),
-        "required_concrete_terminals": IDENTITY_MIN_CONCRETE_TERMINALS,
+        # The identity layer counts resolved labels. Settlement evidence is the
+        # economic layer's bar and is reported here without being mixed in.
+        "determinate_terminal_n": len(determinate),
+        "required_determinate_terminals": IDENTITY_MIN_CONCRETE_TERMINALS,
+        "settlement_evidenced_n": len(concrete),
+        "identity_pass_is_not_execution_pass": True,
+        "rule_version": DELIST_RULE_VERSION,
         "unresolved": unresolved,
         "terminal_unknown": unknown,
         "failed_cases": failed_cases,
@@ -1172,12 +1308,21 @@ def _build_stages(
 
     volume_stage = _stage(str(volume.get("status")), {"session_scope": volume.get("session_scope")})
     blocked_cases = [item["ticker"] for item in delist if item.get("economic_settlement_blocked_only")]
+    quote_only_cases = [
+        item["ticker"]
+        for item in delist
+        if item.get("determinate_terminal") and not item.get("concrete_terminal")
+    ]
     execution = _stage(
         "UNSUPPORTED" if blocked_cases or delist_live != "PASS" else "PASS",
         {
             "settlement_blocked_cases": blocked_cases,
+            "terminal_from_last_quote_only": quote_only_cases,
+            "settlement_evidenced_n": len(concrete),
             "raw_history_retained": True,
             "unsupported_case_is_not_verified_pass": True,
+            "last_quote_is_not_a_verified_exit_price": True,
+            "rule_version": DELIST_RULE_VERSION,
         },
     )
     return {

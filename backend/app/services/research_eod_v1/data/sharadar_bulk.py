@@ -30,14 +30,18 @@ from app.services.research_eod_v1.data.sharadar_store import (
     UniqueKeyIndex,
     advance_checkpoint,
     checkpoint_path,
+    count_jsonl,
     empty_checkpoint,
     key_index_db_path,
     key_index_path,
     load_checkpoint,
+    merge_committed,
     merged_path,
     page_dir,
     query_signature,
     save_checkpoint,
+    sha256_file,
+    verify_committed_pages,
     write_page_file,
 )
 
@@ -67,6 +71,85 @@ def _reset_table(store: Path, table: str) -> None:
         Path(str(key_index_db_path(store, table)) + suffix).unlink(missing_ok=True)
 
 
+def verify_ingested_state(
+    store: Path,
+    table: str,
+    checkpoint: Mapping[str, Any],
+    *,
+    archive_path: Path | None = None,
+) -> dict[str, Any]:
+    """Check the artifacts a completed ingest must have left behind.
+
+    A checkpoint is a record of work, not the work. Pages, the merged file, the
+    primary-key index and the source archive are each verified, so a store that
+    lost or altered its payload cannot come back as READ_OK.
+    """
+
+    committed = list(checkpoint.get("committed_pages") or [])
+    expected_rows = int(checkpoint.get("committed_row_count") or 0)
+    problems: list[str] = []
+    page_errors = verify_committed_pages(store, table, checkpoint)
+    problems.extend(page_errors)
+    if expected_rows and not committed:
+        problems.append("checkpoint_without_committed_pages")
+    merged = merged_path(store, table)
+    merged_rows = count_jsonl(merged) if merged.is_file() else None
+    if merged_rows is None:
+        problems.append("missing_merged_file")
+    elif merged_rows != expected_rows:
+        problems.append(f"merged_row_mismatch:{merged_rows}!={expected_rows}")
+    index = UniqueKeyIndex(store, table)
+    try:
+        index_rows = index.count
+    finally:
+        index.close()
+    if index_rows != expected_rows:
+        problems.append(f"key_index_mismatch:{index_rows}!={expected_rows}")
+    recorded_sha = (checkpoint.get("source_archive") or {}).get("sha256")
+    archive_state = "not_recorded"
+    if recorded_sha:
+        if archive_path is None or not archive_path.is_file():
+            archive_state = "recorded_but_absent"
+        elif sha256_file(archive_path) != recorded_sha:
+            archive_state = "changed"
+            problems.append("source_archive_changed")
+        else:
+            archive_state = "verified"
+    pages_ok = not page_errors and bool(committed or not expected_rows)
+    if not problems:
+        status = "READ_OK"
+    elif not pages_ok:
+        status = "MISSING" if any(item.startswith("missing_page") or item == "checkpoint_without_committed_pages" for item in problems) else "CORRUPT"
+    elif archive_state == "changed":
+        status = "CORRUPT"
+    else:
+        status = "PARTIAL"
+    return {
+        "status": status,
+        "problems": problems,
+        "expected_rows": expected_rows,
+        "merged_rows": merged_rows,
+        "key_index_rows": index_rows,
+        "committed_pages": len(committed),
+        "pages_verified": pages_ok,
+        "source_archive": archive_state,
+        "repairable_from_pages": pages_ok and archive_state != "changed" and bool(problems),
+    }
+
+
+def _rebuild_derived(store: Path, table: str, checkpoint: Mapping[str, Any]) -> dict[str, Any]:
+    """Rebuild the merged file and key index from page files that still verify."""
+
+    merge_committed(store, table, checkpoint)
+    index = UniqueKeyIndex(store, table)
+    try:
+        index.rebuild(checkpoint.get("committed_pages") or [])
+        rows = index.count
+    finally:
+        index.close()
+    return {"rebuilt_from": "committed_pages", "key_index_rows": rows}
+
+
 def ingest_bulk_archive(
     store: Path,
     table: str,
@@ -81,25 +164,51 @@ def ingest_bulk_archive(
     signature = query_signature(table, extra, limit)
     existing = load_checkpoint(store, table)
     if existing is not None and existing.get("query_signature") == signature and existing.get("complete"):
-        return {
-            "table": table,
-            "status": "READ_OK",
-            "row_count": int(existing.get("committed_row_count") or 0),
-            "committed_row_count": int(existing.get("committed_row_count") or 0),
-            "session_row_count": 0,
-            "pages": 0,
-            "complete": True,
-            "download_mode": BULK_MODE,
-            "years": years,
-            "already_ingested": True,
-            "observed_min_date": existing.get("observed_min_date"),
-            "observed_max_date": existing.get("observed_max_date"),
-            "rows_in_archive": existing.get("rows_in_archive"),
-            "rows_dropped_outside_window": existing.get("rows_dropped_outside_window"),
-            "rows_dropped_bad_date": existing.get("rows_dropped_bad_date"),
-            "pk_missing_rows": int(existing.get("pk_missing_rows") or 0),
-            "checkpoint": dict(existing),
-        }
+        verification = verify_ingested_state(store, table, existing, archive_path=archive_path)
+        repaired: dict[str, Any] | None = None
+        if verification["status"] != "READ_OK" and verification["repairable_from_pages"]:
+            repaired = _rebuild_derived(store, table, existing)
+            verification = verify_ingested_state(store, table, existing, archive_path=archive_path)
+            verification["repaired"] = repaired
+        if verification["status"] != "READ_OK":
+            archive_usable = archive_path.is_file() and validate_bulk_archive(archive_path)["ok"]
+            if not archive_usable:
+                return {
+                    "table": table,
+                    "status": verification["status"],
+                    "row_count": 0,
+                    "committed_row_count": 0,
+                    "session_row_count": 0,
+                    "pages": 0,
+                    "complete": False,
+                    "download_mode": BULK_MODE,
+                    "years": years,
+                    "already_ingested": False,
+                    "verification": verification,
+                    "reason": "completed_checkpoint_without_verifiable_payload",
+                }
+            # A verifiable archive is still a source: fall through and re-ingest it.
+        else:
+            return {
+                "table": table,
+                "status": "READ_OK",
+                "row_count": int(existing.get("committed_row_count") or 0),
+                "committed_row_count": int(existing.get("committed_row_count") or 0),
+                "session_row_count": 0,
+                "pages": 0,
+                "complete": True,
+                "download_mode": BULK_MODE,
+                "years": years,
+                "already_ingested": True,
+                "observed_min_date": existing.get("observed_min_date"),
+                "observed_max_date": existing.get("observed_max_date"),
+                "rows_in_archive": existing.get("rows_in_archive"),
+                "rows_dropped_outside_window": existing.get("rows_dropped_outside_window"),
+                "rows_dropped_bad_date": existing.get("rows_dropped_bad_date"),
+                "pk_missing_rows": int(existing.get("pk_missing_rows") or 0),
+                "verification": verification,
+                "checkpoint": dict(existing),
+            }
     if existing is not None and existing.get("query_signature") != signature and existing.get("complete"):
         return {
             "table": table,
@@ -204,6 +313,13 @@ def ingest_bulk_archive(
     checkpoint["rows_dropped_bad_date"] = dropped_bad_date
     checkpoint["observed_min_date"] = None if min_date is None else min_date.isoformat()
     checkpoint["observed_max_date"] = None if max_date is None else max_date.isoformat()
+    checkpoint["source_archive"] = {
+        "name": archive_path.name,
+        "sha256": sha256_file(archive_path),
+        "bytes": archive_path.stat().st_size,
+        "members": members,
+        "same_name_is_not_same_dataset": True,
+    }
     save_checkpoint(store, checkpoint)
     committed = int(checkpoint.get("committed_row_count") or 0)
     return {

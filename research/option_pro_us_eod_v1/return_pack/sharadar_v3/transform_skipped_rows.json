@@ -1,5 +1,9 @@
 {
   "converted_rows": 0,
+  "skipped_n": 0,
+  "skipped_share": null,
+  "skipped_by_reason": {},
   "skipped_rows": [],
-  "skipped_n": 0
+  "skipped_rows_capped_at": 1000,
+  "source_row_counts": {}
 }

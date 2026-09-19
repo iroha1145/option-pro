@@ -1,0 +1,35 @@
+{
+  "total_rows": 0,
+  "observed": {},
+  "assumed_by_terminal_classifier": {
+    "bankruptcy": [
+      "bankruptcy",
+      "bankruptcyliquidation",
+      "chapter11",
+      "chapter7",
+      "liquidation"
+    ],
+    "delisted": [
+      "deleted",
+      "delisted",
+      "regulatorydelisting",
+      "voluntarydelisting"
+    ],
+    "acquisition_cash": [
+      "acquired",
+      "acquisitionby",
+      "acquisitionbycash",
+      "acquisitioncash",
+      "merger",
+      "mergerfrom",
+      "takeprivate"
+    ],
+    "acquisition_stock": [
+      "acquisitionbystock",
+      "acquisitionelectstock",
+      "acquisitionstock",
+      "mergerstock"
+    ]
+  },
+  "vocabulary_is_assumed_until_observed": true
+}

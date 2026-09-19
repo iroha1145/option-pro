@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import bisect
 import csv
 import io
+from collections import Counter
 from dataclasses import asdict, dataclass
 from datetime import date
 from typing import Any, Mapping, Sequence
@@ -66,6 +66,14 @@ THEME_PARENT_SCHEMA = {
 }
 
 CONCRETE_TERMINALS = frozenset({TERMINAL_ACQUISITION_CASH, TERMINAL_BANKRUPTCY})
+# Only a settlement carried on a corporate action releases the economic gate. A
+# bankruptcy label priced off the last observed quote stays an observation.
+SETTLEMENT_EVIDENCE_REASONS = frozenset({"actions.cash_consideration"})
+# v1 counted a bankruptcy priced off the last quote as a settled terminal, which
+# let an observation stand in for an exit price. v2 keeps that row as a
+# determinate label for the identity layer and requires action-borne evidence
+# before the economic layer opens. The identity threshold itself is unchanged.
+DELIST_RULE_VERSION = "delist-terminal-rule-v2"
 
 
 @dataclass(frozen=True)
@@ -97,7 +105,9 @@ def evaluate_delist_fixture(
         "not_last_row_of_same_named_security": True,
     }
     terminal = classify_terminal(actions, last_trade=last_trade)
-    concrete = terminal["label"] in CONCRETE_TERMINALS and terminal.get("value") is not None
+    settled = str(terminal.get("reason")) in SETTLEMENT_EVIDENCE_REASONS
+    determinate = terminal["label"] in CONCRETE_TERMINALS and terminal.get("value") is not None
+    concrete = determinate and settled
     expected = fixture["expected_terminal"]
     if not actions and last_trade is None:
         return {
@@ -107,7 +117,11 @@ def evaluate_delist_fixture(
             "observed_terminal": terminal,
             "identity_resolution": resolution,
             "identity_resolved": identity is not None,
+            "determinate_terminal": False,
             "concrete_terminal": False,
+            "settlement_evidence": None,
+            "economic_settlement_blocked_only": True,
+            "rule_version": DELIST_RULE_VERSION,
         }
     if expected == "acquisition_or_unknown":
         matched = terminal["label"] in {TERMINAL_ACQUISITION_CASH, "TERMINAL_UNKNOWN"}
@@ -134,10 +148,16 @@ def evaluate_delist_fixture(
         "verification": "store_or_live_matched",
         "observed_terminal": terminal,
         "last_trade_is_not_liquidation_value": True,
+        "observed_last_quote": last_trade,
+        "settlement_evidence": str(terminal.get("reason")) if settled else None,
         "identity_resolution": resolution,
         "identity_resolved": identity is not None,
+        # Determinate = the label is resolved. Concrete = a settlement carries it.
+        "determinate_terminal": determinate,
         "concrete_terminal": concrete,
-        "economic_settlement_blocked_only": status in {"UNSUPPORTED", "INSUFFICIENT"},
+        # An observed last quote is a fact about the tape, not a settled exit price.
+        "economic_settlement_blocked_only": not settled,
+        "rule_version": DELIST_RULE_VERSION,
     }
 
 
@@ -310,15 +330,17 @@ def history_budget(
     entitlement_status: str,
     calendar: Sequence[date] | None = None,
     security_sessions: Mapping[str, Any] | None = None,
+    warmup: Mapping[str, int] | None = None,
 ) -> dict[str, Any]:
     """Numeric first-score and label-maturity dates, or NOT_COMPUTED. No expression strings.
 
     The family table is the earliest-any-security view; ``per_security`` carries
     the distribution of first-score days across securities, which is what a
-    listing-date-aware evaluation actually uses.
+    listing-date-aware evaluation actually uses. ``warmup`` exists so a test can
+    state a short dependency; the production thresholds are unchanged.
     """
 
-    warmup = dict(FAMILY_WARMUP_SESSIONS)
+    warmup = dict(warmup or FAMILY_WARMUP_SESSIONS)
     start = None
     if entitlement_status == "HISTORY_10Y":
         start = HISTORY_10Y_START
@@ -415,6 +437,29 @@ def _security_summary(rows: Any) -> tuple[date | None, date | None, int]:
     return usable[0], usable[-1], len(usable)
 
 
+def warmup_hit_date(rows: Any, need: int) -> tuple[date | None, bool]:
+    """Date of the need-th valid observation for one security.
+
+    Sparse bars are never compressed onto a contiguous calendar: the answer comes
+    from the observations themselves. A summary that only kept first/last/n cannot
+    answer it, and says so instead of guessing.
+    """
+
+    need = int(need)
+    if need <= 0:
+        return None, True
+    if isinstance(rows, Mapping):
+        hits = rows.get("warmup_hits") or {}
+        token = hits.get(str(need)) if isinstance(hits, Mapping) else None
+        if token:
+            return date.fromisoformat(str(token)[:10]), True
+        return None, False
+    usable = sorted({item for item in rows if item <= ALLOWED_END})
+    if len(usable) < need:
+        return None, True
+    return usable[need - 1], True
+
+
 def _per_security_budget(
     security_sessions: Mapping[str, Any],
     warmup: Mapping[str, int],
@@ -425,25 +470,39 @@ def _per_security_budget(
     insufficient: list[str] = []
     sessions = list(calendar or [])
     first_scores: dict[str, list[date]] = {family: [] for family in warmup}
+    exact_by_family: dict[str, bool] = {family: True for family in warmup}
+    unknown_by_family: Counter[str] = Counter()
+    gapped_securities = 0
     for security_id, rows in security_sessions.items():
         first, _last, n = _security_summary(rows)
         if n >= longest:
             evaluable.append(security_id)
         else:
             insufficient.append(security_id)
-        if first is None or not sessions:
+        if isinstance(rows, Mapping) and int(rows.get("max_gap_sessions") or 0) > 1:
+            gapped_securities += 1
+        if first is None:
             continue
-        position = bisect.bisect_left(sessions, first)
         for family, need in warmup.items():
             need = int(need)
-            index = position + need - 1
-            if n >= need and index < len(sessions):
-                first_scores[family].append(sessions[index])
+            if n < need:
+                continue
+            hit, known = warmup_hit_date(rows, need)
+            if not known:
+                exact_by_family[family] = False
+                unknown_by_family[family] += 1
+                continue
+            if hit is not None:
+                first_scores[family].append(hit)
     distribution: dict[str, Any] = {}
     for family, dates in first_scores.items():
         dates.sort()
+        exact = exact_by_family[family]
         distribution[family] = {
+            "status": "COMPUTED" if exact else "NOT_COMPUTED",
+            "computed_from": "nth_valid_observation" if exact else "summary_without_valid_observation_dates",
             "securities_with_first_score": len(dates),
+            "securities_without_observation_dates": int(unknown_by_family[family]),
             "earliest": dates[0].isoformat() if dates else None,
             "median": dates[len(dates) // 2].isoformat() if dates else None,
             "latest": dates[-1].isoformat() if dates else None,
@@ -455,5 +514,9 @@ def _per_security_budget(
         "insufficient_n": len(insufficient),
         "insufficient_sample": sorted(insufficient)[:10],
         "first_score_day_distribution": distribution,
-        "first_score_day_is_per_security": bool(sessions),
+        "first_score_day_is_per_security": True,
+        "first_score_day_counts_valid_observations_not_calendar_offset": True,
+        "securities_with_observation_gaps": gapped_securities,
+        "pool_earliest_is_not_every_security_ready": True,
+        "calendar_sessions_supplied": len(sessions),
     }

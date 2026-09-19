@@ -1,6 +1,8 @@
 {
   "status": "AUTH_REQUIRED",
   "fixture_n": 16,
+  "resolved_n": 0,
+  "concrete_terminal_n": 0,
   "cases": [
     {
       "ticker": "DELL",
@@ -13,25 +15,39 @@
       "observed_terminal": {
         "label": "TERMINAL_UNKNOWN",
         "reason": "no_settlement_action",
-        "value": null
+        "value": null,
+        "actions_seen": []
       },
       "identity_resolution": {
         "security_id": null,
         "permaticker": null,
+        "ticker_as_stored": null,
         "resolved_by": "unresolved",
         "event_window": {
           "start": "2013-01-01",
           "end": "2024-06-28",
+          "quote_start": "2013-01-01",
+          "quote_end": "2024-06-28",
+          "events_may_post_after_final_quote": true,
+          "bounded_by_successor_identity_and_sealed_window": true,
           "bounded_by_resolved_coverage": false,
           "candidates_n": 0,
+          "candidate_tickers": [],
           "covering_n": 0,
-          "unresolved_reason": "no_exact_ticker_row",
+          "unresolved_reason": "no_ticker_row",
           "relatedticker_hints_not_verified_aliases": [],
+          "unresolved_bare_ticker_actions": [],
           "rows_are_allowed_window_only": true
         },
         "fixture_year_used_to_resolve_identity": true,
         "not_last_row_of_same_named_security": true
-      }
+      },
+      "identity_resolved": false,
+      "determinate_terminal": false,
+      "concrete_terminal": false,
+      "settlement_evidence": null,
+      "economic_settlement_blocked_only": true,
+      "rule_version": "delist-terminal-rule-v2"
     },
     {
       "ticker": "DTV",
@@ -44,25 +60,39 @@
       "observed_terminal": {
         "label": "TERMINAL_UNKNOWN",
         "reason": "no_settlement_action",
-        "value": null
+        "value": null,
+        "actions_seen": []
       },
       "identity_resolution": {
         "security_id": null,
         "permaticker": null,
+        "ticker_as_stored": null,
         "resolved_by": "unresolved",
         "event_window": {
           "start": "2015-01-01",
           "end": "2024-06-28",
+          "quote_start": "2015-01-01",
+          "quote_end": "2024-06-28",
+          "events_may_post_after_final_quote": true,
+          "bounded_by_successor_identity_and_sealed_window": true,
           "bounded_by_resolved_coverage": false,
           "candidates_n": 0,
+          "candidate_tickers": [],
           "covering_n": 0,
-          "unresolved_reason": "no_exact_ticker_row",
+          "unresolved_reason": "no_ticker_row",
           "relatedticker_hints_not_verified_aliases": [],
+          "unresolved_bare_ticker_actions": [],
           "rows_are_allowed_window_only": true
         },
         "fixture_year_used_to_resolve_identity": true,
         "not_last_row_of_same_named_security": true
-      }
+      },
+      "identity_resolved": false,
+      "determinate_terminal": false,
+      "concrete_terminal": false,
+      "settlement_evidence": null,
+      "economic_settlement_blocked_only": true,
+      "rule_version": "delist-terminal-rule-v2"
     },
     {
       "ticker": "YHOO",
@@ -75,25 +105,39 @@
       "observed_terminal": {
         "label": "TERMINAL_UNKNOWN",
         "reason": "no_settlement_action",
-        "value": null
+        "value": null,
+        "actions_seen": []
       },
       "identity_resolution": {
         "security_id": null,
         "permaticker": null,
+        "ticker_as_stored": null,
         "resolved_by": "unresolved",
         "event_window": {
           "start": "2017-01-01",
           "end": "2024-06-28",
+          "quote_start": "2017-01-01",
+          "quote_end": "2024-06-28",
+          "events_may_post_after_final_quote": true,
+          "bounded_by_successor_identity_and_sealed_window": true,
           "bounded_by_resolved_coverage": false,
           "candidates_n": 0,
+          "candidate_tickers": [],
           "covering_n": 0,
-          "unresolved_reason": "no_exact_ticker_row",
+          "unresolved_reason": "no_ticker_row",
           "relatedticker_hints_not_verified_aliases": [],
+          "unresolved_bare_ticker_actions": [],
           "rows_are_allowed_window_only": true
         },
         "fixture_year_used_to_resolve_identity": true,
         "not_last_row_of_same_named_security": true
-      }
+      },
+      "identity_resolved": false,
+      "determinate_terminal": false,
+      "concrete_terminal": false,
+      "settlement_evidence": null,
+      "economic_settlement_blocked_only": true,
+      "rule_version": "delist-terminal-rule-v2"
     },
     {
       "ticker": "WFM",
@@ -106,25 +150,39 @@
       "observed_terminal": {
         "label": "TERMINAL_UNKNOWN",
         "reason": "no_settlement_action",
-        "value": null
+        "value": null,
+        "actions_seen": []
       },
       "identity_resolution": {
         "security_id": null,
         "permaticker": null,
+        "ticker_as_stored": null,
         "resolved_by": "unresolved",
         "event_window": {
           "start": "2017-01-01",
           "end": "2024-06-28",
+          "quote_start": "2017-01-01",
+          "quote_end": "2024-06-28",
+          "events_may_post_after_final_quote": true,
+          "bounded_by_successor_identity_and_sealed_window": true,
           "bounded_by_resolved_coverage": false,
           "candidates_n": 0,
+          "candidate_tickers": [],
           "covering_n": 0,
-          "unresolved_reason": "no_exact_ticker_row",
+          "unresolved_reason": "no_ticker_row",
           "relatedticker_hints_not_verified_aliases": [],
+          "unresolved_bare_ticker_actions": [],
           "rows_are_allowed_window_only": true
         },
         "fixture_year_used_to_resolve_identity": true,
         "not_last_row_of_same_named_security": true
-      }
+      },
+      "identity_resolved": false,
+      "determinate_terminal": false,
+      "concrete_terminal": false,
+      "settlement_evidence": null,
+      "economic_settlement_blocked_only": true,
+      "rule_version": "delist-terminal-rule-v2"
     },
     {
       "ticker": "MON",
@@ -137,25 +195,39 @@
       "observed_terminal": {
         "label": "TERMINAL_UNKNOWN",
         "reason": "no_settlement_action",
-        "value": null
+        "value": null,
+        "actions_seen": []
       },
       "identity_resolution": {
         "security_id": null,
         "permaticker": null,
+        "ticker_as_stored": null,
         "resolved_by": "unresolved",
         "event_window": {
           "start": "2018-01-01",
           "end": "2024-06-28",
+          "quote_start": "2018-01-01",
+          "quote_end": "2024-06-28",
+          "events_may_post_after_final_quote": true,
+          "bounded_by_successor_identity_and_sealed_window": true,
           "bounded_by_resolved_coverage": false,
           "candidates_n": 0,
+          "candidate_tickers": [],
           "covering_n": 0,
-          "unresolved_reason": "no_exact_ticker_row",
+          "unresolved_reason": "no_ticker_row",
           "relatedticker_hints_not_verified_aliases": [],
+          "unresolved_bare_ticker_actions": [],
           "rows_are_allowed_window_only": true
         },
         "fixture_year_used_to_resolve_identity": true,
         "not_last_row_of_same_named_security": true
-      }
+      },
+      "identity_resolved": false,
+      "determinate_terminal": false,
+      "concrete_terminal": false,
+      "settlement_evidence": null,
+      "economic_settlement_blocked_only": true,
+      "rule_version": "delist-terminal-rule-v2"
     },
     {
       "ticker": "SHLD",
@@ -168,25 +240,39 @@
       "observed_terminal": {
         "label": "TERMINAL_UNKNOWN",
         "reason": "no_settlement_action",
-        "value": null
+        "value": null,
+        "actions_seen": []
       },
       "identity_resolution": {
         "security_id": null,
         "permaticker": null,
+        "ticker_as_stored": null,
         "resolved_by": "unresolved",
         "event_window": {
           "start": "2018-01-01",
           "end": "2024-06-28",
+          "quote_start": "2018-01-01",
+          "quote_end": "2024-06-28",
+          "events_may_post_after_final_quote": true,
+          "bounded_by_successor_identity_and_sealed_window": true,
           "bounded_by_resolved_coverage": false,
           "candidates_n": 0,
+          "candidate_tickers": [],
           "covering_n": 0,
-          "unresolved_reason": "no_exact_ticker_row",
+          "unresolved_reason": "no_ticker_row",
           "relatedticker_hints_not_verified_aliases": [],
+          "unresolved_bare_ticker_actions": [],
           "rows_are_allowed_window_only": true
         },
         "fixture_year_used_to_resolve_identity": true,
         "not_last_row_of_same_named_security": true
-      }
+      },
+      "identity_resolved": false,
+      "determinate_terminal": false,
+      "concrete_terminal": false,
+      "settlement_evidence": null,
+      "economic_settlement_blocked_only": true,
+      "rule_version": "delist-terminal-rule-v2"
     },
     {
       "ticker": "CELG",
@@ -199,25 +285,39 @@
       "observed_terminal": {
         "label": "TERMINAL_UNKNOWN",
         "reason": "no_settlement_action",
-        "value": null
+        "value": null,
+        "actions_seen": []
       },
       "identity_resolution": {
         "security_id": null,
         "permaticker": null,
+        "ticker_as_stored": null,
         "resolved_by": "unresolved",
         "event_window": {
           "start": "2019-01-01",
           "end": "2024-06-28",
+          "quote_start": "2019-01-01",
+          "quote_end": "2024-06-28",
+          "events_may_post_after_final_quote": true,
+          "bounded_by_successor_identity_and_sealed_window": true,
           "bounded_by_resolved_coverage": false,
           "candidates_n": 0,
+          "candidate_tickers": [],
           "covering_n": 0,
-          "unresolved_reason": "no_exact_ticker_row",
+          "unresolved_reason": "no_ticker_row",
           "relatedticker_hints_not_verified_aliases": [],
+          "unresolved_bare_ticker_actions": [],
           "rows_are_allowed_window_only": true
         },
         "fixture_year_used_to_resolve_identity": true,
         "not_last_row_of_same_named_security": true
-      }
+      },
+      "identity_resolved": false,
+      "determinate_terminal": false,
+      "concrete_terminal": false,
+      "settlement_evidence": null,
+      "economic_settlement_blocked_only": true,
+      "rule_version": "delist-terminal-rule-v2"
     },
     {
       "ticker": "ETFC",
@@ -230,25 +330,39 @@
       "observed_terminal": {
         "label": "TERMINAL_UNKNOWN",
         "reason": "no_settlement_action",
-        "value": null
+        "value": null,
+        "actions_seen": []
       },
       "identity_resolution": {
         "security_id": null,
         "permaticker": null,
+        "ticker_as_stored": null,
         "resolved_by": "unresolved",
         "event_window": {
           "start": "2020-01-01",
           "end": "2024-06-28",
+          "quote_start": "2020-01-01",
+          "quote_end": "2024-06-28",
+          "events_may_post_after_final_quote": true,
+          "bounded_by_successor_identity_and_sealed_window": true,
           "bounded_by_resolved_coverage": false,
           "candidates_n": 0,
+          "candidate_tickers": [],
           "covering_n": 0,
-          "unresolved_reason": "no_exact_ticker_row",
+          "unresolved_reason": "no_ticker_row",
           "relatedticker_hints_not_verified_aliases": [],
+          "unresolved_bare_ticker_actions": [],
           "rows_are_allowed_window_only": true
         },
         "fixture_year_used_to_resolve_identity": true,
         "not_last_row_of_same_named_security": true
-      }
+      },
+      "identity_resolved": false,
+      "determinate_terminal": false,
+      "concrete_terminal": false,
+      "settlement_evidence": null,
+      "economic_settlement_blocked_only": true,
+      "rule_version": "delist-terminal-rule-v2"
     },
     {
       "ticker": "JCP",
@@ -261,25 +375,39 @@
       "observed_terminal": {
         "label": "TERMINAL_UNKNOWN",
         "reason": "no_settlement_action",
-        "value": null
+        "value": null,
+        "actions_seen": []
       },
       "identity_resolution": {
         "security_id": null,
         "permaticker": null,
+        "ticker_as_stored": null,
         "resolved_by": "unresolved",
         "event_window": {
           "start": "2020-01-01",
           "end": "2024-06-28",
+          "quote_start": "2020-01-01",
+          "quote_end": "2024-06-28",
+          "events_may_post_after_final_quote": true,
+          "bounded_by_successor_identity_and_sealed_window": true,
           "bounded_by_resolved_coverage": false,
           "candidates_n": 0,
+          "candidate_tickers": [],
           "covering_n": 0,
-          "unresolved_reason": "no_exact_ticker_row",
+          "unresolved_reason": "no_ticker_row",
           "relatedticker_hints_not_verified_aliases": [],
+          "unresolved_bare_ticker_actions": [],
           "rows_are_allowed_window_only": true
         },
         "fixture_year_used_to_resolve_identity": true,
         "not_last_row_of_same_named_security": true
-      }
+      },
+      "identity_resolved": false,
+      "determinate_terminal": false,
+      "concrete_terminal": false,
+      "settlement_evidence": null,
+      "economic_settlement_blocked_only": true,
+      "rule_version": "delist-terminal-rule-v2"
     },
     {
       "ticker": "XLNX",
@@ -292,25 +420,39 @@
       "observed_terminal": {
         "label": "TERMINAL_UNKNOWN",
         "reason": "no_settlement_action",
-        "value": null
+        "value": null,
+        "actions_seen": []
       },
       "identity_resolution": {
         "security_id": null,
         "permaticker": null,
+        "ticker_as_stored": null,
         "resolved_by": "unresolved",
         "event_window": {
           "start": "2022-01-01",
           "end": "2024-06-28",
+          "quote_start": "2022-01-01",
+          "quote_end": "2024-06-28",
+          "events_may_post_after_final_quote": true,
+          "bounded_by_successor_identity_and_sealed_window": true,
           "bounded_by_resolved_coverage": false,
           "candidates_n": 0,
+          "candidate_tickers": [],
           "covering_n": 0,
-          "unresolved_reason": "no_exact_ticker_row",
+          "unresolved_reason": "no_ticker_row",
           "relatedticker_hints_not_verified_aliases": [],
+          "unresolved_bare_ticker_actions": [],
           "rows_are_allowed_window_only": true
         },
         "fixture_year_used_to_resolve_identity": true,
         "not_last_row_of_same_named_security": true
-      }
+      },
+      "identity_resolved": false,
+      "determinate_terminal": false,
+      "concrete_terminal": false,
+      "settlement_evidence": null,
+      "economic_settlement_blocked_only": true,
+      "rule_version": "delist-terminal-rule-v2"
     },
     {
       "ticker": "TWTR",
@@ -323,25 +465,39 @@
       "observed_terminal": {
         "label": "TERMINAL_UNKNOWN",
         "reason": "no_settlement_action",
-        "value": null
+        "value": null,
+        "actions_seen": []
       },
       "identity_resolution": {
         "security_id": null,
         "permaticker": null,
+        "ticker_as_stored": null,
         "resolved_by": "unresolved",
         "event_window": {
           "start": "2022-01-01",
           "end": "2024-06-28",
+          "quote_start": "2022-01-01",
+          "quote_end": "2024-06-28",
+          "events_may_post_after_final_quote": true,
+          "bounded_by_successor_identity_and_sealed_window": true,
           "bounded_by_resolved_coverage": false,
           "candidates_n": 0,
+          "candidate_tickers": [],
           "covering_n": 0,
-          "unresolved_reason": "no_exact_ticker_row",
+          "unresolved_reason": "no_ticker_row",
           "relatedticker_hints_not_verified_aliases": [],
+          "unresolved_bare_ticker_actions": [],
           "rows_are_allowed_window_only": true
         },
         "fixture_year_used_to_resolve_identity": true,
         "not_last_row_of_same_named_security": true
-      }
+      },
+      "identity_resolved": false,
+      "determinate_terminal": false,
+      "concrete_terminal": false,
+      "settlement_evidence": null,
+      "economic_settlement_blocked_only": true,
+      "rule_version": "delist-terminal-rule-v2"
     },
     {
       "ticker": "ATVI",
@@ -354,25 +510,39 @@
       "observed_terminal": {
         "label": "TERMINAL_UNKNOWN",
         "reason": "no_settlement_action",
-        "value": null
+        "value": null,
+        "actions_seen": []
       },
       "identity_resolution": {
         "security_id": null,
         "permaticker": null,
+        "ticker_as_stored": null,
         "resolved_by": "unresolved",
         "event_window": {
           "start": "2023-01-01",
           "end": "2024-06-28",
+          "quote_start": "2023-01-01",
+          "quote_end": "2024-06-28",
+          "events_may_post_after_final_quote": true,
+          "bounded_by_successor_identity_and_sealed_window": true,
           "bounded_by_resolved_coverage": false,
           "candidates_n": 0,
+          "candidate_tickers": [],
           "covering_n": 0,
-          "unresolved_reason": "no_exact_ticker_row",
+          "unresolved_reason": "no_ticker_row",
           "relatedticker_hints_not_verified_aliases": [],
+          "unresolved_bare_ticker_actions": [],
           "rows_are_allowed_window_only": true
         },
         "fixture_year_used_to_resolve_identity": true,
         "not_last_row_of_same_named_security": true
-      }
+      },
+      "identity_resolved": false,
+      "determinate_terminal": false,
+      "concrete_terminal": false,
+      "settlement_evidence": null,
+      "economic_settlement_blocked_only": true,
+      "rule_version": "delist-terminal-rule-v2"
     },
     {
       "ticker": "SIVB",
@@ -385,25 +555,39 @@
       "observed_terminal": {
         "label": "TERMINAL_UNKNOWN",
         "reason": "no_settlement_action",
-        "value": null
+        "value": null,
+        "actions_seen": []
       },
       "identity_resolution": {
         "security_id": null,
         "permaticker": null,
+        "ticker_as_stored": null,
         "resolved_by": "unresolved",
         "event_window": {
           "start": "2023-01-01",
           "end": "2024-06-28",
+          "quote_start": "2023-01-01",
+          "quote_end": "2024-06-28",
+          "events_may_post_after_final_quote": true,
+          "bounded_by_successor_identity_and_sealed_window": true,
           "bounded_by_resolved_coverage": false,
           "candidates_n": 0,
+          "candidate_tickers": [],
           "covering_n": 0,
-          "unresolved_reason": "no_exact_ticker_row",
+          "unresolved_reason": "no_ticker_row",
           "relatedticker_hints_not_verified_aliases": [],
+          "unresolved_bare_ticker_actions": [],
           "rows_are_allowed_window_only": true
         },
         "fixture_year_used_to_resolve_identity": true,
         "not_last_row_of_same_named_security": true
-      }
+      },
+      "identity_resolved": false,
+      "determinate_terminal": false,
+      "concrete_terminal": false,
+      "settlement_evidence": null,
+      "economic_settlement_blocked_only": true,
+      "rule_version": "delist-terminal-rule-v2"
     },
     {
       "ticker": "BBBY",
@@ -416,25 +600,39 @@
       "observed_terminal": {
         "label": "TERMINAL_UNKNOWN",
         "reason": "no_settlement_action",
-        "value": null
+        "value": null,
+        "actions_seen": []
       },
       "identity_resolution": {
         "security_id": null,
         "permaticker": null,
+        "ticker_as_stored": null,
         "resolved_by": "unresolved",
         "event_window": {
           "start": "2023-01-01",
           "end": "2024-06-28",
+          "quote_start": "2023-01-01",
+          "quote_end": "2024-06-28",
+          "events_may_post_after_final_quote": true,
+          "bounded_by_successor_identity_and_sealed_window": true,
           "bounded_by_resolved_coverage": false,
           "candidates_n": 0,
+          "candidate_tickers": [],
           "covering_n": 0,
-          "unresolved_reason": "no_exact_ticker_row",
+          "unresolved_reason": "no_ticker_row",
           "relatedticker_hints_not_verified_aliases": [],
+          "unresolved_bare_ticker_actions": [],
           "rows_are_allowed_window_only": true
         },
         "fixture_year_used_to_resolve_identity": true,
         "not_last_row_of_same_named_security": true
-      }
+      },
+      "identity_resolved": false,
+      "determinate_terminal": false,
+      "concrete_terminal": false,
+      "settlement_evidence": null,
+      "economic_settlement_blocked_only": true,
+      "rule_version": "delist-terminal-rule-v2"
     },
     {
       "ticker": "PIR",
@@ -447,25 +645,39 @@
       "observed_terminal": {
         "label": "TERMINAL_UNKNOWN",
         "reason": "no_settlement_action",
-        "value": null
+        "value": null,
+        "actions_seen": []
       },
       "identity_resolution": {
         "security_id": null,
         "permaticker": null,
+        "ticker_as_stored": null,
         "resolved_by": "unresolved",
         "event_window": {
           "start": "2020-01-01",
           "end": "2024-06-28",
+          "quote_start": "2020-01-01",
+          "quote_end": "2024-06-28",
+          "events_may_post_after_final_quote": true,
+          "bounded_by_successor_identity_and_sealed_window": true,
           "bounded_by_resolved_coverage": false,
           "candidates_n": 0,
+          "candidate_tickers": [],
           "covering_n": 0,
-          "unresolved_reason": "no_exact_ticker_row",
+          "unresolved_reason": "no_ticker_row",
           "relatedticker_hints_not_verified_aliases": [],
+          "unresolved_bare_ticker_actions": [],
           "rows_are_allowed_window_only": true
         },
         "fixture_year_used_to_resolve_identity": true,
         "not_last_row_of_same_named_security": true
-      }
+      },
+      "identity_resolved": false,
+      "determinate_terminal": false,
+      "concrete_terminal": false,
+      "settlement_evidence": null,
+      "economic_settlement_blocked_only": true,
+      "rule_version": "delist-terminal-rule-v2"
     },
     {
       "ticker": "ASNA",
@@ -478,25 +690,39 @@
       "observed_terminal": {
         "label": "TERMINAL_UNKNOWN",
         "reason": "no_settlement_action",
-        "value": null
+        "value": null,
+        "actions_seen": []
       },
       "identity_resolution": {
         "security_id": null,
         "permaticker": null,
+        "ticker_as_stored": null,
         "resolved_by": "unresolved",
         "event_window": {
           "start": "2020-01-01",
           "end": "2024-06-28",
+          "quote_start": "2020-01-01",
+          "quote_end": "2024-06-28",
+          "events_may_post_after_final_quote": true,
+          "bounded_by_successor_identity_and_sealed_window": true,
           "bounded_by_resolved_coverage": false,
           "candidates_n": 0,
+          "candidate_tickers": [],
           "covering_n": 0,
-          "unresolved_reason": "no_exact_ticker_row",
+          "unresolved_reason": "no_ticker_row",
           "relatedticker_hints_not_verified_aliases": [],
+          "unresolved_bare_ticker_actions": [],
           "rows_are_allowed_window_only": true
         },
         "fixture_year_used_to_resolve_identity": true,
         "not_last_row_of_same_named_security": true
-      }
+      },
+      "identity_resolved": false,
+      "determinate_terminal": false,
+      "concrete_terminal": false,
+      "settlement_evidence": null,
+      "economic_settlement_blocked_only": true,
+      "rule_version": "delist-terminal-rule-v2"
     }
   ]
 }

@@ -104,6 +104,7 @@
     "C_trend_pullback": null,
     "D_residual_momentum": null
   },
+  "first_score_day_is_earliest_any_security": true,
   "evaluable_sessions_after_warmup": null,
   "calendar_sessions_in_window": null,
   "calendar_is_independent_of_price_rows": true,
@@ -114,7 +115,50 @@
     "longest_feature_dependency_sessions": 330,
     "evaluable_n": 0,
     "insufficient_n": 0,
-    "insufficient_sample": []
+    "insufficient_sample": [],
+    "first_score_day_distribution": {
+      "A_trend_quality": {
+        "status": "COMPUTED",
+        "computed_from": "nth_valid_observation",
+        "securities_with_first_score": 0,
+        "securities_without_observation_dates": 0,
+        "earliest": null,
+        "median": null,
+        "latest": null
+      },
+      "B_confirmed_base_breakout": {
+        "status": "COMPUTED",
+        "computed_from": "nth_valid_observation",
+        "securities_with_first_score": 0,
+        "securities_without_observation_dates": 0,
+        "earliest": null,
+        "median": null,
+        "latest": null
+      },
+      "C_trend_pullback": {
+        "status": "COMPUTED",
+        "computed_from": "nth_valid_observation",
+        "securities_with_first_score": 0,
+        "securities_without_observation_dates": 0,
+        "earliest": null,
+        "median": null,
+        "latest": null
+      },
+      "D_residual_momentum": {
+        "status": "COMPUTED",
+        "computed_from": "nth_valid_observation",
+        "securities_with_first_score": 0,
+        "securities_without_observation_dates": 0,
+        "earliest": null,
+        "median": null,
+        "latest": null
+      }
+    },
+    "first_score_day_is_per_security": true,
+    "first_score_day_counts_valid_observations_not_calendar_offset": true,
+    "securities_with_observation_gaps": 0,
+    "pool_earliest_is_not_every_security_ready": true,
+    "calendar_sessions_supplied": 0
   },
   "evaluable_years_not_claimed_from_2010_alone": true,
   "ten_year_raw_length_is_not_ten_year_evaluable": true,

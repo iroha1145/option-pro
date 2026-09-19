@@ -78,7 +78,13 @@
     "bulk_years": null,
     "earliest": null,
     "research_start": null,
-    "continue": false
+    "continue": false,
+    "needs_review": false
+  },
+  "entitlement_probe": {
+    "bulk_years": null,
+    "status": "AUTH_REQUIRED",
+    "attempts": []
   },
   "volume_session_scope": "UNKNOWN",
   "secret_present_in_report": false,

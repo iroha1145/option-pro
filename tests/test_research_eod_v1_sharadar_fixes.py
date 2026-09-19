@@ -461,8 +461,10 @@ def test_all_unknown_terminals_do_not_accept(tmp_path: Path, monkeypatch) -> Non
     case = next(item for item in gate["delist"] if item["ticker"] == "BBBY")
     assert case["observed_terminal"]["label"] == "TERMINAL_UNKNOWN"
     assert case["concrete_terminal"] is False
+    assert case["determinate_terminal"] is False
     assert gate["stages"]["IDENTITY"]["status"] != "PASS"
-    assert gate["stages"]["IDENTITY"]["evidence"]["concrete_terminal_n"] == 0
+    assert gate["stages"]["IDENTITY"]["evidence"]["determinate_terminal_n"] == 0
+    assert gate["stages"]["IDENTITY"]["evidence"]["settlement_evidenced_n"] == 0
     assert gate["stage_summary"]["accepted"] is False
     assert gate["terminal_status"] != "DATA_GATE_ACCEPTED"
     assert "delisted" in gate["action_vocabulary"]["observed"]
@@ -570,8 +572,29 @@ def test_history_budget_accepts_session_summaries() -> None:
         },
     )
     dist = budget["per_security"]["first_score_day_distribution"]
-    assert dist["A_trend_quality"]["securities_with_first_score"] == 1
+    # first/last/n cannot say when the 252nd valid bar arrived, so no date is claimed.
+    assert dist["A_trend_quality"]["status"] == "NOT_COMPUTED"
+    assert dist["A_trend_quality"]["securities_with_first_score"] == 0
+    assert dist["A_trend_quality"]["securities_without_observation_dates"] == 1
     assert budget["per_security"]["insufficient_n"] == 1
+
+    with_hits = history_budget(
+        earliest=sessions[0],
+        entitlement_status="READ_OK",
+        calendar=sessions,
+        security_sessions={
+            "sharadar:1": {
+                "first": sessions[0],
+                "last": sessions[-1],
+                "n": len(sessions),
+                "warmup_hits": {"252": sessions[251].isoformat(), "330": sessions[329].isoformat()},
+            },
+        },
+    )
+    hit_dist = with_hits["per_security"]["first_score_day_distribution"]
+    assert hit_dist["A_trend_quality"]["status"] == "COMPUTED"
+    assert hit_dist["A_trend_quality"]["earliest"] == sessions[251].isoformat()
+    assert hit_dist["D_residual_momentum"]["earliest"] == sessions[329].isoformat()
 
 
 # ------------------------------------------------------------------------- real HTTP

@@ -3,49 +3,58 @@
     "stocks": {
       "extra": {
         "from": "2010-01-01",
-        "to": "2024-06-28"
+        "to": "2024-06-28",
+        "sort": "date.asc"
       },
       "limit": 10000,
       "date_bound": true,
-      "plan_version": "sharadar-request-plan-v1",
+      "plan_version": "sharadar-request-plan-v2",
       "source_version": "api.sharadar.com/v1.0",
       "shard": "pinned_from_to",
-      "order_not_assumed_dedupe_by_primary_key": true
+      "order_not_assumed_dedupe_by_primary_key": true,
+      "explicit_sort": "date.asc"
     },
     "funds": {
       "extra": {
         "from": "2010-01-01",
-        "to": "2024-06-28"
+        "to": "2024-06-28",
+        "sort": "date.asc"
       },
       "limit": 10000,
       "date_bound": true,
-      "plan_version": "sharadar-request-plan-v1",
+      "plan_version": "sharadar-request-plan-v2",
       "source_version": "api.sharadar.com/v1.0",
       "shard": "pinned_from_to",
-      "order_not_assumed_dedupe_by_primary_key": true
+      "order_not_assumed_dedupe_by_primary_key": true,
+      "explicit_sort": "date.asc"
     },
     "tickers": {
       "extra": {},
       "limit": 10000,
       "date_bound": false,
-      "plan_version": "sharadar-request-plan-v1",
+      "plan_version": "sharadar-request-plan-v2",
       "source_version": "api.sharadar.com/v1.0",
       "shard": "full_master_no_date_param",
-      "order_not_assumed_dedupe_by_primary_key": true
+      "order_not_assumed_dedupe_by_primary_key": true,
+      "explicit_sort": null
     },
     "actions": {
       "extra": {
         "from": "2010-01-01",
-        "to": "2024-06-28"
+        "to": "2024-06-28",
+        "sort": "date.asc"
       },
       "limit": 10000,
       "date_bound": true,
-      "plan_version": "sharadar-request-plan-v1",
+      "plan_version": "sharadar-request-plan-v2",
       "source_version": "api.sharadar.com/v1.0",
       "shard": "pinned_from_to",
-      "order_not_assumed_dedupe_by_primary_key": true
+      "order_not_assumed_dedupe_by_primary_key": true,
+      "explicit_sort": "date.asc"
     }
   },
+  "download_mode_requested": "bulk_first",
+  "download_modes_used": {},
   "full_download_allowed": {
     "allowed": false,
     "blockers": [

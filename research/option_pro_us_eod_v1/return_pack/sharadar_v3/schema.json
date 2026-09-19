@@ -88,5 +88,7 @@
   },
   "formula_version": "sharadar-raw-imputation-v1",
   "credential_env": "SHARADAR_API_KEY",
-  "nasdaq_data_link_client": false
+  "nasdaq_data_link_client": false,
+  "download_mode_requested": "bulk_first",
+  "download_modes_used": {}
 }

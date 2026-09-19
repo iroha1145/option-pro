@@ -1,6 +1,6 @@
 {
-  "head": "ff88aa9c772d0c51486a3354aff917344c8e83f4",
-  "generated_at": "2026-09-19T05:57:04.306030+00:00",
+  "head": "183b5d29f6d9e2c10b39b06ba2eb5f4f6c1cc5f9",
+  "generated_at": "2026-09-19T09:01:42.543481+00:00",
   "feature_version": "us-eod-research-features-v1.6",
   "archived_feature_version": "us-eod-research-features-v1.5",
   "archive_label": "CONTROL_CURRENT_LIST_214",
@@ -11,6 +11,7 @@
   "weight_search": false,
   "credential_present": false,
   "live_sharadar_request_count": 0,
+  "download_modes_used": {},
   "probe": "sharadar_v3/provider_probe.json",
   "connect_accept": "sharadar_v3/connect_accept_report.json",
   "stage_summary": "sharadar_v3/gate_stages.json",
