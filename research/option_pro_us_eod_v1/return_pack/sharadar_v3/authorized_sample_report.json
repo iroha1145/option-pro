@@ -1,0 +1,60 @@
+{
+  "generated_at": "2026-09-19T12:37:30.744276+00:00",
+  "code_sha": "4395a09fe5f0c79c23864a570c9e6908fbdb14f1",
+  "credential_present": false,
+  "source_channel_required": "api.sharadar.com",
+  "official_https_host": "api.sharadar.com",
+  "sample_window": {
+    "from": "2024-06-24",
+    "to": "2024-06-28"
+  },
+  "allowed_end": "2024-06-28",
+  "authorized_restore_dir": "/home/ubuntu/optix-data/authorized_sharadar_samples",
+  "does_not_overwrite_mock_or_full_store": true,
+  "full_market_bulk_started": false,
+  "yahoo_fallback": false,
+  "factor_or_weight_search": false,
+  "purchase_attempted": false,
+  "real_supplier_requests": 0,
+  "mock_requests": 0,
+  "cache_reads": 0,
+  "tables": {
+    "stocks": {
+      "ticker": "MSFT",
+      "status": "AUTH_REQUIRED",
+      "non_empty_rows": 0
+    },
+    "funds": {
+      "ticker": "SPY",
+      "status": "AUTH_REQUIRED",
+      "non_empty_rows": 0
+    },
+    "tickers": {
+      "tickers": [
+        "MSFT",
+        "SPY",
+        "BBBY"
+      ],
+      "status": "AUTH_REQUIRED",
+      "non_empty_rows": 0,
+      "date_params_sent": false
+    },
+    "actions": {
+      "window": {
+        "from": "2024-06-24",
+        "to": "2024-06-28"
+      },
+      "status": "AUTH_REQUIRED",
+      "non_empty_rows": 0,
+      "empty_may_be_legitimate": true
+    },
+    "historical_identity": {
+      "ticker": "BBBY",
+      "status": "AUTH_REQUIRED",
+      "not_pretended_all_delists_passed": true
+    }
+  },
+  "artifacts": {},
+  "blocking_field_or_entitlement": "process environment has no nonempty SHARADAR_API_KEY; Runtime Secret must be injected at agent start. Real network tasks stopped.",
+  "terminal_status": "AUTH_REQUIRED"
+}
