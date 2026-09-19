@@ -1,6 +1,8 @@
 # CLOSEOUT_AND_REAL_SAMPLE 逐条审计
 
-审查锚点：`183b5d29f6d9e2c10b39b06ba2eb5f4f6c1cc5f9`（Fable 5.1 co-authored 的代码提交）。分支 `cursor/sharadar-data-first-4939`，PR #176。#174/#176 未合并，未切 main。
+审查锚点：`183b5d29f6d9e2c10b39b06ba2eb5f4f6c1cc5f9`（Fable 5.1 co-authored 的代码提交）。实现 head：`b5c6669c1d953c95cb45f960af1b025f8a4df763`。分支 `cursor/sharadar-data-first-4939`，PR #176。#174/#176 未合并，未切 main。
+
+实现 head CI 均为 success：push https://github.com/iroha1145/option-pro/actions/runs/35433685791 、PR https://github.com/iroha1145/option-pro/actions/runs/35433688282 。`Run Python tests` 与 `Audit locked runtime dependencies` 步骤均 success。锚点 `183b5d29` 的 CI 同为 success（35431370360 / 35431373010）。
 
 Fable 的改动全部保留：bulk 优先、分页恢复、分桶转换、实际日期请求、隔离视图、母组与 B 首日修复、sqlite 主键索引、append-only 合并文件、DELL1 后缀身份、`fake_sharadar_server.py`。本轮只补有限验收边界。
 
