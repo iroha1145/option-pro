@@ -1,7 +1,7 @@
 {
   "adapter_code": "PASS",
   "synthetic_three_track": "PASS",
-  "identity_contract": "PASS",
+  "identity_contract": "AUTH_REQUIRED",
   "delist_fixture_table": "PASS",
   "delist_live_verified": "AUTH_REQUIRED",
   "parent_rank_fix": "PASS",
@@ -9,9 +9,10 @@
   "feature_version_bump": "PASS",
   "control_archive_index": "PASS",
   "live_sharadar_read": "AUTH_REQUIRED",
-  "yahoo_reconcile_live": "AUTH_REQUIRED",
+  "yahoo_reconcile_live": "INSUFFICIENT",
   "volume_scope": "UNSUPPORTED",
   "persistent_handover": "AUTH_REQUIRED",
   "chat_or_massive_credential_used": "PASS_NOT_USED",
-  "four_table_mock_or_live_not_empty_placeholder": "AUTH_REQUIRED"
+  "four_table_mock_or_live_not_empty_placeholder": "AUTH_REQUIRED",
+  "explicit_history_request_bounds": "PASS"
 }

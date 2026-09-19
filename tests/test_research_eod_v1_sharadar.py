@@ -19,6 +19,7 @@ from app.services.research_eod_v1.data.sharadar_acceptance import (
     evaluate_delist_fixture,
     history_budget,
     reconcile_aligned_returns,
+    trading_calendar_sessions,
     volume_scope_audit,
 )
 from app.services.research_eod_v1.data.sharadar_archive import CONTROL_LABEL, build_control_index
@@ -224,17 +225,20 @@ def test_entitlement_windows_and_volume_scope() -> None:
     audit = volume_scope_audit(minute_entitlement=False)
     assert audit["session_scope"] == "UNKNOWN"
     assert audit["status"] == "UNSUPPORTED"
-    budget = history_budget(earliest=None, entitlement_status="AUTH_REQUIRED", calendar_sessions=None)
+    budget = history_budget(earliest=None, entitlement_status="AUTH_REQUIRED", calendar=None)
     assert budget["status"] == "AUTH_REQUIRED"
-    assert budget["first_score_day"] is None
+    assert budget["first_score_day"]["A_trend_quality"] is None
     assert budget["evaluable_years_not_claimed_from_2010_alone"] is True
-    dates_only = history_budget(earliest=date(2010, 1, 4), entitlement_status="READ_OK", calendar_sessions=None)
-    assert dates_only["status"] == "INSUFFICIENT"
-    assert dates_only["first_score_day"] is None
-    computed = history_budget(earliest=date(2010, 1, 4), entitlement_status="READ_OK", calendar_sessions=400)
+    dates_only = history_budget(earliest=date(2010, 1, 4), entitlement_status="READ_OK", calendar=None)
+    assert dates_only["status"] == "NOT_COMPUTED"
+    assert dates_only["first_score_day"]["A_trend_quality"] is None
+    sessions = trading_calendar_sessions(date(2010, 1, 4), date(2011, 8, 8))[:400]
+    assert len(sessions) == 400
+    computed = history_budget(earliest=date(2010, 1, 4), entitlement_status="READ_OK", calendar=sessions)
     assert computed["status"] == "COMPUTED"
-    assert computed["evaluable_sessions_after_warmup"]["A_trend_quality"] == 148
-    assert computed["first_score_day"]["A_trend_quality"] is None
+    assert computed["evaluable_sessions_after_warmup"]["A_trend_quality"] == 149
+    assert computed["first_score_day"]["A_trend_quality"] == sessions[251].isoformat()
+    assert computed["families"]["A_trend_quality"]["label_maturity"]["5"]["mature_label_day"] == sessions[256].isoformat()
 
 
 def test_yahoo_reconcile_thresholds() -> None:

@@ -1,12 +1,36 @@
 {
   "aligned_n": 0,
+  "comparison_source": {
+    "kind": "captured_bar_cache",
+    "available": true,
+    "paths": [
+      {
+        "path": "/workspace/research/option_pro_us_eod_v1/data/cache/offline_replay/daily_bars.parquet",
+        "rows": 10,
+        "mapped_rows": 0
+      }
+    ],
+    "identity_alignment": "cache_ticker_to_sharadar_permaticker",
+    "unmapped_cache_ids": [
+      "NVDA",
+      "SPY"
+    ],
+    "unmapped_n": 2,
+    "rows_outside_allowed_window": 0,
+    "return_basis": "total_return_index_tri_vs_sharadar_closeadj",
+    "volume_basis": "tape_volume_from_split_volume_and_raw_close_ratio",
+    "yahoo_is_not_truth": true,
+    "live_yahoo_request": false
+  },
+  "sharadar_n": 0,
+  "yahoo_n": 0,
   "return_coverage_n": 0,
   "volume_coverage_n": 0,
   "marked_n": 0,
   "marked_share": null,
   "return_marked_share": 0.0,
   "volume_marked_share": 0.0,
-  "status": "AUTH_REQUIRED",
+  "status": "INSUFFICIENT",
   "rows": [],
   "yahoo_is_not_truth": true,
   "thresholds": {

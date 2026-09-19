@@ -1,0 +1,60 @@
+{
+  "plan": {
+    "stocks": {
+      "extra": {
+        "from": "2010-01-01",
+        "to": "2024-06-28"
+      },
+      "limit": 10000,
+      "date_bound": true,
+      "plan_version": "sharadar-request-plan-v1",
+      "source_version": "api.sharadar.com/v1.0",
+      "shard": "pinned_from_to",
+      "order_not_assumed_dedupe_by_primary_key": true
+    },
+    "funds": {
+      "extra": {
+        "from": "2010-01-01",
+        "to": "2024-06-28"
+      },
+      "limit": 10000,
+      "date_bound": true,
+      "plan_version": "sharadar-request-plan-v1",
+      "source_version": "api.sharadar.com/v1.0",
+      "shard": "pinned_from_to",
+      "order_not_assumed_dedupe_by_primary_key": true
+    },
+    "tickers": {
+      "extra": {},
+      "limit": 10000,
+      "date_bound": false,
+      "plan_version": "sharadar-request-plan-v1",
+      "source_version": "api.sharadar.com/v1.0",
+      "shard": "full_master_no_date_param",
+      "order_not_assumed_dedupe_by_primary_key": true
+    },
+    "actions": {
+      "extra": {
+        "from": "2010-01-01",
+        "to": "2024-06-28"
+      },
+      "limit": 10000,
+      "date_bound": true,
+      "plan_version": "sharadar-request-plan-v1",
+      "source_version": "api.sharadar.com/v1.0",
+      "shard": "pinned_from_to",
+      "order_not_assumed_dedupe_by_primary_key": true
+    }
+  },
+  "full_download_allowed": {
+    "allowed": false,
+    "blockers": [
+      "credential_absent"
+    ],
+    "empty_page_is_not_sample_proof": true
+  },
+  "allowed_window": {
+    "from": "2010-01-01",
+    "to": "2024-06-28"
+  }
+}

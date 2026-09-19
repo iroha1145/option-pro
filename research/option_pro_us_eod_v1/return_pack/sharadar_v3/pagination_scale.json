@@ -1,0 +1,71 @@
+{
+  "sample": {
+    "page_limit": 500,
+    "page_counts": [
+      8,
+      16
+    ],
+    "deterministic": true,
+    "live_sharadar_request_count": 0
+  },
+  "samples": [
+    {
+      "pages": 8,
+      "rows": 4000,
+      "prefix_rescan_per_page": {
+        "http_pages": 9,
+        "disk_rows_read": 30000,
+        "peak_traced_bytes": 2744965,
+        "row_count": 4000,
+        "complete": true,
+        "merged_rows": 4000,
+        "resume_session_rows": 0,
+        "resume_row_count": 4000
+      },
+      "per_page_key_index": {
+        "http_pages": 9,
+        "disk_rows_read": 8000,
+        "peak_traced_bytes": 2938421,
+        "row_count": 4000,
+        "complete": true,
+        "merged_rows": 4000,
+        "resume_session_rows": 0,
+        "resume_row_count": 4000
+      },
+      "disk_rows_read_ratio": 3.75,
+      "resume_correct": true
+    },
+    {
+      "pages": 16,
+      "rows": 8000,
+      "prefix_rescan_per_page": {
+        "http_pages": 17,
+        "disk_rows_read": 92000,
+        "peak_traced_bytes": 3523450,
+        "row_count": 8000,
+        "complete": true,
+        "merged_rows": 8000,
+        "resume_session_rows": 0,
+        "resume_row_count": 8000
+      },
+      "per_page_key_index": {
+        "http_pages": 17,
+        "disk_rows_read": 16000,
+        "peak_traced_bytes": 4288178,
+        "row_count": 8000,
+        "complete": true,
+        "merged_rows": 8000,
+        "resume_session_rows": 0,
+        "resume_row_count": 8000
+      },
+      "disk_rows_read_ratio": 5.75,
+      "resume_correct": true
+    }
+  ],
+  "ratio_grows_with_page_count": [
+    3.75,
+    5.75
+  ],
+  "resume_correct": true,
+  "note": "prefix rescan grows with pages squared; the durable key index reads each page once"
+}

@@ -61,10 +61,20 @@
     "non_free_example_ticker": "MSFT",
     "history_example_ticker": "AAPL",
     "aapl_not_used_as_non_free_proof": true,
-    "delisted_not_concluded_missing_history": true
+    "delisted_not_concluded_missing_history": true,
+    "row_counts": {},
+    "empty_read_is_not_sample_pass": true
   },
   "entitlement": {
     "status": "AUTH_REQUIRED",
+    "verified_access": false,
+    "observed_coverage": {
+      "earliest_observed_row": null,
+      "earliest_is_coverage_not_license": true,
+      "requested_from": "2010-01-01",
+      "requested_to": "2024-06-28"
+    },
+    "authorized_range_unknown": true,
     "bulk_years": null,
     "earliest": null,
     "research_start": null,
@@ -72,5 +82,12 @@
   },
   "volume_session_scope": "UNKNOWN",
   "secret_present_in_report": false,
-  "terminal_status": "AUTH_REQUIRED"
+  "terminal_status": "AUTH_REQUIRED",
+  "full_download_allowed": {
+    "allowed": false,
+    "blockers": [
+      "credential_absent"
+    ],
+    "empty_page_is_not_sample_proof": true
+  }
 }

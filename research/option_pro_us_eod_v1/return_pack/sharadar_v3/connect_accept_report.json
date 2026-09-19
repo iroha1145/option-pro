@@ -1,41 +1,87 @@
 {
   "credential_present": false,
   "live_sharadar_request_count": 0,
-  "mock_red_green": {
-    "probe_replay": "sharadar_v3/connect_accept_probe_replay.json",
-    "checks": 14,
-    "satisfied": 14,
-    "not_satisfied": 0,
-    "local_pytest": {"passed": 3989, "skipped": 6}
-  },
   "tables": {
     "stocks": {
       "status": "AUTH_REQUIRED",
       "row_count": 0,
       "pages": 0,
       "complete": false,
-      "session_row_count": 0
+      "session_row_count": 0,
+      "request": {
+        "extra": {
+          "from": "2010-01-01",
+          "to": "2024-06-28"
+        },
+        "limit": 10000,
+        "date_bound": true,
+        "plan_version": "sharadar-request-plan-v1",
+        "source_version": "api.sharadar.com/v1.0",
+        "shard": "pinned_from_to",
+        "order_not_assumed_dedupe_by_primary_key": true
+      },
+      "download_started": false,
+      "not_started_reason": "credential_absent"
     },
     "funds": {
       "status": "AUTH_REQUIRED",
       "row_count": 0,
       "pages": 0,
       "complete": false,
-      "session_row_count": 0
+      "session_row_count": 0,
+      "request": {
+        "extra": {
+          "from": "2010-01-01",
+          "to": "2024-06-28"
+        },
+        "limit": 10000,
+        "date_bound": true,
+        "plan_version": "sharadar-request-plan-v1",
+        "source_version": "api.sharadar.com/v1.0",
+        "shard": "pinned_from_to",
+        "order_not_assumed_dedupe_by_primary_key": true
+      },
+      "download_started": false,
+      "not_started_reason": "credential_absent"
     },
     "tickers": {
       "status": "AUTH_REQUIRED",
       "row_count": 0,
       "pages": 0,
       "complete": false,
-      "session_row_count": 0
+      "session_row_count": 0,
+      "request": {
+        "extra": {},
+        "limit": 10000,
+        "date_bound": false,
+        "plan_version": "sharadar-request-plan-v1",
+        "source_version": "api.sharadar.com/v1.0",
+        "shard": "full_master_no_date_param",
+        "order_not_assumed_dedupe_by_primary_key": true
+      },
+      "download_started": false,
+      "not_started_reason": "credential_absent"
     },
     "actions": {
       "status": "AUTH_REQUIRED",
       "row_count": 0,
       "pages": 0,
       "complete": false,
-      "session_row_count": 0
+      "session_row_count": 0,
+      "request": {
+        "extra": {
+          "from": "2010-01-01",
+          "to": "2024-06-28"
+        },
+        "limit": 10000,
+        "date_bound": true,
+        "plan_version": "sharadar-request-plan-v1",
+        "source_version": "api.sharadar.com/v1.0",
+        "shard": "pinned_from_to",
+        "order_not_assumed_dedupe_by_primary_key": true
+      },
+      "download_started": false,
+      "not_started_reason": "credential_absent"
     }
   },
   "raw_row_counts": {
@@ -54,18 +100,84 @@
     "path": "/workspace/research/option_pro_us_eod_v1/data/sharadar_raw",
     "public_git": false,
     "resume": "load checkpoints/<table>.json; verify page hashes; continue from next_skip",
+    "unique_key_index": "keys/<table>.keys; per-page cost, no prefix rescan",
     "paid_rows_must_stay_outside_git": true,
+    "bounded_reads": "merged jsonl streamed row by row; no whole-table copy",
     "allowed_window": {
       "start": "2010-01-01",
       "end": "2024-06-28",
-      "isolated_after_raw_persist": true
+      "isolated_after_raw_persist": true,
+      "acceptance_consumers_see_allowed_window_only": true
     }
+  },
+  "stages": {
+    "AUTH": "AUTH_REQUIRED",
+    "TABLE_ACCESS": "AUTH_REQUIRED",
+    "DOWNLOAD": "AUTH_REQUIRED",
+    "TRANSFORM": "AUTH_REQUIRED",
+    "IDENTITY": "AUTH_REQUIRED",
+    "RECONCILE": "INSUFFICIENT",
+    "HISTORY": "AUTH_REQUIRED",
+    "VOLUME_SCOPE": "UNSUPPORTED",
+    "EXECUTION": "UNSUPPORTED"
+  },
+  "stage_summary": {
+    "required": [
+      "AUTH",
+      "TABLE_ACCESS",
+      "DOWNLOAD",
+      "TRANSFORM",
+      "IDENTITY",
+      "RECONCILE",
+      "HISTORY"
+    ],
+    "optional": [
+      "VOLUME_SCOPE",
+      "EXECUTION"
+    ],
+    "accepted": false,
+    "missing": [],
+    "failed": [],
+    "partial": [],
+    "insufficient": [
+      "RECONCILE"
+    ],
+    "blocked": [
+      "AUTH",
+      "TABLE_ACCESS",
+      "DOWNLOAD",
+      "TRANSFORM",
+      "IDENTITY",
+      "HISTORY"
+    ],
+    "download_complete_is_not_acceptance": true
+  },
+  "raw_download_status": "AUTH_REQUIRED",
+  "entitlement": {
+    "status": "AUTH_REQUIRED",
+    "verified_access": false,
+    "observed_coverage": {
+      "earliest_observed_row": null,
+      "earliest_is_coverage_not_license": true,
+      "requested_from": "2010-01-01",
+      "requested_to": "2024-06-28"
+    },
+    "authorized_range_unknown": true,
+    "bulk_years": null,
+    "earliest": null,
+    "research_start": null,
+    "continue": false
+  },
+  "transform": {
+    "converted_rows": 0,
+    "skipped_rows": [],
+    "skipped_n": 0
   },
   "terminal_status": "AUTH_REQUIRED",
   "checks": {
     "adapter_code": "PASS",
     "synthetic_three_track": "PASS",
-    "identity_contract": "PASS",
+    "identity_contract": "AUTH_REQUIRED",
     "delist_fixture_table": "PASS",
     "delist_live_verified": "AUTH_REQUIRED",
     "parent_rank_fix": "PASS",
@@ -73,11 +185,12 @@
     "feature_version_bump": "PASS",
     "control_archive_index": "PASS",
     "live_sharadar_read": "AUTH_REQUIRED",
-    "yahoo_reconcile_live": "AUTH_REQUIRED",
+    "yahoo_reconcile_live": "INSUFFICIENT",
     "volume_scope": "UNSUPPORTED",
     "persistent_handover": "AUTH_REQUIRED",
     "chat_or_massive_credential_used": "PASS_NOT_USED",
-    "four_table_mock_or_live_not_empty_placeholder": "AUTH_REQUIRED"
+    "four_table_mock_or_live_not_empty_placeholder": "AUTH_REQUIRED",
+    "explicit_history_request_bounds": "PASS"
   },
   "delist_verification": [
     "fixture_list_only",

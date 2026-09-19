@@ -222,6 +222,48 @@ def test_holdout_appends_never_reach_acceptance_inputs(tmp_path: Path, monkeypat
     ) is False  # the raw store keeps the sealed row; only the isolated view drops it
 
 
+def test_reused_ticker_resolves_by_permaticker_and_event_year(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv(ENV_KEY_NAME, SECRET)
+    tables = {
+        "tickers": [
+            _ticker_row("MSFT", "101"),
+            _ticker_row("DELL", "24420", isdelisted="Y", firstpricedate="2010-01-04", lastpricedate="2013-10-29"),
+            _ticker_row("DELL", "122827", firstpricedate="2018-12-28", lastpricedate="2024-06-28"),
+        ],
+        "stocks": [
+            _price_row("MSFT", "2010-01-04", 30.0),
+            _price_row("DELL", "2013-10-29", 13.86),
+            _price_row("DELL", "2024-06-28", 137.0),
+        ],
+        "funds": [],
+        "actions": [
+            _action_row("DELL", "2013-10-29", "acquisitioncash", "13.75"),
+            _action_row("DELL", "2024-01-02", "dividend", "0.445"),
+        ],
+    }
+    client = SharadarClient(allow_network=True, opener=_table_opener(tables), sleep=lambda _s: None)
+    gate = execute_data_gate(client=client, store=tmp_path, yahoo_rows=[], allow_network=True)
+
+    assert gate["identities"]["reused_tickers"] == ["DELL"]
+    assert gate["identities"]["n"] == 3
+
+    case = next(item for item in gate["delist"] if item["ticker"] == "DELL")
+    window = case["identity_resolution"]["event_window"]
+    assert window["candidates_n"] == 2
+    assert window["covering_n"] == 1
+    assert window["bounded_by_resolved_coverage"] is True
+    assert window["start"] == "2013-01-01"
+    assert window["end"] == "2013-10-29"
+    assert case["identity_resolution"]["security_id"] == "sharadar:24420"
+    assert case["identity_resolution"]["permaticker"] == "24420"
+    assert case["observed_terminal"]["value"] == 13.75
+    assert case["live_status"] == "PASS"
+
+    # Both DELL price rows convert under their own permaticker, so three securities carry sessions.
+    assert gate["history_budget"]["per_security"]["n"] == 3
+    assert gate["transform"]["skipped_n"] == 0
+
+
 def test_computed_budget_carries_dates_and_coverage_is_not_a_license() -> None:
     sessions = trading_calendar_sessions(date(2010, 1, 4), ALLOWED_END)
     assert len(sessions) > 3000

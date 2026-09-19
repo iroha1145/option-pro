@@ -130,6 +130,18 @@ def main() -> int:
             "store": gate["store"],
         },
         {
+            "item": "explicit_history_request_bounds",
+            "status": gate["checks"]["explicit_history_request_bounds"],
+            "action": "date tables request from=2010-01-01 to=2024-06-28; a page cursor cannot drift to the vendor default year",
+            "request_plan": gate["request_plan"],
+        },
+        {
+            "item": "full_download_gate",
+            "status": "PASS" if gate["full_download_allowed"].get("allowed") else "BLOCKED",
+            "action": "an empty READ_OK page is not sample proof; do not start a full download on AUTH_FAILED or missing entitlement",
+            "blockers": gate["full_download_allowed"].get("blockers"),
+        },
+        {
             "item": "members_and_factors",
             "status": "NOT_THIS_ROUND",
             "action": "wait for data-gate review",
@@ -151,6 +163,8 @@ def main() -> int:
         "live_sharadar_request_count": gate["live_sharadar_request_count"],
         "probe": "sharadar_v3/provider_probe.json",
         "connect_accept": "sharadar_v3/connect_accept_report.json",
+        "stage_summary": "sharadar_v3/gate_stages.json",
+        "raw_download_status": gate["raw_download_status"],
     }
     audit = "\n".join([
         "# Sharadar 接通与验收回传",
@@ -164,10 +178,19 @@ def main() -> int:
         "官方渠道为 `https://api.sharadar.com/v1.0/data/<table>`；跨域签名下载不再附 key。",
         "分页先持久提交页再推进游标；max_pages/中断为 PARTIAL。HTTP 200 error/HTML 与 503 不能当 READ_OK。",
         "",
+        f"日期表请求区间固定为 from={gate['request_plan']['stocks']['extra'].get('from')} to={gate['request_plan']['stocks']['extra'].get('to')}；主表不臆造日期参数。",
+        f"探针是否允许全量下载：{json.dumps(gate['full_download_allowed'], ensure_ascii=False)}。",
+        "",
         f"四表状态：{json.dumps(gate['tables'], ensure_ascii=False)}。",
-        f"16 个身份案例仍按实际 actions 验收；无行时为 fixture_list_only / AUTH_REQUIRED。",
-        f"Yahoo 对账状态 `{reconcile['status']}`；volume scope `{gate['volume']['status']}`。",
-        f"历史预算状态 `{gate['history_budget']['status']}`。",
+        f"原始下载状态 `{gate['raw_download_status']}`；下载完成不等于验收通过。",
+        f"分层状态：{json.dumps({name: item['status'] for name, item in gate['stages'].items()}, ensure_ascii=False)}。",
+        f"预登记必需项：{json.dumps(gate['stage_summary']['required'], ensure_ascii=False)}；accepted={str(gate['stage_summary']['accepted']).lower()}。",
+        "",
+        f"16 个身份案例按永久身份与事件年份解析；无行时为 fixture_list_only / AUTH_REQUIRED。",
+        f"Yahoo 对账状态 `{reconcile['status']}`；对照源 {json.dumps(reconcile['comparison_source'], ensure_ascii=False)}。",
+        f"volume scope `{gate['volume']['status']}`。",
+        f"历史预算状态 `{gate['history_budget']['status']}`；覆盖不等于授权，权限状态 `{gate['entitlement']['status']}`，authorized_range_unknown={str(gate['entitlement']['authorized_range_unknown']).lower()}。",
+        f"转换跳过行 {gate['transform']['skipped_n']} 条，逐条记录主键与原因。",
         "",
         f"终态：`{terminal}`。这不是策略赢家状态。全市场选优未启动。",
     ]) + "\n"
@@ -186,6 +209,19 @@ def main() -> int:
     _write(V3 / "gap_list.json", gap_list)
     _write(V3 / "acceptance_checks.json", gate["checks"])
     _write(V3 / "event_invariants.json", gate["event_invariants"])
+    _write(V3 / "gate_stages.json", {
+        "stages": gate["stages"],
+        "summary": gate["stage_summary"],
+        "raw_download_status": gate["raw_download_status"],
+        "terminal_status": terminal,
+        "raw_download_complete_is_independent": True,
+    })
+    _write(V3 / "request_plan.json", {
+        "plan": gate["request_plan"],
+        "full_download_allowed": gate["full_download_allowed"],
+        "allowed_window": {"from": gate["request_plan"]["stocks"]["extra"].get("from"), "to": gate["request_plan"]["stocks"]["extra"].get("to")},
+    })
+    _write(V3 / "transform_skipped_rows.json", gate["transform"])
     _write(V3 / "connect_accept_report.json", {
         "credential_present": gate["credential_present"],
         "live_sharadar_request_count": gate["live_sharadar_request_count"],
@@ -193,6 +229,11 @@ def main() -> int:
         "raw_row_counts": gate["raw_row_counts"],
         "isolated_row_counts": gate["isolated_row_counts"],
         "store": gate["store"],
+        "stages": {name: item["status"] for name, item in gate["stages"].items()},
+        "stage_summary": gate["stage_summary"],
+        "raw_download_status": gate["raw_download_status"],
+        "entitlement": gate["entitlement"],
+        "transform": gate["transform"],
         "terminal_status": terminal,
         "checks": gate["checks"],
         "delist_verification": [item.get("verification") for item in gate["delist"]],

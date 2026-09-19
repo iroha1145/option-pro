@@ -16,7 +16,7 @@
   },
   {
     "item": "yahoo_overlap_reconcile",
-    "status": "AUTH_REQUIRED",
+    "status": "INSUFFICIENT",
     "action": "align security/currency/split scale before comparing; missing fields are insufficient"
   },
   {
@@ -32,13 +32,76 @@
       "path": "/workspace/research/option_pro_us_eod_v1/data/sharadar_raw",
       "public_git": false,
       "resume": "load checkpoints/<table>.json; verify page hashes; continue from next_skip",
+      "unique_key_index": "keys/<table>.keys; per-page cost, no prefix rescan",
       "paid_rows_must_stay_outside_git": true,
+      "bounded_reads": "merged jsonl streamed row by row; no whole-table copy",
       "allowed_window": {
         "start": "2010-01-01",
         "end": "2024-06-28",
-        "isolated_after_raw_persist": true
+        "isolated_after_raw_persist": true,
+        "acceptance_consumers_see_allowed_window_only": true
       }
     }
+  },
+  {
+    "item": "explicit_history_request_bounds",
+    "status": "PASS",
+    "action": "date tables request from=2010-01-01 to=2024-06-28; a page cursor cannot drift to the vendor default year",
+    "request_plan": {
+      "stocks": {
+        "extra": {
+          "from": "2010-01-01",
+          "to": "2024-06-28"
+        },
+        "limit": 10000,
+        "date_bound": true,
+        "plan_version": "sharadar-request-plan-v1",
+        "source_version": "api.sharadar.com/v1.0",
+        "shard": "pinned_from_to",
+        "order_not_assumed_dedupe_by_primary_key": true
+      },
+      "funds": {
+        "extra": {
+          "from": "2010-01-01",
+          "to": "2024-06-28"
+        },
+        "limit": 10000,
+        "date_bound": true,
+        "plan_version": "sharadar-request-plan-v1",
+        "source_version": "api.sharadar.com/v1.0",
+        "shard": "pinned_from_to",
+        "order_not_assumed_dedupe_by_primary_key": true
+      },
+      "tickers": {
+        "extra": {},
+        "limit": 10000,
+        "date_bound": false,
+        "plan_version": "sharadar-request-plan-v1",
+        "source_version": "api.sharadar.com/v1.0",
+        "shard": "full_master_no_date_param",
+        "order_not_assumed_dedupe_by_primary_key": true
+      },
+      "actions": {
+        "extra": {
+          "from": "2010-01-01",
+          "to": "2024-06-28"
+        },
+        "limit": 10000,
+        "date_bound": true,
+        "plan_version": "sharadar-request-plan-v1",
+        "source_version": "api.sharadar.com/v1.0",
+        "shard": "pinned_from_to",
+        "order_not_assumed_dedupe_by_primary_key": true
+      }
+    }
+  },
+  {
+    "item": "full_download_gate",
+    "status": "BLOCKED",
+    "action": "an empty READ_OK page is not sample proof; do not start a full download on AUTH_FAILED or missing entitlement",
+    "blockers": [
+      "credential_absent"
+    ]
   },
   {
     "item": "members_and_factors",

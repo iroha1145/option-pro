@@ -1,0 +1,137 @@
+{
+  "stages": {
+    "AUTH": {
+      "status": "AUTH_REQUIRED",
+      "evidence": {
+        "env_var": "SHARADAR_API_KEY",
+        "credential_present": false
+      }
+    },
+    "TABLE_ACCESS": {
+      "status": "AUTH_REQUIRED",
+      "evidence": {
+        "reason": "no_request_attempted"
+      }
+    },
+    "DOWNLOAD": {
+      "status": "AUTH_REQUIRED",
+      "evidence": {
+        "raw_rows": 0
+      }
+    },
+    "TRANSFORM": {
+      "status": "AUTH_REQUIRED",
+      "evidence": {
+        "converted_rows": 0
+      }
+    },
+    "IDENTITY": {
+      "status": "AUTH_REQUIRED",
+      "evidence": {
+        "identities": 0
+      }
+    },
+    "RECONCILE": {
+      "status": "INSUFFICIENT",
+      "evidence": {
+        "aligned_n": 0,
+        "return_coverage_n": 0,
+        "volume_coverage_n": 0,
+        "source": {
+          "kind": "captured_bar_cache",
+          "available": true,
+          "paths": [
+            {
+              "path": "/workspace/research/option_pro_us_eod_v1/data/cache/offline_replay/daily_bars.parquet",
+              "rows": 10,
+              "mapped_rows": 0
+            }
+          ],
+          "identity_alignment": "cache_ticker_to_sharadar_permaticker",
+          "unmapped_cache_ids": [
+            "NVDA",
+            "SPY"
+          ],
+          "unmapped_n": 2,
+          "rows_outside_allowed_window": 0,
+          "return_basis": "total_return_index_tri_vs_sharadar_closeadj",
+          "volume_basis": "tape_volume_from_split_volume_and_raw_close_ratio",
+          "yahoo_is_not_truth": true,
+          "live_yahoo_request": false
+        }
+      }
+    },
+    "HISTORY": {
+      "status": "AUTH_REQUIRED",
+      "evidence": {
+        "calendar_sessions_in_window": null,
+        "first_score_day": {
+          "A_trend_quality": null,
+          "B_confirmed_base_breakout": null,
+          "C_trend_pullback": null,
+          "D_residual_momentum": null
+        },
+        "per_security": {
+          "n": 0,
+          "longest_feature_dependency_sessions": 330,
+          "evaluable_n": 0,
+          "insufficient_n": 0,
+          "insufficient_sample": []
+        },
+        "entitlement": {
+          "status": "AUTH_REQUIRED",
+          "verified_access": false,
+          "authorized_range_unknown": true
+        }
+      }
+    },
+    "VOLUME_SCOPE": {
+      "status": "UNSUPPORTED",
+      "evidence": {
+        "session_scope": "UNKNOWN"
+      }
+    },
+    "EXECUTION": {
+      "status": "UNSUPPORTED",
+      "evidence": {
+        "settlement_blocked_cases": [],
+        "raw_history_retained": true,
+        "unsupported_case_is_not_verified_pass": true
+      }
+    }
+  },
+  "summary": {
+    "required": [
+      "AUTH",
+      "TABLE_ACCESS",
+      "DOWNLOAD",
+      "TRANSFORM",
+      "IDENTITY",
+      "RECONCILE",
+      "HISTORY"
+    ],
+    "optional": [
+      "VOLUME_SCOPE",
+      "EXECUTION"
+    ],
+    "accepted": false,
+    "missing": [],
+    "failed": [],
+    "partial": [],
+    "insufficient": [
+      "RECONCILE"
+    ],
+    "blocked": [
+      "AUTH",
+      "TABLE_ACCESS",
+      "DOWNLOAD",
+      "TRANSFORM",
+      "IDENTITY",
+      "HISTORY"
+    ],
+    "download_complete_is_not_acceptance": true
+  },
+  "raw_download_status": "AUTH_REQUIRED",
+  "terminal_status": "AUTH_REQUIRED",
+  "raw_download_complete_is_independent": true
+}

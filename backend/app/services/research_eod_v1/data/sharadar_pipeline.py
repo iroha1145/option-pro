@@ -21,7 +21,10 @@ from app.services.research_eod_v1.data.sharadar_acceptance import (
     trading_calendar_sessions,
     volume_scope_audit,
 )
-from app.services.research_eod_v1.data.sharadar_identity import identity_from_ticker_row
+from app.services.research_eod_v1.data.sharadar_identity import (
+    identity_from_ticker_row,
+    resolve_identity_for_session,
+)
 from app.services.research_eod_v1.data.sharadar_reconcile_source import load_reconcile_rows
 from app.services.research_eod_v1.data.sharadar_schema import (
     ALLOWED_END,
@@ -112,7 +115,9 @@ class IsolatedTable:
 
 
 def _identities_from_tickers(rows: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
-    by_ticker: dict[str, Any] = {}
+    """Group by ticker without collapsing a reused ticker onto one permaticker."""
+
+    by_ticker: dict[str, list[Any]] = {}
     by_id: dict[str, Any] = {}
     failures: list[dict[str, Any]] = []
     for row in rows:
@@ -121,25 +126,41 @@ def _identities_from_tickers(rows: Iterable[Mapping[str, Any]]) -> dict[str, Any
         except ValueError as exc:
             failures.append({"ticker": row.get("ticker"), "reason": str(exc)})
             continue
-        by_ticker[identity.ticker] = identity
+        if identity.security_id in by_id:
+            continue
+        by_ticker.setdefault(identity.ticker, []).append(identity)
         by_id[identity.security_id] = identity
-    return {"by_ticker": by_ticker, "by_id": by_id, "failures": failures}
+    return {
+        "by_ticker": by_ticker,
+        "by_id": by_id,
+        "failures": failures,
+        "reused_tickers": sorted(ticker for ticker, items in by_ticker.items() if len(items) > 1),
+    }
 
 
-def _delist_identity(fixture: Mapping[str, Any], identities: Mapping[str, Any]) -> Any | None:
-    """Resolve the fixture ticker to one permanent identity whose coverage spans the event year."""
+def _delist_identity(fixture: Mapping[str, Any], identities: Mapping[str, Any]) -> dict[str, Any]:
+    """Resolve the fixture ticker to one permanent identity whose coverage spans the event year.
+
+    ``relatedtickers`` is recorded as an unverified hint only. It never becomes the
+    historical alias of a different permaticker.
+    """
 
     ticker = str(fixture["ticker"]).upper()
     year = int(fixture["year"])
-    candidates = [
+    exact = [
         identity
-        for key, identity in identities.items()
-        if str(key).upper() == ticker or ticker in {item.upper() for item in identity.relatedtickers}
+        for key, items in identities.items()
+        if str(key).upper() == ticker
+        for identity in items
     ]
-    if not candidates:
-        return None
+    hints = sorted({
+        identity.security_id
+        for items in identities.values()
+        for identity in items
+        if ticker in {item.upper() for item in identity.relatedtickers}
+    })
     covering = []
-    for identity in candidates:
+    for identity in exact:
         first = _parse_date(identity.firstpricedate)
         last = _parse_date(identity.lastpricedate)
         if first is not None and first.year > year:
@@ -147,31 +168,48 @@ def _delist_identity(fixture: Mapping[str, Any], identities: Mapping[str, Any]) 
         if last is not None and last.year < year:
             continue
         covering.append(identity)
-    if len(covering) == 1:
-        return covering[0]
-    if not covering:
-        return None
-    return None
+    identity = covering[0] if len(covering) == 1 else None
+    if identity is None:
+        reason = "no_exact_ticker_row" if not exact else (
+            "no_candidate_covers_event_year" if not covering else "ambiguous_candidates"
+        )
+    else:
+        reason = None
+    return {
+        "identity": identity,
+        "candidates_n": len(exact),
+        "covering_n": len(covering),
+        "unresolved_reason": reason,
+        "relatedticker_hints_not_verified_aliases": hints,
+    }
+
+
+def _event_bounds(identity: Any | None, year: int) -> tuple[date, date]:
+    """Rows come from the event year up to the resolved coverage end, never a later reuse."""
+
+    start = date(year, 1, 1)
+    end = ALLOWED_END
+    if identity is not None:
+        last = _parse_date(identity.lastpricedate)
+        if last is not None:
+            end = min(end, last)
+    return start, end
 
 
 def _events_in_window(
     rows: Iterable[Mapping[str, Any]],
     *,
-    security_id: str | None,
     ticker: str,
-    year: int,
+    start: date,
+    end: date,
 ) -> list[dict[str, Any]]:
     token = ticker.upper()
     out: list[dict[str, Any]] = []
     for row in rows:
-        row_id = row.get("security_id")
-        if security_id is not None and row_id is not None:
-            if str(row_id) != str(security_id):
-                continue
-        elif str(row.get("ticker") or "").upper() != token:
+        if str(row.get("ticker") or "").upper() != token:
             continue
         session = _parse_date(row.get("date"))
-        if session is None or session.year < year:
+        if session is None or session < start or session > end:
             continue
         out.append(dict(row))
     return out
@@ -181,7 +219,8 @@ def _last_observed_quote(
     rows: Iterable[Mapping[str, Any]],
     *,
     ticker: str,
-    year: int,
+    start: date,
+    end: date,
 ) -> float | None:
     token = ticker.upper()
     best: tuple[date, float] | None = None
@@ -190,7 +229,7 @@ def _last_observed_quote(
             continue
         session = _parse_date(row.get("date"))
         close = finite(row.get("closeunadj")) or finite(row.get("close"))
-        if session is None or close is None or session.year < year:
+        if session is None or close is None or session < start or session > end:
             continue
         if best is None or session > best[0]:
             best = (session, close)
@@ -207,11 +246,10 @@ def _returns_from_prices(
     out: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
     sessions_by_security: dict[str, list[date]] = {}
+    previous_close: dict[str, float] = {}
     for ticker, items in grouped.items():
-        identity = identities.get(ticker)
-        security_id = identity.security_id if identity is not None else f"ticker:{ticker}"
+        candidates = list(identities.get(ticker) or [])
         items.sort(key=lambda item: str(item.get("date") or ""))
-        prev = None
         for row in items:
             try:
                 tracks = convert_vendor_row(row)
@@ -222,7 +260,18 @@ def _returns_from_prices(
                     "reason": str(exc),
                 })
                 continue
-            ret = closeadj_total_return(prev, tracks.closeadj)
+            identity = resolve_identity_for_session(candidates, tracks.session_date)
+            if identity is None:
+                skipped.append({
+                    "table": "prices",
+                    "primary_key": {"ticker": ticker, "date": tracks.session_date.isoformat()},
+                    "reason": "identity_unresolved_for_session" if candidates else "no_security_master_row",
+                    "candidates_n": len(candidates),
+                    "raw_row_retained_in_store": True,
+                })
+                continue
+            security_id = identity.security_id
+            ret = closeadj_total_return(previous_close.get(security_id), tracks.closeadj)
             out.append({
                 "security_id": security_id,
                 "session_date": tracks.session_date.isoformat(),
@@ -230,7 +279,7 @@ def _returns_from_prices(
                 "volume": tracks.raw_volume,
             })
             sessions_by_security.setdefault(security_id, []).append(tracks.session_date)
-            prev = tracks.closeadj
+            previous_close[security_id] = tracks.closeadj
     return {"rows": out, "skipped": skipped, "sessions_by_security": sessions_by_security}
 
 
@@ -361,14 +410,19 @@ def execute_data_gate(
     for fixture in DELIST_FIXTURES:
         ticker = str(fixture["ticker"])
         year = int(fixture["year"])
-        identity = _delist_identity(fixture, identities["by_ticker"])
-        actions = _events_in_window(
-            isolated["actions"],
-            security_id=None,
-            ticker=ticker,
-            year=year,
+        resolved = _delist_identity(fixture, identities["by_ticker"])
+        identity = resolved["identity"]
+        start, end = _event_bounds(identity, year)
+        actions = (
+            _events_in_window(isolated["actions"], ticker=ticker, start=start, end=end)
+            if identity is not None
+            else []
         )
-        last_trade = _last_observed_quote(isolated["stocks"], ticker=ticker, year=year)
+        last_trade = (
+            _last_observed_quote(isolated["stocks"], ticker=ticker, start=start, end=end)
+            if identity is not None
+            else None
+        )
         delist.append(
             evaluate_delist_fixture(
                 fixture,
@@ -376,8 +430,13 @@ def execute_data_gate(
                 last_trade,
                 identity=None if identity is None else identity.to_dict(),
                 event_window={
-                    "from_year": year,
-                    "allowed_end": ALLOWED_END.isoformat(),
+                    "start": start.isoformat(),
+                    "end": end.isoformat(),
+                    "bounded_by_resolved_coverage": identity is not None,
+                    "candidates_n": resolved["candidates_n"],
+                    "covering_n": resolved["covering_n"],
+                    "unresolved_reason": resolved["unresolved_reason"],
+                    "relatedticker_hints_not_verified_aliases": resolved["relatedticker_hints_not_verified_aliases"],
                     "rows_are_allowed_window_only": True,
                 },
             )
@@ -520,8 +579,10 @@ def execute_data_gate(
         "identities": {
             "n": len(identities["by_id"]),
             "failures": identities["failures"],
+            "reused_tickers": identities["reused_tickers"],
             "listed_at_not_from_firstpricedate": True,
             "relatedtickers_not_auto_aliases": True,
+            "session_date_resolves_reused_ticker": True,
         },
         "delist": delist,
         "reconcile": reconcile,

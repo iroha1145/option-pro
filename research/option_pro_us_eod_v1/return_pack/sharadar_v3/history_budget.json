@@ -11,11 +11,112 @@
     "D_residual_momentum": 330
   },
   "residual_history_min": 330,
-  "first_score_day": null,
+  "label_horizons": [
+    5,
+    20,
+    63
+  ],
+  "families": {
+    "A_trend_quality": {
+      "warmup_sessions": 252,
+      "first_score_day": null,
+      "last_valid_signal_day": null,
+      "label_maturity": {
+        "5": {
+          "mature_label_day": null,
+          "evaluable_sessions": null
+        },
+        "20": {
+          "mature_label_day": null,
+          "evaluable_sessions": null
+        },
+        "63": {
+          "mature_label_day": null,
+          "evaluable_sessions": null
+        }
+      },
+      "evaluable_sessions_after_warmup": null
+    },
+    "B_confirmed_base_breakout": {
+      "warmup_sessions": 252,
+      "first_score_day": null,
+      "last_valid_signal_day": null,
+      "label_maturity": {
+        "5": {
+          "mature_label_day": null,
+          "evaluable_sessions": null
+        },
+        "20": {
+          "mature_label_day": null,
+          "evaluable_sessions": null
+        },
+        "63": {
+          "mature_label_day": null,
+          "evaluable_sessions": null
+        }
+      },
+      "evaluable_sessions_after_warmup": null
+    },
+    "C_trend_pullback": {
+      "warmup_sessions": 252,
+      "first_score_day": null,
+      "last_valid_signal_day": null,
+      "label_maturity": {
+        "5": {
+          "mature_label_day": null,
+          "evaluable_sessions": null
+        },
+        "20": {
+          "mature_label_day": null,
+          "evaluable_sessions": null
+        },
+        "63": {
+          "mature_label_day": null,
+          "evaluable_sessions": null
+        }
+      },
+      "evaluable_sessions_after_warmup": null
+    },
+    "D_residual_momentum": {
+      "warmup_sessions": 330,
+      "first_score_day": null,
+      "last_valid_signal_day": null,
+      "label_maturity": {
+        "5": {
+          "mature_label_day": null,
+          "evaluable_sessions": null
+        },
+        "20": {
+          "mature_label_day": null,
+          "evaluable_sessions": null
+        },
+        "63": {
+          "mature_label_day": null,
+          "evaluable_sessions": null
+        }
+      },
+      "evaluable_sessions_after_warmup": null
+    }
+  },
+  "first_score_day": {
+    "A_trend_quality": null,
+    "B_confirmed_base_breakout": null,
+    "C_trend_pullback": null,
+    "D_residual_momentum": null
+  },
   "evaluable_sessions_after_warmup": null,
-  "mature_labels": "holding_horizon after first_score_day",
+  "calendar_sessions_in_window": null,
+  "calendar_is_independent_of_price_rows": true,
+  "calendar_first": null,
+  "calendar_last": null,
+  "per_security": {
+    "n": 0,
+    "longest_feature_dependency_sessions": 330,
+    "evaluable_n": 0,
+    "insufficient_n": 0,
+    "insufficient_sample": []
+  },
   "evaluable_years_not_claimed_from_2010_alone": true,
   "ten_year_raw_length_is_not_ten_year_evaluable": true,
-  "calendar_sessions_in_window": null,
   "young_names_have_independent_insufficient": true
 }

@@ -6,6 +6,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from app.services.research_eod_v1.data.sharadar_identity import resolve_identity_for_session
 from app.services.research_eod_v1.data.sharadar_schema import ALLOWED_END, FULL_HISTORY_START
 from app.services.research_eod_v1.mathutil import finite
 from app.services.research_eod_v1.paths import RESEARCH_ROOT
@@ -87,11 +88,12 @@ def load_reconcile_rows(
             grouped.setdefault(token, []).append(item)
         mapped_here = 0
         for token, items in grouped.items():
-            identity = by_ticker.get(token) or by_ticker.get(token.upper())
-            if identity is None:
+            candidates = by_ticker.get(token) or by_ticker.get(token.upper()) or []
+            if not isinstance(candidates, (list, tuple)):
+                candidates = [candidates]
+            if not candidates:
                 unmapped.add(token)
                 continue
-            security_id = getattr(identity, "security_id", None) or str(identity)
             items.sort(key=lambda entry: str(entry.get("session_date") or ""))
             prev_tri: float | None = None
             for entry in items:
@@ -102,13 +104,18 @@ def load_reconcile_rows(
                     outside_window += 1
                     prev_tri = finite(entry.get("tri"))
                     continue
+                identity = resolve_identity_for_session(list(candidates), session)
+                if identity is None:
+                    unmapped.add(f"{token}@{session.isoformat()}")
+                    prev_tri = finite(entry.get("tri"))
+                    continue
                 tri = finite(entry.get("tri"))
                 ret = None
                 if tri is not None and prev_tri not in (None, 0):
                     ret = tri / float(prev_tri) - 1.0
                 prev_tri = tri if tri is not None else prev_tri
                 rows.append({
-                    "security_id": security_id,
+                    "security_id": identity.security_id,
                     "session_date": session.isoformat(),
                     "return": ret,
                     "volume": _tape_volume(entry),

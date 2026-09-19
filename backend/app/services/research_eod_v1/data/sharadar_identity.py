@@ -196,6 +196,34 @@ def identity_from_ticker_row(row: Mapping[str, Any]) -> SharadarIdentity:
     )
 
 
+def resolve_identity_for_session(
+    candidates: Sequence[SharadarIdentity],
+    session: date,
+) -> SharadarIdentity | None:
+    """A reused ticker is several permatickers. Vendor coverage picks which one owns a date."""
+
+    def _parse(value: str | None) -> date | None:
+        if not value:
+            return None
+        try:
+            return date.fromisoformat(str(value)[:10])
+        except ValueError:
+            return None
+
+    if len(candidates) == 1:
+        return candidates[0]
+    covering = []
+    for identity in candidates:
+        first = _parse(identity.firstpricedate)
+        last = _parse(identity.lastpricedate)
+        if first is not None and session < first:
+            continue
+        if last is not None and session > last:
+            continue
+        covering.append(identity)
+    return covering[0] if len(covering) == 1 else None
+
+
 def unadj_adv20(tracks: Sequence[PriceTracks]) -> float | None:
     """Prior 20 complete sessions only. The caller must exclude T."""
 
