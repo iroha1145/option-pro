@@ -47,6 +47,28 @@ def test_parent_rank_falls_back_when_finite_members_below_20() -> None:
     assert ranks["B00"] == 0.0
 
 
+def test_parent_rank_none_and_nan_both_fall_back_to_same_track() -> None:
+    import math
+
+    from app.services.research_eod_v1.cross_section import _finite_members
+
+    values, parent, industry, tracks = _two_parent_inputs()
+    parent_members = [sid for sid in values if parent[sid] == "P1"]
+    values_none = dict(values)
+    values_none["A19"] = None
+    values_nan = dict(values)
+    values_nan["A19"] = float("nan")
+    assert _finite_members(values_none, parent_members) == 19
+    assert _finite_members(values_nan, parent_members) == 19
+    none_ranks = q_star(values_none, industry=industry, parent=parent, tracks=tracks)
+    nan_ranks = q_star(values_nan, industry=industry, parent=parent, tracks=tracks)
+    fallback_none = q_star(values_none, industry=industry, parent={sid: None for sid in values}, tracks=tracks)
+    fallback_nan = q_star(values_nan, industry=industry, parent={sid: None for sid in values}, tracks=tracks)
+    assert none_ranks["A10"] == fallback_none["A10"] == 27.6315789474
+    assert nan_ranks["A10"] == fallback_nan["A10"] == 27.6315789474
+    assert math.isnan(values_nan["A19"])
+
+
 def test_unknown_parent_and_etf_isolation() -> None:
     values, parent, industry, tracks = _two_parent_inputs()
     orphan = dict(parent)

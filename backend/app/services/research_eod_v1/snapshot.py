@@ -71,18 +71,18 @@ def _geometry_fields(raw: RawComponents) -> dict[str, Any]:
 
 
 def _v_state(algorithm: str, raw: RawComponents) -> float | None:
-    if raw.rvol is None and algorithm != "C_trend_pullback":
-        return None
-    if algorithm in {"A_trend_quality", "D_residual_momentum"}:
-        if raw.rvol is None or raw.rvol <= 0:
-            return None
-        return clip100(50.0 + 30.0 * math.log(raw.rvol))
     if algorithm == "B_confirmed_base_breakout":
         track = raw.breakout_track or {}
         first_day_rvol = finite(track.get("first_day_rvol"))
         if first_day_rvol is None or first_day_rvol <= 0:
             return None
         return clip100(50.0 + 30.0 * math.log(first_day_rvol))
+    if raw.rvol is None and algorithm != "C_trend_pullback":
+        return None
+    if algorithm in {"A_trend_quality", "D_residual_momentum"}:
+        if raw.rvol is None or raw.rvol <= 0:
+            return None
+        return clip100(50.0 + 30.0 * math.log(raw.rvol))
     if raw.down_ratio is None or raw.rvol is None:
         return None
     return 0.5 * (clip100(100.0 * (1.0 - raw.down_ratio / 1.5)) or 0.0) + 0.5 * (

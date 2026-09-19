@@ -4,11 +4,18 @@ from collections import defaultdict
 from typing import Iterable
 
 from app.services.research_eod_v1.constants import INDUSTRY_MIN_FOR_LAMBDA, PARENT_MIN_FOR_Q
-from app.services.research_eod_v1.mathutil import midrank_percentiles, shrink_q
+from app.services.research_eod_v1.mathutil import finite, midrank_percentiles, shrink_q
 
 
 def parent_pool(track: str, values: dict[str, float | None], tracks: dict[str, str]) -> dict[str, float | None]:
     return {sid: values[sid] for sid in values if tracks.get(sid) == track}
+
+
+def _signed_finite(value: float | None, *, invert: bool) -> float | None:
+    number = finite(value)
+    if number is None:
+        return None
+    return -number if invert else number
 
 
 def ranked_q(
@@ -16,13 +23,13 @@ def ranked_q(
     members: Iterable[str],
 ) -> dict[str, float | None]:
     names = list(members)
-    raw = [values.get(name) for name in names]
-    ranks = midrank_percentiles([item if item is None else float(item) for item in raw])
+    raw = [finite(values.get(name)) for name in names]
+    ranks = midrank_percentiles(raw)
     return dict(zip(names, ranks))
 
 
 def _finite_members(signed: dict[str, float | None], members: Iterable[str]) -> int:
-    return sum(1 for sid in members if signed.get(sid) is not None)
+    return sum(1 for sid in members if finite(signed.get(sid)) is not None)
 
 
 def q_star(
@@ -33,7 +40,7 @@ def q_star(
     tracks: dict[str, str],
     invert: bool = False,
 ) -> dict[str, float | None]:
-    signed = {k: (None if v is None else (-v if invert else v)) for k, v in values.items()}
+    signed = {k: _signed_finite(v, invert=invert) for k, v in values.items()}
     out: dict[str, float | None] = {}
     by_track: dict[str, list[str]] = defaultdict(list)
     by_industry: dict[tuple[str, str], list[str]] = defaultdict(list)
