@@ -14,7 +14,7 @@ import zipfile
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
-from app.services.research_eod_v1.data.sharadar import SharadarClient
+from app.services.research_eod_v1.data.sharadar import SharadarClient, redacted_vendor_error
 from app.services.research_eod_v1.data.sharadar_acceptance import evaluate_delist_fixture
 from app.services.research_eod_v1.data.sharadar_bulk import ingest_bulk_archive, verify_ingested_state
 from app.services.research_eod_v1.data.sharadar_identity import action_value_evidence, classify_terminal
@@ -354,22 +354,84 @@ def test_unverified_share_basis_is_not_cash_evidence_without_proof() -> None:
 
     proven = action_value_evidence(
         row,
-        security=security,
+        security={"ticker": "SYNTH", "permaticker": "9001", "security_id": "sharadar:9001"},
         verified_share_basis_proof={"proof": "verified_permaticker", "permaticker": "9001"},
     )
     assert proven["accepted_as_cash_consideration"] is True
     assert proven["share_basis"] == "unverified"
-    assert proven["share_basis_proof"] == {
-        "proof": "verified_permaticker",
-        "permaticker": "9001",
-        "not_inferred_from_missing_contradiction": True,
-    }
+    assert proven["share_basis_proof"]["proof"] == "verified_permaticker"
+    assert proven["share_basis_proof"]["permaticker"] == "9001"
+    assert proven["share_basis_proof"]["not_inferred_from_missing_contradiction"] is True
+
+
+def test_proof_for_a_different_permaticker_does_not_authorize_the_target() -> None:
+    """A verified proof is only cash evidence when it names this security."""
+
+    row = _action_row("", "2023-06-05", "acquisitioncash", "12.0")
+    security = {"ticker": "SYNTH", "permaticker": "1001", "security_id": "sharadar:1001"}
+    mismatched = action_value_evidence(
+        row,
+        security=security,
+        verified_share_basis_proof={"proof": "verified_permaticker", "permaticker": "1002"},
+    )
+    assert mismatched["share_basis"] == "unverified"
+    assert mismatched["value"] == 12.0
+    assert mismatched["accepted_as_cash_consideration"] is False
+    assert mismatched["rejected_reason"] == "share_basis_proof_target_mismatch"
+    assert mismatched["share_basis_proof"] is None
+
+    missing_target = action_value_evidence(
+        row,
+        security={"ticker": "SYNTH"},
+        verified_share_basis_proof={"proof": "verified_permaticker", "permaticker": "1001"},
+    )
+    assert missing_target["accepted_as_cash_consideration"] is False
+    assert missing_target["rejected_reason"] == "share_basis_proof_target_missing"
+
+    conflicted = action_value_evidence(
+        row,
+        security={"ticker": "SYNTH", "permaticker": "1001", "security_id": "sharadar:1999"},
+        verified_share_basis_proof={"proof": "verified_permaticker", "permaticker": "1001"},
+    )
+    assert conflicted["accepted_as_cash_consideration"] is False
+    assert conflicted["rejected_reason"] == "share_basis_proof_target_conflict"
+
+    matched = action_value_evidence(
+        row,
+        security=security,
+        verified_share_basis_proof={"proof": "verified_permaticker", "permaticker": "1001"},
+    )
+    assert matched["accepted_as_cash_consideration"] is True
+    assert matched["share_basis_proof"]["permaticker"] == "1001"
+    assert matched["share_basis_proof"]["bound_to_security_permaticker"] == "1001"
     rejected_empty_proof = action_value_evidence(
         row,
         security=security,
         verified_share_basis_proof={"proof": "no_contradiction_found", "permaticker": "9001"},
     )
     assert rejected_empty_proof["accepted_as_cash_consideration"] is False
+
+
+def test_http_401_and_403_stay_distinct_on_actions_pages(monkeypatch) -> None:
+    monkeypatch.setenv(ENV_KEY_NAME, SECRET)
+
+    def opener_401(url: str, follow_redirects: bool = False):
+        return 401, b'{"error":{"code":"invalid_api_key","message":"Invalid API key"}}', url
+
+    def opener_403(url: str, follow_redirects: bool = False):
+        return 403, b'{"error":{"code":"not_subscribed","message":"Not subscribed to this dataset"}}', url
+
+    page_401 = SharadarClient(allow_network=True, opener=opener_401, sleep=lambda _s: None).fetch_page("actions")
+    page_403 = SharadarClient(allow_network=True, opener=opener_403, sleep=lambda _s: None).fetch_page("actions")
+    assert page_401.http_status == 401
+    assert page_403.http_status == 403
+    assert page_401.http_status != page_403.http_status
+    assert page_401.vendor_error["vendor_code"] == "invalid_api_key"
+    assert page_403.vendor_error["vendor_code"] == "not_subscribed"
+    assert page_401.vendor_error["not_collapsed_to_upgrade_sku"] is True
+    assert page_403.vendor_error["not_collapsed_to_upgrade_sku"] is True
+    excerpt = redacted_vendor_error(b'{"error":"no key dummy-not-a-real-secret here"}', 401)
+    assert SECRET not in json.dumps(excerpt)
 
 
 def test_unit_unverified_merger_blocks_execution_without_blocking_the_raw_tape(tmp_path: Path, monkeypatch) -> None:

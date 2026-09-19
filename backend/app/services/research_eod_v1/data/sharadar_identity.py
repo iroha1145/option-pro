@@ -401,20 +401,69 @@ def _share_basis(row: Mapping[str, Any], security: Mapping[str, Any] | None) -> 
     return "matched" if row_ticker in wanted else "mismatched"
 
 
-def _auditable_share_basis_proof(proof: Mapping[str, Any] | None) -> dict[str, Any] | None:
-    """Explicit permanent-identity proof. Absence of contradiction is not proof."""
+_VERIFIED_PROOF_KINDS = frozenset({"verified_permaticker", "verified_permanent_identity"})
+_SHARE_BASIS_PROOF_REJECTIONS = frozenset({
+    "share_basis_unverified_without_caller_proof",
+    "share_basis_proof_target_mismatch",
+    "share_basis_proof_target_missing",
+    "share_basis_proof_target_conflict",
+})
+
+
+def _permanent_identity_tokens(mapping: Mapping[str, Any] | None) -> tuple[set[str], bool]:
+    """Normalize permanent-identity tokens. A second distinct ID is a conflict."""
+
+    if not isinstance(mapping, Mapping):
+        return set(), False
+    tokens: set[str] = set()
+    permaticker = str(mapping.get("permaticker") or "").strip()
+    if permaticker:
+        tokens.add(permaticker)
+    security_id = str(mapping.get("security_id") or "").strip()
+    if security_id:
+        token = security_id.split(":", 1)[1].strip() if security_id.lower().startswith("sharadar:") else security_id
+        if token:
+            tokens.add(token)
+    return tokens, len(tokens) > 1
+
+
+def _auditable_share_basis_proof(
+    proof: Mapping[str, Any] | None,
+    *,
+    security: Mapping[str, Any] | None = None,
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Explicit permanent-identity proof bound to the security being settled.
+
+    Absence of contradiction is not proof. A proof that names a different
+    permaticker, a missing target, or two conflicting target IDs stays
+    unverified. Only the documented proof kinds count; an arbitrary string
+    is not treated as verified.
+    """
 
     if not isinstance(proof, Mapping):
-        return None
+        return None, None
     permaticker = str(proof.get("permaticker") or "").strip()
     kind = str(proof.get("proof") or "").strip()
-    if not permaticker or kind not in {"verified_permaticker", "verified_permanent_identity"}:
-        return None
+    if not permaticker or kind not in _VERIFIED_PROOF_KINDS:
+        return None, None
+    proof_tokens, proof_conflict = _permanent_identity_tokens({
+        "permaticker": permaticker,
+        "security_id": proof.get("security_id"),
+    })
+    target_tokens, target_conflict = _permanent_identity_tokens(security)
+    if proof_conflict or target_conflict:
+        return None, "share_basis_proof_target_conflict"
+    if not target_tokens:
+        return None, "share_basis_proof_target_missing"
+    if permaticker not in target_tokens:
+        return None, "share_basis_proof_target_mismatch"
     return {
         "proof": kind,
         "permaticker": permaticker,
         "not_inferred_from_missing_contradiction": True,
-    }
+        "bound_to_security_permaticker": next(iter(target_tokens)),
+        "proof_kind_source": "verified_permanent_identity_kinds",
+    }, None
 
 
 def action_value_evidence(
@@ -429,7 +478,7 @@ def action_value_evidence(
     that decided the unit, so a later correction to the vocabulary is visible
     rather than silently rewriting old conclusions. ``share_basis='unverified'``
     is not cash evidence unless the caller supplies a separate, auditable
-    permanent-identity proof.
+    permanent-identity proof that names this security.
     """
 
     action = str(row.get("action") or "").strip().lower()
@@ -437,7 +486,10 @@ def action_value_evidence(
     basis = _share_basis(row, security)
     parsed = _numeric_value(row)
     value = parsed["value"]
-    proof = _auditable_share_basis_proof(verified_share_basis_proof)
+    proof, proof_rejection = _auditable_share_basis_proof(
+        verified_share_basis_proof,
+        security=security,
+    )
     if action in ACTION_PARTIAL_CONSIDERATION:
         rejected = "election_or_contingent_leg_is_not_the_whole_consideration"
     elif unit != UNIT_USD_PER_SHARE:
@@ -447,7 +499,7 @@ def action_value_evidence(
     elif basis == "mismatched":
         rejected = "action_row_belongs_to_another_security"
     elif basis == "unverified" and proof is None:
-        rejected = "share_basis_unverified_without_caller_proof"
+        rejected = proof_rejection or "share_basis_unverified_without_caller_proof"
     else:
         rejected = None
     return {
@@ -544,7 +596,7 @@ def classify_terminal(
             reason = "acquisition_consideration_incomplete"
         elif "action_row_belongs_to_another_security" in rejections:
             reason = "acquisition_action_on_another_security"
-        elif "share_basis_unverified_without_caller_proof" in rejections:
+        elif rejections & _SHARE_BASIS_PROOF_REJECTIONS:
             reason = "acquisition_share_basis_unverified"
         elif any(item["value"] is not None for item in unpriced):
             reason = "acquisition_value_unit_unverified"

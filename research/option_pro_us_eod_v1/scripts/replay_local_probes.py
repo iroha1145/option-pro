@@ -210,6 +210,11 @@ def _economic_cases() -> list[dict]:
         _action_row("", "acquisitioncash", "12.0"),
         security={"ticker": "SYNTH"},
     )
+    wrong_id = action_value_evidence(
+        _action_row("", "acquisitioncash", "12.0"),
+        security={"ticker": "SYNTH", "permaticker": "1001", "security_id": "sharadar:1001"},
+        verified_share_basis_proof={"proof": "verified_permaticker", "permaticker": "1002"},
+    )
     return [
         {
             "name": "generic_merger_keeps_unit_unknown",
@@ -282,6 +287,17 @@ def _economic_cases() -> list[dict]:
                 unverified["share_basis"] == "unverified"
                 and unverified["accepted_as_cash_consideration"] is False
                 and unverified["rejected_reason"] == "share_basis_unverified_without_caller_proof"
+            ),
+        },
+        {
+            "name": "proof_for_different_security_must_not_authorize_target",
+            "scope": "shipped action_value_evidence; proof must name the settled security",
+            "observed": wrong_id,
+            "expected": "not accepted when proof permaticker differs from security permaticker",
+            "satisfied": (
+                wrong_id["accepted_as_cash_consideration"] is False
+                and wrong_id["rejected_reason"] == "share_basis_proof_target_mismatch"
+                and wrong_id["share_basis_proof"] is None
             ),
         },
     ]

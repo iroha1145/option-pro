@@ -289,6 +289,8 @@ class QueryPage:
     complete: bool | None = None
     short_page: bool = False
     pk_missing: int = 0
+    http_status: int | None = None
+    vendor_error: dict[str, Any] | None = None
 
 
 class SharadarClient:
@@ -452,36 +454,37 @@ class SharadarClient:
             return QueryPage(table, [], skip, limit, "NETWORK_UNAVAILABLE", 0, "", redact_url(url), None, "network", False)
         redacted = redact_url(final_url)
         digest = hashlib.sha256(body).hexdigest()
+        vendor = redacted_vendor_error(body, status)
         if 300 <= status < 400:
-            return QueryPage(table, [], skip, limit, "REDIRECT_UNEXPECTED", 0, digest, redacted, None, "redirect", False)
+            return QueryPage(table, [], skip, limit, "REDIRECT_UNEXPECTED", 0, digest, redacted, None, "redirect", False, http_status=status, vendor_error=vendor)
         if status in {401, 403}:
-            return QueryPage(table, [], skip, limit, "AUTH_FAILED", 0, digest, redacted, None, "auth", False)
+            return QueryPage(table, [], skip, limit, "AUTH_FAILED", 0, digest, redacted, None, "auth", False, http_status=status, vendor_error=vendor)
         if status >= 400 or status < 200:
-            return QueryPage(table, [], skip, limit, "NETWORK_UNAVAILABLE", 0, digest, redacted, None, "http_error", False)
+            return QueryPage(table, [], skip, limit, "NETWORK_UNAVAILABLE", 0, digest, redacted, None, "http_error", False, http_status=status, vendor_error=vendor)
         inspected = inspect_table_body(body)
         kind = inspected["kind"]
         if kind == "empty_body":
-            return QueryPage(table, [], skip, limit, "EMPTY_BODY", 0, digest, redacted, None, "empty_body", False)
+            return QueryPage(table, [], skip, limit, "EMPTY_BODY", 0, digest, redacted, None, "empty_body", False, http_status=status)
         if kind == "error":
             return QueryPage(
                 table, [], skip, limit, status_from_error_payload(inspected.get("error"), status),
-                0, digest, redacted, None, "error", False,
+                0, digest, redacted, None, "error", False, http_status=status, vendor_error=vendor,
             )
         if kind in {"html", "unknown", "metadata"}:
-            return QueryPage(table, [], skip, limit, "SCHEMA_MISMATCH", 0, digest, redacted, None, kind, False)
+            return QueryPage(table, [], skip, limit, "SCHEMA_MISMATCH", 0, digest, redacted, None, kind, False, http_status=status, vendor_error=vendor)
         rows = inspected["rows"]
         missing = required_field_gap(table, rows)
         if missing:
-            return QueryPage(table, [], skip, limit, "SCHEMA_MISMATCH", 0, digest, redacted, None, "rows", False)
+            return QueryPage(table, [], skip, limit, "SCHEMA_MISMATCH", 0, digest, redacted, None, "rows", False, http_status=status)
         if len(rows) > limit:
-            return QueryPage(table, [], skip, limit, "SCHEMA_MISMATCH", len(rows), digest, redacted, None, "rows", False)
+            return QueryPage(table, [], skip, limit, "SCHEMA_MISMATCH", len(rows), digest, redacted, None, "rows", False, http_status=status)
         pk_missing = sum(1 for row in rows if _pk_missing(table, row))
         if not rows:
             # A valid empty page is the only end-of-table signal.
-            return QueryPage(table, [], skip, limit, "READ_OK", 0, digest, redacted, None, "empty", True)
+            return QueryPage(table, [], skip, limit, "READ_OK", 0, digest, redacted, None, "empty", True, http_status=status)
         return QueryPage(
             table, rows, skip, limit, "READ_OK", len(rows), digest, redacted, skip + len(rows), "rows", False,
-            short_page=len(rows) < limit, pk_missing=pk_missing,
+            short_page=len(rows) < limit, pk_missing=pk_missing, http_status=status,
         )
 
     def fetch_all(
@@ -716,13 +719,14 @@ class SharadarClient:
         except Exception:
             return {"table": table, "status": "NETWORK_UNAVAILABLE", "years": years, "metadata": {}}
         inspected = inspect_table_body(body)
+        vendor = redacted_vendor_error(body, code)
         if code in {401, 403}:
-            return {"table": table, "status": "AUTH_FAILED", "years": years, "url": redact_url(final_url), "metadata": {}}
+            return {"table": table, "status": "AUTH_FAILED", "years": years, "url": redact_url(final_url), "metadata": {}, "http_status": code, "vendor_error": vendor}
         if code >= 400 or code < 200:
-            return {"table": table, "status": "NETWORK_UNAVAILABLE", "years": years, "url": redact_url(final_url), "metadata": {}}
+            return {"table": table, "status": "NETWORK_UNAVAILABLE", "years": years, "url": redact_url(final_url), "metadata": {}, "http_status": code, "vendor_error": vendor}
         if inspected["kind"] in {"error", "html", "unknown", "empty_body"}:
             status = status_from_error_payload(inspected.get("error"), code) if inspected["kind"] == "error" else "SCHEMA_MISMATCH"
-            return {"table": table, "status": status, "years": years, "url": redact_url(final_url), "metadata": {}, "body_kind": inspected["kind"]}
+            return {"table": table, "status": status, "years": years, "url": redact_url(final_url), "metadata": {}, "body_kind": inspected["kind"], "http_status": code, "vendor_error": vendor}
         payload = _decode_json(body)
         metadata = parse_bulk_metadata(payload)
         return {
@@ -999,6 +1003,45 @@ def status_from_error_payload(payload: Any, http_status: int) -> str:
     if "not subscribed" in blob or "entitlement" in blob or "permission" in blob or "subscription" in blob:
         return "ENTITLEMENT_MISSING"
     return "VENDOR_ERROR"
+
+
+def redacted_vendor_error(body: bytes, http_status: int) -> dict[str, Any]:
+    """Keep 401 and 403 distinct. Do not rewrite either as 'must upgrade SKU'."""
+
+    inspected = inspect_table_body(body)
+    payload = inspected.get("error") if inspected.get("kind") == "error" else None
+    vendor_code = None
+    vendor_message = None
+    if isinstance(payload, dict):
+        inner = payload.get("error") if "error" in payload else payload.get("errors")
+        if isinstance(inner, dict):
+            vendor_code = inner.get("code") or inner.get("type") or inner.get("errorcode")
+            vendor_message = inner.get("message") or inner.get("msg") or inner.get("error")
+        elif isinstance(inner, str):
+            vendor_message = inner
+        elif isinstance(inner, list) and inner:
+            first = inner[0]
+            if isinstance(first, dict):
+                vendor_code = first.get("code") or first.get("type")
+                vendor_message = first.get("message") or first.get("msg")
+            else:
+                vendor_message = str(first)
+        if vendor_message is None:
+            vendor_message = payload.get("message") or payload.get("msg")
+        if vendor_code is None:
+            vendor_code = payload.get("code") or payload.get("type")
+    excerpt = None
+    if vendor_message is None and body:
+        excerpt = redact_text(body.decode("utf-8", errors="replace"))[:300]
+    return {
+        "http_status": http_status,
+        "http_401_distinct_from_403": True,
+        "body_kind": inspected.get("kind"),
+        "vendor_code": None if vendor_code is None else redact_text(str(vendor_code))[:80],
+        "vendor_message": None if vendor_message is None else redact_text(str(vendor_message))[:300],
+        "excerpt": excerpt,
+        "not_collapsed_to_upgrade_sku": True,
+    }
 
 
 def parse_bulk_metadata(payload: Any) -> dict[str, Any]:
