@@ -486,6 +486,56 @@ def test_schema_format_json_400_is_not_subscription_evidence() -> None:
     assert recorded["http_status"] == 400
 
 
+def test_data_endpoint_json_400_is_bad_request_not_schema_format() -> None:
+    """format=json is valid on /data; only a known schema path + json is format evidence."""
+
+    data_actions = explain_access_class(
+        400,
+        "Invalid date",
+        endpoint="/v1.0/data/actions",
+        query_format="json",
+    )
+    assert data_actions["access_class"] == "bad_request"
+    assert data_actions["schema_format_json_is_not_subscription_evidence"] is False
+
+    data_stocks = explain_access_class(
+        400,
+        "Unknown field",
+        endpoint="/v1.0/data/stocks",
+        query_format="json",
+    )
+    assert data_stocks["access_class"] == "bad_request"
+
+    schema_sqlite = explain_access_class(
+        400,
+        "Bad request",
+        endpoint="/v1.0/schema/actions",
+        query_format="sqlite",
+    )
+    assert schema_sqlite["access_class"] == "bad_request"
+
+    unknown_endpoint = explain_access_class(400, "Bad request", endpoint=None, query_format="json")
+    assert unknown_endpoint["access_class"] == "bad_request"
+
+    missing_format = explain_access_class(400, "Bad request", endpoint="/v1.0/schema/actions")
+    assert missing_format["access_class"] == "bad_request"
+
+    data_body = redacted_vendor_error(
+        b'{"error":{"message":"Invalid date"}}',
+        400,
+        endpoint="/v1.0/data/actions",
+        query_format="json",
+    )
+    assert data_body["access_class"] == "bad_request"
+    stocks_body = redacted_vendor_error(
+        b'{"error":{"message":"Unknown field"}}',
+        400,
+        endpoint="/v1.0/data/stocks",
+        query_format="json",
+    )
+    assert stocks_body["access_class"] == "bad_request"
+
+
 def test_reconcile_names_massive_and_keeps_other_fields_unknown() -> None:
     result = reconcile_aligned_returns(
         [

@@ -1020,8 +1020,9 @@ def explain_access_class(
 
     401 / invalid key stays a credential problem. 403 Exceeds free tier is an
     observed access or quota limit, not an inference that the user is
-    unsubscribed. A bare Forbidden stays unknown. format=json schema 400 is
-    an unsupported format, not a subscription miss.
+    unsubscribed. A bare Forbidden stays unknown. A 400 is
+    unsupported_schema_format only for a known schema path with
+    query_format=json. Data-table format=json 400s stay bad_request.
     """
 
     status = int(http_status) if http_status is not None else None
@@ -1051,7 +1052,7 @@ def explain_access_class(
         wrapper = "AUTH_FAILED"
         not_unsubscribed = True
         not_subscription = True
-    elif status == 400 and (fmt == "json" or (schema_path and fmt in {"", "json"})):
+    elif status == 400 and schema_path and fmt == "json":
         access = "unsupported_schema_format"
         wrapper = page_status or "HTTP_ERROR"
         not_unsubscribed = True
