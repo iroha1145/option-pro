@@ -21,5 +21,11 @@
 | feature v1.6；旧 B0 不回写 | `FEATURE_VERSION`；归档 v1.5 | PASS |
 | 本地回归 | 3976 passed, 6 skipped | PASS |
 | 研究头 CI | push 35377688980 / PR 35377695198 | PASS |
+| CONNECT_AND_ACCEPT 实现头 | `02fa0a2c` | PASS |
+| error envelope / 503 bulk / PARTIAL / resume | `connect_accept_probe_replay.json` 14/14 | PASS |
+| 缺失对账 INSUFFICIENT | 同上 `reconcile_missing_fields_not_pass` | PASS |
+| 有限母组 / B 首日不依赖当前 rvol | 同上 + 边界测试 | PASS |
+| mock 四表 client→落库→验收 | `tests/test_research_eod_v1_connect_accept.py` | PASS |
+| 实现头 GitHub CI | push 35419099251 / PR 35419101191 | PASS |
 
 终态：`AUTH_REQUIRED`。不是策略赢家状态。

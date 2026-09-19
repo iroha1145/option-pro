@@ -1,5 +1,5 @@
 {
-  "head": "a7d9f36d1d22ef03c7c8dbfa3f85f3808ec79efb",
+  "head": "02fa0a2ceb19f274ed81777a57936c1853c45a1f",
   "generated_at": "2026-09-19T03:26:31.773200+00:00",
   "feature_version": "us-eod-research-features-v1.6",
   "archived_feature_version": "us-eod-research-features-v1.5",
@@ -12,5 +12,6 @@
   "credential_present": false,
   "live_sharadar_request_count": 0,
   "probe": "sharadar_v3/provider_probe.json",
-  "connect_accept": "sharadar_v3/connect_accept_report.json"
+  "connect_accept": "sharadar_v3/connect_accept_report.json",
+  "ci": "algorithm_sharadar_connect_accept_ci.json"
 }
