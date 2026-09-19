@@ -30,3 +30,5 @@
 | 经济账本 | UNKNOWN |
 
 一个总 PASS 不宣称其他字段也已通过。不修改 Sharadar 原始值去贴合对照源。Yahoo 合法缓存本环境不存在，未参与。
+
+负责人已确认本账户仅免费 Sample。2010/2016/2020 空页与部分 403 是范围外访问，不再当已购权限异常排查。见 `account_scope_free_sample_only.md`。

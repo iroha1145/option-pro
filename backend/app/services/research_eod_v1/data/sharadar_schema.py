@@ -11,6 +11,9 @@ OFFICIAL_SCHEMA_URL = "https://api.sharadar.com/v1.0/schema"
 # a 400 on format=json is not subscription evidence.
 OFFICIAL_SCHEMA_FORMATS = ("postgres", "sqlite", "mysql")
 ACCESS_CLASS_VERSION = "sharadar-access-class-v1"
+# Owner-confirmed account scope. Not a vendor HTTP/error code.
+ACCOUNT_SCOPE = "FREE_SAMPLE_ONLY"
+ACCOUNT_SCOPE_KIND = "account_scope"
 AUTH_QUERY_PARAM = "api_key"
 ENV_KEY_NAME = "SHARADAR_API_KEY"
 CHANNEL_DOCS = (

@@ -86,6 +86,7 @@ class ProviderCapabilities:
     raw_price_verified: bool
     notes: tuple[str, ...] = ()
     capability_level: str = "DOCUMENTED_ONLY"
+    account_scope: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

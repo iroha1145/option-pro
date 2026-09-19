@@ -324,7 +324,10 @@ def test_provider_access_tested_only_after_success(monkeypatch) -> None:
 
     ok = SharadarProvider(allow_network=True, client=SharadarClient(allow_network=True, opener=opener_ok, sleep=lambda _s: None))
     caps_ok = ok.probe_capabilities()
-    assert caps_ok.capability_level == "ACCESS_TESTED"
+    assert caps_ok.probe_status == "ACCESS_TESTED"
+    assert caps_ok.capability_level == "FREE_SAMPLE_ONLY"
+    assert caps_ok.account_scope == "FREE_SAMPLE_ONLY"
+    assert caps_ok.daily_bars == "sample_only"
 
 
 def test_actions_keep_non_numeric_and_identity_not_listed_at(monkeypatch) -> None:

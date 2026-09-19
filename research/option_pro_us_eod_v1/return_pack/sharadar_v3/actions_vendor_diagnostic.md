@@ -36,11 +36,6 @@ AUTH_FAILED 是历史页状态包装，不改上面的 HTTP / message。映射�
 
 `acquisitionof` 不是已登记的现金对价码，不能当作经济结算通过。原始行已落在授权私人目录，未进公开 git。
 
-## 需要负责人向供应商确认的权限信息
+## 账户范围后记（不改写上面的 HTTP 表）
 
-1. 本 API key 的产品是否包含 ACTIONS 的 **paged** 与 **bulk**；bulk 的 403 Forbidden 与 paged 的 403 Exceeds free tier 是否同一限制。
-2. 多 ticker、跨年窗口、以及退市后代码（供应商返回的 `BBBYQ`）触发 Exceeds free tier 的具体配额字段。
-3. 空的 2010/2016/2020 价量页（HTTP 200、0 行）是历史档未授权，还是该档在免费查询里被静默截断。
-4. 已有 `ACTIONS_FIELDS`，不再用 `format=json` 试 schema。若账户持有人要核 schema，只用官方 postgres/sqlite/mysql。
-
-不要绕过鉴权，不要换错密钥，不要自动下单。
+负责人已确认本账户仅免费 Sample，未购套餐。上表仍是当时脱敏事实，不再当作已购权限待查清单。范围标记见 `account_scope_free_sample_only.md`。不要重复失败探针，不要自动下单。

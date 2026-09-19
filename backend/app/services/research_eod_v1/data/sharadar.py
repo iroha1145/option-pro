@@ -46,6 +46,8 @@ from app.services.research_eod_v1.data.sharadar_identity import (
 )
 from app.services.research_eod_v1.data.sharadar_schema import (
     ACCESS_CLASS_VERSION,
+    ACCOUNT_SCOPE,
+    ACCOUNT_SCOPE_KIND,
     ALLOWED_END,
     AUTH_QUERY_PARAM,
     BULK_YEARS_PROBE_ORDER,
@@ -147,6 +149,31 @@ def redact_text(text: str) -> str:
     return blob
 
 
+def account_scope_record() -> dict[str, Any]:
+    """Owner-confirmed Sharadar scope. Not a vendor error code."""
+
+    return {
+        "account_scope": ACCOUNT_SCOPE,
+        "kind": ACCOUNT_SCOPE_KIND,
+        "not_a_vendor_error_code": True,
+        "owner_confirmed": True,
+        "purchased_sku": False,
+        "long_history_out_of_scope": True,
+        "full_market_out_of_scope": True,
+        "bulk_out_of_scope": True,
+        "ten_year_formal_requirement_not_lowered": True,
+        "formal_data_phase": "paused_until_source_and_budget",
+        "do_not_rerun_failed_coverage_probes": True,
+        "do_not_auto_purchase": True,
+        "do_not_resume_old_214_weight_search": True,
+    }
+
+
+def _with_account_scope(record: dict[str, Any]) -> dict[str, Any]:
+    record.update(account_scope_record())
+    return record
+
+
 def classify_entitlement(
     *,
     earliest: date | None,
@@ -171,7 +198,7 @@ def classify_entitlement(
     access = bool(earliest is not None) if verified_access is None else bool(verified_access)
     has_key = (access or earliest is not None) if credential is None else bool(credential)
     if not has_key:
-        return {
+        return _with_account_scope({
             "status": "AUTH_REQUIRED",
             "verified_access": False,
             "observed_coverage": observed,
@@ -181,9 +208,9 @@ def classify_entitlement(
             "research_start": None,
             "continue": False,
             "needs_review": False,
-        }
+        })
     if bulk_years == "5":
-        return {
+        return _with_account_scope({
             "status": "ENTITLEMENT_SHORT_5Y",
             "verified_access": access,
             "observed_coverage": observed,
@@ -193,9 +220,9 @@ def classify_entitlement(
             "research_start": None,
             "continue": False,
             "needs_review": True,
-        }
+        })
     if bulk_years == "10":
-        return {
+        return _with_account_scope({
             "status": "HISTORY_10Y",
             "verified_access": access,
             "observed_coverage": observed,
@@ -205,9 +232,9 @@ def classify_entitlement(
             "research_start": HISTORY_10Y_START.isoformat(),
             "continue": True,
             "needs_review": False,
-        }
+        })
     if bulk_years in {"full", "all"}:
-        return {
+        return _with_account_scope({
             "status": "READ_OK",
             "verified_access": access,
             "observed_coverage": observed,
@@ -217,9 +244,9 @@ def classify_entitlement(
             "research_start": FULL_HISTORY_START.isoformat(),
             "continue": True,
             "needs_review": False,
-        }
+        })
     if earliest is None:
-        return {
+        return _with_account_scope({
             "status": "COVERAGE_UNOBSERVED",
             "verified_access": access,
             "observed_coverage": observed,
@@ -229,8 +256,8 @@ def classify_entitlement(
             "research_start": None,
             "continue": False,
             "needs_review": True,
-        }
-    return {
+        })
+    return _with_account_scope({
         "status": "ACCESS_VERIFIED_RANGE_UNKNOWN",
         "verified_access": access,
         "observed_coverage": observed,
@@ -242,7 +269,7 @@ def classify_entitlement(
         "research_start": None,
         "continue": True,
         "needs_review": True,
-    }
+    })
 
 
 def isolate_research_window(session: date) -> str:
@@ -1267,6 +1294,8 @@ class SharadarProvider:
             "yahoo_not_used_as_fallback",
             "default_first_10000_is_not_universe",
             "credential_present_is_not_ACCESS_TESTED",
+            f"account_scope={ACCOUNT_SCOPE}",
+            "account_scope_is_not_a_vendor_error_code",
         ]
         if not present:
             notes.append("AUTH_REQUIRED")
@@ -1284,6 +1313,7 @@ class SharadarProvider:
                 raw_price_verified=False,
                 notes=tuple(notes),
                 capability_level="DOCUMENTED_ONLY",
+                account_scope=ACCOUNT_SCOPE,
             )
         if not self.allow_network:
             return ProviderCapabilities(
@@ -1300,26 +1330,27 @@ class SharadarProvider:
                 raw_price_verified=False,
                 notes=tuple(notes + ["network_disabled"]),
                 capability_level="DOCUMENTED_ONLY",
+                account_scope=ACCOUNT_SCOPE,
             )
         page = self.client.fetch_page("tickers", extra={"ticker": PROBE_SAMPLES["non_free_example"]})
         self._last_access_status = page.status
         self._access_tested = page.status == "READ_OK" and bool(page.rows)
-        level = "ACCESS_TESTED" if self._access_tested else "DOCUMENTED_ONLY"
         notes.append(f"access_request_status={page.status}")
         return ProviderCapabilities(
             provider="sharadar",
             dataset_id="sharadar-official-v1",
             dataset_version=SOURCE_VERSION,
             probe_status=page.status if not self._access_tested else "ACCESS_TESTED",
-            daily_bars="available" if self._access_tested else page.status,
-            corporate_actions="available" if self._access_tested else page.status,
+            daily_bars="sample_only" if self._access_tested else page.status,
+            corporate_actions="sample_only" if self._access_tested else page.status,
             classification_history="partial_actions_sic_only" if self._access_tested else page.status,
-            security_master="available" if self._access_tested else page.status,
-            delisted_coverage="documented_survivorship_free" if self._access_tested else page.status,
+            security_master="sample_only" if self._access_tested else page.status,
+            delisted_coverage="sample_identity_only" if self._access_tested else page.status,
             volume_session_scope="UNKNOWN",
             raw_price_verified=False,
             notes=tuple(notes),
-            capability_level=level,
+            capability_level=ACCOUNT_SCOPE if self._access_tested else "DOCUMENTED_ONLY",
+            account_scope=ACCOUNT_SCOPE,
         )
 
     def load_security_master(self) -> list[SecurityIdentity] | str:
@@ -1582,12 +1613,32 @@ def run_sharadar_probe(*, allow_network: bool = True, client: SharadarClient | N
         "volume_session_scope": "UNKNOWN",
         "secret_present_in_report": False,
         "terminal_status": _terminal_from_probe(present, tables, entitlement),
-        "full_download_allowed": full_download_allowed(present, tables, entitlement, samples),
+        "account_scope": account_scope_record(),
+        "full_download_allowed": _download_decision(present, tables, entitlement, samples, adapter),
     }
     blob = json.dumps(report, default=str)
     if _api_key() and _api_key() in blob:
         raise RuntimeError("secret_leaked_into_probe_report")
     return report
+
+
+def _download_decision(
+    present: bool,
+    tables: Mapping[str, Any],
+    entitlement: Mapping[str, Any],
+    samples: Mapping[str, Any],
+    client: SharadarClient,
+) -> dict[str, Any]:
+    decision = full_download_allowed(present, tables, entitlement, samples)
+    live_blocked = formal_live_backfill_blocked(client)
+    blockers = list(decision["blockers"])
+    if live_blocked:
+        token = f"account_scope:{ACCOUNT_SCOPE}"
+        if token not in blockers:
+            blockers.append(token)
+        decision = {**decision, "allowed": False, "blockers": blockers}
+    decision["formal_live_backfill_blocked"] = live_blocked
+    return decision
 
 
 def _sample_status(page: QueryPage) -> str:
@@ -1598,13 +1649,28 @@ def _sample_status(page: QueryPage) -> str:
     return page.status
 
 
+def formal_live_backfill_blocked(client: SharadarClient | None = None) -> bool:
+    """Owner-confirmed free Sample: do not start a live official full-market backfill.
+
+    Injected openers and non-official base URLs keep the engineering pipeline.
+    This is an account-scope mark, not a vendor HTTP/error class.
+    """
+
+    if ACCOUNT_SCOPE != "FREE_SAMPLE_ONLY":
+        return False
+    if client is not None and client.opener is not None:
+        return False
+    base = OFFICIAL_BASE_URL if client is None else client.base_url
+    return official_https_origin(base) or str(base).rstrip("/") == OFFICIAL_BASE_URL.rstrip("/")
+
+
 def full_download_allowed(
     present: bool,
     tables: Mapping[str, Any],
     entitlement: Mapping[str, Any],
     samples: Mapping[str, Any],
 ) -> dict[str, Any]:
-    """A full download only starts after the probe shows real access, not just transport."""
+    """Engineering download gate. Formal live backfill is a separate scope check."""
 
     blockers: list[str] = []
     if not present:
@@ -1631,6 +1697,10 @@ def full_download_allowed(
         "allowed": not blockers,
         "blockers": blockers,
         "empty_page_is_not_sample_proof": True,
+        "account_scope": ACCOUNT_SCOPE,
+        "account_scope_is_not_a_vendor_error_code": True,
+        "formal_data_phase_allowed": False,
+        "formal_data_phase": "paused_until_source_and_budget",
     }
 
 

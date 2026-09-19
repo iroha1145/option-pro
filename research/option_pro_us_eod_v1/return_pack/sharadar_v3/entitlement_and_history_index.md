@@ -1,6 +1,6 @@
-# 权限与长历史索引（终态 B）
+# 权限与长历史索引（账户范围 FREE_SAMPLE_ONLY）
 
-索引 head：`b2e3af8397d3c8d0ed1b2d361befbffe74a912fc`。映射版本 `sharadar-access-class-v1`。不倒写历史原始响应。本轮无新的供应商失败探针。
+索引 head：`bd55c890e463ba8bd9eb5e081a65768feea4f0cf`。映射版本 `sharadar-access-class-v1`。账户范围 `FREE_SAMPLE_ONLY`（`account_scope`，不是供应商错误码）。不倒写历史原始响应。本轮无新的供应商失败探针。
 
 ## 各次运行（分别记账）
 
@@ -60,8 +60,12 @@
 
 ## 结论
 
-终态 **B**：部分样本已取得，剩余访问被供应商范围/配额限制。供应商答复：无。
+负责人已确认：本账户仅免费 Sample，未购买任何套餐。当前 Sharadar 能力标记为 **FREE_SAMPLE_ONLY**。这是账户范围标记，不是新的供应商错误码。
 
-下一步由账户持有人用这些脱敏响应确认产品、paged/bulk、历史深度和退市覆盖。权限未变前不再重复同一批失败探针，不拆成无限单代码短窗绕过限制，不自动购买，不启动全量回填。
+已记录的 403 / 空长历史 / bulk Forbidden 是免费 Sample 的范围外访问，不再当作已购权限异常排查，不再重复失败探针，也不再要求更换 agent 去补覆盖。
 
-`full_backfill_started=false`，`executed_backtests=0`。
+适配器与既有工程修复保留。不自动购买，不恢复旧 214 小池权重搜索，不降低十年以上正式验证要求。数据来源与预算确定后，再恢复正式数据阶段。
+
+先前终态 B（等账户持有人向供应商确认产品）已由负责人确认关闭。
+
+`full_backfill_started=false`，`executed_backtests=0`，`purchase_attempted=false`。

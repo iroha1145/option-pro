@@ -18,9 +18,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "backend"))
 
-from app.services.research_eod_v1.data.sharadar import explain_access_class  # noqa: E402
+from app.services.research_eod_v1.data.sharadar import (  # noqa: E402
+    account_scope_record,
+    explain_access_class,
+)
 from app.services.research_eod_v1.data.sharadar_schema import (  # noqa: E402
     ACCESS_CLASS_VERSION,
+    ACCOUNT_SCOPE,
+    ACCOUNT_SCOPE_KIND,
     ENV_KEY_NAME,
     OFFICIAL_SCHEMA_FORMATS,
 )
@@ -220,20 +225,32 @@ def main() -> int:
             "paid_rows_not_in_git": True,
             "does_not_overwrite_mock_or_full_store": True,
         },
+        "account_scope": account_scope_record(),
         "entitlement_conclusion": {
-            "terminal": "B",
+            "terminal": ACCOUNT_SCOPE,
+            "previous_terminal": "B",
+            "kind": ACCOUNT_SCOPE_KIND,
+            "not_a_vendor_error_code": True,
+            "owner_confirmed": True,
+            "purchased_sku": False,
             "vendor_reply": None,
             "http_401_seen": False,
             "same_key_reads_stocks_funds_tickers": True,
-            "observed_access_or_quota_limit": "403 Exceeds free tier on multi-ticker, BBBYQ, some late names",
-            "forbidden_reason_unknown": "bulk status=True 403 Forbidden",
+            "observed_access_or_quota_limit": "403 Exceeds free tier on multi-ticker, BBBYQ, some late names; now out of scope for this free Sample account",
+            "forbidden_reason_unknown": "bulk status=True 403 Forbidden; bulk is out of scope, not a purchased-SKU mystery",
             "older_history_empty_200": True,
+            "long_history_full_market_bulk_not_purchased_entitlement_bugs": True,
             "schema_format_json_400_not_subscription": True,
             "official_schema_formats": list(OFFICIAL_SCHEMA_FORMATS),
-            "next_action": "account holder confirms product, paged vs bulk, history depth, and delisted coverage with the vendor using these redacted responses",
-            "owner": "account_holder",
+            "next_action": "pause formal data phase until a source and budget are decided; do not rerun failed coverage probes; do not ask a new agent to fix coverage",
+            "owner": "project_owner_confirmed",
             "do_not_split_into_unlimited_single_ticker_windows": True,
-            "do_not_rerun_same_failed_probes_until_entitlement_changes": True,
+            "do_not_rerun_same_failed_probes": True,
+            "do_not_ask_new_agent_to_fix_coverage": True,
+            "do_not_auto_purchase": True,
+            "do_not_resume_old_214_weight_search": True,
+            "ten_year_formal_requirement_not_lowered": True,
+            "formal_data_phase": "paused_until_source_and_budget",
         },
         "full_backfill_started": False,
         "executed_backtests": 0,
@@ -247,9 +264,9 @@ def main() -> int:
     )
 
     md = [
-        "# 权限与长历史索引（终态 B）",
+        f"# 权限与长历史索引（账户范围 {ACCOUNT_SCOPE}）",
         "",
-        f"索引 head：`{payload['index_head']}`。映射版本 `{ACCESS_CLASS_VERSION}`。不倒写历史原始响应。本轮无新的供应商失败探针。",
+        f"索引 head：`{payload['index_head']}`。映射版本 `{ACCESS_CLASS_VERSION}`。账户范围 `{ACCOUNT_SCOPE}`（`{ACCOUNT_SCOPE_KIND}`，不是供应商错误码）。不倒写历史原始响应。本轮无新的供应商失败探针。",
         "",
         "## 各次运行（分别记账）",
         "",
@@ -311,17 +328,21 @@ def main() -> int:
         "",
         "## 结论",
         "",
-        "终态 **B**：部分样本已取得，剩余访问被供应商范围/配额限制。供应商答复：无。",
+        f"负责人已确认：本账户仅免费 Sample，未购买任何套餐。当前 Sharadar 能力标记为 **{ACCOUNT_SCOPE}**。这是账户范围标记，不是新的供应商错误码。",
         "",
-        "下一步由账户持有人用这些脱敏响应确认产品、paged/bulk、历史深度和退市覆盖。权限未变前不再重复同一批失败探针，不拆成无限单代码短窗绕过限制，不自动购买，不启动全量回填。",
+        "已记录的 403 / 空长历史 / bulk Forbidden 是免费 Sample 的范围外访问，不再当作已购权限异常排查，不再重复失败探针，也不再要求更换 agent 去补覆盖。",
         "",
-        "`full_backfill_started=false`，`executed_backtests=0`。",
+        "适配器与既有工程修复保留。不自动购买，不恢复旧 214 小池权重搜索，不降低十年以上正式验证要求。数据来源与预算确定后，再恢复正式数据阶段。",
+        "",
+        "先前终态 B（等账户持有人向供应商确认产品）已由负责人确认关闭。",
+        "",
+        "`full_backfill_started=false`，`executed_backtests=0`，`purchase_attempted=false`。",
         "",
     ]
     (PACK / "entitlement_and_history_index.md").write_text("\n".join(md), encoding="utf-8")
     print(json.dumps({
         "index_head": payload["index_head"],
-        "terminal": "B",
+        "terminal": ACCOUNT_SCOPE,
         "mapped_n": len(mapped),
         "out": [
             "research/option_pro_us_eod_v1/return_pack/sharadar_v3/entitlement_and_history_index.md",

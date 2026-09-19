@@ -11,12 +11,18 @@ from __future__ import annotations
 import io
 import json
 import zipfile
+from datetime import date
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from app.services.research_eod_v1.data.sharadar import (
     SharadarClient,
+    SharadarProvider,
+    account_scope_record,
+    classify_entitlement,
     explain_access_class,
+    formal_live_backfill_blocked,
+    full_download_allowed,
     redacted_vendor_error,
 )
 from app.services.research_eod_v1.data.sharadar_acceptance import reconcile_aligned_returns
@@ -25,6 +31,7 @@ from app.services.research_eod_v1.data.sharadar_bulk import ingest_bulk_archive,
 from app.services.research_eod_v1.data.sharadar_identity import action_value_evidence, classify_terminal
 from app.services.research_eod_v1.data.sharadar_pipeline import execute_data_gate
 from app.services.research_eod_v1.data.sharadar_schema import (
+    ACCOUNT_SCOPE,
     ACTION_VALUE_SEMANTICS_VERSION,
     ACTIONS_FIELDS,
     ENV_KEY_NAME,
@@ -534,6 +541,70 @@ def test_data_endpoint_json_400_is_bad_request_not_schema_format() -> None:
         query_format="json",
     )
     assert stocks_body["access_class"] == "bad_request"
+
+
+def test_sharadar_account_scope_is_free_sample_only_not_a_vendor_error(monkeypatch) -> None:
+    scope = account_scope_record()
+    assert scope["account_scope"] == ACCOUNT_SCOPE == "FREE_SAMPLE_ONLY"
+    assert scope["kind"] == "account_scope"
+    assert scope["not_a_vendor_error_code"] is True
+    assert scope["purchased_sku"] is False
+    assert scope["long_history_out_of_scope"] is True
+    assert scope["full_market_out_of_scope"] is True
+    assert scope["bulk_out_of_scope"] is True
+    assert scope["ten_year_formal_requirement_not_lowered"] is True
+    assert scope["formal_data_phase"] == "paused_until_source_and_budget"
+    assert scope["do_not_rerun_failed_coverage_probes"] is True
+    assert scope["do_not_auto_purchase"] is True
+    assert scope["do_not_resume_old_214_weight_search"] is True
+
+    ten = classify_entitlement(earliest=date(2016, 9, 2), bulk_years="10", verified_access=True)
+    assert ten["status"] == "HISTORY_10Y"
+    assert ten["account_scope"] == "FREE_SAMPLE_ONLY"
+    assert ten["kind"] == "account_scope"
+    assert ten["not_a_vendor_error_code"] is True
+
+    download = full_download_allowed(
+        True,
+        {},
+        {"status": "ACCESS_VERIFIED_RANGE_UNKNOWN"},
+        {"non_free_example": "READ_OK", "history_2010": "READ_OK"},
+    )
+    assert download["allowed"] is True
+    assert download["formal_data_phase_allowed"] is False
+    assert download["account_scope"] == "FREE_SAMPLE_ONLY"
+    assert download["account_scope_is_not_a_vendor_error_code"] is True
+    assert "account_scope:FREE_SAMPLE_ONLY" not in download["blockers"]
+
+    assert formal_live_backfill_blocked(None) is True
+    assert formal_live_backfill_blocked(SharadarClient(allow_network=False)) is True
+    injected = SharadarClient(allow_network=True, opener=lambda url, follow_redirects=False: (200, b"[]", url), sleep=lambda _s: None)
+    assert formal_live_backfill_blocked(injected) is False
+    fake = SharadarClient(allow_network=True, base_url="http://127.0.0.1:9", sleep=lambda _s: None)
+    assert formal_live_backfill_blocked(fake) is False
+
+    monkeypatch.setenv(ENV_KEY_NAME, SECRET)
+
+    def opener_ok(url: str, follow_redirects: bool = False):
+        return 200, json.dumps([_ticker_row("MSFT", "9")]).encode(), url.split("?")[0]
+
+    caps = SharadarProvider(
+        allow_network=True,
+        client=SharadarClient(allow_network=True, opener=opener_ok, sleep=lambda _s: None),
+    ).probe_capabilities()
+    assert caps.account_scope == "FREE_SAMPLE_ONLY"
+    assert caps.capability_level == "FREE_SAMPLE_ONLY"
+    assert caps.probe_status == "ACCESS_TESTED"
+    assert caps.daily_bars == "sample_only"
+    assert caps.corporate_actions == "sample_only"
+    assert caps.security_master == "sample_only"
+
+    tier = explain_access_class(403, "Exceeds free tier")
+    assert tier["access_class"] == "observed_access_or_quota_limit"
+    assert tier["access_class"] != "FREE_SAMPLE_ONLY"
+    unauthorized = explain_access_class(401, "Invalid API key")
+    assert unauthorized["access_class"] == "credential_invalid_or_unauthorized"
+    assert unauthorized["access_class"] != "FREE_SAMPLE_ONLY"
 
 
 def test_reconcile_names_massive_and_keeps_other_fields_unknown() -> None:
