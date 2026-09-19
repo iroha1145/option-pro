@@ -1,0 +1,28 @@
+{
+  "check_runs": [
+    {
+      "conclusion": "success",
+      "name": "test",
+      "url": "https://github.com/iroha1145/option-pro/actions/runs/35425631438/job/105850954364"
+    },
+    {
+      "conclusion": "success",
+      "name": "test",
+      "url": "https://github.com/iroha1145/option-pro/actions/runs/35425633627/job/105850960365"
+    }
+  ],
+  "push_run": "https://github.com/iroha1145/option-pro/actions/runs/35425631438",
+  "pull_request_run": "https://github.com/iroha1145/option-pro/actions/runs/35425633627",
+  "research_head": "9c9e7ca7e898ffa20698b5a096356962a46476d3",
+  "review_anchor": "c4d0902013a2fbc94e75f2a2188be46151c978aa",
+  "local_pytest": "4002 passed, 6 skipped",
+  "local_finish_gate_pytest": "46 passed",
+  "stamp_is_docs_only": true,
+  "terminal_status": "AUTH_REQUIRED",
+  "credential_present": false,
+  "live_sharadar_request_count": 0,
+  "raw_download_status": "AUTH_REQUIRED",
+  "stage_summary": "sharadar_v3/gate_stages.json",
+  "requirement_audit": "sharadar_v3/finish_gate_requirement_audit.md",
+  "pagination_scale": "sharadar_v3/pagination_scale.json"
+}

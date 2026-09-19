@@ -1,6 +1,8 @@
 # FINISH_GATE_AND_LIVE_PROBE 逐条审计
 
-审阅锚点：`c4d0902013a2fbc94e75f2a2188be46151c978aa`。分支 `cursor/sharadar-data-first-4939`，PR #176，不合并 #174/#176。
+审阅锚点：`c4d0902013a2fbc94e75f2a2188be46151c978aa`。实现 head：`9c9e7ca7e898ffa20698b5a096356962a46476d3`。分支 `cursor/sharadar-data-first-4939`，PR #176，不合并 #174/#176。
+
+当前 head CI 均为 success：push https://github.com/iroha1145/option-pro/actions/runs/35425631438 、PR https://github.com/iroha1145/option-pro/actions/runs/35425633627 。本地全量 pytest 4002 passed, 6 skipped。
 
 credential_present=false，live_sharadar_request_count=0。本轮未向官方 API 发任何请求，未回退 Yahoo/Massive。
 
