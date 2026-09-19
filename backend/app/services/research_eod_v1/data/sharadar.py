@@ -347,9 +347,11 @@ class SharadarClient:
         max_pages: int | None = None,
         store: Path | None = None,
         limit: int = DEFAULT_PAGE_LIMIT,
-        include_rows: bool = True,
+        include_rows: bool | None = None,
     ) -> dict[str, Any]:
         extra = dict(extra or {})
+        if include_rows is None:
+            include_rows = store is None
         signature = query_signature(table, extra, limit)
         memory_rows: list[dict[str, Any]] = []
         hashes: list[str] = []
@@ -540,11 +542,14 @@ class SharadarClient:
             return {"table": table, "status": "AUTH_REQUIRED", "years": years, "final_file_exists": dest.exists()}
         dest.parent.mkdir(parents=True, exist_ok=True)
         url = self.table_url(table, {"years": years})
+        tmp = dest.with_name(dest.name + ".partial")
         try:
-            code, body, final_url = self._request(url, follow_redirects=True)
+            code, final_url, digest, nbytes = self._stream_download(url, tmp, follow_redirects=True)
         except PermissionError:
+            tmp.unlink(missing_ok=True)
             return {"table": table, "status": "AUTH_REQUIRED", "years": years, "final_file_exists": dest.exists()}
         except Exception:
+            tmp.unlink(missing_ok=True)
             return {
                 "table": table,
                 "status": "NETWORK_UNAVAILABLE",
@@ -553,8 +558,10 @@ class SharadarClient:
                 "final_file_exists": dest.exists(),
             }
         if code in {401, 403}:
+            tmp.unlink(missing_ok=True)
             return {"table": table, "status": "AUTH_FAILED", "years": years, "url": redact_url(final_url), "final_file_exists": dest.exists()}
         if code < 200 or code >= 300:
+            tmp.unlink(missing_ok=True)
             return {
                 "table": table,
                 "status": "NETWORK_UNAVAILABLE",
@@ -563,8 +570,6 @@ class SharadarClient:
                 "url": redact_url(final_url),
                 "final_file_exists": dest.exists(),
             }
-        tmp = dest.with_name(dest.name + ".partial")
-        tmp.write_bytes(body)
         check = validate_bulk_archive(tmp)
         if not check["ok"]:
             tmp.unlink(missing_ok=True)
@@ -581,12 +586,75 @@ class SharadarClient:
             "table": table,
             "status": "READ_OK",
             "years": years,
-            "bytes": dest.stat().st_size,
-            "sha256": hashlib.sha256(dest.read_bytes()).hexdigest() if dest.stat().st_size < 8_000_000 else _sha256_stream(dest),
+            "bytes": nbytes,
+            "sha256": digest or _sha256_stream(dest),
             "path": str(dest),
             "url": redact_url(final_url),
             "final_file_exists": dest.exists(),
+            "streamed": True,
         }
+
+    def _stream_download(self, url: str, dest: Path, *, follow_redirects: bool) -> tuple[int, str, str, int]:
+        if not self.allow_network:
+            raise RuntimeError("NETWORK_DISABLED")
+        if not _api_key():
+            raise PermissionError("AUTH_REQUIRED")
+        signed = self._attach_key_if_official(url)
+        if self.opener is not None:
+            code, body, final_url = self.opener(signed, follow_redirects=follow_redirects)
+            self._record_request(signed, int(code))
+            if int(code) < 200 or int(code) >= 300:
+                return int(code), str(final_url), "", 0
+            digest = hashlib.sha256()
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            with dest.open("wb") as handle:
+                view = memoryview(body)
+                for start in range(0, len(body), 1024 * 1024):
+                    chunk = view[start:start + 1024 * 1024]
+                    handle.write(chunk)
+                    digest.update(chunk)
+            return int(code), str(final_url), digest.hexdigest(), len(body)
+        request = urllib.request.Request(signed, headers={"Accept": "application/zip,application/octet-stream,*/*"})
+        opener = urllib.request.build_opener(
+            urllib.request.HTTPRedirectHandler() if follow_redirects else _NoRedirect()
+        )
+        try:
+            with opener.open(request, timeout=60) as response:
+                code = int(response.status)
+                final_url = str(response.geturl())
+                self._record_request(signed, code)
+                if code < 200 or code >= 300:
+                    return code, final_url, "", 0
+                if official_https_origin(signed) and not official_https_origin(final_url):
+                    # Redirect already followed by urllib; key was only on the official request.
+                    pass
+                return code, final_url, *_write_stream(response, dest)
+        except urllib.error.HTTPError as exc:
+            location = exc.headers.get("Location") or ""
+            if exc.code in {301, 302, 303, 307, 308} and follow_redirects and location:
+                if official_https_origin(location):
+                    return self._stream_download(location, dest, follow_redirects=True)
+                return self._stream_download_unsigned(location, dest)
+            self._record_request(signed, exc.code, error="http_error")
+            return exc.code, redact_url(url), "", 0
+
+    def _stream_download_unsigned(self, url: str, dest: Path) -> tuple[int, str, str, int]:
+        request = urllib.request.Request(url, headers={"Accept": "application/zip,application/octet-stream,*/*"})
+        if self.opener is not None:
+            code, body, final_url = self.opener(url, follow_redirects=True)
+            self._record_request(url, int(code))
+            if int(code) < 200 or int(code) >= 300:
+                return int(code), str(final_url), "", 0
+            dest.write_bytes(body)
+            return int(code), str(final_url), hashlib.sha256(body).hexdigest(), len(body)
+        opener = urllib.request.build_opener(urllib.request.HTTPRedirectHandler())
+        with opener.open(request, timeout=60) as response:
+            code = int(response.status)
+            self._record_request(url, code)
+            if code < 200 or code >= 300:
+                return code, str(response.geturl()), "", 0
+            digest, nbytes = _write_stream(response, dest)
+            return code, str(response.geturl()), digest, nbytes
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -705,6 +773,21 @@ def _sha256_stream(path: Path) -> str:
                 break
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _write_stream(response: Any, dest: Path) -> tuple[str, int]:
+    digest = hashlib.sha256()
+    nbytes = 0
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    with dest.open("wb") as handle:
+        while True:
+            chunk = response.read(1024 * 1024)
+            if not chunk:
+                break
+            handle.write(chunk)
+            digest.update(chunk)
+            nbytes += len(chunk)
+    return digest.hexdigest(), nbytes
 
 
 class SharadarProvider:

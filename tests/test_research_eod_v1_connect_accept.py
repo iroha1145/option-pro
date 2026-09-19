@@ -13,6 +13,7 @@ from app.services.research_eod_v1.data.sharadar import (
     SharadarClient,
     SharadarProvider,
     inspect_table_body,
+    official_https_origin,
     run_sharadar_probe,
 )
 from app.services.research_eod_v1.data.sharadar_acceptance import reconcile_aligned_returns
@@ -166,6 +167,38 @@ def test_bulk_http_error_and_html_not_committed(tmp_path: Path, monkeypatch) -> 
     ok = zip_client.bulk_download("stocks", years="full", dest=dest)
     assert ok["status"] == "READ_OK"
     assert dest.exists() is True
+    assert ok["streamed"] is True
+
+    dest.unlink()
+
+    def opener_trunc(url: str, follow_redirects: bool = False):
+        return 200, b"PK\x03\x04truncated", url.split("?")[0]
+
+    trunc = SharadarClient(allow_network=True, opener=opener_trunc, sleep=lambda _s: None)
+    bad_zip = trunc.bulk_download("stocks", years="full", dest=dest)
+    assert bad_zip["status"] == "SCHEMA_MISMATCH"
+    assert dest.exists() is False
+
+    def opener_status_503(url: str, follow_redirects: bool = False):
+        return 503, b"Service Unavailable", url.split("?")[0]
+
+    status_client = SharadarClient(allow_network=True, opener=opener_status_503, sleep=lambda _s: None)
+    meta = status_client.bulk_status("stocks")
+    assert meta["status"] == "NETWORK_UNAVAILABLE"
+    assert meta.get("metadata") == {}
+
+
+def test_api_key_stays_on_official_https_origin_only(monkeypatch) -> None:
+    monkeypatch.setenv(ENV_KEY_NAME, "dummy-not-a-real-secret")
+    s3 = "https://s3.amazonaws.com/bucket/file.zip?X-Amz-Signature=abcd"
+    official = "https://api.sharadar.com/v1.0/data/stocks?format=json"
+    client = SharadarClient(allow_network=False)
+    assert client._attach_key_if_official(s3) == s3
+    assert "dummy-not-a-real-secret" not in client._attach_key_if_official(s3)
+    attached = client._attach_key_if_official(official)
+    assert "dummy-not-a-real-secret" in attached
+    assert official_https_origin(official) is True
+    assert official_https_origin(s3) is False
 
 
 def test_pagination_partial_and_resume(tmp_path: Path, monkeypatch) -> None:
