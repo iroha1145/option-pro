@@ -8,6 +8,7 @@ from dataclasses import asdict, dataclass
 from datetime import date
 from typing import Any, Mapping, Sequence
 
+from app.services.market_calendar import trading_sessions
 from app.services.research_eod_v1.constants import RESIDUAL_HISTORY_MIN
 from app.services.research_eod_v1.data.sharadar_identity import classify_terminal
 from app.services.research_eod_v1.data.sharadar_schema import (
@@ -15,6 +16,7 @@ from app.services.research_eod_v1.data.sharadar_schema import (
     FULL_HISTORY_START,
     HISTORY_10Y_START,
     HOLDOUT_START,
+    LABEL_HORIZONS,
 )
 from app.services.research_eod_v1.mathutil import finite
 
@@ -70,7 +72,22 @@ class ReconcileRow:
     reason_class: str
 
 
-def evaluate_delist_fixture(fixture: Mapping[str, Any], actions: Sequence[Mapping[str, Any]], last_trade: float | None) -> dict[str, Any]:
+def evaluate_delist_fixture(
+    fixture: Mapping[str, Any],
+    actions: Sequence[Mapping[str, Any]],
+    last_trade: float | None,
+    *,
+    identity: Mapping[str, Any] | None = None,
+    event_window: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    resolution = {
+        "security_id": None if identity is None else identity.get("security_id"),
+        "permaticker": None if identity is None else identity.get("permaticker"),
+        "resolved_by": "permaticker_and_event_year" if identity else "unresolved",
+        "event_window": dict(event_window or {}),
+        "fixture_year_used_to_resolve_identity": True,
+        "not_last_row_of_same_named_security": True,
+    }
     terminal = classify_terminal(actions, last_trade=last_trade)
     expected = fixture["expected_terminal"]
     if not actions:
@@ -79,6 +96,7 @@ def evaluate_delist_fixture(fixture: Mapping[str, Any], actions: Sequence[Mappin
             "live_status": "AUTH_REQUIRED",
             "verification": "fixture_list_only",
             "observed_terminal": terminal,
+            "identity_resolution": resolution,
         }
     if expected == "acquisition_or_unknown":
         matched = terminal["label"] in {"acquisition_cash", "TERMINAL_UNKNOWN"}
@@ -105,13 +123,20 @@ def evaluate_delist_fixture(fixture: Mapping[str, Any], actions: Sequence[Mappin
         "verification": "store_or_live_matched",
         "observed_terminal": terminal,
         "last_trade_is_not_liquidation_value": True,
+        "identity_resolution": resolution,
+        "economic_settlement_blocked_only": status in {"UNSUPPORTED", "INSUFFICIENT"},
     }
 
 
 def reconcile_aligned_returns(
     sharadar: Sequence[Mapping[str, Any]],
     yahoo: Sequence[Mapping[str, Any]],
+    *,
+    source_available: bool | None = None,
+    source: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """Each field carries its own valid denominator. A missing comparison source is not a pass."""
+
     yahoo_map = {(row["security_id"], row["session_date"]): row for row in yahoo}
     rows: list[ReconcileRow] = []
     return_coverage = 0
@@ -170,8 +195,9 @@ def reconcile_aligned_returns(
     n = len(rows)
     return_share = 0.0 if return_coverage == 0 else return_marked_n / return_coverage
     volume_share = 0.0 if volume_coverage == 0 else volume_marked_n / volume_coverage
-    if not sharadar and not yahoo:
-        status = "AUTH_REQUIRED"
+    available = bool(yahoo) if source_available is None else bool(source_available)
+    if not available:
+        status = "AUTH_REQUIRED" if not sharadar else "RECONCILIATION_MISSING"
     elif n == 0 or (return_coverage == 0 and volume_coverage == 0):
         status = "INSUFFICIENT"
     elif return_share > RECONCILE_FAIL_SHARE or volume_share > RECONCILE_FAIL_SHARE:
@@ -180,6 +206,9 @@ def reconcile_aligned_returns(
         status = "PASS"
     return {
         "aligned_n": n,
+        "comparison_source": dict(source or {"kind": "caller_supplied_rows", "available": available}),
+        "sharadar_n": len(sharadar),
+        "yahoo_n": len(yahoo),
         "return_coverage_n": return_coverage,
         "volume_coverage_n": volume_coverage,
         "marked_n": return_marked_n + volume_marked_n,
@@ -231,33 +260,52 @@ def volume_scope_audit(*, minute_entitlement: bool) -> dict[str, Any]:
     }
 
 
-def history_budget(*, earliest: date | None, entitlement_status: str, calendar_sessions: int | None) -> dict[str, Any]:
+def trading_calendar_sessions(start: date, end: date) -> list[date]:
+    """Independent exchange calendar. A missing vendor bar cannot shorten an H-day span."""
+
+    if start > end:
+        return []
+    return list(trading_sessions(start, min(end, ALLOWED_END)))
+
+
+def history_budget(
+    *,
+    earliest: date | None,
+    entitlement_status: str,
+    calendar: Sequence[date] | None = None,
+    security_sessions: Mapping[str, Sequence[date]] | None = None,
+) -> dict[str, Any]:
+    """Numeric first-score and label-maturity dates, or NOT_COMPUTED. No expression strings."""
+
     warmup = dict(FAMILY_WARMUP_SESSIONS)
     start = None
     if entitlement_status == "HISTORY_10Y":
         start = HISTORY_10Y_START
     elif entitlement_status in {"READ_OK", "full"}:
         start = FULL_HISTORY_START
-    if earliest is not None and start is not None:
-        start = max(start, earliest)
-    if earliest is None:
-        status = "AUTH_REQUIRED" if entitlement_status in {"AUTH_REQUIRED", ""} else "INSUFFICIENT"
-        evaluable = None
-        first_score_day = None
-    elif calendar_sessions is None:
-        status = "INSUFFICIENT"
-        evaluable = None
-        first_score_day = None
+    if earliest is not None:
+        start = earliest if start is None else max(start, earliest)
+    sessions = [item for item in (calendar or []) if item <= ALLOWED_END]
+    if start is not None:
+        sessions = [item for item in sessions if item >= start]
+    sessions.sort()
+    per_security = _per_security_budget(security_sessions or {}, warmup)
+    if earliest is None and not sessions:
+        status = "AUTH_REQUIRED" if entitlement_status in {"AUTH_REQUIRED", ""} else "NOT_COMPUTED"
+    elif not sessions:
+        status = "NOT_COMPUTED"
     else:
         status = "COMPUTED"
-        evaluable = {
-            family: max(0, int(calendar_sessions) - int(need))
-            for family, need in warmup.items()
+    families = _family_budget(sessions, warmup) if status == "COMPUTED" else {
+        family: {
+            "warmup_sessions": need,
+            "first_score_day": None,
+            "last_valid_signal_day": None,
+            "label_maturity": {str(h): {"mature_label_day": None, "evaluable_sessions": None} for h in LABEL_HORIZONS},
+            "evaluable_sessions_after_warmup": None,
         }
-        first_score_day = {
-            family: None
-            for family in warmup
-        }
+        for family, need in warmup.items()
+    }
     return {
         "status": status,
         "entitlement_status": entitlement_status,
@@ -266,11 +314,66 @@ def history_budget(*, earliest: date | None, entitlement_status: str, calendar_s
         "holdout_start": HOLDOUT_START.isoformat(),
         "warmup_sessions": warmup,
         "residual_history_min": RESIDUAL_HISTORY_MIN,
-        "first_score_day": first_score_day,
-        "evaluable_sessions_after_warmup": evaluable,
-        "mature_labels": "holding_horizon after first_score_day",
+        "label_horizons": list(LABEL_HORIZONS),
+        "families": families,
+        "first_score_day": {family: item["first_score_day"] for family, item in families.items()},
+        "evaluable_sessions_after_warmup": (
+            {family: item["evaluable_sessions_after_warmup"] for family, item in families.items()}
+            if status == "COMPUTED"
+            else None
+        ),
+        "calendar_sessions_in_window": len(sessions) if sessions else None,
+        "calendar_is_independent_of_price_rows": True,
+        "calendar_first": sessions[0].isoformat() if sessions else None,
+        "calendar_last": sessions[-1].isoformat() if sessions else None,
+        "per_security": per_security,
         "evaluable_years_not_claimed_from_2010_alone": True,
         "ten_year_raw_length_is_not_ten_year_evaluable": True,
-        "calendar_sessions_in_window": calendar_sessions,
         "young_names_have_independent_insufficient": True,
+    }
+
+
+def _family_budget(sessions: Sequence[date], warmup: Mapping[str, int]) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    total = len(sessions)
+    for family, need in warmup.items():
+        need = int(need)
+        first = sessions[need - 1] if total >= need else None
+        labels: dict[str, Any] = {}
+        for horizon in LABEL_HORIZONS:
+            index = need - 1 + horizon
+            mature = sessions[index] if total > index else None
+            labels[str(horizon)] = {
+                "mature_label_day": None if mature is None else mature.isoformat(),
+                "evaluable_sessions": max(0, total - need - horizon + 1),
+            }
+        out[family] = {
+            "warmup_sessions": need,
+            "first_score_day": None if first is None else first.isoformat(),
+            "last_valid_signal_day": sessions[-1].isoformat() if first is not None else None,
+            "label_maturity": labels,
+            "evaluable_sessions_after_warmup": max(0, total - need + 1) if first is not None else 0,
+        }
+    return out
+
+
+def _per_security_budget(
+    security_sessions: Mapping[str, Sequence[date]],
+    warmup: Mapping[str, int],
+) -> dict[str, Any]:
+    longest = max(int(value) for value in warmup.values()) if warmup else 0
+    evaluable: list[str] = []
+    insufficient: list[str] = []
+    for security_id, rows in security_sessions.items():
+        usable = sorted({item for item in rows if item <= ALLOWED_END})
+        if len(usable) >= longest:
+            evaluable.append(security_id)
+        else:
+            insufficient.append(security_id)
+    return {
+        "n": len(security_sessions),
+        "longest_feature_dependency_sessions": longest,
+        "evaluable_n": len(evaluable),
+        "insufficient_n": len(insufficient),
+        "insufficient_sample": sorted(insufficient)[:10],
     }

@@ -40,6 +40,8 @@ from app.services.research_eod_v1.data.sharadar_schema import (
     HISTORY_10Y_START,
     HOLDOUT_START,
     OFFICIAL_BASE_URL,
+    OFFICIAL_BULK_FILE_FIELDS,
+    OFFICIAL_BULK_FILE_LIST_FIELD,
     OFFICIAL_BULK_META_FIELDS,
     OFFICIAL_CHANNEL,
     OFFICIAL_HTTPS_HOST,
@@ -49,6 +51,7 @@ from app.services.research_eod_v1.data.sharadar_schema import (
     TABLES,
 )
 from app.services.research_eod_v1.data.sharadar_store import (
+    UniqueKeyIndex,
     adopt_orphan_page,
     advance_checkpoint,
     empty_checkpoint,
@@ -114,36 +117,91 @@ def redact_text(text: str) -> str:
     return blob
 
 
-def classify_entitlement(*, earliest: date | None, bulk_years: str | None) -> dict[str, Any]:
-    if bulk_years == "5" or (earliest is not None and earliest > HISTORY_10Y_START):
+def classify_entitlement(
+    *,
+    earliest: date | None,
+    bulk_years: str | None,
+    verified_access: bool | None = None,
+    credential: bool | None = None,
+) -> dict[str, Any]:
+    """Authorized range and observed coverage are separate columns.
+
+    ``bulk_years`` is the only entitlement signal. ``earliest`` is the earliest row
+    actually observed, which a late listing, a holiday, or a gap can move without
+    saying anything about the subscription.
+    """
+
+    observed = {
+        "earliest_observed_row": None if earliest is None else earliest.isoformat(),
+        "earliest_is_coverage_not_license": True,
+        "requested_from": FULL_HISTORY_START.isoformat(),
+        "requested_to": ALLOWED_END.isoformat(),
+    }
+    access = bool(earliest is not None) if verified_access is None else bool(verified_access)
+    has_key = (access or earliest is not None) if credential is None else bool(credential)
+    if not has_key:
         return {
-            "status": "ENTITLEMENT_SHORT_5Y",
-            "bulk_years": bulk_years,
-            "earliest": None if earliest is None else earliest.isoformat(),
+            "status": "AUTH_REQUIRED",
+            "verified_access": False,
+            "observed_coverage": observed,
+            "authorized_range_unknown": True,
+            "bulk_years": None,
+            "earliest": None,
             "research_start": None,
             "continue": False,
         }
-    if bulk_years == "10" or (earliest is not None and earliest > FULL_HISTORY_START):
+    if bulk_years == "5":
+        return {
+            "status": "ENTITLEMENT_SHORT_5Y",
+            "verified_access": access,
+            "observed_coverage": observed,
+            "authorized_range_unknown": False,
+            "bulk_years": bulk_years,
+            "earliest": observed["earliest_observed_row"],
+            "research_start": None,
+            "continue": False,
+        }
+    if bulk_years == "10":
         return {
             "status": "HISTORY_10Y",
-            "bulk_years": bulk_years or "10",
-            "earliest": None if earliest is None else earliest.isoformat(),
+            "verified_access": access,
+            "observed_coverage": observed,
+            "authorized_range_unknown": False,
+            "bulk_years": bulk_years,
+            "earliest": observed["earliest_observed_row"],
             "research_start": HISTORY_10Y_START.isoformat(),
             "continue": True,
         }
-    if earliest is None and bulk_years is None:
+    if bulk_years in {"full", "all"}:
         return {
-            "status": "AUTH_REQUIRED",
+            "status": "READ_OK",
+            "verified_access": access,
+            "observed_coverage": observed,
+            "authorized_range_unknown": False,
+            "bulk_years": bulk_years,
+            "earliest": observed["earliest_observed_row"],
+            "research_start": FULL_HISTORY_START.isoformat(),
+            "continue": True,
+        }
+    if earliest is None:
+        return {
+            "status": "COVERAGE_UNOBSERVED",
+            "verified_access": access,
+            "observed_coverage": observed,
+            "authorized_range_unknown": True,
             "bulk_years": None,
             "earliest": None,
             "research_start": None,
             "continue": False,
         }
     return {
-        "status": "READ_OK",
-        "bulk_years": bulk_years or "full",
-        "earliest": None if earliest is None else earliest.isoformat(),
-        "research_start": FULL_HISTORY_START.isoformat(),
+        "status": "ACCESS_VERIFIED_RANGE_UNKNOWN",
+        "verified_access": access,
+        "observed_coverage": observed,
+        "authorized_range_unknown": True,
+        "bulk_years": None,
+        "earliest": observed["earliest_observed_row"],
+        "research_start": observed["earliest_observed_row"],
         "continue": True,
     }
 
@@ -361,6 +419,7 @@ class SharadarClient:
         complete = False
         checkpoint = empty_checkpoint(table, extra=extra, limit=limit)
         skip = 0
+        key_index: UniqueKeyIndex | None = None
         if store is not None:
             existing = load_checkpoint(store, table)
             if existing is not None:
@@ -397,6 +456,9 @@ class SharadarClient:
                     }
                 checkpoint = adopt_orphan_page(store, table, dict(existing))
                 skip = int(checkpoint.get("next_skip") or 0)
+                key_index = UniqueKeyIndex(store, table)
+                if key_index.count != int(checkpoint.get("committed_row_count") or 0):
+                    key_index.rebuild(checkpoint.get("committed_pages") or [])
                 if checkpoint.get("complete"):
                     merged = merge_committed(store, table, checkpoint)
                     rows = read_jsonl(Path(merged["path"])) if include_rows and merged.get("path") else []
@@ -419,6 +481,10 @@ class SharadarClient:
                 skip = int(resume.get("next_skip") or resume.get("skip") or 0)
         elif isinstance(resume, Mapping):
             skip = int(resume.get("next_skip") or resume.get("skip") or 0)
+        if store is not None and key_index is None:
+            key_index = UniqueKeyIndex(store, table)
+            if key_index.count != int(checkpoint.get("committed_row_count") or 0):
+                key_index.rebuild(checkpoint.get("committed_pages") or [])
 
         while True:
             if max_pages is not None and pages >= max_pages:
@@ -455,6 +521,7 @@ class SharadarClient:
                     rows=page.rows,
                     checkpoint=checkpoint,
                     page_sha256=page.content_sha256,
+                    key_index=key_index,
                 )
                 after_ck = self.persistence_hooks.get("after_checkpoint_durable")
                 if after_ck is not None:
@@ -531,6 +598,8 @@ class SharadarClient:
             "status": metadata["status"],
             "url": redact_url(final_url),
             "metadata": metadata["metadata"],
+            "files": metadata["files"],
+            "shape": metadata["shape"],
             "history_years_from_filename": None,
             "filename_does_not_prove_entitlement": True,
         }
@@ -699,6 +768,8 @@ def inspect_table_body(body: bytes) -> dict[str, Any]:
     if isinstance(payload.get("rows"), list):
         rows = [item for item in payload["rows"] if isinstance(item, dict)]
         return {"kind": "rows" if rows else "empty", "rows": rows}
+    if isinstance(payload.get(OFFICIAL_BULK_FILE_LIST_FIELD), list):
+        return {"kind": "metadata", "rows": [], "metadata": payload}
     if any(key in payload for key in OFFICIAL_BULK_META_FIELDS):
         return {"kind": "metadata", "rows": [], "metadata": payload}
     return {"kind": "unknown", "rows": []}
@@ -718,14 +789,29 @@ def status_from_error_payload(payload: Any, http_status: int) -> str:
 
 
 def parse_bulk_metadata(payload: Any) -> dict[str, Any]:
+    """Read the shape each table actually returns: flat for stocks/funds, `files` for actions."""
+
     if not isinstance(payload, dict):
-        return {"status": "SCHEMA_MISMATCH", "metadata": {}}
+        return {"status": "SCHEMA_MISMATCH", "metadata": {}, "files": [], "shape": "unknown"}
     if "error" in payload or "errors" in payload:
-        return {"status": status_from_error_payload(payload, 200), "metadata": {}}
+        return {"status": status_from_error_payload(payload, 200), "metadata": {}, "files": [], "shape": "error"}
     metadata = {field: payload.get(field) for field in OFFICIAL_BULK_META_FIELDS}
-    if all(metadata[field] is None for field in OFFICIAL_BULK_META_FIELDS):
-        return {"status": "SCHEMA_MISMATCH", "metadata": metadata}
-    return {"status": "READ_OK", "metadata": metadata}
+    listed = payload.get(OFFICIAL_BULK_FILE_LIST_FIELD)
+    files: list[dict[str, Any]] = []
+    if isinstance(listed, list):
+        for item in listed:
+            if isinstance(item, dict):
+                files.append({field: item.get(field) for field in OFFICIAL_BULK_FILE_FIELDS})
+    flat_present = any(metadata[field] is not None for field in OFFICIAL_BULK_META_FIELDS)
+    if not flat_present and not files:
+        return {"status": "SCHEMA_MISMATCH", "metadata": metadata, "files": [], "shape": "unknown"}
+    if files and not flat_present:
+        shape = "file_list"
+    elif files:
+        shape = "flat_with_file_list"
+    else:
+        shape = "flat"
+    return {"status": "READ_OK", "metadata": metadata, "files": files, "shape": shape}
 
 
 def validate_bulk_archive(path: Path) -> dict[str, Any]:
@@ -1032,7 +1118,7 @@ def run_sharadar_probe(*, allow_network: bool = True, client: SharadarClient | N
             "complete": page.complete,
             "body_kind": page.body_kind,
         }
-    entitlement = classify_entitlement(earliest=None, bulk_years=None)
+    entitlement = classify_entitlement(earliest=None, bulk_years=None, verified_access=False, credential=present)
     samples = {
         "non_free_example": "AUTH_REQUIRED",
         "delisted": "AUTH_REQUIRED",
@@ -1043,6 +1129,8 @@ def run_sharadar_probe(*, allow_network: bool = True, client: SharadarClient | N
         "history_example_ticker": PROBE_SAMPLES["history_example"],
         "aapl_not_used_as_non_free_proof": True,
         "delisted_not_concluded_missing_history": True,
+        "row_counts": {},
+        "empty_read_is_not_sample_pass": True,
     }
     if present:
         non_free = adapter.fetch_page(
@@ -1065,20 +1153,29 @@ def run_sharadar_probe(*, allow_network: bool = True, client: SharadarClient | N
         )
         dates = sorted(str(row.get("date") or "")[:10] for row in history.rows if row.get("date"))
         earliest = date.fromisoformat(dates[0]) if dates else None
-        entitlement = classify_entitlement(earliest=earliest, bulk_years=None)
+        verified = any(page.status == "READ_OK" and page.rows for page in (non_free, history, funds, delisted_id, delisted_px))
+        entitlement = classify_entitlement(earliest=earliest, bulk_years=None, verified_access=verified, credential=True)
         tables["stocks"]["earliest_aapl"] = dates[0] if dates else None
-        samples["non_free_example"] = non_free.status
-        samples["history_2010"] = history.status
-        samples["funds_scope"] = funds.status
+        samples["non_free_example"] = _sample_status(non_free)
+        samples["history_2010"] = _sample_status(history)
+        samples["funds_scope"] = _sample_status(funds)
         samples["aapl_earliest"] = dates[0] if dates else None
+        samples["row_counts"] = {
+            "non_free_example": non_free.row_count,
+            "history_2010": history.row_count,
+            "funds_scope": funds.row_count,
+            "delisted_identity": delisted_id.row_count,
+            "delisted_prices": delisted_px.row_count,
+            "delisted_actions": delisted_actions.row_count,
+        }
         if delisted_id.rows or delisted_px.rows or delisted_actions.rows:
             samples["delisted"] = "READ_OK" if delisted_id.status == "READ_OK" or delisted_px.status == "READ_OK" else delisted_id.status
             samples["delisted_not_concluded_missing_history"] = False
         else:
             samples["delisted"] = "IDENTITY_UNRESOLVED" if delisted_id.status == "READ_OK" else delisted_id.status
             samples["delisted_not_concluded_missing_history"] = True
-        tables["stocks"]["non_free_status"] = non_free.status
-        tables["tickers"]["delisted_status"] = delisted_id.status
+        tables["stocks"]["non_free_status"] = _sample_status(non_free)
+        tables["tickers"]["delisted_status"] = _sample_status(delisted_id)
     report = {
         "credential_present": present,
         "runtime": runtime_probe_identity(),
@@ -1100,11 +1197,48 @@ def run_sharadar_probe(*, allow_network: bool = True, client: SharadarClient | N
         "volume_session_scope": "UNKNOWN",
         "secret_present_in_report": False,
         "terminal_status": _terminal_from_probe(present, tables, entitlement),
+        "full_download_allowed": full_download_allowed(present, tables, entitlement, samples),
     }
     blob = json.dumps(report, default=str)
     if _api_key() and _api_key() in blob:
         raise RuntimeError("secret_leaked_into_probe_report")
     return report
+
+
+def _sample_status(page: QueryPage) -> str:
+    """A READ_OK page with no rows is transport proof, never sample proof."""
+
+    if page.status == "READ_OK" and not page.rows:
+        return "EMPTY_NO_SAMPLE"
+    return page.status
+
+
+def full_download_allowed(
+    present: bool,
+    tables: Mapping[str, Any],
+    entitlement: Mapping[str, Any],
+    samples: Mapping[str, Any],
+) -> dict[str, Any]:
+    """A full download only starts after the probe shows real access, not just transport."""
+
+    blockers: list[str] = []
+    if not present:
+        blockers.append("credential_absent")
+    statuses = {str(item.get("status")) for item in tables.values()}
+    for blocking in ("AUTH_FAILED", "ENTITLEMENT_MISSING", "SCHEMA_MISMATCH", "VENDOR_ERROR", "NETWORK_UNAVAILABLE"):
+        if blocking in statuses:
+            blockers.append(f"table_status:{blocking}")
+    if entitlement.get("status") == "ENTITLEMENT_SHORT_5Y":
+        blockers.append("entitlement_short_5y")
+    if present and samples.get("non_free_example") != "READ_OK":
+        blockers.append(f"non_free_sample:{samples.get('non_free_example')}")
+    if present and samples.get("history_2010") != "READ_OK":
+        blockers.append(f"history_sample:{samples.get('history_2010')}")
+    return {
+        "allowed": not blockers,
+        "blockers": blockers,
+        "empty_page_is_not_sample_proof": True,
+    }
 
 
 def _terminal_from_probe(present: bool, tables: Mapping[str, Any], entitlement: Mapping[str, Any]) -> str:

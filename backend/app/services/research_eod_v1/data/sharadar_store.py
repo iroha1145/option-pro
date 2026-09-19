@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Iterator, Mapping, Sequence
 
 from app.services.research_eod_v1.data.contract import hash_payload
 from app.services.research_eod_v1.data.sharadar_schema import SOURCE_VERSION, TABLE_FIELDS
@@ -77,10 +77,11 @@ def write_jsonl_atomic(path: Path, rows: Sequence[Mapping[str, Any]]) -> str:
     return digest.hexdigest()
 
 
-def read_jsonl(path: Path) -> list[dict[str, Any]]:
+def iter_jsonl(path: Path) -> Iterator[dict[str, Any]]:
+    """Stream rows so a caller never has to hold a whole table in memory."""
+
     if not path.is_file():
-        return []
-    rows: list[dict[str, Any]] = []
+        return
     with path.open(encoding="utf-8") as handle:
         for line in handle:
             text = line.strip()
@@ -88,8 +89,22 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
                 continue
             item = json.loads(text)
             if isinstance(item, dict):
-                rows.append(item)
-    return rows
+                yield item
+
+
+def read_jsonl(path: Path) -> list[dict[str, Any]]:
+    return list(iter_jsonl(path))
+
+
+def count_jsonl(path: Path) -> int:
+    if not path.is_file():
+        return 0
+    total = 0
+    with path.open(encoding="utf-8") as handle:
+        for line in handle:
+            if line.strip():
+                total += 1
+    return total
 
 
 def sha256_file(path: Path) -> str:
@@ -177,6 +192,56 @@ def write_page_file(store: Path, table: str, skip: int, rows: Sequence[Mapping[s
     return {"skip": int(skip), "row_count": len(rows), "sha256": sha256_file(path), "path": str(path)}
 
 
+KEY_SEPARATOR = "\x1f"
+
+
+def key_index_path(store: Path, table: str) -> Path:
+    return store / "keys" / f"{table}.keys"
+
+
+class UniqueKeyIndex:
+    """Durable primary-key index so each page costs its own rows, not the whole prefix."""
+
+    def __init__(self, store: Path, table: str) -> None:
+        self.store = store
+        self.table = table
+        self.path = key_index_path(store, table)
+        self._keys: set[str] = set()
+        if self.path.is_file():
+            with self.path.open(encoding="utf-8") as handle:
+                for line in handle:
+                    text = line.rstrip("\n")
+                    if text:
+                        self._keys.add(text)
+
+    @property
+    def count(self) -> int:
+        return len(self._keys)
+
+    def add_rows(self, rows: Sequence[Mapping[str, Any]]) -> int:
+        fresh: list[str] = []
+        for row in rows:
+            token = KEY_SEPARATOR.join(row_primary_key(self.table, row))
+            if token in self._keys:
+                continue
+            self._keys.add(token)
+            fresh.append(token)
+        if fresh:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            with self.path.open("a", encoding="utf-8") as handle:
+                handle.write("".join(f"{token}\n" for token in fresh))
+        return len(fresh)
+
+    def rebuild(self, pages: Sequence[Mapping[str, Any]]) -> int:
+        self._keys = set()
+        for page in sorted(pages, key=lambda item: int(item["skip"])):
+            for row in iter_jsonl(page_path(self.store, self.table, int(page["skip"]))):
+                self._keys.add(KEY_SEPARATOR.join(row_primary_key(self.table, row)))
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        atomic_write_text(self.path, "".join(f"{token}\n" for token in sorted(self._keys)))
+        return len(self._keys)
+
+
 def advance_checkpoint(
     store: Path,
     table: str,
@@ -185,6 +250,7 @@ def advance_checkpoint(
     rows: Sequence[Mapping[str, Any]],
     checkpoint: dict[str, Any],
     page_sha256: str,
+    key_index: UniqueKeyIndex | None = None,
 ) -> dict[str, Any]:
     path = page_path(store, table, skip)
     file_sha = sha256_file(path) if path.is_file() else ""
@@ -194,11 +260,19 @@ def advance_checkpoint(
         "sha256": file_sha,
         "request_sha256": page_sha256,
     }
-    committed = [item for item in (checkpoint.get("committed_pages") or []) if int(item["skip"]) != int(skip)]
+    previous = list(checkpoint.get("committed_pages") or [])
+    replacing = any(int(item["skip"]) == int(skip) for item in previous)
+    committed = [item for item in previous if int(item["skip"]) != int(skip)]
     committed.append(page_meta)
     committed.sort(key=lambda item: int(item["skip"]))
     next_skip = int(skip) + len(rows)
-    unique_n = count_unique_rows(store, table, committed)
+    if key_index is None:
+        unique_n = count_unique_rows(store, table, committed)
+    elif replacing:
+        unique_n = key_index.rebuild(committed)
+    else:
+        key_index.add_rows(rows)
+        unique_n = key_index.count
     updated = dict(checkpoint)
     updated["committed_pages"] = committed
     updated["committed_row_count"] = unique_n
@@ -232,7 +306,7 @@ def commit_page(
 def count_unique_rows(store: Path, table: str, pages: Sequence[Mapping[str, Any]]) -> int:
     seen: set[tuple[str, ...]] = set()
     for page in sorted(pages, key=lambda item: int(item["skip"])):
-        for row in read_jsonl(page_path(store, table, int(page["skip"]))):
+        for row in iter_jsonl(page_path(store, table, int(page["skip"]))):
             seen.add(row_primary_key(table, row))
     return len(seen)
 
@@ -246,7 +320,7 @@ def merge_committed(store: Path, table: str, checkpoint: Mapping[str, Any]) -> d
     count = 0
     with tmp.open("w", encoding="utf-8") as handle:
         for page in sorted(checkpoint.get("committed_pages") or [], key=lambda item: int(item["skip"])):
-            for row in read_jsonl(page_path(store, table, int(page["skip"]))):
+            for row in iter_jsonl(page_path(store, table, int(page["skip"]))):
                 key = row_primary_key(table, row)
                 if key in seen:
                     continue
