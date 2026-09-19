@@ -417,7 +417,10 @@ def test_suffixed_reused_ticker_resolves_to_the_delisted_company(tmp_path: Path,
         ],
         "funds": [],
         "actions": [
-            _action_row("DELL1", "2013-10-29", "acquisitionby", "13.75", contraticker="MSD", contraname="Michael Dell / Silver Lake"),
+            # The 2013 take-private settled in cash, so the synthetic row carries
+            # the action code that states it. `acquisitionby` would resolve the
+            # same identity while leaving the number's unit unproven.
+            _action_row("DELL1", "2013-10-29", "acquisitioncash", "13.75", contraticker="MSD", contraname="Michael Dell / Silver Lake"),
             _action_row("DELL", "2024-01-02", "dividend", "0.445"),
         ],
     }
@@ -430,6 +433,8 @@ def test_suffixed_reused_ticker_resolves_to_the_delisted_company(tmp_path: Path,
     assert case["identity_resolution"]["event_window"]["candidate_tickers"] == ["DELL", "DELL1"]
     assert case["observed_terminal"]["label"] == "acquisition_cash"
     assert case["observed_terminal"]["value"] == 13.75
+    assert case["settlement_evidence_source"]["action"] == "acquisitioncash"
+    assert case["settlement_evidence_source"]["unit"] == "usd_per_share"
     assert case["live_status"] == "PASS"
     assert case["concrete_terminal"] is True
     assert gate["transform"]["skipped_n"] == 0

@@ -136,15 +136,6 @@ ACTION_DELISTED = frozenset({
     "voluntarydelisting",
     "deleted",
 })
-ACTION_ACQUISITION_CASH = frozenset({
-    "acquisitionby",
-    "acquisitioncash",
-    "acquisitionbycash",
-    "mergerfrom",
-    "merger",
-    "takeprivate",
-    "acquired",
-})
 ACTION_ACQUISITION_STOCK = frozenset({
     "acquisitionstock",
     "acquisitionbystock",
@@ -152,6 +143,49 @@ ACTION_ACQUISITION_STOCK = frozenset({
     "mergerstock",
 })
 ACTION_ACQUISITION_ELECT_CASH = frozenset({"acquisitionelectcash"})
+
+# Value-unit semantics. Sharadar documents `actions.value` as a bare number; the
+# unit it carries depends on the action. Only codes that name a cash
+# consideration are read as dollars per share of the settled security. An
+# acquisition or merger code that does not name one keeps its number with the
+# unit reported as unverified -- it is not assumed to be dollars and it is not
+# assumed to be an exchange ratio either.
+ACTION_VALUE_SEMANTICS_VERSION = "sharadar-action-value-units-v1"
+ACTION_CASH_CONSIDERATION = frozenset({
+    "acquisitioncash",
+    "acquisitionbycash",
+})
+# Terminates a listing, says nothing about what `value` measures.
+ACTION_ACQUISITION_UNIT_UNVERIFIED = frozenset({
+    "acquisitionby",
+    "acquired",
+    "merger",
+    "mergerfrom",
+    "takeprivate",
+})
+# One leg of an elected or contingent consideration. The absence of the other
+# leg in the store is not evidence that this leg settled the whole position.
+ACTION_PARTIAL_CONSIDERATION = frozenset({
+    "acquisitionelectcash",
+    "acquisitionelectstock",
+    "cvr",
+    "contingentvaluerights",
+    "contingentconsideration",
+})
+ACTION_ACQUISITION_TERMINAL = (
+    ACTION_CASH_CONSIDERATION
+    | ACTION_ACQUISITION_UNIT_UNVERIFIED
+    | ACTION_ACQUISITION_STOCK
+    | ACTION_PARTIAL_CONSIDERATION
+)
+ACTION_VALUE_UNITS: dict[str, str] = {
+    **{code: "usd_per_share" for code in ACTION_CASH_CONSIDERATION},
+    **{code: "unverified" for code in ACTION_ACQUISITION_UNIT_UNVERIFIED},
+    **{code: "unverified" for code in ACTION_ACQUISITION_STOCK},
+    **{code: "unverified" for code in ACTION_PARTIAL_CONSIDERATION},
+}
+UNIT_UNVERIFIED = "unverified"
+UNIT_USD_PER_SHARE = "usd_per_share"
 
 
 def download_request_plan(

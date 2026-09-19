@@ -46,10 +46,13 @@ from app.services.research_eod_v1.data.sharadar_identity import (
 )
 from app.services.research_eod_v1.data.sharadar_reconcile_source import load_reconcile_rows
 from app.services.research_eod_v1.data.sharadar_schema import (
-    ACTION_ACQUISITION_CASH,
     ACTION_ACQUISITION_STOCK,
+    ACTION_ACQUISITION_UNIT_UNVERIFIED,
     ACTION_BANKRUPTCY,
+    ACTION_CASH_CONSIDERATION,
     ACTION_DELISTED,
+    ACTION_PARTIAL_CONSIDERATION,
+    ACTION_VALUE_SEMANTICS_VERSION,
     ALLOWED_END,
     COMPLETENESS_SAMPLE_DATES,
     DATE_BOUND_TABLES,
@@ -1058,9 +1061,13 @@ def execute_data_gate(
             "assumed_by_terminal_classifier": {
                 "bankruptcy": sorted(ACTION_BANKRUPTCY),
                 "delisted": sorted(ACTION_DELISTED),
-                "acquisition_cash": sorted(ACTION_ACQUISITION_CASH),
+                "cash_consideration_usd_per_share": sorted(ACTION_CASH_CONSIDERATION),
+                "acquisition_value_unit_unverified": sorted(ACTION_ACQUISITION_UNIT_UNVERIFIED),
                 "acquisition_stock": sorted(ACTION_ACQUISITION_STOCK),
+                "partial_or_contingent_consideration": sorted(ACTION_PARTIAL_CONSIDERATION),
             },
+            "value_semantics_version": ACTION_VALUE_SEMANTICS_VERSION,
+            "numeric_value_without_a_documented_unit_is_not_cash": True,
             "vocabulary_is_assumed_until_observed": True,
         },
         "event_invariants": {

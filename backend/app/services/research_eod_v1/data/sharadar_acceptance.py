@@ -13,6 +13,7 @@ from app.services.market_calendar import trading_sessions
 from app.services.research_eod_v1.constants import RESIDUAL_HISTORY_MIN
 from app.services.research_eod_v1.data.sharadar_identity import classify_terminal
 from app.services.research_eod_v1.data.sharadar_schema import (
+    ACTION_VALUE_SEMANTICS_VERSION,
     ALLOWED_END,
     FULL_HISTORY_START,
     HISTORY_10Y_START,
@@ -22,6 +23,7 @@ from app.services.research_eod_v1.data.sharadar_schema import (
     RECONCILE_MIN_SECURITIES,
     TERMINAL_ACQUISITION_CASH,
     TERMINAL_BANKRUPTCY,
+    UNIT_USD_PER_SHARE,
 )
 from app.services.research_eod_v1.mathutil import finite
 
@@ -72,8 +74,11 @@ SETTLEMENT_EVIDENCE_REASONS = frozenset({"actions.cash_consideration"})
 # v1 counted a bankruptcy priced off the last quote as a settled terminal, which
 # let an observation stand in for an exit price. v2 keeps that row as a
 # determinate label for the identity layer and requires action-borne evidence
-# before the economic layer opens. The identity threshold itself is unchanged.
-DELIST_RULE_VERSION = "delist-terminal-rule-v2"
+# before the economic layer opens. v3 stops reading the number on a generic
+# merger or acquisition row as dollars: the code has to name a cash
+# consideration and the unit has to be one the vendor documents. The identity
+# threshold itself is unchanged across all three.
+DELIST_RULE_VERSION = "delist-terminal-rule-v3"
 
 
 @dataclass(frozen=True)
@@ -104,8 +109,17 @@ def evaluate_delist_fixture(
         "fixture_year_used_to_resolve_identity": True,
         "not_last_row_of_same_named_security": True,
     }
-    terminal = classify_terminal(actions, last_trade=last_trade)
-    settled = str(terminal.get("reason")) in SETTLEMENT_EVIDENCE_REASONS
+    terminal = classify_terminal(actions, last_trade=last_trade, security=identity)
+    # The reason string is a label this module produced, not evidence from the
+    # vendor. The gate opens on the action row behind it: a code that names cash,
+    # a unit the vendor documents, and the security that was settled.
+    consideration = terminal.get("cash_consideration")
+    settled = (
+        isinstance(consideration, Mapping)
+        and bool(consideration.get("accepted_as_cash_consideration"))
+        and str(consideration.get("unit")) == UNIT_USD_PER_SHARE
+        and str(terminal.get("reason")) in SETTLEMENT_EVIDENCE_REASONS
+    )
     determinate = terminal["label"] in CONCRETE_TERMINALS and terminal.get("value") is not None
     concrete = determinate and settled
     expected = fixture["expected_terminal"]
@@ -120,6 +134,9 @@ def evaluate_delist_fixture(
             "determinate_terminal": False,
             "concrete_terminal": False,
             "settlement_evidence": None,
+            "settlement_evidence_source": None,
+            "unpriced_actions": list(terminal.get("unpriced_actions") or []),
+            "value_semantics_version": ACTION_VALUE_SEMANTICS_VERSION,
             "economic_settlement_blocked_only": True,
             "rule_version": DELIST_RULE_VERSION,
         }
@@ -150,6 +167,12 @@ def evaluate_delist_fixture(
         "last_trade_is_not_liquidation_value": True,
         "observed_last_quote": last_trade,
         "settlement_evidence": str(terminal.get("reason")) if settled else None,
+        # The action row the gate was opened on, traceable back to the vendor.
+        "settlement_evidence_source": dict(consideration) if settled else None,
+        # Acquisition-family rows whose number has no established unit. The
+        # values are kept as observed and read as neither dollars nor a ratio.
+        "unpriced_actions": list(terminal.get("unpriced_actions") or []),
+        "value_semantics_version": ACTION_VALUE_SEMANTICS_VERSION,
         "identity_resolution": resolution,
         "identity_resolved": identity is not None,
         # Determinate = the label is resolved. Concrete = a settlement carries it.

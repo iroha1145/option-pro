@@ -8,11 +8,13 @@ from datetime import date
 from typing import Any, Iterable, Mapping, Sequence
 
 from app.services.research_eod_v1.data.sharadar_schema import (
-    ACTION_ACQUISITION_CASH,
-    ACTION_ACQUISITION_ELECT_CASH,
     ACTION_ACQUISITION_STOCK,
+    ACTION_ACQUISITION_TERMINAL,
     ACTION_BANKRUPTCY,
     ACTION_DELISTED,
+    ACTION_PARTIAL_CONSIDERATION,
+    ACTION_VALUE_SEMANTICS_VERSION,
+    ACTION_VALUE_UNITS,
     ADV20_MAX_GAP_DAYS,
     CLASSIFICATION_CURRENT,
     CLOSEUNADJ_MIN,
@@ -24,6 +26,8 @@ from app.services.research_eod_v1.data.sharadar_schema import (
     TERMINAL_BANKRUPTCY,
     TERMINAL_UNKNOWN,
     UNADJ_ADV20_MIN,
+    UNIT_USD_PER_SHARE,
+    UNIT_UNVERIFIED,
     VENUE_HISTORY_UNVERIFIED,
     VENUE_OK,
 )
@@ -359,7 +363,7 @@ def venue_unverified_report(rows: Iterable[DailyPoolRow], *, signal_ids: set[str
     }
 
 
-def _cash_value(row: Mapping[str, Any]) -> float | None:
+def _numeric_value(row: Mapping[str, Any]) -> float | None:
     raw = row.get("value")
     if raw in (None, ""):
         return None
@@ -370,19 +374,86 @@ def _cash_value(row: Mapping[str, Any]) -> float | None:
     return number if number > 0 else None
 
 
-def classify_terminal(actions: Sequence[Mapping[str, Any]], *, last_trade: float | None = None) -> dict[str, Any]:
+def _share_basis(row: Mapping[str, Any], security: Mapping[str, Any] | None) -> str:
+    """Whether the action row is carried by the security being settled."""
+
+    row_ticker = str(row.get("ticker") or "").strip().upper()
+    if security is None:
+        # The caller scoped the rows to one security; a contradiction is all we
+        # can look for here, and there is none to look at.
+        return "caller_scoped"
+    wanted = {
+        str(security.get(key) or "").strip().upper()
+        for key in ("ticker", "ticker_as_stored", "ticker_base")
+        if security.get(key)
+    }
+    if not row_ticker or not wanted:
+        return "unverified"
+    return "matched" if row_ticker in wanted else "mismatched"
+
+
+def action_value_evidence(row: Mapping[str, Any], *, security: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """What the vendor's number on this action row can and cannot be read as.
+
+    The record traces back to the original action and names the mapping version
+    that decided the unit, so a later correction to the vocabulary is visible
+    rather than silently rewriting old conclusions.
+    """
+
+    action = str(row.get("action") or "").strip().lower()
+    unit = ACTION_VALUE_UNITS.get(action, UNIT_UNVERIFIED)
+    basis = _share_basis(row, security)
+    value = _numeric_value(row)
+    if action in ACTION_PARTIAL_CONSIDERATION:
+        rejected = "election_or_contingent_leg_is_not_the_whole_consideration"
+    elif unit != UNIT_USD_PER_SHARE:
+        rejected = "value_unit_not_documented_for_this_action"
+    elif value is None:
+        rejected = "no_positive_finite_value"
+    elif basis == "mismatched":
+        rejected = "action_row_belongs_to_another_security"
+    else:
+        rejected = None
+    return {
+        "action": action,
+        "date": row.get("date"),
+        "ticker": row.get("ticker"),
+        "contraticker": row.get("contraticker"),
+        "raw_value": row.get("value"),
+        "value": value,
+        "unit": unit,
+        "unit_source": "action_code_names_cash_consideration" if unit == UNIT_USD_PER_SHARE else "action_code_does_not_state_a_unit",
+        "share_basis": basis,
+        "semantics_version": ACTION_VALUE_SEMANTICS_VERSION,
+        "accepted_as_cash_consideration": rejected is None,
+        "rejected_reason": rejected,
+        "not_assumed_usd": unit != UNIT_USD_PER_SHARE,
+        "not_assumed_exchange_ratio": True,
+    }
+
+
+def classify_terminal(
+    actions: Sequence[Mapping[str, Any]],
+    *,
+    last_trade: float | None = None,
+    security: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     """Terminal label for a holding window that ends in a delisting.
 
     Bankruptcy / liquidation -> last observed trade. Cash acquisition -> the cash
-    consideration carried on the action row. Anything else -> TERMINAL_UNKNOWN
-    (never zero). The action strings seen are returned as evidence.
+    consideration carried on an action whose code names cash, in a unit the
+    vendor documents, on the security being settled. Anything else ->
+    TERMINAL_UNKNOWN (never zero, never a number borrowed from an action whose
+    unit nobody established). The action strings seen are returned as evidence.
     """
 
     rows = list(actions)
-    cash_values: list[float] = []
+    cash: list[dict[str, Any]] = []
+    unpriced: list[dict[str, Any]] = []
     bankruptcy = False
     acquisition = False
     stock_deal = False
+    incomplete_leg = False
     seen: list[str] = []
     for row in rows:
         action = str(row.get("action") or "").strip().lower()
@@ -392,29 +463,72 @@ def classify_terminal(actions: Sequence[Mapping[str, Any]], *, last_trade: float
         if action in ACTION_BANKRUPTCY or (action in ACTION_DELISTED and _BANKRUPTCY_RE.search(blob)):
             bankruptcy = True
             continue
-        if action in ACTION_ACQUISITION_STOCK:
-            acquisition = True
-            stock_deal = True
+        acquisition_like = (
+            action in ACTION_ACQUISITION_TERMINAL
+            or action.startswith("acquisition")
+            or action.startswith("merger")
+        )
+        if not acquisition_like:
             continue
-        if action in ACTION_ACQUISITION_CASH or action in ACTION_ACQUISITION_ELECT_CASH or action.startswith("acquisition") or action.startswith("merger"):
-            acquisition = True
-            value = _cash_value(row)
-            if value is not None and not stock_deal:
-                cash_values.append(value)
+        acquisition = True
+        if action in ACTION_ACQUISITION_STOCK:
+            stock_deal = True
+        if action in ACTION_PARTIAL_CONSIDERATION:
+            incomplete_leg = True
+        evidence = action_value_evidence(row, security=security)
+        (cash if evidence["accepted_as_cash_consideration"] else unpriced).append(evidence)
     if bankruptcy:
         if last_trade is None:
-            return {"label": TERMINAL_UNKNOWN, "reason": "bankruptcy_without_last_trade", "value": None, "actions_seen": seen}
-        return {"label": TERMINAL_BANKRUPTCY, "reason": "last_trade", "value": last_trade, "actions_seen": seen}
+            return _terminal(TERMINAL_UNKNOWN, "bankruptcy_without_last_trade", None, seen, unpriced)
+        return _terminal(
+            TERMINAL_BANKRUPTCY,
+            "last_trade",
+            last_trade,
+            seen,
+            unpriced,
+            unit="usd_per_share_observed_quote",
+        )
     if acquisition:
-        if cash_values and not stock_deal:
-            return {"label": TERMINAL_ACQUISITION_CASH, "reason": "actions.cash_consideration", "value": cash_values[-1], "actions_seen": seen}
-        return {
-            "label": TERMINAL_UNKNOWN,
-            "reason": "acquisition_stock_or_mixed" if stock_deal else "acquisition_without_cash",
-            "value": None,
-            "actions_seen": seen,
-        }
-    return {"label": TERMINAL_UNKNOWN, "reason": "no_settlement_action", "value": None, "actions_seen": seen}
+        if cash and not stock_deal and not incomplete_leg:
+            chosen = cash[-1]
+            payload = _terminal(TERMINAL_ACQUISITION_CASH, "actions.cash_consideration", chosen["value"], seen, unpriced)
+            payload["cash_consideration"] = chosen
+            payload["value_unit"] = chosen["unit"]
+            return payload
+        rejections = {item["rejected_reason"] for item in unpriced}
+        if stock_deal:
+            reason = "acquisition_stock_or_mixed"
+        elif incomplete_leg:
+            reason = "acquisition_consideration_incomplete"
+        elif "action_row_belongs_to_another_security" in rejections:
+            reason = "acquisition_action_on_another_security"
+        elif any(item["value"] is not None for item in unpriced):
+            reason = "acquisition_value_unit_unverified"
+        else:
+            reason = "acquisition_without_cash"
+        return _terminal(TERMINAL_UNKNOWN, reason, None, seen, unpriced)
+    return _terminal(TERMINAL_UNKNOWN, "no_settlement_action", None, seen, unpriced)
+
+
+def _terminal(
+    label: str,
+    reason: str,
+    value: float | None,
+    seen: Sequence[str],
+    unpriced: Sequence[Mapping[str, Any]],
+    *,
+    unit: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "label": label,
+        "reason": reason,
+        "value": value,
+        "actions_seen": list(seen),
+        "cash_consideration": None,
+        "value_unit": unit,
+        "unpriced_actions": [dict(item) for item in unpriced],
+        "value_semantics_version": ACTION_VALUE_SEMANTICS_VERSION,
+    }
 
 
 def issuer_dedup_keys(identities: Sequence[SharadarIdentity]) -> dict[str, list[str]]:
@@ -444,6 +558,7 @@ __all__ = [
     "DailyPoolRow",
     "IdentityFlags",
     "SharadarIdentity",
+    "action_value_evidence",
     "classify_terminal",
     "daily_pool_row",
     "etf_subasset_schema",

@@ -116,7 +116,12 @@ for fx in DELIST_FIXTURES:
     if fx["expected_terminal"] == "bankruptcy_last_trade":
         ACTIONS.append({"date": last, "action": "bankruptcyliquidation", "ticker": stored, "name": f"{tk} Corp", "value": "", "contraticker": "", "contraname": ""})
     else:
-        ACTIONS.append({"date": last, "action": "acquisitionby", "ticker": stored, "name": f"{tk} Corp", "value": round(last_close * 1.1, 2), "contraticker": "ACQ", "contraname": "Acquirer Inc"})
+        # `acquisitioncash` for the fixtures the list calls cash deals; the one
+        # `acquisition_or_unknown` fixture keeps `acquisitionby`, whose number
+        # the vendor never assigns a unit, so the offline chain also exercises
+        # the path where identity resolves and the economic gate stays shut.
+        action = "acquisitionby" if fx["expected_terminal"] == "acquisition_or_unknown" else "acquisitioncash"
+        ACTIONS.append({"date": last, "action": action, "ticker": stored, "name": f"{tk} Corp", "value": round(last_close * 1.1, 2), "contraticker": "ACQ", "contraname": "Acquirer Inc"})
 TICKERS.append(ticker_row(permaticker="200099", ticker="DELL", name="Dell Technologies", exchange="NYSE", isdelisted="N",
                           category="Domestic Common Stock", currency="USD", firstpricedate="2018-12-28",
                           lastpricedate="2024-06-28", scalemarketcap="6 - Mega", lastupdated="2024-06-28", relatedtickers="DELL1"))
