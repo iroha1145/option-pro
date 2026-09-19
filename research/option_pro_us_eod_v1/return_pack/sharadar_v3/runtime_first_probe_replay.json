@@ -1,0 +1,424 @@
+{
+  "reviewed_head": "50495405ce085e898bf260c784aff3da91bb5b5f",
+  "replay_head": "50495405ce085e898bf260c784aff3da91bb5b5f",
+  "generated_at": "2026-09-19T11:34:19.488227+00:00",
+  "scope": "shipped repository modules, real bulk ingest / store / classifier; no transcription",
+  "market_data_replayed": false,
+  "real_supplier_requests": 0,
+  "secret_used": false,
+  "cases": 18,
+  "satisfied": 18,
+  "unsatisfied": 0,
+  "previously_unsatisfied": [
+    "bulk_same_count_changed_merged_rejected",
+    "generic_merger_numeric_not_cash"
+  ],
+  "results": [
+    {
+      "name": "bulk_intact_control",
+      "contract_satisfied": true,
+      "observed": {
+        "status": "READ_OK",
+        "problems": [],
+        "expected_rows": 5,
+        "merged_rows": 5,
+        "key_index_rows": 5,
+        "committed_pages": 1,
+        "pages_verified": true,
+        "source_archive": "verified",
+        "repairable_from_pages": false
+      },
+      "expected": "READ_OK for intact source/page/merged/index"
+    },
+    {
+      "name": "bulk_missing_merged_detected",
+      "contract_satisfied": true,
+      "observed": {
+        "status": "PARTIAL",
+        "problems": [
+          "missing_merged_file"
+        ],
+        "expected_rows": 5,
+        "merged_rows": null,
+        "key_index_rows": 5,
+        "committed_pages": 1,
+        "pages_verified": true,
+        "source_archive": "verified",
+        "repairable_from_pages": true
+      },
+      "expected": "not READ_OK; repairable from intact pages"
+    },
+    {
+      "name": "bulk_changed_page_detected",
+      "contract_satisfied": true,
+      "observed": {
+        "status": "CORRUPT",
+        "problems": [
+          "hash_mismatch:0"
+        ],
+        "expected_rows": 5,
+        "merged_rows": 5,
+        "key_index_rows": 5,
+        "committed_pages": 1,
+        "pages_verified": false,
+        "source_archive": "verified",
+        "repairable_from_pages": false
+      },
+      "expected": "CORRUPT"
+    },
+    {
+      "name": "bulk_same_count_changed_merged_rejected",
+      "contract_satisfied": true,
+      "observed": {
+        "verification": {
+          "status": "CORRUPT",
+          "problems": [
+            "merged_content_mismatch"
+          ],
+          "expected_rows": 5,
+          "merged_rows": 5,
+          "key_index_rows": 5,
+          "committed_pages": 1,
+          "pages_verified": true,
+          "source_archive": "verified",
+          "repairable_from_pages": true
+        },
+        "source_page_close": "10.0",
+        "merged_consumer_close_before_reuse": "99.0",
+        "merged_consumer_close_after_reuse": "10.0",
+        "repair": {
+          "rebuilt_from": "committed_pages",
+          "key_index_rows": 5,
+          "merged_rows": 5,
+          "merged_content_rebound": true
+        }
+      },
+      "expected": "not READ_OK or rebuild verified merged content; row count alone insufficient"
+    },
+    {
+      "name": "bulk_merged_without_digest_not_self_certified",
+      "contract_satisfied": true,
+      "observed": {
+        "status": "PARTIAL",
+        "problems": [
+          "merged_content_unrecorded"
+        ],
+        "expected_rows": 5,
+        "merged_rows": 5,
+        "key_index_rows": 5,
+        "committed_pages": 1,
+        "pages_verified": true,
+        "source_archive": "verified",
+        "repairable_from_pages": true
+      },
+      "expected": "an artifact with no recorded digest is rebuilt, not trusted"
+    },
+    {
+      "name": "bulk_checkpoint_without_payload_rejected",
+      "contract_satisfied": true,
+      "observed": {
+        "status": "MISSING",
+        "problems": [
+          "missing_page:0",
+          "missing_merged_file",
+          "key_index_mismatch:0!=5"
+        ],
+        "expected_rows": 5,
+        "merged_rows": null,
+        "key_index_rows": 0,
+        "committed_pages": 1,
+        "pages_verified": false,
+        "source_archive": "recorded_but_absent",
+        "repairable_from_pages": false
+      },
+      "expected": "not READ_OK"
+    },
+    {
+      "name": "whitelist_all_pass",
+      "contract_satisfied": true,
+      "observed": {
+        "required": [
+          "AUTH",
+          "TABLE_ACCESS",
+          "DOWNLOAD",
+          "TRANSFORM",
+          "IDENTITY",
+          "RECONCILE",
+          "HISTORY"
+        ],
+        "optional": [
+          "VOLUME_SCOPE",
+          "EXECUTION"
+        ],
+        "accepted": true,
+        "observed_status": {
+          "AUTH": "PASS",
+          "TABLE_ACCESS": "PASS",
+          "DOWNLOAD": "PASS",
+          "TRANSFORM": "PASS",
+          "IDENTITY": "PASS",
+          "RECONCILE": "PASS",
+          "HISTORY": "PASS"
+        },
+        "not_pass": [],
+        "missing": [],
+        "failed": [],
+        "unknown": []
+      },
+      "expected": "accepted"
+    },
+    {
+      "name": "whitelist_rejects_unknown_or_missing",
+      "contract_satisfied": true,
+      "observed": {
+        "FAIL": false,
+        "SKIPPED": false,
+        "PENDING": false,
+        "whatever": false,
+        "pass": false,
+        "": false,
+        "None": false,
+        "missing_status": false,
+        "missing_stage": false
+      },
+      "expected": "all false"
+    },
+    {
+      "name": "event_after_last_quote_retained",
+      "contract_satisfied": true,
+      "observed": {
+        "quote": [
+          "2023-01-01",
+          "2023-06-02"
+        ],
+        "event": [
+          "2023-01-01",
+          "2024-06-28"
+        ]
+      },
+      "expected": "price end June2; June5 event permitted"
+    },
+    {
+      "name": "event_successor_and_holdout_bound",
+      "contract_satisfied": true,
+      "observed": [
+        "2023-01-01",
+        "2024-01-02"
+      ],
+      "expected": "end before successor, never use sealed 2025 event"
+    },
+    {
+      "name": "bankruptcy_quote_is_not_settlement",
+      "contract_satisfied": true,
+      "observed": {
+        "label": "bankruptcy_last_trade",
+        "reason": "last_trade",
+        "value": 7.0,
+        "actions_seen": [
+          "bankruptcy"
+        ],
+        "live_status": "PASS",
+        "observed_last_quote": 7.0,
+        "settlement_evidence": null,
+        "settlement_evidence_source": null,
+        "unpriced_actions": [],
+        "determinate_terminal": true,
+        "concrete_terminal": false,
+        "economic_settlement_blocked_only": true,
+        "rule_version": "delist-terminal-rule-v3"
+      },
+      "expected": "identity label permitted; economic gate blocked"
+    },
+    {
+      "name": "explicit_cash_control",
+      "contract_satisfied": true,
+      "observed": {
+        "label": "acquisition_cash",
+        "reason": "actions.cash_consideration",
+        "value": 12.0,
+        "actions_seen": [
+          "acquisitioncash"
+        ],
+        "live_status": "PASS",
+        "observed_last_quote": 11.5,
+        "settlement_evidence": "actions.cash_consideration",
+        "settlement_evidence_source": {
+          "action": "acquisitioncash",
+          "date": "2023-06-05",
+          "ticker": "EXAMPLE",
+          "contraticker": "",
+          "raw_value": "12.0",
+          "value": 12.0,
+          "unit": "usd_per_share",
+          "unit_source": "action_code_names_cash_consideration",
+          "share_basis": "matched",
+          "semantics_version": "sharadar-action-value-units-v1",
+          "accepted_as_cash_consideration": true,
+          "rejected_reason": null,
+          "not_assumed_usd": false,
+          "not_assumed_exchange_ratio": true
+        },
+        "unpriced_actions": [],
+        "determinate_terminal": true,
+        "concrete_terminal": true,
+        "economic_settlement_blocked_only": false,
+        "rule_version": "delist-terminal-rule-v3"
+      },
+      "expected": "explicit cash accepted"
+    },
+    {
+      "name": "mixed_consideration_blocked",
+      "contract_satisfied": true,
+      "observed": {
+        "label": "TERMINAL_UNKNOWN",
+        "reason": "acquisition_stock_or_mixed",
+        "value": null,
+        "actions_seen": [
+          "acquisitioncash",
+          "acquisitionstock"
+        ],
+        "live_status": "UNSUPPORTED",
+        "observed_last_quote": 11.5,
+        "settlement_evidence": null,
+        "settlement_evidence_source": null,
+        "unpriced_actions": [
+          {
+            "action": "acquisitionstock",
+            "date": "2023-06-05",
+            "ticker": "EXAMPLE",
+            "contraticker": "",
+            "raw_value": "0.4",
+            "value": 0.4,
+            "unit": "unverified",
+            "unit_source": "action_code_does_not_state_a_unit",
+            "share_basis": "matched",
+            "semantics_version": "sharadar-action-value-units-v1",
+            "accepted_as_cash_consideration": false,
+            "rejected_reason": "value_unit_not_documented_for_this_action",
+            "not_assumed_usd": true,
+            "not_assumed_exchange_ratio": true
+          }
+        ],
+        "determinate_terminal": false,
+        "concrete_terminal": false,
+        "economic_settlement_blocked_only": true,
+        "rule_version": "delist-terminal-rule-v3"
+      },
+      "expected": "mixed without complete valuation stays blocked"
+    },
+    {
+      "name": "generic_merger_numeric_not_cash",
+      "contract_satisfied": true,
+      "observed": {
+        "label": "TERMINAL_UNKNOWN",
+        "reason": "acquisition_value_unit_unverified",
+        "value": null,
+        "actions_seen": [
+          "merger"
+        ],
+        "live_status": "UNSUPPORTED",
+        "observed_last_quote": 11.5,
+        "settlement_evidence": null,
+        "settlement_evidence_source": null,
+        "unpriced_actions": [
+          {
+            "action": "merger",
+            "date": "2023-06-05",
+            "ticker": "EXAMPLE",
+            "contraticker": "",
+            "raw_value": "0.4",
+            "value": 0.4,
+            "unit": "unverified",
+            "unit_source": "action_code_does_not_state_a_unit",
+            "share_basis": "matched",
+            "semantics_version": "sharadar-action-value-units-v1",
+            "accepted_as_cash_consideration": false,
+            "rejected_reason": "value_unit_not_documented_for_this_action",
+            "not_assumed_usd": true,
+            "not_assumed_exchange_ratio": true
+          }
+        ],
+        "determinate_terminal": false,
+        "concrete_terminal": false,
+        "economic_settlement_blocked_only": true,
+        "rule_version": "delist-terminal-rule-v3"
+      },
+      "expected": "generic numeric merger has no cash-unit proof; must not release economic gate"
+    },
+    {
+      "name": "election_leg_is_not_complete_consideration",
+      "contract_satisfied": true,
+      "observed": {
+        "label": "TERMINAL_UNKNOWN",
+        "reason": "acquisition_consideration_incomplete",
+        "value": null,
+        "actions_seen": [
+          "acquisitionelectcash"
+        ],
+        "live_status": "UNSUPPORTED",
+        "observed_last_quote": 11.5,
+        "settlement_evidence": null,
+        "settlement_evidence_source": null,
+        "unpriced_actions": [
+          {
+            "action": "acquisitionelectcash",
+            "date": "2023-06-05",
+            "ticker": "EXAMPLE",
+            "contraticker": "",
+            "raw_value": "9.0",
+            "value": 9.0,
+            "unit": "unverified",
+            "unit_source": "action_code_does_not_state_a_unit",
+            "share_basis": "matched",
+            "semantics_version": "sharadar-action-value-units-v1",
+            "accepted_as_cash_consideration": false,
+            "rejected_reason": "election_or_contingent_leg_is_not_the_whole_consideration",
+            "not_assumed_usd": true,
+            "not_assumed_exchange_ratio": true
+          }
+        ],
+        "determinate_terminal": false,
+        "concrete_terminal": false,
+        "economic_settlement_blocked_only": true,
+        "rule_version": "delist-terminal-rule-v3"
+      },
+      "expected": "an election leg alone does not settle the position"
+    },
+    {
+      "name": "warmup_sparse_dates",
+      "contract_satisfied": true,
+      "observed": [
+        "2023-01-11",
+        true
+      ],
+      "expected": [
+        "2023-01-11",
+        true
+      ]
+    },
+    {
+      "name": "warmup_continuous_dates",
+      "contract_satisfied": true,
+      "observed": [
+        "2023-01-05",
+        true
+      ],
+      "expected": [
+        "2023-01-05",
+        true
+      ]
+    },
+    {
+      "name": "warmup_summary_without_dates",
+      "contract_satisfied": true,
+      "observed": [
+        null,
+        false
+      ],
+      "expected": [
+        null,
+        false
+      ]
+    }
+  ]
+}
