@@ -1,13 +1,13 @@
 {
   "review_head": "0424b41e0efab7b5502ba61293ab132c5c60d42b",
-  "replay_head": "4395a09fe5f0c79c23864a570c9e6908fbdb14f1",
-  "generated_at": "2026-09-19T12:37:30.642372+00:00",
+  "replay_head": "42be3ea02a45d84ea671c572cdc81140025dfd19",
+  "generated_at": "2026-09-19T16:14:49.006931+00:00",
   "test_type": "shipped repository modules; not transcribed excerpts",
   "complete_module_hash_verified": true,
   "network_requests": 0,
   "real_credentials_used": false,
-  "tests_n": 14,
-  "satisfied": 14,
+  "tests_n": 15,
+  "satisfied": 15,
   "not_satisfied": 0,
   "previously_unsatisfied": [
     "positive_infinity_must_be_rejected",
@@ -661,6 +661,29 @@
         "not_assumed_exchange_ratio": true
       },
       "expected": "not accepted unless a separate caller-scoped proof is supplied",
+      "satisfied": true
+    },
+    {
+      "name": "proof_for_different_security_must_not_authorize_target",
+      "scope": "shipped action_value_evidence; proof must name the settled security",
+      "observed": {
+        "action": "acquisitioncash",
+        "date": "2023-06-05",
+        "ticker": "",
+        "contraticker": "",
+        "raw_value": "12.0",
+        "value": 12.0,
+        "unit": "usd_per_share",
+        "unit_source": "action_code_names_cash_consideration",
+        "share_basis": "unverified",
+        "share_basis_proof": null,
+        "semantics_version": "sharadar-action-value-units-v1",
+        "accepted_as_cash_consideration": false,
+        "rejected_reason": "share_basis_proof_target_mismatch",
+        "not_assumed_usd": false,
+        "not_assumed_exchange_ratio": true
+      },
+      "expected": "not accepted when proof permaticker differs from security permaticker",
       "satisfied": true
     }
   ]
