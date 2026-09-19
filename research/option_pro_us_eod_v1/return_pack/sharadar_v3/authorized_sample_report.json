@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-19T12:37:30.744276+00:00",
-  "code_sha": "4395a09fe5f0c79c23864a570c9e6908fbdb14f1",
-  "credential_present": false,
+  "generated_at": "2026-09-19T13:04:54.580462+00:00",
+  "code_sha": "9421b1dad14f824d4b2601d4a7101833e144ee1d",
+  "credential_present": true,
   "source_channel_required": "api.sharadar.com",
   "official_https_host": "api.sharadar.com",
   "sample_window": {
@@ -15,46 +15,112 @@
   "yahoo_fallback": false,
   "factor_or_weight_search": false,
   "purchase_attempted": false,
-  "real_supplier_requests": 0,
+  "real_supplier_requests": 5,
   "mock_requests": 0,
   "cache_reads": 0,
   "tables": {
     "stocks": {
       "ticker": "MSFT",
-      "status": "AUTH_REQUIRED",
-      "non_empty_rows": 0
+      "status": "READ_OK",
+      "row_count": 5,
+      "non_empty": true,
+      "first_date": "2024-06-24",
+      "last_date": "2024-06-28",
+      "schema_ok": true,
+      "complete": false,
+      "body_kind": "rows",
+      "redacted_url_host_ok": true,
+      "empty_is_not_forged": true
     },
     "funds": {
       "ticker": "SPY",
-      "status": "AUTH_REQUIRED",
-      "non_empty_rows": 0
+      "status": "READ_OK",
+      "row_count": 5,
+      "non_empty": true,
+      "first_date": "2024-06-24",
+      "last_date": "2024-06-28",
+      "schema_ok": true,
+      "complete": false,
+      "body_kind": "rows",
+      "redacted_url_host_ok": true,
+      "empty_is_not_forged": true
     },
     "tickers": {
-      "tickers": [
-        "MSFT",
-        "SPY",
-        "BBBY"
-      ],
-      "status": "AUTH_REQUIRED",
-      "non_empty_rows": 0,
-      "date_params_sent": false
+      "date_params_sent": false,
+      "status": "READ_OK",
+      "row_count": 4,
+      "non_empty": true,
+      "first_date": null,
+      "last_date": null,
+      "schema_ok": true,
+      "complete": false,
+      "body_kind": "rows",
+      "redacted_url_host_ok": true,
+      "empty_is_not_forged": true
     },
     "actions": {
-      "window": {
-        "from": "2024-06-24",
-        "to": "2024-06-28"
-      },
-      "status": "AUTH_REQUIRED",
-      "non_empty_rows": 0,
-      "empty_may_be_legitimate": true
+      "status": "AUTH_FAILED",
+      "row_count": 0,
+      "non_empty": false,
+      "first_date": null,
+      "last_date": null,
+      "schema_ok": false,
+      "complete": false,
+      "body_kind": "auth",
+      "redacted_url_host_ok": true,
+      "empty_is_not_forged": true,
+      "empty_access_ok_is_not_nonempty_action_evidence": false
     },
     "historical_identity": {
       "ticker": "BBBY",
-      "status": "AUTH_REQUIRED",
+      "status": "READ_OK",
+      "row_count": 0,
+      "non_empty": false,
+      "first_date": null,
+      "last_date": null,
+      "schema_ok": true,
+      "complete": true,
+      "body_kind": "empty",
+      "redacted_url_host_ok": true,
+      "empty_is_not_forged": true,
+      "permaticker": null,
+      "isdelisted": null,
       "not_pretended_all_delists_passed": true
     }
   },
-  "artifacts": {},
-  "blocking_field_or_entitlement": "process environment has no nonempty SHARADAR_API_KEY; Runtime Secret must be injected at agent start. Real network tasks stopped.",
-  "terminal_status": "AUTH_REQUIRED"
+  "artifacts": {
+    "stocks": {
+      "path": "/home/ubuntu/optix-data/authorized_sharadar_samples/stocks_msft.jsonl",
+      "sha256": "a07a70982509ee6b056cf82765d9c41d6501b4dc2c0834f694b7d69fb378eef5",
+      "rows": 5,
+      "bytes": 981
+    },
+    "funds": {
+      "path": "/home/ubuntu/optix-data/authorized_sharadar_samples/funds_spy.jsonl",
+      "sha256": "4368d864dad21fbf49b5fde706603fceb1c1c2e80ee966a418c248dd3720a8dd",
+      "rows": 5,
+      "bytes": 979
+    },
+    "tickers": {
+      "path": "/home/ubuntu/optix-data/authorized_sharadar_samples/tickers.jsonl",
+      "sha256": "c2a3cbe18da6fa2f995fca39a053bd1bbc5cc828e24609ff3309587fef87cc02",
+      "rows": 4,
+      "bytes": 3285
+    },
+    "actions": {
+      "path": "/home/ubuntu/optix-data/authorized_sharadar_samples/actions.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "rows": 0,
+      "bytes": 0
+    },
+    "historical_identity": {
+      "path": "/home/ubuntu/optix-data/authorized_sharadar_samples/historical_identity_bbby.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "rows": 0,
+      "bytes": 0
+    }
+  },
+  "blocking_field_or_entitlement": null,
+  "terminal_status": "SAMPLE_STORED",
+  "source_channel_observed": "official_https_origin_api.sharadar.com"
 }
