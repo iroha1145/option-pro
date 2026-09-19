@@ -2,7 +2,7 @@
 
 审查锚点 `3de4bdf5`。本轮实现 head：见同目录 JSON 的 `code_sha`。密钥只记布尔，未打印值。未自动购买，未下载 bulk zip。
 
-官方文档：<https://sharadar.com/docs/actions>  
+官方文档：<https://sharadar.com/docs/actions>
 文档把 ACTIONS 列在 Fundamentals / Prices / Bundle 内。文档可读 ≠ 本账户已授权。
 
 ## 实际 HTTP（未把 401 与 403 混成“必需升级套餐”）
