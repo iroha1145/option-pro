@@ -1,7 +1,7 @@
 {
   "reviewed_head": "50495405ce085e898bf260c784aff3da91bb5b5f",
-  "replay_head": "50495405ce085e898bf260c784aff3da91bb5b5f",
-  "generated_at": "2026-09-19T11:34:19.488227+00:00",
+  "replay_head": "54f9e874989958dcf5fd13c4f60484a7cd4637e2",
+  "generated_at": "2026-09-19T11:49:25.463027+00:00",
   "scope": "shipped repository modules, real bulk ingest / store / classifier; no transcription",
   "market_data_replayed": false,
   "real_supplier_requests": 0,

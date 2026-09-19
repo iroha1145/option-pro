@@ -122,4 +122,13 @@
 | VOLUME_SCOPE | `UNSUPPORTED` | 会话口径未验证，未启动成交量实验 |
 | 其余 7 个必需层 | 离线链 `PASS` | 合成数据的链路验证，不替代真实供应商验收 |
 
+实现 head `54f9e874` 的 GitHub CI：
+
+| 事件 | 运行 | 结论 |
+| --- | --- | --- |
+| push | https://github.com/iroha1145/option-pro/actions/runs/35440601553 | **success**（每一步均 success，含 `Run Python tests`） |
+| pull_request | https://github.com/iroha1145/option-pro/actions/runs/35440604737 | failure，失败步骤为 `Capture Catalyst Desk and macro conditions visual evidence` |
+
+PR 事件失败与本轮改动无关：同一 SHA 的 push 运行里该步骤 success；本轮未改任何 frontend 文件；该步骤 73/75 视觉测试通过，失败的一条是等一级标题 15 秒超时，不是行为断言。Python 步骤在两次运行里都是 success。详情见 `algorithm_sharadar_runtime_first_ci.json`。
+
 停止条件：未合并、未切 main、未自动采购、未晋级、未新增算法或研究框架、留出区未解封。

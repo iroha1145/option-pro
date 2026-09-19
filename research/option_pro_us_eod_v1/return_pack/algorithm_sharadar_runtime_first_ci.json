@@ -1,0 +1,43 @@
+{
+  "generated_at": "2026-09-19T12:10:33.900553+00:00",
+  "implementation_head": "54f9e874989958dcf5fd13c4f60484a7cd4637e2",
+  "branch": "cursor/sharadar-data-first-4939",
+  "pr": 176,
+  "runs": [
+    {
+      "event": "push",
+      "run_id": 35440601553,
+      "url": "https://github.com/iroha1145/option-pro/actions/runs/35440601553",
+      "head_sha": "54f9e874989958dcf5fd13c4f60484a7cd4637e2",
+      "conclusion": "success",
+      "every_step": "success"
+    },
+    {
+      "event": "pull_request",
+      "run_id": 35440604737,
+      "url": "https://github.com/iroha1145/option-pro/actions/runs/35440604737",
+      "head_sha": "54f9e874989958dcf5fd13c4f60484a7cd4637e2",
+      "conclusion": "failure",
+      "failed_step": "Capture Catalyst Desk and macro conditions visual evidence",
+      "failed_test": "frontend-src/visual-tests/tabs-palette-glide.spec.mjs:119 command palette glide highlight",
+      "error": "TimeoutError: locator.waitFor: Timeout 15000ms exceeded waiting for getByRole('heading', {level: 1}).first()",
+      "python_steps": {
+        "Run Python tests": "success",
+        "Audit locked runtime dependencies": "success",
+        "Compile Python sources": "success"
+      },
+      "assessment": "flaky frontend Playwright test, unrelated to this PR",
+      "evidence": [
+        "the same step on the same SHA succeeded in push run 35440601553",
+        "this PR changes no frontend file; diff vs 50495405 touches only backend/app/services/research_eod_v1/data/sharadar*.py, tests/, research/option_pro_us_eod_v1/",
+        "73 of 75 visual tests passed; the one failure is a 15s page-load timeout, not an assertion about behaviour"
+      ]
+    }
+  ],
+  "local_full_suite": "4051 passed, 6 skipped (python -m pytest -q, the command CI runs)",
+  "prior_anchor_ci": {
+    "head": "50495405ce085e898bf260c784aff3da91bb5b5f",
+    "pull_request_run": "https://github.com/iroha1145/option-pro/actions/runs/35435462764",
+    "conclusion": "success"
+  }
+}
