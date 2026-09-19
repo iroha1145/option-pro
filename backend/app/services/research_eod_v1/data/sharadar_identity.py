@@ -32,6 +32,7 @@ from app.services.research_eod_v1.data.sharadar_schema import (
     VENUE_OK,
 )
 from app.services.research_eod_v1.data.sharadar_tracks import PriceTracks
+from app.services.research_eod_v1.mathutil import finite
 
 # Exact vendor categories that form the strategy pool. Preferred stock, warrants,
 # units, Canadian stock and every fund kind are outside by construction.
@@ -363,15 +364,23 @@ def venue_unverified_report(rows: Iterable[DailyPoolRow], *, signal_ids: set[str
     }
 
 
-def _numeric_value(row: Mapping[str, Any]) -> float | None:
+def _numeric_value(row: Mapping[str, Any]) -> dict[str, Any]:
+    """Parse the vendor number without promoting inf / overflow to cash.
+
+    Reuses the shared finite check. The original input is kept even when the
+    conversion is rejected, so a later reader can see ``inf`` / ``Infinity`` /
+    ``1e309`` rather than a silent ``None``.
+    """
+
     raw = row.get("value")
-    if raw in (None, ""):
-        return None
-    try:
-        number = float(raw)
-    except (TypeError, ValueError):
-        return None
-    return number if number > 0 else None
+    number = finite(raw)
+    if number is None or number <= 0:
+        return {
+            "value": None,
+            "raw_value": raw,
+            "rejected_reason": "no_positive_finite_value",
+        }
+    return {"value": number, "raw_value": raw, "rejected_reason": None}
 
 
 def _share_basis(row: Mapping[str, Any], security: Mapping[str, Any] | None) -> str:
@@ -392,26 +401,53 @@ def _share_basis(row: Mapping[str, Any], security: Mapping[str, Any] | None) -> 
     return "matched" if row_ticker in wanted else "mismatched"
 
 
-def action_value_evidence(row: Mapping[str, Any], *, security: Mapping[str, Any] | None = None) -> dict[str, Any]:
+def _auditable_share_basis_proof(proof: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    """Explicit permanent-identity proof. Absence of contradiction is not proof."""
+
+    if not isinstance(proof, Mapping):
+        return None
+    permaticker = str(proof.get("permaticker") or "").strip()
+    kind = str(proof.get("proof") or "").strip()
+    if not permaticker or kind not in {"verified_permaticker", "verified_permanent_identity"}:
+        return None
+    return {
+        "proof": kind,
+        "permaticker": permaticker,
+        "not_inferred_from_missing_contradiction": True,
+    }
+
+
+def action_value_evidence(
+    row: Mapping[str, Any],
+    *,
+    security: Mapping[str, Any] | None = None,
+    verified_share_basis_proof: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     """What the vendor's number on this action row can and cannot be read as.
 
     The record traces back to the original action and names the mapping version
     that decided the unit, so a later correction to the vocabulary is visible
-    rather than silently rewriting old conclusions.
+    rather than silently rewriting old conclusions. ``share_basis='unverified'``
+    is not cash evidence unless the caller supplies a separate, auditable
+    permanent-identity proof.
     """
 
     action = str(row.get("action") or "").strip().lower()
     unit = ACTION_VALUE_UNITS.get(action, UNIT_UNVERIFIED)
     basis = _share_basis(row, security)
-    value = _numeric_value(row)
+    parsed = _numeric_value(row)
+    value = parsed["value"]
+    proof = _auditable_share_basis_proof(verified_share_basis_proof)
     if action in ACTION_PARTIAL_CONSIDERATION:
         rejected = "election_or_contingent_leg_is_not_the_whole_consideration"
     elif unit != UNIT_USD_PER_SHARE:
         rejected = "value_unit_not_documented_for_this_action"
-    elif value is None:
-        rejected = "no_positive_finite_value"
+    elif parsed["rejected_reason"]:
+        rejected = parsed["rejected_reason"]
     elif basis == "mismatched":
         rejected = "action_row_belongs_to_another_security"
+    elif basis == "unverified" and proof is None:
+        rejected = "share_basis_unverified_without_caller_proof"
     else:
         rejected = None
     return {
@@ -419,11 +455,12 @@ def action_value_evidence(row: Mapping[str, Any], *, security: Mapping[str, Any]
         "date": row.get("date"),
         "ticker": row.get("ticker"),
         "contraticker": row.get("contraticker"),
-        "raw_value": row.get("value"),
+        "raw_value": parsed["raw_value"],
         "value": value,
         "unit": unit,
         "unit_source": "action_code_names_cash_consideration" if unit == UNIT_USD_PER_SHARE else "action_code_does_not_state_a_unit",
         "share_basis": basis,
+        "share_basis_proof": proof,
         "semantics_version": ACTION_VALUE_SEMANTICS_VERSION,
         "accepted_as_cash_consideration": rejected is None,
         "rejected_reason": rejected,
@@ -437,6 +474,7 @@ def classify_terminal(
     *,
     last_trade: float | None = None,
     security: Mapping[str, Any] | None = None,
+    verified_share_basis_proof: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Terminal label for a holding window that ends in a delisting.
 
@@ -475,7 +513,11 @@ def classify_terminal(
             stock_deal = True
         if action in ACTION_PARTIAL_CONSIDERATION:
             incomplete_leg = True
-        evidence = action_value_evidence(row, security=security)
+        evidence = action_value_evidence(
+            row,
+            security=security,
+            verified_share_basis_proof=verified_share_basis_proof,
+        )
         (cash if evidence["accepted_as_cash_consideration"] else unpriced).append(evidence)
     if bankruptcy:
         if last_trade is None:
@@ -502,6 +544,8 @@ def classify_terminal(
             reason = "acquisition_consideration_incomplete"
         elif "action_row_belongs_to_another_security" in rejections:
             reason = "acquisition_action_on_another_security"
+        elif "share_basis_unverified_without_caller_proof" in rejections:
+            reason = "acquisition_share_basis_unverified"
         elif any(item["value"] is not None for item in unpriced):
             reason = "acquisition_value_unit_unverified"
         else:

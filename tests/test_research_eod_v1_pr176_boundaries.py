@@ -313,6 +313,65 @@ def test_unknown_and_non_finite_values_follow_the_existing_contract() -> None:
     assert empty["reason"] == "acquisition_without_cash"
 
 
+def test_positive_infinity_and_overflow_are_rejected() -> None:
+    security = {"ticker": "SYNTH"}
+    for raw in ("inf", "Infinity", "1e309"):
+        evidence = action_value_evidence(
+            _action_row("SYNTH", "2023-06-05", "acquisitioncash", raw),
+            security=security,
+        )
+        assert evidence["raw_value"] == raw
+        assert evidence["value"] is None
+        assert evidence["accepted_as_cash_consideration"] is False
+        assert evidence["rejected_reason"] == "no_positive_finite_value"
+        assert evidence["share_basis"] == "matched"
+    terminal = classify_terminal(
+        [_action_row("SYNTH", "2023-06-05", "acquisitioncash", "inf")],
+        security=security,
+    )
+    assert terminal["label"] == "TERMINAL_UNKNOWN"
+    assert terminal["value"] is None
+    assert terminal["cash_consideration"] is None
+
+
+def test_unverified_share_basis_is_not_cash_evidence_without_proof() -> None:
+    row = _action_row("", "2023-06-05", "acquisitioncash", "12.0")
+    security = {"ticker": "SYNTH"}
+    evidence = action_value_evidence(row, security=security)
+    assert evidence["share_basis"] == "unverified"
+    assert evidence["value"] == 12.0
+    assert evidence["raw_value"] == "12.0"
+    assert evidence["accepted_as_cash_consideration"] is False
+    assert evidence["rejected_reason"] == "share_basis_unverified_without_caller_proof"
+    assert evidence["share_basis_proof"] is None
+
+    # "no contradiction found" is not a substitute for an explicit proof.
+    case = _case([row], fixture={**_FIXTURE, "ticker": "SYNTH"})
+    assert case["concrete_terminal"] is False
+    assert case["settlement_evidence"] is None
+    assert case["unpriced_actions"][0]["share_basis"] == "unverified"
+    assert case["observed_terminal"]["reason"] == "acquisition_share_basis_unverified"
+
+    proven = action_value_evidence(
+        row,
+        security=security,
+        verified_share_basis_proof={"proof": "verified_permaticker", "permaticker": "9001"},
+    )
+    assert proven["accepted_as_cash_consideration"] is True
+    assert proven["share_basis"] == "unverified"
+    assert proven["share_basis_proof"] == {
+        "proof": "verified_permaticker",
+        "permaticker": "9001",
+        "not_inferred_from_missing_contradiction": True,
+    }
+    rejected_empty_proof = action_value_evidence(
+        row,
+        security=security,
+        verified_share_basis_proof={"proof": "no_contradiction_found", "permaticker": "9001"},
+    )
+    assert rejected_empty_proof["accepted_as_cash_consideration"] is False
+
+
 def test_unit_unverified_merger_blocks_execution_without_blocking_the_raw_tape(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv(ENV_KEY_NAME, SECRET)
     tables = {

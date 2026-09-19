@@ -42,6 +42,7 @@ config/unmapped-env.json
 research/option_pro_us_eod_v1/data/local/
 research/option_pro_us_eod_v1/data/cache/
 research/option_pro_us_eod_v1/data/sharadar_raw/
+research/option_pro_us_eod_v1/data/authorized_samples/
 research/option_pro_us_eod_v1/return_pack/yahoo_current_universe/daily_bars.parquet
 research/option_pro_us_eod_v1/return_pack/measurement_factor_rows.jsonl
 research/option_pro_us_eod_v1/return_pack/measurement_continuous.checkpoint.json

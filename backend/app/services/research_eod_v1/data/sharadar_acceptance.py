@@ -99,6 +99,7 @@ def evaluate_delist_fixture(
     *,
     identity: Mapping[str, Any] | None = None,
     event_window: Mapping[str, Any] | None = None,
+    verified_share_basis_proof: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     resolution = {
         "security_id": None if identity is None else identity.get("security_id"),
@@ -109,7 +110,12 @@ def evaluate_delist_fixture(
         "fixture_year_used_to_resolve_identity": True,
         "not_last_row_of_same_named_security": True,
     }
-    terminal = classify_terminal(actions, last_trade=last_trade, security=identity)
+    terminal = classify_terminal(
+        actions,
+        last_trade=last_trade,
+        security=identity,
+        verified_share_basis_proof=verified_share_basis_proof,
+    )
     # The reason string is a label this module produced, not evidence from the
     # vendor. The gate opens on the action row behind it: a code that names cash,
     # a unit the vendor documents, and the security that was settled.
