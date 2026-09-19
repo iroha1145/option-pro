@@ -33,6 +33,12 @@ REQUIRED_PK_FIELDS = {
 }
 KEY_SEPARATOR = "\x1f"
 
+# Content chain over the merged file every consumer reads. The chain is folded
+# one line at a time, so an append costs one hash and a verification costs one
+# streaming pass -- the same pass a row count already needed. Row counts and
+# primary keys cannot see a value edited in place; this can.
+MERGED_DIGEST_VERSION = "merged-content-chain-v1"
+
 
 def query_signature(table: str, extra: Mapping[str, Any] | None, limit: int) -> str:
     payload = {
@@ -144,6 +150,68 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def merged_chain_seed(table: str) -> str:
+    return hashlib.sha256(f"{MERGED_DIGEST_VERSION}:{table}".encode("utf-8")).hexdigest()
+
+
+def merged_chain_step(state: str, line: str) -> str:
+    return hashlib.sha256(f"{state}:{line}".encode("utf-8")).hexdigest()
+
+
+def merged_content_digest(store: Path, table: str) -> dict[str, Any]:
+    """Fold the merged file as it sits on disk. Nothing is held beyond one line."""
+
+    path = merged_path(store, table)
+    if not path.is_file():
+        return {"version": MERGED_DIGEST_VERSION, "present": False, "rows": None, "chain_sha256": None}
+    state = merged_chain_seed(table)
+    rows = 0
+    with path.open(encoding="utf-8") as handle:
+        for line in handle:
+            text = line.rstrip("\n")
+            if not text.strip():
+                continue
+            state = merged_chain_step(state, text)
+            rows += 1
+    return {"version": MERGED_DIGEST_VERSION, "present": True, "rows": rows, "chain_sha256": state}
+
+
+def verify_merged_content(store: Path, table: str, checkpoint: Mapping[str, Any]) -> dict[str, Any]:
+    """Compare the merged file against the digest bound when it was written.
+
+    A store whose checkpoint carries no digest is not treated as correct: the
+    merged file cannot vouch for itself, so it has to be rebuilt from artifacts
+    that still verify before a digest is bound to it.
+    """
+
+    observed = merged_content_digest(store, table)
+    recorded = checkpoint.get("merged_content")
+    recorded_chain = None
+    recorded_version = None
+    if isinstance(recorded, Mapping):
+        recorded_chain = recorded.get("chain_sha256")
+        recorded_version = recorded.get("version")
+    if not observed["present"]:
+        status = "MISSING"
+    elif not recorded_chain:
+        status = "UNRECORDED"
+    elif recorded_version != MERGED_DIGEST_VERSION:
+        status = "UNRECORDED"
+    elif str(recorded_chain) != str(observed["chain_sha256"]):
+        status = "MISMATCH"
+    else:
+        status = "MATCH"
+    return {
+        "status": status,
+        "version": MERGED_DIGEST_VERSION,
+        "recorded_version": recorded_version,
+        "rows": observed["rows"],
+        "observed_chain_sha256": observed["chain_sha256"],
+        "recorded_chain_sha256": recorded_chain,
+        "row_count_alone_is_not_content": True,
+    }
+
+
 def empty_checkpoint(table: str, *, extra: Mapping[str, Any] | None, limit: int) -> dict[str, Any]:
     return {
         "table": table,
@@ -155,6 +223,7 @@ def empty_checkpoint(table: str, *, extra: Mapping[str, Any] | None, limit: int)
         "committed_pages": [],
         "committed_row_count": 0,
         "merged_row_count": 0,
+        "merged_content": None,
         "pk_missing_rows": 0,
         "session_row_count": 0,
         "next_skip": 0,
@@ -217,6 +286,7 @@ def adopt_orphan_page(store: Path, table: str, checkpoint: dict[str, Any]) -> di
     checkpoint["next_skip"] = skip + len(rows)
     # The merged file and key index no longer match the page list; force a rebuild.
     checkpoint["merged_row_count"] = -1
+    checkpoint["merged_content"] = None
     save_checkpoint(store, checkpoint)
     return checkpoint
 
@@ -320,18 +390,42 @@ class UniqueKeyIndex:
             pass
 
 
-def append_merged(store: Path, table: str, rows: Sequence[Mapping[str, Any]]) -> int:
-    """Append already-deduplicated rows to the merged table file."""
+def append_merged(store: Path, table: str, rows: Sequence[Mapping[str, Any]], *, chain_state: str) -> dict[str, Any]:
+    """Append already-deduplicated rows and carry the content chain forward."""
 
+    state = chain_state
     if not rows:
-        return 0
+        return {"appended": 0, "chain_sha256": state}
     dest = merged_path(store, table)
     dest.parent.mkdir(parents=True, exist_ok=True)
     with dest.open("a", encoding="utf-8") as handle:
         for row in rows:
-            handle.write(json.dumps(row, default=str) + "\n")
+            line = json.dumps(row, default=str)
+            handle.write(line + "\n")
+            state = merged_chain_step(state, line)
         handle.flush()
-    return len(rows)
+    return {"appended": len(rows), "chain_sha256": state}
+
+
+def merged_content_record(rows: int, chain: str) -> dict[str, Any]:
+    return {"version": MERGED_DIGEST_VERSION, "rows": int(rows), "chain_sha256": chain}
+
+
+def _resume_chain_state(store: Path, table: str, checkpoint: Mapping[str, Any]) -> str | None:
+    """Chain state to append onto, or None when the merged file has to be rebuilt."""
+
+    path = merged_path(store, table)
+    if not path.is_file():
+        return merged_chain_seed(table)
+    recorded = checkpoint.get("merged_content")
+    if isinstance(recorded, Mapping) and recorded.get("version") == MERGED_DIGEST_VERSION and recorded.get("chain_sha256"):
+        return str(recorded["chain_sha256"])
+    # A store written before the digest existed: fold the file once so later
+    # appends extend a chain that was checked against the bytes on disk.
+    observed = merged_content_digest(store, table)
+    if observed["present"] and int(observed["rows"] or 0) == int(checkpoint.get("merged_row_count") or 0):
+        return str(observed["chain_sha256"])
+    return None
 
 
 def advance_checkpoint(
@@ -360,22 +454,28 @@ def advance_checkpoint(
     next_skip = int(skip) + len(rows)
     updated = dict(checkpoint)
     pk_missing_total = int(checkpoint.get("pk_missing_rows") or 0)
+    merged_content: dict[str, Any] | None
+    resume_state = None if key_index is None else _resume_chain_state(store, table, checkpoint)
     if key_index is None:
         unique_n = count_unique_rows(store, table, committed)
         merged_n = -1
-    elif replacing or int(checkpoint.get("merged_row_count") or 0) < 0:
+        merged_content = None
+    elif replacing or int(checkpoint.get("merged_row_count") or 0) < 0 or resume_state is None:
         unique_n = key_index.rebuild(committed)
         merged = merge_committed(store, table, {"committed_pages": committed})
         merged_n = int(merged["row_count"])
+        merged_content = merged_content_record(merged_n, str(merged["chain_sha256"]))
     else:
         fresh, pk_missing = key_index.add_rows(rows)
         pk_missing_total += pk_missing
-        append_merged(store, table, fresh)
+        appended = append_merged(store, table, fresh, chain_state=resume_state)
         unique_n = key_index.count
         merged_n = int(checkpoint.get("merged_row_count") or 0) + len(fresh)
+        merged_content = merged_content_record(merged_n, str(appended["chain_sha256"]))
     updated["committed_pages"] = committed
     updated["committed_row_count"] = unique_n
     updated["merged_row_count"] = merged_n
+    updated["merged_content"] = merged_content
     updated["pk_missing_rows"] = pk_missing_total
     updated["next_skip"] = next_skip
     updated["complete"] = False
@@ -439,6 +539,7 @@ def merge_committed(store: Path, table: str, checkpoint: Mapping[str, Any]) -> d
     cursor = conn.cursor()
     first_row = None
     count = 0
+    state = merged_chain_seed(table)
     with tmp.open("w", encoding="utf-8") as handle:
         for page in sorted(checkpoint.get("committed_pages") or [], key=lambda item: int(item["skip"])):
             for row in iter_jsonl(page_path(store, table, int(page["skip"]))):
@@ -450,7 +551,9 @@ def merge_committed(store: Path, table: str, checkpoint: Mapping[str, Any]) -> d
                     continue
                 if first_row is None:
                     first_row = row
-                handle.write(json.dumps(row, default=str) + "\n")
+                line = json.dumps(row, default=str)
+                handle.write(line + "\n")
+                state = merged_chain_step(state, line)
                 count += 1
     conn.close()
     seen_db.unlink(missing_ok=True)
@@ -460,6 +563,7 @@ def merge_committed(store: Path, table: str, checkpoint: Mapping[str, Any]) -> d
         "row_count": count,
         "first_row": first_row,
         "sha256": sha256_file(dest) if dest.is_file() else "",
+        "chain_sha256": state,
     }
 
 

@@ -73,11 +73,13 @@ from app.services.research_eod_v1.data.sharadar_store import (
     empty_checkpoint,
     load_checkpoint,
     merge_committed,
+    merged_content_record,
     merged_path,
     query_signature,
     read_jsonl,
     save_checkpoint,
     verify_committed_pages,
+    verify_merged_content,
     write_page_file,
 )
 from app.services.research_eod_v1.data.sharadar_tracks import convert_vendor_row
@@ -530,6 +532,7 @@ class SharadarClient:
                     if key_index.count != int(checkpoint.get("committed_row_count") or 0):
                         checkpoint["committed_row_count"] = key_index.rebuild(checkpoint.get("committed_pages") or [])
                         checkpoint["merged_row_count"] = -1
+                        checkpoint["merged_content"] = None
                     if checkpoint.get("complete"):
                         checkpoint = self._ensure_merged(store, table, checkpoint)
                         rows = read_jsonl(merged_path(store, table)) if include_rows else []
@@ -547,6 +550,7 @@ class SharadarClient:
                 if key_index.count != int(checkpoint.get("committed_row_count") or 0):
                     checkpoint["committed_row_count"] = key_index.rebuild(checkpoint.get("committed_pages") or [])
                     checkpoint["merged_row_count"] = -1
+                    checkpoint["merged_content"] = None
 
             previous_hash: str | None = None
             while True:
@@ -642,15 +646,23 @@ class SharadarClient:
 
     @staticmethod
     def _ensure_merged(store: Path, table: str, checkpoint: dict[str, Any]) -> dict[str, Any]:
-        """The merged file must hold exactly the committed unique rows; rebuild otherwise."""
+        """The merged file must hold exactly the committed unique rows, byte for byte.
+
+        The row count says how much is there; the content digest says whether it
+        is still what the pages produced. Either one failing rebuilds the file
+        from the committed pages and rebinds the digest.
+        """
 
         merged_n = int(checkpoint.get("merged_row_count") if checkpoint.get("merged_row_count") is not None else -1)
         committed_n = int(checkpoint.get("committed_row_count") or 0)
         path = merged_path(store, table)
-        if merged_n != committed_n or not path.is_file():
+        content = verify_merged_content(store, table, checkpoint)
+        if merged_n != committed_n or not path.is_file() or content["status"] != "MATCH":
             merged = merge_committed(store, table, checkpoint)
             checkpoint["merged_row_count"] = int(merged["row_count"])
             checkpoint["committed_row_count"] = int(merged["row_count"])
+            checkpoint["merged_content"] = merged_content_record(int(merged["row_count"]), str(merged["chain_sha256"]))
+            checkpoint["merged_content_rebuilt_because"] = content["status"] if content["status"] != "MATCH" else "row_count"
             save_checkpoint(store, checkpoint)
         return checkpoint
 

@@ -30,18 +30,19 @@ from app.services.research_eod_v1.data.sharadar_store import (
     UniqueKeyIndex,
     advance_checkpoint,
     checkpoint_path,
-    count_jsonl,
     empty_checkpoint,
     key_index_db_path,
     key_index_path,
     load_checkpoint,
     merge_committed,
+    merged_content_record,
     merged_path,
     page_dir,
     query_signature,
     save_checkpoint,
     sha256_file,
     verify_committed_pages,
+    verify_merged_content,
     write_page_file,
 )
 
@@ -92,11 +93,15 @@ def verify_ingested_state(
     problems.extend(page_errors)
     if expected_rows and not committed:
         problems.append("checkpoint_without_committed_pages")
-    merged = merged_path(store, table)
-    merged_rows = count_jsonl(merged) if merged.is_file() else None
-    if merged_rows is None:
+    content = verify_merged_content(store, table, checkpoint)
+    merged_rows = content["rows"]
+    if content["status"] == "MISSING":
         problems.append("missing_merged_file")
-    elif merged_rows != expected_rows:
+    elif content["status"] == "UNRECORDED":
+        problems.append("merged_content_unrecorded")
+    elif content["status"] == "MISMATCH":
+        problems.append("merged_content_mismatch")
+    if merged_rows is not None and merged_rows != expected_rows:
         problems.append(f"merged_row_mismatch:{merged_rows}!={expected_rows}")
     index = UniqueKeyIndex(store, table)
     try:
@@ -120,7 +125,7 @@ def verify_ingested_state(
         status = "READ_OK"
     elif not pages_ok:
         status = "MISSING" if any(item.startswith("missing_page") or item == "checkpoint_without_committed_pages" for item in problems) else "CORRUPT"
-    elif archive_state == "changed":
+    elif archive_state == "changed" or "merged_content_mismatch" in problems:
         status = "CORRUPT"
     else:
         status = "PARTIAL"
@@ -129,6 +134,7 @@ def verify_ingested_state(
         "problems": problems,
         "expected_rows": expected_rows,
         "merged_rows": merged_rows,
+        "merged_content": content,
         "key_index_rows": index_rows,
         "committed_pages": len(committed),
         "pages_verified": pages_ok,
@@ -137,17 +143,30 @@ def verify_ingested_state(
     }
 
 
-def _rebuild_derived(store: Path, table: str, checkpoint: Mapping[str, Any]) -> dict[str, Any]:
-    """Rebuild the merged file and key index from page files that still verify."""
+def _rebuild_derived(store: Path, table: str, checkpoint: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Rebuild the merged file and key index from page files that still verify.
 
-    merge_committed(store, table, checkpoint)
+    The digest is bound to what the rebuild actually wrote, so a merged file
+    that arrived without one cannot keep whatever content it happened to hold.
+    """
+
+    merged = merge_committed(store, table, checkpoint)
     index = UniqueKeyIndex(store, table)
     try:
         index.rebuild(checkpoint.get("committed_pages") or [])
         rows = index.count
     finally:
         index.close()
-    return {"rebuilt_from": "committed_pages", "key_index_rows": rows}
+    updated = dict(checkpoint)
+    updated["merged_row_count"] = int(merged["row_count"])
+    updated["merged_content"] = merged_content_record(int(merged["row_count"]), str(merged["chain_sha256"]))
+    save_checkpoint(store, updated)
+    return updated, {
+        "rebuilt_from": "committed_pages",
+        "key_index_rows": rows,
+        "merged_rows": int(merged["row_count"]),
+        "merged_content_rebound": True,
+    }
 
 
 def ingest_bulk_archive(
@@ -167,7 +186,7 @@ def ingest_bulk_archive(
         verification = verify_ingested_state(store, table, existing, archive_path=archive_path)
         repaired: dict[str, Any] | None = None
         if verification["status"] != "READ_OK" and verification["repairable_from_pages"]:
-            repaired = _rebuild_derived(store, table, existing)
+            existing, repaired = _rebuild_derived(store, table, dict(existing))
             verification = verify_ingested_state(store, table, existing, archive_path=archive_path)
             verification["repaired"] = repaired
         if verification["status"] != "READ_OK":
