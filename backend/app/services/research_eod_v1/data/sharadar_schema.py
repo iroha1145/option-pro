@@ -62,6 +62,9 @@ TICKERS_FIELDS = (
     "scalemarketcap",
     "lastupdated",
 )
+# `table` tells which dataset a master row belongs to (stocks / funds / ...). The
+# official docs list it, but a row without it is still a usable master row.
+TICKERS_OPTIONAL_FIELDS = ("table",)
 ACTIONS_FIELDS = (
     "date",
     "action",
@@ -81,7 +84,10 @@ TABLE_FIELDS = {
 
 DEFAULT_PAGE_LIMIT = 10_000
 FORMULA_VERSION = "sharadar-raw-imputation-v1"
-REQUEST_PLAN_VERSION = "sharadar-request-plan-v1"
+# v2: date-bound tables are requested with an explicit sort so page boundaries
+# do not depend on the vendor default (date descending, ties unspecified).
+REQUEST_PLAN_VERSION = "sharadar-request-plan-v2"
+DATE_SORT = "date.asc"
 DERIVED_FLAG = "DERIVED_FROM_VENDOR_ADJUSTMENT"
 PRICE_HISTORY_RECONSTRUCTED = "PRICE_HISTORY_RECONSTRUCTED"
 CLASSIFICATION_CURRENT = "CLASSIFICATION_CURRENT"
@@ -100,16 +106,66 @@ LABEL_HORIZONS = (5, 20, 63)
 DATE_BOUND_TABLES = ("stocks", "funds", "actions")
 MASTER_TABLES = ("tickers",)
 
+# Download modes. The first full backfill should come from the vendor's bulk
+# archive (one zip per table); paging is the fallback and the incremental path.
+DOWNLOAD_MODES = ("bulk_first", "paged")
+BULK_YEARS_PROBE_ORDER = ("full", "10", "5")
+
+# Acceptance thresholds. Pre-registered here; the pipeline does not tune them.
+TRANSFORM_SKIP_TOLERANCE = 0.001
+RECONCILE_MIN_RETURN_COVERAGE = 250
+RECONCILE_MIN_SECURITIES = 10
+IDENTITY_MIN_CONCRETE_TERMINALS = 12
+ADV20_MAX_GAP_DAYS = 45
+EVIDENCE_ROW_CAP = 1_000
+COMPLETENESS_SAMPLE_DATES = 8
+
+# Corporate-action vocabulary. These are the strings the terminal classifier
+# recognises; the real vendor vocabulary is recorded on every run so that this
+# list can be corrected against evidence instead of guessed.
+ACTION_BANKRUPTCY = frozenset({
+    "bankruptcyliquidation",
+    "bankruptcy",
+    "liquidation",
+    "chapter11",
+    "chapter7",
+})
+ACTION_DELISTED = frozenset({
+    "delisted",
+    "regulatorydelisting",
+    "voluntarydelisting",
+    "deleted",
+})
+ACTION_ACQUISITION_CASH = frozenset({
+    "acquisitionby",
+    "acquisitioncash",
+    "acquisitionbycash",
+    "mergerfrom",
+    "merger",
+    "takeprivate",
+    "acquired",
+})
+ACTION_ACQUISITION_STOCK = frozenset({
+    "acquisitionstock",
+    "acquisitionbystock",
+    "acquisitionelectstock",
+    "mergerstock",
+})
+ACTION_ACQUISITION_ELECT_CASH = frozenset({"acquisitionelectcash"})
+
 
 def download_request_plan(
     *,
     start: date = FULL_HISTORY_START,
     end: date = ALLOWED_END,
     limit: int = DEFAULT_PAGE_LIMIT,
+    sort: bool = True,
 ) -> dict[str, dict[str, object]]:
     """Pinned request range per table. A page cursor alone cannot drift to the vendor default year."""
 
-    window = {"from": start.isoformat(), "to": end.isoformat()}
+    window: dict[str, object] = {"from": start.isoformat(), "to": end.isoformat()}
+    if sort:
+        window["sort"] = DATE_SORT
     plan: dict[str, dict[str, object]] = {}
     for table in TABLES:
         extra = dict(window) if table in DATE_BOUND_TABLES else {}
@@ -121,6 +177,7 @@ def download_request_plan(
             "source_version": SOURCE_VERSION,
             "shard": "pinned_from_to" if table in DATE_BOUND_TABLES else "full_master_no_date_param",
             "order_not_assumed_dedupe_by_primary_key": True,
+            "explicit_sort": DATE_SORT if (sort and table in DATE_BOUND_TABLES) else None,
         }
     return plan
 
@@ -137,6 +194,9 @@ STATUSES = (
     "ENTITLEMENT_SHORT_5Y",
     "HISTORY_10Y",
     "NETWORK_UNAVAILABLE",
+    "REDIRECT_UNEXPECTED",
+    "EMPTY_BODY",
+    "PAGING_UNSUPPORTED",
     "SCHEMA_MISMATCH",
     "VENDOR_ERROR",
     "CHECKPOINT_QUERY_MISMATCH",

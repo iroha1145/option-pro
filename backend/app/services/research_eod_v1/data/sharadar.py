@@ -1,8 +1,21 @@
-"""Official api.sharadar.com research adapter. Secrets stay in SHARADAR_API_KEY."""
+"""Official api.sharadar.com research adapter. Secrets stay in SHARADAR_API_KEY.
+
+Transport rules that the first real run depends on:
+
+* A page is only "complete" when the vendor returns a valid empty page. A short
+  page, an empty body, a redirect or an HTTP error never ends a table.
+* Every committed page appends its fresh rows to the merged file; nothing here
+  holds a table in memory and nothing rewrites the merged file on resume.
+* Entitlement comes from the bulk-download metadata (5 / 10 / full), never from
+  the earliest row that happened to be observed.
+* The API key is attached only to the official https origin and is redacted
+  from every URL, error and report, including its URL-encoded form.
+"""
 
 from __future__ import annotations
 
 import csv
+import email.utils
 import hashlib
 import io
 import json
@@ -17,7 +30,7 @@ import urllib.request
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Mapping, Sequence
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from app.services.research_eod_v1.data.contract import (
@@ -34,6 +47,7 @@ from app.services.research_eod_v1.data.sharadar_identity import (
 from app.services.research_eod_v1.data.sharadar_schema import (
     ALLOWED_END,
     AUTH_QUERY_PARAM,
+    BULK_YEARS_PROBE_ORDER,
     DEFAULT_PAGE_LIMIT,
     ENV_KEY_NAME,
     FULL_HISTORY_START,
@@ -49,14 +63,17 @@ from app.services.research_eod_v1.data.sharadar_schema import (
     SOURCE_VERSION,
     TABLE_FIELDS,
     TABLES,
+    TICKERS_OPTIONAL_FIELDS,
 )
 from app.services.research_eod_v1.data.sharadar_store import (
     UniqueKeyIndex,
     adopt_orphan_page,
     advance_checkpoint,
+    count_rows_by_date,
     empty_checkpoint,
     load_checkpoint,
     merge_committed,
+    merged_path,
     query_signature,
     read_jsonl,
     save_checkpoint,
@@ -79,8 +96,13 @@ SENSITIVE_QUERY_KEYS = frozenset({
     "expires",
     "x-amz-expires",
 })
-_SECRET_RE = re.compile(r"(api_key|apikey|signature|token|credential)=([^&]+)", re.IGNORECASE)
+_SECRET_RE = re.compile(r"(api_key|apikey|signature|token|credential)=([^&\s\"']+)", re.IGNORECASE)
 _HTML_PREFIXES = (b"<!doctype", b"<html", b"<?xml")
+_REDIRECT_CODES = frozenset({301, 302, 303, 307, 308})
+_RETRY_CODES = frozenset({429, 500, 502, 503, 504})
+_RETRY_AFTER_CAP_SECONDS = 60.0
+_PAGE_TIMEOUT_SECONDS = 60
+_BULK_TIMEOUT_SECONDS = 600
 
 
 def credential_present() -> bool:
@@ -110,10 +132,14 @@ def redact_url(url: str) -> str:
 
 
 def redact_text(text: str) -> str:
+    """Remove the key in plain, URL-encoded and plus-encoded forms."""
+
     blob = _SECRET_RE.sub(lambda match: f"{match.group(1)}=REDACTED", text)
     key = _api_key()
     if key:
-        blob = blob.replace(key, "REDACTED")
+        for form in {key, urllib.parse.quote(key, safe=""), urllib.parse.quote_plus(key)}:
+            if form:
+                blob = blob.replace(form, "REDACTED")
     return blob
 
 
@@ -128,7 +154,8 @@ def classify_entitlement(
 
     ``bulk_years`` is the only entitlement signal. ``earliest`` is the earliest row
     actually observed, which a late listing, a holiday, or a gap can move without
-    saying anything about the subscription.
+    saying anything about the subscription. An unknown tier never turns the
+    observed earliest row into a research start date.
     """
 
     observed = {
@@ -149,6 +176,7 @@ def classify_entitlement(
             "earliest": None,
             "research_start": None,
             "continue": False,
+            "needs_review": False,
         }
     if bulk_years == "5":
         return {
@@ -160,6 +188,7 @@ def classify_entitlement(
             "earliest": observed["earliest_observed_row"],
             "research_start": None,
             "continue": False,
+            "needs_review": True,
         }
     if bulk_years == "10":
         return {
@@ -171,6 +200,7 @@ def classify_entitlement(
             "earliest": observed["earliest_observed_row"],
             "research_start": HISTORY_10Y_START.isoformat(),
             "continue": True,
+            "needs_review": False,
         }
     if bulk_years in {"full", "all"}:
         return {
@@ -182,6 +212,7 @@ def classify_entitlement(
             "earliest": observed["earliest_observed_row"],
             "research_start": FULL_HISTORY_START.isoformat(),
             "continue": True,
+            "needs_review": False,
         }
     if earliest is None:
         return {
@@ -193,6 +224,7 @@ def classify_entitlement(
             "earliest": None,
             "research_start": None,
             "continue": False,
+            "needs_review": True,
         }
     return {
         "status": "ACCESS_VERIFIED_RANGE_UNKNOWN",
@@ -201,8 +233,11 @@ def classify_entitlement(
         "authorized_range_unknown": True,
         "bulk_years": None,
         "earliest": observed["earliest_observed_row"],
-        "research_start": observed["earliest_observed_row"],
+        # Unknown tier: the requested window is the only defensible start; the
+        # observed earliest row stays in observed_coverage.
+        "research_start": None,
         "continue": True,
+        "needs_review": True,
     }
 
 
@@ -214,6 +249,27 @@ def isolate_research_window(session: date) -> str:
     if session < FULL_HISTORY_START:
         return "BEFORE_RESEARCH_START"
     return "ALLOWED"
+
+
+def _retry_after_seconds(headers: Any, *, attempt: int) -> float:
+    """Honour Retry-After (seconds or HTTP-date, capped); otherwise exponential backoff."""
+
+    raw = None
+    try:
+        raw = headers.get("Retry-After") if headers is not None else None
+    except Exception:  # pragma: no cover - defensive against odd header objects
+        raw = None
+    if raw:
+        text = str(raw).strip()
+        if text.isdigit():
+            return min(float(text), _RETRY_AFTER_CAP_SECONDS)
+        try:
+            when = email.utils.parsedate_to_datetime(text)
+            delta = (when - datetime.now(timezone.utc)).total_seconds()
+            return max(0.0, min(delta, _RETRY_AFTER_CAP_SECONDS))
+        except (TypeError, ValueError):
+            pass
+    return min(0.5 * (2 ** attempt), 8.0)
 
 
 @dataclass
@@ -229,6 +285,8 @@ class QueryPage:
     next_skip: int | None
     body_kind: str = "rows"
     complete: bool | None = None
+    short_page: bool = False
+    pk_missing: int = 0
 
 
 class SharadarClient:
@@ -241,24 +299,26 @@ class SharadarClient:
         base_url: str = OFFICIAL_BASE_URL,
         opener: Callable[..., Any] | None = None,
         sleep: Callable[[float], None] = time.sleep,
-        max_retries: int = 3,
+        max_retries: int = 4,
         persistence_hooks: Mapping[str, Callable[..., Any]] | None = None,
     ) -> None:
         self.allow_network = allow_network
         self.base_url = base_url.rstrip("/")
         self.opener = opener
         self.sleep = sleep
-        self.max_retries = max_retries
+        self.max_retries = max(1, int(max_retries))
         self.persistence_hooks = dict(persistence_hooks or {})
         self.failures: list[dict[str, Any]] = []
         self.request_log: list[dict[str, Any]] = []
         self.live_request_count = 0
 
-    def table_url(self, table: str, params: Mapping[str, Any] | None = None) -> str:
+    # ------------------------------------------------------------------ urls
+    def table_url(self, table: str, params: Mapping[str, Any] | None = None, *, with_format: bool = True) -> str:
         if table not in TABLES:
             raise ValueError(f"unknown_sharadar_table:{table}")
-        query = dict(params or {})
-        query.setdefault("format", "json")
+        query = {k: v for k, v in dict(params or {}).items() if v is not None}
+        if with_format:
+            query.setdefault("format", "json")
         return f"{self.base_url}/{table}?{urlencode(query, doseq=True)}"
 
     def _attach_key_if_official(self, url: str) -> str:
@@ -272,15 +332,23 @@ class SharadarClient:
     def _record_request(self, url: str, status: int | None, *, error: str | None = None) -> None:
         self.live_request_count += 1
         host = (urlsplit(url).hostname or "").lower()
+        official = official_https_origin(url)
         self.request_log.append({
             "url": redact_url(url),
             "host": host,
-            "official_https_origin": official_https_origin(url),
+            "official_https_origin": official,
             "status": status,
             "error": error,
-            "api_key_attached": official_https_origin(url),
+            "api_key_attached": bool(official and _api_key()),
         })
 
+    def channel_confirmed(self) -> bool:
+        """True only when every request that carried the key went to the official https origin."""
+
+        signed = [item for item in self.request_log if item.get("api_key_attached")]
+        return bool(signed) and all(item.get("official_https_origin") for item in signed)
+
+    # ------------------------------------------------------------- transport
     def _request(self, url: str, *, follow_redirects: bool = False) -> tuple[int, bytes, str]:
         if not self.allow_network:
             raise RuntimeError("NETWORK_DISABLED")
@@ -295,25 +363,29 @@ class SharadarClient:
                 if self.opener is not None:
                     code, body, final_url = self.opener(signed, follow_redirects=follow_redirects)
                     self._record_request(signed, int(code))
+                    if int(code) in _RETRY_CODES and attempt + 1 < self.max_retries:
+                        self.sleep(_retry_after_seconds(None, attempt=attempt))
+                        continue
                     return int(code), body, str(final_url)
                 opener = urllib.request.build_opener(
                     urllib.request.HTTPRedirectHandler() if follow_redirects else _NoRedirect()
                 )
-                with opener.open(request, timeout=30) as response:
+                with opener.open(request, timeout=_PAGE_TIMEOUT_SECONDS) as response:
                     body = response.read()
                     final = str(response.geturl())
                     self._record_request(signed, int(response.status))
                     return int(response.status), body, final
             except urllib.error.HTTPError as exc:
                 body = exc.read() if hasattr(exc, "read") else b""
-                location = exc.headers.get("Location") or ""
-                if exc.code in {301, 302, 303, 307, 308} and follow_redirects and location:
+                location = exc.headers.get("Location") or "" if exc.headers is not None else ""
+                if exc.code in _REDIRECT_CODES and follow_redirects and location:
                     if official_https_origin(location):
                         return self._request(location, follow_redirects=True)
                     self._record_request(location, None, error="cross_origin_redirect")
                     return self._request_unsigned(location)
-                if exc.code in {429, 500, 502, 503, 504} and attempt + 1 < self.max_retries:
-                    self.sleep(0.25 * (2 ** attempt))
+                if exc.code in _RETRY_CODES and attempt + 1 < self.max_retries:
+                    self._record_request(signed, exc.code, error="retry")
+                    self.sleep(_retry_after_seconds(exc.headers, attempt=attempt))
                     last_error = exc
                     continue
                 self.failures.append({
@@ -322,17 +394,18 @@ class SharadarClient:
                     "error": "http_error",
                 })
                 self._record_request(signed, exc.code, error="http_error")
-                return exc.code, body, redact_url(str(exc.geturl()) if getattr(exc, "geturl", None) else url)
+                final = redact_url(str(exc.geturl()) if getattr(exc, "geturl", None) else url)
+                return exc.code, body, final
             except PermissionError:
                 raise
             except Exception as exc:
                 last_error = exc
                 if attempt + 1 < self.max_retries:
-                    self.sleep(0.25 * (2 ** attempt))
+                    self.sleep(_retry_after_seconds(None, attempt=attempt))
                     continue
                 self.failures.append({"error": type(exc).__name__, "url": redact_url(url)})
                 self._record_request(signed, None, error=type(exc).__name__)
-                raise
+                raise RuntimeError(redact_text(f"{type(exc).__name__}: {exc}")) from None
         raise RuntimeError(redact_text(str(last_error) if last_error else "request_failed"))
 
     def _request_unsigned(self, url: str) -> tuple[int, bytes, str]:
@@ -343,7 +416,7 @@ class SharadarClient:
                 self._record_request(url, int(code))
                 return int(code), body, str(final_url)
             opener = urllib.request.build_opener(urllib.request.HTTPRedirectHandler())
-            with opener.open(request, timeout=60) as response:
+            with opener.open(request, timeout=_BULK_TIMEOUT_SECONDS) as response:
                 body = response.read()
                 self._record_request(url, int(response.status))
                 return int(response.status), body, str(response.geturl())
@@ -352,6 +425,7 @@ class SharadarClient:
             self._record_request(url, exc.code, error="http_error")
             return exc.code, body, redact_url(url)
 
+    # ------------------------------------------------------------------ pages
     def fetch_page(
         self,
         table: str,
@@ -376,25 +450,37 @@ class SharadarClient:
             return QueryPage(table, [], skip, limit, "NETWORK_UNAVAILABLE", 0, "", redact_url(url), None, "network", False)
         redacted = redact_url(final_url)
         digest = hashlib.sha256(body).hexdigest()
+        if 300 <= status < 400:
+            return QueryPage(table, [], skip, limit, "REDIRECT_UNEXPECTED", 0, digest, redacted, None, "redirect", False)
         if status in {401, 403}:
             return QueryPage(table, [], skip, limit, "AUTH_FAILED", 0, digest, redacted, None, "auth", False)
-        if status >= 400:
+        if status >= 400 or status < 200:
             return QueryPage(table, [], skip, limit, "NETWORK_UNAVAILABLE", 0, digest, redacted, None, "http_error", False)
         inspected = inspect_table_body(body)
-        if inspected["kind"] == "error":
+        kind = inspected["kind"]
+        if kind == "empty_body":
+            return QueryPage(table, [], skip, limit, "EMPTY_BODY", 0, digest, redacted, None, "empty_body", False)
+        if kind == "error":
             return QueryPage(
                 table, [], skip, limit, status_from_error_payload(inspected.get("error"), status),
                 0, digest, redacted, None, "error", False,
             )
-        if inspected["kind"] == "html":
-            return QueryPage(table, [], skip, limit, "SCHEMA_MISMATCH", 0, digest, redacted, None, "html", False)
-        if inspected["kind"] == "unknown":
-            return QueryPage(table, [], skip, limit, "SCHEMA_MISMATCH", 0, digest, redacted, None, "unknown", False)
+        if kind in {"html", "unknown", "metadata"}:
+            return QueryPage(table, [], skip, limit, "SCHEMA_MISMATCH", 0, digest, redacted, None, kind, False)
         rows = inspected["rows"]
         missing = required_field_gap(table, rows)
-        page_status = "SCHEMA_MISMATCH" if missing else "READ_OK"
-        next_skip = skip + len(rows) if len(rows) >= limit else None
-        return QueryPage(table, rows, skip, limit, page_status, len(rows), digest, redacted, next_skip, inspected["kind"], next_skip is None)
+        if missing:
+            return QueryPage(table, [], skip, limit, "SCHEMA_MISMATCH", 0, digest, redacted, None, "rows", False)
+        if len(rows) > limit:
+            return QueryPage(table, [], skip, limit, "SCHEMA_MISMATCH", len(rows), digest, redacted, None, "rows", False)
+        pk_missing = sum(1 for row in rows if _pk_missing(table, row))
+        if not rows:
+            # A valid empty page is the only end-of-table signal.
+            return QueryPage(table, [], skip, limit, "READ_OK", 0, digest, redacted, None, "empty", True)
+        return QueryPage(
+            table, rows, skip, limit, "READ_OK", len(rows), digest, redacted, skip + len(rows), "rows", False,
+            short_page=len(rows) < limit, pk_missing=pk_missing,
+        )
 
     def fetch_all(
         self,
@@ -420,182 +506,217 @@ class SharadarClient:
         checkpoint = empty_checkpoint(table, extra=extra, limit=limit)
         skip = 0
         key_index: UniqueKeyIndex | None = None
-        if store is not None:
-            existing = load_checkpoint(store, table)
-            if existing is not None:
-                if existing.get("query_signature") != signature:
-                    return {
-                        "table": table,
-                        "status": "CHECKPOINT_QUERY_MISMATCH",
-                        "row_count": int(existing.get("committed_row_count") or 0),
-                        "session_row_count": 0,
-                        "committed_row_count": int(existing.get("committed_row_count") or 0),
-                        "pages": 0,
-                        "page_hashes": [],
-                        "used_default_first_page_as_universe": False,
-                        "resume_skip": existing.get("next_skip"),
-                        "complete": False,
-                        "rows": [],
-                        "checkpoint": existing,
-                    }
-                errors = verify_committed_pages(store, table, existing)
-                if errors:
-                    return {
-                        "table": table,
-                        "status": "SCHEMA_MISMATCH",
-                        "row_count": int(existing.get("committed_row_count") or 0),
-                        "session_row_count": 0,
-                        "committed_row_count": int(existing.get("committed_row_count") or 0),
-                        "pages": 0,
-                        "page_hashes": [],
-                        "used_default_first_page_as_universe": False,
-                        "resume_skip": existing.get("next_skip"),
-                        "complete": False,
-                        "rows": [],
-                        "checkpoint_errors": errors,
-                    }
-                checkpoint = adopt_orphan_page(store, table, dict(existing))
-                skip = int(checkpoint.get("next_skip") or 0)
-                key_index = UniqueKeyIndex(store, table)
-                if key_index.count != int(checkpoint.get("committed_row_count") or 0):
-                    key_index.rebuild(checkpoint.get("committed_pages") or [])
-                if checkpoint.get("complete"):
-                    merged = merge_committed(store, table, checkpoint)
-                    rows = read_jsonl(Path(merged["path"])) if include_rows and merged.get("path") else []
-                    return {
-                        "table": table,
-                        "status": "READ_OK",
-                        "row_count": merged["row_count"],
-                        "session_row_count": 0,
-                        "committed_row_count": merged["row_count"],
-                        "pages": 0,
-                        "page_hashes": [],
-                        "used_default_first_page_as_universe": False,
-                        "resume_skip": checkpoint.get("next_skip"),
-                        "complete": True,
-                        "rows": rows,
-                        "checkpoint": checkpoint,
-                        "first_saved_row": merged.get("first_row"),
-                    }
+        short_page_observed: int | None = None
+        try:
+            if store is not None:
+                existing = load_checkpoint(store, table)
+                if existing is not None:
+                    if existing.get("query_signature") != signature:
+                        return self._fetch_result(
+                            table, "CHECKPOINT_QUERY_MISMATCH", existing, pages=0, hashes=[], session_new=0,
+                            complete=False, rows=[], resume_skip=existing.get("next_skip"), store=store,
+                        )
+                    errors = verify_committed_pages(store, table, existing)
+                    if errors:
+                        payload = self._fetch_result(
+                            table, "SCHEMA_MISMATCH", existing, pages=0, hashes=[], session_new=0,
+                            complete=False, rows=[], resume_skip=existing.get("next_skip"), store=store,
+                        )
+                        payload["checkpoint_errors"] = errors
+                        return payload
+                    checkpoint = adopt_orphan_page(store, table, dict(existing))
+                    skip = int(checkpoint.get("next_skip") or 0)
+                    key_index = UniqueKeyIndex(store, table)
+                    if key_index.count != int(checkpoint.get("committed_row_count") or 0):
+                        checkpoint["committed_row_count"] = key_index.rebuild(checkpoint.get("committed_pages") or [])
+                        checkpoint["merged_row_count"] = -1
+                    if checkpoint.get("complete"):
+                        checkpoint = self._ensure_merged(store, table, checkpoint)
+                        rows = read_jsonl(merged_path(store, table)) if include_rows else []
+                        payload = self._fetch_result(
+                            table, "READ_OK", checkpoint, pages=0, hashes=[], session_new=0,
+                            complete=True, rows=rows, resume_skip=checkpoint.get("next_skip"), store=store,
+                        )
+                        return payload
+                elif isinstance(resume, Mapping):
+                    skip = int(resume.get("next_skip") or resume.get("skip") or 0)
             elif isinstance(resume, Mapping):
                 skip = int(resume.get("next_skip") or resume.get("skip") or 0)
-        elif isinstance(resume, Mapping):
-            skip = int(resume.get("next_skip") or resume.get("skip") or 0)
-        if store is not None and key_index is None:
-            key_index = UniqueKeyIndex(store, table)
-            if key_index.count != int(checkpoint.get("committed_row_count") or 0):
-                key_index.rebuild(checkpoint.get("committed_pages") or [])
+            if store is not None and key_index is None:
+                key_index = UniqueKeyIndex(store, table)
+                if key_index.count != int(checkpoint.get("committed_row_count") or 0):
+                    checkpoint["committed_row_count"] = key_index.rebuild(checkpoint.get("committed_pages") or [])
+                    checkpoint["merged_row_count"] = -1
 
-        while True:
-            if max_pages is not None and pages >= max_pages:
-                status = "PARTIAL"
-                complete = False
-                break
-            page = self.fetch_page(table, skip=skip, limit=limit, extra=extra)
-            pages += 1
-            hashes.append(page.content_sha256)
-            status = page.status
-            if page.status != "READ_OK":
-                complete = False
-                break
-            if not page.rows:
-                status = "READ_OK"
-                complete = True
-                break
-            if len(page.rows) > limit:
-                status = "SCHEMA_MISMATCH"
-                complete = False
-                break
-            hook = self.persistence_hooks.get("before_commit_page")
-            if hook is not None:
-                hook(page)
+            previous_hash: str | None = None
+            while True:
+                if max_pages is not None and pages >= max_pages:
+                    status = "PARTIAL"
+                    complete = False
+                    break
+                page = self.fetch_page(table, skip=skip, limit=limit, extra=extra)
+                pages += 1
+                hashes.append(page.content_sha256)
+                status = page.status
+                if page.status != "READ_OK":
+                    complete = False
+                    break
+                if not page.rows:
+                    status = "READ_OK"
+                    complete = True
+                    break
+                if previous_hash is not None and page.content_sha256 == previous_hash:
+                    # The vendor returned the identical page for a new skip: paging is not honoured.
+                    status = "PAGING_UNSUPPORTED"
+                    complete = False
+                    break
+                previous_hash = page.content_sha256
+                hook = self.persistence_hooks.get("before_commit_page")
+                if hook is not None:
+                    hook(page)
+                if store is not None:
+                    write_page_file(store, table, page.skip, page.rows)
+                    after_page = self.persistence_hooks.get("after_page_durable")
+                    if after_page is not None:
+                        after_page(page)
+                    checkpoint = advance_checkpoint(
+                        store,
+                        table,
+                        skip=page.skip,
+                        rows=page.rows,
+                        checkpoint=checkpoint,
+                        page_sha256=page.content_sha256,
+                        key_index=key_index,
+                    )
+                    after_ck = self.persistence_hooks.get("after_checkpoint_durable")
+                    if after_ck is not None:
+                        after_ck(checkpoint)
+                else:
+                    memory_rows.extend(page.rows)
+                session_new += len(page.rows)
+                if page.short_page:
+                    short_page_observed = len(page.rows)
+                skip = int(page.next_skip or skip + len(page.rows))
+
             if store is not None:
-                write_page_file(store, table, page.skip, page.rows)
-                after_page = self.persistence_hooks.get("after_page_durable")
-                if after_page is not None:
-                    after_page(page)
-                checkpoint = advance_checkpoint(
-                    store,
-                    table,
-                    skip=page.skip,
-                    rows=page.rows,
-                    checkpoint=checkpoint,
-                    page_sha256=page.content_sha256,
-                    key_index=key_index,
+                checkpoint["status"] = "READ_OK" if complete else status
+                checkpoint["complete"] = complete
+                checkpoint["next_skip"] = None if complete else skip
+                checkpoint["session_row_count"] = session_new
+                if short_page_observed is not None:
+                    checkpoint["short_page_observed"] = short_page_observed
+                save_checkpoint(store, checkpoint)
+                if checkpoint.get("committed_pages"):
+                    checkpoint = self._ensure_merged(store, table, checkpoint)
+                rows = read_jsonl(merged_path(store, table)) if include_rows and checkpoint.get("committed_pages") else []
+                return self._fetch_result(
+                    table, status, checkpoint, pages=pages, hashes=hashes, session_new=session_new,
+                    complete=complete, rows=rows, resume_skip=None if complete else skip, store=store,
                 )
-                after_ck = self.persistence_hooks.get("after_checkpoint_durable")
-                if after_ck is not None:
-                    after_ck(checkpoint)
-            else:
-                memory_rows.extend(page.rows)
-            session_new += len(page.rows)
-            if page.next_skip is None:
-                status = "READ_OK"
-                complete = True
-                break
-            skip = page.next_skip
-
-        committed_total = session_new
-        first_row = memory_rows[0] if memory_rows else None
-        merged_info: dict[str, Any] | None = None
-        if store is not None:
-            checkpoint["status"] = status if not complete else "READ_OK"
-            checkpoint["complete"] = complete
-            if complete and status == "READ_OK":
-                checkpoint["status"] = "READ_OK"
-            save_checkpoint(store, checkpoint)
-            if checkpoint.get("committed_pages"):
-                merged_info = merge_committed(store, table, checkpoint)
-                committed_total = int(merged_info["row_count"])
-                first_row = merged_info.get("first_row")
-                if include_rows:
-                    memory_rows = read_jsonl(Path(merged_info["path"]))
-            elif include_rows:
-                memory_rows = []
+        finally:
+            if key_index is not None:
+                key_index.close()
         return {
             "table": table,
             "status": status,
-            "row_count": committed_total if store is not None else session_new,
+            "row_count": session_new,
             "session_row_count": session_new,
-            "committed_row_count": committed_total if store is not None else session_new,
+            "committed_row_count": session_new,
             "pages": pages,
             "page_hashes": hashes,
             "used_default_first_page_as_universe": False,
-            "resume_skip": skip,
+            "resume_skip": None if complete else skip,
             "complete": complete,
             "rows": memory_rows if include_rows else [],
-            "checkpoint": checkpoint if store is not None else {
+            "checkpoint": {
                 "skip": skip,
                 "next_skip": None if complete else skip,
                 "query_signature": signature,
             },
-            "first_saved_row": first_row,
-            "merged": merged_info,
+            "first_saved_row": memory_rows[0] if memory_rows else None,
+            "merged": None,
+            "download_mode": "paged",
+            "short_page_observed": short_page_observed,
+            "pk_missing_rows": 0,
         }
 
-    def bulk_status(self, table: str) -> dict[str, Any]:
+    @staticmethod
+    def _ensure_merged(store: Path, table: str, checkpoint: dict[str, Any]) -> dict[str, Any]:
+        """The merged file must hold exactly the committed unique rows; rebuild otherwise."""
+
+        merged_n = int(checkpoint.get("merged_row_count") if checkpoint.get("merged_row_count") is not None else -1)
+        committed_n = int(checkpoint.get("committed_row_count") or 0)
+        path = merged_path(store, table)
+        if merged_n != committed_n or not path.is_file():
+            merged = merge_committed(store, table, checkpoint)
+            checkpoint["merged_row_count"] = int(merged["row_count"])
+            checkpoint["committed_row_count"] = int(merged["row_count"])
+            save_checkpoint(store, checkpoint)
+        return checkpoint
+
+    @staticmethod
+    def _fetch_result(
+        table: str,
+        status: str,
+        checkpoint: Mapping[str, Any],
+        *,
+        pages: int,
+        hashes: list[str],
+        session_new: int,
+        complete: bool,
+        rows: list[dict[str, Any]],
+        resume_skip: Any,
+        store: Path,
+    ) -> dict[str, Any]:
+        committed = int(checkpoint.get("committed_row_count") or 0)
+        merged = merged_path(store, table)
+        return {
+            "table": table,
+            "status": status,
+            "row_count": committed,
+            "session_row_count": session_new,
+            "committed_row_count": committed,
+            "pages": pages,
+            "page_hashes": hashes,
+            "used_default_first_page_as_universe": False,
+            "resume_skip": resume_skip,
+            "complete": complete,
+            "rows": rows,
+            "checkpoint": dict(checkpoint),
+            "first_saved_row": _first_jsonl_row(merged) if merged.is_file() else None,
+            "merged": {"path": str(merged), "row_count": committed} if merged.is_file() else None,
+            "download_mode": str(checkpoint.get("download_mode") or "paged"),
+            "short_page_observed": checkpoint.get("short_page_observed"),
+            "pk_missing_rows": int(checkpoint.get("pk_missing_rows") or 0),
+        }
+
+    # ------------------------------------------------------------------- bulk
+    def bulk_status(self, table: str, *, years: str = "full") -> dict[str, Any]:
+        if years not in {"5", "10", "full"}:
+            raise ValueError("bulk_years_must_be_5_10_or_full")
         if not credential_present():
-            return {"table": table, "status": "AUTH_REQUIRED", "metadata": {}}
-        url = self.table_url(table, {"status": "True", "format": "json"})
+            return {"table": table, "status": "AUTH_REQUIRED", "years": years, "metadata": {}}
+        url = self.table_url(table, {"years": years, "status": "True"}, with_format=False)
         try:
             code, body, final_url = self._request(url)
         except PermissionError:
-            return {"table": table, "status": "AUTH_REQUIRED", "metadata": {}}
+            return {"table": table, "status": "AUTH_REQUIRED", "years": years, "metadata": {}}
         except Exception:
-            return {"table": table, "status": "NETWORK_UNAVAILABLE", "metadata": {}}
+            return {"table": table, "status": "NETWORK_UNAVAILABLE", "years": years, "metadata": {}}
         inspected = inspect_table_body(body)
         if code in {401, 403}:
-            return {"table": table, "status": "AUTH_FAILED", "url": redact_url(final_url), "metadata": {}}
-        if code >= 400:
-            return {"table": table, "status": "NETWORK_UNAVAILABLE", "url": redact_url(final_url), "metadata": {}}
-        if inspected["kind"] in {"error", "html", "unknown"}:
+            return {"table": table, "status": "AUTH_FAILED", "years": years, "url": redact_url(final_url), "metadata": {}}
+        if code >= 400 or code < 200:
+            return {"table": table, "status": "NETWORK_UNAVAILABLE", "years": years, "url": redact_url(final_url), "metadata": {}}
+        if inspected["kind"] in {"error", "html", "unknown", "empty_body"}:
             status = status_from_error_payload(inspected.get("error"), code) if inspected["kind"] == "error" else "SCHEMA_MISMATCH"
-            return {"table": table, "status": status, "url": redact_url(final_url), "metadata": {}, "body_kind": inspected["kind"]}
+            return {"table": table, "status": status, "years": years, "url": redact_url(final_url), "metadata": {}, "body_kind": inspected["kind"]}
         payload = _decode_json(body)
         metadata = parse_bulk_metadata(payload)
         return {
             "table": table,
             "status": metadata["status"],
+            "years": years,
             "url": redact_url(final_url),
             "metadata": metadata["metadata"],
             "files": metadata["files"],
@@ -610,22 +731,35 @@ class SharadarClient:
         if not credential_present():
             return {"table": table, "status": "AUTH_REQUIRED", "years": years, "final_file_exists": dest.exists()}
         dest.parent.mkdir(parents=True, exist_ok=True)
-        url = self.table_url(table, {"years": years})
+        url = self.table_url(table, {"years": years}, with_format=False)
         tmp = dest.with_name(dest.name + ".partial")
-        try:
-            code, final_url, digest, nbytes = self._stream_download(url, tmp, follow_redirects=True)
-        except PermissionError:
-            tmp.unlink(missing_ok=True)
-            return {"table": table, "status": "AUTH_REQUIRED", "years": years, "final_file_exists": dest.exists()}
-        except Exception:
-            tmp.unlink(missing_ok=True)
-            return {
-                "table": table,
-                "status": "NETWORK_UNAVAILABLE",
-                "years": years,
-                "url": redact_url(url),
-                "final_file_exists": dest.exists(),
-            }
+        code = 0
+        final_url = url
+        digest = ""
+        nbytes = 0
+        for attempt in range(self.max_retries):
+            try:
+                code, final_url, digest, nbytes = self._stream_download(url, tmp, follow_redirects=True)
+            except PermissionError:
+                tmp.unlink(missing_ok=True)
+                return {"table": table, "status": "AUTH_REQUIRED", "years": years, "final_file_exists": dest.exists()}
+            except Exception:
+                tmp.unlink(missing_ok=True)
+                if attempt + 1 < self.max_retries:
+                    self.sleep(_retry_after_seconds(None, attempt=attempt))
+                    continue
+                return {
+                    "table": table,
+                    "status": "NETWORK_UNAVAILABLE",
+                    "years": years,
+                    "url": redact_url(url),
+                    "final_file_exists": dest.exists(),
+                }
+            if code in _RETRY_CODES and attempt + 1 < self.max_retries:
+                tmp.unlink(missing_ok=True)
+                self.sleep(_retry_after_seconds(None, attempt=attempt))
+                continue
+            break
         if code in {401, 403}:
             tmp.unlink(missing_ok=True)
             return {"table": table, "status": "AUTH_FAILED", "years": years, "url": redact_url(final_url), "final_file_exists": dest.exists()}
@@ -654,7 +788,9 @@ class SharadarClient:
         return {
             "table": table,
             "status": "READ_OK",
+            "years_requested": years,
             "years": years,
+            "observed_range_verified_at_ingest": True,
             "bytes": nbytes,
             "sha256": digest or _sha256_stream(dest),
             "path": str(dest),
@@ -688,19 +824,16 @@ class SharadarClient:
             urllib.request.HTTPRedirectHandler() if follow_redirects else _NoRedirect()
         )
         try:
-            with opener.open(request, timeout=60) as response:
+            with opener.open(request, timeout=_BULK_TIMEOUT_SECONDS) as response:
                 code = int(response.status)
                 final_url = str(response.geturl())
                 self._record_request(signed, code)
                 if code < 200 or code >= 300:
                     return code, final_url, "", 0
-                if official_https_origin(signed) and not official_https_origin(final_url):
-                    # Redirect already followed by urllib; key was only on the official request.
-                    pass
                 return code, final_url, *_write_stream(response, dest)
         except urllib.error.HTTPError as exc:
-            location = exc.headers.get("Location") or ""
-            if exc.code in {301, 302, 303, 307, 308} and follow_redirects and location:
+            location = exc.headers.get("Location") or "" if exc.headers is not None else ""
+            if exc.code in _REDIRECT_CODES and follow_redirects and location:
                 if official_https_origin(location):
                     return self._stream_download(location, dest, follow_redirects=True)
                 return self._stream_download_unsigned(location, dest)
@@ -717,7 +850,7 @@ class SharadarClient:
             dest.write_bytes(body)
             return int(code), str(final_url), hashlib.sha256(body).hexdigest(), len(body)
         opener = urllib.request.build_opener(urllib.request.HTTPRedirectHandler())
-        with opener.open(request, timeout=60) as response:
+        with opener.open(request, timeout=_BULK_TIMEOUT_SECONDS) as response:
             code = int(response.status)
             self._record_request(url, code)
             if code < 200 or code >= 300:
@@ -731,20 +864,88 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
+def probe_entitlement(client: SharadarClient, *, table: str = "stocks") -> dict[str, Any]:
+    """Ask the bulk endpoint which history tier the account may download.
+
+    The first tier whose metadata is served is the entitlement. A tier that is not
+    subscribed answers with an error payload, not with a smaller file.
+    """
+
+    attempts: list[dict[str, Any]] = []
+    if not credential_present():
+        return {"bulk_years": None, "status": "AUTH_REQUIRED", "attempts": attempts}
+    for years in BULK_YEARS_PROBE_ORDER:
+        meta = client.bulk_status(table, years=years)
+        attempts.append({"years": years, "status": meta.get("status"), "shape": meta.get("shape")})
+        if meta.get("status") == "READ_OK":
+            return {"bulk_years": years, "status": "READ_OK", "metadata": meta.get("metadata"), "attempts": attempts}
+        if meta.get("status") in {"AUTH_REQUIRED", "AUTH_FAILED", "NETWORK_UNAVAILABLE"}:
+            return {"bulk_years": None, "status": str(meta.get("status")), "attempts": attempts}
+    return {"bulk_years": None, "status": "ENTITLEMENT_UNKNOWN", "attempts": attempts}
+
+
+def verify_paged_completeness(
+    client: SharadarClient,
+    table: str,
+    store: Path,
+    dates: Sequence[date | str],
+    *,
+    extra: Mapping[str, Any] | None = None,
+    limit: int = DEFAULT_PAGE_LIMIT,
+) -> dict[str, Any]:
+    """Re-query sampled single days and compare row counts with the store.
+
+    Paging by skip can silently drop rows when the vendor's tie order shifts
+    between pages; a per-day count is a direct check on that.
+    """
+
+    wanted = [str(item)[:10] for item in dates]
+    store_counts = count_rows_by_date(merged_path(store, table), wanted)
+    base = {k: v for k, v in dict(extra or {}).items() if k not in {"from", "to"}}
+    results: list[dict[str, Any]] = []
+    all_match = True
+    for day in wanted:
+        total = 0
+        skip = 0
+        pages = 0
+        status = "READ_OK"
+        while True:
+            page = client.fetch_page(table, skip=skip, limit=limit, extra={**base, "from": day, "to": day})
+            pages += 1
+            if page.status != "READ_OK":
+                status = page.status
+                break
+            total += len(page.rows)
+            if not page.rows or len(page.rows) < limit or pages >= 50:
+                break
+            skip += len(page.rows)
+        match = status == "READ_OK" and total == int(store_counts.get(day, 0))
+        all_match = all_match and match
+        results.append({
+            "date": day,
+            "vendor_rows": total,
+            "store_rows": int(store_counts.get(day, 0)),
+            "status": status,
+            "match": match,
+        })
+    return {"status": "PASS" if all_match else "FAIL", "dates": results, "sampled_n": len(wanted)}
+
+
 def inspect_table_body(body: bytes) -> dict[str, Any]:
-    if not body:
-        return {"kind": "empty", "rows": []}
+    if not body or not body.strip():
+        return {"kind": "empty_body", "rows": []}
     raw = body.lstrip()
     if raw[:20].lower().startswith(_HTML_PREFIXES):
         return {"kind": "html", "rows": []}
-    text = body.decode("utf-8", errors="replace").lstrip("\ufeff")
+    text = body.decode("utf-8", errors="replace").lstrip("﻿")
     stripped = text.lstrip()
     if stripped.lower().startswith("<!doctype") or stripped.lower().startswith("<html"):
         return {"kind": "html", "rows": []}
     try:
         payload = json.loads(text)
     except json.JSONDecodeError:
-        if "," in stripped.splitlines()[0] if stripped.splitlines() else "":
+        first_line = stripped.splitlines()[0] if stripped.splitlines() else ""
+        if "," in first_line:
             reader = csv.DictReader(io.StringIO(text))
             rows = [dict(row) for row in reader]
             return {"kind": "rows" if rows else "empty", "rows": rows}
@@ -759,7 +960,7 @@ def inspect_table_body(body: bytes) -> dict[str, Any]:
     if isinstance(payload.get("data"), list):
         data = payload["data"]
         columns = payload.get("columns") or payload.get("fields")
-        if columns and data and data and not isinstance(data[0], dict):
+        if columns and data and not isinstance(data[0], dict):
             names = [str(col) for col in columns]
             rows = [dict(zip(names, row)) for row in data]
             return {"kind": "rows" if rows else "empty", "rows": rows}
@@ -783,7 +984,7 @@ def status_from_error_payload(payload: Any, http_status: int) -> str:
     blob = json.dumps(payload or {}, default=str).lower()
     if http_status in {401, 403} or "invalid api key" in blob or "unauthorized" in blob:
         return "AUTH_FAILED"
-    if "not subscribed" in blob or "entitlement" in blob or "permission" in blob:
+    if "not subscribed" in blob or "entitlement" in blob or "permission" in blob or "subscription" in blob:
         return "ENTITLEMENT_MISSING"
     return "VENDOR_ERROR"
 
@@ -821,6 +1022,8 @@ def validate_bulk_archive(path: Path) -> dict[str, Any]:
         head = handle.read(32)
     if head.lstrip().lower().startswith(_HTML_PREFIXES):
         return {"ok": False, "reason": "html"}
+    if head.lstrip()[:1] in (b"{", b"["):
+        return {"ok": False, "reason": "json_not_zip"}
     if not zipfile.is_zipfile(path):
         return {"ok": False, "reason": "not_zip"}
     try:
@@ -836,11 +1039,21 @@ def validate_bulk_archive(path: Path) -> dict[str, Any]:
 
 
 def required_field_gap(table: str, rows: list[dict[str, Any]]) -> tuple[str, ...]:
+    """Fields absent from every row of the page. Optional master fields are not required."""
+
     if not rows:
         return ()
-    required = TABLE_FIELDS[table]
-    present = set(rows[0].keys())
+    required = [field for field in TABLE_FIELDS[table] if field not in TICKERS_OPTIONAL_FIELDS]
+    present: set[str] = set()
+    for row in rows:
+        present.update(row.keys())
     return tuple(field for field in required if field not in present)
+
+
+def _pk_missing(table: str, row: Mapping[str, Any]) -> bool:
+    from app.services.research_eod_v1.data.sharadar_store import row_primary_key
+
+    return row_primary_key(table, row) is None
 
 
 def _decode_json(body: bytes) -> Any:
@@ -874,6 +1087,18 @@ def _write_stream(response: Any, dest: Path) -> tuple[str, int]:
             digest.update(chunk)
             nbytes += len(chunk)
     return digest.hexdigest(), nbytes
+
+
+def _first_jsonl_row(path: Path) -> dict[str, Any] | None:
+    if not path.is_file():
+        return None
+    with path.open(encoding="utf-8") as handle:
+        for line in handle:
+            text = line.strip()
+            if text:
+                item = json.loads(text)
+                return item if isinstance(item, dict) else None
+    return None
 
 
 class SharadarProvider:
@@ -930,14 +1155,14 @@ class SharadarProvider:
             )
         page = self.client.fetch_page("tickers", extra={"ticker": PROBE_SAMPLES["non_free_example"]})
         self._last_access_status = page.status
-        self._access_tested = page.status == "READ_OK"
+        self._access_tested = page.status == "READ_OK" and bool(page.rows)
         level = "ACCESS_TESTED" if self._access_tested else "DOCUMENTED_ONLY"
         notes.append(f"access_request_status={page.status}")
         return ProviderCapabilities(
             provider="sharadar",
             dataset_id="sharadar-official-v1",
             dataset_version=SOURCE_VERSION,
-            probe_status=page.status if page.status != "READ_OK" else "ACCESS_TESTED",
+            probe_status=page.status if not self._access_tested else "ACCESS_TESTED",
             daily_bars="available" if self._access_tested else page.status,
             corporate_actions="available" if self._access_tested else page.status,
             classification_history="partial_actions_sic_only" if self._access_tested else page.status,
@@ -1119,6 +1344,7 @@ def run_sharadar_probe(*, allow_network: bool = True, client: SharadarClient | N
             "body_kind": page.body_kind,
         }
     entitlement = classify_entitlement(earliest=None, bulk_years=None, verified_access=False, credential=present)
+    entitlement_probe: dict[str, Any] = {"bulk_years": None, "status": "AUTH_REQUIRED", "attempts": []}
     samples = {
         "non_free_example": "AUTH_REQUIRED",
         "delisted": "AUTH_REQUIRED",
@@ -1154,7 +1380,13 @@ def run_sharadar_probe(*, allow_network: bool = True, client: SharadarClient | N
         dates = sorted(str(row.get("date") or "")[:10] for row in history.rows if row.get("date"))
         earliest = date.fromisoformat(dates[0]) if dates else None
         verified = any(page.status == "READ_OK" and page.rows for page in (non_free, history, funds, delisted_id, delisted_px))
-        entitlement = classify_entitlement(earliest=earliest, bulk_years=None, verified_access=verified, credential=True)
+        entitlement_probe = probe_entitlement(adapter)
+        entitlement = classify_entitlement(
+            earliest=earliest,
+            bulk_years=entitlement_probe.get("bulk_years"),
+            verified_access=verified,
+            credential=True,
+        )
         tables["stocks"]["earliest_aapl"] = dates[0] if dates else None
         samples["non_free_example"] = _sample_status(non_free)
         samples["history_2010"] = _sample_status(history)
@@ -1176,16 +1408,20 @@ def run_sharadar_probe(*, allow_network: bool = True, client: SharadarClient | N
             samples["delisted_not_concluded_missing_history"] = True
         tables["stocks"]["non_free_status"] = _sample_status(non_free)
         tables["tickers"]["delisted_status"] = _sample_status(delisted_id)
+    if not present:
+        channel = "official_docs_mapped; live_channel_unconfirmed_without_secret"
+    elif adapter.live_request_count == 0:
+        channel = "no_live_request"
+    elif adapter.channel_confirmed():
+        channel = "official_https_origin_api.sharadar.com"
+    else:
+        channel = "NON_OFFICIAL_ORIGIN_USED"
     report = {
         "credential_present": present,
         "runtime": runtime_probe_identity(),
         "provider": "sharadar",
         "channel": OFFICIAL_CHANNEL,
-        "channel_confirmed": (
-            "official_https_origin_api.sharadar.com"
-            if present and adapter.live_request_count and all(item.get("official_https_origin") or not item.get("api_key_attached") for item in adapter.request_log)
-            else ("official_docs_mapped; live_channel_unconfirmed_without_secret" if not present else "official_https_origin_attempted")
-        ),
+        "channel_confirmed": channel,
         "nasdaq_data_link_attempted": False,
         "chat_credentials_read": False,
         "massive_key_used": False,
@@ -1194,6 +1430,7 @@ def run_sharadar_probe(*, allow_network: bool = True, client: SharadarClient | N
         "tables": tables,
         "samples": samples,
         "entitlement": entitlement,
+        "entitlement_probe": entitlement_probe,
         "volume_session_scope": "UNKNOWN",
         "secret_present_in_report": False,
         "terminal_status": _terminal_from_probe(present, tables, entitlement),
@@ -1225,7 +1462,15 @@ def full_download_allowed(
     if not present:
         blockers.append("credential_absent")
     statuses = {str(item.get("status")) for item in tables.values()}
-    for blocking in ("AUTH_FAILED", "ENTITLEMENT_MISSING", "SCHEMA_MISMATCH", "VENDOR_ERROR", "NETWORK_UNAVAILABLE"):
+    for blocking in (
+        "AUTH_FAILED",
+        "ENTITLEMENT_MISSING",
+        "SCHEMA_MISMATCH",
+        "VENDOR_ERROR",
+        "NETWORK_UNAVAILABLE",
+        "REDIRECT_UNEXPECTED",
+        "EMPTY_BODY",
+    ):
         if blocking in statuses:
             blockers.append(f"table_status:{blocking}")
     if entitlement.get("status") == "ENTITLEMENT_SHORT_5Y":

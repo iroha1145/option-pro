@@ -99,14 +99,20 @@ def _table_opener(tables: dict[str, list[dict]], *, seen: list[dict] | None = No
         parts = urlsplit(url)
         table = parts.path.rsplit("/", 1)[-1]
         query = parse_qs(parts.query)
+        if "years" in query:
+            return 200, b'{"error":"bulk not subscribed"}', url.split("?")[0]
         if seen is not None:
             seen.append({
                 "table": table,
                 "from": query.get("from", [None])[0],
                 "to": query.get("to", [None])[0],
                 "skip": query.get("skip", [None])[0],
+                "ticker": query.get("ticker", [None])[0],
             })
-        return 200, json.dumps(tables.get(table, [])).encode(), url.split("?")[0]
+        skip = int(query.get("skip", ["0"])[0])
+        limit = int(query.get("limit", [str(DEFAULT_PAGE_LIMIT)])[0])
+        rows = tables.get(table, [])[skip:skip + limit]
+        return 200, json.dumps(rows).encode(), url.split("?")[0]
 
     return opener
 
@@ -124,7 +130,11 @@ def test_date_tables_request_the_real_history_window(tmp_path: Path, monkeypatch
     client = SharadarClient(allow_network=True, opener=_table_opener(_mock_tables(), seen=seen), sleep=lambda _s: None)
     gate = execute_data_gate(client=client, store=tmp_path, yahoo_rows=[], allow_network=True)
 
-    downloads = {item["table"]: item for item in seen if item["skip"] is not None}
+    # The backfill request is the first paged request per table that is not a ticker-limited probe.
+    downloads: dict[str, dict] = {}
+    for item in seen:
+        if item["skip"] is not None and item["ticker"] is None and item["table"] not in downloads:
+            downloads[item["table"]] = item
     for table in DATE_BOUND_TABLES:
         assert downloads[table]["from"] == FULL_HISTORY_START.isoformat()
         assert downloads[table]["to"] == ALLOWED_END.isoformat()
@@ -163,7 +173,14 @@ def test_failed_required_check_blocks_acceptance(tmp_path: Path, monkeypatch) ->
     mismatched = [
         {"security_id": "sharadar:101", "session_date": "2010-01-05", "return": 0.9, "volume": 1_000_000},
     ]
-    gate = execute_data_gate(client=client, store=tmp_path, yahoo_rows=mismatched, allow_network=True)
+    gate = execute_data_gate(
+        client=client,
+        store=tmp_path,
+        yahoo_rows=mismatched,
+        allow_network=True,
+        reconcile_min_return_coverage=1,
+        reconcile_min_securities=1,
+    )
 
     assert gate["reconcile"]["status"] == "FAIL"
     assert gate["stages"]["RECONCILE"]["status"] == "FAIL"
@@ -299,7 +316,9 @@ def test_observed_earliest_is_not_subscription_proof() -> None:
     assert observed["status"] == "ACCESS_VERIFIED_RANGE_UNKNOWN"
     assert observed["authorized_range_unknown"] is True
     assert observed["verified_access"] is True
-    assert observed["research_start"] == "2010-01-04"
+    # The observed earliest row never becomes the research start.
+    assert observed["research_start"] is None
+    assert observed["needs_review"] is True
     assert observed["observed_coverage"]["earliest_observed_row"] == "2010-01-04"
     assert observed["observed_coverage"]["earliest_is_coverage_not_license"] is True
 

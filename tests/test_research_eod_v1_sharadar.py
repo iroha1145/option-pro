@@ -85,7 +85,8 @@ def test_pagination_does_not_treat_first_10000_as_universe(tmp_path: Path, monke
     client = SharadarClient(allow_network=True, opener=opener, sleep=lambda _s: None)
     payload = client.fetch_all("tickers", store=tmp_path)
     assert payload["row_count"] == DEFAULT_PAGE_LIMIT + 1
-    assert payload["pages"] == 2
+    # full page, short page, then the confirming empty page
+    assert payload["pages"] == 3
     assert payload["used_default_first_page_as_universe"] is False
     assert "dummy-not-a-real-secret" not in json.dumps(payload["page_hashes"])
 
@@ -251,6 +252,8 @@ def test_yahoo_reconcile_thresholds() -> None:
             {"security_id": "A", "session_date": "2024-01-02", "return": 0.0101, "volume": 100},
             {"security_id": "A", "session_date": "2024-01-03", "return": 0.03, "volume": 50},
         ],
+        min_return_coverage=1,
+        min_securities=1,
     )
     assert result["rows"][0]["return_marked"] is False
     assert result["rows"][1]["return_marked"] is True

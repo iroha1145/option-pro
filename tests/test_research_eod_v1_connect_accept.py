@@ -208,7 +208,8 @@ def test_pagination_partial_and_resume(tmp_path: Path, monkeypatch) -> None:
     full = client.fetch_all("tickers", store=tmp_path)
     assert full["status"] == "READ_OK"
     assert full["row_count"] == 10002
-    assert full["pages"] == 2
+    # full page, short page, confirming empty page
+    assert full["pages"] == 3
     assert full["complete"] is True
 
     store = tmp_path / "limited"
@@ -330,7 +331,11 @@ def test_actions_keep_non_numeric_and_identity_not_listed_at(monkeypatch) -> Non
     monkeypatch.setenv(ENV_KEY_NAME, "dummy-not-a-real-secret")
 
     def opener(url: str, follow_redirects: bool = False):
-        path = urlsplit(url).path
+        parts = urlsplit(url)
+        path = parts.path
+        skip = int(parse_qs(parts.query).get("skip", ["0"])[0])
+        if skip:
+            return 200, b"[]", path
         if path.endswith("/actions"):
             rows = [
                 _action_row("MSFT", "2020-01-02", "dividend", "not-a-number", contraticker="USD"),
@@ -381,14 +386,28 @@ def test_mock_four_table_pipeline(tmp_path: Path, monkeypatch) -> None:
     }
 
     def opener(url: str, follow_redirects: bool = False):
-        path = urlsplit(url).path.rsplit("/", 1)[-1]
-        return 200, json.dumps(tables.get(path, [])).encode(), url.split("?")[0]
+        parts = urlsplit(url)
+        path = parts.path.rsplit("/", 1)[-1]
+        query = parse_qs(parts.query)
+        if "years" in query:
+            return 200, b'{"error":"bulk not subscribed"}', url.split("?")[0]
+        skip = int(query.get("skip", ["0"])[0])
+        limit = int(query.get("limit", [str(DEFAULT_PAGE_LIMIT)])[0])
+        rows = tables.get(path, [])[skip:skip + limit]
+        return 200, json.dumps(rows).encode(), url.split("?")[0]
 
     client = SharadarClient(allow_network=True, opener=opener, sleep=lambda _s: None)
     yahoo = [
         {"security_id": "sharadar:101", "session_date": "2010-01-05", "return": 0.01, "volume": 1_000_000},
     ]
-    gate = execute_data_gate(client=client, store=tmp_path, yahoo_rows=yahoo, allow_network=True)
+    gate = execute_data_gate(
+        client=client,
+        store=tmp_path,
+        yahoo_rows=yahoo,
+        allow_network=True,
+        reconcile_min_return_coverage=1,
+        reconcile_min_securities=1,
+    )
     assert gate["credential_present"] is True
     assert gate["live_sharadar_request_count"] > 0
     assert all(gate["raw_row_counts"][table] > 0 for table in ("stocks", "funds", "tickers", "actions"))
@@ -408,10 +427,15 @@ def test_mock_four_table_pipeline(tmp_path: Path, monkeypatch) -> None:
 
 
 def test_reconcile_control_and_missing_not_pass() -> None:
-    ok = reconcile_aligned_returns(
+    one_row = (
         [{"security_id": "S", "session_date": "2020-01-02", "return": 0.01, "volume": 100}],
         [{"security_id": "S", "session_date": "2020-01-02", "return": 0.01, "volume": 100}],
     )
+    # One aligned row is never a pass under the registered minimum sample.
+    thin = reconcile_aligned_returns(*one_row)
+    assert thin["status"] == "INSUFFICIENT"
+    assert thin["insufficient_reason"] is not None
+    ok = reconcile_aligned_returns(*one_row, min_return_coverage=1, min_securities=1)
     assert ok["status"] == "PASS"
     assert ok["aligned_n"] == 1
     missing = reconcile_aligned_returns(

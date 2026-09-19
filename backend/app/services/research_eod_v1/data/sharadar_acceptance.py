@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import bisect
 import csv
 import io
 from dataclasses import asdict, dataclass
@@ -17,6 +18,10 @@ from app.services.research_eod_v1.data.sharadar_schema import (
     HISTORY_10Y_START,
     HOLDOUT_START,
     LABEL_HORIZONS,
+    RECONCILE_MIN_RETURN_COVERAGE,
+    RECONCILE_MIN_SECURITIES,
+    TERMINAL_ACQUISITION_CASH,
+    TERMINAL_BANKRUPTCY,
 )
 from app.services.research_eod_v1.mathutil import finite
 
@@ -60,6 +65,8 @@ THEME_PARENT_SCHEMA = {
     "members_stage": "not_this_round",
 }
 
+CONCRETE_TERMINALS = frozenset({TERMINAL_ACQUISITION_CASH, TERMINAL_BANKRUPTCY})
+
 
 @dataclass(frozen=True)
 class ReconcileRow:
@@ -83,33 +90,37 @@ def evaluate_delist_fixture(
     resolution = {
         "security_id": None if identity is None else identity.get("security_id"),
         "permaticker": None if identity is None else identity.get("permaticker"),
+        "ticker_as_stored": None if identity is None else identity.get("ticker"),
         "resolved_by": "permaticker_and_event_year" if identity else "unresolved",
         "event_window": dict(event_window or {}),
         "fixture_year_used_to_resolve_identity": True,
         "not_last_row_of_same_named_security": True,
     }
     terminal = classify_terminal(actions, last_trade=last_trade)
+    concrete = terminal["label"] in CONCRETE_TERMINALS and terminal.get("value") is not None
     expected = fixture["expected_terminal"]
-    if not actions:
+    if not actions and last_trade is None:
         return {
             **dict(fixture),
-            "live_status": "AUTH_REQUIRED",
-            "verification": "fixture_list_only",
+            "live_status": "AUTH_REQUIRED" if identity is None else "INSUFFICIENT",
+            "verification": "fixture_list_only" if identity is None else "identity_only_no_rows",
             "observed_terminal": terminal,
             "identity_resolution": resolution,
+            "identity_resolved": identity is not None,
+            "concrete_terminal": False,
         }
     if expected == "acquisition_or_unknown":
-        matched = terminal["label"] in {"acquisition_cash", "TERMINAL_UNKNOWN"}
-        status = "PASS" if matched else "FAIL"
+        matched = terminal["label"] in {TERMINAL_ACQUISITION_CASH, "TERMINAL_UNKNOWN"}
+        status = "PASS" if matched and concrete else ("UNSUPPORTED" if matched else "FAIL")
     elif expected == "acquisition_cash":
-        if terminal["label"] == "acquisition_cash":
+        if terminal["label"] == TERMINAL_ACQUISITION_CASH:
             status = "PASS"
-        elif terminal["label"] == "TERMINAL_UNKNOWN" and terminal.get("reason") == "acquisition_without_cash":
+        elif terminal["label"] == "TERMINAL_UNKNOWN":
             status = "UNSUPPORTED"
         else:
             status = "FAIL"
     elif expected == "bankruptcy_last_trade":
-        if terminal["label"] == "bankruptcy_last_trade":
+        if terminal["label"] == TERMINAL_BANKRUPTCY:
             status = "PASS"
         elif terminal["label"] == "TERMINAL_UNKNOWN":
             status = "INSUFFICIENT"
@@ -124,6 +135,8 @@ def evaluate_delist_fixture(
         "observed_terminal": terminal,
         "last_trade_is_not_liquidation_value": True,
         "identity_resolution": resolution,
+        "identity_resolved": identity is not None,
+        "concrete_terminal": concrete,
         "economic_settlement_blocked_only": status in {"UNSUPPORTED", "INSUFFICIENT"},
     }
 
@@ -134,8 +147,16 @@ def reconcile_aligned_returns(
     *,
     source_available: bool | None = None,
     source: Mapping[str, Any] | None = None,
+    min_return_coverage: int = RECONCILE_MIN_RETURN_COVERAGE,
+    min_securities: int = RECONCILE_MIN_SECURITIES,
+    sharadar_available: bool | None = None,
 ) -> dict[str, Any]:
-    """Each field carries its own valid denominator. A missing comparison source is not a pass."""
+    """Each field carries its own valid denominator. A missing comparison source is not a pass.
+
+    A PASS needs a real sample: at least ``min_return_coverage`` compared returns
+    across at least ``min_securities`` securities. Fewer comparisons is
+    INSUFFICIENT, never a pass by absence of evidence.
+    """
 
     yahoo_map = {(row["security_id"], row["session_date"]): row for row in yahoo}
     rows: list[ReconcileRow] = []
@@ -143,6 +164,7 @@ def reconcile_aligned_returns(
     volume_coverage = 0
     return_marked_n = 0
     volume_marked_n = 0
+    securities: set[str] = set()
     for row in sharadar:
         key = (row["security_id"], row["session_date"])
         other = yahoo_map.get(key)
@@ -161,6 +183,7 @@ def reconcile_aligned_returns(
         reasons: list[str] = []
         if return_ok:
             return_coverage += 1
+            securities.add(str(row["security_id"]))
             if return_marked:
                 return_marked_n += 1
                 reasons.append("return_gt_50bp")
@@ -196,10 +219,16 @@ def reconcile_aligned_returns(
     return_share = 0.0 if return_coverage == 0 else return_marked_n / return_coverage
     volume_share = 0.0 if volume_coverage == 0 else volume_marked_n / volume_coverage
     available = bool(yahoo) if source_available is None else bool(source_available)
+    thin_reason = None
+    have_sharadar = bool(sharadar) if sharadar_available is None else bool(sharadar_available)
     if not available:
-        status = "AUTH_REQUIRED" if not sharadar else "RECONCILIATION_MISSING"
+        status = "RECONCILIATION_MISSING" if have_sharadar else "AUTH_REQUIRED"
     elif n == 0 or (return_coverage == 0 and volume_coverage == 0):
         status = "INSUFFICIENT"
+        thin_reason = "no_comparable_rows"
+    elif return_coverage < int(min_return_coverage) or len(securities) < int(min_securities):
+        status = "INSUFFICIENT"
+        thin_reason = f"return_coverage_{return_coverage}_lt_{int(min_return_coverage)}_or_securities_{len(securities)}_lt_{int(min_securities)}"
     elif return_share > RECONCILE_FAIL_SHARE or volume_share > RECONCILE_FAIL_SHARE:
         status = "FAIL"
     else:
@@ -211,22 +240,26 @@ def reconcile_aligned_returns(
         "yahoo_n": len(yahoo),
         "return_coverage_n": return_coverage,
         "volume_coverage_n": volume_coverage,
+        "securities_n": len(securities),
         "marked_n": return_marked_n + volume_marked_n,
         "marked_share": None if return_coverage + volume_coverage == 0 else (return_marked_n + volume_marked_n) / max(return_coverage + volume_coverage, 1),
         "return_marked_share": return_share,
         "volume_marked_share": volume_share,
         "status": status,
+        "insufficient_reason": thin_reason,
         "rows": [asdict(row) for row in rows],
         "yahoo_is_not_truth": True,
         "thresholds": {
             "return_abs_bp": RECONCILE_RETURN_MARK_BP,
             "volume_ratio": [RECONCILE_VOLUME_LOW, RECONCILE_VOLUME_HIGH],
             "fail_share": RECONCILE_FAIL_SHARE,
+            "min_return_coverage": int(min_return_coverage),
+            "min_securities": int(min_securities),
         },
     }
 
 
-def reconciliation_csv(result: Mapping[str, Any]) -> str:
+def reconciliation_csv(result: Mapping[str, Any], *, max_rows: int | None = None) -> str:
     buffer = io.StringIO()
     writer = csv.DictWriter(
         buffer,
@@ -234,9 +267,12 @@ def reconciliation_csv(result: Mapping[str, Any]) -> str:
         lineterminator="\n",
     )
     writer.writeheader()
-    for row in result.get("rows") or []:
+    rows = list(result.get("rows") or [])
+    if max_rows is not None:
+        rows = rows[: int(max_rows)]
+    for row in rows:
         writer.writerow(row)
-    if not result.get("rows"):
+    if not rows:
         writer.writerow({
             "security_id": "NONE",
             "session_date": "NONE",
@@ -273,9 +309,14 @@ def history_budget(
     earliest: date | None,
     entitlement_status: str,
     calendar: Sequence[date] | None = None,
-    security_sessions: Mapping[str, Sequence[date]] | None = None,
+    security_sessions: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Numeric first-score and label-maturity dates, or NOT_COMPUTED. No expression strings."""
+    """Numeric first-score and label-maturity dates, or NOT_COMPUTED. No expression strings.
+
+    The family table is the earliest-any-security view; ``per_security`` carries
+    the distribution of first-score days across securities, which is what a
+    listing-date-aware evaluation actually uses.
+    """
 
     warmup = dict(FAMILY_WARMUP_SESSIONS)
     start = None
@@ -289,7 +330,7 @@ def history_budget(
     if start is not None:
         sessions = [item for item in sessions if item >= start]
     sessions.sort()
-    per_security = _per_security_budget(security_sessions or {}, warmup)
+    per_security = _per_security_budget(security_sessions or {}, warmup, sessions)
     if earliest is None and not sessions:
         status = "AUTH_REQUIRED" if entitlement_status in {"AUTH_REQUIRED", ""} else "NOT_COMPUTED"
     elif not sessions:
@@ -317,6 +358,7 @@ def history_budget(
         "label_horizons": list(LABEL_HORIZONS),
         "families": families,
         "first_score_day": {family: item["first_score_day"] for family, item in families.items()},
+        "first_score_day_is_earliest_any_security": True,
         "evaluable_sessions_after_warmup": (
             {family: item["evaluable_sessions_after_warmup"] for family, item in families.items()}
             if status == "COMPUTED"
@@ -357,23 +399,61 @@ def _family_budget(sessions: Sequence[date], warmup: Mapping[str, int]) -> dict[
     return out
 
 
+def _security_summary(rows: Any) -> tuple[date | None, date | None, int]:
+    if isinstance(rows, Mapping):
+        first = rows.get("first")
+        last = rows.get("last")
+        n = int(rows.get("n") or 0)
+        first = first if isinstance(first, date) or first is None else date.fromisoformat(str(first)[:10])
+        last = last if isinstance(last, date) or last is None else date.fromisoformat(str(last)[:10])
+        if last is not None and last > ALLOWED_END:
+            last = ALLOWED_END
+        return first, last, n
+    usable = sorted({item for item in rows if item <= ALLOWED_END})
+    if not usable:
+        return None, None, 0
+    return usable[0], usable[-1], len(usable)
+
+
 def _per_security_budget(
-    security_sessions: Mapping[str, Sequence[date]],
+    security_sessions: Mapping[str, Any],
     warmup: Mapping[str, int],
+    calendar: Sequence[date] | None = None,
 ) -> dict[str, Any]:
     longest = max(int(value) for value in warmup.values()) if warmup else 0
     evaluable: list[str] = []
     insufficient: list[str] = []
+    sessions = list(calendar or [])
+    first_scores: dict[str, list[date]] = {family: [] for family in warmup}
     for security_id, rows in security_sessions.items():
-        usable = sorted({item for item in rows if item <= ALLOWED_END})
-        if len(usable) >= longest:
+        first, _last, n = _security_summary(rows)
+        if n >= longest:
             evaluable.append(security_id)
         else:
             insufficient.append(security_id)
+        if first is None or not sessions:
+            continue
+        position = bisect.bisect_left(sessions, first)
+        for family, need in warmup.items():
+            need = int(need)
+            index = position + need - 1
+            if n >= need and index < len(sessions):
+                first_scores[family].append(sessions[index])
+    distribution: dict[str, Any] = {}
+    for family, dates in first_scores.items():
+        dates.sort()
+        distribution[family] = {
+            "securities_with_first_score": len(dates),
+            "earliest": dates[0].isoformat() if dates else None,
+            "median": dates[len(dates) // 2].isoformat() if dates else None,
+            "latest": dates[-1].isoformat() if dates else None,
+        }
     return {
         "n": len(security_sessions),
         "longest_feature_dependency_sessions": longest,
         "evaluable_n": len(evaluable),
         "insufficient_n": len(insufficient),
         "insufficient_sample": sorted(insufficient)[:10],
+        "first_score_day_distribution": distribution,
+        "first_score_day_is_per_security": bool(sessions),
     }

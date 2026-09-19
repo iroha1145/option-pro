@@ -1,10 +1,22 @@
-"""State-driven Sharadar data-gate. Status comes from actual inputs, not file presence."""
+"""State-driven Sharadar data-gate. Status comes from actual inputs, not file presence.
+
+Memory rule: price tables are never materialised. The transform runs as a
+two-pass bucketed stream (rows are partitioned by ticker into temporary files,
+then each bucket is processed on its own), so a 30-million-row table costs a
+bucket at a time. Every stage reports its own status; an incomplete download
+caps every downstream stage at PARTIAL.
+"""
 
 from __future__ import annotations
 
+import json
+import tempfile
+import zlib
+from collections import Counter, deque
 from datetime import date
 from pathlib import Path
 from typing import Any, Iterable, Iterator, Mapping, Sequence
+from urllib.parse import parse_qs, urlsplit
 
 from app.services.research_eod_v1.data.sharadar import (
     SharadarClient,
@@ -12,6 +24,7 @@ from app.services.research_eod_v1.data.sharadar import (
     credential_present,
     isolate_research_window,
     run_sharadar_probe,
+    verify_paged_completeness,
 )
 from app.services.research_eod_v1.data.sharadar_acceptance import (
     DELIST_FIXTURES,
@@ -21,25 +34,39 @@ from app.services.research_eod_v1.data.sharadar_acceptance import (
     trading_calendar_sessions,
     volume_scope_audit,
 )
+from app.services.research_eod_v1.data.sharadar_bulk import bulk_first_download
 from app.services.research_eod_v1.data.sharadar_identity import (
+    daily_pool_row,
     identity_from_ticker_row,
+    resolve_identity_for_event_year,
     resolve_identity_for_session,
+    split_ticker_suffix,
 )
 from app.services.research_eod_v1.data.sharadar_reconcile_source import load_reconcile_rows
 from app.services.research_eod_v1.data.sharadar_schema import (
+    ACTION_ACQUISITION_CASH,
+    ACTION_ACQUISITION_STOCK,
+    ACTION_BANKRUPTCY,
+    ACTION_DELISTED,
     ALLOWED_END,
+    COMPLETENESS_SAMPLE_DATES,
     DATE_BOUND_TABLES,
+    EVIDENCE_ROW_CAP,
     FULL_HISTORY_START,
     GATE_STAGES,
+    IDENTITY_MIN_CONCRETE_TERMINALS,
     RAW_DOWNLOAD_COMPLETE,
+    RECONCILE_MIN_RETURN_COVERAGE,
+    RECONCILE_MIN_SECURITIES,
     REQUIRED_GATE_STAGES,
     TABLES,
     TERMINAL_ACCEPTED,
     TERMINAL_INSUFFICIENT,
     TERMINAL_PARTIAL,
+    TRANSFORM_SKIP_TOLERANCE,
     download_request_plan,
 )
-from app.services.research_eod_v1.data.sharadar_store import iter_jsonl, merged_path
+from app.services.research_eod_v1.data.sharadar_store import iter_jsonl, load_checkpoint, merged_path
 from app.services.research_eod_v1.data.sharadar_tracks import closeadj_total_return, convert_vendor_row
 from app.services.research_eod_v1.mathutil import finite
 
@@ -51,10 +78,14 @@ BLOCKING_TABLE_STATUSES = {
     "AUTH_FAILED",
     "ENTITLEMENT_MISSING",
     "NETWORK_UNAVAILABLE",
+    "REDIRECT_UNEXPECTED",
+    "EMPTY_BODY",
+    "PAGING_UNSUPPORTED",
     "SCHEMA_MISMATCH",
     "VENDOR_ERROR",
     "CHECKPOINT_QUERY_MISMATCH",
 }
+TRANSFORM_BUCKETS = 64
 
 
 def _parse_date(value: Any) -> date | None:
@@ -115,9 +146,10 @@ class IsolatedTable:
 
 
 def _identities_from_tickers(rows: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
-    """Group by ticker without collapsing a reused ticker onto one permaticker."""
+    """Group by ticker base so a reused ticker (DELL / DELL1) stays several permatickers."""
 
     by_ticker: dict[str, list[Any]] = {}
+    by_base: dict[str, list[Any]] = {}
     by_id: dict[str, Any] = {}
     failures: list[dict[str, Any]] = []
     for row in rows:
@@ -129,55 +161,39 @@ def _identities_from_tickers(rows: Iterable[Mapping[str, Any]]) -> dict[str, Any
         if identity.security_id in by_id:
             continue
         by_ticker.setdefault(identity.ticker, []).append(identity)
+        by_base.setdefault(identity.ticker_base or identity.ticker, []).append(identity)
         by_id[identity.security_id] = identity
     return {
         "by_ticker": by_ticker,
+        "by_base": by_base,
         "by_id": by_id,
         "failures": failures,
-        "reused_tickers": sorted(ticker for ticker, items in by_ticker.items() if len(items) > 1),
+        "reused_tickers": sorted(base for base, items in by_base.items() if len(items) > 1),
     }
 
 
-def _delist_identity(fixture: Mapping[str, Any], identities: Mapping[str, Any]) -> dict[str, Any]:
+def _delist_identity(fixture: Mapping[str, Any], identities_by_base: Mapping[str, Any]) -> dict[str, Any]:
     """Resolve the fixture ticker to one permanent identity whose coverage spans the event year.
 
-    ``relatedtickers`` is recorded as an unverified hint only. It never becomes the
-    historical alias of a different permaticker.
+    Candidates are every master row whose ticker base equals the fixture ticker,
+    so the numeric suffix Sharadar appends to a delisted company (DELL1) is part
+    of the search. ``relatedtickers`` is recorded as an unverified hint only.
     """
 
     ticker = str(fixture["ticker"]).upper()
     year = int(fixture["year"])
-    exact = [
-        identity
-        for key, items in identities.items()
-        if str(key).upper() == ticker
-        for identity in items
-    ]
+    candidates = list(identities_by_base.get(ticker) or [])
     hints = sorted({
         identity.security_id
-        for items in identities.values()
+        for items in identities_by_base.values()
         for identity in items
         if ticker in {item.upper() for item in identity.relatedtickers}
     })
-    covering = []
-    for identity in exact:
-        first = _parse_date(identity.firstpricedate)
-        last = _parse_date(identity.lastpricedate)
-        if first is not None and first.year > year:
-            continue
-        if last is not None and last.year < year:
-            continue
-        covering.append(identity)
-    identity = covering[0] if len(covering) == 1 else None
-    if identity is None:
-        reason = "no_exact_ticker_row" if not exact else (
-            "no_candidate_covers_event_year" if not covering else "ambiguous_candidates"
-        )
-    else:
-        reason = None
+    identity, covering, reason = resolve_identity_for_event_year(candidates, year)
     return {
         "identity": identity,
-        "candidates_n": len(exact),
+        "candidates_n": len(candidates),
+        "candidate_tickers": sorted({item.ticker for item in candidates}),
         "covering_n": len(covering),
         "unresolved_reason": reason,
         "relatedticker_hints_not_verified_aliases": hints,
@@ -196,91 +212,252 @@ def _event_bounds(identity: Any | None, year: int) -> tuple[date, date]:
     return start, end
 
 
-def _events_in_window(
-    rows: Iterable[Mapping[str, Any]],
+def _fixture_actions_for(
+    identity: Any,
+    fixture_ticker: str,
+    fixture_actions: Mapping[str, list[dict[str, Any]]],
     *,
-    ticker: str,
     start: date,
     end: date,
 ) -> list[dict[str, Any]]:
-    token = ticker.upper()
+    """Action rows for the resolved identity: its stored ticker, plus bare-ticker rows inside its coverage."""
+
     out: list[dict[str, Any]] = []
-    for row in rows:
-        if str(row.get("ticker") or "").upper() != token:
-            continue
+    stored = identity.ticker
+    for row in fixture_actions.get(stored, []):
         session = _parse_date(row.get("date"))
-        if session is None or session < start or session > end:
-            continue
-        out.append(dict(row))
+        if session is not None and start <= session <= end:
+            out.append(dict(row))
+    if stored != fixture_ticker:
+        for row in fixture_actions.get(fixture_ticker, []):
+            session = _parse_date(row.get("date"))
+            if session is None or session < start or session > end:
+                continue
+            if identity.covers(session) is False:
+                continue
+            out.append(dict(row))
+    out.sort(key=lambda item: str(item.get("date") or ""))
     return out
 
 
-def _last_observed_quote(
-    rows: Iterable[Mapping[str, Any]],
+def _last_trade_for(
+    identity: Any,
+    fixture_rows: Mapping[str, list[dict[str, Any]]],
     *,
-    ticker: str,
     start: date,
     end: date,
 ) -> float | None:
-    token = ticker.upper()
     best: tuple[date, float] | None = None
-    for row in rows:
-        if str(row.get("ticker") or "").upper() != token:
-            continue
-        session = _parse_date(row.get("date"))
-        close = finite(row.get("closeunadj")) or finite(row.get("close"))
-        if session is None or close is None or session < start or session > end:
-            continue
-        if best is None or session > best[0]:
-            best = (session, close)
+    for ticker, rows in fixture_rows.items():
+        for row in rows:
+            if row.get("security_id") != identity.security_id:
+                continue
+            session = _parse_date(row.get("date"))
+            close = finite(row.get("closeunadj")) or finite(row.get("close"))
+            if session is None or close is None or session < start or session > end:
+                continue
+            if best is None or session > best[0]:
+                best = (session, close)
     return None if best is None else best[1]
 
 
-def _returns_from_prices(
-    rows: Iterable[Mapping[str, Any]],
-    identities: Mapping[str, Any],
+def _transform_streaming(
+    price_views: Sequence[tuple[str, Iterable[Mapping[str, Any]]]],
+    identities_by_base: Mapping[str, Sequence[Any]],
+    *,
+    work_dir: Path,
+    fixture_bases: set[str],
+    reconcile_ids: set[str],
+    buckets: int = TRANSFORM_BUCKETS,
 ) -> dict[str, Any]:
-    grouped: dict[str, list[dict[str, Any]]] = {}
-    for row in rows:
-        grouped.setdefault(str(row.get("ticker") or ""), []).append(dict(row))
-    out: list[dict[str, Any]] = []
-    skipped: list[dict[str, Any]] = []
-    sessions_by_security: dict[str, list[date]] = {}
-    previous_close: dict[str, float] = {}
-    for ticker, items in grouped.items():
-        candidates = list(identities.get(ticker) or [])
-        items.sort(key=lambda item: str(item.get("date") or ""))
-        for row in items:
-            try:
-                tracks = convert_vendor_row(row)
-            except ValueError as exc:
-                skipped.append({
-                    "table": "prices",
-                    "primary_key": {"ticker": ticker, "date": row.get("date")},
-                    "reason": str(exc),
-                })
-                continue
-            identity = resolve_identity_for_session(candidates, tracks.session_date)
-            if identity is None:
-                skipped.append({
-                    "table": "prices",
-                    "primary_key": {"ticker": ticker, "date": tracks.session_date.isoformat()},
-                    "reason": "identity_unresolved_for_session" if candidates else "no_security_master_row",
-                    "candidates_n": len(candidates),
-                    "raw_row_retained_in_store": True,
-                })
-                continue
-            security_id = identity.security_id
-            ret = closeadj_total_return(previous_close.get(security_id), tracks.closeadj)
-            out.append({
-                "security_id": security_id,
-                "session_date": tracks.session_date.isoformat(),
-                "return": ret,
-                "volume": tracks.raw_volume,
+    """Two-pass bucketed transform. Pass 1 partitions rows by ticker; pass 2 works one bucket at a time."""
+
+    work_dir.mkdir(parents=True, exist_ok=True)
+    paths = [work_dir / f"bucket_{index:03d}.jsonl" for index in range(buckets)]
+    handles = [path.open("w", encoding="utf-8") for path in paths]
+    no_ticker = 0
+    try:
+        for table_name, view in price_views:
+            for row in view:
+                ticker = str(row.get("ticker") or "").strip().upper()
+                if not ticker:
+                    no_ticker += 1
+                    continue
+                index = zlib.crc32(ticker.encode("utf-8")) % buckets
+                handles[index].write(json.dumps({**row, "ticker": ticker, "_src": table_name}, default=str) + "\n")
+    finally:
+        for handle in handles:
+            handle.close()
+
+    converted = 0
+    skipped_total = no_ticker
+    skipped_by_reason: Counter[str] = Counter({"missing_ticker": no_ticker} if no_ticker else {})
+    skipped_sample: list[dict[str, Any]] = []
+    sessions: dict[str, dict[str, Any]] = {}
+    pool_by_date: dict[str, list[int]] = {}
+    pool_reasons: Counter[str] = Counter()
+    fixture_rows: dict[str, list[dict[str, Any]]] = {}
+    reconcile_rows: list[dict[str, Any]] = []
+    earliest: date | None = None
+    latest: date | None = None
+    sources: Counter[str] = Counter()
+
+    def skip(reason: str, ticker: str, session: Any, candidates_n: int) -> None:
+        nonlocal skipped_total
+        skipped_total += 1
+        skipped_by_reason[reason] += 1
+        if len(skipped_sample) < EVIDENCE_ROW_CAP:
+            skipped_sample.append({
+                "table": "prices",
+                "primary_key": {"ticker": ticker, "date": None if session is None else str(session)},
+                "reason": reason,
+                "candidates_n": candidates_n,
+                "raw_row_retained_in_store": True,
             })
-            sessions_by_security.setdefault(security_id, []).append(tracks.session_date)
-            previous_close[security_id] = tracks.closeadj
-    return {"rows": out, "skipped": skipped, "sessions_by_security": sessions_by_security}
+
+    for path in paths:
+        grouped: dict[str, list[dict[str, Any]]] = {}
+        for row in iter_jsonl(path):
+            grouped.setdefault(str(row.get("ticker") or ""), []).append(row)
+        for ticker, items in grouped.items():
+            base, _suffix = split_ticker_suffix(ticker)
+            all_candidates = list(identities_by_base.get(base) or identities_by_base.get(ticker) or [])
+            exact = [item for item in all_candidates if item.ticker == ticker]
+            candidates = exact or all_candidates
+            items.sort(key=lambda item: str(item.get("date") or ""))
+            prior: deque[Any] = deque(maxlen=20)
+            previous_close: dict[str, float] = {}
+            current_sid: str | None = None
+            for row in items:
+                sources[str(row.get("_src") or "")] += 1
+                try:
+                    tracks = convert_vendor_row(row)
+                except ValueError as exc:
+                    skip(str(exc), ticker, row.get("date"), len(candidates))
+                    continue
+                identity = resolve_identity_for_session(candidates, tracks.session_date)
+                if identity is None:
+                    skip("identity_unresolved_for_session" if candidates else "no_security_master_row", ticker, tracks.session_date, len(candidates))
+                    continue
+                sid = identity.security_id
+                if sid != current_sid:
+                    prior = deque(maxlen=20)
+                    current_sid = sid
+                ret = closeadj_total_return(previous_close.get(sid), tracks.closeadj)
+                previous_close[sid] = tracks.closeadj if tracks.closeadj is not None else previous_close.get(sid, 0.0)
+                converted += 1
+                summary = sessions.get(sid)
+                if summary is None:
+                    sessions[sid] = {"first": tracks.session_date, "last": tracks.session_date, "n": 1}
+                else:
+                    summary["n"] += 1
+                    if tracks.session_date < summary["first"]:
+                        summary["first"] = tracks.session_date
+                    if tracks.session_date > summary["last"]:
+                        summary["last"] = tracks.session_date
+                if earliest is None or tracks.session_date < earliest:
+                    earliest = tracks.session_date
+                if latest is None or tracks.session_date > latest:
+                    latest = tracks.session_date
+                if identity.asset_track == "stock":
+                    pool = daily_pool_row(identity, tracks, list(prior))
+                    key = tracks.session_date.isoformat()
+                    counts = pool_by_date.setdefault(key, [0, 0, 0])
+                    counts[0] += 1
+                    if pool.in_strategy_pool:
+                        counts[1] += 1
+                        if pool.venue_tag == "venue_unverified":
+                            counts[2] += 1
+                    for reason in pool.reasons:
+                        pool_reasons[reason] += 1
+                prior.append(tracks)
+                if sid in reconcile_ids:
+                    reconcile_rows.append({
+                        "security_id": sid,
+                        "session_date": tracks.session_date.isoformat(),
+                        "return": ret,
+                        "volume": tracks.raw_volume,
+                    })
+                if base in fixture_bases or ticker in fixture_bases:
+                    fixture_rows.setdefault(ticker, []).append({
+                        "date": tracks.session_date.isoformat(),
+                        "closeunadj": tracks.closeunadj,
+                        "close": tracks.close,
+                        "security_id": sid,
+                    })
+        path.unlink(missing_ok=True)
+
+    pool_dates = sorted(pool_by_date)
+    pool_sizes = sorted(counts[1] for counts in pool_by_date.values())
+    pool_rows_total = sum(counts[1] for counts in pool_by_date.values())
+    unverified_total = sum(counts[2] for counts in pool_by_date.values())
+    by_year: dict[str, dict[str, Any]] = {}
+    for key in pool_dates:
+        raw_n, pool_n, unverified_n = pool_by_date[key]
+        year = key[:4]
+        item = by_year.setdefault(year, {"sessions": 0, "raw_rows": 0, "pool_rows": 0, "venue_unverified_rows": 0})
+        item["sessions"] += 1
+        item["raw_rows"] += raw_n
+        item["pool_rows"] += pool_n
+        item["venue_unverified_rows"] += unverified_n
+    for item in by_year.values():
+        item["pool_size_mean"] = round(item["pool_rows"] / item["sessions"], 1) if item["sessions"] else None
+        item["venue_unverified_share"] = round(item["venue_unverified_rows"] / item["pool_rows"], 4) if item["pool_rows"] else None
+    pool_summary = {
+        "computed": bool(pool_by_date),
+        "session_n": len(pool_dates),
+        "first_session": pool_dates[0] if pool_dates else None,
+        "last_session": pool_dates[-1] if pool_dates else None,
+        "pool_rows_total": pool_rows_total,
+        "pool_size_median": pool_sizes[len(pool_sizes) // 2] if pool_sizes else None,
+        "pool_size_min": pool_sizes[0] if pool_sizes else None,
+        "pool_size_max": pool_sizes[-1] if pool_sizes else None,
+        "venue_unverified_rows": unverified_total,
+        "venue_unverified_share": round(unverified_total / pool_rows_total, 4) if pool_rows_total else None,
+        "venue_unverified_signal_share": None,
+        "exclusion_reason_counts": dict(pool_reasons),
+        "by_year": by_year,
+        "rule": {
+            "category": "Domestic Common Stock or ADR Common Stock incl. Primary/Secondary Class",
+            "currency": "USD",
+            "closeunadj_min": 5.0,
+            "unadj_adv20_min": 20_000_000,
+            "adv20_prior_sessions_only": True,
+            "exchange_is_tag_not_drop": True,
+        },
+    }
+    return {
+        "converted_rows": converted,
+        "skipped_total": skipped_total,
+        "skipped_by_reason": dict(skipped_by_reason),
+        "skipped_sample": skipped_sample,
+        "sessions_by_security": sessions,
+        "pool_summary": pool_summary,
+        "fixture_rows": fixture_rows,
+        "reconcile_rows": reconcile_rows,
+        "earliest": earliest,
+        "latest": latest,
+        "source_row_counts": dict(sources),
+    }
+
+
+def _scan_actions(
+    view: Iterable[Mapping[str, Any]],
+    *,
+    fixture_bases: set[str],
+) -> dict[str, Any]:
+    vocabulary: Counter[str] = Counter()
+    fixture_actions: dict[str, list[dict[str, Any]]] = {}
+    total = 0
+    for row in view:
+        total += 1
+        action = str(row.get("action") or "").strip().lower()
+        vocabulary[action or "(blank)"] += 1
+        ticker = str(row.get("ticker") or "").strip().upper()
+        base, _suffix = split_ticker_suffix(ticker)
+        if ticker in fixture_bases or base in fixture_bases:
+            fixture_actions.setdefault(ticker, []).append(dict(row))
+    return {"total": total, "vocabulary": dict(vocabulary.most_common()), "fixture_actions": fixture_actions}
 
 
 def _table_report(
@@ -288,28 +465,37 @@ def _table_report(
     plan: Mapping[str, Any] | None = None,
     *,
     not_started: Mapping[str, Any] | None = None,
+    checkpoint: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     if not payload:
         skipped = dict(not_started or {})
         return {
             "status": str(skipped.get("status") or "AUTH_REQUIRED"),
-            "row_count": 0,
+            "row_count": int((checkpoint or {}).get("committed_row_count") or 0),
             "pages": 0,
-            "complete": False,
+            "complete": bool((checkpoint or {}).get("complete")),
             "session_row_count": 0,
             "request": dict(plan or {}),
             "download_started": False,
             "not_started_reason": skipped.get("reason"),
+            "download_mode": (checkpoint or {}).get("download_mode"),
         }
+    committed = int(payload.get("committed_row_count") or payload.get("row_count") or 0)
     return {
         "status": payload.get("status"),
-        "row_count": payload.get("row_count") or 0,
+        "row_count": committed,
         "session_row_count": payload.get("session_row_count") or 0,
-        "committed_row_count": payload.get("committed_row_count") or payload.get("row_count") or 0,
+        "committed_row_count": committed,
         "pages": payload.get("pages") or 0,
         "complete": bool(payload.get("complete")),
         "resume_skip": payload.get("resume_skip"),
         "request": dict(plan or {}),
+        "download_mode": payload.get("download_mode"),
+        "bulk": {k: payload.get(k) for k in ("years", "observed_min_date", "observed_max_date", "rows_in_archive", "rows_dropped_outside_window", "observed_shorter_than_requested", "stage") if k in payload},
+        "bulk_attempt": payload.get("bulk_attempt"),
+        "completeness": payload.get("completeness"),
+        "pk_missing_rows": payload.get("pk_missing_rows"),
+        "short_page_observed": payload.get("short_page_observed"),
     }
 
 
@@ -318,8 +504,6 @@ def _check_from_status(status: str | None, *, empty_is: str = "AUTH_REQUIRED") -
         return empty_is
     if status == "READ_OK":
         return "PASS"
-    if status in BLOCKING_TABLE_STATUSES:
-        return status
     return status
 
 
@@ -341,7 +525,10 @@ def summarize_stages(stages: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
     blocked = [
         name
         for name in REQUIRED_GATE_STAGES
-        if stages.get(name, {}).get("status") in {"AUTH_REQUIRED", "AUTH_FAILED", "ENTITLEMENT_MISSING", "NETWORK_UNAVAILABLE", "SCHEMA_MISMATCH", "VENDOR_ERROR", "CHECKPOINT_QUERY_MISMATCH"}
+        if stages.get(name, {}).get("status") in {
+            "AUTH_REQUIRED", "AUTH_FAILED", "ENTITLEMENT_MISSING", "NETWORK_UNAVAILABLE", "SCHEMA_MISMATCH",
+            "VENDOR_ERROR", "CHECKPOINT_QUERY_MISMATCH", "REDIRECT_UNEXPECTED", "EMPTY_BODY", "PAGING_UNSUPPORTED",
+        }
     ]
     accepted = not (missing or failed or partial or insufficient or blocked)
     return {
@@ -357,6 +544,69 @@ def summarize_stages(stages: Mapping[str, Mapping[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _sample_calendar_dates(n: int) -> list[str]:
+    sessions = trading_calendar_sessions(FULL_HISTORY_START, ALLOWED_END)
+    if not sessions or n <= 0:
+        return []
+    if n >= len(sessions):
+        return [item.isoformat() for item in sessions]
+    step = len(sessions) / float(n)
+    picks = sorted({sessions[min(len(sessions) - 1, int((index + 0.5) * step))] for index in range(n)})
+    return [item.isoformat() for item in picks]
+
+
+def _requests_bounded(client: SharadarClient) -> str:
+    """Check the requests actually sent, not the plan constants."""
+
+    seen = 0
+    for item in client.request_log:
+        parts = urlsplit(str(item.get("url") or ""))
+        table = parts.path.rsplit("/", 1)[-1]
+        query = parse_qs(parts.query)
+        if table not in DATE_BOUND_TABLES or "skip" not in query or "ticker" in query:
+            continue
+        if query.get("from") == query.get("to"):
+            continue  # single-day completeness recount, not a backfill request
+        seen += 1
+        if query.get("from", [None])[0] != FULL_HISTORY_START.isoformat() or query.get("to", [None])[0] != ALLOWED_END.isoformat():
+            return "FAIL"
+    return "PASS" if seen else "NOT_EXERCISED"
+
+
+def _self_checks() -> dict[str, str]:
+    """Runtime red/green probes of the two algorithm fixes and the feature version."""
+
+    checks: dict[str, str] = {}
+    try:
+        from app.services.research_eod_v1 import FEATURE_VERSION
+
+        checks["feature_version_bump"] = "PASS" if FEATURE_VERSION == "us-eod-research-features-v1.6" else "FAIL"
+    except Exception:
+        checks["feature_version_bump"] = "FAIL"
+    try:
+        from app.services.research_eod_v1.cross_section import q_star
+
+        values = {f"A{i:02d}": float(i) for i in range(20)}
+        values.update({f"B{i:02d}": float(i + 10) for i in range(20)})
+        parent = {sid: ("P1" if sid.startswith("A") else "P2") for sid in values}
+        ranks = q_star(values, industry={sid: None for sid in values}, parent=parent, tracks={sid: "stock" for sid in values})
+        checks["parent_rank_fix"] = "PASS" if abs(float(ranks["A10"]) - 52.6315789474) < 1e-6 and float(ranks["B00"]) == 0.0 else "FAIL"
+    except Exception:
+        checks["parent_rank_fix"] = "FAIL"
+    try:
+        from types import SimpleNamespace
+
+        from app.services.research_eod_v1.snapshot import _v_state
+
+        raw = SimpleNamespace(rvol=0.7, down_ratio=None, clv5=0.8, breakout_track={"first_day_rvol": 2.0})
+        same = _v_state("B_confirmed_base_breakout", raw)
+        missing = _v_state("B_confirmed_base_breakout", SimpleNamespace(rvol=2.0, down_ratio=None, clv5=0.8, breakout_track={"first_day_rvol": None}))
+        checks["breakout_first_day_fix"] = "PASS" if same is not None and abs(same - 70.79441541679836) < 1e-9 and missing is None else "FAIL"
+    except Exception:
+        checks["breakout_first_day_fix"] = "FAIL"
+    return checks
+
+
 def execute_data_gate(
     *,
     client: SharadarClient | None = None,
@@ -365,32 +615,89 @@ def execute_data_gate(
     allow_network: bool = True,
     minute_entitlement: bool = False,
     reconcile_cache_paths: Sequence[Path] | None = None,
+    mode: str = "bulk_first",
+    bulk_dir: Path | None = None,
+    work_dir: Path | None = None,
+    verify_completeness: bool = True,
+    completeness_sample_dates: int = COMPLETENESS_SAMPLE_DATES,
+    reconcile_min_return_coverage: int = RECONCILE_MIN_RETURN_COVERAGE,
+    reconcile_min_securities: int = RECONCILE_MIN_SECURITIES,
 ) -> dict[str, Any]:
     adapter = client or SharadarClient(allow_network=allow_network)
     present = credential_present()
     probe = run_sharadar_probe(allow_network=allow_network, client=adapter)
     plan = download_request_plan()
     download_allowed = probe.get("full_download_allowed") or {"allowed": present, "blockers": []}
+    probe_entitlement = probe.get("entitlement") or {}
+    bulk_years = probe_entitlement.get("bulk_years") or "full"
     fetched: dict[str, Any] = {}
     memory_rows: dict[str, list[dict[str, Any]]] = {table: [] for table in TABLES}
     raw_counts: dict[str, int] = {table: 0 for table in TABLES}
+    modes_used: dict[str, str] = {}
     if present and download_allowed.get("allowed"):
         for table, request in plan.items():
-            fetched[table] = adapter.fetch_all(
-                table,
-                extra=request["extra"],
-                store=store,
-                limit=int(request["limit"]),
-            )
-            if store is not None and fetched[table].get("status") in {"READ_OK", "PARTIAL"}:
-                raw_counts[table] = int(fetched[table].get("committed_row_count") or fetched[table].get("row_count") or 0)
-            else:
-                memory_rows[table] = list(fetched[table].get("rows") or [])
-                raw_counts[table] = len(memory_rows[table])
+            result: dict[str, Any] | None = None
+            bulk_attempt: dict[str, Any] | None = None
+            if mode == "bulk_first" and store is not None:
+                attempt = bulk_first_download(
+                    adapter,
+                    table,
+                    store,
+                    years=str(bulk_years),
+                    dest_dir=bulk_dir or (store / "bulk"),
+                    limit=int(request["limit"]),
+                )
+                if attempt.get("status") == "READ_OK":
+                    result = attempt
+                else:
+                    bulk_attempt = {k: v for k, v in attempt.items() if k not in {"checkpoint", "rows"}}
+            if result is None:
+                result = adapter.fetch_all(
+                    table,
+                    extra=request["extra"],
+                    store=store,
+                    limit=int(request["limit"]),
+                )
+                result["download_mode"] = "paged"
+                if bulk_attempt is not None:
+                    result["bulk_attempt"] = bulk_attempt
+                if (
+                    verify_completeness
+                    and store is not None
+                    and table in DATE_BOUND_TABLES
+                    and result.get("status") == "READ_OK"
+                    and result.get("complete")
+                    and int(result.get("row_count") or 0) > 0
+                ):
+                    result["completeness"] = verify_paged_completeness(
+                        adapter,
+                        table,
+                        store,
+                        _sample_calendar_dates(int(completeness_sample_dates)),
+                        extra=request["extra"],
+                        limit=int(request["limit"]),
+                    )
+            fetched[table] = result
+            modes_used[table] = str(result.get("download_mode") or "paged")
+            if store is None:
+                memory_rows[table] = list(result.get("rows") or [])
+
+    checkpoints: dict[str, dict[str, Any] | None] = {
+        table: (load_checkpoint(store, table) if store is not None else None) for table in TABLES
+    }
+    for table in TABLES:
+        if store is not None:
+            checkpoint = checkpoints[table]
+            raw_counts[table] = int((checkpoint or {}).get("committed_row_count") or 0)
+        else:
+            raw_counts[table] = len(memory_rows[table])
 
     def view(table: str, *, date_field: str | None) -> IsolatedTable:
-        if store is not None and fetched.get(table, {}).get("status") in {"READ_OK", "PARTIAL"}:
-            return IsolatedTable(path=merged_path(store, table), date_field=date_field)
+        if store is not None:
+            path = merged_path(store, table)
+            if path.is_file() and raw_counts[table]:
+                return IsolatedTable(path=path, date_field=date_field)
+            return IsolatedTable(rows=[], date_field=date_field)
         return IsolatedTable(rows=memory_rows[table], date_field=date_field)
 
     isolated = {
@@ -401,25 +708,55 @@ def execute_data_gate(
     }
     isolated_counts = {table: item.count() for table, item in isolated.items()}
     identities = _identities_from_tickers(isolated["tickers"])
-    converted = _returns_from_prices(
-        list(isolated["stocks"]) + list(isolated["funds"]),
-        identities["by_ticker"],
-    )
-    sharadar_returns = converted["rows"]
+    fixture_bases = {str(item["ticker"]).upper() for item in DELIST_FIXTURES}
+
+    if yahoo_rows is None:
+        cache = load_reconcile_rows(
+            identities_by_ticker=identities["by_base"],
+            paths=reconcile_cache_paths,
+        )
+    else:
+        cache = {
+            "available": True,
+            "status": "READ_OK",
+            "rows": list(yahoo_rows),
+            "source": {"kind": "caller_supplied_rows", "available": True, "live_yahoo_request": False},
+        }
+    reconcile_ids = {str(row.get("security_id")) for row in cache["rows"]}
+
+    tmp_holder: tempfile.TemporaryDirectory[str] | None = None
+    if work_dir is None:
+        tmp_holder = tempfile.TemporaryDirectory(prefix="sharadar-transform-")
+        bucket_dir = Path(tmp_holder.name)
+    else:
+        bucket_dir = work_dir
+    try:
+        converted = _transform_streaming(
+            (("stocks", isolated["stocks"]), ("funds", isolated["funds"])),
+            identities["by_base"],
+            work_dir=bucket_dir,
+            fixture_bases=fixture_bases,
+            reconcile_ids=reconcile_ids,
+        )
+    finally:
+        if tmp_holder is not None:
+            tmp_holder.cleanup()
+    actions_scan = _scan_actions(isolated["actions"], fixture_bases=fixture_bases)
+
     delist = []
     for fixture in DELIST_FIXTURES:
-        ticker = str(fixture["ticker"])
+        ticker = str(fixture["ticker"]).upper()
         year = int(fixture["year"])
-        resolved = _delist_identity(fixture, identities["by_ticker"])
+        resolved = _delist_identity(fixture, identities["by_base"])
         identity = resolved["identity"]
         start, end = _event_bounds(identity, year)
         actions = (
-            _events_in_window(isolated["actions"], ticker=ticker, start=start, end=end)
+            _fixture_actions_for(identity, ticker, actions_scan["fixture_actions"], start=start, end=end)
             if identity is not None
             else []
         )
         last_trade = (
-            _last_observed_quote(isolated["stocks"], ticker=ticker, start=start, end=end)
+            _last_trade_for(identity, converted["fixture_rows"], start=start, end=end)
             if identity is not None
             else None
         )
@@ -434,6 +771,7 @@ def execute_data_gate(
                     "end": end.isoformat(),
                     "bounded_by_resolved_coverage": identity is not None,
                     "candidates_n": resolved["candidates_n"],
+                    "candidate_tickers": resolved["candidate_tickers"],
                     "covering_n": resolved["covering_n"],
                     "unresolved_reason": resolved["unresolved_reason"],
                     "relatedticker_hints_not_verified_aliases": resolved["relatedticker_hints_not_verified_aliases"],
@@ -441,34 +779,21 @@ def execute_data_gate(
                 },
             )
         )
-    if yahoo_rows is None:
-        cache = load_reconcile_rows(
-            identities_by_ticker=identities["by_ticker"],
-            paths=reconcile_cache_paths,
-        )
-    else:
-        cache = {
-            "available": True,
-            "status": "READ_OK",
-            "rows": list(yahoo_rows),
-            "source": {"kind": "caller_supplied_rows", "available": True, "live_yahoo_request": False},
-        }
+
     reconcile = reconcile_aligned_returns(
-        sharadar_returns,
+        converted["reconcile_rows"],
         cache["rows"],
         source_available=bool(cache["available"]),
         source=cache["source"],
+        min_return_coverage=int(reconcile_min_return_coverage),
+        min_securities=int(reconcile_min_securities),
+        sharadar_available=int(converted["converted_rows"]) > 0,
     )
-    dated = sorted({
-        session
-        for sessions in converted["sessions_by_security"].values()
-        for session in sessions
-    })
-    earliest = dated[0] if dated else None
+    earliest = converted["earliest"]
     entitlement = classify_entitlement(
         earliest=earliest if present else None,
-        bulk_years=None,
-        verified_access=bool(present and dated),
+        bulk_years=probe_entitlement.get("bulk_years"),
+        verified_access=bool(present and earliest is not None),
         credential=present,
     )
     calendar = trading_calendar_sessions(earliest or FULL_HISTORY_START, ALLOWED_END) if earliest else []
@@ -485,28 +810,18 @@ def execute_data_gate(
         else {"status": "INSUFFICIENT", "reason": "probe_blockers:" + ",".join(download_allowed.get("blockers") or ["unknown"])}
     )
     table_reports = {
-        table: _table_report(fetched.get(table), plan.get(table), not_started=not_started)
+        table: _table_report(fetched.get(table), plan.get(table), not_started=not_started, checkpoint=checkpoints[table])
         for table in TABLES
     }
     live_ok = present and any(item["status"] == "READ_OK" for item in table_reports.values())
-    live_partial = present and any(item["status"] == "PARTIAL" for item in table_reports.values())
+    live_partial = present and any(item["status"] in {"PARTIAL", "NETWORK_UNAVAILABLE", "REDIRECT_UNEXPECTED", "EMPTY_BODY", "PAGING_UNSUPPORTED"} and item["row_count"] for item in table_reports.values())
     rows_present = any(raw_counts[table] for table in TABLES)
     raw_download = (
         RAW_DOWNLOAD_COMPLETE
         if live_ok and rows_present and all(item["complete"] for item in table_reports.values())
-        else ("PARTIAL" if live_ok or live_partial else _check_from_status(
+        else ("PARTIAL" if (live_ok or live_partial) else _check_from_status(
             next((item["status"] for item in table_reports.values()), None)
         ))
-    )
-    fixture_only = all(item.get("verification") == "fixture_list_only" for item in delist)
-    matched = [item for item in delist if item.get("verification") == "store_or_live_matched"]
-    matched_ok = all(item["live_status"] in {"PASS", "UNSUPPORTED", "INSUFFICIENT"} for item in matched)
-    delist_live = (
-        "AUTH_REQUIRED" if fixture_only else (
-            "PASS" if matched and matched_ok and len(matched) == len(delist) else (
-                "PARTIAL" if matched and matched_ok else "FAIL"
-            )
-        )
     )
     stages = _build_stages(
         present=present,
@@ -520,7 +835,6 @@ def execute_data_gate(
         budget=budget,
         volume=volume,
         delist=delist,
-        delist_live=delist_live,
         entitlement=entitlement,
     )
     summary = summarize_stages(stages)
@@ -532,35 +846,34 @@ def execute_data_gate(
         table_reports=table_reports,
         rows_present=rows_present,
     )
+    concrete_n = sum(1 for item in delist if item.get("concrete_terminal"))
+    resolved_n = sum(1 for item in delist if item.get("identity_resolved"))
     checks = {
-        "adapter_code": "PASS",
-        "synthetic_three_track": "PASS",
+        **_self_checks(),
         "identity_contract": stages["IDENTITY"]["status"],
         "delist_fixture_table": "PASS" if len(DELIST_FIXTURES) == 16 else "FAIL",
-        "delist_live_verified": delist_live,
-        "parent_rank_fix": "PASS",
-        "breakout_first_day_fix": "PASS",
-        "feature_version_bump": "PASS",
-        "control_archive_index": "PASS",
+        "delist_live_verified": stages["IDENTITY"]["evidence"].get("delist_live"),
+        "delist_resolved_n": resolved_n,
+        "delist_concrete_terminal_n": concrete_n,
+        "control_archive_index": _control_index_check(),
         "live_sharadar_read": live_read,
         "yahoo_reconcile_live": reconcile["status"],
         "volume_scope": volume["status"],
-        "persistent_handover": "PASS" if store is not None and live_ok and rows_present else ("UNSUPPORTED" if store is None else live_read),
+        "persistent_handover": "PASS" if store is not None and rows_present else ("UNSUPPORTED" if store is None else live_read),
         "chat_or_massive_credential_used": "PASS_NOT_USED",
         "four_table_mock_or_live_not_empty_placeholder": "PASS" if rows_present else ("AUTH_REQUIRED" if not present else "INSUFFICIENT"),
-        "explicit_history_request_bounds": "PASS" if all(
-            plan[table]["extra"].get("from") == FULL_HISTORY_START.isoformat()
-            and plan[table]["extra"].get("to") == ALLOWED_END.isoformat()
-            for table in DATE_BOUND_TABLES
-        ) else "FAIL",
+        "explicit_history_request_bounds": _requests_bounded(adapter),
+        "channel_confirmed": "PASS" if probe.get("channel_confirmed") == "official_https_origin_api.sharadar.com" else str(probe.get("channel_confirmed")),
+        "download_modes": modes_used,
     }
     store_note = {
         "path": None if store is None else str(store),
         "public_git": False,
-        "resume": "load checkpoints/<table>.json; verify page hashes; continue from next_skip",
-        "unique_key_index": None if store is None else "keys/<table>.keys; per-page cost, no prefix rescan",
+        "resume": "load checkpoints/<table>.json; verify page hashes; continue from next_skip; rows already on disk are read whatever the last status was",
+        "unique_key_index": None if store is None else "keys/<table>.sqlite (lookup) + keys/<table>.keys (append-only listing)",
+        "merged_file": "append-only per committed page; rebuilt only after an orphan-page adoption or a replaced page",
         "paid_rows_must_stay_outside_git": True,
-        "bounded_reads": "merged jsonl streamed row by row; no whole-table copy",
+        "bounded_reads": "isolated views stream jsonl; transform is a two-pass bucketed stream under a temporary directory; no whole-table list",
         "allowed_window": {
             "start": FULL_HISTORY_START.isoformat(),
             "end": ALLOWED_END.isoformat(),
@@ -572,27 +885,53 @@ def execute_data_gate(
         "credential_present": present,
         "probe": probe,
         "request_plan": plan,
+        "download_mode_requested": mode,
+        "download_modes_used": modes_used,
         "full_download_allowed": download_allowed,
         "tables": table_reports,
         "raw_row_counts": raw_counts,
         "isolated_row_counts": isolated_counts,
         "identities": {
             "n": len(identities["by_id"]),
-            "failures": identities["failures"],
-            "reused_tickers": identities["reused_tickers"],
+            "failures": identities["failures"][:EVIDENCE_ROW_CAP],
+            "failures_n": len(identities["failures"]),
+            "reused_tickers": identities["reused_tickers"][:EVIDENCE_ROW_CAP],
+            "reused_tickers_n": len(identities["reused_tickers"]),
             "listed_at_not_from_firstpricedate": True,
             "relatedtickers_not_auto_aliases": True,
             "session_date_resolves_reused_ticker": True,
+            "numeric_suffix_resolved_by_ticker_base": True,
         },
         "delist": delist,
         "reconcile": reconcile,
         "volume": volume,
         "history_budget": budget,
         "entitlement": entitlement,
+        "entitlement_probe": probe.get("entitlement_probe"),
         "transform": {
-            "converted_rows": len(sharadar_returns),
-            "skipped_rows": converted["skipped"],
-            "skipped_n": len(converted["skipped"]),
+            "converted_rows": converted["converted_rows"],
+            "skipped_n": converted["skipped_total"],
+            "skipped_share": (
+                converted["skipped_total"] / (converted["converted_rows"] + converted["skipped_total"])
+                if (converted["converted_rows"] + converted["skipped_total"])
+                else None
+            ),
+            "skipped_by_reason": converted["skipped_by_reason"],
+            "skipped_rows": converted["skipped_sample"],
+            "skipped_rows_capped_at": EVIDENCE_ROW_CAP,
+            "source_row_counts": converted["source_row_counts"],
+        },
+        "daily_pool": converted["pool_summary"],
+        "action_vocabulary": {
+            "total_rows": actions_scan["total"],
+            "observed": actions_scan["vocabulary"],
+            "assumed_by_terminal_classifier": {
+                "bankruptcy": sorted(ACTION_BANKRUPTCY),
+                "delisted": sorted(ACTION_DELISTED),
+                "acquisition_cash": sorted(ACTION_ACQUISITION_CASH),
+                "acquisition_stock": sorted(ACTION_ACQUISITION_STOCK),
+            },
+            "vocabulary_is_assumed_until_observed": True,
         },
         "event_invariants": {
             "actions_passthrough": True,
@@ -615,6 +954,26 @@ def execute_data_gate(
     }
 
 
+def _control_index_check() -> str:
+    try:
+        from app.services.research_eod_v1.data.sharadar_archive import CONTROL_LABEL, build_control_index
+
+        return "PASS" if build_control_index().get("archive_label") == CONTROL_LABEL else "FAIL"
+    except Exception:
+        return "FAIL"
+
+
+def _cap(stage: dict[str, Any], download_status: str) -> dict[str, Any]:
+    """An incomplete download caps a downstream PASS at PARTIAL."""
+
+    if download_status != "PASS" and stage.get("status") == "PASS":
+        capped = dict(stage)
+        capped["status"] = "PARTIAL"
+        capped["evidence"] = {**dict(stage.get("evidence") or {}), "capped_by": f"DOWNLOAD:{download_status}"}
+        return capped
+    return stage
+
+
 def _build_stages(
     *,
     present: bool,
@@ -628,7 +987,6 @@ def _build_stages(
     budget: Mapping[str, Any],
     volume: Mapping[str, Any],
     delist: Sequence[Mapping[str, Any]],
-    delist_live: str,
     entitlement: Mapping[str, Any],
 ) -> dict[str, Any]:
     statuses = {str(item.get("status")) for item in table_reports.values()}
@@ -647,7 +1005,7 @@ def _build_stages(
         access = _stage("AUTH_FAILED", {"table_statuses": sorted(statuses)})
     elif "ENTITLEMENT_MISSING" in statuses:
         access = _stage("ENTITLEMENT_MISSING", {"table_statuses": sorted(statuses)})
-    elif "NETWORK_UNAVAILABLE" in statuses:
+    elif "NETWORK_UNAVAILABLE" in statuses and not any(int(item.get("row_count") or 0) for item in table_reports.values()):
         access = _stage("NETWORK_UNAVAILABLE", {"table_statuses": sorted(statuses)})
     elif statuses == {"READ_OK"}:
         access = _stage("PASS", {"table_statuses": ["READ_OK"]})
@@ -656,43 +1014,120 @@ def _build_stages(
 
     total_raw = sum(int(raw_counts.get(table, 0)) for table in TABLES)
     empty_tables = [table for table in TABLES if not int(raw_counts.get(table, 0))]
+    incomplete = [table for table, item in table_reports.items() if not bool(item.get("complete"))]
+    completeness_fail = [
+        table for table, item in table_reports.items()
+        if isinstance(item.get("completeness"), Mapping) and item["completeness"].get("status") == "FAIL"
+    ]
+    modes = {table: item.get("download_mode") for table, item in table_reports.items()}
+    completeness_checked: dict[str, Any] = {}
+    for table, item in table_reports.items():
+        check = item.get("completeness")
+        if not isinstance(check, Mapping):
+            if table not in DATE_BOUND_TABLES:
+                reason = "not_date_bound"
+            elif item.get("download_mode") == "bulk":
+                reason = "bulk_mode"
+            elif not int(item.get("row_count") or 0):
+                reason = "no_rows"
+            else:
+                reason = "check_disabled_or_download_incomplete"
+            completeness_checked[table] = {"status": "NOT_RUN", "reason": reason}
+            continue
+        dates = [entry for entry in (check.get("dates") or []) if isinstance(entry, Mapping)]
+        completeness_checked[table] = {
+            "status": check.get("status"),
+            "sampled_n": int(check.get("sampled_n") or len(dates)),
+            "matched_n": sum(1 for entry in dates if entry.get("match")),
+            "vendor_rows_sampled": sum(int(entry.get("vendor_rows") or 0) for entry in dates),
+        }
+    download_evidence = {
+        "raw_rows": total_raw,
+        "per_table": dict(raw_counts),
+        "modes": modes,
+        "empty_tables": empty_tables,
+        "incomplete_tables": incomplete,
+        "completeness_checked": completeness_checked,
+        "completeness_failed_tables": completeness_fail,
+        "completeness_samples": {table: table_reports[table].get("completeness") for table in completeness_fail},
+        "reasons": [],
+    }
     if not present:
         download = _stage("AUTH_REQUIRED", {"raw_rows": 0})
     elif total_raw == 0:
-        download = _stage("INSUFFICIENT", {"raw_rows": 0, "reason": "all_tables_empty", "empty_tables": empty_tables})
-    elif empty_tables:
-        download = _stage("PARTIAL", {"raw_rows": total_raw, "empty_tables": empty_tables})
-    elif not all(bool(item.get("complete")) for item in table_reports.values()):
-        download = _stage("PARTIAL", {"raw_rows": total_raw, "reason": "incomplete_table"})
+        download = _stage("INSUFFICIENT", {**download_evidence, "reasons": ["all_tables_empty"]})
     else:
-        download = _stage("PASS", {"raw_rows": total_raw, "per_table": dict(raw_counts)})
+        reasons = []
+        if empty_tables:
+            reasons.append("empty_table")
+        if incomplete:
+            reasons.append("incomplete_table")
+        if completeness_fail:
+            reasons.append("completeness_sample_mismatch")
+        download = _stage("PARTIAL" if reasons else "PASS", {**download_evidence, "reasons": reasons})
+    download_status = str(download["status"])
 
     allowed_rows = int(isolated_counts.get("stocks", 0)) + int(isolated_counts.get("funds", 0))
-    skipped = list(converted.get("skipped") or [])
+    converted_n = int(converted.get("converted_rows") or 0)
+    skipped_n = int(converted.get("skipped_total") or 0)
+    share = skipped_n / (converted_n + skipped_n) if (converted_n + skipped_n) else 0.0
     if not present:
         transform = _stage("AUTH_REQUIRED", {"converted_rows": 0})
     elif allowed_rows == 0:
         transform = _stage("INSUFFICIENT", {"reason": "empty_allowed_window", "allowed_price_rows": 0})
-    elif not converted.get("rows"):
-        transform = _stage("FAIL", {"reason": "no_row_converted", "skipped_n": len(skipped)})
-    elif skipped:
-        transform = _stage("PARTIAL", {"converted_rows": len(converted["rows"]), "skipped_n": len(skipped), "skipped_sample": skipped[:10]})
+    elif converted_n == 0:
+        transform = _stage("FAIL", {"reason": "no_row_converted", "skipped_n": skipped_n, "skipped_by_reason": converted.get("skipped_by_reason")})
+    elif share > TRANSFORM_SKIP_TOLERANCE:
+        transform = _stage("PARTIAL", {
+            "converted_rows": converted_n,
+            "skipped_n": skipped_n,
+            "skipped_share": share,
+            "tolerance": TRANSFORM_SKIP_TOLERANCE,
+            "skipped_by_reason": converted.get("skipped_by_reason"),
+            "skipped_sample": list(converted.get("skipped_sample") or [])[:10],
+        })
     else:
-        transform = _stage("PASS", {"converted_rows": len(converted["rows"]), "skipped_n": 0})
+        transform = _stage("PASS", {"converted_rows": converted_n, "skipped_n": skipped_n, "skipped_share": share, "tolerance": TRANSFORM_SKIP_TOLERANCE})
+    transform = _cap(transform, download_status)
 
-    unresolved = [item["ticker"] for item in delist if not (item.get("identity_resolution") or {}).get("security_id")]
+    resolved = [item for item in delist if item.get("identity_resolved")]
+    concrete = [item for item in delist if item.get("concrete_terminal")]
+    unresolved = [item["ticker"] for item in delist if not item.get("identity_resolved")]
+    unknown = [item["ticker"] for item in delist if item.get("identity_resolved") and not item.get("concrete_terminal")]
+    failed_cases = [item["ticker"] for item in delist if item.get("live_status") == "FAIL"]
+    fixture_only = all(item.get("verification") == "fixture_list_only" for item in delist)
+    if fixture_only:
+        delist_live = "AUTH_REQUIRED" if not present else "INSUFFICIENT"
+    elif failed_cases:
+        delist_live = "FAIL"
+    elif len(resolved) == len(delist) and len(concrete) >= IDENTITY_MIN_CONCRETE_TERMINALS:
+        delist_live = "PASS"
+    else:
+        delist_live = "PARTIAL"
+    identity_evidence = {
+        "identities": len(identities.get("by_id") or {}),
+        "delist_live": delist_live,
+        "resolved_n": len(resolved),
+        "concrete_terminal_n": len(concrete),
+        "required_concrete_terminals": IDENTITY_MIN_CONCRETE_TERMINALS,
+        "unresolved": unresolved,
+        "terminal_unknown": unknown,
+        "failed_cases": failed_cases,
+        "master_row_failures_n": len(identities.get("failures") or []),
+    }
     if not present:
         identity = _stage("AUTH_REQUIRED", {"identities": 0})
     elif not identities.get("by_id"):
         identity = _stage("INSUFFICIENT", {"reason": "no_security_master_row"})
-    elif identities.get("failures"):
-        identity = _stage("PARTIAL", {"failures": identities["failures"][:10], "identities": len(identities["by_id"])})
-    elif delist_live in {"FAIL"}:
-        identity = _stage("FAIL", {"delist_live": delist_live, "unresolved": unresolved})
-    elif delist_live in {"AUTH_REQUIRED", "PARTIAL"}:
-        identity = _stage("PARTIAL", {"delist_live": delist_live, "unresolved_n": len(unresolved)})
+    elif delist_live == "FAIL":
+        identity = _stage("FAIL", identity_evidence)
+    elif delist_live == "PASS" and not identities.get("failures"):
+        identity = _stage("PASS", identity_evidence)
+    elif delist_live == "INSUFFICIENT":
+        identity = _stage("INSUFFICIENT", identity_evidence)
     else:
-        identity = _stage("PASS", {"identities": len(identities["by_id"]), "delist_live": delist_live})
+        identity = _stage("PARTIAL", identity_evidence)
+    identity = _cap(identity, download_status)
 
     reconcile_status = str(reconcile.get("status"))
     reconcile_stage = _stage(
@@ -701,24 +1136,39 @@ def _build_stages(
             "aligned_n": reconcile.get("aligned_n"),
             "return_coverage_n": reconcile.get("return_coverage_n"),
             "volume_coverage_n": reconcile.get("volume_coverage_n"),
+            "securities_n": reconcile.get("securities_n"),
+            "insufficient_reason": reconcile.get("insufficient_reason"),
             "source": reconcile.get("comparison_source"),
         },
     )
+    reconcile_stage = _cap(reconcile_stage, download_status)
 
     budget_status = str(budget.get("status"))
+    entitlement_status = str(entitlement.get("status"))
+    if budget_status != "COMPUTED":
+        history_status = budget_status
+    elif entitlement_status == "ENTITLEMENT_SHORT_5Y":
+        history_status = "ENTITLEMENT_MISSING"
+    elif entitlement_status in {"READ_OK", "HISTORY_10Y"}:
+        history_status = "PASS"
+    else:
+        history_status = "PARTIAL"
     history = _stage(
-        "PASS" if budget_status == "COMPUTED" else budget_status,
+        history_status,
         {
             "calendar_sessions_in_window": budget.get("calendar_sessions_in_window"),
-            "first_score_day": budget.get("first_score_day"),
+            "first_score_day_earliest_any_security": budget.get("first_score_day"),
             "per_security": budget.get("per_security"),
             "entitlement": {
-                "status": entitlement.get("status"),
+                "status": entitlement_status,
                 "verified_access": entitlement.get("verified_access"),
                 "authorized_range_unknown": entitlement.get("authorized_range_unknown"),
+                "bulk_years": entitlement.get("bulk_years"),
             },
+            "reason": None if history_status == "PASS" else ("entitlement_tier_unknown" if history_status == "PARTIAL" else history_status),
         },
     )
+    history = _cap(history, download_status)
 
     volume_stage = _stage(str(volume.get("status")), {"session_scope": volume.get("session_scope")})
     blocked_cases = [item["ticker"] for item in delist if item.get("economic_settlement_blocked_only")]
@@ -760,10 +1210,10 @@ def _terminal_from_stages(
         return "AUTH_FAILED", "AUTH_FAILED"
     if stages["TABLE_ACCESS"]["status"] == "ENTITLEMENT_MISSING":
         return "ENTITLEMENT_MISSING", "ENTITLEMENT_MISSING"
-    if stages["TABLE_ACCESS"]["status"] == "NETWORK_UNAVAILABLE" and not transport_ok:
+    if stages["TABLE_ACCESS"]["status"] == "NETWORK_UNAVAILABLE" and not transport_ok and not rows_present:
         return "NETWORK_UNAVAILABLE", "NETWORK_UNAVAILABLE"
-    if rows_present and transport_ok:
-        live_read = "PASS"
+    if rows_present and (transport_ok or rows_present):
+        live_read = "PASS" if transport_ok else "PARTIAL"
     elif transport_ok or not statuses - {"INSUFFICIENT"}:
         live_read = "INSUFFICIENT"
     else:
