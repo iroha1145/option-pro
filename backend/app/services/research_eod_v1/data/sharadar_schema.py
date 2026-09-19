@@ -98,6 +98,7 @@ UNADJ_ADV20_MIN = 20_000_000.0
 
 STATUSES = (
     "READ_OK",
+    "PARTIAL",
     "AUTH_REQUIRED",
     "AUTH_FAILED",
     "ENTITLEMENT_MISSING",
@@ -105,7 +106,15 @@ STATUSES = (
     "HISTORY_10Y",
     "NETWORK_UNAVAILABLE",
     "SCHEMA_MISMATCH",
+    "VENDOR_ERROR",
+    "CHECKPOINT_QUERY_MISMATCH",
+    "INSUFFICIENT",
+    "UNSUPPORTED",
 )
+
+OFFICIAL_HTTPS_HOST = "api.sharadar.com"
+OFFICIAL_BULK_META_FIELDS = ("table", "name", "size", "sizeLabel", "modified")
+SOURCE_VERSION = "api.sharadar.com/v1.0"
 
 PROBE_SAMPLES = {
     "non_free_example": "MSFT",

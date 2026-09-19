@@ -226,7 +226,15 @@ def test_entitlement_windows_and_volume_scope() -> None:
     assert audit["status"] == "UNSUPPORTED"
     budget = history_budget(earliest=None, entitlement_status="AUTH_REQUIRED", calendar_sessions=None)
     assert budget["status"] == "AUTH_REQUIRED"
+    assert budget["first_score_day"] is None
     assert budget["evaluable_years_not_claimed_from_2010_alone"] is True
+    dates_only = history_budget(earliest=date(2010, 1, 4), entitlement_status="READ_OK", calendar_sessions=None)
+    assert dates_only["status"] == "INSUFFICIENT"
+    assert dates_only["first_score_day"] is None
+    computed = history_budget(earliest=date(2010, 1, 4), entitlement_status="READ_OK", calendar_sessions=400)
+    assert computed["status"] == "COMPUTED"
+    assert computed["evaluable_sessions_after_warmup"]["A_trend_quality"] == 148
+    assert computed["first_score_day"]["A_trend_quality"] is None
 
 
 def test_yahoo_reconcile_thresholds() -> None:
@@ -246,6 +254,14 @@ def test_yahoo_reconcile_thresholds() -> None:
     assert result["status"] == "FAIL"
     empty = reconcile_aligned_returns([], [])
     assert empty["status"] == "AUTH_REQUIRED"
+    missing = reconcile_aligned_returns(
+        [{"security_id": "S", "session_date": "2020-01-02", "return": None, "volume": None}],
+        [{"security_id": "S", "session_date": "2020-01-02", "return": None, "volume": None}],
+    )
+    assert missing["status"] == "INSUFFICIENT"
+    assert missing["return_coverage_n"] == 0
+    assert missing["volume_coverage_n"] == 0
+    assert missing["rows"][0]["reason_class"] == "missing_return_and_volume"
 
 
 def test_parse_json_and_csv_bodies() -> None:

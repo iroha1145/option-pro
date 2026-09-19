@@ -58,12 +58,17 @@ class CorporateAction:
     security_id: str
     session_date: date
     kind: str
-    value: float
+    value: float | None
     economic_known_at: datetime | None = None
     known_at: datetime | None = None
     effective_at: date | None = None
     pay_date: date | None = None
     settlement_at: date | None = None
+    raw_value: str | None = None
+    contraticker: str | None = None
+    contraname: str | None = None
+    economic_status: str = "ok"
+    reason: str | None = None
 
 
 @dataclass(frozen=True)

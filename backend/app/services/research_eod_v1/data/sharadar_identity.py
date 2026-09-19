@@ -197,6 +197,8 @@ def identity_from_ticker_row(row: Mapping[str, Any]) -> SharadarIdentity:
 
 
 def unadj_adv20(tracks: Sequence[PriceTracks]) -> float | None:
+    """Prior 20 complete sessions only. The caller must exclude T."""
+
     dollars = [item.raw_dollar_volume for item in tracks[-20:] if item.raw_dollar_volume is not None]
     if len(dollars) < 20:
         return None
@@ -215,7 +217,8 @@ def daily_pool_row(
         reasons.append("CURRENCY")
     if tracks.closeunadj < CLOSEUNADJ_MIN:
         reasons.append("CLOSEUNADJ")
-    adv = unadj_adv20(list(history) + [tracks] if (not history or history[-1].session_date != tracks.session_date) else list(history))
+    prior = [item for item in history if item.session_date < tracks.session_date]
+    adv = unadj_adv20(prior)
     if adv is None or adv < UNADJ_ADV20_MIN:
         reasons.append("UNADJ_ADV20")
     return DailyPoolRow(
