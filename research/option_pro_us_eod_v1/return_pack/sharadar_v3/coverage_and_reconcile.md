@@ -16,10 +16,17 @@
 
 ## 对账
 
-口径：Sharadar `closeunadj` 简单收益 vs Massive `adjusted=false` 日线；币种 USD；未与 Yahoo 静默拼接。成交量分母/时段未知，**不宣称量能实验或经济账本可用**。
+对照源是 Massive `adjusted=false`，不是 Yahoo。未与 Yahoo 静默拼接。`yahoo_n` 只是旧字段别名。
 
-2016 Massive 对照为 `UNSUPPORTED`（控制源没有给出该窗）。对账只用 2024 窗。
+2016 Massive 对照为 `UNSUPPORTED`。对账只用 2024 窗。
 
-跟进后：`reconcile.status=PASS`，`return_coverage_n=297`，`securities_n=11`（门槛 250 / 10）。前一期价格不足的日子不算有效收益对。marked 收益/量偏差未当作真值。
+| 字段 | 状态 |
+| --- | --- |
+| 未复权简单收益 | PASS，297 对 / 11 证券（门槛 250 / 10） |
+| 拆股复权几何价格 | UNKNOWN |
+| 含分红总回报 | UNKNOWN |
+| 真实股份口径成交量与成交额 | UNKNOWN |
+| 时段口径 | UNKNOWN |
+| 经济账本 | UNKNOWN |
 
-Yahoo 合法缓存本环境不存在，未参与。
+一个总 PASS 不宣称其他字段也已通过。不修改 Sharadar 原始值去贴合对照源。Yahoo 合法缓存本环境不存在，未参与。

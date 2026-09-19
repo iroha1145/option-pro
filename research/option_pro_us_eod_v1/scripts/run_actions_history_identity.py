@@ -16,7 +16,6 @@ import sys
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping
-from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "backend"))
@@ -26,7 +25,6 @@ from app.services.research_eod_v1.data.sharadar import (  # noqa: E402
     SharadarClient,
     credential_present,
     redact_text,
-    redacted_vendor_error,
 )
 from app.services.research_eod_v1.data.sharadar_acceptance import (  # noqa: E402
     reconcile_aligned_returns,
@@ -44,7 +42,9 @@ from app.services.research_eod_v1.mathutil import finite  # noqa: E402
 
 PACK = ROOT / "research" / "option_pro_us_eod_v1" / "return_pack" / "sharadar_v3"
 DEFAULT_STORE = Path.home() / "optix-data" / "authorized_sharadar_samples" / "actions_history_identity"
-SCHEMA_URL = "https://api.sharadar.com/v1.0/schema/actions?format=json"
+# Official examples use postgres/sqlite/mysql. A prior format=json probe
+# returned 400 and is not subscription evidence; do not retry json.
+SCHEMA_URL = "https://api.sharadar.com/v1.0/schema/actions?format=sqlite"
 DOCS_ACTIONS = "https://sharadar.com/docs/actions"
 DOCS_TICKERS = "https://sharadar.com/docs/tickers"
 SAMPLE_WINDOW = {"from": "2024-06-24", "to": str(ALLOWED_END)}
@@ -243,25 +243,18 @@ def diagnose_actions(client: SharadarClient) -> dict[str, Any]:
         })
 
     start = len(client.request_log)
-    schema = {"status": "NOT_REQUESTED"}
-    try:
-        code, body, final_url = client._request(SCHEMA_URL)
-        schema = {
-            "status": "READ_OK" if 200 <= code < 300 else "HTTP_ERROR",
-            "http_status": code,
-            "vendor_error": redacted_vendor_error(body, code),
-            "redacted_url_host_ok": OFFICIAL_HTTPS_HOST in (urlsplit(final_url).hostname or ""),
-            "bytes": len(body),
-            "sha256": _sha256_bytes(body),
-            "transport": _log_slice(client, start),
-        }
-    except Exception as exc:
-        schema = {
-            "status": "NETWORK_UNAVAILABLE",
-            "error_type": type(exc).__name__,
-            "error": redact_text(str(exc))[:200],
-            "transport": _log_slice(client, start),
-        }
+    schema = {
+        "status": "NOT_REQUESTED",
+        "reason": "ACTIONS_FIELDS already documented; prior format=json 400 is unsupported_schema_format, not subscription evidence",
+        "official_schema_formats": ["postgres", "sqlite", "mysql"],
+        "historical_format_json": {
+            "http_status": 400,
+            "vendor_message": "Bad request",
+            "page_status": "HTTP_ERROR",
+            "not_rewritten": True,
+        },
+        "transport": _log_slice(client, start),
+    }
 
     http_codes = sorted({
         item.get("http_status")

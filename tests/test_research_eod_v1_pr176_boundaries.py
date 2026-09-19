@@ -14,7 +14,12 @@ import zipfile
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
-from app.services.research_eod_v1.data.sharadar import SharadarClient, redacted_vendor_error
+from app.services.research_eod_v1.data.sharadar import (
+    SharadarClient,
+    explain_access_class,
+    redacted_vendor_error,
+)
+from app.services.research_eod_v1.data.sharadar_acceptance import reconcile_aligned_returns
 from app.services.research_eod_v1.data.sharadar_acceptance import evaluate_delist_fixture
 from app.services.research_eod_v1.data.sharadar_bulk import ingest_bulk_archive, verify_ingested_state
 from app.services.research_eod_v1.data.sharadar_identity import action_value_evidence, classify_terminal
@@ -432,6 +437,83 @@ def test_http_401_and_403_stay_distinct_on_actions_pages(monkeypatch) -> None:
     assert page_403.vendor_error["not_collapsed_to_upgrade_sku"] is True
     excerpt = redacted_vendor_error(b'{"error":"no key dummy-not-a-real-secret here"}', 401)
     assert SECRET not in json.dumps(excerpt)
+
+
+def test_auth_failed_wrapper_explains_403_without_calling_it_credential_loss(monkeypatch) -> None:
+    monkeypatch.setenv(ENV_KEY_NAME, SECRET)
+
+    def opener_tier(url: str, follow_redirects: bool = False):
+        return 403, b'{"error":{"message":"Exceeds free tier"}}', url
+
+    def opener_forbidden(url: str, follow_redirects: bool = False):
+        return 403, b'{"error":{"message":"Forbidden"}}', url
+
+    page_tier = SharadarClient(allow_network=True, opener=opener_tier, sleep=lambda _s: None).fetch_page("actions")
+    page_forbidden = SharadarClient(allow_network=True, opener=opener_forbidden, sleep=lambda _s: None).fetch_page("actions")
+    assert page_tier.status == "AUTH_FAILED"
+    assert page_tier.http_status == 403
+    assert page_tier.vendor_error["access_class"] == "observed_access_or_quota_limit"
+    assert page_tier.vendor_error["not_inferred_as_unsubscribed"] is True
+    assert page_tier.vendor_error["page_status_wrapper"] == "AUTH_FAILED"
+    assert page_forbidden.status == "AUTH_FAILED"
+    assert page_forbidden.vendor_error["access_class"] == "forbidden_reason_unknown"
+    assert page_forbidden.vendor_error["not_inferred_as_unsubscribed"] is True
+    key_401 = explain_access_class(401, "Invalid API key")
+    assert key_401["access_class"] == "credential_invalid_or_unauthorized"
+    assert key_401["access_class"] != page_tier.vendor_error["access_class"]
+
+
+def test_schema_format_json_400_is_not_subscription_evidence() -> None:
+    explained = explain_access_class(
+        400,
+        "Bad request",
+        endpoint="https://api.sharadar.com/v1.0/schema/actions",
+        query_format="json",
+        page_status="HTTP_ERROR",
+    )
+    assert explained["access_class"] == "unsupported_schema_format"
+    assert explained["not_subscription_evidence"] is True
+    assert explained["schema_format_json_is_not_subscription_evidence"] is True
+    assert "json" not in explained["official_schema_formats"]
+    recorded = redacted_vendor_error(
+        b'{"error":{"message":"Bad request"}}',
+        400,
+        endpoint="/v1.0/schema/actions",
+        query_format="json",
+        page_status="HTTP_ERROR",
+    )
+    assert recorded["access_class"] == "unsupported_schema_format"
+    assert recorded["http_status"] == 400
+
+
+def test_reconcile_names_massive_and_keeps_other_fields_unknown() -> None:
+    result = reconcile_aligned_returns(
+        [
+            {"security_id": "sharadar:1", "session_date": "2024-06-24", "return": 0.01, "volume": 100},
+            {"security_id": "sharadar:2", "session_date": "2024-06-24", "return": 0.02, "volume": 100},
+        ],
+        [
+            {"security_id": "sharadar:1", "session_date": "2024-06-24", "return": 0.01, "volume": 100},
+            {"security_id": "sharadar:2", "session_date": "2024-06-24", "return": 0.02, "volume": 100},
+        ],
+        source={
+            "kind": "massive_unadjusted_daily",
+            "available": True,
+            "price_basis": "sharadar_closeunadj_vs_massive_adjusted_false",
+        },
+        min_return_coverage=1,
+        min_securities=1,
+    )
+    assert result["comparison_source"]["kind"] == "massive_unadjusted_daily"
+    assert result["comparison_source"]["yahoo_label_not_used"] is True
+    assert result["control_n"] == 2
+    assert result["yahoo_n_is_legacy_alias"] is True
+    assert result["field_status"]["unadjusted_simple_return"] == "PASS"
+    assert result["field_status"]["split_adjusted_geometric_price"] == "UNKNOWN"
+    assert result["field_status"]["total_return_with_dividends"] == "UNKNOWN"
+    assert result["field_status"]["share_basis_volume_and_turnover"] == "UNKNOWN"
+    assert result["field_status"]["economic_ledger"] == "UNKNOWN"
+    assert result["field_status"]["overall_status_does_not_imply_other_fields"] is True
 
 
 def test_unit_unverified_merger_blocks_execution_without_blocking_the_raw_tape(tmp_path: Path, monkeypatch) -> None:

@@ -282,11 +282,20 @@ def reconcile_aligned_returns(
         status = "FAIL"
     else:
         status = "PASS"
+    comparison = dict(source or {"kind": "caller_supplied_rows", "available": available})
+    kind = str(comparison.get("kind") or "")
+    if "massive" in kind.lower():
+        comparison.setdefault("label", "massive")
+        comparison["yahoo_label_not_used"] = True
+    return_field = status
     return {
         "aligned_n": n,
-        "comparison_source": dict(source or {"kind": "caller_supplied_rows", "available": available}),
+        "comparison_source": comparison,
         "sharadar_n": len(sharadar),
+        "control_n": len(yahoo),
+        "comparison_n": len(yahoo),
         "yahoo_n": len(yahoo),
+        "yahoo_n_is_legacy_alias": True,
         "return_coverage_n": return_coverage,
         "volume_coverage_n": volume_coverage,
         "securities_n": len(securities),
@@ -298,6 +307,15 @@ def reconcile_aligned_returns(
         "insufficient_reason": thin_reason,
         "rows": [asdict(row) for row in rows],
         "yahoo_is_not_truth": True,
+        "field_status": {
+            "unadjusted_simple_return": return_field,
+            "split_adjusted_geometric_price": "UNKNOWN",
+            "total_return_with_dividends": "UNKNOWN",
+            "share_basis_volume_and_turnover": "UNKNOWN",
+            "session_calendar": "UNKNOWN",
+            "economic_ledger": "UNKNOWN",
+            "overall_status_does_not_imply_other_fields": True,
+        },
         "thresholds": {
             "return_abs_bp": RECONCILE_RETURN_MARK_BP,
             "volume_ratio": [RECONCILE_VOLUME_LOW, RECONCILE_VOLUME_HIGH],

@@ -1,0 +1,339 @@
+{
+  "generated_at": "2026-09-19T17:02:52.851637+00:00",
+  "index_head": "b2e3af8397d3c8d0ed1b2d361befbffe74a912fc",
+  "access_class_version": "sharadar-access-class-v1",
+  "environment": {
+    "credential_present": true,
+    "massive_present": true,
+    "branch": "cursor/sharadar-data-first-4939",
+    "note": "runtime_credential_report.json is a different Cloud Agent run with credential_present=false; it does not overwrite later authorized runs"
+  },
+  "runs": [
+    {
+      "source": "authorized_sample_report.json",
+      "code_sha": "9421b1dad14f824d4b2601d4a7101833e144ee1d",
+      "generated_at": "2026-09-19T13:04:54.580462+00:00",
+      "real_supplier_requests": 5,
+      "cache_reads": 0,
+      "mock_requests": 0,
+      "credential_present": true
+    },
+    {
+      "source": "runtime_credential_report.json",
+      "code_sha": "4395a09fe5f0c79c23864a570c9e6908fbdb14f1",
+      "generated_at": "2026-09-19T12:37:30.844507+00:00",
+      "real_supplier_requests": 0,
+      "cache_reads": 0,
+      "mock_requests": 0,
+      "credential_present": false
+    },
+    {
+      "source": "actions_history_identity_report.json",
+      "code_sha": "42be3ea02a45d84ea671c572cdc81140025dfd19",
+      "generated_at": "2026-09-19T16:13:04.317821+00:00",
+      "real_supplier_requests": 69,
+      "cache_reads": 0,
+      "mock_requests": 0,
+      "credential_present": true
+    },
+    {
+      "source": "actions_followup_report.json",
+      "code_sha": "42be3ea02a45d84ea671c572cdc81140025dfd19",
+      "generated_at": "2026-09-19T16:14:37.763057+00:00",
+      "real_supplier_requests": 11,
+      "cache_reads": 0,
+      "mock_requests": 0,
+      "credential_present": true
+    }
+  ],
+  "mapped_access": [
+    {
+      "shape": "paged_ticker_and_window",
+      "http_status": 403,
+      "page_status_recorded": "AUTH_FAILED",
+      "vendor_message": "Exceeds free tier",
+      "row_count": 0,
+      "not_rewritten": true,
+      "access_class": "observed_access_or_quota_limit",
+      "access_class_version": "sharadar-access-class-v1",
+      "page_status_wrapper": "AUTH_FAILED",
+      "not_inferred_as_unsubscribed": true,
+      "not_subscription_evidence": true,
+      "schema_format_json_is_not_subscription_evidence": false,
+      "official_schema_formats": [
+        "postgres",
+        "sqlite",
+        "mysql"
+      ],
+      "http_401_distinct_from_403": true,
+      "not_collapsed_to_upgrade_sku": true
+    },
+    {
+      "shape": "docs_example_ticker_only",
+      "http_status": 200,
+      "page_status_recorded": "READ_OK",
+      "vendor_message": null,
+      "row_count": 20,
+      "not_rewritten": true,
+      "access_class": "not_an_access_failure",
+      "access_class_version": "sharadar-access-class-v1",
+      "page_status_wrapper": "READ_OK",
+      "not_inferred_as_unsubscribed": true,
+      "not_subscription_evidence": true,
+      "schema_format_json_is_not_subscription_evidence": false,
+      "official_schema_formats": [
+        "postgres",
+        "sqlite",
+        "mysql"
+      ],
+      "http_401_distinct_from_403": true,
+      "not_collapsed_to_upgrade_sku": true
+    },
+    {
+      "shape": "bulk_status years=5",
+      "http_status": 403,
+      "page_status_recorded": "AUTH_FAILED",
+      "vendor_message": "Forbidden",
+      "not_rewritten": true,
+      "access_class": "forbidden_reason_unknown",
+      "access_class_version": "sharadar-access-class-v1",
+      "page_status_wrapper": "AUTH_FAILED",
+      "not_inferred_as_unsubscribed": true,
+      "not_subscription_evidence": true,
+      "schema_format_json_is_not_subscription_evidence": false,
+      "official_schema_formats": [
+        "postgres",
+        "sqlite",
+        "mysql"
+      ],
+      "http_401_distinct_from_403": true,
+      "not_collapsed_to_upgrade_sku": true
+    },
+    {
+      "shape": "bulk_status years=10",
+      "http_status": 403,
+      "page_status_recorded": "AUTH_FAILED",
+      "vendor_message": "Forbidden",
+      "not_rewritten": true,
+      "access_class": "forbidden_reason_unknown",
+      "access_class_version": "sharadar-access-class-v1",
+      "page_status_wrapper": "AUTH_FAILED",
+      "not_inferred_as_unsubscribed": true,
+      "not_subscription_evidence": true,
+      "schema_format_json_is_not_subscription_evidence": false,
+      "official_schema_formats": [
+        "postgres",
+        "sqlite",
+        "mysql"
+      ],
+      "http_401_distinct_from_403": true,
+      "not_collapsed_to_upgrade_sku": true
+    },
+    {
+      "shape": "bulk_status years=full",
+      "http_status": 403,
+      "page_status_recorded": "AUTH_FAILED",
+      "vendor_message": "Forbidden",
+      "not_rewritten": true,
+      "access_class": "forbidden_reason_unknown",
+      "access_class_version": "sharadar-access-class-v1",
+      "page_status_wrapper": "AUTH_FAILED",
+      "not_inferred_as_unsubscribed": true,
+      "not_subscription_evidence": true,
+      "schema_format_json_is_not_subscription_evidence": false,
+      "official_schema_formats": [
+        "postgres",
+        "sqlite",
+        "mysql"
+      ],
+      "http_401_distinct_from_403": true,
+      "not_collapsed_to_upgrade_sku": true
+    },
+    {
+      "shape": "schema/actions?format=json",
+      "http_status": 400,
+      "page_status_recorded": "HTTP_ERROR",
+      "vendor_message": "Bad request",
+      "not_rewritten": true,
+      "access_class": "unsupported_schema_format",
+      "access_class_version": "sharadar-access-class-v1",
+      "page_status_wrapper": "HTTP_ERROR",
+      "not_inferred_as_unsubscribed": true,
+      "not_subscription_evidence": true,
+      "schema_format_json_is_not_subscription_evidence": true,
+      "official_schema_formats": [
+        "postgres",
+        "sqlite",
+        "mysql"
+      ],
+      "http_401_distinct_from_403": true,
+      "not_collapsed_to_upgrade_sku": true
+    }
+  ],
+  "identity": {
+    "direct_bbby": "READ_OK_EMPTY_lookup_miss",
+    "vendor_ticker": "BBBYQ",
+    "permaticker": "197799",
+    "security_id": "sharadar:197799",
+    "prices_and_actions": "403 observed_access_or_quota_limit",
+    "smoke_only": true,
+    "sixteen_cases_not_claimed": true
+  },
+  "coverage": {
+    "windows": [
+      "2010-01-04..2010-02-12",
+      "2016-01-04..2016-02-12",
+      "2020-03-02..2020-04-09",
+      "2024-05-20..2024-06-28"
+    ],
+    "older_windows": "HTTP 200 empty; firstpricedate is not row evidence",
+    "window_2024_accessible_rows": 28,
+    "followup_actions_inside_allowed_end": [
+      {
+        "ticker": "AAPL",
+        "http_status": 200,
+        "row_count": 6,
+        "rows_inside_allowed_end": 6,
+        "status": "READ_OK"
+      },
+      {
+        "ticker": "MSFT",
+        "http_status": 200,
+        "row_count": 7,
+        "rows_inside_allowed_end": 7,
+        "status": "READ_OK"
+      },
+      {
+        "ticker": "AAPL",
+        "http_status": 200,
+        "row_count": 0,
+        "rows_inside_allowed_end": 0,
+        "status": "READ_OK"
+      },
+      {
+        "ticker": "BBBYQ",
+        "http_status": 403,
+        "row_count": 0,
+        "rows_inside_allowed_end": 0,
+        "status": "AUTH_FAILED"
+      }
+    ],
+    "followup_prices": [
+      {
+        "ticker": "BBBYQ",
+        "http_status": 403,
+        "row_count": 0,
+        "status": "AUTH_FAILED"
+      },
+      {
+        "ticker": "BBBYQ",
+        "http_status": 403,
+        "row_count": 0,
+        "status": "AUTH_FAILED"
+      },
+      {
+        "ticker": "XOM",
+        "http_status": 403,
+        "row_count": 0,
+        "status": "AUTH_FAILED"
+      },
+      {
+        "ticker": "HD",
+        "http_status": 200,
+        "row_count": 28,
+        "status": "READ_OK"
+      },
+      {
+        "ticker": "CSCO",
+        "http_status": 200,
+        "row_count": 28,
+        "status": "READ_OK"
+      }
+    ]
+  },
+  "reconcile": {
+    "comparison_source": "massive_unadjusted_daily",
+    "yahoo_label_not_used": true,
+    "unadjusted_simple_return": {
+      "status": "PASS",
+      "return_coverage_n": 297,
+      "securities_n": 11
+    },
+    "split_adjusted_geometric_price": "UNKNOWN",
+    "total_return_with_dividends": "UNKNOWN",
+    "share_basis_volume_and_turnover": "UNKNOWN",
+    "session_calendar": "UNKNOWN",
+    "economic_ledger": "UNKNOWN",
+    "overall_status_does_not_imply_other_fields": true
+  },
+  "layers": {
+    "master_identity": "PARTIAL: BBBYQ/197799 resolved; 16-case set not done",
+    "price_coverage": "PARTIAL: 2024 accessible names have rows; 2010/2016/2020 empty; BBBYQ/XOM/INTC limited",
+    "actions": "PARTIAL: AAPL/MSFT single-ticker allowed-window rows; multi-ticker and BBBYQ 403",
+    "economic_settlement": "BLOCKED: acquisitionof is not a documented cash unit; share-basis proof now binds the target"
+  },
+  "local_checks": {
+    "groups": 7,
+    "satisfied": 7,
+    "not_satisfied": 0
+  },
+  "artifacts": [
+    {
+      "path": "/home/ubuntu/optix-data/authorized_sharadar_samples/actions_history_identity/followup/actions_AAPL_2023-01-01_2024-06-28.jsonl",
+      "sha256": "fa44e9ac5a1c75a23f1d50af849dcd7d3fd96867ee51102181ac9907cb713298",
+      "bytes": 858,
+      "exists": true,
+      "not_committed_to_git": true
+    },
+    {
+      "path": "/home/ubuntu/optix-data/authorized_sharadar_samples/actions_history_identity/followup/actions_MSFT_2023-01-01_2024-06-28.jsonl",
+      "sha256": "da1c766f7252771b2468dd5ce129b6eec8ac4325aa682f2b31bef45daecc32d6",
+      "bytes": 1065,
+      "exists": true,
+      "not_committed_to_git": true
+    },
+    {
+      "path": "/home/ubuntu/optix-data/authorized_sharadar_samples/actions_history_identity/coverage/stocks_MSFT_2024.jsonl",
+      "sha256": "095ef7440b917430b0b644a5dd8dbcf323bf5575caf8d7ee922da0240f9b5179",
+      "bytes": 5500,
+      "exists": true,
+      "not_committed_to_git": true
+    },
+    {
+      "path": "/home/ubuntu/optix-data/authorized_sharadar_samples/actions_history_identity/coverage/funds_SPY_2024.jsonl",
+      "sha256": "4423003a4f5d0f89fe4726306253b271bdb5e0a57b7f93e21035f6e665cd7a01",
+      "bytes": 5473,
+      "exists": true,
+      "not_committed_to_git": true
+    }
+  ],
+  "restore": {
+    "authorized_dir": "/home/ubuntu/optix-data/authorized_sharadar_samples/actions_history_identity",
+    "paid_rows_not_in_git": true,
+    "does_not_overwrite_mock_or_full_store": true
+  },
+  "entitlement_conclusion": {
+    "terminal": "B",
+    "vendor_reply": null,
+    "http_401_seen": false,
+    "same_key_reads_stocks_funds_tickers": true,
+    "observed_access_or_quota_limit": "403 Exceeds free tier on multi-ticker, BBBYQ, some late names",
+    "forbidden_reason_unknown": "bulk status=True 403 Forbidden",
+    "older_history_empty_200": true,
+    "schema_format_json_400_not_subscription": true,
+    "official_schema_formats": [
+      "postgres",
+      "sqlite",
+      "mysql"
+    ],
+    "next_action": "account holder confirms product, paged vs bulk, history depth, and delisted coverage with the vendor using these redacted responses",
+    "owner": "account_holder",
+    "do_not_split_into_unlimited_single_ticker_windows": true,
+    "do_not_rerun_same_failed_probes_until_entitlement_changes": true
+  },
+  "full_backfill_started": false,
+  "executed_backtests": 0,
+  "purchase_attempted": false,
+  "yahoo_fallback": false,
+  "factor_or_weight_search": false
+}

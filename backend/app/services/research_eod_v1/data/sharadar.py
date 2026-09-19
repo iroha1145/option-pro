@@ -45,11 +45,13 @@ from app.services.research_eod_v1.data.sharadar_identity import (
     identity_from_ticker_row,
 )
 from app.services.research_eod_v1.data.sharadar_schema import (
+    ACCESS_CLASS_VERSION,
     ALLOWED_END,
     AUTH_QUERY_PARAM,
     BULK_YEARS_PROBE_ORDER,
     DEFAULT_PAGE_LIMIT,
     ENV_KEY_NAME,
+    OFFICIAL_SCHEMA_FORMATS,
     FULL_HISTORY_START,
     HISTORY_10Y_START,
     HOLDOUT_START,
@@ -1005,7 +1007,86 @@ def status_from_error_payload(payload: Any, http_status: int) -> str:
     return "VENDOR_ERROR"
 
 
-def redacted_vendor_error(body: bytes, http_status: int) -> dict[str, Any]:
+def explain_access_class(
+    http_status: int | None,
+    vendor_message: str | None = None,
+    *,
+    vendor_code: str | None = None,
+    endpoint: str | None = None,
+    query_format: str | None = None,
+    page_status: str | None = None,
+) -> dict[str, Any]:
+    """Explain an AUTH_FAILED wrapper without rewriting the raw HTTP record.
+
+    401 / invalid key stays a credential problem. 403 Exceeds free tier is an
+    observed access or quota limit, not an inference that the user is
+    unsubscribed. A bare Forbidden stays unknown. format=json schema 400 is
+    an unsupported format, not a subscription miss.
+    """
+
+    status = int(http_status) if http_status is not None else None
+    message = str(vendor_message or "").strip()
+    code = str(vendor_code or "").strip()
+    blob = f"{message} {code}".lower()
+    path = str(endpoint or "").lower()
+    fmt = str(query_format or "").strip().lower()
+    schema_path = "/schema" in path or path.endswith("schema")
+    if status == 401 or "invalid api key" in blob or "invalid_api_key" in blob:
+        access = "credential_invalid_or_unauthorized"
+        wrapper = "AUTH_FAILED"
+        not_unsubscribed = True
+        not_subscription = True
+    elif status == 403 and "exceeds free tier" in blob:
+        access = "observed_access_or_quota_limit"
+        wrapper = "AUTH_FAILED"
+        not_unsubscribed = True
+        not_subscription = True
+    elif status == 403 and "not subscribed" in blob:
+        access = "vendor_message_not_subscribed"
+        wrapper = "AUTH_FAILED"
+        not_unsubscribed = True
+        not_subscription = False
+    elif status == 403:
+        access = "forbidden_reason_unknown"
+        wrapper = "AUTH_FAILED"
+        not_unsubscribed = True
+        not_subscription = True
+    elif status == 400 and (fmt == "json" or (schema_path and fmt in {"", "json"})):
+        access = "unsupported_schema_format"
+        wrapper = page_status or "HTTP_ERROR"
+        not_unsubscribed = True
+        not_subscription = True
+    elif status == 400:
+        access = "bad_request"
+        wrapper = page_status or "HTTP_ERROR"
+        not_unsubscribed = True
+        not_subscription = True
+    else:
+        access = "not_an_access_failure"
+        wrapper = page_status
+        not_unsubscribed = True
+        not_subscription = True
+    return {
+        "access_class": access,
+        "access_class_version": ACCESS_CLASS_VERSION,
+        "page_status_wrapper": wrapper,
+        "not_inferred_as_unsubscribed": not_unsubscribed,
+        "not_subscription_evidence": not_subscription,
+        "schema_format_json_is_not_subscription_evidence": access == "unsupported_schema_format",
+        "official_schema_formats": list(OFFICIAL_SCHEMA_FORMATS),
+        "http_401_distinct_from_403": True,
+        "not_collapsed_to_upgrade_sku": True,
+    }
+
+
+def redacted_vendor_error(
+    body: bytes,
+    http_status: int,
+    *,
+    endpoint: str | None = None,
+    query_format: str | None = None,
+    page_status: str | None = None,
+) -> dict[str, Any]:
     """Keep 401 and 403 distinct. Do not rewrite either as 'must upgrade SKU'."""
 
     inspected = inspect_table_body(body)
@@ -1033,14 +1114,25 @@ def redacted_vendor_error(body: bytes, http_status: int) -> dict[str, Any]:
     excerpt = None
     if vendor_message is None and body:
         excerpt = redact_text(body.decode("utf-8", errors="replace"))[:300]
+    redacted_code = None if vendor_code is None else redact_text(str(vendor_code))[:80]
+    redacted_message = None if vendor_message is None else redact_text(str(vendor_message))[:300]
+    explained = explain_access_class(
+        http_status,
+        redacted_message,
+        vendor_code=redacted_code,
+        endpoint=endpoint,
+        query_format=query_format,
+        page_status=page_status,
+    )
     return {
         "http_status": http_status,
         "http_401_distinct_from_403": True,
         "body_kind": inspected.get("kind"),
-        "vendor_code": None if vendor_code is None else redact_text(str(vendor_code))[:80],
-        "vendor_message": None if vendor_message is None else redact_text(str(vendor_message))[:300],
+        "vendor_code": redacted_code,
+        "vendor_message": redacted_message,
         "excerpt": excerpt,
         "not_collapsed_to_upgrade_sku": True,
+        **explained,
     }
 
 

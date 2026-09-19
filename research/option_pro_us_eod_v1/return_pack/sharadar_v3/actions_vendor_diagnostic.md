@@ -20,6 +20,13 @@
 
 本轮 **没有出现 HTTP 401**。同一把 key 已经能读 stocks / funds / tickers。
 
+AUTH_FAILED 是历史页状态包装，不改上面的 HTTP / message。映射版本 `sharadar-access-class-v1`：
+
+- 403 `Exceeds free tier` → `observed_access_or_quota_limit`（访问范围/配额限制，不推导“用户没订阅”）
+- 403 `Forbidden` → `forbidden_reason_unknown`
+- 400 `format=json` schema → `unsupported_schema_format`（不是订阅证据；官方 format 为 postgres/sqlite/mysql）
+- 401 / invalid key 才会是 `credential_invalid_or_unauthorized`
+
 重试：上述失败请求的 `retry_count=0`（401/403 不在客户端重试码里）。受控换形状后，单标的 + 允许区日期得到非空分红/收购行。
 
 ## 允许区内真实非空行动（摘要，不是全量）
@@ -34,6 +41,6 @@
 1. 本 API key 的产品是否包含 ACTIONS 的 **paged** 与 **bulk**；bulk 的 403 Forbidden 与 paged 的 403 Exceeds free tier 是否同一限制。
 2. 多 ticker、跨年窗口、以及退市后代码（供应商返回的 `BBBYQ`）触发 Exceeds free tier 的具体配额字段。
 3. 空的 2010/2016/2020 价量页（HTTP 200、0 行）是历史档未授权，还是该档在免费查询里被静默截断。
-4. schema 端点 400 是否需要别的 `format`（文档给的是 postgres/sqlite/mysql）。
+4. 已有 `ACTIONS_FIELDS`，不再用 `format=json` 试 schema。若账户持有人要核 schema，只用官方 postgres/sqlite/mysql。
 
 不要绕过鉴权，不要换错密钥，不要自动下单。

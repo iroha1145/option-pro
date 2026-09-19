@@ -7,6 +7,10 @@ from datetime import date
 OFFICIAL_CHANNEL = "api.sharadar.com"
 OFFICIAL_BASE_URL = "https://api.sharadar.com/v1.0/data"
 OFFICIAL_SCHEMA_URL = "https://api.sharadar.com/v1.0/schema"
+# Official schema examples accept these formats. format=json is not one of them;
+# a 400 on format=json is not subscription evidence.
+OFFICIAL_SCHEMA_FORMATS = ("postgres", "sqlite", "mysql")
+ACCESS_CLASS_VERSION = "sharadar-access-class-v1"
 AUTH_QUERY_PARAM = "api_key"
 ENV_KEY_NAME = "SHARADAR_API_KEY"
 CHANNEL_DOCS = (
