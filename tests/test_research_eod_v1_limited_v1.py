@@ -18,6 +18,7 @@ from app.services.research_eod_v1.limited_v1 import (
     HOLDOUT_START,
     MODE,
     NETWORK_COUNTER,
+    _compact_composite,
     acceptance_sessions,
     apply_price_only_track,
     close_task,
@@ -127,6 +128,41 @@ def test_empty_composite_is_kept() -> None:
     assert m1_consensus([], "balanced", 20) == []
 
 
+def test_last_n_keeps_newest_bars() -> None:
+    days, panel = _panel(80)
+    trimmed = panel["NVDA"].last_n(10)
+    assert trimmed.dates == days[-10:]
+    assert len(trimmed.close) == 10
+    assert panel["NVDA"].last_n(800) is panel["NVDA"]
+
+
+def test_compact_composite_keeps_family_votes() -> None:
+    compact = _compact_composite({
+        "security_id": "COST",
+        "algorithm_id": "A_trend_quality",
+        "status": "eligible",
+        "score": 81.1,
+        "consensus_z": 81.1,
+        "family_votes": ("A_trend_quality", "D_residual_momentum"),
+        "theme_count": 2,
+        "R": 70,
+        "G": None,
+    })
+    assert compact["family_votes"] == ["A_trend_quality", "D_residual_momentum"]
+    assert compact["consensus_z"] == 81.1
+    html = preview_html({
+        "session_date": "2024-06-28",
+        "composite_n": 1,
+        "watch_n": 0,
+        "theme_summaries": [],
+        "composite_results": [compact],
+        "watch_list": [],
+        "limitations": [],
+    })
+    assert "A_trend_quality" in html
+    assert "D_residual_momentum" in html
+
+
 def test_score_session_and_replay_are_offline(tmp_path: Path) -> None:
     days, panel = _panel()
     registry = load_registry()
@@ -156,6 +192,7 @@ def test_score_session_and_replay_are_offline(tmp_path: Path) -> None:
         algorithms=("A_trend_quality",),
     )["published"]
     assert published["mode"] == MODE
+    assert (tmp_path / "sessions" / days[-1].isoformat() / "summary.json").is_file()
     html = (tmp_path / "preview.html").read_text(encoding="utf-8")
     assert "历史 EOD 预览" in html
     assert "不是今日选股" in html

@@ -40,6 +40,9 @@ from app.services.research_eod_v1.eod_shadow import (
 )
 from app.services.research_eod_v1.paths import REPO_ROOT, ensure_reference_on_path
 from app.services.research_eod_v1.runs import canonical_json, run_signature
+from app.services.research_eod_v1.factors import extract_raw
+from app.services.research_eod_v1.membership import has_complete_session_bar
+from app.services.research_eod_v1.series import clip_panel_to_as_of
 from app.services.research_eod_v1.snapshot import compute_snapshot
 from app.services.research_eod_v1.universe_audit import ETF_SUBASSET_HINTS
 from app.services.sectors import SECTORS
@@ -399,6 +402,72 @@ def _compact_row(row: Mapping[str, Any]) -> dict[str, Any]:
     return {key: row.get(key) for key in keep}
 
 
+def _compact_composite(row: Mapping[str, Any]) -> dict[str, Any]:
+    compact = _compact_row(row)
+    votes = row.get("family_votes") or ()
+    compact["consensus_z"] = row.get("consensus_z")
+    compact["family_votes"] = list(votes)
+    compact["theme_count"] = row.get("theme_count")
+    compact["R"] = row.get("R")
+    compact["G"] = row.get("G")
+    return compact
+
+
+def _compact_load(load_report: Mapping[str, Any], coverage: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    empty = [str(row.get("ticker")) for row in coverage if row.get("status") != "ok"]
+    return {
+        "sources": list(load_report.get("sources") or []),
+        "missing": list(load_report.get("missing") or []),
+        "fetched": load_report.get("fetched"),
+        "dataset_hash": load_report.get("dataset_hash"),
+        "inventory": load_report.get("inventory"),
+        "allow_network": load_report.get("allow_network"),
+        "wanted_n": len(load_report.get("appearances") or {}),
+        "failures": load_report.get("failures") or [],
+        "coverage_ok": sum(1 for row in coverage if row.get("status") == "ok"),
+        "coverage_empty": empty,
+    }
+
+
+def precompute_session_raws(
+    panel: Mapping[str, Any],
+    session: date,
+    *,
+    registry: Mapping[str, Any],
+    horizon: str,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """One extract_raw pass per name. Theme B/C gates are reapplied in compute_snapshot."""
+
+    as_of = eod_evaluation_as_of(session)
+    clipped = {
+        sid: series.slice_through(session)
+        for sid, series in clip_panel_to_as_of(panel, as_of).items()
+        if series is not None
+    }
+    keep = WARMUP_SESSIONS + 40
+    clipped = {
+        sid: series.last_n(keep)
+        for sid, series in clipped.items()
+        if series is not None and has_complete_session_bar(series, session)
+    }
+    seed = next(iter(registry["sectors"]))
+    gates = registry["sectors"][seed]["gates"]
+    blend = tuple(registry["horizons"][horizon]["momentum_blend"])
+    market = clipped.get("SPY")
+    raws = {}
+    for sid, series in clipped.items():
+        raws[sid] = extract_raw(
+            series,
+            market=market,
+            panel=clipped,
+            horizon=horizon,
+            momentum_blend=blend,  # type: ignore[arg-type]
+            sector_gates=gates,
+            spy_residual_allowed=True,
+        )
+    return raws, clipped
+
+
 def score_session(
     panel: Mapping[str, Any],
     session: date,
@@ -410,6 +479,8 @@ def score_session(
     data_hash: str = "",
     themes: Sequence[str] | None = None,
     algorithms: Sequence[str] | None = None,
+    precomputed_raws: Mapping[str, Any] | None = None,
+    clipped_panel: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     if session >= HOLDOUT_START or session > ALLOWED_END:
         raise ValueError("session_outside_development_zone")
@@ -419,12 +490,16 @@ def score_session(
     family_results: list[dict[str, Any]] = []
     first_layer: list[dict[str, Any]] = []
     theme_summaries: list[dict[str, Any]] = []
+    if precomputed_raws is None or clipped_panel is None:
+        raws, clipped = precompute_session_raws(panel, session, registry=registry, horizon=horizon)
+    else:
+        raws, clipped = dict(precomputed_raws), dict(clipped_panel)
     for theme_id in theme_ids:
         family_block: dict[str, Any] = {}
         for algorithm in families:
             raw = compute_snapshot(
                 as_of,
-                panel,
+                clipped,
                 UNIVERSE_VERSION,
                 registry,
                 sector_id=theme_id,
@@ -432,6 +507,8 @@ def score_session(
                 profile=profile,
                 horizon=horizon,
                 source_finalized_through=session,
+                precomputed_raws=raws,
+                already_session_clipped=True,
             )
             scored = apply_price_only_track(
                 raw,
@@ -474,10 +551,7 @@ def score_session(
             "members_in_panel": sum(1 for ticker in SECTORS[theme_id]["tickers"] if ticker in panel),
             "families": family_block,
         })
-    composite = [
-        _compact_row(row) if "algorithm_id" in row else dict(row)
-        for row in m1_consensus(first_layer, profile, 20)
-    ]
+    composite = [_compact_composite(row) for row in m1_consensus(first_layer, profile, 20)]
     watch = [row for row in first_layer if row.get("status") == "watch"]
     config_hash = limited_config_hash(
         registry=registry,
@@ -545,8 +619,9 @@ def smoke_864(
     data_hash: str = "",
 ) -> list[dict[str, Any]]:
     rows = []
-    for profile in PROFILES:
-        for horizon in HORIZONS:
+    for horizon in HORIZONS:
+        raws, clipped = precompute_session_raws(panel, session, registry=registry, horizon=horizon)
+        for profile in PROFILES:
             scored = score_session(
                 panel,
                 session,
@@ -555,6 +630,8 @@ def smoke_864(
                 horizon=horizon,
                 volume_verified=volume_verified,
                 data_hash=data_hash,
+                precomputed_raws=raws,
+                clipped_panel=clipped,
             )
             for theme in scored["theme_summaries"]:
                 for algorithm, block in theme["families"].items():
@@ -717,6 +794,18 @@ def close_task(
     day_dir = out_dir / "sessions" / session.isoformat()
     day_dir.mkdir(parents=True, exist_ok=True)
     atomic_write_json(day_dir / "scored.json", scored)
+    atomic_write_json(day_dir / "summary.json", {
+        "session_date": scored["session_date"],
+        "eligible_n": scored["eligible_n"],
+        "watch_n": scored["watch_n"],
+        "composite_n": scored["composite_n"],
+        "config_hash": scored["config_hash"],
+        "run_signature": scored["run_signature"],
+        "theme_summaries": scored["theme_summaries"],
+        "composite_results": scored["composite_results"],
+        "mode": MODE,
+        "evidence_status": EVIDENCE_STATUS,
+    })
     write_preview(day_dir / "preview.html", published)
     write_preview(out_dir / "preview.html", published)
     return {"scored": scored, "published": published, "path": str(snap_path)}
@@ -856,7 +945,7 @@ def run_limited_v1(
         "session_date": window[-1].isoformat(),
         "acceptance_sessions": [item.isoformat() for item in window],
         "acceptance_rule": "last N official development-zone sessions on/before ALLOWED_END; not chosen by performance",
-        "load": {k: v for k, v in load_report.items() if k != "bars"},
+        "load": _compact_load(load_report, coverage),
         "coverage": coverage,
         "replay": replay,
         "smoke_n": len(smoke_rows),

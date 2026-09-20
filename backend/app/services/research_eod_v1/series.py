@@ -122,6 +122,51 @@ class SecuritySeries:
             dividend_events=tuple(item for item in self.dividend_events if _event_session(item) <= session),
         )
 
+    def last_n(self, count: int) -> SecuritySeries:
+        """Keep the newest ``count`` bars. Warmup windows still fit if count is large enough."""
+
+        if count <= 0 or len(self.dates) <= count:
+            return self
+        start = len(self.dates) - int(count)
+        session = self.dates[-1]
+        return SecuritySeries(
+            security_id=self.security_id,
+            ticker_at_signal=self.ticker_at_signal,
+            dates=list(self.dates[start:]),
+            open=self.open[start:].copy(),
+            high=self.high[start:].copy(),
+            low=self.low[start:].copy(),
+            close=self.close[start:].copy(),
+            raw_close=self.raw_close[start:].copy(),
+            volume=self.volume[start:].copy(),
+            dollar_volume=self.dollar_volume[start:].copy(),
+            tri=self.tri[start:].copy(),
+            turnover_is_proxy=self.turnover_is_proxy,
+            volume_session_scope=self.volume_session_scope,
+            asset_track=self.asset_track,
+            industry_id=self.industry_id,
+            parent_industry_id=self.parent_industry_id,
+            theme_ids=self.theme_ids,
+            venue_metadata=self.venue_metadata,
+            source_available_at=self.source_available_at,
+            halted=_halted_through(self, len(self.dates) - 1),
+            raw_open=self.raw_open[start:].copy() if self.raw_open is not None else None,
+            dividends=tuple(item for item in self.dividends if item[0] <= session),
+            splits=tuple(item for item in self.splits if item[0] <= session),
+            economic_known_at=None if self.economic_known_at is None else list(self.economic_known_at[start:]),
+            source_published_at=None if self.source_published_at is None else list(self.source_published_at[start:]),
+            retrieved_at=None if self.retrieved_at is None else list(self.retrieved_at[start:]),
+            finalized_at=None if self.finalized_at is None else list(self.finalized_at[start:]),
+            bar_partial=None if self.bar_partial is None else self.bar_partial[start:].copy(),
+            bar_halted=None if self.bar_halted is None else self.bar_halted[start:].copy(),
+            vintage_status=self.vintage_status[start:] if self.vintage_status else (),
+            price_adjustment=self.price_adjustment[start:] if self.price_adjustment else (),
+            volume_adjustment=self.volume_adjustment[start:] if self.volume_adjustment else (),
+            tri_verified=self.tri_verified,
+            reconstruction_mode=self.reconstruction_mode,
+            dividend_events=tuple(item for item in self.dividend_events if _event_session(item) <= session),
+        )
+
 
 def session_is_halted(series: "SecuritySeries", t: int) -> bool:
     """Halt is a dated event. A later end-of-sample flag cannot rewrite earlier days."""
