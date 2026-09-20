@@ -986,6 +986,7 @@ def test_strength_api_returns_typed_unavailable_without_running_provider_scan(
                 sector_id=None,
                 min_price=5.0,
                 min_avg_dollar_volume=10_000_000,
+                ranking_algorithm="production",
             )
         )
     assert captured.value.status_code == 503
