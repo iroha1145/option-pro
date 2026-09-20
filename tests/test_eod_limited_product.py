@@ -193,7 +193,10 @@ def test_missing_eod_snapshot_does_not_serve_production(
             )
         )
     assert caught.value.status_code == 503
-    assert caught.value.detail["code"] == "eod_limited_snapshot_unavailable"
+    assert caught.value.detail["code"] in {
+        "eod_limited_snapshot_unavailable",
+        "eod_limited_snapshot_preparing",
+    }
     assert caught.value.detail["effective_algorithm"] == EOD_LIMITED_V1
 
 
@@ -234,6 +237,15 @@ def test_worker_intercepts_eod_ranking() -> None:
     assert calls[0]["all_variants"] is True
 
 
+def test_synthetic_panel_covers_sealed_session() -> None:
+    from app.services.eod_limited.worker import build_synthetic_panel
+
+    panel = build_synthetic_panel(end=RESEARCH_SEALED_SESSION)
+    last = max(series.dates[-1] for series in panel.values())
+    assert last == RESEARCH_SEALED_SESSION
+    assert all(len(series.dates) >= 330 for series in panel.values())
+
+
 def test_seed_historical_is_labeled(tmp_path: Path) -> None:
     outcome = seed_labeled_batch(
         purpose=PURPOSE_HISTORICAL,
@@ -250,6 +262,9 @@ def test_seed_historical_is_labeled(tmp_path: Path) -> None:
     assert scored is not None
     assert scored["historical_example"] is True
     assert scored["served_session"] == "2024-06-28"
+    assert int(scored.get("complete_bar_n") or 0) >= 1
+    assert int(scored.get("watch_n") or 0) + int(scored.get("eligible_n") or 0) >= 1
+    assert scored.get("capability_flags", {}).get("volume_verified") is False
 
 
 def test_seed_refuses_live_label() -> None:

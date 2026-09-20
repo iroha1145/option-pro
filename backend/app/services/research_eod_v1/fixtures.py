@@ -23,6 +23,21 @@ def trading_days(start: date, count: int) -> list[date]:
     return days
 
 
+def trading_days_ending(end: date, count: int) -> list[date]:
+    """Last ``count`` regular sessions through ``end`` (inclusive when it is a trading day)."""
+
+    days: list[date] = []
+    cursor = end
+    while len(days) < count:
+        if is_trading_day(cursor):
+            days.append(cursor)
+        cursor -= timedelta(days=1)
+        if cursor.year < 1990:
+            break
+    days.reverse()
+    return days
+
+
 def make_series(
     security_id: str,
     dates: list[date],
@@ -74,6 +89,14 @@ def make_series(
 
 def trending_close(n: int, start: float = 50.0, drift: float = 0.15) -> np.ndarray:
     return start + drift * np.arange(n, dtype=float)
+
+
+def structured_close(n: int, start: float = 50.0, drift: float = 0.12, cycle: int = 16) -> np.ndarray:
+    """Uptrend with periodic pullbacks so confirmed HH/HL pivots exist."""
+
+    x = np.arange(n, dtype=float)
+    amplitude = max(1.6, abs(drift) * cycle * 0.85)
+    return start + drift * x + amplitude * np.sin(2.0 * np.pi * x / cycle)
 
 
 def as_of_after_close(session: date) -> datetime:

@@ -9,7 +9,7 @@ from typing import Any, Mapping, Sequence
 from app.services.research_eod_v1.calendar_asof import last_complete_eod_session
 from app.services.research_eod_v1.config_load import load_registry
 from app.services.research_eod_v1.constants import HORIZONS, PROFILES
-from app.services.research_eod_v1.fixtures import make_series, trading_days, trending_close
+from app.services.research_eod_v1.fixtures import make_series, structured_close, trading_days_ending
 
 from . import (
     COMPUTE_VERSION,
@@ -84,7 +84,7 @@ def run_eod_limited_job(
     coverage: list[dict[str, Any]] = []
     if panel is None:
         if purpose == PURPOSE_SYNTHETIC:
-            panel = build_synthetic_panel()
+            panel = build_synthetic_panel(end=target)
             target = target or max(series.dates[-1] for series in panel.values())
         else:
             target = target or resolve_inference_session(now)
@@ -146,25 +146,30 @@ def run_eod_limited_job(
     }
 
 
-def build_synthetic_panel(*, sessions: int = 380) -> dict[str, Any]:
-    days = trading_days(date(2022, 1, 3), sessions)
+def build_synthetic_panel(*, sessions: int = 380, end: date | None = None) -> dict[str, Any]:
+    last = end or date(2023, 7, 10)
+    days = trading_days_ending(last, sessions)
     specs = (
-        ("NVDA", ("semiconductors", "ai_cloud"), "stock", "CS", 40, 0.12),
-        ("AMD", ("semiconductors",), "stock", "CS", 30, 0.10),
-        ("SPY", ("etfs",), "etf", "ETF", 210, 0.07),
-        ("QQQ", ("etfs",), "etf", "ETF", 200, 0.06),
+        ("NVDA", ("semiconductors", "ai_cloud"), "stock", "CS", "semiconductors", "technology", 40, 0.12, 16),
+        ("AMD", ("semiconductors",), "stock", "CS", "semiconductors", "technology", 30, 0.10, 18),
+        ("AVGO", ("semiconductors",), "stock", "CS", "semiconductors", "technology", 55, 0.09, 15),
+        ("TSM", ("semiconductors",), "stock", "CS", "semiconductors", "technology", 48, 0.08, 17),
+        ("MU", ("semiconductors",), "stock", "CS", "semiconductors", "technology", 28, 0.11, 14),
+        ("INTC", ("semiconductors",), "stock", "CS", "semiconductors", "technology", 22, 0.04, 19),
+        ("SPY", ("etfs",), "etf", "ETF", None, None, 210, 0.07, 20),
+        ("QQQ", ("etfs",), "etf", "ETF", None, None, 200, 0.06, 16),
     )
     panel = {}
-    for ticker, themes, track, security_type, start, drift in specs:
+    for ticker, themes, track, security_type, industry, parent, start, drift, cycle in specs:
         panel[ticker] = make_series(
             ticker,
             days,
-            trending_close(sessions, start, drift),
+            structured_close(len(days), start, drift, cycle),
             theme_ids=themes,
             asset_track=track,
             security_type=security_type,
-            industry_id=None,
-            parent_industry_id=None,
+            industry_id=industry,
+            parent_industry_id=parent,
         ).with_close_price_return()
     return panel
 
@@ -193,7 +198,7 @@ def seed_labeled_batch(
         session=target,
         purpose=purpose,
         all_variants=all_variants,
-        panel=build_synthetic_panel(),
+        panel=build_synthetic_panel(end=target),
         root=root,
         themes=themes,
         algorithms=algorithms,
