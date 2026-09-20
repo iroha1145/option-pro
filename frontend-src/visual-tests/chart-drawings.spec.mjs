@@ -402,7 +402,9 @@ test("chart drawings toolbar is present on a stock page when data loads", async 
 test("chart drawings mobile viewport shows the draw entry", async ({ page }) => {
   test.skip(!HAS_REAL_BACKEND, "stock drawings visual path needs OPTIX_VISUAL_BASE_URL");
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/stock/AAPL", { waitUntil: "domcontentloaded" });
+  // beforeEach already loaded AAPL and recovered any stock-level 429. Reuse
+  // that page after resizing instead of spending another light-bucket read.
+  await openStock(page);
   await expect(page.getByText("绘图").first()).toBeVisible({ timeout: 15_000 });
   await screenshot(page, "390x844-chart-drawings");
 });
