@@ -1983,8 +1983,12 @@ def test_worker_once_selects_personal_etl_from_repository_files_offline(
         async def offline_strength(_self):
             return TaskResult(status="idle", details={{"result": "offline-test"}})
 
+        async def offline_sector_iv(_self):
+            return TaskResult(status="idle", details={{"result": "offline-test"}})
+
         worker_tasks.PublicHomeTask.__call__ = offline_public_home
         worker_tasks.StrengthRefreshTask.__call__ = offline_strength
+        worker_tasks.SectorIVTask.__call__ = offline_sector_iv
 
         def handle(request):
             assert request.url.host == "macrolens.invalid"
@@ -2068,6 +2072,8 @@ def test_worker_once_selects_personal_etl_from_repository_files_offline(
     assert payload["tasks"]["focus"]["status"] == "idle"
     assert payload["tasks"]["ai_jobs"]["status"] == "disabled"
     assert payload["tasks"]["strength_refresh"]["status"] == "idle"
+    assert payload["tasks"]["sector_iv_refresh"]["status"] == "idle"
+    assert not (data_dir / "sector-iv-snapshots-v1" / "refresh.sqlite").exists()
     cache_path = data_dir / "catalyst-cache.db"
     assert cache_path.is_file()
     with sqlite3.connect(cache_path) as connection:

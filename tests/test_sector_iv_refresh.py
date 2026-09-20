@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
+import threading
 import time
 
 from fastapi import FastAPI
@@ -96,6 +97,80 @@ def test_partial_strength_fallback_still_scans_every_member(monkeypatch, client)
     asyncio.run(refresh.run_refresh_batch(schedule=False))
     assert len(calls) == 14
     assert client.get('/api/sectors/semiconductors/iv-ranking').json()['success_count'] == 14
+
+
+@pytest.mark.parametrize("initial_snapshot", ["fresh", "stale", "missing"])
+def test_publication_during_refresh_state_handoff_returns_new_snapshot(
+    monkeypatch,
+    initial_snapshot,
+):
+    now = time.time()
+    sector_id = "semiconductors"
+    old_age = 60 if initial_snapshot == "fresh" else 2 * 86400
+    old = sectors._rank_iv_rows(
+        sector_id,
+        [{"ticker": "AMD", "iv": .3, "as_of": stamp(now - old_age)}],
+    )
+    new = sectors._rank_iv_rows(
+        sector_id,
+        [{"ticker": "AMD", "iv": .31, "as_of": stamp(now - 30)}],
+    )
+    if initial_snapshot != "missing":
+        sectors._write_sector_iv_snapshot(
+            sector_id,
+            old,
+            saved_at=now - old_age,
+            snapshot_origin="worker",
+        )
+
+    store = refresh.default_store()
+    assert store.request(sector_id)["status"] == "queued"
+    claim = store.claim()
+    assert claim is not None
+
+    first_read_finished = threading.Event()
+    allow_request_to_continue = threading.Event()
+    original_read = sectors._read_sector_iv_snapshot
+    observed_reads = []
+
+    def controlled_read(*args, **kwargs):
+        captured = original_read(*args, **kwargs)
+        observed_reads.append(captured)
+        if len(observed_reads) == 1:
+            first_read_finished.set()
+            assert allow_request_to_continue.wait(timeout=5)
+        return captured
+
+    monkeypatch.setattr(sectors, "_read_sector_iv_snapshot", controlled_read)
+    monkeypatch.setattr(sectors, "_read_strength_sector_iv_snapshot", lambda *a, **k: None)
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        pending = pool.submit(
+            lambda: asyncio.run(sectors._request_iv_payload(sector_id))
+        )
+        assert first_read_finished.wait(timeout=5)
+        assert store.finish(
+            *claim,
+            publish=lambda: sectors._write_sector_iv_snapshot(
+                sector_id,
+                new,
+                saved_at=time.time(),
+                snapshot_origin="worker",
+            ),
+        )
+        allow_request_to_continue.set()
+        result = pending.result(timeout=5)
+
+    assert len(observed_reads) == 2
+    assert result["as_of"] == new["as_of"]
+    assert result["rankings"] == new["rankings"]
+    expected_status = "idle" if initial_snapshot == "fresh" else "cooldown"
+    assert result["refresh"]["status"] == expected_status
+    assert result["refresh"]["completed_at"] is not None
+    if expected_status == "idle":
+        assert result["refresh"]["retry_after_seconds"] == 0
+    else:
+        assert 0 < result["refresh"]["retry_after_seconds"] <= refresh.MIN_REFRESH_SECONDS
 
 
 def test_57_day_source_rejected_even_if_file_just_saved(monkeypatch, client):

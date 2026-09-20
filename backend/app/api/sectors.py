@@ -781,6 +781,17 @@ async def _request_iv_payload(
         refresh = await asyncio.to_thread(store.request, sector_id)
     else:
         refresh = await asyncio.to_thread(store.status, sector_id)
+    # Publication and queue state commit happen in the same worker-held
+    # transaction. The first file read can race just ahead of that commit,
+    # then the state read can observe completion while the response still holds
+    # the old payload. Re-read after either state path closes that handoff.
+    observed = time.time()
+    published = _bounded_snapshot(
+        _read_sector_iv_snapshot(sector_id, now=observed),
+        observed,
+    )
+    if published is not None:
+        snapshot = published
     payload = snapshot or fallback or _rank_iv_rows(sector_id, [])
     if not payload.get("rankings"):
         payload["as_of"] = None
