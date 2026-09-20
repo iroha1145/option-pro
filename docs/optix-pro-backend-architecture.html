@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Optix Pro Backend Architecture</title>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose" });
+  </script>
+  <style>
+    :root { font-family: system-ui, sans-serif; line-height: 1.45; color: #1a1a1a; }
+    body { max-width: 1200px; margin: 0 auto; padding: 1.5rem; }
+    h1, h2, h3 { line-height: 1.2; }
+    .mermaid { margin: 1rem 0; overflow-x: auto; }
+    table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+    th, td { border: 1px solid #ccc; padding: 0.35rem 0.5rem; vertical-align: top; }
+    th { background: #f4f4f4; }
+    code { font-size: 0.85em; background: #f6f6f6; padding: 0.1em 0.3em; border-radius: 3px; }
+    .layer { margin-bottom: 2rem; }
+  </style>
+</head>
+<body>
+  <h1>Optix Pro Backend — Architecture Map</h1>
+  <p>Generated from <code>/workspace/backend/app</code> source. Personal Edition: FastAPI HTTP + unified worker + file/SQLite stores under <code>DATA_DIR</code> (default <code>/data</code>).</p>
+
+  <div class="layer">
+    <h2>System layers</h2>
+    <pre class="mermaid">
+flowchart TB
+  subgraph Client["Browser / SPA"]
+    FE[React SPA static from FRONTEND_DIR]
+  end
+
+  subgraph Gateway["main.py gateway"]
+    GW[_GatewayMiddleware: auth rate-limit body bounds CSP]
+    TH[_ExactTrustedHostMiddleware]
+    GZ[GZipMiddleware]
+  end
+
+  subgraph API["FastAPI routers app/api/*.py"]
+    R19[19 routers 99 REST endpoints]
+  end
+
+  subgraph Core["Core app modules"]
+    ACC[access.py]
+    CFG[config.py + personal_config.py]
+    DP[data_paths.py]
+    SN[public_home / stock_* / public_option_data]
+  end
+
+  subgraph SVC["app/services/*"]
+    DOM[Domain services breakouts strength catalysts macro ai ...]
+  end
+
+  subgraph Worker["optix-worker app/worker"]
+    WR[runtime.py scheduler]
+    WT[tasks.py]
+    WS[state.py SQLite optix-worker.db]
+  end
+
+  subgraph Data["DATA_DIR stores"]
+    SQL[(SQLite DBs)]
+    JSON[(JSON snapshots)]
+  end
+
+  subgraph External["External providers"]
+    YH[Yahoo/yfinance]
+    MS[Massive]
+    FH[Finnhub]
+    FMP[FMP]
+    FR[FRED]
+    MD[MarketData.app]
+    TV[TradingView]
+    OAI[OpenAI]
+    ML[MacroLens ETL HTTPS]
+  end
+
+  FE --> GW --> TH --> GZ --> R19
+  R19 --> ACC
+  R19 --> CFG
+  R19 --> SN
+  R19 --> DOM
+  DOM --> SQL
+  DOM --> JSON
+  SN --> JSON
+  WR --> WT
+  WT --> DOM
+  WT --> SQL
+  WT --> JSON
+  DOM --> YH
+  DOM --> MS
+  DOM --> FH
+  DOM --> FMP
+  DOM --> FR
+  DOM --> MD
+  DOM --> TV
+  DOM --> OAI
+  DOM --> ML
+    </pre>
+  </div>
+
+  <div class="layer">
+    <h2>Router registration &amp; access gates</h2>
+    <pre class="mermaid">
+flowchart LR
+  subgraph PublicRead["dependencies: require_public_read_or_owner_access"]
+    stocks[stocks]
+    options[options]
+    earnings[earnings]
+    sectors[sectors]
+    market[market]
+    quotes[quotes]
+    macro[macro_conditions]
+    signals[signals]
+    catalysts[catalysts]
+    strength[strength]
+    breakouts[breakouts]
+  end
+  subgraph OwnerOnly["dependencies: require_same_origin_action owner"]
+    ai[ai]
+    worker[worker_actions]
+    diag[diagnostics]
+    rts[runtime_settings]
+  end
+  subgraph SelfAuth["no router-wide owner gate"]
+    access[access]
+    account[accounts]
+    vp[view_preferences]
+    settings[settings owner on route]
+  end
+  main[main.py include_router] --> PublicRead
+  main --> OwnerOnly
+  main --> SelfAuth
+    </pre>
+    <p>Evidence: <code>main.py</code> lines 730–758 — router mounts and dependency lists.</p>
+  </div>
+
+  <div class="layer">
+    <h2>DATA_DIR layout</h2>
+    <table>
+      <thead><tr><th>Path</th><th>Type</th><th>Owner</th></tr></thead>
+      <tbody>
+        <tr><td><code>ai-jobs.db</code></td><td>SQLite</td><td>AI job queue + results</td></tr>
+        <tr><td><code>catalyst-cache.db</code></td><td>SQLite</td><td>Catalyst ETL cache + local intelligence</td></tr>
+        <tr><td><code>macro-conditions.db</code></td><td>SQLite</td><td>Macro factor history</td></tr>
+        <tr><td><code>optix.db</code></td><td>SQLite</td><td>Breakout radar events/scans</td></tr>
+        <tr><td><code>optix-worker.db</code></td><td>SQLite</td><td>Worker heartbeat, tasks, action queue</td></tr>
+        <tr><td><code>accounts.db</code></td><td>SQLite</td><td>Customer accounts + watchlists + chart drawings</td></tr>
+        <tr><td><code>finnhub-budget.sqlite</code></td><td>SQLite</td><td>Finnhub rate budget</td></tr>
+        <tr><td><code>company-logos.sqlite</code></td><td>SQLite</td><td>Logo fetch cache</td></tr>
+        <tr><td><code>public-options-v1.sqlite</code></td><td>SQLite</td><td>Worker option chain snapshots</td></tr>
+        <tr><td><code>watchlist-snapshot-v1.json</code></td><td>JSON</td><td>Worker watchlist publish</td></tr>
+        <tr><td><code>strength-snapshot-v1.json</code></td><td>JSON</td><td>Strength radar scan publish</td></tr>
+        <tr><td><code>public-home-snapshot-v1.json</code></td><td>JSON</td><td>Home: indices, signals, earnings, options unusual</td></tr>
+        <tr><td><code>runtime-settings.json</code></td><td>JSON</td><td>Runtime toggles + backups/</td></tr>
+        <tr><td><code>view-preferences.json</code></td><td>JSON</td><td>Per-principal UI prefs</td></tr>
+        <tr><td><code>stock-pull-snapshots-v1.json</code></td><td>JSON</td><td>Manual pull bundles</td></tr>
+        <tr><td><code>stock-chart-snapshots-v1/*.json</code></td><td>JSON dir</td><td>Intraday chart pulls</td></tr>
+        <tr><td><code>public-stock-data-v1/</code></td><td>JSON dir</td><td>Worker public stock bundles</td></tr>
+        <tr><td><code>sector-iv-snapshots-v1/</code></td><td>JSON dir</td><td>Sector IV ranking/heatmap</td></tr>
+        <tr><td><code>strength-variant-demand/</code></td><td>JSON dir</td><td>Strength variant demand records</td></tr>
+        <tr><td><code>earnings-market-caps-v1.json</code></td><td>JSON</td><td>FMP market cap cache</td></tr>
+        <tr><td><code>stock-symbol-directory-v1.json</code></td><td>JSON</td><td>Symbol search directory</td></tr>
+      </tbody>
+    </table>
+    <p>Canonical list: <code>data_paths.py</code> <code>get_data_paths()</code>.</p>
+  </div>
+
+  <div class="layer">
+    <h2>Worker tasks (scheduled + manual actions)</h2>
+    <pre class="mermaid">
+flowchart TB
+  WA["POST /api/worker/actions/{type}"] --> WS[(optix-worker.db)]
+  WS --> WR[worker runtime picks action]
+  WR --> T[tasks.py runners]
+  T --> breakout[breakout / breakout_refresh]
+  T --> focus[focus / focus_refresh]
+  T --> cat[catalyst_sync]
+  T --> ai[ai_jobs]
+  T --> maint[maintenance / retention]
+  T --> dir[stock_directory]
+  T --> home[public_home]
+  T --> siv[sector_iv_refresh]
+  T --> earn[earnings_analysis]
+  T --> macro[macro_conditions]
+  T --> str[strength_refresh]
+    </pre>
+    <p>Default task names: <code>worker/tasks.py</code> <code>DEFAULT_TASK_NAMES</code>.</p>
+  </div>
+
+  <div class="layer">
+    <h2>External provider touchpoints</h2>
+    <table>
+      <thead><tr><th>Provider</th><th>Primary modules</th></tr></thead>
+      <tbody>
+        <tr><td>Yahoo / yfinance</td><td><code>services/yahoo.py</code>, <code>yfinance_batch.py</code>, options, stocks pull, sectors fallback</td></tr>
+        <tr><td>Massive</td><td><code>services/massive.py</code> — quotes/candles primary; fallback to Yahoo</td></tr>
+        <tr><td>Finnhub</td><td><code>strength/finnhub.py</code>, <code>earnings.py</code> API refresh, <code>finnhub_budget.py</code>, <code>realtime_quotes.py</code></td></tr>
+        <tr><td>FMP</td><td><code>earnings_enrichment.py</code> calendar + market caps</td></tr>
+        <tr><td>FRED</td><td><code>macro_conditions/fred_client.py</code></td></tr>
+        <tr><td>MarketData.app</td><td><code>strength/marketdata.py</code>, <code>option_capability</code> chain enrichment</td></tr>
+        <tr><td>TradingView</td><td><code>breakouts/providers/tradingview.py</code>, catalyst calendar actuals</td></tr>
+        <tr><td>OpenAI</td><td><code>ai_jobs/runtime.py</code> + <code>worker.py</code>, <code>catalysts/local_intelligence.py</code></td></tr>
+        <tr><td>MacroLens</td><td><code>catalysts/etl_client.py</code> → <code>/internal/v1</code> on MACROLENS_URL</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Full endpoint inventory: see agent report or grep <code>@router.</code> under <code>backend/app/api/</code> (99 routes + <code>/health</code>, <code>/ready</code>).</p>
+</body>
+</html>
