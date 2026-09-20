@@ -86,6 +86,8 @@ export default function ResultCards({
                   <span className="flex flex-wrap items-center gap-1.5">
                     <span className="font-mono text-body-s font-semibold text-ink-800">{r.ticker}</span>
                     {r.sector && <SoftBadge className="max-w-[7.5rem]" title={t(r.sector)}><span className="truncate">{t(r.sector)}</span></SoftBadge>}
+                    {r.observationOnly && <SoftBadge>{t('观察')}</SoftBadge>}
+                    {r.listKind === 'composite' && r.status === 'eligible' && <SoftBadge tone="up">{t('合格')}</SoftBadge>}
                   </span>
                   <span className="block truncate text-micro text-ink-400" title={r.name}>{r.name}</span>
                 </span>

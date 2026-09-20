@@ -41,7 +41,7 @@ export interface RuntimeToggles {
 export type RuntimeTogglesPatch = Partial<RuntimeToggles>;
 
 export interface RuntimeAlgorithms {
-  screenerRankingAlgorithm: 'production' | 'a0_mid_long';
+  screenerRankingAlgorithm: 'production' | 'a0_mid_long' | 'eod_limited_v1';
   radarSortAlgorithm: 'production' | 't1_daily_priority';
 }
 export type RuntimeAlgorithmsPatch = Partial<RuntimeAlgorithms>;
@@ -107,7 +107,12 @@ function nRuntimeDoc(d: unknown): RuntimeDoc {
       earningsScheduledAnalysisEnabled: pickB(earnings, 'scheduled_analysis_enabled'),
     },
     algorithms: {
-      screenerRankingAlgorithm: screener === 'a0_mid_long' ? 'a0_mid_long' : 'production',
+      screenerRankingAlgorithm:
+        screener === 'eod_limited_v1'
+          ? 'eod_limited_v1'
+          : screener === 'a0_mid_long'
+            ? 'a0_mid_long'
+            : 'production',
       radarSortAlgorithm: radar === 't1_daily_priority' ? 't1_daily_priority' : 'production',
     },
   };

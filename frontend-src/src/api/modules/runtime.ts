@@ -14,7 +14,7 @@ export interface StrengthRefreshParameters {
   min_price: number;
   min_avg_dollar_volume: number;
   include_options: boolean;
-  ranking_algorithm?: 'production' | 'a0_mid_long' | 'follow_default';
+  ranking_algorithm?: 'production' | 'a0_mid_long' | 'eod_limited_v1' | 'follow_default';
 }
 
 export interface WorkerAction {

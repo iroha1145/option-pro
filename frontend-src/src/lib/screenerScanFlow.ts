@@ -41,6 +41,7 @@ export function strengthScanPath(params: ScanParams): string {
     min_avg_dollar_volume: params.min_avg_dollar_volume,
     include_options: params.include_options,
     ranking_algorithm: params.ranking_algorithm,
+    list_kind: params.list_kind,
   });
   return `/strength/scan${qs ? `?${qs}` : ''}`;
 }
@@ -156,7 +157,7 @@ export function rankingAlgorithmMatches(actual: unknown, expected: unknown): boo
   const wanted = expected ?? 'production';
   const got = actual ?? 'production';
   if (wanted === 'follow_default') {
-    return got === 'follow_default' || got === 'production' || got === 'a0_mid_long';
+    return got === 'follow_default' || got === 'production' || got === 'a0_mid_long' || got === 'eod_limited_v1';
   }
   return got === wanted;
 }

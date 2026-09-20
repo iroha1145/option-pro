@@ -208,6 +208,31 @@ export default function RowExpansion({ row, weights, dollarVolume, signals, onOp
           })}
         </div>
         {weights && <p className="mt-2.5 text-micro text-ink-400">{t('权重来自当前评分方法（右侧栏）')}</p>}
+        {(row.status || row.qualification || (row.rejectionReasons && row.rejectionReasons.length > 0)) && (
+          <div className="mt-4 space-y-1.5 border-t border-line pt-3" data-testid="screener-eod-row-details">
+            <p className="eyebrow">{t('收盘技术详情')}</p>
+            <p className="text-caption text-ink-600">
+              {row.observationOnly ? t('技术观察') : t('合格综合')}
+              {row.status ? ` · ${row.status}` : ''}
+              {row.familyLabel ? ` · ${row.familyLabel}` : ''}
+              {row.stockOrEtfTrack ? ` · ${row.stockOrEtfTrack}` : ''}
+            </p>
+            {row.observationFamilyCount != null && row.observationFamilyCount > 0 && (
+              <p className="text-caption text-ink-500">{t('多家族观察')} · {row.observationFamilyCount}</p>
+            )}
+            {row.rejectionReasons && row.rejectionReasons.length > 0 && (
+              <p className="text-micro text-ink-500">{row.rejectionReasons.join(' · ')}</p>
+            )}
+            {(row.knownSupport != null || row.plannedInvalidation != null) && (
+              <p className="font-mono text-micro text-ink-500 tnum">
+                {t('支撑')} {row.knownSupport ?? '—'} · {t('失效')} {row.plannedInvalidation ?? '—'}
+              </p>
+            )}
+            {row.dollarVolumeUnknown && (
+              <p className="text-micro text-ink-400">{t('成交额口径未核实，不能当作已通过流动性门')}</p>
+            )}
+          </div>
+        )}
         {/* 宏观适配放在分项下面：它是这些分数的背景，不是其中一项。 */}
         <div className="mt-4 border-t border-line pt-3">
           <MacroFitPanel

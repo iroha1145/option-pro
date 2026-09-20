@@ -24,6 +24,7 @@ import {
   type TierFilter,
   type Timeframe,
 } from './types';
+import { applyEodLimitedView, isEodLimitedRanking } from '@/lib/eodLimitedView';
 import { t as __t } from '../../i18n/core.ts';
 
 const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
@@ -221,7 +222,7 @@ export default function FilterWorkbench({
   const visibleSectors = showAllSectors ? sectorOptions : sectorOptions.slice(0, SECTOR_COLLAPSE_AT);
   const hiddenCount = sectorOptions.length - visibleSectors.length;
 
-  const patch = (p: Partial<ScanFilters>) => onChange({ ...draft, ...p });
+  const patch = (p: Partial<ScanFilters>) => onChange(applyEodLimitedView({ ...draft, ...p }));
 
   const toggleSector = (id: string) => {
     const has = draft.sectors.includes(id);
@@ -288,8 +289,8 @@ export default function FilterWorkbench({
         <div className="w-full min-w-0 sm:w-auto">
           <FieldLabel>{__t('周期')}</FieldLabel>
           <Segmented<Timeframe>
-            options={(['short', 'mid', 'long', 'all'] as const).map((v) => ({ value: v, label: TIMEFRAME_CN[v] }))}
-            value={draft.timeframe}
+            options={(isEodLimitedRanking(draft.rankingAlgorithm) ? (['short', 'mid', 'long'] as const) : (['short', 'mid', 'long', 'all'] as const)).map((v) => ({ value: v, label: TIMEFRAME_CN[v] }))}
+            value={draft.timeframe === 'all' && isEodLimitedRanking(draft.rankingAlgorithm) ? 'mid' : draft.timeframe}
             onChange={(timeframe) => patch({ timeframe })}
             ariaLabel={__t('周期')}
           />
@@ -314,6 +315,7 @@ export default function FilterWorkbench({
               { value: 'follow_default', label: __t('跟随默认') },
               { value: 'production', label: __t('原版排序') },
               { value: 'a0_mid_long', label: __t('中长期趋势（试用）') },
+              { value: 'eod_limited_v1', label: __t('收盘技术（受限）') },
             ]}
             value={draft.rankingAlgorithm}
             onChange={(rankingAlgorithm) => patch({ rankingAlgorithm })}
@@ -331,6 +333,11 @@ export default function FilterWorkbench({
       {draft.rankingAlgorithm === 'a0_mid_long' && draft.timeframe === 'all' && draft.profile === 'balanced' && (
         <p className="mt-3 text-caption text-ink-500" data-testid="screener-a0-view-note">
           {__t('当前试用固定中长期组合：0.5×中期 + 0.5×长期。原综合分仍可查看，不作为本模式名次。')}
+        </p>
+      )}
+      {isEodLimitedRanking(draft.rankingAlgorithm) && (
+        <p className="mt-3 text-caption text-ink-500" data-testid="screener-eod-view-note">
+          {__t('收盘技术基于最近完整交易日与当前主题名单；数据资格未核实时进入观察，不把成交额门标成已通过。首次遇到“全部周期”时已切换到中期。')}
         </p>
       )}
 

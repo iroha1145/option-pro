@@ -199,6 +199,7 @@ export const CATALYSTS: Dict = {
   '雷达默认排序': ['Default radar sort', 'レーダーのデフォルト並び替え'],
   '原版排序': ['Original ranking', '従来の順位'],
   '中长期趋势（试用）': ['Mid/long trend (trial)', '中長期トレンド（試用）'],
+  '收盘技术（受限）': ['EOD technical (limited)', '終値テクニカル（制限）'],
   '原雷达排序': ['Original radar sort', '従来のレーダー順'],
   '日线量价条件优先（试用）': ['Daily volume-price first (trial)', '日足の値嵩条件を優先（試用）'],
   '只影响未指定算法或选择跟随默认的请求。用户已明确选择原版时不会被覆盖。': [

@@ -69,7 +69,7 @@ class StrengthRefreshParameters(BaseModel):
     min_price: float = Field(ge=0)
     min_avg_dollar_volume: float = Field(ge=0)
     include_options: bool
-    ranking_algorithm: Literal["production", "a0_mid_long", "follow_default"] | None = None
+    ranking_algorithm: Literal["production", "a0_mid_long", "eod_limited_v1", "follow_default"] | None = None
 
 
 class ManualActionRequest(BaseModel):
@@ -266,6 +266,16 @@ async def request_action(
         )
         requested_algorithm = raw_parameters.get("ranking_algorithm")
         raw_parameters = _resolve_refresh_ranking(request, raw_parameters)
+        if raw_parameters.get("ranking_algorithm") == "eod_limited_v1" and raw_parameters.get(
+            "timeframe"
+        ) not in {"short", "mid", "long"}:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail={
+                    "code": "algorithm_view_conflict",
+                    "message": "EOD limited ranking only supports timeframe=short|mid|long",
+                },
+            )
         try:
             parameters = normalize_strength_scan_parameters(raw_parameters)
         except ValueError as exc:

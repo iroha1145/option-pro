@@ -23,11 +23,16 @@ A0_SCORE_BASIS = "0.5 * score_mid + 0.5 * score_long"
 A0_SUPPORTED_TIMEFRAME = "all"
 A0_SUPPORTED_PROFILE = "balanced"
 
+EOD_LIMITED_V1 = "eod_limited_v1"
+EOD_LIMITED_VERSION = "eod-limited-v1.1"
+EOD_LIMITED_SCORE_BASIS = "price_only_diagnostic + m1_consensus"
+EOD_LIMITED_TIMEFRAMES = ("short", "mid", "long")
+
 T1_ALGORITHM = "t1_daily_priority"
 T1_VERSION = "t1-daily-priority-v1"
 T1_SCORE_BASIS = "production_order + t1_daily_conditions_boost"
 
-SCREENER_ALGORITHMS = (PRODUCTION_ALGORITHM, A0_ALGORITHM)
+SCREENER_ALGORITHMS = (PRODUCTION_ALGORITHM, A0_ALGORITHM, EOD_LIMITED_V1)
 RADAR_ALGORITHMS = (PRODUCTION_ALGORITHM, T1_ALGORITHM)
 USER_CHOICES = (FOLLOW_DEFAULT, *SCREENER_ALGORITHMS)
 RADAR_USER_CHOICES = (FOLLOW_DEFAULT, *RADAR_ALGORITHMS)
@@ -42,6 +47,9 @@ SCREENER_ALIASES = {
     "a0": A0_ALGORITHM,
     "mid_long": A0_ALGORITHM,
     "mid-long": A0_ALGORITHM,
+    "eod": EOD_LIMITED_V1,
+    "eod_limited": EOD_LIMITED_V1,
+    "limited": EOD_LIMITED_V1,
 }
 
 RADAR_ALIASES = {
@@ -144,6 +152,8 @@ def canonicalize_radar_algorithm(value: Any, *, allow_follow: bool = False) -> s
 def screener_version(algorithm: str) -> str:
     if algorithm == A0_ALGORITHM:
         return A0_VERSION
+    if algorithm == EOD_LIMITED_V1:
+        return EOD_LIMITED_VERSION
     return "strength-v3"
 
 
@@ -156,6 +166,8 @@ def radar_version(algorithm: str) -> str:
 def screener_score_basis(algorithm: str) -> str:
     if algorithm == A0_ALGORITHM:
         return A0_SCORE_BASIS
+    if algorithm == EOD_LIMITED_V1:
+        return EOD_LIMITED_SCORE_BASIS
     return "ranking_score"
 
 
@@ -170,6 +182,11 @@ def a0_view_supported(timeframe: Any, profile: Any) -> bool:
         str(timeframe or "").strip() == A0_SUPPORTED_TIMEFRAME
         and str(profile or "").strip() == A0_SUPPORTED_PROFILE
     )
+
+
+def eod_view_supported(timeframe: Any, profile: Any = None) -> bool:
+    del profile
+    return str(timeframe or "").strip() in EOD_LIMITED_TIMEFRAMES
 
 
 def resolve_screener_algorithm(
@@ -212,6 +229,15 @@ def resolve_screener_algorithm(
             raise ConflictingAlgorithmError(
                 A0_ALGORITHM,
                 "A0 mid/long ranking only supports timeframe=all and profile=balanced",
+            )
+        fallback_reason = INCOMPATIBLE_VIEW
+        effective = PRODUCTION_ALGORITHM
+        source = f"{source}+fallback"
+    elif effective == EOD_LIMITED_V1 and not eod_view_supported(timeframe, profile):
+        if explicit_request or source == "request":
+            raise ConflictingAlgorithmError(
+                EOD_LIMITED_V1,
+                "EOD limited ranking only supports timeframe=short|mid|long",
             )
         fallback_reason = INCOMPATIBLE_VIEW
         effective = PRODUCTION_ALGORITHM

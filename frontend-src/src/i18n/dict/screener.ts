@@ -36,6 +36,55 @@ export const SCREENER: Dict = {
   '跟随默认': ['Follow default', 'デフォルトに従う'],
   '原版排序': ['Original ranking', '従来の順位'],
   '中长期趋势（试用）': ['Mid/long trend (trial)', '中長期トレンド（試用）'],
+  '收盘技术（受限）': ['EOD technical (limited)', '終値テクニカル（制限）'],
+  '收盘技术基于最近完整交易日与当前主题名单；数据资格未核实时进入观察，不把成交额门标成已通过。首次遇到“全部周期”时已切换到中期。': [
+    'EOD technical ranking uses the latest complete session and the current theme list. Unverified data qualifications stay on the watch list and do not pass dollar-volume gates. Selecting this mode with All timeframes switches to Mid.',
+    '終値テクニカルは直近の確定営業日と現行テーマ名簿を使います。データ資格が未確認の場合は観察に留め、売買代金ゲートを通過扱いしません。全期間を選んだ場合は中期に切り替えます。',
+  ],
+  '收盘技术仅支持短、中、长期，不能使用全部周期。': [
+    'EOD technical ranking only supports short, mid, and long timeframes.',
+    '終値テクニカルは短期・中期・長期のみ対応で、全期間は使えません。',
+  ],
+  '收盘技术（受限）快照正在后台生成，请稍候。': [
+    'The limited EOD snapshot is being prepared in the background. Please wait.',
+    '制限付き終値スナップショットをバックグラウンドで生成しています。しばらくお待ちください。',
+  ],
+  '收盘技术暂不可用': ['Limited EOD ranking is unavailable', '制限付き終値順位は利用できません'],
+  '新模式没有可用收盘快照。可切回原版排序，或等后台完成后重试。': [
+    'This mode has no published EOD snapshot yet. Switch back to original ranking, or retry after the worker finishes.',
+    'このモードには公開済みの終値スナップショットがありません。従来の順位に戻すか、バックエンド完了後に再試行してください。',
+  ],
+  '切回原版排序': ['Switch back to original ranking', '従来の順位に戻す'],
+  '技术观察': ['Technical watch', 'テクニカル観察'],
+  '合格综合': ['Eligible composite', '適格総合'],
+  '结果集': ['Result set', '結果セット'],
+  '合格': ['Eligible', '適格'],
+  '历史示例': ['Historical example', '履歴サンプル'],
+  'SYNTHETIC': ['SYNTHETIC', 'SYNTHETIC'],
+  '收盘技术详情': ['EOD technical details', '終値テクニカル詳細'],
+  '多家族观察': ['Multi-family watch', '複数ファミリー観察'],
+  '支撑': ['Support', 'サポート'],
+  '失效': ['Invalidation', '無効化'],
+  '成交额口径未核实，不能当作已通过流动性门': [
+    'Dollar-volume quality is unverified and must not be treated as a passed liquidity gate.',
+    '売買代金の口径は未確認であり、流動性ゲート通過として扱ってはいけません。',
+  ],
+  '合格综合为空：家族共识不足': [
+    'Eligible composite is empty: family consensus is insufficient.',
+    '適格総合は空です。ファミリー合意が不足しています。',
+  ],
+  '合格综合为空：数据资格未核实': [
+    'Eligible composite is empty: data qualifications are unverified.',
+    '適格総合は空です。データ資格が未確認です。',
+  ],
+  '合格综合为空：技术门槛未达到': [
+    'Eligible composite is empty: technical thresholds were not met.',
+    '適格総合は空です。テクニカル閾値に達していません。',
+  ],
+  '合格综合为空：没有完整候选': [
+    'Eligible composite is empty: there are no complete candidates.',
+    '適格総合は空です。完全な候補がありません。',
+  ],
   '中长期趋势排序仅支持周期=全部且偏好=均衡。请改回兼容视图，或改用原版排序。': [
     'Mid/long trend ranking only supports timeframe=all and profile=balanced. Switch back to a compatible view, or use original ranking.',
     '中長期トレンド順位は期間=すべて・スタイル=均衡のみ対応です。互換ビューに戻すか、従来の順位を使ってください。',

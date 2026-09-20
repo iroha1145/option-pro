@@ -24,11 +24,13 @@ from app.personal_config import get_personal_config
 from app.services.algorithm_diagnostics import record_screener_resolution
 from app.services.algorithm_modes import (
     A0_ALGORITHM,
+    EOD_LIMITED_V1,
     PRODUCTION_ALGORITHM,
     ConflictingAlgorithmError,
     UnknownAlgorithmError,
     admin_algorithm_defaults,
     canonicalize_screener_algorithm,
+    eod_view_supported,
     resolve_screener_algorithm,
     screener_score_basis,
     screener_version,
@@ -473,13 +475,13 @@ def _request_screener_resolution(
     )
 
 
-def _maybe_register_a0_variant_demand(
+def _maybe_register_ranking_variant_demand(
     request: Request,
     *,
     parameters: dict[str, Any],
     resolution: Any,
 ) -> dict[str, Any] | None:
-    if resolution is None or resolution.effective != A0_ALGORITHM:
+    if resolution is None or resolution.effective not in {A0_ALGORITHM, EOD_LIMITED_V1}:
         return None
     account = request_account_session(request)
     account_id = getattr(account, "user_id", None) if account is not None else None
@@ -778,6 +780,121 @@ def _overlay_algorithm_metadata(payload: dict[str, Any], resolution: Any | None 
     return payload
 
 
+def _eod_unavailable_detail(
+    demand: dict[str, Any] | None = None,
+    *,
+    preparing: bool = False,
+) -> dict[str, Any]:
+    if preparing or (demand and demand.get("status") in {"queued", "running", "accepted", "preparing"}):
+        return {
+            "code": "eod_limited_snapshot_preparing",
+            "status": "preparing",
+            "message": "收盘技术（受限）快照正在后台生成，请稍候。",
+            "effective_algorithm": EOD_LIMITED_V1,
+            "variant_demand": dict(demand or {}) if demand else None,
+        }
+    return {
+        "code": "eod_limited_snapshot_unavailable",
+        "status": "unavailable",
+        "message": "收盘技术（受限）快照暂不可用",
+        "effective_algorithm": EOD_LIMITED_V1,
+        "variant_demand": dict(demand or {}) if demand else None,
+    }
+
+
+def _read_eod_limited_snapshot(
+    *,
+    parameters: dict[str, Any],
+    list_kind: str,
+    resolution: Any | None,
+) -> tuple[dict[str, Any], float, bool]:
+    from app.services.eod_limited import (
+        LIST_KIND_COMPOSITE,
+        LIST_KIND_OBSERVATION,
+        PURPOSE_LIVE,
+        PURPOSE_SYNTHETIC,
+        RESEARCH_SEALED_SESSION,
+    )
+    from app.services.eod_limited.project import project_strength_payload
+    from app.services.eod_limited.store import read_batch, read_variant, snapshot_path
+    from app.services.research_eod_v1.calendar_asof import last_complete_eod_session
+
+    kind = list_kind if list_kind in {LIST_KIND_OBSERVATION, LIST_KIND_COMPOSITE} else LIST_KIND_OBSERVATION
+    scored = read_variant(str(parameters["profile"]), str(parameters["timeframe"]))
+    if scored is None:
+        raise HTTPException(status_code=503, detail=_eod_unavailable_detail())
+    payload = project_strength_payload(scored, parameters=parameters, list_kind=kind)
+    session = str(payload.get("served_session") or "")
+    if session == RESEARCH_SEALED_SESSION.isoformat():
+        payload["historical_example"] = True
+        payload["purpose"] = payload.get("purpose") if payload.get("purpose") != PURPOSE_LIVE else "historical_example"
+    batch = read_batch() or {}
+    saved_at = batch.get("published_at")
+    if not isinstance(saved_at, (int, float)) or not math.isfinite(float(saved_at)) or float(saved_at) <= 0:
+        try:
+            saved_at = snapshot_path().stat().st_mtime
+        except OSError:
+            saved_at = time.time()
+    saved_at = float(saved_at)
+    purpose = str(payload.get("purpose") or "")
+    synthetic = bool(payload.get("synthetic") or purpose == PURPOSE_SYNTHETIC)
+    historical = bool(payload.get("historical_example") or purpose != PURPOSE_LIVE)
+    stale = False
+    stale_reason = None
+    source_status = "active"
+    if synthetic:
+        source_status = "historical"
+    elif historical:
+        source_status = "historical"
+    elif purpose == PURPOSE_LIVE and session:
+        try:
+            calendar = last_complete_eod_session(datetime.now(timezone.utc))
+            served = datetime.strptime(session, "%Y-%m-%d").date()
+            if served < calendar:
+                stale = True
+                source_status = "stale"
+                stale_reason = "newer_session_available"
+        except ValueError:
+            source_status = "unknown"
+    sector_id = parameters.get("sector_id")
+    if sector_id:
+        payload["observation_rows"] = [
+            row for row in payload.get("observation_rows") or [] if row.get("sector_id") == sector_id
+        ]
+        payload["composite_rows"] = [
+            row for row in payload.get("composite_rows") or [] if row.get("sector_id") == sector_id
+        ]
+        key = "composite_rows" if kind == LIST_KIND_COMPOSITE else "observation_rows"
+        payload["rows"] = list(payload.get(key) or [])
+        payload["results"] = payload["rows"]
+        payload["count"] = len(payload["rows"])
+    top = int(parameters.get("top") or 0)
+    if top > 0 and len(payload.get("rows") or []) > top:
+        payload["rows"] = list(payload["rows"][:top])
+        payload["results"] = payload["rows"]
+        payload["count"] = len(payload["rows"])
+    saved_iso = datetime.fromtimestamp(saved_at, timezone.utc).isoformat()
+    payload.update(
+        {
+            "_cached": True,
+            "_stale": stale,
+            "source_status": source_status,
+            "cache_ttl_seconds": _STRENGTH_SNAPSHOT_TTL_SECONDS,
+            "cache_expires_at": datetime.fromtimestamp(
+                saved_at + _STRENGTH_SNAPSHOT_TTL_SECONDS,
+                timezone.utc,
+            ).isoformat(),
+            "snapshot_source": "eod_limited_worker",
+            "snapshot_saved_at": saved_iso,
+            "scan_completed_at": saved_iso,
+            "score_data_through": session or None,
+        }
+    )
+    if stale_reason:
+        payload["stale_reason"] = stale_reason
+    return sanitize(_overlay_algorithm_metadata(payload, resolution)), saved_at, stale
+
+
 async def _scan_snapshot_payload(
     *,
     universe: str = "themes",
@@ -790,6 +907,7 @@ async def _scan_snapshot_payload(
     include_options: bool = True,
     ranking_algorithm: str | None = None,
     resolution: Any | None = None,
+    list_kind: str = "observation",
 ) -> tuple[dict[str, Any], float, bool]:
     """Return (payload, saved_at, stale) for a matching worker snapshot."""
 
@@ -812,6 +930,21 @@ async def _scan_snapshot_payload(
             status_code=400,
             detail={"code": "strength_parameters_invalid"},
         ) from exc
+    if (ranking_algorithm or parameters.get("ranking_algorithm")) == EOD_LIMITED_V1:
+        if not eod_view_supported(timeframe, profile):
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "algorithm_view_conflict",
+                    "message": "EOD limited ranking only supports timeframe=short|mid|long",
+                },
+            )
+        return await asyncio.to_thread(
+            _read_eod_limited_snapshot,
+            parameters=parameters,
+            list_kind=list_kind,
+            resolution=resolution,
+        )
     now = time.time()
     # 新快照版本的首次读取要同步读盘 + 解码 + 递归校验最高 4MB JSON——
     # 挪线程池，别让单事件循环为冷缓存停摆（审计 P2-03）。指纹缓存命中时
@@ -895,6 +1028,7 @@ async def scan(
     min_avg_dollar_volume: float = Query(10_000_000, ge=0),
     include_options: bool = True,
     ranking_algorithm: Annotated[Optional[str], Query()] = None,
+    list_kind: Annotated[str, Query()] = "observation",
 ):
     """Read a matching Strength Radar snapshot produced by the worker."""
     try:
@@ -926,6 +1060,7 @@ async def scan(
             include_options=include_options,
             ranking_algorithm=resolution.effective,
             resolution=resolution,
+            list_kind=list_kind,
         )
     except HTTPException as exc:
         if exc.status_code != 503:
@@ -944,13 +1079,18 @@ async def scan(
             )
         except ValueError:
             raise exc from None
-        demand = _maybe_register_a0_variant_demand(
+        demand = _maybe_register_ranking_variant_demand(
             request,
             parameters=parameters,
             resolution=resolution,
         )
         if demand is None:
             raise
+        if resolution.effective == EOD_LIMITED_V1:
+            raise HTTPException(
+                status_code=503,
+                detail=_eod_unavailable_detail(demand),
+            ) from exc
         raise HTTPException(
             status_code=503,
             detail=strength_variant_unavailable_detail(demand),
@@ -980,6 +1120,11 @@ async def scan(
             *(
                 (resolution.effective, resolution.version)
                 if resolution.effective != PRODUCTION_ALGORITHM
+                else ()
+            ),
+            *(
+                (list_kind, payload.get("served_session"), payload.get("purpose"))
+                if resolution.effective == EOD_LIMITED_V1
                 else ()
             ),
         ),

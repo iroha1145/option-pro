@@ -5,6 +5,7 @@ import { DEFAULT_FILTERS } from '../src/components/screener/types.ts';
 import { buildStrengthScanRequest } from '../src/components/screener/scanRequest.ts';
 import { isStrengthSnapshotPreparing, strengthParametersMatch } from '../src/lib/screenerScanFlow.ts';
 import { isA0Ranking, keepServerRankingOrder, rowPrimarySortScore } from '../src/lib/screenerSort.ts';
+import { applyEodLimitedView, isEodLimitedRanking } from '../src/lib/eodLimitedView.ts';
 import { t1StatusPresentation } from '../src/lib/t1Status.ts';
 import {
   DEFAULT_ALGORITHM_PREFERENCES,
@@ -75,6 +76,30 @@ test('follow_default is an explicit request identity', () => {
   assert.equal(requestedRadarAlgorithm('follow_default'), 'follow_default');
   assert.equal(requestedScreenerAlgorithm('production'), 'production');
   assert.equal(requestedRadarAlgorithm('t1_daily_priority'), 't1_daily_priority');
+});
+
+test('explicit EOD limited is sent on both scan and refresh identities', () => {
+  const request = buildStrengthScanRequest({
+    ...DEFAULT_FILTERS,
+    timeframe: 'mid',
+    rankingAlgorithm: 'eod_limited_v1',
+    resultSet: 'observation',
+  });
+  assert.equal(request.apiParams.ranking_algorithm, 'eod_limited_v1');
+  assert.equal(request.apiParams.list_kind, 'observation');
+  assert.equal(request.refreshParameters.ranking_algorithm, 'eod_limited_v1');
+  assert.equal(keepServerRankingOrder('eod_limited_v1'), true);
+  assert.equal(isEodLimitedRanking('eod_limited_v1'), true);
+});
+
+test('first EOD select remaps timeframe all to mid', () => {
+  const next = applyEodLimitedView({
+    ...DEFAULT_FILTERS,
+    rankingAlgorithm: 'eod_limited_v1',
+    timeframe: 'all',
+  });
+  assert.equal(next.timeframe, 'mid');
+  assert.equal(next.rankingAlgorithm, 'eod_limited_v1');
 });
 
 test('only preparing 503 is treated as an in-progress A0 snapshot', () => {

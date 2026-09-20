@@ -1,4 +1,5 @@
 import type { ScreenerRow } from '@/api/types';
+import { isEodLimitedRanking } from './eodLimitedView.ts';
 
 export const A0_RANKING = 'a0_mid_long';
 
@@ -20,5 +21,5 @@ export function rowPrimarySortScore(
 }
 
 export function keepServerRankingOrder(effectiveAlgorithm?: string | null): boolean {
-  return isA0Ranking(effectiveAlgorithm);
+  return isA0Ranking(effectiveAlgorithm) || isEodLimitedRanking(effectiveAlgorithm);
 }

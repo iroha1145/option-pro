@@ -4,6 +4,7 @@ import pytest
 
 from app.services.algorithm_modes import (
     A0_ALGORITHM,
+    EOD_LIMITED_V1,
     FOLLOW_DEFAULT,
     INCOMPATIBLE_VIEW,
     PRODUCTION_ALGORITHM,
@@ -107,6 +108,47 @@ def test_admin_a0_with_incompatible_old_client_falls_back() -> None:
     )
     assert resolution.effective == PRODUCTION_ALGORITHM
     assert resolution.fallback_reason == INCOMPATIBLE_VIEW
+
+
+def test_explicit_eod_with_all_timeframe_raises() -> None:
+    with pytest.raises(ConflictingAlgorithmError):
+        resolve_screener_algorithm(
+            requested=EOD_LIMITED_V1,
+            timeframe="all",
+            profile="balanced",
+            explicit_request=True,
+        )
+
+
+def test_follow_default_does_not_silently_become_eod() -> None:
+    resolution = resolve_screener_algorithm(
+        requested=FOLLOW_DEFAULT,
+        admin_default=PRODUCTION_ALGORITHM,
+        timeframe="mid",
+        profile="balanced",
+    )
+    assert resolution.effective == PRODUCTION_ALGORITHM
+
+
+def test_admin_eod_with_all_timeframe_falls_back() -> None:
+    resolution = resolve_screener_algorithm(
+        admin_default=EOD_LIMITED_V1,
+        timeframe="all",
+        profile="balanced",
+    )
+    assert resolution.effective == PRODUCTION_ALGORITHM
+    assert resolution.fallback_reason == INCOMPATIBLE_VIEW
+
+
+def test_explicit_eod_mid_resolves() -> None:
+    resolution = resolve_screener_algorithm(
+        requested=EOD_LIMITED_V1,
+        timeframe="mid",
+        profile="balanced",
+        explicit_request=True,
+    )
+    assert resolution.effective == EOD_LIMITED_V1
+    assert resolution.version == "eod-limited-v1.1"
 
 
 def test_unknown_screener_algorithm_is_rejected() -> None:

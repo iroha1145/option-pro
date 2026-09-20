@@ -1994,9 +1994,11 @@ class StrengthRefreshTask:
         snapshot_path: Path | None = None,
         clock: Callable[[], float] = time.time,
         scheduled_interval_seconds: float = 86_400.0,
+        eod_runner: Callable[..., Any] | None = None,
     ) -> None:
         self._scanner = scanner
         self._writer = writer
+        self._eod_runner = eod_runner
         self._snapshot_path = snapshot_path
         self._clock = clock
         self._scheduled_interval_seconds = float(scheduled_interval_seconds)
@@ -2050,6 +2052,77 @@ class StrengthRefreshTask:
             max(0.0, due_at - float(self._clock())),
         )
 
+    async def _run_eod_limited(self, parameters: dict[str, Any]) -> TaskResult:
+        from app.api.strength import strength_scan_parameters_hash
+        from app.services.eod_limited import PURPOSE_LIVE
+        from app.services.eod_limited.worker import run_eod_limited_job
+        from app.services.research_eod_v1.constants import HORIZONS
+
+        horizon = str(parameters.get("timeframe") or "")
+        if horizon not in HORIZONS:
+            return TaskResult(
+                status="degraded",
+                error_code="algorithm_view_conflict",
+                details={
+                    "result": "kept_previous_snapshot",
+                    "reason": "eod_limited_timeframe_unsupported",
+                    "parameters": parameters,
+                    "published": False,
+                },
+            )
+        runner = self._eod_runner or run_eod_limited_job
+        digest = strength_scan_parameters_hash(parameters)
+        try:
+            outcome = await _call_local(
+                runner,
+                profile=str(parameters.get("profile") or "balanced"),
+                horizon=horizon,
+                purpose=PURPOSE_LIVE,
+                all_variants=True,
+            )
+        except Exception as exc:
+            return TaskResult(
+                status="degraded",
+                error_code="eod_limited_input_unavailable",
+                details={
+                    "result": "kept_previous_snapshot",
+                    "reason": type(exc).__name__,
+                    "parameters": parameters,
+                    "parameters_hash": digest,
+                    "published": False,
+                },
+            )
+        published = str(outcome.get("status") or "") == "RAN"
+        through = outcome.get("served_session") or outcome.get("session")
+        if not published:
+            return TaskResult(
+                status="degraded",
+                error_code="eod_limited_input_unavailable",
+                details={
+                    "result": outcome.get("publish", {}).get("integrity") or "kept_previous_snapshot",
+                    "parameters": parameters,
+                    "parameters_hash": digest,
+                    "score_data_through": through,
+                    "purpose": outcome.get("purpose"),
+                    "published": False,
+                },
+            )
+        return TaskResult(
+            status="idle",
+            details={
+                "result": "refreshed",
+                "snapshot": "eod-limited-v1/batch.json",
+                "count": len(outcome.get("available_variants") or []),
+                "parameters": parameters,
+                "parameters_hash": digest,
+                "completed_at": _timestamp_text(float(self._clock())),
+                "score_data_through": through,
+                "score_version": outcome.get("compute_version") or "limited-current-v1.1",
+                "purpose": outcome.get("purpose"),
+                "published": True,
+            },
+        )
+
     async def _run(self, parameters: dict[str, Any]) -> TaskResult:
         from app.api.strength import (
             _existing_strength_publication,
@@ -2065,10 +2138,14 @@ class StrengthRefreshTask:
         from app.services.strength.scanner import STRENGTH_SCORE_VERSION, scan_strength
         from app.services.utils import sanitize
 
+        from app.services.algorithm_modes import EOD_LIMITED_V1
+
         scanner = self._scanner or scan_strength
         writer = self._writer or _write_strength_snapshot
         base_path = self._snapshot_path or get_data_paths().strength_snapshot
         parameters = normalize_strength_scan_parameters(parameters)
+        if parameters.get("ranking_algorithm") == EOD_LIMITED_V1:
+            return await self._run_eod_limited(parameters)
         path = _strength_snapshot_path(parameters, base_path=base_path)
         payload = sanitize(
             await _call_local(

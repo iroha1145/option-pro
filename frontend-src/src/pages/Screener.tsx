@@ -96,6 +96,13 @@ import {
   shouldApplyRemoteAlgorithmPreference,
 } from '@/lib/choiceGeneration';
 import { keepServerRankingOrder } from '@/lib/screenerSort';
+import {
+  applyEodLimitedView,
+  eodEmptyEligibleLabel,
+  isEodLimitedPreparing,
+  isEodLimitedRanking,
+  isEodLimitedSnapshotProblem,
+} from '@/lib/eodLimitedView';
 import { persistAlgorithmChoice, viewPreferencesApi } from '@/api/modules/viewPreferences';
 
 const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
@@ -270,6 +277,7 @@ export default function Screener() {
   }, [isSignedIn, principal, toast]);
 
   const updateDraft = useCallback((next: ScanFilters) => {
+    next = applyEodLimitedView(next);
     const previous = rankingRef.current;
     if (previous !== next.rankingAlgorithm) {
       choiceGeneration.current = nextChoiceGeneration(choiceGeneration.current);
@@ -289,6 +297,7 @@ export default function Screener() {
     filters: ScanFilters,
     options: { forceRefresh?: boolean } = {},
   ) => {
+    filters = applyEodLimitedView(filters);
     const seq = ++scanSeq.current;
     const identityGeneration = getMarketReadGeneration();
     const isCurrent = () => shouldCommitScanGeneration(seq, scanSeq.current)
@@ -526,10 +535,17 @@ export default function Screener() {
     } catch (e) {
       if (!isCurrent()) return;
       const error = e instanceof ApiError ? e : new ApiError(500, e instanceof Error ? e.message : __t('扫描失败'));
-      if (error.code === 400 && /A0|algorithm|timeframe|profile|中长期/i.test(error.message)) {
+      if (error.code === 400 && isEodLimitedRanking(filters.rankingAlgorithm)) {
+        toast.error(__t('收盘技术仅支持短、中、长期，不能使用全部周期。'), error.message);
+      } else if (error.code === 400 && /A0|algorithm|timeframe|profile|中长期/i.test(error.message)) {
         toast.error(__t('中长期趋势排序仅支持周期=全部且偏好=均衡。请改回兼容视图，或改用原版排序。'), error.message);
+      } else if (isEodLimitedPreparing(error)) {
+        toast.info?.(__t('排序数据准备中'), __t('收盘技术（受限）快照正在后台生成，请稍候。'));
       } else if (isStrengthSnapshotPreparing(error)) {
         toast.info?.(__t('排序数据准备中'), __t('中长期趋势排序正在后台生成，请稍候。'));
+      }
+      if (isEodLimitedRanking(filters.rankingAlgorithm) && scanMeta?.effectiveAlgorithm !== 'eod_limited_v1') {
+        setRows(null);
       }
       setScanError(error);
       setScanState('error');
@@ -604,14 +620,14 @@ export default function Screener() {
     if (f.priceMin != null) out = out.filter((r) => r.price >= (f.priceMin ?? 0));
     if (f.priceMax != null) out = out.filter((r) => r.price <= (f.priceMax ?? Infinity));
     if (f.minScore != null) out = out.filter((r) => r.strengthScore >= (f.minScore ?? 0));
-    if (f.minDollarVol > 0) {
+    if (f.minDollarVol > 0 && !isEodLimitedRanking(f.rankingAlgorithm) && !isEodLimitedRanking(scanMeta?.effectiveAlgorithm)) {
       out = out.filter((r) => {
         const dollarVolume = r.avgDollarVolume20d;
         return dollarVolume !== null && dollarVolume !== undefined && dollarVolume >= f.minDollarVol;
       });
     }
     return out;
-  }, [rows, applied]);
+  }, [rows, applied, scanMeta?.effectiveAlgorithm]);
 
   // Both the table and tier comparison use this macro-filtered pool. Missing is not neutral.
   const macroFilteredBase = useMemo(() => macroToneFilter === 'all'
@@ -907,7 +923,7 @@ export default function Screener() {
       choiceGeneration.current = nextChoiceGeneration(choiceGeneration.current);
       persistVisibleChoice(nextRanking);
     }
-    setDraft((value) => ({ ...value, ...p }));
+    setDraft((value) => applyEodLimitedView({ ...value, ...p }));
   }, [persistVisibleChoice]);
   const chips = useMemo(
     () => buildChips(applied, profiles, sectorOptions, patchApplied, patchDraftOnly),
@@ -1019,10 +1035,26 @@ export default function Screener() {
                     {__t('中长期趋势（试用）')} · {scanMeta.scoreBasis ?? '0.5 * score_mid + 0.5 * score_long'}
                   </SoftBadge>
                 )}
-                {scanMeta && scanMeta.effectiveAlgorithm !== 'a0_mid_long' && (
+                {scanMeta?.effectiveAlgorithm === 'eod_limited_v1' && (
+                  <SoftBadge data-testid="screener-effective-algorithm">
+                    {__t('收盘技术（受限）')} · {scanMeta.scoreBasis ?? 'price_only_diagnostic + m1_consensus'}
+                  </SoftBadge>
+                )}
+                {scanMeta && scanMeta.effectiveAlgorithm !== 'a0_mid_long' && scanMeta.effectiveAlgorithm !== 'eod_limited_v1' && (
                   <SoftBadge data-testid="screener-effective-algorithm">
                     {__t('原版排序')} · {scanMeta.scoreBasis ?? 'ranking_score'}
                   </SoftBadge>
+                )}
+                {scanMeta?.synthetic && (
+                  <SoftBadge tone="warn" data-testid="screener-eod-synthetic">{__t('SYNTHETIC')}</SoftBadge>
+                )}
+                {scanMeta?.historicalExample && !scanMeta.synthetic && (
+                  <SoftBadge tone="warn" data-testid="screener-eod-historical">{__t('历史示例')}</SoftBadge>
+                )}
+                {scanMeta?.effectiveAlgorithm === 'eod_limited_v1' && (
+                  <span className="font-mono text-micro text-ink-400 tnum" data-testid="screener-eod-counts">
+                    {__t('观察')} {scanMeta.observationN ?? 0} · {__t('合格')} {scanMeta.compositeN ?? 0}
+                  </span>
                 )}
                 {scanMeta?.fallbackReason && (
                   <SoftBadge tone="warn" className="whitespace-normal">
@@ -1119,6 +1151,24 @@ export default function Screener() {
                   }}
                 />
               )}
+              {isEodLimitedRanking(scanMeta?.effectiveAlgorithm ?? applied.rankingAlgorithm) && (
+                <Segmented<'observation' | 'composite'>
+                  options={[
+                    { value: 'observation', label: __t('技术观察') },
+                    { value: 'composite', label: __t('合格综合') },
+                  ]}
+                  value={draft.resultSet}
+                  onChange={(resultSet) => {
+                    const next = applyEodLimitedView({ ...draft, resultSet });
+                    updateDraft(next);
+                    setPage(1);
+                    if (scanState === 'done' && isEodLimitedRanking(scanMeta?.effectiveAlgorithm)) {
+                      void runScan(next);
+                    }
+                  }}
+                  ariaLabel={__t('结果集')}
+                />
+              )}
               <Segmented<SortMode>
                 options={(['deterministic', 'latest', 'impact'] as const).map((v) => ({ value: v, label: SORT_CN[v] }))}
                 value={sortMode}
@@ -1185,22 +1235,45 @@ export default function Screener() {
                     variant="error"
                     image="/empty-chart.svg"
                     title={
-                      isStrengthSnapshotPreparing(scanError)
+                      isEodLimitedPreparing(scanError)
+                        ? __t('排序数据准备中')
+                        : isEodLimitedSnapshotProblem(scanError)
+                          ? __t('收盘技术暂不可用')
+                        : isStrengthSnapshotPreparing(scanError)
                         ? __t('排序数据准备中')
                         : scanError?.code === 503 ? __t('扫描数据不可用') : __t('扫描失败')
                     }
                     description={
-                      isStrengthSnapshotPreparing(scanError)
+                      isEodLimitedPreparing(scanError)
+                        ? __t('收盘技术（受限）快照正在后台生成，请稍候。')
+                        : isEodLimitedSnapshotProblem(scanError)
+                          ? __t('新模式没有可用收盘快照。可切回原版排序，或等后台完成后重试。')
+                        : isStrengthSnapshotPreparing(scanError)
                         ? __t('中长期趋势排序正在后台生成，请稍候。')
                         : scanError?.code === 503 ? __t('稍后刷新再试') : scanError?.message
                     }
                     action={
-                      <button
-                        onClick={onScanRetry}
-                        className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105"
-                      >
-                        {__t('重试')}
-                      </button>
+                      <div className="flex flex-wrap justify-center gap-2">
+                        <button
+                          onClick={onScanRetry}
+                          className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105"
+                        >
+                          {__t('重试')}
+                        </button>
+                        {isEodLimitedSnapshotProblem(scanError) && (
+                          <button
+                            data-testid="screener-eod-switch-back"
+                            onClick={() => {
+                              const next = { ...draft, rankingAlgorithm: 'production' as const };
+                              updateDraft(next);
+                              void runScan(next);
+                            }}
+                            className="control-button"
+                          >
+                            {__t('切回原版排序')}
+                          </button>
+                        )}
+                      </div>
                     }
                   />
                 </div>
@@ -1258,7 +1331,11 @@ export default function Screener() {
                 <EmptyState
                   icon="search"
                   title={__t("当前条件无命中")}
-                  description={__t("尝试放宽条件，或移除部分过滤器")}
+                  description={
+                    isEodLimitedRanking(scanMeta?.effectiveAlgorithm ?? applied.rankingAlgorithm) && applied.resultSet === 'composite'
+                      ? eodEmptyEligibleLabel(scanMeta?.emptyEligibleReason)
+                      : __t("尝试放宽条件，或移除部分过滤器")
+                  }
                   action={
                     <div className="flex flex-wrap justify-center gap-2">
                       {(applied.tier !== 'all' || applied.minScore != null) && (
@@ -1438,6 +1515,8 @@ function buildChips(
   if (f.minScore != null) chips.push({ key: 'ms', label: __t('强度 ≥{n}', { n: f.minScore }), onRemove: () => patchServer({ minScore: null }) });
   if (f.rankingAlgorithm === 'a0_mid_long') {
     chips.push({ key: 'algo', label: __t('中长期趋势（试用）'), onRemove: () => patchServer({ rankingAlgorithm: 'follow_default' }) });
+  } else if (f.rankingAlgorithm === 'eod_limited_v1') {
+    chips.push({ key: 'algo', label: __t('收盘技术（受限）'), onRemove: () => patchServer({ rankingAlgorithm: 'follow_default' }) });
   } else if (f.rankingAlgorithm === 'production') {
     chips.push({ key: 'algo', label: __t('原版排序'), onRemove: () => patchServer({ rankingAlgorithm: 'follow_default' }) });
   }
@@ -1459,6 +1538,7 @@ function summarizeFilters(f: ScanFilters): string {
   if (f.minDollarVol > 0) parts.push(__t('成交额≥{v}', { v: fmtCompact(f.minDollarVol) }));
   if (f.minScore != null) parts.push(__t('强度≥{n}', { n: f.minScore }));
   if (f.rankingAlgorithm === 'a0_mid_long') parts.push(__t('中长期趋势（试用）'));
+  else if (f.rankingAlgorithm === 'eod_limited_v1') parts.push(__t('收盘技术（受限）'));
   else if (f.rankingAlgorithm === 'production') parts.push(__t('原版排序'));
   return parts.join(' · ') || __t('默认条件');
 }

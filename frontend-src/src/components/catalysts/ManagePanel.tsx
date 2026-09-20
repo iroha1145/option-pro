@@ -110,7 +110,7 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
   const [draft, setDraft] = useState<{
     manual: boolean;
     scheduled: boolean;
-    screenerRankingAlgorithm: 'production' | 'a0_mid_long';
+    screenerRankingAlgorithm: 'production' | 'a0_mid_long' | 'eod_limited_v1';
     radarSortAlgorithm: 'production' | 't1_daily_priority';
   } | null>(null);
   const [saving, setSaving] = useState(false);
@@ -362,12 +362,13 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
                     <Toggle label={__t("定时分析")} value={draft.scheduled} onChange={(v) => setDraft({ ...draft, scheduled: v })} />
                     <div className="rounded-md border border-line bg-card-warm px-3 py-2">
                       <span className="mb-1.5 block text-caption text-ink-700">{__t('选股默认算法')}</span>
-                      <Segmented<'production' | 'a0_mid_long'>
+                      <Segmented<'production' | 'a0_mid_long' | 'eod_limited_v1'>
                         ariaLabel={__t('选股默认算法')}
                         scrollable
                         options={[
                           { value: 'production', label: __t('原版排序') },
                           { value: 'a0_mid_long', label: __t('中长期趋势（试用）') },
+                          { value: 'eod_limited_v1', label: __t('收盘技术（受限）') },
                         ]}
                         value={draft.screenerRankingAlgorithm}
                         onChange={(screenerRankingAlgorithm) => setDraft({

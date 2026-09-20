@@ -8,11 +8,12 @@ import {
 export const SCREENER_FOLLOW_DEFAULT = 'follow_default';
 export const SCREENER_PRODUCTION = 'production';
 export const SCREENER_A0 = 'a0_mid_long';
+export const SCREENER_EOD_LIMITED = 'eod_limited_v1';
 export const RADAR_FOLLOW_DEFAULT = 'follow_default';
 export const RADAR_PRODUCTION = 'production';
 export const RADAR_T1 = 't1_daily_priority';
 
-export type ScreenerRankingChoice = 'follow_default' | 'production' | 'a0_mid_long';
+export type ScreenerRankingChoice = 'follow_default' | 'production' | 'a0_mid_long' | 'eod_limited_v1';
 export type RadarSortChoice = 'follow_default' | 'production' | 't1_daily_priority';
 
 export interface AlgorithmPreferences {
@@ -26,7 +27,12 @@ export const DEFAULT_ALGORITHM_PREFERENCES: AlgorithmPreferences = {
 };
 
 function asScreenerChoice(value: unknown): ScreenerRankingChoice {
-  if (value === SCREENER_PRODUCTION || value === SCREENER_A0 || value === SCREENER_FOLLOW_DEFAULT) {
+  if (
+    value === SCREENER_PRODUCTION
+    || value === SCREENER_A0
+    || value === SCREENER_EOD_LIMITED
+    || value === SCREENER_FOLLOW_DEFAULT
+  ) {
     return value;
   }
   return SCREENER_FOLLOW_DEFAULT;
