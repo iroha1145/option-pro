@@ -2916,10 +2916,15 @@ def test_focus_refresh_rebuilds_atomic_watchlist_snapshot_without_network(
     assert list(snapshot_path.parent.glob(".*.tmp")) == []
 
 
-def test_strength_refresh_runs_default_forced_scan_and_persists_snapshot(
+def test_legacy_strength_snapshot_runs_default_forced_scan_and_persists_snapshot(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from app.api import strength
+    from tests.legacy_strength_support import LegacySnapshotTask
+    from tests.http_response_support import lock_screener_admin_production
+
+    lock_screener_admin_production(monkeypatch)
 
     snapshot_path = tmp_path / "strength-snapshot-v1.json"
     calls: list[dict] = []
@@ -2940,7 +2945,7 @@ def test_strength_refresh_runs_default_forced_scan_and_persists_snapshot(
         }
 
     result = asyncio.run(
-        StrengthRefreshTask(
+        LegacySnapshotTask(
             scanner=fake_scanner,
             snapshot_path=snapshot_path,
             clock=lambda: 1_789_000_000.0,
@@ -2964,10 +2969,11 @@ def test_strength_refresh_runs_default_forced_scan_and_persists_snapshot(
     assert snapshot["payload"]["rows"] == [row]
 
 
-def test_strength_refresh_runs_claimed_nondefault_parameters_and_writes_variant(
+def test_legacy_strength_snapshot_runs_claimed_nondefault_parameters_and_writes_variant(
     tmp_path: Path,
 ) -> None:
     from app.api import strength
+    from tests.legacy_strength_support import LegacySnapshotTask
 
     base_path = tmp_path / "strength-snapshot-v1.json"
     calls: list[dict] = []
@@ -2998,7 +3004,7 @@ def test_strength_refresh_runs_claimed_nondefault_parameters_and_writes_variant(
         }
 
     result = asyncio.run(
-        StrengthRefreshTask(
+        LegacySnapshotTask(
             scanner=fake_scanner,
             snapshot_path=base_path,
             clock=lambda: 1_789_000_000.0,
@@ -3029,10 +3035,15 @@ def test_strength_refresh_runs_claimed_nondefault_parameters_and_writes_variant(
     assert snapshot["payload"]["rows"] == [row]
 
 
-def test_strength_refresh_failure_keeps_the_previous_snapshot(
+def test_legacy_strength_snapshot_failure_keeps_the_previous_snapshot(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from app.api import strength
+    from tests.legacy_strength_support import LegacySnapshotTask
+    from tests.http_response_support import lock_screener_admin_production
+
+    lock_screener_admin_production(monkeypatch)
 
     base_path = tmp_path / "strength-snapshot-v1.json"
     row = {"ticker": "AAPL", "score": 88.0}
@@ -3060,7 +3071,7 @@ def test_strength_refresh_failure_keeps_the_previous_snapshot(
 
     with pytest.raises(RuntimeError, match="provider unavailable"):
         asyncio.run(
-            StrengthRefreshTask(
+            LegacySnapshotTask(
                 scanner=failed_scanner,
                 snapshot_path=base_path,
                 clock=lambda: 1_789_000_000.0,

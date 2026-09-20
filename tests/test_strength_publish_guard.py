@@ -16,7 +16,8 @@ import pytest
 
 from app.api import strength
 from app.services.strength.freshness import should_replace_published_snapshot
-from app.worker.tasks import StrengthRefreshTask
+from tests.legacy_strength_support import LegacySnapshotTask
+from tests.http_response_support import lock_screener_admin_production
 from tests.test_strength_variant_lifecycle import _payload
 
 ET = ZoneInfo("America/New_York")
@@ -24,6 +25,11 @@ NOW = datetime(2026, 9, 4, 16, 30, tzinfo=ET).timestamp()
 CURRENT = "2026-09-04T20:00:00+00:00"
 PREVIOUS = "2026-09-03T20:00:00+00:00"
 DEFAULT = dict(strength.DEFAULT_STRENGTH_SCAN_PARAMETERS)
+
+
+@pytest.fixture(autouse=True)
+def _keep_scheduled_strength_on_production(monkeypatch: pytest.MonkeyPatch) -> None:
+    lock_screener_admin_production(monkeypatch)
 VARIANT_RETRY_SECONDS = 300.0
 
 
@@ -125,7 +131,7 @@ def test_run_does_not_publish_computable_but_older_provider_data(tmp_path: Path)
         return _payload(through=PREVIOUS)
 
     result = asyncio.run(
-        StrengthRefreshTask(
+        LegacySnapshotTask(
             scanner=older_but_publishable,
             snapshot_path=path,
             clock=lambda: NOW + 60,
@@ -233,7 +239,7 @@ def test_scheduled_refresh_does_not_hide_variant_degraded(tmp_path: Path) -> Non
         return _payload(parameters, through=CURRENT)
 
     result = asyncio.run(
-        StrengthRefreshTask(scanner=scanner, snapshot_path=base, clock=lambda: NOW)()
+        LegacySnapshotTask(scanner=scanner, snapshot_path=base, clock=lambda: NOW)()
     )
     assert result.status == "degraded"
     assert result.error_code
@@ -260,7 +266,7 @@ def test_scheduled_refresh_does_not_hide_variant_exception(tmp_path: Path) -> No
         return _payload(parameters, through=CURRENT)
 
     result = asyncio.run(
-        StrengthRefreshTask(scanner=scanner, snapshot_path=base, clock=lambda: NOW)()
+        LegacySnapshotTask(scanner=scanner, snapshot_path=base, clock=lambda: NOW)()
     )
     assert result.status == "degraded"
     assert result.error_code
@@ -288,7 +294,7 @@ def test_scheduled_refresh_partial_failure_counts_match_hashes(tmp_path: Path) -
         return _payload(parameters, ticker="X", through=CURRENT)
 
     result = asyncio.run(
-        StrengthRefreshTask(scanner=scanner, snapshot_path=base, clock=lambda: NOW)()
+        LegacySnapshotTask(scanner=scanner, snapshot_path=base, clock=lambda: NOW)()
     )
     assert result.status == "degraded"
     assert result.details["variant_refresh_attempted"] == 3
@@ -312,7 +318,7 @@ def test_scheduled_refresh_all_variants_succeed_without_errors(tmp_path: Path) -
         return _payload(parameters, ticker="X", through=CURRENT)
 
     result = asyncio.run(
-        StrengthRefreshTask(scanner=scanner, snapshot_path=base, clock=lambda: NOW)()
+        LegacySnapshotTask(scanner=scanner, snapshot_path=base, clock=lambda: NOW)()
     )
     assert result.status == "idle"
     assert result.error_code is None
@@ -335,7 +341,7 @@ def test_default_failure_keeps_existing_failure_semantics(tmp_path: Path) -> Non
         return _payload(parameters, through=CURRENT)
 
     result = asyncio.run(
-        StrengthRefreshTask(scanner=scanner, snapshot_path=base, clock=lambda: NOW)()
+        LegacySnapshotTask(scanner=scanner, snapshot_path=base, clock=lambda: NOW)()
     )
     assert result.status == "degraded"
     assert result.error_code == "strength_input_unavailable"
@@ -360,7 +366,7 @@ def test_variant_retry_does_not_postpone_default_or_pile_tasks(tmp_path: Path) -
             return _payload(parameters, through=CURRENT)
         return _failed_payload(parameters)
 
-    task = StrengthRefreshTask(
+    task = LegacySnapshotTask(
         scanner=scanner,
         snapshot_path=base,
         clock=lambda: clock[0],

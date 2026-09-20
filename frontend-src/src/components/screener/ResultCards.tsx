@@ -12,7 +12,7 @@ import TickerLogo from '@/components/shared/TickerLogo';
 import InfoHint from '@/components/shared/InfoHint';
 import MacroFitBadge from '@/components/shared/MacroFitBadge';
 import { SCORE_HINTS } from '@/lib/scoreHints';
-import { isA0Ranking, rowPrimarySortScore } from '@/lib/screenerSort';
+import { rowPrimarySortScore } from '@/lib/screenerSort';
 import RowExpansion from './RowExpansion';
 import { CatalystBadge, SubscoreTicks } from './cells';
 import {
@@ -39,7 +39,6 @@ export interface ResultCardsProps {
   page?: number;
   /** 与桌面端可选列同一个开关 */
   showMacro?: boolean;
-  effectiveAlgorithm?: string | null;
 }
 
 export default function ResultCards({
@@ -54,14 +53,12 @@ export default function ResultCards({
   animKey,
   page = 1,
   showMacro = false,
-  effectiveAlgorithm = null,
 }: ResultCardsProps) {
-  const a0Active = isA0Ranking(effectiveAlgorithm);
   return (
     <div className="grid grid-cols-1 gap-3" key={animKey}>
       {rows.map((r, i) => {
         const isOpen = expanded === r.ticker;
-        const primary = rowPrimarySortScore(r, effectiveAlgorithm);
+        const primary = rowPrimarySortScore(r);
         const strength = screenerStrengthPresentation(primary ?? r.strengthScore);
         const strengthWidth = primary == null ? 0 : Math.max(2, Math.min(100, primary));
         return (
@@ -86,6 +83,8 @@ export default function ResultCards({
                   <span className="flex flex-wrap items-center gap-1.5">
                     <span className="font-mono text-body-s font-semibold text-ink-800">{r.ticker}</span>
                     {r.sector && <SoftBadge className="max-w-[7.5rem]" title={t(r.sector)}><span className="truncate">{t(r.sector)}</span></SoftBadge>}
+                    {r.observationOnly && <SoftBadge>{t('观察')}</SoftBadge>}
+                    {r.listKind === 'composite' && r.status === 'eligible' && <SoftBadge tone="up">{t('合格')}</SoftBadge>}
                   </span>
                   <span className="block truncate text-micro text-ink-400" title={r.name}>{r.name}</span>
                 </span>
@@ -99,18 +98,13 @@ export default function ResultCards({
               <span className="mt-3 flex items-end justify-between gap-3">
                 <span>
                   <SoftBadge tone={strength.badgeTone} size="md" className="metric-value text-data-l tnum">
-                    {/* 主显示值必须等于当前排序依据；A0 缺数显 —，不用 0 冒充。 */}
+                    {/* 主显示值必须等于当前排序依据；缺数显 —，不用 0 冒充。 */}
                     {primary == null ? '—' : primary.toFixed(1)}
                   </SoftBadge>
                   <span className="ml-1.5 text-micro text-ink-400">
-                    {a0Active ? t('排序分 ·') : t('强度分 ·')} {primary == null ? t('数据不足') : `${strength.band} ${strength.label}`}
+                    {t('强度分 ·')} {primary == null ? t('数据不足') : `${strength.band} ${strength.label}`}
                     <InfoHint hint={SCORE_HINTS.strengthComposite} size={11} className="ml-1" />
                   </span>
-                  {a0Active && (
-                    <span className="mt-1 block text-micro text-ink-400">
-                      {t('综合分 {score}', { score: r.strengthScore.toFixed(1) })}
-                    </span>
-                  )}
                 </span>
                 <span className="pb-0.5 text-right">
                   <span className="block metric-value text-data-m text-ink-800 tnum"><LivePrice symbol={r.ticker} fallback={r.price} fallbackAt={r.priceAsOf ?? r.dailyDataThrough} fallbackKind="scan" /></span>

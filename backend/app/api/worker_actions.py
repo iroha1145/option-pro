@@ -11,8 +11,8 @@ from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.strength import (
-    DEFAULT_STRENGTH_SCAN_PARAMETERS,
-    normalize_strength_scan_parameters,
+    scheduled_strength_scan_parameters,
+    strength_execution_parameters,
     strength_scan_parameters_hash,
 )
 from app.data_paths import get_data_paths
@@ -69,7 +69,7 @@ class StrengthRefreshParameters(BaseModel):
     min_price: float = Field(ge=0)
     min_avg_dollar_volume: float = Field(ge=0)
     include_options: bool
-    ranking_algorithm: Literal["production", "a0_mid_long", "follow_default"] | None = None
+    ranking_algorithm: Literal["production", "a0_mid_long", "eod_limited_v1", "follow_default"] | None = None
 
 
 class ManualActionRequest(BaseModel):
@@ -229,15 +229,22 @@ def _resolve_refresh_ranking(request: Request, raw_parameters: dict[str, Any]) -
 
     payload = dict(raw_parameters)
     requested = payload.pop("ranking_algorithm", None)
+    timeframe_omitted = "timeframe" not in raw_parameters or raw_parameters.get("timeframe") in {
+        None,
+        "",
+    }
     try:
         resolution = _request_screener_resolution(
             request,
             requested=requested,
             timeframe=str(payload.get("timeframe") or "all"),
             profile=str(payload.get("profile") or "balanced"),
+            timeframe_omitted=timeframe_omitted,
         )
     except Exception:
         return raw_parameters
+    if resolution.resolved_timeframe:
+        payload["timeframe"] = resolution.resolved_timeframe
     if resolution.effective != PRODUCTION_ALGORITHM:
         payload["ranking_algorithm"] = resolution.effective
     return payload
@@ -262,12 +269,12 @@ async def request_action(
         raw_parameters = (
             body.parameters.model_dump()
             if body.parameters is not None
-            else dict(DEFAULT_STRENGTH_SCAN_PARAMETERS)
+            else scheduled_strength_scan_parameters()
         )
         requested_algorithm = raw_parameters.get("ranking_algorithm")
         raw_parameters = _resolve_refresh_ranking(request, raw_parameters)
         try:
-            parameters = normalize_strength_scan_parameters(raw_parameters)
+            parameters = strength_execution_parameters(raw_parameters)
         except ValueError as exc:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,

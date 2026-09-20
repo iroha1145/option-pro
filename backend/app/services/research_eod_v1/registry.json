@@ -1,0 +1,2365 @@
+{
+  "schema_version": "option-pro-us-eod-research-v1.0",
+  "authored_date": "2026-09-16",
+  "repo_commit_reviewed": "8b620d760f05020d2c1b51a3c3228a89fd9f3120",
+  "status": "not_backtested_not_production",
+  "factors": [
+    "T",
+    "M",
+    "S",
+    "B",
+    "P",
+    "V",
+    "R",
+    "G"
+  ],
+  "base_algorithm_weights": {
+    "A_trend_quality": {
+      "T": 0.24,
+      "M": 0.25,
+      "S": 0.18,
+      "B": 0.03,
+      "P": 0.05,
+      "V": 0.07,
+      "R": 0.1,
+      "G": 0.08
+    },
+    "B_confirmed_base_breakout": {
+      "T": 0.12,
+      "M": 0.1,
+      "S": 0.15,
+      "B": 0.3,
+      "P": 0.03,
+      "V": 0.18,
+      "R": 0.07,
+      "G": 0.05
+    },
+    "C_trend_pullback": {
+      "T": 0.18,
+      "M": 0.1,
+      "S": 0.22,
+      "B": 0.02,
+      "P": 0.27,
+      "V": 0.08,
+      "R": 0.08,
+      "G": 0.05
+    },
+    "D_residual_momentum": {
+      "T": 0.18,
+      "M": 0.3,
+      "S": 0.12,
+      "B": 0.02,
+      "P": 0.03,
+      "V": 0.05,
+      "R": 0.2,
+      "G": 0.1
+    }
+  },
+  "profiles": {
+    "conservative": {
+      "name": "稳健",
+      "factor_tilt": [
+        1.15,
+        0.9,
+        1.15,
+        0.85,
+        1.1,
+        0.9,
+        1.5,
+        1.05
+      ],
+      "score_floor": 78,
+      "structure_floor": 65,
+      "minimum_adv_usd": 50000000,
+      "atr_absolute_cap_pct": 5.0,
+      "atr_sector_median_multiplier": 1.25,
+      "confirm_closes": 2,
+      "max_extension_atr": 1.5,
+      "rvol_multiplier": 1.0,
+      "coverage_min": 0.95,
+      "scheduled_earnings_no_new_before_sessions": 5,
+      "scheduled_earnings_no_new_after_sessions": 1,
+      "max_position_fraction": 0.05,
+      "position_risk_budget_fraction": 0.003,
+      "max_order_adv_fraction": 0.0005
+    },
+    "balanced": {
+      "name": "均衡",
+      "factor_tilt": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "score_floor": 74,
+      "structure_floor": 55,
+      "minimum_adv_usd": 20000000,
+      "atr_absolute_cap_pct": 8.0,
+      "atr_sector_median_multiplier": 1.75,
+      "confirm_closes": 2,
+      "max_extension_atr": 2.0,
+      "rvol_multiplier": 1.0,
+      "coverage_min": 0.9,
+      "scheduled_earnings_no_new_before_sessions": 3,
+      "scheduled_earnings_no_new_after_sessions": 1,
+      "max_position_fraction": 0.08,
+      "position_risk_budget_fraction": 0.005,
+      "max_order_adv_fraction": 0.001
+    },
+    "aggressive": {
+      "name": "进取",
+      "factor_tilt": [
+        0.95,
+        1.15,
+        1.05,
+        1.25,
+        0.95,
+        1.1,
+        0.8,
+        1.0
+      ],
+      "score_floor": 70,
+      "structure_floor": 50,
+      "minimum_adv_usd": 10000000,
+      "atr_absolute_cap_pct": 12.0,
+      "atr_sector_median_multiplier": 2.5,
+      "confirm_closes": 1,
+      "max_extension_atr": 2.5,
+      "rvol_multiplier": 1.0,
+      "coverage_min": 0.9,
+      "scheduled_earnings_no_new_before_sessions": 1,
+      "scheduled_earnings_no_new_after_sessions": 1,
+      "max_position_fraction": 0.1,
+      "position_risk_budget_fraction": 0.0075,
+      "max_order_adv_fraction": 0.0025
+    }
+  },
+  "horizons": {
+    "short": {
+      "label_holding_sessions": 5,
+      "factor_tilt": [
+        0.9,
+        0.75,
+        1.1,
+        1.25,
+        1.15,
+        1.15,
+        0.95,
+        0.9
+      ],
+      "momentum_blend": [
+        0.5,
+        0.3,
+        0.2
+      ]
+    },
+    "mid": {
+      "label_holding_sessions": 20,
+      "factor_tilt": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "momentum_blend": [
+        0.25,
+        0.4,
+        0.35
+      ]
+    },
+    "long": {
+      "label_holding_sessions": 63,
+      "factor_tilt": [
+        1.2,
+        1.2,
+        1,
+        0.8,
+        0.8,
+        0.8,
+        1.1,
+        1.05
+      ],
+      "momentum_blend": [
+        0.1,
+        0.35,
+        0.55
+      ]
+    }
+  },
+  "sectors": {
+    "semiconductors": {
+      "name": "半导体",
+      "benchmark_hint": "SOXX",
+      "historical_membership_required": true,
+      "factor_prior": {
+        "T": 1.1,
+        "M": 1.15,
+        "S": 1.05,
+        "B": 1.2,
+        "P": 0.9,
+        "V": 1.05,
+        "R": 0.9,
+        "G": 1.2
+      },
+      "candidates": {
+        "A_trend_quality": {
+          "weights": {
+            "T": 0.2442183164,
+            "M": 0.2659574468,
+            "S": 0.1748381129,
+            "B": 0.0333024977,
+            "P": 0.0416281221,
+            "V": 0.0679925994,
+            "R": 0.0832562442,
+            "G": 0.0888066605
+          },
+          "min_history_sessions": 252
+        },
+        "B_confirmed_base_breakout": {
+          "weights": {
+            "T": 0.1196193928,
+            "M": 0.104213865,
+            "S": 0.1427276846,
+            "B": 0.3262347077,
+            "P": 0.0244676031,
+            "V": 0.1712732216,
+            "R": 0.0570910739,
+            "G": 0.0543724513
+          },
+          "min_history_sessions": 252
+        },
+        "C_trend_pullback": {
+          "weights": {
+            "T": 0.1927945472,
+            "M": 0.111976631,
+            "S": 0.2249269718,
+            "B": 0.023369036,
+            "P": 0.2366114898,
+            "V": 0.0817916261,
+            "R": 0.0701071081,
+            "G": 0.0584225901
+          },
+          "min_history_sessions": 252
+        },
+        "D_residual_momentum": {
+          "weights": {
+            "T": 0.1846153846,
+            "M": 0.3216783217,
+            "S": 0.1174825175,
+            "B": 0.0223776224,
+            "P": 0.0251748252,
+            "V": 0.048951049,
+            "R": 0.1678321678,
+            "G": 0.1118881119
+          },
+          "min_history_sessions": 330
+        }
+      },
+      "gates": {
+        "minimum_adv_usd": 30000000,
+        "base_min_sessions": 20,
+        "base_max_sessions": 80,
+        "breakout_rvol_min": 1.25,
+        "breakout_buffer_atr": 0.15,
+        "breakout_buffer_price_fraction": 0.0025,
+        "pullback_depth_max_atr": 3.0,
+        "event_policy": "earnings",
+        "base_min_distinct_touches": 2
+      },
+      "notes": "同时检验板块共振与个股相对强度。不能把存储、设备、设计公司的周期混为一类；强势趋势允许较高 RSI，但用 ATR 乖离限制追高。",
+      "pit_subgroups": [
+        "芯片设计",
+        "存储",
+        "设备",
+        "代工",
+        "模拟芯片"
+      ],
+      "asset_track": "stock",
+      "status": "unvalidated_research_hypothesis"
+    },
+    "software": {
+      "name": "软件基础设施",
+      "benchmark_hint": "IGV",
+      "historical_membership_required": true,
+      "factor_prior": {
+        "T": 1.1,
+        "M": 1.1,
+        "S": 1.1,
+        "B": 1.0,
+        "P": 1.1,
+        "V": 1.0,
+        "R": 1.1,
+        "G": 0.95
+      },
+      "candidates": {
+        "A_trend_quality": {
+          "weights": {
+            "T": 0.2448979592,
+            "M": 0.2551020408,
+            "S": 0.1836734694,
+            "B": 0.0278293135,
+            "P": 0.0510204082,
+            "V": 0.0649350649,
+            "R": 0.1020408163,
+            "G": 0.0705009276
+          },
+          "min_history_sessions": 252
+        },
+        "B_confirmed_base_breakout": {
+          "weights": {
+            "T": 0.1263762566,
+            "M": 0.1053135472,
+            "S": 0.1579703207,
+            "B": 0.287218765,
+            "P": 0.0315940641,
+            "V": 0.172331259,
+            "R": 0.073719483,
+            "G": 0.0454763045
+          },
+          "min_history_sessions": 252
+        },
+        "C_trend_pullback": {
+          "weights": {
+            "T": 0.1829099307,
+            "M": 0.1016166282,
+            "S": 0.223556582,
+            "B": 0.0184757506,
+            "P": 0.2743648961,
+            "V": 0.0739030023,
+            "R": 0.0812933025,
+            "G": 0.0438799076
+          },
+          "min_history_sessions": 252
+        },
+        "D_residual_momentum": {
+          "weights": {
+            "T": 0.1836734694,
+            "M": 0.306122449,
+            "S": 0.1224489796,
+            "B": 0.0185528757,
+            "P": 0.0306122449,
+            "V": 0.0463821892,
+            "R": 0.2040816327,
+            "G": 0.0881261596
+          },
+          "min_history_sessions": 330
+        }
+      },
+      "gates": {
+        "minimum_adv_usd": 20000000,
+        "base_min_sessions": 20,
+        "base_max_sessions": 80,
+        "breakout_rvol_min": 1.3,
+        "breakout_buffer_atr": 0.15,
+        "breakout_buffer_price_fraction": 0.0025,
+        "pullback_depth_max_atr": 2.8,
+        "event_policy": "earnings",
+        "base_min_distinct_touches": 2
+      },
+      "notes": "拆分成熟软件、云订阅与网络安全；重点检查财报跳空后的延续，剔除仅因单日大阳线入选的情况。宏观久期暴露只作分层诊断，首轮不接复杂宏观择时。",
+      "pit_subgroups": [
+        "成熟软件",
+        "云订阅",
+        "网络安全"
+      ],
+      "asset_track": "stock",
+      "status": "unvalidated_research_hypothesis"
+    },
+    "ai_cloud": {
+      "name": "AI 与云",
+      "benchmark_hint": "PIT_AI_CLOUD_BASKET",
+      "historical_membership_required": true,
+      "factor_prior": {
+        "T": 1.05,
+        "M": 1.1,
+        "S": 1.1,
+        "B": 1.15,
+        "P": 0.9,
+        "V": 1.05,
+        "R": 1.15,
+        "G": 1.15
+      },
+      "candidates": {
+        "A_trend_quality": {
+          "weights": {
+            "T": 0.2322580645,
+            "M": 0.2534562212,
+            "S": 0.1824884793,
+            "B": 0.031797235,
+            "P": 0.0414746544,
+            "V": 0.0677419355,
+            "R": 0.1059907834,
+            "G": 0.0847926267
+          },
+          "min_history_sessions": 252
+        },
+        "B_confirmed_base_breakout": {
+          "weights": {
+            "T": 0.1145454545,
+            "M": 0.1,
+            "S": 0.15,
+            "B": 0.3136363636,
+            "P": 0.0245454545,
+            "V": 0.1718181818,
+            "R": 0.0731818182,
+            "G": 0.0522727273
+          },
+          "min_history_sessions": 252
+        },
+        "C_trend_pullback": {
+          "weights": {
+            "T": 0.1816434407,
+            "M": 0.1057184046,
+            "S": 0.2325804901,
+            "B": 0.0221047573,
+            "P": 0.2335415666,
+            "V": 0.0807304181,
+            "R": 0.0884190293,
+            "G": 0.0552618933
+          },
+          "min_history_sessions": 252
+        },
+        "D_residual_momentum": {
+          "weights": {
+            "T": 0.1720527993,
+            "M": 0.3004096495,
+            "S": 0.1201638598,
+            "B": 0.0209376422,
+            "P": 0.0245789713,
+            "V": 0.0477924442,
+            "R": 0.2093764224,
+            "G": 0.1046882112
+          },
+          "min_history_sessions": 330
+        }
+      },
+      "gates": {
+        "minimum_adv_usd": 30000000,
+        "base_min_sessions": 20,
+        "base_max_sessions": 80,
+        "breakout_rvol_min": 1.25,
+        "breakout_buffer_atr": 0.2,
+        "breakout_buffer_price_fraction": 0.0025,
+        "pullback_depth_max_atr": 3.0,
+        "event_policy": "earnings",
+        "base_min_distinct_touches": 2
+      },
+      "notes": "拆开大型云厂、网络/服务器供应商与新云厂；不能把今天的 AI 标签回填到十年前。综合池要控制与半导体、软件的重复暴露。",
+      "pit_subgroups": [
+        "大型云厂",
+        "服务器与网络",
+        "新云厂"
+      ],
+      "asset_track": "stock",
+      "status": "unvalidated_research_hypothesis"
+    },
+    "biotech": {
+      "name": "生物技术",
+      "benchmark_hint": "PIT_BIOTECH_BASKET",
+      "historical_membership_required": true,
+      "factor_prior": {
+        "T": 0.95,
+        "M": 0.8,
+        "S": 1.25,
+        "B": 1.05,
+        "P": 1.0,
+        "V": 1.15,
+        "R": 1.5,
+        "G": 0.85
+      },
+      "candidates": {
+        "A_trend_quality": {
+          "weights": {
+            "T": 0.2207163601,
+            "M": 0.1936108422,
+            "S": 0.2178121975,
+            "B": 0.0304937076,
+            "P": 0.0484027106,
+            "V": 0.077928364,
+            "R": 0.1452081317,
+            "G": 0.0658276864
+          },
+          "min_history_sessions": 252
+        },
+        "B_confirmed_base_breakout": {
+          "weights": {
+            "T": 0.1054579093,
+            "M": 0.0740055504,
+            "S": 0.1734505088,
+            "B": 0.2913968548,
+            "P": 0.0277520814,
+            "V": 0.1914893617,
+            "R": 0.0971322849,
+            "G": 0.0393154487
+          },
+          "min_history_sessions": 252
+        },
+        "C_trend_pullback": {
+          "weights": {
+            "T": 0.1595893607,
+            "M": 0.0746616892,
+            "S": 0.2566495567,
+            "B": 0.0195986934,
+            "P": 0.2519832011,
+            "V": 0.0858609426,
+            "R": 0.1119925338,
+            "G": 0.0396640224
+          },
+          "min_history_sessions": 252
+        },
+        "D_residual_momentum": {
+          "weights": {
+            "T": 0.1621621622,
+            "M": 0.2275960171,
+            "S": 0.1422475107,
+            "B": 0.0199146515,
+            "P": 0.0284495021,
+            "V": 0.0545282124,
+            "R": 0.2844950213,
+            "G": 0.0806069227
+          },
+          "min_history_sessions": 330
+        }
+      },
+      "gates": {
+        "minimum_adv_usd": 20000000,
+        "base_min_sessions": 30,
+        "base_max_sessions": 80,
+        "breakout_rvol_min": 1.5,
+        "breakout_buffer_atr": 0.25,
+        "breakout_buffer_price_fraction": 0.0025,
+        "pullback_depth_max_atr": 2.5,
+        "event_policy": "binary_high",
+        "base_min_distinct_touches": 2
+      },
+      "notes": "成熟盈利药企与临床阶段生技必须分开评估；事件日期可知性不足时不能声称已经规避药物审批风险。优先降低隔夜尾部暴露，不把异常放量一律解释为吸筹。",
+      "pit_subgroups": [
+        "成熟药企",
+        "商业化生技",
+        "临床阶段"
+      ],
+      "asset_track": "stock",
+      "status": "unvalidated_research_hypothesis"
+    },
+    "healthcare": {
+      "name": "医疗保健",
+      "benchmark_hint": "XLV",
+      "historical_membership_required": true,
+      "factor_prior": {
+        "T": 1.2,
+        "M": 0.85,
+        "S": 1.1,
+        "B": 0.85,
+        "P": 1.15,
+        "V": 0.85,
+        "R": 1.35,
+        "G": 1.0
+      },
+      "candidates": {
+        "A_trend_quality": {
+          "weights": {
+            "T": 0.2727272727,
+            "M": 0.2012310606,
+            "S": 0.1875,
+            "B": 0.0241477273,
+            "P": 0.0544507576,
+            "V": 0.056344697,
+            "R": 0.1278409091,
+            "G": 0.0757575758
+          },
+          "min_history_sessions": 252
+        },
+        "B_confirmed_base_breakout": {
+          "weights": {
+            "T": 0.1467889908,
+            "M": 0.0866462793,
+            "S": 0.1681957187,
+            "B": 0.2599388379,
+            "P": 0.0351681957,
+            "V": 0.1559633028,
+            "R": 0.0963302752,
+            "G": 0.0509683996
+          },
+          "min_history_sessions": 252
+        },
+        "C_trend_pullback": {
+          "weights": {
+            "T": 0.1969904241,
+            "M": 0.0775193798,
+            "S": 0.2207022344,
+            "B": 0.015503876,
+            "P": 0.2831737346,
+            "V": 0.0620155039,
+            "R": 0.098495212,
+            "G": 0.0455996352
+          },
+          "min_history_sessions": 252
+        },
+        "D_residual_momentum": {
+          "weights": {
+            "T": 0.2024367385,
+            "M": 0.2389878163,
+            "S": 0.1237113402,
+            "B": 0.0159325211,
+            "P": 0.0323336457,
+            "V": 0.0398313027,
+            "R": 0.2530459231,
+            "G": 0.0937207123
+          },
+          "min_history_sessions": 330
+        }
+      },
+      "gates": {
+        "minimum_adv_usd": 25000000,
+        "base_min_sessions": 30,
+        "base_max_sessions": 80,
+        "breakout_rvol_min": 1.15,
+        "breakout_buffer_atr": 0.1,
+        "breakout_buffer_price_fraction": 0.0025,
+        "pullback_depth_max_atr": 2.2,
+        "event_policy": "earnings",
+        "base_min_distinct_touches": 2
+      },
+      "notes": "拆分药企、保险/服务与器械；回调质量和长期结构优先。行业内低波动标准化，避免与高波动成长股比较时长期被挤出。",
+      "pit_subgroups": [
+        "药企",
+        "医保与服务",
+        "医疗器械"
+      ],
+      "asset_track": "stock",
+      "status": "unvalidated_research_hypothesis"
+    },
+    "consumer_electronics": {
+      "name": "消费电子",
+      "benchmark_hint": "PIT_CONSUMER_ELECTRONICS_BASKET",
+      "historical_membership_required": true,
+      "factor_prior": {
+        "T": 1.1,
+        "M": 0.95,
+        "S": 1.15,
+        "B": 0.95,
+        "P": 1.15,
+        "V": 0.95,
+        "R": 1.2,
+        "G": 0.9
+      },
+      "candidates": {
+        "A_trend_quality": {
+          "weights": {
+            "T": 0.2507122507,
+            "M": 0.2255460589,
+            "S": 0.1965811966,
+            "B": 0.0270655271,
+            "P": 0.0546058879,
+            "V": 0.0631528965,
+            "R": 0.113960114,
+            "G": 0.0683760684
+          },
+          "min_history_sessions": 252
+        },
+        "B_confirmed_base_breakout": {
+          "weights": {
+            "T": 0.1295387635,
+            "M": 0.0932286555,
+            "S": 0.1692836114,
+            "B": 0.2796859666,
+            "P": 0.0338567223,
+            "V": 0.16781158,
+            "R": 0.0824337586,
+            "G": 0.0441609421
+          },
+          "min_history_sessions": 252
+        },
+        "C_trend_pullback": {
+          "weights": {
+            "T": 0.1812356979,
+            "M": 0.0869565217,
+            "S": 0.2315789474,
+            "B": 0.0173913043,
+            "P": 0.2842105263,
+            "V": 0.0695652174,
+            "R": 0.0878718535,
+            "G": 0.0411899314
+          },
+          "min_history_sessions": 252
+        },
+        "D_residual_momentum": {
+          "weights": {
+            "T": 0.1882129278,
+            "M": 0.2709125475,
+            "S": 0.1311787072,
+            "B": 0.0180608365,
+            "P": 0.0327946768,
+            "V": 0.0451520913,
+            "R": 0.2281368821,
+            "G": 0.0855513308
+          },
+          "min_history_sessions": 330
+        }
+      },
+      "gates": {
+        "minimum_adv_usd": 20000000,
+        "base_min_sessions": 20,
+        "base_max_sessions": 80,
+        "breakout_rvol_min": 1.2,
+        "breakout_buffer_atr": 0.15,
+        "breakout_buffer_price_fraction": 0.0025,
+        "pullback_depth_max_atr": 2.5,
+        "event_policy": "earnings",
+        "base_min_distinct_touches": 2
+      },
+      "notes": "消费品牌与电脑/外设业务分层；原主题成员少，使用相邻行业训练池做收缩，不在五六只股票上拟合大量权重。",
+      "pit_subgroups": [
+        "消费品牌",
+        "电脑设备",
+        "外设"
+      ],
+      "asset_track": "stock",
+      "status": "unvalidated_research_hypothesis"
+    },
+    "automotive": {
+      "name": "汽车 / EV",
+      "benchmark_hint": "PIT_AUTOMOTIVE_BASKET",
+      "historical_membership_required": true,
+      "factor_prior": {
+        "T": 0.95,
+        "M": 1.0,
+        "S": 1.2,
+        "B": 1.1,
+        "P": 0.95,
+        "V": 1.1,
+        "R": 1.4,
+        "G": 0.9
+      },
+      "candidates": {
+        "A_trend_quality": {
+          "weights": {
+            "T": 0.2143864598,
+            "M": 0.2350728726,
+            "S": 0.2031029619,
+            "B": 0.0310296192,
+            "P": 0.0446638458,
+            "V": 0.0724024448,
+            "R": 0.1316408087,
+            "G": 0.0677009873
+          },
+          "min_history_sessions": 252
+        },
+        "B_confirmed_base_breakout": {
+          "weights": {
+            "T": 0.1042524005,
+            "M": 0.0914494742,
+            "S": 0.1646090535,
+            "B": 0.3017832647,
+            "P": 0.0260631001,
+            "V": 0.1810699588,
+            "R": 0.0896204847,
+            "G": 0.0411522634
+          },
+          "min_history_sessions": 252
+        },
+        "C_trend_pullback": {
+          "weights": {
+            "T": 0.1615493623,
+            "M": 0.0944733113,
+            "S": 0.2494095418,
+            "B": 0.0207841285,
+            "P": 0.2423240435,
+            "V": 0.0831365139,
+            "R": 0.1058101086,
+            "G": 0.0425129901
+          },
+          "min_history_sessions": 252
+        },
+        "D_residual_momentum": {
+          "weights": {
+            "T": 0.1568088033,
+            "M": 0.2751031637,
+            "S": 0.1320495186,
+            "B": 0.020174232,
+            "P": 0.0261348006,
+            "V": 0.05043558,
+            "R": 0.2567629528,
+            "G": 0.0825309491
+          },
+          "min_history_sessions": 330
+        }
+      },
+      "gates": {
+        "minimum_adv_usd": 25000000,
+        "base_min_sessions": 20,
+        "base_max_sessions": 80,
+        "breakout_rvol_min": 1.4,
+        "breakout_buffer_atr": 0.25,
+        "breakout_buffer_price_fraction": 0.0025,
+        "pullback_depth_max_atr": 3.0,
+        "event_policy": "earnings",
+        "base_min_distinct_touches": 2
+      },
+      "notes": "传统车厂、新能源成长厂和美国上市 ADR 分层；高波动不自动加分。禁止仅凭超卖回升在完整下降结构中接飞刀。",
+      "pit_subgroups": [
+        "传统车厂",
+        "新能源成长车厂",
+        "ADR 覆盖标签"
+      ],
+      "asset_track": "stock",
+      "status": "unvalidated_research_hypothesis"
+    },
+    "ev_supply": {
+      "name": "电动车供应链",
+      "benchmark_hint": "PIT_EV_SUPPLY_BASKET",
+      "historical_membership_required": true,
+      "factor_prior": {
+        "T": 0.9,
+        "M": 0.9,
+        "S": 1.2,
+        "B": 1.15,
+        "P": 0.9,
+        "V": 1.15,
+        "R": 1.5,
+        "G": 1.0
+      },
+      "candidates": {
+        "A_trend_quality": {
+          "weights": {
+            "T": 0.2063037249,
+            "M": 0.2148997135,
+            "S": 0.2063037249,
+            "B": 0.0329512894,
+            "P": 0.0429799427,
+            "V": 0.0768863419,
+            "R": 0.1432664756,
+            "G": 0.076408787
+          },
+          "min_history_sessions": 252
+        },
+        "B_confirmed_base_breakout": {
+          "weights": {
+            "T": 0.0971223022,
+            "M": 0.0809352518,
+            "S": 0.1618705036,
+            "B": 0.3102517986,
+            "P": 0.0242805755,
+            "V": 0.1861510791,
+            "R": 0.0944244604,
+            "G": 0.0449640288
+          },
+          "min_history_sessions": 252
+        },
+        "C_trend_pullback": {
+          "weights": {
+            "T": 0.1551724138,
+            "M": 0.0862068966,
+            "S": 0.2528735632,
+            "B": 0.0220306513,
+            "P": 0.2327586207,
+            "V": 0.0881226054,
+            "R": 0.1149425287,
+            "G": 0.0478927203
+          },
+          "min_history_sessions": 252
+        },
+        "D_residual_momentum": {
+          "weights": {
+            "T": 0.1495154592,
+            "M": 0.2491924319,
+            "S": 0.1329026304,
+            "B": 0.0212275035,
+            "P": 0.0249192432,
+            "V": 0.0530687587,
+            "R": 0.2768804799,
+            "G": 0.0922934933
+          },
+          "min_history_sessions": 330
+        }
+      },
+      "gates": {
+        "minimum_adv_usd": 15000000,
+        "base_min_sessions": 25,
+        "base_max_sessions": 80,
+        "breakout_rvol_min": 1.5,
+        "breakout_buffer_atr": 0.25,
+        "breakout_buffer_price_fraction": 0.0025,
+        "pullback_depth_max_atr": 2.8,
+        "event_policy": "financing_high",
+        "base_min_distinct_touches": 2
+      },
+      "notes": "现有分类混入整车、锂资源、充电、氢能和太阳能。保留用户入口，但底层拆组；融资/反向拆股记录作数据与事件风险检查。",
+      "pit_subgroups": [
+        "锂资源",
+        "充电设施",
+        "氢能",
+        "太阳能",
+        "整车重复标签"
+      ],
+      "asset_track": "stock",
+      "status": "unvalidated_research_hypothesis"
+    },
+    "finance": {
+      "name": "大型银行",
+      "benchmark_hint": "PIT_BANKS_BASKET",
+      "historical_membership_required": true,
+      "factor_prior": {
+        "T": 1.15,
+        "M": 0.9,
+        "S": 1.15,
+        "B": 0.95,
+        "P": 1.15,
+        "V": 0.9,
+        "R": 1.3,
+        "G": 1.15
+      },
+      "candidates": {
+        "A_trend_quality": {
+          "weights": {
+            "T": 0.2557924004,
+            "M": 0.2085264133,
+            "S": 0.1918443003,
+            "B": 0.0264133457,
+            "P": 0.0532900834,
+            "V": 0.0583873957,
+            "R": 0.1204819277,
+            "G": 0.0852641335
+          },
+          "min_history_sessions": 252
+        },
+        "B_confirmed_base_breakout": {
+          "weights": {
+            "T": 0.133915575,
+            "M": 0.0873362445,
+            "S": 0.1673944687,
+            "B": 0.2765647744,
+            "P": 0.0334788937,
+            "V": 0.1572052402,
+            "R": 0.0883066473,
+            "G": 0.0557981562
+          },
+          "min_history_sessions": 252
+        },
+        "C_trend_pullback": {
+          "weights": {
+            "T": 0.1859838275,
+            "M": 0.0808625337,
+            "S": 0.2273135669,
+            "B": 0.0170709793,
+            "P": 0.2789757412,
+            "V": 0.064690027,
+            "R": 0.09344115,
+            "G": 0.0516621743
+          },
+          "min_history_sessions": 252
+        },
+        "D_residual_momentum": {
+          "weights": {
+            "T": 0.1901699587,
+            "M": 0.2480477722,
+            "S": 0.1267799724,
+            "B": 0.0174552136,
+            "P": 0.0316949931,
+            "V": 0.0413412954,
+            "R": 0.2388608176,
+            "G": 0.105649977
+          },
+          "min_history_sessions": 330
+        }
+      },
+      "gates": {
+        "minimum_adv_usd": 30000000,
+        "base_min_sessions": 25,
+        "base_max_sessions": 80,
+        "breakout_rvol_min": 1.15,
+        "breakout_buffer_atr": 0.12,
+        "breakout_buffer_price_fraction": 0.0025,
+        "pullback_depth_max_atr": 2.5,
+        "event_policy": "earnings",
+        "base_min_distinct_touches": 2
+      },
+      "notes": "存贷款银行与券商/资本市场业务分层；行业相对收益与风险收缩优先。不能用科技股的固定高涨幅门槛；危机时期须留存失败和退出样本。",
+      "pit_subgroups": [
+        "大型银行",
+        "资本市场",
+        "区域银行"
+      ],
+      "asset_track": "stock",
+      "status": "unvalidated_research_hypothesis"
+    },
+    "fintech": {
+      "name": "金融科技",
+      "benchmark_hint": "PIT_FINTECH_BASKET",
+      "historical_membership_required": true,
+      "factor_prior": {
+        "T": 1.0,
+        "M": 1.05,
+        "S": 1.1,
+        "B": 1.05,
+        "P": 1.0,
+        "V": 1.1,
+        "R": 1.35,
+        "G": 1.0
+      },
+      "candidates": {
+        "A_trend_quality": {
+          "weights": {
+            "T": 0.2234636872,
+            "M": 0.2444134078,
+            "S": 0.1843575419,
+            "B": 0.0293296089,
+            "P": 0.0465549348,
+            "V": 0.0716945996,
+            "R": 0.125698324,
+            "G": 0.0744878957
+          },
+          "min_history_sessions": 252
+        },
+        "B_confirmed_base_breakout": {
+          "weights": {
+            "T": 0.1113689095,
+            "M": 0.0974477958,
+            "S": 0.1531322506,
+            "B": 0.2923433875,
+            "P": 0.0278422274,
+            "V": 0.1837587007,
+            "R": 0.0877030162,
+            "G": 0.0464037123
+          },
+          "min_history_sessions": 252
+        },
+        "C_trend_pullback": {
+          "weights": {
+            "T": 0.1691729323,
+            "M": 0.0986842105,
+            "S": 0.227443609,
+            "B": 0.0197368421,
+            "P": 0.2537593985,
+            "V": 0.0827067669,
+            "R": 0.1015037594,
+            "G": 0.0469924812
+          },
+          "min_history_sessions": 252
+        },
+        "D_residual_momentum": {
+          "weights": {
+            "T": 0.1631912965,
+            "M": 0.2855847688,
+            "S": 0.1196736174,
+            "B": 0.0190389846,
+            "P": 0.0271985494,
+            "V": 0.0498640073,
+            "R": 0.2447869447,
+            "G": 0.0906618314
+          },
+          "min_history_sessions": 330
+        }
+      },
+      "gates": {
+        "minimum_adv_usd": 25000000,
+        "base_min_sessions": 20,
+        "base_max_sessions": 80,
+        "breakout_rvol_min": 1.35,
+        "breakout_buffer_atr": 0.2,
+        "breakout_buffer_price_fraction": 0.0025,
+        "pullback_depth_max_atr": 3.0,
+        "event_policy": "earnings",
+        "base_min_distinct_touches": 2
+      },
+      "notes": "支付网络、数字贷款、线上券商与加密平台分别标准化；盈利稳态不同不能靠一个 ATR 阈值概括，ADR/crypto 暴露另计。",
+      "pit_subgroups": [
+        "支付网络",
+        "数字贷款",
+        "线上券商",
+        "加密平台"
+      ],
+      "asset_track": "stock",
+      "status": "unvalidated_research_hypothesis"
+    },
+    "retail": {
+      "name": "零售消费",
+      "benchmark_hint": "PIT_RETAIL_BASKET",
+      "historical_membership_required": true,
+      "factor_prior": {
+        "T": 1.2,
+        "M": 0.9,
+        "S": 1.1,
+        "B": 0.85,
+        "P": 1.2,
+        "V": 0.9,
+        "R": 1.2,
+        "G": 1.1
+      },
+      "candidates": {
+        "A_trend_quality": {
+          "weights": {
+            "T": 0.2697892272,
+            "M": 0.2107728337,
+            "S": 0.1854800937,
+            "B": 0.0238875878,
+            "P": 0.056206089,
+            "V": 0.0590163934,
+            "R": 0.112412178,
+            "G": 0.0824355972
+          },
+          "min_history_sessions": 252
+        },
+        "B_confirmed_base_breakout": {
+          "weights": {
+            "T": 0.1453077699,
+            "M": 0.0908173562,
+            "S": 0.1664984864,
+            "B": 0.2573158426,
+            "P": 0.0363269425,
+            "V": 0.1634712412,
+            "R": 0.0847628658,
+            "G": 0.0554994955
+          },
+          "min_history_sessions": 252
+        },
+        "C_trend_pullback": {
+          "weights": {
+            "T": 0.1942446043,
+            "M": 0.0809352518,
+            "S": 0.2176258993,
+            "B": 0.0152877698,
+            "P": 0.2913669065,
+            "V": 0.0647482014,
+            "R": 0.0863309353,
+            "G": 0.0494604317
+          },
+          "min_history_sessions": 252
+        },
+        "D_residual_momentum": {
+          "weights": {
+            "T": 0.2026266417,
+            "M": 0.2532833021,
+            "S": 0.1238273921,
+            "B": 0.0159474672,
+            "P": 0.0337711069,
+            "V": 0.0422138837,
+            "R": 0.2251407129,
+            "G": 0.1031894934
+          },
+          "min_history_sessions": 330
+        }
+      },
+      "gates": {
+        "minimum_adv_usd": 25000000,
+        "base_min_sessions": 25,
+        "base_max_sessions": 80,
+        "breakout_rvol_min": 1.15,
+        "breakout_buffer_atr": 0.12,
+        "breakout_buffer_price_fraction": 0.0025,
+        "pullback_depth_max_atr": 2.5,
+        "event_policy": "earnings",
+        "base_min_distinct_touches": 2
+      },
+      "notes": "必需消费、可选消费、电商和餐饮拆组；优先中期趋势后的健康回踩，按财报事件分层看回撤，不能只挑当前消费龙头。",
+      "pit_subgroups": [
+        "必需零售",
+        "可选零售",
+        "电商",
+        "餐饮"
+      ],
+      "asset_track": "stock",
+      "status": "unvalidated_research_hypothesis"
+    },
+    "luxury": {
+      "name": "奢侈品",
+      "benchmark_hint": "PIT_US_LUXURY_BASKET",
+      "historical_membership_required": true,
+      "factor_prior": {
+        "T": 1.15,
+        "M": 0.85,
+        "S": 1.15,
+        "B": 0.8,
+        "P": 1.2,
+        "V": 0.85,
+        "R": 1.45,
+        "G": 0.95
+      },
+      "candidates": {
+        "A_trend_quality": {
+          "weights": {
+            "T": 0.2603773585,
+            "M": 0.2004716981,
+            "S": 0.1952830189,
+            "B": 0.0226415094,
+            "P": 0.0566037736,
+            "V": 0.0561320755,
+            "R": 0.1367924528,
+            "G": 0.0716981132
+          },
+          "min_history_sessions": 252
+        },
+        "B_confirmed_base_breakout": {
+          "weights": {
+            "T": 0.1417565485,
+            "M": 0.0873138161,
+            "S": 0.1771956857,
+            "B": 0.2465331279,
+            "P": 0.0369799692,
+            "V": 0.157164869,
+            "R": 0.1042629687,
+            "G": 0.0487930149
+          },
+          "min_history_sessions": 252
+        },
+        "C_trend_pullback": {
+          "weights": {
+            "T": 0.1854008061,
+            "M": 0.0761307658,
+            "S": 0.2266009852,
+            "B": 0.0143304971,
+            "P": 0.2901925661,
+            "V": 0.0609046126,
+            "R": 0.1038961039,
+            "G": 0.0425436632
+          },
+          "min_history_sessions": 252
+        },
+        "D_residual_momentum": {
+          "weights": {
+            "T": 0.1917554423,
+            "M": 0.2362204724,
+            "S": 0.1278369616,
+            "B": 0.0148216767,
+            "P": 0.0333487726,
+            "V": 0.0393700787,
+            "R": 0.2686428902,
+            "G": 0.0880037054
+          },
+          "min_history_sessions": 330
+        }
+      },
+      "gates": {
+        "minimum_adv_usd": 10000000,
+        "base_min_sessions": 30,
+        "base_max_sessions": 80,
+        "breakout_rvol_min": 1.2,
+        "breakout_buffer_atr": 0.15,
+        "breakout_buffer_price_fraction": 0.0025,
+        "pullback_depth_max_atr": 2.3,
+        "event_policy": "earnings",
+        "base_min_distinct_touches": 2
+      },
+      "notes": "先按交易所和证券类型核实美股范围；默认排除 OTC 与非美国挂牌，而非简单凭代码有无点号。样本不足必须降级为父行业模型或不发布专属赢家。",
+      "pit_subgroups": [
+        "美国挂牌服饰",
+        "美妆",
+        "奢侈品 ADR 合规子池"
+      ],
+      "asset_track": "stock",
+      "status": "unvalidated_research_hypothesis"
+    },
+    "media_streaming": {
+      "name": "媒体与流媒体",
+      "benchmark_hint": "PIT_MEDIA_BASKET",
+      "historical_membership_required": true,
+      "factor_prior": {
+        "T": 1.0,
+        "M": 1.05,
+        "S": 1.15,
+        "B": 1.1,
+        "P": 1.05,
+        "V": 1.15,
+        "R": 1.25,
+        "G": 0.9
+      },
+      "candidates": {
+        "A_trend_quality": {
+          "weights": {
+            "T": 0.2237762238,
+            "M": 0.2447552448,
+            "S": 0.193006993,
+            "B": 0.0307692308,
+            "P": 0.048951049,
+            "V": 0.0750582751,
+            "R": 0.1165501166,
+            "G": 0.0671328671
+          },
+          "min_history_sessions": 252
+        },
+        "B_confirmed_base_breakout": {
+          "weights": {
+            "T": 0.1092398726,
+            "M": 0.0955848885,
+            "S": 0.1570323168,
+            "B": 0.3004096495,
+            "P": 0.0286754665,
+            "V": 0.1884387802,
+            "R": 0.0796540737,
+            "G": 0.0409649522
+          },
+          "min_history_sessions": 252
+        },
+        "C_trend_pullback": {
+          "weights": {
+            "T": 0.1665895419,
+            "M": 0.0971772328,
+            "S": 0.2341508561,
+            "B": 0.020360944,
+            "P": 0.2623785285,
+            "V": 0.0851457658,
+            "R": 0.0925497455,
+            "G": 0.0416473855
+          },
+          "min_history_sessions": 252
+        },
+        "D_residual_momentum": {
+          "weights": {
+            "T": 0.1660516605,
+            "M": 0.2905904059,
+            "S": 0.1273062731,
+            "B": 0.020295203,
+            "P": 0.0290590406,
+            "V": 0.0530442804,
+            "R": 0.2306273063,
+            "G": 0.0830258303
+          },
+          "min_history_sessions": 330
+        }
+      },
+      "gates": {
+        "minimum_adv_usd": 15000000,
+        "base_min_sessions": 20,
+        "base_max_sessions": 80,
+        "breakout_rvol_min": 1.35,
+        "breakout_buffer_atr": 0.2,
+        "breakout_buffer_price_fraction": 0.0025,
+        "pullback_depth_max_atr": 2.8,
+        "event_policy": "earnings",
+        "base_min_distinct_touches": 2
+      },
+      "notes": "区分成熟流媒体、传统传媒、广告平台和高风险小盘；并购、新实体和更名不能用简单字符串拼接收益历史。",
+      "pit_subgroups": [
+        "成熟流媒体",
+        "传统传媒",
+        "广告平台",
+        "体育娱乐"
+      ],
+      "asset_track": "stock",
+      "status": "unvalidated_research_hypothesis"
+    },
+    "social_internet": {
+      "name": "社交与互联网",
+      "benchmark_hint": "PIT_INTERNET_BASKET",
+      "historical_membership_required": true,
+      "factor_prior": {
+        "T": 1.1,
+        "M": 1.15,
+        "S": 1.05,
+        "B": 1.05,
+        "P": 1.0,
+        "V": 1.0,
+        "R": 1.15,
+        "G": 1.05
+      },
+      "candidates": {
+        "A_trend_quality": {
+          "weights": {
+            "T": 0.241979835,
+            "M": 0.2635197067,
+            "S": 0.1732355637,
+            "B": 0.028872594,
+            "P": 0.0458295142,
+            "V": 0.0641613199,
+            "R": 0.1054078827,
+            "G": 0.0769935839
+          },
+          "min_history_sessions": 252
+        },
+        "B_confirmed_base_breakout": {
+          "weights": {
+            "T": 0.1242352941,
+            "M": 0.1082352941,
+            "S": 0.1482352941,
+            "B": 0.2964705882,
+            "P": 0.0282352941,
+            "V": 0.1694117647,
+            "R": 0.0757647059,
+            "G": 0.0494117647
+          },
+          "min_history_sessions": 252
+        },
+        "C_trend_pullback": {
+          "weights": {
+            "T": 0.1868806041,
+            "M": 0.108541765,
+            "S": 0.2180273714,
+            "B": 0.0198206701,
+            "P": 0.2548371874,
+            "V": 0.0755073148,
+            "R": 0.086833412,
+            "G": 0.0495516753
+          },
+          "min_history_sessions": 252
+        },
+        "D_residual_momentum": {
+          "weights": {
+            "T": 0.1791855204,
+            "M": 0.3122171946,
+            "S": 0.1140271493,
+            "B": 0.0190045249,
+            "P": 0.0271493213,
+            "V": 0.0452488688,
+            "R": 0.2081447964,
+            "G": 0.0950226244
+          },
+          "min_history_sessions": 330
+        }
+      },
+      "gates": {
+        "minimum_adv_usd": 25000000,
+        "base_min_sessions": 20,
+        "base_max_sessions": 80,
+        "breakout_rvol_min": 1.25,
+        "breakout_buffer_atr": 0.18,
+        "breakout_buffer_price_fraction": 0.0025,
+        "pullback_depth_max_atr": 3.0,
+        "event_policy": "earnings",
+        "base_min_distinct_touches": 2
+      },
+      "notes": "大型平台与小型广告平台分层；中国 ADR 为覆盖风险标签，不要与主行业互相抢归属。用残差动量检验是否只是市场 beta。",
+      "pit_subgroups": [
+        "大型互联网",
+        "社交广告",
+        "电商平台",
+        "ADR 覆盖标签"
+      ],
+      "asset_track": "stock",
+      "status": "unvalidated_research_hypothesis"
+    },
+    "energy": {
+      "name": "能源",
+      "benchmark_hint": "XLE",
+      "historical_membership_required": true,
+      "factor_prior": {
+        "T": 1.0,
+        "M": 0.95,
+        "S": 1.05,
+        "B": 0.95,
+        "P": 1.1,
+        "V": 0.9,
+        "R": 1.15,
+        "G": 1.5
+      },
+      "candidates": {
+        "A_trend_quality": {
+          "weights": {
+            "T": 0.2290076336,
+            "M": 0.2266221374,
+            "S": 0.1803435115,
+            "B": 0.0271946565,
+            "P": 0.052480916,
+            "V": 0.0601145038,
+            "R": 0.1097328244,
+            "G": 0.1145038168
+          },
+          "min_history_sessions": 252
+        },
+        "B_confirmed_base_breakout": {
+          "weights": {
+            "T": 0.119047619,
+            "M": 0.0942460317,
+            "S": 0.15625,
+            "B": 0.2827380952,
+            "P": 0.0327380952,
+            "V": 0.1607142857,
+            "R": 0.0798611111,
+            "G": 0.0744047619
+          },
+          "min_history_sessions": 252
+        },
+        "C_trend_pullback": {
+          "weights": {
+            "T": 0.1696512724,
+            "M": 0.0895381715,
+            "S": 0.2177191329,
+            "B": 0.0179076343,
+            "P": 0.2799245994,
+            "V": 0.067860509,
+            "R": 0.0867106503,
+            "G": 0.0706880302
+          },
+          "min_history_sessions": 252
+        },
+        "D_residual_momentum": {
+          "weights": {
+            "T": 0.1685393258,
+            "M": 0.2668539326,
+            "S": 0.1179775281,
+            "B": 0.0177902622,
+            "P": 0.0308988764,
+            "V": 0.0421348315,
+            "R": 0.2153558052,
+            "G": 0.1404494382
+          },
+          "min_history_sessions": 330
+        }
+      },
+      "gates": {
+        "minimum_adv_usd": 25000000,
+        "base_min_sessions": 20,
+        "base_max_sessions": 80,
+        "breakout_rvol_min": 1.15,
+        "breakout_buffer_atr": 0.15,
+        "breakout_buffer_price_fraction": 0.0025,
+        "pullback_depth_max_atr": 3.0,
+        "event_policy": "earnings",
+        "base_min_distinct_touches": 2
+      },
+      "notes": "上游勘探、综合油气、炼化和油服分别建父组；首轮只用行业价格/广度，不硬编码油价涨跌关系。商品联动属于独立消融实验。",
+      "pit_subgroups": [
+        "上游",
+        "综合油气",
+        "炼化",
+        "油服"
+      ],
+      "asset_track": "stock",
+      "status": "unvalidated_research_hypothesis"
+    },
+    "utilities": {
+      "name": "电力公用",
+      "benchmark_hint": "PIT_UTILITIES_BASKET",
+      "historical_membership_required": true,
+      "factor_prior": {
+        "T": 1.3,
+        "M": 0.75,
+        "S": 1.15,
+        "B": 0.8,
+        "P": 1.2,
+        "V": 0.75,
+        "R": 1.45,
+        "G": 1.1
+      },
+      "candidates": {
+        "A_trend_quality": {
+          "weights": {
+            "T": 0.2899628253,
+            "M": 0.1742565056,
+            "S": 0.1923791822,
+            "B": 0.0223048327,
+            "P": 0.0557620818,
+            "V": 0.0487918216,
+            "R": 0.1347583643,
+            "G": 0.0817843866
+          },
+          "min_history_sessions": 252
+        },
+        "B_confirmed_base_breakout": {
+          "weights": {
+            "T": 0.1606591143,
+            "M": 0.0772399588,
+            "S": 0.1776519053,
+            "B": 0.2471678682,
+            "P": 0.0370751802,
+            "V": 0.1390319258,
+            "R": 0.1045314109,
+            "G": 0.0566426365
+          },
+          "min_history_sessions": 252
+        },
+        "C_trend_pullback": {
+          "weights": {
+            "T": 0.2065313327,
+            "M": 0.06619594,
+            "S": 0.2233009709,
+            "B": 0.0141218005,
+            "P": 0.2859664607,
+            "V": 0.052956752,
+            "R": 0.1023830538,
+            "G": 0.0485436893
+          },
+          "min_history_sessions": 252
+        },
+        "D_residual_momentum": {
+          "weights": {
+            "T": 0.2153704556,
+            "M": 0.2070869765,
+            "S": 0.1270133456,
+            "B": 0.014726185,
+            "P": 0.0331339162,
+            "V": 0.0345144961,
+            "R": 0.2669121031,
+            "G": 0.1012425219
+          },
+          "min_history_sessions": 330
+        }
+      },
+      "gates": {
+        "minimum_adv_usd": 25000000,
+        "base_min_sessions": 30,
+        "base_max_sessions": 80,
+        "breakout_rvol_min": 1.1,
+        "breakout_buffer_atr": 0.1,
+        "breakout_buffer_price_fraction": 0.0025,
+        "pullback_depth_max_atr": 2.0,
+        "event_policy": "earnings",
+        "base_min_distinct_touches": 2
+      },
+      "notes": "传统受监管公用与市场化发电必须拆组；低波动趋势不能因为量比不到成长股标准就一律淘汰。高波动发电子组仍受统一风险上限约束。",
+      "pit_subgroups": [
+        "受监管公用",
+        "市场化发电",
+        "新能源公用"
+      ],
+      "asset_track": "stock",
+      "status": "unvalidated_research_hypothesis"
+    },
+    "defense_aero": {
+      "name": "国防航空",
+      "benchmark_hint": "PIT_AEROSPACE_DEFENSE_BASKET",
+      "historical_membership_required": true,
+      "factor_prior": {
+        "T": 1.25,
+        "M": 0.95,
+        "S": 1.15,
+        "B": 0.95,
+        "P": 1.1,
+        "V": 0.9,
+        "R": 1.2,
+        "G": 1.15
+      },
+      "candidates": {
+        "A_trend_quality": {
+          "weights": {
+            "T": 0.2719854941,
+            "M": 0.2153218495,
+            "S": 0.1876699909,
+            "B": 0.0258386219,
+            "P": 0.0498640073,
+            "V": 0.0571169538,
+            "R": 0.1087941976,
+            "G": 0.0834088849
+          },
+          "min_history_sessions": 252
+        },
+        "B_confirmed_base_breakout": {
+          "weights": {
+            "T": 0.1443695861,
+            "M": 0.0914340712,
+            "S": 0.1660250241,
+            "B": 0.2743022137,
+            "P": 0.031761309,
+            "V": 0.155919153,
+            "R": 0.0808469682,
+            "G": 0.0553416747
+          },
+          "min_history_sessions": 252
+        },
+        "C_trend_pullback": {
+          "weights": {
+            "T": 0.201884253,
+            "M": 0.0852400179,
+            "S": 0.2270076267,
+            "B": 0.0170480036,
+            "P": 0.266487214,
+            "V": 0.064602961,
+            "R": 0.0861372813,
+            "G": 0.0515926424
+          },
+          "min_history_sessions": 252
+        },
+        "D_residual_momentum": {
+          "weights": {
+            "T": 0.2045454545,
+            "M": 0.2590909091,
+            "S": 0.1254545455,
+            "B": 0.0172727273,
+            "P": 0.03,
+            "V": 0.0409090909,
+            "R": 0.2181818182,
+            "G": 0.1045454545
+          },
+          "min_history_sessions": 330
+        }
+      },
+      "gates": {
+        "minimum_adv_usd": 20000000,
+        "base_min_sessions": 25,
+        "base_max_sessions": 80,
+        "breakout_rvol_min": 1.15,
+        "breakout_buffer_atr": 0.12,
+        "breakout_buffer_price_fraction": 0.0025,
+        "pullback_depth_max_atr": 2.5,
+        "event_policy": "earnings",
+        "base_min_distinct_touches": 2
+      },
+      "notes": "传统国防、民航制造/零部件与新航天分层；新航天样本不能伪造十年历史。项目当前入口未单列航天，不擅自扩大线上关注名单。",
+      "pit_subgroups": [
+        "国防承包商",
+        "民航制造",
+        "航空零部件",
+        "新航天研究扩展池"
+      ],
+      "asset_track": "stock",
+      "status": "unvalidated_research_hypothesis"
+    },
+    "airlines": {
+      "name": "航空运输",
+      "benchmark_hint": "PIT_AIRLINES_BASKET",
+      "historical_membership_required": true,
+      "factor_prior": {
+        "T": 0.95,
+        "M": 0.9,
+        "S": 1.2,
+        "B": 1.0,
+        "P": 1.1,
+        "V": 1.05,
+        "R": 1.4,
+        "G": 1.25
+      },
+      "candidates": {
+        "A_trend_quality": {
+          "weights": {
+            "T": 0.2135831382,
+            "M": 0.2107728337,
+            "S": 0.2023419204,
+            "B": 0.0281030445,
+            "P": 0.0515222482,
+            "V": 0.068852459,
+            "R": 0.131147541,
+            "G": 0.093676815
+          },
+          "min_history_sessions": 252
+        },
+        "B_confirmed_base_breakout": {
+          "weights": {
+            "T": 0.1068917018,
+            "M": 0.0843881857,
+            "S": 0.1687763713,
+            "B": 0.2812939522,
+            "P": 0.0309423347,
+            "V": 0.1772151899,
+            "R": 0.0918893577,
+            "G": 0.0586029067
+          },
+          "min_history_sessions": 252
+        },
+        "C_trend_pullback": {
+          "weights": {
+            "T": 0.1553839164,
+            "M": 0.0817810086,
+            "S": 0.2398909587,
+            "B": 0.0181735575,
+            "P": 0.2698773285,
+            "V": 0.0763289414,
+            "R": 0.1017719219,
+            "G": 0.0567923671
+          },
+          "min_history_sessions": 252
+        },
+        "D_residual_momentum": {
+          "weights": {
+            "T": 0.1560931082,
+            "M": 0.2464628024,
+            "S": 0.1314468279,
+            "B": 0.0182565039,
+            "P": 0.0301232314,
+            "V": 0.0479233227,
+            "R": 0.2555910543,
+            "G": 0.1141031492
+          },
+          "min_history_sessions": 330
+        }
+      },
+      "gates": {
+        "minimum_adv_usd": 15000000,
+        "base_min_sessions": 20,
+        "base_max_sessions": 60,
+        "breakout_rvol_min": 1.35,
+        "breakout_buffer_atr": 0.2,
+        "breakout_buffer_price_fraction": 0.0025,
+        "pullback_depth_max_atr": 2.8,
+        "event_policy": "earnings",
+        "base_min_distinct_touches": 2
+      },
+      "notes": "行业周期和破产/重组样本必须保留；不能把低估或低 RSI 当买入理由。油价关系先作解释变量诊断，不直接注入未知强度的预测权重。",
+      "pit_subgroups": [
+        "网络航空",
+        "低成本航空",
+        "美国挂牌国际航空"
+      ],
+      "asset_track": "stock",
+      "status": "unvalidated_research_hypothesis"
+    },
+    "real_estate": {
+      "name": "房地产",
+      "benchmark_hint": "VNQ",
+      "historical_membership_required": true,
+      "factor_prior": {
+        "T": 1.25,
+        "M": 0.75,
+        "S": 1.2,
+        "B": 0.75,
+        "P": 1.2,
+        "V": 0.8,
+        "R": 1.5,
+        "G": 1.1
+      },
+      "candidates": {
+        "A_trend_quality": {
+          "weights": {
+            "T": 0.2777777778,
+            "M": 0.1736111111,
+            "S": 0.2,
+            "B": 0.0208333333,
+            "P": 0.0555555556,
+            "V": 0.0518518519,
+            "R": 0.1388888889,
+            "G": 0.0814814815
+          },
+          "min_history_sessions": 252
+        },
+        "B_confirmed_base_breakout": {
+          "weights": {
+            "T": 0.1546391753,
+            "M": 0.0773195876,
+            "S": 0.1855670103,
+            "B": 0.2319587629,
+            "P": 0.0371134021,
+            "V": 0.1484536082,
+            "R": 0.1082474227,
+            "G": 0.0567010309
+          },
+          "min_history_sessions": 252
+        },
+        "C_trend_pullback": {
+          "weights": {
+            "T": 0.1970227671,
+            "M": 0.0656742557,
+            "S": 0.23117338,
+            "B": 0.0131348511,
+            "P": 0.2837127846,
+            "V": 0.0560420315,
+            "R": 0.1050788091,
+            "G": 0.0481611208
+          },
+          "min_history_sessions": 252
+        },
+        "D_residual_momentum": {
+          "weights": {
+            "T": 0.2054794521,
+            "M": 0.2054794521,
+            "S": 0.1315068493,
+            "B": 0.0136986301,
+            "P": 0.0328767123,
+            "V": 0.0365296804,
+            "R": 0.2739726027,
+            "G": 0.100456621
+          },
+          "min_history_sessions": 330
+        }
+      },
+      "gates": {
+        "minimum_adv_usd": 20000000,
+        "base_min_sessions": 30,
+        "base_max_sessions": 80,
+        "breakout_rvol_min": 1.1,
+        "breakout_buffer_atr": 0.1,
+        "breakout_buffer_price_fraction": 0.0025,
+        "pullback_depth_max_atr": 2.2,
+        "event_policy": "earnings",
+        "base_min_distinct_touches": 2
+      },
+      "notes": "数据中心、通信塔、工业仓储、住宅/零售等 REIT 分组；总收益必须含分红，结构价位用一致的价格复权口径。避免用普通企业估值概念修饰技术算法。",
+      "pit_subgroups": [
+        "数据中心 REIT",
+        "通信塔",
+        "仓储",
+        "零售",
+        "医疗养老"
+      ],
+      "asset_track": "stock",
+      "status": "unvalidated_research_hypothesis"
+    },
+    "crypto": {
+      "name": "加密相关",
+      "benchmark_hint": "PIT_CRYPTO_EQUITY_BASKET",
+      "historical_membership_required": true,
+      "factor_prior": {
+        "T": 0.85,
+        "M": 1.05,
+        "S": 1.2,
+        "B": 1.15,
+        "P": 0.85,
+        "V": 1.25,
+        "R": 1.55,
+        "G": 1.15
+      },
+      "candidates": {
+        "A_trend_quality": {
+          "weights": {
+            "T": 0.1864716636,
+            "M": 0.2399451554,
+            "S": 0.197440585,
+            "B": 0.031535649,
+            "P": 0.0388482633,
+            "V": 0.0799817185,
+            "R": 0.1416819013,
+            "G": 0.084095064
+          },
+          "min_history_sessions": 252
+        },
+        "B_confirmed_base_breakout": {
+          "weights": {
+            "T": 0.0888114933,
+            "M": 0.091423596,
+            "S": 0.1567261646,
+            "B": 0.3003918154,
+            "P": 0.0222028733,
+            "V": 0.1959077057,
+            "R": 0.0944710492,
+            "G": 0.0500653026
+          },
+          "min_history_sessions": 252
+        },
+        "C_trend_pullback": {
+          "weights": {
+            "T": 0.1448863636,
+            "M": 0.0994318182,
+            "S": 0.25,
+            "B": 0.021780303,
+            "P": 0.2173295455,
+            "V": 0.0946969697,
+            "R": 0.1174242424,
+            "G": 0.0544507576
+          },
+          "min_history_sessions": 252
+        },
+        "D_residual_momentum": {
+          "weights": {
+            "T": 0.1332752613,
+            "M": 0.2743902439,
+            "S": 0.1254355401,
+            "B": 0.0200348432,
+            "P": 0.0222125436,
+            "V": 0.0544425087,
+            "R": 0.2700348432,
+            "G": 0.100174216
+          },
+          "min_history_sessions": 330
+        }
+      },
+      "gates": {
+        "minimum_adv_usd": 30000000,
+        "base_min_sessions": 20,
+        "base_max_sessions": 80,
+        "breakout_rvol_min": 1.6,
+        "breakout_buffer_atr": 0.3,
+        "breakout_buffer_price_fraction": 0.0025,
+        "pullback_depth_max_atr": 3.5,
+        "event_policy": "financing_high",
+        "base_min_distinct_touches": 2
+      },
+      "notes": "区分交易平台、矿企、持币公司与转型算力；BTC 不是股价的机械替代品。首轮只用美国股票收盘同频数据；BTC 因子须另订同一时点采样协议后独立回测。",
+      "pit_subgroups": [
+        "交易平台",
+        "矿企",
+        "持币公司",
+        "算力转型"
+      ],
+      "asset_track": "stock",
+      "status": "unvalidated_research_hypothesis"
+    },
+    "china_adr": {
+      "name": "中概 ADR",
+      "benchmark_hint": "PIT_CHINA_ADR_BASKET",
+      "historical_membership_required": true,
+      "factor_prior": {
+        "T": 0.9,
+        "M": 0.9,
+        "S": 1.2,
+        "B": 1.0,
+        "P": 1.0,
+        "V": 1.1,
+        "R": 1.5,
+        "G": 1.25
+      },
+      "candidates": {
+        "A_trend_quality": {
+          "weights": {
+            "T": 0.2030075188,
+            "M": 0.2114661654,
+            "S": 0.2030075188,
+            "B": 0.0281954887,
+            "P": 0.0469924812,
+            "V": 0.0723684211,
+            "R": 0.1409774436,
+            "G": 0.0939849624
+          },
+          "min_history_sessions": 252
+        },
+        "B_confirmed_base_breakout": {
+          "weights": {
+            "T": 0.100605496,
+            "M": 0.0838379134,
+            "S": 0.1676758267,
+            "B": 0.2794597112,
+            "P": 0.0279459711,
+            "V": 0.1844434094,
+            "R": 0.0978108989,
+            "G": 0.0582207732
+          },
+          "min_history_sessions": 252
+        },
+        "C_trend_pullback": {
+          "weights": {
+            "T": 0.1504876916,
+            "M": 0.0836042731,
+            "S": 0.2452392011,
+            "B": 0.0185787274,
+            "P": 0.2508128193,
+            "V": 0.0817464004,
+            "R": 0.1114723641,
+            "G": 0.058058523
+          },
+          "min_history_sessions": 252
+        },
+        "D_residual_momentum": {
+          "weights": {
+            "T": 0.1464737794,
+            "M": 0.2441229656,
+            "S": 0.130198915,
+            "B": 0.0180831826,
+            "P": 0.027124774,
+            "V": 0.0497287523,
+            "R": 0.2712477396,
+            "G": 0.1130198915
+          },
+          "min_history_sessions": 330
+        }
+      },
+      "gates": {
+        "minimum_adv_usd": 20000000,
+        "base_min_sessions": 25,
+        "base_max_sessions": 80,
+        "breakout_rvol_min": 1.4,
+        "breakout_buffer_atr": 0.25,
+        "breakout_buffer_price_fraction": 0.0025,
+        "pullback_depth_max_atr": 3.0,
+        "event_policy": "adr_high",
+        "base_min_distinct_touches": 2
+      },
+      "notes": "中概是地域/制度风险覆盖标签，不是单一主行业；行业组、地域组都要看。禁止用后来获知的监管事件日期倒填预警，也不能把香港收盘与美国当日收盘混用。",
+      "pit_subgroups": [
+        "互联网",
+        "汽车",
+        "教育",
+        "文娱"
+      ],
+      "asset_track": "stock",
+      "status": "unvalidated_research_hypothesis"
+    },
+    "telecom": {
+      "name": "电信",
+      "benchmark_hint": "PIT_TELECOM_BASKET",
+      "historical_membership_required": true,
+      "factor_prior": {
+        "T": 1.3,
+        "M": 0.7,
+        "S": 1.2,
+        "B": 0.7,
+        "P": 1.25,
+        "V": 0.75,
+        "R": 1.5,
+        "G": 1.1
+      },
+      "candidates": {
+        "A_trend_quality": {
+          "weights": {
+            "T": 0.2896935933,
+            "M": 0.1624883937,
+            "S": 0.2005571031,
+            "B": 0.0194986072,
+            "P": 0.0580315692,
+            "V": 0.0487465181,
+            "R": 0.139275766,
+            "G": 0.0817084494
+          },
+          "min_history_sessions": 252
+        },
+        "B_confirmed_base_breakout": {
+          "weights": {
+            "T": 0.1644702161,
+            "M": 0.073800738,
+            "S": 0.1897733263,
+            "B": 0.221402214,
+            "P": 0.0395361096,
+            "V": 0.1423299947,
+            "R": 0.110701107,
+            "G": 0.0579862941
+          },
+          "min_history_sessions": 252
+        },
+        "C_trend_pullback": {
+          "weights": {
+            "T": 0.2026851451,
+            "M": 0.0606323084,
+            "S": 0.2286704201,
+            "B": 0.0121264617,
+            "P": 0.2923343439,
+            "V": 0.05197055,
+            "R": 0.1039411,
+            "G": 0.0476396709
+          },
+          "min_history_sessions": 252
+        },
+        "D_residual_momentum": {
+          "weights": {
+            "T": 0.2152713891,
+            "M": 0.1931922723,
+            "S": 0.132474701,
+            "B": 0.0128794848,
+            "P": 0.0344986201,
+            "V": 0.0344986201,
+            "R": 0.2759889604,
+            "G": 0.1011959522
+          },
+          "min_history_sessions": 330
+        }
+      },
+      "gates": {
+        "minimum_adv_usd": 25000000,
+        "base_min_sessions": 30,
+        "base_max_sessions": 80,
+        "breakout_rvol_min": 1.1,
+        "breakout_buffer_atr": 0.1,
+        "breakout_buffer_price_fraction": 0.0025,
+        "pullback_depth_max_atr": 2.0,
+        "event_policy": "earnings",
+        "base_min_distinct_touches": 2
+      },
+      "notes": "无线运营商、有线网络与跨国 ADR 分组；低波动、分红与长趋势优先，量比门槛较低但不能忽略长趋势破位。",
+      "pit_subgroups": [
+        "无线运营商",
+        "有线网络",
+        "国际 ADR"
+      ],
+      "asset_track": "stock",
+      "status": "unvalidated_research_hypothesis"
+    },
+    "industrials": {
+      "name": "工业制造",
+      "benchmark_hint": "XLI",
+      "historical_membership_required": true,
+      "factor_prior": {
+        "T": 1.2,
+        "M": 0.95,
+        "S": 1.1,
+        "B": 0.95,
+        "P": 1.15,
+        "V": 0.9,
+        "R": 1.15,
+        "G": 1.2
+      },
+      "candidates": {
+        "A_trend_quality": {
+          "weights": {
+            "T": 0.2658052607,
+            "M": 0.2191970466,
+            "S": 0.1827411168,
+            "B": 0.0263036456,
+            "P": 0.0530687587,
+            "V": 0.0581449008,
+            "R": 0.1061375173,
+            "G": 0.0886017536
+          },
+          "min_history_sessions": 252
+        },
+        "B_confirmed_base_breakout": {
+          "weights": {
+            "T": 0.1403508772,
+            "M": 0.0925925926,
+            "S": 0.1608187135,
+            "B": 0.2777777778,
+            "P": 0.033625731,
+            "V": 0.1578947368,
+            "R": 0.078460039,
+            "G": 0.0584795322
+          },
+          "min_history_sessions": 252
+        },
+        "C_trend_pullback": {
+          "weights": {
+            "T": 0.195210122,
+            "M": 0.0858563037,
+            "S": 0.2187076367,
+            "B": 0.0171712607,
+            "P": 0.2806145504,
+            "V": 0.0650700407,
+            "R": 0.083145052,
+            "G": 0.0542250339
+          },
+          "min_history_sessions": 252
+        },
+        "D_residual_momentum": {
+          "weights": {
+            "T": 0.1997226075,
+            "M": 0.2635228849,
+            "S": 0.1220527046,
+            "B": 0.0175681923,
+            "P": 0.0319001387,
+            "V": 0.0416088766,
+            "R": 0.2126675913,
+            "G": 0.1109570042
+          },
+          "min_history_sessions": 330
+        }
+      },
+      "gates": {
+        "minimum_adv_usd": 25000000,
+        "base_min_sessions": 25,
+        "base_max_sessions": 80,
+        "breakout_rvol_min": 1.15,
+        "breakout_buffer_atr": 0.12,
+        "breakout_buffer_price_fraction": 0.0025,
+        "pullback_depth_max_atr": 2.5,
+        "event_policy": "earnings",
+        "base_min_distinct_touches": 2
+      },
+      "notes": "设备机械、物流、自动化/电气拆组；并购拆分后的实体历史要核实。行业扩散度与中期相对强度优先，避免单一 AI 电气主题代表整个工业板块。",
+      "pit_subgroups": [
+        "机械设备",
+        "物流",
+        "自动化与电气",
+        "综合工业"
+      ],
+      "asset_track": "stock",
+      "status": "unvalidated_research_hypothesis"
+    },
+    "etfs": {
+      "name": "宽基 ETF（入口保留，底层拆资产）",
+      "benchmark_hint": "ASSET_CLASS_MATCHED",
+      "historical_membership_required": true,
+      "factor_prior": {
+        "T": 1.35,
+        "M": 0.9,
+        "S": 1.1,
+        "B": 0.7,
+        "P": 1.05,
+        "V": 0.65,
+        "R": 1.45,
+        "G": 1.1
+      },
+      "candidates": {
+        "A_trend_quality": {
+          "weights": {
+            "T": 0.2948134668,
+            "M": 0.2047315742,
+            "S": 0.1801637853,
+            "B": 0.0191082803,
+            "P": 0.0477707006,
+            "V": 0.0414012739,
+            "R": 0.1319381256,
+            "G": 0.0800727934
+          },
+          "min_history_sessions": 252
+        },
+        "B_confirmed_base_breakout": {
+          "weights": {
+            "T": 0.1738197425,
+            "M": 0.0965665236,
+            "S": 0.1770386266,
+            "B": 0.2253218884,
+            "P": 0.0337982833,
+            "V": 0.1255364807,
+            "R": 0.1089055794,
+            "G": 0.0590128755
+          },
+          "min_history_sessions": 252
+        },
+        "C_trend_pullback": {
+          "weights": {
+            "T": 0.2218165221,
+            "M": 0.0821542675,
+            "S": 0.2209036969,
+            "B": 0.0127795527,
+            "P": 0.2587859425,
+            "V": 0.0474669101,
+            "R": 0.1058877225,
+            "G": 0.0502053857
+          },
+          "min_history_sessions": 252
+        },
+        "D_residual_momentum": {
+          "weights": {
+            "T": 0.2163846839,
+            "M": 0.2404274265,
+            "S": 0.1175422974,
+            "B": 0.0124666073,
+            "P": 0.0280498664,
+            "V": 0.0289403384,
+            "R": 0.2582368655,
+            "G": 0.0979519145
+          },
+          "min_history_sessions": 330
+        }
+      },
+      "gates": {
+        "minimum_adv_usd": 50000000,
+        "base_min_sessions": 20,
+        "base_max_sessions": 80,
+        "breakout_rvol_min": 1.05,
+        "breakout_buffer_atr": 0.1,
+        "breakout_buffer_price_fraction": 0.0025,
+        "pullback_depth_max_atr": 2.0,
+        "event_policy": "fund",
+        "base_min_distinct_touches": 2
+      },
+      "notes": "现有入口含宽基、行业、主题、黄金和长债；ETF 独立赛道，不与股票按同一超额收益/行业因子竞争。每个子资产组都登记 A/B/C/D，黄金和长债绝不能用 SPY 残差模型。",
+      "pit_subgroups": [
+        "宽基股票 ETF",
+        "行业 ETF",
+        "主题 ETF",
+        "黄金 ETF",
+        "长债 ETF"
+      ],
+      "asset_track": "etf",
+      "status": "unvalidated_research_hypothesis"
+    }
+  },
+  "global_rules": {
+    "signal_price_basis": "last_completed_regular_session_close",
+    "scope": "US_major_exchange_common_equity_and_ADR;separate_US_listed_ETF_track",
+    "long_only": true,
+    "leverage_allowed": false,
+    "minimum_raw_price_usd": 5,
+    "allow_empty_selection": true,
+    "top_k_is_cap_not_quota": true,
+    "missing_is_not_neutral": true,
+    "unresolved_upthrust_veto": true,
+    "current_membership_backfill_forbidden": true,
+    "primary_daily_fetch_during_regular_session": false,
+    "options_features_enter_stock_rank": false,
+    "new_ipo_core_model_history_fabrication_forbidden": true
+  },
+  "research": {
+    "preferred_history_start": "2010-01-01",
+    "historical_data_through": "2026-09-15",
+    "minimum_coverage_calendar_years": 10,
+    "capital_scenarios_usd": [
+      25000,
+      100000,
+      500000,
+      1000000
+    ],
+    "base_top_k": [
+      5,
+      10,
+      20
+    ],
+    "calibration_primary_horizon": "mid",
+    "maximum_local_single_parameter_rounds": 1,
+    "subgroup_tuning_first_round": false,
+    "required_coverage_rows": 864,
+    "ETF_subasset_slices_required": 5
+  },
+  "sources_file": "sources.json"
+}

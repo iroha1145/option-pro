@@ -34,7 +34,7 @@ class _StrictModel(BaseModel):
 
 class ViewPreferencesPatch(_StrictModel):
     screener_ranking_algorithm: Optional[
-        Literal["follow_default", "production", "a0_mid_long"]
+        Literal["follow_default", "production", "a0_mid_long", "eod_limited_v1"]
     ] = None
     radar_sort_algorithm: Optional[
         Literal["follow_default", "production", "t1_daily_priority"]

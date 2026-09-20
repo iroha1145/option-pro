@@ -10,8 +10,11 @@ from fastapi.testclient import TestClient
 from app.api import worker_actions
 from app.api.strength import (
     DEFAULT_STRENGTH_SCAN_PARAMETERS,
+    scheduled_strength_scan_parameters,
+    strength_execution_parameters,
     strength_scan_parameters_hash,
 )
+from app.services.algorithm_modes import EOD_LIMITED_V1
 from app.worker.state import WorkerStateRepository
 
 
@@ -54,6 +57,26 @@ def _client() -> TestClient:
 
 def _strength_parameters(**updates) -> dict:
     return {**DEFAULT_STRENGTH_SCAN_PARAMETERS, **updates}
+
+
+def _lock_admin_production(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.api.strength.get_effective_runtime_settings",
+        lambda: type(
+            "Settings",
+            (),
+            {
+                "algorithms": type(
+                    "Algos",
+                    (),
+                    {
+                        "screener_ranking_algorithm": "production",
+                        "radar_sort_algorithm": "production",
+                    },
+                )()
+            },
+        )(),
+    )
 
 
 def test_manual_actions_queue_and_reuse_the_same_minute(tmp_path, monkeypatch) -> None:
@@ -187,6 +210,7 @@ def test_strength_action_persists_full_parameters_and_hashes_default_idempotency
     monkeypatch,
 ) -> None:
     repository, _token = _live_repository(tmp_path, monkeypatch)
+    _lock_admin_production(monkeypatch)
     parameters = _strength_parameters(
         timeframe="mid",
         profile="conservative",
@@ -196,7 +220,8 @@ def test_strength_action_persists_full_parameters_and_hashes_default_idempotency
         min_avg_dollar_volume=25_000_000.0,
         include_options=False,
     )
-    expected_hash = strength_scan_parameters_hash(parameters)
+    expected = strength_execution_parameters(parameters)
+    expected_hash = strength_scan_parameters_hash(expected)
     with _client() as client:
         first = client.post(
             "/api/worker/actions/strength_refresh",
@@ -209,7 +234,7 @@ def test_strength_action_persists_full_parameters_and_hashes_default_idempotency
 
     assert first.status_code == 202
     assert first.json()["details"] == {
-        "parameters": parameters,
+        "parameters": expected,
         "parameters_hash": expected_hash,
     }
     assert duplicate.status_code == 200
@@ -229,7 +254,7 @@ def test_follow_default_strength_action_stores_requested_and_resolved_hash(
 ) -> None:
     _live_repository(tmp_path, monkeypatch)
     parameters = _strength_parameters(ranking_algorithm="follow_default")
-    expected = dict(DEFAULT_STRENGTH_SCAN_PARAMETERS)
+    expected = scheduled_strength_scan_parameters()
     expected_hash = strength_scan_parameters_hash(expected)
     with _client() as client:
         response = client.post(
@@ -240,7 +265,8 @@ def test_follow_default_strength_action_stores_requested_and_resolved_hash(
     details = response.json()["details"]
     assert details["requested_algorithm"] == "follow_default"
     assert details["parameters_hash"] == expected_hash
-    assert "ranking_algorithm" not in details["parameters"]
+    assert details["parameters"]["ranking_algorithm"] == EOD_LIMITED_V1
+    assert details["parameters"]["timeframe"] == "mid"
 
 
 def test_earnings_analysis_action_applies_paid_work_gate_and_queues(
@@ -274,6 +300,7 @@ def test_strength_action_reuses_active_actual_parameters_for_a_different_request
     monkeypatch,
 ) -> None:
     _live_repository(tmp_path, monkeypatch)
+    _lock_admin_production(monkeypatch)
     running_parameters = _strength_parameters(top=30, profile="aggressive")
     requested_parameters = _strength_parameters(top=50, profile="conservative")
     with _client() as client:
@@ -290,7 +317,7 @@ def test_strength_action_reuses_active_actual_parameters_for_a_different_request
     assert reused.status_code == 200
     assert reused.json()["reason"] == "already_running"
     assert reused.json()["request_id"] == first.json()["request_id"]
-    assert reused.json()["details"]["parameters"] == running_parameters
+    assert reused.json()["details"]["parameters"] == strength_execution_parameters(running_parameters)
 
 
 def test_strength_action_cooldown_reuses_the_completed_actual_parameters(
@@ -298,6 +325,7 @@ def test_strength_action_cooldown_reuses_the_completed_actual_parameters(
     monkeypatch,
 ) -> None:
     repository, token = _live_repository(tmp_path, monkeypatch)
+    _lock_admin_production(monkeypatch)
     completed_parameters = _strength_parameters(top=10, timeframe="short")
     requested_parameters = _strength_parameters(top=50, timeframe="long")
     with _client() as client:
@@ -325,7 +353,7 @@ def test_strength_action_cooldown_reuses_the_completed_actual_parameters(
     assert first.status_code == 202
     assert reused.status_code == 200
     assert reused.json()["reason"] == "cooldown"
-    assert reused.json()["details"]["parameters"] == completed_parameters
+    assert reused.json()["details"]["parameters"] == strength_execution_parameters(completed_parameters)
     assert reused.json()["details"]["result"] == {"snapshot": "variant.json"}
 
 

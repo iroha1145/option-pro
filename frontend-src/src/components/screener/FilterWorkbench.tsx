@@ -24,6 +24,7 @@ import {
   type TierFilter,
   type Timeframe,
 } from './types';
+import { applyEodLimitedView } from '@/lib/eodLimitedView';
 import { t as __t } from '../../i18n/core.ts';
 
 const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
@@ -201,6 +202,7 @@ interface FilterWorkbenchProps {
   presetsFailed: boolean;
   scanning: boolean;
   dirty: boolean;
+  dollarVolumeFilterSupported: boolean;
   onScan: () => void;
 }
 
@@ -215,13 +217,14 @@ export default function FilterWorkbench({
   presetsFailed,
   scanning,
   dirty,
+  dollarVolumeFilterSupported,
   onScan,
 }: FilterWorkbenchProps) {
   const [showAllSectors, setShowAllSectors] = useState(false);
   const visibleSectors = showAllSectors ? sectorOptions : sectorOptions.slice(0, SECTOR_COLLAPSE_AT);
   const hiddenCount = sectorOptions.length - visibleSectors.length;
 
-  const patch = (p: Partial<ScanFilters>) => onChange({ ...draft, ...p });
+  const patch = (p: Partial<ScanFilters>) => onChange(applyEodLimitedView({ ...draft, ...p }));
 
   const toggleSector = (id: string) => {
     const has = draft.sectors.includes(id);
@@ -256,7 +259,7 @@ export default function FilterWorkbench({
     : draft.priceMin !== null
       ? `${__t('价格区间')} ≥ $${draft.priceMin}`
       : draft.priceMax !== null ? `${__t('价格区间')} ≤ $${draft.priceMax}` : null;
-  const volumeSummary = draft.minDollarVol > 0
+  const volumeSummary = dollarVolumeFilterSupported && draft.minDollarVol > 0
     ? `${__t('成交额下限')} ${DOLLAR_VOL_OPTIONS.find((option) => option.value === draft.minDollarVol)?.label ?? draft.minDollarVol}`
     : null;
   const advancedSummary = [
@@ -288,8 +291,8 @@ export default function FilterWorkbench({
         <div className="w-full min-w-0 sm:w-auto">
           <FieldLabel>{__t('周期')}</FieldLabel>
           <Segmented<Timeframe>
-            options={(['short', 'mid', 'long', 'all'] as const).map((v) => ({ value: v, label: TIMEFRAME_CN[v] }))}
-            value={draft.timeframe}
+            options={(['short', 'mid', 'long'] as const).map((v) => ({ value: v, label: TIMEFRAME_CN[v] }))}
+            value={draft.timeframe === 'all' ? 'mid' : draft.timeframe}
             onChange={(timeframe) => patch({ timeframe })}
             ariaLabel={__t('周期')}
           />
@@ -307,32 +310,8 @@ export default function FilterWorkbench({
           <FieldLabel>{__t('返回数量')}</FieldLabel>
           <MenuSelect ariaLabel={__t("最多显示数量")} value={draft.topN} onChange={(topN) => patch({ topN })} options={TOPN_OPTIONS} />
         </div>
-        <div className="w-full min-w-0 sm:w-auto">
-          <FieldLabel>{__t('排序算法')}</FieldLabel>
-          <Segmented<ScanFilters['rankingAlgorithm']>
-            options={[
-              { value: 'follow_default', label: __t('跟随默认') },
-              { value: 'production', label: __t('原版排序') },
-              { value: 'a0_mid_long', label: __t('中长期趋势（试用）') },
-            ]}
-            value={draft.rankingAlgorithm}
-            onChange={(rankingAlgorithm) => patch({ rankingAlgorithm })}
-            scrollable
-            ariaLabel={__t('排序算法')}
-          />
-        </div>
         <ScanButton scanning={scanning} dirty={dirty} universeCount={universe.count} onScan={onScan} className="w-full sm:ml-auto sm:w-auto" />
       </motion.div>
-      {draft.rankingAlgorithm === 'a0_mid_long' && (draft.timeframe !== 'all' || draft.profile !== 'balanced') && (
-        <p className="mt-3 text-caption text-warn-700" data-testid="screener-a0-view-warning">
-          {__t('中长期趋势排序仅支持周期=全部且偏好=均衡。请改回兼容视图，或改用原版排序。')}
-        </p>
-      )}
-      {draft.rankingAlgorithm === 'a0_mid_long' && draft.timeframe === 'all' && draft.profile === 'balanced' && (
-        <p className="mt-3 text-caption text-ink-500" data-testid="screener-a0-view-note">
-          {__t('当前试用固定中长期组合：0.5×中期 + 0.5×长期。原综合分仍可查看，不作为本模式名次。')}
-        </p>
-      )}
 
       {/* 次要条件收纳；已选择的范围常驻，避免折叠后忘记当前扫描门槛。 */}
       <details className="group/filters mt-5 border-t border-line/70 pt-3" data-testid="screener-advanced-filters">
@@ -426,7 +405,18 @@ export default function FilterWorkbench({
             </div>
             <div data-screener-field="dollar-volume">
               <FieldLabel>{__t('成交额下限')}</FieldLabel>
-              <MenuSelect ariaLabel={__t("成交额下限")} value={draft.minDollarVol} onChange={(minDollarVol) => patch({ minDollarVol })} options={DOLLAR_VOL_OPTIONS} />
+              <MenuSelect
+                ariaLabel={__t("成交额下限")}
+                value={draft.minDollarVol}
+                onChange={(minDollarVol) => patch({ minDollarVol })}
+                options={DOLLAR_VOL_OPTIONS}
+                disabled={!dollarVolumeFilterSupported}
+              />
+              {!dollarVolumeFilterSupported && (
+                <p className="mt-1 max-w-[18rem] text-micro text-ink-400" data-testid="screener-dollar-volume-unsupported">
+                  {__t('当前排序未核实成交额口径，此条件未应用')}
+                </p>
+              )}
             </div>
           </div>
         </div>

@@ -41,6 +41,7 @@ export function strengthScanPath(params: ScanParams): string {
     min_avg_dollar_volume: params.min_avg_dollar_volume,
     include_options: params.include_options,
     ranking_algorithm: params.ranking_algorithm,
+    list_kind: params.list_kind,
   });
   return `/strength/scan${qs ? `?${qs}` : ''}`;
 }
@@ -52,12 +53,22 @@ export function shouldSubmitStrengthRefresh(input: {
   snapshotMissing: boolean;
   snapshotStale: boolean;
   sourceStatus?: string | null;
+  rankingAlgorithm?: string | null;
+  historicalExample?: boolean;
+  synthetic?: boolean;
 }): StrengthRefreshDecision {
   if (!input.isOwner || input.isMock) {
     return { submit: false, reason: input.snapshotMissing ? 'missing' : 'reuse' };
   }
   if (input.forceRefresh) return { submit: true, reason: 'force' };
   if (input.snapshotMissing) return { submit: true, reason: 'missing' };
+  if (
+    input.rankingAlgorithm === 'eod_limited_v1'
+    && (input.historicalExample || input.synthetic)
+    && !input.snapshotStale
+  ) {
+    return { submit: false, reason: 'reuse' };
+  }
   if (input.snapshotStale) return { submit: true, reason: 'stale' };
   if (input.sourceStatus === 'unknown' || input.sourceStatus === 'historical') {
     return { submit: true, reason: 'unknown' };
@@ -156,7 +167,7 @@ export function rankingAlgorithmMatches(actual: unknown, expected: unknown): boo
   const wanted = expected ?? 'production';
   const got = actual ?? 'production';
   if (wanted === 'follow_default') {
-    return got === 'follow_default' || got === 'production' || got === 'a0_mid_long';
+    return got === 'follow_default' || got === 'production' || got === 'a0_mid_long' || got === 'eod_limited_v1';
   }
   return got === wanted;
 }

@@ -962,19 +962,16 @@ def test_range_shadow_failure_does_not_remove_legacy_strength_candidate(
     assert payload["skipped"]["range_persistence_error"] == 1
 
 
-def test_strength_api_returns_typed_unavailable_without_running_provider_scan(
+def test_strength_api_returns_typed_preparing_without_running_provider_scan(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    async def fail(**_kwargs):
+    def fail(**_kwargs):
         raise AssertionError("the read endpoint must not run a provider scan")
 
     monkeypatch.setattr(scanner, "scan_strength", fail)
-    monkeypatch.setattr(
-        strength_api,
-        "_STRENGTH_SNAPSHOT_PATH",
-        tmp_path / "missing-strength-snapshot.json",
-    )
+    monkeypatch.setattr("app.services.eod_limited.worker.run_eod_limited_job", fail)
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
     with pytest.raises(HTTPException) as captured:
         asyncio.run(
             strength_api.scan(
@@ -986,14 +983,15 @@ def test_strength_api_returns_typed_unavailable_without_running_provider_scan(
                 sector_id=None,
                 min_price=5.0,
                 min_avg_dollar_volume=10_000_000,
+                ranking_algorithm="production",
             )
         )
     assert captured.value.status_code == 503
-    assert captured.value.detail == {
-        "code": "strength_snapshot_unavailable",
-        "status": "unavailable",
-        "message": "强势雷达后台快照暂不可用",
-    }
+    detail = captured.value.detail
+    assert detail["code"] == "eod_limited_snapshot_preparing"
+    assert detail["status"] == "preparing"
+    assert detail["effective_algorithm"] == "eod_limited_v1"
+    assert detail["variant_demand"]["status"] == "preparing"
 
 
 def test_us_calendar_skips_observed_holiday_for_next_open() -> None:

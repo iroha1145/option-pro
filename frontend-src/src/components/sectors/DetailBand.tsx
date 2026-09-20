@@ -7,7 +7,7 @@ import InfoHint from '@/components/shared/InfoHint';
 import { SCORE_HINTS } from '@/lib/scoreHints';
 import Icon from '@/components/icons';
 import type { SectorVm } from './model';
-import { periodLabel } from './model';
+import { periodLabel, scoreSourceLabel } from './model';
 import { t } from '../../i18n/core.ts';
 
 interface DetailBandProps {
@@ -97,6 +97,11 @@ export default function DetailBand({
             value={`${sector.coveredCount ?? '—'} / ${sector.memberCount}`}
           />
         </dl>
+        <p className="mt-2 text-micro text-ink-400">
+          {t('有评分 {scored} / {total}', { scored: sector.scoredCount ?? '—', total: sector.memberCount })}
+          {sector.scoreDataThrough ? ` · ${t('评分截至 {date}', { date: sector.scoreDataThrough })}` : ''}
+          {scoreSourceLabel(sector.scoreSourceStatus) ? ` · ${scoreSourceLabel(sector.scoreSourceStatus)}` : ''}
+        </p>
 
         <div className="mt-5 grid grid-cols-1 gap-6 lg:grid-cols-2">
           <div>

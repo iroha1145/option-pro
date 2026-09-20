@@ -8,6 +8,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.api import strength
+from tests.legacy_strength_support import read_legacy_snapshot
 from tests.http_response_support import anonymous_get_request as _areq, response_payload as _rp
 
 
@@ -38,7 +39,7 @@ def _payload(
 
 def _run_scan(*, top: int = 20) -> dict:
     return _rp(asyncio.run(
-        strength.scan(
+        read_legacy_snapshot(
             _areq(),
             universe="themes",
             timeframe="all",
@@ -47,11 +48,12 @@ def _run_scan(*, top: int = 20) -> dict:
             sector_id=None,
             min_price=5.0,
             min_avg_dollar_volume=10_000_000.0,
+            ranking_algorithm="production",
         )
     ))
 
 
-def test_default_scan_reads_fresh_worker_snapshot_without_network(
+def test_legacy_reader_reads_fresh_worker_snapshot_without_network(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -251,7 +253,7 @@ def test_nondefault_worker_snapshot_is_path_isolated_and_read_by_exact_query(
     monkeypatch.setattr(strength, "_STRENGTH_SNAPSHOT_PATH", base)
     monkeypatch.setattr(strength.time, "time", lambda: NOW)
 
-    result = _rp(asyncio.run(strength.scan(_areq(), **parameters)))
+    result = _rp(asyncio.run(read_legacy_snapshot(_areq(), **parameters, ranking_algorithm="production")))
 
     assert result["rows"][0]["ticker"] == "NVDA"
     assert result["snapshot_source"] == "worker"
@@ -333,19 +335,22 @@ def test_password_mode_owner_reads_worker_snapshot_not_live_scan(
     现算路径（stock_strength 内部是整池扫描）必须完全不被触碰——
     monkeypatch 成必炸函数来证明。
     """
-    path = tmp_path / "strength-snapshot-v1.json"
-    payload = _payload()
-    payload["market_regime"] = {"score": 55, "label": "均衡"}
-    payload["sectors"] = [
-        {"id": "tech", "name": "科技", "avg_return_3mo": 1.2, "avg_strength": 60},
-    ]
-    strength._write_strength_snapshot(
-        path,
-        parameters=dict(strength.DEFAULT_STRENGTH_SCAN_PARAMETERS),
-        payload=payload,
-        saved_at=NOW - 10,
-    )
-    monkeypatch.setattr(strength, "_STRENGTH_SNAPSHOT_PATH", path)
+    from app.services.eod_limited import context_snapshot, store
+
+    monkeypatch.setattr(store, "snapshot_dir", lambda root=None: tmp_path / "eod-limited-v1")
+    store.publish_batch({
+        "purpose": "live_eod_inference", "served_session": "2026-09-18",
+        "variants": {"balanced|mid": {
+            "session_date": "2026-09-18", "watch_list": [{
+                "security_id": "AAPL", "score": 91.0, "price": 100,
+                "status": "watch", "sector_context": "consumer_electronics",
+            }], "watch_n": 1,
+        }},
+    }, root=tmp_path)
+    monkeypatch.setattr(context_snapshot, "read_context_snapshot", lambda: {
+        "as_of": "2026-09-18", "market_regime": {"score": 55, "label": "均衡"},
+        "sectors": [], "source_status": "active", "_stale": False,
+    })
     monkeypatch.setattr(strength.time, "time", lambda: NOW)
     _owner_mode(monkeypatch, "password")
 
@@ -357,27 +362,31 @@ def test_password_mode_owner_reads_worker_snapshot_not_live_scan(
     monkeypatch.setattr(strength, "sector_strength", _must_not_run)
 
     stock = asyncio.run(strength.stock("AAPL", profile="balanced"))
-    assert stock["snapshot_source"] == "worker"
+    assert stock["snapshot_source"] == "eod_limited_worker"
     assert stock["_cached"] is True
     assert stock["row"]["ticker"] == "AAPL"
 
     market = asyncio.run(strength.market())
-    assert market["snapshot_source"] == "worker"
+    assert market["snapshot_source"] == "strength_context_worker"
 
     sectors = asyncio.run(strength.sectors(period="3mo"))
-    assert sectors["snapshot_source"] == "worker"
+    assert sectors["snapshot_source"] == "strength_context_worker"
 
 
-def test_private_network_owner_keeps_live_compute(
+def test_private_network_owner_reads_independent_market_context(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """本地 private_network 模式保留 Owner 现算（开发场景，无 Worker 快照）。"""
+    """Private-network reads share the independent worker context too."""
+    from app.services.eod_limited import context_snapshot
+
     _owner_mode(monkeypatch, "private_network")
-    sentinel = {"market_regime": {"score": 42}, "live": True}
+    sentinel = {"market_regime": {"score": 42}, "source_status": "active", "_stale": False}
 
     async def _live():
-        return sentinel
+        raise AssertionError("GET must not download market context")
 
     monkeypatch.setattr(strength, "market_strength", _live)
+    monkeypatch.setattr(context_snapshot, "read_context_snapshot", lambda: sentinel)
     result = asyncio.run(strength.market())
-    assert result["live"] is True
+    assert result["market_regime"]["score"] == 42
+    assert result["snapshot_source"] == "strength_context_worker"

@@ -10,6 +10,22 @@ from app.services.breakouts.config import BreakoutSettings
 from app.services.catalysts.config import CatalystSettings
 
 
+@pytest.mark.parametrize("value", [None, "", "   "])
+def test_unconfigured_data_dir_uses_real_container_default_without_writes(monkeypatch, value) -> None:
+    if value is None:
+        monkeypatch.delenv("DATA_DIR", raising=False)
+    else:
+        monkeypatch.setenv("DATA_DIR", value)
+
+    def unexpected_mkdir(*args, **kwargs):
+        raise AssertionError("Resolving the data directory must not create it")
+
+    monkeypatch.setattr(Path, "mkdir", unexpected_mkdir)
+    paths = get_data_paths()
+    assert paths.root == Path("/data")
+    assert paths.runtime_settings == Path("/data/runtime-settings.json")
+
+
 def test_data_dir_owns_the_complete_runtime_layout(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
 

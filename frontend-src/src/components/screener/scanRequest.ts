@@ -37,6 +37,7 @@ export function buildStrengthScanRequest(filters: ScanFilters): StrengthScanRequ
       min_avg_dollar_volume: filters.minDollarVol,
       include_options: true,
       ranking_algorithm: filters.rankingAlgorithm,
+      list_kind: filters.resultSet,
       ...(filters.minScore != null ? { minScore: filters.minScore } : {}),
     },
     refreshParameters: {

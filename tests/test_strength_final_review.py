@@ -7,11 +7,17 @@ import json
 import pytest
 
 from app.api import strength
-from app.worker.tasks import StrengthRefreshTask
+from tests.legacy_strength_support import LegacySnapshotTask
+from tests.http_response_support import lock_screener_admin_production
 from tests.test_strength_publish_guard import (
     CURRENT, PREVIOUS, DEFAULT, NOW, _multi_row_payload, _failed_payload, _write_variant,
 )
 from tests.test_strength_variant_lifecycle import _payload
+
+
+@pytest.fixture(autouse=True)
+def _keep_scheduled_strength_on_production(monkeypatch: pytest.MonkeyPatch) -> None:
+    lock_screener_admin_production(monkeypatch)
 
 
 def _pool_payload(rows, *, data_errors=0, insufficient=0, version="pool-v1"):
@@ -127,7 +133,7 @@ def _scheduled_task(tmp_path, monkeypatch):
         return _payload(params, through=CURRENT)
 
     monkeypatch.setattr(strength, "list_recent_strength_variant_parameters", lambda *_a, **_k: list(recent))
-    task = StrengthRefreshTask(scanner=scan, snapshot_path=base, clock=lambda: clock[0])
+    task = LegacySnapshotTask(scanner=scan, snapshot_path=base, clock=lambda: clock[0])
     return task, clock, bad, good, recent, calls, fail
 
 

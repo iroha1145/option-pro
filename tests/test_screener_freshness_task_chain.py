@@ -1,4 +1,4 @@
-"""Real worker action → real scanner → publish → GET, with provider stubs only."""
+"""Current EOD action/publish/GET chain plus historical scorer regressions."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -19,6 +20,7 @@ from app.services.strength import scanner
 from app.services.strength.market_regime import MARKET_BENCHMARKS
 from app.worker.state import WorkerStateRepository
 from app.worker.tasks import StrengthRefreshTask
+
 
 
 def _history(*, end: date, slope: float, offset: float = 0.0, size: int = 320) -> pd.DataFrame:
@@ -115,7 +117,7 @@ def _install_provider_boundary(monkeypatch) -> list[tuple[list[str], str]]:
     return requested
 
 
-def _live_repository(tmp_path: Path, monkeypatch) -> None:
+def _live_repository(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     repository = WorkerStateRepository(tmp_path / "optix-worker.db")
     observed = datetime.now(timezone.utc)
@@ -131,77 +133,83 @@ def _live_repository(tmp_path: Path, monkeypatch) -> None:
         now=observed,
     )
 
+    return repository, token
 
-def test_e01_real_action_real_scanner_publish_and_read(tmp_path: Path, monkeypatch) -> None:
-    downloads = _install_provider_boundary(monkeypatch)
-    _live_repository(tmp_path, monkeypatch)
-    snapshot = tmp_path / "strength-snapshot-v1.json"
-    monkeypatch.setattr(strength, "_STRENGTH_SNAPSHOT_PATH", snapshot)
+
+def test_e01_real_action_real_eod_publish_and_read(tmp_path: Path, monkeypatch) -> None:
+    from app.services.eod_limited import worker, store
+    from app.services.research_eod_v1.calendar_asof import last_complete_eod_session
+
+    repository, token = _live_repository(tmp_path, monkeypatch)
+    session = last_complete_eod_session(datetime.now(timezone.utc))
+    panel = worker.build_synthetic_panel(end=session)
+    runs = []
+
+    def real_eod_with_labeled_fixture(**kwargs):
+        runs.append(kwargs)
+        return worker.run_eod_limited_job(
+            **kwargs, session=session, panel=panel, root=tmp_path,
+            synthetic_input=True, themes=("semiconductors",), algorithms=("A_trend_quality",),
+        )
 
     parameters = {
         **strength.DEFAULT_STRENGTH_SCAN_PARAMETERS,
-        "sector_id": "semiconductors",
-        "top": 20,
-        "min_price": 0.0,
-        "min_avg_dollar_volume": 0.0,
-        "include_options": False,
+        "sector_id": "semiconductors", "min_price": 0.0,
+        "min_avg_dollar_volume": 0.0, "include_options": False,
     }
-
+    expected = strength.strength_execution_parameters(parameters)
     app = FastAPI()
     app.include_router(worker_actions.router)
     app.include_router(strength.router)
     with TestClient(app) as client:
-        posted = client.post(
-            "/api/worker/actions/strength_refresh",
-            json={"parameters": parameters, "idempotency_key": "e01-semiconductors"},
-        )
+        posted = client.post("/api/worker/actions/strength_refresh", json={
+            "parameters": parameters, "idempotency_key": "e01-semiconductors",
+        })
         assert posted.status_code == 202, posted.text
         action = posted.json()
         assert action["reason"] == "queued"
-        assert action["reused"] in {False, None}
-        assert action["details"]["parameters"]["sector_id"] == "semiconductors"
-        assert action["details"]["parameters_hash"] == strength.strength_scan_parameters_hash(
-            parameters
-        )
-
-        result = asyncio.run(
-            StrengthRefreshTask(snapshot_path=snapshot).run_for_actions([action])
-        )
+        assert action["details"]["parameters"] == expected
+        assert action["details"]["parameters_hash"] == strength.strength_scan_parameters_hash(expected)
+        claimed = repository.claim_actions("test-worker", token, "strength_refresh")
+        result = asyncio.run(StrengthRefreshTask(eod_runner=real_eod_with_labeled_fixture).run_for_actions(claimed))
         assert result.status == "idle"
-        assert result.details["result"] == "refreshed"
         assert result.details["published"] is True
-        assert result.details["parameters"]["sector_id"] == "semiconductors"
+        assert result.details["parameters"] == expected
         assert result.details["parameters_hash"] == action["details"]["parameters_hash"]
-        assert result.details["score_data_through"]
-        assert result.details["count"] >= 1
-        assert downloads, "scanner must consume the provider stub"
-
-        variant = strength._strength_snapshot_path(parameters, base_path=snapshot)
-        assert variant.is_file()
-
+        assert result.details["score_data_through"] == session.isoformat()
+        assert result.details["count"] == 9
+        assert len(runs) == 1
+        assert store.snapshot_path(tmp_path).is_file()
+        completion = result.details["action_completions"][0]
+        repository.finish_actions(
+            "test-worker", token, [action["request_id"]], succeeded=completion["succeeded"],
+            details={"result": completion["result"]},
+        )
         status = client.get(f"/api/worker/actions/{action['request_id']}")
         assert status.status_code == 200
-        assert status.json()["request_id"] == action["request_id"]
-
-        payload, _saved_at, stale = asyncio.run(strength._scan_snapshot_payload(**parameters))
-        assert payload["rows"][0]["ticker"] == "NVDA"
-        assert payload.get("score_data_through")
-        assert payload["snapshot_source"] == "worker"
-        assert stale is False
-        assert payload["source_status"] == "active"
-
-        same_scores = asyncio.run(
-            StrengthRefreshTask(snapshot_path=snapshot).run_for_actions([action])
-        )
-        assert same_scores.status == "idle"
-        replay, _, _ = asyncio.run(strength._scan_snapshot_payload(**parameters))
-        assert [row["ticker"] for row in replay["rows"]] == [
-            row["ticker"] for row in payload["rows"]
-        ]
+        assert status.json()["status"] == "completed"
+        response = client.get("/api/strength/scan", params={
+            "ranking_algorithm": "production", "timeframe": "all",
+            "sector_id": "semiconductors", "min_price": 0,
+        })
+        assert response.status_code == 200, response.text
+        payload = response.json()
+        assert payload["rows"]
+        assert {row["ticker"] for row in payload["rows"]} <= set(panel)
+        assert payload["score_data_through"] == session.isoformat()
+        assert payload["snapshot_source"] == "eod_limited_worker"
+        assert payload["effective_algorithm"] == "eod_limited_v1"
+        assert payload["synthetic"] is True
+        assert payload["source_status"] == "historical"
+        replay = client.get("/api/strength/scan", params={
+            "ranking_algorithm": "a0_mid_long", "timeframe": "all",
+            "sector_id": "semiconductors", "min_price": 0,
+        }).json()
+        assert replay["rows"] == payload["rows"]
         assert replay["score_data_through"] == payload["score_data_through"]
 
 
-def test_b03_sector_filter_does_not_rescore_the_same_ticker(
+def test_legacy_sector_filter_does_not_rescore_the_same_ticker(
     tmp_path: Path,
     monkeypatch,
 ) -> None:

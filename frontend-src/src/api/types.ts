@@ -145,6 +145,21 @@ export interface ScreenerRow {
   sortBasis?: string | null;
   sortAlgorithm?: string | null;
   a0Available?: boolean | null;
+  priceUnknown?: boolean;
+  dollarVolumeUnknown?: boolean;
+  qualification?: string | null;
+  status?: string | null;
+  rejectionReasons?: string[];
+  listKind?: string | null;
+  observationOnly?: boolean;
+  observationFamilyCount?: number;
+  observationFamilyScores?: Record<string, number | null>;
+  familyLabel?: string | null;
+  algorithmId?: string | null;
+  stockOrEtfTrack?: string | null;
+  knownSupport?: number | null;
+  knownResistance?: number | null;
+  plannedInvalidation?: number | null;
   /** 后端 avg_dollar_volume_20d；缺失时为 null，不用当日成交额冒充。 */
   avgDollarVolume20d?: number | null;
   band: StrengthBand;

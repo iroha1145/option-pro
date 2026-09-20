@@ -59,6 +59,21 @@ export interface StrengthScanEnvelope {
   algorithmVersion: string | null;
   scoreBasis: string | null;
   fallbackReason: string | null;
+  resolvedTimeframe: string | null;
+  purpose: string | null;
+  historicalExample: boolean;
+  synthetic: boolean;
+  servedSession: string | null;
+  listKind: string | null;
+  emptyEligibleReason: string | null;
+  eligibleN: number | null;
+  watchN: number | null;
+  compositeN: number | null;
+  observationN: number | null;
+  filterSupport?: {
+    minPrice: boolean | null;
+    minAvgDollarVolume: boolean | null;
+  };
 }
 
 export interface ScanParams {
@@ -77,7 +92,8 @@ export interface ScanParams {
   min_price?: number;
   min_avg_dollar_volume?: number;
   include_options?: boolean;
-  ranking_algorithm?: 'production' | 'a0_mid_long' | 'follow_default';
+  ranking_algorithm?: 'production' | 'a0_mid_long' | 'eod_limited_v1' | 'follow_default';
+  list_kind?: 'observation' | 'composite';
 }
 
 function applyParams(rows: ScreenerRow[], p: ScanParams): ScreenerRow[] {
@@ -87,7 +103,7 @@ function applyParams(rows: ScreenerRow[], p: ScanParams): ScreenerRow[] {
   if (p.sector && p.sector !== 'all') out = out.filter((r) => r.sector === p.sector || r.sectorId === p.sector);
   if (p.minScore !== undefined) out = out.filter((r) => r.strengthScore >= p.minScore!);
   const sort = p.sort ?? 'score';
-  if (p.ranking_algorithm === 'a0_mid_long' && sort === 'score') {
+  if ((p.ranking_algorithm === 'a0_mid_long' || p.ranking_algorithm === 'eod_limited_v1') && sort === 'score') {
     return out;
   }
   const dir = p.order === 'asc' ? 1 : -1;
@@ -116,14 +132,31 @@ function applyParams(rows: ScreenerRow[], p: ScanParams): ScreenerRow[] {
  * 关键对齐：change_pct（非 changePct/change_percent）· sector_name/sector_id ·
  * 分项 = 契约周期/质量分 score_short/score_mid/score_long/breakout_quality_score（subscoreDims 携带真实标签）。
  */
+function mapFactorDims(raw: unknown): ScreenerSubscoreDim[] | null {
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+  const dims = raw
+    .map((item) => {
+      const rec = asRec(item);
+      const key = pickS(rec, 'key');
+      const label = pickLabel(rec, 'label') ?? key;
+      if (!key || !label) return null;
+      return { key, label, value: pickN(rec, 'value') };
+    })
+    .filter((item): item is ScreenerSubscoreDim => item !== null);
+  return dims.length > 0 ? dims : null;
+}
+
 function mapScanRow(r: Record<string, unknown>): ScreenerRow | null {
   const ticker = pickS(r, 'ticker');
   const score = pickN(r, 'strengthScore', 'final_score', 'strength_score', 'score');
+  const priceUnknown = pickB(r, 'price_unknown', 'priceUnknown') ?? false;
   const price = pickN(r, 'price');
-  // 价格或评分缺失的行不能用 0 冒充真实扫描结果。
-  if (!ticker || score === null || price === null) return null;
+  // 价格或评分缺失的行不能用 0 冒充真实扫描结果。收盘快照可显式标 price_unknown。
+  if (!ticker || score === null) return null;
+  if (price === null && !priceUnknown) return null;
   const band: StrengthBand = score >= 85 ? 'strong' : score >= 60 ? 'mid' : 'weak';
-  const dims: ScreenerSubscoreDim[] = [
+  const factorDims = mapFactorDims(r.factor_dims ?? r.factorDims);
+  const dims: ScreenerSubscoreDim[] = factorDims ?? [
     { key: 'score_short', label: t('短期'), value: pickN(r, 'score_short') },
     { key: 'score_mid', label: t('中期'), value: pickN(r, 'score_mid') },
     { key: 'score_long', label: t('长期'), value: pickN(r, 'score_long') },
@@ -134,7 +167,8 @@ function mapScanRow(r: Record<string, unknown>): ScreenerRow | null {
     name: pickLabel(r, 'name') ?? ticker,
     sector: pickLabel(r, 'sector_name', 'primary_sector_name', 'sector') ?? '',
     sectorId: pickS(r, 'sector_id', 'primary_sector_id') ?? undefined,
-    price,
+    price: price ?? 0,
+    priceUnknown,
     priceAsOf: pickS(r, 'price_as_of', 'quote_as_of', 'daily_data_through'),
     dailyDataThrough: pickS(r, 'daily_data_through'),
     // 契约键为 change_pct；缺失如实为 null（UI 显「—」，不显 +0.00%）
@@ -165,6 +199,28 @@ function mapScanRow(r: Record<string, unknown>): ScreenerRow | null {
     sortBasis: pickS(r, 'sort_basis', 'sortBasis'),
     sortAlgorithm: pickS(r, 'sort_algorithm', 'sortAlgorithm'),
     a0Available: pickB(r, 'a0_available', 'a0Available'),
+    dollarVolumeUnknown: pickB(r, 'dollar_volume_unknown', 'dollarVolumeUnknown') ?? false,
+    qualification: pickS(r, 'qualification'),
+    status: pickS(r, 'status'),
+    rejectionReasons: Array.isArray(r.rejection_reasons)
+      ? (r.rejection_reasons as unknown[]).filter((item): item is string => typeof item === 'string')
+      : Array.isArray(r.rejectionReasons)
+        ? (r.rejectionReasons as unknown[]).filter((item): item is string => typeof item === 'string')
+        : [],
+    listKind: pickS(r, 'list_kind', 'listKind'),
+    observationOnly: pickB(r, 'observation_only', 'observationOnly') ?? false,
+    observationFamilyCount: pickN(r, 'observation_family_count', 'observationFamilyCount') ?? undefined,
+    observationFamilyScores: (() => {
+      const raw = asRec(r.observation_family_scores ?? r.observationFamilyScores);
+      if (Object.keys(raw).length === 0) return undefined;
+      return Object.fromEntries(Object.entries(raw).map(([key, value]) => [key, typeof value === 'number' ? value : null]));
+    })(),
+    familyLabel: pickLabel(r, 'family_label', 'familyLabel'),
+    algorithmId: pickS(r, 'algorithm_id', 'algorithmId'),
+    stockOrEtfTrack: pickS(r, 'stock_or_etf_track', 'stockOrEtfTrack'),
+    knownSupport: pickN(r, 'known_support', 'knownSupport'),
+    knownResistance: pickN(r, 'known_resistance', 'knownResistance'),
+    plannedInvalidation: pickN(r, 'planned_invalidation', 'plannedInvalidation'),
   };
 }
 
@@ -180,6 +236,7 @@ function liveScan(params: ScanParams, force = false): Promise<StrengthScanEnvelo
     min_avg_dollar_volume: params.min_avg_dollar_volume,
     include_options: params.include_options,
     ranking_algorithm: params.ranking_algorithm,
+    list_kind: params.list_kind,
   });
   return marketGet(`/strength/scan${qs ? `?${qs}` : ''}`, {
     ttlMs: 30_000,
@@ -212,6 +269,25 @@ function liveScan(params: ScanParams, force = false): Promise<StrengthScanEnvelo
       algorithmVersion: pickS(env, 'algorithm_version', 'algorithmVersion'),
       scoreBasis: pickS(env, 'score_basis', 'scoreBasis'),
       fallbackReason: pickS(env, 'fallback_reason', 'fallbackReason'),
+      resolvedTimeframe: pickS(env, 'resolved_timeframe', 'resolvedTimeframe'),
+      purpose: pickS(env, 'purpose'),
+      historicalExample: pickB(env, 'historical_example', 'historicalExample') ?? false,
+      synthetic: pickB(env, 'synthetic') ?? false,
+      servedSession: pickS(env, 'served_session', 'servedSession', 'as_of_session'),
+      listKind: pickS(env, 'list_kind', 'listKind'),
+      emptyEligibleReason: pickS(env, 'empty_eligible_reason', 'emptyEligibleReason'),
+      eligibleN: pickN(env, 'eligible_n', 'eligibleN'),
+      watchN: pickN(env, 'watch_n', 'watchN'),
+      compositeN: pickN(env, 'composite_n', 'compositeN'),
+      observationN: pickN(env, 'observation_n', 'observationN'),
+      filterSupport: {
+        minPrice: pickB(asRec(env.filter_support ?? env.filterSupport), 'min_price', 'minPrice'),
+        minAvgDollarVolume: pickB(
+          asRec(env.filter_support ?? env.filterSupport),
+          'min_avg_dollar_volume',
+          'minAvgDollarVolume',
+        ),
+      },
     };
   });
 }
@@ -371,10 +447,42 @@ export const strengthApi = {
           snapshotSavedAt: null,
           cacheExpiresAt: null,
           priceProvider: 'mock fixtures',
-          effectiveAlgorithm: params.ranking_algorithm ?? 'production',
-          algorithmVersion: params.ranking_algorithm === 'a0_mid_long' ? 'a0-mid-long-v1' : 'strength-v3',
-          scoreBasis: params.ranking_algorithm === 'a0_mid_long' ? '0.5 * score_mid + 0.5 * score_long' : 'ranking_score',
+          effectiveAlgorithm:
+            params.ranking_algorithm === 'production' || params.ranking_algorithm === 'a0_mid_long'
+              ? params.ranking_algorithm
+              : params.ranking_algorithm === 'eod_limited_v1'
+                ? 'eod_limited_v1'
+                : 'eod_limited_v1',
+          algorithmVersion:
+            params.ranking_algorithm === 'a0_mid_long'
+              ? 'a0-mid-long-v1'
+              : params.ranking_algorithm === 'production'
+                ? 'strength-v3'
+                : 'eod-limited-v1.1',
+          scoreBasis:
+            params.ranking_algorithm === 'a0_mid_long'
+              ? '0.5 * score_mid + 0.5 * score_long'
+              : params.ranking_algorithm === 'production'
+                ? 'ranking_score'
+                : 'price_only_diagnostic + m1_consensus',
           fallbackReason: null,
+          resolvedTimeframe: params.timeframe === 'all' && params.ranking_algorithm !== 'production' && params.ranking_algorithm !== 'a0_mid_long'
+            ? 'mid'
+            : params.timeframe ?? 'mid',
+          purpose: null,
+          historicalExample: false,
+          synthetic: false,
+          servedSession: null,
+          listKind: params.list_kind ?? null,
+          emptyEligibleReason: null,
+          eligibleN: null,
+          watchN: null,
+          compositeN: null,
+          observationN: null,
+          filterSupport: {
+            minPrice: true,
+            minAvgDollarVolume: params.ranking_algorithm === 'eod_limited_v1' ? false : true,
+          },
         };
       },
       () => liveScan(params, force),

@@ -19,6 +19,7 @@ from typing import Any, Iterator, Mapping
 from app.data_paths import get_data_paths
 from app.services.algorithm_modes import (
     A0_ALGORITHM,
+    EOD_LIMITED_V1,
     FOLLOW_DEFAULT,
     PRODUCTION_ALGORITHM,
     T1_ALGORITHM,
@@ -228,4 +229,4 @@ def principal_for_request(*, is_owner: bool, account_id: str | None) -> str | No
 
 
 # Keep unused imports referenced for tests that patch algorithm IDs.
-_ = (PRODUCTION_ALGORITHM, A0_ALGORITHM, T1_ALGORITHM)
+_ = (PRODUCTION_ALGORITHM, A0_ALGORITHM, EOD_LIMITED_V1, T1_ALGORITHM)

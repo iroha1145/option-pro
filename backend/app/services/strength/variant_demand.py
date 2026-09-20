@@ -19,7 +19,12 @@ from pathlib import Path
 from typing import Any, Iterator, Mapping
 
 from app.data_paths import get_data_paths
-from app.services.algorithm_modes import A0_ALGORITHM, a0_view_supported
+from app.services.algorithm_modes import (
+    A0_ALGORITHM,
+    EOD_LIMITED_V1,
+    a0_view_supported,
+    eod_view_supported,
+)
 
 
 VARIANT_DEMAND_TTL_SECONDS = 30 * 60
@@ -100,10 +105,12 @@ def customer_variant_parameters_allowed(parameters: Mapping[str, Any]) -> bool:
         normalized = normalize_strength_scan_parameters(dict(parameters))
     except (TypeError, ValueError):
         return False
-    return (
-        normalized.get("ranking_algorithm") == A0_ALGORITHM
-        and a0_view_supported(normalized.get("timeframe"), normalized.get("profile"))
-    )
+    ranking = normalized.get("ranking_algorithm")
+    if ranking == A0_ALGORITHM:
+        return a0_view_supported(normalized.get("timeframe"), normalized.get("profile"))
+    if ranking == EOD_LIMITED_V1:
+        return eod_view_supported(normalized.get("timeframe"), normalized.get("profile"))
+    return False
 
 
 def _minute_key(digest: str, now: float) -> str:

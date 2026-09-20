@@ -107,8 +107,10 @@ export interface ScanFilters {
   /** 强度分下限（由预设策略注入；null = 不限） */
   minScore: number | null;
   presetId: string | null;
-  /** 选股排序：跟随默认 / 原版 / A0 中长期趋势 */
-  rankingAlgorithm: 'follow_default' | 'production' | 'a0_mid_long';
+  /** 固定的新选股引擎身份；仅用于请求与缓存，不作为用户选项。 */
+  rankingAlgorithm: 'follow_default' | 'production' | 'a0_mid_long' | 'eod_limited_v1';
+  /** 结果集：技术观察或严格合格综合 */
+  resultSet: 'observation' | 'composite';
 }
 
 /** 与后端每日真实强度快照的默认成交额门槛保持一致。 */
@@ -118,7 +120,7 @@ export const DEFAULT_TOP_N = 20;
 
 export const DEFAULT_FILTERS: ScanFilters = {
   tier: 'all',
-  timeframe: 'all',
+  timeframe: 'mid',
   profile: 'balanced',
   topN: DEFAULT_TOP_N,
   sectors: [],
@@ -127,7 +129,8 @@ export const DEFAULT_FILTERS: ScanFilters = {
   minDollarVol: DEFAULT_MIN_DOLLAR_VOLUME,
   minScore: null,
   presetId: null,
-  rankingAlgorithm: 'follow_default',
+  rankingAlgorithm: 'eod_limited_v1',
+  resultSet: 'observation',
 };
 
 /** 72h 窗口催化剂汇总（catalystsApi.batchSummaries72h 单次批量） */

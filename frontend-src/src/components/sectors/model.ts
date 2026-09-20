@@ -20,6 +20,7 @@ export interface SectorVm {
   tickers: string[];
   memberCount: number;
   coveredCount: number | null;
+  scoredCount: number | null;
   period: SectorPeriod;
   periodDays: number | null;
   avgReturn: number | null;
@@ -27,6 +28,8 @@ export interface SectorVm {
   avgReturn3mo: number | null;
   avgReturn6mo: number | null;
   avgStrength: number | null;
+  scoreDataThrough: string | null;
+  scoreSourceStatus: string | null;
   leaders: SectorStrengthLeader[];
   asOf: string | null;
   strengthCovered: boolean;
@@ -73,6 +76,13 @@ export function periodLabel(period: SectorPeriod): string {
   return PERIOD_LABELS[period];
 }
 
+export function scoreSourceLabel(status: string | null): string | null {
+  if (status === 'stale') return t('评分已过期');
+  if (status === 'unavailable') return t('评分不可用');
+  if (status === 'historical') return t('历史评分');
+  return null;
+}
+
 function makeSectorVm(
   catalog: SectorCatalogItem | undefined,
   strength: SectorStrengthRow | undefined,
@@ -83,8 +93,9 @@ function makeSectorVm(
     id: strength?.sectorId ?? catalog?.id ?? '',
     name: strength?.name ?? catalog?.name ?? strength?.sectorId ?? '',
     tickers,
-    memberCount: tickers.length,
+    memberCount: strength?.memberCount ?? tickers.length,
     coveredCount: strength?.count ?? null,
+    scoredCount: strength?.scoredCount ?? null,
     period: strength?.period ?? envelope.period,
     periodDays: strength?.periodDays ?? envelope.periodDays,
     avgReturn: strength?.avgReturn ?? null,
@@ -92,6 +103,8 @@ function makeSectorVm(
     avgReturn3mo: strength?.avgReturn3mo ?? null,
     avgReturn6mo: strength?.avgReturn6mo ?? null,
     avgStrength: strength?.avgStrength ?? null,
+    scoreDataThrough: strength?.scoreDataThrough ?? null,
+    scoreSourceStatus: strength?.scoreSourceStatus ?? null,
     leaders: strength?.leaders ?? [],
     asOf: envelope.asOf,
     strengthCovered: strength !== undefined,

@@ -13,7 +13,23 @@ if str(BACKEND_ROOT) not in sys.path:
 
 
 @pytest.fixture(autouse=True)
-def _isolated_public_option_store(monkeypatch, tmp_path):
+def _isolated_runtime_data(monkeypatch, tmp_path):
+    """Give ordinary tests a writable runtime root without touching /data.
+
+    Tests can still set or delete DATA_DIR to exercise the real resolver.
+    The default settings store caches its resolved path, so reset that cache
+    on both sides of the test as well as restoring the environment.
+    """
+    monkeypatch.setenv("DATA_DIR", str(tmp_path / "runtime-data"))
+    from app.services.runtime_settings import get_runtime_settings_store
+
+    get_runtime_settings_store.cache_clear()
+    yield
+    get_runtime_settings_store.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def _isolated_public_option_store(monkeypatch, tmp_path, _isolated_runtime_data):
     """HTTP and worker option snapshots must never leak between tests."""
     from app import public_option_data
 
@@ -31,7 +47,7 @@ def isolated_option_accounts(monkeypatch, tmp_path):
 
 
 @pytest.fixture(autouse=True)
-def _isolated_finnhub_budget(monkeypatch, tmp_path):
+def _isolated_finnhub_budget(monkeypatch, tmp_path, _isolated_runtime_data):
     """Provider mocks share the real limiter, with a fresh per-test database."""
     from app.services import finnhub_budget
 
@@ -66,7 +82,7 @@ def anchor_ai_jobs_clock(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _reset_read_caches():
+def _reset_read_caches(_isolated_runtime_data):
     """Isolate fingerprint/byte read caches between tests.
 
     These module-level caches are keyed by file identity and version, which is
@@ -93,7 +109,7 @@ def _reset_read_caches():
 
 
 @pytest.fixture(autouse=True)
-def _isolated_company_logo_cache(monkeypatch, tmp_path):
+def _isolated_company_logo_cache(monkeypatch, tmp_path, _isolated_runtime_data):
     """Logo disk/memory caches cannot leak provider fixtures between tests."""
     from app.services import company_logo_cache
     from app.api import stocks
@@ -106,7 +122,7 @@ def _isolated_company_logo_cache(monkeypatch, tmp_path):
 
 
 @pytest.fixture(autouse=True)
-def _isolated_sector_iv_refresh(monkeypatch, tmp_path):
+def _isolated_sector_iv_refresh(monkeypatch, tmp_path, _isolated_runtime_data):
     """Sector snapshots and their persistent public demand stay local to a test."""
     from app.api import sectors
 

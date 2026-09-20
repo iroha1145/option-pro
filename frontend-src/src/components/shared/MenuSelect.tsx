@@ -11,7 +11,7 @@ import Icon from '@/components/icons';
 
 export default function MenuSelect<T extends string | number>({
   value, onChange, options, ariaLabel, className, triggerClassName,
-  align = 'left', leading,
+  align = 'left', leading, disabled = false,
 }: {
   value: T;
   onChange: (v: T) => void;
@@ -21,6 +21,7 @@ export default function MenuSelect<T extends string | number>({
   triggerClassName?: string;
   align?: 'left' | 'right';
   leading?: ReactNode;
+  disabled?: boolean;
 }) {
   // Index keys preserve numeric values and allow an empty string option: Radix
   // reserves the empty string for its placeholder, and all its values are strings.
@@ -35,7 +36,7 @@ export default function MenuSelect<T extends string | number>({
     <div className={className}>
       <Select.Root
         value={selected >= 0 ? `option-${selected}` : ''}
-        disabled={options.length === 0}
+        disabled={disabled || options.length === 0}
         onValueChange={(key) => {
           const option = options[Number(key.slice(7))];
           if (option) onChange(option.value);

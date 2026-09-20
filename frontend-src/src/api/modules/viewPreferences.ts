@@ -22,7 +22,7 @@ export interface ViewPreferencesDoc {
 }
 
 function asScreener(value: string | null): ScreenerRankingChoice {
-  if (value === 'production' || value === 'a0_mid_long' || value === 'follow_default') return value;
+  void value;
   return DEFAULT_ALGORITHM_PREFERENCES.screenerRankingAlgorithm;
 }
 

@@ -9,11 +9,21 @@ import pytest
 from fastapi import HTTPException
 
 from app.api import strength
-from app.worker.tasks import StrengthRefreshTask
-from tests.http_response_support import anonymous_get_request as _areq, response_payload as _rp
+from tests.legacy_strength_support import read_legacy_snapshot
+from tests.legacy_strength_support import LegacySnapshotTask
+from tests.http_response_support import (
+    anonymous_get_request as _areq,
+    lock_screener_admin_production,
+    response_payload as _rp,
+)
 
 ET = ZoneInfo("America/New_York")
 NOW = datetime(2026, 9, 4, 16, 30, tzinfo=ET).timestamp()
+
+
+@pytest.fixture(autouse=True)
+def _keep_scheduled_strength_on_production(monkeypatch: pytest.MonkeyPatch) -> None:
+    lock_screener_admin_production(monkeypatch)
 
 
 def _payload(parameters: dict | None = None, *, ticker: str = "AAPL", through: str | None = None) -> dict:
@@ -62,8 +72,8 @@ def test_b01_fresh_default_does_not_make_old_semiconductor_current(
     monkeypatch.setattr(strength, "_STRENGTH_SNAPSHOT_PATH", base)
     monkeypatch.setattr(strength.time, "time", lambda: NOW)
 
-    default = _rp(asyncio.run(strength.scan(_areq(), **strength.DEFAULT_STRENGTH_SCAN_PARAMETERS)))
-    variant_body = _rp(asyncio.run(strength.scan(_areq(), **variant_params)))
+    default = _rp(asyncio.run(read_legacy_snapshot(_areq(), **strength.DEFAULT_STRENGTH_SCAN_PARAMETERS, ranking_algorithm="production")))
+    variant_body = _rp(asyncio.run(read_legacy_snapshot(_areq(), **variant_params, ranking_algorithm="production")))
 
     assert default["_stale"] is False
     assert default["source_status"] == "active"
@@ -85,7 +95,7 @@ def test_b05_today_write_with_old_bars_is_not_fresh(
     )
     monkeypatch.setattr(strength, "_STRENGTH_SNAPSHOT_PATH", path)
     monkeypatch.setattr(strength.time, "time", lambda: NOW)
-    result = _rp(asyncio.run(strength.scan(_areq(), **strength.DEFAULT_STRENGTH_SCAN_PARAMETERS)))
+    result = _rp(asyncio.run(read_legacy_snapshot(_areq(), **strength.DEFAULT_STRENGTH_SCAN_PARAMETERS, ranking_algorithm="production")))
     assert result["_stale"] is True
     assert result["stale_reason"] == "score_data_too_old"
     assert result["snapshot_saved_at"].startswith("2026-09-04")
@@ -100,7 +110,7 @@ def test_b09_corrupt_and_mismatched_snapshots_stay_unavailable(
     monkeypatch.setattr(strength, "_STRENGTH_SNAPSHOT_PATH", path)
     monkeypatch.setattr(strength.time, "time", lambda: NOW)
     with pytest.raises(HTTPException) as caught:
-        asyncio.run(strength.scan(_areq(), **strength.DEFAULT_STRENGTH_SCAN_PARAMETERS))
+        asyncio.run(read_legacy_snapshot(_areq(), **strength.DEFAULT_STRENGTH_SCAN_PARAMETERS, ranking_algorithm="production"))
     assert caught.value.status_code == 503
     assert caught.value.detail["code"] == "strength_snapshot_unavailable"
 
@@ -158,7 +168,7 @@ def test_scheduled_refresh_updates_recent_variants_only(
         os.utime(target, (stamped, stamped))
 
     result = asyncio.run(
-        StrengthRefreshTask(
+        LegacySnapshotTask(
             scanner=fake_scanner,
             snapshot_path=base,
             clock=lambda: NOW,
@@ -199,7 +209,7 @@ def test_failed_provider_does_not_publish_empty_fresh_snapshot(tmp_path: Path) -
         }
 
     result = asyncio.run(
-        StrengthRefreshTask(
+        LegacySnapshotTask(
             scanner=failed,
             snapshot_path=base,
             clock=lambda: NOW,

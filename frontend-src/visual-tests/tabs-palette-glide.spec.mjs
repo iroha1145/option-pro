@@ -110,10 +110,13 @@ async function pollGlideOnRow(page, row) {
 }
 
 test.describe("command palette glide highlight (#113 blocker 1+2)", () => {
+  test.describe.configure({ timeout: 90_000 });
   test.beforeEach(async ({ page }) => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
     // prepareI18n() 之后才挂 App；标题出来才有 Ctrl+K 监听。
-    await page.getByRole("heading", { level: 1 }).first().waitFor();
+    // Shared CI identity requests can honor up to 60s of Retry-After. Match
+    // the bounded boot allowance used by the tab tests; motion checks stay strict.
+    await page.getByRole("heading", { level: 1 }).first().waitFor({ timeout: 75_000 });
   });
 
   test("highlight is visible on first open, placed without animating from a stale spot", async ({ page }) => {

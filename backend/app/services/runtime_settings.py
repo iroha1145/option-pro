@@ -141,7 +141,7 @@ class RuntimeEarningsSettings(_StrictModel):
 class RuntimeAlgorithmSettings(_StrictModel):
     """Independent defaults for optional production ranking/sort algorithms."""
 
-    screener_ranking_algorithm: Literal["production", "a0_mid_long"] = "production"
+    screener_ranking_algorithm: Literal["production", "a0_mid_long", "eod_limited_v1"] = "production"
     radar_sort_algorithm: Literal["production", "t1_daily_priority"] = "production"
 
 
@@ -205,7 +205,7 @@ class RuntimeEarningsSettingsPatch(_StrictModel):
 
 
 class RuntimeAlgorithmSettingsPatch(_StrictModel):
-    screener_ranking_algorithm: Optional[Literal["production", "a0_mid_long"]] = None
+    screener_ranking_algorithm: Optional[Literal["production", "a0_mid_long", "eod_limited_v1"]] = None
     radar_sort_algorithm: Optional[Literal["production", "t1_daily_priority"]] = None
 
 

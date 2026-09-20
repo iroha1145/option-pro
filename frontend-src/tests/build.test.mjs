@@ -91,25 +91,26 @@ test('default screener request matches the daily live snapshot parameters', () =
     sort: 'score',
     order: 'desc',
     universe: 'themes',
-    timeframe: 'all',
+    timeframe: 'mid',
     profile: 'balanced',
     top: 20,
     sector_id: undefined,
     min_price: 5,
     min_avg_dollar_volume: 10_000_000,
     include_options: true,
-    ranking_algorithm: 'follow_default',
+    ranking_algorithm: 'eod_limited_v1',
+    list_kind: 'observation',
   });
   assert.deepEqual(request.refreshParameters, {
     universe: 'themes',
-    timeframe: 'all',
+    timeframe: 'mid',
     profile: 'balanced',
     top: 20,
     sector_id: null,
     min_price: 5,
     min_avg_dollar_volume: 10_000_000,
     include_options: true,
-    ranking_algorithm: 'follow_default',
+    ranking_algorithm: 'eod_limited_v1',
   });
 });
 

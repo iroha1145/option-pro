@@ -6,9 +6,10 @@ from pathlib import Path
 import pytest
 
 from app.api import strength
+from tests.legacy_strength_support import read_legacy_snapshot
 from app.services.algorithm_modes import A0_ALGORITHM, A0_UNAVAILABLE, PRODUCTION_ALGORITHM
 from app.services.strength.ranking_variants import a0_request_can_score, apply_a0_mid_long
-from app.worker.tasks import StrengthRefreshTask
+from tests.legacy_strength_support import LegacySnapshotTask
 from tests.http_response_support import anonymous_get_request as _areq, response_payload as _rp
 from tests.test_strength_worker_snapshot import NOW, _payload
 
@@ -42,7 +43,7 @@ def test_a0_fallback_snapshot_writes_and_reads_requested_identity(
     monkeypatch.setattr(strength.time, "time", lambda: NOW)
     result = _rp(
         asyncio.run(
-            strength.scan(
+            read_legacy_snapshot(
                 _areq(),
                 universe="themes",
                 timeframe="all",
@@ -67,7 +68,7 @@ def test_a0_fallback_snapshot_writes_and_reads_requested_identity(
     )
     production = _rp(
         asyncio.run(
-            strength.scan(
+            read_legacy_snapshot(
                 _areq(),
                 universe="themes",
                 timeframe="all",
@@ -76,6 +77,7 @@ def test_a0_fallback_snapshot_writes_and_reads_requested_identity(
                 sector_id=None,
                 min_price=5.0,
                 min_avg_dollar_volume=10_000_000.0,
+                ranking_algorithm=PRODUCTION_ALGORITHM,
             )
         )
     )
@@ -138,7 +140,7 @@ def test_scanner_fallback_payload_is_accepted_by_worker_writer(
         return body
 
     result = asyncio.run(
-        StrengthRefreshTask(
+        LegacySnapshotTask(
             scanner=fake_scanner,
             snapshot_path=default_path,
             clock=lambda: NOW,
@@ -159,7 +161,7 @@ def test_scanner_fallback_payload_is_accepted_by_worker_writer(
     monkeypatch.setattr(strength.time, "time", lambda: NOW)
     published = _rp(
         asyncio.run(
-            strength.scan(
+            read_legacy_snapshot(
                 _areq(),
                 universe="themes",
                 timeframe="all",

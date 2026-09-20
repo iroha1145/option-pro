@@ -17,7 +17,7 @@ from app.api import accounts as accounts_api
 from app.api import strength, worker_actions
 from app.personal_config import AccessConfig
 from app.services.accounts import AccountStore, set_account_store
-from app.services.algorithm_modes import A0_ALGORITHM, PRODUCTION_ALGORITHM
+from app.services.algorithm_modes import A0_ALGORITHM, EOD_LIMITED_V1, PRODUCTION_ALGORITHM
 from app.services.strength.variant_demand import (
     VARIANT_DEMAND_MAX,
     VARIANT_DEMAND_TTL_SECONDS,
@@ -33,12 +33,27 @@ from tests.http_response_support import anonymous_get_request as _areq, response
 from tests.test_strength_worker_snapshot import NOW, _payload
 
 
+def _publish_eod_fixture(**kwargs):
+    from app.services.eod_limited import PURPOSE_HISTORICAL, store
+    from app.services.research_eod_v1.constants import PROFILES, HORIZONS
+    from tests.test_eod_limited_product import _scored
+    variants = {
+        store.variant_key(profile, horizon): {**_scored(), "profile": profile, "horizon": horizon}
+        for profile in PROFILES for horizon in HORIZONS
+    }
+    published = store.publish_batch({
+        "purpose": PURPOSE_HISTORICAL, "served_session": "2024-06-28", "variants": variants,
+    })
+    return {"status": "RAN", "publish": published, "published_at": published["published_at"],
+            "purpose": PURPOSE_HISTORICAL, "served_session": "2024-06-28", "available_variants": list(variants)}
+
+
 def _signed_in_request() -> object:
     request = _areq()
     return request
 
 
-def test_anonymous_missing_a0_registers_bounded_demand(
+def test_anonymous_old_a0_request_registers_new_engine_demand(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -69,15 +84,15 @@ def test_anonymous_missing_a0_registers_bounded_demand(
             )
         )
     assert caught.value.status_code == 503
-    assert caught.value.detail["code"] == "strength_snapshot_preparing"
+    assert caught.value.detail["code"] == "eod_limited_snapshot_preparing"
     pending = list_pending_strength_variant_demands(
         root=tmp_path / "strength-variant-demand"
     )
     assert len(pending) == 1
-    assert pending[0]["ranking_algorithm"] == A0_ALGORITHM
+    assert pending[0]["ranking_algorithm"] == EOD_LIMITED_V1
 
 
-def test_signed_in_customer_missing_a0_registers_demand_then_reads_full_pool(
+def test_signed_in_customer_old_a0_request_reads_new_engine_after_refresh(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -131,21 +146,17 @@ def test_signed_in_customer_missing_a0_registers_demand_then_reads_full_pool(
             )
         )
     assert caught.value.status_code == 503
-    assert caught.value.detail["code"] == "strength_snapshot_preparing"
+    assert caught.value.detail["code"] == "eod_limited_snapshot_preparing"
     pending = list_pending_strength_variant_demands(root=tmp_path / "strength-variant-demand")
     assert pending
-    assert pending[0]["ranking_algorithm"] == A0_ALGORITHM
+    assert pending[0]["ranking_algorithm"] == EOD_LIMITED_V1
 
     a0_parameters = strength.a0_companion_scan_parameters()
     a0_path = strength._strength_snapshot_path(a0_parameters, base_path=default_path)
 
-    async def fake_scanner(**kwargs):
-        parameters = {key: value for key, value in kwargs.items() if key != "force_refresh"}
-        return _payload(parameters=parameters, ticker="A0ROW")
-
     result = asyncio.run(
         StrengthRefreshTask(
-            scanner=fake_scanner,
+            eod_runner=_publish_eod_fixture,
             snapshot_path=default_path,
             clock=lambda: NOW,
         ).run_for_actions(
@@ -161,7 +172,9 @@ def test_signed_in_customer_missing_a0_registers_demand_then_reads_full_pool(
         )
     )
     assert result.status == "idle"
-    assert a0_path.is_file()
+    assert not a0_path.exists()
+    from app.services.eod_limited.store import snapshot_path
+    assert snapshot_path(tmp_path).is_file()
     published = _rp(
         asyncio.run(
             strength.scan(
@@ -177,8 +190,8 @@ def test_signed_in_customer_missing_a0_registers_demand_then_reads_full_pool(
             )
         )
     )
-    assert published["rows"][0]["ticker"] == "A0ROW"
-    assert published["effective_algorithm"] == A0_ALGORITHM
+    assert published["rows"][0]["ticker"] == "NVDA"
+    assert published["effective_algorithm"] == EOD_LIMITED_V1
 
 
 def test_variant_demand_rejects_non_a0_parameters(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -388,10 +401,9 @@ def test_worker_picks_up_pending_a0_demand_without_scheduled_preheat(
     calls: list[dict] = []
     clock = {"now": NOW}
 
-    async def fake_scanner(**kwargs):
+    def eod_runner(**kwargs):
         calls.append(kwargs)
-        parameters = {key: value for key, value in kwargs.items() if key != "force_refresh"}
-        return _payload(parameters=parameters, ticker="A0ROW" if parameters.get("ranking_algorithm") == A0_ALGORITHM else "PROD")
+        return _publish_eod_fixture(**kwargs)
 
     monkeypatch.setattr(
         strength,
@@ -412,14 +424,14 @@ def test_worker_picks_up_pending_a0_demand_without_scheduled_preheat(
         )(),
     )
     task = StrengthRefreshTask(
-        scanner=fake_scanner,
+        eod_runner=eod_runner,
         snapshot_path=snapshot_path,
         clock=lambda: clock["now"],
     )
     first = asyncio.run(task())
     assert first.status == "idle"
     assert len(calls) == 1
-    assert calls[0].get("ranking_algorithm") in {None, PRODUCTION_ALGORITHM}
+    assert calls[0]["horizon"] == "mid"
     register_strength_variant_demand(
         _a0_parameters(),
         principal="account:alice",
@@ -428,13 +440,17 @@ def test_worker_picks_up_pending_a0_demand_without_scheduled_preheat(
     clock["now"] = NOW + 10
     second = asyncio.run(task())
     assert second.status == "idle"
-    assert any(call.get("ranking_algorithm") == A0_ALGORITHM for call in calls)
+    assert len(calls) == 2
+    assert all(call["all_variants"] is True for call in calls)
+    assert list_pending_strength_variant_demands() == []
     a0_path = strength._strength_snapshot_path(_a0_parameters(), base_path=snapshot_path)
-    assert a0_path.is_file()
+    assert not a0_path.exists()
+    from app.services.eod_limited.store import snapshot_path
+    assert snapshot_path(tmp_path).is_file()
 
 
 @pytest.mark.parametrize("account_id", [None, "alice"], ids=["anonymous", "customer"])
-def test_public_caller_enqueue_claim_worker_publish_and_read_a0(
+def test_public_caller_old_a0_request_enqueues_publishes_and_reads_new_engine(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     account_id: str | None,
@@ -488,18 +504,14 @@ def test_public_caller_enqueue_claim_worker_publish_and_read_a0(
             )
         )
     assert caught.value.status_code == 503
-    assert caught.value.detail["code"] == "strength_snapshot_preparing"
+    assert caught.value.detail["code"] == "eod_limited_snapshot_preparing"
     claimed = repository.claim_actions("test-worker", token, "strength_refresh")
     assert claimed
     assert claimed[0]["action_type"] == "strength_variant_refresh"
 
-    async def fake_scanner(**kwargs):
-        parameters = {key: value for key, value in kwargs.items() if key != "force_refresh"}
-        return _payload(parameters=parameters, ticker="A0ROW")
-
     result = asyncio.run(
         StrengthRefreshTask(
-            scanner=fake_scanner,
+            eod_runner=_publish_eod_fixture,
             snapshot_path=default_path,
             clock=lambda: NOW,
         ).run_for_actions(claimed)
@@ -520,5 +532,5 @@ def test_public_caller_enqueue_claim_worker_publish_and_read_a0(
             )
         )
     )
-    assert published["rows"][0]["ticker"] == "A0ROW"
-    assert published["effective_algorithm"] == A0_ALGORITHM
+    assert published["rows"][0]["ticker"] == "NVDA"
+    assert published["effective_algorithm"] == EOD_LIMITED_V1

@@ -6,6 +6,10 @@
 import type { Dict } from './types';
 
 export const CATALYSTS: Dict = {
+  '雷达默认排序只影响未指定排序或选择跟随默认的请求。': [
+    'The radar default applies only when a request does not specify a sort or follows the default.',
+    'レーダーの既定順位は、並び順を指定しないか既定に従うリクエストにのみ適用されます。',
+  ],
   /* ---------------- AnalysisProgressCard.tsx ---------------- */
   '暂无新闻分析任务': ['No news analysis jobs', 'ニュース分析ジョブなし'],
   '最近一批任务已结束': ['Latest batch finished', '直近バッチ終了'],
@@ -199,6 +203,7 @@ export const CATALYSTS: Dict = {
   '雷达默认排序': ['Default radar sort', 'レーダーのデフォルト並び替え'],
   '原版排序': ['Original ranking', '従来の順位'],
   '中长期趋势（试用）': ['Mid/long trend (trial)', '中長期トレンド（試用）'],
+  '收盘技术（受限）': ['EOD technical (limited)', '終値テクニカル（制限）'],
   '原雷达排序': ['Original radar sort', '従来のレーダー順'],
   '日线量价条件优先（试用）': ['Daily volume-price first (trial)', '日足の値嵩条件を優先（試用）'],
   '只影响未指定算法或选择跟随默认的请求。用户已明确选择原版时不会被覆盖。': [

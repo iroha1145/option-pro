@@ -12,7 +12,7 @@ import {
 } from '@/lib/macroFit';
 import Icon from '@/components/icons';
 import type { SectorVm } from './model';
-import { periodLabel } from './model';
+import { periodLabel, scoreSourceLabel } from './model';
 import { t } from '../../i18n/core.ts';
 
 interface SectorListProps {
@@ -73,12 +73,19 @@ export default function SectorList({
         hint: <InfoHint hint={SCORE_HINTS.avgStrength} side="bottom" size={11} />,
         sortable: true,
         sortValue: (row) => row.avgStrength ?? Number.NaN,
-        render: (row) =>
-          row.avgStrength !== null ? (
-            <StrengthBar score={row.avgStrength} width={72} />
-          ) : (
-            <span className="font-mono text-ink-300">—</span>
-          ),
+        render: (row) => (
+          <span className="flex flex-col items-start gap-0.5">
+            {row.avgStrength !== null ? (
+              <StrengthBar score={row.avgStrength} width={72} />
+            ) : (
+              <span className="font-mono text-ink-300">—</span>
+            )}
+            <span className="text-micro text-ink-400">
+              {t('有评分 {scored} / {total}', { scored: row.scoredCount ?? '—', total: row.memberCount })}
+              {scoreSourceLabel(row.scoreSourceStatus) ? ` · ${scoreSourceLabel(row.scoreSourceStatus)}` : ''}
+            </span>
+          </span>
+        ),
       },
       {
         // 与平均强度**并列**，不混进它。两者不一致的板块（技术强但宏观逆风、

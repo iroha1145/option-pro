@@ -3,9 +3,11 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+import math
 import sqlite3
 import threading
 import time
+from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -1994,9 +1996,17 @@ class StrengthRefreshTask:
         snapshot_path: Path | None = None,
         clock: Callable[[], float] = time.time,
         scheduled_interval_seconds: float = 86_400.0,
+        eod_runner: Callable[..., Any] | None = None,
     ) -> None:
         self._scanner = scanner
         self._writer = writer
+        self._eod_runner = eod_runner
+        # Each public task invocation owns its successful all-variant batch.
+        # Context-local state also prevents overlapping invocations from
+        # treating an earlier explicit refresh as their own publication.
+        self._eod_batch: ContextVar[dict[str, Any] | None] = ContextVar(
+            "strength_eod_batch", default=None,
+        )
         self._snapshot_path = snapshot_path
         self._clock = clock
         self._scheduled_interval_seconds = float(scheduled_interval_seconds)
@@ -2050,7 +2060,106 @@ class StrengthRefreshTask:
             max(0.0, due_at - float(self._clock())),
         )
 
+    async def _run_eod_limited(self, parameters: dict[str, Any]) -> TaskResult:
+        from app.api.strength import strength_scan_parameters_hash
+        from app.services.eod_limited import PURPOSE_LIVE
+        from app.services.eod_limited.store import variant_key
+        from app.services.eod_limited.worker import run_eod_limited_job
+        from app.services.research_eod_v1.constants import HORIZONS, PROFILES
+
+        horizon = str(parameters.get("timeframe") or "")
+        if horizon not in HORIZONS:
+            return TaskResult(
+                status="degraded",
+                error_code="algorithm_view_conflict",
+                details={
+                    "result": "kept_previous_snapshot",
+                    "reason": "eod_limited_timeframe_unsupported",
+                    "parameters": parameters,
+                    "published": False,
+                },
+            )
+        runner = self._eod_runner or run_eod_limited_job
+        digest = strength_scan_parameters_hash(parameters)
+        batch = self._eod_batch.get()
+        outcome = batch.get("outcome") if batch is not None else None
+        try:
+            if outcome is None:
+                outcome = await _call_local(
+                    runner,
+                    profile=str(parameters.get("profile") or "balanced"),
+                    horizon=horizon,
+                    purpose=PURPOSE_LIVE,
+                    all_variants=True,
+                )
+        except Exception as exc:
+            return TaskResult(
+                status="degraded",
+                error_code="eod_limited_input_unavailable",
+                details={
+                    "result": "kept_previous_snapshot",
+                    "reason": type(exc).__name__,
+                    "parameters": parameters,
+                    "parameters_hash": digest,
+                    "published": False,
+                },
+            )
+        publication = outcome.get("publish") or {}
+        published_at = outcome.get("published_at", publication.get("published_at"))
+        published = (
+            str(outcome.get("status") or "") == "RAN"
+            and publication.get("ok") is True
+            and isinstance(published_at, (int, float))
+            and not isinstance(published_at, bool)
+            and math.isfinite(published_at)
+            and published_at > 0
+        )
+        through = outcome.get("served_session") or outcome.get("session")
+        if not published:
+            return TaskResult(
+                status="degraded",
+                error_code="eod_limited_input_unavailable",
+                details={
+                    "result": outcome.get("publish", {}).get("integrity") or "kept_previous_snapshot",
+                    "parameters": parameters,
+                    "parameters_hash": digest,
+                    "score_data_through": through,
+                    "purpose": outcome.get("purpose"),
+                    "published": False,
+                },
+            )
+        if batch is not None and {
+            variant_key(profile, timeframe) for profile in PROFILES for timeframe in HORIZONS
+        }.issubset(outcome.get("available_variants") or []):
+            batch["outcome"] = outcome
+        return TaskResult(
+            status="idle",
+            details={
+                "result": "refreshed",
+                "snapshot": "eod-limited-v1/batch.json",
+                "count": len(outcome.get("available_variants") or []),
+                "parameters": parameters,
+                "parameters_hash": digest,
+                # The browser verifies the persisted snapshot against this
+                # instant. A later task-finished clock rejects our own write.
+                "completed_at": _timestamp_text(float(published_at)),
+                "score_data_through": through,
+                "score_version": outcome.get("compute_version") or "limited-current-v1.1",
+                "purpose": outcome.get("purpose"),
+                "published": True,
+            },
+        )
+
     async def _run(self, parameters: dict[str, Any]) -> TaskResult:
+        from app.api.strength import strength_execution_parameters
+
+        return await self._run_eod_limited(strength_execution_parameters(parameters))
+
+    async def _run_legacy_snapshot(self, parameters: dict[str, Any]) -> TaskResult:
+        """Historical snapshot implementation retained for compatibility tests.
+
+        Scheduled and queued work only enters _run, which executes EOD.
+        """
         from app.api.strength import (
             _existing_strength_publication,
             _strength_snapshot_path,
@@ -2065,10 +2174,14 @@ class StrengthRefreshTask:
         from app.services.strength.scanner import STRENGTH_SCORE_VERSION, scan_strength
         from app.services.utils import sanitize
 
+        from app.services.algorithm_modes import EOD_LIMITED_V1
+
         scanner = self._scanner or scan_strength
         writer = self._writer or _write_strength_snapshot
         base_path = self._snapshot_path or get_data_paths().strength_snapshot
         parameters = normalize_strength_scan_parameters(parameters)
+        if parameters.get("ranking_algorithm") == EOD_LIMITED_V1:
+            raise ValueError("EOD cannot execute through the legacy snapshot writer")
         path = _strength_snapshot_path(parameters, base_path=base_path)
         payload = sanitize(
             await _call_local(
@@ -2193,9 +2306,16 @@ class StrengthRefreshTask:
 
     @bind_trusted_system_task
     async def run_for_actions(self, actions: list[dict[str, Any]]) -> TaskResult:
+        token = self._eod_batch.set({})
+        try:
+            return await self._run_action_batch(actions)
+        finally:
+            self._eod_batch.reset(token)
+
+    async def _run_action_batch(self, actions: list[dict[str, Any]]) -> TaskResult:
         from app.api.strength import (
-            DEFAULT_STRENGTH_SCAN_PARAMETERS,
             normalize_strength_scan_parameters,
+            strength_execution_parameters,
             strength_scan_parameters_hash,
         )
 
@@ -2207,6 +2327,7 @@ class StrengthRefreshTask:
         group_index: dict[str, int] = {}
         leftover_request_ids: list[str] = []
         action_completions: list[dict[str, Any]] = []
+        demand_aliases: dict[str, list[dict[str, Any]]] = {}
         for action in actions:
             details = action.get("details") if isinstance(action, dict) else None
             raw = details.get("parameters") if isinstance(details, dict) else None
@@ -2220,6 +2341,11 @@ class StrengthRefreshTask:
                 stored_hash = details.get("parameters_hash") if isinstance(details, dict) else None
                 if stored_hash is not None and stored_hash != expected_hash:
                     raise ValueError("strength refresh action parameter hash is invalid")
+                # Verify the persisted identity before translating old queued
+                # production/A0 requests into the replacement engine.
+                original_parameters = parameters
+                parameters = strength_execution_parameters(parameters)
+                expected_hash = strength_scan_parameters_hash(parameters)
             except ValueError as exc:
                 for item_id in request_ids:
                     action_completions.append(
@@ -2237,12 +2363,14 @@ class StrengthRefreshTask:
                 continue
             existing = group_index.get(expected_hash)
             if existing is not None:
+                demand_aliases[expected_hash].append(original_parameters)
                 selected_groups[existing][2].extend(request_ids)
                 continue
             if len(selected_groups) >= 4:
                 leftover_request_ids.extend(request_ids)
                 continue
             group_index[expected_hash] = len(selected_groups)
+            demand_aliases[expected_hash] = [original_parameters]
             selected_groups.append((expected_hash, parameters, request_ids))
         selected_jobs = [parameters for _digest, parameters, _ids in selected_groups]
         seen = set(group_index)
@@ -2290,6 +2418,11 @@ class StrengthRefreshTask:
                 status=outcome,
                 error_code=group_result.error_code,
             )
+            for original in demand_aliases.get(digest, []):
+                if original != selected:
+                    complete_strength_variant_demand(
+                        original, status=outcome, error_code=group_result.error_code,
+                    )
             if group_result.status == "idle" and not group_result.error_code:
                 self._pending_variant_parameters.pop(digest, None)
                 self._pending_variant_errors.pop(digest, None)
@@ -2356,14 +2489,6 @@ class StrengthRefreshTask:
             record_group(digest, selected, request_ids, result)
             await self._publish_action_progress(action_completions, remaining_ids())
         assert result is not None
-        if result.status == "idle":
-            from app.api.strength import a0_companion_for_admin_default
-
-            companion = a0_companion_for_admin_default(selected_jobs[0])
-            if companion is not None:
-                companion_hash = strength_scan_parameters_hash(companion)
-                if companion_hash not in seen:
-                    await run_side_job(companion)
         extras = [
             item
             for item in list_pending_strength_variant_demands()
@@ -2388,10 +2513,17 @@ class StrengthRefreshTask:
 
     @bind_trusted_system_task
     async def __call__(self) -> TaskResult:
+        token = self._eod_batch.set({})
+        try:
+            return await self._run_scheduled_batch()
+        finally:
+            self._eod_batch.reset(token)
+
+    async def _run_scheduled_batch(self) -> TaskResult:
         from app.api.strength import (
-            DEFAULT_STRENGTH_SCAN_PARAMETERS,
             list_recent_strength_variant_parameters,
             normalize_strength_scan_parameters,
+            scheduled_strength_scan_parameters,
             strength_scan_parameters_hash,
         )
 
@@ -2400,12 +2532,13 @@ class StrengthRefreshTask:
             self._last_scheduled_at is None
             or now >= self._last_scheduled_at + self._scheduled_interval_seconds
         )
+        scheduled_parameters = scheduled_strength_scan_parameters()
         if (
             due
             or self._last_default_result is None
             or self._last_default_result.status != "idle"
         ):
-            result = await self._run(dict(DEFAULT_STRENGTH_SCAN_PARAMETERS))
+            result = await self._run(scheduled_parameters)
             self._last_default_result = result
         else:
             result = self._last_default_result
@@ -2423,16 +2556,7 @@ class StrengthRefreshTask:
                 )
             except (OSError, TypeError, ValueError):
                 extras = []
-            try:
-                from app.api.strength import a0_companion_for_admin_default
-
-                # Do not shadow-scan A0 on every cycle. Preheat only when the
-                # admin default actually needs that snapshot identity.
-                companion = a0_companion_for_admin_default()
-                if companion is not None and companion not in extras:
-                    extras = [companion, *extras][:4]
-            except Exception:
-                pass
+            extras = [item for item in extras if item != scheduled_parameters]
         elif self._variant_retry_at is not None and now >= self._variant_retry_at:
             # Retry exactly the failed set, even if reads or successful writes
             # have changed the recent-file ordering since the scheduled round.

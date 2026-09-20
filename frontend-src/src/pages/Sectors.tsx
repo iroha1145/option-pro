@@ -39,6 +39,9 @@ function emptyStrength(period: SectorPeriod): SectorStrengthEnvelope {
     count: 0,
     cached: false,
     snapshotSource: null,
+    stale: false,
+    sourceStatus: null,
+    staleReason: null,
   };
 }
 
@@ -173,6 +176,11 @@ export default function Sectors() {
                 })
               : t('板块列表已加载，涨跌幅与强度数据暂不可用。')}
           </span>
+        </StatusNotice>
+      )}
+      {!strengthQ.error && strengthEnvelope.stale && (
+        <StatusNotice className="mt-4">
+          {t('部分板块数据已过期，请结合各项数据日期查看。')}
         </StatusNotice>
       )}
 

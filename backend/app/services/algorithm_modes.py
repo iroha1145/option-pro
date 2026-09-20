@@ -1,8 +1,8 @@
 """Stable production algorithm IDs, versions, and resolution rules.
 
-Screener ranking and radar sort are independent. The system default is the
-original production algorithm. An explicit user or request choice is never
-overwritten by a later admin default.
+Screener ranking and radar sort are independent. Historical screener names
+remain valid inputs, but all screener choices execute the current EOD engine.
+Radar production and T1 retain their existing meanings.
 """
 
 from __future__ import annotations
@@ -23,11 +23,20 @@ A0_SCORE_BASIS = "0.5 * score_mid + 0.5 * score_long"
 A0_SUPPORTED_TIMEFRAME = "all"
 A0_SUPPORTED_PROFILE = "balanced"
 
+EOD_LIMITED_V1 = "eod_limited_v1"
+EOD_LIMITED_VERSION = "eod-limited-v1.1"
+EOD_LIMITED_SCORE_BASIS = "price_only_diagnostic + m1_consensus"
+EOD_LIMITED_TIMEFRAMES = ("short", "mid", "long")
+# Preserve the stored/public default while replacing its execution engine.
+DEFAULT_SCREENER_ALGORITHM = PRODUCTION_ALGORITHM
+EOD_DEFAULT_TIMEFRAME = "mid"
+PRODUCTION_DEFAULT_TIMEFRAME = "all"
+
 T1_ALGORITHM = "t1_daily_priority"
 T1_VERSION = "t1-daily-priority-v1"
 T1_SCORE_BASIS = "production_order + t1_daily_conditions_boost"
 
-SCREENER_ALGORITHMS = (PRODUCTION_ALGORITHM, A0_ALGORITHM)
+SCREENER_ALGORITHMS = (PRODUCTION_ALGORITHM, A0_ALGORITHM, EOD_LIMITED_V1)
 RADAR_ALGORITHMS = (PRODUCTION_ALGORITHM, T1_ALGORITHM)
 USER_CHOICES = (FOLLOW_DEFAULT, *SCREENER_ALGORITHMS)
 RADAR_USER_CHOICES = (FOLLOW_DEFAULT, *RADAR_ALGORITHMS)
@@ -42,6 +51,9 @@ SCREENER_ALIASES = {
     "a0": A0_ALGORITHM,
     "mid_long": A0_ALGORITHM,
     "mid-long": A0_ALGORITHM,
+    "eod": EOD_LIMITED_V1,
+    "eod_limited": EOD_LIMITED_V1,
+    "limited": EOD_LIMITED_V1,
 }
 
 RADAR_ALIASES = {
@@ -91,9 +103,10 @@ class AlgorithmResolution:
     score_basis: str
     source: str
     fallback_reason: str | None = None
+    resolved_timeframe: str | None = None
 
     def as_public_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             "requested_algorithm": self.requested,
             "user_choice": self.user_choice,
             "admin_default_algorithm": self.admin_default,
@@ -103,6 +116,9 @@ class AlgorithmResolution:
             "resolution_source": self.source,
             "fallback_reason": self.fallback_reason,
         }
+        if self.resolved_timeframe is not None:
+            payload["resolved_timeframe"] = self.resolved_timeframe
+        return payload
 
 
 def _clean(value: Any) -> str | None:
@@ -144,6 +160,8 @@ def canonicalize_radar_algorithm(value: Any, *, allow_follow: bool = False) -> s
 def screener_version(algorithm: str) -> str:
     if algorithm == A0_ALGORITHM:
         return A0_VERSION
+    if algorithm == EOD_LIMITED_V1:
+        return EOD_LIMITED_VERSION
     return "strength-v3"
 
 
@@ -156,6 +174,8 @@ def radar_version(algorithm: str) -> str:
 def screener_score_basis(algorithm: str) -> str:
     if algorithm == A0_ALGORITHM:
         return A0_SCORE_BASIS
+    if algorithm == EOD_LIMITED_V1:
+        return EOD_LIMITED_SCORE_BASIS
     return "ranking_score"
 
 
@@ -172,6 +192,11 @@ def a0_view_supported(timeframe: Any, profile: Any) -> bool:
     )
 
 
+def eod_view_supported(timeframe: Any, profile: Any = None) -> bool:
+    del profile
+    return str(timeframe or "").strip() in EOD_LIMITED_TIMEFRAMES
+
+
 def resolve_screener_algorithm(
     *,
     requested: Any = None,
@@ -180,10 +205,11 @@ def resolve_screener_algorithm(
     timeframe: Any = "all",
     profile: Any = "balanced",
     explicit_request: bool = False,
+    timeframe_omitted: bool = False,
 ) -> AlgorithmResolution:
     requested_id = canonicalize_screener_algorithm(requested, allow_follow=True)
     user_id = canonicalize_screener_algorithm(user_choice, allow_follow=True)
-    admin_id = canonicalize_screener_algorithm(admin_default) or PRODUCTION_ALGORITHM
+    admin_id = canonicalize_screener_algorithm(admin_default) or DEFAULT_SCREENER_ALGORITHM
 
     follow_requested = requested_id == FOLLOW_DEFAULT
     if requested_id == FOLLOW_DEFAULT:
@@ -206,16 +232,20 @@ def resolve_screener_algorithm(
         effective = admin_id
         source = "admin_default" if admin_default not in (None, "") else "system_default"
 
-    fallback_reason = None
-    if effective == A0_ALGORITHM and not a0_view_supported(timeframe, profile):
-        if explicit_request or source == "request":
-            raise ConflictingAlgorithmError(
-                A0_ALGORITHM,
-                "A0 mid/long ranking only supports timeframe=all and profile=balanced",
-            )
-        fallback_reason = INCOMPATIBLE_VIEW
-        effective = PRODUCTION_ALGORITHM
-        source = f"{source}+fallback"
+    raw_timeframe = _clean(timeframe)
+    if raw_timeframe is None:
+        timeframe_omitted = True
+        raw_timeframe = PRODUCTION_DEFAULT_TIMEFRAME
+
+    # Names such as production and A0 are compatibility inputs, not separate
+    # ranking engines. Keep preference provenance without rewriting its file.
+    effective = EOD_LIMITED_V1
+    resolved_timeframe = (
+        EOD_DEFAULT_TIMEFRAME if timeframe_omitted or raw_timeframe == "all"
+        else raw_timeframe
+    )
+    if not eod_view_supported(resolved_timeframe, profile):
+        raise ConflictingAlgorithmError(EOD_LIMITED_V1, "Unsupported screener timeframe")
 
     return AlgorithmResolution(
         family=SCREENER_FAMILY,
@@ -226,7 +256,8 @@ def resolve_screener_algorithm(
         version=screener_version(effective),
         score_basis=screener_score_basis(effective),
         source=source,
-        fallback_reason=fallback_reason,
+        fallback_reason=None,
+        resolved_timeframe=resolved_timeframe,
     )
 
 
@@ -287,9 +318,9 @@ def admin_algorithm_defaults(settings: Any = None) -> dict[str, str]:
             screener_raw = algorithms.get("screener_ranking_algorithm", screener_raw)
             radar_raw = algorithms.get("radar_sort_algorithm", radar_raw)
     try:
-        screener = canonicalize_screener_algorithm(screener_raw) or PRODUCTION_ALGORITHM
+        screener = canonicalize_screener_algorithm(screener_raw) or DEFAULT_SCREENER_ALGORITHM
     except UnknownAlgorithmError:
-        screener = PRODUCTION_ALGORITHM
+        screener = DEFAULT_SCREENER_ALGORITHM
     try:
         radar = canonicalize_radar_algorithm(radar_raw) or PRODUCTION_ALGORITHM
     except UnknownAlgorithmError:
