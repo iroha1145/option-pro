@@ -19,6 +19,7 @@ test('follow_default is sent explicitly on both scan and refresh identities', ()
   const request = buildStrengthScanRequest(DEFAULT_FILTERS);
   assert.equal(request.apiParams.ranking_algorithm, 'follow_default');
   assert.equal(request.refreshParameters.ranking_algorithm, 'follow_default');
+  assert.equal('list_kind' in request.apiParams, false);
 });
 
 test('explicit A0 is sent on both scan and refresh identities', () => {
@@ -87,6 +88,12 @@ test('explicit EOD limited is sent on both scan and refresh identities', () => {
   });
   assert.equal(request.apiParams.ranking_algorithm, 'eod_limited_v1');
   assert.equal(request.apiParams.list_kind, 'observation');
+  const composite = buildStrengthScanRequest({
+    ...DEFAULT_FILTERS,
+    rankingAlgorithm: 'follow_default',
+    resultSet: 'composite',
+  });
+  assert.equal(composite.apiParams.list_kind, 'composite');
   assert.equal(request.refreshParameters.ranking_algorithm, 'eod_limited_v1');
   assert.equal(keepServerRankingOrder('eod_limited_v1'), true);
   assert.equal(isEodLimitedRanking('eod_limited_v1'), true);

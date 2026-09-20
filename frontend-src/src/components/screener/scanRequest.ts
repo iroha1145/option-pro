@@ -37,7 +37,10 @@ export function buildStrengthScanRequest(filters: ScanFilters): StrengthScanRequ
       min_avg_dollar_volume: filters.minDollarVol,
       include_options: true,
       ranking_algorithm: filters.rankingAlgorithm,
-      list_kind: filters.resultSet,
+      // 原版 / A0 / follow_default 的日常快照参数保持不变；list_kind 只在收盘模式或显式合格综合时下发。
+      ...(filters.rankingAlgorithm === 'eod_limited_v1' || filters.resultSet === 'composite'
+        ? { list_kind: filters.resultSet }
+        : {}),
       ...(filters.minScore != null ? { minScore: filters.minScore } : {}),
     },
     refreshParameters: {
