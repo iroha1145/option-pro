@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from app.services.algorithm_modes import A0_ALGORITHM, PRODUCTION_ALGORITHM
+from tests.http_response_support import lock_screener_admin_production
 from app.worker.lock import ProcessFileLock
 from app.worker.runtime import TaskSpec, WorkerSupervisor
 from app.worker.state import WorkerStateRepository
@@ -13,6 +14,11 @@ from app.worker.tasks import StrengthRefreshTask
 
 
 NOW = 1_789_000_000.0
+
+
+@pytest.fixture(autouse=True)
+def _keep_scheduled_strength_on_production(monkeypatch: pytest.MonkeyPatch) -> None:
+    lock_screener_admin_production(monkeypatch)
 
 
 def _payload(*, parameters: dict, ticker: str, failed: bool = False) -> dict:

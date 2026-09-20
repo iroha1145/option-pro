@@ -2466,9 +2466,9 @@ class StrengthRefreshTask:
     @bind_trusted_system_task
     async def __call__(self) -> TaskResult:
         from app.api.strength import (
-            DEFAULT_STRENGTH_SCAN_PARAMETERS,
             list_recent_strength_variant_parameters,
             normalize_strength_scan_parameters,
+            scheduled_strength_scan_parameters,
             strength_scan_parameters_hash,
         )
 
@@ -2477,12 +2477,13 @@ class StrengthRefreshTask:
             self._last_scheduled_at is None
             or now >= self._last_scheduled_at + self._scheduled_interval_seconds
         )
+        scheduled_parameters = scheduled_strength_scan_parameters()
         if (
             due
             or self._last_default_result is None
             or self._last_default_result.status != "idle"
         ):
-            result = await self._run(dict(DEFAULT_STRENGTH_SCAN_PARAMETERS))
+            result = await self._run(scheduled_parameters)
             self._last_default_result = result
         else:
             result = self._last_default_result
@@ -2500,12 +2501,13 @@ class StrengthRefreshTask:
                 )
             except (OSError, TypeError, ValueError):
                 extras = []
+            extras = [item for item in extras if item != scheduled_parameters]
             try:
                 from app.api.strength import a0_companion_for_admin_default
 
                 # Do not shadow-scan A0 on every cycle. Preheat only when the
                 # admin default actually needs that snapshot identity.
-                companion = a0_companion_for_admin_default()
+                companion = a0_companion_for_admin_default(scheduled_parameters)
                 if companion is not None and companion not in extras:
                     extras = [companion, *extras][:4]
             except Exception:

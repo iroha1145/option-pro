@@ -76,6 +76,7 @@ def test_a0_fallback_snapshot_writes_and_reads_requested_identity(
                 sector_id=None,
                 min_price=5.0,
                 min_avg_dollar_volume=10_000_000.0,
+                ranking_algorithm=PRODUCTION_ALGORITHM,
             )
         )
     )

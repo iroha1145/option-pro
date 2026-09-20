@@ -117,7 +117,7 @@ def test_defaults_follow_non_secret_personal_configuration(tmp_path: Path) -> No
     )
     assert document.settings.earnings.scheduled_analysis_enabled is False
     assert document.settings.earnings.lookahead_days == 5
-    assert document.settings.algorithms.screener_ranking_algorithm == "production"
+    assert document.settings.algorithms.screener_ranking_algorithm == "eod_limited_v1"
     assert document.settings.algorithms.radar_sort_algorithm == "production"
     catalyst_document = document.settings.catalyst.model_dump()
     assert "manual_force_reanalysis" not in catalyst_document

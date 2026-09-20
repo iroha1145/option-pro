@@ -358,3 +358,128 @@ def test_normalize_accepts_eod_algorithm() -> None:
     default = strength.normalize_strength_scan_parameters(dict(strength.DEFAULT_STRENGTH_SCAN_PARAMETERS))
     assert "ranking_algorithm" not in default
     assert default["timeframe"] == "all"
+    scheduled = strength.scheduled_strength_scan_parameters(
+        type(
+            "Settings",
+            (),
+            {
+                "algorithms": type(
+                    "Algos",
+                    (),
+                    {
+                        "screener_ranking_algorithm": EOD_LIMITED_V1,
+                        "radar_sort_algorithm": PRODUCTION_ALGORITHM,
+                    },
+                )()
+            },
+        )()
+    )
+    assert scheduled["ranking_algorithm"] == EOD_LIMITED_V1
+    assert scheduled["timeframe"] == "mid"
+
+
+def test_unspecified_scan_consumes_eod_mid(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services.eod_limited import store as eod_store
+
+    monkeypatch.setattr(eod_store, "snapshot_dir", lambda root=None: tmp_path / "eod-limited-v1")
+    monkeypatch.setattr(
+        strength,
+        "get_effective_runtime_settings",
+        lambda: type(
+            "Settings",
+            (),
+            {
+                "algorithms": type(
+                    "Algos",
+                    (),
+                    {
+                        "screener_ranking_algorithm": EOD_LIMITED_V1,
+                        "radar_sort_algorithm": PRODUCTION_ALGORITHM,
+                    },
+                )()
+            },
+        )(),
+    )
+    publish_batch(
+        {
+            "purpose": PURPOSE_HISTORICAL,
+            "served_session": "2024-06-28",
+            "attempted_session": "2024-06-28",
+            "published_at": 1_700_000_000,
+            "variants": {variant_key("balanced", "mid"): _scored()},
+        },
+        root=tmp_path,
+    )
+    result = _rp(
+        asyncio.run(
+            strength.scan(
+                _areq(),
+                universe="themes",
+                profile="balanced",
+                top=20,
+                sector_id=None,
+                min_price=5.0,
+                min_avg_dollar_volume=10_000_000.0,
+            )
+        )
+    )
+    assert result["effective_algorithm"] == EOD_LIMITED_V1
+    assert result["resolved_timeframe"] == "mid"
+    assert result["rows"][0]["ticker"] == "NVDA"
+
+
+def test_scheduled_refresh_publishes_eod_when_default_is_eod() -> None:
+    eod_calls: list[dict] = []
+    scanner_calls: list[dict] = []
+
+    def fake_eod(**kwargs):
+        eod_calls.append(kwargs)
+        return {
+            "status": "RAN",
+            "served_session": "2026-09-18",
+            "available_variants": ["balanced:mid"] * 9,
+            "purpose": PURPOSE_LIVE,
+            "compute_version": "limited-current-v1.1",
+            "publish": {"integrity": "ok"},
+        }
+
+    async def fake_scanner(**kwargs):
+        scanner_calls.append(kwargs)
+        raise AssertionError("production scanner must not run for the EOD default")
+
+    async def _run() -> None:
+        from app.api import strength as strength_api
+
+        original = strength_api.get_effective_runtime_settings
+        strength_api.get_effective_runtime_settings = lambda: type(
+            "Settings",
+            (),
+            {
+                "algorithms": type(
+                    "Algos",
+                    (),
+                    {
+                        "screener_ranking_algorithm": EOD_LIMITED_V1,
+                        "radar_sort_algorithm": PRODUCTION_ALGORITHM,
+                    },
+                )()
+            },
+        )()
+        try:
+            result = await StrengthRefreshTask(
+                scanner=fake_scanner,
+                eod_runner=fake_eod,
+                clock=lambda: 1_800_000_000.0,
+            )()
+        finally:
+            strength_api.get_effective_runtime_settings = original
+        assert result.status == "idle"
+        assert result.details.get("snapshot") == "eod-limited-v1/batch.json"
+        assert eod_calls
+        assert eod_calls[0]["horizon"] == "mid"
+        assert not scanner_calls
+
+    asyncio.run(_run())

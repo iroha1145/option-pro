@@ -120,7 +120,7 @@ export const DEFAULT_TOP_N = 20;
 
 export const DEFAULT_FILTERS: ScanFilters = {
   tier: 'all',
-  timeframe: 'all',
+  timeframe: 'mid',
   profile: 'balanced',
   topN: DEFAULT_TOP_N,
   sectors: [],

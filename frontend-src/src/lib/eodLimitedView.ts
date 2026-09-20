@@ -7,9 +7,14 @@ export function isEodLimitedRanking(algorithm?: string | null): boolean {
   return algorithm === EOD_LIMITED_RANKING;
 }
 
+/** follow_default now consumes the product EOD default, so All remaps to Mid. */
+export function followsEodScreenerView(algorithm?: string | null): boolean {
+  return isEodLimitedRanking(algorithm) || algorithm === 'follow_default';
+}
+
 /** First-select remap: EOD does not accept timeframe=all. */
 export function applyEodLimitedView(filters: ScanFilters): ScanFilters {
-  if (!isEodLimitedRanking(filters.rankingAlgorithm)) return filters;
+  if (!followsEodScreenerView(filters.rankingAlgorithm)) return filters;
   if (filters.timeframe !== 'all') return filters;
   return { ...filters, timeframe: 'mid' };
 }

@@ -108,11 +108,11 @@ function nRuntimeDoc(d: unknown): RuntimeDoc {
     },
     algorithms: {
       screenerRankingAlgorithm:
-        screener === 'eod_limited_v1'
-          ? 'eod_limited_v1'
+        screener === 'production'
+          ? 'production'
           : screener === 'a0_mid_long'
             ? 'a0_mid_long'
-            : 'production',
+            : 'eod_limited_v1',
       radarSortAlgorithm: radar === 't1_daily_priority' ? 't1_daily_priority' : 'production',
     },
   };
@@ -126,7 +126,7 @@ let mockToggles: RuntimeToggles = {
   earningsScheduledAnalysisEnabled: false,
 };
 let mockAlgorithms: RuntimeAlgorithms = {
-  screenerRankingAlgorithm: 'production',
+  screenerRankingAlgorithm: 'eod_limited_v1',
   radarSortAlgorithm: 'production',
 };
 const MOCK_TASKS = ['focus_refresh', 'strength_refresh', 'breakout_refresh', 'earnings_analysis'];

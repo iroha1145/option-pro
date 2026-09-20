@@ -1,21 +1,41 @@
-# 收盘技术（受限）启用与回滚
+# 收盘技术（受限）启用、默认迁移与回滚
 
-模式 ID：`eod_limited_v1`。默认算法仍是 `production`。本模式不是收益验证，只展示规则分数、观察与拒绝原因。
+模式 ID：`eod_limited_v1`。选股系统默认是本模式；雷达默认仍是 `production`。本模式不是收益验证，只展示规则分数、观察与拒绝原因。
 
-## 启用（测试实例）
+## 启用（目标实例）
 
 1. 部署包含本 PR 的镜像。不要把 `research/` 或回传目录打进前端/生产镜像。
-2. 管理员在催化管理面板把「选股默认算法」保持为原版，或仅在测试实例设为「收盘技术（受限）」。
-3. 用户在选股页主动选择「收盘技术（受限）」。首次遇到周期=全部时，界面改到中期并按 mid 请求。
-4. Owner 在该模式下点扫描/刷新：提交现有 `strength_refresh`，worker 走隔离批次 `DATA_DIR/eod-limited-v1/batch.json`，一次采集日线后预计算 9 组 profile/horizon。
-5. 普通 GET 只读已发布快照，不向供应商取数。无快照时显示本模式不可用，可切回原版。
+2. 新安装：管理员选股默认与代码默认均为 `eod_limited_v1`，周期缺省 `mid`。
+3. 已有实例若只是初始化时把管理员默认写成了 `production`：启动后由幂等迁移 `screener_default_to_eod_limited_v1` 改成新默认。记录文件：`DATA_DIR/screener-default-to-eod-limited-v1.json`。
+4. 用户打开 `/screener` 且选择为 `follow_default` / 未保存偏好时，页面消费新默认并回显中期。显式 `production` / `a0_mid_long` 个人选择不被覆盖。
+5. 管理员若已固定 `a0_mid_long`，迁移跳过，不偷偷覆盖。
+6. Owner 扫描/刷新与调度 `strength_refresh` 在新默认下走隔离批次 `DATA_DIR/eod-limited-v1/batch.json`，一次采集日线后预计算 9 组 profile/horizon。
+7. 普通 GET 只读已发布快照，不向供应商取数。无快照时显示本模式不可用，可切回原版。
+
+显式关闭自动迁移：环境变量 `OPTIX_SCREENER_DEFAULT_MIGRATION=0`。
 
 ## 回滚
 
-1. 用户切回「原版排序」或「跟随默认」。
+1. 用户切回「原版排序」或「中长期趋势（试用）」。
 2. 管理员把选股默认算法改回 `production`。
-3. 需要停用入口时回退本 PR，或保持代码但不要把管理员默认设成 `eod_limited_v1`。
-4. 删除 `DATA_DIR/eod-limited-v1/batch.json` 只影响新模式；原版 strength 24 变体缓存不受影响。
+3. 撤销本次默认迁移（恢复迁移前的管理员默认，并阻止再次自动套用）：
+
+```python
+from app.services.runtime_settings import get_runtime_settings_store
+from app.services.screener_default_migration import rollback_screener_default_migration
+
+rollback_screener_default_migration(get_runtime_settings_store())
+```
+
+4. 需要停用入口时回退本 PR。删除 `DATA_DIR/eod-limited-v1/batch.json` 只影响新模式；原版 strength 24 变体缓存不受影响。
+5. 删除迁移记录文件会让下一次启动再次把仍为 `production` 的初始化默认迁到新版；回滚后请保留该文件。
+
+## 周期
+
+- 省略 `timeframe` 或旧客户端带着 `all` 跟随新默认时，解析为 `mid`。
+- 界面把已保存的「全部周期」回显为「中期」，并发送 `mid`。
+- API 显式 `ranking_algorithm=eod_limited_v1&timeframe=all` 返回 `algorithm_view_conflict`。
+- 原版 / A0 的 `all` 语义不变。
 
 ## 数据与标签
 

@@ -37,9 +37,9 @@ export const SCREENER: Dict = {
   '原版排序': ['Original ranking', '従来の順位'],
   '中长期趋势（试用）': ['Mid/long trend (trial)', '中長期トレンド（試用）'],
   '收盘技术（受限）': ['EOD technical (limited)', '終値テクニカル（制限）'],
-  '收盘技术基于最近完整交易日与当前主题名单；数据资格未核实时进入观察，不把成交额门标成已通过。首次遇到“全部周期”时已切换到中期。': [
-    'EOD technical ranking uses the latest complete session and the current theme list. Unverified data qualifications stay on the watch list and do not pass dollar-volume gates. Selecting this mode with All timeframes switches to Mid.',
-    '終値テクニカルは直近の確定営業日と現行テーマ名簿を使います。データ資格が未確認の場合は観察に留め、売買代金ゲートを通過扱いしません。全期間を選んだ場合は中期に切り替えます。',
+  '当前选股默认是收盘技术（受限），周期缺省为中期。数据资格未核实时进入观察，不把成交额门标成已通过。可显式切回原版。': [
+    'The screener now defaults to limited EOD technical ranking with a Mid timeframe. Unverified data qualifications stay on the watch list and do not pass dollar-volume gates. You can switch back to the original ranking.',
+    'スクリーナーの既定は制限付き終値テクニカルで、期間は中期です。データ資格が未確認の場合は観察に留め、売買代金ゲートを通過扱いしません。従来の順位へ明示的に戻せます。',
   ],
   '收盘技术仅支持短、中、长期，不能使用全部周期。': [
     'EOD technical ranking only supports short, mid, and long timeframes.',

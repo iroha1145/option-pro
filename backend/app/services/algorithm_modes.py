@@ -1,8 +1,9 @@
 """Stable production algorithm IDs, versions, and resolution rules.
 
-Screener ranking and radar sort are independent. The system default is the
-original production algorithm. An explicit user or request choice is never
-overwritten by a later admin default.
+Screener ranking and radar sort are independent. The screener system default
+is the limited EOD ranking. Radar still defaults to the original production
+sort. An explicit user or request choice is never overwritten by a later
+admin default.
 """
 
 from __future__ import annotations
@@ -27,6 +28,9 @@ EOD_LIMITED_V1 = "eod_limited_v1"
 EOD_LIMITED_VERSION = "eod-limited-v1.1"
 EOD_LIMITED_SCORE_BASIS = "price_only_diagnostic + m1_consensus"
 EOD_LIMITED_TIMEFRAMES = ("short", "mid", "long")
+DEFAULT_SCREENER_ALGORITHM = EOD_LIMITED_V1
+EOD_DEFAULT_TIMEFRAME = "mid"
+PRODUCTION_DEFAULT_TIMEFRAME = "all"
 
 T1_ALGORITHM = "t1_daily_priority"
 T1_VERSION = "t1-daily-priority-v1"
@@ -99,9 +103,10 @@ class AlgorithmResolution:
     score_basis: str
     source: str
     fallback_reason: str | None = None
+    resolved_timeframe: str | None = None
 
     def as_public_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             "requested_algorithm": self.requested,
             "user_choice": self.user_choice,
             "admin_default_algorithm": self.admin_default,
@@ -111,6 +116,9 @@ class AlgorithmResolution:
             "resolution_source": self.source,
             "fallback_reason": self.fallback_reason,
         }
+        if self.resolved_timeframe is not None:
+            payload["resolved_timeframe"] = self.resolved_timeframe
+        return payload
 
 
 def _clean(value: Any) -> str | None:
@@ -197,10 +205,12 @@ def resolve_screener_algorithm(
     timeframe: Any = "all",
     profile: Any = "balanced",
     explicit_request: bool = False,
+    timeframe_omitted: bool = False,
 ) -> AlgorithmResolution:
     requested_id = canonicalize_screener_algorithm(requested, allow_follow=True)
     user_id = canonicalize_screener_algorithm(user_choice, allow_follow=True)
-    admin_id = canonicalize_screener_algorithm(admin_default) or PRODUCTION_ALGORITHM
+    admin_id = canonicalize_screener_algorithm(admin_default) or DEFAULT_SCREENER_ALGORITHM
+    named_request = requested_id
 
     follow_requested = requested_id == FOLLOW_DEFAULT
     if requested_id == FOLLOW_DEFAULT:
@@ -223,8 +233,14 @@ def resolve_screener_algorithm(
         effective = admin_id
         source = "admin_default" if admin_default not in (None, "") else "system_default"
 
+    raw_timeframe = _clean(timeframe)
+    if raw_timeframe is None:
+        timeframe_omitted = True
+        raw_timeframe = PRODUCTION_DEFAULT_TIMEFRAME
+
     fallback_reason = None
-    if effective == A0_ALGORITHM and not a0_view_supported(timeframe, profile):
+    resolved_timeframe = raw_timeframe
+    if effective == A0_ALGORITHM and not a0_view_supported(raw_timeframe, profile):
         if explicit_request or source == "request":
             raise ConflictingAlgorithmError(
                 A0_ALGORITHM,
@@ -233,15 +249,18 @@ def resolve_screener_algorithm(
         fallback_reason = INCOMPATIBLE_VIEW
         effective = PRODUCTION_ALGORITHM
         source = f"{source}+fallback"
-    elif effective == EOD_LIMITED_V1 and not eod_view_supported(timeframe, profile):
-        if explicit_request or source == "request":
+    elif effective == EOD_LIMITED_V1 and not eod_view_supported(raw_timeframe, profile):
+        explicit_eod = named_request == EOD_LIMITED_V1 and (
+            explicit_request or source == "request"
+        )
+        if explicit_eod and not timeframe_omitted:
             raise ConflictingAlgorithmError(
                 EOD_LIMITED_V1,
                 "EOD limited ranking only supports timeframe=short|mid|long",
             )
-        fallback_reason = INCOMPATIBLE_VIEW
-        effective = PRODUCTION_ALGORITHM
-        source = f"{source}+fallback"
+        resolved_timeframe = EOD_DEFAULT_TIMEFRAME
+    elif effective == EOD_LIMITED_V1 and timeframe_omitted:
+        resolved_timeframe = EOD_DEFAULT_TIMEFRAME
 
     return AlgorithmResolution(
         family=SCREENER_FAMILY,
@@ -253,6 +272,7 @@ def resolve_screener_algorithm(
         score_basis=screener_score_basis(effective),
         source=source,
         fallback_reason=fallback_reason,
+        resolved_timeframe=resolved_timeframe,
     )
 
 
@@ -313,9 +333,9 @@ def admin_algorithm_defaults(settings: Any = None) -> dict[str, str]:
             screener_raw = algorithms.get("screener_ranking_algorithm", screener_raw)
             radar_raw = algorithms.get("radar_sort_algorithm", radar_raw)
     try:
-        screener = canonicalize_screener_algorithm(screener_raw) or PRODUCTION_ALGORITHM
+        screener = canonicalize_screener_algorithm(screener_raw) or DEFAULT_SCREENER_ALGORITHM
     except UnknownAlgorithmError:
-        screener = PRODUCTION_ALGORITHM
+        screener = DEFAULT_SCREENER_ALGORITHM
     try:
         radar = canonicalize_radar_algorithm(radar_raw) or PRODUCTION_ALGORITHM
     except UnknownAlgorithmError:

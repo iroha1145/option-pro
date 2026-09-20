@@ -13,9 +13,18 @@ import pytest
 from app.api import strength
 from app.services.strength import scanner
 from app.worker.tasks import StrengthRefreshTask
-from tests.http_response_support import anonymous_get_request, response_payload
+from tests.http_response_support import (
+    anonymous_get_request,
+    lock_screener_admin_production,
+    response_payload,
+)
 from tests.test_screener_freshness_task_chain import _install_provider_boundary
 from tests.test_strength_variant_lifecycle import _payload
+
+
+@pytest.fixture(autouse=True)
+def _keep_scheduled_strength_on_production(monkeypatch: pytest.MonkeyPatch) -> None:
+    lock_screener_admin_production(monkeypatch)
 
 
 OBSERVED = datetime(2026, 9, 5, 12, tzinfo=timezone.utc)
@@ -43,7 +52,7 @@ def _publish(path: Path, payload: dict) -> None:
 
 def _read() -> dict:
     return response_payload(asyncio.run(strength.scan(
-        anonymous_get_request(), **strength.DEFAULT_STRENGTH_SCAN_PARAMETERS,
+        anonymous_get_request(), **strength.DEFAULT_STRENGTH_SCAN_PARAMETERS, ranking_algorithm="production",
     )))
 
 

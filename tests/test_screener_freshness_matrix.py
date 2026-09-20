@@ -72,7 +72,7 @@ def test_a04_visitor_get_does_not_touch_variant_mtime(
     monkeypatch.setattr(strength, "_STRENGTH_SNAPSHOT_PATH", base)
     monkeypatch.setattr(strength.time, "time", lambda: NOW)
     monkeypatch.setattr(strength, "current_request_is_owner", lambda: False)
-    _rp(asyncio.run(strength.scan(_areq(), **params)))
+    _rp(asyncio.run(strength.scan(_areq(), **params, ranking_algorithm="production")))
     assert variant.stat().st_mtime_ns == before
 
 
@@ -96,7 +96,7 @@ def test_b01_owner_read_marks_variant_recent(
     monkeypatch.setattr(strength.time, "time", lambda: NOW)
     monkeypatch.setattr(strength, "current_request_is_owner", lambda: True)
     with request_owner_access_context(True):
-        _rp(asyncio.run(strength.scan(_areq(), **params)))
+        _rp(asyncio.run(strength.scan(_areq(), **params, ranking_algorithm="production")))
     assert variant.stat().st_mtime_ns > before
     recent = strength.list_recent_strength_variant_parameters(base, limit=4)
     assert recent[0]["sector_id"] == "semiconductors"
@@ -138,7 +138,7 @@ def test_b09_unknown_snapshot_does_not_invent_now(
     )
     monkeypatch.setattr(strength, "_STRENGTH_SNAPSHOT_PATH", path)
     monkeypatch.setattr(strength.time, "time", lambda: NOW)
-    result = _rp(asyncio.run(strength.scan(_areq(), **strength.DEFAULT_STRENGTH_SCAN_PARAMETERS)))
+    result = _rp(asyncio.run(strength.scan(_areq(), **strength.DEFAULT_STRENGTH_SCAN_PARAMETERS, ranking_algorithm="production")))
     assert result["source_status"] == "unknown"
     assert result["_stale"] is False
     assert "score_data_through" not in result or result.get("score_data_through") in {None, ""}
@@ -174,7 +174,7 @@ def test_c03_etag_304_does_not_invent_a_new_data_date(
     monkeypatch.setattr(strength.time, "time", lambda: clock["now"])
 
     async def scenario() -> None:
-        first = await strength.scan(_areq(), **strength.DEFAULT_STRENGTH_SCAN_PARAMETERS)
+        first = await strength.scan(_areq(), **strength.DEFAULT_STRENGTH_SCAN_PARAMETERS, ranking_algorithm="production")
         assert first.status_code == 200
         etag = first.headers["etag"]
         body = _rp(first)
@@ -185,13 +185,14 @@ def test_c03_etag_304_does_not_invent_a_new_data_date(
         replay = await strength.scan(
             _areq(headers={"If-None-Match": etag}),
             **strength.DEFAULT_STRENGTH_SCAN_PARAMETERS,
+            ranking_algorithm="production",
         )
         assert replay.status_code == 304
         assert not replay.body
         assert replay.headers["etag"] == etag
 
         clock["now"] = NOW + 27 * 60 * 60
-        stale = await strength.scan(_areq(), **strength.DEFAULT_STRENGTH_SCAN_PARAMETERS)
+        stale = await strength.scan(_areq(), **strength.DEFAULT_STRENGTH_SCAN_PARAMETERS, ranking_algorithm="production")
         assert stale.status_code == 200
         stale_body = _rp(stale)
         assert stale.headers["etag"] != etag
@@ -284,7 +285,7 @@ def test_e05_visitor_get_storm_does_not_call_scanner_or_touch_mtime(
 
     monkeypatch.setattr("app.services.strength.scanner.scan_strength", forbidden)
     for _ in range(20):
-        _rp(asyncio.run(strength.scan(_areq(), **params)))
+        _rp(asyncio.run(strength.scan(_areq(), **params, ranking_algorithm="production")))
     assert variant.stat().st_mtime_ns == before
 
 

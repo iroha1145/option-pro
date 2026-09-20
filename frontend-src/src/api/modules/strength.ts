@@ -59,6 +59,7 @@ export interface StrengthScanEnvelope {
   algorithmVersion: string | null;
   scoreBasis: string | null;
   fallbackReason: string | null;
+  resolvedTimeframe: string | null;
   purpose: string | null;
   historicalExample: boolean;
   synthetic: boolean;
@@ -264,6 +265,7 @@ function liveScan(params: ScanParams, force = false): Promise<StrengthScanEnvelo
       algorithmVersion: pickS(env, 'algorithm_version', 'algorithmVersion'),
       scoreBasis: pickS(env, 'score_basis', 'scoreBasis'),
       fallbackReason: pickS(env, 'fallback_reason', 'fallbackReason'),
+      resolvedTimeframe: pickS(env, 'resolved_timeframe', 'resolvedTimeframe'),
       purpose: pickS(env, 'purpose'),
       historicalExample: pickB(env, 'historical_example', 'historicalExample') ?? false,
       synthetic: pickB(env, 'synthetic') ?? false,
@@ -433,10 +435,28 @@ export const strengthApi = {
           snapshotSavedAt: null,
           cacheExpiresAt: null,
           priceProvider: 'mock fixtures',
-          effectiveAlgorithm: params.ranking_algorithm ?? 'production',
-          algorithmVersion: params.ranking_algorithm === 'a0_mid_long' ? 'a0-mid-long-v1' : 'strength-v3',
-          scoreBasis: params.ranking_algorithm === 'a0_mid_long' ? '0.5 * score_mid + 0.5 * score_long' : 'ranking_score',
+          effectiveAlgorithm:
+            params.ranking_algorithm === 'production' || params.ranking_algorithm === 'a0_mid_long'
+              ? params.ranking_algorithm
+              : params.ranking_algorithm === 'eod_limited_v1'
+                ? 'eod_limited_v1'
+                : 'eod_limited_v1',
+          algorithmVersion:
+            params.ranking_algorithm === 'a0_mid_long'
+              ? 'a0-mid-long-v1'
+              : params.ranking_algorithm === 'production'
+                ? 'strength-v3'
+                : 'eod-limited-v1.1',
+          scoreBasis:
+            params.ranking_algorithm === 'a0_mid_long'
+              ? '0.5 * score_mid + 0.5 * score_long'
+              : params.ranking_algorithm === 'production'
+                ? 'ranking_score'
+                : 'price_only_diagnostic + m1_consensus',
           fallbackReason: null,
+          resolvedTimeframe: params.timeframe === 'all' && params.ranking_algorithm !== 'production' && params.ranking_algorithm !== 'a0_mid_long'
+            ? 'mid'
+            : params.timeframe ?? 'mid',
           purpose: null,
           historicalExample: false,
           synthetic: false,

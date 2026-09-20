@@ -11,8 +11,8 @@ from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.strength import (
-    DEFAULT_STRENGTH_SCAN_PARAMETERS,
     normalize_strength_scan_parameters,
+    scheduled_strength_scan_parameters,
     strength_scan_parameters_hash,
 )
 from app.data_paths import get_data_paths
@@ -229,15 +229,22 @@ def _resolve_refresh_ranking(request: Request, raw_parameters: dict[str, Any]) -
 
     payload = dict(raw_parameters)
     requested = payload.pop("ranking_algorithm", None)
+    timeframe_omitted = "timeframe" not in raw_parameters or raw_parameters.get("timeframe") in {
+        None,
+        "",
+    }
     try:
         resolution = _request_screener_resolution(
             request,
             requested=requested,
             timeframe=str(payload.get("timeframe") or "all"),
             profile=str(payload.get("profile") or "balanced"),
+            timeframe_omitted=timeframe_omitted,
         )
     except Exception:
         return raw_parameters
+    if resolution.resolved_timeframe:
+        payload["timeframe"] = resolution.resolved_timeframe
     if resolution.effective != PRODUCTION_ALGORITHM:
         payload["ranking_algorithm"] = resolution.effective
     return payload
@@ -262,20 +269,28 @@ async def request_action(
         raw_parameters = (
             body.parameters.model_dump()
             if body.parameters is not None
-            else dict(DEFAULT_STRENGTH_SCAN_PARAMETERS)
+            else scheduled_strength_scan_parameters()
         )
         requested_algorithm = raw_parameters.get("ranking_algorithm")
         raw_parameters = _resolve_refresh_ranking(request, raw_parameters)
         if raw_parameters.get("ranking_algorithm") == "eod_limited_v1" and raw_parameters.get(
             "timeframe"
         ) not in {"short", "mid", "long"}:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail={
-                    "code": "algorithm_view_conflict",
-                    "message": "EOD limited ranking only supports timeframe=short|mid|long",
-                },
-            )
+            explicit_eod = requested_algorithm in {
+                "eod_limited_v1",
+                "eod",
+                "eod_limited",
+                "limited",
+            }
+            if explicit_eod:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail={
+                        "code": "algorithm_view_conflict",
+                        "message": "EOD limited ranking only supports timeframe=short|mid|long",
+                    },
+                )
+            raw_parameters["timeframe"] = "mid"
         try:
             parameters = normalize_strength_scan_parameters(raw_parameters)
         except ValueError as exc:

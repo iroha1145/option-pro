@@ -9,6 +9,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -19,6 +20,12 @@ from app.services.strength import scanner
 from app.services.strength.market_regime import MARKET_BENCHMARKS
 from app.worker.state import WorkerStateRepository
 from app.worker.tasks import StrengthRefreshTask
+from tests.http_response_support import lock_screener_admin_production
+
+
+@pytest.fixture(autouse=True)
+def _keep_scheduled_strength_on_production(monkeypatch: pytest.MonkeyPatch) -> None:
+    lock_screener_admin_production(monkeypatch)
 
 
 def _history(*, end: date, slope: float, offset: float = 0.0, size: int = 320) -> pd.DataFrame:

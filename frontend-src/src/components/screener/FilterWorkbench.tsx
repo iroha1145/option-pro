@@ -335,9 +335,9 @@ export default function FilterWorkbench({
           {__t('当前试用固定中长期组合：0.5×中期 + 0.5×长期。原综合分仍可查看，不作为本模式名次。')}
         </p>
       )}
-      {isEodLimitedRanking(draft.rankingAlgorithm) && (
+      {(isEodLimitedRanking(draft.rankingAlgorithm) || draft.rankingAlgorithm === 'follow_default') && (
         <p className="mt-3 text-caption text-ink-500" data-testid="screener-eod-view-note">
-          {__t('收盘技术基于最近完整交易日与当前主题名单；数据资格未核实时进入观察，不把成交额门标成已通过。首次遇到“全部周期”时已切换到中期。')}
+          {__t('当前选股默认是收盘技术（受限），周期缺省为中期。数据资格未核实时进入观察，不把成交额门标成已通过。可显式切回原版。')}
         </p>
       )}
 

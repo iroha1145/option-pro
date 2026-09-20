@@ -141,7 +141,9 @@ class RuntimeEarningsSettings(_StrictModel):
 class RuntimeAlgorithmSettings(_StrictModel):
     """Independent defaults for optional production ranking/sort algorithms."""
 
-    screener_ranking_algorithm: Literal["production", "a0_mid_long", "eod_limited_v1"] = "production"
+    screener_ranking_algorithm: Literal["production", "a0_mid_long", "eod_limited_v1"] = (
+        "eod_limited_v1"
+    )
     radar_sort_algorithm: Literal["production", "t1_daily_priority"] = "production"
 
 
@@ -754,4 +756,8 @@ def get_effective_runtime_settings(
     of silently re-enabling a disabled paid action.
     """
 
-    return (store or get_runtime_settings_store()).read().settings
+    store = store or get_runtime_settings_store()
+    from app.services.screener_default_migration import apply_screener_default_migration
+
+    apply_screener_default_migration(store)
+    return store.read().settings

@@ -24,6 +24,8 @@ from app.personal_config import get_personal_config
 from app.services.algorithm_diagnostics import record_screener_resolution
 from app.services.algorithm_modes import (
     A0_ALGORITHM,
+    DEFAULT_SCREENER_ALGORITHM,
+    EOD_DEFAULT_TIMEFRAME,
     EOD_LIMITED_V1,
     PRODUCTION_ALGORITHM,
     ConflictingAlgorithmError,
@@ -155,6 +157,25 @@ def normalize_strength_scan_parameters(value: Any) -> dict[str, Any]:
     if ranking_algorithm != PRODUCTION_ALGORITHM:
         payload["ranking_algorithm"] = ranking_algorithm
     return payload
+
+
+def scheduled_strength_scan_parameters(settings: Any = None) -> dict[str, Any]:
+    """Snapshot identity the scheduled worker must publish for the current default."""
+
+    try:
+        effective_settings = settings
+        if effective_settings is None:
+            effective_settings = get_effective_runtime_settings()
+        algorithm = admin_algorithm_defaults(effective_settings)["screener_ranking_algorithm"]
+    except Exception:
+        algorithm = DEFAULT_SCREENER_ALGORITHM
+    payload = dict(DEFAULT_STRENGTH_SCAN_PARAMETERS)
+    if algorithm == EOD_LIMITED_V1:
+        payload["ranking_algorithm"] = EOD_LIMITED_V1
+        payload["timeframe"] = EOD_DEFAULT_TIMEFRAME
+    elif algorithm == A0_ALGORITHM:
+        payload["ranking_algorithm"] = A0_ALGORITHM
+    return normalize_strength_scan_parameters(payload)
 
 
 async def _public_strength_snapshot() -> dict[str, Any]:
@@ -445,12 +466,21 @@ def a0_companion_for_admin_default(
     return a0_companion_scan_parameters(normalized)
 
 
+def _unwrap_query_value(value: Any) -> Any:
+    if value is not None and not isinstance(value, (str, bytes, int, float, bool)) and hasattr(
+        value, "default"
+    ):
+        return getattr(value, "default", None)
+    return value
+
+
 def _request_screener_resolution(
     request: Request,
     *,
     requested: Any,
     timeframe: str,
     profile: str,
+    timeframe_omitted: bool = False,
 ) -> Any:
     account = request_account_session(request)
     account_id = getattr(account, "user_id", None) if account is not None else None
@@ -464,7 +494,7 @@ def _request_screener_resolution(
     try:
         admin_default = admin_algorithm_defaults(get_effective_runtime_settings())
     except Exception:
-        admin_default = {"screener_ranking_algorithm": PRODUCTION_ALGORITHM}
+        admin_default = {"screener_ranking_algorithm": DEFAULT_SCREENER_ALGORITHM}
     return resolve_screener_algorithm(
         requested=requested,
         user_choice=user_choice,
@@ -472,6 +502,7 @@ def _request_screener_resolution(
         timeframe=timeframe,
         profile=profile,
         explicit_request=requested not in (None, "", "follow_default", "default"),
+        timeframe_omitted=timeframe_omitted,
     )
 
 
@@ -767,6 +798,8 @@ def _overlay_algorithm_metadata(payload: dict[str, Any], resolution: Any | None 
         payload["algorithm_version"] = resolution.version or screener_version(str(effective))
         payload["score_basis"] = resolution.score_basis or screener_score_basis(str(effective))
         payload["fallback_reason"] = resolution.fallback_reason
+        if getattr(resolution, "resolved_timeframe", None):
+            payload["resolved_timeframe"] = resolution.resolved_timeframe
         return payload
     effective = scanner_effective or PRODUCTION_ALGORITHM
     payload["requested_algorithm"] = payload.get("requested_algorithm")
@@ -1020,7 +1053,7 @@ async def _scan_snapshot_payload(
 async def scan(
     request: Request,
     universe: str = Query("themes", pattern="^(themes)$"),
-    timeframe: str = Query("all", pattern="^(short|mid|long|all)$"),
+    timeframe: Annotated[Optional[str], Query(pattern="^(short|mid|long|all)$")] = None,
     profile: str = Query("balanced", pattern="^(conservative|balanced|aggressive)$"),
     top: int = Query(20, ge=5, le=120),
     sector_id: Optional[str] = Query(None),
@@ -1031,12 +1064,19 @@ async def scan(
     list_kind: Annotated[str, Query()] = "observation",
 ):
     """Read a matching Strength Radar snapshot produced by the worker."""
+    requested = _unwrap_query_value(ranking_algorithm)
+    raw_timeframe = _unwrap_query_value(timeframe)
+    timeframe_omitted = raw_timeframe in (None, "")
+    timeframe_value = str(raw_timeframe) if not timeframe_omitted else "all"
+    if not timeframe_omitted and timeframe_value not in TIMEFRAMES:
+        raise HTTPException(status_code=400, detail="Invalid screener parameters")
     try:
         resolution = _request_screener_resolution(
             request,
-            requested=ranking_algorithm,
-            timeframe=timeframe,
+            requested=requested,
+            timeframe=timeframe_value,
             profile=profile,
+            timeframe_omitted=timeframe_omitted,
         )
     except UnknownAlgorithmError as exc:
         raise HTTPException(
@@ -1048,10 +1088,11 @@ async def scan(
             status_code=400,
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
+    served_timeframe = resolution.resolved_timeframe or timeframe_value
     try:
         payload, saved_at, stale = await _scan_snapshot_payload(
             universe=universe,
-            timeframe=timeframe,
+            timeframe=served_timeframe,
             profile=profile,
             top=top,
             sector_id=sector_id,
@@ -1068,7 +1109,7 @@ async def scan(
         try:
             parameters = _scan_parameters(
                 universe=universe,
-                timeframe=timeframe,
+                timeframe=served_timeframe,
                 profile=profile,
                 top=top,
                 sector_id=sector_id,
@@ -1110,7 +1151,7 @@ async def scan(
             payload.get("stale_reason"),
             payload.get("score_data_through"),
             universe,
-            timeframe,
+            served_timeframe,
             profile,
             top,
             sector_id,

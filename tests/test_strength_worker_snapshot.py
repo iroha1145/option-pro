@@ -47,6 +47,7 @@ def _run_scan(*, top: int = 20) -> dict:
             sector_id=None,
             min_price=5.0,
             min_avg_dollar_volume=10_000_000.0,
+            ranking_algorithm="production",
         )
     ))
 
@@ -251,7 +252,7 @@ def test_nondefault_worker_snapshot_is_path_isolated_and_read_by_exact_query(
     monkeypatch.setattr(strength, "_STRENGTH_SNAPSHOT_PATH", base)
     monkeypatch.setattr(strength.time, "time", lambda: NOW)
 
-    result = _rp(asyncio.run(strength.scan(_areq(), **parameters)))
+    result = _rp(asyncio.run(strength.scan(_areq(), **parameters, ranking_algorithm="production")))
 
     assert result["rows"][0]["ticker"] == "NVDA"
     assert result["snapshot_source"] == "worker"

@@ -14,6 +14,26 @@ from typing import Any, Mapping
 from fastapi import Request, Response
 
 
+def lock_screener_admin_production(monkeypatch: Any) -> None:
+    """Keep scheduled strength_refresh on the original production snapshot identity."""
+
+    settings = type(
+        "Settings",
+        (),
+        {
+            "algorithms": type(
+                "Algos",
+                (),
+                {
+                    "screener_ranking_algorithm": "production",
+                    "radar_sort_algorithm": "production",
+                },
+            )()
+        },
+    )()
+    monkeypatch.setattr("app.api.strength.get_effective_runtime_settings", lambda: settings)
+
+
 def anonymous_get_request(
     path: str = "/api/test",
     headers: Mapping[str, str] | None = None,

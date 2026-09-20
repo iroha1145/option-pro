@@ -1082,7 +1082,7 @@ export const EN: Record<string, string> = {
   "原版排序": "Original ranking",
   "中长期趋势（试用）": "Mid/long trend (trial)",
   "收盘技术（受限）": "EOD technical (limited)",
-  "收盘技术基于最近完整交易日与当前主题名单；数据资格未核实时进入观察，不把成交额门标成已通过。首次遇到“全部周期”时已切换到中期。": "EOD technical ranking uses the latest complete session and the current theme list. Unverified data qualifications stay on the watch list and do not pass dollar-volume gates. Selecting this mode with All timeframes switches to Mid.",
+  "当前选股默认是收盘技术（受限），周期缺省为中期。数据资格未核实时进入观察，不把成交额门标成已通过。可显式切回原版。": "The screener now defaults to limited EOD technical ranking with a Mid timeframe. Unverified data qualifications stay on the watch list and do not pass dollar-volume gates. You can switch back to the original ranking.",
   "收盘技术仅支持短、中、长期，不能使用全部周期。": "EOD technical ranking only supports short, mid, and long timeframes.",
   "收盘技术（受限）快照正在后台生成，请稍候。": "The limited EOD snapshot is being prepared in the background. Please wait.",
   "收盘技术暂不可用": "Limited EOD ranking is unavailable",

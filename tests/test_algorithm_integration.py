@@ -77,6 +77,7 @@ def test_strength_scan_adds_compatible_algorithm_fields_on_default_path(
                 sector_id=None,
                 min_price=5.0,
                 min_avg_dollar_volume=10_000_000.0,
+                ranking_algorithm=PRODUCTION_ALGORITHM,
             )
         )
     )
@@ -341,8 +342,7 @@ def test_admin_a0_default_preheats_companion_snapshot(
         )()
     )
     algorithms = [item.get("ranking_algorithm") for item in calls]
-    assert None in algorithms or PRODUCTION_ALGORITHM in algorithms
-    assert A0_ALGORITHM in algorithms
+    assert algorithms == [A0_ALGORITHM]
 
 
 def test_owner_default_refresh_preheats_a0_when_admin_default_is_a0(

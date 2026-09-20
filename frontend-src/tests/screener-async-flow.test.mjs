@@ -99,9 +99,9 @@ test('reset scans default server parameters and keeps old result identity throug
   await new Promise(setImmediate);
   assert.equal(h.state.macroToneFilter, 'all');
   assert.equal(h.state.draft.profile, 'balanced');
-  assert.equal(h.state.draft.timeframe, 'all');
+  assert.equal(h.state.draft.timeframe, 'mid');
   assert.equal(requests.at(-1).profile, 'balanced');
-  assert.equal(requests.at(-1).timeframe, 'all');
+  assert.equal(requests.at(-1).timeframe, 'mid');
   assert.equal(h.state.scanState, 'scanning');
   assert.equal(h.state.applied.profile, 'aggressive', 'old rows must retain their real profile while defaults are in flight');
   assert.equal(h.state.rows[0].ticker, 'AGGRESSIVE');
@@ -115,7 +115,7 @@ test('reset scans default server parameters and keeps old result identity throug
   assert.equal(defaultReads, 2);
   assert.equal(h.state.scanState, 'done');
   assert.equal(h.state.applied.profile, 'balanced');
-  assert.equal(h.state.applied.timeframe, 'all');
+  assert.equal(h.state.applied.timeframe, 'mid');
   assert.equal(h.state.rows[0].ticker, 'BALANCED');
 });
 

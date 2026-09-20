@@ -176,11 +176,11 @@ export default function Screener() {
   }, [profilesQ.data, universe.sectors]);
 
   /* ---------------- 扫描状态机 ---------------- */
-  const [draft, setDraft] = useState<ScanFilters>(() => ({
+  const [draft, setDraft] = useState<ScanFilters>(() => applyEodLimitedView({
     ...DEFAULT_FILTERS,
     rankingAlgorithm: readAlgorithmPreferences(principal).screenerRankingAlgorithm,
   }));
-  const [applied, setApplied] = useState<ScanFilters>(() => ({
+  const [applied, setApplied] = useState<ScanFilters>(() => applyEodLimitedView({
     ...DEFAULT_FILTERS,
     rankingAlgorithm: readAlgorithmPreferences(principal).screenerRankingAlgorithm,
   }));
@@ -231,7 +231,7 @@ export default function Screener() {
     setDraft((current) => (
       current.rankingAlgorithm === local.screenerRankingAlgorithm
         ? current
-        : { ...current, rankingAlgorithm: local.screenerRankingAlgorithm }
+        : applyEodLimitedView({ ...current, rankingAlgorithm: local.screenerRankingAlgorithm })
     ));
   }, [principal]);
 
@@ -253,7 +253,7 @@ export default function Screener() {
       setDraft((current) => (
         current.rankingAlgorithm === remote.screenerRankingAlgorithm
           ? current
-          : { ...current, rankingAlgorithm: remote.screenerRankingAlgorithm }
+          : applyEodLimitedView({ ...current, rankingAlgorithm: remote.screenerRankingAlgorithm })
       ));
     }, () => {
       // Keep the local preference when the signed-in copy is unavailable.
@@ -856,7 +856,11 @@ export default function Screener() {
   }, []);
 
   const resetAllFilters = () => {
-    const filters = { ...DEFAULT_FILTERS, sectors: [], rankingAlgorithm: draft.rankingAlgorithm };
+    const filters = applyEodLimitedView({
+      ...DEFAULT_FILTERS,
+      sectors: [],
+      rankingAlgorithm: draft.rankingAlgorithm,
+    });
     setMacroToneFilter('all');
     setDraft(filters);
     // Defaults include server-side profile/timeframe. Keep the old result's

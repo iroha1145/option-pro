@@ -4,6 +4,8 @@ import pytest
 
 from app.services.algorithm_modes import (
     A0_ALGORITHM,
+    DEFAULT_SCREENER_ALGORITHM,
+    EOD_DEFAULT_TIMEFRAME,
     EOD_LIMITED_V1,
     FOLLOW_DEFAULT,
     INCOMPATIBLE_VIEW,
@@ -17,11 +19,13 @@ from app.services.algorithm_modes import (
 )
 
 
-def test_unspecified_request_uses_system_default_production() -> None:
+def test_unspecified_request_uses_system_default_eod() -> None:
     resolution = resolve_screener_algorithm()
-    assert resolution.effective == PRODUCTION_ALGORITHM
+    assert resolution.effective == EOD_LIMITED_V1
+    assert resolution.effective == DEFAULT_SCREENER_ALGORITHM
     assert resolution.source == "system_default"
     assert resolution.fallback_reason is None
+    assert resolution.resolved_timeframe == EOD_DEFAULT_TIMEFRAME
 
 
 def test_explicit_production_is_not_overwritten_by_admin_a0() -> None:
@@ -130,14 +134,32 @@ def test_follow_default_does_not_silently_become_eod() -> None:
     assert resolution.effective == PRODUCTION_ALGORITHM
 
 
-def test_admin_eod_with_all_timeframe_falls_back() -> None:
+def test_implicit_eod_all_timeframe_remaps_to_mid() -> None:
     resolution = resolve_screener_algorithm(
         admin_default=EOD_LIMITED_V1,
         timeframe="all",
         profile="balanced",
     )
-    assert resolution.effective == PRODUCTION_ALGORITHM
-    assert resolution.fallback_reason == INCOMPATIBLE_VIEW
+    assert resolution.effective == EOD_LIMITED_V1
+    assert resolution.resolved_timeframe == EOD_DEFAULT_TIMEFRAME
+    assert resolution.fallback_reason is None
+
+
+def test_follow_default_all_timeframe_remaps_to_mid() -> None:
+    resolution = resolve_screener_algorithm(
+        requested=FOLLOW_DEFAULT,
+        timeframe="all",
+        profile="balanced",
+    )
+    assert resolution.effective == EOD_LIMITED_V1
+    assert resolution.source == "system_default"
+    assert resolution.resolved_timeframe == EOD_DEFAULT_TIMEFRAME
+
+
+def test_omitted_timeframe_uses_eod_mid() -> None:
+    resolution = resolve_screener_algorithm(timeframe=None, timeframe_omitted=True)
+    assert resolution.effective == EOD_LIMITED_V1
+    assert resolution.resolved_timeframe == EOD_DEFAULT_TIMEFRAME
 
 
 def test_explicit_eod_mid_resolves() -> None:
@@ -149,6 +171,7 @@ def test_explicit_eod_mid_resolves() -> None:
     )
     assert resolution.effective == EOD_LIMITED_V1
     assert resolution.version == "eod-limited-v1.1"
+    assert resolution.resolved_timeframe == "mid"
 
 
 def test_unknown_screener_algorithm_is_rejected() -> None:
@@ -169,6 +192,12 @@ def test_radar_and_screener_defaults_are_independent() -> None:
     assert defaults["radar_sort_algorithm"] == PRODUCTION_ALGORITHM
     radar = resolve_radar_algorithm(admin_default=defaults["radar_sort_algorithm"])
     assert radar.effective == PRODUCTION_ALGORITHM
+
+
+def test_unspecified_admin_defaults_use_eod_screener() -> None:
+    defaults = admin_algorithm_defaults(None)
+    assert defaults["screener_ranking_algorithm"] == EOD_LIMITED_V1
+    assert defaults["radar_sort_algorithm"] == PRODUCTION_ALGORITHM
 
 
 def test_explicit_t1_request_is_independent_of_screener_default() -> None:

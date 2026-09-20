@@ -21,5 +21,9 @@ export function rowPrimarySortScore(
 }
 
 export function keepServerRankingOrder(effectiveAlgorithm?: string | null): boolean {
-  return isA0Ranking(effectiveAlgorithm) || isEodLimitedRanking(effectiveAlgorithm);
+  return (
+    isA0Ranking(effectiveAlgorithm)
+    || isEodLimitedRanking(effectiveAlgorithm)
+    || effectiveAlgorithm === 'follow_default'
+  );
 }

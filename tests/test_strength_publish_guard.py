@@ -17,6 +17,7 @@ import pytest
 from app.api import strength
 from app.services.strength.freshness import should_replace_published_snapshot
 from app.worker.tasks import StrengthRefreshTask
+from tests.http_response_support import lock_screener_admin_production
 from tests.test_strength_variant_lifecycle import _payload
 
 ET = ZoneInfo("America/New_York")
@@ -24,6 +25,11 @@ NOW = datetime(2026, 9, 4, 16, 30, tzinfo=ET).timestamp()
 CURRENT = "2026-09-04T20:00:00+00:00"
 PREVIOUS = "2026-09-03T20:00:00+00:00"
 DEFAULT = dict(strength.DEFAULT_STRENGTH_SCAN_PARAMETERS)
+
+
+@pytest.fixture(autouse=True)
+def _keep_scheduled_strength_on_production(monkeypatch: pytest.MonkeyPatch) -> None:
+    lock_screener_admin_production(monkeypatch)
 VARIANT_RETRY_SECONDS = 300.0
 
 
