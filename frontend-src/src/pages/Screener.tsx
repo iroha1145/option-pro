@@ -1265,7 +1265,7 @@ export default function Screener() {
                         >
                           {__t('重试')}
                         </button>
-                        {isEodLimitedSnapshotProblem(scanError) && (
+                        {(isEodLimitedSnapshotProblem(scanError) || isEodLimitedPreparing(scanError)) && (
                           <button
                             data-testid="screener-eod-switch-back"
                             onClick={() => {
