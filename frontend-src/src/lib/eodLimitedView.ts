@@ -7,16 +7,43 @@ export function isEodLimitedRanking(algorithm?: string | null): boolean {
   return algorithm === EOD_LIMITED_RANKING;
 }
 
-/** follow_default now consumes the product EOD default, so All remaps to Mid. */
+/** follow_default can resolve to the EOD product default; final resolution remains server-owned. */
 export function followsEodScreenerView(algorithm?: string | null): boolean {
   return isEodLimitedRanking(algorithm) || algorithm === 'follow_default';
 }
 
-/** First-select remap: EOD does not accept timeframe=all. */
+/**
+ * Keep an explicit algorithm choice on a view that the backend accepts.
+ *
+ * The product default moved to EOD/mid, but an existing personal A0 choice
+ * must still reopen on A0's fixed all/balanced view. Otherwise restoring the
+ * preference creates an invalid request before the user touches any filter.
+ */
 export function applyEodLimitedView(filters: ScanFilters): ScanFilters {
-  if (!followsEodScreenerView(filters.rankingAlgorithm)) return filters;
-  if (filters.timeframe !== 'all') return filters;
+  if (filters.rankingAlgorithm === 'a0_mid_long') {
+    if (filters.timeframe === 'all' && filters.profile === 'balanced') return filters;
+    return {
+      ...filters,
+      timeframe: 'all',
+      profile: 'balanced',
+      presetId: null,
+    };
+  }
+  if (!isEodLimitedRanking(filters.rankingAlgorithm) || filters.timeframe !== 'all') return filters;
   return { ...filters, timeframe: 'mid' };
+}
+
+export function supportsDollarVolumeFilter(input: {
+  rankingAlgorithm: ScanFilters['rankingAlgorithm'];
+  effectiveAlgorithm?: string | null;
+  serverSupport?: boolean | null;
+}): boolean {
+  if (input.serverSupport != null) return input.serverSupport;
+  if (isEodLimitedRanking(input.rankingAlgorithm)) return false;
+  if (input.rankingAlgorithm !== 'follow_default') return true;
+  if (input.effectiveAlgorithm) return !isEodLimitedRanking(input.effectiveAlgorithm);
+  // Until follow_default has resolved, do not present an unverified gate as active.
+  return false;
 }
 
 export function eodEmptyEligibleLabel(reason?: string | null): string {

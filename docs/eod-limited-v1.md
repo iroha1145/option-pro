@@ -43,6 +43,9 @@ rollback_screener_default_migration(get_runtime_settings_store())
 - `2024-06-28` 只能标「历史示例」，不能当最新。
 - 合成输入必须标 `SYNTHETIC`。历史种子面板必须覆盖目标交易日，并带可确认高低点，避免只有标签没有观察行。
 - 默认不把 `volume_verified` / `dollar_liquidity_verified` 设为 true。
+- 成交额资格尚未核实，因此本模式不应用成交额下限，界面禁用该条件；价格下限仍生效。接口通过 `filter_support` 如实回显。
+- 供应商返回空数据、缺少完整日线或日期早于已发布结果时，保留上一份有效快照，并报告刷新失败。
+- 刷新完成使用实际快照发布时间核验；每次读取的结果及时间来自同一批次。
 - Worker 日线走现有 `download_in_bounded_batches`，不要再传 `threads`。
 - 隔离验证可用 `tickers=` 把当前主题名单收成有界子集；不在页面 GET 上传任意代码名单。
 - 最近完整交易日由纽约日历收盘 + 半日/假期规则决定，不是固定日本时间。`2024-06-28` 若被 live 入口碰到会改标历史示例。

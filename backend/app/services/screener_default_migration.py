@@ -7,11 +7,14 @@ rollback are left alone. User view preferences are never rewritten.
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
+import tempfile
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from app.services.algorithm_modes import (
     A0_ALGORITHM,
@@ -61,12 +64,29 @@ def _read_record(path: Path) -> dict[str, Any] | None:
 def _write_record(path: Path, record: dict[str, Any]) -> dict[str, Any]:
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     encoded = json.dumps(record, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
-    path.write_text(encoded, encoding="utf-8")
+    descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     try:
-        os.chmod(path, 0o600)
-    except OSError:
-        pass
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            stream.write(encoded)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
     return record
+
+
+@contextmanager
+def _migration_lock(store: RuntimeSettingsStore) -> Iterator[None]:
+    path = migration_record_path(store)
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    with (path.parent / f".{path.name}.lock").open("a+b") as stream:
+        os.fchmod(stream.fileno(), 0o600)
+        fcntl.flock(stream.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
 
 
 def _disabled() -> bool:
@@ -76,6 +96,15 @@ def _disabled() -> bool:
 
 def apply_screener_default_migration(store: RuntimeSettingsStore) -> dict[str, Any]:
     """Move init-frozen admin production defaults onto the new EOD default."""
+
+    existing = _read_record(migration_record_path(store))
+    if existing is not None:
+        return existing
+    with _migration_lock(store):
+        return _apply_screener_default_migration_locked(store)
+
+
+def _apply_screener_default_migration_locked(store: RuntimeSettingsStore) -> dict[str, Any]:
 
     path = migration_record_path(store)
     cache_key = str(path)
@@ -101,9 +130,8 @@ def apply_screener_default_migration(store: RuntimeSettingsStore) -> dict[str, A
             "scope": "admin_screener_ranking_algorithm",
             "recorded_at": _now_text(),
         }
-        if persisted:
-            _write_record(path, record)
-            _SEEN_PATHS.add(cache_key)
+        _write_record(path, record)
+        _SEEN_PATHS.add(cache_key)
         return record
 
     if current == EOD_LIMITED_V1:
@@ -115,9 +143,10 @@ def apply_screener_default_migration(store: RuntimeSettingsStore) -> dict[str, A
             "scope": "admin_screener_ranking_algorithm",
             "recorded_at": _now_text(),
         }
-        if persisted:
-            _write_record(path, record)
-            _SEEN_PATHS.add(cache_key)
+        # Record first-run completion even before runtime settings are saved.
+        # A later explicit production choice must not look like an old default.
+        _write_record(path, record)
+        _SEEN_PATHS.add(cache_key)
         return record
 
     if current == A0_ALGORITHM:
@@ -205,6 +234,12 @@ def apply_screener_default_migration(store: RuntimeSettingsStore) -> dict[str, A
 
 def rollback_screener_default_migration(store: RuntimeSettingsStore) -> dict[str, Any]:
     """Restore the previous admin screener default and prevent a silent re-apply."""
+
+    with _migration_lock(store):
+        return _rollback_screener_default_migration_locked(store)
+
+
+def _rollback_screener_default_migration_locked(store: RuntimeSettingsStore) -> dict[str, Any]:
 
     path = migration_record_path(store)
     record = _read_record(path)

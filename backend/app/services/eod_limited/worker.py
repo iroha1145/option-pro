@@ -10,6 +10,7 @@ from app.services.research_eod_v1.calendar_asof import last_complete_eod_session
 from app.services.research_eod_v1.config_load import load_registry
 from app.services.research_eod_v1.constants import HORIZONS, PROFILES
 from app.services.research_eod_v1.fixtures import make_series, structured_close, trading_days_ending
+from app.services.research_eod_v1.membership import has_complete_session_bar
 
 from . import (
     COMPUTE_VERSION,
@@ -20,7 +21,7 @@ from . import (
 )
 from .bars import fetch_current_universe_bars, last_bar_session
 from .inference import precompute_session_raws, score_eod_session
-from .panel import bars_to_panel, select_universe_tickers
+from .panel import bars_to_panel, prepare_limited_panel, select_universe_tickers
 from .store import publish_batch, read_batch, variant_key
 
 
@@ -78,10 +79,13 @@ def run_eod_limited_job(
     themes: Sequence[str] | None = None,
     algorithms: Sequence[str] | None = None,
     tickers: Sequence[str] | None = None,
+    synthetic_input: bool = False,
 ) -> dict[str, Any]:
     started = time.perf_counter()
+    live_input = purpose == PURPOSE_LIVE and not synthetic_input
     registry = load_registry()
     target = session
+    attempted_session = session
     coverage: list[dict[str, Any]] = []
     if panel is None:
         if purpose == PURPOSE_SYNTHETIC:
@@ -89,6 +93,7 @@ def run_eod_limited_job(
             target = target or max(series.dates[-1] for series in panel.values())
         else:
             target = target or resolve_inference_session(now)
+            attempted_session = target
             appearances = select_universe_tickers(tickers)
             bars = fetch_current_universe_bars(end=target, tickers=list(appearances))
             bar_session = last_bar_session(bars)
@@ -103,13 +108,50 @@ def run_eod_limited_job(
             target = calendar
     if purpose == PURPOSE_LIVE and target == RESEARCH_SEALED_SESSION:
         purpose = PURPOSE_HISTORICAL
+    attempted_session = attempted_session or target
+    previous = read_batch(root) or {}
+    try:
+        previous_session = date.fromisoformat(str(previous.get("served_session") or ""))
+    except ValueError:
+        previous_session = None
+    failure_reason = None
+    if (
+        live_input
+        and previous.get("purpose") == PURPOSE_LIVE
+        and not previous.get("synthetic")
+        and previous_session is not None
+        and target < previous_session
+    ):
+        failure_reason = "older_session_than_published"
+    elif not any(has_complete_session_bar(series, target) for series in panel.values()):
+        failure_reason = "no_complete_session_bars"
+    if failure_reason:
+        return {
+            "status": "DATA_UNAVAILABLE",
+            "session": attempted_session.isoformat(),
+            "served_session": previous.get("served_session"),
+            "purpose": purpose,
+            "compute_version": COMPUTE_VERSION,
+            "available_variants": sorted(previous.get("variants") or {}),
+            "elapsed_s": round(time.perf_counter() - started, 3),
+            "publish": {
+                "ok": False,
+                "reason": failure_reason,
+                "integrity": "stale_previous_retained" if previous else "unavailable",
+                "served_session": previous.get("served_session"),
+                "attempted_session": attempted_session.isoformat(),
+            },
+        }
+    panel = prepare_limited_panel(panel)
     wanted = [(profile, horizon)]
     if all_variants:
         wanted = [(item_profile, item_horizon) for item_horizon in HORIZONS for item_profile in PROFILES]
-    previous = read_batch(root) or {}
     variants = dict(previous.get("variants") or {}) if previous.get("served_session") == target.isoformat() else {}
+    horizon_inputs = {}
     for item_profile, item_horizon in wanted:
-        raws, clipped = precompute_session_raws(panel, target, registry=registry, horizon=item_horizon)
+        if item_horizon not in horizon_inputs:
+            horizon_inputs[item_horizon] = precompute_session_raws(panel, target, registry=registry, horizon=item_horizon)
+        raws, clipped = horizon_inputs[item_horizon]
         scored = score_eod_session(
             panel,
             target,
@@ -123,12 +165,15 @@ def run_eod_limited_job(
             themes=themes,
             algorithms=algorithms,
         )
+        if synthetic_input:
+            scored["synthetic"] = True
         variants[variant_key(item_profile, item_horizon)] = _compact_variant(scored)
     batch = {
         "version": 1,
         "purpose": purpose,
+        "synthetic": synthetic_input or purpose == PURPOSE_SYNTHETIC,
         "compute_version": COMPUTE_VERSION,
-        "attempted_session": target.isoformat(),
+        "attempted_session": attempted_session.isoformat(),
         "served_session": target.isoformat(),
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "available_variants": sorted(variants),
@@ -139,8 +184,10 @@ def run_eod_limited_job(
     published = publish_batch(batch, root=root)
     return {
         "status": "RAN" if published.get("ok") else "PUBLISH_FAILED",
+        "compute_version": COMPUTE_VERSION,
         "session": target.isoformat(),
         "served_session": published.get("served_session"),
+        "published_at": published.get("published_at"),
         "purpose": purpose,
         "available_variants": sorted(variants),
         "elapsed_s": round(time.perf_counter() - started, 3),
@@ -204,4 +251,5 @@ def seed_labeled_batch(
         root=root,
         themes=themes,
         algorithms=algorithms,
+        synthetic_input=True,
     )

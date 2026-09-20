@@ -71,12 +71,87 @@ def _write_production_document(path: Path) -> None:
     )
 
 
-def test_unpersisted_store_keeps_code_default_without_writing(tmp_path: Path) -> None:
+def test_unpersisted_store_records_completion_without_persisting_settings(tmp_path: Path) -> None:
     store = _store(tmp_path / "runtime-settings.json")
     record = apply_screener_default_migration(store)
     assert record["status"] == STATUS_ALREADY_NEW
     assert store.read().settings.algorithms.screener_ranking_algorithm == EOD_LIMITED_V1
     assert not store.path.exists()
+
+
+def test_first_admin_production_choice_survives_new_install(tmp_path: Path) -> None:
+    store = _store(tmp_path / "runtime-settings.json")
+    assert get_effective_runtime_settings(store).algorithms.screener_ranking_algorithm == EOD_LIMITED_V1
+    store.update(
+        RuntimeSettingsPatch(
+            algorithms=RuntimeAlgorithmSettingsPatch(screener_ranking_algorithm=PRODUCTION_ALGORITHM)
+        ),
+        expected_version=1,
+    )
+    assert get_effective_runtime_settings(store).algorithms.screener_ranking_algorithm == PRODUCTION_ALGORITHM
+
+
+def test_concurrent_startup_preserves_migration_rollback_record(tmp_path: Path, monkeypatch) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+    from app.services import screener_default_migration as migration
+
+    path = tmp_path / "runtime-settings.json"
+    _write_production_document(path)
+    first, second = _store(path), _store(path)
+    publishing, release, peer_started, peer_read = Event(), Event(), Event(), Event()
+    original_write = migration._write_record
+    original_read = second.read
+
+    def delayed_write(record_path, record):
+        if record["status"] == STATUS_APPLIED:
+            publishing.set()
+            assert release.wait(5)
+        return original_write(record_path, record)
+
+    def observed_read():
+        peer_read.set()
+        return original_read()
+
+    def run_peer():
+        peer_started.set()
+        return apply_screener_default_migration(second)
+
+    monkeypatch.setattr(migration, "_write_record", delayed_write)
+    monkeypatch.setattr(second, "read", observed_read)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        first_result = pool.submit(apply_screener_default_migration, first)
+        try:
+            assert publishing.wait(5)
+            second_result = pool.submit(run_peer)
+            assert peer_started.wait(5)
+            # The peer must not classify the newly written EOD setting before
+            # the first worker has committed its migration record.
+            assert not peer_read.wait(0.2)
+        finally:
+            release.set()
+        assert first_result.result(timeout=5)["status"] == STATUS_APPLIED
+        assert second_result.result(timeout=5)["status"] == STATUS_APPLIED
+    assert rollback_screener_default_migration(first)["status"] == STATUS_ROLLED_BACK
+    assert first.read().settings.algorithms.screener_ranking_algorithm == PRODUCTION_ALGORITHM
+
+
+def test_record_replacement_failure_preserves_previous_record(tmp_path: Path, monkeypatch) -> None:
+    import pytest
+    from app.services import screener_default_migration as migration
+
+    path = tmp_path / "migration.json"
+    previous = {"status": STATUS_APPLIED}
+    migration._write_record(path, previous)
+
+    def fail_replace(*args):
+        raise OSError("replacement failed")
+
+    monkeypatch.setattr(migration.os, "replace", fail_replace)
+    with pytest.raises(OSError, match="replacement failed"):
+        migration._write_record(path, {"status": STATUS_ROLLED_BACK})
+    assert json.loads(path.read_text()) == previous
+    assert list(tmp_path.iterdir()) == [path]
 
 
 def test_init_frozen_production_is_migrated_once(tmp_path: Path) -> None:

@@ -1,4 +1,4 @@
-"""Product EOD limited ranking. Same math as research PRICE_ONLY + M1; not the default algorithm."""
+"""Default EOD limited ranking, using the research PRICE_ONLY + M1 rules."""
 
 from __future__ import annotations
 

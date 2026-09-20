@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+import math
 import sqlite3
 import threading
 import time
@@ -2092,7 +2093,16 @@ class StrengthRefreshTask:
                     "published": False,
                 },
             )
-        published = str(outcome.get("status") or "") == "RAN"
+        publication = outcome.get("publish") or {}
+        published_at = outcome.get("published_at", publication.get("published_at"))
+        published = (
+            str(outcome.get("status") or "") == "RAN"
+            and publication.get("ok") is True
+            and isinstance(published_at, (int, float))
+            and not isinstance(published_at, bool)
+            and math.isfinite(published_at)
+            and published_at > 0
+        )
         through = outcome.get("served_session") or outcome.get("session")
         if not published:
             return TaskResult(
@@ -2115,7 +2125,9 @@ class StrengthRefreshTask:
                 "count": len(outcome.get("available_variants") or []),
                 "parameters": parameters,
                 "parameters_hash": digest,
-                "completed_at": _timestamp_text(float(self._clock())),
+                # The browser verifies the persisted snapshot against this
+                # instant. A later task-finished clock rejects our own write.
+                "completed_at": _timestamp_text(float(published_at)),
                 "score_data_through": through,
                 "score_version": outcome.get("compute_version") or "limited-current-v1.1",
                 "purpose": outcome.get("purpose"),

@@ -202,6 +202,7 @@ interface FilterWorkbenchProps {
   presetsFailed: boolean;
   scanning: boolean;
   dirty: boolean;
+  dollarVolumeFilterSupported: boolean;
   onScan: () => void;
 }
 
@@ -216,6 +217,7 @@ export default function FilterWorkbench({
   presetsFailed,
   scanning,
   dirty,
+  dollarVolumeFilterSupported,
   onScan,
 }: FilterWorkbenchProps) {
   const [showAllSectors, setShowAllSectors] = useState(false);
@@ -257,7 +259,7 @@ export default function FilterWorkbench({
     : draft.priceMin !== null
       ? `${__t('价格区间')} ≥ $${draft.priceMin}`
       : draft.priceMax !== null ? `${__t('价格区间')} ≤ $${draft.priceMax}` : null;
-  const volumeSummary = draft.minDollarVol > 0
+  const volumeSummary = dollarVolumeFilterSupported && draft.minDollarVol > 0
     ? `${__t('成交额下限')} ${DOLLAR_VOL_OPTIONS.find((option) => option.value === draft.minDollarVol)?.label ?? draft.minDollarVol}`
     : null;
   const advancedSummary = [
@@ -433,7 +435,18 @@ export default function FilterWorkbench({
             </div>
             <div data-screener-field="dollar-volume">
               <FieldLabel>{__t('成交额下限')}</FieldLabel>
-              <MenuSelect ariaLabel={__t("成交额下限")} value={draft.minDollarVol} onChange={(minDollarVol) => patch({ minDollarVol })} options={DOLLAR_VOL_OPTIONS} />
+              <MenuSelect
+                ariaLabel={__t("成交额下限")}
+                value={draft.minDollarVol}
+                onChange={(minDollarVol) => patch({ minDollarVol })}
+                options={DOLLAR_VOL_OPTIONS}
+                disabled={!dollarVolumeFilterSupported}
+              />
+              {!dollarVolumeFilterSupported && (
+                <p className="mt-1 max-w-[18rem] text-micro text-ink-400" data-testid="screener-dollar-volume-unsupported">
+                  {__t('当前排序未核实成交额口径，此条件未应用')}
+                </p>
+              )}
             </div>
           </div>
         </div>

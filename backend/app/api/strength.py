@@ -849,11 +849,13 @@ def _read_eod_limited_snapshot(
         RESEARCH_SEALED_SESSION,
     )
     from app.services.eod_limited.project import project_strength_payload
-    from app.services.eod_limited.store import read_batch, read_variant, snapshot_path
+    from app.services.eod_limited.store import read_batch, variant_from_batch, snapshot_path
     from app.services.research_eod_v1.calendar_asof import last_complete_eod_session
 
     kind = list_kind if list_kind in {LIST_KIND_OBSERVATION, LIST_KIND_COMPOSITE} else LIST_KIND_OBSERVATION
-    scored = read_variant(str(parameters["profile"]), str(parameters["timeframe"]))
+    # Rows and their publication clock must come from one atomic file read.
+    batch = read_batch() or {}
+    scored = variant_from_batch(batch, str(parameters["profile"]), str(parameters["timeframe"]))
     if scored is None:
         raise HTTPException(status_code=503, detail=_eod_unavailable_detail())
     payload = project_strength_payload(scored, parameters=parameters, list_kind=kind)
@@ -861,7 +863,6 @@ def _read_eod_limited_snapshot(
     if session == RESEARCH_SEALED_SESSION.isoformat():
         payload["historical_example"] = True
         payload["purpose"] = payload.get("purpose") if payload.get("purpose") != PURPOSE_LIVE else "historical_example"
-    batch = read_batch() or {}
     saved_at = batch.get("published_at")
     if not isinstance(saved_at, (int, float)) or not math.isfinite(float(saved_at)) or float(saved_at) <= 0:
         try:
@@ -890,22 +891,29 @@ def _read_eod_limited_snapshot(
         except ValueError:
             source_status = "unknown"
     sector_id = parameters.get("sector_id")
-    if sector_id:
-        payload["observation_rows"] = [
-            row for row in payload.get("observation_rows") or [] if row.get("sector_id") == sector_id
+    min_price = float(parameters.get("min_price") or 0)
+    for key in ("observation_rows", "composite_rows"):
+        rows = [
+            row for row in payload.get(key) or []
+            if (not sector_id or row.get("sector_id") == sector_id)
+            and (
+                min_price <= 0
+                or (not row.get("price_unknown") and float(row.get("price") or 0) >= min_price)
+            )
         ]
-        payload["composite_rows"] = [
-            row for row in payload.get("composite_rows") or [] if row.get("sector_id") == sector_id
-        ]
-        key = "composite_rows" if kind == LIST_KIND_COMPOSITE else "observation_rows"
-        payload["rows"] = list(payload.get(key) or [])
-        payload["results"] = payload["rows"]
-        payload["count"] = len(payload["rows"])
+        rows.sort(key=lambda row: (
+            -float(row["sort_score"]) if row.get("sort_score") is not None else math.inf,
+            str(row.get("ticker") or ""),
+        ))
+        payload[key] = rows
+    key = "composite_rows" if kind == LIST_KIND_COMPOSITE else "observation_rows"
+    payload["rows"] = list(payload[key])
     top = int(parameters.get("top") or 0)
-    if top > 0 and len(payload.get("rows") or []) > top:
-        payload["rows"] = list(payload["rows"][:top])
-        payload["results"] = payload["rows"]
-        payload["count"] = len(payload["rows"])
+    if top > 0:
+        payload["rows"] = payload["rows"][:top]
+    payload["results"] = payload["rows"]
+    payload["count"] = len(payload["rows"])
+    payload["filter_support"] = {"min_price": True, "min_avg_dollar_volume": False}
     saved_iso = datetime.fromtimestamp(saved_at, timezone.utc).isoformat()
     payload.update(
         {

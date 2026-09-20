@@ -54,7 +54,7 @@ def _sector_name(theme_id: str | None) -> str:
 
 
 def _close_price(row: Mapping[str, Any]) -> float | None:
-    for key in ("price", "raw_close", "close", "known_support"):
+    for key in ("price", "raw_close", "close"):
         value = row.get(key)
         if isinstance(value, (int, float)) and float(value) > 0:
             return float(value)
@@ -86,7 +86,7 @@ def _factor_dims(row: Mapping[str, Any]) -> list[dict[str, Any]]:
 
 def project_row(row: Mapping[str, Any], *, list_kind: str) -> dict[str, Any]:
     ticker = str(row.get("security_id") or row.get("ticker") or "").upper()
-    score = row.get("score")
+    score = row.get("consensus_z", row.get("score")) if list_kind == LIST_KIND_COMPOSITE else row.get("score")
     try:
         score_n = None if score is None else float(score)
     except (TypeError, ValueError):

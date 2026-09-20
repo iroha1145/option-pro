@@ -43,6 +43,17 @@ const DIM_HINTS: Record<string, ScoreHint> = {
   factor_G: SCORE_HINTS.eodFactorG,
 };
 
+function eodDetailLabel(value: string): string {
+  if (value === 'eligible') return t('合格');
+  if (value === 'watch') return t('观察');
+  if (value === 'rejected') return t('未通过');
+  if (value === 'stock') return t('股票');
+  if (value === 'etf') return 'ETF';
+  if (value === 'DOLLAR_LIQUIDITY_UNVERIFIED') return t('成交额资格未核实');
+  if (value === 'VOLUME_SESSION_UNVERIFIED') return t('成交量时段未核实');
+  return value;
+}
+
 /* ---------------- 近 6 日收盘（live 懒加载；表格/卡片双实例只共享进行中的请求） ---------------- */
 const DOT_DAYS = 6;
 const closesCache = new Map<string, Promise<number[] | null>>();
@@ -221,15 +232,15 @@ export default function RowExpansion({ row, weights, dollarVolume, signals, onOp
             <p className="eyebrow">{t('收盘技术详情')}</p>
             <p className="text-caption text-ink-600">
               {row.observationOnly ? t('技术观察') : t('合格综合')}
-              {row.status ? ` · ${row.status}` : ''}
+              {row.status ? ` · ${eodDetailLabel(row.status)}` : ''}
               {row.familyLabel ? ` · ${row.familyLabel}` : ''}
-              {row.stockOrEtfTrack ? ` · ${row.stockOrEtfTrack}` : ''}
+              {row.stockOrEtfTrack ? ` · ${eodDetailLabel(row.stockOrEtfTrack)}` : ''}
             </p>
             {row.observationFamilyCount != null && row.observationFamilyCount > 0 && (
               <p className="text-caption text-ink-500">{t('多家族观察')} · {row.observationFamilyCount}</p>
             )}
             {row.rejectionReasons && row.rejectionReasons.length > 0 && (
-              <p className="text-micro text-ink-500">{row.rejectionReasons.join(' · ')}</p>
+              <p className="text-micro text-ink-500">{row.rejectionReasons.map(eodDetailLabel).join(' · ')}</p>
             )}
             {(row.knownSupport != null || row.plannedInvalidation != null) && (
               <p className="font-mono text-micro text-ink-500 tnum">

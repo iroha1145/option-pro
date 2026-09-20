@@ -7,6 +7,7 @@ from typing import Any, Mapping, Sequence
 
 from app.services.research_eod_v1.data.contract import ResearchBar
 from app.services.research_eod_v1.data.to_series import bars_to_series
+from app.services.research_eod_v1.venue import CURRENT_UNIVERSE_VENUE_NOTES, classify_venue
 from app.services.sectors import SECTORS
 
 from . import RETURN_BASIS
@@ -55,8 +56,8 @@ def prepare_limited_panel(panel: Mapping[str, Any]) -> dict[str, Any]:
     return prepared
 
 
-def _venue(track: str) -> dict[str, str]:
-    return {
+def _venue(track: str, ticker: str) -> dict[str, str]:
+    metadata = {
         "listing_country": "US",
         "exchange": "NASDAQ",
         "mic": "XNAS",
@@ -66,6 +67,12 @@ def _venue(track: str) -> dict[str, str]:
         "return_basis": RETURN_BASIS,
         "return_transform_version": "limited-v1-close-price-return-v1",
     }
+    known = CURRENT_UNIVERSE_VENUE_NOTES.get(ticker)
+    if known:
+        metadata.update(known)
+        metadata["mic"] = ""
+        metadata["identity_confidence"] = "current_universe_venue_notes"
+    return metadata
 
 
 def bars_to_panel(
@@ -78,6 +85,11 @@ def bars_to_panel(
     coverage: list[dict[str, Any]] = []
     for ticker, themes in appearances.items():
         track = "etf" if ticker in ETF_SUBASSET_HINTS or list(themes) == ["etfs"] else "stock"
+        venue = _venue(track, ticker)
+        decision = classify_venue(venue)
+        if not decision.eligible:
+            coverage.append({"ticker": ticker, "themes": list(themes), "bars": 0, "status": f"excluded:{decision.reason}"})
+            continue
         usable = [
             bar
             for bar in (bars.get(ticker) or [])
@@ -95,7 +107,7 @@ def bars_to_panel(
                 theme_ids=tuple(themes) or (("etfs",) if track == "etf" else ()),
                 industry_id=None,
                 parent_industry_id=None,
-                venue_metadata=_venue(track),
+                venue_metadata=venue,
             )
         except ValueError as exc:
             row["status"] = f"invalid:{exc}"

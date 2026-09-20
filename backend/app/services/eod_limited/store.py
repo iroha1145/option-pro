@@ -66,7 +66,12 @@ def publish_batch(
         body["published_at"] = body.get("published_at") or time.time()
         body["integrity"] = "complete"
         _atomic_write(snapshot_path(root), body)
-        return {"ok": True, "served_session": body.get("served_session"), "integrity": "complete"}
+        return {
+            "ok": True,
+            "served_session": body.get("served_session"),
+            "published_at": body["published_at"],
+            "integrity": "complete",
+        }
     except OSError:
         if previous is None:
             raise
@@ -92,6 +97,16 @@ def read_variant(
     batch = read_batch(root)
     if batch is None:
         return None
+    return variant_from_batch(batch, profile, horizon)
+
+
+def variant_from_batch(
+    batch: Mapping[str, Any],
+    profile: str,
+    horizon: str,
+) -> dict[str, Any] | None:
+    """Project a variant from the same batch whose publication metadata is served."""
+
     variants = batch.get("variants") or {}
     scored = variants.get(variant_key(profile, horizon))
     if not isinstance(scored, dict):
@@ -101,7 +116,7 @@ def read_variant(
     out["served_session"] = batch.get("served_session") or out.get("served_session")
     out["attempted_session"] = batch.get("attempted_session") or out.get("attempted_session")
     out["historical_example"] = bool(batch.get("purpose") and batch.get("purpose") != PURPOSE_LIVE)
-    out["synthetic"] = bool(batch.get("purpose") == "synthetic" or out.get("synthetic"))
+    out["synthetic"] = bool(batch.get("synthetic") or batch.get("purpose") == "synthetic" or out.get("synthetic"))
     out["available_variants"] = sorted(variants)
     out["batch_integrity"] = batch.get("integrity")
     return out

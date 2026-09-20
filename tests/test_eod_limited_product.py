@@ -175,6 +175,9 @@ def test_store_is_isolated_from_strength_cache(tmp_path: Path, monkeypatch: pyte
     }
     published = publish_batch(batch, root=tmp_path)
     assert published["ok"] is True
+    from app.services.eod_limited.store import read_batch
+
+    assert published["published_at"] == read_batch(tmp_path)["published_at"]
     scored = read_variant("balanced", "mid", root=tmp_path)
     assert scored is not None
     assert scored["historical_example"] is True
@@ -280,7 +283,8 @@ def test_worker_intercepts_eod_ranking() -> None:
             "purpose": PURPOSE_LIVE,
             "available_variants": ["balanced|mid"],
             "compute_version": "limited-current-v1.1",
-            "publish": {"ok": True},
+            "published_at": 1_800_000_000.0,
+            "publish": {"ok": True, "published_at": 1_800_000_000.0},
         }
 
     task = StrengthRefreshTask(eod_runner=runner)
@@ -330,6 +334,8 @@ def test_seed_historical_is_labeled(tmp_path: Path) -> None:
     assert scored is not None
     assert scored["historical_example"] is True
     assert scored["served_session"] == "2024-06-28"
+    assert scored["purpose"] == PURPOSE_HISTORICAL
+    assert scored["synthetic"] is True
     assert int(scored.get("complete_bar_n") or 0) >= 1
     assert int(scored.get("watch_n") or 0) + int(scored.get("eligible_n") or 0) >= 1
     assert scored.get("capability_flags", {}).get("volume_verified") is False
@@ -338,6 +344,28 @@ def test_seed_historical_is_labeled(tmp_path: Path) -> None:
 def test_seed_refuses_live_label() -> None:
     with pytest.raises(ValueError):
         seed_labeled_batch(purpose=PURPOSE_LIVE)
+
+
+def test_composite_projection_displays_and_sorts_by_consensus() -> None:
+    from app.services.research_eod_v1.composite import m1_consensus
+
+    template = _scored(eligible=True)["family_results"][0]["rows"][0]
+    family_rows = [
+        {**template, "security_id": ticker, "algorithm_id": algorithm, "score": score}
+        for ticker, algorithm, score in [
+            ("NVDA", "A_trend_quality", 80.0),
+            ("NVDA", "D_residual_momentum", 100.0),
+            ("AMD", "A_trend_quality", 90.0),
+            ("AMD", "D_residual_momentum", 80.0),
+        ]
+    ]
+    scored = _scored(eligible=True)
+    scored["composite_results"] = m1_consensus(family_rows, "balanced", 20)
+    scored["composite_n"] = 2
+    payload = project_strength_payload(scored, parameters={}, list_kind="composite")
+    assert [(row["ticker"], row["score"], row["sort_score"]) for row in payload["rows"]] == [
+        ("NVDA", 90.0, 90.0), ("AMD", 85.0, 85.0),
+    ]
 
 
 def test_normalize_accepts_eod_algorithm() -> None:
@@ -443,7 +471,8 @@ def test_scheduled_refresh_publishes_eod_when_default_is_eod() -> None:
             "available_variants": ["balanced:mid"] * 9,
             "purpose": PURPOSE_LIVE,
             "compute_version": "limited-current-v1.1",
-            "publish": {"integrity": "ok"},
+            "published_at": 1_800_000_000.0,
+            "publish": {"ok": True, "integrity": "ok", "published_at": 1_800_000_000.0},
         }
 
     async def fake_scanner(**kwargs):
@@ -483,3 +512,149 @@ def test_scheduled_refresh_publishes_eod_when_default_is_eod() -> None:
         assert not scanner_calls
 
     asyncio.run(_run())
+
+
+@pytest.mark.parametrize("input_kind", ["empty", "partial", "invalid_ohlc"])
+def test_failed_daily_input_retains_previous_batch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, input_kind: str) -> None:
+    from app.services.eod_limited import worker
+    from app.services.eod_limited.store import snapshot_path
+    from app.services.research_eod_v1.data.contract import ResearchBar
+
+    publish_batch({
+        "purpose": PURPOSE_LIVE,
+        "served_session": "2026-09-17",
+        "variants": {variant_key("balanced", "mid"): _scored(session="2026-09-17", purpose=PURPOSE_LIVE)},
+    }, root=tmp_path)
+    original = snapshot_path(tmp_path).read_bytes()
+    bar = ResearchBar(
+        security_id="NVDA", session_date=date(2026, 9, 18),
+        open=100, high=90 if input_kind == "invalid_ohlc" else 101, low=99, close=100,
+        raw_open=100, raw_close=100, volume=1_000_000, dollar_volume=100_000_000, tri=100,
+        partial=input_kind == "partial",
+    )
+    monkeypatch.setattr(worker, "fetch_current_universe_bars", lambda **kwargs: {} if input_kind == "empty" else {"NVDA": [bar]})
+    outcome = worker.run_eod_limited_job(session=date(2026, 9, 18), root=tmp_path, tickers=["NVDA"])
+    assert outcome["status"] == "DATA_UNAVAILABLE"
+    assert outcome["publish"]["ok"] is False
+    assert outcome["publish"]["attempted_session"] == "2026-09-18"
+    assert outcome["served_session"] == "2026-09-17"
+    assert snapshot_path(tmp_path).read_bytes() == original
+
+
+def test_empty_input_without_previous_snapshot_is_unavailable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.services.eod_limited import worker
+    from app.services.eod_limited.store import snapshot_path
+
+    monkeypatch.setattr(worker, "fetch_current_universe_bars", lambda **kwargs: {})
+    outcome = worker.run_eod_limited_job(session=date(2026, 9, 18), root=tmp_path)
+    assert outcome["status"] == "DATA_UNAVAILABLE"
+    assert outcome["served_session"] is None
+    assert not snapshot_path(tmp_path).exists()
+
+
+@pytest.mark.parametrize("older_session", [date(2026, 9, 17), RESEARCH_SEALED_SESSION])
+def test_older_vendor_session_cannot_replace_newer_live_batch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, older_session: date) -> None:
+    from app.services.eod_limited import worker
+    from app.services.eod_limited.store import snapshot_path
+    from app.services.research_eod_v1.data.contract import ResearchBar
+
+    publish_batch({
+        "purpose": PURPOSE_LIVE,
+        "served_session": "2026-09-18",
+        "variants": {variant_key("balanced", "mid"): _scored(session="2026-09-18", purpose=PURPOSE_LIVE)},
+    }, root=tmp_path)
+    original = snapshot_path(tmp_path).read_bytes()
+    older_bar = ResearchBar(
+        security_id="NVDA", session_date=older_session, open=100, high=101, low=99, close=100,
+        raw_open=100, raw_close=100, volume=1_000_000, dollar_volume=100_000_000, tri=100,
+    )
+    monkeypatch.setattr(worker, "fetch_current_universe_bars", lambda **kwargs: {"NVDA": [older_bar]})
+    outcome = worker.run_eod_limited_job(session=date(2026, 9, 21), root=tmp_path, tickers=["NVDA"])
+    assert outcome["status"] == "DATA_UNAVAILABLE"
+    assert outcome["publish"]["reason"] == "older_session_than_published"
+    assert outcome["publish"]["attempted_session"] == "2026-09-21"
+    assert outcome["served_session"] == "2026-09-18"
+    assert snapshot_path(tmp_path).read_bytes() == original
+    # Explicit historical examples remain available in isolated test roots.
+    worker.seed_labeled_batch(
+        purpose=PURPOSE_HISTORICAL, root=tmp_path,
+        themes=["semiconductors"], algorithms=["A_trend_quality"],
+    )
+    assert read_variant("balanced", "mid", root=tmp_path)["historical_example"] is True
+
+
+def test_complete_bars_without_qualified_signals_publish(tmp_path: Path) -> None:
+    from app.services.eod_limited.worker import build_synthetic_panel, run_eod_limited_job
+
+    panel = build_synthetic_panel(sessions=5, end=date(2026, 9, 18))
+    outcome = run_eod_limited_job(
+        session=date(2026, 9, 18), panel=panel, root=tmp_path,
+        themes=["semiconductors"], algorithms=["A_trend_quality"],
+    )
+    assert outcome["status"] == "RAN"
+    assert outcome["published_at"] == outcome["publish"]["published_at"]
+    scored = read_variant("balanced", "mid", root=tmp_path)
+    assert scored["complete_bar_n"] > 0
+    assert scored["watch_n"] == scored["eligible_n"] == 0
+
+
+def test_panel_excludes_known_foreign_and_otc_names() -> None:
+    from app.services.eod_limited.panel import bars_to_panel
+    from app.services.research_eod_v1.data.contract import ResearchBar
+
+    names = ["RMS.PA", "LVMUY", "CFRUY", "NVDA"]
+    bars = {
+        name: [ResearchBar(
+            security_id=name, session_date=date(2026, 9, 18), open=100, high=101, low=99, close=100,
+            raw_open=100, raw_close=100, volume=1_000_000, dollar_volume=100_000_000, tri=100,
+        )]
+        for name in names
+    }
+    panel, coverage = bars_to_panel(bars, {name: ["luxury"] for name in names})
+    assert set(panel) == {"NVDA"}
+    statuses = {row["ticker"]: row["status"] for row in coverage}
+    assert statuses["RMS.PA"] == "excluded:NON_US_LISTING"
+    assert statuses["LVMUY"] == statuses["CFRUY"] == "excluded:OTC_EXCLUDED"
+
+
+def test_all_variants_reuses_horizon_raws_without_changing_scores(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.services.eod_limited import worker
+    from app.services.eod_limited.panel import prepare_limited_panel
+    from app.services.eod_limited.store import read_batch
+    from app.services.research_eod_v1.config_load import load_registry
+    from app.services.research_eod_v1.constants import ALGORITHMS, HORIZONS, PROFILES
+
+    session = date(2026, 9, 18)
+    panel = prepare_limited_panel(worker.build_synthetic_panel(end=session))
+    original_precompute = worker.precompute_session_raws
+    calls = []
+
+    def counted(*args, **kwargs):
+        calls.append(kwargs["horizon"])
+        return original_precompute(*args, **kwargs)
+
+    monkeypatch.setattr(worker, "precompute_session_raws", counted)
+    worker.run_eod_limited_job(
+        session=session, panel=panel, root=tmp_path, all_variants=True,
+        themes=["semiconductors", "ai_cloud", "etfs"], algorithms=ALGORITHMS,
+    )
+    assert calls == list(HORIZONS)
+    actual = read_batch(tmp_path)["variants"]
+    registry = load_registry()
+    for horizon in HORIZONS:
+        for profile in PROFILES:
+            # Recompute independently for every profile, as the previous worker did.
+            raws, clipped = original_precompute(panel, session, registry=registry, horizon=horizon)
+            scored = worker.score_eod_session(
+                panel, session, registry=registry, profile=profile, horizon=horizon,
+                precomputed_raws=raws, clipped_panel=clipped,
+                themes=["semiconductors", "ai_cloud", "etfs"], algorithms=ALGORITHMS,
+            )
+            expected = worker._compact_variant(scored)
+            observed = dict(actual[variant_key(profile, horizon)])
+            expected.pop("generated_at")
+            observed.pop("generated_at")
+            # Serialized tuples become lists in the stored batch.
+            import json
+
+            assert observed == json.loads(json.dumps(expected, default=str))

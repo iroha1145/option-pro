@@ -99,9 +99,11 @@ import { keepServerRankingOrder } from '@/lib/screenerSort';
 import {
   applyEodLimitedView,
   eodEmptyEligibleLabel,
+  followsEodScreenerView,
   isEodLimitedPreparing,
   isEodLimitedRanking,
   isEodLimitedSnapshotProblem,
+  supportsDollarVolumeFilter,
 } from '@/lib/eodLimitedView';
 import { persistAlgorithmChoice, viewPreferencesApi } from '@/api/modules/viewPreferences';
 
@@ -141,39 +143,6 @@ export default function Screener() {
   const marketQ = usePolling(() => strengthApi.market(), 300_000);
   const profilesQ = usePolling(() => strengthApi.profilesMeta(), null);
   const profiles = profilesQ.data?.profiles ?? null;
-
-  /**
-   * 分档计数必须描述候选池，而不是这次返回的这几行（审计 P2-10）。
-   *
-   * 初次调用不传 top，后端默认只返回 20 条；旧实现拿这 20 行统计 S/A/B/C/D，却在
-   * 旁边展示真实股票池数量，于是出现「股票池 300 只，五档加起来 20 只」。后端现在
-   * 在截取 top 之前统计整池分布；旧快照没有该字段时回退到当前行并如实标注。
-   */
-  const universe = useMemo(() => {
-    const snapshotRows = universeQ.data?.rows ?? [];
-    const distribution = universeQ.data?.tierDistribution ?? null;
-    return {
-      tierCounts: distribution
-        ? {
-            all: distribution.total,
-            S: distribution.S,
-            A: distribution.A,
-            B: distribution.B,
-            C: distribution.C,
-          }
-        : countByTier(snapshotRows.map((r) => r.strengthScore)),
-      tierCountsCoverPool: distribution !== null,
-      sectors: [...new Set(snapshotRows.map((r) => r.sector))].sort(SECTOR_COLLATOR.compare),
-      count: universeQ.data?.universeCount ?? snapshotRows.length,
-    };
-  }, [universeQ.data]);
-
-  /* 板块选项：live 取 /strength/profiles 的板块字典（id+中文名，扫描下发 id）；mock 回退扫描行 sector 名 */
-  const sectorOptions = useMemo<SectorOption[]>(() => {
-    const fromMeta = profilesQ.data?.sectors ?? [];
-    if (fromMeta.length > 0) return fromMeta;
-    return universe.sectors.map((s) => ({ id: s, name: s }));
-  }, [profilesQ.data, universe.sectors]);
 
   /* ---------------- 扫描状态机 ---------------- */
   const [draft, setDraft] = useState<ScanFilters>(() => applyEodLimitedView({
@@ -218,6 +187,41 @@ export default function Screener() {
   const choiceGeneration = useRef(0);
   const rankingRef = useRef(draft.rankingAlgorithm);
   rankingRef.current = draft.rankingAlgorithm;
+
+  /**
+   * 分档计数必须描述当前已应用的候选池，而不是挂载时读到的默认算法。
+   * 后端提供整池分布时使用它；EOD 等没有分布的快照只统计当前返回行并明确范围。
+   */
+  const universe = useMemo(() => {
+    const hasAppliedSnapshot = scanMeta !== null && rows !== null;
+    const snapshotRows = hasAppliedSnapshot ? rows : (universeQ.data?.rows ?? []);
+    const distribution = hasAppliedSnapshot
+      ? scanMeta.tierDistribution
+      : (universeQ.data?.tierDistribution ?? null);
+    return {
+      tierCounts: distribution
+        ? {
+            all: distribution.total,
+            S: distribution.S,
+            A: distribution.A,
+            B: distribution.B,
+            C: distribution.C,
+          }
+        : countByTier(snapshotRows.map((r) => r.strengthScore)),
+      tierCountsCoverPool: distribution !== null,
+      sectors: [...new Set(snapshotRows.map((r) => r.sector))].sort(SECTOR_COLLATOR.compare),
+      count: hasAppliedSnapshot
+        ? scanMeta.universeCount
+        : (universeQ.data?.universeCount ?? snapshotRows.length),
+    };
+  }, [universeQ.data, scanMeta, rows]);
+
+  /* 板块选项：live 取 /strength/profiles 的板块字典（id+中文名，扫描下发 id）；mock 回退扫描行 sector 名 */
+  const sectorOptions = useMemo<SectorOption[]>(() => {
+    const fromMeta = profilesQ.data?.sectors ?? [];
+    if (fromMeta.length > 0) return fromMeta;
+    return universe.sectors.map((s) => ({ id: s, name: s }));
+  }, [profilesQ.data, universe.sectors]);
 
   useEffect(() => {
     // Identity changes and unmounting revoke all older UI/worker continuations.
@@ -290,6 +294,17 @@ export default function Screener() {
   const scanTriggerLocked = shouldLockScanTrigger({
     scanning: scanState === 'scanning',
     draftMatchesInFlight: inFlightFilters != null && filtersEqual(draft, inFlightFilters),
+  });
+  const draftDollarVolumeFilterSupported = supportsDollarVolumeFilter({
+    rankingAlgorithm: draft.rankingAlgorithm,
+    effectiveAlgorithm:
+      draft.rankingAlgorithm === applied.rankingAlgorithm
+        ? scanMeta?.effectiveAlgorithm
+        : null,
+    serverSupport:
+      draft.rankingAlgorithm === applied.rankingAlgorithm
+        ? scanMeta?.filterSupport?.minAvgDollarVolume
+        : null,
   });
 
   /* ---------------- 执行扫描 ---------------- */
@@ -535,7 +550,17 @@ export default function Screener() {
       setPage(1);
       setExpanded(null);
       setScanState('done');
-      setHistory((h) => [{ at: times.scanCompletedAt ?? checkedAt, count: result.rows.length, durationMs, summary: summarizeFilters(filters) }, ...h].slice(0, 5));
+      const volumeFilterSupported = supportsDollarVolumeFilter({
+        rankingAlgorithm: filters.rankingAlgorithm,
+        effectiveAlgorithm: result.effectiveAlgorithm,
+        serverSupport: result.filterSupport?.minAvgDollarVolume,
+      });
+      setHistory((h) => [{
+        at: times.scanCompletedAt ?? checkedAt,
+        count: result.rows.length,
+        durationMs,
+        summary: summarizeFilters(filters, volumeFilterSupported),
+      }, ...h].slice(0, 5));
       return true;
     } catch (e) {
       if (!isCurrent()) return;
@@ -557,7 +582,7 @@ export default function Screener() {
       setScanPhase('failed');
       return false;
     }
-  }, [isOwner, isSignedIn, principal, toast]);
+  }, [isOwner, isSignedIn, principal, toast, scanMeta?.effectiveAlgorithm]);
 
   useEffect(() => {
     if (scanState !== 'done' || isMock) return;
@@ -935,8 +960,19 @@ export default function Screener() {
     setDraft((value) => applyEodLimitedView({ ...value, ...p }));
   }, [persistVisibleChoice]);
   const chips = useMemo(
-    () => buildChips(applied, profiles, sectorOptions, patchApplied, patchDraftOnly),
-    [applied, profiles, sectorOptions, patchApplied, patchDraftOnly],
+    () => buildChips(
+      applied,
+      profiles,
+      sectorOptions,
+      patchApplied,
+      patchDraftOnly,
+      supportsDollarVolumeFilter({
+        rankingAlgorithm: applied.rankingAlgorithm,
+        effectiveAlgorithm: scanMeta?.effectiveAlgorithm,
+        serverSupport: scanMeta?.filterSupport?.minAvgDollarVolume,
+      }),
+    ),
+    [applied, profiles, sectorOptions, patchApplied, patchDraftOnly, scanMeta],
   );
 
   const animKey = `${scanSeq.current}:${safePage}`;
@@ -990,6 +1026,7 @@ export default function Screener() {
           presetsFailed={!!profilesQ.error}
           scanning={scanTriggerLocked}
           dirty={dirty}
+          dollarVolumeFilterSupported={draftDollarVolumeFilterSupported}
           onScan={onScanClick}
         />
       </div>
@@ -1490,6 +1527,7 @@ function buildChips(
   sectorOptions: SectorOption[],
   patch: (p: Partial<ScanFilters>) => void,
   patchServer: (p: Partial<ScanFilters>) => void,
+  dollarVolumeFilterSupported: boolean,
 ): EchoChip[] {
   /* 两类移除语义（评分方法卡与表格分数必须同源）：
      - 客户端条件（tier/priceMax 等本地过滤）→ patch：applied+draft 同步，立即生效；
@@ -1499,7 +1537,8 @@ function buildChips(
        表格里的分数却仍是进取档算出来的，且 dirty=false 没有任何重扫提示。 */
   const chips: EchoChip[] = [];
   if (f.tier !== 'all') chips.push({ key: 'tier', label: __t('{tier} 档', { tier: f.tier }), onRemove: () => patch({ tier: 'all' }) });
-  if (f.timeframe !== 'all') chips.push({ key: 'tf', label: __t('周期 {tf}', { tf: TIMEFRAME_CN[f.timeframe] }), onRemove: () => patchServer({ timeframe: 'all' }) });
+  const defaultTimeframe = followsEodScreenerView(f.rankingAlgorithm) ? 'mid' : 'all';
+  if (f.timeframe !== defaultTimeframe) chips.push({ key: 'tf', label: __t('周期 {tf}', { tf: TIMEFRAME_CN[f.timeframe] }), onRemove: () => patchServer({ timeframe: defaultTimeframe }) });
   if (f.profile !== 'balanced') chips.push({ key: 'pf', label: __t('偏好 {profile}', { profile: PROFILE_CN[f.profile] }), onRemove: () => patchServer({ profile: 'balanced' }) });
   if (f.topN > 0) chips.push({ key: 'top', label: `Top ${f.topN}`, onRemove: () => patchServer({ topN: 0 }) });
   f.sectors.forEach((s) =>
@@ -1517,7 +1556,7 @@ function buildChips(
     const remove = f.priceMin != null ? patchServer : patch;
     chips.push({ key: 'price', label: __t('价格 {lo}–{hi}', { lo, hi }), onRemove: () => remove({ priceMin: null, priceMax: null }) });
   }
-  if (f.minDollarVol > 0) {
+  if (dollarVolumeFilterSupported && f.minDollarVol > 0) {
     const opt = DOLLAR_VOL_OPTIONS.find((o) => o.value === f.minDollarVol);
     chips.push({ key: 'dv', label: __t('成交额 {v}', { v: opt?.label ?? `≥${fmtCompact(f.minDollarVol)}` }), onRemove: () => patchServer({ minDollarVol: 0 }) });
   }
@@ -1536,7 +1575,7 @@ function buildChips(
   return chips;
 }
 
-function summarizeFilters(f: ScanFilters): string {
+function summarizeFilters(f: ScanFilters, dollarVolumeFilterSupported = true): string {
   const parts: string[] = [];
   if (f.tier !== 'all') parts.push(__t('{tier} 档', { tier: f.tier }));
   if (f.timeframe !== 'all') parts.push(TIMEFRAME_CN[f.timeframe]);
@@ -1544,7 +1583,7 @@ function summarizeFilters(f: ScanFilters): string {
   if (f.topN > 0) parts.push(`Top ${f.topN}`);
   if (f.sectors.length > 0) parts.push(__t('板块 {n} 项', { n: f.sectors.length }));
   if (f.priceMin != null || f.priceMax != null) parts.push(__t('价格区间'));
-  if (f.minDollarVol > 0) parts.push(__t('成交额≥{v}', { v: fmtCompact(f.minDollarVol) }));
+  if (dollarVolumeFilterSupported && f.minDollarVol > 0) parts.push(__t('成交额≥{v}', { v: fmtCompact(f.minDollarVol) }));
   if (f.minScore != null) parts.push(__t('强度≥{n}', { n: f.minScore }));
   if (f.rankingAlgorithm === 'a0_mid_long') parts.push(__t('中长期趋势（试用）'));
   else if (f.rankingAlgorithm === 'eod_limited_v1') parts.push(__t('收盘技术（受限）'));

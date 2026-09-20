@@ -32,6 +32,10 @@ export const SCREENER: Dict = {
   '最低价格': ['Minimum price', '最低価格'],
   '最高价格': ['Maximum price', '最高価格'],
   '成交额下限': ['Min dollar volume', '売買代金下限'],
+  '当前排序未核实成交额口径，此条件未应用': [
+    'This ranking does not verify dollar-volume data, so this filter is not applied.',
+    'この順位では売買代金の口径を確認できないため、この条件は適用されません。',
+  ],
   '排序算法': ['Ranking algorithm', '順位アルゴリズム'],
   '跟随默认': ['Follow default', 'デフォルトに従う'],
   '原版排序': ['Original ranking', '従来の順位'],
@@ -69,6 +73,9 @@ export const SCREENER: Dict = {
     'Dollar-volume quality is unverified and must not be treated as a passed liquidity gate.',
     '売買代金の口径は未確認であり、流動性ゲート通過として扱ってはいけません。',
   ],
+  '未通过': ['Not eligible', '不適格'],
+  '成交额资格未核实': ['Dollar-volume eligibility unverified', '売買代金の適格性は未確認'],
+  '成交量时段未核实': ['Volume session unverified', '出来高の取引日は未確認'],
   '合格综合为空：家族共识不足': [
     'Eligible composite is empty: family consensus is insufficient.',
     '適格総合は空です。ファミリー合意が不足しています。',

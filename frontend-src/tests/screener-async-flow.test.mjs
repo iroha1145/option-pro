@@ -18,7 +18,8 @@ const envelope = (ticker = 'NEW') => ({ rows: [{ ticker, price: 180 }], stale: f
 const deferred = () => { let resolve; let reject; const promise = new Promise((r, fail) => { resolve = r; reject = fail; }); return { promise, resolve, reject }; };
 
 function harness(overrides = {}) {
-  const state = { rows: null, history: [], scanPhase: null };
+  const initialScanMeta = overrides.scanMeta ?? null;
+  const state = { rows: null, history: [], scanPhase: null, scanMeta: initialScanMeta };
   let pending = null;
   const scope = {
     ...flow, ...eodView, ApiError, Date, Promise, Object, Map, Boolean,
@@ -26,6 +27,10 @@ function harness(overrides = {}) {
     useCallback: (fn) => fn,
     isOwner: true, isMock: false,
     principal: 'owner',
+    // The extracted useCallback dependency list is evaluated when the harness
+    // mounts, just like a real render. Individual cases may inject the
+    // previously applied algorithm through overrides.scanMeta.
+    scanMeta: initialScanMeta,
     scanSeq: { current: 0 },
     scanIdentity: { current: 'owner' },
     mounted: { current: true },

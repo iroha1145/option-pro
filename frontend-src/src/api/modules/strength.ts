@@ -70,6 +70,10 @@ export interface StrengthScanEnvelope {
   watchN: number | null;
   compositeN: number | null;
   observationN: number | null;
+  filterSupport?: {
+    minPrice: boolean | null;
+    minAvgDollarVolume: boolean | null;
+  };
 }
 
 export interface ScanParams {
@@ -276,6 +280,14 @@ function liveScan(params: ScanParams, force = false): Promise<StrengthScanEnvelo
       watchN: pickN(env, 'watch_n', 'watchN'),
       compositeN: pickN(env, 'composite_n', 'compositeN'),
       observationN: pickN(env, 'observation_n', 'observationN'),
+      filterSupport: {
+        minPrice: pickB(asRec(env.filter_support ?? env.filterSupport), 'min_price', 'minPrice'),
+        minAvgDollarVolume: pickB(
+          asRec(env.filter_support ?? env.filterSupport),
+          'min_avg_dollar_volume',
+          'minAvgDollarVolume',
+        ),
+      },
     };
   });
 }
@@ -467,6 +479,10 @@ export const strengthApi = {
           watchN: null,
           compositeN: null,
           observationN: null,
+          filterSupport: {
+            minPrice: true,
+            minAvgDollarVolume: params.ranking_algorithm === 'eod_limited_v1' ? false : true,
+          },
         };
       },
       () => liveScan(params, force),
