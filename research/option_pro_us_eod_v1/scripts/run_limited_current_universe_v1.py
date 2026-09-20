@@ -2,7 +2,7 @@
 
     PYTHONPATH=backend python research/option_pro_us_eod_v1/scripts/run_limited_current_universe_v1.py \\
       --dataset auto --session 2024-06-28 --replay-days 20 --profile balanced --horizon mid \\
-      --out-dir research/option_pro_us_eod_v1/return_pack/limited_current_universe_v1
+      --out-dir research/option_pro_us_eod_v1/return_pack/limited_current_universe_v1_1
 """
 
 from __future__ import annotations
@@ -16,9 +16,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "backend"))
 
+from app.services.research_eod_v1.eod_shadow import read_snapshot  # noqa: E402
 from app.services.research_eod_v1.limited_v1 import (  # noqa: E402
     ALLOWED_END,
     MODE,
+    PACK_RELATIVE,
+    read_preview_state,
     run_limited_v1,
 )
 
@@ -30,7 +33,7 @@ def _parse() -> argparse.Namespace:
     parser.add_argument("--replay-days", type=int, default=20)
     parser.add_argument("--profile", default="balanced")
     parser.add_argument("--horizon", default="mid")
-    parser.add_argument("--out-dir", type=Path, default=ROOT / "research/option_pro_us_eod_v1/return_pack/limited_current_universe_v1")
+    parser.add_argument("--out-dir", type=Path, default=ROOT / PACK_RELATIVE)
     parser.add_argument("--allow-network", action="store_true", help="fill missing current-list names via locked Yahoo params")
     parser.add_argument("--no-network", action="store_true")
     parser.add_argument("--smoke-864", action="store_true")
@@ -43,10 +46,24 @@ def main() -> int:
     if args.preview_only:
         preview = args.out_dir / "preview.html"
         snap = args.out_dir / "research-eod-v1-snapshot.json"
-        print(json.dumps({"mode": MODE, "preview": str(preview), "snapshot": str(snap), "exists": preview.is_file()}, indent=2))
+        state = read_preview_state(args.out_dir)
+        published = read_snapshot(snap) or {}
+        print(json.dumps({
+            "mode": MODE,
+            "preview": str(preview),
+            "snapshot": str(snap),
+            "exists": preview.is_file(),
+            "attempted_session": state.get("attempted_session"),
+            "served_session": state.get("served_session") or published.get("session_date"),
+            "integrity": state.get("integrity") or published.get("integrity"),
+            "stale": bool(state.get("stale")),
+            "synthetic": bool(state.get("synthetic") or published.get("synthetic")),
+        }, indent=2))
         return 0 if preview.is_file() else 2
     allow_network = bool(args.allow_network) and not args.no_network
     if args.dataset == "yahoo_cache":
+        allow_network = False
+    if args.dataset == "synthetic":
         allow_network = False
     report = run_limited_v1(
         root=ROOT,

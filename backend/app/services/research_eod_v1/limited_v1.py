@@ -22,6 +22,7 @@ from app.services.research_eod_v1.calendar_asof import eod_evaluation_as_of
 from app.services.research_eod_v1.capability import (
     HARD_REJECTIONS,
     PRICE_ONLY_DIAGNOSTIC,
+    SCORE_DERIVED_REASONS,
     diagnostic_weights,
     family_required,
     rescore_row,
@@ -51,9 +52,10 @@ ensure_reference_on_path()
 from registry import resolve_weights  # type: ignore  # noqa: E402
 
 MODE = "LIMITED_CURRENT_UNIVERSE_V1"
+COMPUTE_VERSION = "limited-current-v1.1"
 EVIDENCE_STATUS = "UNVALIDATED_LIMITED_DATA"
 MEMBER_POLICY = "CURRENT_MEMBERSHIP"
-UNIVERSE_VERSION = "u_limited_current_v1"
+UNIVERSE_VERSION = "u_limited_current_v1_1"
 ALLOWED_END = date(2024, 6, 28)
 HOLDOUT_START = date(2024, 7, 1)
 HISTORY_START = date(2018, 1, 2)
@@ -62,8 +64,13 @@ ACCEPTANCE_SESSIONS = 20
 WARMUP_SESSIONS = 330
 VOLUME_SCOPE = "VENDOR_DAILY_UNVERIFIED"
 MOMENTUM_BASIS = "price_return_not_total_return"
+RETURN_BASIS = "close_price_return"
+RETURN_TRANSFORM_VERSION = "limited-v1-close-price-return-v1"
+DOLLAR_LIQUIDITY_UNVERIFIED = "DOLLAR_LIQUIDITY_UNVERIFIED"
+VOLUME_SESSION_UNVERIFIED = "VOLUME_SESSION_UNVERIFIED"
 CACHE_RELATIVE = Path("research/option_pro_us_eod_v1/data/cache/limited_current_universe_v1/bars.pkl")
-PACK_RELATIVE = Path("research/option_pro_us_eod_v1/return_pack/limited_current_universe_v1")
+PACK_RELATIVE = Path("research/option_pro_us_eod_v1/return_pack/limited_current_universe_v1_1")
+PREVIEW_STATE_NAME = "preview_state.json"
 
 NETWORK_COUNTER = {"yahoo_batch_downloads": 0, "preview_provider_calls": 0}
 
@@ -74,6 +81,9 @@ LIMITATIONS = (
     "momentum and labels are price returns, not total return",
     "execution / dollar risk / corporate-action ledger unverified",
     "G dropped once via PRICE_ONLY_DIAGNOSTIC; D is market-residual diagnostic",
+    "industry_id/parent_industry_id stay None without independent classification",
+    "M/D read Close via close_price_return; vendor Adj Close/tri is preserved aside",
+    "dollar/share ADV unverified demotes every family to watch; session-volume proof is separate",
     "not a 10-year formal verification; evidence_status=UNVALIDATED_LIMITED_DATA",
     "holdout from 2024-07-01 stays sealed",
 )
@@ -116,6 +126,33 @@ FEATURE_MAPPING = (
         "raw_interpretable": False,
     },
 )
+
+
+def build_synthetic_panel(*, sessions: int = 380) -> dict[str, Any]:
+    """Engineering fixture only. Never mixed into a real-cache identity."""
+
+    from app.services.research_eod_v1.fixtures import make_series, trading_days, trending_close
+
+    days = trading_days(date(2022, 1, 3), sessions)
+    specs = (
+        ("NVDA", ("semiconductors", "ai_cloud"), "stock", "CS", 40, 0.12),
+        ("AMD", ("semiconductors",), "stock", "CS", 30, 0.10),
+        ("SPY", ("etfs",), "etf", "ETF", 210, 0.07),
+        ("QQQ", ("etfs",), "etf", "ETF", 200, 0.06),
+    )
+    panel = {}
+    for ticker, themes, track, security_type, start, drift in specs:
+        panel[ticker] = make_series(
+            ticker,
+            days,
+            trending_close(sessions, start, drift),
+            theme_ids=themes,
+            asset_track=track,
+            security_type=security_type,
+            industry_id=None,
+            parent_industry_id=None,
+        ).with_close_price_return()
+    return panel
 
 
 def current_universe_tickers() -> dict[str, list[str]]:
@@ -164,14 +201,38 @@ def clip_bars(bars: Sequence[ResearchBar], *, end: date = ALLOWED_END) -> list[R
     return [bar for bar in bars if bar.session_date <= end and bar.session_date < HOLDOUT_START]
 
 
-def dataset_hash(bars: Mapping[str, Sequence[ResearchBar]]) -> str:
+def dataset_hash(bars: Mapping[str, Sequence[ResearchBar]], *, include_vendor_tri: bool = False) -> str:
+    """Hash the series this limited path actually consumes. Vendor TRI is a source side-digest."""
+
     digest = hashlib.sha256()
+    digest.update(f"return_basis={RETURN_BASIS}|transform={RETURN_TRANSFORM_VERSION}\n".encode())
     for symbol in sorted(bars):
         for bar in clip_bars(bars[symbol]):
             digest.update(
-                f"{symbol}|{bar.session_date}|{bar.open}|{bar.high}|{bar.low}|{bar.close}|{bar.volume}\n".encode()
+                (
+                    f"{symbol}|{bar.session_date}|{bar.open}|{bar.high}|{bar.low}|{bar.close}|{bar.volume}"
+                    f"|used_return={bar.close}|vscope={bar.volume_scope}|padj={bar.price_adjustment}\n"
+                ).encode()
             )
+            if include_vendor_tri:
+                digest.update(f"vendor_tri|{bar.tri}\n".encode())
     return digest.hexdigest()
+
+
+def source_dataset_hash(bars: Mapping[str, Sequence[ResearchBar]]) -> str:
+    return dataset_hash(bars, include_vendor_tri=True)
+
+
+def prepare_limited_panel(panel: Mapping[str, Any]) -> dict[str, Any]:
+    """Close-price return view; drop unverified theme-as-industry labels."""
+
+    prepared = {}
+    for sid, series in panel.items():
+        viewed = series.with_close_price_return() if hasattr(series, "with_close_price_return") else series
+        viewed.industry_id = None
+        viewed.parent_industry_id = None
+        prepared[sid] = viewed
+    return prepared
 
 
 def _venue(track: str) -> dict[str, str]:
@@ -181,7 +242,9 @@ def _venue(track: str) -> dict[str, str]:
         "mic": "XNAS",
         "security_type": "ETF" if track == "etf" else "CS",
         "identity_confidence": "unverified_default_not_checked",
-        "industry_source": "theme_tag_diagnostic_not_economic_parent",
+        "industry_source": "none_without_independent_classification",
+        "return_basis": RETURN_BASIS,
+        "return_transform_version": RETURN_TRANSFORM_VERSION,
     }
 
 
@@ -204,8 +267,8 @@ def bars_to_panel(
                 security_id=ticker,
                 asset_track=track,
                 theme_ids=tuple(themes) or (("etfs",) if track == "etf" else ()),
-                industry_id=(themes[0] if themes else "unknown"),
-                parent_industry_id=(themes[0] if themes else "unknown"),
+                industry_id=None,
+                parent_industry_id=None,
                 venue_metadata=_venue(track),
             )
         except ValueError as exc:
@@ -216,7 +279,7 @@ def bars_to_panel(
             row["status"] = "empty"
             coverage.append(row)
             continue
-        panel[ticker] = series
+        panel[ticker] = series.with_close_price_return()
         coverage.append(row)
     return panel, coverage
 
@@ -295,9 +358,18 @@ def load_or_fetch_bars(
         "fetched": fetched,
         "failures": failures,
         "dataset_hash": dataset_hash(batched),
+        "source_dataset_hash": source_dataset_hash(batched),
         "inventory": inventory_inputs(base),
         "allow_network": allow_network,
     }
+
+
+def theme_membership_identity(
+    appearances: Mapping[str, Sequence[str]] | None = None,
+) -> dict[str, list[str]]:
+    if appearances is not None:
+        return {str(sid): [str(theme) for theme in themes] for sid, themes in appearances.items()}
+    return {theme_id: list(sector["tickers"]) for theme_id, sector in SECTORS.items()}
 
 
 def limited_config_hash(
@@ -307,14 +379,28 @@ def limited_config_hash(
     horizon: str,
     track: str,
     data_hash: str,
+    theme_members: Mapping[str, Sequence[str]] | None = None,
 ) -> str:
     body = {
+        "capability_policy": {
+            "dollar_liquidity": "watch_all_families_when_unverified",
+            "industry": "none_without_independent_source",
+            "residual": "market_only",
+            "track": track,
+            "volume_session": VOLUME_SCOPE,
+        },
+        "compute_version": COMPUTE_VERSION,
         "data_hash": data_hash,
         "feature_version": FEATURE_VERSION,
         "horizon": horizon,
+        "member_policy": MEMBER_POLICY,
         "mode": MODE,
         "profile": profile,
-        "registry_sectors": list(registry["sectors"]),
+        "reference_policy": "same_track_plus_spy_qqq",
+        "registry": registry,
+        "return_basis": RETURN_BASIS,
+        "return_transform_version": RETURN_TRANSFORM_VERSION,
+        "theme_members": theme_membership_identity(theme_members),
         "track": track,
         "universe_version": UNIVERSE_VERSION,
     }
@@ -330,7 +416,11 @@ def apply_price_only_track(
     profile: str,
     horizon: str,
     volume_verified: bool,
+    dollar_liquidity_verified: bool | None = None,
+    volume_session_verified: bool | None = None,
 ) -> dict[str, Any]:
+    dollar_ok = volume_verified if dollar_liquidity_verified is None else dollar_liquidity_verified
+    session_ok = volume_verified if volume_session_verified is None else volume_session_verified
     weights = resolve_weights(registry, theme_id, family, profile, horizon)
     track = PRICE_ONLY_DIAGNOSTIC
     diag = diagnostic_weights(weights, track=track, family=family)
@@ -341,8 +431,11 @@ def apply_price_only_track(
     for row in payload.get("rows") or []:
         updated = dict(row)
         updated["track"] = track
-        updated["volume_scope"] = VOLUME_SCOPE if not volume_verified else row.get("volume_scope")
+        updated["volume_scope"] = VOLUME_SCOPE if not session_ok else row.get("volume_scope")
         updated["momentum_basis"] = MOMENTUM_BASIS
+        updated["return_basis"] = RETURN_BASIS
+        inherited = [str(reason) for reason in (updated.get("rejection_reasons") or ())]
+        updated["rejection_reasons"] = [reason for reason in inherited if reason not in SCORE_DERIVED_REASONS]
         if updated.get("factors"):
             scored = rescore_row(
                 updated,
@@ -354,22 +447,30 @@ def apply_price_only_track(
             updated["score"] = scored["score"]
             updated["observed_feature_coverage"] = scored["coverage"]
             updated["effective_weights"] = diag
-            hard = [reason for reason in (updated.get("rejection_reasons") or ()) if reason in HARD_REJECTIONS]
-            updated["rejection_reasons"] = list(dict.fromkeys([*hard, *scored["rejection_reasons"]]))
-            if scored["final_eligible"] and updated.get("status") != "rejected":
-                updated["status"] = "eligible"
-            elif not scored["final_eligible"]:
-                updated["status"] = "rejected"
-        if (
-            not volume_verified
-            and family in {"B_confirmed_base_breakout", "C_trend_pullback"}
-            and updated.get("status") == "eligible"
-        ):
+            hard = [
+                reason
+                for reason in scored["rejection_reasons"]
+                if reason in HARD_REJECTIONS or reason not in SCORE_DERIVED_REASONS
+            ]
+            updated["rejection_reasons"] = list(dict.fromkeys(hard))
+            updated["status"] = "eligible" if scored["final_eligible"] else "rejected"
+        if updated.get("status") == "eligible" and not dollar_ok:
             updated["status"] = "watch"
             reasons = list(updated.get("rejection_reasons") or [])
-            if "LIQUIDITY_HARD_GATE_UNVERIFIED" not in reasons:
-                reasons.append("LIQUIDITY_HARD_GATE_UNVERIFIED")
+            if DOLLAR_LIQUIDITY_UNVERIFIED not in reasons:
+                reasons.append(DOLLAR_LIQUIDITY_UNVERIFIED)
             updated["rejection_reasons"] = reasons
+        if (
+            family in {"B_confirmed_base_breakout", "C_trend_pullback"}
+            and not session_ok
+            and updated.get("status") in {"eligible", "watch"}
+        ):
+            reasons = list(updated.get("rejection_reasons") or [])
+            if VOLUME_SESSION_UNVERIFIED not in reasons:
+                reasons.append(VOLUME_SESSION_UNVERIFIED)
+            updated["rejection_reasons"] = reasons
+            if updated.get("status") == "eligible":
+                updated["status"] = "watch"
         rows.append(updated)
     out = dict(payload)
     out["rows"] = rows
@@ -395,11 +496,32 @@ def _compact_row(row: Mapping[str, Any]) -> dict[str, Any]:
         "track",
         "volume_scope",
         "momentum_basis",
+        "return_basis",
         "observed_feature_coverage",
         "stock_or_etf_track",
         "theme_ids",
+        "gate_results",
+        "effective_weights",
+        "known_support",
+        "known_resistance",
+        "planned_invalidation",
+        "residual_raw",
+        "residual_status",
     )
     return {key: row.get(key) for key in keep}
+
+
+def row_compare_payload(row: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "security_id": row.get("security_id"),
+        "algorithm_id": row.get("algorithm_id"),
+        "sector_context": row.get("sector_context"),
+        "status": row.get("status"),
+        "score": row.get("score"),
+        "factors": row.get("factors"),
+        "rejection_reasons": list(row.get("rejection_reasons") or []),
+        "stock_or_etf_track": row.get("stock_or_etf_track"),
+    }
 
 
 def _compact_composite(row: Mapping[str, Any]) -> dict[str, Any]:
@@ -410,6 +532,8 @@ def _compact_composite(row: Mapping[str, Any]) -> dict[str, Any]:
     compact["theme_count"] = row.get("theme_count")
     compact["R"] = row.get("R")
     compact["G"] = row.get("G")
+    compact["stock_or_etf_track"] = row.get("stock_or_etf_track")
+    compact["return_basis"] = row.get("return_basis") or RETURN_BASIS
     return compact
 
 
@@ -484,6 +608,7 @@ def score_session(
 ) -> dict[str, Any]:
     if session >= HOLDOUT_START or session > ALLOWED_END:
         raise ValueError("session_outside_development_zone")
+    panel = prepare_limited_panel(panel)
     as_of = eod_evaluation_as_of(session)
     theme_ids = list(themes or SECTORS)
     families = list(algorithms or ALGORITHMS)
@@ -551,7 +676,15 @@ def score_session(
             "members_in_panel": sum(1 for ticker in SECTORS[theme_id]["tickers"] if ticker in panel),
             "families": family_block,
         })
-    composite = [_compact_composite(row) for row in m1_consensus(first_layer, profile, 20)]
+    stock_layer = [row for row in first_layer if row.get("stock_or_etf_track") != "etf"]
+    etf_layer = [row for row in first_layer if row.get("stock_or_etf_track") == "etf"]
+    composite_stock = [_compact_composite(row) for row in m1_consensus(stock_layer, profile, 20)]
+    composite_etf = [_compact_composite(row) for row in m1_consensus(etf_layer, profile, 20)]
+    for row in composite_stock:
+        row["stock_or_etf_track"] = "stock"
+    for row in composite_etf:
+        row["stock_or_etf_track"] = "etf"
+    composite = [*composite_stock, *composite_etf]
     watch = [row for row in first_layer if row.get("status") == "watch"]
     config_hash = limited_config_hash(
         registry=registry,
@@ -566,7 +699,7 @@ def score_session(
         horizon=horizon,
         label_horizons=(5, 20, 63),
         feature_version=FEATURE_VERSION,
-        statistics_version="limited-v1-no-ic-promotion",
+        statistics_version=f"{COMPUTE_VERSION}-no-ic-promotion",
         data_hash=data_hash or "empty",
         universe_version=UNIVERSE_VERSION,
         member_policy=MEMBER_POLICY,
@@ -575,12 +708,22 @@ def score_session(
         end=session,
         available_factors=("T", "M", "S", "B", "P", "V", "R"),
         timing_policy="eod_evaluation_as_of",
-        capability_mask={"track": PRICE_ONLY_DIAGNOSTIC, "actual_G_observed": False, "mode": MODE},
+        capability_mask={
+            "track": PRICE_ONLY_DIAGNOSTIC,
+            "actual_G_observed": False,
+            "mode": MODE,
+            "compute_version": COMPUTE_VERSION,
+            "return_basis": RETURN_BASIS,
+            "return_transform_version": RETURN_TRANSFORM_VERSION,
+            "industry_policy": "none_without_independent_source",
+            "residual": "market_only",
+        },
     )
     return {
         "session_date": session.isoformat(),
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "mode": MODE,
+        "compute_version": COMPUTE_VERSION,
         "evidence_status": EVIDENCE_STATUS,
         "universe_version": UNIVERSE_VERSION,
         "feature_version": FEATURE_VERSION,
@@ -597,10 +740,14 @@ def score_session(
         "family_results": family_results,
         "theme_summaries": theme_summaries,
         "composite_results": composite,
+        "composite_stock": composite_stock,
+        "composite_etf": composite_etf,
         "watch_list": watch,
         "eligible_n": sum(1 for row in first_layer if row.get("status") == "eligible"),
         "watch_n": len(watch),
         "composite_n": len(composite),
+        "composite_stock_n": len(composite_stock),
+        "composite_etf_n": len(composite_etf),
         "limitations": list(LIMITATIONS),
         "holdout_sealed": True,
         "data_stale": False,
@@ -665,11 +812,15 @@ def publish_limited_snapshot(path: Path, scored: Mapping[str, Any]) -> dict[str,
         "capability_track": scored.get("capability_track"),
         "run_signature": scored.get("run_signature"),
         "theme_summaries": scored.get("theme_summaries"),
+        "compute_version": COMPUTE_VERSION,
         "composite_results": scored.get("composite_results"),
+        "composite_stock": scored.get("composite_stock"),
+        "composite_etf": scored.get("composite_etf"),
         "watch_list": scored.get("watch_list"),
         "limitations": scored.get("limitations"),
         "volume_scope": VOLUME_SCOPE,
         "momentum_basis": MOMENTUM_BASIS,
+        "return_basis": RETURN_BASIS,
         "member_policy": MEMBER_POLICY,
         "holdout_sealed": True,
         "execution_unverified": True,
@@ -679,8 +830,11 @@ def publish_limited_snapshot(path: Path, scored: Mapping[str, Any]) -> dict[str,
         "eligible_n": scored.get("eligible_n"),
         "watch_n": scored.get("watch_n"),
         "composite_n": scored.get("composite_n"),
+        "composite_stock_n": scored.get("composite_stock_n"),
+        "composite_etf_n": scored.get("composite_etf_n"),
         "panel_n": scored.get("panel_n"),
         "feature_mapping": list(FEATURE_MAPPING),
+        "synthetic": bool(scored.get("synthetic")),
     }
     return publish_snapshot(
         path,
@@ -692,12 +846,25 @@ def publish_limited_snapshot(path: Path, scored: Mapping[str, Any]) -> dict[str,
     )
 
 
-def preview_html(snapshot: Mapping[str, Any]) -> str:
-    NETWORK_COUNTER["preview_provider_calls"] += 0
+def preview_html(snapshot: Mapping[str, Any], *, state: Mapping[str, Any] | None = None) -> str:
     themes = snapshot.get("theme_summaries") or []
-    composite = snapshot.get("composite_results") or []
+    composite_stock = snapshot.get("composite_stock") or [
+        row for row in (snapshot.get("composite_results") or []) if row.get("stock_or_etf_track") != "etf"
+    ]
+    composite_etf = snapshot.get("composite_etf") or [
+        row for row in (snapshot.get("composite_results") or []) if row.get("stock_or_etf_track") == "etf"
+    ]
     watch = snapshot.get("watch_list") or []
     limitations = snapshot.get("limitations") or LIMITATIONS
+    rows = list(snapshot.get("rows") or [])
+    if not rows:
+        for block in snapshot.get("family_results") or []:
+            rows.extend(block.get("rows") or [])
+    by_theme: dict[str, dict[str, list[Mapping[str, Any]]]] = {}
+    for row in rows:
+        theme = str(row.get("sector_context") or "")
+        algo = str(row.get("algorithm_id") or "")
+        by_theme.setdefault(theme, {}).setdefault(algo, []).append(row)
 
     def table(headers: Sequence[str], rows: Sequence[Sequence[Any]]) -> str:
         head = "".join(f"<th>{html.escape(str(item))}</th>" for item in headers)
@@ -706,11 +873,39 @@ def preview_html(snapshot: Mapping[str, Any]) -> str:
             body.append("<tr>" + "".join(f"<td>{html.escape(str(item))}</td>" for item in row) + "</tr>")
         return f"<table><thead><tr>{head}</tr></thead><tbody>{''.join(body)}</tbody></table>"
 
+    def factor_text(row: Mapping[str, Any]) -> str:
+        factors = row.get("factors") or {}
+        return " ".join(f"{key}={factors.get(key)}" for key in ("T", "M", "S", "B", "P", "V", "R", "G") if key in factors)
+
+    def family_details(theme_id: str) -> str:
+        blocks = []
+        for algo in ALGORITHMS:
+            family_rows = (by_theme.get(theme_id) or {}).get(algo) or []
+            shown = [
+                [
+                    row.get("security_id"),
+                    row.get("score"),
+                    row.get("status"),
+                    factor_text(row),
+                    row.get("rejection_reasons") or row.get("gate_results"),
+                    row.get("known_support"),
+                    row.get("planned_invalidation"),
+                ]
+                for row in family_rows[:40]
+            ]
+            inner = table(("证券", "分数", "资格", "因子", "原因/门", "支撑", "失效"), shown) if shown else "<p>无行。</p>"
+            blocks.append(
+                f"<details><summary>{html.escape(algo)} · {len(family_rows)} 行</summary>{inner}</details>"
+            )
+        return "".join(blocks)
+
     theme_rows = []
+    details = []
     for theme in themes:
         families = theme.get("families") or {}
+        theme_id = str(theme.get("theme_id"))
         theme_rows.append([
-            theme.get("theme_id"),
+            theme_id,
             theme.get("members_listed"),
             theme.get("members_in_panel"),
             sum(int((families.get(algo) or {}).get("eligible") or 0) for algo in ALGORITHMS),
@@ -720,46 +915,92 @@ def preview_html(snapshot: Mapping[str, Any]) -> str:
                 for algo in ALGORITHMS
             ),
         ])
-    composite_rows = [
-        [
-            row.get("security_id"),
-            row.get("consensus_z") if row.get("consensus_z") is not None else row.get("score"),
-            ",".join(str(item) for item in (row.get("family_votes") or ())),
-            row.get("status"),
-        ]
-        for row in composite
-    ]
+        details.append(f"<details><summary>主题 {html.escape(theme_id)}</summary>{family_details(theme_id)}</details>")
+
+    def composite_table(items: Sequence[Mapping[str, Any]]) -> str:
+        if not items:
+            return "<p>零合格，名单为空。</p>"
+        return table(
+            ("证券", "轨", "共识分", "家族", "状态"),
+            [
+                [
+                    row.get("security_id"),
+                    row.get("stock_or_etf_track"),
+                    row.get("consensus_z") if row.get("consensus_z") is not None else row.get("score"),
+                    ",".join(str(item) for item in (row.get("family_votes") or ())),
+                    row.get("status"),
+                ]
+                for row in items
+            ],
+        )
+
     watch_rows = [
         [row.get("security_id"), row.get("algorithm_id"), row.get("sector_context"), row.get("score"), row.get("rejection_reasons")]
         for row in watch[:40]
     ]
+    state = state or {}
+    integrity = snapshot.get("integrity") or state.get("integrity") or "complete"
+    stale = bool(snapshot.get("publish_failed") or integrity == "stale_previous_retained" or state.get("stale"))
+    attempted = state.get("attempted_session") or snapshot.get("attempted_session")
+    served = state.get("served_session") or snapshot.get("session_date")
+    synthetic = bool(snapshot.get("synthetic") or state.get("synthetic"))
+    banners = []
+    if synthetic:
+        banners.append("<p class=\"note\" style=\"background:#fde2e2\"><strong>SYNTHETIC</strong> 合成输入，不是真实行情。</p>")
+    if stale:
+        banners.append(
+            f"<p class=\"note\" style=\"background:#f8d7da\">发布失败或过期。"
+            f"attempted_session={html.escape(str(attempted))} · served_session={html.escape(str(served))} · "
+            f"integrity={html.escape(str(integrity))}</p>"
+        )
     return "\n".join([
         "<!DOCTYPE html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\"/>",
         f"<title>LIMITED_CURRENT_UNIVERSE_V1 {html.escape(str(snapshot.get('session_date')))}</title>",
         "<style>body{font-family:sans-serif;max-width:1100px;margin:24px auto;color:#111}",
         "table{border-collapse:collapse;width:100%;margin:12px 0}th,td{border:1px solid #ccc;padding:6px;font-size:13px}",
-        "th{background:#f3f3f3;text-align:left}.note{background:#fff7e6;padding:12px}</style></head><body>",
+        "th{background:#f3f3f3;text-align:left}.note{background:#fff7e6;padding:12px}",
+        "details{margin:8px 0;padding:6px;border:1px solid #ddd}</style></head><body>",
         f"<h1>历史 EOD 预览 · {html.escape(str(snapshot.get('session_date')))}</h1>",
+        *banners,
         "<p class=\"note\">这是明确标注日期的历史结果，不是今日选股。",
-        f"mode={html.escape(MODE)} · evidence={html.escape(EVIDENCE_STATUS)} · track={html.escape(PRICE_ONLY_DIAGNOSTIC)}。",
-        "不展示 IC、回测收益或研究账本。</p>",
+        f"mode={html.escape(MODE)} · compute={html.escape(COMPUTE_VERSION)} · evidence={html.escape(EVIDENCE_STATUS)} · "
+        f"track={html.escape(PRICE_ONLY_DIAGNOSTIC)} · return={html.escape(RETURN_BASIS)}。",
+        f"integrity={html.escape(str(integrity))}。不展示 IC、回测收益或研究账本。</p>",
         f"<p>profile={html.escape(str(snapshot.get('profile')))} horizon={html.escape(str(snapshot.get('horizon')))} "
-        f"综合入选 {html.escape(str(snapshot.get('composite_n')))} · 观察 {html.escape(str(snapshot.get('watch_n')))}</p>",
+        f"股票综合 {html.escape(str(snapshot.get('composite_stock_n') if snapshot.get('composite_stock_n') is not None else len(composite_stock)))} · "
+        f"ETF 综合 {html.escape(str(snapshot.get('composite_etf_n') if snapshot.get('composite_etf_n') is not None else len(composite_etf)))} · "
+        f"观察 {html.escape(str(snapshot.get('watch_n')))}</p>",
         "<h2>限制</h2><ul>" + "".join(f"<li>{html.escape(str(item))}</li>" for item in limitations) + "</ul>",
         "<h2>24 主题</h2>",
         table(("主题", "名单", "可用", "合格", "观察", "家族"), theme_rows),
-        "<h2>M1 综合</h2>",
-        table(("证券", "共识分", "家族", "状态"), composite_rows) if composite_rows else "<p>零合格，名单为空。</p>",
+        "<h2>主题家族明细</h2>",
+        "".join(details),
+        "<h2>M1 股票综合</h2>",
+        composite_table(composite_stock),
+        "<h2>M1 ETF 综合</h2>",
+        composite_table(composite_etf),
         "<h2>观察列表</h2>",
         table(("证券", "家族", "主题", "分数", "原因"), watch_rows) if watch_rows else "<p>无观察项。</p>",
         "</body></html>",
     ])
 
 
-def write_preview(path: Path, snapshot: Mapping[str, Any]) -> Path:
-    NETWORK_COUNTER["preview_provider_calls"] += 0
-    path.write_text(preview_html(snapshot), encoding="utf-8")
+def write_preview(path: Path, snapshot: Mapping[str, Any], *, state: Mapping[str, Any] | None = None) -> Path:
+    path.write_text(preview_html(snapshot, state=state), encoding="utf-8")
     return path
+
+
+def write_preview_state(out_dir: Path, payload: Mapping[str, Any]) -> Path:
+    path = out_dir / PREVIEW_STATE_NAME
+    atomic_write_json(path, payload)
+    return path
+
+
+def read_preview_state(out_dir: Path) -> dict[str, Any]:
+    path = out_dir / PREVIEW_STATE_NAME
+    if not path.is_file():
+        return {}
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def close_task(
@@ -774,6 +1015,7 @@ def close_task(
     data_hash: str = "",
     themes: Sequence[str] | None = None,
     algorithms: Sequence[str] | None = None,
+    synthetic: bool = False,
 ) -> dict[str, Any]:
     """One complete session, one write. Retry/manual trigger reuse the same identity."""
 
@@ -789,26 +1031,53 @@ def close_task(
         themes=themes,
         algorithms=algorithms,
     )
+    scored["synthetic"] = synthetic
     snap_path = out_dir / "research-eod-v1-snapshot.json"
     published = publish_limited_snapshot(snap_path, scored)
+    failed = published.get("integrity") == "stale_previous_retained" or bool(published.get("publish_failed"))
+    state = {
+        "attempted_session": scored["session_date"],
+        "served_session": published.get("session_date"),
+        "integrity": published.get("integrity"),
+        "publish_failed": failed,
+        "stale": failed,
+        "synthetic": synthetic,
+        "cache_key": published.get("cache_key"),
+    }
+    write_preview_state(out_dir, state)
     day_dir = out_dir / "sessions" / session.isoformat()
     day_dir.mkdir(parents=True, exist_ok=True)
+    if failed:
+        atomic_write_json(day_dir / "publish_failed.json", {
+            "attempted_session": scored["session_date"],
+            "served_session": published.get("session_date"),
+            "integrity": published.get("integrity"),
+            "published": False,
+        })
+        write_preview(out_dir / "preview.html", published, state=state)
+        return {"scored": scored, "published": published, "path": str(snap_path), "publish_failed": True}
     atomic_write_json(day_dir / "scored.json", scored)
     atomic_write_json(day_dir / "summary.json", {
         "session_date": scored["session_date"],
         "eligible_n": scored["eligible_n"],
         "watch_n": scored["watch_n"],
         "composite_n": scored["composite_n"],
+        "composite_stock_n": scored.get("composite_stock_n"),
+        "composite_etf_n": scored.get("composite_etf_n"),
         "config_hash": scored["config_hash"],
         "run_signature": scored["run_signature"],
         "theme_summaries": scored["theme_summaries"],
         "composite_results": scored["composite_results"],
+        "composite_stock": scored.get("composite_stock"),
+        "composite_etf": scored.get("composite_etf"),
         "mode": MODE,
+        "compute_version": COMPUTE_VERSION,
         "evidence_status": EVIDENCE_STATUS,
+        "published": True,
     })
-    write_preview(day_dir / "preview.html", published)
-    write_preview(out_dir / "preview.html", published)
-    return {"scored": scored, "published": published, "path": str(snap_path)}
+    write_preview(day_dir / "preview.html", published, state=state)
+    write_preview(out_dir / "preview.html", published, state=state)
+    return {"scored": scored, "published": published, "path": str(snap_path), "publish_failed": False}
 
 
 def replay_sessions(
@@ -823,6 +1092,7 @@ def replay_sessions(
     data_hash: str = "",
     themes: Sequence[str] | None = None,
     algorithms: Sequence[str] | None = None,
+    synthetic: bool = False,
 ) -> dict[str, Any]:
     started = time.perf_counter()
     days = []
@@ -838,6 +1108,7 @@ def replay_sessions(
             data_hash=data_hash,
             themes=themes,
             algorithms=algorithms,
+            synthetic=synthetic,
         )
         scored = result["scored"]
         days.append({
@@ -880,7 +1151,25 @@ def run_limited_v1(
     dest.mkdir(parents=True, exist_ok=True)
     registry = load_registry()
     load_report: dict[str, Any]
-    if panel is None:
+    if synthetic and panel is None:
+        panel = build_synthetic_panel()
+        coverage = [
+            {"ticker": sid, "status": "ok", "bars": len(getattr(series, "dates", []) or [])}
+            for sid, series in panel.items()
+        ]
+        data_hash = data_hash or f"synthetic:{COMPUTE_VERSION}:{len(panel)}"
+        load_report = {
+            "bars": {},
+            "appearances": {sid: list(getattr(series, "theme_ids", ()) or []) for sid, series in panel.items()},
+            "sources": ["synthetic_fixture_panel"],
+            "missing": [],
+            "fetched": 0,
+            "failures": [],
+            "dataset_hash": data_hash,
+            "inventory": inventory_inputs(base),
+            "allow_network": False,
+        }
+    elif panel is None:
         load_report = load_or_fetch_bars(root=base, allow_network=allow_network, provider=provider)
         panel, coverage = bars_to_panel(load_report["bars"], load_report["appearances"])
         data_hash = data_hash or str(load_report["dataset_hash"])
@@ -917,7 +1206,11 @@ def run_limited_v1(
         atomic_write_json(dest / "run_report.json", report)
         return report
     target = session or ALLOWED_END
-    if target not in set(trading_sessions(HISTORY_START, ALLOWED_END)):
+    if synthetic:
+        last = max(series.dates[-1] for series in panel.values() if getattr(series, "dates", None))
+        if all(target not in getattr(series, "dates", []) for series in panel.values()):
+            target = last
+    elif target not in set(trading_sessions(HISTORY_START, ALLOWED_END)):
         target = acceptance_sessions(end=ALLOWED_END, count=1)[0]
     window = acceptance_sessions(end=target, count=min(replay_days, ACCEPTANCE_SESSIONS)) if replay_days > 1 else [target]
     replay = replay_sessions(
@@ -931,6 +1224,7 @@ def run_limited_v1(
         data_hash=data_hash,
         themes=themes,
         algorithms=algorithms,
+        synthetic=synthetic,
     )
     smoke_rows: list[dict[str, Any]] = []
     if smoke:
@@ -946,6 +1240,7 @@ def run_limited_v1(
     report = {
         "status": "RAN",
         "mode": MODE,
+        "compute_version": COMPUTE_VERSION,
         "evidence_status": EVIDENCE_STATUS,
         "synthetic": synthetic,
         "session_date": window[-1].isoformat(),
