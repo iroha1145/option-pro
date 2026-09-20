@@ -1,5 +1,5 @@
 /** 板块域：真实目录、强度聚合与板块内 IV 横截面。 */
-import { get, mockOr, toQuery } from '../client';
+import { get, mockOr, post, toQuery } from '../client';
 import { registryGet } from '../queryRegistry';
 import { asRec, pickB, pickN, pickS, pickLabel, unwrap, type Rec } from '../live';
 import { mapMacroFitDrivers } from '../macroFields';
@@ -9,6 +9,22 @@ import type { IvRankRow, Sector } from '../types';
 
 export type SectorPeriod = '1mo' | '3mo' | '6mo';
 export type SectorSourceStatus = 'active' | 'degraded' | 'stale' | 'insufficient_data';
+export type SectorIvRefreshStatus = 'idle' | 'queued' | 'running' | 'cooldown' | 'failed';
+
+export interface SectorIvRefreshState {
+  status: SectorIvRefreshStatus;
+  retryAfterSeconds: number;
+  requestedAt: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  nextRefreshAt: string | null;
+  errorCode: string | null;
+}
+
+export interface SectorIvRefreshResponse {
+  sectorId: string;
+  refresh: SectorIvRefreshState;
+}
 
 export interface SectorCatalogItem extends Sector {
   tickers: string[];
@@ -67,12 +83,45 @@ export interface SectorIvRankingEnvelope {
   snapshotSource: string | null;
   snapshotOrigin: string | null;
   providers: string[];
+  refresh: SectorIvRefreshState;
 }
 
 function normalizeStatus(value: unknown): SectorSourceStatus {
   return value === 'degraded' || value === 'stale' || value === 'insufficient_data'
     ? value
     : 'active';
+}
+
+function normalizeRefreshStatus(value: unknown): SectorIvRefreshStatus {
+  return value === 'queued'
+    || value === 'running'
+    || value === 'cooldown'
+    || value === 'failed'
+    ? value
+    : 'idle';
+}
+
+/** 后台 IV 更新状态；时间只透传服务端值，不用浏览器时钟补造。 */
+export function mapSectorIvRefreshState(payload: unknown): SectorIvRefreshState {
+  const envelope = asRec(payload);
+  const refresh = asRec(envelope.refresh ?? payload);
+  return {
+    status: normalizeRefreshStatus(refresh.status),
+    retryAfterSeconds: Math.max(0, pickN(refresh, 'retry_after_seconds', 'retryAfterSeconds') ?? 0),
+    requestedAt: pickS(refresh, 'requested_at', 'requestedAt'),
+    startedAt: pickS(refresh, 'started_at', 'startedAt'),
+    completedAt: pickS(refresh, 'completed_at', 'completedAt'),
+    nextRefreshAt: pickS(refresh, 'next_refresh_at', 'nextRefreshAt'),
+    errorCode: pickS(refresh, 'error_code', 'errorCode'),
+  };
+}
+
+export function mapSectorIvRefreshResponse(payload: unknown): SectorIvRefreshResponse {
+  const envelope = asRec(payload);
+  return {
+    sectorId: pickS(envelope, 'sector_id', 'sectorId') ?? '',
+    refresh: mapSectorIvRefreshState(envelope.refresh),
+  };
 }
 
 function stringArray(value: unknown): string[] {
@@ -208,6 +257,7 @@ export function mapSectorIvRankingEnvelope(payload: unknown): SectorIvRankingEnv
     snapshotSource: pickS(envelope, 'snapshot_source'),
     snapshotOrigin: pickS(envelope, 'snapshot_origin'),
     providers: sourceArray(envelope.providers),
+    refresh: mapSectorIvRefreshState(envelope.refresh),
   };
 }
 
@@ -246,10 +296,23 @@ export const sectorsApi = {
           sector_id: sectorId,
           rankings: fx2.getSectorIvRanking(sectorId),
           source_status: 'active',
+          refresh: { status: 'idle' },
         }),
       () =>
         get(`/sectors/${encodeURIComponent(sectorId)}/iv-ranking`).then(
           mapSectorIvRankingEnvelope,
+        ),
+    ),
+  ivRefresh: (sectorId: string): Promise<SectorIvRefreshResponse> =>
+    mockOr(
+      () =>
+        mapSectorIvRefreshResponse({
+          sector_id: sectorId,
+          refresh: { status: 'queued' },
+        }),
+      () =>
+        post(`/sectors/${encodeURIComponent(sectorId)}/iv-refresh`).then(
+          mapSectorIvRefreshResponse,
         ),
     ),
 };

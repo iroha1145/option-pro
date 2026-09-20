@@ -94,6 +94,17 @@ def _test_app(runtime: OwnerAccessRuntime) -> FastAPI:
     def public_batch_query() -> dict[str, bool]:
         return {"public": True}
 
+    @app.post(
+        "/api/sectors/{sector_id}/iv-refresh",
+        dependencies=[
+            Depends(require_public_read_or_owner_access),
+            Depends(require_same_origin_request),
+        ],
+        status_code=202,
+    )
+    def public_sector_refresh(sector_id: str) -> dict[str, str]:
+        return {"sector_id": sector_id, "status": "queued"}
+
     @app.get("/login")
     def login_page() -> dict[str, str]:
         return {"page": "login"}
@@ -169,6 +180,7 @@ _SAME_ORIGIN_JSON_ONLY_OPERATIONS = {
 #: Same category, but bodyless — there is no content type to assert, so these
 #: take the origin-only guard instead of the JSON one.
 _SAME_ORIGIN_REQUEST_ONLY_OPERATIONS = {
+    ("POST", "/api/sectors/{sector_id}/iv-refresh"),
     ("POST", "/api/account/logout"),
     ("DELETE", "/api/account/watchlist/{ticker}"),
     ("DELETE", "/api/account/chart-drawings"),
@@ -355,6 +367,29 @@ def test_password_mode_serves_public_reads_and_protects_owner_surfaces() -> None
             headers=_action_headers("https://evil.example"),
         )
         assert cross_site_batch.status_code == 403
+
+
+def test_sector_refresh_is_public_without_enabling_other_visitor_actions() -> None:
+    runtime = _runtime("password", visitor_live_pulls=False, visitor_ai_actions=False)
+    main._rl_buckets.clear()
+    with TestClient(
+        _PeerAddress(_test_app(runtime), "203.0.113.29"),
+        base_url="https://testserver",
+        follow_redirects=False,
+    ) as client:
+        response = client.post(
+            "/api/sectors/semiconductors/iv-refresh", headers=_action_headers(),
+        )
+        assert response.status_code == 202
+        assert response.json() == {"sector_id": "semiconductors", "status": "queued"}
+        assert "no-store" in response.headers["cache-control"]
+        assert client.post(
+            "/api/sectors/semiconductors/iv-refresh",
+            headers=_action_headers("https://evil.example"),
+        ).status_code == 403
+        assert client.post("/api/sectors/semiconductors/iv-refresh").status_code == 403
+        assert client.post("/api/action", headers=_action_headers()).status_code == 401
+        assert client.get("/api/worker/status").status_code == 401
 
 
 def test_password_visitor_stock_data_status_is_public_and_cannot_start_pulls(
@@ -1011,6 +1046,12 @@ def test_production_validation_errors_never_echo_submitted_password() -> None:
         ("POST", "/api/ai/earnings-impact/AAPL/reports/2026-07-23", False),
         ("POST", "/api/catalysts/tickers/batch", True),
         ("POST", "/api/stocks/AAOI/pull", False),
+        ("POST", "/api/sectors/semiconductors/iv-refresh", True),
+        ("POST", "/api/sectors/semiconductors/iv-refresh/", False),
+        ("POST", "/api/sectors/semiconductors/iv-refresh/extra", False),
+        ("POST", "/api/sectors/semiconductors/iv-ranking", False),
+        ("PUT", "/api/sectors/semiconductors/iv-refresh", False),
+        ("POST", "/api/sectors/../iv-refresh", False),
         # SPA(BrowserRouter):无扩展名路径回退到 index.html 壳,匿名可读
         ("GET", "/index.html/extra", True),
         ("GET", "/staticity/js/deck-app.js", False),
@@ -1109,8 +1150,9 @@ def test_public_catalyst_reads_do_not_consume_the_provider_work_budget(
         ("GET", "/api/stocks/AAOI/signals", True),
         ("GET", "/api/options/AAOI/expirations", False),
         ("GET", "/api/options/AAOI/chain", False),
-        ("GET", "/api/sectors/technology/iv-ranking", False),
-        ("GET", "/api/sectors/technology/heatmap", False),
+        ("GET", "/api/sectors/technology/iv-ranking", True),
+        ("GET", "/api/sectors/technology/heatmap", True),
+        ("POST", "/api/sectors/semiconductors/iv-refresh", False),
         ("GET", "/api/signals/stock/AAOI", True),
         ("GET", "/api/strength/stocks/AAOI", True),
         ("GET", "/api/strength/scan", True),

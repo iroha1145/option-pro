@@ -172,6 +172,7 @@ expected = {
     "earnings_analysis",
     "focus_refresh",
     "strength_refresh",
+    "sector_iv_refresh",
     "breakout_refresh",
     "retention",
     # Added with the macro conditions worker task. Missing it here meant every
@@ -195,6 +196,7 @@ critical = {
     "stock_directory",
     "public_home",
     "strength_refresh",
+    "sector_iv_refresh",
 }
 # Print why before exiting. The caller used to report "did not report all twelve
 # task types" for every one of these, which sent the operator hunting a missing

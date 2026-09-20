@@ -31,6 +31,7 @@ WORKER_HEALTH = (
     '{"task_name":"earnings_analysis"},'
     '{"task_name":"focus_refresh"},'
     '{"task_name":"strength_refresh","enabled":true,"status":"idle","consecutive_failures":0},'
+    '{"task_name":"sector_iv_refresh","enabled":true,"status":"idle","consecutive_failures":0},'
     '{"task_name":"breakout_refresh"},'
     '{"task_name":"retention"},'
     '{"task_name":"macro_conditions"}]}'

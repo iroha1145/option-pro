@@ -42,10 +42,11 @@ class AccessConfig(StrictConfigModel):
     mode: Literal["private_network", "password"] = "private_network"
     # 密码模式下的非 Owner（匿名访客与朋友账号）默认只读已保存的快照。
     # 下面两个开关各自打开一个有限的「访客可发起」面，默认关闭：
-    # - visitor_live_pulls: 个股手动拉取、板块 IV 冷启动实扫、日历 actual 外部补全
+    # - visitor_live_pulls: 个股手动拉取、日历 actual 外部补全
     #   （消耗 Massive/Yahoo/TradingView 等第三方行情额度）
     # - visitor_ai_actions: 财报影响分析的提交（消耗 OpenAI 模型预算）
     # 打开后仍保留原有的每 IP 限流、冷却与同源校验。
+    # 板块 IV 使用公开的有界后台刷新队列，不依赖这两个开关。
     visitor_live_pulls: bool = False
     visitor_ai_actions: bool = False
     allowed_private_cidrs: list[str] = Field(

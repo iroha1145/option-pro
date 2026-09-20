@@ -21,6 +21,7 @@ import SectorList from '@/components/sectors/SectorList';
 import DetailBand from '@/components/sectors/DetailBand';
 import IvPanel from '@/components/sectors/IvPanel';
 import SideRail from '@/components/sectors/SideRail';
+import { useSectorIvRefresh } from '@/components/sectors/useSectorIvRefresh';
 import {
   buildSectorViewModels,
   normalizeIvMeta,
@@ -70,31 +71,10 @@ export default function Sectors() {
     ivSectorId && catalogIds.has(ivSectorId)
       ? ivSectorId
       : (catalogQ.data?.[0]?.id ?? null);
-  const ivQ = usePolling(
-    () =>
-      ivSectorIdValid
-        ? sectorsApi
-            .ivRanking(ivSectorIdValid)
-            // 信封若未带 sectorId，盖上本次请求的板块章：切板块时旧信封
-            // 仍留在 usePolling.data 里，没有归属就无法识别「这是谁的数字」
-            .then((envelope) =>
-              envelope
-                ? { ...envelope, sectorId: envelope.sectorId ?? ivSectorIdValid }
-                : envelope,
-            )
-        : Promise.resolve(null),
-    600_000,
-    [ivSectorIdValid],
-  );
-  /* 只认属于当前板块的信封：切板块后新请求在飞的数秒内，旧板块的行与统计
-     不得顶着新板块的标题上屏（标题换了、数字没换=同屏自相矛盾）。 */
-  const ivData = useMemo(
-    () =>
-      ivQ.data && (!ivQ.data.sectorId || ivQ.data.sectorId === ivSectorIdValid)
-        ? ivQ.data
-        : null,
-    [ivQ.data, ivSectorIdValid],
-  );
+  /* IV 使用独立的任务读取流：正常每 10 分钟确认一次，后台任务 queued/running
+     时缩短到 3 秒；按板块世代丢弃晚到响应，避免切换后串台。 */
+  const ivQ = useSectorIvRefresh(ivSectorIdValid);
+  const ivData = ivQ.data;
   const ivRows = useMemo(
     () => (ivData?.rows ?? []).map(normalizeIvRow),
     [ivData],
@@ -344,8 +324,13 @@ export default function Sectors() {
               data={ivRows}
               meta={ivMeta}
               loading={ivQ.loading}
-              error={ivQ.error}
-              onRetry={ivQ.refresh}
+              refreshing={ivQ.refreshing}
+              error={ivQ.readError}
+              refresh={ivQ.refresh}
+              submitting={ivQ.submitting}
+              actionError={ivQ.actionError}
+              onRetry={ivQ.retryRead}
+              onRefresh={ivQ.requestRefresh}
               onOpenTicker={openTicker}
             />
           )}
@@ -397,9 +382,9 @@ export default function Sectors() {
               rows={ivRows}
               meta={ivMeta}
               loading={catalogQ.loading}
-              ivLoading={ivQ.loading || (!ivData && !ivQ.error)}
-              ivError={!!ivQ.error && !ivData}
-              onIvRetry={ivQ.refresh}
+              ivLoading={ivQ.loading || (!ivData && !ivQ.readError)}
+              ivError={!!ivQ.readError && !ivData}
+              onIvRetry={ivQ.retryRead}
               onOpenTicker={openTicker}
               onOpenPalette={openPalette}
             />

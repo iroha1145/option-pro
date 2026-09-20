@@ -27,6 +27,7 @@ DEFAULT_TASK_NAMES = (
     "maintenance",
     "stock_directory",
     "public_home",
+    "sector_iv_refresh",
     "earnings_analysis",
     "macro_conditions",
     "focus_refresh",
@@ -3049,6 +3050,22 @@ class RetentionTask:
         )
 
 
+class SectorIVTask:
+    """Independent public sector coverage, using the same queue as manual demand."""
+
+    @bind_trusted_system_task
+    async def __call__(self) -> TaskResult:
+        from app.services.sector_iv_refresh import run_refresh_batch
+
+        outcome = await run_refresh_batch()
+        return TaskResult(
+            status="degraded" if outcome["failed"] else "idle",
+            error_code="sector_iv_refresh_failed" if outcome["failed"] else None,
+            details=outcome,
+            next_delay_seconds=5.0,
+        )
+
+
 def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]:
     config = get_personal_config()
     ai = AIJobsTask(owner_id, settings=settings, personal_config=config)
@@ -3104,6 +3121,14 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
         personal_config=config,
     )
     return (
+        TaskSpec(
+            "sector_iv_refresh",
+            SectorIVTask(),
+            interval_seconds=5.0,
+            timeout_seconds=900.0,
+            failure_backoff_seconds=30.0,
+            max_backoff_seconds=300.0,
+        ),
         TaskSpec(
             "breakout",
             breakout,
@@ -3241,6 +3266,7 @@ __all__ = [
     "PublicHomeTask",
     "RetentionTask",
     "StockDirectoryTask",
+    "SectorIVTask",
     "StrengthRefreshTask",
     "build_default_tasks",
     "seconds_until_next_et_slot",

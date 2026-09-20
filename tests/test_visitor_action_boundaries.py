@@ -2,7 +2,7 @@
 
 目标口径：
 - 匿名访客默认只读已保存的快照，不触发模型任务、实时行情拉取、
-  期权冷启动扫描或外部数据补全；
+  期权冷启动扫描或外部数据补全；板块 IV 允许登记有界后台刷新需求；
 - 个股手动拉取（2026-08-08 起）对登录客户开放并按账号限额——正向
   路径钉在 tests/test_stock_pull_access.py，本文件守匿名/伪造 cookie
   仍被拒的一半；其余动作面朋友账号与匿名同样只读；
@@ -262,7 +262,7 @@ def test_visitor_earnings_submission_flag_restores_same_origin_branch() -> None:
 # ── 板块 IV 冷启动 ───────────────────────────────────────────
 
 
-def test_visitor_cold_sector_iv_returns_503_without_provider_calls(
+def test_visitor_cold_sector_iv_queues_without_provider_calls(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
@@ -284,22 +284,17 @@ def test_visitor_cold_sector_iv_returns_503_without_provider_calls(
 
     async def scenario():
         with request_owner_access_context(False):
-            try:
-                await sectors._request_iv_payload(
-                    sector_id,
-                    public_client_id="203.0.113.9",
-                    visitor_live_allowed=False,
-                )
-            except Exception as error:  # noqa: BLE001 - assert on shape below
-                return error
-            return None
+            return await sectors._request_iv_payload(
+                sector_id,
+                public_client_id="203.0.113.9",
+                visitor_live_allowed=False,
+            )
 
-    error = asyncio.run(scenario())
-    assert error is not None
-    assert getattr(error, "status_code", None) == 503
-    assert error.detail["code"] == "public_snapshot_unavailable"
+    payload = asyncio.run(scenario())
+    assert payload["source_status"] == "insufficient_data"
+    assert payload["refresh"]["status"] == "queued"
     assert calls == 0
-    assert not (tmp_path / "missing").exists()
+    assert (tmp_path / "missing" / "refresh.sqlite").is_file()
 
 
 def test_request_allows_visitor_live_pulls_prefers_injected_runtime() -> None:

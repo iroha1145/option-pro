@@ -261,134 +261,56 @@ def test_sector_iv_all_failures_are_not_reported_as_valid_data(monkeypatch: pyte
 def test_sector_iv_total_failure_is_cooled_and_concurrent_calls_coalesce(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    sector_id = "cooldown-sector"
-    monkeypatch.setitem(
-        sector_api.SECTORS,
-        sector_id,
-        {"name": "Cooldown", "tickers": ["AAA", "BBB"]},
-    )
-    monkeypatch.setattr(
-        sector_api,
-        "_read_sector_iv_snapshot",
-        lambda *_args, **_kwargs: None,
-    )
-    monkeypatch.setattr(
-        sector_api,
-        "_read_strength_sector_iv_snapshot",
-        lambda *_args, **_kwargs: None,
-    )
-    sector_api._cache.clear()
-    sector_api._locks.clear()
-    sector_api._sector_iv_failure_deadlines.clear()
+    from app.services.sector_iv_refresh import run_refresh_batch
+
+    sector_id = "semiconductors"
+    monkeypatch.setattr(sector_api, "_read_sector_iv_snapshot", lambda *a, **k: None)
+    monkeypatch.setattr(sector_api, "_read_strength_sector_iv_snapshot", lambda *a, **k: None)
     calls = 0
 
     async def unavailable(_sector_id: str) -> dict:
         nonlocal calls
         calls += 1
         await asyncio.sleep(0.02)
-        return {
-            "sector_id": sector_id,
-            "rankings": [],
-            "source_status": "insufficient_data",
-        }
+        return {"sector_id": sector_id, "rankings": [], "source_status": "insufficient_data"}
 
     monkeypatch.setattr(sector_api, "_iv_ranking_payload", unavailable)
 
-    async def scenario() -> list[object]:
-        # 冷却与合流是 visitor_live_pulls 开启后的保护；默认关闭时访客
-        # 直接得到 public_snapshot_unavailable（见 test_visitor_action_boundaries）。
+    async def scenario():
         with request_owner_access_context(False):
-            return await asyncio.gather(
-                *[
-                    sector_api._request_iv_payload(
-                        sector_id,
-                        public_client_id="203.0.113.20",
-                        visitor_live_allowed=True,
-                    )
-                    for _ in range(5)
-                ],
-                return_exceptions=True,
-            )
+            queued = await asyncio.gather(*[sector_api._request_iv_payload(sector_id) for _ in range(5)])
+            assert calls == 0
+            assert all(row["refresh"]["status"] == "queued" for row in queued)
+            assert len({row["refresh"]["requested_at"] for row in queued}) == 1
+            await asyncio.gather(run_refresh_batch(schedule=False), run_refresh_batch(schedule=False))
+            return await asyncio.gather(*[sector_api._request_iv_payload(sector_id) for _ in range(5)])
 
     results = asyncio.run(scenario())
-
     assert calls == 1
-    assert all(
-        isinstance(result, HTTPException)
-        and result.status_code == 503
-        and result.detail["code"] == "sector_iv_cooldown"
-        and int(result.headers["Retry-After"]) > 0
-        for result in results
-    )
-    sector_api._sector_iv_failure_deadlines.clear()
-    sector_api._public_sector_iv_recent.clear()
-    sector_api._cache.clear()
-    sector_api._locks.clear()
+    assert all(result["refresh"]["status"] == "failed" and result["refresh"]["retry_after_seconds"] > 0 for result in results)
 
 
 def test_public_sector_iv_provider_work_has_a_per_client_budget(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    sector_ids = ["budget-one", "budget-two", "budget-three"]
-    for sector_id in sector_ids:
-        monkeypatch.setitem(
-            sector_api.SECTORS,
-            sector_id,
-            {"name": sector_id, "tickers": ["AAA"]},
-        )
-    monkeypatch.setattr(
-        sector_api,
-        "_read_sector_iv_snapshot",
-        lambda *_args, **_kwargs: None,
-    )
-    monkeypatch.setattr(
-        sector_api,
-        "_read_strength_sector_iv_snapshot",
-        lambda *_args, **_kwargs: None,
-    )
-    monkeypatch.setattr(
-        sector_api,
-        "_write_sector_iv_snapshot",
-        lambda *_args, **_kwargs: None,
-    )
+    from starlette.requests import Request
+
     monkeypatch.setattr(sector_api, "_PUBLIC_SECTOR_IV_CLIENT_LIMIT", 2)
-    sector_api._cache.clear()
-    sector_api._locks.clear()
-    sector_api._sector_iv_failure_deadlines.clear()
-    sector_api._public_sector_iv_recent.clear()
+    request = Request({"type": "http", "headers": [], "client": ("203.0.113.21", 1234)})
 
-    async def available(sector_id: str) -> dict:
-        return {
-            "sector_id": sector_id,
-            "sector_name": sector_id,
-            "rankings": [{"ticker": "AAA", "atm_iv_percent": 25.0}],
-            "source_status": "active",
-        }
-
-    monkeypatch.setattr(sector_api, "_iv_ranking_payload", available)
-
-    async def scenario() -> None:
+    async def scenario():
         with request_owner_access_context(False):
-            for sector_id in sector_ids[:2]:
-                await sector_api._request_iv_payload(
-                    sector_id,
-                    public_client_id="203.0.113.21",
-                    visitor_live_allowed=True,
-                )
+            for sector_id in ["semiconductors", "software"]:
+                response = await sector_api.iv_refresh(sector_id, request)
+                assert response.status_code == 202
             with pytest.raises(HTTPException) as captured:
-                await sector_api._request_iv_payload(
-                    sector_ids[2],
-                    public_client_id="203.0.113.21",
-                    visitor_live_allowed=True,
-                )
+                await sector_api.iv_refresh("energy", request)
             assert captured.value.status_code == 429
             assert captured.value.detail["code"] == "sector_iv_rate_limited"
             assert int(captured.value.headers["Retry-After"]) > 0
 
     asyncio.run(scenario())
-    sector_api._public_sector_iv_recent.clear()
-    sector_api._cache.clear()
-    sector_api._locks.clear()
+
 
 
 def test_sector_iv_uses_massive_price_then_yahoo_for_uncovered_symbols(

@@ -35,6 +35,7 @@ from app.access import (
     get_access_runtime,
     is_public_earnings_ai_read_path,
     is_public_earnings_impact_action_path,
+    is_public_sector_iv_refresh_path,
     is_public_stock_pull_path,
     request_has_account_session,
     request_owner_access_context,
@@ -248,7 +249,6 @@ _PROVIDER_WORK_READ_PATTERNS = tuple(
     _re.compile(pattern, _re.IGNORECASE)
     for pattern in (
         r"^/api/options/[^/]+/(?:expirations|chain)$",
-        r"^/api/sectors/[^/]+/(?:iv-ranking|heatmap)$",
     )
 )
 _HTML_CSP = (
@@ -398,7 +398,8 @@ def _is_public_read_request(
 
     The two keyword flags mirror ``AccessConfig``: the earnings-impact
     submission and the manual stock pull are visitor-reachable only when the
-    owner opted in via config; by default visitors stay read-only.
+    owner opted in via config. Sector refresh is a separately bounded public
+    queue and does not depend on either opt-in flag.
     """
 
     normalized_method = method.upper()
@@ -415,6 +416,7 @@ def _is_public_read_request(
         )
     return normalized_method == "POST" and (
         path in _PUBLIC_READ_POST_PATHS
+        or is_public_sector_iv_refresh_path(path)
         or (visitor_ai_actions and is_public_earnings_impact_action_path(path))
         or (visitor_live_pulls and is_public_stock_pull_path(path))
     )

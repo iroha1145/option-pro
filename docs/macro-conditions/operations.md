@@ -65,7 +65,7 @@ stale threshold、`minimum_history`、模块最低因子数量、Regime 阈值�
 ```
 breakout · catalyst_sync · focus · ai_jobs · maintenance · stock_directory
 public_home · earnings_analysis · macro_conditions
-focus_refresh · strength_refresh · breakout_refresh · retention
+focus_refresh · strength_refresh · sector_iv_refresh · breakout_refresh · retention
 ```
 
 - 定时与手动**共用这一个任务**（不存在第二个宏观任务名）。

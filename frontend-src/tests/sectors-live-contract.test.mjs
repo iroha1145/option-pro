@@ -106,6 +106,10 @@ function loadSectorsModule(responses = {}) {
           calls.push(url);
           return responses[url] ?? {};
         },
+        post: async (url) => {
+          calls.push(url);
+          return responses[url] ?? {};
+        },
         mockOr: (_mock, live) => live(),
         toQuery: (params) => new URLSearchParams(params).toString(),
       };
@@ -191,6 +195,15 @@ test('IV 排名保留顶层来源状态与覆盖率，不伪装成历史百分�
     snapshot_source: 'strength_worker',
     snapshot_origin: 'public_live',
     providers: ['Yahoo/yfinance'],
+    refresh: {
+      status: 'running',
+      retry_after_seconds: 3,
+      requested_at: '2026-07-23T08:00:01Z',
+      started_at: '2026-07-23T08:00:02Z',
+      completed_at: null,
+      next_refresh_at: null,
+      error_code: null,
+    },
     rankings: [
       {
         ticker: 'nvda',
@@ -212,6 +225,15 @@ test('IV 排名保留顶层来源状态与覆盖率，不伪装成历史百分�
   assert.equal(result.snapshotSource, 'strength_worker');
   assert.equal(result.snapshotOrigin, 'public_live');
   assert.deepEqual(result.providers, ['Yahoo/yfinance']);
+  assert.deepEqual(JSON.parse(JSON.stringify(result.refresh)), {
+    status: 'running',
+    retryAfterSeconds: 3,
+    requestedAt: '2026-07-23T08:00:01Z',
+    startedAt: '2026-07-23T08:00:02Z',
+    completedAt: null,
+    nextRefreshAt: null,
+    errorCode: null,
+  });
   assert.equal(result.rows[0].priceProvider, 'Massive');
   assert.equal('ivChange30d' in result.rows[0], false);
 });
@@ -227,18 +249,27 @@ test('板块网关调用目录、强度聚合和 IV 排名真实路径', async (
       sector_id: 'semi',
       rankings: [{ ticker: 'NVDA', atm_iv_percent: 40, sector_iv_rank: 50 }],
     },
+    '/sectors/semi/iv-refresh': {
+      sector_id: 'semi',
+      refresh: { status: 'queued', retry_after_seconds: 5 },
+    },
   };
   const loaded = loadSectorsModule(responses);
 
   await loaded.exports.sectorsApi.list();
   await loaded.exports.sectorsApi.strength('6mo');
   await loaded.exports.sectorsApi.ivRanking('semi');
+  const refresh = await loaded.exports.sectorsApi.ivRefresh('semi');
 
   assert.deepEqual(loaded.calls, [
     '/sectors',
     '/strength/sectors?period=6mo',
     '/sectors/semi/iv-ranking',
+    '/sectors/semi/iv-refresh',
   ]);
+  assert.equal(refresh.sectorId, 'semi');
+  assert.equal(refresh.refresh.status, 'queued');
+  assert.equal(refresh.refresh.retryAfterSeconds, 5);
 });
 
 test('板块组件不再消费无后端依据的趋势、资金流和相关性字段', () => {
@@ -292,7 +323,7 @@ test('板块组件不再消费无后端依据的趋势、资金流和相关性�
   assert.match(ivPanel, /meta\.stale/);
 });
 
-test('IV 排名等待真实板块目录，首屏不再请求旧占位编号', () => {
+test('IV 排名等待真实板块目录，并交给按板块隔离的刷新流', () => {
   const page = fs.readFileSync(
     path.join(sourceRoot, 'pages', 'Sectors.tsx'),
     'utf8',
@@ -300,14 +331,38 @@ test('IV 排名等待真实板块目录，首屏不再请求旧占位编号', ()
 
   assert.equal(page.includes("useState('semi')"), false);
   assert.equal(page.includes('catalogIds.has(ivSectorId)'), true);
-  assert.equal(page.includes('Promise.resolve(null)'), true);
-  assert.match(
-    page,
-    /ivSectorIdValid\s*\?\s*sectorsApi\s*\.ivRanking\(ivSectorIdValid\)/,
+  assert.match(page, /useSectorIvRefresh\(ivSectorIdValid\)/);
+  assert.match(page, /refresh=\{ivQ\.refresh\}/);
+  assert.match(page, /onRefresh=\{ivQ\.requestRefresh\}/);
+  assert.equal(page.includes('useAccess'), false, '公开 IV 更新不应依赖登录身份');
+});
+
+test('IV 更新按钮覆盖所有数据状态，任务运行时改用三秒读取', () => {
+  const panel = fs.readFileSync(
+    path.join(sourceRoot, 'components', 'sectors', 'IvPanel.tsx'),
+    'utf8',
   );
-  // 降级分支仍在（目录未到达前不发请求）
-  assert.match(
-    page,
-    /:\s*Promise\.resolve\(null\)/,
+  const control = fs.readFileSync(
+    path.join(sourceRoot, 'components', 'sectors', 'IvRefreshControl.tsx'),
+    'utf8',
   );
+  const hook = fs.readFileSync(
+    path.join(sourceRoot, 'components', 'sectors', 'useSectorIvRefresh.ts'),
+    'utf8',
+  );
+  const scheduler = fs.readFileSync(
+    path.join(sourceRoot, 'components', 'sectors', 'sectorIvReadScheduler.ts'),
+    'utf8',
+  );
+
+  assert.ok(
+    panel.indexOf('<IvRefreshControl') < panel.indexOf('{loading && rows.length === 0'),
+    '更新按钮应在骨架、错误、空态和数据表的共同分支中',
+  );
+  assert.match(control, /const disabled = busy \|\| cooling/);
+  assert.match(control, /useRetryCountdown\(refresh, refresh\.retryAfterSeconds\)/);
+  assert.equal(control.includes('useAccess'), false, '访客按钮不应有身份门槛');
+  assert.match(hook, /SectorIvReadScheduler/);
+  assert.match(scheduler, /ACTIVE_REFRESH_INTERVAL_MS = 3_000/);
+  assert.match(scheduler, /NORMAL_READ_INTERVAL_MS = 600_000/);
 });
