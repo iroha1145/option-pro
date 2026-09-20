@@ -885,18 +885,24 @@ def run_limited_v1(
         panel, coverage = bars_to_panel(load_report["bars"], load_report["appearances"])
         data_hash = data_hash or str(load_report["dataset_hash"])
     else:
+        appearances = current_universe_tickers()
+        coverage = [
+            {"ticker": sid, "status": "ok", "bars": len(getattr(series, "dates", []) or [])}
+            for sid, series in panel.items()
+        ]
+        missing = [ticker for ticker in appearances if ticker not in panel]
+        coverage.extend({"ticker": ticker, "status": "empty", "bars": 0} for ticker in missing)
         load_report = {
             "bars": {},
-            "appearances": current_universe_tickers(),
+            "appearances": appearances,
             "sources": ["caller_panel"],
-            "missing": [],
+            "missing": missing,
             "fetched": 0,
             "failures": [],
             "dataset_hash": data_hash or "caller_panel",
             "inventory": inventory_inputs(base),
             "allow_network": False,
         }
-        coverage = [{"ticker": sid, "status": "ok", "bars": len(getattr(series, "dates", []) or [])} for sid, series in panel.items()]
         data_hash = data_hash or "caller_panel"
     if not panel:
         report = {

@@ -310,6 +310,9 @@ def test_run_limited_v1_synthetic_panel_writes_preview(tmp_path: Path) -> None:
     assert (tmp_path / "preview.html").is_file()
     assert (tmp_path / "research-eod-v1-snapshot.json").is_file()
     assert "AUTH_REQUIRED" not in json.dumps(report["replay"])
+    assert report["load"]["wanted_n"] == len(current_universe_tickers())
+    assert "NVDA" not in report["load"]["missing"]
+    assert len(report["load"]["missing"]) == report["load"]["wanted_n"] - 4
 
 
 def test_preview_only_reads_snapshot_without_yahoo(tmp_path: Path) -> None:
