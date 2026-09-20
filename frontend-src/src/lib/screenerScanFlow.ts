@@ -53,12 +53,22 @@ export function shouldSubmitStrengthRefresh(input: {
   snapshotMissing: boolean;
   snapshotStale: boolean;
   sourceStatus?: string | null;
+  rankingAlgorithm?: string | null;
+  historicalExample?: boolean;
+  synthetic?: boolean;
 }): StrengthRefreshDecision {
   if (!input.isOwner || input.isMock) {
     return { submit: false, reason: input.snapshotMissing ? 'missing' : 'reuse' };
   }
   if (input.forceRefresh) return { submit: true, reason: 'force' };
   if (input.snapshotMissing) return { submit: true, reason: 'missing' };
+  if (
+    input.rankingAlgorithm === 'eod_limited_v1'
+    && (input.historicalExample || input.synthetic)
+    && !input.snapshotStale
+  ) {
+    return { submit: false, reason: 'reuse' };
+  }
   if (input.snapshotStale) return { submit: true, reason: 'stale' };
   if (input.sourceStatus === 'unknown' || input.sourceStatus === 'historical') {
     return { submit: true, reason: 'unknown' };

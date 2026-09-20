@@ -53,6 +53,25 @@ test('A03 missing snapshot submits only for the owner', () => {
   assert.equal(shouldSubmitStrengthRefresh({ ...ownerBase, isOwner: false, snapshotMissing: true }).submit, false);
 });
 
+test('labeled EOD historical snapshots are reused instead of posting a live refresh', () => {
+  assert.equal(shouldSubmitStrengthRefresh({
+    ...ownerBase,
+    sourceStatus: 'historical',
+    rankingAlgorithm: 'eod_limited_v1',
+    historicalExample: true,
+  }).submit, false);
+  assert.equal(shouldSubmitStrengthRefresh({
+    ...ownerBase,
+    sourceStatus: 'historical',
+    rankingAlgorithm: 'eod_limited_v1',
+    synthetic: true,
+  }).submit, false);
+  assert.equal(shouldSubmitStrengthRefresh({
+    ...ownerBase,
+    sourceStatus: 'historical',
+  }).submit, true);
+});
+
 test('A04 visitors never submit a refresh for stale or missing snapshots', () => {
   assert.equal(shouldSubmitStrengthRefresh({
     isOwner: false,

@@ -440,6 +440,7 @@ export default function Screener() {
         forceRefresh: Boolean(options.forceRefresh),
         snapshotMissing: false,
         snapshotStale: false,
+        rankingAlgorithm: filters.rankingAlgorithm,
       }).submit) {
         await refreshSnapshot();
         submittedRefresh = true;
@@ -465,6 +466,7 @@ export default function Screener() {
             forceRefresh: Boolean(options.forceRefresh),
             snapshotMissing,
             snapshotStale: false,
+            rankingAlgorithm: filters.rankingAlgorithm,
           });
           if (submittedRefresh || !decision.submit || !snapshotMissing) throw error;
           await refreshSnapshot();
@@ -479,6 +481,9 @@ export default function Screener() {
         snapshotMissing: false,
         snapshotStale: result.stale,
         sourceStatus: result.sourceStatus,
+        rankingAlgorithm: filters.rankingAlgorithm,
+        historicalExample: result.historicalExample,
+        synthetic: result.synthetic,
       });
       if (followUp.submit && !submittedRefresh) {
         await refreshSnapshot();
