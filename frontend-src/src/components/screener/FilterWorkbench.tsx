@@ -24,7 +24,7 @@ import {
   type TierFilter,
   type Timeframe,
 } from './types';
-import { applyEodLimitedView, isEodLimitedRanking } from '@/lib/eodLimitedView';
+import { applyEodLimitedView } from '@/lib/eodLimitedView';
 import { t as __t } from '../../i18n/core.ts';
 
 const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
@@ -291,8 +291,8 @@ export default function FilterWorkbench({
         <div className="w-full min-w-0 sm:w-auto">
           <FieldLabel>{__t('周期')}</FieldLabel>
           <Segmented<Timeframe>
-            options={(isEodLimitedRanking(draft.rankingAlgorithm) ? (['short', 'mid', 'long'] as const) : (['short', 'mid', 'long', 'all'] as const)).map((v) => ({ value: v, label: TIMEFRAME_CN[v] }))}
-            value={draft.timeframe === 'all' && isEodLimitedRanking(draft.rankingAlgorithm) ? 'mid' : draft.timeframe}
+            options={(['short', 'mid', 'long'] as const).map((v) => ({ value: v, label: TIMEFRAME_CN[v] }))}
+            value={draft.timeframe === 'all' ? 'mid' : draft.timeframe}
             onChange={(timeframe) => patch({ timeframe })}
             ariaLabel={__t('周期')}
           />
@@ -310,38 +310,8 @@ export default function FilterWorkbench({
           <FieldLabel>{__t('返回数量')}</FieldLabel>
           <MenuSelect ariaLabel={__t("最多显示数量")} value={draft.topN} onChange={(topN) => patch({ topN })} options={TOPN_OPTIONS} />
         </div>
-        <div className="w-full min-w-0 sm:w-auto">
-          <FieldLabel>{__t('排序算法')}</FieldLabel>
-          <Segmented<ScanFilters['rankingAlgorithm']>
-            options={[
-              { value: 'follow_default', label: __t('跟随默认') },
-              { value: 'production', label: __t('原版排序') },
-              { value: 'a0_mid_long', label: __t('中长期趋势（试用）') },
-              { value: 'eod_limited_v1', label: __t('收盘技术（受限）') },
-            ]}
-            value={draft.rankingAlgorithm}
-            onChange={(rankingAlgorithm) => patch({ rankingAlgorithm })}
-            scrollable
-            ariaLabel={__t('排序算法')}
-          />
-        </div>
         <ScanButton scanning={scanning} dirty={dirty} universeCount={universe.count} onScan={onScan} className="w-full sm:ml-auto sm:w-auto" />
       </motion.div>
-      {draft.rankingAlgorithm === 'a0_mid_long' && (draft.timeframe !== 'all' || draft.profile !== 'balanced') && (
-        <p className="mt-3 text-caption text-warn-700" data-testid="screener-a0-view-warning">
-          {__t('中长期趋势排序仅支持周期=全部且偏好=均衡。请改回兼容视图，或改用原版排序。')}
-        </p>
-      )}
-      {draft.rankingAlgorithm === 'a0_mid_long' && draft.timeframe === 'all' && draft.profile === 'balanced' && (
-        <p className="mt-3 text-caption text-ink-500" data-testid="screener-a0-view-note">
-          {__t('当前试用固定中长期组合：0.5×中期 + 0.5×长期。原综合分仍可查看，不作为本模式名次。')}
-        </p>
-      )}
-      {(isEodLimitedRanking(draft.rankingAlgorithm) || draft.rankingAlgorithm === 'follow_default') && (
-        <p className="mt-3 text-caption text-ink-500" data-testid="screener-eod-view-note">
-          {__t('当前选股默认是收盘技术（受限），周期缺省为中期。数据资格未核实时进入观察，不把成交额门标成已通过。可显式切回原版。')}
-        </p>
-      )}
 
       {/* 次要条件收纳；已选择的范围常驻，避免折叠后忘记当前扫描门槛。 */}
       <details className="group/filters mt-5 border-t border-line/70 pt-3" data-testid="screener-advanced-filters">

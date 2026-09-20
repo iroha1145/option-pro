@@ -5,6 +5,18 @@
 import type { Dict } from './types';
 
 export const HINTS: Dict = {
+  '评分综合趋势、动量、结构、突破、回踩、量能、相对表现与行业等已收盘日线因子。不同风险偏好会调整门槛；观察名单可包含数据资格尚未核实的标的，合格综合还要求多种方法形成共识。': [
+    'The score combines closed-daily-bar factors such as trend, momentum, structure, breakouts, pullbacks, volume, relative performance, and industry context. Risk profiles adjust thresholds; the watch list may include names with unverified eligibility, while the eligible composite also requires agreement across methods.',
+    'スコアは、確定日足のトレンド、モメンタム、構造、ブレイクアウト、押し目、出来高、相対パフォーマンス、業種などを総合します。リスク設定で閾値が変わり、観察リストには適格性未確認の銘柄を含む場合があります。適格総合には複数手法の合意も必要です。',
+  ],
+  '趋势因子：衡量价格方向与均线结构。': ['Trend factor: measures price direction and moving-average structure.', 'トレンド要因：価格方向と移動平均の構造を測ります。'],
+  '动量因子：按当前周期衡量收益变化。': ['Momentum factor: measures return changes over the selected timeframe.', 'モメンタム要因：選択した期間のリターン変化を測ります。'],
+  '结构因子：观察高低点与价格形态是否相互支持。': ['Structure factor: checks whether highs, lows, and price patterns support one another.', '構造要因：高値・安値と価格パターンが整合しているかを確認します。'],
+  '突破因子：衡量突破确认与首日跟进情况。': ['Breakout factor: measures breakout confirmation and first-day follow-through.', 'ブレイクアウト要因：ブレイクの確認と初日の追随を測ります。'],
+  '回踩因子：衡量趋势内的回撤位置与承接情况。': ['Pullback factor: measures retracement location and support within the trend.', '押し目要因：トレンド内の下落位置と支えを測ります。'],
+  '量能因子：使用日线成交量；成交额资格未核实时只进入观察。': ['Volume factor: uses daily volume; names with unverified dollar-volume eligibility remain on watch.', '出来高要因：日足の出来高を使い、売買代金の適格性が未確認の銘柄は観察扱いになります。'],
+  '相对因子：衡量相对基准的表现；缺少行业分类时不推断行业相对强弱。': ['Relative factor: measures performance versus a benchmark and does not infer industry-relative strength without classification.', '相対要因：ベンチマーク比の成績を測り、業種分類がない場合は業種内の相対強度を推定しません。'],
+  '行业因子：衡量行业内相对表现；没有可靠分类时保持未知。': ['Industry factor: measures relative performance within an industry and stays unknown without reliable classification.', '業種要因：業種内の相対成績を測り、信頼できる分類がない場合は不明のままにします。'],
   "缺失项不计入评分，其余项重新分配权重；数据越少，置信度越低。": ["Missing components are excluded and the remaining weights are rescaled. Less data means lower confidence.", "欠測項目を除き、残りの項目で重みを調整します。データが少ないほど信頼度は下がります。"],
 
   '趋势 T': ['Trend T', 'トレンド T'],

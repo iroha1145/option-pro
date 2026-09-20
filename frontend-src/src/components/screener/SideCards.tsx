@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import Icon from '@/components/icons';
 import HatchLegend from '@/components/shared/HatchLegend';
 import SourceNote from '@/components/shared/SourceNote';
+import { SCORE_HINTS } from '@/lib/scoreHints';
 import { SUBSCORE_META, type Tier, type TierFilter } from './types';
 import { t as __t } from '../../i18n/core.ts';
 
@@ -173,9 +174,14 @@ export function MethodCard({
                 )}
               </div>
             ) : !profile?.weights ? (
-              /* live 契约 /strength/profiles 仅返回枚举，无权重明细；profile 为
-               * null（档位不在枚举里）同样不编造默认 25%（审计 2.1.1/2.1.4） */
-              <p className="mt-4 text-caption leading-[18px] text-ink-400">{__t('该档位暂无权重明细')}</p>
+              /* live 契约不下发旧版四因子权重。这里说明当前收盘日线八因子、
+               * 风险偏好门槛与观察/综合名单关系，不用“权重暂无”掩盖真实规则。 */
+              <div className="mt-4 space-y-2">
+                <p className="text-caption leading-[18px] text-ink-500">{SCORE_HINTS.strengthComposite.body}</p>
+                {SCORE_HINTS.strengthComposite.note && (
+                  <p className="text-micro leading-[16px] text-ink-400">{SCORE_HINTS.strengthComposite.note}</p>
+                )}
+              </div>
             ) : (
               <div className="mt-4 grid grid-cols-[max-content_minmax(0,1fr)_max-content] gap-y-2.5">
                 {SUBSCORE_META.map(({ key, label }) => {
@@ -197,12 +203,11 @@ export function MethodCard({
                 })}
               </div>
             )}
-            <p className="mt-3 text-caption leading-[18px] text-ink-500">
-              {profile?.description ||
-                (profile?.weights
-                  ? __t('最终强度分为四因子加权合成（0–100），≥85 为高强度区。')
-                  : __t('偏好档位决定评分时侧重哪些因子，最终强度分 0–100，≥85 为高强度区。'))}
-            </p>
+            {profile?.weights && (
+              <p className="mt-3 text-caption leading-[18px] text-ink-500">
+                {profile.description || __t('最终强度分为四因子加权合成（0–100），≥85 为高强度区。')}
+              </p>
+            )}
             {profile?.weights && (
               <SourceNote className="mt-3" text={__t("权重取自当前选用的评分档位")} />
             )}

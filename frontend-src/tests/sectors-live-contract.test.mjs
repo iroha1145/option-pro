@@ -147,6 +147,9 @@ test('板块目录与强度聚合按真实契约映射，缺失数值不补零',
   const strength = exports.mapSectorStrengthEnvelope(
     {
       as_of: '2026-07-23T08:00:00Z',
+      _stale: true,
+      source_status: 'stale',
+      stale_reason: 'newer_score_session_available',
       period: '3mo',
       period_days: 63,
       sectors: [
@@ -154,14 +157,16 @@ test('板块目录与强度聚合按真实契约映射，缺失数值不补零',
           sector_id: 'semi',
           name: '半导体',
           count: 2,
+          member_count: 8,
+          scored_count: 0,
           avg_return: 12.5,
           avg_return_1mo: 4.1,
           avg_return_3mo: 12.5,
           avg_return_6mo: 21.8,
-          leaders: [
-            { ticker: 'nvda', score: 91.2 },
-            { ticker: 'AMD' },
-          ],
+          avg_strength: null,
+          leaders: [],
+          score_data_through: null,
+          score_source_status: 'unavailable',
         },
       ],
     },
@@ -174,7 +179,14 @@ test('板块目录与强度聚合按真实契约映射，缺失数值不补零',
   );
   assert.equal(strength.sectors[0].avgReturn, 12.5);
   assert.equal(strength.sectors[0].avgStrength, null);
-  assert.equal(strength.sectors[0].leaders[1].score, null);
+  assert.equal(strength.sectors[0].leaders.length, 0);
+  assert.equal(strength.sectors[0].memberCount, 8);
+  assert.equal(strength.sectors[0].scoredCount, 0);
+  assert.equal(strength.sectors[0].scoreDataThrough, null);
+  assert.equal(strength.sectors[0].scoreSourceStatus, 'unavailable');
+  assert.equal(strength.stale, true);
+  assert.equal(strength.sourceStatus, 'stale');
+  assert.equal(strength.staleReason, 'newer_score_session_available');
   assert.equal('flowRating' in strength.sectors[0], false);
   assert.equal('corr' in strength.sectors[0], false);
   assert.equal('trend30d' in strength.sectors[0], false);
@@ -299,6 +311,8 @@ test('板块组件不再消费无后端依据的趋势、资金流和相关性�
     'avgReturn',
     'avgStrength',
     'coveredCount',
+    'scoredCount',
+    'scoreDataThrough',
     'leaders',
   ]) {
     assert.equal(source.includes(required), true, `应消费 ${required}`);

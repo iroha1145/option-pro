@@ -1,11 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 
 import { DEFAULT_FILTERS } from '../src/components/screener/types.ts';
 import { buildStrengthScanRequest } from '../src/components/screener/scanRequest.ts';
 import { isStrengthSnapshotPreparing, strengthParametersMatch } from '../src/lib/screenerScanFlow.ts';
-import { isA0Ranking, keepServerRankingOrder, rowPrimarySortScore } from '../src/lib/screenerSort.ts';
-import { applyEodLimitedView, followsEodScreenerView, isEodLimitedRanking, supportsDollarVolumeFilter } from '../src/lib/eodLimitedView.ts';
+import { keepServerRankingOrder, rowPrimarySortScore } from '../src/lib/screenerSort.ts';
+import { applyEodLimitedView, isEodLimitedRanking, supportsDollarVolumeFilter } from '../src/lib/eodLimitedView.ts';
 import { t1StatusPresentation } from '../src/lib/t1Status.ts';
 import {
   DEFAULT_ALGORITHM_PREFERENCES,
@@ -15,15 +16,29 @@ import {
   writeAlgorithmPreferences,
 } from '../src/lib/algorithmPreferences.ts';
 
-test('follow_default is sent explicitly on both scan and refresh identities', () => {
+test('the screener and owner console expose no algorithm category or internal score basis', async () => {
+  const [page, filters, owner, sideCards] = await Promise.all([
+    readFile(new URL('../src/pages/Screener.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../src/components/screener/FilterWorkbench.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../src/components/catalysts/ManagePanel.tsx', import.meta.url), 'utf8'),
+    readFile(new URL('../src/components/screener/SideCards.tsx', import.meta.url), 'utf8'),
+  ]);
+  assert.doesNotMatch(filters, /排序算法|原版排序|中长期趋势|收盘技术（受限）/);
+  assert.doesNotMatch(page, /scoreBasis|screener-effective-algorithm|切回原版排序/);
+  assert.doesNotMatch(owner, /screenerRankingAlgorithm|选股默认算法/);
+  assert.match(sideCards, /SCORE_HINTS\.strengthComposite\.body/);
+  assert.doesNotMatch(sideCards, /该档位暂无权重明细|偏好档位决定评分时侧重哪些因子/);
+});
+
+test('the screener always sends the single current engine identity', () => {
   const request = buildStrengthScanRequest(DEFAULT_FILTERS);
-  assert.equal(request.apiParams.ranking_algorithm, 'follow_default');
-  assert.equal(request.refreshParameters.ranking_algorithm, 'follow_default');
+  assert.equal(request.apiParams.ranking_algorithm, 'eod_limited_v1');
+  assert.equal(request.refreshParameters.ranking_algorithm, 'eod_limited_v1');
   assert.equal(request.apiParams.list_kind, 'observation');
   assert.equal(request.apiParams.timeframe, 'mid');
 });
 
-test('explicit A0 is sent on both scan and refresh identities', () => {
+test('legacy A0 and original choices normalize to the single current engine', () => {
   const filters = applyEodLimitedView({
     ...DEFAULT_FILTERS,
     rankingAlgorithm: 'a0_mid_long',
@@ -31,10 +46,10 @@ test('explicit A0 is sent on both scan and refresh identities', () => {
     profile: 'aggressive',
   });
   const request = buildStrengthScanRequest(filters);
-  assert.equal(request.apiParams.ranking_algorithm, 'a0_mid_long');
-  assert.equal(request.apiParams.timeframe, 'all');
-  assert.equal(request.apiParams.profile, 'balanced');
-  assert.equal(request.refreshParameters.ranking_algorithm, 'a0_mid_long');
+  assert.equal(request.apiParams.ranking_algorithm, 'eod_limited_v1');
+  assert.equal(request.apiParams.timeframe, 'mid');
+  assert.equal(request.apiParams.profile, 'aggressive');
+  assert.equal(request.refreshParameters.ranking_algorithm, 'eod_limited_v1');
   assert.equal(
     strengthParametersMatch(request.refreshParameters, request.refreshParameters),
     true,
@@ -48,7 +63,7 @@ test('explicit A0 is sent on both scan and refresh identities', () => {
   );
 });
 
-test('A0 display score stays on the sort score and missing stays missing', () => {
+test('the visible score always uses the current engine strength score', () => {
   const scored = {
     ticker: 'AAA',
     strengthScore: 91,
@@ -61,11 +76,9 @@ test('A0 display score stays on the sort score and missing stays missing', () =>
     sortScore: null,
     sortAlgorithm: 'a0_mid_long',
   };
-  assert.equal(rowPrimarySortScore(scored, 'a0_mid_long'), 70);
-  assert.equal(rowPrimarySortScore(missing, 'a0_mid_long'), null);
-  assert.equal(keepServerRankingOrder('a0_mid_long'), true);
-  assert.equal(keepServerRankingOrder('production'), false);
-  assert.equal(isA0Ranking('a0_mid_long'), true);
+  assert.equal(rowPrimarySortScore(scored), 91);
+  assert.equal(rowPrimarySortScore(missing), 88);
+  assert.equal(keepServerRankingOrder(), true);
 });
 
 test('T1 unknown or unmet is not labeled as a weak signal', () => {
@@ -78,14 +91,14 @@ test('T1 unknown or unmet is not labeled as a weak signal', () => {
   assert.equal((t1StatusPresentation('unavailable')?.label ?? '').includes('弱信号'), false);
 });
 
-test('follow_default is an explicit request identity', () => {
-  assert.equal(requestedScreenerAlgorithm('follow_default'), 'follow_default');
+test('legacy screener preferences normalize without changing radar preferences', () => {
+  assert.equal(requestedScreenerAlgorithm('follow_default'), 'eod_limited_v1');
   assert.equal(requestedRadarAlgorithm('follow_default'), 'follow_default');
-  assert.equal(requestedScreenerAlgorithm('production'), 'production');
+  assert.equal(requestedScreenerAlgorithm('production'), 'eod_limited_v1');
   assert.equal(requestedRadarAlgorithm('t1_daily_priority'), 't1_daily_priority');
 });
 
-test('explicit EOD limited is sent on both scan and refresh identities', () => {
+test('observation and eligible result sets share the same engine identity', () => {
   const request = buildStrengthScanRequest({
     ...DEFAULT_FILTERS,
     timeframe: 'mid',
@@ -105,7 +118,7 @@ test('explicit EOD limited is sent on both scan and refresh identities', () => {
   assert.equal(isEodLimitedRanking('eod_limited_v1'), true);
 });
 
-test('first EOD select remaps timeframe all to mid', () => {
+test('legacy all timeframe remaps to the supported mid view', () => {
   const next = applyEodLimitedView({
     ...DEFAULT_FILTERS,
     rankingAlgorithm: 'eod_limited_v1',
@@ -115,18 +128,17 @@ test('first EOD select remaps timeframe all to mid', () => {
   assert.equal(next.rankingAlgorithm, 'eod_limited_v1');
 });
 
-test('follow_default preserves the view until the server resolves its current default', () => {
+test('follow_default also normalizes to the current engine and mid view', () => {
   const next = applyEodLimitedView({
     ...DEFAULT_FILTERS,
     rankingAlgorithm: 'follow_default',
     timeframe: 'all',
   });
-  assert.equal(next.timeframe, 'all');
-  assert.equal(followsEodScreenerView('follow_default'), true);
-  assert.equal(followsEodScreenerView('production'), false);
+  assert.equal(next.timeframe, 'mid');
+  assert.equal(next.rankingAlgorithm, 'eod_limited_v1');
 });
 
-test('restored A0 preferences reopen on the only supported view', () => {
+test('restored A0 preferences cannot restore removed view constraints', () => {
   const next = applyEodLimitedView({
     ...DEFAULT_FILTERS,
     rankingAlgorithm: 'a0_mid_long',
@@ -134,27 +146,26 @@ test('restored A0 preferences reopen on the only supported view', () => {
     profile: 'aggressive',
     presetId: 'aggressive',
   });
-  assert.equal(next.timeframe, 'all');
-  assert.equal(next.profile, 'balanced');
-  assert.equal(next.presetId, null);
+  assert.equal(next.timeframe, 'mid');
+  assert.equal(next.profile, 'aggressive');
+  assert.equal(next.presetId, 'aggressive');
+  assert.equal(next.rankingAlgorithm, 'eod_limited_v1');
 });
 
-test('dollar-volume controls stay disabled until follow_default resolves', () => {
-  assert.equal(supportsDollarVolumeFilter({ rankingAlgorithm: 'eod_limited_v1' }), false);
-  assert.equal(supportsDollarVolumeFilter({ rankingAlgorithm: 'follow_default' }), false);
-  assert.equal(supportsDollarVolumeFilter({ rankingAlgorithm: 'follow_default', effectiveAlgorithm: 'production' }), true);
-  assert.equal(supportsDollarVolumeFilter({ rankingAlgorithm: 'follow_default', effectiveAlgorithm: 'eod_limited_v1' }), false);
-  assert.equal(supportsDollarVolumeFilter({ rankingAlgorithm: 'production', serverSupport: false }), false);
+test('dollar-volume controls follow server capability metadata', () => {
+  assert.equal(supportsDollarVolumeFilter({}), false);
+  assert.equal(supportsDollarVolumeFilter({ serverSupport: false }), false);
+  assert.equal(supportsDollarVolumeFilter({ serverSupport: true }), true);
 });
 
-test('only preparing 503 is treated as an in-progress A0 snapshot', () => {
+test('only preparing 503 is treated as an in-progress snapshot', () => {
   assert.equal(isStrengthSnapshotPreparing({ code: 503, bizCode: 'strength_snapshot_preparing' }), true);
   assert.equal(isStrengthSnapshotPreparing({ code: 503, bizCode: 'strength_snapshot_unavailable' }), false);
   assert.equal(isStrengthSnapshotPreparing({ code: 500, bizCode: 'strength_snapshot_preparing' }), false);
   assert.equal(isStrengthSnapshotPreparing(null), false);
 });
 
-test('local algorithm preferences keep an explicit original choice', () => {
+test('local legacy screener preferences collapse while radar preference remains independent', () => {
   const memory = new Map();
   globalThis.window = {
     localStorage: {
@@ -165,10 +176,10 @@ test('local algorithm preferences keep an explicit original choice', () => {
   assert.deepEqual(readAlgorithmPreferences(), DEFAULT_ALGORITHM_PREFERENCES);
   writeAlgorithmPreferences({ screenerRankingAlgorithm: 'production', radarSortAlgorithm: 'production' }, 'account:alice');
   const stored = readAlgorithmPreferences('account:alice');
-  assert.equal(stored.screenerRankingAlgorithm, 'production');
+  assert.equal(stored.screenerRankingAlgorithm, 'eod_limited_v1');
   assert.equal(stored.radarSortAlgorithm, 'production');
   writeAlgorithmPreferences({ screenerRankingAlgorithm: 'follow_default' }, 'account:alice');
-  assert.equal(readAlgorithmPreferences('account:alice').screenerRankingAlgorithm, 'follow_default');
-  assert.equal(readAlgorithmPreferences('account:bob').screenerRankingAlgorithm, 'follow_default');
+  assert.equal(readAlgorithmPreferences('account:alice').screenerRankingAlgorithm, 'eod_limited_v1');
+  assert.equal(readAlgorithmPreferences('account:bob').screenerRankingAlgorithm, 'eod_limited_v1');
   delete globalThis.window;
 });

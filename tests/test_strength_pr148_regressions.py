@@ -11,8 +11,9 @@ from threading import Event
 import pytest
 
 from app.api import strength
+from tests.legacy_strength_support import read_legacy_snapshot
 from app.services.strength import scanner
-from app.worker.tasks import StrengthRefreshTask
+from tests.legacy_strength_support import LegacySnapshotTask
 from tests.http_response_support import (
     anonymous_get_request,
     lock_screener_admin_production,
@@ -51,7 +52,7 @@ def _publish(path: Path, payload: dict) -> None:
 
 
 def _read() -> dict:
-    return response_payload(asyncio.run(strength.scan(
+    return response_payload(asyncio.run(read_legacy_snapshot(
         anonymous_get_request(), **strength.DEFAULT_STRENGTH_SCAN_PARAMETERS, ranking_algorithm="production",
     )))
 
@@ -134,7 +135,7 @@ def test_provider_truncated_all_histories_keeps_the_previous_snapshot(
     old["score_version"] = scanner.STRENGTH_SCORE_VERSION
     _publish(snapshot_path, old)
     before = snapshot_path.read_bytes()
-    result = asyncio.run(StrengthRefreshTask(
+    result = asyncio.run(LegacySnapshotTask(
         snapshot_path=snapshot_path, clock=lambda: OBSERVED.timestamp(),
     )())
     assert result.status == "degraded"
@@ -147,7 +148,7 @@ def test_partial_missing_history_still_publishes_the_other_scored_rows(
 ) -> None:
     panel = _install_history(monkeypatch)
     panel.loc[panel.index[:-4], "NVDA"] = float("nan")
-    result = asyncio.run(StrengthRefreshTask(
+    result = asyncio.run(LegacySnapshotTask(
         snapshot_path=snapshot_path, clock=lambda: OBSERVED.timestamp(),
     )())
     assert result.status == "idle"
@@ -180,7 +181,7 @@ def test_cancelled_provider_thread_cannot_publish_after_a_newer_scan(
     monkeypatch.setattr(scanner, "_download_history", download)
 
     async def scenario():
-        task = StrengthRefreshTask(
+        task = LegacySnapshotTask(
             snapshot_path=snapshot_path, clock=lambda: OBSERVED.timestamp(),
         )
         cancelled = asyncio.create_task(task())
@@ -216,7 +217,7 @@ def test_malformed_variant_cannot_abort_successful_default_refresh(
         payload["score_version"] = scanner.STRENGTH_SCORE_VERSION
         return payload
 
-    result = asyncio.run(StrengthRefreshTask(
+    result = asyncio.run(LegacySnapshotTask(
         scanner=scan, snapshot_path=snapshot_path,
         clock=lambda: OBSERVED.timestamp(),
     )())

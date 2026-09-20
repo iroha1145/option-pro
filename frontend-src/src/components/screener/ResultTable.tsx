@@ -16,7 +16,7 @@ import InfoHint from '@/components/shared/InfoHint';
 import MacroFitBadge from '@/components/shared/MacroFitBadge';
 import { macroShadowHint } from '@/lib/scoreHints';
 import { SCORE_HINTS, type ScoreHint } from '@/lib/scoreHints';
-import { isA0Ranking, rowPrimarySortScore } from '@/lib/screenerSort';
+import { rowPrimarySortScore } from '@/lib/screenerSort';
 import RowExpansion from './RowExpansion';
 import { CatalystBadge, ScoreCell, SubscoreTicks } from './cells';
 import { tierOf, TIER_RANGE, type CatalystSummary, type DetailCache, type RowSignalsState } from './types';
@@ -43,8 +43,6 @@ export interface ResultTableProps {
   stale?: boolean;
   /** 可选列：宏观适配（影子字段，不参与排序） */
   showMacro?: boolean;
-  /** 当前真正生效的排序算法，决定主分数列显示什么。 */
-  effectiveAlgorithm?: string | null;
 }
 
 const HEADS: { label: string; align?: 'right' | 'center'; width?: string; hint?: ScoreHint }[] = [
@@ -90,14 +88,8 @@ export default function ResultTable({
   animKey,
   stale = false,
   showMacro = false,
-  effectiveAlgorithm = null,
 }: ResultTableProps) {
-  const a0Active = isA0Ranking(effectiveAlgorithm);
-  const heads = headsFor(showMacro).map((head) =>
-    head.label === t('强度分') && a0Active
-      ? { ...head, label: t('排序分'), hint: SCORE_HINTS.strengthComposite }
-      : head,
-  );
+  const heads = headsFor(showMacro);
   const tableId = useId();
   return (
     // overflow-x-auto 与 shared/DataTable 同口径（审计 2.4.1）：8–9 个数据列在
@@ -162,18 +154,12 @@ export default function ResultTable({
                       </span>
                     </span>
                   </td>
-                  {/* 主排序分：A0 显示中长期组合分，原综合分仍可见。 */}
+                  {/* 当前唯一选股引擎的主评分。 */}
                   <td className="px-3 py-2">
                     <ScoreCell
-                      score={rowPrimarySortScore(r, effectiveAlgorithm)}
+                      score={rowPrimarySortScore(r)}
                       index={i}
-                      caption={
-                        a0Active
-                          ? rowPrimarySortScore(r, effectiveAlgorithm) == null
-                            ? t('数据不足')
-                            : t('综合分 {score}', { score: r.strengthScore.toFixed(1) })
-                          : null
-                      }
+                      caption={null}
                     />
                   </td>
                   {/* 宏观适配（可选列） */}

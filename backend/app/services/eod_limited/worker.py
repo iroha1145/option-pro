@@ -91,9 +91,11 @@ def run_eod_limited_job(
     algorithms: Sequence[str] | None = None,
     tickers: Sequence[str] | None = None,
     synthetic_input: bool = False,
+    refresh_context: bool | None = None,
 ) -> dict[str, Any]:
     started = time.perf_counter()
     live_input = purpose == PURPOSE_LIVE and not synthetic_input
+    context_requested = panel is None and live_input if refresh_context is None else refresh_context
     registry = load_registry()
     target = session
     attempted_session = session
@@ -196,6 +198,15 @@ def run_eod_limited_job(
         "variants": variants,
     }
     published = publish_batch(batch, root=root)
+    context_outcome = None
+    if published.get("ok") and context_requested:
+        try:
+            from .context_snapshot import refresh_context_snapshot
+
+            context_outcome = refresh_context_snapshot(root=root, now=now)
+        except Exception as exc:
+            # Ranking publication is already complete and must stay available.
+            context_outcome = {"status": "UNAVAILABLE", "published": False, "error": type(exc).__name__}
     return {
         "status": "RAN" if published.get("ok") else "PUBLISH_FAILED",
         "compute_version": COMPUTE_VERSION,
@@ -206,6 +217,7 @@ def run_eod_limited_job(
         "available_variants": sorted(variants),
         "elapsed_s": round(time.perf_counter() - started, 3),
         "publish": published,
+        "context": context_outcome,
     }
 
 

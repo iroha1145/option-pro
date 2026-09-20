@@ -6,6 +6,10 @@
 import type { Dict } from './types';
 
 export const CATALYSTS: Dict = {
+  '雷达默认排序只影响未指定排序或选择跟随默认的请求。': [
+    'The radar default applies only when a request does not specify a sort or follows the default.',
+    'レーダーの既定順位は、並び順を指定しないか既定に従うリクエストにのみ適用されます。',
+  ],
   /* ---------------- AnalysisProgressCard.tsx ---------------- */
   '暂无新闻分析任务': ['No news analysis jobs', 'ニュース分析ジョブなし'],
   '最近一批任务已结束': ['Latest batch finished', '直近バッチ終了'],

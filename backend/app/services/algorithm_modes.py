@@ -1,9 +1,8 @@
 """Stable production algorithm IDs, versions, and resolution rules.
 
-Screener ranking and radar sort are independent. The screener system default
-is the limited EOD ranking. Radar still defaults to the original production
-sort. An explicit user or request choice is never overwritten by a later
-admin default.
+Screener ranking and radar sort are independent. Historical screener names
+remain valid inputs, but all screener choices execute the current EOD engine.
+Radar production and T1 retain their existing meanings.
 """
 
 from __future__ import annotations
@@ -28,7 +27,8 @@ EOD_LIMITED_V1 = "eod_limited_v1"
 EOD_LIMITED_VERSION = "eod-limited-v1.1"
 EOD_LIMITED_SCORE_BASIS = "price_only_diagnostic + m1_consensus"
 EOD_LIMITED_TIMEFRAMES = ("short", "mid", "long")
-DEFAULT_SCREENER_ALGORITHM = EOD_LIMITED_V1
+# Preserve the stored/public default while replacing its execution engine.
+DEFAULT_SCREENER_ALGORITHM = PRODUCTION_ALGORITHM
 EOD_DEFAULT_TIMEFRAME = "mid"
 PRODUCTION_DEFAULT_TIMEFRAME = "all"
 
@@ -210,7 +210,6 @@ def resolve_screener_algorithm(
     requested_id = canonicalize_screener_algorithm(requested, allow_follow=True)
     user_id = canonicalize_screener_algorithm(user_choice, allow_follow=True)
     admin_id = canonicalize_screener_algorithm(admin_default) or DEFAULT_SCREENER_ALGORITHM
-    named_request = requested_id
 
     follow_requested = requested_id == FOLLOW_DEFAULT
     if requested_id == FOLLOW_DEFAULT:
@@ -238,29 +237,15 @@ def resolve_screener_algorithm(
         timeframe_omitted = True
         raw_timeframe = PRODUCTION_DEFAULT_TIMEFRAME
 
-    fallback_reason = None
-    resolved_timeframe = raw_timeframe
-    if effective == A0_ALGORITHM and not a0_view_supported(raw_timeframe, profile):
-        if explicit_request or source == "request":
-            raise ConflictingAlgorithmError(
-                A0_ALGORITHM,
-                "A0 mid/long ranking only supports timeframe=all and profile=balanced",
-            )
-        fallback_reason = INCOMPATIBLE_VIEW
-        effective = PRODUCTION_ALGORITHM
-        source = f"{source}+fallback"
-    elif effective == EOD_LIMITED_V1 and not eod_view_supported(raw_timeframe, profile):
-        explicit_eod = named_request == EOD_LIMITED_V1 and (
-            explicit_request or source == "request"
-        )
-        if explicit_eod and not timeframe_omitted:
-            raise ConflictingAlgorithmError(
-                EOD_LIMITED_V1,
-                "EOD limited ranking only supports timeframe=short|mid|long",
-            )
-        resolved_timeframe = EOD_DEFAULT_TIMEFRAME
-    elif effective == EOD_LIMITED_V1 and timeframe_omitted:
-        resolved_timeframe = EOD_DEFAULT_TIMEFRAME
+    # Names such as production and A0 are compatibility inputs, not separate
+    # ranking engines. Keep preference provenance without rewriting its file.
+    effective = EOD_LIMITED_V1
+    resolved_timeframe = (
+        EOD_DEFAULT_TIMEFRAME if timeframe_omitted or raw_timeframe == "all"
+        else raw_timeframe
+    )
+    if not eod_view_supported(resolved_timeframe, profile):
+        raise ConflictingAlgorithmError(EOD_LIMITED_V1, "Unsupported screener timeframe")
 
     return AlgorithmResolution(
         family=SCREENER_FAMILY,
@@ -271,7 +256,7 @@ def resolve_screener_algorithm(
         version=screener_version(effective),
         score_basis=screener_score_basis(effective),
         source=source,
-        fallback_reason=fallback_reason,
+        fallback_reason=None,
         resolved_timeframe=resolved_timeframe,
     )
 

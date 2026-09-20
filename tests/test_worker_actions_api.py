@@ -11,6 +11,7 @@ from app.api import worker_actions
 from app.api.strength import (
     DEFAULT_STRENGTH_SCAN_PARAMETERS,
     scheduled_strength_scan_parameters,
+    strength_execution_parameters,
     strength_scan_parameters_hash,
 )
 from app.services.algorithm_modes import EOD_LIMITED_V1
@@ -219,7 +220,8 @@ def test_strength_action_persists_full_parameters_and_hashes_default_idempotency
         min_avg_dollar_volume=25_000_000.0,
         include_options=False,
     )
-    expected_hash = strength_scan_parameters_hash(parameters)
+    expected = strength_execution_parameters(parameters)
+    expected_hash = strength_scan_parameters_hash(expected)
     with _client() as client:
         first = client.post(
             "/api/worker/actions/strength_refresh",
@@ -232,7 +234,7 @@ def test_strength_action_persists_full_parameters_and_hashes_default_idempotency
 
     assert first.status_code == 202
     assert first.json()["details"] == {
-        "parameters": parameters,
+        "parameters": expected,
         "parameters_hash": expected_hash,
     }
     assert duplicate.status_code == 200
@@ -315,7 +317,7 @@ def test_strength_action_reuses_active_actual_parameters_for_a_different_request
     assert reused.status_code == 200
     assert reused.json()["reason"] == "already_running"
     assert reused.json()["request_id"] == first.json()["request_id"]
-    assert reused.json()["details"]["parameters"] == running_parameters
+    assert reused.json()["details"]["parameters"] == strength_execution_parameters(running_parameters)
 
 
 def test_strength_action_cooldown_reuses_the_completed_actual_parameters(
@@ -351,7 +353,7 @@ def test_strength_action_cooldown_reuses_the_completed_actual_parameters(
     assert first.status_code == 202
     assert reused.status_code == 200
     assert reused.json()["reason"] == "cooldown"
-    assert reused.json()["details"]["parameters"] == completed_parameters
+    assert reused.json()["details"]["parameters"] == strength_execution_parameters(completed_parameters)
     assert reused.json()["details"]["result"] == {"snapshot": "variant.json"}
 
 

@@ -159,38 +159,29 @@ def normalize_strength_scan_parameters(value: Any) -> dict[str, Any]:
     return payload
 
 
-def scheduled_strength_scan_parameters(settings: Any = None) -> dict[str, Any]:
-    """Snapshot identity the scheduled worker must publish for the current default."""
+def strength_execution_parameters(value: Any) -> dict[str, Any]:
+    """Resolve legacy request names without changing historical cache hashes."""
 
-    try:
-        effective_settings = settings
-        if effective_settings is None:
-            effective_settings = get_effective_runtime_settings()
-        algorithm = admin_algorithm_defaults(effective_settings)["screener_ranking_algorithm"]
-    except Exception:
-        algorithm = DEFAULT_SCREENER_ALGORITHM
-    payload = dict(DEFAULT_STRENGTH_SCAN_PARAMETERS)
-    if algorithm == EOD_LIMITED_V1:
-        payload["ranking_algorithm"] = EOD_LIMITED_V1
+    payload = normalize_strength_scan_parameters(value)
+    payload["ranking_algorithm"] = EOD_LIMITED_V1
+    if payload["timeframe"] == "all":
         payload["timeframe"] = EOD_DEFAULT_TIMEFRAME
-    elif algorithm == A0_ALGORITHM:
-        payload["ranking_algorithm"] = A0_ALGORITHM
-    return normalize_strength_scan_parameters(payload)
+    return payload
 
 
-async def _public_strength_snapshot() -> dict[str, Any]:
-    """Read the worker-produced default snapshot without running a scan."""
+def scheduled_strength_scan_parameters(settings: Any = None) -> dict[str, Any]:
+    """The current screener engine replaces every historical default choice."""
 
-    parameters = DEFAULT_STRENGTH_SCAN_PARAMETERS
+    return strength_execution_parameters(dict(DEFAULT_STRENGTH_SCAN_PARAMETERS))
+
+
+async def _public_strength_snapshot(*, profile: str = "balanced") -> dict[str, Any]:
+    """Read the current stock-selection scores without the old ranking scan."""
+
     payload, _, _ = await _scan_snapshot_payload(
-        universe=str(parameters["universe"]),
-        timeframe=str(parameters["timeframe"]),
-        profile=str(parameters["profile"]),
-        top=int(parameters["top"]),
-        sector_id=parameters["sector_id"],
-        min_price=float(parameters["min_price"]),
-        min_avg_dollar_volume=float(parameters["min_avg_dollar_volume"]),
-        include_options=bool(parameters["include_options"]),
+        universe="themes", timeframe=EOD_DEFAULT_TIMEFRAME, profile=profile,
+        top=120, sector_id=None, min_price=0.0, min_avg_dollar_volume=0.0,
+        include_options=False, ranking_algorithm=EOD_LIMITED_V1,
     )
     return payload
 
@@ -443,27 +434,9 @@ def a0_companion_scan_parameters(
 def a0_companion_for_admin_default(
     parameters: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
-    """Preheat A0 only when the admin default actually needs that identity."""
+    """Historical callers no longer trigger an A0 shadow computation."""
 
-    from app.services.algorithm_modes import a0_view_supported
-
-    try:
-        normalized = normalize_strength_scan_parameters(
-            dict(parameters or DEFAULT_STRENGTH_SCAN_PARAMETERS)
-        )
-    except ValueError:
-        return None
-    if normalized.get("ranking_algorithm") == A0_ALGORITHM:
-        return None
-    if not a0_view_supported(normalized.get("timeframe"), normalized.get("profile")):
-        return None
-    try:
-        defaults = admin_algorithm_defaults(get_effective_runtime_settings())
-    except Exception:
-        return None
-    if defaults.get("screener_ranking_algorithm") != A0_ALGORITHM:
-        return None
-    return a0_companion_scan_parameters(normalized)
+    return None
 
 
 def _unwrap_query_value(value: Any) -> Any:
@@ -1196,100 +1169,81 @@ def _serve_public_snapshot() -> bool:
 
 @router.get("/stocks/{ticker}")
 async def stock(ticker: str, profile: str = Query("balanced", pattern="^(conservative|balanced|aggressive)$")) -> dict[str, Any]:
-    if _serve_public_snapshot():
-        if profile != DEFAULT_STRENGTH_SCAN_PARAMETERS["profile"]:
-            raise public_snapshot_unavailable(f"strength:stock:{ticker}:{profile}")
-        payload = await _public_strength_snapshot()
-        symbol = ticker.upper().strip()
-        for row in payload.get("rows") or payload.get("results") or []:
-            if isinstance(row, dict) and row.get("ticker") == symbol:
-                return sanitize({
-                    "as_of": payload.get("as_of"),
-                    "ticker": symbol,
-                    "row": row,
-                    "market_regime": payload.get("market_regime"),
-                    # Which macro snapshot this row's shadow fields were scored
-                    # against. The drawer pairs the row's technical-minus-macro
-                    # gap with a *live* macro fit, and a scan can be hours older
-                    # than the latest publication; without this the interface
-                    # cannot tell whether the two numbers describe one moment.
-                    "macro_linkage": payload.get("macro_linkage"),
-                    "_cached": True,
-                    "snapshot_source": "worker",
-                })
-        raise HTTPException(
-            status_code=404,
-            detail=f"Ticker not found in public snapshot: {ticker}",
-        )
-    try:
-        return sanitize(await stock_strength(ticker, profile=profile))
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=f"Ticker not found in theme universe: {ticker}") from exc
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail="Strength data is currently unavailable") from exc
+    from app.services.eod_limited.context_snapshot import read_context_snapshot
+
+    payload = await _public_strength_snapshot(profile=profile)
+    symbol = ticker.upper().strip()
+    # observation_rows contains the full published selection before top slicing.
+    for row in payload.get("observation_rows") or payload.get("rows") or []:
+        if isinstance(row, dict) and row.get("ticker") == symbol:
+            context = await asyncio.to_thread(read_context_snapshot)
+            return sanitize({
+                "as_of": payload.get("as_of"), "ticker": symbol, "row": row,
+                "market_regime": context.get("market_regime"),
+                "context_as_of": context.get("as_of"),
+                "context_source_status": context.get("source_status"),
+                "macro_linkage": payload.get("macro_linkage"),
+                "_cached": True, "snapshot_source": "eod_limited_worker",
+                "_stale": bool(payload.get("_stale")),
+                "source_status": payload.get("source_status"),
+                "stale_reason": payload.get("stale_reason"),
+                "score_data_through": payload.get("score_data_through"),
+                "effective_algorithm": EOD_LIMITED_V1,
+            })
+    raise HTTPException(status_code=404, detail=f"Ticker not found in public snapshot: {ticker}")
 
 
 @router.get("/sectors")
 async def sectors(period: str = Query("3mo", pattern="^(1mo|3mo|6mo)$")) -> dict[str, Any]:
-    if _serve_public_snapshot():
-        payload = await _public_strength_snapshot()
-        selected_key = f"avg_return_{period}"
-        rows = []
-        for raw in payload.get("sectors") or []:
-            if not isinstance(raw, dict):
-                continue
-            selected_return = raw.get(selected_key)
-            rows.append({
-                **raw,
-                "period": period,
-                "avg_return": selected_return,
-                "avg_return_period": selected_return,
-            })
-        rows.sort(
-            key=lambda row: (
-                row.get("avg_return") is not None,
-                row.get("avg_return")
-                if row.get("avg_return") is not None
-                else float("-inf"),
-                row.get("avg_strength") or 0,
-            ),
-            reverse=True,
-        )
-        return sanitize({
-            "as_of": payload.get("as_of"),
-            "period": period,
-            "sectors": rows,
-            "count": len(rows),
-            "_cached": True,
-            "snapshot_source": "worker",
-        })
+    from app.services.eod_limited.context_snapshot import read_context_snapshot, sector_rows_with_scores
+
+    if period not in {"1mo", "3mo", "6mo"}:
+        raise HTTPException(status_code=400, detail="Unsupported sector period")
+    context = await asyncio.to_thread(read_context_snapshot)
     try:
-        return sanitize(await sector_strength(period=period))
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail="Strength data is currently unavailable") from exc
+        selection = await _public_strength_snapshot()
+    except HTTPException as exc:
+        if exc.status_code != 503:
+            raise
+        selection = None
+    if context.get("source_status") == "unavailable" and selection is None:
+        raise public_snapshot_unavailable("strength:sectors")
+    rows = sector_rows_with_scores(context, selection, period=period)
+    score_unavailable = selection is None
+    score_stale = bool((selection or {}).get("_stale"))
+    stale = bool(context.get("_stale")) or score_stale or score_unavailable
+    reason = context.get("stale_reason") or (
+        "selection_scores_unavailable" if score_unavailable else (selection or {}).get("stale_reason")
+    )
+    return sanitize({
+        "as_of": context.get("as_of"), "period": period, "sectors": rows, "count": len(rows),
+        "_cached": True, "snapshot_source": "strength_context_worker",
+        "_stale": stale, "source_status": "stale" if stale else context.get("source_status", "active"),
+        "stale_reason": reason, "context_source_status": context.get("source_status"),
+        "macro_context": context.get("macro_context"),
+        "score_source_status": (selection or {}).get("source_status", "unavailable"),
+        "score_data_through": (selection or {}).get("score_data_through"),
+        "cache_ttl_seconds": context.get("cache_ttl_seconds"),
+        "cache_expires_at": context.get("cache_expires_at"),
+    })
 
 
 @router.get("/market")
 async def market() -> dict[str, Any]:
-    if _serve_public_snapshot():
-        payload = await _public_strength_snapshot()
-        regime = payload.get("market_regime")
-        if not isinstance(regime, dict):
-            raise public_snapshot_unavailable("strength:market")
-        return sanitize({
-            "as_of": payload.get("as_of"),
-            "market_regime": regime,
-            "_cached": True,
-            "snapshot_source": "worker",
-            "cache_ttl_seconds": payload.get("cache_ttl_seconds"),
-            "cache_expires_at": payload.get("cache_expires_at"),
-        })
-    try:
-        return sanitize(await market_strength())
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail="Strength data is currently unavailable") from exc
+    from app.services.eod_limited.context_snapshot import read_context_snapshot
+
+    payload = await asyncio.to_thread(read_context_snapshot)
+    regime = payload.get("market_regime")
+    if not isinstance(regime, dict):
+        raise public_snapshot_unavailable("strength:market")
+    return sanitize({
+        "as_of": payload.get("as_of"), "market_regime": regime,
+        "_cached": True, "snapshot_source": "strength_context_worker",
+        "_stale": bool(payload.get("_stale")), "source_status": payload.get("source_status"),
+        "stale_reason": payload.get("stale_reason"),
+        "cache_ttl_seconds": payload.get("cache_ttl_seconds"),
+        "cache_expires_at": payload.get("cache_expires_at"),
+    })
 
 
 @router.get("/profiles")

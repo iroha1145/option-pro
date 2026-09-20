@@ -11,8 +11,8 @@ from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.strength import (
-    normalize_strength_scan_parameters,
     scheduled_strength_scan_parameters,
+    strength_execution_parameters,
     strength_scan_parameters_hash,
 )
 from app.data_paths import get_data_paths
@@ -273,26 +273,8 @@ async def request_action(
         )
         requested_algorithm = raw_parameters.get("ranking_algorithm")
         raw_parameters = _resolve_refresh_ranking(request, raw_parameters)
-        if raw_parameters.get("ranking_algorithm") == "eod_limited_v1" and raw_parameters.get(
-            "timeframe"
-        ) not in {"short", "mid", "long"}:
-            explicit_eod = requested_algorithm in {
-                "eod_limited_v1",
-                "eod",
-                "eod_limited",
-                "limited",
-            }
-            if explicit_eod:
-                raise HTTPException(
-                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                    detail={
-                        "code": "algorithm_view_conflict",
-                        "message": "EOD limited ranking only supports timeframe=short|mid|long",
-                    },
-                )
-            raw_parameters["timeframe"] = "mid"
         try:
-            parameters = normalize_strength_scan_parameters(raw_parameters)
+            parameters = strength_execution_parameters(raw_parameters)
         except ValueError as exc:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,

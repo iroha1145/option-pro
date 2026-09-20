@@ -1,6 +1,5 @@
 import type { ScanParams } from '@/api/modules/strength';
 import type { StrengthRefreshParameters } from '@/api/modules/runtime';
-import { followsEodScreenerView } from '../../lib/eodLimitedView.ts';
 import type { ScanFilters } from './types';
 
 export interface StrengthScanRequest {
@@ -38,10 +37,7 @@ export function buildStrengthScanRequest(filters: ScanFilters): StrengthScanRequ
       min_avg_dollar_volume: filters.minDollarVol,
       include_options: true,
       ranking_algorithm: filters.rankingAlgorithm,
-      // follow_default 现跟随收盘默认，与显式 eod / 合格综合一样带上 list_kind。
-      ...(followsEodScreenerView(filters.rankingAlgorithm) || filters.resultSet === 'composite'
-        ? { list_kind: filters.resultSet }
-        : {}),
+      list_kind: filters.resultSet,
       ...(filters.minScore != null ? { minScore: filters.minScore } : {}),
     },
     refreshParameters: {

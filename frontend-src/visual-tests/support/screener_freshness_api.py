@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Isolated FastAPI for live screener freshness browser tests.
 
-The production action router, durable queue, WorkerSupervisor and scanner run
-against synthetic provider inputs. Only this loopback test server exposes reset
+The production action router, durable queue, WorkerSupervisor and EOD batch
+publication run against controlled inputs. Only this loopback server exposes reset
 and diagnostic endpoints; it does not exercise production authentication.
 """
 
@@ -16,11 +16,9 @@ import tempfile
 import time
 from contextlib import asynccontextmanager
 from copy import deepcopy
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
-import numpy as np
-import pandas as pd
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
@@ -36,9 +34,9 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 from app.api import strength, worker_actions  # noqa: E402
 from app.access import request_owner_access_context  # noqa: E402
 from app.services.algorithm_modes import PRODUCTION_ALGORITHM  # noqa: E402
-from app.services.breakouts.config import BreakoutSettings  # noqa: E402
-from app.services.strength import scanner  # noqa: E402
-from app.services.strength.market_regime import MARKET_BENCHMARKS  # noqa: E402
+from app.services.eod_limited import PURPOSE_LIVE  # noqa: E402
+from app.services.eod_limited import store as eod_store  # noqa: E402
+from app.services.research_eod_v1.constants import HORIZONS, PROFILES  # noqa: E402
 from app.worker.tasks import StrengthRefreshTask  # noqa: E402
 from app.worker.runtime import TaskSpec, WorkerSupervisor  # noqa: E402
 from app.worker.state import WorkerStateRepository  # noqa: E402
@@ -57,84 +55,10 @@ POST_COUNT = 0
 SCAN_COUNT = 0
 
 
-def _history(*, slope: float, offset: float = 0.0, size: int = 320) -> pd.DataFrame:
-    index = pd.bdate_range(end=DATA_THROUGH, periods=size, tz="America/New_York")
-    step = np.arange(size, dtype=float)
-    close = 40.0 + offset + step * slope + np.sin(step / 9.0)
-    return pd.DataFrame(
-        {
-            "Open": close - 0.2,
-            "High": close + 0.8,
-            "Low": close - 0.8,
-            "Close": close,
-            "Volume": 2_500_000.0 + step * 1_000.0,
-        },
-        index=index,
-    )
-
-
 def _install_provider_boundary() -> None:
-    metadata = {
-        "NVDA": {
-            "sector_id": "semiconductors",
-            "sector_name": "半导体",
-            "primary_sector_id": "semiconductors",
-            "primary_sector_name": "半导体",
-            "theme_ids": ["semiconductors"],
-            "theme_names": ["半导体"],
-        },
-        "AAPL": {
-            "sector_id": "hardware",
-            "sector_name": "硬件",
-            "primary_sector_id": "hardware",
-            "primary_sector_name": "硬件",
-            "theme_ids": ["hardware"],
-            "theme_names": ["硬件"],
-        },
-        "MSFT": {
-            "sector_id": "software",
-            "sector_name": "软件",
-            "primary_sector_id": "software",
-            "primary_sector_name": "软件",
-            "theme_ids": ["software"],
-            "theme_names": ["软件"],
-        },
-    }
-    frames = {
-        "NVDA": _history(slope=0.22),
-        "AAPL": _history(slope=0.10, offset=8.0),
-        "MSFT": _history(slope=0.12, offset=4.0),
-    }
-    for symbol in MARKET_BENCHMARKS:
-        frames.setdefault(symbol, _history(slope=0.06, offset=20.0))
-    panel = pd.concat(frames, axis=1)
-    panel.attrs["price_source"] = {
-        "provider": "synthetic-fixture",
-        "status": "active",
-        "message": "controlled daily bars",
-    }
-
-    scanner._theme_universe = lambda sector_id=None: (["NVDA", "AAPL", "MSFT"], deepcopy(metadata))
-    def download(symbols, period="2y"):
-        global SCAN_COUNT
-        SCAN_COUNT += 1
-        time.sleep(PROVIDER_DELAY)
-        if PROVIDER_FAILURE:
-            raise RuntimeError("synthetic_provider_failure")
-        return panel
-
-    scanner._download_history = download
-    scanner.enrich_rows_with_yahoo_options = lambda rows, display_top: {
-        "provider": "Yahoo/yfinance",
-        "status": "skipped",
-        "enriched": 0,
-    }
-    scanner.enrich_rows_with_finnhub = lambda rows: {"provider": "Finnhub", "status": "skipped", "enriched": 0}
-    scanner.enrich_rows_with_marketdata_options = lambda rows: {
-        "provider": "MarketData.app",
-        "status": "skipped",
-        "enriched": 0,
-    }
+    # Production reads one all-variant EOD batch. Keep the same store contract
+    # while isolating every browser scenario under its own temporary DATA_DIR.
+    eod_store.snapshot_dir = lambda root=None: Path(root or SNAPSHOT.parent) / "eod-limited-v1"
 
     production_settings = type(
         "Settings",
@@ -152,74 +76,99 @@ def _install_provider_boundary() -> None:
     )()
     strength.get_effective_runtime_settings = lambda: production_settings
 
-    import app.services.breakouts.config as breakout_config
-
-    breakout_config.get_breakout_settings = lambda: BreakoutSettings(
-        _env_file=None,
-        RANGE_PERSISTENCE_MODE="shadow",
-    )
-
-
-def _row(ticker: str, score: float, price: float, through: str, sector_id: str, sector_name: str) -> dict:
+def _row(ticker: str, score: float, price: float, through: str, sector_id: str) -> dict:
     return {
-        "ticker": ticker,
+        "security_id": ticker,
         "score": score,
-        "final_score": score,
         "price": price,
-        "avg_dollar_volume_20d": 50_000_000.0,
-        "daily_data_through": through,
-        "price_as_of": through,
-        "sector_id": sector_id,
-        "sector_name": sector_name,
+        "session_date": through,
+        "status": "watch",
+        "qualification": "watch",
+        "sector_context": sector_id,
+        "algorithm_id": "A_trend_quality",
+        "stock_or_etf_track": "stock",
+        "rejection_reasons": ["DOLLAR_LIQUIDITY_UNVERIFIED"],
+        "factors": {"T": 80, "M": 70, "S": 60, "B": 50, "P": 40, "V": 30, "R": 20, "G": 10},
     }
 
 
-def _seed_snapshots() -> None:
-    strength._STRENGTH_SNAPSHOT_PATH = SNAPSHOT
-    through = DATA_THROUGH
-    default_row = _row("AAPL", 80.0, 190.0, through, "hardware", "硬件")
-    strength._write_strength_snapshot(
-        SNAPSHOT,
-        parameters=dict(strength.DEFAULT_STRENGTH_SCAN_PARAMETERS),
-        payload={
-            "as_of": datetime.now(timezone.utc).isoformat(),
-            "score_version": scanner.STRENGTH_SCORE_VERSION,
-            "score_data_through": through,
-            "params": {
-                key: value
-                for key, value in strength.DEFAULT_STRENGTH_SCAN_PARAMETERS.items()
-                if key != "include_options"
-            },
-            "count": 1,
-            "rows": [default_row],
-            "results": [default_row],
-            "universe_count": 3,
-            "screened_count": 3,
-            "data_sources": {"prices": {"status": "active", "provider": "synthetic-fixture"}},
+def _scored(rows: list[dict], *, profile: str, horizon: str, through: str) -> dict:
+    return {
+        "session_date": through,
+        "served_session": through,
+        "attempted_session": through,
+        "purpose": PURPOSE_LIVE,
+        "compute_version": "limited-current-v1.1",
+        "feature_version": "browser-fixture-v1",
+        "profile": profile,
+        "horizon": horizon,
+        "capability_flags": {
+            "dollar_liquidity_verified": False,
+            "volume_session_verified": False,
+            "volume_verified": False,
         },
-        saved_at=NOW - 60,
-    )
-    variant_params = {**strength.DEFAULT_STRENGTH_SCAN_PARAMETERS, "sector_id": "semiconductors"}
-    old = (datetime.fromisoformat(DATA_THROUGH) - timedelta(days=60)).date().isoformat()
-    old_row = _row("NVDA", 91.0, 12.5, old, "semiconductors", "半导体")
-    strength._write_strength_snapshot(
-        strength._strength_snapshot_path(variant_params, base_path=SNAPSHOT),
-        base_path=SNAPSHOT,
-        parameters=variant_params,
-        payload={
-            "as_of": f"{old}T20:00:00+00:00",
-            "score_version": scanner.STRENGTH_SCORE_VERSION,
-            "score_data_through": old,
-            "params": {key: value for key, value in variant_params.items() if key != "include_options"},
-            "count": 1,
-            "rows": [old_row],
-            "results": [old_row],
-            "universe_count": 3,
-            "screened_count": 3,
-            "data_sources": {"prices": {"status": "active", "provider": "legacy-snapshot"}},
-        },
-        saved_at=NOW - 30,
-    )
+        "volume_scope": "VENDOR_DAILY_UNVERIFIED",
+        "panel_n": 3,
+        "complete_bar_n": 3,
+        "family_results": [],
+        "composite_results": [],
+        "watch_list": deepcopy(rows),
+        "eligible_n": 0,
+        "watch_n": len(rows),
+        "rejected_n": 0,
+        "composite_n": 0,
+        "historical_example": False,
+        "synthetic": False,
+    }
+
+
+def _publish_eod_rows(rows: list[dict], *, published_at: float) -> dict:
+    variants = {
+        eod_store.variant_key(profile, horizon): _scored(
+            rows, profile=profile, horizon=horizon, through=DATA_THROUGH,
+        )
+        for profile in PROFILES
+        for horizon in HORIZONS
+    }
+    publication = eod_store.publish_batch({
+        "purpose": PURPOSE_LIVE,
+        "served_session": DATA_THROUGH,
+        "attempted_session": DATA_THROUGH,
+        "published_at": published_at,
+        "variants": variants,
+    }, root=SNAPSHOT.parent)
+    return {"publication": publication, "variants": variants}
+
+
+def _seed_snapshots(*, software_fresh: bool = False) -> None:
+    rows = [_row("AAPL", 80.0, 190.0, DATA_THROUGH, "hardware")]
+    if software_fresh:
+        rows.append(_row("MSFT", 85.0, 95.0, DATA_THROUGH, "software"))
+    _publish_eod_rows(rows, published_at=NOW - 60)
+
+
+def _run_eod_fixture(**_kwargs) -> dict:
+    global SCAN_COUNT
+    SCAN_COUNT += 1
+    time.sleep(PROVIDER_DELAY)
+    if PROVIDER_FAILURE:
+        raise RuntimeError("synthetic_provider_failure")
+    rows = [
+        _row("NVDA", 91.0, 220.0, DATA_THROUGH, "semiconductors"),
+        _row("MSFT", 85.0, 95.0, DATA_THROUGH, "software"),
+        _row("AAPL", 80.0, 190.0, DATA_THROUGH, "hardware"),
+    ]
+    published_at = time.time()
+    batch = _publish_eod_rows(rows, published_at=published_at)
+    return {
+        "status": "RAN",
+        "purpose": PURPOSE_LIVE,
+        "served_session": DATA_THROUGH,
+        "published_at": published_at,
+        "compute_version": "limited-current-v1.1",
+        "available_variants": sorted(batch["variants"]),
+        "publish": batch["publication"],
+    }
 
 
 async def _stop_worker() -> None:
@@ -241,25 +190,12 @@ async def _reset(*, provider_delay: float = 0.25, provider_failure: bool = False
     PROVIDER_DELAY = provider_delay
     PROVIDER_FAILURE = provider_failure
     _install_provider_boundary()
-    _seed_snapshots()
-    if software_fresh:
-        parameters = {**strength.DEFAULT_STRENGTH_SCAN_PARAMETERS, "sector_id": "software"}
-        row = _row("MSFT", 85.0, 95.0, DATA_THROUGH, "software", "软件")
-        strength._write_strength_snapshot(
-            strength._strength_snapshot_path(parameters, base_path=SNAPSHOT),
-            base_path=SNAPSHOT, parameters=parameters, saved_at=NOW - 60,
-            payload={"as_of": datetime.now(timezone.utc).isoformat(),
-                     "score_version": scanner.STRENGTH_SCORE_VERSION,
-                     "score_data_through": DATA_THROUGH, "count": 1,
-                     "rows": [row], "results": [row], "universe_count": 3,
-                     "screened_count": 3,
-                     "params": {k: v for k, v in parameters.items() if k != "include_options"},
-                     "data_sources": {"prices": {"status": "active", "provider": "synthetic-fixture"}}},
-        )
+    _seed_snapshots(software_fresh=software_fresh)
     REPOSITORY = WorkerStateRepository(scenario / "worker.db")
     SUPERVISOR = WorkerSupervisor(
         REPOSITORY,
-        [TaskSpec("strength_refresh", StrengthRefreshTask(snapshot_path=SNAPSHOT),
+        [TaskSpec("strength_refresh", StrengthRefreshTask(
+                  snapshot_path=SNAPSHOT, eod_runner=_run_eod_fixture),
                   interval_seconds=86_400, timeout_seconds=30, manual_only=True)],
         owner_id="screener-browser-fixture", shutdown_grace_seconds=5,
     )
@@ -323,8 +259,9 @@ def screener_stats() -> dict:
         "scan_count": SCAN_COUNT,
         "score_data_through": DATA_THROUGH,
         "snapshot_hashes": {
-            path.name: hashlib.sha256(path.read_bytes()).hexdigest()
-            for path in SNAPSHOT.parent.glob("strength-snapshot-v1*.json")
+            str(path.relative_to(SNAPSHOT.parent)): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in [eod_store.snapshot_path()]
+            if path.is_file()
         },
         "actions": [
             {"request_id": item["request_id"], "status": item["status"],

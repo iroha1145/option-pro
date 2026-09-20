@@ -22,20 +22,15 @@ export interface AlgorithmPreferences {
 }
 
 export const DEFAULT_ALGORITHM_PREFERENCES: AlgorithmPreferences = {
-  screenerRankingAlgorithm: SCREENER_FOLLOW_DEFAULT,
+  screenerRankingAlgorithm: SCREENER_EOD_LIMITED,
   radarSortAlgorithm: RADAR_FOLLOW_DEFAULT,
 };
 
 function asScreenerChoice(value: unknown): ScreenerRankingChoice {
-  if (
-    value === SCREENER_PRODUCTION
-    || value === SCREENER_A0
-    || value === SCREENER_EOD_LIMITED
-    || value === SCREENER_FOLLOW_DEFAULT
-  ) {
-    return value;
-  }
-  return SCREENER_FOLLOW_DEFAULT;
+  // The screener has one current engine. Legacy values remain readable so old
+  // local/account documents cannot restore removed mathematics or UI modes.
+  void value;
+  return SCREENER_EOD_LIMITED;
 }
 
 function asRadarChoice(value: unknown): RadarSortChoice {
@@ -81,7 +76,11 @@ export function writeAlgorithmPreferences(
   next: Partial<AlgorithmPreferences>,
   principal?: string | null,
 ): AlgorithmPreferences {
-  const merged = { ...readAlgorithmPreferences(principal), ...next };
+  const merged: AlgorithmPreferences = {
+    ...readAlgorithmPreferences(principal),
+    ...next,
+    screenerRankingAlgorithm: SCREENER_EOD_LIMITED as ScreenerRankingChoice,
+  };
   const current = readStorage(preferenceStorageKey(principal)) ?? {};
   writeStorage(preferenceStorageKey(principal), {
     ...current,
@@ -107,7 +106,8 @@ export function algorithmPreferencePendingSync(principal?: string | null): boole
 export function requestedScreenerAlgorithm(
   choice: ScreenerRankingChoice,
 ): ScreenerRankingChoice {
-  return choice;
+  void choice;
+  return SCREENER_EOD_LIMITED;
 }
 
 export function requestedRadarAlgorithm(

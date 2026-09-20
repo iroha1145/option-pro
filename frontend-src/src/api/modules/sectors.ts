@@ -39,6 +39,8 @@ export interface SectorStrengthRow {
   sectorId: string;
   name: string;
   count: number | null;
+  memberCount: number | null;
+  scoredCount: number | null;
   period: SectorPeriod;
   periodDays: number | null;
   avgReturn: number | null;
@@ -46,6 +48,8 @@ export interface SectorStrengthRow {
   avgReturn3mo: number | null;
   avgReturn6mo: number | null;
   avgStrength: number | null;
+  scoreDataThrough: string | null;
+  scoreSourceStatus: string | null;
   leaders: SectorStrengthLeader[];
   /**
    * 宏观适配（影子字段）：与 avgStrength 并列，绝不混入它。
@@ -66,6 +70,9 @@ export interface SectorStrengthEnvelope {
   count: number;
   cached: boolean;
   snapshotSource: string | null;
+  stale: boolean;
+  sourceStatus: string | null;
+  staleReason: string | null;
 }
 
 export interface SectorIvRankingEnvelope {
@@ -180,6 +187,8 @@ function mapStrengthRow(raw: Rec, requestedPeriod: SectorPeriod): SectorStrength
     sectorId,
     name: pickLabel(raw, 'name', 'sector_name') ?? sectorId,
     count: pickN(raw, 'count'),
+    memberCount: pickN(raw, 'member_count', 'memberCount'),
+    scoredCount: pickN(raw, 'scored_count', 'scoredCount'),
     period,
     periodDays: pickN(raw, 'period_days'),
     avgReturn: pickN(raw, 'avg_return', 'avg_return_period'),
@@ -187,6 +196,8 @@ function mapStrengthRow(raw: Rec, requestedPeriod: SectorPeriod): SectorStrength
     avgReturn3mo: pickN(raw, 'avg_return_3mo', 'avg_return_3m'),
     avgReturn6mo: pickN(raw, 'avg_return_6mo'),
     avgStrength: pickN(raw, 'avg_strength'),
+    scoreDataThrough: pickS(raw, 'score_data_through', 'scoreDataThrough'),
+    scoreSourceStatus: pickS(raw, 'score_source_status', 'scoreSourceStatus'),
     leaders,
     macroFit: pickN(raw, 'macro_sector_fit'),
     macroTailwind: pickS(raw, 'macro_sector_tailwind'),
@@ -218,6 +229,9 @@ export function mapSectorStrengthEnvelope(
     count: pickN(envelope, 'count') ?? sectors.length,
     cached: pickB(envelope, '_cached') ?? false,
     snapshotSource: pickS(envelope, 'snapshot_source'),
+    stale: pickB(envelope, '_stale', 'stale') ?? false,
+    sourceStatus: pickS(envelope, 'source_status', 'sourceStatus'),
+    staleReason: pickS(envelope, 'stale_reason', 'staleReason'),
   };
 }
 
@@ -270,6 +284,9 @@ function mockStrength(period: SectorPeriod): SectorStrengthEnvelope {
     count: 0,
     cached: false,
     snapshotSource: null,
+    stale: false,
+    sourceStatus: null,
+    staleReason: null,
   };
 }
 

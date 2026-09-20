@@ -223,23 +223,23 @@ def test_scan_reads_eod_snapshot_not_production(
     assert result["snapshot_source"] == "eod_limited_worker"
 
 
-def test_explicit_eod_all_timeframe_is_conflict() -> None:
-    with pytest.raises(HTTPException) as caught:
-        asyncio.run(
-            strength.scan(
-                _areq(),
-                universe="themes",
-                timeframe="all",
-                profile="balanced",
-                top=20,
-                sector_id=None,
-                min_price=5.0,
-                min_avg_dollar_volume=10_000_000.0,
-                ranking_algorithm=EOD_LIMITED_V1,
-            )
+def test_explicit_eod_all_timeframe_reads_mid(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.services.eod_limited import store as eod_store
+
+    monkeypatch.setattr(eod_store, "snapshot_dir", lambda root=None: tmp_path / "eod-limited-v1")
+    publish_batch({
+        "purpose": PURPOSE_HISTORICAL, "served_session": "2024-06-28",
+        "variants": {variant_key("balanced", "mid"): _scored()},
+    }, root=tmp_path)
+    payload = _rp(asyncio.run(
+        strength.scan(
+            _areq(), universe="themes", timeframe="all", profile="balanced", top=20,
+            sector_id=None, min_price=5.0, min_avg_dollar_volume=10_000_000.0,
+            ranking_algorithm=EOD_LIMITED_V1,
         )
-    assert caught.value.status_code == 400
-    assert caught.value.detail["code"] == "algorithm_view_conflict"
+    ))
+    assert payload["resolved_timeframe"] == "mid"
+    assert payload["rows"][0]["ticker"] == "NVDA"
 
 
 def test_missing_eod_snapshot_does_not_serve_production(

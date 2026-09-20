@@ -229,7 +229,7 @@ export default function RowExpansion({ row, weights, dollarVolume, signals, onOp
         {weights && <p className="mt-2.5 text-micro text-ink-400">{t('权重来自当前评分方法（右侧栏）')}</p>}
         {(row.status || row.qualification || (row.rejectionReasons && row.rejectionReasons.length > 0)) && (
           <div className="mt-4 space-y-1.5 border-t border-line pt-3" data-testid="screener-eod-row-details">
-            <p className="eyebrow">{t('收盘技术详情')}</p>
+            <p className="eyebrow">{t('技术详情')}</p>
             <p className="text-caption text-ink-600">
               {row.observationOnly ? t('技术观察') : t('合格综合')}
               {row.status ? ` · ${eodDetailLabel(row.status)}` : ''}

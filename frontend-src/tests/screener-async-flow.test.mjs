@@ -11,7 +11,7 @@ import * as live from '../src/api/live.ts';
 import { DEFAULT_FILTERS } from '../src/components/screener/types.ts';
 
 const source = fs.readFileSync(new URL('../src/pages/Screener.tsx', import.meta.url), 'utf8');
-const parameters = { universe: 'themes', timeframe: 'all', profile: 'balanced', top: 20, sector_id: null, min_price: 5, min_avg_dollar_volume: 10000000, include_options: true };
+const parameters = { universe: 'themes', timeframe: 'mid', profile: 'balanced', top: 20, sector_id: null, min_price: 5, min_avg_dollar_volume: 10000000, include_options: true, ranking_algorithm: 'eod_limited_v1' };
 const completedAt = '2026-09-04T21:00:00Z';
 const completed = { requestId: 'new', status: 'completed', details: { parameters, result: { completed_at: completedAt, score_version: 'v2', published: true } } };
 const envelope = (ticker = 'NEW') => ({ rows: [{ ticker, price: 180 }], stale: false, sourceStatus: 'active', snapshotSavedAt: completedAt, scanCompletedAt: completedAt, scoreVersion: 'v2' });
@@ -37,9 +37,6 @@ function harness(overrides = {}) {
     getMarketReadGeneration: () => 0,
     __t: (text) => text,
     toast: { error() {}, success() {}, info() {} },
-    persistAlgorithmChoice: async () => {},
-    choiceGeneration: { current: 0 },
-    isSignedIn: false,
     summarizeFilters: () => '',
     buildStrengthScanRequest: (filters) => ({ apiParams: { ...parameters, ...filters }, refreshParameters: { ...parameters, ...filters } }),
     detailsRef: { current: {} },
@@ -60,7 +57,16 @@ function harness(overrides = {}) {
   const end = source.indexOf('\n  useEffect(', start);
   const code = ts.transpileModule(`${source.slice(start, end)}\nglobalThis.runScan = runScan;`, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
   vm.runInNewContext(code, scope);
-  return { state, scope, runScan: scope.runScan, seedPending: (value) => { pending = value; }, pending: () => pending };
+  return {
+    state,
+    scope,
+    // The component always calls runScan with a complete ScanFilters object.
+    // Tests may override only fields relevant to a scenario, so fill the real
+    // defaults before exercising the extracted callback.
+    runScan: (filters = {}, options) => scope.runScan({ ...DEFAULT_FILTERS, ...filters }, options),
+    seedPending: (value) => { pending = value; },
+    pending: () => pending,
+  };
 }
 
 function retryLastAttempt(h) {
@@ -298,34 +304,33 @@ test('publication visibility retry stays bounded and never creates a second work
   assert.equal(h.state.rows[0].ticker, 'NEW');
 });
 
-test('signed-in customer polls preparing A0 snapshot without posting owner refresh', async () => {
+test('visitor polls a preparing current snapshot without posting owner refresh', async () => {
   let posts = 0;
   let reads = 0;
   const h = harness({
     isOwner: false,
-    isSignedIn: true,
     principal: 'account:alice',
     runtimeApi: { workerAction: async () => { posts++; return completed; } },
     strengthApi: {
       scanEnvelope: async () => {
         reads += 1;
         if (reads < 3) throw new ApiError(503, 'preparing', { bizCode: 'strength_snapshot_preparing' });
-        return envelope('A0ROW');
+        return envelope('CURRENT');
       },
     },
   });
   assert.equal(await h.runScan({ rankingAlgorithm: 'a0_mid_long' }), true);
   assert.equal(posts, 0);
   assert.equal(reads, 3);
-  assert.equal(h.state.rows[0].ticker, 'A0ROW');
+  assert.equal(h.state.rows[0].ticker, 'CURRENT');
+  assert.equal(h.state.applied.rankingAlgorithm, 'eod_limited_v1');
 });
 
-test('unavailable A0 snapshot is a real failure and does not post owner refresh', async () => {
+test('an unavailable current snapshot is a real failure and does not post visitor refresh', async () => {
   let posts = 0;
   let reads = 0;
   const h = harness({
     isOwner: false,
-    isSignedIn: true,
     principal: 'account:alice',
     runtimeApi: { workerAction: async () => { posts++; return completed; } },
     strengthApi: {
@@ -453,13 +458,13 @@ test('a late discovery failure cannot mark newer parameters or an unmounted page
   }
 });
 
-test('signed-in scan continues when algorithm preference persist fails', async () => {
+test('a scan never writes the removed screener algorithm preference', async () => {
   const requests = [];
+  let preferenceWrites = 0;
   const h = harness({
     isOwner: false,
-    isSignedIn: true,
     persistAlgorithmChoice: async () => {
-      throw new Error('view preferences unavailable');
+      preferenceWrites += 1;
     },
     strengthApi: {
       scanEnvelope: async (params) => {
@@ -472,4 +477,5 @@ test('signed-in scan continues when algorithm preference persist fails', async (
   assert.equal(h.state.scanState, 'done');
   assert.equal(h.state.rows[0].ticker, 'ALICE');
   assert.equal(requests.length, 1);
+  assert.equal(preferenceWrites, 0);
 });

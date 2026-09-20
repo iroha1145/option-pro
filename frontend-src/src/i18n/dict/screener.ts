@@ -2,6 +2,7 @@
 import type { Dict } from './types';
 
 export const SCREENER: Dict = {
+  '技术详情': ['Technical details', 'テクニカル詳細'],
   '催化摘要读取失败，暂按强度排序': ['Catalyst summaries failed to load; results remain sorted by strength.', '材料の概要を取得できないため、強度順で表示しています。'],
   '展开或收起 {ticker} 详情': ['Expand or collapse {ticker} details', '{ticker} の詳細を開く・閉じる'],
   '强度分布 · 候选比较': ['Strength distribution · candidate comparison', '強度分布 · 候補比較'],
@@ -32,6 +33,19 @@ export const SCREENER: Dict = {
   '最低价格': ['Minimum price', '最低価格'],
   '最高价格': ['Maximum price', '最高価格'],
   '成交额下限': ['Min dollar volume', '売買代金下限'],
+  '按技术评分、板块与可用资格条件筛选股票。': [
+    'Screen stocks by technical score, sector, and available eligibility checks.',
+    'テクニカルスコア、セクター、利用可能な適格条件で銘柄を絞り込みます。',
+  ],
+  '选股数据正在后台生成，请稍候。': [
+    'Screener data is being prepared in the background. Please wait.',
+    'スクリーナーデータをバックグラウンドで生成しています。しばらくお待ちください。',
+  ],
+  '选股数据暂不可用': ['Screener data is unavailable', 'スクリーナーデータは利用できません'],
+  '暂时没有可用的选股数据，请等待后台完成后重试。': [
+    'No screener data is available yet. Retry after background processing finishes.',
+    '利用可能なスクリーナーデータがまだありません。バックグラウンド処理の完了後に再試行してください。',
+  ],
   '当前排序未核实成交额口径，此条件未应用': [
     'This ranking does not verify dollar-volume data, so this filter is not applied.',
     'この順位では売買代金の口径を確認できないため、この条件は適用されません。',
@@ -102,7 +116,6 @@ export const SCREENER: Dict = {
   ],
   '排序分': ['Sort score', '並び替えスコア'],
   '数据不足': ['Insufficient data', 'データ不足'],
-  '综合分 {score}': ['Composite {score}', '総合点 {score}'],
   '排序分 ·': ['Sort score ·', '並び替えスコア ·'],
   '当前视图不支持中长期趋势排序，已回退原版。': [
     'The current view does not support mid/long trend ranking; original ranking was used.',
@@ -203,11 +216,6 @@ export const SCREENER: Dict = {
   '仅统计本次筛选命中的标的': ['Counts only the names that matched this scan.', '今回の絞り込みで該当した銘柄のみを集計しています。'],
   '评分方法 ·': ['Scoring method ·', '評価方法 ·'],
   '默认权重': ['Default weights', 'デフォルトウェイト'],
-  '该档位暂无权重明细': ['No weight breakdown available for this profile', 'このプロファイルの重み内訳はまだありません'],
-  '偏好档位决定评分时侧重哪些因子，最终强度分 0–100，≥85 为高强度区。': [
-    'Your preference profile determines which factors the score emphasizes. The final strength score runs 0–100, and 85 or above is the high-strength zone.',
-    '選択したプロファイルが、採点時にどの要因を重視するかを決めます。最終的な強度スコアは0〜100で、85以上が高強度ゾーンです。',
-  ],
   '最终强度分为四因子加权合成（0–100），≥85 为高强度区。': [
     'The final strength score is a weighted blend of four factors (0–100), and 85 or above is the high-strength zone.',
     '最終的な強度スコアは4つの要因を加重合成したもので（0〜100）、85以上が高強度ゾーンです。',

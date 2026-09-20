@@ -98,7 +98,7 @@ test('default screener request matches the daily live snapshot parameters', () =
     min_price: 5,
     min_avg_dollar_volume: 10_000_000,
     include_options: true,
-    ranking_algorithm: 'follow_default',
+    ranking_algorithm: 'eod_limited_v1',
     list_kind: 'observation',
   });
   assert.deepEqual(request.refreshParameters, {
@@ -110,7 +110,7 @@ test('default screener request matches the daily live snapshot parameters', () =
     min_price: 5,
     min_avg_dollar_volume: 10_000_000,
     include_options: true,
-    ranking_algorithm: 'follow_default',
+    ranking_algorithm: 'eod_limited_v1',
   });
 });
 

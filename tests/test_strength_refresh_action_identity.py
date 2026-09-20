@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from app.services.algorithm_modes import A0_ALGORITHM, PRODUCTION_ALGORITHM
-from tests.http_response_support import lock_screener_admin_production
+from app.services.algorithm_modes import EOD_LIMITED_V1
+from app.services.eod_limited.store import variant_key
 from app.worker.lock import ProcessFileLock
 from app.worker.runtime import TaskSpec, WorkerSupervisor
 from app.worker.state import WorkerStateRepository
@@ -16,22 +16,17 @@ from app.worker.tasks import StrengthRefreshTask
 NOW = 1_789_000_000.0
 
 
-@pytest.fixture(autouse=True)
-def _keep_scheduled_strength_on_production(monkeypatch: pytest.MonkeyPatch) -> None:
-    lock_screener_admin_production(monkeypatch)
-
-
 def _payload(*, parameters: dict, ticker: str, failed: bool = False) -> dict:
-    body = {
-        "as_of": "2026-07-16T00:00:00+00:00",
-        "params": {key: value for key, value in parameters.items() if key != "force_refresh"},
-        "count": 0 if failed else 1,
-        "rows": [] if failed else [{"ticker": ticker, "score": 91.0}],
-        "results": [] if failed else [{"ticker": ticker, "score": 91.0}],
+    # A deliberately single-variant provider stub keeps separate group failure
+    # and cancellation paths observable; full-batch reuse is tested separately.
+    return {
+        "status": "FAILED" if failed else "RAN",
+        "publish": {"ok": not failed},
+        "published_at": NOW,
+        "served_session": "2026-09-18",
+        "purpose": "live_eod_inference",
+        "available_variants": [variant_key(parameters["profile"], parameters["horizon"])],
     }
-    if failed:
-        body["data_sources"] = {"prices": {"status": "unavailable"}}
-    return body
 
 
 def _wait_for_action(repository: WorkerStateRepository, request_id: str, *, status: str):
@@ -49,21 +44,21 @@ def _wait_for_action(repository: WorkerStateRepository, request_id: str, *, stat
 def test_run_for_actions_keeps_per_request_completions(tmp_path: Path) -> None:
     from app.api import strength
 
-    default = dict(strength.DEFAULT_STRENGTH_SCAN_PARAMETERS)
-    a0 = strength.normalize_strength_scan_parameters(
-        {**default, "ranking_algorithm": A0_ALGORITHM}
+    default = strength.strength_execution_parameters(dict(strength.DEFAULT_STRENGTH_SCAN_PARAMETERS))
+    long_view = strength.normalize_strength_scan_parameters(
+        {**default, "timeframe": "long"}
     )
     calls: list[str | None] = []
 
     async def fake_scanner(**kwargs) -> dict:
-        ranking = kwargs.get("ranking_algorithm")
+        ranking = kwargs.get("horizon")
         calls.append(ranking)
-        ticker = "A0ROW" if ranking == A0_ALGORITHM else "PROD"
+        ticker = "LONGROW" if ranking == "long" else "MID"
         return _payload(parameters=kwargs, ticker=ticker)
 
     result = asyncio.run(
         StrengthRefreshTask(
-            scanner=fake_scanner,
+            eod_runner=fake_scanner,
             snapshot_path=tmp_path / "strength-snapshot-v1.json",
             clock=lambda: NOW,
         ).run_for_actions(
@@ -76,10 +71,10 @@ def test_run_for_actions_keeps_per_request_completions(tmp_path: Path) -> None:
                     },
                 },
                 {
-                    "request_id": "act_a0",
+                    "request_id": "act_long_view",
                     "details": {
-                        "parameters": a0,
-                        "parameters_hash": strength.strength_scan_parameters_hash(a0),
+                        "parameters": long_view,
+                        "parameters_hash": strength.strength_scan_parameters_hash(long_view),
                     },
                 },
             ]
@@ -87,80 +82,77 @@ def test_run_for_actions_keeps_per_request_completions(tmp_path: Path) -> None:
     )
     completions = {item["request_id"]: item for item in result.details["action_completions"]}
     assert completions["act_owner"]["succeeded"] is True
-    assert completions["act_a0"]["succeeded"] is True
+    assert completions["act_long_view"]["succeeded"] is True
     assert completions["act_owner"]["parameters_hash"] == strength.strength_scan_parameters_hash(
         default
     )
-    assert completions["act_a0"]["parameters_hash"] == strength.strength_scan_parameters_hash(a0)
-    assert completions["act_owner"]["parameters"].get("ranking_algorithm") in {
-        None,
-        PRODUCTION_ALGORITHM,
-    }
-    assert completions["act_a0"]["parameters"]["ranking_algorithm"] == A0_ALGORITHM
-    assert result.details["parameters"] == a0
-    assert A0_ALGORITHM in calls and any(item in {None, PRODUCTION_ALGORITHM} for item in calls)
+    assert completions["act_long_view"]["parameters_hash"] == strength.strength_scan_parameters_hash(long_view)
+    assert completions["act_owner"]["parameters"].get("ranking_algorithm") == EOD_LIMITED_V1
+    assert completions["act_long_view"]["parameters"]["ranking_algorithm"] == EOD_LIMITED_V1
+    assert result.details["parameters"] == long_view
+    assert calls == ["mid", "long"]
 
 
 def test_first_group_failure_does_not_complete_later_success(tmp_path: Path) -> None:
     from app.api import strength
 
-    default = dict(strength.DEFAULT_STRENGTH_SCAN_PARAMETERS)
-    a0 = strength.normalize_strength_scan_parameters(
-        {**default, "ranking_algorithm": A0_ALGORITHM}
+    default = strength.strength_execution_parameters(dict(strength.DEFAULT_STRENGTH_SCAN_PARAMETERS))
+    long_view = strength.normalize_strength_scan_parameters(
+        {**default, "timeframe": "long"}
     )
 
     async def fake_scanner(**kwargs) -> dict:
-        ranking = kwargs.get("ranking_algorithm")
-        failed = ranking != A0_ALGORITHM
+        ranking = kwargs.get("horizon")
+        failed = ranking != "long"
         return _payload(
             parameters=kwargs,
-            ticker="A0ROW" if ranking == A0_ALGORITHM else "PROD",
+            ticker="LONGROW" if ranking == "long" else "MID",
             failed=failed,
         )
 
     result = asyncio.run(
         StrengthRefreshTask(
-            scanner=fake_scanner,
+            eod_runner=fake_scanner,
             snapshot_path=tmp_path / "strength-snapshot-v1.json",
             clock=lambda: NOW,
         ).run_for_actions(
             [
                 {"request_id": "act_owner", "details": {"parameters": default}},
-                {"request_id": "act_a0", "details": {"parameters": a0}},
+                {"request_id": "act_long_view", "details": {"parameters": long_view}},
             ]
         )
     )
     completions = {item["request_id"]: item for item in result.details["action_completions"]}
     assert completions["act_owner"]["succeeded"] is False
-    assert completions["act_owner"]["error_code"] == "strength_input_unavailable"
-    assert completions["act_a0"]["succeeded"] is True
-    assert completions["act_a0"]["error_code"] is None
+    assert completions["act_owner"]["error_code"] == "eod_limited_input_unavailable"
+    assert completions["act_long_view"]["succeeded"] is True
+    assert completions["act_long_view"]["error_code"] is None
     assert result.status == "idle"
 
 
-def test_companion_failure_does_not_rewrite_owner_completion(
+def test_pending_variant_failure_does_not_rewrite_owner_completion(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from app.api import strength
 
-    default = dict(strength.DEFAULT_STRENGTH_SCAN_PARAMETERS)
-    a0 = strength.normalize_strength_scan_parameters(
-        {**default, "ranking_algorithm": A0_ALGORITHM}
+    default = strength.strength_execution_parameters(dict(strength.DEFAULT_STRENGTH_SCAN_PARAMETERS))
+    long_view = strength.normalize_strength_scan_parameters(
+        {**default, "timeframe": "long"}
     )
-    monkeypatch.setattr(strength, "a0_companion_for_admin_default", lambda *_args, **_kwargs: a0)
+    monkeypatch.setattr("app.services.strength.variant_demand.list_pending_strength_variant_demands", lambda: [long_view])
 
     async def fake_scanner(**kwargs) -> dict:
-        ranking = kwargs.get("ranking_algorithm")
+        ranking = kwargs.get("horizon")
         return _payload(
             parameters=kwargs,
-            ticker="A0ROW" if ranking == A0_ALGORITHM else "PROD",
-            failed=ranking == A0_ALGORITHM,
+            ticker="LONGROW" if ranking == "long" else "MID",
+            failed=ranking == "long",
         )
 
     result = asyncio.run(
         StrengthRefreshTask(
-            scanner=fake_scanner,
+            eod_runner=fake_scanner,
             snapshot_path=tmp_path / "strength-snapshot-v1.json",
             clock=lambda: NOW,
         ).run_for_actions(
@@ -182,7 +174,7 @@ def test_fifth_parameter_group_is_requeued_not_completed(tmp_path: Path) -> None
     actions = []
     for index in range(5):
         parameters = strength.normalize_strength_scan_parameters(
-            {**strength.DEFAULT_STRENGTH_SCAN_PARAMETERS, "top": 20 + index}
+            {**strength.strength_execution_parameters(dict(strength.DEFAULT_STRENGTH_SCAN_PARAMETERS)), "top": 20 + index}
         )
         actions.append(
             {
@@ -199,7 +191,7 @@ def test_fifth_parameter_group_is_requeued_not_completed(tmp_path: Path) -> None
 
     result = asyncio.run(
         StrengthRefreshTask(
-            scanner=fake_scanner,
+            eod_runner=fake_scanner,
             snapshot_path=tmp_path / "strength-snapshot-v1.json",
             clock=lambda: NOW,
         ).run_for_actions(actions)
@@ -216,21 +208,21 @@ def test_owner_and_customer_actions_keep_separate_runtime_results(
     from app.api import strength
 
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
-    default = dict(strength.DEFAULT_STRENGTH_SCAN_PARAMETERS)
-    a0 = strength.normalize_strength_scan_parameters(
-        {**default, "ranking_algorithm": A0_ALGORITHM}
+    default = strength.strength_execution_parameters(dict(strength.DEFAULT_STRENGTH_SCAN_PARAMETERS))
+    long_view = strength.normalize_strength_scan_parameters(
+        {**default, "timeframe": "long"}
     )
 
     async def fake_scanner(**kwargs) -> dict:
-        ranking = kwargs.get("ranking_algorithm")
+        ranking = kwargs.get("horizon")
         return _payload(
             parameters=kwargs,
-            ticker="A0ROW" if ranking == A0_ALGORITHM else "PROD",
-            failed=ranking != A0_ALGORITHM,
+            ticker="LONGROW" if ranking == "long" else "MID",
+            failed=ranking != "long",
         )
 
     task = StrengthRefreshTask(
-        scanner=fake_scanner,
+        eod_runner=fake_scanner,
         snapshot_path=tmp_path / "strength-snapshot-v1.json",
         clock=lambda: NOW,
     )
@@ -269,10 +261,10 @@ def test_owner_and_customer_actions_keep_separate_runtime_results(
         customer = repository.request_action(
             "strength_variant_refresh",
             "strength_refresh",
-            "strength-refresh:customer-a0",
+            "strength-refresh:customer-long_view",
             details={
-                "parameters": a0,
-                "parameters_hash": strength.strength_scan_parameters_hash(a0),
+                "parameters": long_view,
+                "parameters_hash": strength.strength_scan_parameters_hash(long_view),
             },
         )
         owner_action = await _wait_for_action(repository, owner["request_id"], status="failed")
@@ -281,20 +273,17 @@ def test_owner_and_customer_actions_keep_separate_runtime_results(
             customer["request_id"],
             status="completed",
         )
-        assert owner_action["error_code"] == "strength_input_unavailable"
-        assert owner_action["details"]["result"]["parameters"].get("ranking_algorithm") in {
-            None,
-            PRODUCTION_ALGORITHM,
-        }
+        assert owner_action["error_code"] == "eod_limited_input_unavailable"
+        assert owner_action["details"]["result"]["parameters"].get("ranking_algorithm") == EOD_LIMITED_V1
         assert (
             owner_action["details"]["result"]["parameters_hash"]
             == strength.strength_scan_parameters_hash(default)
         )
         assert customer_action["error_code"] is None
-        assert customer_action["details"]["result"]["parameters"]["ranking_algorithm"] == A0_ALGORITHM
+        assert customer_action["details"]["result"]["parameters"]["ranking_algorithm"] == EOD_LIMITED_V1
         assert (
             customer_action["details"]["result"]["parameters_hash"]
-            == strength.strength_scan_parameters_hash(a0)
+            == strength.strength_scan_parameters_hash(long_view)
         )
         supervisor.request_stop()
         await asyncio.wait_for(running, timeout=2)
@@ -305,7 +294,7 @@ def test_owner_and_customer_actions_keep_separate_runtime_results(
 def test_unfinished_claimed_actions_return_to_queued(tmp_path: Path) -> None:
     from app.api import strength
 
-    default = dict(strength.DEFAULT_STRENGTH_SCAN_PARAMETERS)
+    default = strength.strength_execution_parameters(dict(strength.DEFAULT_STRENGTH_SCAN_PARAMETERS))
     extras = [
         strength.normalize_strength_scan_parameters({**default, "top": 20 + index})
         for index in range(5)
@@ -315,7 +304,7 @@ def test_unfinished_claimed_actions_return_to_queued(tmp_path: Path) -> None:
         return _payload(parameters=kwargs, ticker="ROW")
 
     task = StrengthRefreshTask(
-        scanner=fake_scanner,
+        eod_runner=fake_scanner,
         snapshot_path=tmp_path / "strength-snapshot-v1.json",
         clock=lambda: NOW,
     )
@@ -363,13 +352,13 @@ def test_unfinished_claimed_actions_return_to_queued(tmp_path: Path) -> None:
     asyncio.run(scenario())
 
 
-def _raising_scanner(*, production: bool = False, a0: bool = False):
+def _raising_scanner(*, production: bool = False, long_view: bool = False):
     async def fake_scanner(**kwargs) -> dict:
-        ranking = kwargs.get("ranking_algorithm")
-        is_a0 = ranking == A0_ALGORITHM
-        if (a0 and is_a0) or (production and not is_a0):
+        ranking = kwargs.get("horizon")
+        is_long_view = ranking == "long"
+        if (long_view and is_long_view) or (production and not is_long_view):
             raise OSError("injected scan/write failure")
-        return _payload(parameters=kwargs, ticker="A0ROW" if is_a0 else "PROD")
+        return _payload(parameters=kwargs, ticker="LONGROW" if is_long_view else "MID")
 
     return fake_scanner
 
@@ -377,27 +366,27 @@ def _raising_scanner(*, production: bool = False, a0: bool = False):
 def _pair_actions(tmp_path: Path, scanner):
     from app.api import strength
 
-    default = dict(strength.DEFAULT_STRENGTH_SCAN_PARAMETERS)
-    a0 = strength.normalize_strength_scan_parameters(
-        {**default, "ranking_algorithm": A0_ALGORITHM}
+    default = strength.strength_execution_parameters(dict(strength.DEFAULT_STRENGTH_SCAN_PARAMETERS))
+    long_view = strength.normalize_strength_scan_parameters(
+        {**default, "timeframe": "long"}
     )
     task = StrengthRefreshTask(
-        scanner=scanner,
+        eod_runner=scanner,
         snapshot_path=tmp_path / "strength-snapshot-v1.json",
         clock=lambda: NOW,
     )
-    return default, a0, task
+    return default, long_view, task
 
 
 def test_later_oserror_keeps_prior_success(tmp_path: Path) -> None:
     from app.api import strength
 
-    default, a0, task = _pair_actions(tmp_path, _raising_scanner(a0=True))
+    default, long_view, task = _pair_actions(tmp_path, _raising_scanner(long_view=True))
     result = asyncio.run(
         task.run_for_actions(
             [
                 {"request_id": "act_owner", "details": {"parameters": default}},
-                {"request_id": "act_a0", "details": {"parameters": a0}},
+                {"request_id": "act_long_view", "details": {"parameters": long_view}},
             ]
         )
     )
@@ -406,40 +395,40 @@ def test_later_oserror_keeps_prior_success(tmp_path: Path) -> None:
     assert completions["act_owner"]["parameters_hash"] == strength.strength_scan_parameters_hash(
         default
     )
-    assert completions["act_a0"]["succeeded"] is False
-    assert completions["act_a0"]["error_code"] == "task_failed"
-    assert completions["act_a0"]["parameters_hash"] == strength.strength_scan_parameters_hash(a0)
-    assert completions["act_a0"]["result"]["error_type"] == "OSError"
+    assert completions["act_long_view"]["succeeded"] is False
+    assert completions["act_long_view"]["error_code"] == "eod_limited_input_unavailable"
+    assert completions["act_long_view"]["parameters_hash"] == strength.strength_scan_parameters_hash(long_view)
+    assert completions["act_long_view"]["result"]["reason"] == "OSError"
 
 
 def test_earlier_oserror_lets_later_group_succeed(tmp_path: Path) -> None:
     from app.api import strength
 
-    default, a0, task = _pair_actions(tmp_path, _raising_scanner(production=True))
+    default, long_view, task = _pair_actions(tmp_path, _raising_scanner(production=True))
     result = asyncio.run(
         task.run_for_actions(
             [
                 {"request_id": "act_owner", "details": {"parameters": default}},
-                {"request_id": "act_a0", "details": {"parameters": a0}},
+                {"request_id": "act_long_view", "details": {"parameters": long_view}},
             ]
         )
     )
     completions = {item["request_id"]: item for item in result.details["action_completions"]}
     assert completions["act_owner"]["succeeded"] is False
-    assert completions["act_owner"]["error_code"] == "task_failed"
-    assert completions["act_a0"]["succeeded"] is True
-    assert completions["act_a0"]["parameters"]["ranking_algorithm"] == A0_ALGORITHM
-    assert completions["act_a0"]["parameters_hash"] == strength.strength_scan_parameters_hash(a0)
+    assert completions["act_owner"]["error_code"] == "eod_limited_input_unavailable"
+    assert completions["act_long_view"]["succeeded"] is True
+    assert completions["act_long_view"]["parameters"]["ranking_algorithm"] == EOD_LIMITED_V1
+    assert completions["act_long_view"]["parameters_hash"] == strength.strength_scan_parameters_hash(long_view)
 
 
-def test_companion_oserror_keeps_owner_success(
+def test_pending_variant_oserror_keeps_owner_success(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from app.api import strength
 
-    default, a0, task = _pair_actions(tmp_path, _raising_scanner(a0=True))
-    monkeypatch.setattr(strength, "a0_companion_for_admin_default", lambda *_args, **_kwargs: a0)
+    default, long_view, task = _pair_actions(tmp_path, _raising_scanner(long_view=True))
+    monkeypatch.setattr("app.services.strength.variant_demand.list_pending_strength_variant_demands", lambda: [long_view])
     result = asyncio.run(
         task.run_for_actions([{"request_id": "act_owner", "details": {"parameters": default}}])
     )
@@ -458,11 +447,11 @@ def test_pending_extra_oserror_keeps_owner_success(
     from app.api import strength
     from app.services.strength import variant_demand
 
-    default, a0, task = _pair_actions(tmp_path, _raising_scanner(a0=True))
+    default, long_view, task = _pair_actions(tmp_path, _raising_scanner(long_view=True))
     monkeypatch.setattr(
         variant_demand,
         "list_pending_strength_variant_demands",
-        lambda **_kwargs: [a0],
+        lambda **_kwargs: [long_view],
     )
     result = asyncio.run(
         task.run_for_actions([{"request_id": "act_owner", "details": {"parameters": default}}])
@@ -483,7 +472,7 @@ def _runtime_pair(
 ):
     from app.api import strength
 
-    default, a0, task = _pair_actions(tmp_path, scanner)
+    default, long_view, task = _pair_actions(tmp_path, scanner)
     repository = WorkerStateRepository(tmp_path / "runtime.db")
     repository.initialize()
     supervisor = WorkerSupervisor(
@@ -502,13 +491,13 @@ def _runtime_pair(
         shutdown_grace_seconds=grace,
         process_lock=ProcessFileLock(tmp_path / "runtime.lock"),
     )
-    return default, a0, strength, repository, supervisor
+    return default, long_view, strength, repository, supervisor
 
 
 def test_runtime_later_oserror_keeps_owner_completed(tmp_path: Path) -> None:
-    default, a0, strength, repository, supervisor = _runtime_pair(
+    default, long_view, strength, repository, supervisor = _runtime_pair(
         tmp_path,
-        _raising_scanner(a0=True),
+        _raising_scanner(long_view=True),
     )
 
     async def scenario() -> None:
@@ -531,8 +520,8 @@ def test_runtime_later_oserror_keeps_owner_completed(tmp_path: Path) -> None:
             "strength_refresh",
             "strength-refresh:customer-oserror",
             details={
-                "parameters": a0,
-                "parameters_hash": strength.strength_scan_parameters_hash(a0),
+                "parameters": long_view,
+                "parameters_hash": strength.strength_scan_parameters_hash(long_view),
             },
         )
         owner_action = await _wait_for_action(repository, owner["request_id"], status="completed")
@@ -542,10 +531,10 @@ def test_runtime_later_oserror_keeps_owner_completed(tmp_path: Path) -> None:
             owner_action["details"]["result"]["parameters_hash"]
             == strength.strength_scan_parameters_hash(default)
         )
-        assert customer_action["error_code"] == "task_failed"
+        assert customer_action["error_code"] == "eod_limited_input_unavailable"
         assert (
             customer_action["details"]["result"]["parameters_hash"]
-            == strength.strength_scan_parameters_hash(a0)
+            == strength.strength_scan_parameters_hash(long_view)
         )
         supervisor.request_stop()
         await asyncio.wait_for(running, timeout=2)
@@ -557,11 +546,11 @@ def test_runtime_timeout_keeps_first_group_and_requeues_rest(tmp_path: Path) -> 
     hang = asyncio.Event()
 
     async def fake_scanner(**kwargs) -> dict:
-        if kwargs.get("ranking_algorithm") == A0_ALGORITHM:
+        if kwargs.get("horizon") == "long":
             await hang.wait()
-        return _payload(parameters=kwargs, ticker="PROD")
+        return _payload(parameters=kwargs, ticker="MID")
 
-    default, a0, strength, repository, supervisor = _runtime_pair(
+    default, long_view, strength, repository, supervisor = _runtime_pair(
         tmp_path,
         fake_scanner,
         timeout_seconds=0.15,
@@ -587,8 +576,8 @@ def test_runtime_timeout_keeps_first_group_and_requeues_rest(tmp_path: Path) -> 
             "strength_refresh",
             "strength-refresh:customer-timeout",
             details={
-                "parameters": a0,
-                "parameters_hash": strength.strength_scan_parameters_hash(a0),
+                "parameters": long_view,
+                "parameters_hash": strength.strength_scan_parameters_hash(long_view),
             },
         )
         owner_action = await _wait_for_action(repository, owner["request_id"], status="completed")
@@ -618,11 +607,11 @@ def test_runtime_shutdown_keeps_settled_success(tmp_path: Path) -> None:
     hang = asyncio.Event()
 
     async def fake_scanner(**kwargs) -> dict:
-        if kwargs.get("ranking_algorithm") == A0_ALGORITHM:
+        if kwargs.get("horizon") == "long":
             await hang.wait()
-        return _payload(parameters=kwargs, ticker="PROD")
+        return _payload(parameters=kwargs, ticker="MID")
 
-    default, a0, strength, repository, supervisor = _runtime_pair(tmp_path, fake_scanner)
+    default, long_view, strength, repository, supervisor = _runtime_pair(tmp_path, fake_scanner)
 
     async def scenario() -> None:
         running = asyncio.create_task(supervisor.run_forever())
@@ -644,8 +633,8 @@ def test_runtime_shutdown_keeps_settled_success(tmp_path: Path) -> None:
             "strength_refresh",
             "strength-refresh:customer-cancel",
             details={
-                "parameters": a0,
-                "parameters_hash": strength.strength_scan_parameters_hash(a0),
+                "parameters": long_view,
+                "parameters_hash": strength.strength_scan_parameters_hash(long_view),
             },
         )
         owner_action = await _wait_for_action(repository, owner["request_id"], status="completed")
@@ -660,7 +649,7 @@ def test_runtime_shutdown_keeps_settled_success(tmp_path: Path) -> None:
 
 
 def test_runtime_lease_loss_does_not_rewrite_settled_success(tmp_path: Path) -> None:
-    default, a0, strength, repository, supervisor = _runtime_pair(
+    default, long_view, strength, repository, supervisor = _runtime_pair(
         tmp_path,
         _raising_scanner(),
     )
@@ -698,8 +687,8 @@ def test_runtime_lease_loss_does_not_rewrite_settled_success(tmp_path: Path) -> 
             "strength_refresh",
             "strength-refresh:customer-lease",
             details={
-                "parameters": a0,
-                "parameters_hash": strength.strength_scan_parameters_hash(a0),
+                "parameters": long_view,
+                "parameters_hash": strength.strength_scan_parameters_hash(long_view),
             },
         )
         await _wait_for_action(repository, owner["request_id"], status="completed")
@@ -723,7 +712,7 @@ def test_runtime_lease_loss_does_not_rewrite_settled_success(tmp_path: Path) -> 
 def test_invalid_parameters_fail_and_valid_group_completes(tmp_path: Path) -> None:
     from app.api import strength
 
-    default, _a0, task = _pair_actions(tmp_path, _raising_scanner())
+    default, _long_view, task = _pair_actions(tmp_path, _raising_scanner())
     result = asyncio.run(
         task.run_for_actions(
             [

@@ -90,7 +90,7 @@ function HeatTile({
             {sector.name}
           </span>
           <span className={cn('hidden font-mono text-micro tnum md:inline', textSub)}>
-            {sector.coveredCount !== null ? t('{n} 只', { n: sector.coveredCount }) : t('未覆盖')}
+            {t('有评分 {scored} / {total}', { scored: sector.scoredCount ?? '—', total: sector.memberCount })}
           </span>
         </span>
         <span>
@@ -149,6 +149,18 @@ function HeatTile({
               {sector.coveredCount ?? '—'} / {sector.memberCount}
             </span>
           </span>
+          <span className="flex items-center justify-between gap-2">
+            <span className="text-ink-500">{t('评分覆盖')}</span>
+            <span className="font-mono text-ink-800 tnum">
+              {sector.scoredCount ?? '—'} / {sector.memberCount}
+            </span>
+          </span>
+          {sector.scoreDataThrough && (
+            <span className="flex items-center justify-between gap-2">
+              <span className="text-ink-500">{t('评分截至')}</span>
+              <span className="font-mono text-ink-800 tnum">{sector.scoreDataThrough}</span>
+            </span>
+          )}
         </span>
       </span>
     </motion.button>

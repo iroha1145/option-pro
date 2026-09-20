@@ -107,9 +107,9 @@ export interface ScanFilters {
   /** 强度分下限（由预设策略注入；null = 不限） */
   minScore: number | null;
   presetId: string | null;
-  /** 选股排序：跟随默认 / 原版 / A0 中长期趋势 / 收盘技术（受限） */
+  /** 固定的新选股引擎身份；仅用于请求与缓存，不作为用户选项。 */
   rankingAlgorithm: 'follow_default' | 'production' | 'a0_mid_long' | 'eod_limited_v1';
-  /** 收盘技术结果集：技术观察或严格合格综合 */
+  /** 结果集：技术观察或严格合格综合 */
   resultSet: 'observation' | 'composite';
 }
 
@@ -129,7 +129,7 @@ export const DEFAULT_FILTERS: ScanFilters = {
   minDollarVol: DEFAULT_MIN_DOLLAR_VOLUME,
   minScore: null,
   presetId: null,
-  rankingAlgorithm: 'follow_default',
+  rankingAlgorithm: 'eod_limited_v1',
   resultSet: 'observation',
 };
 
