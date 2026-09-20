@@ -1,7 +1,6 @@
 # LIMITED_CURRENT_UNIVERSE_V1
 
-受限工程版：让现有研究函数在**当前主题名单**的真实日线上跑通。  
-这不是十年 PIT 认证，也不是参数寻优。`evidence_status=UNVALIDATED_LIMITED_DATA`。
+受限工程版：让现有研究函数在**当前主题名单**的真实日线上跑通。这不是十年 PIT 认证，也不是参数寻优。`evidence_status=UNVALIDATED_LIMITED_DATA`。
 
 主路径：`24 主题 × A/B/C/D × balanced × mid` → M1 共识 → 原子快照 → 本地只读 HTML。
 
