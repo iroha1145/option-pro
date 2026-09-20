@@ -1,0 +1,99 @@
+{
+  "credential_present": false,
+  "runtime": {
+    "platform": "Linux-6.12.94+-x86_64-with-glibc2.39",
+    "python": "3.12.3",
+    "hostname_hash": "46a4eebd20d881ec",
+    "env_key_name": "SHARADAR_API_KEY"
+  },
+  "provider": "sharadar",
+  "channel": "api.sharadar.com",
+  "channel_confirmed": "official_docs_mapped; live_channel_unconfirmed_without_secret",
+  "nasdaq_data_link_attempted": false,
+  "chat_credentials_read": false,
+  "massive_key_used": false,
+  "yahoo_fallback_used": false,
+  "live_sharadar_request_count": 0,
+  "tables": {
+    "stocks": {
+      "alias": "SEP",
+      "status": "AUTH_REQUIRED",
+      "row_count": 0,
+      "redacted_url": "https://api.sharadar.com/v1.0/data/stocks?format=json",
+      "schema_gap": [],
+      "complete": false,
+      "body_kind": "auth"
+    },
+    "funds": {
+      "alias": "SFP",
+      "status": "AUTH_REQUIRED",
+      "row_count": 0,
+      "redacted_url": "https://api.sharadar.com/v1.0/data/funds?format=json",
+      "schema_gap": [],
+      "complete": false,
+      "body_kind": "auth"
+    },
+    "tickers": {
+      "alias": "TICKERS",
+      "status": "AUTH_REQUIRED",
+      "row_count": 0,
+      "redacted_url": "https://api.sharadar.com/v1.0/data/tickers?format=json",
+      "schema_gap": [],
+      "complete": false,
+      "body_kind": "auth"
+    },
+    "actions": {
+      "alias": "ACTIONS",
+      "status": "AUTH_REQUIRED",
+      "row_count": 0,
+      "redacted_url": "https://api.sharadar.com/v1.0/data/actions?format=json",
+      "schema_gap": [],
+      "complete": false,
+      "body_kind": "auth"
+    }
+  },
+  "samples": {
+    "non_free_example": "AUTH_REQUIRED",
+    "delisted": "AUTH_REQUIRED",
+    "history_2010": "AUTH_REQUIRED",
+    "funds_scope": "AUTH_REQUIRED",
+    "aapl_earliest": null,
+    "non_free_example_ticker": "MSFT",
+    "history_example_ticker": "AAPL",
+    "aapl_not_used_as_non_free_proof": true,
+    "delisted_not_concluded_missing_history": true,
+    "row_counts": {},
+    "empty_read_is_not_sample_pass": true
+  },
+  "entitlement": {
+    "status": "AUTH_REQUIRED",
+    "verified_access": false,
+    "observed_coverage": {
+      "earliest_observed_row": null,
+      "earliest_is_coverage_not_license": true,
+      "requested_from": "2010-01-01",
+      "requested_to": "2024-06-28"
+    },
+    "authorized_range_unknown": true,
+    "bulk_years": null,
+    "earliest": null,
+    "research_start": null,
+    "continue": false,
+    "needs_review": false
+  },
+  "entitlement_probe": {
+    "bulk_years": null,
+    "status": "AUTH_REQUIRED",
+    "attempts": []
+  },
+  "volume_session_scope": "UNKNOWN",
+  "secret_present_in_report": false,
+  "terminal_status": "AUTH_REQUIRED",
+  "full_download_allowed": {
+    "allowed": false,
+    "blockers": [
+      "credential_absent"
+    ],
+    "empty_page_is_not_sample_proof": true
+  }
+}

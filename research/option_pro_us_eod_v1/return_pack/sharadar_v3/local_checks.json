@@ -1,0 +1,204 @@
+{
+  "head": "3de4bdf5ecb211c3faff9ed1652bdf5df80c1795",
+  "replay_head": "42be3ea02a45d84ea671c572cdc81140025dfd19",
+  "scope": "source-excerpt functions; shipped action_value_evidence; no network",
+  "groups": 7,
+  "satisfied": 7,
+  "not_satisfied": 0,
+  "previously_unsatisfied": [
+    "proof_for_different_security_must_not_authorize_target"
+  ],
+  "generated_at": "2026-09-19T16:17:24.134147+00:00",
+  "cases": [
+    {
+      "name": "non_finite_non_positive_and_boolean_rejected",
+      "expected": "all value None",
+      "actual": [
+        {
+          "value": null,
+          "raw_value": null,
+          "rejected_reason": "no_positive_finite_value"
+        },
+        {
+          "value": null,
+          "raw_value": "",
+          "rejected_reason": "no_positive_finite_value"
+        },
+        {
+          "value": null,
+          "raw_value": "nan",
+          "rejected_reason": "no_positive_finite_value"
+        },
+        {
+          "value": null,
+          "raw_value": "inf",
+          "rejected_reason": "no_positive_finite_value"
+        },
+        {
+          "value": null,
+          "raw_value": "Infinity",
+          "rejected_reason": "no_positive_finite_value"
+        },
+        {
+          "value": null,
+          "raw_value": "1e309",
+          "rejected_reason": "no_positive_finite_value"
+        },
+        {
+          "value": null,
+          "raw_value": -1,
+          "rejected_reason": "no_positive_finite_value"
+        },
+        {
+          "value": null,
+          "raw_value": 0,
+          "rejected_reason": "no_positive_finite_value"
+        },
+        {
+          "value": null,
+          "raw_value": true,
+          "rejected_reason": "no_positive_finite_value"
+        }
+      ],
+      "satisfied": true
+    },
+    {
+      "name": "matched_positive_cash_control",
+      "expected": true,
+      "actual": {
+        "action": "acquisitioncash",
+        "date": "2023-06-05",
+        "ticker": "EXAMPLE",
+        "contraticker": null,
+        "raw_value": "12.0",
+        "value": 12.0,
+        "unit": "usd_per_share",
+        "unit_source": "action_code_names_cash_consideration",
+        "share_basis": "matched",
+        "share_basis_proof": null,
+        "semantics_version": "sharadar-action-value-units-v1",
+        "accepted_as_cash_consideration": true,
+        "rejected_reason": null,
+        "not_assumed_usd": false,
+        "not_assumed_exchange_ratio": true
+      },
+      "satisfied": true
+    },
+    {
+      "name": "generic_merger_not_cash",
+      "expected": false,
+      "actual": {
+        "action": "merger",
+        "date": "2023-06-05",
+        "ticker": "EXAMPLE",
+        "contraticker": null,
+        "raw_value": "0.4",
+        "value": 0.4,
+        "unit": "unverified",
+        "unit_source": "action_code_does_not_state_a_unit",
+        "share_basis": "matched",
+        "share_basis_proof": null,
+        "semantics_version": "sharadar-action-value-units-v1",
+        "accepted_as_cash_consideration": false,
+        "rejected_reason": "value_unit_not_documented_for_this_action",
+        "not_assumed_usd": true,
+        "not_assumed_exchange_ratio": true
+      },
+      "satisfied": true
+    },
+    {
+      "name": "missing_ticker_without_proof_rejected",
+      "expected": false,
+      "actual": {
+        "action": "acquisitioncash",
+        "date": "2023-06-05",
+        "ticker": null,
+        "contraticker": null,
+        "raw_value": "12.0",
+        "value": 12.0,
+        "unit": "usd_per_share",
+        "unit_source": "action_code_names_cash_consideration",
+        "share_basis": "unverified",
+        "share_basis_proof": null,
+        "semantics_version": "sharadar-action-value-units-v1",
+        "accepted_as_cash_consideration": false,
+        "rejected_reason": "share_basis_unverified_without_caller_proof",
+        "not_assumed_usd": false,
+        "not_assumed_exchange_ratio": true
+      },
+      "satisfied": true
+    },
+    {
+      "name": "matching_proof_control",
+      "expected": true,
+      "actual": {
+        "action": "acquisitioncash",
+        "date": "2023-06-05",
+        "ticker": null,
+        "contraticker": null,
+        "raw_value": "12.0",
+        "value": 12.0,
+        "unit": "usd_per_share",
+        "unit_source": "action_code_names_cash_consideration",
+        "share_basis": "unverified",
+        "share_basis_proof": {
+          "proof": "verified_permaticker",
+          "permaticker": "1001",
+          "not_inferred_from_missing_contradiction": true,
+          "bound_to_security_permaticker": "1001",
+          "proof_kind_source": "verified_permanent_identity_kinds"
+        },
+        "semantics_version": "sharadar-action-value-units-v1",
+        "accepted_as_cash_consideration": true,
+        "rejected_reason": null,
+        "not_assumed_usd": false,
+        "not_assumed_exchange_ratio": true
+      },
+      "satisfied": true
+    },
+    {
+      "name": "proof_for_different_security_must_not_authorize_target",
+      "expected": false,
+      "actual": {
+        "action": "acquisitioncash",
+        "date": "2023-06-05",
+        "ticker": null,
+        "contraticker": null,
+        "raw_value": "12.0",
+        "value": 12.0,
+        "unit": "usd_per_share",
+        "unit_source": "action_code_names_cash_consideration",
+        "share_basis": "unverified",
+        "share_basis_proof": null,
+        "semantics_version": "sharadar-action-value-units-v1",
+        "accepted_as_cash_consideration": false,
+        "rejected_reason": "share_basis_proof_target_mismatch",
+        "not_assumed_usd": false,
+        "not_assumed_exchange_ratio": true
+      },
+      "satisfied": true
+    },
+    {
+      "name": "invalid_proof_kind_rejected",
+      "expected": false,
+      "actual": {
+        "action": "acquisitioncash",
+        "date": "2023-06-05",
+        "ticker": null,
+        "contraticker": null,
+        "raw_value": "12.0",
+        "value": 12.0,
+        "unit": "usd_per_share",
+        "unit_source": "action_code_names_cash_consideration",
+        "share_basis": "unverified",
+        "share_basis_proof": null,
+        "semantics_version": "sharadar-action-value-units-v1",
+        "accepted_as_cash_consideration": false,
+        "rejected_reason": "share_basis_unverified_without_caller_proof",
+        "not_assumed_usd": false,
+        "not_assumed_exchange_ratio": true
+      },
+      "satisfied": true
+    }
+  ]
+}

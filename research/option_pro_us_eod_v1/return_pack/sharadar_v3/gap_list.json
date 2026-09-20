@@ -1,0 +1,92 @@
+[
+  {
+    "item": "SHARADAR_API_KEY",
+    "status": "AUTH_REQUIRED",
+    "action": "inject Cursor secret and start a new agent"
+  },
+  {
+    "item": "live_table_read",
+    "status": "AUTH_REQUIRED",
+    "action": "do not fall back to Yahoo or Massive"
+  },
+  {
+    "item": "entitlement_years",
+    "status": "AUTH_REQUIRED",
+    "action": "stop on 5Y; tag 10Y; continue full from 2010-01-01; tier comes from bulk status metadata, not from the earliest observed row",
+    "probe": {
+      "bulk_years": null,
+      "status": "AUTH_REQUIRED",
+      "attempts": []
+    }
+  },
+  {
+    "item": "download_mode",
+    "status": "NOT_RUN",
+    "action": "bulk zip first for the backfill; paged fetch with explicit sort only as fallback / incremental",
+    "modes": {}
+  },
+  {
+    "item": "yahoo_overlap_reconcile",
+    "status": "INSUFFICIENT",
+    "action": "align security/currency/split scale before comparing; fewer than the minimum comparisons is INSUFFICIENT",
+    "thresholds": {
+      "return_abs_bp": 50.0,
+      "volume_ratio": [
+        0.8,
+        1.25
+      ],
+      "fail_share": 0.02,
+      "min_return_coverage": 250,
+      "min_securities": 10
+    }
+  },
+  {
+    "item": "volume_session_scope",
+    "status": "UNSUPPORTED",
+    "action": "do not start volume experiments"
+  },
+  {
+    "item": "persistent_offline_export",
+    "status": "AUTH_REQUIRED",
+    "action": "authorized store outside public git; resume from checkpoints",
+    "store": {
+      "path": "/workspace/research/option_pro_us_eod_v1/data/sharadar_raw",
+      "public_git": false,
+      "resume": "load checkpoints/<table>.json; verify page hashes; continue from next_skip; rows already on disk are read whatever the last status was",
+      "unique_key_index": "keys/<table>.sqlite (lookup) + keys/<table>.keys (append-only listing)",
+      "merged_file": "append-only per committed page; rebuilt only after an orphan-page adoption or a replaced page",
+      "paid_rows_must_stay_outside_git": true,
+      "bounded_reads": "isolated views stream jsonl; transform is a two-pass bucketed stream under a temporary directory; no whole-table list",
+      "allowed_window": {
+        "start": "2010-01-01",
+        "end": "2024-06-28",
+        "isolated_after_raw_persist": true,
+        "acceptance_consumers_see_allowed_window_only": true
+      }
+    }
+  },
+  {
+    "item": "explicit_history_request_bounds",
+    "status": "NOT_EXERCISED",
+    "action": "every paged date-table request seen must carry from=2010-01-01 to=2024-06-28"
+  },
+  {
+    "item": "full_download_gate",
+    "status": "BLOCKED",
+    "action": "an empty READ_OK page is not sample proof; do not start a full download on AUTH_FAILED or missing entitlement",
+    "blockers": [
+      "credential_absent"
+    ]
+  },
+  {
+    "item": "action_vocabulary",
+    "status": "NOT_OBSERVED",
+    "action": "compare the observed action strings with the classifier's assumed vocabulary before trusting terminal labels",
+    "observed": {}
+  },
+  {
+    "item": "members_and_factors",
+    "status": "NOT_THIS_ROUND",
+    "action": "wait for data-gate review"
+  }
+]

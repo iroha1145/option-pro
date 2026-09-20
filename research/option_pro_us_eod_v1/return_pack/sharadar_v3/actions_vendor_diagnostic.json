@@ -1,0 +1,227 @@
+{
+  "generated_at": "2026-09-19T16:13:04.317821+00:00",
+  "code_sha": "42be3ea02a45d84ea671c572cdc81140025dfd19",
+  "actions": {
+    "docs": "https://sharadar.com/docs/actions",
+    "probes": [
+      {
+        "shape": "paged_ticker_and_window",
+        "table": "actions",
+        "tickers": [
+          "MSFT",
+          "AAPL",
+          "SPY"
+        ],
+        "window": {
+          "from": "2024-06-24",
+          "to": "2024-06-28"
+        },
+        "docs_endpoint": "https://api.sharadar.com/v1.0/data/actions",
+        "docs_included_in": [
+          "Fundamentals",
+          "Prices",
+          "Bundle"
+        ],
+        "status": "AUTH_FAILED",
+        "http_status": 403,
+        "row_count": 0,
+        "body_kind": "auth",
+        "complete": false,
+        "first_date": null,
+        "last_date": null,
+        "redacted_url_host_ok": true,
+        "vendor_error": {
+          "http_status": 403,
+          "http_401_distinct_from_403": true,
+          "body_kind": "error",
+          "vendor_code": null,
+          "vendor_message": "Exceeds free tier",
+          "excerpt": null,
+          "not_collapsed_to_upgrade_sku": true
+        },
+        "transport": {
+          "attempts": 1,
+          "retry_count": 0,
+          "http_statuses": [
+            403
+          ],
+          "official_https_origin": true,
+          "hosts": [
+            "api.sharadar.com"
+          ]
+        }
+      },
+      {
+        "shape": "docs_example_ticker_only",
+        "table": "actions",
+        "tickers": [
+          "AAPL"
+        ],
+        "window": null,
+        "status": "READ_OK",
+        "http_status": 200,
+        "row_count": 20,
+        "body_kind": "rows",
+        "complete": false,
+        "first_date": "2021-11-05",
+        "last_date": "2026-08-10",
+        "redacted_url_host_ok": true,
+        "vendor_error": null,
+        "transport": {
+          "attempts": 1,
+          "retry_count": 0,
+          "http_statuses": [
+            200
+          ],
+          "official_https_origin": true,
+          "hosts": [
+            "api.sharadar.com"
+          ]
+        }
+      }
+    ],
+    "bulk_status": [
+      {
+        "years": "5",
+        "status": "AUTH_FAILED",
+        "http_status": 403,
+        "vendor_error": {
+          "http_status": 403,
+          "http_401_distinct_from_403": true,
+          "body_kind": "error",
+          "vendor_code": null,
+          "vendor_message": "Forbidden",
+          "excerpt": null,
+          "not_collapsed_to_upgrade_sku": true
+        },
+        "body_kind": null,
+        "files": [],
+        "shape": null,
+        "purchase_attempted": false,
+        "transport": {
+          "attempts": 1,
+          "retry_count": 0,
+          "http_statuses": [
+            403
+          ],
+          "official_https_origin": true,
+          "hosts": [
+            "api.sharadar.com"
+          ]
+        }
+      },
+      {
+        "years": "10",
+        "status": "AUTH_FAILED",
+        "http_status": 403,
+        "vendor_error": {
+          "http_status": 403,
+          "http_401_distinct_from_403": true,
+          "body_kind": "error",
+          "vendor_code": null,
+          "vendor_message": "Forbidden",
+          "excerpt": null,
+          "not_collapsed_to_upgrade_sku": true
+        },
+        "body_kind": null,
+        "files": [],
+        "shape": null,
+        "purchase_attempted": false,
+        "transport": {
+          "attempts": 1,
+          "retry_count": 0,
+          "http_statuses": [
+            403
+          ],
+          "official_https_origin": true,
+          "hosts": [
+            "api.sharadar.com"
+          ]
+        }
+      },
+      {
+        "years": "full",
+        "status": "AUTH_FAILED",
+        "http_status": 403,
+        "vendor_error": {
+          "http_status": 403,
+          "http_401_distinct_from_403": true,
+          "body_kind": "error",
+          "vendor_code": null,
+          "vendor_message": "Forbidden",
+          "excerpt": null,
+          "not_collapsed_to_upgrade_sku": true
+        },
+        "body_kind": null,
+        "files": [],
+        "shape": null,
+        "purchase_attempted": false,
+        "transport": {
+          "attempts": 1,
+          "retry_count": 0,
+          "http_statuses": [
+            403
+          ],
+          "official_https_origin": true,
+          "hosts": [
+            "api.sharadar.com"
+          ]
+        }
+      }
+    ],
+    "schema": {
+      "status": "HTTP_ERROR",
+      "http_status": 400,
+      "vendor_error": {
+        "http_status": 400,
+        "http_401_distinct_from_403": true,
+        "body_kind": "error",
+        "vendor_code": null,
+        "vendor_message": "Bad request",
+        "excerpt": null,
+        "not_collapsed_to_upgrade_sku": true
+      },
+      "redacted_url_host_ok": true,
+      "bytes": 102,
+      "sha256": "14ec699f84a0d8d67d10daac207335482209db8d98fb84f80ad34ba29057d2ca",
+      "transport": {
+        "attempts": 1,
+        "retry_count": 0,
+        "http_statuses": [
+          400
+        ],
+        "official_https_origin": true,
+        "hosts": [
+          "api.sharadar.com"
+        ]
+      }
+    },
+    "distinct_http_statuses": [
+      200,
+      400,
+      403
+    ],
+    "interpretation": {
+      "docs_list_actions_inside_fundamentals_prices_bundle": true,
+      "docs_readable_is_not_this_account_entitlement": true,
+      "http_401_means_key_rejected_for_this_request": false,
+      "http_403_means_key_reached_server_but_table_forbidden": true,
+      "401_and_403_not_collapsed_to_upgrade_sku": true,
+      "same_key_already_reads_stocks_funds_tickers": true,
+      "auto_purchase": false,
+      "ask_vendor": [
+        "whether this API key's product includes the ACTIONS table or only SEP/SFP/TICKERS",
+        "the exact HTTP status and vendor error code returned for /v1.0/data/actions",
+        "whether ACTIONS requires Fundamentals, Prices, or Bundle on this account"
+      ]
+    },
+    "nonempty_actions_rows": true,
+    "full_download_started": false
+  },
+  "ask_vendor": [
+    "whether this API key's product includes the ACTIONS table or only SEP/SFP/TICKERS",
+    "the exact HTTP status and vendor error code returned for /v1.0/data/actions",
+    "whether ACTIONS requires Fundamentals, Prices, or Bundle on this account"
+  ],
+  "secrets_omitted": true
+}

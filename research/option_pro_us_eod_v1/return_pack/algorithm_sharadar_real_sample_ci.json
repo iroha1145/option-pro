@@ -1,0 +1,64 @@
+{
+  "queried_at": "2026-09-19T12:37:37Z",
+  "branch": "cursor/sharadar-data-first-4939",
+  "pr": 176,
+  "note": "query time only; no tests disabled and no timeout increased",
+  "implementation_head": "4395a09fe5f0c79c23864a570c9e6908fbdb14f1",
+  "review_anchor_at_start": "0424b41e0efab7b5502ba61293ab132c5c60d42b",
+  "prior_implementation_head": "54f9e874989958dcf5fd13c4f60484a7cd4637e2",
+  "runs": [
+    {
+      "event": "push",
+      "run_id": 35443385399,
+      "url": "https://github.com/iroha1145/option-pro/actions/runs/35443385399",
+      "head_sha": "4395a09fe5f0c79c23864a570c9e6908fbdb14f1",
+      "status": "in_progress",
+      "conclusion": null
+    },
+    {
+      "event": "pull_request",
+      "run_id": 35443389415,
+      "url": "https://github.com/iroha1145/option-pro/actions/runs/35443389415",
+      "head_sha": "4395a09fe5f0c79c23864a570c9e6908fbdb14f1",
+      "status": "pending",
+      "conclusion": null
+    },
+    {
+      "event": "push",
+      "run_id": 35442168336,
+      "url": "https://github.com/iroha1145/option-pro/actions/runs/35442168336",
+      "head_sha": "0424b41e0efab7b5502ba61293ab132c5c60d42b",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "event": "pull_request",
+      "run_id": 35442170733,
+      "url": "https://github.com/iroha1145/option-pro/actions/runs/35442170733",
+      "head_sha": "0424b41e0efab7b5502ba61293ab132c5c60d42b",
+      "status": "in_progress",
+      "conclusion": null,
+      "note": "still running at query time; not treated as proof that the earlier visual timeout is unrelated"
+    },
+    {
+      "event": "push",
+      "run_id": 35440601553,
+      "url": "https://github.com/iroha1145/option-pro/actions/runs/35440601553",
+      "head_sha": "54f9e874989958dcf5fd13c4f60484a7cd4637e2",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "event": "pull_request",
+      "run_id": 35440604737,
+      "url": "https://github.com/iroha1145/option-pro/actions/runs/35440604737",
+      "head_sha": "54f9e874989958dcf5fd13c4f60484a7cd4637e2",
+      "status": "completed",
+      "conclusion": "failure",
+      "failed_step": "Capture Catalyst Desk and macro conditions visual evidence",
+      "assessment": "prior fact; not used as root-cause proof for this round"
+    }
+  ],
+  "local_targeted_suite": "86 passed (pr176 + sharadar + closeout + connect_accept + finish_gate + sharadar_fixes)",
+  "local_probes_replay": "14/14 satisfied against shipped modules"
+}

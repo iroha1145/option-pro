@@ -1,0 +1,20 @@
+{
+  "feature_version_bump": "PASS",
+  "parent_rank_fix": "PASS",
+  "breakout_first_day_fix": "PASS",
+  "identity_contract": "AUTH_REQUIRED",
+  "delist_fixture_table": "PASS",
+  "delist_live_verified": null,
+  "delist_resolved_n": 0,
+  "delist_concrete_terminal_n": 0,
+  "control_archive_index": "PASS",
+  "live_sharadar_read": "AUTH_REQUIRED",
+  "yahoo_reconcile_live": "INSUFFICIENT",
+  "volume_scope": "UNSUPPORTED",
+  "persistent_handover": "AUTH_REQUIRED",
+  "chat_or_massive_credential_used": "PASS_NOT_USED",
+  "four_table_mock_or_live_not_empty_placeholder": "AUTH_REQUIRED",
+  "explicit_history_request_bounds": "NOT_EXERCISED",
+  "channel_confirmed": "official_docs_mapped; live_channel_unconfirmed_without_secret",
+  "download_modes": {}
+}

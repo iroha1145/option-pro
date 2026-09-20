@@ -1,0 +1,162 @@
+{
+  "repository": "iroha1145/option-pro",
+  "pr": 176,
+  "method": "in-process mock transport; no live Sharadar; no chat credentials",
+  "full_repository_tests_run_locally": true,
+  "full_pytest": {
+    "passed": 3989,
+    "skipped": 6
+  },
+  "live_sharadar_request_count": 0,
+  "real_credentials_read_or_used": false,
+  "credential_present": false,
+  "market_backtest_run": false,
+  "checks": 14,
+  "satisfied": 14,
+  "not_satisfied": 0,
+  "observations": [
+    {
+      "name": "no_key_no_request",
+      "observed": {
+        "status": "AUTH_REQUIRED",
+        "rows": 0,
+        "transport_calls": 0
+      },
+      "expected_contract": "AUTH_REQUIRED without transport call",
+      "contract_satisfied": true
+    },
+    {
+      "name": "valid_page_control",
+      "observed": {
+        "status": "READ_OK",
+        "rows": 1
+      },
+      "expected_contract": "READ_OK with one validated row",
+      "contract_satisfied": true
+    },
+    {
+      "name": "error_envelope_not_empty_success",
+      "observed": {
+        "status": "VENDOR_ERROR",
+        "rows": 0,
+        "kind": "error"
+      },
+      "expected_contract": "Error response must not be accepted as a valid empty page",
+      "contract_satisfied": true
+    },
+    {
+      "name": "bulk_error_not_committed",
+      "observed": {
+        "status": "NETWORK_UNAVAILABLE",
+        "final_file_exists": false
+      },
+      "expected_contract": "HTTP 503 must not be READ_OK or promoted to a final archive",
+      "contract_satisfied": true
+    },
+    {
+      "name": "parent_rank_normal_control",
+      "observed": {
+        "A10": 52.6315789474,
+        "B0": 0.0
+      },
+      "expected_contract": "Parent-specific ranks 52.6315789474 and 0",
+      "contract_satisfied": true
+    },
+    {
+      "name": "finite_parent_count",
+      "observed": {
+        "valid_parent_n": 19,
+        "with_None": 27.6315789474,
+        "with_NaN": 27.6315789474
+      },
+      "expected_contract": "19 finite members plus None or NaN must both fall back to same-track ranks",
+      "contract_satisfied": true
+    },
+    {
+      "name": "B_first_day_normal_control",
+      "observed": {
+        "today_rvol_2": 70.79441541679836,
+        "today_rvol_0_7": 70.79441541679836
+      },
+      "expected_contract": "Frozen first-day subscore unchanged",
+      "contract_satisfied": true
+    },
+    {
+      "name": "B_first_day_no_current_dependency",
+      "observed": {
+        "first_day_valid_subscore": 70.79441541679836,
+        "today_missing_subscore": 70.79441541679836
+      },
+      "expected_contract": "Frozen first-day subcomponent should not be cancelled by missing current RVOL",
+      "contract_satisfied": true
+    },
+    {
+      "name": "B_missing_first_day_control",
+      "observed": {
+        "subscore": null
+      },
+      "expected_contract": "Missing frozen input returns None",
+      "contract_satisfied": true
+    },
+    {
+      "name": "reconcile_valid_control",
+      "observed": {
+        "status": "PASS",
+        "n": 1
+      },
+      "expected_contract": "PASS for matching finite observations",
+      "contract_satisfied": true
+    },
+    {
+      "name": "reconcile_missing_fields_not_pass",
+      "observed": {
+        "status": "INSUFFICIENT",
+        "n": 1,
+        "row": {
+          "security_id": "S",
+          "session_date": "2020-01-02",
+          "return_diff_bp": null,
+          "volume_ratio": null,
+          "return_marked": false,
+          "volume_marked": false,
+          "reason_class": "missing_return_and_volume"
+        }
+      },
+      "expected_contract": "All missing returns/volume must be insufficient, not PASS",
+      "contract_satisfied": true
+    },
+    {
+      "name": "uninterrupted_pagination_control",
+      "observed": {
+        "status": "READ_OK",
+        "rows": 10002,
+        "pages": 2
+      },
+      "expected_contract": "10002 records over 2 pages",
+      "contract_satisfied": true
+    },
+    {
+      "name": "page_limit_is_explicitly_partial",
+      "observed": {
+        "status": "PARTIAL",
+        "rows": 10000,
+        "resume_skip": 10000,
+        "used_default_first_page_as_universe": false,
+        "complete_field": false
+      },
+      "expected_contract": "Known remaining pages require explicit PARTIAL/incomplete state",
+      "contract_satisfied": true
+    },
+    {
+      "name": "resume_preserves_prior_durable_pages",
+      "observed": {
+        "first_saved_rows": 10000,
+        "resumed_reported_rows": 2,
+        "final_saved_rows": 10002,
+        "first_saved_ticker": "S00000"
+      },
+      "expected_contract": "Final dataset must retain prefix and tail, 10002 unique rows",
+      "contract_satisfied": true
+    }
+  ]
+}

@@ -1,0 +1,456 @@
+{
+  "stages": {
+    "AUTH": {
+      "status": "AUTH_REQUIRED",
+      "evidence": {
+        "env_var": "SHARADAR_API_KEY",
+        "credential_present": false
+      }
+    },
+    "TABLE_ACCESS": {
+      "status": "AUTH_REQUIRED",
+      "evidence": {
+        "reason": "no_request_attempted"
+      }
+    },
+    "DOWNLOAD": {
+      "status": "AUTH_REQUIRED",
+      "evidence": {
+        "raw_rows": 0
+      }
+    },
+    "TRANSFORM": {
+      "status": "AUTH_REQUIRED",
+      "evidence": {
+        "converted_rows": 0
+      }
+    },
+    "IDENTITY": {
+      "status": "AUTH_REQUIRED",
+      "evidence": {
+        "identities": 0
+      }
+    },
+    "RECONCILE": {
+      "status": "INSUFFICIENT",
+      "evidence": {
+        "aligned_n": 0,
+        "return_coverage_n": 0,
+        "volume_coverage_n": 0,
+        "securities_n": 0,
+        "insufficient_reason": "no_comparable_rows",
+        "source": {
+          "kind": "captured_bar_cache",
+          "available": true,
+          "paths": [
+            {
+              "path": "/workspace/research/option_pro_us_eod_v1/data/cache/offline_replay/daily_bars.parquet",
+              "rows": 10,
+              "mapped_rows": 0
+            },
+            {
+              "path": "/workspace/research/option_pro_us_eod_v1/data/cache/round3_yahoo_abcd/bars.pkl",
+              "rows": 449597,
+              "mapped_rows": 0
+            }
+          ],
+          "identity_alignment": "cache_ticker_to_sharadar_permaticker",
+          "unmapped_cache_ids": [
+            "AAL",
+            "AAPL",
+            "ABBV",
+            "ABT",
+            "ADBE",
+            "AEP",
+            "AFRM",
+            "ALB",
+            "ALK",
+            "AMAT",
+            "AMD",
+            "AMGN",
+            "AMT",
+            "AMX",
+            "AMZN",
+            "ANET",
+            "ARKK",
+            "ARM",
+            "ASML",
+            "AVGO",
+            "AXP",
+            "BA",
+            "BABA",
+            "BAC",
+            "BIDU",
+            "BIIB",
+            "BILI",
+            "BLNK",
+            "BMY",
+            "BNTX",
+            "BTBT",
+            "C",
+            "CAT",
+            "CCI",
+            "CEG",
+            "CFRUY",
+            "CHPT",
+            "CHTR",
+            "CIFR",
+            "CLSK",
+            "CMCSA",
+            "COIN",
+            "COP",
+            "COST",
+            "CPA",
+            "CRM",
+            "CRWD",
+            "CRWV",
+            "CVX",
+            "D",
+            "DAL",
+            "DDOG",
+            "DE",
+            "DELL",
+            "DHR",
+            "DIA",
+            "DIS",
+            "DLR",
+            "DUK",
+            "DVN",
+            "EL",
+            "EMR",
+            "ENPH",
+            "EOG",
+            "EQIX",
+            "ETN",
+            "EXC",
+            "F",
+            "FDX",
+            "FSLR",
+            "FUBO",
+            "GD",
+            "GE",
+            "GILD",
+            "GLD",
+            "GM",
+            "GOOGL",
+            "GS",
+            "HD",
+            "HEI",
+            "HON",
+            "HOOD",
+            "HPQ",
+            "HUT",
+            "INTC",
+            "IQ",
+            "ISRG",
+            "ITW",
+            "IWM",
+            "JBLU",
+            "JD",
+            "JNJ",
+            "JPM",
+            "KLAC",
+            "LCID",
+            "LHX",
+            "LI",
+            "LLY",
+            "LMT",
+            "LOGI",
+            "LOW",
+            "LRCX",
+            "LUV",
+            "LVMUY",
+            "MA",
+            "MARA",
+            "MCD",
+            "MDB",
+            "MDT",
+            "META",
+            "MMM",
+            "MPC",
+            "MRK",
+            "MRNA",
+            "MRVL",
+            "MS",
+            "MSFT",
+            "MSTR",
+            "MU",
+            "NEE",
+            "NET",
+            "NFLX",
+            "NIO",
+            "NKE",
+            "NOC",
+            "NOW",
+            "NTES",
+            "NVDA",
+            "NVO",
+            "O",
+            "ORCL",
+            "OXY",
+            "PANW",
+            "PCG",
+            "PDD",
+            "PFE",
+            "PINS",
+            "PLD",
+            "PLTR",
+            "PLUG",
+            "PNC",
+            "PSA",
+            "PSKY",
+            "PSX",
+            "PVH",
+            "PYPL",
+            "QCOM",
+            "QQQ",
+            "RDDT",
+            "REGN",
+            "RIOT",
+            "RIVN",
+            "RL",
+            "RMS.PA",
+            "ROKU",
+            "RTX",
+            "RUN",
+            "RYAAY",
+            "SBUX",
+            "SCHW",
+            "SLB",
+            "SMCI",
+            "SNAP",
+            "SNOW",
+            "SO",
+            "SOFI",
+            "SONY",
+            "SOXX",
+            "SPG",
+            "SPOT",
+            "SPY",
+            "SRE",
+            "STLA",
+            "T",
+            "TAL",
+            "TDG",
+            "TFC",
+            "TGT",
+            "TJX",
+            "TKO",
+            "TLT",
+            "TM",
+            "TME",
+            "TMO",
+            "TMUS",
+            "TPR",
+            "TSLA",
+            "TSM",
+            "TXN",
+            "TXT",
+            "UAL",
+            "UNH",
+            "UPS",
+            "UPST",
+            "USB",
+            "V",
+            "VICI",
+            "VLO",
+            "VOD",
+            "VOO"
+          ],
+          "unmapped_n": 214,
+          "rows_outside_allowed_window": 0,
+          "return_basis": "total_return_index_tri_vs_sharadar_closeadj",
+          "volume_basis": "tape_volume_from_split_volume_and_raw_close_ratio",
+          "yahoo_is_not_truth": true,
+          "live_yahoo_request": false
+        }
+      }
+    },
+    "HISTORY": {
+      "status": "AUTH_REQUIRED",
+      "evidence": {
+        "calendar_sessions_in_window": null,
+        "first_score_day_earliest_any_security": {
+          "A_trend_quality": null,
+          "B_confirmed_base_breakout": null,
+          "C_trend_pullback": null,
+          "D_residual_momentum": null
+        },
+        "per_security": {
+          "n": 0,
+          "longest_feature_dependency_sessions": 330,
+          "evaluable_n": 0,
+          "insufficient_n": 0,
+          "insufficient_sample": [],
+          "first_score_day_distribution": {
+            "A_trend_quality": {
+              "status": "COMPUTED",
+              "computed_from": "nth_valid_observation",
+              "securities_with_first_score": 0,
+              "securities_without_observation_dates": 0,
+              "earliest": null,
+              "median": null,
+              "latest": null
+            },
+            "B_confirmed_base_breakout": {
+              "status": "COMPUTED",
+              "computed_from": "nth_valid_observation",
+              "securities_with_first_score": 0,
+              "securities_without_observation_dates": 0,
+              "earliest": null,
+              "median": null,
+              "latest": null
+            },
+            "C_trend_pullback": {
+              "status": "COMPUTED",
+              "computed_from": "nth_valid_observation",
+              "securities_with_first_score": 0,
+              "securities_without_observation_dates": 0,
+              "earliest": null,
+              "median": null,
+              "latest": null
+            },
+            "D_residual_momentum": {
+              "status": "COMPUTED",
+              "computed_from": "nth_valid_observation",
+              "securities_with_first_score": 0,
+              "securities_without_observation_dates": 0,
+              "earliest": null,
+              "median": null,
+              "latest": null
+            }
+          },
+          "first_score_day_is_per_security": true,
+          "first_score_day_counts_valid_observations_not_calendar_offset": true,
+          "securities_with_observation_gaps": 0,
+          "pool_earliest_is_not_every_security_ready": true,
+          "calendar_sessions_supplied": 0
+        },
+        "entitlement": {
+          "status": "AUTH_REQUIRED",
+          "verified_access": false,
+          "authorized_range_unknown": true,
+          "bulk_years": null
+        },
+        "reason": "AUTH_REQUIRED"
+      }
+    },
+    "VOLUME_SCOPE": {
+      "status": "UNSUPPORTED",
+      "evidence": {
+        "session_scope": "UNKNOWN"
+      }
+    },
+    "EXECUTION": {
+      "status": "UNSUPPORTED",
+      "evidence": {
+        "settlement_blocked_cases": [
+          "DELL",
+          "DTV",
+          "YHOO",
+          "WFM",
+          "MON",
+          "SHLD",
+          "CELG",
+          "ETFC",
+          "JCP",
+          "XLNX",
+          "TWTR",
+          "ATVI",
+          "SIVB",
+          "BBBY",
+          "PIR",
+          "ASNA"
+        ],
+        "terminal_from_last_quote_only": [],
+        "settlement_evidenced_n": 0,
+        "raw_history_retained": true,
+        "unsupported_case_is_not_verified_pass": true,
+        "last_quote_is_not_a_verified_exit_price": true,
+        "rule_version": "delist-terminal-rule-v2"
+      }
+    }
+  },
+  "summary": {
+    "required": [
+      "AUTH",
+      "TABLE_ACCESS",
+      "DOWNLOAD",
+      "TRANSFORM",
+      "IDENTITY",
+      "RECONCILE",
+      "HISTORY"
+    ],
+    "optional": [
+      "VOLUME_SCOPE",
+      "EXECUTION"
+    ],
+    "accepted": false,
+    "observed_status": {
+      "AUTH": "AUTH_REQUIRED",
+      "TABLE_ACCESS": "AUTH_REQUIRED",
+      "DOWNLOAD": "AUTH_REQUIRED",
+      "TRANSFORM": "AUTH_REQUIRED",
+      "IDENTITY": "AUTH_REQUIRED",
+      "RECONCILE": "INSUFFICIENT",
+      "HISTORY": "AUTH_REQUIRED"
+    },
+    "not_pass": [
+      {
+        "stage": "AUTH",
+        "status": "AUTH_REQUIRED",
+        "reason": "blocked"
+      },
+      {
+        "stage": "TABLE_ACCESS",
+        "status": "AUTH_REQUIRED",
+        "reason": "blocked"
+      },
+      {
+        "stage": "DOWNLOAD",
+        "status": "AUTH_REQUIRED",
+        "reason": "blocked"
+      },
+      {
+        "stage": "TRANSFORM",
+        "status": "AUTH_REQUIRED",
+        "reason": "blocked"
+      },
+      {
+        "stage": "IDENTITY",
+        "status": "AUTH_REQUIRED",
+        "reason": "blocked"
+      },
+      {
+        "stage": "RECONCILE",
+        "status": "INSUFFICIENT",
+        "reason": "insufficient"
+      },
+      {
+        "stage": "HISTORY",
+        "status": "AUTH_REQUIRED",
+        "reason": "blocked"
+      }
+    ],
+    "missing": [],
+    "failed": [],
+    "partial": [],
+    "insufficient": [
+      "RECONCILE"
+    ],
+    "blocked": [
+      "AUTH",
+      "TABLE_ACCESS",
+      "DOWNLOAD",
+      "TRANSFORM",
+      "IDENTITY",
+      "HISTORY"
+    ],
+    "unknown": [],
+    "accepted_requires_explicit_pass": true,
+    "download_complete_is_not_acceptance": true
+  },
+  "raw_download_status": "AUTH_REQUIRED",
+  "terminal_status": "AUTH_REQUIRED",
+  "raw_download_complete_is_independent": true
+}

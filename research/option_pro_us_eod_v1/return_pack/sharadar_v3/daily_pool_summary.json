@@ -1,0 +1,23 @@
+{
+  "computed": false,
+  "session_n": 0,
+  "first_session": null,
+  "last_session": null,
+  "pool_rows_total": 0,
+  "pool_size_median": null,
+  "pool_size_min": null,
+  "pool_size_max": null,
+  "venue_unverified_rows": 0,
+  "venue_unverified_share": null,
+  "venue_unverified_signal_share": null,
+  "exclusion_reason_counts": {},
+  "by_year": {},
+  "rule": {
+    "category": "Domestic Common Stock or ADR Common Stock incl. Primary/Secondary Class",
+    "currency": "USD",
+    "closeunadj_min": 5.0,
+    "unadj_adv20_min": 20000000,
+    "adv20_prior_sessions_only": true,
+    "exchange_is_tag_not_drop": true
+  }
+}

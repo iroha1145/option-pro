@@ -1,0 +1,128 @@
+{
+  "archive_label": "CONTROL_CURRENT_LIST_214",
+  "do_not_reuse_as_full_market_baseline": true,
+  "do_not_hide_213_vs_214": true,
+  "list_n": 214,
+  "quality_valid_n": 213,
+  "quality_insufficient_n": 1,
+  "quality_outlier": {
+    "CRWV": {
+      "after_holdout": 369,
+      "allowed_n": 0,
+      "complete_t_days": 0,
+      "contract": "ok",
+      "first": "2025-03-28",
+      "last": "2026-09-16",
+      "rejections": {},
+      "status": "INSUFFICIENT"
+    }
+  },
+  "213_is_valid_subset_of_214_list": true,
+  "automotive_dv": {
+    "role": "small_pool_contrast_only",
+    "inherited_winner": false,
+    "note": "Automotive D/V is a seen small-pool contrast only. It is not a full-market baseline or inherited winner."
+  },
+  "old_feature_version": "us-eod-research-features-v1.5",
+  "new_feature_version_not_backfilled": true,
+  "b0_sha256_expected": "b490ba6d83965a0c3fe60c76afab8205fc2a0d76cc6577cdf23cb838e447f75a",
+  "yahoo_bars_sha256_expected": "d910d86505e1914eb14aaacea2ddabc8d61b1f097ab83c513f07750539f32d48",
+  "historical_statuses": {
+    "b0": "FIRST_ABLATION_AND_NEIGHBORS_EXECUTED",
+    "round1_feature_version": "us-eod-research-features-v1.5",
+    "round1b_feature_version": "us-eod-research-features-v1.5",
+    "round2_feature_version": "us-eod-research-features-v1.5",
+    "freeze_outcome": "FROZEN_EXPLORATORY_CANDIDATE",
+    "freeze_not_a_winner": true,
+    "fixed_matrix_protocol": "us-eod-research-fixed-matrix-v1",
+    "fixed_matrix_dataset": "us-eod-fixed-matrix-yahoo-v1"
+  },
+  "artifacts": {
+    "b0_results": {
+      "path": "research/option_pro_us_eod_v1/return_pack/measurement_results.json",
+      "sha256": "bd4a4028d13a187382f400ae9cfa3d50426fc70b9223b43675dd3ea65acb1d20",
+      "bytes": 9643,
+      "rewritten": false
+    },
+    "b0_rows": {
+      "path": "research/option_pro_us_eod_v1/return_pack/measurement_factor_rows.jsonl",
+      "sha256": "b490ba6d83965a0c3fe60c76afab8205fc2a0d76cc6577cdf23cb838e447f75a",
+      "bytes": 4129370382,
+      "rewritten": false
+    },
+    "round1_manifest": {
+      "path": "research/option_pro_us_eod_v1/return_pack/algorithm_round1_manifest.json",
+      "sha256": "02a633a55f8dec545029244048e736a9f9cba4ef87f7fd52e88ac980309ec9aa",
+      "bytes": 4678,
+      "rewritten": false
+    },
+    "round1_results": {
+      "path": "research/option_pro_us_eod_v1/return_pack/algorithm_round1_results.json",
+      "sha256": "fa90c8ffdb9917efbc3b2bb339aae5b0a6bb3c2efc08bcc8d696fc9159edc892",
+      "bytes": 24934,
+      "rewritten": false
+    },
+    "round1b_manifest": {
+      "path": "research/option_pro_us_eod_v1/return_pack/algorithm_round1b_manifest.json",
+      "sha256": "5bab366f34c84b7fbd5a6eaca1c65dd56ef339519c9891db3b510cdf734645db",
+      "bytes": 4186,
+      "rewritten": false
+    },
+    "round1b_results": {
+      "path": "research/option_pro_us_eod_v1/return_pack/algorithm_round1b_results.json",
+      "sha256": "71052be44c5a3bad12eca6d61aec6af737452e9ad860dcde1eb330940512068d",
+      "bytes": 231772,
+      "rewritten": false
+    },
+    "round2_manifest": {
+      "path": "research/option_pro_us_eod_v1/return_pack/algorithm_round2_manifest.json",
+      "sha256": "1449e1047270eb10e67159df7f6f0e2de27c92e69c39912d27dde1f711ee1f6f",
+      "bytes": 4080,
+      "rewritten": false
+    },
+    "round2_results": {
+      "path": "research/option_pro_us_eod_v1/return_pack/algorithm_round2_results.json",
+      "sha256": "320372dc58c084298324831a2db1d79a35717f09fa3a65ffbaf26cc6160a9709",
+      "bytes": 600910,
+      "rewritten": false
+    },
+    "freeze_validation": {
+      "path": "research/option_pro_us_eod_v1/return_pack/algorithm_round2_freeze_validation.json",
+      "sha256": "2f30dcaf8c8d7de9bf850fa8f167648a0e24e680937c3d19945fa540f6038e5f",
+      "bytes": 14751,
+      "rewritten": false
+    },
+    "freeze_stop": {
+      "path": "research/option_pro_us_eod_v1/return_pack/algorithm_round2_freeze_stop.json",
+      "sha256": "581be9758f0aa05dfd2523ca76a939a656d587242a53e9dad6a7bab3b5e2b182",
+      "bytes": 354,
+      "rewritten": false
+    },
+    "fixed_matrix_capabilities": {
+      "path": "research/option_pro_us_eod_v1/return_pack/algorithm_fixed_matrix_capabilities.json",
+      "sha256": "d8c6078392012c53f0f444e8f99cc9c11017fe8f04eae87b2728fe410b189eb8",
+      "bytes": 1079319,
+      "rewritten": false
+    },
+    "fixed_matrix_quality": {
+      "path": "research/option_pro_us_eod_v1/return_pack/algorithm_fixed_matrix_quality.json",
+      "sha256": "8ee4e0b044c98d7b705ed03f057c6f6242d6b94059b3db5afeca2351edc1fd33",
+      "bytes": 603,
+      "rewritten": false
+    },
+    "fixed_matrix_sources": {
+      "path": "research/option_pro_us_eod_v1/return_pack/algorithm_fixed_matrix_sources.json",
+      "sha256": "4d1d36daf778fe397131cf1fca8e2072c5308efeeb70a02a5a70f60cb5cb7333",
+      "bytes": 593,
+      "rewritten": false
+    },
+    "fixed_matrix_head": {
+      "path": "research/option_pro_us_eod_v1/return_pack/algorithm_fixed_matrix_head.json",
+      "sha256": "0ad2c7f4804a5b811d79dfa993491d79e7ab9f4cd273fe5a0ad8cdc349c16b14",
+      "bytes": 1795,
+      "rewritten": false
+    }
+  },
+  "holdout_still_sealed": true,
+  "weight_search_closed": true
+}

@@ -62,6 +62,7 @@ def publish_snapshot(
     universe_version: str,
     rows: list[dict[str, Any]],
     integrity: str = "complete",
+    extra: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     previous = read_snapshot(path)
     payload = {
@@ -81,6 +82,10 @@ def publish_snapshot(
         "algorithm_family": "research_eod_v1",
         "production_default_unchanged": True,
     }
+    if extra:
+        for key, value in extra.items():
+            if key not in {"integrity", "rows", "cache_key"}:
+                payload[key] = value
     try:
         atomic_write_json(path, payload)
         return payload

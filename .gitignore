@@ -41,6 +41,8 @@ config/unmapped-env.json
 # Licensed / downloaded research market data stays private.
 research/option_pro_us_eod_v1/data/local/
 research/option_pro_us_eod_v1/data/cache/
+research/option_pro_us_eod_v1/data/sharadar_raw/
+research/option_pro_us_eod_v1/data/authorized_samples/
 research/option_pro_us_eod_v1/return_pack/yahoo_current_universe/daily_bars.parquet
 research/option_pro_us_eod_v1/return_pack/measurement_factor_rows.jsonl
 research/option_pro_us_eod_v1/return_pack/measurement_continuous.checkpoint.json
@@ -50,6 +52,8 @@ research/option_pro_us_eod_v1/return_pack/**/daily_paired_diffs.jsonl
 research/option_pro_us_eod_v1/return_pack/algorithm_round2_daily_paired_diffs.jsonl
 research/option_pro_us_eod_v1/return_pack/**/daily_validation.jsonl
 research/option_pro_us_eod_v1/return_pack/algorithm_round2_freeze_daily_validation.jsonl
+research/option_pro_us_eod_v1/return_pack/limited_current_universe_v1/sessions/**/scored.json
+research/option_pro_us_eod_v1/return_pack/limited_current_universe_v1_1/sessions/**/scored.json
 
 # worktree 里手工 symlink 过一次 node_modules,结果被 git add -A 收进了提交(#84);
 # 路径级忽略让这类链接从一开始就进不了暂存区。

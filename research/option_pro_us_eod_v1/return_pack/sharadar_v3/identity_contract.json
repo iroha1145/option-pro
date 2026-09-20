@@ -1,0 +1,52 @@
+{
+  "security_id": "sharadar:{permaticker}",
+  "do_not_join_history_by_current_ticker": true,
+  "numeric_suffix_resolved_by_ticker_base": true,
+  "firstpricedate_is_not_legal_list_date": true,
+  "firstpricedate_not_exported_as_listed_at": true,
+  "relatedtickers_not_auto_aliases": true,
+  "exchange_is_latest_primary_venue": true,
+  "flags": [
+    "VENUE_HISTORY_UNVERIFIED",
+    "PRICE_HISTORY_RECONSTRUCTED",
+    "CLASSIFICATION_CURRENT",
+    "ETF_SUBASSET_MAPPING_MANUAL"
+  ],
+  "strategy_pool": {
+    "raw_universe_unsifted": true,
+    "category": "Domestic Common Stock or ADR Common Stock including Primary/Secondary Class",
+    "currency": "USD",
+    "closeunadj_min": 5.0,
+    "unadj_adv20_min": 20000000,
+    "unadj_adv20_excludes_T": true,
+    "exchange_is_tag_not_drop": true,
+    "computed_in_pipeline": false
+  },
+  "etf_subasset": {
+    "flag": "ETF_SUBASSET_MAPPING_MANUAL",
+    "sharadar_category_stops_at_fund_kind": true,
+    "fund_kinds": [
+      "CEF",
+      "ETD",
+      "ETF",
+      "ETN"
+    ],
+    "subassets": [
+      "broad_equity",
+      "sector_equity",
+      "thematic_equity",
+      "gold",
+      "long_bond"
+    ],
+    "members_stage": "not_this_round",
+    "historical_themes_rebuilt": false
+  },
+  "theme_parent_schema": {
+    "themes_planned": 24,
+    "parent_groups_planned": 30,
+    "sectors_planned": 11,
+    "historical_membership_rebuilt": false,
+    "classification_flag": "CLASSIFICATION_CURRENT",
+    "members_stage": "not_this_round"
+  }
+}

@@ -1,0 +1,41 @@
+# ACTIONS 供应商脱敏诊断
+
+审查锚点 `3de4bdf5`。本轮实现 head：见同目录 JSON 的 `code_sha`。密钥只记布尔，未打印值。未自动购买，未下载 bulk zip。
+
+官方文档：<https://sharadar.com/docs/actions>
+文档把 ACTIONS 列在 Fundamentals / Prices / Bundle 内。文档可读 ≠ 本账户已授权。
+
+## 实际 HTTP（未把 401 与 403 混成“必需升级套餐”）
+
+| 请求形状 | HTTP | 厂商 message | 页状态 | 行数 |
+| --- | --- | --- | --- | --- |
+| `actions?ticker=MSFT,AAPL,SPY&from=2024-06-24&to=2024-06-28` | **403** | Exceeds free tier | AUTH_FAILED | 0 |
+| `actions?ticker=AAPL`（文档示例，无日期） | **200** | — | READ_OK | 20（含允许区之后的日期，不能当研究行） |
+| `actions?ticker=AAPL&from=2023-01-01&to=2024-06-28` | **200** | — | READ_OK | 6，全在允许区内 |
+| `actions?ticker=MSFT&from=2023-01-01&to=2024-06-28` | **200** | — | READ_OK | 7，全在允许区内 |
+| `actions?ticker=AAPL&from=2024-06-24&to=2024-06-28` | **200** | — | READ_OK | 0（空窗口，不是鉴权失败） |
+| `actions?ticker=BBBYQ&from=2023-01-01&to=2023-05-31` | **403** | Exceeds free tier | AUTH_FAILED | 0 |
+| bulk `status=True` years=5/10/full | **403** | Forbidden | AUTH_FAILED | — |
+| `/v1.0/schema/actions?format=json` | **400** | Bad request | HTTP_ERROR | — |
+
+本轮 **没有出现 HTTP 401**。同一把 key 已经能读 stocks / funds / tickers。
+
+AUTH_FAILED 是历史页状态包装，不改上面的 HTTP / message。映射版本 `sharadar-access-class-v1`：
+
+- 403 `Exceeds free tier` → `observed_access_or_quota_limit`（访问范围/配额限制，不推导“用户没订阅”）
+- 403 `Forbidden` → `forbidden_reason_unknown`
+- 400 `format=json` schema → `unsupported_schema_format`（不是订阅证据；官方 format 为 postgres/sqlite/mysql）
+- 401 / invalid key 才会是 `credential_invalid_or_unauthorized`
+
+重试：上述失败请求的 `retry_count=0`（401/403 不在客户端重试码里）。受控换形状后，单标的 + 允许区日期得到非空分红/收购行。
+
+## 允许区内真实非空行动（摘要，不是全量）
+
+- AAPL：6 条 `dividend`（2023-02-10 … 2024-05-10）
+- MSFT：6 条 `dividend` + 1 条 `acquisitionof`（2023-10-12，contraticker=`ATVI`，contraname=`ACTIVISION BLIZZARD INC`）
+
+`acquisitionof` 不是已登记的现金对价码，不能当作经济结算通过。原始行已落在授权私人目录，未进公开 git。
+
+## 账户范围后记（不改写上面的 HTTP 表）
+
+负责人已确认本账户仅免费 Sample，未购套餐。上表仍是当时脱敏事实，不再当作已购权限待查清单。范围标记见 `account_scope_free_sample_only.md`。不要重复失败探针，不要自动下单。

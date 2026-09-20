@@ -15,7 +15,7 @@ from app.services.research_eod_v1.calendar_asof import last_complete_eod_session
 from app.services.research_eod_v1.data.capture_store import eod_pool_exclusions, series_is_late
 from app.services.research_eod_v1.cross_section import q_star
 from app.services.research_eod_v1.factors import RawComponents, apply_sector_gates, extract_raw
-from app.services.research_eod_v1.mathutil import clip100
+from app.services.research_eod_v1.mathutil import clip100, finite
 from app.services.research_eod_v1.membership import (
     has_complete_session_bar,
     is_theme_candidate,
@@ -71,13 +71,15 @@ def _geometry_fields(raw: RawComponents) -> dict[str, Any]:
 
 
 def _v_state(algorithm: str, raw: RawComponents) -> float | None:
+    if algorithm == "B_confirmed_base_breakout":
+        track = raw.breakout_track or {}
+        first_day_rvol = finite(track.get("first_day_rvol"))
+        if first_day_rvol is None or first_day_rvol <= 0:
+            return None
+        return clip100(50.0 + 30.0 * math.log(first_day_rvol))
     if raw.rvol is None and algorithm != "C_trend_pullback":
         return None
     if algorithm in {"A_trend_quality", "D_residual_momentum"}:
-        if raw.rvol is None or raw.rvol <= 0:
-            return None
-        return clip100(50.0 + 30.0 * math.log(raw.rvol))
-    if algorithm == "B_confirmed_base_breakout":
         if raw.rvol is None or raw.rvol <= 0:
             return None
         return clip100(50.0 + 30.0 * math.log(raw.rvol))
