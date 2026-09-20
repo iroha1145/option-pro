@@ -6,6 +6,7 @@ import ts from 'typescript';
 import { formatChartTime } from '../src/components/detail/chartTime.ts';
 import { catalystSortReadiness, catalystSummaryUsable, CATALYST_SUMMARY_TTL_MS, EMPTY_CATALYST, DEFAULT_FILTERS, tierOf } from '../src/components/screener/types.ts';
 import { keepServerRankingOrder } from '../src/lib/screenerSort.ts';
+import { applyEodLimitedView } from '../src/lib/eodLimitedView.ts';
 import { macroToneOf } from '../src/lib/macroFit.ts';
 
 const source = fs.readFileSync(new URL('../src/pages/Screener.tsx', import.meta.url), 'utf8');
@@ -228,7 +229,7 @@ test('macro filtering affects tier comparison and reset clears macro without rel
     { ticker: 'UNKNOWN', strengthScore: 96, macroFit: null },
   ];
   const requests = [];
-  const scope = { useMemo: fn => fn(), useCallback: fn => fn, macroToneOf, tierOf, DEFAULT_FILTERS,
+  const scope = { useMemo: fn => fn(), useCallback: fn => fn, macroToneOf, tierOf, DEFAULT_FILTERS, applyEodLimitedView,
     filteredBase: rows, applied: { ...DEFAULT_FILTERS, profile: 'aggressive', tier: 'S', topN: 1 }, macroToneFilter: 'tailwind',
     draft: { ...DEFAULT_FILTERS, profile: 'aggressive', tier: 'S', topN: 1 },
     setPage: () => {}, setDraft: () => {},
