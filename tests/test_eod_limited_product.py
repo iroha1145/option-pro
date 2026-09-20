@@ -715,3 +715,48 @@ def test_theme_precomputation_is_not_retained_after_failed_job(tmp_path: Path, m
     assert worker.run_eod_limited_job(**kwargs)["status"] == "RAN"
     assert len(calls) == 2
     assert calls[0] is not calls[1]
+
+
+@pytest.mark.parametrize("volume_verified", [False, True])
+def test_compact_variants_preserve_full_public_projection(volume_verified: bool) -> None:
+    import json
+
+    from app.services.eod_limited import worker
+    from app.services.eod_limited.panel import prepare_limited_panel
+    from app.services.research_eod_v1.config_load import load_registry
+    from app.services.research_eod_v1.constants import HORIZONS, PROFILES
+
+    session = date(2026, 9, 18)
+    panel = prepare_limited_panel(worker.build_synthetic_panel(end=session))
+    registry = load_registry()
+    retained_eligible = 0
+    observed_watch = 0
+    omitted_rows = 0
+    for horizon in HORIZONS:
+        raws, clipped = worker.precompute_session_raws(panel, session, registry=registry, horizon=horizon)
+        theme_raws = worker.precompute_theme_raws(raws, clipped, session, registry=registry)
+        for profile in PROFILES:
+            full = worker.score_eod_session(
+                panel, session, registry=registry, profile=profile, horizon=horizon,
+                volume_verified=volume_verified, precomputed_raws=raws, clipped_panel=clipped,
+                precomputed_theme_raws=theme_raws,
+            )
+            original = json.dumps(full, sort_keys=True, default=str)
+            compact = worker._compact_variant(full)
+            assert json.dumps(full, sort_keys=True, default=str) == original
+            for before, after in zip(full["family_results"], compact["family_results"], strict=True):
+                assert {key: value for key, value in before.items() if key != "rows"} == {
+                    key: value for key, value in after.items() if key != "rows"
+                }
+                assert after["rows"] == [row for row in before["rows"] if row["status"] == "eligible"]
+                retained_eligible += len(after["rows"])
+                omitted_rows += len(before["rows"]) - len(after["rows"])
+            observed_watch += len(full["watch_list"])
+            for list_kind in ("observation", "composite"):
+                kwargs = {"parameters": {"profile": profile, "timeframe": horizon}, "list_kind": list_kind}
+                assert project_strength_payload(compact, **kwargs) == project_strength_payload(full, **kwargs)
+    assert omitted_rows > 0
+    if volume_verified:
+        assert retained_eligible > 0
+    else:
+        assert observed_watch > 0

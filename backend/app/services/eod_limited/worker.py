@@ -62,7 +62,18 @@ def _compact_variant(scored: Mapping[str, Any]) -> dict[str, Any]:
         "historical_example",
         "synthetic",
     )
-    return {key: scored.get(key) for key in keep}
+    compact = {key: scored.get(key) for key in keep}
+    # The public projection reads only eligible rows here. Watch rows already
+    # live in watch_list; rejected rows contribute only the retained counts and
+    # reason summaries. Their full platform histories need not be persisted.
+    compact["family_results"] = [
+        {
+            **block,
+            "rows": [row for row in block.get("rows") or [] if row.get("status") == "eligible"],
+        }
+        for block in scored.get("family_results") or []
+    ]
+    return compact
 
 
 def run_eod_limited_job(
