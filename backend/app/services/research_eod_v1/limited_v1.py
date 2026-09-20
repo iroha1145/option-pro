@@ -956,7 +956,7 @@ def preview_html(snapshot: Mapping[str, Any], *, state: Mapping[str, Any] | None
     return "\n".join([
         "<!DOCTYPE html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\"/>",
         f"<title>LIMITED_CURRENT_UNIVERSE_V1 {html.escape(str(snapshot.get('session_date')))}</title>",
-        "<style>body{font-family:sans-serif;max-width:1100px;margin:24px auto;color:#111}",
+        "<style>body{font-family:\"WenQuanYi Micro Hei\",\"Noto Sans CJK SC\",\"Droid Sans Fallback\",sans-serif;max-width:1100px;margin:24px auto;color:#111}",
         "table{border-collapse:collapse;width:100%;margin:12px 0}th,td{border:1px solid #ccc;padding:6px;font-size:13px}",
         "th{background:#f3f3f3;text-align:left}.note{background:#fff7e6;padding:12px}",
         "details{margin:8px 0;padding:6px;border:1px solid #ddd}</style></head><body>",

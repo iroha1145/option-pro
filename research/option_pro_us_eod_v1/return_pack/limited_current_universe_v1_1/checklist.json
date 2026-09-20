@@ -1,0 +1,116 @@
+{
+  "mode": "LIMITED_CURRENT_UNIVERSE_V1",
+  "compute_version": "limited-current-v1.1",
+  "universe_version": "u_limited_current_v1_1",
+  "evidence_status": "UNVALIDATED_LIMITED_DATA",
+  "stop_condition": "wiring/display acceptance on the same cache; no new weight search",
+  "source_sha_at_successful_run": "48f64e7f",
+  "successful_command": "PYTHONPATH=backend python research/option_pro_us_eod_v1/scripts/run_limited_current_universe_v1.py --dataset yahoo_cache --session 2024-06-28 --replay-days 20 --profile balanced --horizon mid --no-network --smoke-864 --out-dir research/option_pro_us_eod_v1/return_pack/limited_current_universe_v1_1",
+  "data_refetched": false,
+  "old_results_retained": true,
+  "old_pack": "research/option_pro_us_eod_v1/return_pack/limited_current_universe_v1",
+  "authorized_artifact": {
+    "path": "research/option_pro_us_eod_v1/data/cache/limited_current_universe_v1/bars.pkl",
+    "gitignored": true,
+    "file_sha256": "cc26ef2ecb35a24a852720a2f8b6a3bbea238b83549494019f1eb34083efc622",
+    "bytes": 63469417,
+    "same_file_as_v1": true
+  },
+  "compute_dataset_hash": "058c56a4587fd4b5add589fd3cce1279b31e73571609713d287ca4fd3ca68a76",
+  "main_path": {
+    "session_date": "2024-06-28",
+    "profile": "balanced",
+    "horizon": "mid",
+    "themes": 24,
+    "families": 4,
+    "eligible_n": 0,
+    "watch_n": 25,
+    "composite_n": 0,
+    "composite_stock_n": 0,
+    "composite_etf_n": 0,
+    "composite": [],
+    "empty_m1_legal": true
+  },
+  "replay_20": {
+    "rule": "last 20 official development-zone sessions on/before 2024-06-28",
+    "ordered": true,
+    "elapsed_s": 989.584,
+    "total_elapsed_s": 1375.631,
+    "peak_mb": 692.8,
+    "yahoo_batches": 0,
+    "preview_provider_calls": 0,
+    "detail": "replay_summary.json"
+  },
+  "smoke_864": {
+    "n": 864,
+    "all_ran": true,
+    "table": "smoke_864.json",
+    "by_profile_horizon": {
+      "aggressive|long": {
+        "n": 96,
+        "eligible": 0,
+        "ran": 96
+      },
+      "aggressive|mid": {
+        "n": 96,
+        "eligible": 0,
+        "ran": 96
+      },
+      "aggressive|short": {
+        "n": 96,
+        "eligible": 0,
+        "ran": 96
+      },
+      "balanced|long": {
+        "n": 96,
+        "eligible": 0,
+        "ran": 96
+      },
+      "balanced|mid": {
+        "n": 96,
+        "eligible": 0,
+        "ran": 96
+      },
+      "balanced|short": {
+        "n": 96,
+        "eligible": 0,
+        "ran": 96
+      },
+      "conservative|long": {
+        "n": 96,
+        "eligible": 0,
+        "ran": 96
+      },
+      "conservative|mid": {
+        "n": 96,
+        "eligible": 0,
+        "ran": 96
+      },
+      "conservative|short": {
+        "n": 96,
+        "eligible": 0,
+        "ran": 96
+      }
+    }
+  },
+  "preview": {
+    "path": "research/option_pro_us_eod_v1/return_pack/limited_current_universe_v1_1/preview.html",
+    "label": "历史 EOD 预览",
+    "not_live_picks": true,
+    "family_details": true,
+    "stock_etf_m1_split": true
+  },
+  "offline_rescore_2024-06-28": {
+    "config_hash_match": true,
+    "run_signature_match": true,
+    "family_fingerprint_equal": true,
+    "yahoo_batches": 0
+  },
+  "tests": {
+    "related_suite_passed": 153,
+    "limited_v1_file_passed": 32
+  },
+  "production_refresh_unchanged": true,
+  "weight_search_started": false,
+  "sharadar_paid_sku_chase": false
+}

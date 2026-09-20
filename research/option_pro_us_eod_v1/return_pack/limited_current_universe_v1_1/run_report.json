@@ -1,0 +1,2042 @@
+{
+  "status": "RAN",
+  "mode": "LIMITED_CURRENT_UNIVERSE_V1",
+  "compute_version": "limited-current-v1.1",
+  "evidence_status": "UNVALIDATED_LIMITED_DATA",
+  "synthetic": false,
+  "session_date": "2024-06-28",
+  "acceptance_sessions": [
+    "2024-05-31",
+    "2024-06-03",
+    "2024-06-04",
+    "2024-06-05",
+    "2024-06-06",
+    "2024-06-07",
+    "2024-06-10",
+    "2024-06-11",
+    "2024-06-12",
+    "2024-06-13",
+    "2024-06-14",
+    "2024-06-17",
+    "2024-06-18",
+    "2024-06-20",
+    "2024-06-21",
+    "2024-06-24",
+    "2024-06-25",
+    "2024-06-26",
+    "2024-06-27",
+    "2024-06-28"
+  ],
+  "acceptance_rule": "last N official development-zone sessions on/before ALLOWED_END; not chosen by performance",
+  "load": {
+    "sources": [
+      "research/option_pro_us_eod_v1/data/cache/limited_current_universe_v1/bars.pkl"
+    ],
+    "missing": [
+      "CRWV"
+    ],
+    "fetched": 0,
+    "dataset_hash": "058c56a4587fd4b5add589fd3cce1279b31e73571609713d287ca4fd3ca68a76",
+    "inventory": [
+      {
+        "path": "research/option_pro_us_eod_v1/data/cache/round3_yahoo_abcd/bars.pkl",
+        "exists": false,
+        "bytes": 0,
+        "role": "trusted_yahoo_cache"
+      },
+      {
+        "path": "research/option_pro_us_eod_v1/data/cache/round3_after_close/last_bars.pkl",
+        "exists": false,
+        "bytes": 0,
+        "role": "trusted_yahoo_cache"
+      },
+      {
+        "path": "research/option_pro_us_eod_v1/data/cache/limited_current_universe_v1/bars.pkl",
+        "exists": true,
+        "bytes": 63469417,
+        "role": "optional"
+      },
+      {
+        "path": "research/option_pro_us_eod_v1/return_pack/yahoo_current_universe/daily_bars.parquet",
+        "exists": false,
+        "bytes": 0,
+        "role": "optional"
+      },
+      {
+        "path": "research/option_pro_us_eod_v1/return_pack/fixtures/synthetic_daily_bars.parquet",
+        "exists": true,
+        "bytes": 6904,
+        "role": "optional"
+      }
+    ],
+    "allow_network": false,
+    "wanted_n": 214,
+    "failures": [
+      {
+        "stage": "cache",
+        "error": "missing_symbols_network_disabled",
+        "count": 1
+      }
+    ],
+    "coverage_ok": 213,
+    "coverage_empty": [
+      "CRWV"
+    ]
+  },
+  "coverage": [
+    {
+      "ticker": "NVDA",
+      "themes": [
+        "semiconductors",
+        "ai_cloud"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "AMD",
+      "themes": [
+        "semiconductors"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "TSM",
+      "themes": [
+        "semiconductors"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "AVGO",
+      "themes": [
+        "semiconductors"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "ASML",
+      "themes": [
+        "semiconductors"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "MU",
+      "themes": [
+        "semiconductors"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "INTC",
+      "themes": [
+        "semiconductors"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "ARM",
+      "themes": [
+        "semiconductors"
+      ],
+      "bars": 199,
+      "status": "ok"
+    },
+    {
+      "ticker": "QCOM",
+      "themes": [
+        "semiconductors"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "MRVL",
+      "themes": [
+        "semiconductors"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "TXN",
+      "themes": [
+        "semiconductors"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "LRCX",
+      "themes": [
+        "semiconductors"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "KLAC",
+      "themes": [
+        "semiconductors"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "AMAT",
+      "themes": [
+        "semiconductors"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "MSFT",
+      "themes": [
+        "software",
+        "ai_cloud"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "ORCL",
+      "themes": [
+        "software"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "CRM",
+      "themes": [
+        "software"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "ADBE",
+      "themes": [
+        "software"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "NOW",
+      "themes": [
+        "software"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "SNOW",
+      "themes": [
+        "software"
+      ],
+      "bars": 952,
+      "status": "ok"
+    },
+    {
+      "ticker": "PLTR",
+      "themes": [
+        "software",
+        "ai_cloud"
+      ],
+      "bars": 942,
+      "status": "ok"
+    },
+    {
+      "ticker": "PANW",
+      "themes": [
+        "software"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "NET",
+      "themes": [
+        "software"
+      ],
+      "bars": 1206,
+      "status": "ok"
+    },
+    {
+      "ticker": "CRWD",
+      "themes": [
+        "software"
+      ],
+      "bars": 1271,
+      "status": "ok"
+    },
+    {
+      "ticker": "DDOG",
+      "themes": [
+        "software"
+      ],
+      "bars": 1202,
+      "status": "ok"
+    },
+    {
+      "ticker": "MDB",
+      "themes": [
+        "software"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "GOOGL",
+      "themes": [
+        "ai_cloud",
+        "social_internet"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "AMZN",
+      "themes": [
+        "ai_cloud",
+        "retail"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "META",
+      "themes": [
+        "ai_cloud",
+        "social_internet"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "SMCI",
+      "themes": [
+        "ai_cloud"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "ANET",
+      "themes": [
+        "ai_cloud"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "DELL",
+      "themes": [
+        "ai_cloud",
+        "consumer_electronics"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "CRWV",
+      "themes": [
+        "ai_cloud"
+      ],
+      "bars": 0,
+      "status": "empty"
+    },
+    {
+      "ticker": "LLY",
+      "themes": [
+        "biotech"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "NVO",
+      "themes": [
+        "biotech"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "ABBV",
+      "themes": [
+        "biotech"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "AMGN",
+      "themes": [
+        "biotech"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "GILD",
+      "themes": [
+        "biotech"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "VRTX",
+      "themes": [
+        "biotech"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "REGN",
+      "themes": [
+        "biotech"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "BIIB",
+      "themes": [
+        "biotech"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "MRNA",
+      "themes": [
+        "biotech"
+      ],
+      "bars": 1398,
+      "status": "ok"
+    },
+    {
+      "ticker": "BNTX",
+      "themes": [
+        "biotech"
+      ],
+      "bars": 1187,
+      "status": "ok"
+    },
+    {
+      "ticker": "UNH",
+      "themes": [
+        "healthcare"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "JNJ",
+      "themes": [
+        "healthcare"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "PFE",
+      "themes": [
+        "healthcare"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "MRK",
+      "themes": [
+        "healthcare"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "TMO",
+      "themes": [
+        "healthcare"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "ABT",
+      "themes": [
+        "healthcare"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "DHR",
+      "themes": [
+        "healthcare"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "ISRG",
+      "themes": [
+        "healthcare"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "MDT",
+      "themes": [
+        "healthcare"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "BMY",
+      "themes": [
+        "healthcare"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "AAPL",
+      "themes": [
+        "consumer_electronics"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "SONY",
+      "themes": [
+        "consumer_electronics"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "HPQ",
+      "themes": [
+        "consumer_electronics"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "LOGI",
+      "themes": [
+        "consumer_electronics"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "TSLA",
+      "themes": [
+        "automotive",
+        "ev_supply"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "RIVN",
+      "themes": [
+        "automotive",
+        "ev_supply"
+      ],
+      "bars": 661,
+      "status": "ok"
+    },
+    {
+      "ticker": "F",
+      "themes": [
+        "automotive"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "GM",
+      "themes": [
+        "automotive"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "LCID",
+      "themes": [
+        "automotive",
+        "ev_supply"
+      ],
+      "bars": 950,
+      "status": "ok"
+    },
+    {
+      "ticker": "NIO",
+      "themes": [
+        "automotive",
+        "china_adr"
+      ],
+      "bars": 1458,
+      "status": "ok"
+    },
+    {
+      "ticker": "LI",
+      "themes": [
+        "automotive",
+        "china_adr"
+      ],
+      "bars": 985,
+      "status": "ok"
+    },
+    {
+      "ticker": "XPEV",
+      "themes": [
+        "automotive",
+        "china_adr"
+      ],
+      "bars": 965,
+      "status": "ok"
+    },
+    {
+      "ticker": "STLA",
+      "themes": [
+        "automotive"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "TM",
+      "themes": [
+        "automotive"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "ALB",
+      "themes": [
+        "ev_supply"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "PLUG",
+      "themes": [
+        "ev_supply"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "BLNK",
+      "themes": [
+        "ev_supply"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "CHPT",
+      "themes": [
+        "ev_supply"
+      ],
+      "bars": 1205,
+      "status": "ok"
+    },
+    {
+      "ticker": "ENPH",
+      "themes": [
+        "ev_supply"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "FSLR",
+      "themes": [
+        "ev_supply"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "RUN",
+      "themes": [
+        "ev_supply"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "JPM",
+      "themes": [
+        "finance"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "BAC",
+      "themes": [
+        "finance"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "WFC",
+      "themes": [
+        "finance"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "C",
+      "themes": [
+        "finance"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "GS",
+      "themes": [
+        "finance"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "MS",
+      "themes": [
+        "finance"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "USB",
+      "themes": [
+        "finance"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "PNC",
+      "themes": [
+        "finance"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "TFC",
+      "themes": [
+        "finance"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "SCHW",
+      "themes": [
+        "finance"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "V",
+      "themes": [
+        "fintech"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "MA",
+      "themes": [
+        "fintech"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "PYPL",
+      "themes": [
+        "fintech"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "XYZ",
+      "themes": [
+        "fintech"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "AXP",
+      "themes": [
+        "fintech"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "COIN",
+      "themes": [
+        "fintech",
+        "crypto"
+      ],
+      "bars": 808,
+      "status": "ok"
+    },
+    {
+      "ticker": "HOOD",
+      "themes": [
+        "fintech"
+      ],
+      "bars": 734,
+      "status": "ok"
+    },
+    {
+      "ticker": "SOFI",
+      "themes": [
+        "fintech"
+      ],
+      "bars": 877,
+      "status": "ok"
+    },
+    {
+      "ticker": "AFRM",
+      "themes": [
+        "fintech"
+      ],
+      "bars": 870,
+      "status": "ok"
+    },
+    {
+      "ticker": "UPST",
+      "themes": [
+        "fintech"
+      ],
+      "bars": 888,
+      "status": "ok"
+    },
+    {
+      "ticker": "WMT",
+      "themes": [
+        "retail"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "COST",
+      "themes": [
+        "retail"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "HD",
+      "themes": [
+        "retail"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "TGT",
+      "themes": [
+        "retail"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "LOW",
+      "themes": [
+        "retail"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "NKE",
+      "themes": [
+        "retail"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "SBUX",
+      "themes": [
+        "retail"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "MCD",
+      "themes": [
+        "retail"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "TJX",
+      "themes": [
+        "retail"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "LVMUY",
+      "themes": [
+        "luxury"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "RMS.PA",
+      "themes": [
+        "luxury"
+      ],
+      "bars": 1664,
+      "status": "ok"
+    },
+    {
+      "ticker": "CFRUY",
+      "themes": [
+        "luxury"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "EL",
+      "themes": [
+        "luxury"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "TPR",
+      "themes": [
+        "luxury"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "RL",
+      "themes": [
+        "luxury"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "PVH",
+      "themes": [
+        "luxury"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "NFLX",
+      "themes": [
+        "media_streaming"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "DIS",
+      "themes": [
+        "media_streaming"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "WBD",
+      "themes": [
+        "media_streaming"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "PSKY",
+      "themes": [
+        "media_streaming"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "ROKU",
+      "themes": [
+        "media_streaming"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "SPOT",
+      "themes": [
+        "media_streaming"
+      ],
+      "bars": 1571,
+      "status": "ok"
+    },
+    {
+      "ticker": "FUBO",
+      "themes": [
+        "media_streaming"
+      ],
+      "bars": 1324,
+      "status": "ok"
+    },
+    {
+      "ticker": "TKO",
+      "themes": [
+        "media_streaming"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "SNAP",
+      "themes": [
+        "social_internet"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "PINS",
+      "themes": [
+        "social_internet"
+      ],
+      "bars": 1308,
+      "status": "ok"
+    },
+    {
+      "ticker": "RDDT",
+      "themes": [
+        "social_internet"
+      ],
+      "bars": 69,
+      "status": "ok"
+    },
+    {
+      "ticker": "BIDU",
+      "themes": [
+        "social_internet",
+        "china_adr"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "BABA",
+      "themes": [
+        "social_internet",
+        "china_adr"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "PDD",
+      "themes": [
+        "social_internet",
+        "china_adr"
+      ],
+      "bars": 1491,
+      "status": "ok"
+    },
+    {
+      "ticker": "XOM",
+      "themes": [
+        "energy"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "CVX",
+      "themes": [
+        "energy"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "COP",
+      "themes": [
+        "energy"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "SLB",
+      "themes": [
+        "energy"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "EOG",
+      "themes": [
+        "energy"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "MPC",
+      "themes": [
+        "energy"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "VLO",
+      "themes": [
+        "energy"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "PSX",
+      "themes": [
+        "energy"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "OXY",
+      "themes": [
+        "energy"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "DVN",
+      "themes": [
+        "energy"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "NEE",
+      "themes": [
+        "utilities"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "DUK",
+      "themes": [
+        "utilities"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "SO",
+      "themes": [
+        "utilities"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "AEP",
+      "themes": [
+        "utilities"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "EXC",
+      "themes": [
+        "utilities"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "SRE",
+      "themes": [
+        "utilities"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "D",
+      "themes": [
+        "utilities"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "PCG",
+      "themes": [
+        "utilities"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "VST",
+      "themes": [
+        "utilities"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "CEG",
+      "themes": [
+        "utilities"
+      ],
+      "bars": 614,
+      "status": "ok"
+    },
+    {
+      "ticker": "LMT",
+      "themes": [
+        "defense_aero"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "RTX",
+      "themes": [
+        "defense_aero"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "NOC",
+      "themes": [
+        "defense_aero"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "GD",
+      "themes": [
+        "defense_aero"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "BA",
+      "themes": [
+        "defense_aero"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "LHX",
+      "themes": [
+        "defense_aero"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "TDG",
+      "themes": [
+        "defense_aero"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "HEI",
+      "themes": [
+        "defense_aero"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "TXT",
+      "themes": [
+        "defense_aero"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "DAL",
+      "themes": [
+        "airlines"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "UAL",
+      "themes": [
+        "airlines"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "AAL",
+      "themes": [
+        "airlines"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "LUV",
+      "themes": [
+        "airlines"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "ALK",
+      "themes": [
+        "airlines"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "JBLU",
+      "themes": [
+        "airlines"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "RYAAY",
+      "themes": [
+        "airlines"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "CPA",
+      "themes": [
+        "airlines"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "PLD",
+      "themes": [
+        "real_estate"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "AMT",
+      "themes": [
+        "real_estate"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "EQIX",
+      "themes": [
+        "real_estate"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "CCI",
+      "themes": [
+        "real_estate"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "SPG",
+      "themes": [
+        "real_estate"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "O",
+      "themes": [
+        "real_estate"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "PSA",
+      "themes": [
+        "real_estate"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "DLR",
+      "themes": [
+        "real_estate"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "WELL",
+      "themes": [
+        "real_estate"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "VICI",
+      "themes": [
+        "real_estate"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "MARA",
+      "themes": [
+        "crypto"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "RIOT",
+      "themes": [
+        "crypto"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "MSTR",
+      "themes": [
+        "crypto"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "HUT",
+      "themes": [
+        "crypto"
+      ],
+      "bars": 1588,
+      "status": "ok"
+    },
+    {
+      "ticker": "CLSK",
+      "themes": [
+        "crypto"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "WULF",
+      "themes": [
+        "crypto"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "CIFR",
+      "themes": [
+        "crypto"
+      ],
+      "bars": 928,
+      "status": "ok"
+    },
+    {
+      "ticker": "BTBT",
+      "themes": [
+        "crypto"
+      ],
+      "bars": 1580,
+      "status": "ok"
+    },
+    {
+      "ticker": "JD",
+      "themes": [
+        "china_adr"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "NTES",
+      "themes": [
+        "china_adr"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "TME",
+      "themes": [
+        "china_adr"
+      ],
+      "bars": 1395,
+      "status": "ok"
+    },
+    {
+      "ticker": "TAL",
+      "themes": [
+        "china_adr"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "BILI",
+      "themes": [
+        "china_adr"
+      ],
+      "bars": 1574,
+      "status": "ok"
+    },
+    {
+      "ticker": "IQ",
+      "themes": [
+        "china_adr"
+      ],
+      "bars": 1573,
+      "status": "ok"
+    },
+    {
+      "ticker": "T",
+      "themes": [
+        "telecom"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "VZ",
+      "themes": [
+        "telecom"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "TMUS",
+      "themes": [
+        "telecom"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "CHTR",
+      "themes": [
+        "telecom"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "CMCSA",
+      "themes": [
+        "telecom"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "VOD",
+      "themes": [
+        "telecom"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "AMX",
+      "themes": [
+        "telecom"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "CAT",
+      "themes": [
+        "industrials"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "DE",
+      "themes": [
+        "industrials"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "HON",
+      "themes": [
+        "industrials"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "GE",
+      "themes": [
+        "industrials"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "MMM",
+      "themes": [
+        "industrials"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "UPS",
+      "themes": [
+        "industrials"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "FDX",
+      "themes": [
+        "industrials"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "EMR",
+      "themes": [
+        "industrials"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "ETN",
+      "themes": [
+        "industrials"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "ITW",
+      "themes": [
+        "industrials"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "SPY",
+      "themes": [
+        "etfs"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "QQQ",
+      "themes": [
+        "etfs"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "IWM",
+      "themes": [
+        "etfs"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "DIA",
+      "themes": [
+        "etfs"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "VTI",
+      "themes": [
+        "etfs"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "VOO",
+      "themes": [
+        "etfs"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "ARKK",
+      "themes": [
+        "etfs"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "SOXX",
+      "themes": [
+        "etfs"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "XLF",
+      "themes": [
+        "etfs"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "XLE",
+      "themes": [
+        "etfs"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "GLD",
+      "themes": [
+        "etfs"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    },
+    {
+      "ticker": "TLT",
+      "themes": [
+        "etfs"
+      ],
+      "bars": 1633,
+      "status": "ok"
+    }
+  ],
+  "replay": {
+    "sessions": [
+      {
+        "session_date": "2024-05-31",
+        "eligible_n": 0,
+        "watch_n": 29,
+        "composite_n": 0,
+        "run_signature": "c7d94cc1770d3fe512c325d7a6b320cccaf6509e1f4cf82a6507cd38782f01d6",
+        "config_hash": "9e5c8559a006ad455a0569fb7f856f9a23841cd5b348e8cead70ad584a9606bf"
+      },
+      {
+        "session_date": "2024-06-03",
+        "eligible_n": 0,
+        "watch_n": 29,
+        "composite_n": 0,
+        "run_signature": "f815c9c4124e5ca3a3fe9fab92897f42176f5a144812b02589afe3b434762fd1",
+        "config_hash": "9e5c8559a006ad455a0569fb7f856f9a23841cd5b348e8cead70ad584a9606bf"
+      },
+      {
+        "session_date": "2024-06-04",
+        "eligible_n": 0,
+        "watch_n": 27,
+        "composite_n": 0,
+        "run_signature": "1160494d52d6b950b77603b65f25e1952a25b11d2516faee6c6b25d0c6afd599",
+        "config_hash": "9e5c8559a006ad455a0569fb7f856f9a23841cd5b348e8cead70ad584a9606bf"
+      },
+      {
+        "session_date": "2024-06-05",
+        "eligible_n": 0,
+        "watch_n": 24,
+        "composite_n": 0,
+        "run_signature": "8c4bbd84bc6408bad9e3a303dc5829822ab719971c17d4fc4a2acc4cf2583cf2",
+        "config_hash": "9e5c8559a006ad455a0569fb7f856f9a23841cd5b348e8cead70ad584a9606bf"
+      },
+      {
+        "session_date": "2024-06-06",
+        "eligible_n": 0,
+        "watch_n": 23,
+        "composite_n": 0,
+        "run_signature": "5648bf9c2e317082e32f797cffee31bc3682ad1f07254fc7551d33cb3da7fdb2",
+        "config_hash": "9e5c8559a006ad455a0569fb7f856f9a23841cd5b348e8cead70ad584a9606bf"
+      },
+      {
+        "session_date": "2024-06-07",
+        "eligible_n": 0,
+        "watch_n": 21,
+        "composite_n": 0,
+        "run_signature": "e006031543753ca17e8af04daa2dc4041cd5698d54c8eb0babd5f8eee1c22eba",
+        "config_hash": "9e5c8559a006ad455a0569fb7f856f9a23841cd5b348e8cead70ad584a9606bf"
+      },
+      {
+        "session_date": "2024-06-10",
+        "eligible_n": 0,
+        "watch_n": 21,
+        "composite_n": 0,
+        "run_signature": "bce7d7e1e61a7fbacd05ec6691d6205225dd641a19c75ddf37e5a7041947b06a",
+        "config_hash": "9e5c8559a006ad455a0569fb7f856f9a23841cd5b348e8cead70ad584a9606bf"
+      },
+      {
+        "session_date": "2024-06-11",
+        "eligible_n": 0,
+        "watch_n": 21,
+        "composite_n": 0,
+        "run_signature": "91c71fb9270ff67c6ccc5c29becdfd8788f66805496a2234bcb912714bdeec52",
+        "config_hash": "9e5c8559a006ad455a0569fb7f856f9a23841cd5b348e8cead70ad584a9606bf"
+      },
+      {
+        "session_date": "2024-06-12",
+        "eligible_n": 0,
+        "watch_n": 21,
+        "composite_n": 0,
+        "run_signature": "9f6d10ca82928237ea708136a219c055e919986b66d2e514753ac2d73f25a7de",
+        "config_hash": "9e5c8559a006ad455a0569fb7f856f9a23841cd5b348e8cead70ad584a9606bf"
+      },
+      {
+        "session_date": "2024-06-13",
+        "eligible_n": 0,
+        "watch_n": 20,
+        "composite_n": 0,
+        "run_signature": "b7fcac500a7dbcd9a8a8db1a95a6c922c8b5f3710809735e4efffda0a61bb16e",
+        "config_hash": "9e5c8559a006ad455a0569fb7f856f9a23841cd5b348e8cead70ad584a9606bf"
+      },
+      {
+        "session_date": "2024-06-14",
+        "eligible_n": 0,
+        "watch_n": 19,
+        "composite_n": 0,
+        "run_signature": "153575be4b95278b7634d68fef01de7aedf7c225b6bf7be7657e2f0f2143c1fc",
+        "config_hash": "9e5c8559a006ad455a0569fb7f856f9a23841cd5b348e8cead70ad584a9606bf"
+      },
+      {
+        "session_date": "2024-06-17",
+        "eligible_n": 0,
+        "watch_n": 18,
+        "composite_n": 0,
+        "run_signature": "c5ad3752f3b9bdba7913176227b6f308f41b1fec31202955c1ac94988d69998f",
+        "config_hash": "9e5c8559a006ad455a0569fb7f856f9a23841cd5b348e8cead70ad584a9606bf"
+      },
+      {
+        "session_date": "2024-06-18",
+        "eligible_n": 0,
+        "watch_n": 18,
+        "composite_n": 0,
+        "run_signature": "0cb4ad353dc70ee02bc7c85036bbacaf8cea987e5146aa9539066a3816cdc4c1",
+        "config_hash": "9e5c8559a006ad455a0569fb7f856f9a23841cd5b348e8cead70ad584a9606bf"
+      },
+      {
+        "session_date": "2024-06-20",
+        "eligible_n": 0,
+        "watch_n": 18,
+        "composite_n": 0,
+        "run_signature": "dca0b2f124cf9c9a2d258b63ae540d4d44ab5686c69fdc7159f7c29c61c5d0b8",
+        "config_hash": "9e5c8559a006ad455a0569fb7f856f9a23841cd5b348e8cead70ad584a9606bf"
+      },
+      {
+        "session_date": "2024-06-21",
+        "eligible_n": 0,
+        "watch_n": 21,
+        "composite_n": 0,
+        "run_signature": "5e2b5e8bb5a1348162dc5927c3f5429557d32ec3be82724f601bfd81720cf489",
+        "config_hash": "9e5c8559a006ad455a0569fb7f856f9a23841cd5b348e8cead70ad584a9606bf"
+      },
+      {
+        "session_date": "2024-06-24",
+        "eligible_n": 0,
+        "watch_n": 15,
+        "composite_n": 0,
+        "run_signature": "c53d99ec66f85cc585d25f5cb078de546da6462e1e173369992afd55650f1b83",
+        "config_hash": "9e5c8559a006ad455a0569fb7f856f9a23841cd5b348e8cead70ad584a9606bf"
+      },
+      {
+        "session_date": "2024-06-25",
+        "eligible_n": 0,
+        "watch_n": 13,
+        "composite_n": 0,
+        "run_signature": "e72d424a8b5cd1f22c41eaa39b8dfafb48f7b3811d4dd036f7827190a447acc8",
+        "config_hash": "9e5c8559a006ad455a0569fb7f856f9a23841cd5b348e8cead70ad584a9606bf"
+      },
+      {
+        "session_date": "2024-06-26",
+        "eligible_n": 0,
+        "watch_n": 12,
+        "composite_n": 0,
+        "run_signature": "05529e21b4ce0f02519cb6f5e2900d4be35cca15249171dd53613f25e6ec14af",
+        "config_hash": "9e5c8559a006ad455a0569fb7f856f9a23841cd5b348e8cead70ad584a9606bf"
+      },
+      {
+        "session_date": "2024-06-27",
+        "eligible_n": 0,
+        "watch_n": 17,
+        "composite_n": 0,
+        "run_signature": "9e405331dc1966b516a59faa1f3df761145869a9a49d963a0693699f0b1ab9bc",
+        "config_hash": "9e5c8559a006ad455a0569fb7f856f9a23841cd5b348e8cead70ad584a9606bf"
+      },
+      {
+        "session_date": "2024-06-28",
+        "eligible_n": 0,
+        "watch_n": 25,
+        "composite_n": 0,
+        "run_signature": "b376e889f7cafb34704de821b743413869ecc886be32813a4ac072096b2d98a5",
+        "config_hash": "9e5c8559a006ad455a0569fb7f856f9a23841cd5b348e8cead70ad584a9606bf"
+      }
+    ],
+    "elapsed_s": 989.584,
+    "network_yahoo_batches": 0,
+    "preview_provider_calls": 0,
+    "ordered": true
+  },
+  "smoke_n": 864,
+  "latest_eligible_n": 0,
+  "latest_composite_n": 0,
+  "preview": "/workspace/research/option_pro_us_eod_v1/return_pack/limited_current_universe_v1_1/preview.html",
+  "snapshot": "/workspace/research/option_pro_us_eod_v1/return_pack/limited_current_universe_v1_1/research-eod-v1-snapshot.json",
+  "limitations": [
+    "CURRENT_MEMBERSHIP only; not historical PIT constituents or delist union",
+    "Yahoo auto_adjust=False does not prove Close is historical raw trade price",
+    "volume_scope=VENDOR_DAILY_UNVERIFIED; not regular-session or share-basis proof",
+    "momentum and labels are price returns, not total return",
+    "execution / dollar risk / corporate-action ledger unverified",
+    "G dropped once via PRICE_ONLY_DIAGNOSTIC; D is market-residual diagnostic",
+    "industry_id/parent_industry_id stay None without independent classification",
+    "M/D read Close via close_price_return; vendor Adj Close/tri is preserved aside",
+    "dollar/share ADV unverified demotes every family to watch; session-volume proof is separate",
+    "not a 10-year formal verification; evidence_status=UNVALIDATED_LIMITED_DATA",
+    "holdout from 2024-07-01 stays sealed"
+  ],
+  "feature_mapping": [
+    {
+      "source_module": "factors.extract_raw / pivots",
+      "shared_feature": "structure, ATR, support/resistance, platform geometry",
+      "used_by": "T, S, B/C setup, planned_invalidation",
+      "raw_interpretable": true
+    },
+    {
+      "source_module": "factors.extract_raw momentum",
+      "shared_feature": "price-return M windows (not TRI/total return)",
+      "used_by": "M, D residual input",
+      "raw_interpretable": true
+    },
+    {
+      "source_module": "residual.py",
+      "shared_feature": "SPY-market residual (not economic-industry residual)",
+      "used_by": "D_residual_momentum on D_MARKET_RESIDUAL_DIAGNOSTIC / PRICE_ONLY",
+      "raw_interpretable": true
+    },
+    {
+      "source_module": "cross_section.q_star",
+      "shared_feature": "same-track reference-pool midranks",
+      "used_by": "T/M/S/R/G assembly before score_features",
+      "raw_interpretable": true
+    },
+    {
+      "source_module": "algorithms.setup_for",
+      "shared_feature": "A/B/C/D hard setup gates",
+      "used_by": "eligible vs rejected; not UI copy",
+      "raw_interpretable": true
+    },
+    {
+      "source_module": "Yahoo volume column",
+      "shared_feature": "vendor daily volume under VENDOR_DAILY_UNVERIFIED",
+      "used_by": "V diagnostic only; B/C liquidity hard-gate stays unverified",
+      "raw_interpretable": false
+    }
+  ],
+  "production_default_unchanged": true
+}

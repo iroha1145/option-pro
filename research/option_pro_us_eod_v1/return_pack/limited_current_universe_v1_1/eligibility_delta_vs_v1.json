@@ -1,0 +1,259 @@
+{
+  "old_pack": "research/option_pro_us_eod_v1/return_pack/limited_current_universe_v1",
+  "new_pack": "research/option_pro_us_eod_v1/return_pack/limited_current_universe_v1_1",
+  "data_refetched": false,
+  "cache_sha256": "cc26ef2ecb35a24a852720a2f8b6a3bbea238b83549494019f1eb34083efc622",
+  "why_scores_changed": [
+    "industry_id/parent_industry_id are None instead of themes[0]",
+    "M/D consume Close via close_price_return; vendor Adj Close kept aside",
+    "G-missing score rejects are rescored on PRICE_ONLY_DIAGNOSTIC",
+    "unverified dollar/share liquidity watches A/B/C/D; empty M1 is legal"
+  ],
+  "days": [
+    {
+      "session_date": "2024-05-31",
+      "v1_eligible_n": 12,
+      "v1_1_eligible_n": 0,
+      "v1_watch_n": 0,
+      "v1_1_watch_n": 29,
+      "v1_composite": [
+        "GS"
+      ],
+      "v1_1_composite": [],
+      "eligibility_change_reason": "unverified dollar/share liquidity now watches every family; Close price-return and no theme-as-industry also change factors"
+    },
+    {
+      "session_date": "2024-06-03",
+      "v1_eligible_n": 12,
+      "v1_1_eligible_n": 0,
+      "v1_watch_n": 0,
+      "v1_1_watch_n": 29,
+      "v1_composite": [
+        "GS"
+      ],
+      "v1_1_composite": [],
+      "eligibility_change_reason": "unverified dollar/share liquidity now watches every family; Close price-return and no theme-as-industry also change factors"
+    },
+    {
+      "session_date": "2024-06-04",
+      "v1_eligible_n": 13,
+      "v1_1_eligible_n": 0,
+      "v1_watch_n": 0,
+      "v1_1_watch_n": 27,
+      "v1_composite": [
+        "GS",
+        "GOOGL"
+      ],
+      "v1_1_composite": [],
+      "eligibility_change_reason": "unverified dollar/share liquidity now watches every family; Close price-return and no theme-as-industry also change factors"
+    },
+    {
+      "session_date": "2024-06-05",
+      "v1_eligible_n": 10,
+      "v1_1_eligible_n": 0,
+      "v1_watch_n": 0,
+      "v1_1_watch_n": 24,
+      "v1_composite": [
+        "GS"
+      ],
+      "v1_1_composite": [],
+      "eligibility_change_reason": "unverified dollar/share liquidity now watches every family; Close price-return and no theme-as-industry also change factors"
+    },
+    {
+      "session_date": "2024-06-06",
+      "v1_eligible_n": 9,
+      "v1_1_eligible_n": 0,
+      "v1_watch_n": 0,
+      "v1_1_watch_n": 23,
+      "v1_composite": [
+        "GS"
+      ],
+      "v1_1_composite": [],
+      "eligibility_change_reason": "unverified dollar/share liquidity now watches every family; Close price-return and no theme-as-industry also change factors"
+    },
+    {
+      "session_date": "2024-06-07",
+      "v1_eligible_n": 12,
+      "v1_1_eligible_n": 0,
+      "v1_watch_n": 0,
+      "v1_1_watch_n": 21,
+      "v1_composite": [
+        "GS"
+      ],
+      "v1_1_composite": [],
+      "eligibility_change_reason": "unverified dollar/share liquidity now watches every family; Close price-return and no theme-as-industry also change factors"
+    },
+    {
+      "session_date": "2024-06-10",
+      "v1_eligible_n": 11,
+      "v1_1_eligible_n": 0,
+      "v1_watch_n": 0,
+      "v1_1_watch_n": 21,
+      "v1_composite": [
+        "GS"
+      ],
+      "v1_1_composite": [],
+      "eligibility_change_reason": "unverified dollar/share liquidity now watches every family; Close price-return and no theme-as-industry also change factors"
+    },
+    {
+      "session_date": "2024-06-11",
+      "v1_eligible_n": 9,
+      "v1_1_eligible_n": 0,
+      "v1_watch_n": 0,
+      "v1_1_watch_n": 21,
+      "v1_composite": [],
+      "v1_1_composite": [],
+      "eligibility_change_reason": "unverified dollar/share liquidity now watches every family; Close price-return and no theme-as-industry also change factors"
+    },
+    {
+      "session_date": "2024-06-12",
+      "v1_eligible_n": 11,
+      "v1_1_eligible_n": 0,
+      "v1_watch_n": 0,
+      "v1_1_watch_n": 21,
+      "v1_composite": [],
+      "v1_1_composite": [],
+      "eligibility_change_reason": "unverified dollar/share liquidity now watches every family; Close price-return and no theme-as-industry also change factors"
+    },
+    {
+      "session_date": "2024-06-13",
+      "v1_eligible_n": 13,
+      "v1_1_eligible_n": 0,
+      "v1_watch_n": 0,
+      "v1_1_watch_n": 20,
+      "v1_composite": [
+        "WELL",
+        "VRTX",
+        "SO"
+      ],
+      "v1_1_composite": [],
+      "eligibility_change_reason": "unverified dollar/share liquidity now watches every family; Close price-return and no theme-as-industry also change factors"
+    },
+    {
+      "session_date": "2024-06-14",
+      "v1_eligible_n": 10,
+      "v1_1_eligible_n": 0,
+      "v1_watch_n": 1,
+      "v1_1_watch_n": 19,
+      "v1_composite": [
+        "WELL",
+        "HEI"
+      ],
+      "v1_1_composite": [],
+      "eligibility_change_reason": "unverified dollar/share liquidity now watches every family; Close price-return and no theme-as-industry also change factors"
+    },
+    {
+      "session_date": "2024-06-17",
+      "v1_eligible_n": 12,
+      "v1_1_eligible_n": 0,
+      "v1_watch_n": 0,
+      "v1_1_watch_n": 18,
+      "v1_composite": [
+        "HEI",
+        "WMT"
+      ],
+      "v1_1_composite": [],
+      "eligibility_change_reason": "unverified dollar/share liquidity now watches every family; Close price-return and no theme-as-industry also change factors"
+    },
+    {
+      "session_date": "2024-06-18",
+      "v1_eligible_n": 10,
+      "v1_1_eligible_n": 0,
+      "v1_watch_n": 1,
+      "v1_1_watch_n": 18,
+      "v1_composite": [
+        "HEI"
+      ],
+      "v1_1_composite": [],
+      "eligibility_change_reason": "unverified dollar/share liquidity now watches every family; Close price-return and no theme-as-industry also change factors"
+    },
+    {
+      "session_date": "2024-06-20",
+      "v1_eligible_n": 12,
+      "v1_1_eligible_n": 0,
+      "v1_watch_n": 2,
+      "v1_1_watch_n": 18,
+      "v1_composite": [
+        "GOOGL",
+        "WMT"
+      ],
+      "v1_1_composite": [],
+      "eligibility_change_reason": "unverified dollar/share liquidity now watches every family; Close price-return and no theme-as-industry also change factors"
+    },
+    {
+      "session_date": "2024-06-21",
+      "v1_eligible_n": 20,
+      "v1_1_eligible_n": 0,
+      "v1_watch_n": 0,
+      "v1_1_watch_n": 21,
+      "v1_composite": [
+        "COST",
+        "TMUS",
+        "GOOGL"
+      ],
+      "v1_1_composite": [],
+      "eligibility_change_reason": "unverified dollar/share liquidity now watches every family; Close price-return and no theme-as-industry also change factors"
+    },
+    {
+      "session_date": "2024-06-24",
+      "v1_eligible_n": 13,
+      "v1_1_eligible_n": 0,
+      "v1_watch_n": 0,
+      "v1_1_watch_n": 15,
+      "v1_composite": [
+        "COST",
+        "TMUS"
+      ],
+      "v1_1_composite": [],
+      "eligibility_change_reason": "unverified dollar/share liquidity now watches every family; Close price-return and no theme-as-industry also change factors"
+    },
+    {
+      "session_date": "2024-06-25",
+      "v1_eligible_n": 11,
+      "v1_1_eligible_n": 0,
+      "v1_watch_n": 0,
+      "v1_1_watch_n": 13,
+      "v1_composite": [
+        "COST"
+      ],
+      "v1_1_composite": [],
+      "eligibility_change_reason": "unverified dollar/share liquidity now watches every family; Close price-return and no theme-as-industry also change factors"
+    },
+    {
+      "session_date": "2024-06-26",
+      "v1_eligible_n": 10,
+      "v1_1_eligible_n": 0,
+      "v1_watch_n": 0,
+      "v1_1_watch_n": 12,
+      "v1_composite": [
+        "COST"
+      ],
+      "v1_1_composite": [],
+      "eligibility_change_reason": "unverified dollar/share liquidity now watches every family; Close price-return and no theme-as-industry also change factors"
+    },
+    {
+      "session_date": "2024-06-27",
+      "v1_eligible_n": 11,
+      "v1_1_eligible_n": 0,
+      "v1_watch_n": 0,
+      "v1_1_watch_n": 17,
+      "v1_composite": [
+        "COST"
+      ],
+      "v1_1_composite": [],
+      "eligibility_change_reason": "unverified dollar/share liquidity now watches every family; Close price-return and no theme-as-industry also change factors"
+    },
+    {
+      "session_date": "2024-06-28",
+      "v1_eligible_n": 19,
+      "v1_1_eligible_n": 0,
+      "v1_watch_n": 0,
+      "v1_1_watch_n": 25,
+      "v1_composite": [
+        "COST"
+      ],
+      "v1_1_composite": [],
+      "eligibility_change_reason": "unverified dollar/share liquidity now watches every family; Close price-return and no theme-as-industry also change factors"
+    }
+  ]
+}

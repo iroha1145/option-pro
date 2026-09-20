@@ -1,0 +1,23 @@
+{
+  "mode": "LIMITED_CURRENT_UNIVERSE_V1",
+  "compute_version": "limited-current-v1.1",
+  "evidence_status": "UNVALIDATED_LIMITED_DATA",
+  "member_policy": "CURRENT_MEMBERSHIP",
+  "compute_dataset_hash": "058c56a4587fd4b5add589fd3cce1279b31e73571609713d287ca4fd3ca68a76",
+  "cache": {
+    "path": "research/option_pro_us_eod_v1/data/cache/limited_current_universe_v1/bars.pkl",
+    "gitignored": true,
+    "bytes": 63469417,
+    "sha256": "cc26ef2ecb35a24a852720a2f8b6a3bbea238b83549494019f1eb34083efc622",
+    "refetched": false,
+    "import": "reuse authorized limited_current_universe_v1/bars.pkl; YahooDiagnosticProvider.fetch_daily_bars_batch with locked yfinance==1.5.1 if the cache is missing locally"
+  },
+  "symbols_wanted": 214,
+  "symbols_with_bars": 213,
+  "missing": [
+    "CRWV"
+  ],
+  "snapshot_sha256": "865a08a01a8b2960fa025ef7a495a94981a17cd35812baec788c3d654eefc92a",
+  "snapshot_bytes": 1792097,
+  "preview_sha256": "a6260195b8b6c936d640f2a46214f5267d58e6c37529a4a8969acae876fa7207"
+}

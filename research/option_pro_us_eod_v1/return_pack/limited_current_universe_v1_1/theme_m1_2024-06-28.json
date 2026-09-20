@@ -1,0 +1,886 @@
+{
+  "session_date": "2024-06-28",
+  "eligible_n": 0,
+  "watch_n": 25,
+  "composite_stock": [],
+  "composite_etf": [],
+  "theme_family_counts": [
+    {
+      "theme_id": "ai_cloud",
+      "algorithm_id": "A_trend_quality",
+      "row_n": 9,
+      "unique_securities": 9,
+      "eligible": 0,
+      "watch": 1,
+      "rejected": 8
+    },
+    {
+      "theme_id": "ai_cloud",
+      "algorithm_id": "B_confirmed_base_breakout",
+      "row_n": 9,
+      "unique_securities": 9,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 9
+    },
+    {
+      "theme_id": "ai_cloud",
+      "algorithm_id": "C_trend_pullback",
+      "row_n": 9,
+      "unique_securities": 9,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 9
+    },
+    {
+      "theme_id": "ai_cloud",
+      "algorithm_id": "D_residual_momentum",
+      "row_n": 9,
+      "unique_securities": 9,
+      "eligible": 0,
+      "watch": 1,
+      "rejected": 8
+    },
+    {
+      "theme_id": "airlines",
+      "algorithm_id": "A_trend_quality",
+      "row_n": 8,
+      "unique_securities": 8,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 8
+    },
+    {
+      "theme_id": "airlines",
+      "algorithm_id": "B_confirmed_base_breakout",
+      "row_n": 8,
+      "unique_securities": 8,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 8
+    },
+    {
+      "theme_id": "airlines",
+      "algorithm_id": "C_trend_pullback",
+      "row_n": 8,
+      "unique_securities": 8,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 8
+    },
+    {
+      "theme_id": "airlines",
+      "algorithm_id": "D_residual_momentum",
+      "row_n": 8,
+      "unique_securities": 8,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 8
+    },
+    {
+      "theme_id": "automotive",
+      "algorithm_id": "A_trend_quality",
+      "row_n": 10,
+      "unique_securities": 10,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 10
+    },
+    {
+      "theme_id": "automotive",
+      "algorithm_id": "B_confirmed_base_breakout",
+      "row_n": 10,
+      "unique_securities": 10,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 10
+    },
+    {
+      "theme_id": "automotive",
+      "algorithm_id": "C_trend_pullback",
+      "row_n": 10,
+      "unique_securities": 10,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 10
+    },
+    {
+      "theme_id": "automotive",
+      "algorithm_id": "D_residual_momentum",
+      "row_n": 10,
+      "unique_securities": 10,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 10
+    },
+    {
+      "theme_id": "biotech",
+      "algorithm_id": "A_trend_quality",
+      "row_n": 10,
+      "unique_securities": 10,
+      "eligible": 0,
+      "watch": 2,
+      "rejected": 8
+    },
+    {
+      "theme_id": "biotech",
+      "algorithm_id": "B_confirmed_base_breakout",
+      "row_n": 10,
+      "unique_securities": 10,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 10
+    },
+    {
+      "theme_id": "biotech",
+      "algorithm_id": "C_trend_pullback",
+      "row_n": 10,
+      "unique_securities": 10,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 10
+    },
+    {
+      "theme_id": "biotech",
+      "algorithm_id": "D_residual_momentum",
+      "row_n": 10,
+      "unique_securities": 10,
+      "eligible": 0,
+      "watch": 2,
+      "rejected": 8
+    },
+    {
+      "theme_id": "china_adr",
+      "algorithm_id": "A_trend_quality",
+      "row_n": 12,
+      "unique_securities": 12,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 12
+    },
+    {
+      "theme_id": "china_adr",
+      "algorithm_id": "B_confirmed_base_breakout",
+      "row_n": 12,
+      "unique_securities": 12,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 12
+    },
+    {
+      "theme_id": "china_adr",
+      "algorithm_id": "C_trend_pullback",
+      "row_n": 12,
+      "unique_securities": 12,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 12
+    },
+    {
+      "theme_id": "china_adr",
+      "algorithm_id": "D_residual_momentum",
+      "row_n": 12,
+      "unique_securities": 12,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 12
+    },
+    {
+      "theme_id": "consumer_electronics",
+      "algorithm_id": "A_trend_quality",
+      "row_n": 5,
+      "unique_securities": 5,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 5
+    },
+    {
+      "theme_id": "consumer_electronics",
+      "algorithm_id": "B_confirmed_base_breakout",
+      "row_n": 5,
+      "unique_securities": 5,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 5
+    },
+    {
+      "theme_id": "consumer_electronics",
+      "algorithm_id": "C_trend_pullback",
+      "row_n": 5,
+      "unique_securities": 5,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 5
+    },
+    {
+      "theme_id": "consumer_electronics",
+      "algorithm_id": "D_residual_momentum",
+      "row_n": 5,
+      "unique_securities": 5,
+      "eligible": 0,
+      "watch": 1,
+      "rejected": 4
+    },
+    {
+      "theme_id": "crypto",
+      "algorithm_id": "A_trend_quality",
+      "row_n": 9,
+      "unique_securities": 9,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 9
+    },
+    {
+      "theme_id": "crypto",
+      "algorithm_id": "B_confirmed_base_breakout",
+      "row_n": 9,
+      "unique_securities": 9,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 9
+    },
+    {
+      "theme_id": "crypto",
+      "algorithm_id": "C_trend_pullback",
+      "row_n": 9,
+      "unique_securities": 9,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 9
+    },
+    {
+      "theme_id": "crypto",
+      "algorithm_id": "D_residual_momentum",
+      "row_n": 9,
+      "unique_securities": 9,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 9
+    },
+    {
+      "theme_id": "defense_aero",
+      "algorithm_id": "A_trend_quality",
+      "row_n": 9,
+      "unique_securities": 9,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 9
+    },
+    {
+      "theme_id": "defense_aero",
+      "algorithm_id": "B_confirmed_base_breakout",
+      "row_n": 9,
+      "unique_securities": 9,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 9
+    },
+    {
+      "theme_id": "defense_aero",
+      "algorithm_id": "C_trend_pullback",
+      "row_n": 9,
+      "unique_securities": 9,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 9
+    },
+    {
+      "theme_id": "defense_aero",
+      "algorithm_id": "D_residual_momentum",
+      "row_n": 9,
+      "unique_securities": 9,
+      "eligible": 0,
+      "watch": 1,
+      "rejected": 8
+    },
+    {
+      "theme_id": "energy",
+      "algorithm_id": "A_trend_quality",
+      "row_n": 10,
+      "unique_securities": 10,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 10
+    },
+    {
+      "theme_id": "energy",
+      "algorithm_id": "B_confirmed_base_breakout",
+      "row_n": 10,
+      "unique_securities": 10,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 10
+    },
+    {
+      "theme_id": "energy",
+      "algorithm_id": "C_trend_pullback",
+      "row_n": 10,
+      "unique_securities": 10,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 10
+    },
+    {
+      "theme_id": "energy",
+      "algorithm_id": "D_residual_momentum",
+      "row_n": 10,
+      "unique_securities": 10,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 10
+    },
+    {
+      "theme_id": "etfs",
+      "algorithm_id": "A_trend_quality",
+      "row_n": 12,
+      "unique_securities": 12,
+      "eligible": 0,
+      "watch": 2,
+      "rejected": 10
+    },
+    {
+      "theme_id": "etfs",
+      "algorithm_id": "B_confirmed_base_breakout",
+      "row_n": 12,
+      "unique_securities": 12,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 12
+    },
+    {
+      "theme_id": "etfs",
+      "algorithm_id": "C_trend_pullback",
+      "row_n": 12,
+      "unique_securities": 12,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 12
+    },
+    {
+      "theme_id": "etfs",
+      "algorithm_id": "D_residual_momentum",
+      "row_n": 12,
+      "unique_securities": 12,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 12
+    },
+    {
+      "theme_id": "ev_supply",
+      "algorithm_id": "A_trend_quality",
+      "row_n": 10,
+      "unique_securities": 10,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 10
+    },
+    {
+      "theme_id": "ev_supply",
+      "algorithm_id": "B_confirmed_base_breakout",
+      "row_n": 10,
+      "unique_securities": 10,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 10
+    },
+    {
+      "theme_id": "ev_supply",
+      "algorithm_id": "C_trend_pullback",
+      "row_n": 10,
+      "unique_securities": 10,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 10
+    },
+    {
+      "theme_id": "ev_supply",
+      "algorithm_id": "D_residual_momentum",
+      "row_n": 10,
+      "unique_securities": 10,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 10
+    },
+    {
+      "theme_id": "finance",
+      "algorithm_id": "A_trend_quality",
+      "row_n": 10,
+      "unique_securities": 10,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 10
+    },
+    {
+      "theme_id": "finance",
+      "algorithm_id": "B_confirmed_base_breakout",
+      "row_n": 10,
+      "unique_securities": 10,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 10
+    },
+    {
+      "theme_id": "finance",
+      "algorithm_id": "C_trend_pullback",
+      "row_n": 10,
+      "unique_securities": 10,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 10
+    },
+    {
+      "theme_id": "finance",
+      "algorithm_id": "D_residual_momentum",
+      "row_n": 10,
+      "unique_securities": 10,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 10
+    },
+    {
+      "theme_id": "fintech",
+      "algorithm_id": "A_trend_quality",
+      "row_n": 10,
+      "unique_securities": 10,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 10
+    },
+    {
+      "theme_id": "fintech",
+      "algorithm_id": "B_confirmed_base_breakout",
+      "row_n": 10,
+      "unique_securities": 10,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 10
+    },
+    {
+      "theme_id": "fintech",
+      "algorithm_id": "C_trend_pullback",
+      "row_n": 10,
+      "unique_securities": 10,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 10
+    },
+    {
+      "theme_id": "fintech",
+      "algorithm_id": "D_residual_momentum",
+      "row_n": 10,
+      "unique_securities": 10,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 10
+    },
+    {
+      "theme_id": "healthcare",
+      "algorithm_id": "A_trend_quality",
+      "row_n": 10,
+      "unique_securities": 10,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 10
+    },
+    {
+      "theme_id": "healthcare",
+      "algorithm_id": "B_confirmed_base_breakout",
+      "row_n": 10,
+      "unique_securities": 10,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 10
+    },
+    {
+      "theme_id": "healthcare",
+      "algorithm_id": "C_trend_pullback",
+      "row_n": 10,
+      "unique_securities": 10,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 10
+    },
+    {
+      "theme_id": "healthcare",
+      "algorithm_id": "D_residual_momentum",
+      "row_n": 10,
+      "unique_securities": 10,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 10
+    },
+    {
+      "theme_id": "industrials",
+      "algorithm_id": "A_trend_quality",
+      "row_n": 10,
+      "unique_securities": 10,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 10
+    },
+    {
+      "theme_id": "industrials",
+      "algorithm_id": "B_confirmed_base_breakout",
+      "row_n": 10,
+      "unique_securities": 10,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 10
+    },
+    {
+      "theme_id": "industrials",
+      "algorithm_id": "C_trend_pullback",
+      "row_n": 10,
+      "unique_securities": 10,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 10
+    },
+    {
+      "theme_id": "industrials",
+      "algorithm_id": "D_residual_momentum",
+      "row_n": 10,
+      "unique_securities": 10,
+      "eligible": 0,
+      "watch": 1,
+      "rejected": 9
+    },
+    {
+      "theme_id": "luxury",
+      "algorithm_id": "A_trend_quality",
+      "row_n": 7,
+      "unique_securities": 7,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 7
+    },
+    {
+      "theme_id": "luxury",
+      "algorithm_id": "B_confirmed_base_breakout",
+      "row_n": 7,
+      "unique_securities": 7,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 7
+    },
+    {
+      "theme_id": "luxury",
+      "algorithm_id": "C_trend_pullback",
+      "row_n": 7,
+      "unique_securities": 7,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 7
+    },
+    {
+      "theme_id": "luxury",
+      "algorithm_id": "D_residual_momentum",
+      "row_n": 7,
+      "unique_securities": 7,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 7
+    },
+    {
+      "theme_id": "media_streaming",
+      "algorithm_id": "A_trend_quality",
+      "row_n": 8,
+      "unique_securities": 8,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 8
+    },
+    {
+      "theme_id": "media_streaming",
+      "algorithm_id": "B_confirmed_base_breakout",
+      "row_n": 8,
+      "unique_securities": 8,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 8
+    },
+    {
+      "theme_id": "media_streaming",
+      "algorithm_id": "C_trend_pullback",
+      "row_n": 8,
+      "unique_securities": 8,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 8
+    },
+    {
+      "theme_id": "media_streaming",
+      "algorithm_id": "D_residual_momentum",
+      "row_n": 8,
+      "unique_securities": 8,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 8
+    },
+    {
+      "theme_id": "real_estate",
+      "algorithm_id": "A_trend_quality",
+      "row_n": 10,
+      "unique_securities": 10,
+      "eligible": 0,
+      "watch": 1,
+      "rejected": 9
+    },
+    {
+      "theme_id": "real_estate",
+      "algorithm_id": "B_confirmed_base_breakout",
+      "row_n": 10,
+      "unique_securities": 10,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 10
+    },
+    {
+      "theme_id": "real_estate",
+      "algorithm_id": "C_trend_pullback",
+      "row_n": 10,
+      "unique_securities": 10,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 10
+    },
+    {
+      "theme_id": "real_estate",
+      "algorithm_id": "D_residual_momentum",
+      "row_n": 10,
+      "unique_securities": 10,
+      "eligible": 0,
+      "watch": 1,
+      "rejected": 9
+    },
+    {
+      "theme_id": "retail",
+      "algorithm_id": "A_trend_quality",
+      "row_n": 10,
+      "unique_securities": 10,
+      "eligible": 0,
+      "watch": 2,
+      "rejected": 8
+    },
+    {
+      "theme_id": "retail",
+      "algorithm_id": "B_confirmed_base_breakout",
+      "row_n": 10,
+      "unique_securities": 10,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 10
+    },
+    {
+      "theme_id": "retail",
+      "algorithm_id": "C_trend_pullback",
+      "row_n": 10,
+      "unique_securities": 10,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 10
+    },
+    {
+      "theme_id": "retail",
+      "algorithm_id": "D_residual_momentum",
+      "row_n": 10,
+      "unique_securities": 10,
+      "eligible": 0,
+      "watch": 3,
+      "rejected": 7
+    },
+    {
+      "theme_id": "semiconductors",
+      "algorithm_id": "A_trend_quality",
+      "row_n": 14,
+      "unique_securities": 14,
+      "eligible": 0,
+      "watch": 1,
+      "rejected": 13
+    },
+    {
+      "theme_id": "semiconductors",
+      "algorithm_id": "B_confirmed_base_breakout",
+      "row_n": 14,
+      "unique_securities": 14,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 14
+    },
+    {
+      "theme_id": "semiconductors",
+      "algorithm_id": "C_trend_pullback",
+      "row_n": 14,
+      "unique_securities": 14,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 14
+    },
+    {
+      "theme_id": "semiconductors",
+      "algorithm_id": "D_residual_momentum",
+      "row_n": 14,
+      "unique_securities": 14,
+      "eligible": 0,
+      "watch": 1,
+      "rejected": 13
+    },
+    {
+      "theme_id": "social_internet",
+      "algorithm_id": "A_trend_quality",
+      "row_n": 8,
+      "unique_securities": 8,
+      "eligible": 0,
+      "watch": 1,
+      "rejected": 7
+    },
+    {
+      "theme_id": "social_internet",
+      "algorithm_id": "B_confirmed_base_breakout",
+      "row_n": 8,
+      "unique_securities": 8,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 8
+    },
+    {
+      "theme_id": "social_internet",
+      "algorithm_id": "C_trend_pullback",
+      "row_n": 8,
+      "unique_securities": 8,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 8
+    },
+    {
+      "theme_id": "social_internet",
+      "algorithm_id": "D_residual_momentum",
+      "row_n": 8,
+      "unique_securities": 8,
+      "eligible": 0,
+      "watch": 1,
+      "rejected": 7
+    },
+    {
+      "theme_id": "software",
+      "algorithm_id": "A_trend_quality",
+      "row_n": 12,
+      "unique_securities": 12,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 12
+    },
+    {
+      "theme_id": "software",
+      "algorithm_id": "B_confirmed_base_breakout",
+      "row_n": 12,
+      "unique_securities": 12,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 12
+    },
+    {
+      "theme_id": "software",
+      "algorithm_id": "C_trend_pullback",
+      "row_n": 12,
+      "unique_securities": 12,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 12
+    },
+    {
+      "theme_id": "software",
+      "algorithm_id": "D_residual_momentum",
+      "row_n": 12,
+      "unique_securities": 12,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 12
+    },
+    {
+      "theme_id": "telecom",
+      "algorithm_id": "A_trend_quality",
+      "row_n": 7,
+      "unique_securities": 7,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 7
+    },
+    {
+      "theme_id": "telecom",
+      "algorithm_id": "B_confirmed_base_breakout",
+      "row_n": 7,
+      "unique_securities": 7,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 7
+    },
+    {
+      "theme_id": "telecom",
+      "algorithm_id": "C_trend_pullback",
+      "row_n": 7,
+      "unique_securities": 7,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 7
+    },
+    {
+      "theme_id": "telecom",
+      "algorithm_id": "D_residual_momentum",
+      "row_n": 7,
+      "unique_securities": 7,
+      "eligible": 0,
+      "watch": 1,
+      "rejected": 6
+    },
+    {
+      "theme_id": "utilities",
+      "algorithm_id": "A_trend_quality",
+      "row_n": 10,
+      "unique_securities": 10,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 10
+    },
+    {
+      "theme_id": "utilities",
+      "algorithm_id": "B_confirmed_base_breakout",
+      "row_n": 10,
+      "unique_securities": 10,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 10
+    },
+    {
+      "theme_id": "utilities",
+      "algorithm_id": "C_trend_pullback",
+      "row_n": 10,
+      "unique_securities": 10,
+      "eligible": 0,
+      "watch": 0,
+      "rejected": 10
+    },
+    {
+      "theme_id": "utilities",
+      "algorithm_id": "D_residual_momentum",
+      "row_n": 10,
+      "unique_securities": 10,
+      "eligible": 0,
+      "watch": 2,
+      "rejected": 8
+    }
+  ],
+  "limitations": [
+    "CURRENT_MEMBERSHIP only; not historical PIT constituents or delist union",
+    "Yahoo auto_adjust=False does not prove Close is historical raw trade price",
+    "volume_scope=VENDOR_DAILY_UNVERIFIED; not regular-session or share-basis proof",
+    "momentum and labels are price returns, not total return",
+    "execution / dollar risk / corporate-action ledger unverified",
+    "G dropped once via PRICE_ONLY_DIAGNOSTIC; D is market-residual diagnostic",
+    "industry_id/parent_industry_id stay None without independent classification",
+    "M/D read Close via close_price_return; vendor Adj Close/tri is preserved aside",
+    "dollar/share ADV unverified demotes every family to watch; session-volume proof is separate",
+    "not a 10-year formal verification; evidence_status=UNVALIDATED_LIMITED_DATA",
+    "holdout from 2024-07-01 stays sealed"
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "session_date": "2024-06-28",
+  "network": 0,
+  "config_hash_match": true,
+  "run_signature_match": true,
+  "family_fingerprint_equal": true,
+  "family_n": 96,
+  "eligible_n": 0,
+  "watch_n": 25,
+  "yahoo_batches": 0
+}
