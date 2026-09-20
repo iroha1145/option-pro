@@ -57,6 +57,7 @@ SCHEDULED_TASK_NAMES = {
     "earnings_analysis",
     "macro_conditions",
     "strength_refresh",
+    "sector_iv_refresh",
 }
 MANUAL_TASK_NAMES = {
     "focus_refresh",
@@ -1419,6 +1420,7 @@ def test_worker_once_records_scheduled_tasks_and_isolates_failure(
         ),
         TaskSpec("macro_conditions", lambda: success("macro_conditions"), 60),
         TaskSpec("strength_refresh", lambda: success("strength_refresh"), 60),
+        TaskSpec("sector_iv_refresh", lambda: success("sector_iv_refresh"), 60),
     )
     repository = WorkerStateRepository(tmp_path / "worker.db")
     supervisor = WorkerSupervisor(
@@ -3190,6 +3192,11 @@ def test_default_task_inventory_and_maintenance_backup(
     assert isinstance(strength_spec.runner, StrengthRefreshTask)
     assert strength_spec.interval_seconds == 86_400
     assert strength_spec.manual_only is False
+    sector_iv_spec = next(spec for spec in specs if spec.name == "sector_iv_refresh")
+    assert isinstance(sector_iv_spec.runner, worker_tasks.SectorIVTask)
+    assert sector_iv_spec.enabled is True
+    assert sector_iv_spec.manual_only is False
+    assert sector_iv_spec.interval_seconds == 5
     manual_specs = {spec.name: spec for spec in specs if spec.manual_only}
     assert set(manual_specs) == MANUAL_TASK_NAMES
     assert isinstance(manual_specs["focus_refresh"].runner, FocusRefreshTask)

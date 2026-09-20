@@ -50,6 +50,9 @@ _PUBLIC_STOCK_PULL_PATH = re.compile(
     r"^/api/stocks/(?:\^[A-Z0-9][A-Z0-9.^_=-]{0,30}|[A-Z0-9][A-Z0-9.^_=-]{0,31})/pull$",
     re.IGNORECASE,
 )
+_PUBLIC_SECTOR_IV_REFRESH_PATH = re.compile(
+    r"^/api/sectors/[a-z][a-z0-9_]{0,63}/iv-refresh$",
+)
 _PUBLIC_EARNINGS_REPORT_PATH = re.compile(
     r"^/api/ai/earnings-impact/[A-Z0-9][A-Z0-9.\-^]{0,11}"
     r"/reports/\d{4}-\d{2}-\d{2}$",
@@ -107,6 +110,12 @@ def is_public_stock_pull_path(path: str) -> bool:
     """Match only the bounded, same-origin stock refresh action."""
 
     return _PUBLIC_STOCK_PULL_PATH.fullmatch(path) is not None
+
+
+def is_public_sector_iv_refresh_path(path: str) -> bool:
+    """Only the bounded sector queue is public; other mutations stay private."""
+
+    return _PUBLIC_SECTOR_IV_REFRESH_PATH.fullmatch(path) is not None
 
 
 def is_public_earnings_impact_action_path(path: str) -> bool:
@@ -586,7 +595,7 @@ def request_has_account_session(request: Request) -> bool:
 async def require_public_read_or_owner_access(
     request: Request,
 ) -> AsyncIterator[None]:
-    """Allow password-mode reads while keeping every other request owner-only."""
+    """Allow password-mode reads and explicitly bounded public actions."""
 
     runtime = _runtime(request)
     method = request.method.upper()
@@ -601,8 +610,14 @@ async def require_public_read_or_owner_access(
     public_stock_pull = is_stock_pull and (
         runtime.visitor_live_pulls or request_has_account_session(request)
     )
+    public_sector_refresh = (
+        method == "POST" and is_public_sector_iv_refresh_path(request.url.path)
+    )
     if runtime.mode == "password" and (
-        method in {"GET", "HEAD"} or public_batch_query or public_stock_pull
+        method in {"GET", "HEAD"}
+        or public_batch_query
+        or public_stock_pull
+        or public_sector_refresh
     ):
         owner_access = runtime.request_is_owner(request)
         request.state.owner_access = owner_access

@@ -189,6 +189,7 @@ def test_environment_templates_separate_secrets_from_machine_edges() -> None:
         "macro_conditions",
         "focus_refresh",
         "strength_refresh",
+        "sector_iv_refresh",
         "breakout_refresh",
         "retention",
     }

@@ -11,12 +11,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import JSONResponse
 
 from app.access import (
-    current_request_is_owner,
     public_snapshot_unavailable,
-    request_allows_visitor_live_pulls,
+    require_same_origin_request,
 )
 from app.data_paths import get_data_paths
 from app.services import massive, yahoo
@@ -35,15 +35,11 @@ _locks: dict[str, asyncio.Lock] = {}
 _MAX_STALE_SECONDS = 60 * 60
 _REAL_OPTION_PROVIDERS = frozenset({"Yahoo/yfinance", "MarketData.app"})
 _SECTOR_IV_SNAPSHOT_VERSION = 1
-_SECTOR_IV_SNAPSHOT_TTL_SECONDS = 60 * 60
 _SECTOR_IV_SNAPSHOT_MAX_BYTES = 512 * 1024
 _SECTOR_IV_SNAPSHOT_DIR = get_data_paths().root / "sector-iv-snapshots-v1"
-_SECTOR_IV_FAILURE_TTL_SECONDS = 60
-_SECTOR_IV_FAILURE_MAX_KEYS = 128
 _PUBLIC_SECTOR_IV_CLIENT_WINDOW_SECONDS = 5 * 60
 _PUBLIC_SECTOR_IV_CLIENT_LIMIT = 8
 _PUBLIC_SECTOR_IV_MAX_CLIENTS = 2048
-_sector_iv_failure_deadlines: dict[str, float] = {}
 _public_sector_iv_recent: dict[str, deque[float]] = {}
 
 
@@ -53,42 +49,6 @@ def _lock_for(key: str) -> asyncio.Lock:
         lock = asyncio.Lock()
         _locks[key] = lock
     return lock
-
-
-def _sector_iv_failure_retry_after(key: str) -> int | None:
-    now = time.monotonic()
-    for expired_key in [
-        candidate
-        for candidate, deadline in _sector_iv_failure_deadlines.items()
-        if deadline <= now
-    ]:
-        _sector_iv_failure_deadlines.pop(expired_key, None)
-    deadline = _sector_iv_failure_deadlines.get(key)
-    return None if deadline is None else max(1, math.ceil(deadline - now))
-
-
-def _record_sector_iv_failure(key: str) -> int:
-    _sector_iv_failure_deadlines[key] = (
-        time.monotonic() + _SECTOR_IV_FAILURE_TTL_SECONDS
-    )
-    if len(_sector_iv_failure_deadlines) > _SECTOR_IV_FAILURE_MAX_KEYS:
-        oldest = min(
-            _sector_iv_failure_deadlines,
-            key=_sector_iv_failure_deadlines.__getitem__,
-        )
-        _sector_iv_failure_deadlines.pop(oldest, None)
-    return _sector_iv_failure_retry_after(key) or 1
-
-
-def _sector_iv_cooldown_error(retry_after: int) -> HTTPException:
-    return HTTPException(
-        status_code=503,
-        detail={
-            "code": "sector_iv_cooldown",
-            "message": "Yahoo/yfinance 板块期权数据暂不可用",
-        },
-        headers={"Retry-After": str(max(1, retry_after))},
-    )
 
 
 def _reserve_public_sector_iv(client_id: str) -> None:
@@ -291,7 +251,7 @@ def _finite_number(value: Any) -> float | None:
 
 def _rank_iv_rows(sector_id: str, rows: list[dict[str, Any]]) -> dict[str, Any]:
     sector = SECTORS[sector_id]
-    valid_rows = [row for row in rows if row.get("iv") is not None]
+    valid_rows = [row for row in rows if (iv := _finite_number(row.get("iv"))) is not None and 0 < iv <= 10]
     iv_values = [float(row["iv"]) for row in valid_rows]
 
     rankings = []
@@ -331,7 +291,8 @@ def _rank_iv_rows(sector_id: str, rows: list[dict[str, Any]]) -> dict[str, Any]:
     )
 
     total = len(sector["tickers"])
-    failed_symbols = [row.get("ticker") for row in rows if row.get("iv") is None and row.get("ticker")]
+    successful_symbols = {row["ticker"] for row in valid_rows}
+    failed_symbols = [ticker for ticker in sector["tickers"] if ticker not in successful_symbols]
     stale = any(bool(row.get("_stale")) for row in valid_rows)
     source_status = "insufficient_data" if not rankings else ("stale" if stale else ("degraded" if len(rankings) < total else "active"))
     as_of_values = [str(row.get("as_of")) for row in valid_rows if row.get("as_of")]
@@ -342,7 +303,7 @@ def _rank_iv_rows(sector_id: str, rows: list[dict[str, Any]]) -> dict[str, Any]:
         "data_limited": len(rankings) < total,
         "source_status": source_status,
         "_stale": stale,
-        "as_of": min(as_of_values) if as_of_values else datetime.now(timezone.utc).isoformat(),
+        "as_of": min(as_of_values, key=lambda value: _source_timestamp(value) or 0) if as_of_values else None,
         "success_count": len(rankings),
         "requested_count": total,
         "success_rate": round(len(rankings) / total * 100, 1) if total else 0.0,
@@ -358,7 +319,8 @@ def _rank_iv_rows(sector_id: str, rows: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 async def _iv_ranking_payload(sector_id: str) -> dict:
-    return _rank_iv_rows(sector_id, await _sector_iv_rows(sector_id))
+    rows = await _sector_iv_rows(sector_id)
+    return _rank_iv_rows(sector_id, rows)
 
 
 def _sector_iv_snapshot_path(sector_id: str) -> Path:
@@ -411,8 +373,8 @@ def _clean_sector_iv_snapshot_payload(
             atm_iv is None
             or atm_iv <= 0
             or atm_iv > 1000
-            or sector_rank is None
-            or not 0 <= sector_rank <= 100
+            or (raw.get("sector_iv_rank") is not None and (sector_rank is None or not 0 <= sector_rank <= 100))
+            or (raw.get("sector_iv_rank") is None and len(rankings) != 1)
             or (
                 price is not None
                 and (
@@ -471,7 +433,7 @@ def _write_sector_iv_snapshot(
         or saved_at <= 0
     ):
         raise ValueError("sector snapshot saved_at is invalid")
-    if snapshot_origin not in {"owner_live", "public_live"}:
+    if snapshot_origin not in {"owner_live", "public_live", "worker"}:
         raise ValueError("sector snapshot origin is invalid")
     encoded = json.dumps(
         {
@@ -552,7 +514,7 @@ def _parse_sector_iv_document(
     if payload is None:
         return None
     snapshot_origin = document.get("snapshot_origin", "legacy")
-    if snapshot_origin not in {"owner_live", "public_live", "legacy"}:
+    if snapshot_origin not in {"owner_live", "public_live", "worker", "legacy"}:
         return None
     return {
         "saved_at": float(saved_at),
@@ -594,10 +556,11 @@ def _read_sector_iv_snapshot(
     saved_at = float(document["saved_at"])
     # Copy before decorating: the parsed document is shared by the cache.
     payload = dict(document["payload"])
-    stale = (
-        saved_at + _SECTOR_IV_SNAPSHOT_TTL_SECONDS <= observed
-        or bool(payload.get("_stale"))
-    )
+    source_at = _source_timestamp(payload.get("as_of"))
+    from app.services.sector_iv_refresh import MAX_STALE_SECONDS, refresh_interval
+    if source_at is None or source_at > observed + 60 or observed - source_at > MAX_STALE_SECONDS:
+        return None
+    stale = observed - source_at >= refresh_interval(observed) or bool(payload.get("_stale"))
     payload.update(
         {
             "_cached": True,
@@ -608,14 +571,18 @@ def _read_sector_iv_snapshot(
                 saved_at,
                 timezone.utc,
             ).isoformat(),
-            "cache_ttl_seconds": _SECTOR_IV_SNAPSHOT_TTL_SECONDS,
+            "cache_ttl_seconds": refresh_interval(observed),
         }
     )
     if stale:
         payload["source_status"] = "stale"
-        payload["stale_reason"] = "sector_snapshot_expired"
+        payload["stale_reason"] = (
+            "sector_snapshot_expired"
+            if observed - source_at >= refresh_interval(observed)
+            else "provider_stale"
+        )
         payload["stale_age_seconds"] = round(
-            max(observed - saved_at, 0.0),
+            max(observed - source_at, 0.0),
             1,
         )
     return payload
@@ -764,139 +731,80 @@ def _read_strength_sector_iv_snapshot(
     return payload
 
 
+def _source_timestamp(value: Any) -> float | None:
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            return None
+        return parsed.timestamp()
+    except (ValueError, TypeError, OverflowError):
+        return None
+
+
+def _bounded_snapshot(payload: dict[str, Any] | None, now: float) -> dict[str, Any] | None:
+    from app.services.sector_iv_refresh import MAX_STALE_SECONDS, refresh_interval
+
+    if not payload or not payload.get("rankings"):
+        return None
+    source_at = _source_timestamp(payload.get("as_of"))
+    if source_at is None or source_at > now + 60 or now - source_at > MAX_STALE_SECONDS:
+        return None
+    result = dict(payload)
+    if now - source_at >= refresh_interval(now) or result.get("_stale"):
+        result.update(_stale=True, source_status="stale",
+                      stale_age_seconds=round(max(now - source_at, 0), 1))
+    return result
+
+
 async def _request_iv_payload(
     sector_id: str,
     *,
     public_client_id: str | None = None,
     visitor_live_allowed: bool = False,
 ) -> dict[str, Any]:
-    """Resolve cached IV first, then perform one protected Yahoo cold scan.
+    """Read saved data and register bounded demand; HTTP never calls providers.
 
-    Massive Stocks Starter does not provide the option chain needed for ATM IV.
-    Yahoo/yfinance is therefore the real source for this endpoint.  The
-    process cache coalesces same-sector requests and the durable sector
-    snapshot keeps later visitors from repeating the provider scan after a
-    restart.
+    Legacy keyword arguments remain accepted for internal callers. Access level
+    does not change sector IV visibility or refresh eligibility.
     """
+    from app.services.sector_iv_refresh import default_store
 
-    key = f"iv:{sector_id}"
-    owner = current_request_is_owner()
     now = time.time()
-    hit = _cache.get(key)
-    if hit and hit[0] > now:
-        return _with_cache_status(hit[2], fetched_at=hit[1], cache_stale=False)
-    sector_snapshot = _read_sector_iv_snapshot(sector_id, now=now)
-    if (
-        sector_snapshot is not None
-        and sector_snapshot.get("rankings")
-        and not sector_snapshot.get("_stale")
-    ):
-        return sector_snapshot
-    strength_snapshot = _read_strength_sector_iv_snapshot(sector_id, now=now)
-    if (
-        strength_snapshot is not None
-        and strength_snapshot.get("rankings")
-        and not strength_snapshot.get("_stale")
-    ):
-        return strength_snapshot
-
-    fallback = (
-        sector_snapshot
-        if sector_snapshot is not None and sector_snapshot.get("rankings")
-        else strength_snapshot
-        if strength_snapshot is not None and strength_snapshot.get("rankings")
-        else None
+    snapshot = _bounded_snapshot(_read_sector_iv_snapshot(sector_id, now=now), now)
+    # A dedicated full scan (even with missing symbols) takes precedence over
+    # the unrelated top-N strength selection. A fallback never suppresses work.
+    fallback = None if snapshot else _bounded_snapshot(
+        _read_strength_sector_iv_snapshot(sector_id, now=now), now,
     )
-    # A visitor can keep using an honestly marked stale provider snapshot.
-    if not owner and fallback is not None:
-        return fallback
-    # Visitors only start new Yahoo work when the owner opted in via
-    # ``access.visitor_live_pulls``. By default a sector without any saved
-    # snapshot answers 503 to visitors instead of spending provider quota —
-    # the snapshot appears once the owner (or worker) has looked at it.
-    if not owner and not visitor_live_allowed:
-        raise public_snapshot_unavailable(f"sector {sector_id} IV ranking")
+    store = default_store()
+    if snapshot is None or snapshot.get("_stale"):
+        refresh = await asyncio.to_thread(store.request, sector_id)
+    else:
+        refresh = await asyncio.to_thread(store.status, sector_id)
+    payload = snapshot or fallback or _rank_iv_rows(sector_id, [])
+    if not payload.get("rankings"):
+        payload["as_of"] = None
+    return {**payload, "refresh": refresh}
 
-    retry_after = _sector_iv_failure_retry_after(key)
-    if retry_after is not None:
-        if fallback is not None:
-            return fallback
-        raise _sector_iv_cooldown_error(retry_after)
 
-    async def load_live() -> dict[str, Any]:
-        locked_retry_after = _sector_iv_failure_retry_after(key)
-        if locked_retry_after is not None:
-            raise _sector_iv_cooldown_error(locked_retry_after)
-        if public_client_id is not None:
-            _reserve_public_sector_iv(public_client_id)
-        try:
-            candidate = await _iv_ranking_payload(sector_id)
-        except HTTPException:
-            raise
-        except Exception as exc:
-            raise _sector_iv_cooldown_error(
-                _record_sector_iv_failure(key)
-            ) from exc
-        if (
-            candidate.get("source_status") == "insufficient_data"
-            or not candidate.get("rankings")
-        ):
-            raise _sector_iv_cooldown_error(
-                _record_sector_iv_failure(key)
-            )
-        _sector_iv_failure_deadlines.pop(key, None)
-        return candidate
+@router.post("/{sector_id}/iv-refresh", dependencies=[Depends(require_same_origin_request)])
+async def iv_refresh(sector_id: str, request: Request):
+    from app.services.sector_iv_refresh import default_store
 
-    try:
-        payload = await _cached(
-            key,
-            600,
-            load_live,
-            allow_refresh=True,
-        )
-    except Exception:
-        if fallback is not None:
-            return fallback
-        raise
-
-    if payload.get("rankings") and not payload.get("_stale"):
-        saved_at = time.time()
-        persisted = False
-        try:
-            await asyncio.to_thread(
-                _write_sector_iv_snapshot,
-                sector_id,
-                payload,
-                saved_at=saved_at,
-                snapshot_origin="owner_live" if owner else "public_live",
-            )
-            persisted = True
-        except (OSError, ValueError):
-            persisted = False
-        result = dict(payload)
-        result["snapshot_source"] = "owner_live" if owner else "public_live"
-        result["snapshot_origin"] = result["snapshot_source"]
-        result["snapshot_persisted"] = persisted
-        if persisted:
-            result["snapshot_saved_at"] = datetime.fromtimestamp(
-                saved_at,
-                timezone.utc,
-            ).isoformat()
-        return result
-    return payload
+    ensure_sector(sector_id)
+    _reserve_public_sector_iv(request_client_ip(request))
+    refresh = await asyncio.to_thread(default_store().request, sector_id)
+    return JSONResponse(
+        {"sector_id": sector_id, "refresh": refresh},
+        status_code=202 if refresh["status"] in {"queued", "running"} else 200,
+    )
 
 
 @router.get("/{sector_id}/iv-ranking")
 async def iv_ranking(sector_id: str, request: Request):
     ensure_sector(sector_id)
     try:
-        return await _request_iv_payload(
-            sector_id,
-            public_client_id=(
-                None if current_request_is_owner() else request_client_ip(request)
-            ),
-            visitor_live_allowed=request_allows_visitor_live_pulls(request),
-        )
+        return await _request_iv_payload(sector_id)
     except HTTPException:
         raise
     except Exception as exc:
@@ -909,13 +817,7 @@ async def heatmap(sector_id: str, request: Request):
     # Reuse the iv-ranking cache — the heatmap is a projection of the same
     # data, so visiting both views costs one scan instead of two.
     try:
-        payload = await _request_iv_payload(
-            sector_id,
-            public_client_id=(
-                None if current_request_is_owner() else request_client_ip(request)
-            ),
-            visitor_live_allowed=request_allows_visitor_live_pulls(request),
-        )
+        payload = await _request_iv_payload(sector_id)
     except HTTPException:
         raise
     except Exception as exc:
@@ -945,4 +847,5 @@ async def heatmap(sector_id: str, request: Request):
         "snapshot_origin": payload.get("snapshot_origin"),
         "snapshot_saved_at": payload.get("snapshot_saved_at"),
         "providers": payload.get("providers", []),
+        "refresh": payload["refresh"],
     }

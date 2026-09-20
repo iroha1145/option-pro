@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from datetime import datetime, timezone
 import time
 
 import pytest
@@ -18,6 +19,7 @@ from app.access import (
 from app.api import earnings, market, options, sectors, signals, stocks, strength
 from app.personal_config import AccessConfig
 from app.services import signals as signal_service
+from app.services.sector_iv_refresh import run_refresh_batch
 from app.services import yahoo
 from app.services.cache import cache
 
@@ -88,7 +90,6 @@ def _clear_process_caches(monkeypatch: pytest.MonkeyPatch):
     cache.clear()
     sectors._cache.clear()
     sectors._locks.clear()
-    sectors._sector_iv_failure_deadlines.clear()
     sectors._public_sector_iv_recent.clear()
     with signal_service._cache_lock:
         signal_service._cache.clear()
@@ -312,7 +313,7 @@ def test_sector_iv_reads_persisted_strength_worker_options_without_provider_call
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
-    now = 1_790_000_000.0
+    now = datetime(2026, 7, 23, 15, 30, tzinfo=timezone.utc).timestamp()
     path = tmp_path / "strength-snapshot-v1.json"
     rows = [
         {
@@ -383,6 +384,7 @@ def test_sector_iv_reads_persisted_strength_worker_options_without_provider_call
     public_payload, heatmap_payload, owner_payload = asyncio.run(scenario())
 
     assert calls == 0
+    assert public_payload["refresh"]["status"] == "queued"
     assert public_payload["snapshot_source"] == "strength_worker"
     assert public_payload["_cached"] is True
     assert public_payload["_stale"] is False
@@ -428,7 +430,7 @@ def test_sector_iv_marks_expired_strength_worker_snapshot_stale(
     strength._write_strength_snapshot(
         path,
         parameters=dict(strength.DEFAULT_STRENGTH_SCAN_PARAMETERS),
-        payload=_strength_payload_with_option_rows([row]),
+        payload={**_strength_payload_with_option_rows([row]), "as_of": datetime.fromtimestamp(saved_at, timezone.utc).isoformat()},
         saved_at=saved_at,
     )
     monkeypatch.setattr(strength, "_STRENGTH_SNAPSHOT_PATH", path)
@@ -492,26 +494,19 @@ def test_sector_iv_rejects_non_provider_option_placeholders(
         }
 
     monkeypatch.setattr(sectors, "_iv_ranking_payload", unavailable_scan)
-    # 占位数据被拒后访客要能走到实扫，需要 owner 打开 visitor_live_pulls。
-    monkeypatch.setattr(sectors, "request_allows_visitor_live_pulls", lambda _r: True)
-
-    async def scenario() -> list[HTTPException]:
+    async def scenario():
         with request_owner_access_context(False):
-            return [
-                await _expect_unavailable(
-                    sectors.iv_ranking("semiconductors", _request())
-                )
-                for _ in range(2)
-            ]
+            first = await sectors.iv_ranking("semiconductors", _request())
+            assert first["rankings"] == []
+            assert first["refresh"]["status"] == "queued"
+            assert calls == 0
+            await run_refresh_batch(schedule=False)
+            return await sectors.iv_ranking("semiconductors", _request())
 
-    failures = asyncio.run(scenario())
-
+    failure = asyncio.run(scenario())
     assert calls == 1
-    assert all(
-        failure.detail["code"] == "sector_iv_cooldown"
-        and int(failure.headers["Retry-After"]) > 0
-        for failure in failures
-    )
+    assert failure["refresh"]["status"] == "failed"
+    assert failure["refresh"]["retry_after_seconds"] > 0
 
 
 def test_owner_cold_sector_scan_persists_for_public_restart_without_strength_hit(
@@ -552,7 +547,7 @@ def test_owner_cold_sector_scan_persists_for_public_restart_without_strength_hit
                 "price": 170.0 if ticker == "NVDA" else 160.0,
                 "iv": 0.48 if ticker == "NVDA" else 0.32,
                 "_stale": False,
-                "as_of": "2026-07-23T15:40:00+00:00",
+                "as_of": datetime.fromtimestamp(now - 30, timezone.utc).isoformat(),
                 "source_status": "active",
                 "provider": "Yahoo/yfinance",
             }
@@ -571,20 +566,24 @@ def test_owner_cold_sector_scan_persists_for_public_restart_without_strength_hit
         with request_owner_access_context(True):
             return await sectors.iv_ranking("semiconductors", _request())
 
+    queued = asyncio.run(owner_scan())
+    assert queued["refresh"]["status"] == "queued"
+    assert calls == 0
+    asyncio.run(run_refresh_batch(schedule=False))
     owner_payload = asyncio.run(owner_scan())
     snapshot_path = snapshot_dir / "semiconductors.json"
 
     assert calls == 1
-    assert owner_payload["snapshot_source"] == "owner_live"
-    assert owner_payload["snapshot_origin"] == "owner_live"
-    assert owner_payload["snapshot_persisted"] is True
+    assert owner_payload["snapshot_source"] == "sector_snapshot"
+    assert owner_payload["snapshot_origin"] == "worker"
+    assert owner_payload["refresh"]["status"] == "idle"
     assert owner_payload["providers"] == ["Yahoo/yfinance"]
     assert [row["ticker"] for row in owner_payload["rankings"]] == [
         "NVDA",
         "AMD",
     ]
     assert snapshot_path.is_file()
-    assert json.loads(snapshot_path.read_text())["snapshot_origin"] == "owner_live"
+    assert json.loads(snapshot_path.read_text())["snapshot_origin"] == "worker"
     original = snapshot_path.read_bytes()
 
     # 模拟发布重启：进程内缓存清空，Strength Top20 仍没有半导体。
@@ -604,7 +603,7 @@ def test_owner_cold_sector_scan_persists_for_public_restart_without_strength_hit
 
     assert calls == 1
     assert public_payload["snapshot_source"] == "sector_snapshot"
-    assert public_payload["snapshot_origin"] == "owner_live"
+    assert public_payload["snapshot_origin"] == "worker"
     assert public_payload["_cached"] is True
     assert public_payload["_stale"] is False
     assert [row["ticker"] for row in public_payload["rankings"]] == [
@@ -624,9 +623,6 @@ def test_public_cold_sector_iv_uses_yahoo_and_persists_restart_snapshot(
         sector_id,
         {"name": "Public Cold Sector", "tickers": ["AAA", "BBB"]},
     )
-    # 冷启动实扫是 visitor_live_pulls 开启后的行为；默认关闭时访客得到
-    # public_snapshot_unavailable（见 test_visitor_action_boundaries）。
-    monkeypatch.setattr(sectors, "request_allows_visitor_live_pulls", lambda _r: True)
     snapshot_dir = tmp_path / "sector-iv-snapshots-v1"
     monkeypatch.setattr(sectors, "_SECTOR_IV_SNAPSHOT_DIR", snapshot_dir)
     monkeypatch.setattr(
@@ -647,7 +643,7 @@ def test_public_cold_sector_iv_uses_yahoo_and_persists_restart_snapshot(
                 "price": 100.0,
                 "iv": 0.25,
                 "_stale": False,
-                "as_of": "2026-07-24T05:00:00+00:00",
+                "as_of": datetime.now(timezone.utc).isoformat(),
                 "source_status": "active",
                 "provider": "Yahoo/yfinance",
             },
@@ -657,7 +653,7 @@ def test_public_cold_sector_iv_uses_yahoo_and_persists_restart_snapshot(
                 "price": 200.0,
                 "iv": 0.5,
                 "_stale": False,
-                "as_of": "2026-07-24T05:00:00+00:00",
+                "as_of": datetime.now(timezone.utc).isoformat(),
                 "source_status": "active",
                 "provider": "Yahoo/yfinance",
             },
@@ -669,17 +665,21 @@ def test_public_cold_sector_iv_uses_yahoo_and_persists_restart_snapshot(
         with request_owner_access_context(False):
             return await sectors.iv_ranking(sector_id, _request())
 
+    queued = asyncio.run(public_read())
+    assert queued["refresh"]["status"] == "queued"
+    assert calls == 0
+    asyncio.run(run_refresh_batch(schedule=False))
     first = asyncio.run(public_read())
     snapshot_path = snapshot_dir / f"{sector_id}.json"
 
     assert calls == 1
-    assert first["snapshot_source"] == "public_live"
-    assert first["snapshot_origin"] == "public_live"
-    assert first["snapshot_persisted"] is True
+    assert first["snapshot_source"] == "sector_snapshot"
+    assert first["snapshot_origin"] == "worker"
+    assert first["refresh"]["status"] == "idle"
     assert first["providers"] == ["Yahoo/yfinance"]
     assert [row["ticker"] for row in first["rankings"]] == ["BBB", "AAA"]
     assert snapshot_path.is_file()
-    assert json.loads(snapshot_path.read_text())["snapshot_origin"] == "public_live"
+    assert json.loads(snapshot_path.read_text())["snapshot_origin"] == "worker"
     original = snapshot_path.read_bytes()
 
     sectors._cache.clear()
@@ -693,7 +693,7 @@ def test_public_cold_sector_iv_uses_yahoo_and_persists_restart_snapshot(
 
     assert calls == 1
     assert second["snapshot_source"] == "sector_snapshot"
-    assert second["snapshot_origin"] == "public_live"
+    assert second["snapshot_origin"] == "worker"
     assert second["_cached"] is True
     assert second["_stale"] is False
     assert snapshot_path.read_bytes() == original

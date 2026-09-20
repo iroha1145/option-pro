@@ -3,7 +3,7 @@ import { LivePrice } from '@/components/shared/LiveQuote';
 /** 当前 ATM IV 在所选板块成分中的真实横截面排名。 */
 import { useMemo, useState } from 'react';
 import { fmtRelative } from '@/lib/format';
-import type { ApiError } from '@/api/client';
+import type { SectorIvRefreshState } from '@/api/modules/sectors';
 import TickerLogo from '@/components/shared/TickerLogo';
 import EmptyState from '@/components/shared/EmptyState';
 import InfoHint from '@/components/shared/InfoHint';
@@ -16,6 +16,8 @@ import { useRetryCountdown } from '@/hooks/useRetryCountdown';
 import { useAppearance } from '@/hooks/useAppearance.ts';
 import { t } from '../../i18n/core.ts';
 import SectorChips from './SectorChips';
+import IvRefreshControl from './IvRefreshControl';
+import type { SectorIvFlowError } from './ivRefreshFlow';
 import type { IvMetaVm, IvRowVm } from './model';
 import { SOURCE_STATUS_CN, ivRankColor } from './model';
 
@@ -54,12 +56,32 @@ interface IvPanelProps {
   data: IvRowVm[];
   meta: IvMetaVm;
   loading: boolean;
-  error: ApiError | null;
+  refreshing: boolean;
+  error: SectorIvFlowError | null;
+  refresh: SectorIvRefreshState;
+  submitting: boolean;
+  actionError: SectorIvFlowError | null;
   onRetry: () => void;
+  onRefresh: () => void;
   onOpenTicker: (ticker: string) => void;
 }
 
-export default function IvPanel({ sectors, sectorId, onSectorChange, data, meta, loading, error, onRetry, onOpenTicker }: IvPanelProps) {
+export default function IvPanel({
+  sectors,
+  sectorId,
+  onSectorChange,
+  data,
+  meta,
+  loading,
+  refreshing,
+  error,
+  refresh,
+  submitting,
+  actionError,
+  onRetry,
+  onRefresh,
+  onOpenTicker,
+}: IvPanelProps) {
   const [desc, setDesc] = useState(false);
   const retrySeconds = useRetryCountdown(error, error?.retryAfter);
 
@@ -87,9 +109,6 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, meta,
           {meta.status !== 'active' && <SourceStatusBadge status={meta.status} />}
         </div>
         <div className="flex items-center gap-3">
-          {meta.asOf && (
-            <span className="hidden font-mono text-micro text-ink-400 tnum sm:inline">{t('更新于')} {fmtRelative(meta.asOf)}</span>
-          )}
           <button
             type="button"
             onClick={() => setDesc((v) => !v)}
@@ -108,18 +127,51 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, meta,
       {/* 板块 pills（随 B1 联动，可手动改） */}
       <SectorChips sectors={sectors} value={sectorId} onChange={onSectorChange} className="mt-3" />
 
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-y border-line py-2.5">
+        <span className="text-micro text-ink-400">
+          {refreshing && refresh.status === 'idle'
+            ? t('正在确认最新结果')
+            : meta.asOf
+              ? t('数据时间 {time}', { time: fmtRelative(meta.asOf) })
+              : t('数据时间暂缺')}
+        </span>
+        <IvRefreshControl
+          refresh={refresh}
+          submitting={submitting}
+          actionError={actionError}
+          hasData={data.length > 0}
+          onRefresh={onRefresh}
+        />
+      </div>
+
       {/* 数据未刷新横幅 */}
       {meta.stale && !loading && !error && (
         <StatusNotice className="mt-3">
           {t('数据暂未刷新，以下为最近一次结果')}
         </StatusNotice>
       )}
+      {error && data.length > 0 && !loading && (
+        <StatusNotice
+          className="mt-3"
+          action={
+            <button
+              type="button"
+              onClick={onRetry}
+              className="min-h-9 rounded-md px-2 text-caption font-medium text-brand-600 hover:bg-brand-50"
+            >
+              {t('重试')}
+            </button>
+          }
+        >
+          {t('读取最新结果失败，仍显示上次数据')}
+        </StatusNotice>
+      )}
 
       {/* 表 / 骨架 / 空态 */}
       <div className="mt-3 overflow-x-auto overscroll-x-contain">
-        {loading ? (
+        {loading && rows.length === 0 ? (
           <SkeletonRows rows={6} />
-        ) : error ? (
+        ) : error && rows.length === 0 ? (
           <EmptyState
             image="/empty-chart.svg"
             title={error.code === 503 ? t('IV 排名暂不可用') : t('IV 排名加载失败')}
@@ -144,16 +196,10 @@ export default function IvPanel({ sectors, sectorId, onSectorChange, data, meta,
           <EmptyState
             image="/empty-chart.svg"
             title={t("该板块暂无 IV 排名数据")}
-            description={t("该板块成分暂无可用的期权样本，可切换板块或重新加载")}
-            action={
-              <button
-                type="button"
-                onClick={onRetry}
-                className="flex min-h-11 items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter,opacity] hover:brightness-105"
-              >
-                <Icon name="refresh" size={14} />
-                {t('重新加载')}
-              </button>
+            description={
+              refresh.status === 'queued' || refresh.status === 'running'
+                ? t('正在准备该板块的 IV 数据，完成后会自动显示')
+                : t('该板块成分暂无可用的期权样本，可切换板块或更新数据')
             }
           />
         ) : (

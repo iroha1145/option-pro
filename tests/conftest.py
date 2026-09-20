@@ -103,3 +103,12 @@ def _isolated_company_logo_cache(monkeypatch, tmp_path):
         if key.startswith("logo:"):
             stocks._endpoint_cache.pop(key, None)
     stocks._logo_retry_after.clear()
+
+
+@pytest.fixture(autouse=True)
+def _isolated_sector_iv_refresh(monkeypatch, tmp_path):
+    """Sector snapshots and their persistent public demand stay local to a test."""
+    from app.api import sectors
+
+    monkeypatch.setattr(sectors, "_SECTOR_IV_SNAPSHOT_DIR", tmp_path / "sector-iv")
+    sectors._public_sector_iv_recent.clear()
