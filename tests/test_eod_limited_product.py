@@ -150,6 +150,19 @@ def test_project_keeps_watch_and_empty_composite() -> None:
     assert payload["capability_flags"]["volume_verified"] is False
 
 
+def test_observation_rows_dedupe_same_security_across_themes() -> None:
+    scored = _scored()
+    second = dict(scored["watch_list"][0])
+    second["sector_context"] = "ai_cloud"
+    second["score"] = 60.0
+    scored["watch_list"].append(second)
+    payload = project_strength_payload(scored, parameters={"profile": "balanced", "timeframe": "mid"})
+    tickers = [row["ticker"] for row in payload["rows"]]
+    assert tickers == ["NVDA"]
+    assert payload["observation_n"] == 1
+    assert payload["rows"][0]["sort_score"] == 71.2
+
+
 def test_store_is_isolated_from_strength_cache(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from app.services.eod_limited import store as eod_store
 

@@ -140,6 +140,22 @@ def project_row(row: Mapping[str, Any], *, list_kind: str) -> dict[str, Any]:
     }
 
 
+def _dedupe_observation_rows(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Keep one row per security/track after cross-theme family collapse."""
+
+    best: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        ticker = str(row.get("ticker") or "")
+        if not ticker:
+            continue
+        key = f"{ticker}|{row.get('stock_or_etf_track') or ''}"
+        current = dict(row)
+        previous = best.get(key)
+        if previous is None or (current.get("sort_score") or -1) > (previous.get("sort_score") or -1):
+            best[key] = current
+    return list(best.values())
+
+
 def _empty_eligible_reason(scored: Mapping[str, Any]) -> str:
     if int(scored.get("eligible_n") or 0) > 0 and int(scored.get("composite_n") or 0) == 0:
         return "consensus_insufficient"
@@ -187,6 +203,7 @@ def project_strength_payload(
         if extra:
             row["observation_family_count"] = extra["count"]
             row["observation_family_scores"] = extra["families"]
+    observation_rows = _dedupe_observation_rows(observation_rows)
     rows = composite_rows if list_kind == LIST_KIND_COMPOSITE else observation_rows
     rows = [row for row in rows if row.get("ticker")]
     rows.sort(key=lambda item: (-(item.get("sort_score") or -1), item["ticker"]))
