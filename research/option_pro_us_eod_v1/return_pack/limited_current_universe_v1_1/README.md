@@ -139,3 +139,7 @@ PYTHONPATH=backend python -m pytest \
 - 正式十年验证条不降低；付费 Sharadar 未买
 
 完整数据迁移仍看 `../limited_current_universe_v1/FULL_DATA_MIGRATION.md`。不要把本版结果倒写成 PIT 通过。未开权重搜索，未追付费 SKU。
+
+## 解释 / 身份 / 入口补丁
+
+见同目录 `FINAL_PATCH.md`。已提交的 20 日快照未回写。
