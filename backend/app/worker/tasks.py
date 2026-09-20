@@ -7,6 +7,7 @@ import math
 import sqlite3
 import threading
 import time
+from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -2000,6 +2001,12 @@ class StrengthRefreshTask:
         self._scanner = scanner
         self._writer = writer
         self._eod_runner = eod_runner
+        # Each public task invocation owns its successful all-variant batch.
+        # Context-local state also prevents overlapping invocations from
+        # treating an earlier explicit refresh as their own publication.
+        self._eod_batch: ContextVar[dict[str, Any] | None] = ContextVar(
+            "strength_eod_batch", default=None,
+        )
         self._snapshot_path = snapshot_path
         self._clock = clock
         self._scheduled_interval_seconds = float(scheduled_interval_seconds)
@@ -2056,8 +2063,9 @@ class StrengthRefreshTask:
     async def _run_eod_limited(self, parameters: dict[str, Any]) -> TaskResult:
         from app.api.strength import strength_scan_parameters_hash
         from app.services.eod_limited import PURPOSE_LIVE
+        from app.services.eod_limited.store import variant_key
         from app.services.eod_limited.worker import run_eod_limited_job
-        from app.services.research_eod_v1.constants import HORIZONS
+        from app.services.research_eod_v1.constants import HORIZONS, PROFILES
 
         horizon = str(parameters.get("timeframe") or "")
         if horizon not in HORIZONS:
@@ -2073,14 +2081,17 @@ class StrengthRefreshTask:
             )
         runner = self._eod_runner or run_eod_limited_job
         digest = strength_scan_parameters_hash(parameters)
+        batch = self._eod_batch.get()
+        outcome = batch.get("outcome") if batch is not None else None
         try:
-            outcome = await _call_local(
-                runner,
-                profile=str(parameters.get("profile") or "balanced"),
-                horizon=horizon,
-                purpose=PURPOSE_LIVE,
-                all_variants=True,
-            )
+            if outcome is None:
+                outcome = await _call_local(
+                    runner,
+                    profile=str(parameters.get("profile") or "balanced"),
+                    horizon=horizon,
+                    purpose=PURPOSE_LIVE,
+                    all_variants=True,
+                )
         except Exception as exc:
             return TaskResult(
                 status="degraded",
@@ -2117,6 +2128,10 @@ class StrengthRefreshTask:
                     "published": False,
                 },
             )
+        if batch is not None and {
+            variant_key(profile, timeframe) for profile in PROFILES for timeframe in HORIZONS
+        }.issubset(outcome.get("available_variants") or []):
+            batch["outcome"] = outcome
         return TaskResult(
             status="idle",
             details={
@@ -2282,6 +2297,13 @@ class StrengthRefreshTask:
 
     @bind_trusted_system_task
     async def run_for_actions(self, actions: list[dict[str, Any]]) -> TaskResult:
+        token = self._eod_batch.set({})
+        try:
+            return await self._run_action_batch(actions)
+        finally:
+            self._eod_batch.reset(token)
+
+    async def _run_action_batch(self, actions: list[dict[str, Any]]) -> TaskResult:
         from app.api.strength import (
             DEFAULT_STRENGTH_SCAN_PARAMETERS,
             normalize_strength_scan_parameters,
@@ -2477,6 +2499,13 @@ class StrengthRefreshTask:
 
     @bind_trusted_system_task
     async def __call__(self) -> TaskResult:
+        token = self._eod_batch.set({})
+        try:
+            return await self._run_scheduled_batch()
+        finally:
+            self._eod_batch.reset(token)
+
+    async def _run_scheduled_batch(self) -> TaskResult:
         from app.api.strength import (
             list_recent_strength_variant_parameters,
             normalize_strength_scan_parameters,
