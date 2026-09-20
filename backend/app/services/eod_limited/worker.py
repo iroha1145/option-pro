@@ -20,7 +20,7 @@ from . import (
     RESEARCH_SEALED_SESSION,
 )
 from .bars import fetch_current_universe_bars, last_bar_session
-from .inference import precompute_session_raws, score_eod_session
+from .inference import precompute_session_raws, precompute_theme_raws, score_eod_session
 from .panel import bars_to_panel, prepare_limited_panel, select_universe_tickers
 from .store import publish_batch, read_batch, variant_key
 
@@ -150,8 +150,10 @@ def run_eod_limited_job(
     horizon_inputs = {}
     for item_profile, item_horizon in wanted:
         if item_horizon not in horizon_inputs:
-            horizon_inputs[item_horizon] = precompute_session_raws(panel, target, registry=registry, horizon=item_horizon)
-        raws, clipped = horizon_inputs[item_horizon]
+            raws, clipped = precompute_session_raws(panel, target, registry=registry, horizon=item_horizon)
+            theme_raws = precompute_theme_raws(raws, clipped, target, registry=registry, themes=themes)
+            horizon_inputs[item_horizon] = (raws, clipped, theme_raws)
+        raws, clipped, theme_raws = horizon_inputs[item_horizon]
         scored = score_eod_session(
             panel,
             target,
@@ -162,6 +164,7 @@ def run_eod_limited_job(
             purpose=purpose,
             precomputed_raws=raws,
             clipped_panel=clipped,
+            precomputed_theme_raws=theme_raws,
             themes=themes,
             algorithms=algorithms,
         )

@@ -11,8 +11,8 @@ from app.services.research_eod_v1.calendar_asof import eod_evaluation_as_of
 from app.services.research_eod_v1.capability import PRICE_ONLY_DIAGNOSTIC
 from app.services.research_eod_v1.composite import m1_consensus
 from app.services.research_eod_v1.constants import ALGORITHMS
-from app.services.research_eod_v1.factors import extract_raw
-from app.services.research_eod_v1.membership import has_complete_session_bar
+from app.services.research_eod_v1.factors import apply_sector_gates, extract_raw
+from app.services.research_eod_v1.membership import has_complete_session_bar, is_theme_candidate, source_is_available
 from app.services.research_eod_v1.snapshot import compute_snapshot
 from app.services.research_eod_v1.series import clip_panel_to_as_of
 from app.services.sectors import SECTORS
@@ -85,6 +85,38 @@ def precompute_session_raws(
     return raws, clipped
 
 
+def precompute_theme_raws(
+    raws: Mapping[str, Any],
+    clipped: Mapping[str, Any],
+    session: date,
+    *,
+    registry: Mapping[str, Any],
+    themes: Sequence[str] | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Apply theme geometry once to this horizon's inputs, without changing them.
+
+    Profile and algorithm decisions still run in compute_snapshot. Only the
+    profile-independent apply_sector_gates call is shared within one job.
+    """
+
+    as_of = eod_evaluation_as_of(session)
+    prepared = {}
+    for theme_id in themes or SECTORS:
+        sector = registry["sectors"][theme_id]
+        target_track = "etf" if sector.get("asset_track") == "etf" else "stock"
+        theme_raws = dict(raws)
+        for sid, series in clipped.items():
+            if sid not in raws or not source_is_available(series, as_of):
+                continue
+            candidate, _reason = is_theme_candidate(
+                series, sector_id=theme_id, session=session, target_track=target_track,
+            )
+            if candidate:
+                theme_raws[sid] = apply_sector_gates(raws[sid], series, sector["gates"])
+        prepared[theme_id] = theme_raws
+    return prepared
+
+
 def score_eod_session(
     panel: Mapping[str, Any],
     session: date,
@@ -100,6 +132,7 @@ def score_eod_session(
     purpose: str = PURPOSE_LIVE,
     precomputed_raws: Mapping[str, Any] | None = None,
     clipped_panel: Mapping[str, Any] | None = None,
+    precomputed_theme_raws: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     flags = resolve_capability_flags(
         volume_verified=volume_verified,
@@ -117,6 +150,7 @@ def score_eod_session(
     else:
         raws, clipped = dict(precomputed_raws), dict(clipped_panel)
     for theme_id in theme_ids:
+        theme_raws = None if precomputed_theme_raws is None else precomputed_theme_raws.get(theme_id)
         for algorithm in families:
             raw = compute_snapshot(
                 as_of,
@@ -128,7 +162,8 @@ def score_eod_session(
                 profile=profile,
                 horizon=horizon,
                 source_finalized_through=session,
-                precomputed_raws=raws,
+                precomputed_raws=raws if theme_raws is None else theme_raws,
+                reapply_theme_gates=theme_raws is None,
                 already_session_clipped=True,
             )
             scored = apply_price_only_track(

@@ -618,7 +618,10 @@ def test_panel_excludes_known_foreign_and_otc_names() -> None:
 
 
 def test_all_variants_reuses_horizon_raws_without_changing_scores(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from app.services.eod_limited import worker
+    import json
+    from dataclasses import asdict
+
+    from app.services.eod_limited import inference, worker
     from app.services.eod_limited.panel import prepare_limited_panel
     from app.services.eod_limited.store import read_batch
     from app.services.research_eod_v1.config_load import load_registry
@@ -627,18 +630,45 @@ def test_all_variants_reuses_horizon_raws_without_changing_scores(tmp_path: Path
     session = date(2026, 9, 18)
     panel = prepare_limited_panel(worker.build_synthetic_panel(end=session))
     original_precompute = worker.precompute_session_raws
+    original_theme_precompute = worker.precompute_theme_raws
+    original_apply_gates = inference.apply_sector_gates
     calls = []
+    gate_calls = []
+    retained_inputs = []
+
+    def raw_fingerprint(raws):
+        return json.dumps({sid: asdict(raw) for sid, raw in raws.items()}, sort_keys=True, default=str)
 
     def counted(*args, **kwargs):
         calls.append(kwargs["horizon"])
         return original_precompute(*args, **kwargs)
 
+    def counted_gates(raw, series, gates):
+        gate_calls.append((raw.security_id, id(gates)))
+        return original_apply_gates(raw, series, gates)
+
+    def checked_theme_precompute(raws, *args, **kwargs):
+        before = raw_fingerprint(raws)
+        prepared = original_theme_precompute(raws, *args, **kwargs)
+        assert raw_fingerprint(raws) == before
+        assert prepared["semiconductors"]["NVDA"] is not prepared["ai_cloud"]["NVDA"]
+        retained_inputs.append((raws, before, prepared, {theme: raw_fingerprint(items) for theme, items in prepared.items()}))
+        return prepared
+
     monkeypatch.setattr(worker, "precompute_session_raws", counted)
+    monkeypatch.setattr(worker, "precompute_theme_raws", checked_theme_precompute)
+    monkeypatch.setattr(inference, "apply_sector_gates", counted_gates)
     worker.run_eod_limited_job(
         session=session, panel=panel, root=tmp_path, all_variants=True,
-        themes=["semiconductors", "ai_cloud", "etfs"], algorithms=ALGORITHMS,
+        algorithms=ALGORITHMS,
     )
     assert calls == list(HORIZONS)
+    # Six semiconductor names, one additional AI theme appearance, two ETFs.
+    assert len(gate_calls) == len(HORIZONS) * 9
+    assert len({id(raws) for raws, *_rest in retained_inputs}) == len(HORIZONS)
+    for raws, before, prepared, prepared_before in retained_inputs:
+        assert raw_fingerprint(raws) == before
+        assert {theme: raw_fingerprint(items) for theme, items in prepared.items()} == prepared_before
     actual = read_batch(tmp_path)["variants"]
     registry = load_registry()
     for horizon in HORIZONS:
@@ -648,13 +678,40 @@ def test_all_variants_reuses_horizon_raws_without_changing_scores(tmp_path: Path
             scored = worker.score_eod_session(
                 panel, session, registry=registry, profile=profile, horizon=horizon,
                 precomputed_raws=raws, clipped_panel=clipped,
-                themes=["semiconductors", "ai_cloud", "etfs"], algorithms=ALGORITHMS,
+                algorithms=ALGORITHMS,
             )
             expected = worker._compact_variant(scored)
             observed = dict(actual[variant_key(profile, horizon)])
             expected.pop("generated_at")
             observed.pop("generated_at")
             # Serialized tuples become lists in the stored batch.
-            import json
-
             assert observed == json.loads(json.dumps(expected, default=str))
+
+
+def test_theme_precomputation_is_not_retained_after_failed_job(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.services.eod_limited import worker
+    from app.services.eod_limited.store import snapshot_path
+
+    session = date(2026, 9, 18)
+    panel = worker.build_synthetic_panel(end=session)
+    original_precompute = worker.precompute_theme_raws
+    original_score = worker.score_eod_session
+    calls = []
+
+    def counted(*args, **kwargs):
+        calls.append(args[0])
+        return original_precompute(*args, **kwargs)
+
+    def fail_scoring(*args, **kwargs):
+        raise RuntimeError("injected scoring failure")
+
+    monkeypatch.setattr(worker, "precompute_theme_raws", counted)
+    monkeypatch.setattr(worker, "score_eod_session", fail_scoring)
+    kwargs = dict(session=session, panel=panel, root=tmp_path, themes=["semiconductors"], algorithms=["A_trend_quality"])
+    with pytest.raises(RuntimeError, match="injected scoring failure"):
+        worker.run_eod_limited_job(**kwargs)
+    assert not snapshot_path(tmp_path).exists()
+    monkeypatch.setattr(worker, "score_eod_session", original_score)
+    assert worker.run_eod_limited_job(**kwargs)["status"] == "RAN"
+    assert len(calls) == 2
+    assert calls[0] is not calls[1]
