@@ -15,7 +15,6 @@ from .panel import current_universe_tickers
 DOWNLOAD_PARAMS = {
     "interval": "1d",
     "group_by": "ticker",
-    "threads": False,
     "progress": False,
     "auto_adjust": False,
     "repair": False,

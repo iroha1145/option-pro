@@ -21,5 +21,6 @@
 
 - 实时推断：`purpose=live_eod_inference`，日期为最近完整交易日。
 - `2024-06-28` 只能标「历史示例」，不能当最新。
-- 合成输入必须标 `SYNTHETIC`。
+- 合成输入必须标 `SYNTHETIC`。历史种子面板必须覆盖目标交易日，并带可确认高低点，避免只有标签没有观察行。
 - 默认不把 `volume_verified` / `dollar_liquidity_verified` 设为 true。
+- Worker 日线走现有 `download_in_bounded_batches`，不要再传 `threads`。

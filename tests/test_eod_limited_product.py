@@ -73,6 +73,14 @@ def _scored(*, session: str = "2024-06-28", purpose: str = PURPOSE_HISTORICAL, e
     }
 
 
+def test_eod_bar_download_does_not_override_batch_threads() -> None:
+    from app.services.eod_limited.bars import DOWNLOAD_PARAMS
+
+    assert "threads" not in DOWNLOAD_PARAMS
+    assert DOWNLOAD_PARAMS["group_by"] == "ticker"
+    assert DOWNLOAD_PARAMS["auto_adjust"] is False
+
+
 def test_capability_flags_default_false() -> None:
     flags = resolve_capability_flags()
     assert flags == {
