@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
 import * as flow from '../src/lib/screenerScanFlow.ts';
+import * as eodView from '../src/lib/eodLimitedView.ts';
 import { ApiError, toQuery } from '../src/api/client.ts';
 import { marketGet, resetMarketReadState } from '../src/api/marketRead.ts';
 import * as live from '../src/api/live.ts';
@@ -20,7 +21,7 @@ function harness(overrides = {}) {
   const state = { rows: null, history: [], scanPhase: null };
   let pending = null;
   const scope = {
-    ...flow, ApiError, Date, Promise, Object, Map, Boolean,
+    ...flow, ...eodView, ApiError, Date, Promise, Object, Map, Boolean,
     setTimeout: (cb) => { queueMicrotask(cb); return 1; },
     useCallback: (fn) => fn,
     isOwner: true, isMock: false,

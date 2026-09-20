@@ -491,7 +491,7 @@ def _maybe_register_ranking_variant_demand(
     )
     try:
         return register_strength_variant_demand(parameters, principal=principal)
-    except ValueError:
+    except (ValueError, OSError, PermissionError):
         return None
 
 
