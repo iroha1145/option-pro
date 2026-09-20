@@ -19,8 +19,9 @@ export default function StrengthBar({
 }) {
   /* live 无强度分（契约未覆盖）：空轨道 + 「—」，不编造 0 分 */
   const valid = typeof score === 'number' && Number.isFinite(score);
+  const displayScore = valid ? score.toFixed(1) : '—';
   return (
-    <span className={cn('inline-flex items-center gap-2', className)} aria-label={valid ? t('强度分 {score}', { score }) : t('强度分缺失')}>
+    <span className={cn('inline-flex items-center gap-2', className)} aria-label={valid ? t('强度分 {score}', { score: displayScore }) : t('强度分缺失')}>
       <span className="strength-track h-1 overflow-hidden rounded-pill bg-line" style={{ width }} role="presentation">
         {valid && (
           <span
@@ -29,7 +30,7 @@ export default function StrengthBar({
           />
         )}
       </span>
-      {showScore && <span className="text-[12px] font-medium leading-[18px] text-ink-600 tnum">{valid ? score : '—'}</span>}
+      {showScore && <span className="text-[12px] font-medium leading-[18px] text-ink-600 tnum">{displayScore}</span>}
     </span>
   );
 }
