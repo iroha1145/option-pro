@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import json
 import socket
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
 
@@ -27,6 +28,7 @@ from app.services.research_eod_v1.limited_v1 import (
     NETWORK_COUNTER,
     RETURN_BASIS,
     VOLUME_SESSION_UNVERIFIED,
+    LimitedSessionError,
     _compact_composite,
     acceptance_sessions,
     apply_price_only_track,
@@ -37,6 +39,9 @@ from app.services.research_eod_v1.limited_v1 import (
     inventory_inputs,
     limited_config_hash,
     preview_html,
+    replay_sessions,
+    resolve_capability_flags,
+    resolve_limited_session,
     row_compare_payload,
     run_limited_v1,
     score_session,
@@ -761,5 +766,230 @@ def test_synthetic_flag_does_not_relabel_yahoo_cache(tmp_path: Path) -> None:
     )
     assert report["synthetic"] is True
     assert report["load"]["sources"] == ["synthetic_fixture_panel"]
+    assert report["session_remapped"] is True
+    assert report["session_remap_reason"] == "synthetic_fixture_end"
+    assert report["requested_session"] == "2024-06-28"
+    assert report["session_date"] != "2024-06-28"
     html = (tmp_path / "preview.html").read_text(encoding="utf-8")
     assert "SYNTHETIC" in html
+
+
+def test_fresh_low_score_reason_is_retained() -> None:
+    registry = load_registry()
+    scored = apply_price_only_track(
+        {
+            "rows": [
+                {
+                    "security_id": "NVDA",
+                    "algorithm_id": "A_trend_quality",
+                    "status": "rejected",
+                    "score": 50,
+                    "factors": {"T": 50, "M": 50, "S": 50, "B": 50, "P": 50, "V": 50, "R": 50, "G": None},
+                    "rejection_reasons": ["LOW_SCORE"],
+                    "gate_results": {"setup": (), "common": ["LOW_SCORE"], "venue": ""},
+                }
+            ]
+        },
+        registry=registry,
+        theme_id="semiconductors",
+        family="A_trend_quality",
+        profile="balanced",
+        horizon="mid",
+        volume_verified=True,
+    )
+    row = scored["rows"][0]
+    assert row["score"] == 50
+    assert row["status"] == "rejected"
+    assert "LOW_SCORE" in row["rejection_reasons"]
+    assert row["gate_results_source"] == "upstream_full_model"
+
+
+def test_fresh_missing_required_factor_reason_is_retained() -> None:
+    registry = load_registry()
+    scored = apply_price_only_track(
+        {
+            "rows": [
+                {
+                    "security_id": "NVDA",
+                    "algorithm_id": "A_trend_quality",
+                    "status": "rejected",
+                    "score": None,
+                    "factors": {"T": None, "M": 90, "S": 90, "B": 90, "P": 90, "V": 90, "R": 90, "G": None},
+                    "rejection_reasons": ["MISSING_SCORE"],
+                }
+            ]
+        },
+        registry=registry,
+        theme_id="semiconductors",
+        family="A_trend_quality",
+        profile="balanced",
+        horizon="mid",
+        volume_verified=True,
+    )
+    row = scored["rows"][0]
+    assert row["score"] is None
+    assert row["status"] == "rejected"
+    assert "DATA_INSUFFICIENT" in row["rejection_reasons"]
+    assert "MISSING_SCORE" not in row["rejection_reasons"]
+
+
+def test_consumed_quality_and_amount_fields_change_identity() -> None:
+    day = date(2024, 6, 27)
+    original = {"AAA": [_bar("AAA", day, 100.0, 95.0)]}
+    base = dataset_hash(original)
+    assert dataset_hash({"AAA": [replace(original["AAA"][0], partial=True)]}) != base
+    assert dataset_hash({"AAA": [replace(original["AAA"][0], halted=True)]}) != base
+    assert dataset_hash({"AAA": [replace(original["AAA"][0], dollar_volume=1.0)]}) != base
+    assert dataset_hash({"AAA": [replace(original["AAA"][0], raw_close=99.0)]}) != base
+    assert dataset_hash({"AAA": [replace(original["AAA"][0], missing=True)]}) != base
+    assert dataset_hash({"AAA": [replace(original["AAA"][0], raw_open=1.0)]}) == base
+
+
+def test_effective_capability_values_bind_published_identity() -> None:
+    registry = load_registry()
+    unverified = limited_config_hash(
+        registry=registry,
+        profile="balanced",
+        horizon="mid",
+        track=PRICE_ONLY_DIAGNOSTIC,
+        data_hash="one",
+        volume_verified=False,
+    )
+    verified = limited_config_hash(
+        registry=registry,
+        profile="balanced",
+        horizon="mid",
+        track=PRICE_ONLY_DIAGNOSTIC,
+        data_hash="one",
+        volume_verified=True,
+    )
+    mixed = limited_config_hash(
+        registry=registry,
+        profile="balanced",
+        horizon="mid",
+        track=PRICE_ONLY_DIAGNOSTIC,
+        data_hash="one",
+        volume_verified=True,
+        dollar_liquidity_verified=False,
+        volume_session_verified=True,
+    )
+    scoped = limited_config_hash(
+        registry=registry,
+        profile="balanced",
+        horizon="mid",
+        track=PRICE_ONLY_DIAGNOSTIC,
+        data_hash="one",
+        volume_verified=False,
+        themes=("semiconductors",),
+        algorithms=("A_trend_quality",),
+    )
+    assert unverified != verified
+    assert mixed != verified
+    assert mixed != unverified
+    assert scoped != unverified
+    assert resolve_capability_flags(volume_verified=False)["dollar_liquidity_verified"] is False
+    days, panel = _panel()
+    watch = score_session(
+        panel,
+        days[-1],
+        registry=registry,
+        volume_verified=False,
+        data_hash="synthetic-test",
+        themes=("semiconductors",),
+        algorithms=("A_trend_quality",),
+    )
+    eligible = score_session(
+        panel,
+        days[-1],
+        registry=registry,
+        volume_verified=True,
+        data_hash="synthetic-test",
+        themes=("semiconductors",),
+        algorithms=("A_trend_quality",),
+    )
+    assert watch["config_hash"] != eligible["config_hash"]
+    assert watch["run_signature"] != eligible["run_signature"]
+    assert watch["capability_flags"]["dollar_liquidity_verified"] is False
+    assert eligible["capability_flags"]["dollar_liquidity_verified"] is True
+
+
+def test_explicit_non_trading_session_is_invalid(tmp_path: Path) -> None:
+    try:
+        resolve_limited_session(date(2024, 6, 1), synthetic=False)
+    except LimitedSessionError as exc:
+        assert exc.code == "INVALID_SESSION"
+    else:
+        raise AssertionError("expected INVALID_SESSION")
+    kept = resolve_limited_session(date(2024, 6, 3), synthetic=False)
+    assert kept["session"] == date(2024, 6, 3)
+    assert kept["session_remapped"] is False
+    omitted = resolve_limited_session(None, synthetic=False)
+    assert omitted["session"] == ALLOWED_END
+    assert omitted["session_defaulted"] is True
+    days, panel = _panel()
+    report = run_limited_v1(
+        out_dir=tmp_path,
+        session=date(2024, 6, 1),
+        replay_days=1,
+        panel=panel,
+        volume_verified=True,
+        data_hash="synthetic-test",
+        synthetic=False,
+        smoke=False,
+        themes=("semiconductors",),
+        algorithms=("A_trend_quality",),
+    )
+    assert report["status"] == "INVALID_SESSION"
+    assert report["code"] == "INVALID_SESSION"
+    assert (tmp_path / "preview.html").exists() is False or report["status"] != "RAN"
+
+
+def test_replay_publish_failure_is_not_ran_success(tmp_path: Path, monkeypatch) -> None:
+    days, panel = _panel()
+    registry = load_registry()
+    first = close_task(
+        panel=panel,
+        session=days[-2],
+        out_dir=tmp_path,
+        registry=registry,
+        volume_verified=True,
+        data_hash="synthetic-test",
+        themes=("semiconductors",),
+        algorithms=("A_trend_quality",),
+    )
+    previous = dict(first["published"])
+
+    def fail_publish(path, scored):
+        return {**previous, "integrity": "stale_previous_retained", "publish_failed": True}
+
+    monkeypatch.setattr("app.services.research_eod_v1.limited_v1.publish_limited_snapshot", fail_publish)
+    replay = replay_sessions(
+        panel,
+        [days[-1]],
+        out_dir=tmp_path,
+        registry=registry,
+        volume_verified=True,
+        data_hash="synthetic-test",
+        themes=("semiconductors",),
+        algorithms=("A_trend_quality",),
+        synthetic=True,
+    )
+    assert replay["publish_failed_n"] == 1
+    assert replay["attempted_sessions"] == [days[-1].isoformat()]
+    assert replay["served_sessions"] == [first["published"]["session_date"]]
+    report = run_limited_v1(
+        out_dir=tmp_path / "failed-run",
+        session=days[-1],
+        replay_days=1,
+        panel=panel,
+        volume_verified=True,
+        data_hash="synthetic-test",
+        synthetic=True,
+        smoke=False,
+        themes=("semiconductors",),
+        algorithms=("A_trend_quality",),
+    )
+    assert report["status"] == "PUBLISH_FAILED"
+    assert report["status"] != "RAN"
+    assert report["publish_failed_n"] == 1
+    assert report["replay"]["publish_failed_n"] == 1

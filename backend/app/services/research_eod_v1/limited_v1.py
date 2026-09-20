@@ -20,7 +20,6 @@ from app.services.market_calendar import trading_sessions
 from app.services.research_eod_v1 import FEATURE_VERSION
 from app.services.research_eod_v1.calendar_asof import eod_evaluation_as_of
 from app.services.research_eod_v1.capability import (
-    HARD_REJECTIONS,
     PRICE_ONLY_DIAGNOSTIC,
     SCORE_DERIVED_REASONS,
     diagnostic_weights,
@@ -201,17 +200,130 @@ def clip_bars(bars: Sequence[ResearchBar], *, end: date = ALLOWED_END) -> list[R
     return [bar for bar in bars if bar.session_date <= end and bar.session_date < HOLDOUT_START]
 
 
+DATASET_HASH_PROJECTION = {
+    "consumed": (
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+        "raw_close",
+        "dollar_volume",
+        "volume_scope",
+        "price_adjustment",
+        "missing",
+        "partial",
+        "halted",
+        "vintage_status",
+        "economic_known_at",
+    ),
+    "source_only": ("tri",),
+    "not_consumed_by_limited_compute": (
+        "raw_open",
+        "retrieved_at",
+        "source_published_at",
+        "vendor_tri",
+    ),
+}
+
+
+class LimitedSessionError(ValueError):
+    """Explicit session is outside the sealed development-zone trading calendar."""
+
+    def __init__(self, session: date | None, *, code: str = "INVALID_SESSION", detail: str = ""):
+        self.session = session
+        self.code = code
+        super().__init__(detail or f"{code}:{session}")
+
+
+def resolve_capability_flags(
+    *,
+    volume_verified: bool = False,
+    dollar_liquidity_verified: bool | None = None,
+    volume_session_verified: bool | None = None,
+) -> dict[str, bool]:
+    dollar_ok = volume_verified if dollar_liquidity_verified is None else dollar_liquidity_verified
+    session_ok = volume_verified if volume_session_verified is None else volume_session_verified
+    return {
+        "dollar_liquidity_verified": bool(dollar_ok),
+        "volume_session_verified": bool(session_ok),
+        "volume_verified": bool(volume_verified),
+    }
+
+
+def published_scope(
+    *,
+    themes: Sequence[str] | None = None,
+    algorithms: Sequence[str] | None = None,
+) -> dict[str, Any]:
+    return {
+        "themes": "all" if themes is None else [str(item) for item in themes],
+        "algorithms": "all" if algorithms is None else [str(item) for item in algorithms],
+    }
+
+
+def resolve_limited_session(
+    session: date | None,
+    *,
+    synthetic: bool = False,
+    panel: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Keep omitted dates defaulting to ALLOWED_END. Never silently move an explicit real date."""
+
+    implicit = session is None
+    target = ALLOWED_END if implicit else session
+    meta: dict[str, Any] = {
+        "requested_session": None if session is None else session.isoformat(),
+        "session_explicit": not implicit,
+        "session_defaulted": implicit,
+        "session_remapped": False,
+        "session_remap_reason": None,
+        "served_session": None,
+    }
+    if synthetic:
+        dated = [
+            series.dates[-1]
+            for series in (panel or {}).values()
+            if getattr(series, "dates", None)
+        ]
+        if not dated:
+            raise LimitedSessionError(target, detail="synthetic_panel_has_no_dates")
+        last = max(dated)
+        present = any(target in getattr(series, "dates", []) for series in (panel or {}).values())
+        if not present:
+            meta["session_remapped"] = True
+            meta["session_remap_reason"] = "synthetic_fixture_end"
+            target = last
+        meta["session"] = target
+        meta["served_session"] = target.isoformat()
+        return meta
+    allowed = set(trading_sessions(HISTORY_START, ALLOWED_END))
+    if target not in allowed or target >= HOLDOUT_START or target > ALLOWED_END:
+        raise LimitedSessionError(
+            target,
+            code="INVALID_SESSION",
+            detail="explicit session must be a development-zone trading day",
+        )
+    meta["session"] = target
+    meta["served_session"] = target.isoformat()
+    return meta
+
+
 def dataset_hash(bars: Mapping[str, Sequence[ResearchBar]], *, include_vendor_tri: bool = False) -> str:
     """Hash the series this limited path actually consumes. Vendor TRI is a source side-digest."""
 
     digest = hashlib.sha256()
     digest.update(f"return_basis={RETURN_BASIS}|transform={RETURN_TRANSFORM_VERSION}\n".encode())
+    digest.update(f"projection={canonical_json(DATASET_HASH_PROJECTION)}\n".encode())
     for symbol in sorted(bars):
         for bar in clip_bars(bars[symbol]):
             digest.update(
                 (
                     f"{symbol}|{bar.session_date}|{bar.open}|{bar.high}|{bar.low}|{bar.close}|{bar.volume}"
-                    f"|used_return={bar.close}|vscope={bar.volume_scope}|padj={bar.price_adjustment}\n"
+                    f"|used_return={bar.close}|raw_close={bar.raw_close}|dollar_volume={bar.dollar_volume}"
+                    f"|vscope={bar.volume_scope}|padj={bar.price_adjustment}|missing={bar.missing}"
+                    f"|partial={bar.partial}|halted={bar.halted}|vintage={bar.vintage_status}"
+                    f"|known_at={bar.economic_known_at}\n"
                 ).encode()
             )
             if include_vendor_tri:
@@ -380,7 +492,17 @@ def limited_config_hash(
     track: str,
     data_hash: str,
     theme_members: Mapping[str, Sequence[str]] | None = None,
+    volume_verified: bool = False,
+    dollar_liquidity_verified: bool | None = None,
+    volume_session_verified: bool | None = None,
+    themes: Sequence[str] | None = None,
+    algorithms: Sequence[str] | None = None,
 ) -> str:
+    flags = resolve_capability_flags(
+        volume_verified=volume_verified,
+        dollar_liquidity_verified=dollar_liquidity_verified,
+        volume_session_verified=volume_session_verified,
+    )
     body = {
         "capability_policy": {
             "dollar_liquidity": "watch_all_families_when_unverified",
@@ -389,6 +511,7 @@ def limited_config_hash(
             "track": track,
             "volume_session": VOLUME_SCOPE,
         },
+        "capability_flags": flags,
         "compute_version": COMPUTE_VERSION,
         "data_hash": data_hash,
         "feature_version": FEATURE_VERSION,
@@ -396,6 +519,7 @@ def limited_config_hash(
         "member_policy": MEMBER_POLICY,
         "mode": MODE,
         "profile": profile,
+        "published_scope": published_scope(themes=themes, algorithms=algorithms),
         "reference_policy": "same_track_plus_spy_qqq",
         "registry": registry,
         "return_basis": RETURN_BASIS,
@@ -419,8 +543,13 @@ def apply_price_only_track(
     dollar_liquidity_verified: bool | None = None,
     volume_session_verified: bool | None = None,
 ) -> dict[str, Any]:
-    dollar_ok = volume_verified if dollar_liquidity_verified is None else dollar_liquidity_verified
-    session_ok = volume_verified if volume_session_verified is None else volume_session_verified
+    flags = resolve_capability_flags(
+        volume_verified=volume_verified,
+        dollar_liquidity_verified=dollar_liquidity_verified,
+        volume_session_verified=volume_session_verified,
+    )
+    dollar_ok = flags["dollar_liquidity_verified"]
+    session_ok = flags["volume_session_verified"]
     weights = resolve_weights(registry, theme_id, family, profile, horizon)
     track = PRICE_ONLY_DIAGNOSTIC
     diag = diagnostic_weights(weights, track=track, family=family)
@@ -436,6 +565,8 @@ def apply_price_only_track(
         updated["return_basis"] = RETURN_BASIS
         inherited = [str(reason) for reason in (updated.get("rejection_reasons") or ())]
         updated["rejection_reasons"] = [reason for reason in inherited if reason not in SCORE_DERIVED_REASONS]
+        if updated.get("gate_results") is not None:
+            updated["gate_results_source"] = "upstream_full_model"
         if updated.get("factors"):
             scored = rescore_row(
                 updated,
@@ -447,12 +578,7 @@ def apply_price_only_track(
             updated["score"] = scored["score"]
             updated["observed_feature_coverage"] = scored["coverage"]
             updated["effective_weights"] = diag
-            hard = [
-                reason
-                for reason in scored["rejection_reasons"]
-                if reason in HARD_REJECTIONS or reason not in SCORE_DERIVED_REASONS
-            ]
-            updated["rejection_reasons"] = list(dict.fromkeys(hard))
+            updated["rejection_reasons"] = list(dict.fromkeys(scored["rejection_reasons"]))
             updated["status"] = "eligible" if scored["final_eligible"] else "rejected"
         if updated.get("status") == "eligible" and not dollar_ok:
             updated["status"] = "watch"
@@ -501,6 +627,7 @@ def _compact_row(row: Mapping[str, Any]) -> dict[str, Any]:
         "stock_or_etf_track",
         "theme_ids",
         "gate_results",
+        "gate_results_source",
         "effective_weights",
         "known_support",
         "known_resistance",
@@ -600,6 +727,8 @@ def score_session(
     profile: str = "balanced",
     horizon: str = "mid",
     volume_verified: bool = False,
+    dollar_liquidity_verified: bool | None = None,
+    volume_session_verified: bool | None = None,
     data_hash: str = "",
     themes: Sequence[str] | None = None,
     algorithms: Sequence[str] | None = None,
@@ -608,6 +737,12 @@ def score_session(
 ) -> dict[str, Any]:
     if session >= HOLDOUT_START or session > ALLOWED_END:
         raise ValueError("session_outside_development_zone")
+    flags = resolve_capability_flags(
+        volume_verified=volume_verified,
+        dollar_liquidity_verified=dollar_liquidity_verified,
+        volume_session_verified=volume_session_verified,
+    )
+    scope = published_scope(themes=themes, algorithms=algorithms)
     panel = prepare_limited_panel(panel)
     as_of = eod_evaluation_as_of(session)
     theme_ids = list(themes or SECTORS)
@@ -643,6 +778,8 @@ def score_session(
                 profile=profile,
                 horizon=horizon,
                 volume_verified=volume_verified,
+                dollar_liquidity_verified=dollar_liquidity_verified,
+                volume_session_verified=volume_session_verified,
             )
             rows = [_compact_row(row) for row in scored["rows"]]
             counts = Counter(str(row.get("status")) for row in rows)
@@ -692,6 +829,11 @@ def score_session(
         horizon=horizon,
         track=PRICE_ONLY_DIAGNOSTIC,
         data_hash=data_hash,
+        volume_verified=volume_verified,
+        dollar_liquidity_verified=dollar_liquidity_verified,
+        volume_session_verified=volume_session_verified,
+        themes=themes,
+        algorithms=algorithms,
     )
     identity = run_signature(
         registry=registry,
@@ -717,6 +859,8 @@ def score_session(
             "return_transform_version": RETURN_TRANSFORM_VERSION,
             "industry_policy": "none_without_independent_source",
             "residual": "market_only",
+            **flags,
+            "published_scope": scope,
         },
     )
     return {
@@ -732,6 +876,8 @@ def score_session(
         "profile": profile,
         "horizon": horizon,
         "capability_track": PRICE_ONLY_DIAGNOSTIC,
+        "capability_flags": flags,
+        "published_scope": scope,
         "member_policy": MEMBER_POLICY,
         "volume_scope": VOLUME_SCOPE,
         "momentum_basis": MOMENTUM_BASIS,
@@ -763,6 +909,8 @@ def smoke_864(
     *,
     registry: Mapping[str, Any],
     volume_verified: bool = False,
+    dollar_liquidity_verified: bool | None = None,
+    volume_session_verified: bool | None = None,
     data_hash: str = "",
 ) -> list[dict[str, Any]]:
     rows = []
@@ -776,6 +924,8 @@ def smoke_864(
                 profile=profile,
                 horizon=horizon,
                 volume_verified=volume_verified,
+                dollar_liquidity_verified=dollar_liquidity_verified,
+                volume_session_verified=volume_session_verified,
                 data_hash=data_hash,
                 precomputed_raws=raws,
                 clipped_panel=clipped,
@@ -821,6 +971,8 @@ def publish_limited_snapshot(path: Path, scored: Mapping[str, Any]) -> dict[str,
         "volume_scope": VOLUME_SCOPE,
         "momentum_basis": MOMENTUM_BASIS,
         "return_basis": RETURN_BASIS,
+        "capability_flags": scored.get("capability_flags"),
+        "published_scope": scored.get("published_scope"),
         "member_policy": MEMBER_POLICY,
         "holdout_sealed": True,
         "execution_unverified": True,
@@ -1012,6 +1164,8 @@ def close_task(
     profile: str = "balanced",
     horizon: str = "mid",
     volume_verified: bool = False,
+    dollar_liquidity_verified: bool | None = None,
+    volume_session_verified: bool | None = None,
     data_hash: str = "",
     themes: Sequence[str] | None = None,
     algorithms: Sequence[str] | None = None,
@@ -1027,6 +1181,8 @@ def close_task(
         profile=profile,
         horizon=horizon,
         volume_verified=volume_verified,
+        dollar_liquidity_verified=dollar_liquidity_verified,
+        volume_session_verified=volume_session_verified,
         data_hash=data_hash,
         themes=themes,
         algorithms=algorithms,
@@ -1089,6 +1245,8 @@ def replay_sessions(
     profile: str = "balanced",
     horizon: str = "mid",
     volume_verified: bool = False,
+    dollar_liquidity_verified: bool | None = None,
+    volume_session_verified: bool | None = None,
     data_hash: str = "",
     themes: Sequence[str] | None = None,
     algorithms: Sequence[str] | None = None,
@@ -1105,12 +1263,15 @@ def replay_sessions(
             profile=profile,
             horizon=horizon,
             volume_verified=volume_verified,
+            dollar_liquidity_verified=dollar_liquidity_verified,
+            volume_session_verified=volume_session_verified,
             data_hash=data_hash,
             themes=themes,
             algorithms=algorithms,
             synthetic=synthetic,
         )
         scored = result["scored"]
+        published = result["published"]
         days.append({
             "session_date": scored["session_date"],
             "eligible_n": scored["eligible_n"],
@@ -1118,13 +1279,22 @@ def replay_sessions(
             "composite_n": scored["composite_n"],
             "run_signature": scored["run_signature"],
             "config_hash": scored["config_hash"],
+            "publish_failed": bool(result.get("publish_failed")),
+            "attempted_session": scored["session_date"],
+            "served_session": published.get("session_date"),
+            "integrity": published.get("integrity"),
         })
+    failed = [item for item in days if item.get("publish_failed")]
     return {
         "sessions": days,
         "elapsed_s": round(time.perf_counter() - started, 3),
         "network_yahoo_batches": NETWORK_COUNTER["yahoo_batch_downloads"],
         "preview_provider_calls": NETWORK_COUNTER["preview_provider_calls"],
         "ordered": [item["session_date"] for item in days] == [session.isoformat() for session in sessions],
+        "publish_failed": failed,
+        "publish_failed_n": len(failed),
+        "attempted_sessions": [item["attempted_session"] for item in days],
+        "served_sessions": [item["served_session"] for item in days],
     }
 
 
@@ -1141,6 +1311,8 @@ def run_limited_v1(
     provider: YahooDiagnosticProvider | None = None,
     panel: Mapping[str, Any] | None = None,
     volume_verified: bool = False,
+    dollar_liquidity_verified: bool | None = None,
+    volume_session_verified: bool | None = None,
     data_hash: str = "",
     synthetic: bool = False,
     themes: Sequence[str] | None = None,
@@ -1205,13 +1377,22 @@ def run_limited_v1(
         }
         atomic_write_json(dest / "run_report.json", report)
         return report
-    target = session or ALLOWED_END
-    if synthetic:
-        last = max(series.dates[-1] for series in panel.values() if getattr(series, "dates", None))
-        if all(target not in getattr(series, "dates", []) for series in panel.values()):
-            target = last
-    elif target not in set(trading_sessions(HISTORY_START, ALLOWED_END)):
-        target = acceptance_sessions(end=ALLOWED_END, count=1)[0]
+    try:
+        resolved = resolve_limited_session(session, synthetic=synthetic, panel=panel)
+    except LimitedSessionError as exc:
+        report = {
+            "status": "INVALID_SESSION",
+            "code": exc.code,
+            "mode": MODE,
+            "evidence_status": EVIDENCE_STATUS,
+            "session": None if exc.session is None else exc.session.isoformat(),
+            "message": str(exc),
+            "synthetic": synthetic,
+            "production_default_unchanged": True,
+        }
+        atomic_write_json(dest / "run_report.json", report)
+        return report
+    target = resolved["session"]
     window = acceptance_sessions(end=target, count=min(replay_days, ACCEPTANCE_SESSIONS)) if replay_days > 1 else [target]
     replay = replay_sessions(
         panel,
@@ -1221,6 +1402,8 @@ def run_limited_v1(
         profile=profile,
         horizon=horizon,
         volume_verified=volume_verified,
+        dollar_liquidity_verified=dollar_liquidity_verified,
+        volume_session_verified=volume_session_verified,
         data_hash=data_hash,
         themes=themes,
         algorithms=algorithms,
@@ -1233,17 +1416,34 @@ def run_limited_v1(
             window[-1],
             registry=registry,
             volume_verified=volume_verified,
+            dollar_liquidity_verified=dollar_liquidity_verified,
+            volume_session_verified=volume_session_verified,
             data_hash=data_hash,
         )
         atomic_write_json(dest / "smoke_864.json", {"session_date": window[-1].isoformat(), "rows": smoke_rows})
     latest = read_snapshot(dest / "research-eod-v1-snapshot.json") or {}
+    failed_n = int(replay.get("publish_failed_n") or 0)
+    session_n = len(replay.get("sessions") or ())
+    if failed_n <= 0:
+        status = "RAN"
+    elif failed_n >= session_n:
+        status = "PUBLISH_FAILED"
+    else:
+        status = "PARTIAL"
     report = {
-        "status": "RAN",
+        "status": status,
         "mode": MODE,
         "compute_version": COMPUTE_VERSION,
         "evidence_status": EVIDENCE_STATUS,
         "synthetic": synthetic,
         "session_date": window[-1].isoformat(),
+        "requested_session": resolved["requested_session"],
+        "served_session": resolved["served_session"],
+        "session_explicit": resolved["session_explicit"],
+        "session_defaulted": resolved["session_defaulted"],
+        "session_remapped": resolved["session_remapped"],
+        "session_remap_reason": resolved["session_remap_reason"],
+        "publish_failed_n": failed_n,
         "acceptance_sessions": [item.isoformat() for item in window],
         "acceptance_rule": "last N official development-zone sessions on/before ALLOWED_END; not chosen by performance",
         "load": _compact_load(load_report, coverage),

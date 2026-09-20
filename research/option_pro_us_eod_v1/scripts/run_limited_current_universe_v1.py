@@ -29,7 +29,11 @@ from app.services.research_eod_v1.limited_v1 import (  # noqa: E402
 def _parse() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset", choices=("auto", "yahoo_cache", "synthetic"), default="auto")
-    parser.add_argument("--session", default=ALLOWED_END.isoformat(), help="historical EOD session, not live now")
+    parser.add_argument(
+        "--session",
+        default=None,
+        help=f"development-zone trading day; omit to default to {ALLOWED_END.isoformat()}",
+    )
     parser.add_argument("--replay-days", type=int, default=20)
     parser.add_argument("--profile", default="balanced")
     parser.add_argument("--horizon", default="mid")
@@ -68,7 +72,7 @@ def main() -> int:
     report = run_limited_v1(
         root=ROOT,
         out_dir=args.out_dir,
-        session=date.fromisoformat(args.session),
+        session=date.fromisoformat(args.session) if args.session else None,
         replay_days=max(1, int(args.replay_days)),
         profile=args.profile,
         horizon=args.horizon,
