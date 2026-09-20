@@ -99,26 +99,27 @@ def test_partial_strength_fallback_still_scans_every_member(monkeypatch, client)
     assert client.get('/api/sectors/semiconductors/iv-ranking').json()['success_count'] == 14
 
 
-@pytest.mark.parametrize("initial_snapshot", ["stale", "missing"])
+@pytest.mark.parametrize("initial_snapshot", ["fresh", "stale", "missing"])
 def test_publication_during_refresh_state_handoff_returns_new_snapshot(
     monkeypatch,
     initial_snapshot,
 ):
     now = time.time()
     sector_id = "semiconductors"
+    old_age = 60 if initial_snapshot == "fresh" else 2 * 86400
     old = sectors._rank_iv_rows(
         sector_id,
-        [{"ticker": "AMD", "iv": .3, "as_of": stamp(now - 2 * 86400)}],
+        [{"ticker": "AMD", "iv": .3, "as_of": stamp(now - old_age)}],
     )
     new = sectors._rank_iv_rows(
         sector_id,
         [{"ticker": "AMD", "iv": .31, "as_of": stamp(now - 30)}],
     )
-    if initial_snapshot == "stale":
+    if initial_snapshot != "missing":
         sectors._write_sector_iv_snapshot(
             sector_id,
             old,
-            saved_at=now - 2 * 86400,
+            saved_at=now - old_age,
             snapshot_origin="worker",
         )
 
@@ -163,9 +164,13 @@ def test_publication_during_refresh_state_handoff_returns_new_snapshot(
     assert len(observed_reads) == 2
     assert result["as_of"] == new["as_of"]
     assert result["rankings"] == new["rankings"]
-    assert result["refresh"]["status"] == "cooldown"
+    expected_status = "idle" if initial_snapshot == "fresh" else "cooldown"
+    assert result["refresh"]["status"] == expected_status
     assert result["refresh"]["completed_at"] is not None
-    assert 0 < result["refresh"]["retry_after_seconds"] <= refresh.MIN_REFRESH_SECONDS
+    if expected_status == "idle":
+        assert result["refresh"]["retry_after_seconds"] == 0
+    else:
+        assert 0 < result["refresh"]["retry_after_seconds"] <= refresh.MIN_REFRESH_SECONDS
 
 
 def test_57_day_source_rejected_even_if_file_just_saved(monkeypatch, client):
