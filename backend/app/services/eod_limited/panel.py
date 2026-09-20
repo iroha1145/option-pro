@@ -37,6 +37,14 @@ def current_universe_tickers() -> dict[str, list[str]]:
     return appearances
 
 
+def select_universe_tickers(tickers: Sequence[str] | None = None) -> dict[str, list[str]]:
+    appearances = current_universe_tickers()
+    if tickers is None:
+        return appearances
+    wanted = [str(item).upper() for item in tickers]
+    return {key: appearances[key] for key in wanted if key in appearances}
+
+
 def prepare_limited_panel(panel: Mapping[str, Any]) -> dict[str, Any]:
     prepared = {}
     for sid, series in panel.items():

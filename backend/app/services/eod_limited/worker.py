@@ -20,7 +20,7 @@ from . import (
 )
 from .bars import fetch_current_universe_bars, last_bar_session
 from .inference import precompute_session_raws, score_eod_session
-from .panel import bars_to_panel, current_universe_tickers
+from .panel import bars_to_panel, select_universe_tickers
 from .store import publish_batch, read_batch, variant_key
 
 
@@ -77,6 +77,7 @@ def run_eod_limited_job(
     now: datetime | None = None,
     themes: Sequence[str] | None = None,
     algorithms: Sequence[str] | None = None,
+    tickers: Sequence[str] | None = None,
 ) -> dict[str, Any]:
     started = time.perf_counter()
     registry = load_registry()
@@ -88,11 +89,12 @@ def run_eod_limited_job(
             target = target or max(series.dates[-1] for series in panel.values())
         else:
             target = target or resolve_inference_session(now)
-            bars = fetch_current_universe_bars(end=target)
+            appearances = select_universe_tickers(tickers)
+            bars = fetch_current_universe_bars(end=target, tickers=list(appearances))
             bar_session = last_bar_session(bars)
             if bar_session is not None:
                 target = min(target, bar_session)
-            panel, coverage = bars_to_panel(bars, current_universe_tickers(), end=target)
+            panel, coverage = bars_to_panel(bars, appearances, end=target)
     if target is None:
         raise ValueError("eod_limited_session_unresolved")
     if purpose == PURPOSE_LIVE and session is None:

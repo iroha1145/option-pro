@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pytest
 from fastapi import HTTPException
@@ -79,6 +80,52 @@ def test_eod_bar_download_does_not_override_batch_threads() -> None:
     assert "threads" not in DOWNLOAD_PARAMS
     assert DOWNLOAD_PARAMS["group_by"] == "ticker"
     assert DOWNLOAD_PARAMS["auto_adjust"] is False
+
+
+def test_select_universe_tickers_stays_bounded() -> None:
+    from app.services.eod_limited.panel import current_universe_tickers, select_universe_tickers
+
+    full = current_universe_tickers()
+    bounded = select_universe_tickers(["nvda", "SPY", "NOTREAL"])
+    assert set(bounded) == {"NVDA", "SPY"}
+    assert bounded["NVDA"] == full["NVDA"]
+    assert "NOTREAL" not in bounded
+    assert len(bounded) < len(full)
+
+
+def test_last_complete_session_respects_holiday_half_day_and_timezone() -> None:
+    from app.services.research_eod_v1.calendar_asof import (
+        last_complete_eod_session,
+        require_aware,
+        session_is_partial,
+    )
+
+    et = ZoneInfo("America/New_York")
+    utc = ZoneInfo("UTC")
+    assert last_complete_eod_session(datetime(2026, 9, 7, 17, 0, tzinfo=et)) == date(2026, 9, 4)
+    assert last_complete_eod_session(datetime(2024, 7, 3, 12, 30, tzinfo=et)) == date(2024, 7, 2)
+    assert last_complete_eod_session(datetime(2024, 7, 3, 13, 5, tzinfo=et)) == date(2024, 7, 3)
+    assert last_complete_eod_session(datetime(2026, 9, 18, 9, 0, tzinfo=utc)) == date(2026, 9, 17)
+    assert last_complete_eod_session(datetime(2026, 9, 18, 21, 0, tzinfo=utc)) == date(2026, 9, 18)
+    assert session_is_partial(date(2026, 9, 18), datetime(2026, 9, 18, 12, 0, tzinfo=et)) is True
+    assert session_is_partial(date(2026, 9, 18), datetime(2026, 9, 18, 16, 5, tzinfo=et)) is False
+    with pytest.raises(ValueError, match="timezone-aware"):
+        require_aware(datetime(2026, 9, 18, 16, 0))
+
+
+def test_live_job_relabels_sealed_research_session(tmp_path: Path) -> None:
+    from app.services.eod_limited.worker import build_synthetic_panel, run_eod_limited_job
+
+    outcome = run_eod_limited_job(
+        session=RESEARCH_SEALED_SESSION,
+        purpose=PURPOSE_LIVE,
+        panel=build_synthetic_panel(end=RESEARCH_SEALED_SESSION),
+        root=tmp_path,
+        themes=("semiconductors",),
+        algorithms=("A_trend_quality",),
+    )
+    assert outcome["purpose"] == PURPOSE_HISTORICAL
+    assert outcome["served_session"] == "2024-06-28"
 
 
 def test_capability_flags_default_false() -> None:

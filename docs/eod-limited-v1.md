@@ -24,3 +24,5 @@
 - 合成输入必须标 `SYNTHETIC`。历史种子面板必须覆盖目标交易日，并带可确认高低点，避免只有标签没有观察行。
 - 默认不把 `volume_verified` / `dollar_liquidity_verified` 设为 true。
 - Worker 日线走现有 `download_in_bounded_batches`，不要再传 `threads`。
+- 隔离验证可用 `tickers=` 把当前主题名单收成有界子集；不在页面 GET 上传任意代码名单。
+- 最近完整交易日由纽约日历收盘 + 半日/假期规则决定，不是固定日本时间。`2024-06-28` 若被 live 入口碰到会改标历史示例。
