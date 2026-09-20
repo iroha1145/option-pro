@@ -1,0 +1,96 @@
+{
+  "rescore_match": true,
+  "mismatch_n": 0,
+  "mismatch_sample": [],
+  "eligible": 19,
+  "composite": [
+    "COST"
+  ],
+  "config_hash_same": true,
+  "run_signature_same": true,
+  "network_delta_yahoo": 0,
+  "network_delta_preview": 0,
+  "snapshot_auth_required_rows": 0,
+  "snapshot_rows_with_factors": 920,
+  "snapshot_session": "2024-06-28",
+  "smoke_n": 864,
+  "smoke_by_profile_horizon": {
+    "conservative|short": {
+      "n": 96,
+      "eligible": 2,
+      "watch": 0,
+      "rejected": 918,
+      "ran": 96,
+      "unavailable": 0
+    },
+    "balanced|short": {
+      "n": 96,
+      "eligible": 16,
+      "watch": 0,
+      "rejected": 904,
+      "ran": 96,
+      "unavailable": 0
+    },
+    "aggressive|short": {
+      "n": 96,
+      "eligible": 38,
+      "watch": 0,
+      "rejected": 882,
+      "ran": 96,
+      "unavailable": 0
+    },
+    "conservative|mid": {
+      "n": 96,
+      "eligible": 3,
+      "watch": 0,
+      "rejected": 917,
+      "ran": 96,
+      "unavailable": 0
+    },
+    "balanced|mid": {
+      "n": 96,
+      "eligible": 19,
+      "watch": 0,
+      "rejected": 901,
+      "ran": 96,
+      "unavailable": 0
+    },
+    "aggressive|mid": {
+      "n": 96,
+      "eligible": 37,
+      "watch": 0,
+      "rejected": 883,
+      "ran": 96,
+      "unavailable": 0
+    },
+    "conservative|long": {
+      "n": 96,
+      "eligible": 7,
+      "watch": 0,
+      "rejected": 913,
+      "ran": 96,
+      "unavailable": 0
+    },
+    "balanced|long": {
+      "n": 96,
+      "eligible": 20,
+      "watch": 0,
+      "rejected": 900,
+      "ran": 96,
+      "unavailable": 0
+    },
+    "aggressive|long": {
+      "n": 96,
+      "eligible": 42,
+      "watch": 0,
+      "rejected": 878,
+      "ran": 96,
+      "unavailable": 0
+    }
+  },
+  "smoke_themes": 24,
+  "yahoo_missing": [
+    "CRWV"
+  ],
+  "dataset_hash": "a8541164c3a7b4bf1d8a272f2d853ecb1d198743fa5245c289609b47193d1c7f"
+}

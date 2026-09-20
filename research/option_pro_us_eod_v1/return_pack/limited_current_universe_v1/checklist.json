@@ -1,0 +1,80 @@
+{
+  "mode": "LIMITED_CURRENT_UNIVERSE_V1",
+  "evidence_status": "UNVALIDATED_LIMITED_DATA",
+  "stop_condition": "limited path ran, previewable, repeatable, failures explained; no new weight search",
+  "source_sha_at_successful_run": "7feadcbaf2b356d517aa0690038291fb38a623e9",
+  "successful_command": "PYTHONPATH=backend python research/option_pro_us_eod_v1/scripts/run_limited_current_universe_v1.py --dataset yahoo_cache --session 2024-06-28 --replay-days 20 --profile balanced --horizon mid --no-network --smoke-864 --out-dir research/option_pro_us_eod_v1/return_pack/limited_current_universe_v1",
+  "equivalent_in_this_environment": "load_or_fetch_bars(allow_network=False); run_limited_v1(session=2024-06-28, replay_days=20, smoke=True, panel=..., volume_verified=False)",
+  "dataset_manifest": "research/option_pro_us_eod_v1/return_pack/limited_current_universe_v1/dataset_manifest.json",
+  "authorized_artifact": {
+    "path": "research/option_pro_us_eod_v1/data/cache/limited_current_universe_v1/bars.pkl",
+    "gitignored": true,
+    "dataset_hash": "a8541164c3a7b4bf1d8a272f2d853ecb1d198743fa5245c289609b47193d1c7f",
+    "file_sha256_prefix": "cc26ef2ecb35a24a",
+    "bytes": 63469417
+  },
+  "main_path": {
+    "session_date": "2024-06-28",
+    "profile": "balanced",
+    "horizon": "mid",
+    "themes": 24,
+    "families": 4,
+    "eligible_n": 19,
+    "watch_n": 0,
+    "composite_n": 1,
+    "composite": ["COST"],
+    "family_votes": ["A_trend_quality", "D_residual_momentum"],
+    "consensus_z": 80.59568316038302,
+    "auth_required_rows": 0,
+    "snapshot_rows_with_factors": 920
+  },
+  "replay_20": {
+    "rule": "last 20 official development-zone sessions on/before 2024-06-28",
+    "ordered": true,
+    "elapsed_s": 1025.531,
+    "peak_mb": 692.6,
+    "yahoo_batches": 0,
+    "preview_provider_calls": 0,
+    "empty_composite_dates": ["2024-06-11", "2024-06-12"],
+    "detail": "replay_summary.json"
+  },
+  "total_run_with_smoke_s": 1412.76,
+  "smoke_864": {
+    "n": 864,
+    "all_ran": true,
+    "unavailable": 0,
+    "table": "smoke_864.json"
+  },
+  "offline_rescore_2024-06-28": {
+    "fingerprint_match": true,
+    "config_hash_match": true,
+    "run_signature_match": true,
+    "yahoo_batches": 0
+  },
+  "preview": {
+    "path": "research/option_pro_us_eod_v1/return_pack/limited_current_universe_v1/preview.html",
+    "how": "open the HTML file or run the CLI with --preview-only",
+    "label": "历史 EOD 预览",
+    "not_live_picks": true,
+    "no_ic_cagr": true
+  },
+  "tests": {
+    "command": "PYTHONPATH=backend python -m pytest tests/test_research_eod_v1_limited_v1.py tests/test_research_eod_v1_lookahead.py tests/test_research_eod_v1_composite.py tests/test_research_eod_v1_eod_shadow.py tests/test_research_eod_v1_pr176_boundaries.py tests/test_research_eod_v1_connect_accept.py tests/test_research_eod_v1_yahoo_snapshot.py tests/test_research_eod_v1_production_boundary.py tests/test_research_eod_v1_network_spy.py tests/test_research_eod_v1_correctness.py tests/test_research_eod_v1_algorithms.py tests/test_research_eod_v1_features.py tests/test_research_eod_v1_sharadar.py tests/test_research_eod_v1_sharadar_fixes.py tests/test_research_eod_v1_finish_gate.py -q",
+    "passed": 159,
+    "ci_uses_synthetic_fixture": true
+  },
+  "production_refresh_unchanged": true,
+  "remaining_limits": [
+    "CURRENT_MEMBERSHIP only",
+    "Yahoo close not proven raw",
+    "VENDOR_DAILY_UNVERIFIED volume",
+    "price return not total return",
+    "execution and corporate actions unverified",
+    "not a 10-year formal verification",
+    "holdout from 2024-07-01 sealed",
+    "CRWV missing in window"
+  ],
+  "full_data_migration": "FULL_DATA_MIGRATION.md",
+  "weight_search_started": false,
+  "sharadar_paid_sku_chase": false
+}

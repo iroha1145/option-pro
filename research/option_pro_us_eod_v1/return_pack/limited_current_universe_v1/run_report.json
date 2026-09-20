@@ -1,0 +1,1373 @@
+{
+  "status": "RAN",
+  "mode": "LIMITED_CURRENT_UNIVERSE_V1",
+  "evidence_status": "UNVALIDATED_LIMITED_DATA",
+  "synthetic": false,
+  "session_date": "2024-06-28",
+  "acceptance_sessions": [
+    "2024-05-31",
+    "2024-06-03",
+    "2024-06-04",
+    "2024-06-05",
+    "2024-06-06",
+    "2024-06-07",
+    "2024-06-10",
+    "2024-06-11",
+    "2024-06-12",
+    "2024-06-13",
+    "2024-06-14",
+    "2024-06-17",
+    "2024-06-18",
+    "2024-06-20",
+    "2024-06-21",
+    "2024-06-24",
+    "2024-06-25",
+    "2024-06-26",
+    "2024-06-27",
+    "2024-06-28"
+  ],
+  "acceptance_rule": "last N official development-zone sessions on/before ALLOWED_END; not chosen by performance",
+  "load": {
+    "sources": [
+      "caller_panel"
+    ],
+    "missing": [
+      "CRWV"
+    ],
+    "fetched": 0,
+    "dataset_hash": "a8541164c3a7b4bf1d8a272f2d853ecb1d198743fa5245c289609b47193d1c7f",
+    "inventory": [
+      {
+        "path": "research/option_pro_us_eod_v1/data/cache/round3_yahoo_abcd/bars.pkl",
+        "exists": false,
+        "bytes": 0,
+        "role": "trusted_yahoo_cache"
+      },
+      {
+        "path": "research/option_pro_us_eod_v1/data/cache/round3_after_close/last_bars.pkl",
+        "exists": false,
+        "bytes": 0,
+        "role": "trusted_yahoo_cache"
+      },
+      {
+        "path": "research/option_pro_us_eod_v1/data/cache/limited_current_universe_v1/bars.pkl",
+        "exists": true,
+        "bytes": 63469417,
+        "role": "optional"
+      },
+      {
+        "path": "research/option_pro_us_eod_v1/return_pack/yahoo_current_universe/daily_bars.parquet",
+        "exists": false,
+        "bytes": 0,
+        "role": "optional"
+      },
+      {
+        "path": "research/option_pro_us_eod_v1/return_pack/fixtures/synthetic_daily_bars.parquet",
+        "exists": true,
+        "bytes": 6904,
+        "role": "optional"
+      }
+    ],
+    "allow_network": false,
+    "wanted_n": 214,
+    "failures": [],
+    "coverage_ok": 213,
+    "coverage_empty": [
+      "CRWV"
+    ]
+  },
+  "coverage": [
+    {
+      "ticker": "NVDA",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "AMD",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "TSM",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "AVGO",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "ASML",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "MU",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "INTC",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "ARM",
+      "status": "ok",
+      "bars": 199
+    },
+    {
+      "ticker": "QCOM",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "MRVL",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "TXN",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "LRCX",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "KLAC",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "AMAT",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "MSFT",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "ORCL",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "CRM",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "ADBE",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "NOW",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "SNOW",
+      "status": "ok",
+      "bars": 952
+    },
+    {
+      "ticker": "PLTR",
+      "status": "ok",
+      "bars": 942
+    },
+    {
+      "ticker": "PANW",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "NET",
+      "status": "ok",
+      "bars": 1206
+    },
+    {
+      "ticker": "CRWD",
+      "status": "ok",
+      "bars": 1271
+    },
+    {
+      "ticker": "DDOG",
+      "status": "ok",
+      "bars": 1202
+    },
+    {
+      "ticker": "MDB",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "GOOGL",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "AMZN",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "META",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "SMCI",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "ANET",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "DELL",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "LLY",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "NVO",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "ABBV",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "AMGN",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "GILD",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "VRTX",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "REGN",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "BIIB",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "MRNA",
+      "status": "ok",
+      "bars": 1398
+    },
+    {
+      "ticker": "BNTX",
+      "status": "ok",
+      "bars": 1187
+    },
+    {
+      "ticker": "UNH",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "JNJ",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "PFE",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "MRK",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "TMO",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "ABT",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "DHR",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "ISRG",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "MDT",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "BMY",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "AAPL",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "SONY",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "HPQ",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "LOGI",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "TSLA",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "RIVN",
+      "status": "ok",
+      "bars": 661
+    },
+    {
+      "ticker": "F",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "GM",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "LCID",
+      "status": "ok",
+      "bars": 950
+    },
+    {
+      "ticker": "NIO",
+      "status": "ok",
+      "bars": 1458
+    },
+    {
+      "ticker": "LI",
+      "status": "ok",
+      "bars": 985
+    },
+    {
+      "ticker": "XPEV",
+      "status": "ok",
+      "bars": 965
+    },
+    {
+      "ticker": "STLA",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "TM",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "ALB",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "PLUG",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "BLNK",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "CHPT",
+      "status": "ok",
+      "bars": 1205
+    },
+    {
+      "ticker": "ENPH",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "FSLR",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "RUN",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "JPM",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "BAC",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "WFC",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "C",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "GS",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "MS",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "USB",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "PNC",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "TFC",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "SCHW",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "V",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "MA",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "PYPL",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "XYZ",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "AXP",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "COIN",
+      "status": "ok",
+      "bars": 808
+    },
+    {
+      "ticker": "HOOD",
+      "status": "ok",
+      "bars": 734
+    },
+    {
+      "ticker": "SOFI",
+      "status": "ok",
+      "bars": 877
+    },
+    {
+      "ticker": "AFRM",
+      "status": "ok",
+      "bars": 870
+    },
+    {
+      "ticker": "UPST",
+      "status": "ok",
+      "bars": 888
+    },
+    {
+      "ticker": "WMT",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "COST",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "HD",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "TGT",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "LOW",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "NKE",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "SBUX",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "MCD",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "TJX",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "LVMUY",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "RMS.PA",
+      "status": "ok",
+      "bars": 1664
+    },
+    {
+      "ticker": "CFRUY",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "EL",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "TPR",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "RL",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "PVH",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "NFLX",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "DIS",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "WBD",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "PSKY",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "ROKU",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "SPOT",
+      "status": "ok",
+      "bars": 1571
+    },
+    {
+      "ticker": "FUBO",
+      "status": "ok",
+      "bars": 1324
+    },
+    {
+      "ticker": "TKO",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "SNAP",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "PINS",
+      "status": "ok",
+      "bars": 1308
+    },
+    {
+      "ticker": "RDDT",
+      "status": "ok",
+      "bars": 69
+    },
+    {
+      "ticker": "BIDU",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "BABA",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "PDD",
+      "status": "ok",
+      "bars": 1491
+    },
+    {
+      "ticker": "XOM",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "CVX",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "COP",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "SLB",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "EOG",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "MPC",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "VLO",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "PSX",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "OXY",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "DVN",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "NEE",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "DUK",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "SO",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "AEP",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "EXC",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "SRE",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "D",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "PCG",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "VST",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "CEG",
+      "status": "ok",
+      "bars": 614
+    },
+    {
+      "ticker": "LMT",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "RTX",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "NOC",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "GD",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "BA",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "LHX",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "TDG",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "HEI",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "TXT",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "DAL",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "UAL",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "AAL",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "LUV",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "ALK",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "JBLU",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "RYAAY",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "CPA",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "PLD",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "AMT",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "EQIX",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "CCI",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "SPG",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "O",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "PSA",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "DLR",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "WELL",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "VICI",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "MARA",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "RIOT",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "MSTR",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "HUT",
+      "status": "ok",
+      "bars": 1588
+    },
+    {
+      "ticker": "CLSK",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "WULF",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "CIFR",
+      "status": "ok",
+      "bars": 928
+    },
+    {
+      "ticker": "BTBT",
+      "status": "ok",
+      "bars": 1580
+    },
+    {
+      "ticker": "JD",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "NTES",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "TME",
+      "status": "ok",
+      "bars": 1395
+    },
+    {
+      "ticker": "TAL",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "BILI",
+      "status": "ok",
+      "bars": 1574
+    },
+    {
+      "ticker": "IQ",
+      "status": "ok",
+      "bars": 1573
+    },
+    {
+      "ticker": "T",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "VZ",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "TMUS",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "CHTR",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "CMCSA",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "VOD",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "AMX",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "CAT",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "DE",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "HON",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "GE",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "MMM",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "UPS",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "FDX",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "EMR",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "ETN",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "ITW",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "SPY",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "QQQ",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "IWM",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "DIA",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "VTI",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "VOO",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "ARKK",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "SOXX",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "XLF",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "XLE",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "GLD",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "TLT",
+      "status": "ok",
+      "bars": 1633
+    },
+    {
+      "ticker": "CRWV",
+      "status": "empty",
+      "bars": 0
+    }
+  ],
+  "replay": {
+    "sessions": [
+      {
+        "session_date": "2024-05-31",
+        "eligible_n": 12,
+        "watch_n": 0,
+        "composite_n": 1,
+        "run_signature": "54ffe132756b1d20626a2b77e35eff8123ddc6dc8ff6ee0ed4fea98ea0a0ff79",
+        "config_hash": "70fdb339e822146a78464ac7c6e2f48151bcc02d6e804bc265c8b1453f2a8e28"
+      },
+      {
+        "session_date": "2024-06-03",
+        "eligible_n": 12,
+        "watch_n": 0,
+        "composite_n": 1,
+        "run_signature": "5afe55e21b47d44972b503a43649c95f6731487770ecbd1749cf377b517c2736",
+        "config_hash": "70fdb339e822146a78464ac7c6e2f48151bcc02d6e804bc265c8b1453f2a8e28"
+      },
+      {
+        "session_date": "2024-06-04",
+        "eligible_n": 13,
+        "watch_n": 0,
+        "composite_n": 2,
+        "run_signature": "02e2c1e769f45bc25dd1bd9b8eea143ba313a43eb01ab75803dea098746846f4",
+        "config_hash": "70fdb339e822146a78464ac7c6e2f48151bcc02d6e804bc265c8b1453f2a8e28"
+      },
+      {
+        "session_date": "2024-06-05",
+        "eligible_n": 10,
+        "watch_n": 0,
+        "composite_n": 1,
+        "run_signature": "f61ec9fafea2da4694ca74e2a11fbaad722a71bc07133875b59a5d3077b39e9c",
+        "config_hash": "70fdb339e822146a78464ac7c6e2f48151bcc02d6e804bc265c8b1453f2a8e28"
+      },
+      {
+        "session_date": "2024-06-06",
+        "eligible_n": 9,
+        "watch_n": 0,
+        "composite_n": 1,
+        "run_signature": "04f72c32673d5a4996565de8ad4c440ff3371e86533194355fe282d010b90bbe",
+        "config_hash": "70fdb339e822146a78464ac7c6e2f48151bcc02d6e804bc265c8b1453f2a8e28"
+      },
+      {
+        "session_date": "2024-06-07",
+        "eligible_n": 12,
+        "watch_n": 0,
+        "composite_n": 1,
+        "run_signature": "bb803f8d004abc02094cf44b86cbf35b529e44b9649fb850ac957121aed20b83",
+        "config_hash": "70fdb339e822146a78464ac7c6e2f48151bcc02d6e804bc265c8b1453f2a8e28"
+      },
+      {
+        "session_date": "2024-06-10",
+        "eligible_n": 11,
+        "watch_n": 0,
+        "composite_n": 1,
+        "run_signature": "9c7c01ae5cd65bb9dfc11d60d625d4d515ad6146a3f063b3c49302e4e49a1d37",
+        "config_hash": "70fdb339e822146a78464ac7c6e2f48151bcc02d6e804bc265c8b1453f2a8e28"
+      },
+      {
+        "session_date": "2024-06-11",
+        "eligible_n": 9,
+        "watch_n": 0,
+        "composite_n": 0,
+        "run_signature": "6f0d0008ef1c9b287a64df4d08134096470545dd941c51e621af1a0ab8206257",
+        "config_hash": "70fdb339e822146a78464ac7c6e2f48151bcc02d6e804bc265c8b1453f2a8e28"
+      },
+      {
+        "session_date": "2024-06-12",
+        "eligible_n": 11,
+        "watch_n": 0,
+        "composite_n": 0,
+        "run_signature": "998490d593e162779fba709fd005c921c3460786d7e6683070f6124c8e20528f",
+        "config_hash": "70fdb339e822146a78464ac7c6e2f48151bcc02d6e804bc265c8b1453f2a8e28"
+      },
+      {
+        "session_date": "2024-06-13",
+        "eligible_n": 13,
+        "watch_n": 0,
+        "composite_n": 3,
+        "run_signature": "d94b51712210e9f975ba11f99e08b4934e6092e6e48e5add25e1e4dd3d9e6227",
+        "config_hash": "70fdb339e822146a78464ac7c6e2f48151bcc02d6e804bc265c8b1453f2a8e28"
+      },
+      {
+        "session_date": "2024-06-14",
+        "eligible_n": 10,
+        "watch_n": 1,
+        "composite_n": 2,
+        "run_signature": "318ae89a276991445ac898b7f7d4a361e02de73534779e75ba22c734afd54743",
+        "config_hash": "70fdb339e822146a78464ac7c6e2f48151bcc02d6e804bc265c8b1453f2a8e28"
+      },
+      {
+        "session_date": "2024-06-17",
+        "eligible_n": 12,
+        "watch_n": 0,
+        "composite_n": 2,
+        "run_signature": "6fb5b261110be3c1ce5ac58d38a821bec5927253ffec6110b709f898ff3fe9d2",
+        "config_hash": "70fdb339e822146a78464ac7c6e2f48151bcc02d6e804bc265c8b1453f2a8e28"
+      },
+      {
+        "session_date": "2024-06-18",
+        "eligible_n": 10,
+        "watch_n": 1,
+        "composite_n": 1,
+        "run_signature": "5fb60df9575e3b3f1a83dd07b8d1fd630d6d7db376d3494b18979367b3ea9244",
+        "config_hash": "70fdb339e822146a78464ac7c6e2f48151bcc02d6e804bc265c8b1453f2a8e28"
+      },
+      {
+        "session_date": "2024-06-20",
+        "eligible_n": 12,
+        "watch_n": 2,
+        "composite_n": 2,
+        "run_signature": "27e676ddfbe0d36170e20d21024b11913765c3145eb49057b3ce35367a9b0bdf",
+        "config_hash": "70fdb339e822146a78464ac7c6e2f48151bcc02d6e804bc265c8b1453f2a8e28"
+      },
+      {
+        "session_date": "2024-06-21",
+        "eligible_n": 20,
+        "watch_n": 0,
+        "composite_n": 3,
+        "run_signature": "62a6a59e7948a69061a86d79163c6dc2f4f0f36818d407fee933bf2854ae09b9",
+        "config_hash": "70fdb339e822146a78464ac7c6e2f48151bcc02d6e804bc265c8b1453f2a8e28"
+      },
+      {
+        "session_date": "2024-06-24",
+        "eligible_n": 13,
+        "watch_n": 0,
+        "composite_n": 2,
+        "run_signature": "ee64e35ae071de08479e50d587dea41d98faf4d845beb80b4ebe5d6ab472d798",
+        "config_hash": "70fdb339e822146a78464ac7c6e2f48151bcc02d6e804bc265c8b1453f2a8e28"
+      },
+      {
+        "session_date": "2024-06-25",
+        "eligible_n": 11,
+        "watch_n": 0,
+        "composite_n": 1,
+        "run_signature": "cb2f66e1e9ef7407db3120273eeb196ef492a715877780a589d047848bfde850",
+        "config_hash": "70fdb339e822146a78464ac7c6e2f48151bcc02d6e804bc265c8b1453f2a8e28"
+      },
+      {
+        "session_date": "2024-06-26",
+        "eligible_n": 10,
+        "watch_n": 0,
+        "composite_n": 1,
+        "run_signature": "5b224bbda4d273f3f9fd0dc60eb5ddc6a7d528f24112067b77e08d9638dfa4e9",
+        "config_hash": "70fdb339e822146a78464ac7c6e2f48151bcc02d6e804bc265c8b1453f2a8e28"
+      },
+      {
+        "session_date": "2024-06-27",
+        "eligible_n": 11,
+        "watch_n": 0,
+        "composite_n": 1,
+        "run_signature": "cf35d0f3c922c4aa7eda08dd1c14a94c9111f027e742b36ed3e26a455f3cb827",
+        "config_hash": "70fdb339e822146a78464ac7c6e2f48151bcc02d6e804bc265c8b1453f2a8e28"
+      },
+      {
+        "session_date": "2024-06-28",
+        "eligible_n": 19,
+        "watch_n": 0,
+        "composite_n": 1,
+        "run_signature": "ff2a8375928adceca2123259815c45b289be999f95a3f0f30bf842d8ed319b22",
+        "config_hash": "70fdb339e822146a78464ac7c6e2f48151bcc02d6e804bc265c8b1453f2a8e28"
+      }
+    ],
+    "elapsed_s": 1025.531,
+    "network_yahoo_batches": 0,
+    "preview_provider_calls": 0,
+    "ordered": true
+  },
+  "smoke_n": 864,
+  "latest_eligible_n": 19,
+  "latest_composite_n": 1,
+  "preview": "/workspace/research/option_pro_us_eod_v1/return_pack/limited_current_universe_v1/preview.html",
+  "snapshot": "/workspace/research/option_pro_us_eod_v1/return_pack/limited_current_universe_v1/research-eod-v1-snapshot.json",
+  "limitations": [
+    "CURRENT_MEMBERSHIP only; not historical PIT constituents or delist union",
+    "Yahoo auto_adjust=False does not prove Close is historical raw trade price",
+    "volume_scope=VENDOR_DAILY_UNVERIFIED; not regular-session or share-basis proof",
+    "momentum and labels are price returns, not total return",
+    "execution / dollar risk / corporate-action ledger unverified",
+    "G dropped once via PRICE_ONLY_DIAGNOSTIC; D is market-residual diagnostic",
+    "not a 10-year formal verification; evidence_status=UNVALIDATED_LIMITED_DATA",
+    "holdout from 2024-07-01 stays sealed"
+  ],
+  "feature_mapping": [
+    {
+      "source_module": "factors.extract_raw / pivots",
+      "shared_feature": "structure, ATR, support/resistance, platform geometry",
+      "used_by": "T, S, B/C setup, planned_invalidation",
+      "raw_interpretable": true
+    },
+    {
+      "source_module": "factors.extract_raw momentum",
+      "shared_feature": "price-return M windows (not TRI/total return)",
+      "used_by": "M, D residual input",
+      "raw_interpretable": true
+    },
+    {
+      "source_module": "residual.py",
+      "shared_feature": "SPY-market residual (not economic-industry residual)",
+      "used_by": "D_residual_momentum on D_MARKET_RESIDUAL_DIAGNOSTIC / PRICE_ONLY",
+      "raw_interpretable": true
+    },
+    {
+      "source_module": "cross_section.q_star",
+      "shared_feature": "same-track reference-pool midranks",
+      "used_by": "T/M/S/R/G assembly before score_features",
+      "raw_interpretable": true
+    },
+    {
+      "source_module": "algorithms.setup_for",
+      "shared_feature": "A/B/C/D hard setup gates",
+      "used_by": "eligible vs rejected; not UI copy",
+      "raw_interpretable": true
+    },
+    {
+      "source_module": "Yahoo volume column",
+      "shared_feature": "vendor daily volume under VENDOR_DAILY_UNVERIFIED",
+      "used_by": "V diagnostic only; B/C liquidity hard-gate stays unverified",
+      "raw_interpretable": false
+    }
+  ],
+  "production_default_unchanged": true
+}

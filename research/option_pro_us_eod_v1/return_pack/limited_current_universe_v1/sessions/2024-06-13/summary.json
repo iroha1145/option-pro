@@ -1,0 +1,4739 @@
+{
+  "session_date": "2024-06-13",
+  "eligible_n": 13,
+  "watch_n": 0,
+  "composite_n": 3,
+  "config_hash": "70fdb339e822146a78464ac7c6e2f48151bcc02d6e804bc265c8b1453f2a8e28",
+  "run_signature": "d94b51712210e9f975ba11f99e08b4934e6092e6e48e5add25e1e4dd3d9e6227",
+  "theme_summaries": [
+    {
+      "theme_id": "semiconductors",
+      "membership": "CURRENT_MEMBERSHIP",
+      "members_listed": 14,
+      "members_in_panel": 14,
+      "families": {
+        "A_trend_quality": {
+          "theme_id": "semiconductors",
+          "algorithm_id": "A_trend_quality",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 14,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 14,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              12
+            ],
+            [
+              "EXTENDED",
+              9
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              3
+            ],
+            [
+              "TREND_DIRECTION",
+              3
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              2
+            ],
+            [
+              "WEAK_STRUCTURE",
+              1
+            ],
+            [
+              "LH_LL",
+              1
+            ],
+            [
+              "SHORT_HISTORY",
+              1
+            ]
+          ],
+          "fingerprint": "e3d82b85920fb91130ac6739e29ab7819c9ae5f0c07496d3773e6c3d5514e528"
+        },
+        "B_confirmed_base_breakout": {
+          "theme_id": "semiconductors",
+          "algorithm_id": "B_confirmed_base_breakout",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 14,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 14,
+          "top_rejections": [
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              13
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              12
+            ],
+            [
+              "LOW_SCORE",
+              12
+            ],
+            [
+              "EXTENDED",
+              9
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              4
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              3
+            ],
+            [
+              "SMA50_SLOPE",
+              3
+            ],
+            [
+              "BELOW_SMA50",
+              2
+            ]
+          ],
+          "fingerprint": "51bf8e8ed8ededa4ca5f12d4fccc02f0f744468724a9d5e47fe16d57f80fce73"
+        },
+        "C_trend_pullback": {
+          "theme_id": "semiconductors",
+          "algorithm_id": "C_trend_pullback",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 14,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 14,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              13
+            ],
+            [
+              "EXTENDED",
+              9
+            ],
+            [
+              "NO_REBOUND",
+              8
+            ],
+            [
+              "LOW_RVOL",
+              6
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              3
+            ],
+            [
+              "TREND_DIRECTION",
+              3
+            ],
+            [
+              "LOW_CLV",
+              3
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              2
+            ]
+          ],
+          "fingerprint": "e2a924dc34bbd05055f5e66edb598b26d3f256d024f6882a201bac3e73a76842"
+        },
+        "D_residual_momentum": {
+          "theme_id": "semiconductors",
+          "algorithm_id": "D_residual_momentum",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 14,
+          "reference": 203,
+          "eligible": 2,
+          "watch": 0,
+          "rejected": 12,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              11
+            ],
+            [
+              "EXTENDED",
+              9
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              5
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              3
+            ],
+            [
+              "SMA50_SLOPE",
+              3
+            ],
+            [
+              "BELOW_SMA50",
+              2
+            ],
+            [
+              "WEAK_STRUCTURE",
+              1
+            ],
+            [
+              "SHORT_HISTORY",
+              1
+            ]
+          ],
+          "fingerprint": "cc43ad6727443dd3a4657df3da9f823d68d828a54b6eb1d082eb2b3392b65217"
+        }
+      }
+    },
+    {
+      "theme_id": "software",
+      "membership": "CURRENT_MEMBERSHIP",
+      "members_listed": 12,
+      "members_in_panel": 12,
+      "families": {
+        "A_trend_quality": {
+          "theme_id": "software",
+          "algorithm_id": "A_trend_quality",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 12,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 12,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              12
+            ],
+            [
+              "TREND_DIRECTION",
+              8
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4
+            ],
+            [
+              "LH_LL",
+              4
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              4
+            ],
+            [
+              "EXTENDED",
+              2
+            ],
+            [
+              "INVALIDATED",
+              2
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              2
+            ]
+          ],
+          "fingerprint": "0995d36132da012470157cab4fae6b90796dc68b35077b6799cd1fd3e0afa1d6"
+        },
+        "B_confirmed_base_breakout": {
+          "theme_id": "software",
+          "algorithm_id": "B_confirmed_base_breakout",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 12,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 12,
+          "top_rejections": [
+            [
+              "SMA50_SLOPE",
+              8
+            ],
+            [
+              "BELOW_SMA50",
+              7
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              6
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              6
+            ],
+            [
+              "LOW_SCORE",
+              6
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              6
+            ],
+            [
+              "MISSING_FIRST_DAY_RVOL",
+              6
+            ],
+            [
+              "MISSING_FIRST_DAY_CLV",
+              6
+            ]
+          ],
+          "fingerprint": "0be6e85955e53193634b2a01c00d2bff5a267ee5d621b19cccf4df84b983b9f9"
+        },
+        "C_trend_pullback": {
+          "theme_id": "software",
+          "algorithm_id": "C_trend_pullback",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 12,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 12,
+          "top_rejections": [
+            [
+              "NO_REBOUND",
+              12
+            ],
+            [
+              "LOW_SCORE",
+              12
+            ],
+            [
+              "LOW_CLV",
+              11
+            ],
+            [
+              "TREND_DIRECTION",
+              8
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              5
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4
+            ],
+            [
+              "LOW_RVOL",
+              4
+            ],
+            [
+              "EXTENDED",
+              2
+            ]
+          ],
+          "fingerprint": "ab8a264687dd81420bab018b231141fc47364dd302eca2c3e3f12d1bc07b44e1"
+        },
+        "D_residual_momentum": {
+          "theme_id": "software",
+          "algorithm_id": "D_residual_momentum",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 12,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 12,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              12
+            ],
+            [
+              "SMA50_SLOPE",
+              8
+            ],
+            [
+              "BELOW_SMA50",
+              7
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              6
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4
+            ],
+            [
+              "EXTENDED",
+              2
+            ],
+            [
+              "INVALIDATED",
+              2
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              2
+            ]
+          ],
+          "fingerprint": "ac8a067d082cc2dbb718191f7d4814a05109e1160cea06c74e52892c320ac97d"
+        }
+      }
+    },
+    {
+      "theme_id": "ai_cloud",
+      "membership": "CURRENT_MEMBERSHIP",
+      "members_listed": 10,
+      "members_in_panel": 9,
+      "families": {
+        "A_trend_quality": {
+          "theme_id": "ai_cloud",
+          "algorithm_id": "A_trend_quality",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 9,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 9,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              7
+            ],
+            [
+              "EXTENDED",
+              4
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              3
+            ],
+            [
+              "TREND_DIRECTION",
+              3
+            ],
+            [
+              "HIGH_ATR",
+              2
+            ],
+            [
+              "WEAK_STRUCTURE",
+              1
+            ],
+            [
+              "LH_LL",
+              1
+            ]
+          ],
+          "fingerprint": "50e79cb1aacbd59a9caf478be4e55a16293db19241d81255279d6256498f06a0"
+        },
+        "B_confirmed_base_breakout": {
+          "theme_id": "ai_cloud",
+          "algorithm_id": "B_confirmed_base_breakout",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 9,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 9,
+          "top_rejections": [
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              8
+            ],
+            [
+              "LOW_SCORE",
+              8
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              7
+            ],
+            [
+              "EXTENDED",
+              4
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              3
+            ],
+            [
+              "SMA50_SLOPE",
+              3
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              3
+            ],
+            [
+              "HIGH_ATR",
+              2
+            ]
+          ],
+          "fingerprint": "61df037cc0a4845c54d534014451edfae68ac36e44a423254d8aa69d99b9a63b"
+        },
+        "C_trend_pullback": {
+          "theme_id": "ai_cloud",
+          "algorithm_id": "C_trend_pullback",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 9,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 9,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              9
+            ],
+            [
+              "NO_REBOUND",
+              5
+            ],
+            [
+              "LOW_CLV",
+              5
+            ],
+            [
+              "EXTENDED",
+              4
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              3
+            ],
+            [
+              "LOW_RVOL",
+              3
+            ],
+            [
+              "TREND_DIRECTION",
+              3
+            ],
+            [
+              "HIGH_ATR",
+              2
+            ]
+          ],
+          "fingerprint": "c277325d652874c4a9a89dc714d8e7e6d820e7800f103a4421d8c54ff0fecfd0"
+        },
+        "D_residual_momentum": {
+          "theme_id": "ai_cloud",
+          "algorithm_id": "D_residual_momentum",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 9,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 9,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              8
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              6
+            ],
+            [
+              "EXTENDED",
+              4
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              3
+            ],
+            [
+              "SMA50_SLOPE",
+              3
+            ],
+            [
+              "HIGH_ATR",
+              2
+            ],
+            [
+              "WEAK_STRUCTURE",
+              1
+            ]
+          ],
+          "fingerprint": "31190850fcb1bd8ec545a267ad3c4dd42070826739f3cd473f0386b56e184123"
+        }
+      }
+    },
+    {
+      "theme_id": "biotech",
+      "membership": "CURRENT_MEMBERSHIP",
+      "members_listed": 10,
+      "members_in_panel": 10,
+      "families": {
+        "A_trend_quality": {
+          "theme_id": "biotech",
+          "algorithm_id": "A_trend_quality",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 10,
+          "reference": 203,
+          "eligible": 1,
+          "watch": 0,
+          "rejected": 9,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              8
+            ],
+            [
+              "TREND_DIRECTION",
+              4
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              3
+            ],
+            [
+              "EXTENDED",
+              2
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              2
+            ],
+            [
+              "HIGH_ATR",
+              2
+            ]
+          ],
+          "fingerprint": "bb84c528479cd3920511c75c9d693872c91e67c09aa6bd0efa7a27c0efb918b0"
+        },
+        "B_confirmed_base_breakout": {
+          "theme_id": "biotech",
+          "algorithm_id": "B_confirmed_base_breakout",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 10,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 10,
+          "top_rejections": [
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              5
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              5
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              5
+            ],
+            [
+              "MISSING_FIRST_DAY_RVOL",
+              5
+            ],
+            [
+              "MISSING_FIRST_DAY_CLV",
+              5
+            ],
+            [
+              "DATA_INSUFFICIENT",
+              5
+            ],
+            [
+              "LOW_SCORE",
+              3
+            ],
+            [
+              "EXTENDED",
+              2
+            ]
+          ],
+          "fingerprint": "f4e82112be55f9338756214f45e3e16546b4cf045d62b057d21855397821571f"
+        },
+        "C_trend_pullback": {
+          "theme_id": "biotech",
+          "algorithm_id": "C_trend_pullback",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 10,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 10,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "NO_REBOUND",
+              6
+            ],
+            [
+              "LOW_RVOL",
+              5
+            ],
+            [
+              "TREND_DIRECTION",
+              4
+            ],
+            [
+              "LOW_CLV",
+              3
+            ],
+            [
+              "EXTENDED",
+              2
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              2
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              2
+            ]
+          ],
+          "fingerprint": "f79040b580fe184bb2ae21d9f75ab6ddbe973009b088f133fb8c63e03bdae63a"
+        },
+        "D_residual_momentum": {
+          "theme_id": "biotech",
+          "algorithm_id": "D_residual_momentum",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 10,
+          "reference": 203,
+          "eligible": 1,
+          "watch": 0,
+          "rejected": 9,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              9
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              5
+            ],
+            [
+              "EXTENDED",
+              2
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              2
+            ],
+            [
+              "SMA50_SLOPE",
+              2
+            ],
+            [
+              "HIGH_ATR",
+              2
+            ],
+            [
+              "BELOW_SMA50",
+              1
+            ]
+          ],
+          "fingerprint": "38f4e225103aefd689103eb6272f87cd0cd2d431dff63b318468357b4d269906"
+        }
+      }
+    },
+    {
+      "theme_id": "healthcare",
+      "membership": "CURRENT_MEMBERSHIP",
+      "members_listed": 10,
+      "members_in_panel": 10,
+      "families": {
+        "A_trend_quality": {
+          "theme_id": "healthcare",
+          "algorithm_id": "A_trend_quality",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 10,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 10,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "TREND_DIRECTION",
+              7
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              4
+            ],
+            [
+              "WEAK_STRUCTURE",
+              2
+            ],
+            [
+              "LH_LL",
+              2
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              2
+            ],
+            [
+              "INVALIDATED",
+              1
+            ]
+          ],
+          "fingerprint": "bb84c528479cd3920511c75c9d693872c91e67c09aa6bd0efa7a27c0efb918b0"
+        },
+        "B_confirmed_base_breakout": {
+          "theme_id": "healthcare",
+          "algorithm_id": "B_confirmed_base_breakout",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 10,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 10,
+          "top_rejections": [
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              8
+            ],
+            [
+              "LOW_SCORE",
+              8
+            ],
+            [
+              "SMA50_SLOPE",
+              5
+            ],
+            [
+              "BELOW_SMA50",
+              5
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              3
+            ],
+            [
+              "WEAK_STRUCTURE",
+              2
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              2
+            ],
+            [
+              "MISSING_FIRST_DAY_RVOL",
+              2
+            ]
+          ],
+          "fingerprint": "f4e82112be55f9338756214f45e3e16546b4cf045d62b057d21855397821571f"
+        },
+        "C_trend_pullback": {
+          "theme_id": "healthcare",
+          "algorithm_id": "C_trend_pullback",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 10,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 10,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "NO_REBOUND",
+              8
+            ],
+            [
+              "TREND_DIRECTION",
+              7
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              6
+            ],
+            [
+              "LOW_CLV",
+              4
+            ],
+            [
+              "WEAK_STRUCTURE",
+              2
+            ],
+            [
+              "LOW_RVOL",
+              2
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              2
+            ]
+          ],
+          "fingerprint": "f79040b580fe184bb2ae21d9f75ab6ddbe973009b088f133fb8c63e03bdae63a"
+        },
+        "D_residual_momentum": {
+          "theme_id": "healthcare",
+          "algorithm_id": "D_residual_momentum",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 10,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 10,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              5
+            ],
+            [
+              "BELOW_SMA50",
+              5
+            ],
+            [
+              "SMA50_SLOPE",
+              5
+            ],
+            [
+              "WEAK_STRUCTURE",
+              2
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              2
+            ],
+            [
+              "INVALIDATED",
+              1
+            ]
+          ],
+          "fingerprint": "38f4e225103aefd689103eb6272f87cd0cd2d431dff63b318468357b4d269906"
+        }
+      }
+    },
+    {
+      "theme_id": "consumer_electronics",
+      "membership": "CURRENT_MEMBERSHIP",
+      "members_listed": 5,
+      "members_in_panel": 5,
+      "families": {
+        "A_trend_quality": {
+          "theme_id": "consumer_electronics",
+          "algorithm_id": "A_trend_quality",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 5,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 5,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              5
+            ],
+            [
+              "HIGH_ATR",
+              2
+            ],
+            [
+              "EXTENDED",
+              2
+            ],
+            [
+              "TREND_DIRECTION",
+              1
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              1
+            ]
+          ],
+          "fingerprint": "2f145781c46f188002b2cb5aa37940cfdd9b40f65065e0260110cf739869ba41"
+        },
+        "B_confirmed_base_breakout": {
+          "theme_id": "consumer_electronics",
+          "algorithm_id": "B_confirmed_base_breakout",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 5,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 5,
+          "top_rejections": [
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              5
+            ],
+            [
+              "LOW_SCORE",
+              5
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              4
+            ],
+            [
+              "LOW_CLV",
+              4
+            ],
+            [
+              "HIGH_ATR",
+              2
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              2
+            ],
+            [
+              "EXTENDED",
+              2
+            ],
+            [
+              "SMA50_SLOPE",
+              1
+            ]
+          ],
+          "fingerprint": "8831c20fdd46494bc7be2db94ab1bab93f1c65bb52e4fca7219513f0a1cf7c98"
+        },
+        "C_trend_pullback": {
+          "theme_id": "consumer_electronics",
+          "algorithm_id": "C_trend_pullback",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 5,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 5,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              5
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              4
+            ],
+            [
+              "LOW_RVOL",
+              4
+            ],
+            [
+              "NO_REBOUND",
+              3
+            ],
+            [
+              "LOW_CLV",
+              3
+            ],
+            [
+              "HIGH_ATR",
+              2
+            ],
+            [
+              "EXTENDED",
+              2
+            ],
+            [
+              "TREND_DIRECTION",
+              1
+            ]
+          ],
+          "fingerprint": "f5c7336124271e1ede6ab7913b7d80289acb80a7d560a366c209c06fae3e3e33"
+        },
+        "D_residual_momentum": {
+          "theme_id": "consumer_electronics",
+          "algorithm_id": "D_residual_momentum",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 5,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 5,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              4
+            ],
+            [
+              "HIGH_ATR",
+              2
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              2
+            ],
+            [
+              "EXTENDED",
+              2
+            ],
+            [
+              "SMA50_SLOPE",
+              1
+            ]
+          ],
+          "fingerprint": "20f92e4319c926a2998fa8a9ff57af31795949da5ba74826ea39e42130f5e88e"
+        }
+      }
+    },
+    {
+      "theme_id": "automotive",
+      "membership": "CURRENT_MEMBERSHIP",
+      "members_listed": 10,
+      "members_in_panel": 10,
+      "families": {
+        "A_trend_quality": {
+          "theme_id": "automotive",
+          "algorithm_id": "A_trend_quality",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 10,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 10,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "TREND_DIRECTION",
+              9
+            ],
+            [
+              "WEAK_STRUCTURE",
+              6
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              6
+            ],
+            [
+              "LH_LL",
+              5
+            ],
+            [
+              "INVALIDATED",
+              5
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              2
+            ],
+            [
+              "EXTENDED",
+              1
+            ]
+          ],
+          "fingerprint": "bb84c528479cd3920511c75c9d693872c91e67c09aa6bd0efa7a27c0efb918b0"
+        },
+        "B_confirmed_base_breakout": {
+          "theme_id": "automotive",
+          "algorithm_id": "B_confirmed_base_breakout",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 10,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 10,
+          "top_rejections": [
+            [
+              "SMA50_SLOPE",
+              8
+            ],
+            [
+              "BELOW_SMA50",
+              7
+            ],
+            [
+              "WEAK_STRUCTURE",
+              6
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              6
+            ],
+            [
+              "MISSING_FIRST_DAY_RVOL",
+              6
+            ],
+            [
+              "MISSING_FIRST_DAY_CLV",
+              6
+            ],
+            [
+              "DATA_INSUFFICIENT",
+              6
+            ],
+            [
+              "INVALIDATED",
+              5
+            ]
+          ],
+          "fingerprint": "f4e82112be55f9338756214f45e3e16546b4cf045d62b057d21855397821571f"
+        },
+        "C_trend_pullback": {
+          "theme_id": "automotive",
+          "algorithm_id": "C_trend_pullback",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 10,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 10,
+          "top_rejections": [
+            [
+              "NO_REBOUND",
+              10
+            ],
+            [
+              "LOW_CLV",
+              10
+            ],
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "TREND_DIRECTION",
+              9
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              7
+            ],
+            [
+              "WEAK_STRUCTURE",
+              6
+            ],
+            [
+              "INVALIDATED",
+              5
+            ],
+            [
+              "SUPPORT_BROKEN",
+              5
+            ]
+          ],
+          "fingerprint": "f79040b580fe184bb2ae21d9f75ab6ddbe973009b088f133fb8c63e03bdae63a"
+        },
+        "D_residual_momentum": {
+          "theme_id": "automotive",
+          "algorithm_id": "D_residual_momentum",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 10,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 10,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "SMA50_SLOPE",
+              8
+            ],
+            [
+              "BELOW_SMA50",
+              7
+            ],
+            [
+              "WEAK_STRUCTURE",
+              6
+            ],
+            [
+              "INVALIDATED",
+              5
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              3
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              2
+            ],
+            [
+              "EXTENDED",
+              1
+            ]
+          ],
+          "fingerprint": "38f4e225103aefd689103eb6272f87cd0cd2d431dff63b318468357b4d269906"
+        }
+      }
+    },
+    {
+      "theme_id": "ev_supply",
+      "membership": "CURRENT_MEMBERSHIP",
+      "members_listed": 10,
+      "members_in_panel": 10,
+      "families": {
+        "A_trend_quality": {
+          "theme_id": "ev_supply",
+          "algorithm_id": "A_trend_quality",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 10,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 10,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              9
+            ],
+            [
+              "TREND_DIRECTION",
+              8
+            ],
+            [
+              "WEAK_STRUCTURE",
+              5
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              5
+            ],
+            [
+              "LH_LL",
+              4
+            ],
+            [
+              "INVALIDATED",
+              3
+            ],
+            [
+              "LOW_PRICE",
+              2
+            ]
+          ],
+          "fingerprint": "bb84c528479cd3920511c75c9d693872c91e67c09aa6bd0efa7a27c0efb918b0"
+        },
+        "B_confirmed_base_breakout": {
+          "theme_id": "ev_supply",
+          "algorithm_id": "B_confirmed_base_breakout",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 10,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 10,
+          "top_rejections": [
+            [
+              "NOT_THROUGH_RESISTANCE",
+              7
+            ],
+            [
+              "MISSING_FIRST_DAY_RVOL",
+              7
+            ],
+            [
+              "MISSING_FIRST_DAY_CLV",
+              7
+            ],
+            [
+              "DATA_INSUFFICIENT",
+              7
+            ],
+            [
+              "WEAK_STRUCTURE",
+              5
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              5
+            ],
+            [
+              "SMA50_SLOPE",
+              5
+            ],
+            [
+              "INVALIDATED",
+              3
+            ]
+          ],
+          "fingerprint": "f4e82112be55f9338756214f45e3e16546b4cf045d62b057d21855397821571f"
+        },
+        "C_trend_pullback": {
+          "theme_id": "ev_supply",
+          "algorithm_id": "C_trend_pullback",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 10,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 10,
+          "top_rejections": [
+            [
+              "NO_REBOUND",
+              10
+            ],
+            [
+              "LOW_CLV",
+              10
+            ],
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "TREND_DIRECTION",
+              8
+            ],
+            [
+              "WEAK_STRUCTURE",
+              5
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              5
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              5
+            ],
+            [
+              "LOW_RVOL",
+              4
+            ]
+          ],
+          "fingerprint": "f79040b580fe184bb2ae21d9f75ab6ddbe973009b088f133fb8c63e03bdae63a"
+        },
+        "D_residual_momentum": {
+          "theme_id": "ev_supply",
+          "algorithm_id": "D_residual_momentum",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 10,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 10,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "WEAK_STRUCTURE",
+              5
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              5
+            ],
+            [
+              "SMA50_SLOPE",
+              5
+            ],
+            [
+              "INVALIDATED",
+              3
+            ],
+            [
+              "BELOW_SMA50",
+              3
+            ],
+            [
+              "LOW_PRICE",
+              2
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              2
+            ]
+          ],
+          "fingerprint": "38f4e225103aefd689103eb6272f87cd0cd2d431dff63b318468357b4d269906"
+        }
+      }
+    },
+    {
+      "theme_id": "finance",
+      "membership": "CURRENT_MEMBERSHIP",
+      "members_listed": 10,
+      "members_in_panel": 10,
+      "families": {
+        "A_trend_quality": {
+          "theme_id": "finance",
+          "algorithm_id": "A_trend_quality",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 10,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 10,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "TREND_DIRECTION",
+              7
+            ],
+            [
+              "INVALIDATED",
+              6
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4
+            ],
+            [
+              "LH_LL",
+              4
+            ]
+          ],
+          "fingerprint": "bb84c528479cd3920511c75c9d693872c91e67c09aa6bd0efa7a27c0efb918b0"
+        },
+        "B_confirmed_base_breakout": {
+          "theme_id": "finance",
+          "algorithm_id": "B_confirmed_base_breakout",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 10,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 10,
+          "top_rejections": [
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              10
+            ],
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "BELOW_SMA50",
+              7
+            ],
+            [
+              "INVALIDATED",
+              6
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              6
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              6
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4
+            ],
+            [
+              "SMA50_SLOPE",
+              1
+            ]
+          ],
+          "fingerprint": "f4e82112be55f9338756214f45e3e16546b4cf045d62b057d21855397821571f"
+        },
+        "C_trend_pullback": {
+          "theme_id": "finance",
+          "algorithm_id": "C_trend_pullback",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 10,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 10,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "NO_REBOUND",
+              8
+            ],
+            [
+              "TREND_DIRECTION",
+              7
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              7
+            ],
+            [
+              "INVALIDATED",
+              6
+            ],
+            [
+              "SUPPORT_BROKEN",
+              6
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4
+            ],
+            [
+              "LOW_RVOL",
+              4
+            ]
+          ],
+          "fingerprint": "f79040b580fe184bb2ae21d9f75ab6ddbe973009b088f133fb8c63e03bdae63a"
+        },
+        "D_residual_momentum": {
+          "theme_id": "finance",
+          "algorithm_id": "D_residual_momentum",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 10,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 10,
+          "top_rejections": [
+            [
+              "BELOW_SMA50",
+              7
+            ],
+            [
+              "LOW_SCORE",
+              7
+            ],
+            [
+              "INVALIDATED",
+              6
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              5
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4
+            ],
+            [
+              "SMA50_SLOPE",
+              1
+            ]
+          ],
+          "fingerprint": "38f4e225103aefd689103eb6272f87cd0cd2d431dff63b318468357b4d269906"
+        }
+      }
+    },
+    {
+      "theme_id": "fintech",
+      "membership": "CURRENT_MEMBERSHIP",
+      "members_listed": 10,
+      "members_in_panel": 10,
+      "families": {
+        "A_trend_quality": {
+          "theme_id": "fintech",
+          "algorithm_id": "A_trend_quality",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 10,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 10,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "TREND_DIRECTION",
+              9
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              6
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3
+            ],
+            [
+              "LH_LL",
+              3
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              3
+            ],
+            [
+              "HIGH_ATR",
+              3
+            ],
+            [
+              "INVALIDATED",
+              2
+            ]
+          ],
+          "fingerprint": "bb84c528479cd3920511c75c9d693872c91e67c09aa6bd0efa7a27c0efb918b0"
+        },
+        "B_confirmed_base_breakout": {
+          "theme_id": "fintech",
+          "algorithm_id": "B_confirmed_base_breakout",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 10,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 10,
+          "top_rejections": [
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              9
+            ],
+            [
+              "LOW_SCORE",
+              9
+            ],
+            [
+              "SMA50_SLOPE",
+              7
+            ],
+            [
+              "BELOW_SMA50",
+              7
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              6
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              4
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              4
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3
+            ]
+          ],
+          "fingerprint": "f4e82112be55f9338756214f45e3e16546b4cf045d62b057d21855397821571f"
+        },
+        "C_trend_pullback": {
+          "theme_id": "fintech",
+          "algorithm_id": "C_trend_pullback",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 10,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 10,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "TREND_DIRECTION",
+              9
+            ],
+            [
+              "NO_REBOUND",
+              8
+            ],
+            [
+              "LOW_CLV",
+              8
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              6
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              4
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3
+            ],
+            [
+              "HIGH_ATR",
+              3
+            ]
+          ],
+          "fingerprint": "f79040b580fe184bb2ae21d9f75ab6ddbe973009b088f133fb8c63e03bdae63a"
+        },
+        "D_residual_momentum": {
+          "theme_id": "fintech",
+          "algorithm_id": "D_residual_momentum",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 10,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 10,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              7
+            ],
+            [
+              "BELOW_SMA50",
+              7
+            ],
+            [
+              "SMA50_SLOPE",
+              7
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              6
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3
+            ],
+            [
+              "HIGH_ATR",
+              3
+            ],
+            [
+              "INVALIDATED",
+              2
+            ]
+          ],
+          "fingerprint": "38f4e225103aefd689103eb6272f87cd0cd2d431dff63b318468357b4d269906"
+        }
+      }
+    },
+    {
+      "theme_id": "retail",
+      "membership": "CURRENT_MEMBERSHIP",
+      "members_listed": 10,
+      "members_in_panel": 10,
+      "families": {
+        "A_trend_quality": {
+          "theme_id": "retail",
+          "algorithm_id": "A_trend_quality",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 10,
+          "reference": 203,
+          "eligible": 1,
+          "watch": 0,
+          "rejected": 9,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              9
+            ],
+            [
+              "TREND_DIRECTION",
+              6
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              3
+            ],
+            [
+              "EXTENDED",
+              2
+            ],
+            [
+              "WEAK_STRUCTURE",
+              1
+            ],
+            [
+              "LH_LL",
+              1
+            ]
+          ],
+          "fingerprint": "bb84c528479cd3920511c75c9d693872c91e67c09aa6bd0efa7a27c0efb918b0"
+        },
+        "B_confirmed_base_breakout": {
+          "theme_id": "retail",
+          "algorithm_id": "B_confirmed_base_breakout",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 10,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 10,
+          "top_rejections": [
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              8
+            ],
+            [
+              "LOW_SCORE",
+              7
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              6
+            ],
+            [
+              "SMA50_SLOPE",
+              6
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              5
+            ],
+            [
+              "BELOW_SMA50",
+              4
+            ],
+            [
+              "EXTENDED",
+              2
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              2
+            ]
+          ],
+          "fingerprint": "f4e82112be55f9338756214f45e3e16546b4cf045d62b057d21855397821571f"
+        },
+        "C_trend_pullback": {
+          "theme_id": "retail",
+          "algorithm_id": "C_trend_pullback",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 10,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 10,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "TREND_DIRECTION",
+              6
+            ],
+            [
+              "NO_REBOUND",
+              4
+            ],
+            [
+              "LOW_RVOL",
+              4
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              4
+            ],
+            [
+              "LOW_CLV",
+              2
+            ],
+            [
+              "EXTENDED",
+              2
+            ],
+            [
+              "WEAK_STRUCTURE",
+              1
+            ]
+          ],
+          "fingerprint": "f79040b580fe184bb2ae21d9f75ab6ddbe973009b088f133fb8c63e03bdae63a"
+        },
+        "D_residual_momentum": {
+          "theme_id": "retail",
+          "algorithm_id": "D_residual_momentum",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 10,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 10,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              8
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              7
+            ],
+            [
+              "SMA50_SLOPE",
+              6
+            ],
+            [
+              "BELOW_SMA50",
+              4
+            ],
+            [
+              "EXTENDED",
+              2
+            ],
+            [
+              "WEAK_STRUCTURE",
+              1
+            ]
+          ],
+          "fingerprint": "38f4e225103aefd689103eb6272f87cd0cd2d431dff63b318468357b4d269906"
+        }
+      }
+    },
+    {
+      "theme_id": "luxury",
+      "membership": "CURRENT_MEMBERSHIP",
+      "members_listed": 7,
+      "members_in_panel": 7,
+      "families": {
+        "A_trend_quality": {
+          "theme_id": "luxury",
+          "algorithm_id": "A_trend_quality",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 7,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 7,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              7
+            ],
+            [
+              "TREND_DIRECTION",
+              6
+            ],
+            [
+              "WEAK_STRUCTURE",
+              2
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              2
+            ],
+            [
+              "LH_LL",
+              2
+            ],
+            [
+              "LOW_ADV",
+              1
+            ],
+            [
+              "INVALIDATED",
+              1
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              1
+            ]
+          ],
+          "fingerprint": "d8079ff0b0b39a57c5be86676519ed4aa5509ca0130a05663d1ab202144d8a9a"
+        },
+        "B_confirmed_base_breakout": {
+          "theme_id": "luxury",
+          "algorithm_id": "B_confirmed_base_breakout",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 7,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 7,
+          "top_rejections": [
+            [
+              "SMA50_SLOPE",
+              6
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              4
+            ],
+            [
+              "LOW_SCORE",
+              4
+            ],
+            [
+              "BELOW_SMA50",
+              3
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              3
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              3
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              3
+            ],
+            [
+              "MISSING_FIRST_DAY_RVOL",
+              3
+            ]
+          ],
+          "fingerprint": "3c60d8c82eaf997fa4ca03b8b1875852850931741f466b7c92636d8268a08ad2"
+        },
+        "C_trend_pullback": {
+          "theme_id": "luxury",
+          "algorithm_id": "C_trend_pullback",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 7,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 7,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              7
+            ],
+            [
+              "TREND_DIRECTION",
+              6
+            ],
+            [
+              "NO_REBOUND",
+              5
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              4
+            ],
+            [
+              "LOW_CLV",
+              4
+            ],
+            [
+              "LOW_RVOL",
+              3
+            ],
+            [
+              "WEAK_STRUCTURE",
+              2
+            ],
+            [
+              "LOW_ADV",
+              1
+            ]
+          ],
+          "fingerprint": "25b08da9a9faac129febd79c772d8d4be15e740916c2d853825b6545204c9651"
+        },
+        "D_residual_momentum": {
+          "theme_id": "luxury",
+          "algorithm_id": "D_residual_momentum",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 7,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 7,
+          "top_rejections": [
+            [
+              "SMA50_SLOPE",
+              6
+            ],
+            [
+              "LOW_SCORE",
+              6
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              4
+            ],
+            [
+              "BELOW_SMA50",
+              3
+            ],
+            [
+              "WEAK_STRUCTURE",
+              2
+            ],
+            [
+              "MISSING_DAY_RETURN",
+              1
+            ],
+            [
+              "DATA_INSUFFICIENT",
+              1
+            ],
+            [
+              "LOW_ADV",
+              1
+            ]
+          ],
+          "fingerprint": "62f0cfd5b0f9ca51dd77ece43cb454f8e29b87569844d59b897e22cee41cf4e6"
+        }
+      }
+    },
+    {
+      "theme_id": "media_streaming",
+      "membership": "CURRENT_MEMBERSHIP",
+      "members_listed": 8,
+      "members_in_panel": 8,
+      "families": {
+        "A_trend_quality": {
+          "theme_id": "media_streaming",
+          "algorithm_id": "A_trend_quality",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 8,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 8,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              7
+            ],
+            [
+              "TREND_DIRECTION",
+              5
+            ],
+            [
+              "INVALIDATED",
+              4
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              4
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3
+            ],
+            [
+              "LH_LL",
+              3
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              3
+            ],
+            [
+              "LOW_ADV",
+              1
+            ]
+          ],
+          "fingerprint": "34c8e67b11020b451ef5d23a9799b26818fc5e4b98d6bd13425e2e6c3d55310e"
+        },
+        "B_confirmed_base_breakout": {
+          "theme_id": "media_streaming",
+          "algorithm_id": "B_confirmed_base_breakout",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 8,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 8,
+          "top_rejections": [
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              5
+            ],
+            [
+              "LOW_SCORE",
+              5
+            ],
+            [
+              "BELOW_SMA50",
+              5
+            ],
+            [
+              "INVALIDATED",
+              4
+            ],
+            [
+              "SMA50_SLOPE",
+              4
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              3
+            ],
+            [
+              "MISSING_FIRST_DAY_RVOL",
+              3
+            ],
+            [
+              "MISSING_FIRST_DAY_CLV",
+              3
+            ]
+          ],
+          "fingerprint": "0272c0c2c4047e9ad1b3e48701f9128ade2cbc0bfc5eda8c51b17b88d651478f"
+        },
+        "C_trend_pullback": {
+          "theme_id": "media_streaming",
+          "algorithm_id": "C_trend_pullback",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 8,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 8,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              8
+            ],
+            [
+              "NO_REBOUND",
+              7
+            ],
+            [
+              "LOW_CLV",
+              6
+            ],
+            [
+              "TREND_DIRECTION",
+              5
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              5
+            ],
+            [
+              "INVALIDATED",
+              4
+            ],
+            [
+              "SUPPORT_BROKEN",
+              4
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3
+            ]
+          ],
+          "fingerprint": "2065e941c3fb658552063bc65ab78ccf39c1f08d00b2e2579dcb4624ed4fc56f"
+        },
+        "D_residual_momentum": {
+          "theme_id": "media_streaming",
+          "algorithm_id": "D_residual_momentum",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 8,
+          "reference": 203,
+          "eligible": 1,
+          "watch": 0,
+          "rejected": 7,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              7
+            ],
+            [
+              "BELOW_SMA50",
+              5
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              4
+            ],
+            [
+              "INVALIDATED",
+              4
+            ],
+            [
+              "SMA50_SLOPE",
+              4
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              3
+            ],
+            [
+              "LOW_ADV",
+              1
+            ]
+          ],
+          "fingerprint": "90261d245d2eb494f38ccd73ab3f3ec3f6ee748a5b0451017dc39842d5deb393"
+        }
+      }
+    },
+    {
+      "theme_id": "social_internet",
+      "membership": "CURRENT_MEMBERSHIP",
+      "members_listed": 8,
+      "members_in_panel": 8,
+      "families": {
+        "A_trend_quality": {
+          "theme_id": "social_internet",
+          "algorithm_id": "A_trend_quality",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 8,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 8,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              6
+            ],
+            [
+              "WEAK_STRUCTURE",
+              5
+            ],
+            [
+              "LH_LL",
+              5
+            ],
+            [
+              "TREND_DIRECTION",
+              4
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              2
+            ],
+            [
+              "INVALIDATED",
+              2
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              1
+            ],
+            [
+              "EXTENDED",
+              1
+            ]
+          ],
+          "fingerprint": "34c8e67b11020b451ef5d23a9799b26818fc5e4b98d6bd13425e2e6c3d55310e"
+        },
+        "B_confirmed_base_breakout": {
+          "theme_id": "social_internet",
+          "algorithm_id": "B_confirmed_base_breakout",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 8,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 8,
+          "top_rejections": [
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              5
+            ],
+            [
+              "WEAK_STRUCTURE",
+              5
+            ],
+            [
+              "LOW_SCORE",
+              4
+            ],
+            [
+              "DATA_INSUFFICIENT",
+              4
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              3
+            ],
+            [
+              "SMA50_SLOPE",
+              3
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              3
+            ],
+            [
+              "MISSING_FIRST_DAY_RVOL",
+              3
+            ]
+          ],
+          "fingerprint": "0272c0c2c4047e9ad1b3e48701f9128ade2cbc0bfc5eda8c51b17b88d651478f"
+        },
+        "C_trend_pullback": {
+          "theme_id": "social_internet",
+          "algorithm_id": "C_trend_pullback",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 8,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 8,
+          "top_rejections": [
+            [
+              "NO_REBOUND",
+              8
+            ],
+            [
+              "LOW_CLV",
+              8
+            ],
+            [
+              "LOW_SCORE",
+              7
+            ],
+            [
+              "WEAK_STRUCTURE",
+              5
+            ],
+            [
+              "TREND_DIRECTION",
+              4
+            ],
+            [
+              "LOW_RVOL",
+              4
+            ],
+            [
+              "INVALIDATED",
+              2
+            ],
+            [
+              "SUPPORT_BROKEN",
+              2
+            ]
+          ],
+          "fingerprint": "2065e941c3fb658552063bc65ab78ccf39c1f08d00b2e2579dcb4624ed4fc56f"
+        },
+        "D_residual_momentum": {
+          "theme_id": "social_internet",
+          "algorithm_id": "D_residual_momentum",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 8,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 8,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              6
+            ],
+            [
+              "WEAK_STRUCTURE",
+              5
+            ],
+            [
+              "SMA50_SLOPE",
+              3
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              2
+            ],
+            [
+              "INVALIDATED",
+              2
+            ],
+            [
+              "BELOW_SMA50",
+              2
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              1
+            ],
+            [
+              "EXTENDED",
+              1
+            ]
+          ],
+          "fingerprint": "90261d245d2eb494f38ccd73ab3f3ec3f6ee748a5b0451017dc39842d5deb393"
+        }
+      }
+    },
+    {
+      "theme_id": "energy",
+      "membership": "CURRENT_MEMBERSHIP",
+      "members_listed": 10,
+      "members_in_panel": 10,
+      "families": {
+        "A_trend_quality": {
+          "theme_id": "energy",
+          "algorithm_id": "A_trend_quality",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 10,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 10,
+          "top_rejections": [
+            [
+              "TREND_DIRECTION",
+              10
+            ],
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "WEAK_STRUCTURE",
+              9
+            ],
+            [
+              "LH_LL",
+              9
+            ],
+            [
+              "INVALIDATED",
+              6
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              1
+            ]
+          ],
+          "fingerprint": "bb84c528479cd3920511c75c9d693872c91e67c09aa6bd0efa7a27c0efb918b0"
+        },
+        "B_confirmed_base_breakout": {
+          "theme_id": "energy",
+          "algorithm_id": "B_confirmed_base_breakout",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 10,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 10,
+          "top_rejections": [
+            [
+              "BELOW_SMA50",
+              10
+            ],
+            [
+              "WEAK_STRUCTURE",
+              9
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              9
+            ],
+            [
+              "LOW_SCORE",
+              9
+            ],
+            [
+              "SMA50_SLOPE",
+              8
+            ],
+            [
+              "INVALIDATED",
+              6
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              3
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              3
+            ]
+          ],
+          "fingerprint": "f4e82112be55f9338756214f45e3e16546b4cf045d62b057d21855397821571f"
+        },
+        "C_trend_pullback": {
+          "theme_id": "energy",
+          "algorithm_id": "C_trend_pullback",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 10,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 10,
+          "top_rejections": [
+            [
+              "TREND_DIRECTION",
+              10
+            ],
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "WEAK_STRUCTURE",
+              9
+            ],
+            [
+              "NO_REBOUND",
+              7
+            ],
+            [
+              "LOW_CLV",
+              7
+            ],
+            [
+              "INVALIDATED",
+              6
+            ],
+            [
+              "SUPPORT_BROKEN",
+              6
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              3
+            ]
+          ],
+          "fingerprint": "f79040b580fe184bb2ae21d9f75ab6ddbe973009b088f133fb8c63e03bdae63a"
+        },
+        "D_residual_momentum": {
+          "theme_id": "energy",
+          "algorithm_id": "D_residual_momentum",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 10,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 10,
+          "top_rejections": [
+            [
+              "BELOW_SMA50",
+              10
+            ],
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "WEAK_STRUCTURE",
+              9
+            ],
+            [
+              "SMA50_SLOPE",
+              8
+            ],
+            [
+              "INVALIDATED",
+              6
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              4
+            ]
+          ],
+          "fingerprint": "38f4e225103aefd689103eb6272f87cd0cd2d431dff63b318468357b4d269906"
+        }
+      }
+    },
+    {
+      "theme_id": "utilities",
+      "membership": "CURRENT_MEMBERSHIP",
+      "members_listed": 10,
+      "members_in_panel": 10,
+      "families": {
+        "A_trend_quality": {
+          "theme_id": "utilities",
+          "algorithm_id": "A_trend_quality",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 10,
+          "reference": 203,
+          "eligible": 1,
+          "watch": 0,
+          "rejected": 9,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              9
+            ],
+            [
+              "INVALIDATED",
+              3
+            ],
+            [
+              "TREND_DIRECTION",
+              2
+            ],
+            [
+              "HIGH_ATR",
+              2
+            ],
+            [
+              "WEAK_STRUCTURE",
+              1
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              1
+            ],
+            [
+              "LH_LL",
+              1
+            ]
+          ],
+          "fingerprint": "bb84c528479cd3920511c75c9d693872c91e67c09aa6bd0efa7a27c0efb918b0"
+        },
+        "B_confirmed_base_breakout": {
+          "theme_id": "utilities",
+          "algorithm_id": "B_confirmed_base_breakout",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 10,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 10,
+          "top_rejections": [
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              10
+            ],
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              6
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              5
+            ],
+            [
+              "INVALIDATED",
+              3
+            ],
+            [
+              "BELOW_SMA50",
+              2
+            ],
+            [
+              "HIGH_ATR",
+              2
+            ],
+            [
+              "WEAK_STRUCTURE",
+              1
+            ]
+          ],
+          "fingerprint": "f4e82112be55f9338756214f45e3e16546b4cf045d62b057d21855397821571f"
+        },
+        "C_trend_pullback": {
+          "theme_id": "utilities",
+          "algorithm_id": "C_trend_pullback",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 10,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 10,
+          "top_rejections": [
+            [
+              "DEPTH_OUT_OF_RANGE",
+              9
+            ],
+            [
+              "LOW_SCORE",
+              9
+            ],
+            [
+              "NO_REBOUND",
+              4
+            ],
+            [
+              "LOW_RVOL",
+              4
+            ],
+            [
+              "INVALIDATED",
+              3
+            ],
+            [
+              "SUPPORT_BROKEN",
+              3
+            ],
+            [
+              "TREND_DIRECTION",
+              2
+            ],
+            [
+              "HIGH_ATR",
+              2
+            ]
+          ],
+          "fingerprint": "f79040b580fe184bb2ae21d9f75ab6ddbe973009b088f133fb8c63e03bdae63a"
+        },
+        "D_residual_momentum": {
+          "theme_id": "utilities",
+          "algorithm_id": "D_residual_momentum",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 10,
+          "reference": 203,
+          "eligible": 1,
+          "watch": 0,
+          "rejected": 9,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              9
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              4
+            ],
+            [
+              "INVALIDATED",
+              3
+            ],
+            [
+              "BELOW_SMA50",
+              2
+            ],
+            [
+              "HIGH_ATR",
+              2
+            ],
+            [
+              "WEAK_STRUCTURE",
+              1
+            ]
+          ],
+          "fingerprint": "38f4e225103aefd689103eb6272f87cd0cd2d431dff63b318468357b4d269906"
+        }
+      }
+    },
+    {
+      "theme_id": "defense_aero",
+      "membership": "CURRENT_MEMBERSHIP",
+      "members_listed": 9,
+      "members_in_panel": 9,
+      "families": {
+        "A_trend_quality": {
+          "theme_id": "defense_aero",
+          "algorithm_id": "A_trend_quality",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 9,
+          "reference": 203,
+          "eligible": 1,
+          "watch": 0,
+          "rejected": 8,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              7
+            ],
+            [
+              "TREND_DIRECTION",
+              5
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              3
+            ],
+            [
+              "WEAK_STRUCTURE",
+              2
+            ],
+            [
+              "INVALIDATED",
+              2
+            ],
+            [
+              "LH_LL",
+              2
+            ],
+            [
+              "HIGH_ATR",
+              1
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              1
+            ]
+          ],
+          "fingerprint": "50e79cb1aacbd59a9caf478be4e55a16293db19241d81255279d6256498f06a0"
+        },
+        "B_confirmed_base_breakout": {
+          "theme_id": "defense_aero",
+          "algorithm_id": "B_confirmed_base_breakout",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 9,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 9,
+          "top_rejections": [
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              8
+            ],
+            [
+              "LOW_SCORE",
+              7
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              5
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              5
+            ],
+            [
+              "BELOW_SMA50",
+              4
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              3
+            ],
+            [
+              "SMA50_SLOPE",
+              3
+            ],
+            [
+              "WEAK_STRUCTURE",
+              2
+            ]
+          ],
+          "fingerprint": "61df037cc0a4845c54d534014451edfae68ac36e44a423254d8aa69d99b9a63b"
+        },
+        "C_trend_pullback": {
+          "theme_id": "defense_aero",
+          "algorithm_id": "C_trend_pullback",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 9,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 9,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              8
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              7
+            ],
+            [
+              "NO_REBOUND",
+              6
+            ],
+            [
+              "TREND_DIRECTION",
+              5
+            ],
+            [
+              "LOW_RVOL",
+              5
+            ],
+            [
+              "LOW_CLV",
+              4
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              3
+            ],
+            [
+              "WEAK_STRUCTURE",
+              2
+            ]
+          ],
+          "fingerprint": "c277325d652874c4a9a89dc714d8e7e6d820e7800f103a4421d8c54ff0fecfd0"
+        },
+        "D_residual_momentum": {
+          "theme_id": "defense_aero",
+          "algorithm_id": "D_residual_momentum",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 9,
+          "reference": 203,
+          "eligible": 1,
+          "watch": 0,
+          "rejected": 8,
+          "top_rejections": [
+            [
+              "NONPOSITIVE_RESIDUAL",
+              6
+            ],
+            [
+              "LOW_SCORE",
+              6
+            ],
+            [
+              "BELOW_SMA50",
+              4
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              3
+            ],
+            [
+              "SMA50_SLOPE",
+              3
+            ],
+            [
+              "WEAK_STRUCTURE",
+              2
+            ],
+            [
+              "INVALIDATED",
+              2
+            ],
+            [
+              "HIGH_ATR",
+              1
+            ]
+          ],
+          "fingerprint": "31190850fcb1bd8ec545a267ad3c4dd42070826739f3cd473f0386b56e184123"
+        }
+      }
+    },
+    {
+      "theme_id": "airlines",
+      "membership": "CURRENT_MEMBERSHIP",
+      "members_listed": 8,
+      "members_in_panel": 8,
+      "families": {
+        "A_trend_quality": {
+          "theme_id": "airlines",
+          "algorithm_id": "A_trend_quality",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 8,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 8,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              8
+            ],
+            [
+              "TREND_DIRECTION",
+              6
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              3
+            ],
+            [
+              "WEAK_STRUCTURE",
+              2
+            ],
+            [
+              "LH_LL",
+              2
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              1
+            ],
+            [
+              "INVALIDATED",
+              1
+            ]
+          ],
+          "fingerprint": "34c8e67b11020b451ef5d23a9799b26818fc5e4b98d6bd13425e2e6c3d55310e"
+        },
+        "B_confirmed_base_breakout": {
+          "theme_id": "airlines",
+          "algorithm_id": "B_confirmed_base_breakout",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 8,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 8,
+          "top_rejections": [
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              6
+            ],
+            [
+              "LOW_SCORE",
+              6
+            ],
+            [
+              "SMA50_SLOPE",
+              5
+            ],
+            [
+              "BELOW_SMA50",
+              5
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              2
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              2
+            ],
+            [
+              "MISSING_FIRST_DAY_RVOL",
+              2
+            ],
+            [
+              "MISSING_FIRST_DAY_CLV",
+              2
+            ]
+          ],
+          "fingerprint": "0272c0c2c4047e9ad1b3e48701f9128ade2cbc0bfc5eda8c51b17b88d651478f"
+        },
+        "C_trend_pullback": {
+          "theme_id": "airlines",
+          "algorithm_id": "C_trend_pullback",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 8,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 8,
+          "top_rejections": [
+            [
+              "NO_REBOUND",
+              8
+            ],
+            [
+              "LOW_SCORE",
+              8
+            ],
+            [
+              "TREND_DIRECTION",
+              6
+            ],
+            [
+              "LOW_RVOL",
+              3
+            ],
+            [
+              "WEAK_STRUCTURE",
+              2
+            ],
+            [
+              "LOW_CLV",
+              2
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              1
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              1
+            ]
+          ],
+          "fingerprint": "2065e941c3fb658552063bc65ab78ccf39c1f08d00b2e2579dcb4624ed4fc56f"
+        },
+        "D_residual_momentum": {
+          "theme_id": "airlines",
+          "algorithm_id": "D_residual_momentum",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 8,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 8,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              7
+            ],
+            [
+              "BELOW_SMA50",
+              5
+            ],
+            [
+              "SMA50_SLOPE",
+              5
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              4
+            ],
+            [
+              "WEAK_STRUCTURE",
+              2
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              1
+            ],
+            [
+              "INVALIDATED",
+              1
+            ]
+          ],
+          "fingerprint": "90261d245d2eb494f38ccd73ab3f3ec3f6ee748a5b0451017dc39842d5deb393"
+        }
+      }
+    },
+    {
+      "theme_id": "real_estate",
+      "membership": "CURRENT_MEMBERSHIP",
+      "members_listed": 10,
+      "members_in_panel": 10,
+      "families": {
+        "A_trend_quality": {
+          "theme_id": "real_estate",
+          "algorithm_id": "A_trend_quality",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 10,
+          "reference": 203,
+          "eligible": 1,
+          "watch": 0,
+          "rejected": 9,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              9
+            ],
+            [
+              "TREND_DIRECTION",
+              8
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              5
+            ],
+            [
+              "WEAK_STRUCTURE",
+              2
+            ],
+            [
+              "LH_LL",
+              2
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              1
+            ]
+          ],
+          "fingerprint": "bb84c528479cd3920511c75c9d693872c91e67c09aa6bd0efa7a27c0efb918b0"
+        },
+        "B_confirmed_base_breakout": {
+          "theme_id": "real_estate",
+          "algorithm_id": "B_confirmed_base_breakout",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 10,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 10,
+          "top_rejections": [
+            [
+              "SMA50_SLOPE",
+              7
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              7
+            ],
+            [
+              "LOW_SCORE",
+              7
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              4
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              3
+            ],
+            [
+              "MISSING_FIRST_DAY_RVOL",
+              3
+            ],
+            [
+              "MISSING_FIRST_DAY_CLV",
+              3
+            ],
+            [
+              "DATA_INSUFFICIENT",
+              3
+            ]
+          ],
+          "fingerprint": "f4e82112be55f9338756214f45e3e16546b4cf045d62b057d21855397821571f"
+        },
+        "C_trend_pullback": {
+          "theme_id": "real_estate",
+          "algorithm_id": "C_trend_pullback",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 10,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 10,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "TREND_DIRECTION",
+              8
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              8
+            ],
+            [
+              "NO_REBOUND",
+              6
+            ],
+            [
+              "LOW_CLV",
+              6
+            ],
+            [
+              "LOW_RVOL",
+              6
+            ],
+            [
+              "WEAK_STRUCTURE",
+              2
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              1
+            ]
+          ],
+          "fingerprint": "f79040b580fe184bb2ae21d9f75ab6ddbe973009b088f133fb8c63e03bdae63a"
+        },
+        "D_residual_momentum": {
+          "theme_id": "real_estate",
+          "algorithm_id": "D_residual_momentum",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 10,
+          "reference": 203,
+          "eligible": 1,
+          "watch": 0,
+          "rejected": 9,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              9
+            ],
+            [
+              "SMA50_SLOPE",
+              7
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              4
+            ],
+            [
+              "WEAK_STRUCTURE",
+              2
+            ],
+            [
+              "BELOW_SMA50",
+              2
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              1
+            ]
+          ],
+          "fingerprint": "38f4e225103aefd689103eb6272f87cd0cd2d431dff63b318468357b4d269906"
+        }
+      }
+    },
+    {
+      "theme_id": "crypto",
+      "membership": "CURRENT_MEMBERSHIP",
+      "members_listed": 9,
+      "members_in_panel": 9,
+      "families": {
+        "A_trend_quality": {
+          "theme_id": "crypto",
+          "algorithm_id": "A_trend_quality",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 9,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 9,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              9
+            ],
+            [
+              "TREND_DIRECTION",
+              7
+            ],
+            [
+              "HIGH_ATR",
+              5
+            ],
+            [
+              "EXTENDED",
+              3
+            ],
+            [
+              "LOW_PRICE",
+              3
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              2
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              2
+            ],
+            [
+              "LOW_ADV",
+              1
+            ]
+          ],
+          "fingerprint": "50e79cb1aacbd59a9caf478be4e55a16293db19241d81255279d6256498f06a0"
+        },
+        "B_confirmed_base_breakout": {
+          "theme_id": "crypto",
+          "algorithm_id": "B_confirmed_base_breakout",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 9,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 9,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              7
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              6
+            ],
+            [
+              "HIGH_ATR",
+              5
+            ],
+            [
+              "SMA50_SLOPE",
+              5
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              4
+            ],
+            [
+              "EXTENDED",
+              3
+            ],
+            [
+              "LOW_PRICE",
+              3
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              2
+            ]
+          ],
+          "fingerprint": "61df037cc0a4845c54d534014451edfae68ac36e44a423254d8aa69d99b9a63b"
+        },
+        "C_trend_pullback": {
+          "theme_id": "crypto",
+          "algorithm_id": "C_trend_pullback",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 9,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 9,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              9
+            ],
+            [
+              "TREND_DIRECTION",
+              7
+            ],
+            [
+              "HIGH_ATR",
+              5
+            ],
+            [
+              "NO_REBOUND",
+              4
+            ],
+            [
+              "LOW_CLV",
+              4
+            ],
+            [
+              "EXTENDED",
+              3
+            ],
+            [
+              "LOW_PRICE",
+              3
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              2
+            ]
+          ],
+          "fingerprint": "c277325d652874c4a9a89dc714d8e7e6d820e7800f103a4421d8c54ff0fecfd0"
+        },
+        "D_residual_momentum": {
+          "theme_id": "crypto",
+          "algorithm_id": "D_residual_momentum",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 9,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 9,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              9
+            ],
+            [
+              "HIGH_ATR",
+              5
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              5
+            ],
+            [
+              "SMA50_SLOPE",
+              5
+            ],
+            [
+              "EXTENDED",
+              3
+            ],
+            [
+              "LOW_PRICE",
+              3
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              2
+            ],
+            [
+              "LOW_ADV",
+              1
+            ]
+          ],
+          "fingerprint": "31190850fcb1bd8ec545a267ad3c4dd42070826739f3cd473f0386b56e184123"
+        }
+      }
+    },
+    {
+      "theme_id": "china_adr",
+      "membership": "CURRENT_MEMBERSHIP",
+      "members_listed": 12,
+      "members_in_panel": 12,
+      "families": {
+        "A_trend_quality": {
+          "theme_id": "china_adr",
+          "algorithm_id": "A_trend_quality",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 12,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 12,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              12
+            ],
+            [
+              "TREND_DIRECTION",
+              9
+            ],
+            [
+              "WEAK_STRUCTURE",
+              7
+            ],
+            [
+              "LH_LL",
+              7
+            ],
+            [
+              "INVALIDATED",
+              6
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              5
+            ],
+            [
+              "LOW_PRICE",
+              2
+            ]
+          ],
+          "fingerprint": "0995d36132da012470157cab4fae6b90796dc68b35077b6799cd1fd3e0afa1d6"
+        },
+        "B_confirmed_base_breakout": {
+          "theme_id": "china_adr",
+          "algorithm_id": "B_confirmed_base_breakout",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 12,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 12,
+          "top_rejections": [
+            [
+              "BELOW_SMA50",
+              9
+            ],
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              8
+            ],
+            [
+              "LOW_SCORE",
+              8
+            ],
+            [
+              "WEAK_STRUCTURE",
+              7
+            ],
+            [
+              "INVALIDATED",
+              6
+            ],
+            [
+              "SMA50_SLOPE",
+              6
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              4
+            ],
+            [
+              "MISSING_FIRST_DAY_RVOL",
+              4
+            ]
+          ],
+          "fingerprint": "0be6e85955e53193634b2a01c00d2bff5a267ee5d621b19cccf4df84b983b9f9"
+        },
+        "C_trend_pullback": {
+          "theme_id": "china_adr",
+          "algorithm_id": "C_trend_pullback",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 12,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 12,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              12
+            ],
+            [
+              "NO_REBOUND",
+              10
+            ],
+            [
+              "LOW_CLV",
+              10
+            ],
+            [
+              "TREND_DIRECTION",
+              9
+            ],
+            [
+              "LOW_RVOL",
+              8
+            ],
+            [
+              "WEAK_STRUCTURE",
+              7
+            ],
+            [
+              "INVALIDATED",
+              6
+            ],
+            [
+              "SUPPORT_BROKEN",
+              6
+            ]
+          ],
+          "fingerprint": "ab8a264687dd81420bab018b231141fc47364dd302eca2c3e3f12d1bc07b44e1"
+        },
+        "D_residual_momentum": {
+          "theme_id": "china_adr",
+          "algorithm_id": "D_residual_momentum",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 12,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 12,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              12
+            ],
+            [
+              "BELOW_SMA50",
+              9
+            ],
+            [
+              "WEAK_STRUCTURE",
+              7
+            ],
+            [
+              "INVALIDATED",
+              6
+            ],
+            [
+              "SMA50_SLOPE",
+              6
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              4
+            ],
+            [
+              "LOW_PRICE",
+              2
+            ]
+          ],
+          "fingerprint": "ac8a067d082cc2dbb718191f7d4814a05109e1160cea06c74e52892c320ac97d"
+        }
+      }
+    },
+    {
+      "theme_id": "telecom",
+      "membership": "CURRENT_MEMBERSHIP",
+      "members_listed": 7,
+      "members_in_panel": 7,
+      "families": {
+        "A_trend_quality": {
+          "theme_id": "telecom",
+          "algorithm_id": "A_trend_quality",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 7,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 7,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              7
+            ],
+            [
+              "TREND_DIRECTION",
+              5
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              3
+            ],
+            [
+              "INVALIDATED",
+              3
+            ]
+          ],
+          "fingerprint": "d8079ff0b0b39a57c5be86676519ed4aa5509ca0130a05663d1ab202144d8a9a"
+        },
+        "B_confirmed_base_breakout": {
+          "theme_id": "telecom",
+          "algorithm_id": "B_confirmed_base_breakout",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 7,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 7,
+          "top_rejections": [
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              4
+            ],
+            [
+              "LOW_SCORE",
+              4
+            ],
+            [
+              "SMA50_SLOPE",
+              4
+            ],
+            [
+              "BELOW_SMA50",
+              4
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              3
+            ],
+            [
+              "NOT_THROUGH_RESISTANCE",
+              3
+            ],
+            [
+              "MISSING_FIRST_DAY_RVOL",
+              3
+            ],
+            [
+              "MISSING_FIRST_DAY_CLV",
+              3
+            ]
+          ],
+          "fingerprint": "3c60d8c82eaf997fa4ca03b8b1875852850931741f466b7c92636d8268a08ad2"
+        },
+        "C_trend_pullback": {
+          "theme_id": "telecom",
+          "algorithm_id": "C_trend_pullback",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 7,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 7,
+          "top_rejections": [
+            [
+              "DEPTH_OUT_OF_RANGE",
+              7
+            ],
+            [
+              "LOW_SCORE",
+              7
+            ],
+            [
+              "TREND_DIRECTION",
+              5
+            ],
+            [
+              "LOW_RVOL",
+              4
+            ],
+            [
+              "NO_REBOUND",
+              4
+            ],
+            [
+              "INVALIDATED",
+              3
+            ],
+            [
+              "SUPPORT_BROKEN",
+              3
+            ],
+            [
+              "LOW_CLV",
+              3
+            ]
+          ],
+          "fingerprint": "25b08da9a9faac129febd79c772d8d4be15e740916c2d853825b6545204c9651"
+        },
+        "D_residual_momentum": {
+          "theme_id": "telecom",
+          "algorithm_id": "D_residual_momentum",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 7,
+          "reference": 203,
+          "eligible": 1,
+          "watch": 0,
+          "rejected": 6,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              6
+            ],
+            [
+              "BELOW_SMA50",
+              4
+            ],
+            [
+              "SMA50_SLOPE",
+              4
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              3
+            ],
+            [
+              "INVALIDATED",
+              3
+            ]
+          ],
+          "fingerprint": "62f0cfd5b0f9ca51dd77ece43cb454f8e29b87569844d59b897e22cee41cf4e6"
+        }
+      }
+    },
+    {
+      "theme_id": "industrials",
+      "membership": "CURRENT_MEMBERSHIP",
+      "members_listed": 10,
+      "members_in_panel": 10,
+      "families": {
+        "A_trend_quality": {
+          "theme_id": "industrials",
+          "algorithm_id": "A_trend_quality",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 10,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 10,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "TREND_DIRECTION",
+              7
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4
+            ],
+            [
+              "LH_LL",
+              4
+            ],
+            [
+              "INVALIDATED",
+              2
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              2
+            ]
+          ],
+          "fingerprint": "bb84c528479cd3920511c75c9d693872c91e67c09aa6bd0efa7a27c0efb918b0"
+        },
+        "B_confirmed_base_breakout": {
+          "theme_id": "industrials",
+          "algorithm_id": "B_confirmed_base_breakout",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 10,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 10,
+          "top_rejections": [
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              8
+            ],
+            [
+              "LOW_SCORE",
+              8
+            ],
+            [
+              "BELOW_SMA50",
+              7
+            ],
+            [
+              "SMA50_SLOPE",
+              6
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              4
+            ],
+            [
+              "INVALIDATED",
+              2
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              2
+            ]
+          ],
+          "fingerprint": "f4e82112be55f9338756214f45e3e16546b4cf045d62b057d21855397821571f"
+        },
+        "C_trend_pullback": {
+          "theme_id": "industrials",
+          "algorithm_id": "C_trend_pullback",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 10,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 10,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "TREND_DIRECTION",
+              7
+            ],
+            [
+              "NO_REBOUND",
+              5
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              4
+            ],
+            [
+              "LOW_CLV",
+              3
+            ],
+            [
+              "LOW_RVOL",
+              2
+            ],
+            [
+              "INVALIDATED",
+              2
+            ]
+          ],
+          "fingerprint": "f79040b580fe184bb2ae21d9f75ab6ddbe973009b088f133fb8c63e03bdae63a"
+        },
+        "D_residual_momentum": {
+          "theme_id": "industrials",
+          "algorithm_id": "D_residual_momentum",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 10,
+          "reference": 203,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 10,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              8
+            ],
+            [
+              "BELOW_SMA50",
+              7
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              6
+            ],
+            [
+              "SMA50_SLOPE",
+              6
+            ],
+            [
+              "WEAK_STRUCTURE",
+              4
+            ],
+            [
+              "INVALIDATED",
+              2
+            ]
+          ],
+          "fingerprint": "38f4e225103aefd689103eb6272f87cd0cd2d431dff63b318468357b4d269906"
+        }
+      }
+    },
+    {
+      "theme_id": "etfs",
+      "membership": "CURRENT_MEMBERSHIP",
+      "members_listed": 12,
+      "members_in_panel": 12,
+      "families": {
+        "A_trend_quality": {
+          "theme_id": "etfs",
+          "algorithm_id": "A_trend_quality",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 12,
+          "reference": 12,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 12,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              12
+            ],
+            [
+              "TREND_DIRECTION",
+              7
+            ],
+            [
+              "EXTENDED",
+              5
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3
+            ],
+            [
+              "LH_LL",
+              3
+            ],
+            [
+              "HIGH_ATR",
+              2
+            ],
+            [
+              "NONPOSITIVE_MOMENTUM",
+              2
+            ],
+            [
+              "UNRESOLVED_UPTHRUST",
+              1
+            ]
+          ],
+          "fingerprint": "0995d36132da012470157cab4fae6b90796dc68b35077b6799cd1fd3e0afa1d6"
+        },
+        "B_confirmed_base_breakout": {
+          "theme_id": "etfs",
+          "algorithm_id": "B_confirmed_base_breakout",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 12,
+          "reference": 12,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 12,
+          "top_rejections": [
+            [
+              "BREAKOUT_TRACK_EXPIRED",
+              10
+            ],
+            [
+              "LOW_SCORE",
+              10
+            ],
+            [
+              "LOW_EVENT_RVOL",
+              7
+            ],
+            [
+              "TOO_FAR_FROM_BASE",
+              6
+            ],
+            [
+              "BELOW_SMA50",
+              6
+            ],
+            [
+              "EXTENDED",
+              5
+            ],
+            [
+              "SMA50_SLOPE",
+              5
+            ],
+            [
+              "LOW_CLV",
+              3
+            ]
+          ],
+          "fingerprint": "0be6e85955e53193634b2a01c00d2bff5a267ee5d621b19cccf4df84b983b9f9"
+        },
+        "C_trend_pullback": {
+          "theme_id": "etfs",
+          "algorithm_id": "C_trend_pullback",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 12,
+          "reference": 12,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 12,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              12
+            ],
+            [
+              "DEPTH_OUT_OF_RANGE",
+              11
+            ],
+            [
+              "TREND_DIRECTION",
+              7
+            ],
+            [
+              "NO_REBOUND",
+              6
+            ],
+            [
+              "EXTENDED",
+              5
+            ],
+            [
+              "LOW_CLV",
+              4
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3
+            ],
+            [
+              "HIGH_ATR",
+              2
+            ]
+          ],
+          "fingerprint": "ab8a264687dd81420bab018b231141fc47364dd302eca2c3e3f12d1bc07b44e1"
+        },
+        "D_residual_momentum": {
+          "theme_id": "etfs",
+          "algorithm_id": "D_residual_momentum",
+          "session_date": "2024-06-13",
+          "profile": "balanced",
+          "horizon": "mid",
+          "track": "PRICE_ONLY_DIAGNOSTIC",
+          "candidates": 12,
+          "reference": 12,
+          "eligible": 0,
+          "watch": 0,
+          "rejected": 12,
+          "top_rejections": [
+            [
+              "LOW_SCORE",
+              11
+            ],
+            [
+              "NONPOSITIVE_RESIDUAL",
+              7
+            ],
+            [
+              "BELOW_SMA50",
+              6
+            ],
+            [
+              "EXTENDED",
+              5
+            ],
+            [
+              "SMA50_SLOPE",
+              5
+            ],
+            [
+              "WEAK_STRUCTURE",
+              3
+            ],
+            [
+              "HIGH_ATR",
+              2
+            ],
+            [
+              "INSUFFICIENT_MATCHED_BENCHMARK",
+              1
+            ]
+          ],
+          "fingerprint": "ac8a067d082cc2dbb718191f7d4814a05109e1160cea06c74e52892c320ac97d"
+        }
+      }
+    }
+  ],
+  "composite_results": [
+    {
+      "security_id": "WELL",
+      "ticker_at_signal": "WELL",
+      "session_date": "2024-06-13",
+      "algorithm_id": "A_trend_quality",
+      "profile": "balanced",
+      "horizon": "mid",
+      "sector_context": "real_estate",
+      "status": "eligible",
+      "score": 77.30127046856485,
+      "rejection_reasons": [],
+      "setup_state": "eligible",
+      "factors": {
+        "T": 86.06879937473676,
+        "M": 69.3240190853575,
+        "S": 82.0,
+        "B": 74.43157322890187,
+        "P": 42.719553882391864,
+        "V": 50.292169384657456,
+        "R": 87.3181453352725,
+        "G": 45.11621315193111
+      },
+      "track": "PRICE_ONLY_DIAGNOSTIC",
+      "volume_scope": "VENDOR_DAILY_UNVERIFIED",
+      "momentum_basis": "price_return_not_total_return",
+      "observed_feature_coverage": 1.0,
+      "stock_or_etf_track": "stock",
+      "theme_ids": [
+        "real_estate"
+      ],
+      "consensus_z": 80.94016238405871,
+      "family_votes": [
+        "A_trend_quality",
+        "D_residual_momentum"
+      ],
+      "theme_count": 1,
+      "R": 87.3181453352725,
+      "G": 45.11621315193111
+    },
+    {
+      "security_id": "VRTX",
+      "ticker_at_signal": "VRTX",
+      "session_date": "2024-06-13",
+      "algorithm_id": "A_trend_quality",
+      "profile": "balanced",
+      "horizon": "mid",
+      "sector_context": "biotech",
+      "status": "eligible",
+      "score": 77.10350342926306,
+      "rejection_reasons": [],
+      "setup_state": "eligible",
+      "factors": {
+        "T": 84.27903993210072,
+        "M": 69.21434825644374,
+        "S": 85.0,
+        "B": 72.23209516776565,
+        "P": 49.74259629505355,
+        "V": 66.29064645464292,
+        "R": 80.81701468199874,
+        "G": 68.67630385488556
+      },
+      "track": "PRICE_ONLY_DIAGNOSTIC",
+      "volume_scope": "VENDOR_DAILY_UNVERIFIED",
+      "momentum_basis": "price_return_not_total_return",
+      "observed_feature_coverage": 1.0,
+      "stock_or_etf_track": "stock",
+      "theme_ids": [
+        "biotech"
+      ],
+      "consensus_z": 79.20152008771333,
+      "family_votes": [
+        "A_trend_quality",
+        "D_residual_momentum"
+      ],
+      "theme_count": 1,
+      "R": 80.81701468199874,
+      "G": 68.67630385488556
+    },
+    {
+      "security_id": "SO",
+      "ticker_at_signal": "SO",
+      "session_date": "2024-06-13",
+      "algorithm_id": "A_trend_quality",
+      "profile": "balanced",
+      "horizon": "mid",
+      "sector_context": "utilities",
+      "status": "eligible",
+      "score": 75.97998962882274,
+      "rejection_reasons": [],
+      "setup_state": "eligible",
+      "factors": {
+        "T": 84.22666829603467,
+        "M": 58.850819755356255,
+        "S": 79.85040606827863,
+        "B": 65.18953708896865,
+        "P": 65.18671483017565,
+        "V": 56.892563791035215,
+        "R": 88.02300073598875,
+        "G": 72.84580498864611
+      },
+      "track": "PRICE_ONLY_DIAGNOSTIC",
+      "volume_scope": "VENDOR_DAILY_UNVERIFIED",
+      "momentum_basis": "price_return_not_total_return",
+      "observed_feature_coverage": 1.0,
+      "stock_or_etf_track": "stock",
+      "theme_ids": [
+        "utilities"
+      ],
+      "consensus_z": 78.71790929233237,
+      "family_votes": [
+        "A_trend_quality",
+        "D_residual_momentum"
+      ],
+      "theme_count": 1,
+      "R": 88.02300073598875,
+      "G": 72.84580498864611
+    }
+  ],
+  "mode": "LIMITED_CURRENT_UNIVERSE_V1",
+  "evidence_status": "UNVALIDATED_LIMITED_DATA"
+}

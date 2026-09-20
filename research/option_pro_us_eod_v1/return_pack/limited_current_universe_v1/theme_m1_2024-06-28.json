@@ -1,0 +1,649 @@
+{
+  "session_date": "2024-06-28",
+  "eligible_n": 19,
+  "watch_n": 0,
+  "composite_n": 1,
+  "composite_results": [
+    {
+      "security_id": "COST",
+      "ticker_at_signal": "COST",
+      "session_date": "2024-06-28",
+      "algorithm_id": "A_trend_quality",
+      "profile": "balanced",
+      "horizon": "mid",
+      "sector_context": "retail",
+      "status": "eligible",
+      "score": 81.1206983619872,
+      "rejection_reasons": [],
+      "setup_state": "eligible",
+      "factors": {
+        "T": 87.81164384859059,
+        "M": 86.22063796058846,
+        "S": 79.85040606827863,
+        "B": 71.70067479725128,
+        "P": 38.818631119365804,
+        "V": 52.50760446095107,
+        "R": 95.77068764568847,
+        "G": 23.71271585556923
+      },
+      "track": "PRICE_ONLY_DIAGNOSTIC",
+      "volume_scope": "VENDOR_DAILY_UNVERIFIED",
+      "momentum_basis": "price_return_not_total_return",
+      "observed_feature_coverage": 1.0,
+      "stock_or_etf_track": "stock",
+      "theme_ids": [
+        "retail"
+      ],
+      "consensus_z": 80.59568316038302,
+      "family_votes": [
+        "A_trend_quality",
+        "D_residual_momentum"
+      ],
+      "theme_count": 1,
+      "R": 95.77068764568847,
+      "G": 23.71271585556923
+    }
+  ],
+  "themes": [
+    {
+      "theme_id": "semiconductors",
+      "members_listed": 14,
+      "members_in_panel": 14,
+      "eligible": {
+        "A": 1,
+        "B": 0,
+        "C": 0,
+        "D": 1
+      },
+      "watch": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 0
+      },
+      "rejected": {
+        "A": 13,
+        "B": 14,
+        "C": 14,
+        "D": 13
+      },
+      "reference": 203,
+      "candidates": 14
+    },
+    {
+      "theme_id": "software",
+      "members_listed": 12,
+      "members_in_panel": 12,
+      "eligible": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 0
+      },
+      "watch": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 0
+      },
+      "rejected": {
+        "A": 12,
+        "B": 12,
+        "C": 12,
+        "D": 12
+      },
+      "reference": 203,
+      "candidates": 12
+    },
+    {
+      "theme_id": "ai_cloud",
+      "members_listed": 10,
+      "members_in_panel": 9,
+      "eligible": {
+        "A": 2,
+        "B": 0,
+        "C": 0,
+        "D": 1
+      },
+      "watch": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 0
+      },
+      "rejected": {
+        "A": 7,
+        "B": 9,
+        "C": 9,
+        "D": 8
+      },
+      "reference": 203,
+      "candidates": 9
+    },
+    {
+      "theme_id": "biotech",
+      "members_listed": 10,
+      "members_in_panel": 10,
+      "eligible": {
+        "A": 2,
+        "B": 0,
+        "C": 0,
+        "D": 1
+      },
+      "watch": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 0
+      },
+      "rejected": {
+        "A": 8,
+        "B": 10,
+        "C": 10,
+        "D": 9
+      },
+      "reference": 203,
+      "candidates": 10
+    },
+    {
+      "theme_id": "healthcare",
+      "members_listed": 10,
+      "members_in_panel": 10,
+      "eligible": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 0
+      },
+      "watch": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 0
+      },
+      "rejected": {
+        "A": 10,
+        "B": 10,
+        "C": 10,
+        "D": 10
+      },
+      "reference": 203,
+      "candidates": 10
+    },
+    {
+      "theme_id": "consumer_electronics",
+      "members_listed": 5,
+      "members_in_panel": 5,
+      "eligible": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 1
+      },
+      "watch": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 0
+      },
+      "rejected": {
+        "A": 5,
+        "B": 5,
+        "C": 5,
+        "D": 4
+      },
+      "reference": 203,
+      "candidates": 5
+    },
+    {
+      "theme_id": "automotive",
+      "members_listed": 10,
+      "members_in_panel": 10,
+      "eligible": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 0
+      },
+      "watch": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 0
+      },
+      "rejected": {
+        "A": 10,
+        "B": 10,
+        "C": 10,
+        "D": 10
+      },
+      "reference": 203,
+      "candidates": 10
+    },
+    {
+      "theme_id": "ev_supply",
+      "members_listed": 10,
+      "members_in_panel": 10,
+      "eligible": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 0
+      },
+      "watch": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 0
+      },
+      "rejected": {
+        "A": 10,
+        "B": 10,
+        "C": 10,
+        "D": 10
+      },
+      "reference": 203,
+      "candidates": 10
+    },
+    {
+      "theme_id": "finance",
+      "members_listed": 10,
+      "members_in_panel": 10,
+      "eligible": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 0
+      },
+      "watch": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 0
+      },
+      "rejected": {
+        "A": 10,
+        "B": 10,
+        "C": 10,
+        "D": 10
+      },
+      "reference": 203,
+      "candidates": 10
+    },
+    {
+      "theme_id": "fintech",
+      "members_listed": 10,
+      "members_in_panel": 10,
+      "eligible": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 0
+      },
+      "watch": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 0
+      },
+      "rejected": {
+        "A": 10,
+        "B": 10,
+        "C": 10,
+        "D": 10
+      },
+      "reference": 203,
+      "candidates": 10
+    },
+    {
+      "theme_id": "retail",
+      "members_listed": 10,
+      "members_in_panel": 10,
+      "eligible": {
+        "A": 1,
+        "B": 0,
+        "C": 0,
+        "D": 2
+      },
+      "watch": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 0
+      },
+      "rejected": {
+        "A": 9,
+        "B": 10,
+        "C": 10,
+        "D": 8
+      },
+      "reference": 203,
+      "candidates": 10
+    },
+    {
+      "theme_id": "luxury",
+      "members_listed": 7,
+      "members_in_panel": 7,
+      "eligible": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 0
+      },
+      "watch": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 0
+      },
+      "rejected": {
+        "A": 7,
+        "B": 7,
+        "C": 7,
+        "D": 7
+      },
+      "reference": 203,
+      "candidates": 7
+    },
+    {
+      "theme_id": "media_streaming",
+      "members_listed": 8,
+      "members_in_panel": 8,
+      "eligible": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 0
+      },
+      "watch": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 0
+      },
+      "rejected": {
+        "A": 8,
+        "B": 8,
+        "C": 8,
+        "D": 8
+      },
+      "reference": 203,
+      "candidates": 8
+    },
+    {
+      "theme_id": "social_internet",
+      "members_listed": 8,
+      "members_in_panel": 8,
+      "eligible": {
+        "A": 1,
+        "B": 0,
+        "C": 0,
+        "D": 1
+      },
+      "watch": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 0
+      },
+      "rejected": {
+        "A": 7,
+        "B": 8,
+        "C": 8,
+        "D": 7
+      },
+      "reference": 203,
+      "candidates": 8
+    },
+    {
+      "theme_id": "energy",
+      "members_listed": 10,
+      "members_in_panel": 10,
+      "eligible": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 0
+      },
+      "watch": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 0
+      },
+      "rejected": {
+        "A": 10,
+        "B": 10,
+        "C": 10,
+        "D": 10
+      },
+      "reference": 203,
+      "candidates": 10
+    },
+    {
+      "theme_id": "utilities",
+      "members_listed": 10,
+      "members_in_panel": 10,
+      "eligible": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 1
+      },
+      "watch": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 0
+      },
+      "rejected": {
+        "A": 10,
+        "B": 10,
+        "C": 10,
+        "D": 9
+      },
+      "reference": 203,
+      "candidates": 10
+    },
+    {
+      "theme_id": "defense_aero",
+      "members_listed": 9,
+      "members_in_panel": 9,
+      "eligible": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 1
+      },
+      "watch": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 0
+      },
+      "rejected": {
+        "A": 9,
+        "B": 9,
+        "C": 9,
+        "D": 8
+      },
+      "reference": 203,
+      "candidates": 9
+    },
+    {
+      "theme_id": "airlines",
+      "members_listed": 8,
+      "members_in_panel": 8,
+      "eligible": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 0
+      },
+      "watch": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 0
+      },
+      "rejected": {
+        "A": 8,
+        "B": 8,
+        "C": 8,
+        "D": 8
+      },
+      "reference": 203,
+      "candidates": 8
+    },
+    {
+      "theme_id": "real_estate",
+      "members_listed": 10,
+      "members_in_panel": 10,
+      "eligible": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 1
+      },
+      "watch": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 0
+      },
+      "rejected": {
+        "A": 10,
+        "B": 10,
+        "C": 10,
+        "D": 9
+      },
+      "reference": 203,
+      "candidates": 10
+    },
+    {
+      "theme_id": "crypto",
+      "members_listed": 9,
+      "members_in_panel": 9,
+      "eligible": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 0
+      },
+      "watch": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 0
+      },
+      "rejected": {
+        "A": 9,
+        "B": 9,
+        "C": 9,
+        "D": 9
+      },
+      "reference": 203,
+      "candidates": 9
+    },
+    {
+      "theme_id": "china_adr",
+      "members_listed": 12,
+      "members_in_panel": 12,
+      "eligible": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 0
+      },
+      "watch": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 0
+      },
+      "rejected": {
+        "A": 12,
+        "B": 12,
+        "C": 12,
+        "D": 12
+      },
+      "reference": 203,
+      "candidates": 12
+    },
+    {
+      "theme_id": "telecom",
+      "members_listed": 7,
+      "members_in_panel": 7,
+      "eligible": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 1
+      },
+      "watch": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 0
+      },
+      "rejected": {
+        "A": 7,
+        "B": 7,
+        "C": 7,
+        "D": 6
+      },
+      "reference": 203,
+      "candidates": 7
+    },
+    {
+      "theme_id": "industrials",
+      "members_listed": 10,
+      "members_in_panel": 10,
+      "eligible": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 1
+      },
+      "watch": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 0
+      },
+      "rejected": {
+        "A": 10,
+        "B": 10,
+        "C": 10,
+        "D": 9
+      },
+      "reference": 203,
+      "candidates": 10
+    },
+    {
+      "theme_id": "etfs",
+      "members_listed": 12,
+      "members_in_panel": 12,
+      "eligible": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 0
+      },
+      "watch": {
+        "A": 0,
+        "B": 0,
+        "C": 0,
+        "D": 0
+      },
+      "rejected": {
+        "A": 12,
+        "B": 12,
+        "C": 12,
+        "D": 12
+      },
+      "reference": 12,
+      "candidates": 12
+    }
+  ]
+}

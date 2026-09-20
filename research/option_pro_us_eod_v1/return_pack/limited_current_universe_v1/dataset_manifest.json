@@ -1,0 +1,28 @@
+{
+  "mode": "LIMITED_CURRENT_UNIVERSE_V1",
+  "evidence_status": "UNVALIDATED_LIMITED_DATA",
+  "member_policy": "CURRENT_MEMBERSHIP",
+  "dataset_hash": "a8541164c3a7b4bf1d8a272f2d853ecb1d198743fa5245c289609b47193d1c7f",
+  "cache": {
+    "path": "research/option_pro_us_eod_v1/data/cache/limited_current_universe_v1/bars.pkl",
+    "gitignored": true,
+    "bytes": 63469417,
+    "sha256": "cc26ef2ecb35a24a852720a2f8b6a3bbea238b83549494019f1eb34083efc622",
+    "import": "YahooDiagnosticProvider.fetch_daily_bars_batch with locked yfinance==1.5.1 params; HISTORY_START=2018-01-02 DOWNLOAD_END_EXCLUSIVE=2024-06-29"
+  },
+  "trusted_round3_yahoo_abcd": {
+    "exists": false
+  },
+  "yahoo_parquet": {
+    "exists": false
+  },
+  "symbols_wanted": 214,
+  "symbols_with_bars": 213,
+  "missing": [
+    "CRWV"
+  ],
+  "missing_reason": "empty Yahoo download inside 2018-01-02..2024-06-28; IPO after window; kept as missing",
+  "snapshot_sha256": "6787687a2e12d31b91d5d17f7a33f11c1606bf8a35aa425d2d9c96740972ad20",
+  "snapshot_bytes": 1056083,
+  "preview_sha256": "f0f23034e35569e19e97852e3386fd0ef626d301820d54273fd020420ac5f5d5"
+}
