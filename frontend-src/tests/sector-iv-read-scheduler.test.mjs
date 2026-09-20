@@ -177,6 +177,38 @@ test('deadline reached while hidden waits until visibility returns', async () =>
   scheduler.dispose();
 });
 
+test('expired failure keeps checking while the worker has not yet picked up its retry', async () => {
+  const clock = new FakeClock();
+  const responses = [
+    envelope('semiconductors', 'OLD', 'failed', 5),
+    envelope('semiconductors', 'OLD', 'failed', 0),
+    envelope('semiconductors', 'OLD', 'queued'),
+    envelope('semiconductors', 'NEW', 'idle', 0, '2026-09-20T04:05:00Z'),
+  ];
+  let reads = 0;
+  const flow = new SectorIvRefreshFlow({
+    read: async () => responses[reads++],
+    refresh: async () => { throw new Error('recovery must not submit another POST'); },
+  });
+  const { scheduler, unsubscribe } = wire(flow, clock, { value: true });
+  await flow.selectSector('semiconductors');
+  clock.advance(5_000);
+  await settle();
+  assert.equal(reads, 2);
+  assert.equal(flow.getSnapshot().refresh.status, 'failed');
+  clock.advance(3_000);
+  await settle();
+  assert.equal(reads, 3, 'a pending worker retry must not fall back to ten-minute reads');
+  assert.equal(flow.getSnapshot().refresh.status, 'queued');
+  clock.advance(3_000);
+  await settle();
+  assert.equal(reads, 4);
+  assert.equal(flow.getSnapshot().data.rows[0].ticker, 'NEW');
+  assert.equal(flow.getSnapshot().data.asOf, '2026-09-20T04:05:00Z');
+  unsubscribe();
+  scheduler.dispose();
+});
+
 test('GET 429 Retry-After suspends the three-second running poll', async () => {
   const clock = new FakeClock();
   const visible = { value: true };

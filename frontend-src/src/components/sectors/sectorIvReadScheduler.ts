@@ -96,7 +96,11 @@ export class SectorIvReadScheduler {
       return;
     }
 
-    const active = snapshot.refresh.status === 'queued' || snapshot.refresh.status === 'running';
+    // The worker checks its durable retry schedule separately. A GET can land
+    // just after cooling ends but before the worker changes failed to queued.
+    const active = snapshot.refresh.status === 'queued'
+      || snapshot.refresh.status === 'running'
+      || (snapshot.refresh.status === 'failed' && snapshot.refresh.retryAfterSeconds <= 0);
     const intervalMs = active ? ACTIVE_REFRESH_INTERVAL_MS : NORMAL_READ_INTERVAL_MS;
     this.intervalHandle = this.clock.setInterval(() => {
       if (this.visible()) void this.read();
