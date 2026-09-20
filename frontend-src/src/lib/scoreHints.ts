@@ -72,6 +72,38 @@ export const SCORE_HINTS = {
     body:
       t('表示评分所需数据的完整程度，按配置权重计算。指标或历史数据缺失时会降低。'),
   },
+  eodFactorT: {
+    title: t('趋势 T'),
+    body: t('收盘技术趋势因子：方向与均线结构。不是原版短期/中期/长期槽位。'),
+  },
+  eodFactorM: {
+    title: t('动量 M'),
+    body: t('收盘技术动量因子：按当前周期定义的收益混合。不是原版短期分。'),
+  },
+  eodFactorS: {
+    title: t('结构 S'),
+    body: t('收盘技术结构因子：高低点与形态是否支撑当前家族设定。'),
+  },
+  eodFactorB: {
+    title: t('突破 B'),
+    body: t('收盘技术突破因子：突破确认与第一日跟进，不是原版突破质量槽。'),
+  },
+  eodFactorP: {
+    title: t('回踩 P'),
+    body: t('收盘技术回踩因子：趋势内回撤位置，不是原版中期分。'),
+  },
+  eodFactorV: {
+    title: t('量能 V'),
+    body: t('收盘技术量能因子：仅用供应商日线量，未核实成交额门时保持观察。'),
+  },
+  eodFactorR: {
+    title: t('相对 R'),
+    body: t('收盘技术相对因子：对基准的相对表现，缺行业分类时不假装行业相对。'),
+  },
+  eodFactorG: {
+    title: t('行业 G'),
+    body: t('收盘技术行业因子：无独立行业分类时保持未知，不编造板块强度。'),
+  },
 
   /* ================= 市场环境六维（market_regime） ================= */
   marketRegime: {

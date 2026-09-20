@@ -7,6 +7,47 @@ import type { Dict } from './types';
 export const HINTS: Dict = {
   "缺失项不计入评分，其余项重新分配权重；数据越少，置信度越低。": ["Missing components are excluded and the remaining weights are rescaled. Less data means lower confidence.", "欠測項目を除き、残りの項目で重みを調整します。データが少ないほど信頼度は下がります。"],
 
+  '趋势 T': ['Trend T', 'トレンド T'],
+  '收盘技术趋势因子：方向与均线结构。不是原版短期/中期/长期槽位。': [
+    'EOD technical trend factor: direction and moving-average structure. It is not the original short/mid/long slot.',
+    '終値テクニカルのトレンド因子：方向と移動平均の構造です。従来の短期・中期・長期スロットではありません。',
+  ],
+  '动量 M': ['Momentum M', 'モメンタム M'],
+  '收盘技术动量因子：按当前周期定义的收益混合。不是原版短期分。': [
+    'EOD technical momentum factor: the return blend defined for the current horizon. It is not the original short-term score.',
+    '終値テクニカルのモメンタム因子：現在の期間定義によるリターン混合です。従来の短期スコアではありません。',
+  ],
+  '结构 S': ['Structure S', '構造 S'],
+  '收盘技术结构因子：高低点与形态是否支撑当前家族设定。': [
+    'EOD technical structure factor: whether highs, lows, and pattern support the current family setup.',
+    '終値テクニカルの構造因子：高値・安値と形状が現在のファミリー設定を支えるかです。',
+  ],
+  '突破 B': ['Breakout B', 'ブレイクアウト B'],
+  '收盘技术突破因子：突破确认与第一日跟进，不是原版突破质量槽。': [
+    'EOD technical breakout factor: confirmation and first-day follow-through, not the original breakout-quality slot.',
+    '終値テクニカルのブレイクアウト因子：確認と初日の追随であり、従来のブレイクアウト品質スロットではありません。',
+  ],
+  '回踩 P': ['Pullback P', '押し目 P'],
+  '收盘技术回踩因子：趋势内回撤位置，不是原版中期分。': [
+    'EOD technical pullback factor: retracement location inside the trend, not the original mid-term score.',
+    '終値テクニカルの押し目因子：トレンド内の押し位置であり、従来の中期スコアではありません。',
+  ],
+  '量能 V': ['Volume V', '出来高 V'],
+  '收盘技术量能因子：仅用供应商日线量，未核实成交额门时保持观察。': [
+    'EOD technical volume factor: vendor daily volume only. Unverified dollar-volume gates stay on watch.',
+    '終値テクニカルの出来高因子：ベンダー日次出来高のみを使います。売買代金ゲート未確認の場合は観察に留めます。',
+  ],
+  '相对 R': ['Relative R', '相対 R'],
+  '收盘技术相对因子：对基准的相对表现，缺行业分类时不假装行业相对。': [
+    'EOD technical relative factor: performance versus the benchmark. Missing industry classification is not treated as sector-relative.',
+    '終値テクニカルの相対因子：ベンチマークに対する相対パフォーマンスです。業種分類が無い場合に業種相対を装いません。',
+  ],
+  '行业 G': ['Industry G', '業種 G'],
+  '收盘技术行业因子：无独立行业分类时保持未知，不编造板块强度。': [
+    'EOD technical industry factor: stays unknown without an independent industry classification and does not invent sector strength.',
+    '終値テクニカルの業種因子：独立した業種分類が無い場合は未知のままにし、セクター強度を作りません。',
+  ],
+
   '综合评分（0–100）': ['Composite score (0–100)', '総合スコア（0–100）'],
   '排序分 = 个股自身强度 78% + 市场契合 8% + 风格契合 14%。个股自身强度只用该股价格/量能与对 SPY 的相对表现，由六个族加权：中期 24% / 短期 16% / 趋势 16% / 长期 14% / 突破质量 15% / 价格行为 15%。': [
     "Ranking score = the stock's own strength 78% + market fit 8% + style fit 14%. The stock's own strength uses only its price and volume plus its performance relative to SPY, weighted across six families: mid-term 24% / short-term 16% / trend 16% / long-term 14% / breakout quality 15% / price action 15%.",

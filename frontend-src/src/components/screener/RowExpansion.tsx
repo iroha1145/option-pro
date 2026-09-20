@@ -33,6 +33,14 @@ const DIM_HINTS: Record<string, ScoreHint> = {
   score_mid: SCORE_HINTS.strengthMid,
   score_long: SCORE_HINTS.strengthLong,
   breakout_quality_score: SCORE_HINTS.strengthBreakoutQuality,
+  factor_T: SCORE_HINTS.eodFactorT,
+  factor_M: SCORE_HINTS.eodFactorM,
+  factor_S: SCORE_HINTS.eodFactorS,
+  factor_B: SCORE_HINTS.eodFactorB,
+  factor_P: SCORE_HINTS.eodFactorP,
+  factor_V: SCORE_HINTS.eodFactorV,
+  factor_R: SCORE_HINTS.eodFactorR,
+  factor_G: SCORE_HINTS.eodFactorG,
 };
 
 /* ---------------- 近 6 日收盘（live 懒加载；表格/卡片双实例只共享进行中的请求） ---------------- */
