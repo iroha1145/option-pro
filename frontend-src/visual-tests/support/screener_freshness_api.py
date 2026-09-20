@@ -35,6 +35,7 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 from app.api import strength, worker_actions  # noqa: E402
 from app.access import request_owner_access_context  # noqa: E402
+from app.services.algorithm_modes import PRODUCTION_ALGORITHM  # noqa: E402
 from app.services.breakouts.config import BreakoutSettings  # noqa: E402
 from app.services.strength import scanner  # noqa: E402
 from app.services.strength.market_regime import MARKET_BENCHMARKS  # noqa: E402
@@ -134,6 +135,22 @@ def _install_provider_boundary() -> None:
         "status": "skipped",
         "enriched": 0,
     }
+
+    production_settings = type(
+        "Settings",
+        (),
+        {
+            "algorithms": type(
+                "Algos",
+                (),
+                {
+                    "screener_ranking_algorithm": PRODUCTION_ALGORITHM,
+                    "radar_sort_algorithm": PRODUCTION_ALGORITHM,
+                },
+            )()
+        },
+    )()
+    strength.get_effective_runtime_settings = lambda: production_settings
 
     import app.services.breakouts.config as breakout_config
 

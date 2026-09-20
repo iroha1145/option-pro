@@ -12,6 +12,18 @@ async function openScreener(page) {
   return errors;
 }
 
+/** These flows exercise the original production snapshot identity (all / balanced). */
+async function useProductionSnapshotView(page) {
+  await page.getByRole('tablist', { name: '排序算法' }).getByRole('tab', { name: '原版排序' }).click();
+  await page.getByRole('tablist', { name: '周期' }).getByRole('tab', { name: '全部周期' }).click();
+}
+
+async function openProductionScreener(page) {
+  const errors = await openScreener(page);
+  await useProductionSnapshotView(page);
+  return errors;
+}
+
 async function selectSemiconductorsAndScan(page) {
   await page.locator('[data-testid="screener-advanced-filters"] summary').click();
   await page.getByRole('button', { name: '半导体' }).click();
@@ -56,7 +68,7 @@ test('A07 a later valid software view wins over a late semiconductor refresh', a
     data: { software_fresh: true, provider_delay: 1.5 },
   });
   await page.setViewportSize({ width: 1440, height: 900 });
-  await openScreener(page);
+  await openProductionScreener(page);
   await page.locator('[data-testid="screener-advanced-filters"] summary').click();
   await page.getByRole('button', { name: '半导体' }).click();
   await page.locator('button.scan-trigger').click();
@@ -82,7 +94,7 @@ test('A08 ten same-parameter clicks share one refresh computation', async ({ pag
       posts.push(req.url());
     }
   });
-  await openScreener(page);
+  await openProductionScreener(page);
   await page.locator('[data-testid="screener-advanced-filters"] summary').click();
   await page.getByRole('button', { name: '半导体' }).click();
   await page.locator('button.scan-trigger').evaluate((button) => {
@@ -105,8 +117,8 @@ test('A08 two tabs coalesce onto one semiconductor action', async ({ browser, re
   const contextB = await browser.newContext();
   const pageA = await contextA.newPage();
   const pageB = await contextB.newPage();
-  await openScreener(pageA);
-  await openScreener(pageB);
+  await openProductionScreener(pageA);
+  await openProductionScreener(pageB);
   await pageA.locator('[data-testid="screener-advanced-filters"] summary').click();
   await pageB.locator('[data-testid="screener-advanced-filters"] summary').click();
   await pageA.getByRole('button', { name: '半导体' }).click();
@@ -131,7 +143,7 @@ test('C06 offline failure does not invent a scan clock, then one reconnect scan 
   test.setTimeout(120_000);
   const before = await readScreenerStats(request);
   await page.setViewportSize({ width: 1440, height: 900 });
-  await openScreener(page);
+  await openProductionScreener(page);
   await page.context().setOffline(true);
   await page.locator('button.scan-trigger').click();
   await expect(page.getByText(/扫描失败|Failed/).filter({ visible: true }).first()).toBeVisible();
@@ -149,7 +161,7 @@ test('C06 offline failure does not invent a scan clock, then one reconnect scan 
 test('E02 provider failure keeps prior rows and timestamps without publishing', async ({ page, request }) => {
   await request.post(`${isolatedApi}/debug/reset`, { data: { provider_failure: true } });
   const before = await readScreenerStats(request);
-  await openScreener(page);
+  await openProductionScreener(page);
   await page.locator('button.scan-trigger').click();
   await expect(page.getByText('AAPL').filter({ visible: true }).first()).toBeVisible();
   const lastScan = page.getByText('上次扫描').locator('xpath=following-sibling::span[1]');
@@ -169,7 +181,7 @@ test('F02 desktop 1440 owner refreshes a stale semiconductor snapshot', async ({
   test.setTimeout(120_000);
   await page.setViewportSize({ width: 1440, height: 900 });
   await mkdir(evidence, { recursive: true });
-  const errors = await openScreener(page);
+  const errors = await openProductionScreener(page);
   await page.screenshot({ path: `${evidence}/desktop-1440-before.png`, animations: 'disabled' });
   await selectSemiconductorsAndScan(page);
   await expect(page.getByText('NVDA').filter({ visible: true }).first()).toBeVisible({ timeout: 90_000 });
@@ -189,7 +201,7 @@ test('F02 mobile 390 shows scan date on cards after refresh', async ({ page, req
   test.setTimeout(120_000);
   await page.setViewportSize({ width: 390, height: 844 });
   await mkdir(evidence, { recursive: true });
-  const errors = await openScreener(page);
+  const errors = await openProductionScreener(page);
   await selectSemiconductorsAndScan(page);
   const nvda = page.getByText('NVDA').filter({ visible: true }).first();
   await expect(nvda).toBeVisible({ timeout: 90_000 });
