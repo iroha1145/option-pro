@@ -415,6 +415,71 @@ def overlap(a: Sequence[str], b: Sequence[str]) -> dict[str, Any]:
     }
 
 
+def run_one_session(
+    panel: Mapping[str, Any],
+    session: date,
+    *,
+    registry: Mapping[str, Any],
+    theme_ids: Sequence[str],
+    families: Sequence[str],
+    profile: str,
+    horizon: str,
+) -> dict[str, Any]:
+    started = time.perf_counter()
+    inputs = precompute_all_horizon_inputs(
+        panel, session, registry=registry, horizons=[horizon], themes=list(theme_ids),
+    )
+    raws, clipped, themed = inputs[horizon]
+    scored = score_contexts(
+        registry=registry,
+        session=session,
+        as_of=eod_evaluation_as_of(session),
+        clipped=clipped,
+        raws=raws,
+        themed=themed,
+        themes=list(theme_ids),
+        families=list(families),
+        profile=profile,
+        horizon=horizon,
+        universe_version=UNIVERSE_VERSION,
+    )
+    scored["elapsed_s"] = time.perf_counter() - started
+    scored["complete_bar_n"] = sum(1 for series in clipped.values() if has_complete_session_bar(series, session))
+    keep = (
+        "security_id",
+        "session_date",
+        "stock_or_etf_track",
+        "algorithm_id",
+        "sector_context",
+        "score",
+        "adv20",
+        "atr",
+        "rejection_reasons",
+        "status",
+    )
+    slim = []
+    for item in scored["records"]:
+        row = item["row"]
+        slim.append(
+            {
+                "row": {key: row.get(key) for key in keep},
+                "facts": item["facts"],
+                "decisions": item["decisions"],
+                "attached": {
+                    variant: {
+                        "score": item["attached"][variant].get("score"),
+                        "status": item["attached"][variant].get("status"),
+                        "rejection_reasons": item["attached"][variant].get("rejection_reasons"),
+                        "research_gate": item["attached"][variant].get("research_gate"),
+                    }
+                    for variant in VARIANTS
+                },
+            }
+        )
+    scored["records"] = slim
+    return scored
+
+
 def run_sessions(
     panel: Mapping[str, Any],
     sessions: Sequence[date],
@@ -428,59 +493,10 @@ def run_sessions(
     families = list(ALGORITHMS)
     results = []
     for index, session in enumerate(sessions, start=1):
-        started = time.perf_counter()
-        inputs = precompute_all_horizon_inputs(
-            panel, session, registry=registry, horizons=[horizon], themes=theme_ids,
+        scored = run_one_session(
+            panel, session, registry=registry, theme_ids=theme_ids,
+            families=families, profile=profile, horizon=horizon,
         )
-        raws, clipped, themed = inputs[horizon]
-        scored = score_contexts(
-            registry=registry,
-            session=session,
-            as_of=eod_evaluation_as_of(session),
-            clipped=clipped,
-            raws=raws,
-            themed=themed,
-            themes=theme_ids,
-            families=families,
-            profile=profile,
-            horizon=horizon,
-            universe_version=UNIVERSE_VERSION,
-        )
-        scored["elapsed_s"] = time.perf_counter() - started
-        scored["complete_bar_n"] = sum(1 for series in clipped.values() if has_complete_session_bar(series, session))
-        keep = (
-            "security_id",
-            "session_date",
-            "stock_or_etf_track",
-            "algorithm_id",
-            "sector_context",
-            "score",
-            "adv20",
-            "atr",
-            "rejection_reasons",
-            "status",
-        )
-        slim = []
-        for item in scored["records"]:
-            row = item["row"]
-            slim.append(
-                {
-                    "row": {key: row.get(key) for key in keep},
-                    "facts": item["facts"],
-                    "decisions": item["decisions"],
-                    "attached": {
-                        variant: {
-                            "score": item["attached"][variant].get("score"),
-                            "status": item["attached"][variant].get("status"),
-                            "rejection_reasons": item["attached"][variant].get("rejection_reasons"),
-                            "research_gate": item["attached"][variant].get("research_gate"),
-                        }
-                        for variant in VARIANTS
-                    },
-                }
-            )
-        scored["records"] = slim
-        results.append(scored)
         print(
             f"session {index}/{len(sessions)} {session.isoformat()} "
             f"{profile}/{horizon} {scored['elapsed_s']:.1f}s "
@@ -488,6 +504,7 @@ def run_sessions(
             f"new={scored['new_reference_median']}",
             flush=True,
         )
+        results.append(scored)
     return results
 
 
@@ -766,6 +783,76 @@ def cmd_download(args: argparse.Namespace) -> None:
     print(json.dumps(info, indent=2))
 
 
+def _paired_from_summaries(summaries: Sequence[Mapping[str, Any]], panel: Mapping[str, Any]) -> dict[str, Any]:
+    daily = []
+    prev_top = {variant: [] for variant in VARIANTS}
+    yearly: dict[int, dict[str, list]] = defaultdict(lambda: {variant: [] for variant in VARIANTS})
+    for summary in summaries:
+        session = date.fromisoformat(str(summary["session_date"]))
+        day: dict[str, Any] = {
+            "session_date": summary["session_date"],
+            "old_reference_median": summary.get("old_reference_median"),
+            "new_reference_median": summary.get("new_reference_median"),
+            "reference_n": summary.get("reference_n"),
+            "actual_cap": summary.get("actual_cap"),
+            "complete_bar_n": None,
+        }
+        b0_top20 = list((summary.get("variants") or {}).get(B0_CURRENT, {}).get("top", {}).get(20) or [])
+        for variant in VARIANTS:
+            block = (summary.get("variants") or {}).get(variant) or {}
+            ids20 = list((block.get("top") or {}).get(20) or [])
+            ov = overlap(b0_top20, ids20)
+            turn = overlap(prev_top[variant], ids20)
+            prev_top[variant] = ids20
+            labels = block.get("labels") or {}
+            rets = {}
+            for h in LABEL_HS:
+                lab = labels.get(str(h)) or {}
+                rets[f"h{h}_close_mean"] = lab.get("close_to_close_mean")
+                rets[f"h{h}_close_n"] = lab.get("label_coverage_close")
+                rets[f"h{h}_open_mean"] = lab.get("open_to_open_mean")
+                rets[f"h{h}_open_n"] = lab.get("label_coverage_open")
+            if rets.get("h20_close_mean") is not None:
+                yearly[session.year][variant].append(rets["h20_close_mean"])
+            hits = block.get("gate_hits") or {}
+            day[variant] = {
+                "discovery_n": block.get("discovery_n"),
+                "technical_n": block.get("technical_n"),
+                "qualified_n": block.get("qualified_n"),
+                "top5": (block.get("top") or {}).get(5),
+                "top10": (block.get("top") or {}).get(10),
+                "top20": ids20,
+                "overlap_vs_b0": ov,
+                "turnover_vs_prev": {
+                    "overlap_n": turn["overlap_n"],
+                    "added_n": len(turn["added"]),
+                    "removed_n": len(turn["removed"]),
+                },
+                **rets,
+                **hits,
+            }
+        daily.append(day)
+    bootstrap = {}
+    for variant in VARIANTS:
+        series20f = [float(day[variant]["h20_close_mean"]) for day in daily if day[variant].get("h20_close_mean") is not None]
+        bootstrap[variant] = {}
+        for name, block in (("H", 20), ("2H", 40)):
+            samples = circular_block_bootstrap(series20f, block=block, reps=BOOTSTRAP_REPS, seed=BOOTSTRAP_SEED)
+            bootstrap[variant][name] = {
+                "mean": _mean(series20f),
+                "n_days": len(series20f),
+                "ci95": ci(samples),
+                "block": block,
+                "reps": BOOTSTRAP_REPS,
+                "seed": BOOTSTRAP_SEED,
+            }
+    year_out = {
+        str(year): {variant: _mean(values) for variant, values in variants.items()}
+        for year, variants in yearly.items()
+    }
+    return {"daily": daily, "bootstrap_h20_close": bootstrap, "yearly_h20_close_mean": year_out}
+
+
 def score_ics(result: Mapping[str, Any], panel: Mapping[str, Any], horizon_h: int = 20) -> dict[str, Any]:
     session = date.fromisoformat(result["session_date"])
     out: dict[str, Any] = {}
@@ -807,39 +894,65 @@ def cmd_replay(args: argparse.Namespace) -> None:
     if args.max_sessions:
         sessions = sessions[: int(args.max_sessions)]
     align_n = max(1, int(args.align_sessions))
-    align_sessions = sessions[:align_n]
-    print(f"aligning {len(align_sessions)} sessions", flush=True)
-    align_results = run_sessions(panel, align_sessions, profile="balanced", horizon="mid")
-    alignment = alignment_report(align_results)
+    registry = load_market_registry()
+    theme_ids = list(registry["sectors"])
+    families = list(ALGORITHMS)
+    alignment = {"compared_stock_rows": 0, "high_atr_mismatches": 0, "score_mutations": 0, "examples": [], "aligned": True}
+    summaries: list[dict[str, Any]] = []
+    attribution: list[dict[str, Any]] = []
+    examples: list[dict[str, Any]] = []
+    ics: list[dict[str, Any]] = []
+    extras: dict[str, Any] = {}
+
+    def consume(result: Mapping[str, Any], *, align: bool = False) -> None:
+        if align:
+            part = alignment_report([result])
+            alignment["compared_stock_rows"] += part["compared_stock_rows"]
+            alignment["high_atr_mismatches"] += part["high_atr_mismatches"]
+            alignment["score_mutations"] += part["score_mutations"]
+            alignment["examples"].extend(part["examples"][: max(0, 8 - len(alignment["examples"]))])
+            alignment["aligned"] = alignment["high_atr_mismatches"] == 0 and alignment["score_mutations"] == 0
+        summaries.append(summarize_session(result, panel))
+        attribution.extend(attribution_rows([result]))
+        if len(examples) < 12:
+            examples.extend(example_rows([result], limit=12 - len(examples)))
+        ics.append(score_ics(result, panel))
+
+    wanted = sessions if args.align_only else sessions
+    print(f"replaying {len(wanted)} sessions profile={args.profile} horizon={args.horizon}", flush=True)
+    for index, session in enumerate(wanted, start=1):
+        result = run_one_session(
+            panel, session, registry=registry, theme_ids=theme_ids,
+            families=families, profile=args.profile, horizon=args.horizon,
+        )
+        print(
+            f"session {index}/{len(wanted)} {session.isoformat()} "
+            f"{args.profile}/{args.horizon} {result['elapsed_s']:.1f}s "
+            f"ref_n={result['reference_n']} old={result['old_reference_median']} "
+            f"new={result['new_reference_median']}",
+            flush=True,
+        )
+        consume(result, align=index <= align_n and args.profile == "balanced" and args.horizon == "mid")
+        if args.align_only and index >= align_n:
+            break
     print(f"alignment {json.dumps(alignment, ensure_ascii=False)}", flush=True)
-    if args.align_only:
-        main_results = align_results
-    elif args.profile == "balanced" and args.horizon == "mid":
-        rest = sessions[len(align_sessions):]
-        main_results = list(align_results) + (run_sessions(panel, rest, profile=args.profile, horizon=args.horizon) if rest else [])
-    else:
-        main_results = run_sessions(panel, sessions, profile=args.profile, horizon=args.horizon)
-    extras = {}
     if args.other_variants:
+        extra_sessions = sessions[: max(1, int(args.extra_sessions))]
         for profile in PROFILES:
             for horizon in HORIZONS:
                 if profile == args.profile and horizon == args.horizon:
                     continue
-                extra_sessions = sessions[: max(1, int(args.extra_sessions))]
                 extras[f"{horizon}|{profile}"] = [
                     summarize_session(item, panel)
                     for item in run_sessions(panel, extra_sessions, profile=profile, horizon=horizon)
                 ]
-    ics = [score_ics(item, panel) for item in main_results]
-    paired = paired_stats(main_results, panel)
+    # Rebuild paired stats from stored summaries + leftover compact fields.
+    paired = _paired_from_summaries(summaries, panel)
     paired["common_sample_ic"] = {
         "mean": _mean([item.get("common_sample_ic_h20") for item in ics]),
         "n_days": sum(1 for item in ics if item.get("common_sample_ic_h20") is not None),
         "note": "rank IC on shared scored names, separate from each candidate Top-K set",
     }
-    attribution = attribution_rows(main_results)
-    examples = example_rows(main_results)
-    summaries = [summarize_session(item, panel) for item in main_results]
     broad = {"status": "skipped", "reason": "not_requested"}
     if args.broad_slices:
         broad = fetch_broad_slices(dest, args.broad_slices.split(","))
