@@ -306,6 +306,59 @@ def test_coverage_classifies_missing_history_session_invalid_and_excluded(
     assert manifest["complete_bar_count"] + manifest["missing_session_count"] == manifest["eligible_count"]
 
 
+def test_panel_reads_each_exact_member_with_no_global_temp_sort(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    tickers = ["CASE", "Case", *(f"T{index:03d}" for index in range(32))]
+    directory = [_directory_row(ticker) for ticker in tickers]
+    days = ("2026-09-14", "2026-09-15", "2026-09-16")
+    grouped = {
+        day: [
+            _bar(ticker, 10.0 + ticker_index + day_index)
+            for ticker_index, ticker in enumerate(tickers)
+        ]
+        for day_index, day in enumerate(days)
+    }
+    statements: list[str] = []
+    _install_provider(monkeypatch, directory, grouped)
+    original_connect = market_data._connect
+
+    def traced_connect(path: Path) -> sqlite3.Connection:
+        connection = original_connect(path)
+        connection.set_trace_callback(statements.append)
+        return connection
+
+    monkeypatch.setattr(market_data, "_connect", traced_connect)
+    panel, coverage, manifest = load_all_market_panel(end=END, root=tmp_path)
+
+    assert set(panel) == set(tickers)
+    assert all(row["status"] == "ok" for row in coverage)
+    assert manifest["complete_bar_count"] == len(tickers)
+    assert panel["CASE"].close.tolist() == pytest.approx([10.0, 11.0, 12.0])
+    assert panel["Case"].close.tolist() == pytest.approx([11.0, 12.0, 13.0])
+    member_reads = [
+        statement
+        for statement in statements
+        if statement.startswith("SELECT * FROM raw_daily_bars WHERE ticker = ")
+    ]
+    assert len(member_reads) == len(tickers)
+    assert all("ORDER BY session_date" in statement for statement in member_reads)
+    assert not any("all_market_selected" in statement for statement in statements)
+
+    database = tmp_path / "eod-limited-v1" / market_data.DB_NAME
+    with sqlite3.connect(database) as connection:
+        plan = connection.execute(
+            "EXPLAIN QUERY PLAN SELECT * FROM raw_daily_bars "
+            "WHERE ticker = ? AND session_date BETWEEN ? AND ? "
+            "ORDER BY session_date",
+            ("CASE", days[0], days[-1]),
+        ).fetchall()
+    details = [str(row[3]).upper() for row in plan]
+    assert any("SEARCH RAW_DAILY_BARS" in detail for detail in details)
+    assert not any("TEMP B-TREE" in detail for detail in details)
+
+
 def test_split_pagination_rebuilds_fixed_path_and_forwards_only_cursor(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

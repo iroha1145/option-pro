@@ -292,7 +292,7 @@ export default function Screener() {
         };
         onProgress(action);
         if (action.status !== 'completed') {
-          action = await runtimeApi.waitForWorkerAction(requestId, undefined, {
+          action = await runtimeApi.waitForWorkerAction(requestId, 1_920_000, {
             shouldContinue: isCurrent, onProgress,
           });
           requireCurrent();

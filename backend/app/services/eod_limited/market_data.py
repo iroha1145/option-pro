@@ -645,18 +645,6 @@ def _load_panel(
     start, end = sessions[0], sessions[-1]
     split_by_ticker = _split_map(connection, members, start, end)
     by_ticker = {str(row["ticker"]): row for row in coverage}
-    connection.execute("DROP TABLE IF EXISTS temp.all_market_selected")
-    connection.execute("CREATE TEMP TABLE all_market_selected (ticker TEXT PRIMARY KEY)")
-    connection.executemany(
-        "INSERT INTO all_market_selected(ticker) VALUES (?)",
-        ((ticker,) for ticker in members),
-    )
-    query = connection.execute(
-        "SELECT b.* FROM raw_daily_bars b "
-        "JOIN all_market_selected s ON s.ticker = b.ticker "
-        "WHERE b.session_date BETWEEN ? AND ? ORDER BY b.ticker, b.session_date",
-        (start.isoformat(), end.isoformat()),
-    )
     panel: dict[str, SecuritySeries] = {}
     current_ticker: str | None = None
     current_rows: list[sqlite3.Row] = []
@@ -698,16 +686,20 @@ def _load_panel(
             splits=split_by_ticker.get(current_ticker, ()),
         )
 
-    for row in query:
-        ticker = str(row["ticker"])
-        if current_ticker is None:
-            current_ticker = ticker
-        elif ticker != current_ticker:
-            flush()
-            current_ticker = ticker
-            current_rows = []
-        current_rows.append(row)
-    flush()
+    for ticker in members:
+        rows = list(
+            connection.execute(
+                "SELECT * FROM raw_daily_bars "
+                "WHERE ticker = ? AND session_date BETWEEN ? AND ? "
+                "ORDER BY session_date",
+                (ticker, start.isoformat(), end.isoformat()),
+            )
+        )
+        if not rows:
+            continue
+        current_ticker = ticker
+        current_rows = rows
+        flush()
     for ticker in members:
         row = by_ticker[ticker]
         if row["status"] == "pending":

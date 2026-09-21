@@ -290,6 +290,75 @@ test('A09 pending task is recovered instead of blindly posting again', () => {
   clearPendingStrengthTask();
 });
 
+const currentMarketParameters = {
+  universe: 'all_market', timeframe: 'mid', profile: 'balanced', top: 20,
+  sector_id: 'semiconductors', min_price: 5, min_avg_dollar_volume: 10_000_000,
+  include_options: true, ranking_algorithm: 'eod_limited_v1',
+};
+
+test('legacy themes pending tasks recover under the current all-market request without rewriting their identity', t => {
+  const priorStorage = globalThis.sessionStorage;
+  const memory = new Map();
+  globalThis.sessionStorage = {
+    getItem: key => memory.get(key) ?? null,
+    setItem: (key, value) => memory.set(key, String(value)),
+    removeItem: key => memory.delete(key),
+  };
+  t.after(() => {
+    if (priorStorage === undefined) delete globalThis.sessionStorage;
+    else globalThis.sessionStorage = priorStorage;
+  });
+  const legacy = { ...currentMarketParameters, universe: 'themes' };
+  writePendingStrengthTask({ requestId: 'legacy-theme-task', parameters: legacy, storedAt: Date.now() });
+  const saved = [...memory.values()];
+  const pending = readPendingStrengthTask();
+  assert.equal(pending.requestId, 'legacy-theme-task');
+  assert.equal(pending.parameters.universe, 'themes');
+  assert.equal(strengthParametersMatch(pending.parameters, currentMarketParameters), true);
+  assert.equal(strengthParametersMatch(currentMarketParameters, legacy), true);
+  assert.deepEqual([...memory.values()], saved, 'matching must not rewrite the stored request or its identity');
+});
+
+test('queued and running legacy actions match, and completed actions may retain the old outer universe and hash', () => {
+  const legacy = { ...currentMarketParameters, universe: 'themes' };
+  for (const status of ['queued', 'running']) {
+    assert.equal(refreshActionMatchesRequest({ status, details: {
+      parameters: legacy, parameters_hash: 'legacy-request-hash',
+    } }, currentMarketParameters), true);
+  }
+  const completed = {
+    status: 'completed',
+    details: {
+      parameters: legacy, parameters_hash: 'legacy-request-hash',
+      result: { parameters: currentMarketParameters, parameters_hash: 'all-market-result-hash' },
+    },
+  };
+  const before = structuredClone(completed);
+  assert.equal(refreshActionMatchesRequest(completed, currentMarketParameters), true);
+  assert.deepEqual(completed, before, 'the original durable action parameters and hash remain untouched');
+});
+
+test('the universe migration does not relax other request fields or recognize unknown universes', () => {
+  const legacy = { ...currentMarketParameters, universe: 'themes' };
+  const mismatches = [
+    { universe: 'watchlist' }, { universe: 'ALL_MARKET' }, { universe: null },
+    { top: 120 }, { profile: 'aggressive' }, { timeframe: 'all' },
+    { sector_id: 'software' }, { min_price: 0 }, { min_avg_dollar_volume: 0 },
+    { include_options: false }, { ranking_algorithm: 'production' },
+    { ranking_algorithm: 'a0_mid_long' },
+  ];
+  for (const mismatch of mismatches) {
+    const changed = { ...legacy, ...mismatch };
+    assert.equal(strengthParametersMatch(changed, currentMarketParameters), false, JSON.stringify(mismatch));
+    assert.equal(refreshActionMatchesRequest({ status: 'completed', details: {
+      parameters: changed, result: { parameters: currentMarketParameters },
+    } }, currentMarketParameters), false, `outer parameters: ${JSON.stringify(mismatch)}`);
+    assert.equal(refreshActionMatchesRequest({ status: 'completed', details: {
+      parameters: legacy, result: { parameters: changed },
+    } }, currentMarketParameters), false, `result parameters: ${JSON.stringify(mismatch)}`);
+  }
+});
+
 test('C05 hidden pages do not discover published scans', () => {
   assert.equal(shouldDiscoverPublishedScan({ scanState: 'done', visibilityState: 'visible', isMock: false }), true);
   assert.equal(shouldDiscoverPublishedScan({ scanState: 'done', visibilityState: 'hidden', isMock: false }), false);
