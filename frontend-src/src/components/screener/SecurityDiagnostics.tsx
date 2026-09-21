@@ -245,6 +245,11 @@ export default function SecurityDiagnostics({ profile, timeframe, publicationKey
       if (error instanceof ApiError && error.code === 404) message = t('该代码不在本批次证券目录中。');
       else if (error instanceof ApiError && error.code === 503) message = t('该批次尚无完整诊断，请等待扫描完成后重试。');
       else if (error instanceof ApiError && error.code === 409) message = t('该代码对应多个不同证券，无法唯一识别。');
+      else if (error instanceof ApiError && error.code === 429) {
+        message = typeof error.retryAfter === 'number' && Number.isFinite(error.retryAfter) && error.retryAfter > 0
+          ? t('选股诊断查询过于频繁，请 {n} 秒后重试。', { n: Math.ceil(error.retryAfter) })
+          : t('选股诊断查询过于频繁，请稍后重试。');
+      }
       setFailure({ key: requestKey, message });
     }).finally(() => {
       if (seq.current === requestSeq) setPending(null);

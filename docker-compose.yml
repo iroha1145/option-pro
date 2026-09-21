@@ -71,7 +71,8 @@ services:
 
   worker:
     <<: *optix-runtime
-    stop_grace_period: 2100s
+    # Full-market strength refresh has a 7200s task budget; allow cleanup after it.
+    stop_grace_period: 7500s
     command:
       - python
       - -m

@@ -32,6 +32,25 @@ async function open(page, width) {
     const url = new URL(route.request().url());
     return ['127.0.0.1', 'localhost'].includes(url.hostname) ? route.continue() : route.abort();
   });
+  // This suite tests the diagnostic panel with a routed diagnostic response.
+  // The preceding visual tests can exhaust the shared local backend rate
+  // limit; unrelated startup reads must not block this panel's GET in marketGet.
+  await page.route('**/api/**', (route) => {
+    const pathname = new URL(route.request().url()).pathname;
+    if (!pathname.startsWith('/api/')) return route.continue();
+    if (pathname.startsWith('/api/strength/diagnostics/')) return route.continue();
+    if (pathname === '/api/access/status') return route.fulfill({ json: { access_mode: 'password', logged_in: false, account: null } });
+    if (pathname === '/api/quotes') return route.fulfill({ json: { quotes: [], status: { allowed: false, enabled: false, connected: false } } });
+    if (pathname === '/api/market/status') return route.fulfill({ json: { market: 'closed', is_open: false } });
+    if (pathname === '/api/market/indices') return route.fulfill({ json: { indices: [] } });
+    if (pathname === '/api/strength/market') return route.fulfill({ json: { avg_score: 0, stocks: [] } });
+    if (pathname === '/api/strength/profiles') return route.fulfill({ json: { profiles: ['balanced', 'aggressive', 'conservative'], sectors: [] } });
+    if (pathname === '/api/strength/scan') return route.fulfill({ json: {
+      rows: [], universe_count: 0, screened_count: 0, source_status: 'active', _stale: false,
+      snapshot_saved_at: '2026-09-21T10:00:00+00:00', score_version: 'visual-fixture',
+    } });
+    return route.fulfill({ json: {} });
+  });
   await page.goto('/screener');
   const panel = page.getByRole('region', { name: '按代码查询选股诊断' });
   await expect(panel).toBeVisible();
@@ -50,6 +69,7 @@ for (const width of [1440, 390, 320]) {
     });
     await panel.getByLabel('证券代码').fill('CRWD');
     await panel.getByRole('button', { name: '查询诊断', exact: true }).click();
+    await expect.poll(() => requests).toBe(1);
     await expect(panel.getByText('有技术分数，但未进入结果', { exact: false })).toBeVisible();
     await panel.locator('summary').first().click();
     await expect(panel.getByText('波动幅度超过门槛', { exact: true }).last()).toBeVisible();
@@ -92,6 +112,21 @@ test('changing profile revokes an older lookup and errors remain distinct from e
   await panel.getByLabel('证券代码').fill('UNAVAILABLE');
   await panel.getByRole('button', { name: '查询诊断', exact: true }).click();
   await expect(panel.getByRole('alert')).toHaveText('该批次尚无完整诊断，请等待扫描完成后重试。');
+});
+
+test('a diagnostic 429 names the wait from Retry-After without showing an empty result', async ({ page }) => {
+  const panel = await open(page, 1440);
+  let requests = 0;
+  await page.route('**/api/strength/diagnostics/**', (route) => {
+    requests += 1;
+    return route.fulfill({ status: 429, headers: { 'Retry-After': '3' },
+      json: { detail: { code: 'rate_limited', message: 'Too many requests' } } });
+  });
+  await panel.getByLabel('证券代码').fill('CRWD');
+  await panel.getByRole('button', { name: '查询诊断', exact: true }).click();
+  await expect.poll(() => requests).toBe(1);
+  await expect(panel.getByRole('alert')).toHaveText('选股诊断查询过于频繁，请 3 秒后重试。');
+  await expect(panel.getByText('完整评分路径', { exact: false })).toHaveCount(0);
 });
 
 test('case-distinct provider symbols are queried separately and never routed to another security', async ({ page }) => {

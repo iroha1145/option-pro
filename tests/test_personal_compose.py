@@ -94,7 +94,7 @@ def test_unified_worker_command_healthcheck_and_shutdown_window() -> None:
         "app.worker",
         "--healthcheck",
     ]
-    assert worker["stop_grace_period"] == "2100s"
+    assert worker["stop_grace_period"] == "7500s"
     assert "ports" not in worker
 
 

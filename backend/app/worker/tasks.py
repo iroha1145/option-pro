@@ -21,6 +21,11 @@ from app.personal_config import get_personal_config
 from .runtime import TaskResult, TaskSpec, _public_error_code
 
 
+# Full-market capture, geometry, nine scoring views and diagnostic publication
+# share this finite budget. Production runs can exceed the old 30-minute limit.
+STRENGTH_REFRESH_TIMEOUT_SECONDS = 7_200.0
+
+
 DEFAULT_TASK_NAMES = (
     "breakout",
     "focus",
@@ -3354,9 +3359,10 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
             StrengthRefreshTask(),
             # 默认快照每天刷新；参数化 API 动作不会重置默认快照的绝对截止时间。
             interval_seconds=86_400.0,
-            # The first all-market run also fills 370 daily captures. Warm
-            # runs reuse that cache; leave room for the cold capture and scoring.
-            timeout_seconds=1800.0,
+            timeout_seconds=STRENGTH_REFRESH_TIMEOUT_SECONDS,
+            # Let the local writer finish and report its real result on shutdown;
+            # the task deadline still applies and the worker lease stays held.
+            drain_on_shutdown=True,
         ),
         TaskSpec(
             "breakout_refresh",
