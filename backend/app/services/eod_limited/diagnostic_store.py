@@ -81,6 +81,9 @@ class DiagnosticWriter:
         self.connection = sqlite3.connect(self.temp_path)
         self.connection.execute("PRAGMA journal_mode=DELETE")
         self.connection.execute("PRAGMA synchronous=FULL")
+        # Full-market compressed paths are 1.3–1.9 KB each. A WITHOUT ROWID
+        # index spills each payload to an overflow page at the default 4 KB
+        # page size; ordinary table leaves pack these records together.
         self.connection.executescript("""
             CREATE TABLE metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);
             CREATE TABLE coverage (
@@ -92,7 +95,7 @@ class DiagnosticWriter:
                 theme_id TEXT NOT NULL,
                 algorithm_id TEXT NOT NULL, payload BLOB NOT NULL,
                 PRIMARY KEY (variant, ticker, theme_id, algorithm_id)
-            ) WITHOUT ROWID;
+            );
             CREATE INDEX paths_lookup ON paths (variant, lookup_ticker);
             CREATE TABLE weight_sources (id TEXT PRIMARY KEY, payload BLOB NOT NULL);
         """)

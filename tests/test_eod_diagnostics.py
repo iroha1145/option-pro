@@ -3,6 +3,9 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
+import random
+import sqlite3
+import string
 
 import numpy as np
 
@@ -26,6 +29,24 @@ def _batch(manifest: dict, *, version: str = "test-v1") -> dict:
             "family_results": [{"rows": []}], "watch_list": [], "composite_results": [],
         }},
     }
+
+
+def test_large_compressed_paths_do_not_allocate_an_overflow_page_per_row(tmp_path: Path) -> None:
+    """Exercise the payload size observed in the real 418k-path publication."""
+    writer = DiagnosticWriter(
+        root=tmp_path, served_session="2026-09-18", compute_version="test-v1",
+        feature_version="features-v1", source_hash="bars-1", dollar_volume_basis=None,
+    )
+    rng = random.Random(42)
+    detail = "".join(rng.choices(string.ascii_letters + string.digits, k=1850))
+    rows = [{"security_id": f"TEST{index:04d}", "score": None, "status": "rejected",
+             "rejection_reasons": [detail]} for index in range(1000)]
+    writer.write_block("balanced|mid", "all_market_stocks", "A_trend_quality", rows)
+    manifest = writer.finish()
+    with sqlite3.connect(writer.final_path) as connection:
+        count, payload_bytes = connection.execute("SELECT COUNT(*), SUM(length(payload)) FROM paths").fetchone()
+    assert count == 1000 and payload_bytes > 1_000_000
+    assert manifest["size"] < 2 * payload_bytes
 
 
 def test_indexed_diagnostics_keep_rejected_paths_and_data_gaps(tmp_path: Path) -> None:
