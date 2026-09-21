@@ -986,8 +986,14 @@ def compact_diagnostics(summary: Mapping[str, Any], daily: Sequence[Mapping[str,
         }
         turn = [((day[variant].get("turnover_vs_prev") or {}).get("added_n")) for day in daily[1:]]
         variant_stats[variant] = {
-            "h20_close_path": compact_path_stats(close20),
-            "h20_close_excess_vs_restricted_stock_ew": compact_path_stats(excess20),
+            "h20_close_path": {
+                **compact_path_stats(close20),
+                "note": "compounded sequence of overlapping daily Top-K mean labels; not a portfolio NAV and not independent trades",
+            },
+            "h20_close_excess_vs_restricted_stock_ew": {
+                **compact_path_stats(excess20),
+                "note": "Top-K mean minus restricted stock equal-weight; not a full-market excess",
+            },
             "h20_mae": compact_path_stats(mae),
             "h20_mfe": compact_path_stats(mfe),
             "fee_sensitivity": fees,
@@ -1085,7 +1091,7 @@ def build_validation_md(
             "- CRWV has no Yahoo bars in the open zone (IPO after 2024-06-28)",
             "- LVMUY / CFRUY venue OTC_EXCLUDED; RMS.PA NON_US_LISTING",
             "- other profile/horizon extras are 3-session verification only, not a second full 562-day matrix",
-            "- overlapping 5/20/63 labels are not independent trades",
+            "- overlapping 5/20/63 labels are not independent trades; path max-drawdown compounds those overlapping daily means and is not a portfolio NAV",
             "- fee scenarios are sensitivity only, not live costs",
             "- G2/G3 discovery expansion is not a trading-return claim",
             "",
