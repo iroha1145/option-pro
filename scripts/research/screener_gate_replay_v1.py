@@ -346,7 +346,7 @@ def gate_counts(records: Sequence[Mapping[str, Any]], variant: str) -> dict[str,
 
 def summarize_session(result: Mapping[str, Any], panel: Mapping[str, Any]) -> dict[str, Any]:
     session = date.fromisoformat(result["session_date"])
-        summary: dict[str, Any] = {
+    summary: dict[str, Any] = {
         "session_date": result["session_date"],
         "old_reference_median": result["old_reference_median"],
         "new_reference_median": result["new_reference_median"],

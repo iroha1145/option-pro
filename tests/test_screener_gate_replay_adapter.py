@@ -189,7 +189,8 @@ def test_finalize_helpers_keep_nulls_and_entry_identity():
     )
 
     assert fee_adjust(None, 0.001) is None
-    assert fee_adjust(0.01, 0.001) == 0.009
+    assert fee_adjust(0.01, 0.001) is not None
+    assert abs(float(fee_adjust(0.01, 0.001)) - 0.009) < 1e-12
     assert percentile([], 0.5) is None
     assert max_drawdown([]) is None
     assert abs(max_drawdown([0.1, -0.2, 0.05]) - ((0.88 / 1.1) - 1.0)) < 1e-12
