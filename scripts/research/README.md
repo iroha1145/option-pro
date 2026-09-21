@@ -14,7 +14,9 @@ Market replay writes outside the repo:
 export SCREENER_GATE_RESEARCH_DIR="$HOME/optix-research/screener-gate-v1"
 PYTHONPATH=backend python scripts/research/screener_gate_replay_v1.py discover
 PYTHONPATH=backend python scripts/research/screener_gate_replay_v1.py download --start 2016-01-01 --end 2024-06-28
-PYTHONPATH=backend python scripts/research/screener_gate_replay_v1.py replay --start 2023-01-03 --end 2024-03-28 --other-variants --broad-slices 2024-06-28,2023-12-29,2022-12-30
+PYTHONPATH=backend python -u scripts/research/screener_gate_replay_v1.py replay --start 2022-01-03 --end 2024-03-28 --other-variants --extra-sessions 3 --broad-slices 2024-06-28,2023-12-29,2022-12-30 --align-sessions 5
+PYTHONPATH=backend python scripts/research/screener_gate_replay_v1.py finalize --refresh-examples
 ```
 
 Holdout from `2024-07-01` stays sealed. Compact results stay in the research directory, not in Git.
+`finalize` enriches an existing pack (fees, theme/ADV slices, excess vs restricted stock EW, validation.md) without replaying all sessions.

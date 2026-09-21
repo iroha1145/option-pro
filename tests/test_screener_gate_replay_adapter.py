@@ -174,6 +174,49 @@ def test_low_vol_etfs_do_not_enter_stock_reference():
     assert all(not reference_eligible(item) for item in inputs if item.asset_track == "etf")
 
 
+def test_finalize_helpers_keep_nulls_and_entry_identity():
+    sys.path.insert(0, str(ROOT / "scripts" / "research"))
+    from screener_gate_replay_v1 import (
+        B0_CURRENT,
+        G1_STOCK_REFERENCE,
+        G2_EXTENSION_DISCOVERY,
+        G3_RISK_DISCOVERY,
+        build_validation_md,
+        engineering_checks,
+        fee_adjust,
+        max_drawdown,
+        percentile,
+    )
+
+    assert fee_adjust(None, 0.001) is None
+    assert fee_adjust(0.01, 0.001) == 0.009
+    assert percentile([], 0.5) is None
+    assert max_drawdown([]) is None
+    assert abs(max_drawdown([0.1, -0.2, 0.05]) - ((0.88 / 1.1) - 1.0)) < 1e-12
+    daily = [
+        {
+            B0_CURRENT: {"top20": ["A"], "technical_n": 1, "qualified_n": 0, "discovery_n": 1, "etf_in_stock_top20_n": 0, "overlap_vs_b0": {"added": [], "removed": []}},
+            G1_STOCK_REFERENCE: {"top20": ["A", "B"], "technical_n": 2, "qualified_n": 0, "discovery_n": 2, "etf_in_stock_top20_n": 0, "overlap_vs_b0": {"added": ["B"], "removed": []}},
+            G2_EXTENSION_DISCOVERY: {"top20": ["A", "B"], "technical_n": 2, "qualified_n": 0, "discovery_n": 4, "etf_in_stock_top20_n": 0, "overlap_vs_b0": {"added": ["B"], "removed": []}},
+            G3_RISK_DISCOVERY: {"top20": ["A", "B"], "technical_n": 2, "qualified_n": 0, "discovery_n": 5, "etf_in_stock_top20_n": 0, "overlap_vs_b0": {"added": ["B"], "removed": []}},
+        }
+    ]
+    checks = engineering_checks(daily, {"alignment": {"aligned": True}})
+    assert checks["g1_g2_g3_entry_mismatch_days"] == 0
+    assert checks["g1_can_add_vs_b0_top20_days"] == 1
+    assert checks["unverified_not_promoted"] is True
+    validation = build_validation_md(
+        manifest={"production_anchor": "d16b25e", "layer": "restricted_current_membership_exploratory", "dates": {}, "run": {}, "data": {}},
+        summary={"broad_market_median": None, "broad_market_median_reason": "restricted pool"},
+        diagnostics={"engineering_checks": checks},
+        caches={"any_reusable_bars": False},
+        commands=["python -m pytest -q tests/test_screener_gate_candidates_v1.py"],
+    )
+    assert "## 执行命令" in validation
+    assert "## 旧资源复用" in validation
+    assert "not claimed reused" in validation
+
+
 def test_old_median_uses_production_industry_grouping():
     registry = load_market_registry()
     panel = prepare_limited_panel(build_synthetic_panel(sessions=370, end=date(2023, 7, 10)))

@@ -346,13 +346,14 @@ def gate_counts(records: Sequence[Mapping[str, Any]], variant: str) -> dict[str,
 
 def summarize_session(result: Mapping[str, Any], panel: Mapping[str, Any]) -> dict[str, Any]:
     session = date.fromisoformat(result["session_date"])
-    summary: dict[str, Any] = {
+        summary: dict[str, Any] = {
         "session_date": result["session_date"],
         "old_reference_median": result["old_reference_median"],
         "new_reference_median": result["new_reference_median"],
         "reference_n": result["reference_n"],
         "actual_cap": result["actual_cap"],
         "reference_error": result["reference_error"],
+        "complete_bar_n": result.get("complete_bar_n"),
         "family_pre_merge": result["family_pre_merge"],
         "display_best": {},
         "variants": {},
@@ -660,32 +661,446 @@ def attribution_rows(results: Sequence[Mapping[str, Any]]) -> list[dict[str, Any
 
 def example_rows(results: Sequence[Mapping[str, Any]], *, limit: int = 12) -> list[dict[str, Any]]:
     out = []
+    seen: set[tuple[str, str, str]] = set()
+
+    def push(row: Mapping[str, Any], result: Mapping[str, Any], note: str) -> None:
+        key = (str(result["session_date"]), str(row.get("security_id")), note)
+        if key in seen:
+            return
+        seen.add(key)
+        gate = row.get("research_gate") or {}
+        out.append(
+            {
+                "session_date": result["session_date"],
+                "security_id": row.get("security_id"),
+                "theme": row.get("sector_context"),
+                "family": row.get("algorithm_id"),
+                "score": row.get("score"),
+                "adv20": row.get("adv20"),
+                "atr": row.get("atr"),
+                "reasons_b0": (row.get("rejection_reasons") or []),
+                "research_reasons_g1": gate.get("research_reasons"),
+                "old_median": gate.get("old_reference_median"),
+                "new_median": gate.get("new_reference_median"),
+                "note": note,
+            }
+        )
+
     for result in results:
-        b0 = {row["security_id"] for row in ranked_stocks(result, B0_CURRENT, layer="technical_entry")[:20]}
-        g1 = ranked_stocks(result, G1_STOCK_REFERENCE, layer="technical_entry")[:20]
-        for row in g1:
-            if row["security_id"] in b0:
-                continue
-            gate = row.get("research_gate") or {}
-            out.append(
-                {
-                    "session_date": result["session_date"],
-                    "security_id": row.get("security_id"),
-                    "theme": row.get("sector_context"),
-                    "family": row.get("algorithm_id"),
-                    "score": row.get("score"),
-                    "adv20": row.get("adv20"),
-                    "atr": row.get("atr"),
-                    "reasons_b0": (row.get("rejection_reasons") or []),
-                    "research_reasons_g1": gate.get("research_reasons"),
-                    "old_median": gate.get("old_reference_median"),
-                    "new_median": gate.get("new_reference_median"),
-                    "note": "explanatory sample, not a parameter-tuning seed",
-                }
-            )
-            if len(out) >= limit:
-                return out
+        b0_rows = ranked_stocks(result, B0_CURRENT, layer="technical_entry")[:20]
+        g1_rows = ranked_stocks(result, G1_STOCK_REFERENCE, layer="technical_entry")[:20]
+        g2_disc = ranked_stocks(result, G2_EXTENSION_DISCOVERY, layer="discovery")[:20]
+        g1_tech = ranked_stocks(result, G1_STOCK_REFERENCE, layer="technical_entry")
+        b0 = {row["security_id"] for row in b0_rows}
+        g1 = {row["security_id"] for row in g1_rows}
+        g1_entry = {row["security_id"] for row in g1_tech}
+        for row in g1_rows:
+            if row["security_id"] not in b0:
+                push(row, result, "g1_added_vs_b0_top20; explanatory, not a parameter-tuning seed")
+        for row in b0_rows:
+            if row["security_id"] not in g1:
+                push(row, result, "g1_removed_vs_b0_top20; explanatory, not a parameter-tuning seed")
+        for row in g2_disc:
+            if row["security_id"] not in g1_entry:
+                push(row, result, "g2_discovery_only_not_strict_entry; not a trading-return claim")
+        if len(out) >= limit:
+            return out[:limit]
+    return out[:limit]
+
+
+THEME_SLICE_IDS = (
+    "semiconductors",
+    "software",
+    "ai_cloud",
+    "biotech",
+    "healthcare",
+    "consumer_electronics",
+    "automotive",
+    "ev_supply",
+    "finance",
+    "fintech",
+    "retail",
+    "luxury",
+    "media_streaming",
+    "social_internet",
+    "energy",
+    "utilities",
+    "defense_aero",
+    "airlines",
+    "real_estate",
+    "crypto",
+    "china_adr",
+    "telecom",
+    "industrials",
+    "etfs",
+    "all_market_stocks",
+)
+ADV_BUCKETS = (
+    ("lt_20m", 0.0, 20_000_000.0),
+    ("20m_to_100m", 20_000_000.0, 100_000_000.0),
+    ("100m_to_500m", 100_000_000.0, 500_000_000.0),
+    ("ge_500m", 500_000_000.0, None),
+)
+
+
+def universe_theme_map() -> dict[str, list[str]]:
+    out: dict[str, list[str]] = {}
+    for row in load_universe():
+        out[row["security_id"]] = [item for item in row["themes"].split("|") if item]
     return out
+
+
+def adv20_at(series: Any, session: date) -> float | None:
+    if session not in series.dates:
+        return None
+    index = series.dates.index(session)
+    if index < 20:
+        return None
+    window = [float(value) for value in series.dollar_volume[index - 20 : index]]
+    if not window or any(value != value or value <= 0 for value in window):
+        return None
+    return sum(window) / len(window)
+
+
+def adv_bucket(adv20: float | None) -> str:
+    if adv20 is None:
+        return "adv20_missing"
+    for name, lo, hi in ADV_BUCKETS:
+        if adv20 >= lo and (hi is None or adv20 < hi):
+            return name
+    return "adv20_missing"
+
+
+def fee_adjust(mean: float | None, fee: float) -> float | None:
+    if mean is None:
+        return None
+    return float(mean) - float(fee)
+
+
+def percentile(values: Sequence[float], q: float) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(float(value) for value in values)
+    if len(ordered) == 1:
+        return ordered[0]
+    rank = q * (len(ordered) - 1)
+    lo = int(rank)
+    hi = min(lo + 1, len(ordered) - 1)
+    frac = rank - lo
+    return ordered[lo] * (1.0 - frac) + ordered[hi] * frac
+
+
+def max_drawdown(returns: Sequence[float]) -> float | None:
+    if not returns:
+        return None
+    equity = 1.0
+    peak = 1.0
+    worst = 0.0
+    for value in returns:
+        equity *= 1.0 + float(value)
+        peak = max(peak, equity)
+        worst = min(worst, equity / peak - 1.0)
+    return worst
+
+
+def panel_track_counts(panel: Mapping[str, Any]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for series in panel.values():
+        track = str(getattr(series, "asset_track", "unknown") or "unknown")
+        counts[track] = counts.get(track, 0) + 1
+    return counts
+
+
+def complete_bar_count(panel: Mapping[str, Any], session: date) -> int:
+    return sum(1 for series in panel.values() if has_complete_session_bar(series, session))
+
+
+def stock_ids(panel: Mapping[str, Any]) -> list[str]:
+    return [sid for sid, series in panel.items() if getattr(series, "asset_track", None) == "stock"]
+
+
+def etf_ids(panel: Mapping[str, Any]) -> set[str]:
+    return {sid for sid, series in panel.items() if getattr(series, "asset_track", None) == "etf"}
+
+
+def universe_ew_label(panel: Mapping[str, Any], session: date, horizon: int, *, use_open: bool) -> dict[str, Any]:
+    values = []
+    for sid in stock_ids(panel):
+        values.append(label_return(panel[sid], session, horizon, use_open=use_open))
+    present = [float(value) for value in values if value is not None]
+    return {
+        "mean": None if not present else sum(present) / len(present),
+        "n": len(present),
+        "coverage": None if not values else len(present) / len(values),
+    }
+
+
+def theme_counts_for_ids(ids: Sequence[str], theme_map: Mapping[str, Sequence[str]]) -> dict[str, int]:
+    counts = {theme: 0 for theme in THEME_SLICE_IDS}
+    for sid in ids:
+        themes = list(theme_map.get(sid) or [])
+        if "etfs" not in themes:
+            themes.append("all_market_stocks")
+        for theme in themes:
+            if theme in counts:
+                counts[theme] += 1
+    return counts
+
+
+def adv_counts_for_ids(ids: Sequence[str], panel: Mapping[str, Any], session: date) -> dict[str, int]:
+    counts = {name: 0 for name, _lo, _hi in ADV_BUCKETS}
+    counts["adv20_missing"] = 0
+    for sid in ids:
+        series = panel.get(sid)
+        bucket = adv_bucket(None if series is None else adv20_at(series, session))
+        counts[bucket] = counts.get(bucket, 0) + 1
+    return counts
+
+
+def enrich_paired_daily(daily: Sequence[Mapping[str, Any]], panel: Mapping[str, Any]) -> list[dict[str, Any]]:
+    theme_map = universe_theme_map()
+    etfs = etf_ids(panel)
+    out = []
+    for row in daily:
+        session = date.fromisoformat(str(row["session_date"]))
+        day = dict(row)
+        day["complete_bar_n"] = complete_bar_count(panel, session)
+        day["stock_panel_n"] = len(stock_ids(panel))
+        day["etf_panel_n"] = len(etfs)
+        for h in LABEL_HS:
+            close_ew = universe_ew_label(panel, session, h, use_open=False)
+            open_ew = universe_ew_label(panel, session, h, use_open=True)
+            day[f"universe_stock_ew_h{h}_close_mean"] = close_ew["mean"]
+            day[f"universe_stock_ew_h{h}_close_n"] = close_ew["n"]
+            day[f"universe_stock_ew_h{h}_open_mean"] = open_ew["mean"]
+            day[f"universe_stock_ew_h{h}_open_n"] = open_ew["n"]
+        for variant in VARIANTS:
+            block = dict(day.get(variant) or {})
+            ids20 = list(block.get("top20") or [])
+            block["etf_in_stock_top20_n"] = len(set(ids20) & etfs)
+            block["theme_counts"] = theme_counts_for_ids(ids20, theme_map)
+            block["adv_buckets"] = adv_counts_for_ids(ids20, panel, session)
+            for h in LABEL_HS:
+                top_mean = block.get(f"h{h}_close_mean")
+                uni = day.get(f"universe_stock_ew_h{h}_close_mean")
+                block[f"h{h}_close_excess_vs_stock_ew"] = None if top_mean is None or uni is None else float(top_mean) - float(uni)
+                open_mean = block.get(f"h{h}_open_mean")
+                uni_open = day.get(f"universe_stock_ew_h{h}_open_mean")
+                block[f"h{h}_open_excess_vs_stock_ew"] = None if open_mean is None or uni_open is None else float(open_mean) - float(uni_open)
+                for fee in FEE_SCENARIOS:
+                    key = str(fee).replace(".", "p")
+                    block[f"h{h}_close_mean_fee_{key}"] = fee_adjust(top_mean, fee)
+            day[variant] = block
+        out.append(day)
+    return out
+
+
+def compact_path_stats(values: Sequence[float | None]) -> dict[str, Any]:
+    clean = [float(value) for value in values if value is not None]
+    return {
+        "n": len(clean),
+        "missing_n": sum(1 for value in values if value is None),
+        "mean": _mean(clean),
+        "p05": percentile(clean, 0.05),
+        "p25": percentile(clean, 0.25),
+        "p50": percentile(clean, 0.50),
+        "p75": percentile(clean, 0.75),
+        "p95": percentile(clean, 0.95),
+        "min": None if not clean else min(clean),
+        "max": None if not clean else max(clean),
+        "max_drawdown": max_drawdown(clean),
+    }
+
+
+def engineering_checks(daily: Sequence[Mapping[str, Any]], summary: Mapping[str, Any]) -> dict[str, Any]:
+    entry_mismatch = 0
+    etf_leaks = 0
+    g1_add_days = 0
+    g1_rem_days = 0
+    g2_disc_gt_g1 = 0
+    g3_disc_gt_g2 = 0
+    qualified_nonzero = 0
+    for day in daily:
+        g1 = day[G1_STOCK_REFERENCE]
+        g2 = day[G2_EXTENSION_DISCOVERY]
+        g3 = day[G3_RISK_DISCOVERY]
+        if g1.get("top20") != g2.get("top20") or g1.get("top20") != g3.get("top20") or g1.get("technical_n") != g2.get("technical_n") or g1.get("technical_n") != g3.get("technical_n"):
+            entry_mismatch += 1
+        for variant in VARIANTS:
+            etf_leaks += int((day[variant] or {}).get("etf_in_stock_top20_n") or 0)
+            qualified_nonzero += int((day[variant] or {}).get("qualified_n") or 0)
+        ov = (g1.get("overlap_vs_b0") or {})
+        if ov.get("added"):
+            g1_add_days += 1
+        if ov.get("removed"):
+            g1_rem_days += 1
+        if (g2.get("discovery_n") or 0) > (g1.get("discovery_n") or 0):
+            g2_disc_gt_g1 += 1
+        if (g3.get("discovery_n") or 0) > (g2.get("discovery_n") or 0):
+            g3_disc_gt_g2 += 1
+    alignment = summary.get("alignment") or {}
+    return {
+        "b0_aligned": bool(alignment.get("aligned")),
+        "g1_g2_g3_entry_identical_days": len(daily) - entry_mismatch,
+        "g1_g2_g3_entry_mismatch_days": entry_mismatch,
+        "etf_in_stock_topk_total": etf_leaks,
+        "g1_can_add_vs_b0_top20_days": g1_add_days,
+        "g1_can_remove_vs_b0_top20_days": g1_rem_days,
+        "g2_discovery_gt_g1_days": g2_disc_gt_g1,
+        "g3_discovery_gt_g2_days": g3_disc_gt_g2,
+        "qualified_entry_nonzero_total": qualified_nonzero,
+        "unverified_not_promoted": qualified_nonzero == 0,
+        "bootstrap_seed": BOOTSTRAP_SEED,
+        "bootstrap_reps": BOOTSTRAP_REPS,
+        "passed": entry_mismatch == 0 and etf_leaks == 0 and qualified_nonzero == 0 and bool(alignment.get("aligned")),
+    }
+
+
+def compact_diagnostics(summary: Mapping[str, Any], daily: Sequence[Mapping[str, Any]], panel: Mapping[str, Any]) -> dict[str, Any]:
+    theme_map = universe_theme_map()
+    theme_days = {theme: {variant: 0 for variant in VARIANTS} for theme in THEME_SLICE_IDS}
+    theme_share_sum = {theme: {variant: 0.0 for variant in VARIANTS} for theme in THEME_SLICE_IDS}
+    listed = Counter(theme for themes in theme_map.values() for theme in themes)
+    listed["all_market_stocks"] = sum(1 for themes in theme_map.values() if "etfs" not in themes)
+    variant_stats = {}
+    for variant in VARIANTS:
+        close20 = [day[variant].get("h20_close_mean") for day in daily]
+        excess20 = [day[variant].get("h20_close_excess_vs_stock_ew") for day in daily]
+        mae = []
+        mfe = []
+        for sess in summary.get("sessions") or []:
+            lab = ((sess.get("variants") or {}).get(variant) or {}).get("labels") or {}
+            mae.append((lab.get("20") or {}).get("mae_mean"))
+            mfe.append((lab.get("20") or {}).get("mfe_mean"))
+        fees = {
+            str(fee): {
+                "h20_close_mean_minus_fee": fee_adjust(_mean([value for value in close20 if value is not None]), fee),
+                "note": "sensitivity only; subtracts a one-way fee from the already-formed Top-K mean, not a live cost",
+            }
+            for fee in FEE_SCENARIOS
+        }
+        turn = [((day[variant].get("turnover_vs_prev") or {}).get("added_n")) for day in daily[1:]]
+        variant_stats[variant] = {
+            "h20_close_path": compact_path_stats(close20),
+            "h20_close_excess_vs_restricted_stock_ew": compact_path_stats(excess20),
+            "h20_mae": compact_path_stats(mae),
+            "h20_mfe": compact_path_stats(mfe),
+            "fee_sensitivity": fees,
+            "mean_top20_turnover_added_n": _mean([float(value) for value in turn if value is not None]),
+            "zero_technical_days": sum(1 for day in daily if (day[variant].get("technical_n") or 0) == 0),
+            "mean_technical_n": _mean([day[variant].get("technical_n") for day in daily]),
+            "mean_discovery_n": _mean([day[variant].get("discovery_n") for day in daily]),
+        }
+        for day in daily:
+            counts = (day[variant].get("theme_counts") or {})
+            n = max(1, len(day[variant].get("top20") or []))
+            for theme in THEME_SLICE_IDS:
+                share = float(counts.get(theme) or 0) / n
+                theme_share_sum[theme][variant] += share
+                if (counts.get(theme) or 0) > 0:
+                    theme_days[theme][variant] += 1
+    theme_slices = {}
+    for theme in THEME_SLICE_IDS:
+        n_listed = int(listed.get(theme) or 0)
+        theme_slices[theme] = {
+            "listed_n": n_listed,
+            "thin_sample": n_listed < 10,
+            "days_with_top20_member": theme_days[theme],
+            "mean_top20_share": {
+                variant: None if not daily else theme_share_sum[theme][variant] / len(daily)
+                for variant in VARIANTS
+            },
+            "note": "coverage diagnostic only; not a per-theme champion",
+        }
+    return {
+        "panel_tracks": panel_track_counts(panel),
+        "layer": "restricted_current_membership_exploratory",
+        "universe_ew_note": "equal-weight of restricted stock panel members with labels; not a full-market benchmark",
+        "theme_slices": theme_slices,
+        "variants": variant_stats,
+        "engineering_checks": engineering_checks(daily, summary),
+    }
+
+
+def build_validation_md(
+    *,
+    manifest: Mapping[str, Any],
+    summary: Mapping[str, Any],
+    diagnostics: Mapping[str, Any],
+    caches: Mapping[str, Any],
+    commands: Sequence[str],
+    test_results: Mapping[str, Any] | None = None,
+) -> str:
+    alignment = manifest.get("run", {}).get("alignment") or summary.get("alignment") or {}
+    checks = diagnostics.get("engineering_checks") or {}
+    dates = manifest.get("dates") or {}
+    lines = [
+        "# Validation",
+        "",
+        "## 执行命令",
+    ]
+    for command in commands:
+        lines.append(f"- `{command}`")
+    lines.extend(
+        [
+            "",
+            "## 基线与范围",
+            f"- production HEAD target: `{manifest.get('production_anchor')}`",
+            f"- layer: `{manifest.get('layer')}`",
+            f"- sessions: {dates.get('start')} → {dates.get('end')} (n={dates.get('n_sessions')})",
+            f"- profile/horizon: {manifest.get('run', {}).get('profile')} / {manifest.get('run', {}).get('horizon')}",
+            f"- seen_or_unseen: {dates.get('seen_or_unseen')}",
+            f"- holdout {dates.get('holdout_sealed_from')}+ : sealed, not used",
+            f"- last open research session: {dates.get('last_open_research_session')}",
+            f"- elapsed_s: {manifest.get('run', {}).get('elapsed_s')}",
+            "",
+            "## 旧资源复用",
+            f"- old bars.pkl reusable: {caches.get('any_reusable_bars')}",
+            "- expected bars.pkl sha256 `d910d86505e1914eb14aaacea2ddabc8d61b1f097ab83c513f07750539f32d48`: ABSENT, hash not verified, not claimed reused",
+            "- expected 4GB tape sha256 `b490ba6d83965a0c3fe60c76afab8205fc2a0d76cc6577cdf23cb838e447f75a`: ABSENT, not claimed reused",
+            f"- Yahoo re-download sha256: `{((manifest.get('data') or {}).get('yahoo_bars_sha256'))}`",
+            "- algorithm_candidates.patch: not attached; candidates reconstructed from frozen CURSOR_TASK/REVIEW spec without changing weights",
+            "",
+            "## 通过项",
+            f"- B0 alignment: {json.dumps(alignment, ensure_ascii=False)}",
+            f"- G1/G2/G3 technical-entry identity mismatch days: {checks.get('g1_g2_g3_entry_mismatch_days')}",
+            f"- G1 can add vs B0 Top20 days: {checks.get('g1_can_add_vs_b0_top20_days')}",
+            f"- G1 can remove vs B0 Top20 days: {checks.get('g1_can_remove_vs_b0_top20_days')}",
+            f"- ETF leaked into stock Top-K: {checks.get('etf_in_stock_topk_total')}",
+            f"- qualified_entry nonzero total: {checks.get('qualified_entry_nonzero_total')} (DOLLAR_LIQUIDITY_UNVERIFIED / VOLUME_SESSION_UNVERIFIED not promoted)",
+            f"- bootstrap seed={checks.get('bootstrap_seed')} reps={checks.get('bootstrap_reps')} blocks=H/2H",
+            f"- engineering_checks.passed: {checks.get('passed')}",
+            "",
+            "## 跳过项与数据限制",
+            "- 2024-07-01+ holdout not opened",
+            "- old 214-name pool cannot be called a full-market HIGH_ATR median",
+            f"- broad_market_median: {summary.get('broad_market_median')}; reason: {summary.get('broad_market_median_reason')}",
+            f"- broad slices status: {(manifest.get('run') or {}).get('broad_slices', {}).get('status')}",
+            "- Massive grouped_daily slices are same-day high-low/close range, NOT ATR%, NOT G1 reference",
+            "- CRWV has no Yahoo bars in the open zone (IPO after 2024-06-28)",
+            "- LVMUY / CFRUY venue OTC_EXCLUDED; RMS.PA NON_US_LISTING",
+            "- other profile/horizon extras are 3-session verification only, not a second full 562-day matrix",
+            "- overlapping 5/20/63 labels are not independent trades",
+            "- fee scenarios are sensitivity only, not live costs",
+            "- G2/G3 discovery expansion is not a trading-return claim",
+            "",
+            "## 测试",
+        ]
+    )
+    if test_results:
+        for name, payload in test_results.items():
+            lines.append(f"- {name}: {json.dumps(payload, ensure_ascii=False)}")
+    else:
+        lines.append("- tests not re-run inside this finalize call")
+    lines.extend(
+        [
+            "",
+            "Stock and ETF tracks are reported separately; Top-K is stock-only after filtering.",
+            "Synthetic 56 tests prove function behavior only; this pack is the market replay.",
+            "No production defaults were changed. No deploy/merge/search.",
+        ]
+    )
+    return "\n".join(lines) + "\n"
 
 
 def write_json(path: Path, payload: Any) -> None:
@@ -742,7 +1157,11 @@ def fetch_broad_slices(dest: Path, days: Sequence[str]) -> dict[str, Any]:
         session = date.fromisoformat(day)
         if session >= HOLDOUT_FROM:
             continue
-        rows = massive.grouped_daily(day)
+        try:
+            rows = massive.grouped_daily(day)
+        except Exception as exc:
+            slices.append({"session_date": day, "status": "skipped", "reason": str(exc)})
+            continue
         stock_ranges = []
         etf_ranges = []
         for symbol, bar in rows.items():
@@ -795,7 +1214,7 @@ def _paired_from_summaries(summaries: Sequence[Mapping[str, Any]], panel: Mappin
             "new_reference_median": summary.get("new_reference_median"),
             "reference_n": summary.get("reference_n"),
             "actual_cap": summary.get("actual_cap"),
-            "complete_bar_n": None,
+            "complete_bar_n": summary.get("complete_bar_n"),
         }
         b0_top20 = list((summary.get("variants") or {}).get(B0_CURRENT, {}).get("top", {}).get(20) or [])
         for variant in VARIANTS:
@@ -948,6 +1367,7 @@ def cmd_replay(args: argparse.Namespace) -> None:
                 ]
     # Rebuild paired stats from stored summaries + leftover compact fields.
     paired = _paired_from_summaries(summaries, panel)
+    paired["daily"] = enrich_paired_daily(paired["daily"], panel)
     paired["common_sample_ic"] = {
         "mean": _mean([item.get("common_sample_ic_h20") for item in ics]),
         "n_days": sum(1 for item in ics if item.get("common_sample_ic_h20") is not None),
@@ -966,6 +1386,7 @@ def cmd_replay(args: argparse.Namespace) -> None:
         "code_hashes": {
             "screener_gate_candidates_v1.py": code_hash,
             "screener_gate_adapter_v1.py": adapter_hash,
+            "screener_gate_replay_v1.py": sha256_file(Path(__file__).resolve()),
         },
         "data": {
             "provider": yahoo_payload.get("provider"),
@@ -986,6 +1407,7 @@ def cmd_replay(args: argparse.Namespace) -> None:
             "kind": "restricted_current_membership",
             "n_listed": len(load_universe()),
             "n_panel": len(panel),
+            "tracks": panel_track_counts(panel),
             "stocks_etfs_separated": True,
         },
         "labels": {
@@ -1004,6 +1426,14 @@ def cmd_replay(args: argparse.Namespace) -> None:
             "status": "ok" if alignment.get("aligned") else "b0_alignment_differences_recorded",
         },
     }
+    diagnostics = compact_diagnostics(
+        {
+            "alignment": alignment,
+            "sessions": summaries,
+        },
+        paired["daily"],
+        panel,
+    )
     summary = {
         "layer": "restricted_current_membership_exploratory",
         "alignment": alignment,
@@ -1012,28 +1442,22 @@ def cmd_replay(args: argparse.Namespace) -> None:
         "yearly_h20_close_mean": paired["yearly_h20_close_mean"],
         "common_sample_ic": paired.get("common_sample_ic"),
         "other_profile_horizon": extras or None,
+        "compact": diagnostics,
         "broad_market_median": None,
         "broad_market_median_reason": "restricted 214-name pool cannot be called a full-market median; see broad_slices if present",
         "qualified_entry_n_note": "volume and dollar liquidity remain unverified; qualified_entry stays empty unless those flags are true",
     }
-    validation = "\n".join(
-        [
-            "# Validation",
-            "",
-            f"- production HEAD target: `d16b25e3812dce9adf16e2ca993b4f2c38d7b1ef`",
-            f"- layer: restricted_current_membership_exploratory",
-            f"- sessions: {sessions[0] if sessions else None} → {sessions[-1] if sessions else None} ({len(sessions)} days)",
-            f"- profile/horizon: {args.profile} / {args.horizon}",
-            f"- B0 alignment: {json.dumps(alignment, ensure_ascii=False)}",
-            f"- old bars.pkl reusable: {caches.get('any_reusable_bars')}",
-            f"- holdout 2024-07-01+: sealed, not used",
-            f"- elapsed_s: {manifest['run']['elapsed_s']}",
-            f"- broad slices: {broad.get('status')}",
-            "",
-            "G2/G3 discovery expansion is not a trading-return claim.",
-            "Stock and ETF tracks are reported separately; Top-K is stock-only after filtering.",
-            "Synthetic 56 tests prove function behavior only; this pack is the market replay.",
-        ]
+    validation = build_validation_md(
+        manifest=manifest,
+        summary=summary,
+        diagnostics=diagnostics,
+        caches=caches,
+        commands=[
+            "PYTHONPATH=backend python -m pytest -q tests/test_screener_gate_candidates_v1.py tests/test_screener_gate_replay_adapter.py",
+            "PYTHONPATH=backend python scripts/research/screener_gate_replay_v1.py discover",
+            "PYTHONPATH=backend python scripts/research/screener_gate_replay_v1.py download --start 2016-01-01 --end 2024-06-28",
+            "PYTHONPATH=backend python -u scripts/research/screener_gate_replay_v1.py replay --start 2022-01-03 --end 2024-03-28 --other-variants --extra-sessions 3 --broad-slices 2024-06-28,2023-12-29,2022-12-30 --align-sessions 5",
+        ],
     )
     export_pack(
         dest,
@@ -1045,6 +1469,102 @@ def cmd_replay(args: argparse.Namespace) -> None:
         validation=validation,
     )
     print(json.dumps({"pack": str(dest / "return_pack"), "alignment": alignment, "n_sessions": len(sessions)}, indent=2, default=str))
+
+
+def cmd_finalize(args: argparse.Namespace) -> None:
+    dest = research_dir(args.research_dir)
+    pack = dest / "return_pack"
+    started = time.perf_counter()
+    caches = discover_old_caches()
+    panel, coverage, yahoo_payload = load_restricted_panel(dest, end=LAST_OPEN_SESSION)
+    summary = json.loads((pack / "summary.json").read_text(encoding="utf-8"))
+    manifest = json.loads((pack / "manifest.json").read_text(encoding="utf-8"))
+    paired = _paired_from_summaries(summary.get("sessions") or [], panel)
+    paired["daily"] = enrich_paired_daily(paired["daily"], panel)
+    paired["common_sample_ic"] = summary.get("common_sample_ic")
+    diagnostics = compact_diagnostics(summary, paired["daily"], panel)
+    summary["compact"] = diagnostics
+    summary["bootstrap_h20_close"] = paired["bootstrap_h20_close"]
+    summary["yearly_h20_close_mean"] = paired["yearly_h20_close_mean"]
+    manifest.setdefault("code_hashes", {})["screener_gate_replay_v1.py"] = sha256_file(Path(__file__).resolve())
+    manifest.setdefault("universe", {})["tracks"] = panel_track_counts(panel)
+    manifest["data"] = manifest.get("data") or {}
+    manifest["data"]["coverage"] = coverage
+    manifest["data"]["provider"] = yahoo_payload.get("provider")
+    manifest["data"]["price_adjustment"] = yahoo_payload.get("price_adjustment")
+    manifest["run"] = manifest.get("run") or {}
+    manifest["run"]["finalize_elapsed_s"] = time.perf_counter() - started
+    examples = []
+    if args.refresh_examples:
+        registry = load_market_registry()
+        theme_ids = list(registry["sectors"])
+        families = list(ALGORITHMS)
+        wanted = []
+        for day in paired["daily"]:
+            ov = ((day.get(G1_STOCK_REFERENCE) or {}).get("overlap_vs_b0") or {})
+            if ov.get("added") or ov.get("removed"):
+                wanted.append(date.fromisoformat(str(day["session_date"])))
+            if len(wanted) >= 4:
+                break
+        if not wanted and paired["daily"]:
+            wanted = [date.fromisoformat(str(paired["daily"][0]["session_date"]))]
+        for session in wanted:
+            result = run_one_session(
+                panel,
+                session,
+                registry=registry,
+                theme_ids=theme_ids,
+                families=families,
+                profile=str(manifest.get("run", {}).get("profile") or "balanced"),
+                horizon=str(manifest.get("run", {}).get("horizon") or "mid"),
+            )
+            examples.extend(example_rows([result], limit=12 - len(examples)))
+            if len(examples) >= 12:
+                break
+    else:
+        with (pack / "examples.csv").open(encoding="utf-8") as handle:
+            examples = list(csv.DictReader(handle))
+    test_results = None
+    if args.test_results:
+        test_results = json.loads(Path(args.test_results).read_text(encoding="utf-8"))
+    validation = build_validation_md(
+        manifest=manifest,
+        summary=summary,
+        diagnostics=diagnostics,
+        caches=caches,
+        commands=[
+            "PYTHONPATH=backend python -m pytest -q tests/test_screener_gate_candidates_v1.py tests/test_screener_gate_replay_adapter.py",
+            "PYTHONPATH=backend python scripts/research/screener_gate_replay_v1.py discover",
+            "PYTHONPATH=backend python scripts/research/screener_gate_replay_v1.py download --start 2016-01-01 --end 2024-06-28",
+            "PYTHONPATH=backend python -u scripts/research/screener_gate_replay_v1.py replay --start 2022-01-03 --end 2024-03-28 --other-variants --extra-sessions 3 --broad-slices 2024-06-28,2023-12-29,2022-12-30 --align-sessions 5",
+            "PYTHONPATH=backend python scripts/research/screener_gate_replay_v1.py finalize --refresh-examples",
+        ],
+        test_results=test_results,
+    )
+    attribution = []
+    attr_path = pack / "gate_attribution.csv"
+    if attr_path.is_file():
+        with attr_path.open(encoding="utf-8") as handle:
+            for row in csv.DictReader(handle):
+                parsed = dict(row)
+                for key in ("added_reasons", "removed_reasons", "added_theme_family"):
+                    raw = parsed.get(key)
+                    if raw:
+                        try:
+                            parsed[key] = json.loads(raw)
+                        except json.JSONDecodeError:
+                            pass
+                attribution.append(parsed)
+    export_pack(
+        dest,
+        manifest=manifest,
+        summary=summary,
+        paired=paired["daily"],
+        attribution=attribution,
+        examples=examples,
+        validation=validation,
+    )
+    print(json.dumps({"pack": str(pack), "checks": diagnostics.get("engineering_checks"), "finalize_elapsed_s": manifest["run"]["finalize_elapsed_s"]}, indent=2, default=str))
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1071,6 +1591,11 @@ def build_parser() -> argparse.ArgumentParser:
     replay.add_argument("--extra-sessions", type=int, default=3)
     replay.add_argument("--broad-slices", default="")
     replay.set_defaults(func=cmd_replay)
+    finalize = sub.add_parser("finalize")
+    finalize.add_argument("--research-dir")
+    finalize.add_argument("--refresh-examples", action="store_true")
+    finalize.add_argument("--test-results")
+    finalize.set_defaults(func=cmd_finalize)
     return parser
 
 
