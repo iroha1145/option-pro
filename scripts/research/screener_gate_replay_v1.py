@@ -427,7 +427,7 @@ def run_sessions(
     theme_ids = list(themes or registry["sectors"])
     families = list(ALGORITHMS)
     results = []
-    for session in sessions:
+    for index, session in enumerate(sessions, start=1):
         started = time.perf_counter()
         inputs = precompute_all_horizon_inputs(
             panel, session, registry=registry, horizons=[horizon], themes=theme_ids,
@@ -448,7 +448,46 @@ def run_sessions(
         )
         scored["elapsed_s"] = time.perf_counter() - started
         scored["complete_bar_n"] = sum(1 for series in clipped.values() if has_complete_session_bar(series, session))
+        keep = (
+            "security_id",
+            "session_date",
+            "stock_or_etf_track",
+            "algorithm_id",
+            "sector_context",
+            "score",
+            "adv20",
+            "atr",
+            "rejection_reasons",
+            "status",
+        )
+        slim = []
+        for item in scored["records"]:
+            row = item["row"]
+            slim.append(
+                {
+                    "row": {key: row.get(key) for key in keep},
+                    "facts": item["facts"],
+                    "decisions": item["decisions"],
+                    "attached": {
+                        variant: {
+                            "score": item["attached"][variant].get("score"),
+                            "status": item["attached"][variant].get("status"),
+                            "rejection_reasons": item["attached"][variant].get("rejection_reasons"),
+                            "research_gate": item["attached"][variant].get("research_gate"),
+                        }
+                        for variant in VARIANTS
+                    },
+                }
+            )
+        scored["records"] = slim
         results.append(scored)
+        print(
+            f"session {index}/{len(sessions)} {session.isoformat()} "
+            f"{profile}/{horizon} {scored['elapsed_s']:.1f}s "
+            f"ref_n={scored['reference_n']} old={scored['old_reference_median']} "
+            f"new={scored['new_reference_median']}",
+            flush=True,
+        )
     return results
 
 
@@ -521,7 +560,8 @@ def paired_stats(results: Sequence[Mapping[str, Any]], panel: Mapping[str, Any])
                     values.append(None if series is None else label_return(series, session, h, use_open=False))
                 rets[f"h{h}_close_mean"] = _mean(values)
                 rets[f"h{h}_close_n"] = sum(value is not None for value in values)
-                yearly[session.year][variant].append(rets[f"h{h}_close_mean"] if h == 20 else None)
+                if h == 20:
+                    yearly[session.year][variant].append(rets["h20_close_mean"])
             day[variant] = {
                 "discovery_n": len(discovery),
                 "technical_n": len(technical),
@@ -726,6 +766,38 @@ def cmd_download(args: argparse.Namespace) -> None:
     print(json.dumps(info, indent=2))
 
 
+def score_ics(result: Mapping[str, Any], panel: Mapping[str, Any], horizon_h: int = 20) -> dict[str, Any]:
+    session = date.fromisoformat(result["session_date"])
+    out: dict[str, Any] = {}
+    common_rows = []
+    for item in result["records"]:
+        if item["facts"].asset_track != "stock" or item["row"].get("score") is None:
+            continue
+        series = panel.get(item["row"]["security_id"])
+        label = None if series is None else label_return(series, session, horizon_h, use_open=False)
+        if label is None:
+            continue
+        common_rows.append((str(item["row"]["security_id"]), float(item["row"]["score"]), float(label)))
+    best: dict[str, tuple[float, float]] = {}
+    for sid, score, label in common_rows:
+        prev = best.get(sid)
+        if prev is None or score > prev[0]:
+            best[sid] = (score, label)
+    xs = [pair[0] for pair in best.values()]
+    ys = [pair[1] for pair in best.values()]
+    out["common_sample_ic_h20"] = _spearman(xs, ys)
+    out["common_sample_n"] = len(best)
+    for variant in VARIANTS:
+        selected = ranked_stocks(result, variant, layer="technical_entry")[:20]
+        labels = []
+        for row in selected:
+            series = panel.get(row["security_id"])
+            labels.append(None if series is None else label_return(series, session, horizon_h, use_open=False))
+        out[f"{variant}_top20_h20_mean"] = _mean(labels)
+        out[f"{variant}_top20_h20_n"] = sum(value is not None for value in labels)
+    return out
+
+
 def cmd_replay(args: argparse.Namespace) -> None:
     dest = research_dir(args.research_dir)
     started = time.perf_counter()
@@ -734,10 +806,19 @@ def cmd_replay(args: argparse.Namespace) -> None:
     sessions = session_dates(panel, start=date.fromisoformat(args.start), end=date.fromisoformat(args.end))
     if args.max_sessions:
         sessions = sessions[: int(args.max_sessions)]
-    align_sessions = sessions[: max(1, int(args.align_sessions))]
+    align_n = max(1, int(args.align_sessions))
+    align_sessions = sessions[:align_n]
+    print(f"aligning {len(align_sessions)} sessions", flush=True)
     align_results = run_sessions(panel, align_sessions, profile="balanced", horizon="mid")
     alignment = alignment_report(align_results)
-    main_results = align_results if args.align_only else run_sessions(panel, sessions, profile=args.profile, horizon=args.horizon)
+    print(f"alignment {json.dumps(alignment, ensure_ascii=False)}", flush=True)
+    if args.align_only:
+        main_results = align_results
+    elif args.profile == "balanced" and args.horizon == "mid":
+        rest = sessions[len(align_sessions):]
+        main_results = list(align_results) + (run_sessions(panel, rest, profile=args.profile, horizon=args.horizon) if rest else [])
+    else:
+        main_results = run_sessions(panel, sessions, profile=args.profile, horizon=args.horizon)
     extras = {}
     if args.other_variants:
         for profile in PROFILES:
@@ -749,7 +830,13 @@ def cmd_replay(args: argparse.Namespace) -> None:
                     summarize_session(item, panel)
                     for item in run_sessions(panel, extra_sessions, profile=profile, horizon=horizon)
                 ]
+    ics = [score_ics(item, panel) for item in main_results]
     paired = paired_stats(main_results, panel)
+    paired["common_sample_ic"] = {
+        "mean": _mean([item.get("common_sample_ic_h20") for item in ics]),
+        "n_days": sum(1 for item in ics if item.get("common_sample_ic_h20") is not None),
+        "note": "rank IC on shared scored names, separate from each candidate Top-K set",
+    }
     attribution = attribution_rows(main_results)
     examples = example_rows(main_results)
     summaries = [summarize_session(item, panel) for item in main_results]
@@ -810,6 +897,7 @@ def cmd_replay(args: argparse.Namespace) -> None:
         "sessions": summaries,
         "bootstrap_h20_close": paired["bootstrap_h20_close"],
         "yearly_h20_close_mean": paired["yearly_h20_close_mean"],
+        "common_sample_ic": paired.get("common_sample_ic"),
         "other_profile_horizon": extras or None,
         "broad_market_median": None,
         "broad_market_median_reason": "restricted 214-name pool cannot be called a full-market median; see broad_slices if present",
