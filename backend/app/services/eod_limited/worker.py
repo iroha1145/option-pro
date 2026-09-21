@@ -201,6 +201,7 @@ def run_eod_limited_job(
             panel, target, registry=registry,
             horizons=list(dict.fromkeys(item_horizon for _, item_horizon in wanted)),
             themes=themes,
+            geometry_workers=4,
         )
     for item_profile, item_horizon in wanted:
         if item_horizon not in horizon_inputs:

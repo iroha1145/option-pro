@@ -19,6 +19,7 @@ from app.services.research_eod_v1.series import clip_panel_to_as_of
 
 from . import COMPUTE_VERSION, MODE_ID, PURPOSE_LIVE, VOLUME_SCOPE
 from .panel import prepare_limited_panel
+from .geometry_parallel import parallel_geometry, validate_geometry_workers
 from .price_only import apply_price_only_track, resolve_capability_flags
 
 WARMUP_SESSIONS = 330
@@ -94,6 +95,7 @@ def precompute_theme_raws(
     *,
     registry: Mapping[str, Any],
     themes: Sequence[str] | None = None,
+    geometry_workers: int = 1,
 ) -> dict[str, dict[str, Any]]:
     """Apply theme geometry once to this horizon's inputs, without changing them.
 
@@ -101,9 +103,11 @@ def precompute_theme_raws(
     profile-independent apply_sector_gates call is shared within one job.
     """
 
+    validate_geometry_workers(geometry_workers)
     as_of = eod_evaluation_as_of(session)
     prepared = {}
     geometry_cache: dict = {}
+    security_themes: dict[str, list[tuple[str, dict[str, Any]]]] = {}
     for theme_id in themes or registry["sectors"]:
         sector = registry["sectors"][theme_id]
         target_track = "etf" if sector.get("asset_track") == "etf" else "stock"
@@ -115,10 +119,18 @@ def precompute_theme_raws(
                 series, sector_id=theme_id, session=session, target_track=target_track,
             )
             if candidate:
-                theme_raws[sid] = apply_sector_gates(
-                    raws[sid], series, sector["gates"], geometry_cache=geometry_cache,
-                )
+                if geometry_workers == 1:
+                    theme_raws[sid] = apply_sector_gates(
+                        raws[sid], series, sector["gates"], geometry_cache=geometry_cache,
+                    )
+                else:
+                    security_themes.setdefault(sid, []).append((theme_id, sector["gates"]))
         prepared[theme_id] = theme_raws
+    if geometry_workers > 1:
+        tasks = ((sid, raws[sid], clipped[sid], gates) for sid, gates in security_themes.items())
+        for sid, results in parallel_geometry(tasks, workers=geometry_workers):
+            for theme_id, raw in results:
+                prepared[theme_id][sid] = raw
     return prepared
 
 
@@ -138,8 +150,10 @@ def derive_horizon_raws(
 def precompute_all_horizon_inputs(
     panel: Mapping[str, Any], session: date, *, registry: Mapping[str, Any],
     horizons: Sequence[str], themes: Sequence[str] | None = None,
+    geometry_workers: int = 1,
 ) -> dict[str, tuple[dict, dict, dict]]:
     """One immutable session panel, one raw extraction, one geometry pass per job."""
+    validate_geometry_workers(geometry_workers)
     wanted = list(dict.fromkeys(horizons))
     if not wanted:
         return {}
@@ -148,7 +162,10 @@ def precompute_all_horizon_inputs(
     raws, clipped = precompute_session_raws(
         panel, session, registry=registry, horizon=seed, include_setup=False,
     )
-    themed = precompute_theme_raws(raws, clipped, session, registry=registry, themes=themes)
+    themed = precompute_theme_raws(
+        raws, clipped, session, registry=registry, themes=themes,
+        geometry_workers=geometry_workers,
+    )
     result = {seed: (raws, clipped, themed)}
     for horizon in wanted[1:]:
         derived = derive_horizon_raws(raws, registry=registry, horizon=horizon)
