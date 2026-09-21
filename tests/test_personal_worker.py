@@ -9,6 +9,7 @@ import sys
 import textwrap
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -1753,6 +1754,134 @@ def test_call_local_waits_through_repeated_cancellation(
     asyncio.run(scenario())
 
 
+@pytest.mark.parametrize("timeout_seconds,expected_error", [(2.0, None), (0.1, "task_timeout")])
+def test_strength_budget_keeps_thread_fenced_and_preserves_real_timeout(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    timeout_seconds: float,
+    expected_error: str | None,
+) -> None:
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    strength_spec = next(
+        spec for spec in build_default_tasks("strength-budget", settings=_worker_config(tmp_path))
+        if spec.name == "strength_refresh"
+    )
+
+    async def scenario() -> None:
+        started = threading.Event()
+        release = threading.Event()
+        published = tmp_path / "published.json"
+
+        def local_publication() -> None:
+            started.set()
+            if not release.wait(timeout=5):
+                raise RuntimeError("test did not release the local publication")
+            published.write_text('{"published":true}')
+
+        async def runner() -> TaskResult:
+            await worker_tasks._call_local(local_publication)
+            return TaskResult(status="idle", details={"published": True})
+
+        repository = WorkerStateRepository(tmp_path / "budget.db")
+        lock_path = tmp_path / "budget.lock"
+        supervisor = WorkerSupervisor(
+            repository, (replace(strength_spec, runner=runner, timeout_seconds=timeout_seconds),),
+            owner_id="strength-budget", lease_seconds=2,
+            process_lock=ProcessFileLock(lock_path),
+        )
+        running = asyncio.create_task(supervisor.run_once())
+        try:
+            assert await asyncio.to_thread(started.wait, 2)
+            # Cross the scaled old deadline while the local thread is held.
+            # The longer budget may succeed; the shorter one must remain a
+            # timeout even if the thread eventually publishes successfully.
+            await asyncio.sleep(0.2)
+            assert not running.done()
+            assert not published.exists()
+            contender = ProcessFileLock(lock_path)
+            assert contender.acquire("contender") is False
+            assert repository.health(expected_tasks=("strength_refresh",))["lock_live"] is True
+            state = repository.task_states()[0]
+            assert state["status"] == "running"
+            assert state["last_success_at"] is None
+        finally:
+            release.set()
+            outcome = await asyncio.wait_for(running, timeout=3)
+        assert published.exists()
+        state = repository.task_states()[0]
+        result = outcome["tasks"]["strength_refresh"]
+        assert result["error_code"] == expected_error
+        assert state["error_code"] == expected_error
+        if expected_error:
+            assert result["status"] == state["status"] == "degraded"
+            assert state["last_success_at"] is None
+        else:
+            assert result["status"] == state["status"] == "idle"
+            assert state["last_success_at"] is not None
+        contender = ProcessFileLock(lock_path)
+        assert contender.acquire("after-publication") is True
+        contender.release()
+
+    asyncio.run(scenario())
+
+
+def test_strength_shutdown_drains_local_publication_before_releasing_lease(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    strength_spec = next(
+        spec for spec in build_default_tasks("strength-drain", settings=_worker_config(tmp_path))
+        if spec.name == "strength_refresh"
+    )
+
+    async def scenario() -> None:
+        started = threading.Event()
+        release = threading.Event()
+        finished = threading.Event()
+
+        def local_publication() -> None:
+            started.set()
+            if not release.wait(timeout=5):
+                raise RuntimeError("test did not release the local publication")
+            finished.set()
+
+        async def runner() -> TaskResult:
+            await worker_tasks._call_local(local_publication)
+            return TaskResult(status="idle", details={"published": True})
+
+        repository = WorkerStateRepository(tmp_path / "strength-drain.db")
+        lock_path = tmp_path / "strength-drain.lock"
+        supervisor = WorkerSupervisor(
+            repository, (replace(strength_spec, runner=runner, timeout_seconds=2),),
+            owner_id="strength-drain", lease_seconds=0.6, shutdown_grace_seconds=0.02,
+            process_lock=ProcessFileLock(lock_path),
+        )
+        running = asyncio.create_task(supervisor.run_forever())
+        try:
+            assert await asyncio.to_thread(started.wait, 2)
+            before = repository.health(expected_tasks=("strength_refresh",))["heartbeat_at"]
+            supervisor.request_stop()
+            # Outlive both the ordinary shutdown grace and a heartbeat interval.
+            await asyncio.sleep(0.3)
+            assert not running.done() and not finished.is_set()
+            health = repository.health(expected_tasks=("strength_refresh",))
+            assert health["lock_live"] is True
+            assert health["heartbeat_at"] != before
+            contender = ProcessFileLock(lock_path)
+            assert contender.acquire("contender") is False
+        finally:
+            release.set()
+            outcome = await asyncio.wait_for(running, timeout=3)
+        assert finished.is_set()
+        assert outcome["tasks"]["strength_refresh"]["status"] == "idle"
+        assert outcome["tasks"]["strength_refresh"]["error_code"] is None
+        contender = ProcessFileLock(lock_path)
+        assert contender.acquire("after-drain") is True
+        contender.release()
+
+    asyncio.run(scenario())
+
+
 def test_unexpected_task_loop_exit_terminates_supervisor_and_releases_lock(
     tmp_path: Path,
 ) -> None:
@@ -3209,6 +3338,9 @@ def test_default_task_inventory_and_maintenance_backup(
     assert isinstance(strength_spec.runner, StrengthRefreshTask)
     assert strength_spec.interval_seconds == 86_400
     assert strength_spec.manual_only is False
+    assert strength_spec.timeout_seconds == worker_tasks.STRENGTH_REFRESH_TIMEOUT_SECONDS == 7_200.0
+    assert strength_spec.drain_on_shutdown is True
+    assert strength_spec.may_block_event_loop is False
     sector_iv_spec = next(spec for spec in specs if spec.name == "sector_iv_refresh")
     assert isinstance(sector_iv_spec.runner, worker_tasks.SectorIVTask)
     assert sector_iv_spec.enabled is True

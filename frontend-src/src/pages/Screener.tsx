@@ -293,7 +293,9 @@ export default function Screener() {
         };
         onProgress(action);
         if (action.status !== 'completed') {
-          action = await runtimeApi.waitForWorkerAction(requestId, 1_920_000, {
+          // This screener refresh may use the dedicated 7,200s worker budget.
+          // Keep a 120s response margin without changing other worker waits.
+          action = await runtimeApi.waitForWorkerAction(requestId, 7_320_000, {
             shouldContinue: isCurrent, onProgress,
           });
           requireCurrent();

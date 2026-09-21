@@ -199,6 +199,23 @@ test('failed recovered task is discarded so a new click can create a replacement
   assert.equal(posts, 1);
 });
 
+test('EOD refresh waits through the dedicated worker budget and retains a timed-out request ID', async () => {
+  const accepted = { ...completed, status: 'queued', details: { parameters } };
+  let observedTimeout = null;
+  const h = harness({ runtimeApi: {
+    workerAction: async () => accepted,
+    workerActionStatus: async () => accepted,
+    waitForWorkerAction: async (_requestId, timeoutMs) => {
+      observedTimeout = timeoutMs;
+      throw new ApiError(504, 'wait timed out', { bizCode: 'worker_action_timeout' });
+    },
+  } });
+  assert.equal(await h.runScan({}, { forceRefresh: true }), false);
+  assert.equal(observedTimeout, 7_320_000);
+  assert.equal(h.pending()?.requestId, accepted.requestId);
+  assert.equal(h.state.scanState, 'error');
+});
+
 test('a missing recovered task is discarded instead of permanently blocking retries', async () => {
   let posts = 0;
   const h = harness({ runtimeApi: {

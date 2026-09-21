@@ -73,6 +73,8 @@ export const EOD_DIAGNOSTICS: Dict = {
   '请输入有效代码，最多三十二个字母、数字、点或连字符。': ['Enter a valid symbol of at most 32 letters, digits, dots, or hyphens.', '英数字、ピリオド、ハイフンを用いた32文字以内の有効な銘柄コードを入力してください。'],
   '返回的数据与所查代码或条件不符，请重试。': ['The response does not match the requested symbol or settings. Retry.', '応答が検索した銘柄または条件と一致しません。再試行してください。'],
   '读取失败，请稍后重试。': ['Could not load diagnostics. Retry later.', '診断を読み込めませんでした。後ほど再試行してください。'],
+  '选股诊断查询过于频繁，请稍后重试。': ['Too many diagnostic lookups. Please try again shortly.', '診断の検索が集中しています。しばらくしてから再試行してください。'],
+  '选股诊断查询过于频繁，请 {n} 秒后重试。': ['Too many diagnostic lookups. Please try again in {n} second.||Too many diagnostic lookups. Please try again in {n} seconds.', '診断の検索が集中しています。{n} 秒後に再試行してください。'],
   '该代码不在本批次证券目录中。': ['This symbol is not in the current batch directory.', 'この銘柄コードは今回の証券一覧にありません。'],
   '该批次尚无完整诊断，请等待扫描完成后重试。': ['This batch has no complete diagnostics yet. Retry after scanning finishes.', 'このバッチには完全な診断がまだありません。スキャン完了後に再試行してください。'],
   '按代码查询选股诊断': ['Look up screener diagnostics by symbol', '銘柄コードでスクリーナー診断を検索'],
