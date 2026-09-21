@@ -67,9 +67,10 @@ def q_star(
     n_ind: dict[str, int] = {}
     for _key, members in by_industry.items():
         ranks = ranked_q(signed, members)
+        finite_count = _finite_members(signed, members)
         for sid in members:
             q_ind[sid] = ranks[sid]
-            n_ind[sid] = _finite_members(signed, members)
+            n_ind[sid] = finite_count
     for sid in signed:
         q_p = q_parent.get(sid)
         if q_p is None:

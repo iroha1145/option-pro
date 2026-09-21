@@ -13,7 +13,7 @@ from app.worker.tasks import StrengthRefreshTask
 
 
 def parameters(profile="balanced", horizon="mid"):
-    return strength.normalize_strength_scan_parameters({
+    return strength.strength_execution_parameters({
         **strength.DEFAULT_STRENGTH_SCAN_PARAMETERS,
         "ranking_algorithm": "eod_limited_v1", "profile": profile, "timeframe": horizon,
     })

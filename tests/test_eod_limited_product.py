@@ -532,8 +532,13 @@ def test_failed_daily_input_retains_previous_batch(tmp_path: Path, monkeypatch: 
         raw_open=100, raw_close=100, volume=1_000_000, dollar_volume=100_000_000, tri=100,
         partial=input_kind == "partial",
     )
-    monkeypatch.setattr(worker, "fetch_current_universe_bars", lambda **kwargs: {} if input_kind == "empty" else {"NVDA": [bar]})
-    outcome = worker.run_eod_limited_job(session=date(2026, 9, 18), root=tmp_path, tickers=["NVDA"])
+    from app.services.eod_limited import market_data
+    def market_panel(**kwargs):
+        bars = {} if input_kind == "empty" else {"NVDA": [bar]}
+        panel, coverage = worker.bars_to_panel(bars, {"NVDA": ["semiconductors"]}, end=kwargs["end"])
+        return panel, coverage, {"status": "complete", "eligible_count": 1, "complete_bar_count": len(panel)}
+    monkeypatch.setattr(market_data, "load_all_market_panel", market_panel)
+    outcome = worker.run_eod_limited_job(session=date(2026, 9, 18), root=tmp_path)
     assert outcome["status"] == "DATA_UNAVAILABLE"
     assert outcome["publish"]["ok"] is False
     assert outcome["publish"]["attempted_session"] == "2026-09-18"
@@ -545,7 +550,8 @@ def test_empty_input_without_previous_snapshot_is_unavailable(tmp_path: Path, mo
     from app.services.eod_limited import worker
     from app.services.eod_limited.store import snapshot_path
 
-    monkeypatch.setattr(worker, "fetch_current_universe_bars", lambda **kwargs: {})
+    from app.services.eod_limited import market_data
+    monkeypatch.setattr(market_data, "load_all_market_panel", lambda **kwargs: ({}, [], {"status": "complete", "eligible_count": 1, "complete_bar_count": 0}))
     outcome = worker.run_eod_limited_job(session=date(2026, 9, 18), root=tmp_path)
     assert outcome["status"] == "DATA_UNAVAILABLE"
     assert outcome["served_session"] is None
@@ -568,10 +574,16 @@ def test_older_vendor_session_cannot_replace_newer_live_batch(tmp_path: Path, mo
         security_id="NVDA", session_date=older_session, open=100, high=101, low=99, close=100,
         raw_open=100, raw_close=100, volume=1_000_000, dollar_volume=100_000_000, tri=100,
     )
-    monkeypatch.setattr(worker, "fetch_current_universe_bars", lambda **kwargs: {"NVDA": [older_bar]})
-    outcome = worker.run_eod_limited_job(session=date(2026, 9, 21), root=tmp_path, tickers=["NVDA"])
+    from app.services.eod_limited import market_data
+    def market_panel(**kwargs):
+        panel, coverage = worker.bars_to_panel({"NVDA": [older_bar]}, {"NVDA": ["semiconductors"]}, end=kwargs["end"])
+        return panel, coverage, {"status": "complete", "eligible_count": 1, "complete_bar_count": 0}
+    monkeypatch.setattr(market_data, "load_all_market_panel", market_panel)
+    outcome = worker.run_eod_limited_job(session=date(2026, 9, 21), root=tmp_path)
     assert outcome["status"] == "DATA_UNAVAILABLE"
-    assert outcome["publish"]["reason"] == "older_session_than_published"
+    # Whole-market inference keeps the requested session fixed. Older bars do
+    # not silently relabel a completed scan as an earlier market day.
+    assert outcome["publish"]["reason"] == "no_complete_session_bars"
     assert outcome["publish"]["attempted_session"] == "2026-09-21"
     assert outcome["served_session"] == "2026-09-18"
     assert snapshot_path(tmp_path).read_bytes() == original
@@ -643,9 +655,9 @@ def test_all_variants_reuses_horizon_raws_without_changing_scores(tmp_path: Path
         calls.append(kwargs["horizon"])
         return original_precompute(*args, **kwargs)
 
-    def counted_gates(raw, series, gates):
+    def counted_gates(raw, series, gates, **kwargs):
         gate_calls.append((raw.security_id, id(gates)))
-        return original_apply_gates(raw, series, gates)
+        return original_apply_gates(raw, series, gates, **kwargs)
 
     def checked_theme_precompute(raws, *args, **kwargs):
         before = raw_fingerprint(raws)

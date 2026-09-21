@@ -92,6 +92,8 @@ def project_row(row: Mapping[str, Any], *, list_kind: str) -> dict[str, Any]:
     except (TypeError, ValueError):
         score_n = None
     theme = str(row.get("sector_context") or row.get("theme_id") or "")
+    if theme == "all_market_stocks":
+        theme = ""
     price = _close_price(row)
     if price is None:
         price = 0.0
@@ -102,7 +104,7 @@ def project_row(row: Mapping[str, Any], *, list_kind: str) -> dict[str, Any]:
     status = str(row.get("status") or "rejected")
     return {
         "ticker": ticker,
-        "name": _name_for(ticker),
+        "name": str(row.get("name") or _name_for(ticker)),
         "sector_id": theme or primary_sector_id(ticker),
         "sector_name": _sector_name(theme) or theme,
         "price": price,
@@ -215,6 +217,7 @@ def project_strength_payload(
         purpose = PURPOSE_HISTORICAL
     historical = bool(scored.get("historical_example")) or purpose != PURPOSE_LIVE or sealed
     synthetic = bool(scored.get("synthetic") or purpose == PURPOSE_SYNTHETIC)
+    coverage = scored.get("coverage") or {}
     return {
         "as_of": session,
         "as_of_session": session,
@@ -246,8 +249,15 @@ def project_strength_payload(
         "rows": rows,
         "results": rows,
         "count": len(rows),
-        "universe_count": int(scored.get("panel_n") or 0),
-        "screened_count": int(scored.get("complete_bar_n") or 0),
+        "universe": scored.get("universe"),
+        "universe_count": int(coverage.get("eligible_count", scored.get("panel_n") or 0)),
+        "screened_count": int(coverage.get("complete_bar_count", scored.get("complete_bar_n") or 0)),
+        "coverage": {key: coverage[key] for key in (
+            "status", "directory_count", "eligible_count", "excluded_count",
+            "complete_bar_count", "missing_session_count", "short_history_count",
+            "residual_short_history_count", "invalid_count", "no_history_count",
+            "scored_count", "provider", "source_dates", "source_hash",
+        ) if key in coverage},
         "score_version": scored.get("compute_version"),
         "feature_version": scored.get("feature_version"),
         "data_sources": {
@@ -255,6 +265,7 @@ def project_strength_payload(
                 "status": "snapshot",
                 "as_of_session": session,
                 "note": "close_snapshot_not_live_quote",
+                "provider": coverage.get("provider"),
             }
         },
     }

@@ -97,11 +97,31 @@ test('页内抓取也走同一套新鲜度判断，不再只看键是否存在',
 
 /* ---------------- P1-05：客户端筛选的真实作用范围 ---------------- */
 
-test('已评分候选多于返回行时，界面标明只在前 N 名内筛选', async () => {
+test('观察候选多于返回行时，界面标明只在前 N 名内筛选', async () => {
   const page = codeOf(await source('pages/Screener.tsx'));
   assert.match(page, /truncatedScope = useMemo/);
-  assert.match(page, /if \(scanMeta\.screenedCount <= returned\) return null;/);
+  assert.match(page, /const candidates = scanMeta\.observationN \?\? scanMeta\.screenedCount;/);
+  assert.match(page, /if \(candidates <= returned\) return null;/);
   assert.match(page, /\{__t\('仅在强度前'\)\} \{truncatedScope\.returned\} \{__t\('名内筛选'\)\}/);
+});
+
+test('截断提示优先使用观察候选数，真实零值不能退回全市场行情数量', async () => {
+  const page = codeOf(await source('pages/Screener.tsx'));
+  const body = /const truncatedScope = useMemo\(\(\) => \{([\s\S]*?)\}, \[scanMeta, rows\]\);/.exec(page)?.[1];
+  assert.ok(body, '必须能检查界面实际使用的截断判定');
+  const decide = new Function('scanMeta', 'rows', body);
+  assert.equal(decide({ rows: [{}, {}], observationN: 2, screenedCount: 11_752 }, [{}, {}]), null);
+  assert.equal(decide({ rows: [], observationN: 0, screenedCount: 11_752 }, []), null);
+  assert.deepEqual(decide({ rows: [{}, {}], observationN: 8, screenedCount: 11_752 }, [{}, {}]), {
+    returned: 2, screened: 8,
+  });
+  for (const observationN of [null, undefined]) {
+    assert.deepEqual(decide({ rows: [{}, {}], observationN, screenedCount: 9 }, [{}, {}]), {
+      returned: 2, screened: 9,
+    });
+  }
+  assert.equal(decide(null, []), null);
+  assert.equal(decide({ rows: [], observationN: 8, screenedCount: 9 }, null), null);
 });
 
 /* ---------------- P2-10：分档计数描述候选池 ---------------- */

@@ -34,7 +34,7 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 from app.api import strength, worker_actions  # noqa: E402
 from app.access import request_owner_access_context  # noqa: E402
 from app.services.algorithm_modes import PRODUCTION_ALGORITHM  # noqa: E402
-from app.services.eod_limited import PURPOSE_LIVE  # noqa: E402
+from app.services.eod_limited import COMPUTE_VERSION, PURPOSE_LIVE  # noqa: E402
 from app.services.eod_limited import store as eod_store  # noqa: E402
 from app.services.research_eod_v1.constants import HORIZONS, PROFILES  # noqa: E402
 from app.worker.tasks import StrengthRefreshTask  # noqa: E402
@@ -53,6 +53,23 @@ PROVIDER_FAILURE = False
 worker_actions._repository = lambda: REPOSITORY
 POST_COUNT = 0
 SCAN_COUNT = 0
+# This fixture simulates a complete three-security directory. Its counts verify
+# the browser contract only; they are not evidence of real all-market coverage.
+FIXTURE_COVERAGE = {
+    "status": "complete",
+    "directory_count": 3,
+    "eligible_count": 3,
+    "excluded_count": 0,
+    "complete_bar_count": 3,
+    "scored_count": 3,
+    "missing_session_count": 0,
+    "short_history_count": 0,
+    "residual_short_history_count": 0,
+    "invalid_count": 0,
+    "no_history_count": 0,
+    "provider": "browser_fixture_no_network",
+    "source_hash": "simulated-three-security-directory-v1",
+}
 
 
 def _install_provider_boundary() -> None:
@@ -98,7 +115,7 @@ def _scored(rows: list[dict], *, profile: str, horizon: str, through: str) -> di
         "served_session": through,
         "attempted_session": through,
         "purpose": PURPOSE_LIVE,
-        "compute_version": "limited-current-v1.1",
+        "compute_version": COMPUTE_VERSION,
         "feature_version": "browser-fixture-v1",
         "profile": profile,
         "horizon": horizon,
@@ -110,6 +127,7 @@ def _scored(rows: list[dict], *, profile: str, horizon: str, through: str) -> di
         "volume_scope": "VENDOR_DAILY_UNVERIFIED",
         "panel_n": 3,
         "complete_bar_n": 3,
+        "scored_security_count": 3,
         "family_results": [],
         "composite_results": [],
         "watch_list": deepcopy(rows),
@@ -132,6 +150,9 @@ def _publish_eod_rows(rows: list[dict], *, published_at: float) -> dict:
     }
     publication = eod_store.publish_batch({
         "purpose": PURPOSE_LIVE,
+        "compute_version": COMPUTE_VERSION,
+        "universe": "all_market",
+        "coverage": deepcopy(FIXTURE_COVERAGE),
         "served_session": DATA_THROUGH,
         "attempted_session": DATA_THROUGH,
         "published_at": published_at,
@@ -165,7 +186,7 @@ def _run_eod_fixture(**_kwargs) -> dict:
         "purpose": PURPOSE_LIVE,
         "served_session": DATA_THROUGH,
         "published_at": published_at,
-        "compute_version": "limited-current-v1.1",
+        "compute_version": COMPUTE_VERSION,
         "available_variants": sorted(batch["variants"]),
         "publish": batch["publication"],
     }
@@ -266,6 +287,7 @@ def screener_stats() -> dict:
         "actions": [
             {"request_id": item["request_id"], "status": item["status"],
              "parameters_hash": item["details"].get("parameters_hash"),
+             "universe": item["details"].get("parameters", {}).get("universe"),
              "sector_id": item["details"].get("parameters", {}).get("sector_id"),
              "result": item["details"].get("result")}
             for item in actions

@@ -24,7 +24,7 @@ A0_SUPPORTED_TIMEFRAME = "all"
 A0_SUPPORTED_PROFILE = "balanced"
 
 EOD_LIMITED_V1 = "eod_limited_v1"
-EOD_LIMITED_VERSION = "eod-limited-v1.1"
+EOD_LIMITED_VERSION = "eod-limited-v1.2"
 EOD_LIMITED_SCORE_BASIS = "price_only_diagnostic + m1_consensus"
 EOD_LIMITED_TIMEFRAMES = ("short", "mid", "long")
 # Preserve the stored/public default while replacing its execution engine.

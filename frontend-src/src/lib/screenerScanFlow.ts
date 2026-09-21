@@ -32,7 +32,7 @@ const PENDING_STORAGE_KEY = 'optix:screener-pending-strength';
 
 export function strengthScanPath(params: ScanParams): string {
   const qs = toQuery({
-    universe: params.universe,
+    universe: params.universe ?? 'all_market',
     timeframe: params.timeframe,
     profile: params.profile,
     top: params.top,

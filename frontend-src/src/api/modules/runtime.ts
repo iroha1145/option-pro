@@ -6,7 +6,7 @@ import { t } from '../../i18n/core.ts';
 import { workerWaitDecision, workerWaitHasTimedOut } from '../../lib/screenerScanFlow.ts';
 
 export interface StrengthRefreshParameters {
-  universe: 'themes';
+  universe: 'themes' | 'all_market';
   timeframe: 'short' | 'mid' | 'long' | 'all';
   profile: 'conservative' | 'balanced' | 'aggressive';
   top: number;

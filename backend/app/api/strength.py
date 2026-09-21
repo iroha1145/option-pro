@@ -88,6 +88,7 @@ DEFAULT_STRENGTH_SCAN_PARAMETERS: dict[str, Any] = {
 
 
 OPTIONAL_STRENGTH_SCAN_FIELDS = frozenset({"ranking_algorithm"})
+SCREENER_UNIVERSES = (*UNIVERSES, "all_market")
 
 
 def normalize_strength_scan_parameters(value: Any) -> dict[str, Any]:
@@ -107,7 +108,7 @@ def normalize_strength_scan_parameters(value: Any) -> dict[str, Any]:
     min_price = value.get("min_price")
     min_avg_dollar_volume = value.get("min_avg_dollar_volume")
     include_options = value.get("include_options")
-    if universe not in UNIVERSES:
+    if universe not in SCREENER_UNIVERSES:
         raise ValueError("strength scan universe is invalid")
     if timeframe not in TIMEFRAMES:
         raise ValueError("strength scan timeframe is invalid")
@@ -164,6 +165,7 @@ def strength_execution_parameters(value: Any) -> dict[str, Any]:
 
     payload = normalize_strength_scan_parameters(value)
     payload["ranking_algorithm"] = EOD_LIMITED_V1
+    payload["universe"] = "all_market"
     if payload["timeframe"] == "all":
         payload["timeframe"] = EOD_DEFAULT_TIMEFRAME
     return payload
@@ -179,7 +181,7 @@ async def _public_strength_snapshot(*, profile: str = "balanced") -> dict[str, A
     """Read the current stock-selection scores without the old ranking scan."""
 
     payload, _, _ = await _scan_snapshot_payload(
-        universe="themes", timeframe=EOD_DEFAULT_TIMEFRAME, profile=profile,
+        universe="all_market", timeframe=EOD_DEFAULT_TIMEFRAME, profile=profile,
         top=120, sector_id=None, min_price=0.0, min_avg_dollar_volume=0.0,
         include_options=False, ranking_algorithm=EOD_LIMITED_V1,
     )
@@ -925,7 +927,7 @@ async def _scan_snapshot_payload(
 ) -> tuple[dict[str, Any], float, bool]:
     """Return (payload, saved_at, stale) for a matching worker snapshot."""
 
-    if universe not in UNIVERSES or timeframe not in TIMEFRAMES or profile not in PROFILES:
+    if universe not in SCREENER_UNIVERSES or timeframe not in TIMEFRAMES or profile not in PROFILES:
         raise HTTPException(status_code=400, detail="Invalid screener parameters")
     try:
         parameters = _scan_parameters(
@@ -1033,7 +1035,7 @@ async def _scan_snapshot_payload(
 @router.get("/scan")
 async def scan(
     request: Request,
-    universe: str = Query("themes", pattern="^(themes)$"),
+    universe: str = Query("all_market", pattern="^(themes|all_market)$"),
     timeframe: Annotated[Optional[str], Query(pattern="^(short|mid|long|all)$")] = None,
     profile: str = Query("balanced", pattern="^(conservative|balanced|aggressive)$"),
     top: int = Query(20, ge=5, le=120),
@@ -1248,4 +1250,7 @@ async def market() -> dict[str, Any]:
 
 @router.get("/profiles")
 async def list_profiles() -> dict[str, Any]:
-    return sanitize(profiles())
+    payload = dict(profiles())
+    payload["universes"] = ["all_market"]
+    payload["legacy_universe_aliases"] = ["themes"]
+    return sanitize(payload)

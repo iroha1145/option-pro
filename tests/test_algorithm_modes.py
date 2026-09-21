@@ -167,7 +167,7 @@ def test_explicit_eod_mid_resolves() -> None:
         explicit_request=True,
     )
     assert resolution.effective == EOD_LIMITED_V1
-    assert resolution.version == "eod-limited-v1.1"
+    assert resolution.version == "eod-limited-v1.2"
     assert resolution.resolved_timeframe == "mid"
 
 

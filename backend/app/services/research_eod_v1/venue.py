@@ -50,9 +50,13 @@ def classify_venue(metadata: Mapping[str, Any] | None) -> VenueDecision:
     us_major = mic in US_MAJOR_MICS or exchange in US_MAJOR_EXCHANGES
     if not us_major:
         return VenueDecision(False, "NOT_US_MAJOR_EXCHANGE", None, "metadata")
-    if asset_class in {"ETF", "ETP"} or security_type in {"ETF", "ETP", "ETN"}:
+    if asset_class in {"ETF", "ETP"} or security_type in {
+        "ETF", "ETP", "ETN", "ETS", "ETV", "FUND",
+    }:
         return VenueDecision(True, "US_LISTED_ETF", "etf", "metadata")
-    if security_type in {"CS", "COMMON", "COMMON_STOCK", "ADR", "GDR", "EQUITY"}:
+    if security_type in {
+        "CS", "COMMON", "COMMON_STOCK", "ADR", "ADRC", "GDR", "EQUITY",
+    }:
         return VenueDecision(True, "US_MAJOR_EQUITY", "stock", "metadata")
     if security_type:
         return VenueDecision(False, f"UNSUPPORTED_SECURITY_TYPE:{security_type}", None, "metadata")

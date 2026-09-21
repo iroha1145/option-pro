@@ -28,7 +28,7 @@ export function buildStrengthScanRequest(filters: ScanFilters): StrengthScanRequ
       band: 'all',
       sort: 'score',
       order: 'desc',
-      universe: 'themes',
+      universe: 'all_market',
       timeframe: filters.timeframe,
       profile: filters.profile,
       top,
@@ -41,7 +41,7 @@ export function buildStrengthScanRequest(filters: ScanFilters): StrengthScanRequ
       ...(filters.minScore != null ? { minScore: filters.minScore } : {}),
     },
     refreshParameters: {
-      universe: 'themes',
+      universe: 'all_market',
       timeframe: filters.timeframe,
       profile: filters.profile,
       top,

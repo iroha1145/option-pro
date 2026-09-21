@@ -98,7 +98,11 @@ def _dedup_security(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
 
 def m1_consensus(rows: Sequence[Mapping[str, Any]], profile: str, top_k: int) -> list[dict[str, Any]]:
     floor = COMPOSITE_FLOORS[profile]
-    grouped = _dedup_security(_eligible(rows))
+    eligible = _eligible(rows)
+    grouped = _dedup_security(eligible)
+    by_security: dict[str, list[Mapping[str, Any]]] = {}
+    for item in eligible:
+        by_security.setdefault(str(item["security_id"]), []).append(item)
     kept: list[dict[str, Any]] = []
     for row in grouped:
         votes = [v for v in row["family_votes"] if v]
@@ -107,7 +111,7 @@ def m1_consensus(rows: Sequence[Mapping[str, Any]], profile: str, top_k: int) ->
         z = row["consensus_z"]
         if z is None or z < floor:
             continue
-        folded = _collapse_same_family([item for item in _eligible(rows) if item["security_id"] == row["security_id"]])
+        folded = _collapse_same_family(by_security[str(row["security_id"])])
         family_z = [float(item["score"]) for item in folded if item.get("score") is not None]
         if family_z and max(family_z) - min(family_z) > 25:
             row["status"] = "watch"
