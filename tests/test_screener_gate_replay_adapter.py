@@ -186,6 +186,7 @@ def test_finalize_helpers_keep_nulls_and_entry_identity():
         fee_adjust,
         max_drawdown,
         percentile,
+        top_ids_from_block,
     )
 
     assert fee_adjust(None, 0.001) is None
@@ -216,6 +217,8 @@ def test_finalize_helpers_keep_nulls_and_entry_identity():
     assert "## 执行命令" in validation
     assert "## 旧资源复用" in validation
     assert "not claimed reused" in validation
+    assert top_ids_from_block({"top": {"20": ["PDD"]}}, 20) == ["PDD"]
+    assert top_ids_from_block({"top": {20: ["PDD"]}}, 20) == ["PDD"]
 
 
 def test_old_median_uses_production_industry_grouping():

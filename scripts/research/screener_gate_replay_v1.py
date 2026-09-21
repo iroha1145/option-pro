@@ -708,6 +708,11 @@ def example_rows(results: Sequence[Mapping[str, Any]], *, limit: int = 12) -> li
     return out[:limit]
 
 
+def top_ids_from_block(block: Mapping[str, Any] | None, k: int) -> list[str]:
+    top = (block or {}).get("top") or {}
+    return list(top.get(k) or top.get(str(k)) or [])
+
+
 THEME_SLICE_IDS = (
     "semiconductors",
     "software",
@@ -1216,10 +1221,10 @@ def _paired_from_summaries(summaries: Sequence[Mapping[str, Any]], panel: Mappin
             "actual_cap": summary.get("actual_cap"),
             "complete_bar_n": summary.get("complete_bar_n"),
         }
-        b0_top20 = list((summary.get("variants") or {}).get(B0_CURRENT, {}).get("top", {}).get(20) or [])
+        b0_top20 = top_ids_from_block((summary.get("variants") or {}).get(B0_CURRENT, {}), 20)
         for variant in VARIANTS:
             block = (summary.get("variants") or {}).get(variant) or {}
-            ids20 = list((block.get("top") or {}).get(20) or [])
+            ids20 = top_ids_from_block(block, 20)
             ov = overlap(b0_top20, ids20)
             turn = overlap(prev_top[variant], ids20)
             prev_top[variant] = ids20
@@ -1238,8 +1243,8 @@ def _paired_from_summaries(summaries: Sequence[Mapping[str, Any]], panel: Mappin
                 "discovery_n": block.get("discovery_n"),
                 "technical_n": block.get("technical_n"),
                 "qualified_n": block.get("qualified_n"),
-                "top5": (block.get("top") or {}).get(5),
-                "top10": (block.get("top") or {}).get(10),
+                "top5": top_ids_from_block(block, 5),
+                "top10": top_ids_from_block(block, 10),
                 "top20": ids20,
                 "overlap_vs_b0": ov,
                 "turnover_vs_prev": {
@@ -1500,14 +1505,15 @@ def cmd_finalize(args: argparse.Namespace) -> None:
         theme_ids = list(registry["sectors"])
         families = list(ALGORITHMS)
         wanted = []
+        if paired["daily"]:
+            wanted.append(date.fromisoformat(str(paired["daily"][0]["session_date"])))
         for day in paired["daily"]:
             ov = ((day.get(G1_STOCK_REFERENCE) or {}).get("overlap_vs_b0") or {})
-            if ov.get("added") or ov.get("removed"):
-                wanted.append(date.fromisoformat(str(day["session_date"])))
+            session = date.fromisoformat(str(day["session_date"]))
+            if (ov.get("added") or ov.get("removed")) and session not in wanted:
+                wanted.append(session)
             if len(wanted) >= 4:
                 break
-        if not wanted and paired["daily"]:
-            wanted = [date.fromisoformat(str(paired["daily"][0]["session_date"]))]
         for session in wanted:
             result = run_one_session(
                 panel,
