@@ -149,10 +149,10 @@ function PathCard({ path, sources }: {
     <details className="min-w-0 rounded-md border border-line bg-paper-1 p-3 sm:p-4">
       <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-          <span className="min-w-0 flex-1 text-body-s font-semibold text-ink-800">{diagnosticTheme(theme)} · {diagnosticFamily(path.algorithm_id)}</span>
-          <span className="font-mono text-body-s text-ink-800">{t('分数')} {diagnosticNumber(path.score)}</span>
-          <span className="text-micro text-ink-500">{pathStatus(path.status)}</span>
-          <span className="text-micro text-brand-600">{t('查看路径')}</span>
+          <span className="min-w-0 basis-full text-body-s font-semibold text-ink-800 sm:basis-0 sm:flex-1">{diagnosticTheme(theme)} · {diagnosticFamily(path.algorithm_id)}</span>
+          <span className="whitespace-nowrap font-mono text-body-s text-ink-800">{t('分数')} {diagnosticNumber(path.score)}</span>
+          <span className="whitespace-nowrap text-micro text-ink-500">{pathStatus(path.status)}</span>
+          <span className="whitespace-nowrap text-micro text-brand-600">{t('查看路径')}</span>
         </div>
         {reasons.length > 0 && <p className="mt-1 text-micro text-ink-500">{diagnosticReason(reasons[0])}{reasons.length > 1 ? ` · ${t('另有条件未通过')}` : ''}</p>}
       </summary>
