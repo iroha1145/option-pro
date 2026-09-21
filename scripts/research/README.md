@@ -36,4 +36,6 @@ PYTHONPATH=backend python -u scripts/research/screener_gate_statistics_v2.py \
   --research-dir "$HOME/optix-research/screener-gate-v1" --discover
 PYTHONPATH=backend python scripts/research/screener_gate_statistics_v2.py \
   --research-dir "$HOME/optix-research/screener-gate-v1" --evaluate-discovery --reps 2000
+PYTHONPATH=backend python scripts/research/screener_gate_review4_bundle.py \
+  --research-dir "$HOME/optix-research/screener-gate-v1"
 ```
