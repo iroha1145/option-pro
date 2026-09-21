@@ -99,7 +99,12 @@ def build_review4_bundle(
                 relative = path.relative_to(research)
                 archive.write(path, arcname=str(relative))
                 included.append(str(relative))
-        for name in ("alignment_v2/report.json", "alignment_v2/full_technical_top20.json", "command_log_review4.txt"):
+        for name in (
+            "alignment_v2/report.json",
+            "alignment_v2/full_technical_top20.json",
+            "command_log_review4.txt",
+            "pytest_review4.log",
+        ):
             path = research / name
             if path.is_file():
                 archive.write(path, arcname=name)

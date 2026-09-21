@@ -39,3 +39,8 @@ PYTHONPATH=backend python scripts/research/screener_gate_statistics_v2.py \
 PYTHONPATH=backend python scripts/research/screener_gate_review4_bundle.py \
   --research-dir "$HOME/optix-research/screener-gate-v1"
 ```
+
+Downloadable copies from the review-4 run, not a production package:
+
+- `scripts/research/deliverables/screener_gate_review4_compact.zip` — metrics v2, discovery summary, paired rows, attribution, validation, commands, and test log
+- `scripts/research/deliverables/screener_gate_review4_checkpoints.zip` — offline three-layer checkpoints only
