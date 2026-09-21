@@ -7,6 +7,7 @@ from datetime import date, datetime, timezone
 from typing import Any, Mapping, Sequence
 
 from app.services.research_eod_v1.calendar_asof import last_complete_eod_session
+from app.services.research_eod_v1 import FEATURE_VERSION
 from app.services.research_eod_v1.config_load import load_registry
 from app.services.research_eod_v1.constants import HORIZONS, PROFILES
 from app.services.research_eod_v1.fixtures import make_series, structured_close, trading_days_ending
@@ -20,6 +21,11 @@ from . import (
     RESEARCH_SEALED_SESSION,
 )
 from .bars import fetch_current_universe_bars, last_bar_session
+from .diagnostics import (
+    VariantDiagnostics, build_theme_statistics, build_universe_funnel,
+    REFERENCE_PROFILE, REFERENCE_HORIZON,
+)
+from .diagnostic_store import DiagnosticWriter, prune_old_generations
 from .inference import precompute_session_raws, precompute_theme_raws, score_eod_session
 from .panel import bars_to_panel, prepare_limited_panel, select_universe_tickers
 from .store import publish_batch, read_batch, variant_key
@@ -65,6 +71,7 @@ def _compact_variant(scored: Mapping[str, Any]) -> dict[str, Any]:
         "security_status",
         "feature_failure_count",
         "feature_failure_ids",
+        "family_funnels",
     )
     compact = {key: scored.get(key) for key in keep}
     # The public projection reads only eligible rows here. Watch rows already
@@ -203,53 +210,100 @@ def run_eod_limited_job(
             themes=themes,
             geometry_workers=4,
         )
-    for item_profile, item_horizon in wanted:
-        if item_horizon not in horizon_inputs:
-            raws, clipped = precompute_session_raws(panel, target, registry=registry, horizon=item_horizon)
-            theme_raws = precompute_theme_raws(raws, clipped, target, registry=registry, themes=themes)
-            horizon_inputs[item_horizon] = (raws, clipped, theme_raws)
-        raws, clipped, theme_raws = horizon_inputs[item_horizon]
-        scored = score_eod_session(
-            panel,
-            target,
-            registry=registry,
-            profile=item_profile,
-            horizon=item_horizon,
-            volume_verified=volume_verified,
-            purpose=purpose,
-            precomputed_raws=raws,
-            clipped_panel=clipped,
-            precomputed_theme_raws=theme_raws,
-            themes=themes,
-            algorithms=algorithms,
-            **({"compact": True, "snapshot_cache": snapshot_cache} if market_input else {}),
+    writer = DiagnosticWriter(
+        root=root, served_session=target.isoformat(), compute_version=COMPUTE_VERSION,
+        feature_version=FEATURE_VERSION, source_hash=manifest.get("source_hash"),
+        dollar_volume_basis=manifest.get("dollar_volume_basis"),
+    )
+    reference_diagnostics = None
+    batch_published = False
+    try:
+        writer.write_coverage(coverage)
+        for item_profile, item_horizon in wanted:
+            if item_horizon not in horizon_inputs:
+                raws, clipped = precompute_session_raws(panel, target, registry=registry, horizon=item_horizon)
+                theme_raws = precompute_theme_raws(raws, clipped, target, registry=registry, themes=themes)
+                horizon_inputs[item_horizon] = (raws, clipped, theme_raws)
+            raws, clipped, theme_raws = horizon_inputs[item_horizon]
+            key = variant_key(item_profile, item_horizon)
+            diagnostics = (
+                VariantDiagnostics(profile=item_profile, horizon=item_horizon)
+                if item_profile == REFERENCE_PROFILE and item_horizon == REFERENCE_HORIZON else None
+            )
+
+            def retain_block(theme_id, algorithm, rows, provenance):
+                writer.write_block(key, theme_id, algorithm, rows, provenance)
+                if diagnostics is not None:
+                    diagnostics.add_block(theme_id, algorithm, rows)
+
+            scored = score_eod_session(
+                panel,
+                target,
+                registry=registry,
+                profile=item_profile,
+                horizon=item_horizon,
+                volume_verified=volume_verified,
+                purpose=purpose,
+                precomputed_raws=raws,
+                clipped_panel=clipped,
+                precomputed_theme_raws=theme_raws,
+                themes=themes,
+                algorithms=algorithms,
+                on_family_rows=retain_block,
+                **({"compact": True, "snapshot_cache": snapshot_cache} if market_input else {}),
+            )
+            if synthetic_input:
+                scored["synthetic"] = True
+            variants[key] = _compact_variant(scored)
+            if diagnostics is not None:
+                reference_diagnostics = diagnostics
+        if market_input:
+            manifest["scored_count"] = max(int(item.get("scored_security_count") or 0) for item in variants.values())
+            if any(int(item.get("scored_security_count") or 0) != len(panel) for item in variants.values()):
+                raise RuntimeError("all_market_scoring_coverage_incomplete")
+            for item in variants.values():
+                item["volume_scope"] = manifest.get("volume_session_scope")
+        theme_statistics = build_theme_statistics(
+            reference_diagnostics, panel=panel, coverage_records=coverage,
+            served_session=target.isoformat(), compute_version=COMPUTE_VERSION,
+            feature_version=FEATURE_VERSION, source_hash=manifest.get("source_hash"),
         )
-        if synthetic_input:
-            scored["synthetic"] = True
-        variants[variant_key(item_profile, item_horizon)] = _compact_variant(scored)
-    if market_input:
-        manifest["scored_count"] = max(int(item.get("scored_security_count") or 0) for item in variants.values())
-        if any(int(item.get("scored_security_count") or 0) != len(panel) for item in variants.values()):
-            raise RuntimeError("all_market_scoring_coverage_incomplete")
-        for item in variants.values():
-            item["volume_scope"] = manifest.get("volume_session_scope")
-    batch = {
-        "version": 1,
-        "purpose": purpose,
-        "synthetic": synthetic_input or purpose == PURPOSE_SYNTHETIC,
-        "compute_version": COMPUTE_VERSION,
-        "attempted_session": attempted_session.isoformat(),
-        "served_session": target.isoformat(),
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-        "available_variants": sorted(variants),
-        "coverage_empty": [row["ticker"] for row in coverage if row.get("status") != "ok"],
-        "coverage_ok": sum(1 for row in coverage if row.get("status") == "ok"),
-        "universe": "all_market" if market_input else "injected_panel",
-        "coverage": manifest,
-        "coverage_records": coverage,
-        "variants": variants,
-    }
-    published = publish_batch(batch, root=root)
+        diagnostic_manifest = writer.finish()
+        batch = {
+            "version": 1,
+            "purpose": purpose,
+            "synthetic": synthetic_input or purpose == PURPOSE_SYNTHETIC,
+            "compute_version": COMPUTE_VERSION,
+            "feature_version": FEATURE_VERSION,
+            "attempted_session": attempted_session.isoformat(),
+            "served_session": target.isoformat(),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "available_variants": sorted(variants),
+            "coverage_empty": [row["ticker"] for row in coverage if row.get("status") != "ok"],
+            "coverage_ok": sum(1 for row in coverage if row.get("status") == "ok"),
+            "universe": "all_market" if market_input else "injected_panel",
+            "coverage": manifest,
+            "coverage_records": coverage,
+            "universe_funnel": build_universe_funnel(coverage),
+            "variants": variants,
+            "diagnostics": diagnostic_manifest,
+            "theme_statistics": theme_statistics,
+        }
+        published = publish_batch(batch, root=root)
+        if not published.get("ok"):
+            writer.discard()
+        else:
+            batch_published = True
+    except Exception:
+        if not batch_published:
+            writer.discard()
+        raise
+    if batch_published:
+        try:
+            prune_old_generations(root=root, active_name=diagnostic_manifest["path"])
+        except OSError:
+            # Retention is housekeeping; the active batch must remain readable.
+            pass
     context_outcome = None
     if published.get("ok") and context_requested:
         try:

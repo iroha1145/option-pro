@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Any, Mapping, Sequence
 
 from app.services.sectors import SECTORS, primary_sector_id
@@ -70,7 +71,7 @@ def _factor_dims(row: Mapping[str, Any]) -> list[dict[str, Any]]:
         "B": "突破",
         "P": "回踩",
         "V": "量能",
-        "R": "相对",
+        "R": "稳定性",
         "G": "行业",
     }
     dims = []
@@ -102,6 +103,9 @@ def project_row(row: Mapping[str, Any], *, list_kind: str) -> dict[str, Any]:
         price_unknown = False
     reasons = [str(item) for item in (row.get("rejection_reasons") or [])]
     status = str(row.get("status") or "rejected")
+    adv = row.get("adv20")
+    adv = float(adv) if isinstance(adv, (int, float)) and not isinstance(adv, bool) and math.isfinite(adv) and adv >= 0 else None
+    flags = row.get("capability_flags") or {}
     return {
         "ticker": ticker,
         "name": str(row.get("name") or _name_for(ticker)),
@@ -119,8 +123,13 @@ def project_row(row: Mapping[str, Any], *, list_kind: str) -> dict[str, Any]:
         "sort_score": score_n,
         "sort_algorithm": MODE_ID,
         "sort_basis": SCORE_BASIS,
-        "avg_dollar_volume_20d": None,
-        "dollar_volume_unknown": True,
+        "avg_dollar_volume_20d": adv,
+        "dollar_volume_unknown": adv is None,
+        "dollar_volume_proxy_available": adv is not None,
+        "dollar_volume_basis": "mean_20_raw_close_times_raw_volume",
+        "dollar_volume_source": "vendor_daily_aggregate",
+        "dollar_liquidity_verified": bool(flags.get("dollar_liquidity_verified")),
+        "volume_session_verified": bool(flags.get("volume_session_verified")),
         "qualification": row.get("qualification") or status,
         "list_kind": list_kind,
         "status": status,
@@ -130,6 +139,10 @@ def project_row(row: Mapping[str, Any], *, list_kind: str) -> dict[str, Any]:
         "family_votes": list(row.get("family_votes") or ()),
         "stock_or_etf_track": row.get("stock_or_etf_track"),
         "factors": row.get("factors") or {},
+        "effective_weights": row.get("effective_weights") or {} if list_kind == LIST_KIND_OBSERVATION else {},
+        "score_components": row.get("score_components") or {} if list_kind == LIST_KIND_OBSERVATION else {},
+        "weight_provenance_id": row.get("weight_provenance_id"),
+        "score_aggregation": "m1_consensus" if list_kind == LIST_KIND_COMPOSITE else "best_family_theme_path",
         "known_support": row.get("known_support"),
         "known_resistance": row.get("known_resistance"),
         "planned_invalidation": row.get("planned_invalidation"),
@@ -174,8 +187,10 @@ def _observation_family_counts(watch: Sequence[Mapping[str, Any]]) -> dict[str, 
         sid = str(row.get("security_id") or "")
         algo = str(row.get("algorithm_id") or "")
         item = grouped.setdefault(sid, {"ticker": sid, "families": {}, "count": 0})
-        if algo and algo not in item["families"]:
-            item["families"][algo] = row.get("score")
+        score = row.get("score")
+        previous = item["families"].get(algo)
+        if algo and score is not None and (previous is None or score > previous):
+            item["families"][algo] = score
             item["count"] = len(item["families"])
     return grouped
 
@@ -199,7 +214,7 @@ def project_strength_payload(
         project_row(row, list_kind="composite")
         for row in (scored.get("composite_results") or [])
     ]
-    family_counts = _observation_family_counts(watch)
+    family_counts = _observation_family_counts([*eligible, *watch])
     for row in observation_rows:
         extra = family_counts.get(row["ticker"])
         if extra:
@@ -229,6 +244,10 @@ def project_strength_payload(
         "effective_algorithm": MODE_ID,
         "algorithm_version": ALGORITHM_VERSION,
         "score_basis": SCORE_BASIS,
+        "score_aggregation": "m1_consensus" if list_kind == LIST_KIND_COMPOSITE else "best_family_theme_path",
+        "factor_capabilities": {"R": "stability_risk_quality", "G": "disabled_unverified_industry"},
+        "theme_statistics": scored.get("theme_statistics"),
+        "family_funnels": scored.get("family_funnels"),
         "fallback_reason": None,
         "purpose": purpose,
         "historical_example": historical,

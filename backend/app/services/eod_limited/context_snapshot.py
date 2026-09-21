@@ -193,30 +193,67 @@ def sector_rows_with_scores(
     context: Mapping[str, Any], selection: Mapping[str, Any] | None, *, period: str,
 ) -> list[dict[str, Any]]:
     by_sector = {row["sector_id"]: row for row in context.get("sectors") or []}
-    scores = {}
-    for row in (selection or {}).get("observation_rows") or []:
-        score = row.get("score")
-        if isinstance(score, (int, float)) and not isinstance(score, bool) and math.isfinite(score):
-            scores[row["ticker"]] = float(score)
-    score_status = str((selection or {}).get("source_status") or "unavailable")
+    statistics = (selection or {}).get("theme_statistics")
+    if not isinstance(statistics, Mapping):
+        statistics = {}
+    expected_session = (selection or {}).get("score_data_through") or (selection or {}).get("served_session")
+    expected_version = (selection or {}).get("score_version") or (selection or {}).get("compute_version")
+    expected_feature = (selection or {}).get("feature_version")
+    expected_source_hash = ((selection or {}).get("coverage") or {}).get("source_hash")
+    matched = (
+        bool(statistics.get("sectors"))
+        and (not expected_session or statistics.get("served_session") == expected_session)
+        and (not expected_version or statistics.get("compute_version") == expected_version)
+        and (not expected_feature or statistics.get("feature_version") == expected_feature)
+        and (not expected_source_hash or statistics.get("source_hash") == expected_source_hash)
+        and statistics.get("reference_profile") == "balanced"
+        and statistics.get("reference_horizon") == "mid"
+        and statistics.get("reference_family") == "A_trend_quality"
+    )
+    by_score = {row["sector_id"]: row for row in statistics.get("sectors") or []} if matched else {}
     rows = []
     for sid, sector in SECTORS.items():
         members = set(sector["tickers"])
-        scored = [(ticker, scores[ticker]) for ticker in members if ticker in scores]
-        scored.sort(key=lambda item: (-item[1], item[0]))
+        scored = by_score.get(sid) or {}
+        score_available = scored.get("score_source_status") in {"active", "degraded"}
         row = dict(by_sector.get(sid) or {
             "sector_id": sid, "id": sid, "name": sector["name"], "count": 0,
             "avg_return_1mo": None, "avg_return_3mo": None, "avg_return_6mo": None, "avg_return_3m": None,
         })
+        if matched:
+            # Keep every period and its coverage on the same immutable EOD
+            # batch; the independent context may have a different date/source.
+            row.update({
+                "avg_return_1mo": scored.get("avg_return_1mo"),
+                "avg_return_3mo": scored.get("avg_return_3mo"),
+                "avg_return_3m": scored.get("avg_return_3mo"),
+                "avg_return_6mo": scored.get("avg_return_6mo"),
+                "return_coverage_1mo": scored.get("return_coverage_1mo"),
+                "return_coverage_3mo": scored.get("return_coverage_3mo"),
+                "return_coverage_6mo": scored.get("return_coverage_6mo"),
+                "count": scored.get(f"return_coverage_{period}"),
+            })
         selected_return = row.get(f"avg_return_{period}")
         row.update({
             "period": period, "period_days": {"1mo": 20, "3mo": 63, "6mo": 126}[period],
             "avg_return": selected_return, "avg_return_period": selected_return,
-            "member_count": len(members), "scored_count": len(scored),
-            "avg_strength": round(sum(score for _, score in scored) / len(scored), 1) if scored else None,
-            "leaders": [{"ticker": ticker, "score": score} for ticker, score in scored[:4]],
-            "score_data_through": (selection or {}).get("score_data_through"),
-            "score_source_status": score_status,
+            "member_count": len(members),
+            "scored_count": (
+                scored.get("scored_count") if scored and "NOT_EVALUATED_IN_BATCH" not in (scored.get("missing_reasons") or {}) else None
+            ),
+            "avg_strength": scored.get("avg_strength") if score_available else None,
+            "leaders": list(scored.get("leaders") or ()) if score_available else [],
+            "score_basis": "full_theme_balanced_mid_A" if matched else None,
+            "score_coverage": (
+                round(int(scored["scored_count"]) / int(scored["member_count"]), 4)
+                if scored and scored.get("member_count") and "NOT_EVALUATED_IN_BATCH" not in (scored.get("missing_reasons") or {}) else None
+            ),
+            "score_missing_reasons": scored.get("missing_reasons") if scored else {"FULL_THEME_STATISTICS_UNAVAILABLE": len(members)},
+            "benchmark_ticker": "SPY" if matched else None,
+            "benchmark_return": scored.get(f"spy_return_{period}") if scored else None,
+            "excess_return": scored.get(f"excess_vs_spy_{period}") if scored else None,
+            "score_data_through": statistics.get("served_session") if matched else None,
+            "score_source_status": scored.get("score_source_status") if matched and scored else "unavailable",
         })
         rows.append(row)
     rows.sort(key=lambda row: (row.get("avg_return") is not None, row.get("avg_return") or 0, row.get("avg_strength") or 0), reverse=True)

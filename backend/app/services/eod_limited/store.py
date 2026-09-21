@@ -119,4 +119,7 @@ def variant_from_batch(
     out["batch_integrity"] = batch.get("integrity")
     out["universe"] = batch.get("universe") or out.get("universe")
     out["coverage"] = batch.get("coverage") or out.get("coverage")
+    out["theme_statistics"] = batch.get("theme_statistics")
+    if batch.get("universe_funnel") is not None:
+        out["family_funnels"] = {**(out.get("family_funnels") or {}), "universe": batch["universe_funnel"]}
     return out

@@ -228,6 +228,8 @@ def rescore_row(
     return {
         "score": scored.score,
         "coverage": scored.coverage,
+        "effective_weights": scored.effective_weights,
+        "score_components": scored.contributions,
         "status": scored.status,
         "final_eligible": bool(eligible),
         "rejection_reasons": new_reasons,

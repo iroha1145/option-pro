@@ -147,6 +147,11 @@ export interface ScreenerRow {
   a0Available?: boolean | null;
   priceUnknown?: boolean;
   dollarVolumeUnknown?: boolean;
+  dollarVolumeProxyAvailable?: boolean;
+  dollarLiquidityVerified?: boolean;
+  volumeSessionVerified?: boolean;
+  effectiveWeights?: Record<string, number>;
+  scoreComponents?: Record<string, number>;
   qualification?: string | null;
   status?: string | null;
   rejectionReasons?: string[];
@@ -160,7 +165,7 @@ export interface ScreenerRow {
   knownSupport?: number | null;
   knownResistance?: number | null;
   plannedInvalidation?: number | null;
-  /** 后端 avg_dollar_volume_20d；缺失时为 null，不用当日成交额冒充。 */
+  /** 日成交额代理的20日均值；可用性与资格认证分开。 */
   avgDollarVolume20d?: number | null;
   band: StrengthBand;
   /**

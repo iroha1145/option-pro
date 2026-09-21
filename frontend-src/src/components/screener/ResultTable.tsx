@@ -192,8 +192,9 @@ export default function ResultTable({
                     <CatalystBadge summary={catalysts[r.ticker]} tipSide={i < 3 ? 'bottom' : 'top'} />
                   </td>
                   {/* 20 日平均美元成交额 */}
-                  <td className="px-3 py-2 text-right font-mono text-body-s text-ink-600 tnum">
+                  <td className="px-3 py-2 text-right font-mono text-body-s text-ink-600 tnum" title={r.dollarVolumeProxyAvailable ? t('20 日均成交额代理') : undefined}>
                     {dvPending ? <span className="text-ink-300">…</span> : dv === null || dv === undefined ? '—' : `$${fmtCompact(dv)}`}
+                    {r.dollarVolumeProxyAvailable && <span className="ml-1 text-micro text-ink-400">{t('估')}</span>}
                   </td>
                   {/* 展开 */}
                   <td className="px-3 py-2 text-right">

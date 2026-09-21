@@ -42,6 +42,7 @@ import MarketRegimeCard from '@/components/screener/MarketRegimeCard';
 import ResultTable from '@/components/screener/ResultTable';
 import ResultCards from '@/components/screener/ResultCards';
 import ScanHistoryPopover from '@/components/screener/ScanHistoryPopover';
+import SecurityDiagnostics from '@/components/screener/SecurityDiagnostics';
 import { MethodCard, TierHistogram } from '@/components/screener/SideCards';
 import { buildStrengthScanRequest } from '@/components/screener/scanRequest';
 import {
@@ -921,6 +922,11 @@ export default function Screener() {
           dollarVolumeFilterSupported={draftDollarVolumeFilterSupported}
           onScan={onScanClick}
         />
+      </div>
+
+      <div className="mt-4">
+        <SecurityDiagnostics profile={draft.profile} timeframe={draft.timeframe === 'all' ? 'mid' : draft.timeframe}
+          publicationKey={scanMeta?.snapshotSavedAt ?? undefined} onOpenDetail={openTicker} />
       </div>
 
       <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-12">

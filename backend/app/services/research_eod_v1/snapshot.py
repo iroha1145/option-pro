@@ -34,6 +34,78 @@ from app.services.research_eod_v1.venue import classify_venue
 
 _CS_MEMO: dict[tuple, dict[str, Any]] = {}
 
+# Frozen research policy. ADV is a proxy filter, never a qualification flag.
+ATR_REFERENCE_POLICIES = {
+    "legacy": {},
+    "track_liquid_v1": {"minimum_raw_price": 5.0, "minimum_adv20_proxy": 20_000_000.0, "minimum_group_n": 5},
+}
+
+
+def _atr_references(raws: Mapping[str, RawComponents], policy: str) -> dict[str, tuple[float | None, int, str]]:
+    """Upper medians; missing industry identifiers never become an industry."""
+    spec = ATR_REFERENCE_POLICIES[policy]
+    groups: dict[tuple, list[float]] = defaultdict(list)
+    for raw in raws.values():
+        if raw.atr_pct is None:
+            continue
+        if policy == "legacy":
+            groups[(raw.industry_id,)].append(raw.atr_pct)
+            continue
+        if not (
+            math.isfinite(raw.atr_pct) and raw.atr_pct > 0
+            and raw.raw_close is not None and math.isfinite(raw.raw_close)
+            and raw.raw_close >= spec["minimum_raw_price"]
+            and raw.last_close is not None and math.isfinite(raw.last_close) and raw.last_close > 0
+            and raw.adv20 is not None and math.isfinite(raw.adv20)
+            and raw.adv20 >= spec["minimum_adv20_proxy"]
+            and raw.currently_tradable and classify_venue(raw.venue_metadata).eligible
+        ):
+            continue
+        groups[(raw.asset_track, "track")].append(raw.atr_pct)
+        if raw.industry_id:
+            groups[(raw.asset_track, "industry", raw.industry_id)].append(raw.atr_pct)
+        if raw.parent_industry_id:
+            groups[(raw.asset_track, "parent", raw.parent_industry_id)].append(raw.atr_pct)
+    medians = {key: (sorted(values)[len(values) // 2], len(values)) for key, values in groups.items()}
+    result = {}
+    for sid, raw in raws.items():
+        if policy == "legacy":
+            value, count = medians.get((raw.industry_id,), (raw.atr_pct or 0.0, 0))
+            result[sid] = (value or raw.atr_pct, count, "legacy_all_tracks_industry" if raw.industry_id else "legacy_all_tracks_missing_industry")
+            continue
+        result[sid] = (None, 0, "unavailable")
+        for kind, identifier in (("industry", raw.industry_id), ("parent", raw.parent_industry_id), ("track", None)):
+            if kind != "track" and not identifier:
+                continue
+            key = (raw.asset_track, kind) if kind == "track" else (raw.asset_track, kind, identifier)
+            value, count = medians.get(key, (None, 0))
+            if count >= (1 if kind == "track" else spec["minimum_group_n"]):
+                result[sid] = (value, count, f"{raw.asset_track}:{kind}")
+                break
+    return result
+
+
+def _common_gate_checks(raw, registry, sector, profile, algorithm, scored, venue, median):
+    """Independent pass/fail facts, including inputs the combined gate cannot assess."""
+    p = registry["profiles"][profile]
+    spec = registry["sectors"][sector]
+    def ge(value, minimum):
+        return None if value is None else value >= minimum
+    return {
+        "venue": venue.eligible,
+        "currently_tradable": raw.currently_tradable,
+        "price": ge(raw.raw_close, registry["global_rules"]["minimum_raw_price_usd"]),
+        "adv20": ge(raw.adv20, max(spec["gates"]["minimum_adv_usd"], p["minimum_adv_usd"])),
+        "atr": None if raw.atr_pct is None or median is None else raw.atr_pct <= min(p["atr_absolute_cap_pct"], p["atr_sector_median_multiplier"] * median),
+        "extension": None if raw.extension_atr is None else raw.extension_atr <= p["max_extension_atr"],
+        "structure": ge(raw.structure_score, p["structure_floor"]),
+        "history": raw.history_sessions >= spec["candidates"][algorithm]["min_history_sessions"],
+        "upthrust": not raw.unresolved_upthrust,
+        "invalidation": not raw.structure_invalidated,
+        "score": None if scored.score is None else scored.score >= p["score_floor"],
+        "coverage": scored.coverage + 1e-12 >= p["coverage_min"],
+    }
+
 
 def _series_geometry_close(series: SecuritySeries) -> float | None:
     if series.close is None or len(series.close) == 0:
@@ -258,6 +330,7 @@ def compute_snapshot(
     reapply_theme_gates: bool = True,
     already_session_clipped: bool = False,
     snapshot_cache: dict | None = None,
+    atr_reference_policy: str = "legacy",
 ) -> dict[str, Any]:
     """Deterministic snapshot. Adding bars after ``as_of`` must not change T.
 
@@ -266,6 +339,8 @@ def compute_snapshot(
     """
 
     require_aware(as_of)
+    if atr_reference_policy not in ATR_REFERENCE_POLICIES:
+        raise ValueError(f"unknown ATR reference policy: {atr_reference_policy}")
     session = last_complete_eod_session(
         as_of,
         source_finalized_through=source_finalized_through,
@@ -324,6 +399,12 @@ def compute_snapshot(
                 reasons=tuple(dict.fromkeys(reasons)),
                 event_status=event_status,
             )
+        )
+        pool_rejects[-1].update(
+            atr_pct=None, sector_median_atr_pct=None, atr_reference_n=0,
+            atr_reference_source="unavailable", atr_reference_policy=atr_reference_policy,
+            atr_threshold_pct=None, extension_atr=None,
+            extension_limit_atr=profile_cfg["max_extension_atr"], common_gate_checks={},
         )
 
     for sid, series in panel.items():
@@ -473,17 +554,12 @@ def compute_snapshot(
     q_g = cached_cs["q_g"]
     breadth = cached_cs["breadth"]
 
-    # Preserve the original None-industry bucket, all tracks, and upper median.
-    atr_key = ("atr_medians", session, universe_version)
-    atr_medians = None if snapshot_cache is None else snapshot_cache.get(atr_key)
-    if atr_medians is None:
-        atr_groups: dict[str | None, list[float]] = defaultdict(list)
-        for item in raws.values():
-            if item.atr_pct is not None:
-                atr_groups[item.industry_id].append(item.atr_pct)
-        atr_medians = {key: sorted(values)[len(values) // 2] for key, values in atr_groups.items()}
+    atr_key = ("atr_references", session, universe_version, atr_reference_policy)
+    atr_references = None if snapshot_cache is None else snapshot_cache.get(atr_key)
+    if atr_references is None:
+        atr_references = _atr_references(raws, atr_reference_policy)
         if snapshot_cache is not None:
-            snapshot_cache[atr_key] = atr_medians
+            snapshot_cache[atr_key] = atr_references
     rows: list[dict[str, Any]] = []
     required = ("T", "M", "S", "R")
     if algorithm == "B_confirmed_base_breakout":
@@ -514,9 +590,11 @@ def compute_snapshot(
         )
         scored = score_features(factors, weights, coverage_min=profile_cfg["coverage_min"], required=required)
         setup = setup_for(algorithm, raw, profile_cfg, sector["gates"], horizon)
-        median_atr = atr_medians.get(raw.industry_id, raw.atr_pct or 0.0)
+        median_atr, reference_n, reference_source = atr_references[sid]
         common = ()
-        if raw.raw_close is not None and raw.adv20 is not None and raw.atr_pct is not None and raw.extension_atr is not None and raw.structure_score is not None:
+        if median_atr is None and atr_reference_policy != "legacy":
+            common = ("ATR_REFERENCE_UNAVAILABLE",)
+        elif raw.raw_close is not None and raw.adv20 is not None and raw.atr_pct is not None and raw.extension_atr is not None and raw.structure_score is not None:
             common = common_rejections(
                 registry,
                 sector_id,
@@ -557,6 +635,15 @@ def compute_snapshot(
                 "horizon": horizon,
                 "adv20": raw.adv20,
                 "atr": raw.atr,
+                "atr_pct": raw.atr_pct,
+                "sector_median_atr_pct": median_atr,
+                "atr_reference_n": reference_n,
+                "atr_reference_source": reference_source,
+                "atr_reference_policy": atr_reference_policy,
+                "atr_threshold_pct": None if median_atr is None else min(profile_cfg["atr_absolute_cap_pct"], profile_cfg["atr_sector_median_multiplier"] * median_atr),
+                "extension_atr": raw.extension_atr,
+                "extension_limit_atr": profile_cfg["max_extension_atr"],
+                "common_gate_checks": _common_gate_checks(raw, registry, sector_id, profile, algorithm, scored, venue, median_atr),
                 "ma_distance_atr": raw.ma_distance_atr,
                 "platform_distance_atr": raw.platform_distance_atr,
                 "invalidation_distance_atr": raw.invalidation_distance_atr,

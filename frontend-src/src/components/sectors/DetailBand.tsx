@@ -5,6 +5,7 @@ import { fmtPct } from '@/lib/format';
 import TickerLogo from '@/components/shared/TickerLogo';
 import InfoHint from '@/components/shared/InfoHint';
 import { SCORE_HINTS } from '@/lib/scoreHints';
+import { diagnosticCoverageStatus } from '@/lib/eodDiagnostics';
 import Icon from '@/components/icons';
 import type { SectorVm } from './model';
 import { periodLabel, scoreSourceLabel } from './model';
@@ -87,7 +88,7 @@ export default function DetailBand({
             label={
               <>
                 {t('平均强度')}
-                <InfoHint hint={SCORE_HINTS.avgStrength} side="bottom" size={11} className="ml-1" />
+                <InfoHint hint={SCORE_HINTS.sectorFullStrength} side="bottom" size={11} className="ml-1" />
               </>
             }
             value={sector.avgStrength?.toFixed(1) ?? '—'}
@@ -102,6 +103,17 @@ export default function DetailBand({
           {sector.scoreDataThrough ? ` · ${t('评分截至 {date}', { date: sector.scoreDataThrough })}` : ''}
           {scoreSourceLabel(sector.scoreSourceStatus) ? ` · ${scoreSourceLabel(sector.scoreSourceStatus)}` : ''}
         </p>
+
+        {sector.scoreBasis === 'full_theme_balanced_mid_A' && (
+          <div className="mt-2 space-y-1 text-micro text-ink-500" data-testid="sector-full-score-basis">
+            <p>{t('均分采用全体有有效评分的成员，固定为均衡、中期、趋势质量。')}</p>
+            <p>{t('基准收益')} {sector.benchmarkTicker ?? '—'} {sector.benchmarkReturn != null ? fmtPct(sector.benchmarkReturn) : '—'}
+              {' · '}{t('较基准')} {sector.excessReturn != null ? `${sector.excessReturn >= 0 ? '+' : ''}${sector.excessReturn.toFixed(2)}` : '—'} {t('个百分点')}</p>
+            {Object.keys(sector.scoreMissingReasons ?? {}).length > 0 && (
+              <p>{t('缺失原因')} · {Object.entries(sector.scoreMissingReasons ?? {}).map(([reason, count]) => `${diagnosticCoverageStatus(reason)} ${count}`).join(' · ')}</p>
+            )}
+          </div>
+        )}
 
         <div className="mt-5 grid grid-cols-1 gap-6 lg:grid-cols-2">
           <div>

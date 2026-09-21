@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import replace
 from datetime import date, datetime, timezone
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 from app.services.research_eod_v1 import FEATURE_VERSION
 from app.services.research_eod_v1.calendar_asof import eod_evaluation_as_of
@@ -21,6 +21,7 @@ from . import COMPUTE_VERSION, MODE_ID, PURPOSE_LIVE, VOLUME_SCOPE
 from .panel import prepare_limited_panel
 from .geometry_parallel import parallel_geometry, validate_geometry_workers
 from .price_only import apply_price_only_track, resolve_capability_flags
+from .diagnostics import VariantDiagnostics
 
 WARMUP_SESSIONS = 330
 UNIVERSE_VERSION = "u_eod_limited_v1"
@@ -204,6 +205,7 @@ def score_eod_session(
     precomputed_theme_raws: Mapping[str, Mapping[str, Any]] | None = None,
     compact: bool = False,
     snapshot_cache: dict | None = None,
+    on_family_rows: Callable[[str, str, Sequence[Mapping[str, Any]], Mapping[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     flags = resolve_capability_flags(
         volume_verified=volume_verified,
@@ -219,6 +221,7 @@ def score_eod_session(
     status_counts: Counter = Counter()
     security_status: dict[str, dict[str, Any]] = {}
     snapshot_cache = {} if snapshot_cache is None else snapshot_cache
+    funnel_diagnostics = VariantDiagnostics(profile=profile, horizon=horizon)
     if precomputed_raws is None or clipped_panel is None:
         raws, clipped = precompute_session_raws(panel, session, registry=registry, horizon=horizon)
     else:
@@ -271,6 +274,11 @@ def score_eod_session(
                 item["statuses"].add(str(row.get("status")))
                 item["rejection_reasons"].update(str(reason) for reason in row.get("rejection_reasons") or ())
             status_counts.update(counts)
+            funnel_diagnostics.add_block(theme_id, algorithm, rows)
+            if on_family_rows is not None:
+                # The callback receives every final scoring decision before the
+                # public snapshot drops rejected rows and expensive geometry.
+                on_family_rows(theme_id, algorithm, rows, scored.get("weight_provenance") or {})
             retained_rows = rows if not compact else [
                 _compact_row(row) for row in rows if row.get("status") in {"eligible", "watch"}
             ]
@@ -287,6 +295,7 @@ def score_eod_session(
                 "top_rejections": reasons.most_common(8),
                 "rows": retained_rows,
                 "rejection_counts": dict(reasons),
+                "weight_provenance": scored.get("weight_provenance") or {},
             })
             first_layer.extend(retained_rows)
     stock_layer = [row for row in first_layer if row.get("stock_or_etf_track") != "etf"]
@@ -302,7 +311,7 @@ def score_eod_session(
     watch = [row for row in first_layer if row.get("status") == "watch"]
     observation = observation_consensus(watch, profile, 20)
     eligible = [row for row in first_layer if row.get("status") == "eligible"]
-    return {
+    result = {
         "session_date": session.isoformat(),
         "as_of_session": session.isoformat(),
         "served_session": session.isoformat(),
@@ -342,3 +351,5 @@ def score_eod_session(
         "historical_example": purpose != PURPOSE_LIVE,
         "synthetic": purpose == "synthetic",
     }
+    result["family_funnels"] = funnel_diagnostics.funnel(result)
+    return result
