@@ -42,7 +42,7 @@ def test_relabel_delta_keeps_the_paired_increment_separate_from_the_level():
     }
     delta = technical_relabel_delta(old, v2)
     assert delta["close_level_matches_old_absolute"] is True
-    assert delta["g1_minus_b0_h20_close_paired"]["conditional_mean"] == -0.0001
+    assert delta["g1_minus_b0_h20_close_paired"]["H"]["conditional_mean"] == -0.0001
 
 
 def test_bundle_omits_checkpoints_and_keeps_old_hashes(tmp_path: Path):
