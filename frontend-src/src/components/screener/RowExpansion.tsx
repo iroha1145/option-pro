@@ -193,9 +193,11 @@ export interface RowExpansionProps {
 
 export default function RowExpansion({ row, weights, dollarVolume, signals, onOpenDetail }: RowExpansionProps) {
   const dims = subscoreDimsOf(row);
-  // 权重仅对 mock 四维键有意义（live 契约 profiles 无权重 → weights 为 null 自动隐藏）
-  const weightOf = (key: string): number | null =>
-    weights && key in weights ? weights[key as keyof typeof weights] : null;
+  const weightOf = (key: string): number | null => {
+    const effective = row.effectiveWeights?.[key.replace(/^factor_/, '')];
+    if (effective != null) return effective * 100;
+    return weights && key in weights ? weights[key as keyof typeof weights] : null;
+  };
   return (
     <div className="grid grid-cols-1 gap-x-8 gap-y-5 border-t border-line bg-card-warm/60 px-4 py-4 md:grid-cols-3">
       {/* ① 分项强度 breakdown（与行内微条同源） */}
@@ -220,7 +222,7 @@ export default function RowExpansion({ row, weights, dollarVolume, signals, onOp
                 </span>
                 <span className="text-right font-mono text-caption text-ink-800 tnum">
                   {value !== null ? value : '—'}
-                  {w !== null && <span className="ml-1 text-micro text-ink-300">×{w}%</span>}
+                  {w !== null && <span className="ml-1 text-micro text-ink-300">×{w.toFixed(1)}%</span>}
                 </span>
               </div>
             );
@@ -247,7 +249,10 @@ export default function RowExpansion({ row, weights, dollarVolume, signals, onOp
                 {t('支撑')} {row.knownSupport ?? '—'} · {t('失效')} {row.plannedInvalidation ?? '—'}
               </p>
             )}
-            {row.dollarVolumeUnknown && (
+            {row.observationOnly && (
+              <p className="text-micro text-ink-400">{t('观察分取各家族与主题路径中的最高分，不代表多家族共识。')}</p>
+            )}
+            {!row.dollarLiquidityVerified && (
               <p className="text-micro text-ink-400">{t('成交额口径未核实，不能当作已通过流动性门')}</p>
             )}
           </div>
@@ -304,13 +309,14 @@ export default function RowExpansion({ row, weights, dollarVolume, signals, onOp
           )}
         </div>
         <div className="mt-3 flex items-center justify-between border-t border-line pt-3">
-          {/* 数字直接取后端 avg_dollar_volume_20d：既不是「推导」，也不是当日
-              成交额（审计 2.3.2）。 */}
-          <span className="text-micro text-ink-400">{t('20 日均美元成交额')}</span>
+          <span className="text-micro text-ink-400">{row.dollarVolumeProxyAvailable ? t('20 日均成交额代理') : t('20 日均美元成交额')}</span>
           <span className="font-mono text-data-m text-ink-800 tnum">
             {dollarVolume === null ? '—' : `$${fmtCompact(dollarVolume)}`}
           </span>
         </div>
+        {row.dollarVolumeProxyAvailable && (
+          <p className="mt-2 text-micro text-ink-400">{t('按原始收盘价乘日成交量估算；成交额与成交时段资格仍需核实。')}</p>
+        )}
       </div>
     </div>
   );

@@ -32,8 +32,22 @@ def _context_payload(session: str = "2026-09-18") -> dict:
 def _selection() -> dict:
     return {
         "as_of": "2026-09-18", "score_data_through": "2026-09-18",
-        "source_status": "active", "_stale": False,
+        "source_status": "active", "_stale": False, "score_version": "limited-all-market-v1.3",
         "observation_rows": [{"ticker": "NVDA", "score": 72.0, "strength_score": 72.0}],
+        "theme_statistics": {
+            "status": "active", "served_session": "2026-09-18",
+            "compute_version": "limited-all-market-v1.3",
+            "reference_profile": "balanced", "reference_horizon": "mid",
+            "reference_family": "A_trend_quality",
+            "sectors": [
+                {"sector_id": sid, "member_count": 14, "scored_count": 1,
+                 "avg_strength": 72.0, "leaders": [{"ticker": "NVDA", "score": 72.0}],
+                 "missing_reasons": {"SCORE_UNAVAILABLE": 13},
+                 "score_source_status": "degraded", "avg_return_3mo": 2.0,
+                 "spy_return_3mo": 1.0, "excess_vs_spy_3mo": 1.0}
+                for sid in ("semiconductors", "ai_cloud")
+            ],
+        },
     }
 
 
@@ -177,6 +191,8 @@ def test_all_access_modes_read_eod_scores_and_independent_context(monkeypatch: p
     sectors = asyncio.run(strength.sectors(period="3mo"))
     rows = {row["sector_id"]: row for row in sectors["sectors"]}
     assert rows["semiconductors"]["avg_strength"] == 72
+    assert rows["semiconductors"]["score_basis"] == "full_theme_balanced_mid_A"
+    assert rows["semiconductors"]["excess_return"] == 1.0
     assert rows["semiconductors"]["macro_sector_fit"] == 62
     assert rows["semiconductors"]["avg_return"] == 2
     assert rows["semiconductors"]["scored_count"] == rows["ai_cloud"]["scored_count"] == 1
@@ -197,7 +213,7 @@ def test_market_and_sector_returns_survive_missing_selection(monkeypatch: pytest
     sectors = asyncio.run(strength.sectors(period="3mo"))
     semiconductor = next(row for row in sectors["sectors"] if row["sector_id"] == "semiconductors")
     assert semiconductor["avg_return"] == 2
-    assert semiconductor["avg_strength"] is None and semiconductor["scored_count"] == 0
+    assert semiconductor["avg_strength"] is None and semiconductor["scored_count"] is None
     assert semiconductor["score_source_status"] == "unavailable"
 
 

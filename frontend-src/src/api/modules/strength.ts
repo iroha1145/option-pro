@@ -209,6 +209,11 @@ function mapScanRow(r: Record<string, unknown>): ScreenerRow | null {
     sortAlgorithm: pickS(r, 'sort_algorithm', 'sortAlgorithm'),
     a0Available: pickB(r, 'a0_available', 'a0Available'),
     dollarVolumeUnknown: pickB(r, 'dollar_volume_unknown', 'dollarVolumeUnknown') ?? false,
+    dollarVolumeProxyAvailable: pickB(r, 'dollar_volume_proxy_available') ?? false,
+    dollarLiquidityVerified: pickB(r, 'dollar_liquidity_verified') ?? false,
+    volumeSessionVerified: pickB(r, 'volume_session_verified') ?? false,
+    effectiveWeights: Object.fromEntries(Object.entries(asRec(r.effective_weights)).filter((entry): entry is [string, number] => typeof entry[1] === 'number' && Number.isFinite(entry[1]))),
+    scoreComponents: Object.fromEntries(Object.entries(asRec(r.score_components)).filter((entry): entry is [string, number] => typeof entry[1] === 'number' && Number.isFinite(entry[1]))),
     qualification: pickS(r, 'qualification'),
     status: pickS(r, 'status'),
     rejectionReasons: Array.isArray(r.rejection_reasons)

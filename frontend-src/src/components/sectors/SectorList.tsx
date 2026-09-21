@@ -70,7 +70,7 @@ export default function SectorList({
       {
         key: 'strength',
         title: t('平均强度'),
-        hint: <InfoHint hint={SCORE_HINTS.avgStrength} side="bottom" size={11} />,
+        hint: <InfoHint hint={SCORE_HINTS.sectorFullStrength} side="bottom" size={11} />,
         sortable: true,
         sortValue: (row) => row.avgStrength ?? Number.NaN,
         render: (row) => (

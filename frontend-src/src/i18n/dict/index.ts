@@ -28,6 +28,7 @@ import { DRAWINGS } from './drawings.ts';
 import { SMART_DRAWINGS } from './smartDrawings.ts';
 import { OPTIONS_UI } from './optionsUi.ts';
 import { STOCK_DATA } from './stockData.ts';
+import { EOD_DIAGNOSTICS } from './eodDiagnostics.ts';
 import type { Dict } from './types.ts';
 
 export const DICT: Dict = {
@@ -52,4 +53,5 @@ export const DICT: Dict = {
   ...SMART_DRAWINGS,
   ...OPTIONS_UI,
   ...STOCK_DATA,
+  ...EOD_DIAGNOSTICS,
 };

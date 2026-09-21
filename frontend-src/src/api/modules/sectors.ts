@@ -50,6 +50,12 @@ export interface SectorStrengthRow {
   avgStrength: number | null;
   scoreDataThrough: string | null;
   scoreSourceStatus: string | null;
+  scoreBasis?: string | null;
+  scoreCoverage?: number | null;
+  scoreMissingReasons?: Record<string, number>;
+  benchmarkTicker?: string | null;
+  benchmarkReturn?: number | null;
+  excessReturn?: number | null;
   leaders: SectorStrengthLeader[];
   /**
    * 宏观适配（影子字段）：与 avgStrength 并列，绝不混入它。
@@ -198,6 +204,12 @@ function mapStrengthRow(raw: Rec, requestedPeriod: SectorPeriod): SectorStrength
     avgStrength: pickN(raw, 'avg_strength'),
     scoreDataThrough: pickS(raw, 'score_data_through', 'scoreDataThrough'),
     scoreSourceStatus: pickS(raw, 'score_source_status', 'scoreSourceStatus'),
+    scoreBasis: pickS(raw, 'score_basis'),
+    scoreCoverage: pickN(raw, 'score_coverage'),
+    scoreMissingReasons: Object.fromEntries(Object.entries(asRec(raw.score_missing_reasons)).filter((entry): entry is [string, number] => typeof entry[1] === 'number' && Number.isFinite(entry[1]) && entry[1] >= 0)),
+    benchmarkTicker: pickS(raw, 'benchmark_ticker'),
+    benchmarkReturn: pickN(raw, 'benchmark_return'),
+    excessReturn: pickN(raw, 'excess_return'),
     leaders,
     macroFit: pickN(raw, 'macro_sector_fit'),
     macroTailwind: pickS(raw, 'macro_sector_tailwind'),

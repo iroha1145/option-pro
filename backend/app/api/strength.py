@@ -1169,6 +1169,73 @@ def _serve_public_snapshot() -> bool:
     return get_personal_config().access.mode == "password"
 
 
+@router.get("/diagnostics/{ticker}")
+async def security_diagnostics(
+    ticker: str,
+    request: Request,
+    profile: str = Query("balanced", pattern="^(conservative|balanced|aggressive)$"),
+    timeframe: str = Query("mid", pattern="^(short|mid|long)$"),
+) -> Any:
+    """Read one security's paths, including rejected and missing-data securities."""
+    import re
+    import sqlite3
+
+    from app.services.eod_limited.diagnostic_store import read_security_diagnostics
+    from app.services.eod_limited.store import read_batch
+    from app.services.eod_limited import PURPOSE_LIVE
+    from app.services.research_eod_v1.calendar_asof import last_complete_eod_session
+
+    symbol = ticker.strip()
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.\-]{0,31}", symbol):
+        raise HTTPException(status_code=422, detail="Invalid security symbol")
+    # Keep the immutable batch alive for both the rows and their publication time.
+    batch = await asyncio.to_thread(read_batch)
+    if not batch or not batch.get("diagnostics"):
+        raise HTTPException(status_code=503, detail={
+            "code": "eod_diagnostics_unavailable", "message": "该批次尚无完整诊断，请等待下一次扫描完成。",
+        })
+    try:
+        payload = await asyncio.to_thread(read_security_diagnostics, batch, symbol, profile, timeframe)
+    except (OSError, ValueError, sqlite3.Error) as exc:
+        raise HTTPException(status_code=503, detail={
+            "code": "eod_diagnostics_unavailable", "message": "该批次诊断暂不可用。",
+        }) from exc
+    if payload is None:
+        raise HTTPException(status_code=404, detail={
+            "code": "eod_diagnostics_symbol_unknown", "message": "该代码不在本批次证券目录中。",
+        })
+    if payload.get("data_status") in {"variant_diagnostics_unavailable", "diagnostics_unavailable"}:
+        raise HTTPException(status_code=503, detail={
+            "code": "eod_diagnostics_unavailable", "message": "该批次诊断暂不可用。",
+        })
+    if payload.get("data_status") == "ambiguous_symbol":
+        raise HTTPException(status_code=409, detail={
+            "code": "eod_diagnostics_symbol_ambiguous", "message": "该代码对应多个不同证券，无法唯一识别。",
+            "provider_tickers": payload.get("provider_tickers") or [],
+        })
+    session = str(batch.get("served_session") or "")
+    historical = batch.get("purpose") != PURPOSE_LIVE or bool(batch.get("synthetic"))
+    stale = not historical and session < last_complete_eod_session(datetime.now(timezone.utc)).isoformat()
+    saved_at = batch.get("published_at")
+    payload = sanitize({
+        **payload,
+        "published_at": saved_at,
+        "snapshot_saved_at": datetime.fromtimestamp(saved_at, timezone.utc).isoformat()
+        if isinstance(saved_at, (int, float)) and math.isfinite(saved_at) and saved_at > 0 else None,
+        "purpose": batch.get("purpose"),
+        "synthetic": bool(batch.get("synthetic")),
+        "historical_example": historical,
+        "_stale": stale,
+        "source_status": "historical" if historical else "stale" if stale else "active",
+        "score_data_through": session,
+    })
+    return await respond_with_snapshot(
+        request, payload,
+        version_key=snapshot_version_key("eod_diagnostics", saved_at, symbol, profile, timeframe, stale),
+        cache_control="private, max-age=30, stale-while-revalidate=60",
+    )
+
+
 @router.get("/stocks/{ticker}")
 async def stock(ticker: str, profile: str = Query("balanced", pattern="^(conservative|balanced|aggressive)$")) -> dict[str, Any]:
     from app.services.eod_limited.context_snapshot import read_context_snapshot
@@ -1211,7 +1278,11 @@ async def sectors(period: str = Query("3mo", pattern="^(1mo|3mo|6mo)$")) -> dict
     if context.get("source_status") == "unavailable" and selection is None:
         raise public_snapshot_unavailable("strength:sectors")
     rows = sector_rows_with_scores(context, selection, period=period)
-    score_unavailable = selection is None
+    score_unavailable = all(row.get("score_source_status") == "unavailable" for row in rows)
+    score_status = "unavailable" if score_unavailable else (
+        "degraded" if any(row.get("score_source_status") in {"degraded", "unavailable"} for row in rows)
+        else (selection or {}).get("source_status", "unavailable")
+    )
     score_stale = bool((selection or {}).get("_stale"))
     stale = bool(context.get("_stale")) or score_stale or score_unavailable
     reason = context.get("stale_reason") or (
@@ -1223,7 +1294,7 @@ async def sectors(period: str = Query("3mo", pattern="^(1mo|3mo|6mo)$")) -> dict
         "_stale": stale, "source_status": "stale" if stale else context.get("source_status", "active"),
         "stale_reason": reason, "context_source_status": context.get("source_status"),
         "macro_context": context.get("macro_context"),
-        "score_source_status": (selection or {}).get("source_status", "unavailable"),
+        "score_source_status": score_status,
         "score_data_through": (selection or {}).get("score_data_through"),
         "cache_ttl_seconds": context.get("cache_ttl_seconds"),
         "cache_expires_at": context.get("cache_expires_at"),

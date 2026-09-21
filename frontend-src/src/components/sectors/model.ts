@@ -30,6 +30,12 @@ export interface SectorVm {
   avgStrength: number | null;
   scoreDataThrough: string | null;
   scoreSourceStatus: string | null;
+  scoreBasis?: string | null;
+  scoreCoverage?: number | null;
+  scoreMissingReasons?: Record<string, number>;
+  benchmarkTicker?: string | null;
+  benchmarkReturn?: number | null;
+  excessReturn?: number | null;
   leaders: SectorStrengthLeader[];
   asOf: string | null;
   strengthCovered: boolean;
@@ -105,6 +111,12 @@ function makeSectorVm(
     avgStrength: strength?.avgStrength ?? null,
     scoreDataThrough: strength?.scoreDataThrough ?? null,
     scoreSourceStatus: strength?.scoreSourceStatus ?? null,
+    scoreBasis: strength?.scoreBasis ?? null,
+    scoreCoverage: strength?.scoreCoverage ?? null,
+    scoreMissingReasons: strength?.scoreMissingReasons ?? {},
+    benchmarkTicker: strength?.benchmarkTicker ?? null,
+    benchmarkReturn: strength?.benchmarkReturn ?? null,
+    excessReturn: strength?.excessReturn ?? null,
     leaders: strength?.leaders ?? [],
     asOf: envelope.asOf,
     strengthCovered: strength !== undefined,

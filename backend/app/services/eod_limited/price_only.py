@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Any, Mapping
 
 from app.services.research_eod_v1.capability import (
@@ -15,6 +16,7 @@ from app.services.research_eod_v1.constants import SCORE_FLOORS
 from app.services.research_eod_v1.registry_scoring import resolve_weights
 
 from . import MOMENTUM_BASIS, RETURN_BASIS, VOLUME_SCOPE
+from .weight_provenance import weight_provenance
 
 DOLLAR_LIQUIDITY_UNVERIFIED = "DOLLAR_LIQUIDITY_UNVERIFIED"
 VOLUME_SESSION_UNVERIFIED = "VOLUME_SESSION_UNVERIFIED"
@@ -57,6 +59,9 @@ def apply_price_only_track(
     weights = resolve_weights(registry, theme_id, family, profile, horizon)
     track = PRICE_ONLY_DIAGNOSTIC
     diag = diagnostic_weights(weights, track=track, family=family)
+    provenance = weight_provenance(
+        registry, theme_id=theme_id, family=family, profile=profile, horizon=horizon, track=track,
+    )
     coverage_min = float(registry["profiles"][profile]["coverage_min"])
     required = family_required(family)
     score_floor = float(SCORE_FLOORS[profile])
@@ -67,6 +72,12 @@ def apply_price_only_track(
         updated["volume_scope"] = VOLUME_SCOPE if not session_ok else row.get("volume_scope")
         updated["momentum_basis"] = MOMENTUM_BASIS
         updated["return_basis"] = RETURN_BASIS
+        updated["capability_flags"] = dict(flags)
+        updated.setdefault("configured_weights", weights)
+        updated["track_weights"] = diag
+        updated["weight_provenance_id"] = provenance["id"]
+        updated["effective_weights"] = {}
+        updated["score_components"] = {}
         inherited = [str(reason) for reason in (updated.get("rejection_reasons") or ())]
         updated["rejection_reasons"] = [reason for reason in inherited if reason not in SCORE_DERIVED_REASONS]
         if updated.get("gate_results") is not None:
@@ -81,7 +92,21 @@ def apply_price_only_track(
             )
             updated["score"] = scored["score"]
             updated["observed_feature_coverage"] = scored["coverage"]
-            updated["effective_weights"] = diag
+            updated["effective_weights"] = scored["effective_weights"]
+            updated["score_components"] = scored["score_components"]
+            updated["score_gate_checks"] = {
+                "coverage_ratio": scored["coverage"],
+                "coverage_min": coverage_min,
+                "coverage_passed": scored["coverage"] + 1e-12 >= coverage_min,
+                "score_floor": score_floor,
+                "score_floor_passed": scored["score"] >= score_floor if scored["score"] is not None else None,
+                "required_factors_passed": all(
+                    isinstance(updated["factors"].get(key), (int, float))
+                    and not isinstance(updated["factors"].get(key), bool)
+                    and math.isfinite(updated["factors"][key])
+                    for key in required
+                ),
+            }
             updated["rejection_reasons"] = list(dict.fromkeys(scored["rejection_reasons"]))
             updated["status"] = "eligible" if scored["final_eligible"] else "rejected"
         if updated.get("status") == "eligible" and not dollar_ok:
@@ -106,4 +131,5 @@ def apply_price_only_track(
     out["rows"] = rows
     out["track"] = track
     out["capability_track"] = track
+    out["weight_provenance"] = provenance
     return out
