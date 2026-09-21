@@ -1012,6 +1012,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--reps", type=int, default=2000)
     parser.add_argument("--align-sessions", type=int, default=0)
     parser.add_argument("--discover", action="store_true")
+    parser.add_argument("--resume-discover", action="store_true")
     parser.add_argument("--evaluate-discovery", action="store_true")
     parser.add_argument("--max-sessions", type=int, default=0)
     return parser
@@ -1075,7 +1076,7 @@ def _align(research: Path, n: int) -> dict[str, Any]:
     return report
 
 
-def _discover(research: Path, *, max_sessions: int) -> dict[str, Any]:
+def _discover(research: Path, *, max_sessions: int, resume: bool = False) -> dict[str, Any]:
     from screener_gate_adapter_v1 import ranked_stocks
     from screener_gate_replay_v1 import load_restricted_panel, run_one_session, session_dates
     from app.services.eod_limited.market_registry import load_market_registry
@@ -1083,7 +1084,7 @@ def _discover(research: Path, *, max_sessions: int) -> dict[str, Any]:
 
     dest = research / "return_pack_discovery_v2"
     checkpoints = dest / "checkpoints"
-    if any(checkpoints.glob("*.json")):
+    if any(checkpoints.glob("*.json")) and not resume:
         raise FileExistsError(checkpoints)
     panel, _coverage, _payload = load_restricted_panel(research, end=LAST_OPEN_SESSION)
     sessions = session_dates(panel, start=date(2022, 1, 3), end=date(2024, 3, 28))
@@ -1099,6 +1100,16 @@ def _discover(research: Path, *, max_sessions: int) -> dict[str, Any]:
         "horizon": "mid",
     }
     for index, session in enumerate(sessions, start=1):
+        existing = checkpoints / f"{session.isoformat()}.json"
+        if existing.exists():
+            if not resume:
+                raise FileExistsError(existing)
+            kept = checkpoint_identity_core(_load_json(existing))
+            for key, value in identity_base.items():
+                if kept.get(key) != value:
+                    raise RuntimeError(f"resume identity mismatch for {key} on {session.isoformat()}")
+            print(f"keep {index}/{len(sessions)} {session.isoformat()}", flush=True)
+            continue
         result = run_one_session(
             panel,
             session,
@@ -1128,7 +1139,7 @@ def main() -> None:
         if not report["aligned"]:
             raise SystemExit(1)
     if args.discover:
-        print(json.dumps(_discover(research, max_sessions=args.max_sessions), indent=2))
+        print(json.dumps(_discover(research, max_sessions=args.max_sessions, resume=args.resume_discover), indent=2))
         if not args.evaluate_discovery:
             return
     if args.evaluate_discovery:
