@@ -335,6 +335,9 @@ _PUBLIC_READ_API_PATTERNS = tuple(
         r"^/api/catalysts/news/[1-9][0-9]*$",
         r"^/api/catalysts/tickers/(?!batch$)[A-Z0-9][A-Z0-9.-]{0,19}$",
         r"^/api/strength/stocks/[^/]+$",
+        # One published security snapshot only. Disable the tuple's global
+        # IGNORECASE flag for the symbol so this matches the handler's ASCII rule.
+        r"^/api/strength/diagnostics/(?-i:[A-Za-z0-9][A-Za-z0-9.\-]{0,31})$",
         r"^/api/breakouts/events/[^/]+$",
         r"^/api/breakouts/tickers/[^/]+$",
     )
