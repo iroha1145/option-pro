@@ -32,7 +32,10 @@ from screener_gate_candidates_v1 import (
 from screener_gate_statistics_v2 import (
     HOLDOUT_FROM,
     LabelBook,
+    aggregate_discovery_records,
     circular_block_indices,
+    compare_frozen_to_old_session,
+    entry_invariant_failures,
     freeze_layers,
     paired_bootstrap,
     write_checkpoint,
@@ -570,3 +573,99 @@ def test_paired_diff_uses_same_day_not_an_absolute_level():
     assert result["n_valid"] == 2
     assert result["conditional_mean"] == pytest.approx(0.005)
     assert math.isfinite(result["conditional_mean"])
+
+
+def _frozen(discovery_ids, technical_ids):
+    def rows(ids):
+        return [
+            {
+                "security_id": sid,
+                "score": 1.0,
+                "algorithm_id": "A_trend_quality",
+                "sector_context": "x",
+                "rejection_reasons": [],
+            }
+            for sid in ids
+        ]
+
+    layers = {}
+    for variant in (B0_CURRENT, G1_STOCK_REFERENCE, G2_EXTENSION_DISCOVERY, G3_RISK_DISCOVERY):
+        layers[variant] = {
+            "discovery": rows(discovery_ids if variant == G2_EXTENSION_DISCOVERY else technical_ids),
+            "technical_entry": rows(technical_ids),
+            "qualified_entry": [],
+        }
+    return {"layers": layers, "identity": {"session_date": "2022-01-03"}}
+
+
+def test_entry_invariant_allows_discovery_differences_only():
+    assert entry_invariant_failures(_frozen(["AAA", "BBB"], ["AAA"])) == []
+
+
+def test_entry_invariant_flags_technical_drift():
+    payload = _frozen(["AAA"], ["AAA"])
+    payload["layers"][G3_RISK_DISCOVERY]["technical_entry"] = [
+        {"security_id": "OTHER", "score": 1.0, "algorithm_id": "A", "sector_context": "x", "rejection_reasons": []}
+    ]
+    assert entry_invariant_failures(payload) == ["technical_entry"]
+
+
+def test_added_name_group_skips_days_with_no_substitution():
+    rows = [
+        {
+            "session_date": "2022-01-03",
+            "layer": "discovery",
+            "comparison": f"{G2_EXTENSION_DISCOVERY} - {G1_STOCK_REFERENCE}",
+            "k": 20,
+            "added": [],
+            "removed": [],
+            "order_only": False,
+            "h20_close_diff": 0.0,
+            "h20_added_close_full": None,
+            "h20_removed_close_full": None,
+            "h20_close_coverage_left": 1.0,
+            "h20_mae_left": -0.02,
+            "h20_mfe_left": 0.03,
+        },
+        {
+            "session_date": "2023-01-03",
+            "layer": "discovery",
+            "comparison": f"{G2_EXTENSION_DISCOVERY} - {G1_STOCK_REFERENCE}",
+            "k": 20,
+            "added": ["BBB"],
+            "removed": ["AAA"],
+            "order_only": False,
+            "h20_close_diff": 0.01,
+            "h20_added_close_full": 0.2,
+            "h20_removed_close_full": -0.05,
+            "h20_close_coverage_left": 1.0,
+            "h20_mae_left": -0.01,
+            "h20_mfe_left": 0.04,
+        },
+    ]
+    summary = aggregate_discovery_records(rows, reps=4)
+    key = f"discovery:{G2_EXTENSION_DISCOVERY} - {G1_STOCK_REFERENCE}:k20"
+    group = summary[key]
+    assert group["substitution"]["added_days"] == 1
+    assert group["substitution"]["unique_added"] == ["BBB"]
+    assert group["substitution"]["unique_removed"] == ["AAA"]
+    added = group["horizons"]["20"]["added_names_close"]
+    assert added["conditional_mean"] == pytest.approx(0.2)
+    assert added["n_substitution_days"] == 1
+    yearly = group["horizons"]["20"]["yearly_close_paired_mean"]
+    assert yearly["2022"]["mean"] == pytest.approx(0.0)
+    assert yearly["2023"]["mean"] == pytest.approx(0.01)
+
+
+def test_old_technical_comparison_does_not_treat_discovery_count_as_top20():
+    payload = _frozen(["AAA", "BBB"], ["AAA"])
+    old = {
+        "variants": {
+            variant: {"discovery_n": 1, "top": {"20": ["AAA"]}}
+            for variant in (B0_CURRENT, G1_STOCK_REFERENCE, G2_EXTENSION_DISCOVERY, G3_RISK_DISCOVERY)
+        }
+    }
+    compared = compare_frozen_to_old_session(payload, old)
+    assert compared["technical"] == []
+    assert compared["discovery_count"][0]["variant"] == G2_EXTENSION_DISCOVERY
+    assert compared["discovery_count"][0]["new"] == 2

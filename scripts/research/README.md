@@ -27,4 +27,13 @@ PYTHONPATH=backend python scripts/research/screener_gate_statistics_v2.py \
   --research-dir "$HOME/optix-research/screener-gate-v1" --reps 2000
 ```
 
-That writes `return_pack_metrics_v2/` and refuses to overwrite it. Discovery checkpoints, if recomputed, go to `return_pack_discovery_v2/` and are not mixed into the old pack.
+That writes `return_pack_metrics_v2/` and refuses to overwrite it. Discovery checkpoints, if recomputed, go to `return_pack_discovery_v2/` and are not mixed into the old pack. The commands in this file are templates. The commands actually executed for a run are appended outside the repo, in that run's `command_log_review4.txt`.
+
+```bash
+PYTHONPATH=backend python scripts/research/screener_gate_statistics_v2.py \
+  --research-dir "$HOME/optix-research/screener-gate-v1" --align-sessions 5
+PYTHONPATH=backend python -u scripts/research/screener_gate_statistics_v2.py \
+  --research-dir "$HOME/optix-research/screener-gate-v1" --discover
+PYTHONPATH=backend python scripts/research/screener_gate_statistics_v2.py \
+  --research-dir "$HOME/optix-research/screener-gate-v1" --evaluate-discovery --reps 2000
+```

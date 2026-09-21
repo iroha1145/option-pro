@@ -529,63 +529,481 @@ def _validation_text(manifest: Mapping[str, Any], summary: Mapping[str, Any]) ->
     ) + "\n"
 
 
+FIXED_COMPARISONS = (
+    ("technical_entry", G1_STOCK_REFERENCE, B0_CURRENT),
+    ("discovery", G2_EXTENSION_DISCOVERY, G1_STOCK_REFERENCE),
+    ("discovery", G3_RISK_DISCOVERY, G2_EXTENSION_DISCOVERY),
+)
+
+
+def checkpoint_identity_core(payload: Mapping[str, Any]) -> dict[str, Any]:
+    identity = payload["identity"]
+    return {key: identity[key] for key in IDENTITY_KEYS if key != "session_date"}
+
+
+def entry_invariant_failures(payload: Mapping[str, Any]) -> list[str]:
+    """technical_entry and qualified_entry must keep G2 = G3 = G1. Discovery may differ."""
+
+    failures = []
+    for layer in ("technical_entry", "qualified_entry"):
+        baseline = [str(item["security_id"]) for item in payload["layers"][G1_STOCK_REFERENCE][layer]]
+        for variant in (G2_EXTENSION_DISCOVERY, G3_RISK_DISCOVERY):
+            current = [str(item["security_id"]) for item in payload["layers"][variant][layer]]
+            if current != baseline:
+                failures.append(layer)
+                break
+    return failures
+
+
+def _layer_ids(payload: Mapping[str, Any], variant: str, layer: str, k: int | None = None) -> list[str]:
+    rows = payload["layers"][variant][layer]
+    if k is not None:
+        rows = rows[:k]
+    return [str(item["security_id"]) for item in rows]
+
+
+def _present(values: Sequence[Any]) -> list[float]:
+    return [float(value) for value in values if value is not None]
+
+
+def records_for_checkpoint(payload: Mapping[str, Any], book: LabelBook) -> list[dict[str, Any]]:
+    session = date.fromisoformat(str(payload["identity"]["session_date"]))
+    records = []
+    for layer, left_name, right_name in FIXED_COMPARISONS:
+        for k in (5, 10, 20):
+            left_ids = _layer_ids(payload, left_name, layer, k)
+            right_ids = _layer_ids(payload, right_name, layer, k)
+            added = sorted(set(left_ids) - set(right_ids))
+            removed = sorted(set(right_ids) - set(left_ids))
+            record: dict[str, Any] = {
+                "session_date": session.isoformat(),
+                "layer": layer,
+                "comparison": f"{left_name} - {right_name}",
+                "k": k,
+                "added": added,
+                "removed": removed,
+                "order_only": bool(left_ids != right_ids and set(left_ids) == set(right_ids)),
+            }
+            for horizon in LABEL_HS:
+                left_close = book.basket(left_ids, session, horizon, use_open=False)
+                right_close = book.basket(right_ids, session, horizon, use_open=False)
+                left_open = book.basket(left_ids, session, horizon, use_open=True)
+                right_open = book.basket(right_ids, session, horizon, use_open=True)
+                added_close = book.basket(added, session, horizon, use_open=False)
+                removed_close = book.basket(removed, session, horizon, use_open=False)
+                close_diff = (
+                    None
+                    if left_close["full_mean"] is None or right_close["full_mean"] is None
+                    else left_close["full_mean"] - right_close["full_mean"]
+                )
+                open_diff = (
+                    None
+                    if left_open["full_mean"] is None or right_open["full_mean"] is None
+                    else left_open["full_mean"] - right_open["full_mean"]
+                )
+                record[f"h{horizon}_close_diff"] = close_diff
+                record[f"h{horizon}_open_diff"] = open_diff
+                record[f"h{horizon}_close_coverage_left"] = left_close["coverage"]
+                record[f"h{horizon}_close_coverage_right"] = right_close["coverage"]
+                record[f"h{horizon}_mae_left"] = left_close.get("mae_mean")
+                record[f"h{horizon}_mfe_left"] = left_close.get("mfe_mean")
+                record[f"h{horizon}_added_close_full"] = added_close["full_mean"]
+                record[f"h{horizon}_removed_close_full"] = removed_close["full_mean"]
+            records.append(record)
+    return records
+
+
+def _side_summary(values: Sequence[Any], *, block: int, reps: int) -> dict[str, Any]:
+    clean = _present(values)
+    return {
+        "H": paired_bootstrap(values, block=block, reps=reps, seed=BOOTSTRAP_SEED),
+        "2H": paired_bootstrap(values, block=2 * block, reps=reps, seed=BOOTSTRAP_SEED),
+        "percentiles": {
+            "p05": _percentile(clean, 0.05),
+            "p50": _percentile(clean, 0.50),
+            "p95": _percentile(clean, 0.95),
+        },
+    }
+
+
+def _group_return(rows: Sequence[Mapping[str, Any]], key: str) -> dict[str, Any]:
+    """Mean of a substitution group. Days with an empty group are omitted, not scored as zero."""
+
+    selected = [row.get(key) for row in rows]
+    present = _present(selected)
+    return {
+        "conditional_mean": _mean(present),
+        "n_substitution_days": len(selected),
+        "n_complete": len(present),
+        "n_missing": len(selected) - len(present),
+        "note": "empty substitution groups are omitted; they are not an observed zero return",
+    }
+
+
+def aggregate_discovery_records(records: Sequence[Mapping[str, Any]], *, reps: int) -> dict[str, Any]:
+    grouped: dict[str, list[Mapping[str, Any]]] = {}
+    for row in records:
+        grouped.setdefault(f"{row['layer']}:{row['comparison']}:k{row['k']}", []).append(row)
+    summary = {}
+    for key, rows in grouped.items():
+        added_names: list[str] = []
+        removed_names: list[str] = []
+        added_days = removed_days = membership_days = order_only_days = 0
+        for row in rows:
+            added = list(row.get("added") or [])
+            removed = list(row.get("removed") or [])
+            if added:
+                added_days += 1
+                added_names.extend(str(item) for item in added)
+            if removed:
+                removed_days += 1
+                removed_names.extend(str(item) for item in removed)
+            if added or removed:
+                membership_days += 1
+            if row.get("order_only"):
+                order_only_days += 1
+        horizons = {}
+        for horizon in LABEL_HS:
+            close_vals = [row.get(f"h{horizon}_close_diff") for row in rows]
+            open_vals = [row.get(f"h{horizon}_open_diff") for row in rows]
+            yearly: dict[str, list[Any]] = {}
+            for row in rows:
+                yearly.setdefault(str(row["session_date"])[:4], []).append(row.get(f"h{horizon}_close_diff"))
+            added_rows = [row for row in rows if row.get("added")]
+            removed_rows = [row for row in rows if row.get("removed")]
+            horizons[str(horizon)] = {
+                "close": _side_summary(close_vals, block=horizon, reps=reps),
+                "open": _side_summary(open_vals, block=horizon, reps=reps),
+                "label_coverage_left_mean": _mean(_present([row.get(f"h{horizon}_close_coverage_left") for row in rows])),
+                "label_coverage_right_mean": _mean(_present([row.get(f"h{horizon}_close_coverage_right") for row in rows])),
+                "mae_left": {
+                    "mean": _mean(_present([row.get(f"h{horizon}_mae_left") for row in rows])),
+                    "percentiles": {
+                        "p05": _percentile(_present([row.get(f"h{horizon}_mae_left") for row in rows]), 0.05),
+                        "p50": _percentile(_present([row.get(f"h{horizon}_mae_left") for row in rows]), 0.50),
+                        "p95": _percentile(_present([row.get(f"h{horizon}_mae_left") for row in rows]), 0.95),
+                    },
+                },
+                "mfe_left": {
+                    "mean": _mean(_present([row.get(f"h{horizon}_mfe_left") for row in rows])),
+                    "percentiles": {
+                        "p05": _percentile(_present([row.get(f"h{horizon}_mfe_left") for row in rows]), 0.05),
+                        "p50": _percentile(_present([row.get(f"h{horizon}_mfe_left") for row in rows]), 0.50),
+                        "p95": _percentile(_present([row.get(f"h{horizon}_mfe_left") for row in rows]), 0.95),
+                    },
+                },
+                "yearly_close_paired_mean": {
+                    year: {
+                        "mean": _mean(_present(values)),
+                        "n_days": len(values),
+                        "n_valid": len(_present(values)),
+                    }
+                    for year, values in yearly.items()
+                },
+                "added_names_close": _group_return(added_rows, f"h{horizon}_added_close_full"),
+                "removed_names_close": _group_return(removed_rows, f"h{horizon}_removed_close_full"),
+            }
+        summary[key] = {
+            "n_days": len(rows),
+            "substitution": {
+                "membership_change_days": membership_days,
+                "added_days": added_days,
+                "removed_days": removed_days,
+                "order_only_days": order_only_days,
+                "added_name_slots": len(added_names),
+                "removed_name_slots": len(removed_names),
+                "unique_added": sorted(set(added_names)),
+                "unique_removed": sorted(set(removed_names)),
+            },
+            "horizons": horizons,
+        }
+    return summary
+
+
 def evaluate_frozen_checkpoints(research: Path, checkpoint_dir: Path, *, reps: int) -> dict[str, Any]:
-    """Score discovery/technical/qualified lists saved by freeze_layers. Separate from the old pack."""
+    """Score frozen three-layer lists. Does not write, and does not touch return_pack/."""
 
     from screener_gate_replay_v1 import load_restricted_panel
 
     panel, _coverage, _payload = load_restricted_panel(research, end=LAST_OPEN_SESSION)
     book = LabelBook(panel, exchange_calendar(panel))
     files = sorted(checkpoint_dir.glob("*.json"))
-    comparisons = (
-        ("technical_entry", G1_STOCK_REFERENCE, B0_CURRENT),
-        ("discovery", G2_EXTENSION_DISCOVERY, G1_STOCK_REFERENCE),
-        ("discovery", G3_RISK_DISCOVERY, G2_EXTENSION_DISCOVERY),
-    )
-    rows = []
-    series: dict[str, dict[int, list]] = {}
+    rows: list[dict[str, Any]] = []
+    invariant_failures = []
     for path in files:
         payload = _load_json(path)
-        session = date.fromisoformat(payload["identity"]["session_date"])
-        for layer, left, right in comparisons:
-            for k in (5, 10, 20):
-                left_ids = [item["security_id"] for item in payload["layers"][left][layer][:k]]
-                right_ids = [item["security_id"] for item in payload["layers"][right][layer][:k]]
-                key = f"{layer}:{left}-{right}:k{k}"
-                bucket = series.setdefault(key, {h: [] for h in LABEL_HS})
-                record: dict[str, Any] = {
-                    "session_date": session.isoformat(),
-                    "layer": layer,
-                    "comparison": f"{left} - {right}",
-                    "k": k,
-                    "added": sorted(set(left_ids) - set(right_ids)),
-                    "removed": sorted(set(right_ids) - set(left_ids)),
-                }
-                for h in LABEL_HS:
-                    a = book.basket(left_ids, session, h, use_open=False)
-                    b = book.basket(right_ids, session, h, use_open=False)
-                    ao = book.basket(left_ids, session, h, use_open=True)
-                    bo = book.basket(right_ids, session, h, use_open=True)
-                    close_diff = None if a["full_mean"] is None or b["full_mean"] is None else a["full_mean"] - b["full_mean"]
-                    open_diff = None if ao["full_mean"] is None or bo["full_mean"] is None else ao["full_mean"] - bo["full_mean"]
-                    bucket[h].append(close_diff)
-                    record[f"h{h}_close_diff"] = close_diff
-                    record[f"h{h}_open_diff"] = open_diff
-                    record[f"h{h}_close_coverage_left"] = a["coverage"]
-                    record[f"h{h}_mae_left"] = a["mae_mean"]
-                    record[f"h{h}_mfe_left"] = a["mfe_mean"]
-                rows.append(record)
-    summary = {
+        failures = entry_invariant_failures(payload)
+        if failures:
+            invariant_failures.append({"session_date": payload["identity"]["session_date"], "layers": failures})
+        rows.extend(records_for_checkpoint(payload, book))
+    summary = aggregate_discovery_records(rows, reps=reps)
+    bootstrap = {
         key: {
-            str(h): {
-                "H": paired_bootstrap(values, block=h, reps=reps, seed=BOOTSTRAP_SEED),
-                "2H": paired_bootstrap(values, block=2 * h, reps=reps, seed=BOOTSTRAP_SEED),
-            }
-            for h, values in horizons.items()
+            horizon: {"H": blob["close"]["H"], "2H": blob["close"]["2H"]}
+            for horizon, blob in group["horizons"].items()
         }
-        for key, horizons in series.items()
+        for key, group in summary.items()
     }
-    return {"rows": rows, "bootstrap": summary, "n_checkpoints": len(files)}
+    return {
+        "rows": rows,
+        "bootstrap": bootstrap,
+        "summary": summary,
+        "n_checkpoints": len(files),
+        "entry_invariant_failures": invariant_failures,
+    }
+
+
+def _old_top20(session_blob: Mapping[str, Any], variant: str) -> list[str]:
+    top = ((session_blob.get("variants") or {}).get(variant) or {}).get("top") or {}
+    return [str(item) for item in (top.get(20) or top.get("20") or [])]
+
+
+def compare_frozen_to_old_session(payload: Mapping[str, Any], old_session: Mapping[str, Any]) -> dict[str, Any]:
+    technical = []
+    discovery_counts = []
+    for variant in VARIANTS:
+        new_ids = _layer_ids(payload, variant, "technical_entry", 20)
+        old_ids = _old_top20(old_session, variant)
+        if new_ids != old_ids:
+            technical.append({"variant": variant, "new": new_ids, "old": old_ids})
+        old_blob = (old_session.get("variants") or {}).get(variant) or {}
+        old_n = old_blob.get("discovery_n")
+        new_n = len(payload["layers"][variant]["discovery"])
+        if old_n is not None and int(old_n) != new_n:
+            discovery_counts.append({"variant": variant, "old": int(old_n), "new": new_n})
+    return {"technical": technical, "discovery_count": discovery_counts}
+
+
+def write_discovery_evaluation(research: Path, *, reps: int) -> dict[str, Any]:
+    """Write an independent discovery pack next to checkpoints. Refuses to overwrite."""
+
+    from screener_gate_replay_v1 import load_restricted_panel
+
+    dest = research / "return_pack_discovery_v2"
+    checkpoints = dest / "checkpoints"
+    outputs = (
+        "manifest.json",
+        "summary.json",
+        "paired_daily.csv",
+        "gate_attribution.csv",
+        "examples.csv",
+        "validation.md",
+        "checkpoint_index.csv",
+    )
+    existing = [name for name in outputs if (dest / name).exists()]
+    if existing:
+        raise FileExistsError(dest / existing[0])
+    files = sorted(checkpoints.glob("*.json"))
+    if not files:
+        raise FileNotFoundError(checkpoints)
+    old_summary = _load_json(research / "return_pack" / "summary.json")
+    old_by_day = {item["session_date"]: item for item in old_summary["sessions"]}
+    panel, _coverage, _payload = load_restricted_panel(research, end=LAST_OPEN_SESSION)
+    book = LabelBook(panel, exchange_calendar(panel))
+    records: list[dict[str, Any]] = []
+    identities = []
+    invariant_failures = []
+    technical_examples = []
+    technical_mismatch_dates: list[str] = []
+    discovery_count_examples = []
+    technical_days = 0
+    discovery_count_days = 0
+    index_rows = []
+    length_sums = {variant: {layer: 0 for layer in LAYERS} for variant in VARIANTS}
+    qualified_nonzero = 0
+    first_sample = None
+    for path in files:
+        payload = _load_json(path)
+        session = str(payload["identity"]["session_date"])
+        identities.append(checkpoint_identity_core(payload))
+        failures = entry_invariant_failures(payload)
+        if failures:
+            invariant_failures.append({"session_date": session, "layers": failures})
+        records.extend(records_for_checkpoint(payload, book))
+        old = old_by_day.get(session)
+        if old is None:
+            technical_days += 1
+            if len(technical_examples) < 8:
+                technical_examples.append({"session_date": session, "missing_old_session": True})
+        else:
+            compared = compare_frozen_to_old_session(payload, old)
+            if compared["technical"]:
+                technical_days += 1
+                technical_mismatch_dates.append(session)
+                if len(technical_examples) < 8:
+                    technical_examples.append({"session_date": session, "variants": compared["technical"]})
+            if compared["discovery_count"]:
+                discovery_count_days += 1
+                if len(discovery_count_examples) < 8:
+                    discovery_count_examples.append({"session_date": session, "variants": compared["discovery_count"]})
+        counts = {}
+        for variant in VARIANTS:
+            counts[variant] = {layer: len(payload["layers"][variant][layer]) for layer in LAYERS}
+            for layer, length in counts[variant].items():
+                length_sums[variant][layer] += length
+            if counts[variant]["qualified_entry"]:
+                qualified_nonzero += 1
+        if first_sample is None:
+            first_sample = {
+                "session_date": session,
+                "discovery_top5": {
+                    variant: _layer_ids(payload, variant, "discovery", 5) for variant in VARIANTS
+                },
+                "technical_top5": {
+                    variant: _layer_ids(payload, variant, "technical_entry", 5) for variant in VARIANTS
+                },
+            }
+        index_rows.append(
+            {
+                "session_date": session,
+                "sha256": sha256_file(path),
+                "counts": counts,
+            }
+        )
+    cores = {json.dumps(item, sort_keys=True) for item in identities}
+    if len(cores) != 1:
+        raise RuntimeError("checkpoint identity hashes are not uniform")
+    identity = identities[0]
+    n = len(files)
+    sessions = [row["session_date"] for row in index_rows]
+    aggregated = aggregate_discovery_records(records, reps=reps)
+    old_manifest = _load_json(research / "return_pack" / "manifest.json")
+    old_pack = research / "return_pack"
+    name_check = {
+        "compared_sessions": n,
+        "technical_top20_mismatch_days": technical_days,
+        "technical_mismatch_dates": technical_mismatch_dates,
+        "technical_examples": technical_examples,
+        "discovery_count_diff_days": discovery_count_days,
+        "discovery_count_examples": discovery_count_examples,
+        "aligned_with_old_technical_top20": technical_days == 0,
+        "provenance_note": (
+            "new code reproduced the frozen #184 technical Top-20 on every checkpoint date; "
+            "discovery lists still belong to this run's code hashes"
+            if technical_days == 0
+            else "new guards changed technical Top-20 versus the #184 pack; "
+            "do not attach these discovery statistics to the old candidate hash"
+        ),
+    }
+    summary = {
+        "scope": "restricted_current_membership_exploratory",
+        "not_full_market_excess": True,
+        "scope_note": (
+            "Labels use the restricted current-membership panel and its exchange calendar. "
+            "This is not a full-market excess return."
+        ),
+        "entry_invariant": {
+            "technical_entry_and_qualified_entry_g2_g3_equal_g1": not invariant_failures,
+            "failures": invariant_failures,
+            "note": "entry-list equality is an invariant, not a return experiment",
+        },
+        "technical_top20_vs_old_pack": name_check,
+        "ranking_coverage": {
+            "n_checkpoints": n,
+            "mean_lengths": {
+                variant: {layer: length_sums[variant][layer] / n for layer in LAYERS} for variant in VARIANTS
+            },
+            "qualified_entry_nonzero_variant_days": qualified_nonzero,
+        },
+        "sample": first_sample,
+        "comparisons": aggregated,
+        "empty_basket_is_not_zero": True,
+        "pseudo_nav_drawdown_emitted": False,
+        "fixed_comparisons": [f"{layer}: {left} - {right}" for layer, left, right in FIXED_COMPARISONS],
+    }
+    manifest = {
+        "protocol": "us-eod-screener-gate-discovery-v2",
+        "production_anchor": identity.get("production_anchor"),
+        "profile": identity.get("profile"),
+        "horizon": identity.get("horizon"),
+        "scoring_code_hashes": {
+            "candidates_sha256": identity.get("candidates_sha256"),
+            "adapter_sha256": identity.get("adapter_sha256"),
+        },
+        "bars_sha256": identity.get("bars_sha256"),
+        "label_code": "screener_gate_statistics_v2.py",
+        "label_code_sha256": sha256_file(Path(__file__).resolve()),
+        "old_pack_scoring_code_hashes": old_manifest.get("code_hashes"),
+        "old_pack_sha256": {path.name: sha256_file(path) for path in sorted(old_pack.iterdir()) if path.is_file()},
+        "sessions": {"start": sessions[0], "end": sessions[-1], "n": n},
+        "complete_open_window": sessions[0] == "2022-01-03" and sessions[-1] == "2024-03-28" and n == 562,
+        "holdout_sealed_from": HOLDOUT_FROM.isoformat(),
+        "label_definitions": {
+            "close": "T_close_to_calendar_T_plus_H_close",
+            "open": "E_open_to_E_plus_H_open",
+            "E": "T_plus_1_exchange_session",
+        },
+        "bootstrap": {"seed": BOOTSTRAP_SEED, "reps": reps, "blocks": ["H", "2H"]},
+        "broad_slices_used_as_g1": False,
+        "patch_note": "pr184_review_fixes.patch was not attached; boundary guards were reconstructed from REVIEW(4)",
+    }
+    examples = [
+        row
+        for row in records
+        if row["k"] == 20 and (row["added"] or row["removed"] or row["order_only"]) and row["layer"] == "discovery"
+    ][:12]
+    if len(examples) < 12:
+        examples.extend(
+            row
+            for row in records
+            if row["k"] == 20 and (row["added"] or row["removed"]) and row["layer"] == "technical_entry"
+        )
+        examples = examples[:12]
+    validation = _discovery_validation_text(manifest, summary)
+    dest.mkdir(parents=True, exist_ok=True)
+    (dest / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    (dest / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+    _write_csv(
+        dest / "paired_daily.csv",
+        [{key: value for key, value in row.items() if key not in {"added", "removed"}} for row in records],
+    )
+    _write_csv(
+        dest / "gate_attribution.csv",
+        [
+            {key: row[key] for key in ("session_date", "layer", "comparison", "k", "added", "removed", "order_only")}
+            for row in records
+        ],
+    )
+    _write_csv(dest / "examples.csv", examples)
+    _write_csv(dest / "checkpoint_index.csv", index_rows)
+    (dest / "validation.md").write_text(validation, encoding="utf-8")
+    (research / "alignment_v2").mkdir(parents=True, exist_ok=True)
+    (research / "alignment_v2" / "full_technical_top20.json").write_text(
+        json.dumps(name_check, indent=2),
+        encoding="utf-8",
+    )
+    return {"pack": str(dest), "n": n, "technical_top20_mismatch_days": technical_days}
+
+
+def _discovery_validation_text(manifest: Mapping[str, Any], summary: Mapping[str, Any]) -> str:
+    name_check = summary.get("technical_top20_vs_old_pack") or {}
+    g2 = ((summary.get("comparisons") or {}).get(f"discovery:{G2_EXTENSION_DISCOVERY} - {G1_STOCK_REFERENCE}:k20") or {})
+    h20 = ((g2.get("horizons") or {}).get("20") or {}).get("close") or {}
+    return "\n".join(
+        [
+            "# Validation — discovery v2",
+            "",
+            "Checkpoints are a separate scoring run from return_pack/. Entry lists are an invariant.",
+            "Discovery comparisons are G2-G1 and G3-G2. Technical comparison is G1-B0.",
+            "",
+            f"- scope: `{summary.get('scope')}`",
+            f"- {summary.get('scope_note')}",
+            f"- production anchor: `{manifest.get('production_anchor')}`",
+            f"- bars sha256: `{manifest.get('bars_sha256')}`",
+            f"- this-run scoring hashes: `{json.dumps(manifest.get('scoring_code_hashes'), ensure_ascii=False)}`",
+            f"- old pack scoring hashes: `{json.dumps(manifest.get('old_pack_scoring_code_hashes'), ensure_ascii=False)}`",
+            f"- sessions: {manifest.get('sessions')}",
+            f"- complete open window: {manifest.get('complete_open_window')}",
+            f"- entry invariant holds: {(summary.get('entry_invariant') or {}).get('technical_entry_and_qualified_entry_g2_g3_equal_g1')}",
+            f"- technical Top-20 versus old pack: `{json.dumps({k: name_check.get(k) for k in ('technical_top20_mismatch_days', 'aligned_with_old_technical_top20', 'provenance_note')}, ensure_ascii=False)}`",
+            f"- discovery G2-G1 H20 close paired: `{json.dumps(h20, ensure_ascii=False)}`",
+            "- added and removed names are grouped on their own; an empty group is not zero",
+            "- no compounded overlapping-label drawdown",
+            "- holdout 2024-07-01+ not crossed",
+            "- suffix-classified broad slices are not a G1 reference",
+            f"- {manifest.get('patch_note')}",
+        ]
+    ) + "\n"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -594,6 +1012,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--reps", type=int, default=2000)
     parser.add_argument("--align-sessions", type=int, default=0)
     parser.add_argument("--discover", action="store_true")
+    parser.add_argument("--evaluate-discovery", action="store_true")
     parser.add_argument("--max-sessions", type=int, default=0)
     return parser
 
@@ -710,6 +1129,10 @@ def main() -> None:
             raise SystemExit(1)
     if args.discover:
         print(json.dumps(_discover(research, max_sessions=args.max_sessions), indent=2))
+        if not args.evaluate_discovery:
+            return
+    if args.evaluate_discovery:
+        print(json.dumps(write_discovery_evaluation(research, reps=args.reps), indent=2, default=str))
         return
     if args.align_sessions and not args.discover:
         return
