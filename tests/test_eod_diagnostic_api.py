@@ -4,9 +4,13 @@ import asyncio
 from datetime import datetime, timezone
 
 import pytest
-from fastapi import HTTPException
+from fastapi import Depends, FastAPI, HTTPException
+from fastapi.testclient import TestClient
 
+from app.access import OwnerAccessRuntime, require_public_read_or_owner_access, hash_owner_password
 from app.api import strength
+from app.main import _GatewayMiddleware
+from app.personal_config import AccessConfig
 from app.services.eod_limited.project import project_row, project_strength_payload
 from tests.http_response_support import anonymous_get_request, response_payload
 
@@ -114,3 +118,89 @@ def test_diagnostic_read_failures_do_not_become_empty_scored_results(monkeypatch
     with pytest.raises(HTTPException) as caught:
         asyncio.run(strength.security_diagnostics("TEST", anonymous_get_request("/api/strength/diagnostics/TEST"), "balanced", "mid"))
     assert caught.value.status_code == status
+
+
+def _password_diagnostic_client() -> TestClient:
+    """Use the real route, access dependency, and ASGI gateway together."""
+    runtime = OwnerAccessRuntime(
+        AccessConfig(mode="password"),
+        password_hash=hash_owner_password("diagnostic-test-owner-password"),
+    )
+    app = FastAPI()
+    app.state.access_runtime = runtime
+    public_dependencies = [Depends(require_public_read_or_owner_access)]
+    app.include_router(strength.router, dependencies=public_dependencies)
+    app.add_middleware(_GatewayMiddleware, access_runtime=runtime)
+    return TestClient(app, base_url="https://testserver")
+
+
+def test_anonymous_http_diagnostics_reads_only_published_snapshot(monkeypatch):
+    from app.services.eod_limited import diagnostic_store, store
+
+    calls = []
+    batch = {
+        "diagnostics": {"generation": "published"},
+        "published_at": 1_800_000_000.0,
+        "purpose": "live_eod_inference",
+        "served_session": "2099-01-02",
+    }
+    monkeypatch.setattr(store, "read_batch", lambda: calls.append("batch") or batch)
+
+    def read_security(received, ticker, profile, timeframe):
+        assert received is batch
+        calls.append((ticker, profile, timeframe))
+        if ticker == "bcpc":
+            return {"data_status": "ambiguous_symbol", "provider_tickers": ["BCPC", "BCpC"]}
+        return {"ticker": ticker, "paths": [{"status": "rejected", "score": 79.0}]}
+
+    monkeypatch.setattr(diagnostic_store, "read_security_diagnostics", read_security)
+    with _password_diagnostic_client() as client:
+        get = client.get("/api/strength/diagnostics/BCPC?profile=balanced&timeframe=mid")
+        preferred = client.get("/api/strength/diagnostics/BCpC?profile=balanced&timeframe=mid")
+        ambiguous = client.get("/api/strength/diagnostics/bcpc?profile=balanced&timeframe=mid")
+        longest = client.get("/api/strength/diagnostics/" + "A" * 32)
+        # The gateway permits HEAD reads; FastAPI's GET-only route responds 405.
+        head = client.head("/api/strength/diagnostics/BCPC")
+
+    assert get.status_code == 200
+    assert get.json()["ticker"] == "BCPC"
+    assert get.json()["paths"][0]["status"] == "rejected"
+    assert preferred.status_code == 200 and preferred.json()["ticker"] == "BCpC"
+    assert ambiguous.status_code == 409
+    assert ambiguous.json()["detail"]["code"] == "eod_diagnostics_symbol_ambiguous"
+    assert longest.status_code == 200
+    assert head.status_code == 405
+    assert calls == [
+        "batch", ("BCPC", "balanced", "mid"),
+        "batch", ("BCpC", "balanced", "mid"),
+        "batch", ("bcpc", "balanced", "mid"),
+        "batch", ("A" * 32, "balanced", "mid"),
+    ]
+
+
+def test_anonymous_http_diagnostics_without_snapshot_returns_503(monkeypatch):
+    from app.services.eod_limited import diagnostic_store, store
+
+    monkeypatch.setattr(store, "read_batch", lambda: None)
+    monkeypatch.setattr(diagnostic_store, "read_security_diagnostics", lambda *args: pytest.fail("snapshot read attempted"))
+    with _password_diagnostic_client() as client:
+        response = client.get("/api/strength/diagnostics/BCPC")
+    assert response.status_code == 503
+    assert response.json()["detail"]["code"] == "eod_diagnostics_unavailable"
+
+
+@pytest.mark.parametrize(("method", "path"), [
+    ("POST", "/api/strength/diagnostics/BCPC"),
+    ("PUT", "/api/strength/diagnostics/BCPC"),
+    ("GET", "/api/strength/diagnostics/BCPC/extra"),
+    ("GET", "/api/diagnostics"),
+    ("GET", "/api/strength/diagnostics/.BCPC"),
+    ("GET", "/api/strength/diagnostics/BCPC_"),
+    ("GET", "/api/strength/diagnostics/" + "A" * 33),
+    ("GET", "/api/strength/diagnostics/K"),
+])
+def test_anonymous_http_diagnostics_gateway_stays_narrow(method, path):
+    with _password_diagnostic_client() as client:
+        response = client.request(method, path)
+    assert response.status_code == 401
+    assert response.json()["error"] == "owner_login_required"
