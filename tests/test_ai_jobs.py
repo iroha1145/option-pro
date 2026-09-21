@@ -1361,13 +1361,38 @@ def test_worker_health_reports_official_responses_sdk_without_a_key(tmp_path):
     )
 
 
+def test_provider_input_bound_rejects_payloads_the_worker_cannot_submit():
+    runtime.ensure_provider_input_bound({"ticker": "AAA"})
+    with pytest.raises(ValueError, match="ai_input_too_large"):
+        runtime.ensure_provider_input_bound({"ticker": "AAA", "raw_context": "x" * 61_000})
+
+
+def test_create_job_rejects_provider_oversized_payload_before_enqueue(monkeypatch):
+    monkeypatch.setattr(ai, "_require_manual_analysis_enabled", lambda: None)
+    monkeypatch.setattr(
+        ai,
+        "get_settings",
+        lambda: SimpleNamespace(
+            openai_job_max_queued=10,
+            openai_model="gpt-5.6-terra",
+            openai_reasoning="max",
+            openai_execution_mode="background",
+        ),
+    )
+    with pytest.raises(ValueError, match="ai_job_payload_too_large"):
+        ai._create_job(
+            "signal_analysis",
+            {"ticker": "AAA", "raw_context": "x" * 61_000},
+        )
+
+
 def test_all_paid_job_prompt_versions_invalidate_legacy_english_cache():
     assert ai._PROMPT_VERSIONS == {
         "earnings_impact": "earnings-impact-zh-cn-v5",
         "option_alerts": "option-alerts-zh-cn-v4",
         "signal_analysis": "signal-analysis-zh-cn-v6",
         "news_impact": "news-impact-zh-cn-v6",
-        "market_focus": "market-focus-zh-cn-v5",
+        "market_focus": "market-focus-zh-cn-v6",
     }
 
 
@@ -3173,3 +3198,59 @@ def test_active_for_ticker_sees_only_running_jobs_of_the_same_type(tmp_path):
     connection.commit()
     connection.close()
     assert repository.active_for_ticker("signal_analysis", "AMD") is None
+
+
+def test_create_job_reuses_active_signal_analysis_for_the_same_ticker(tmp_path):
+    repository = AIJobRepository(tmp_path / "ai-jobs-single-flight.db")
+    version, digest = runtime.schema_identity("signal_analysis")
+
+    def enqueue(ticker: str, as_of: str):
+        return repository.create_job(
+            job_type="signal_analysis",
+            payload={
+                "ticker": ticker,
+                "signals": {},
+                "scores": {},
+                "as_of": as_of,
+            },
+            model="gpt-5.6-terra",
+            reasoning="max",
+            execution_mode="background",
+            prompt_version="signal-analysis-zh-cn-v6",
+            schema_version=version,
+            schema_sha256=digest,
+            max_queued=200,
+            submission_source="manual",
+            priority=80,
+        )
+
+    first, created_first = enqueue("AMD", "2026-08-02T00:00:00Z")
+    second, created_second = enqueue("AMD", "2026-08-02T00:01:00Z")
+    forced, created_forced = repository.create_job(
+        job_type="signal_analysis",
+        payload={
+            "ticker": "AMD",
+            "signals": {},
+            "scores": {},
+            "as_of": "2026-08-02T00:02:00Z",
+        },
+        model="gpt-5.6-terra",
+        reasoning="max",
+        execution_mode="background",
+        prompt_version="signal-analysis-zh-cn-v6",
+        schema_version=version,
+        schema_sha256=digest,
+        max_queued=200,
+        submission_source="manual",
+        priority=80,
+        force_retry=True,
+    )
+    other, created_other = enqueue("NVDA", "2026-08-02T00:00:00Z")
+
+    assert created_first is True
+    assert created_second is False
+    assert second["job_id"] == first["job_id"]
+    assert created_forced is True
+    assert forced["job_id"] != first["job_id"]
+    assert created_other is True
+    assert other["job_id"] != first["job_id"]

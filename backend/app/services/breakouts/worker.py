@@ -7,6 +7,7 @@ import asyncio
 import hashlib
 import inspect
 import json
+import logging
 import os
 import random
 import signal
@@ -34,6 +35,9 @@ from app.services.breakouts.repository import (
     SchemaVersionError,
 )
 from pydantic import ValidationError
+
+
+logger = logging.getLogger(__name__)
 
 
 def _utc_now() -> datetime:
@@ -906,7 +910,11 @@ class BreakoutWorker:
             try:
                 self.repository.persist_t1_evaluations(publication.get("events") or [])
             except Exception:
-                pass
+                logger.warning(
+                    "Could not persist T1 evaluations after scan %s",
+                    scan_id,
+                    exc_info=True,
+                )
             self._last_completed_scan_id = scan_id
             self._last_completed_at = self.clock.now()
             self._wait_status = "idle"

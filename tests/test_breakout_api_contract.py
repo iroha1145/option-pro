@@ -326,6 +326,43 @@ def test_read_endpoints_register_only_the_actual_returned_stocks(tmp_path, monke
     assert registered == []
     current = client.get("/api/breakouts/current").json()
     assert set(registered) == {row["ticker"] for row in current["events"]}
+    registered.clear()
+    ticker_page = client.get("/api/breakouts/tickers/AAPL").json()
+    assert [row["ticker"] for row in ticker_page["events"]] == ["AAPL"]
+    assert registered == ["AAPL"]
+
+
+def test_ticker_history_overlays_latest_t1_evaluation(tmp_path, monkeypatch) -> None:
+    path = tmp_path / "ticker-t1.db"
+    repository = BreakoutRepository(path)
+    repository.initialize()
+    event = _event("event-t1-aapl", "AAPL", NOW, 91.0)
+    event["features"]["t1_priority"] = {
+        "status": "pending",
+        "reason": "session_incomplete",
+    }
+    _publish(repository, NOW, [event])
+    repository.persist_t1_evaluations(
+        [
+            {
+                "event_id": "event-t1-aapl",
+                "t1_priority": {
+                    "status": "met",
+                    "reason": "close_confirmed",
+                    "version": "t1-daily-priority-v1",
+                },
+            }
+        ]
+    )
+    monkeypatch.setattr(breakout_api, "get_breakout_settings", lambda: _settings(path))
+    monkeypatch.setattr(breakout_api, "_now", lambda: NOW + timedelta(hours=8))
+
+    payload = _client().get("/api/breakouts/tickers/AAPL").json()
+    current = _client().get("/api/breakouts/current").json()
+
+    assert payload["events"][0]["t1_status"] == "met"
+    assert payload["events"][0]["t1_priority"]["status"] == "met"
+    assert current["events"][0]["t1_status"] == "met"
 
 
 def test_read_endpoints_are_active_with_fresh_worker_and_snapshot(tmp_path, monkeypatch) -> None:
