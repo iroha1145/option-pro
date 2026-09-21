@@ -292,7 +292,7 @@ export default function Screener() {
         };
         onProgress(action);
         if (action.status !== 'completed') {
-          action = await runtimeApi.waitForWorkerAction(requestId, undefined, {
+          action = await runtimeApi.waitForWorkerAction(requestId, 1_920_000, {
             shouldContinue: isCurrent, onProgress,
           });
           requireCurrent();
@@ -821,8 +821,9 @@ export default function Screener() {
   const truncatedScope = useMemo(() => {
     if (!scanMeta || rows === null) return null;
     const returned = scanMeta.rows.length;
-    if (scanMeta.screenedCount <= returned) return null;
-    return { returned, screened: scanMeta.screenedCount };
+    const candidates = scanMeta.observationN ?? scanMeta.screenedCount;
+    if (candidates <= returned) return null;
+    return { returned, screened: candidates };
   }, [scanMeta, rows]);
   const hitsByTier = useMemo(() => {
     const acc: Record<Tier, number> = { S: 0, A: 0, B: 0, C: 0, D: 0 };
@@ -979,8 +980,15 @@ export default function Screener() {
                   </span>
                 )}
                 {scanMeta && (
-                  <span className="font-mono text-micro text-ink-400 tnum">
-                    {__t('股票池')} {scanMeta.universeCount} {__t('/ 条件通过')} {scanMeta.screenedCount}
+                  <span className="font-mono text-micro text-ink-400 tnum" data-testid="screener-market-coverage">
+                    {scanMeta.universe === 'all_market' ? __t('全市场股票与基金') : __t('股票池')} {scanMeta.universeCount}
+                    {' · '}{__t('当日日线完整')} {scanMeta.screenedCount}
+                    {scanMeta.coverage?.missingSessionCount != null && scanMeta.coverage.missingSessionCount > 0 && (
+                      <>{' · '}{__t('缺少当日日线')} {scanMeta.coverage.missingSessionCount}</>
+                    )}
+                    {scanMeta.coverage?.shortHistoryCount != null && scanMeta.coverage.shortHistoryCount > 0 && (
+                      <>{' · '}{__t('历史不足 252 日')} {scanMeta.coverage.shortHistoryCount}</>
+                    )}
                   </span>
                 )}
                 {/* 客户端条件只作用在后端返回的强度前 N 名上（审计 P1-05）：

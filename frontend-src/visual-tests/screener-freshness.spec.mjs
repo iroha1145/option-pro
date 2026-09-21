@@ -18,7 +18,7 @@ async function openProductionScreener(page) {
 
 async function applySemiconductorView(page) {
   await page.locator('[data-testid="screener-advanced-filters"] summary').click();
-  await page.getByRole('button', { name: '半导体' }).click();
+  await page.getByTestId('screener-advanced-filters').getByRole('button', { name: '半导体', exact: true }).click();
   await page.locator('button.scan-trigger').click();
   await expect(page.locator('button.scan-trigger')).toBeEnabled();
 }
@@ -59,6 +59,7 @@ async function expectPublishedSemiconductors(request) {
   const action = stats.actions.find((item) => item.sector_id === 'semiconductors');
   expect(stats.scan_count).toBe(1);
   expect(action.result.published).toBe(true);
+  expect(action.universe).toBe('all_market');
   expect(action.result.parameters_hash).toBe(action.parameters_hash);
   expect(action.result.score_data_through).toContain(stats.score_data_through);
   return stats;
@@ -75,8 +76,8 @@ test('A07 a later EOD software read wins over a late semiconductor batch refresh
   await refreshAppliedView(page);
   await expect(page.getByRole('button', { name: '刷新强度分' })).toBeDisabled();
   await expect.poll(async () => (await readScreenerStats(request)).post_count).toBe(1);
-  await page.getByRole('button', { name: '半导体' }).click();
-  await page.getByRole('button', { name: '软件' }).click();
+  await page.getByTestId('screener-advanced-filters').getByRole('button', { name: '半导体', exact: true }).click();
+  await page.getByTestId('screener-advanced-filters').getByRole('button', { name: '软件', exact: true }).click();
   await expect(page.locator('button.scan-trigger')).toBeEnabled();
   await page.locator('button.scan-trigger').click();
   await expect(page.getByText('MSFT').filter({ visible: true }).first()).toBeVisible({ timeout: 90_000 });
@@ -188,6 +189,10 @@ test('F02 desktop 1440 owner publishes and reads the semiconductor EOD batch', a
   await expect(page.getByText(/评分依据/).filter({ visible: true }).first()).toBeVisible();
   await expect(page.getByText(/使用已有评分|命中/).filter({ visible: true }).first()).toBeVisible();
   const stats = await expectPublishedSemiconductors(request);
+  // The isolated API simulates three securities; this checks the real page's
+  // coverage mapping and label, not actual production market completeness.
+  await expect(page.getByTestId('screener-market-coverage')).toContainText('全市场股票与基金 3');
+  await expect(page.getByTestId('screener-market-coverage')).toContainText('当日日线完整 3');
   await expect(page.getByText(/评分依据/).filter({ visible: true }).first()).toContainText(stats.score_data_through);
   await expect(page.locator('[data-quote-symbol="NVDA"]').filter({ visible: true }).first()).toContainText('220');
   await page.screenshot({ path: `${evidence}/desktop-1440-after.png`, animations: 'disabled' });

@@ -10,10 +10,12 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from app.data_paths import get_data_paths
+from app.services.snapshot_read_cache import FingerprintedFileCache
 
 from . import PURPOSE_LIVE
 
 BATCH_NAME = "batch.json"
+_batch_documents = FingerprintedFileCache("eod_market", max_paths=2, max_bytes=256 * 1024 * 1024)
 
 
 def snapshot_dir(root: Path | None = None) -> Path:
@@ -27,7 +29,7 @@ def snapshot_path(root: Path | None = None) -> Path:
 
 def _atomic_write(path: Path, payload: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    encoded = json.dumps(payload, ensure_ascii=False, default=str, indent=2)
+    encoded = json.dumps(payload, ensure_ascii=False, default=str, separators=(",", ":"), allow_nan=False)
     fd, tmp_name = tempfile.mkstemp(prefix=path.name, suffix=".tmp", dir=str(path.parent))
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
@@ -43,16 +45,12 @@ def _atomic_write(path: Path, payload: Mapping[str, Any]) -> None:
 
 
 def read_batch(root: Path | None = None) -> dict[str, Any] | None:
+    """Return an immutable-by-contract batch, cached by its atomic file identity."""
     path = snapshot_path(root)
-    if not path.is_file():
-        return None
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-    if not isinstance(payload, dict):
-        return None
-    return payload
+    def decode(raw: bytes) -> dict[str, Any] | None:
+        payload = json.loads(raw)
+        return payload if isinstance(payload, dict) else None
+    return _batch_documents.read(path, decode)
 
 
 def publish_batch(
@@ -119,4 +117,6 @@ def variant_from_batch(
     out["synthetic"] = bool(batch.get("synthetic") or batch.get("purpose") == "synthetic" or out.get("synthetic"))
     out["available_variants"] = sorted(variants)
     out["batch_integrity"] = batch.get("integrity")
+    out["universe"] = batch.get("universe") or out.get("universe")
+    out["coverage"] = batch.get("coverage") or out.get("coverage")
     return out

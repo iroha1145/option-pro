@@ -32,7 +32,7 @@ const PENDING_STORAGE_KEY = 'optix:screener-pending-strength';
 
 export function strengthScanPath(params: ScanParams): string {
   const qs = toQuery({
-    universe: params.universe,
+    universe: params.universe ?? 'all_market',
     timeframe: params.timeframe,
     profile: params.profile,
     top: params.top,
@@ -115,6 +115,12 @@ export function expireStrengthSnapshot(snapshot: StrengthScanEnvelope, nowMs = D
   return { ...snapshot, stale: true, sourceStatus: 'stale', staleReason: 'worker_snapshot_expired' };
 }
 
+function executionUniverse(value: unknown): unknown {
+  // Legacy queued actions retain their original parameters/hash. Both names
+  // now execute the same all-market scan; preserve every other comparison.
+  return value === 'themes' ? 'all_market' : value;
+}
+
 export function strengthParametersMatch(
   actual: unknown,
   expected: StrengthRefreshParameters,
@@ -122,7 +128,7 @@ export function strengthParametersMatch(
   if (!actual || typeof actual !== 'object') return false;
   const value = actual as Record<string, unknown>;
   return (
-    value.universe === expected.universe
+    executionUniverse(value.universe) === executionUniverse(expected.universe)
     && value.timeframe === expected.timeframe
     && value.profile === expected.profile
     && value.top === expected.top

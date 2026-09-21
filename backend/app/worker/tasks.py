@@ -3354,7 +3354,9 @@ def build_default_tasks(owner_id: str, *, settings: Any) -> tuple[TaskSpec, ...]
             StrengthRefreshTask(),
             # 默认快照每天刷新；参数化 API 动作不会重置默认快照的绝对截止时间。
             interval_seconds=86_400.0,
-            timeout_seconds=1200.0,
+            # The first all-market run also fills 370 daily captures. Warm
+            # runs reuse that cache; leave room for the cold capture and scoring.
+            timeout_seconds=1800.0,
         ),
         TaskSpec(
             "breakout_refresh",

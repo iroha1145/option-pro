@@ -522,16 +522,25 @@ def _theme_setup_from_gates(
     sector_gates: dict[str, Any],
     close: np.ndarray,
     atr_t1: float | None,
+    geometry_cache: dict | None = None,
 ) -> dict[str, Any]:
     """Theme-gate B/setup/breakout fields. Shared residual and pivots stay elsewhere."""
 
-    b_score, b_status, setup = resolve_frozen_setup(
-        series,
-        t,
-        min_sessions=int(sector_gates.get("base_min_sessions", 20)),
-        max_sessions=int(sector_gates.get("base_max_sessions", 80)),
-        min_touches=int(sector_gates.get("base_min_distinct_touches", 2)),
+    geometry_key = (
+        id(series), t,
+        int(sector_gates.get("base_min_sessions", 20)),
+        int(sector_gates.get("base_max_sessions", 80)),
+        int(sector_gates.get("base_min_distinct_touches", 2)),
     )
+    frozen = None if geometry_cache is None else geometry_cache.get(geometry_key)
+    if frozen is None:
+        frozen = resolve_frozen_setup(
+            series, t, min_sessions=geometry_key[2],
+            max_sessions=geometry_key[3], min_touches=geometry_key[4],
+        )
+        if geometry_cache is not None:
+            geometry_cache[geometry_key] = frozen
+    b_score, b_status, setup = frozen
     breakout_track = _breakout_track(series, t, setup, sector_gates)
     if setup is not None and breakout_track is not None:
         setup = dict(setup)
@@ -558,12 +567,14 @@ def apply_sector_gates(
     raw: RawComponents,
     series: SecuritySeries,
     sector_gates: dict[str, Any],
+    *,
+    geometry_cache: dict | None = None,
 ) -> RawComponents:
     """Re-derive theme-gate fields on a shared extract. Does not recompute residual."""
 
     t = len(series.dates) - 1
     atr_t1 = atr_sma_at(series.high, series.low, series.close, t - 1, ATR_PERIOD) if t >= 1 else None
-    gated = _theme_setup_from_gates(series, t, sector_gates, series.close, atr_t1)
+    gated = _theme_setup_from_gates(series, t, sector_gates, series.close, atr_t1, geometry_cache)
     return replace(raw, **gated)
 
 

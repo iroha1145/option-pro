@@ -123,6 +123,7 @@ def test_context_incomplete_market_does_not_publish(tmp_path: Path, monkeypatch:
 
 def test_eod_context_hook_defaults_to_real_capture_only(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from app.services.eod_limited.bars import _frame_to_bars
+    from app.services.eod_limited import market_data
 
     calls = []
     monkeypatch.setattr(context, "refresh_context_snapshot", lambda **kwargs: calls.append(kwargs) or {"status": "RAN"})
@@ -131,10 +132,14 @@ def test_eod_context_hook_defaults_to_real_capture_only(tmp_path: Path, monkeypa
     worker.run_eod_limited_job(**params, panel=panel, root=tmp_path / "injected")
     assert calls == []
     frame = pd.DataFrame({"Open": [100], "High": [101], "Low": [99], "Close": [100], "Volume": [1_000_000]}, index=pd.to_datetime([NOW.date()]))
-    monkeypatch.setattr(worker, "fetch_current_universe_bars", lambda **kwargs: {"NVDA": _frame_to_bars("NVDA", frame)})
-    outcome = worker.run_eod_limited_job(**params, tickers=["NVDA"], root=tmp_path / "real")
+    loaded_panel, coverage = worker.bars_to_panel({"NVDA": _frame_to_bars("NVDA", frame)}, {"NVDA": ["semiconductors"]}, end=NOW.date())
+    monkeypatch.setattr(market_data, "load_all_market_panel", lambda **kwargs: (loaded_panel, coverage, {
+        "status": "complete", "eligible_count": 1, "complete_bar_count": 1,
+        "volume_session_scope": market_data.VOLUME_SCOPE,
+    }))
+    outcome = worker.run_eod_limited_job(session=NOW.date(), root=tmp_path / "real")
     assert outcome["status"] == "RAN" and len(calls) == 1
-    worker.run_eod_limited_job(**params, tickers=["NVDA"], root=tmp_path / "isolated", refresh_context=False)
+    worker.run_eod_limited_job(session=NOW.date(), root=tmp_path / "isolated", refresh_context=False)
     assert len(calls) == 1
 
 

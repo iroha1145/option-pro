@@ -61,7 +61,7 @@ class StrengthRefreshParameters(BaseModel):
         allow_inf_nan=False,
     )
 
-    universe: Literal["themes"]
+    universe: Literal["themes", "all_market"]
     timeframe: Literal["short", "mid", "long", "all"]
     profile: Literal["conservative", "balanced", "aggressive"]
     top: int = Field(ge=5, le=120)

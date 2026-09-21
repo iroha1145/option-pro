@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any, Mapping
@@ -256,8 +257,13 @@ def compute_snapshot(
     precomputed_raws: Mapping[str, RawComponents] | None = None,
     reapply_theme_gates: bool = True,
     already_session_clipped: bool = False,
+    snapshot_cache: dict | None = None,
 ) -> dict[str, Any]:
-    """Deterministic snapshot. Adding bars after ``as_of`` must not change T."""
+    """Deterministic snapshot. Adding bars after ``as_of`` must not change T.
+
+    ``snapshot_cache`` belongs to one job with an immutable panel and registry.
+    Only theme/horizon-independent reference statistics are shared in that job.
+    """
 
     require_aware(as_of)
     session = last_complete_eod_session(
@@ -336,6 +342,12 @@ def compute_snapshot(
     raws: dict[str, RawComponents] = {}
     candidate_ids: set[str] = set()
     reference_ids: set[str] = set()
+    membership_key = ("membership", session, sector_id)
+    membership_cache = None if snapshot_cache is None else snapshot_cache.get(membership_key)
+    if membership_cache is None:
+        membership_cache = {}
+        if snapshot_cache is not None:
+            snapshot_cache[membership_key] = membership_cache
     for sid, series in t_complete.items():
         if precomputed_raws is not None and sid in precomputed_raws:
             raws[sid] = precomputed_raws[sid]
@@ -350,13 +362,14 @@ def compute_snapshot(
                 spy_residual_allowed=spy_residual_allowed,
                 matched_market=matched,
             )
-        ok, reason = is_theme_candidate(
-            series,
-            sector_id=sector_id,
-            session=session,
-            target_track=target_track,
-            extra_members=extra_members,
-        )
+        membership = membership_cache.get(sid)
+        if membership is None:
+            membership = is_theme_candidate(
+                series, sector_id=sector_id, session=session,
+                target_track=target_track, extra_members=extra_members,
+            )
+            membership_cache[sid] = membership
+        ok, reason = membership
         if ok:
             candidate_ids.add(sid)
             if reapply_theme_gates and precomputed_raws is not None and sid in precomputed_raws:
@@ -372,30 +385,34 @@ def compute_snapshot(
             if has_complete_session_bar(series, session)
         }
     xref = {sid: raw for sid, raw in raws.items() if sid in reference_ids}
-    cs_key = (
-        session,
-        tuple(
-            sorted(
-                (
-                    sid,
-                    raw.slope50,
-                    raw.m63,
-                    raw.m126_skip21,
-                    raw.m252_skip21,
-                    raw.residual.raw,
-                    raw.imbalance20,
-                    raw.sigma20,
-                    raw.gap_tail252,
-                    raw.max_drawdown63,
-                    raw.industry_id,
-                    raw.parent_industry_id,
-                    raw.asset_track,
+    job_key = (session, target_track, universe_version)
+    cached_cs = None if snapshot_cache is None else snapshot_cache.get(job_key)
+    cs_key = None
+    if cached_cs is None and snapshot_cache is None:
+        cs_key = (
+            session,
+            tuple(
+                sorted(
+                    (
+                        sid,
+                        raw.slope50,
+                        raw.m63,
+                        raw.m126_skip21,
+                        raw.m252_skip21,
+                        raw.residual.raw,
+                        raw.imbalance20,
+                        raw.sigma20,
+                        raw.gap_tail252,
+                        raw.max_drawdown63,
+                        raw.industry_id,
+                        raw.parent_industry_id,
+                        raw.asset_track,
+                    )
+                    for sid, raw in xref.items()
                 )
-                for sid, raw in xref.items()
-            )
-        ),
-    )
-    cached_cs = _CS_MEMO.get(cs_key)
+            ),
+        )
+        cached_cs = _CS_MEMO.get(cs_key)
     if cached_cs is None:
         tracks = {sid: raw.asset_track for sid, raw in xref.items()}
         industries = {sid: raw.industry_id for sid, raw in xref.items()}
@@ -414,19 +431,17 @@ def compute_snapshot(
         industry_ret: dict[str, float | None] = {}
         breadth: dict[str, float | None] = {}
         spy_m63 = raws["SPY"].m63 if "SPY" in raws else None
+        industry_members: dict[str, list[str]] = defaultdict(list)
+        parent_members: dict[str, list[str]] = defaultdict(list)
         for sid, raw in xref.items():
-            peers = [
-                other
-                for other, item in xref.items()
-                if other != sid and item.industry_id and item.industry_id == raw.industry_id
-            ]
+            if raw.industry_id:
+                industry_members[raw.industry_id].append(sid)
+            if raw.parent_industry_id:
+                parent_members[raw.parent_industry_id].append(sid)
+        for sid, raw in xref.items():
+            peers = [other for other in industry_members.get(raw.industry_id, ()) if other != sid]
             if len(peers) < 5:
-                parent_peers = [
-                    other
-                    for other, item in xref.items()
-                    if other != sid and item.parent_industry_id and item.parent_industry_id == raw.parent_industry_id
-                ]
-                peers = parent_peers
+                peers = [other for other in parent_members.get(raw.parent_industry_id, ()) if other != sid]
             if len(peers) < 5:
                 industry_ret[sid] = None
                 breadth[sid] = None
@@ -440,9 +455,12 @@ def compute_snapshot(
             breadth[sid] = None if len(flags) < 5 else sum(1 for flag in flags if flag) / len(flags)
         cached_cs["q_g"] = q_star(industry_ret, industry=parents, parent=parents, tracks=tracks)
         cached_cs["breadth"] = breadth
-        if len(_CS_MEMO) >= 8:
-            _CS_MEMO.clear()
-        _CS_MEMO[cs_key] = cached_cs
+        if snapshot_cache is None:
+            if len(_CS_MEMO) >= 8:
+                _CS_MEMO.clear()
+            _CS_MEMO[cs_key] = cached_cs
+        else:
+            snapshot_cache[job_key] = cached_cs
     q_slope = cached_cs["q_slope"]
     q_m63 = cached_cs["q_m63"]
     q_m126 = cached_cs["q_m126"]
@@ -455,6 +473,17 @@ def compute_snapshot(
     q_g = cached_cs["q_g"]
     breadth = cached_cs["breadth"]
 
+    # Preserve the original None-industry bucket, all tracks, and upper median.
+    atr_key = ("atr_medians", session, universe_version)
+    atr_medians = None if snapshot_cache is None else snapshot_cache.get(atr_key)
+    if atr_medians is None:
+        atr_groups: dict[str | None, list[float]] = defaultdict(list)
+        for item in raws.values():
+            if item.atr_pct is not None:
+                atr_groups[item.industry_id].append(item.atr_pct)
+        atr_medians = {key: sorted(values)[len(values) // 2] for key, values in atr_groups.items()}
+        if snapshot_cache is not None:
+            snapshot_cache[atr_key] = atr_medians
     rows: list[dict[str, Any]] = []
     required = ("T", "M", "S", "R")
     if algorithm == "B_confirmed_base_breakout":
@@ -485,12 +514,7 @@ def compute_snapshot(
         )
         scored = score_features(factors, weights, coverage_min=profile_cfg["coverage_min"], required=required)
         setup = setup_for(algorithm, raw, profile_cfg, sector["gates"], horizon)
-        atr_peers = [
-            item.atr_pct
-            for item in raws.values()
-            if item.industry_id == raw.industry_id and item.atr_pct is not None
-        ]
-        median_atr = sorted(atr_peers)[len(atr_peers) // 2] if atr_peers else (raw.atr_pct or 0.0)
+        median_atr = atr_medians.get(raw.industry_id, raw.atr_pct or 0.0)
         common = ()
         if raw.raw_close is not None and raw.adv20 is not None and raw.atr_pct is not None and raw.extension_atr is not None and raw.structure_score is not None:
             common = common_rejections(

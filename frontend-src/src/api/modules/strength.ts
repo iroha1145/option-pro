@@ -43,6 +43,15 @@ export interface StrengthScanEnvelope {
   rows: ScreenerRow[];
   universeCount: number;
   screenedCount: number;
+  universe?: string | null;
+  coverage?: {
+    directoryCount: number | null;
+    excludedCount: number | null;
+    missingSessionCount: number | null;
+    shortHistoryCount: number | null;
+    scoredCount: number | null;
+    status: string | null;
+  };
   /** 后端统计的整池分档；旧快照没有这个字段时为 null。 */
   tierDistribution: TierDistribution | null;
   stale: boolean;
@@ -227,7 +236,7 @@ function mapScanRow(r: Record<string, unknown>): ScreenerRow | null {
 /** live 仅下发契约白名单参数（sector → sector_id），其余 UI 参数客户端套用 */
 function liveScan(params: ScanParams, force = false): Promise<StrengthScanEnvelope> {
   const qs = toQuery({
-    universe: params.universe,
+    universe: params.universe ?? 'all_market',
     timeframe: params.timeframe,
     profile: params.profile,
     top: params.top,
@@ -254,6 +263,15 @@ function liveScan(params: ScanParams, force = false): Promise<StrengthScanEnvelo
       rows: applyParams(rows, params),
       universeCount: pickN(env, 'universe_count', 'universeCount') ?? rows.length,
       screenedCount: pickN(env, 'screened_count', 'screenedCount') ?? rows.length,
+      universe: pickS(env, 'universe'),
+      coverage: {
+        directoryCount: pickN(asRec(env.coverage), 'directory_count'),
+        excludedCount: pickN(asRec(env.coverage), 'excluded_count'),
+        missingSessionCount: pickN(asRec(env.coverage), 'missing_session_count'),
+        shortHistoryCount: pickN(asRec(env.coverage), 'short_history_count'),
+        scoredCount: pickN(asRec(env.coverage), 'scored_count'),
+        status: pickS(asRec(env.coverage), 'status'),
+      },
       tierDistribution: mapTierDistribution(env.tier_distribution ?? env.tierDistribution),
       stale: pickB(env, '_stale', 'stale') ?? false,
       sourceStatus: pickS(env, 'source_status'),

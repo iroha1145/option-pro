@@ -90,7 +90,7 @@ test('default screener request matches the daily live snapshot parameters', () =
     band: 'all',
     sort: 'score',
     order: 'desc',
-    universe: 'themes',
+    universe: 'all_market',
     timeframe: 'mid',
     profile: 'balanced',
     top: 20,
@@ -102,7 +102,7 @@ test('default screener request matches the daily live snapshot parameters', () =
     list_kind: 'observation',
   });
   assert.deepEqual(request.refreshParameters, {
-    universe: 'themes',
+    universe: 'all_market',
     timeframe: 'mid',
     profile: 'balanced',
     top: 20,

@@ -61,6 +61,10 @@ def _compact_variant(scored: Mapping[str, Any]) -> dict[str, Any]:
         "observation_consensus_n",
         "historical_example",
         "synthetic",
+        "scored_security_count",
+        "security_status",
+        "feature_failure_count",
+        "feature_failure_ids",
     )
     compact = {key: scored.get(key) for key in keep}
     # The public projection reads only eligible rows here. Watch rows already
@@ -96,14 +100,31 @@ def run_eod_limited_job(
     started = time.perf_counter()
     live_input = purpose == PURPOSE_LIVE and not synthetic_input
     context_requested = panel is None and live_input if refresh_context is None else refresh_context
-    registry = load_registry()
+    market_input = live_input and panel is None
+    if market_input and tickers is not None:
+        raise ValueError("live_all_market_job_does_not_allow_ticker_subsets")
+    if market_input and (themes is not None or algorithms is not None):
+        raise ValueError("live_all_market_job_requires_all_scoring_contexts")
+    if market_input and volume_verified:
+        raise ValueError("all_market_volume_qualification_is_unverified")
+    if market_input or any("all_market_stocks" in getattr(series, "theme_ids", ()) for series in (panel or {}).values()):
+        from .market_registry import load_market_registry
+        registry = load_market_registry()
+    else:
+        registry = load_registry()
     target = session
     attempted_session = session
     coverage: list[dict[str, Any]] = []
+    manifest: dict[str, Any] = {}
     if panel is None:
         if purpose == PURPOSE_SYNTHETIC:
             panel = build_synthetic_panel(end=target)
             target = target or max(series.dates[-1] for series in panel.values())
+        elif market_input:
+            from .market_data import load_all_market_panel
+            target = target or resolve_inference_session(now)
+            attempted_session = target
+            panel, coverage, manifest = load_all_market_panel(end=target, root=root, tickers=tickers)
         else:
             target = target or resolve_inference_session(now)
             attempted_session = target
@@ -138,6 +159,12 @@ def run_eod_limited_job(
         failure_reason = "older_session_than_published"
     elif not any(has_complete_session_bar(series, target) for series in panel.values()):
         failure_reason = "no_complete_session_bars"
+    elif market_input and (
+        manifest.get("status") != "complete"
+        or int(manifest.get("eligible_count") or 0) <= 0
+        or int(manifest.get("complete_bar_count") or 0) < 0.90 * int(manifest["eligible_count"])
+    ):
+        failure_reason = "all_market_coverage_incomplete"
     if failure_reason:
         return {
             "status": "DATA_UNAVAILABLE",
@@ -147,6 +174,7 @@ def run_eod_limited_job(
             "compute_version": COMPUTE_VERSION,
             "available_variants": sorted(previous.get("variants") or {}),
             "elapsed_s": round(time.perf_counter() - started, 3),
+            "coverage": manifest,
             "publish": {
                 "ok": False,
                 "reason": failure_reason,
@@ -157,10 +185,24 @@ def run_eod_limited_job(
         }
     panel = prepare_limited_panel(panel)
     wanted = [(profile, horizon)]
-    if all_variants:
+    if all_variants or market_input:
         wanted = [(item_profile, item_horizon) for item_horizon in HORIZONS for item_profile in PROFILES]
-    variants = dict(previous.get("variants") or {}) if previous.get("served_session") == target.isoformat() else {}
+    same_inputs = (
+        previous.get("served_session") == target.isoformat()
+        and previous.get("compute_version") == COMPUTE_VERSION
+        and not market_input
+    )
+    variants = dict(previous.get("variants") or {}) if same_inputs else {}
     horizon_inputs = {}
+    snapshot_cache = {}
+    if market_input:
+        from .inference import precompute_all_horizon_inputs
+        horizon_inputs = precompute_all_horizon_inputs(
+            panel, target, registry=registry,
+            horizons=list(dict.fromkeys(item_horizon for _, item_horizon in wanted)),
+            themes=themes,
+            geometry_workers=4,
+        )
     for item_profile, item_horizon in wanted:
         if item_horizon not in horizon_inputs:
             raws, clipped = precompute_session_raws(panel, target, registry=registry, horizon=item_horizon)
@@ -180,10 +222,17 @@ def run_eod_limited_job(
             precomputed_theme_raws=theme_raws,
             themes=themes,
             algorithms=algorithms,
+            **({"compact": True, "snapshot_cache": snapshot_cache} if market_input else {}),
         )
         if synthetic_input:
             scored["synthetic"] = True
         variants[variant_key(item_profile, item_horizon)] = _compact_variant(scored)
+    if market_input:
+        manifest["scored_count"] = max(int(item.get("scored_security_count") or 0) for item in variants.values())
+        if any(int(item.get("scored_security_count") or 0) != len(panel) for item in variants.values()):
+            raise RuntimeError("all_market_scoring_coverage_incomplete")
+        for item in variants.values():
+            item["volume_scope"] = manifest.get("volume_session_scope")
     batch = {
         "version": 1,
         "purpose": purpose,
@@ -195,6 +244,9 @@ def run_eod_limited_job(
         "available_variants": sorted(variants),
         "coverage_empty": [row["ticker"] for row in coverage if row.get("status") != "ok"],
         "coverage_ok": sum(1 for row in coverage if row.get("status") == "ok"),
+        "universe": "all_market" if market_input else "injected_panel",
+        "coverage": manifest,
+        "coverage_records": coverage,
         "variants": variants,
     }
     published = publish_batch(batch, root=root)
@@ -218,6 +270,7 @@ def run_eod_limited_job(
         "elapsed_s": round(time.perf_counter() - started, 3),
         "publish": published,
         "context": context_outcome,
+        "coverage": manifest,
     }
 
 
