@@ -1173,25 +1173,21 @@ def fetch_broad_slices(dest: Path, days: Sequence[str]) -> dict[str, Any]:
         except Exception as exc:
             slices.append({"session_date": day, "status": "skipped", "reason": str(exc)})
             continue
-        stock_ranges = []
-        etf_ranges = []
-        for symbol, bar in rows.items():
-            o, h, l, c = bar.get("o"), bar.get("h"), bar.get("l"), bar.get("c")
+        ranges = []
+        for _symbol, bar in rows.items():
+            _o, h, l, c = bar.get("o"), bar.get("h"), bar.get("l"), bar.get("c")
             if c is None or c <= 0 or h is None or l is None:
                 continue
-            rng = 100.0 * (h - l) / c
-            # Same-day range proxy only; not ATR14 and not G1.
-            if symbol.endswith("X") and len(symbol) <= 4:
-                etf_ranges.append(rng)
-            else:
-                stock_ranges.append(rng)
+            ranges.append(100.0 * (h - l) / c)
         payload = {
             "session_date": day,
             "provider": "massive_grouped_daily_unadjusted",
             "n_symbols": len(rows),
-            "same_day_range_pct_stock_n": len(stock_ranges),
-            "same_day_range_pct_stock_upper_median": None if len(stock_ranges) < 30 else sorted(stock_ranges)[len(stock_ranges) // 2],
-            "same_day_range_pct_note": "intraday high-low / close; NOT ATR%, NOT G1 reference, NOT full-market median",
+            "classification": "unclassified",
+            "classification_reason": "no per-symbol type directory; ticker suffix is not a security type",
+            "same_day_range_pct_unclassified_n": len(ranges),
+            "same_day_range_pct_unclassified_upper_median": None if len(ranges) < 30 else sorted(ranges)[len(ranges) // 2],
+            "same_day_range_pct_note": "intraday high-low / close; NOT ATR14, NOT G1 reference, NOT a stock-vs-ETF split",
         }
         path = out_dir / f"grouped_{day}.json"
         # Do not store raw prints in the repo; compact counts only.
@@ -1317,6 +1313,8 @@ def score_ics(result: Mapping[str, Any], panel: Mapping[str, Any], horizon_h: in
 
 def cmd_replay(args: argparse.Namespace) -> None:
     dest = research_dir(args.research_dir)
+    if (dest / "return_pack" / "manifest.json").is_file() and not args.allow_overwrite:
+        raise SystemExit(f"refusing to overwrite {dest / 'return_pack'}; pass --allow-overwrite to replace #184 evidence")
     started = time.perf_counter()
     caches = discover_old_caches()
     panel, coverage, yahoo_payload = load_restricted_panel(dest, end=LAST_OPEN_SESSION)
@@ -1335,6 +1333,25 @@ def cmd_replay(args: argparse.Namespace) -> None:
     extras: dict[str, Any] = {}
 
     def consume(result: Mapping[str, Any], *, align: bool = False) -> None:
+        if args.layer_dir:
+            from screener_gate_statistics_v2 import freeze_layers, write_checkpoint
+
+            write_checkpoint(
+                Path(args.layer_dir),
+                freeze_layers(
+                    result,
+                    ranked_stocks,
+                    identity={
+                        "production_anchor": "d16b25e3812dce9adf16e2ca993b4f2c38d7b1ef",
+                        "candidates_sha256": sha256_file(Path(__file__).resolve().parent / "screener_gate_candidates_v1.py"),
+                        "adapter_sha256": sha256_file(Path(__file__).resolve().parent / "screener_gate_adapter_v1.py"),
+                        "bars_sha256": sha256_file(dest / "restricted_yahoo_bars.json"),
+                        "profile": args.profile,
+                        "horizon": args.horizon,
+                        "session_date": result["session_date"],
+                    },
+                ),
+            )
         if align:
             part = alignment_report([result])
             alignment["compared_stock_rows"] += part["compared_stock_rows"]
@@ -1485,6 +1502,8 @@ def cmd_replay(args: argparse.Namespace) -> None:
 def cmd_finalize(args: argparse.Namespace) -> None:
     dest = research_dir(args.research_dir)
     pack = dest / "return_pack"
+    if (pack / "manifest.json").is_file() and not args.allow_overwrite:
+        raise SystemExit(f"refusing to overwrite {pack}; #184 evidence stays put")
     started = time.perf_counter()
     caches = discover_old_caches()
     panel, coverage, yahoo_payload = load_restricted_panel(dest, end=LAST_OPEN_SESSION)
@@ -1497,7 +1516,17 @@ def cmd_finalize(args: argparse.Namespace) -> None:
     summary["compact"] = diagnostics
     summary["bootstrap_h20_close"] = paired["bootstrap_h20_close"]
     summary["yearly_h20_close_mean"] = paired["yearly_h20_close_mean"]
-    manifest.setdefault("code_hashes", {})["screener_gate_replay_v1.py"] = sha256_file(Path(__file__).resolve())
+    hashes = manifest.setdefault("code_hashes", {})
+    scoring_replay_hash = hashes.get("screener_gate_replay_v1.py")
+    manifest["provenance"] = {
+        "scoring_code_hashes": {
+            "screener_gate_candidates_v1.py": hashes.get("screener_gate_candidates_v1.py"),
+            "screener_gate_adapter_v1.py": hashes.get("screener_gate_adapter_v1.py"),
+            "screener_gate_replay_v1.py": scoring_replay_hash,
+        },
+        "summary_tool_hash": sha256_file(Path(__file__).resolve()),
+        "note": "summary_tool_hash is the finalize script, not the hash that scored the frozen lists",
+    }
     manifest.setdefault("universe", {})["tracks"] = panel_track_counts(panel)
     manifest["data"] = manifest.get("data") or {}
     manifest["data"]["coverage"] = coverage
@@ -1602,11 +1631,14 @@ def build_parser() -> argparse.ArgumentParser:
     replay.add_argument("--other-variants", action="store_true")
     replay.add_argument("--extra-sessions", type=int, default=3)
     replay.add_argument("--broad-slices", default="")
+    replay.add_argument("--allow-overwrite", action="store_true")
+    replay.add_argument("--layer-dir", default="")
     replay.set_defaults(func=cmd_replay)
     finalize = sub.add_parser("finalize")
     finalize.add_argument("--research-dir")
     finalize.add_argument("--refresh-examples", action="store_true")
     finalize.add_argument("--test-results")
+    finalize.add_argument("--allow-overwrite", action="store_true")
     finalize.set_defaults(func=cmd_finalize)
     return parser
 

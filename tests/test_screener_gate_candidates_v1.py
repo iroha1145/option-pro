@@ -236,7 +236,7 @@ def test_multiplier_preserved():
 
 def test_g1_can_add_candidates():
     ref = build_reference([member(i, atr_pct=3.0) for i in range(30)])
-    src = row(rejection_reasons=["HIGH_ATR"], gate_results={"common": ("HIGH_ATR",)})
+    src = row(rejection_reasons=["HIGH_ATR"], gate_results={"common": ("HIGH_ATR",), "setup": ()})
     g1 = decide(G1_STOCK_REFERENCE, src=src, ref=ref, old=1.0, atr_pct=4.0)
     b0 = decide(B0_CURRENT, src=src, ref=ref, old=1.0, atr_pct=4.0)
     assert b0.high_atr is True
@@ -246,7 +246,7 @@ def test_g1_can_add_candidates():
 
 def test_g1_can_remove_candidates():
     ref = build_reference([member(i, atr_pct=1.0) for i in range(30)])
-    src = row(rejection_reasons=[], status="eligible", gate_results={"common": ()})
+    src = row(rejection_reasons=[], status="eligible", gate_results={"common": (), "setup": ()})
     g1 = decide(G1_STOCK_REFERENCE, src=src, ref=ref, old=6.0, atr_pct=4.0)
     b0 = decide(B0_CURRENT, src=src, ref=ref, old=6.0, atr_pct=4.0)
     assert b0.high_atr is False
@@ -272,7 +272,11 @@ def test_too_far_from_base_preserved():
 
 
 def test_low_event_rvol_preserved():
-    src = row(rejection_reasons=["LOW_EVENT_RVOL"], gate_results={"setup": ("LOW_EVENT_RVOL",)})
+    src = row(
+        rejection_reasons=["LOW_EVENT_RVOL"],
+        status="rejected",
+        gate_results={"common": (), "setup": ("LOW_EVENT_RVOL",)},
+    )
     ref = build_reference([member(i, atr_pct=3.0) for i in range(30)])
     g1 = decide(G1_STOCK_REFERENCE, src=src, ref=ref, old=1.0, atr_pct=4.0)
     assert "LOW_EVENT_RVOL" in g1.research_reasons
@@ -291,10 +295,27 @@ def test_g1_does_not_fill_with_etf_or_self_atr():
 
 
 def test_b0_reproduces_industry_median_high_atr():
-    src = row(rejection_reasons=[])
+    """B0 keeps the upstream HIGH_ATR decision. Recompute is diagnostic only."""
+
+    from screener_gate_candidates_v1 import b0_recompute_diagnostic
+
+    src = row(
+        rejection_reasons=["HIGH_ATR"],
+        status="rejected",
+        gate_results={"common": ("HIGH_ATR",), "setup": ()},
+    )
     b0 = decide(B0_CURRENT, src=src, old=1.5, atr_pct=4.0)
     assert b0.high_atr is True
-    assert high_atr_hit(4.0, median_atr_pct=1.5, absolute_atr_cap=CAP, reference_multiplier=MULT)
+    diagnostic = b0_recompute_diagnostic(
+        src,
+        facts(atr_pct=4.0),
+        old_reference_median=1.5,
+        absolute_atr_cap=CAP,
+        reference_multiplier=MULT,
+    )
+    assert diagnostic["agrees"] is True
+    assert diagnostic["recomputed_high_atr"] is True
+    assert b0.high_atr is diagnostic["upstream_high_atr"]
 
 
 def test_frozen_constants():
@@ -308,7 +329,7 @@ def test_frozen_constants():
 
 
 def test_g2_discovery_passes_extended():
-    src = row(rejection_reasons=["EXTENDED"], gate_results={"common": ("EXTENDED",)})
+    src = row(rejection_reasons=["EXTENDED"], gate_results={"common": ("EXTENDED",), "setup": ()})
     ref = build_reference([member(i, atr_pct=3.0) for i in range(30)])
     g2 = decide(G2_EXTENSION_DISCOVERY, src=src, ref=ref, atr_pct=4.0)
     assert g2.discovery_passed is True
@@ -316,7 +337,7 @@ def test_g2_discovery_passes_extended():
 
 
 def test_g2_technical_entry_rejects_extended():
-    src = row(rejection_reasons=["EXTENDED"], gate_results={"common": ("EXTENDED",)})
+    src = row(rejection_reasons=["EXTENDED"], gate_results={"common": ("EXTENDED",), "setup": ()})
     ref = build_reference([member(i, atr_pct=3.0) for i in range(30)])
     g2 = decide(G2_EXTENSION_DISCOVERY, src=src, ref=ref, atr_pct=4.0)
     assert g2.technical_entry_passed is False
@@ -324,7 +345,7 @@ def test_g2_technical_entry_rejects_extended():
 
 
 def test_g3_discovery_passes_high_atr():
-    src = row(rejection_reasons=["HIGH_ATR"], gate_results={"common": ("HIGH_ATR",)})
+    src = row(rejection_reasons=["HIGH_ATR"], gate_results={"common": ("HIGH_ATR",), "setup": ()})
     ref = build_reference([member(i, atr_pct=1.0) for i in range(30)])
     g3 = decide(G3_RISK_DISCOVERY, src=src, ref=ref, atr_pct=4.0)
     assert g3.high_atr is True
@@ -340,18 +361,18 @@ def test_g3_technical_entry_rejects_high_atr():
 
 
 def test_g1_g2_g3_technical_entry_identical():
-    src = row(rejection_reasons=["HIGH_ATR", "EXTENDED"], gate_results={"common": ("HIGH_ATR", "EXTENDED")})
+    src = row(rejection_reasons=["HIGH_ATR", "EXTENDED"], gate_results={"common": ("HIGH_ATR", "EXTENDED"), "setup": ()})
     ref = build_reference([member(i, atr_pct=1.0) for i in range(30)])
     decisions = [decide(variant, src=src, ref=ref, atr_pct=4.0) for variant in (G1_STOCK_REFERENCE, G2_EXTENSION_DISCOVERY, G3_RISK_DISCOVERY)]
     assert {item.technical_entry_passed for item in decisions} == {False}
-    src2 = row(rejection_reasons=[], gate_results={"common": ()})
+    src2 = row(rejection_reasons=[], status="eligible", gate_results={"common": (), "setup": ()})
     ref2 = build_reference([member(i, atr_pct=3.0) for i in range(30)])
     ok = [decide(variant, src=src2, ref=ref2, atr_pct=4.0) for variant in (G1_STOCK_REFERENCE, G2_EXTENSION_DISCOVERY, G3_RISK_DISCOVERY)]
     assert {item.technical_entry_passed for item in ok} == {True}
 
 
 def test_g1_g2_g3_qualified_entry_identical():
-    src = row(rejection_reasons=["DOLLAR_LIQUIDITY_UNVERIFIED"], status="watch", gate_results={"common": ()})
+    src = row(rejection_reasons=["DOLLAR_LIQUIDITY_UNVERIFIED"], status="watch", gate_results={"common": (), "setup": ()})
     ref = build_reference([member(i, atr_pct=3.0) for i in range(30)])
     decisions = [decide(variant, src=src, ref=ref, atr_pct=4.0) for variant in (G1_STOCK_REFERENCE, G2_EXTENSION_DISCOVERY, G3_RISK_DISCOVERY)]
     assert {item.qualified_entry_passed for item in decisions} == {False}
@@ -366,14 +387,14 @@ def test_g2_discovery_still_rejects_high_atr():
 
 
 def test_g1_discovery_rejects_extended():
-    src = row(rejection_reasons=["EXTENDED"], gate_results={"common": ("EXTENDED",)})
+    src = row(rejection_reasons=["EXTENDED"], gate_results={"common": ("EXTENDED",), "setup": ()})
     ref = build_reference([member(i, atr_pct=3.0) for i in range(30)])
     g1 = decide(G1_STOCK_REFERENCE, src=src, ref=ref, atr_pct=4.0)
     assert g1.discovery_passed is False
 
 
 def test_g3_extended_and_high_atr_are_hints():
-    src = row(rejection_reasons=["HIGH_ATR", "EXTENDED"], gate_results={"common": ("HIGH_ATR", "EXTENDED")})
+    src = row(rejection_reasons=["HIGH_ATR", "EXTENDED"], gate_results={"common": ("HIGH_ATR", "EXTENDED"), "setup": ()})
     ref = build_reference([member(i, atr_pct=1.0) for i in range(30)])
     g3 = decide(G3_RISK_DISCOVERY, src=src, ref=ref, atr_pct=4.0)
     assert g3.discovery_passed is True
@@ -390,7 +411,7 @@ def test_risk_hints_do_not_erase_other_rejects():
 
 
 def test_dollar_liquidity_unverified_not_promoted():
-    src = row(rejection_reasons=["DOLLAR_LIQUIDITY_UNVERIFIED"], status="watch", gate_results={"common": ()})
+    src = row(rejection_reasons=["DOLLAR_LIQUIDITY_UNVERIFIED"], status="watch", gate_results={"common": (), "setup": ()})
     g1 = decide(G1_STOCK_REFERENCE, src=src, atr_pct=4.0)
     assert DOLLAR_LIQUIDITY_UNVERIFIED in g1.research_reasons
     assert g1.qualified_entry_passed is False
@@ -401,7 +422,7 @@ def test_volume_session_unverified_not_promoted():
         algorithm_id="B_confirmed_base_breakout",
         rejection_reasons=["VOLUME_SESSION_UNVERIFIED"],
         status="watch",
-        gate_results={"common": ()},
+        gate_results={"common": (), "setup": ()},
     )
     g1 = decide(G1_STOCK_REFERENCE, src=src, atr_pct=4.0)
     assert VOLUME_SESSION_UNVERIFIED in g1.research_reasons
@@ -413,7 +434,7 @@ def test_unverified_allows_technical_not_qualified():
         rejection_reasons=["DOLLAR_LIQUIDITY_UNVERIFIED", "VOLUME_SESSION_UNVERIFIED"],
         algorithm_id="C_trend_pullback",
         status="watch",
-        gate_results={"common": ()},
+        gate_results={"common": (), "setup": ()},
     )
     ref = build_reference([member(i, atr_pct=3.0) for i in range(30)])
     g1 = decide(G1_STOCK_REFERENCE, src=src, ref=ref, atr_pct=4.0)
@@ -430,7 +451,7 @@ def test_structural_rejects_not_erased():
 
 
 def test_halted_does_not_pass():
-    src = row(rejection_reasons=[], gate_results={"common": ()})
+    src = row(rejection_reasons=[], status="eligible", gate_results={"common": (), "setup": ()})
     g1 = decide(G1_STOCK_REFERENCE, src=src, atr_pct=4.0, halted=True, currently_tradable=False)
     assert "HALTED_SESSION" in g1.research_reasons
     assert g1.discovery_passed is False
@@ -453,7 +474,13 @@ def test_research_fields_only():
 
 
 def test_etf_row_does_not_use_stock_reference():
-    src = row(security_id="SPY", stock_or_etf_track="etf", rejection_reasons=[], gate_results={"common": ()})
+    src = row(
+        security_id="SPY",
+        stock_or_etf_track="etf",
+        status="eligible",
+        rejection_reasons=[],
+        gate_results={"common": (), "setup": ()},
+    )
     ref = build_reference([member(i, atr_pct=1.0) for i in range(30)])
     etf_facts = facts(security_id="SPY", asset_track="etf", atr_pct=4.0)
     g1 = evaluate(
@@ -542,7 +569,7 @@ def test_stock_rank_ignores_consensus_z():
 
 
 def test_insufficient_reference_evaluate_does_not_relax():
-    src = row(rejection_reasons=[], gate_results={"common": ()})
+    src = row(rejection_reasons=[], status="eligible", gate_results={"common": (), "setup": ()})
     g1 = evaluate(
         variant=G1_STOCK_REFERENCE,
         row=src,

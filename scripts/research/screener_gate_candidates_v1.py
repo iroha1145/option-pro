@@ -11,6 +11,7 @@ convention ``sorted(values)[n // 2]``.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -160,13 +161,26 @@ def high_atr_hit(
     return float(atr_pct) > cap
 
 
-def _finite_positive(value: Any) -> float | None:
+def _finite_number(value: Any) -> float | None:
+    """Finite real number. Rejects bool, NaN, and +/-Inf."""
+
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
     number = float(value)
-    if number != number or number <= 0:
+    if not math.isfinite(number):
         return None
     return number
+
+
+def _finite_positive(value: Any) -> float | None:
+    number = _finite_number(value)
+    if number is None or number <= 0:
+        return None
+    return number
+
+
+def _finite_score(value: Any) -> float | None:
+    return _finite_number(value)
 
 
 def reference_eligible(item: ReferenceInput) -> bool:
@@ -252,26 +266,60 @@ def _unverified_reasons(
     return tuple(out)
 
 
-def _production_extended(row: Mapping[str, Any]) -> bool:
-    reasons = _as_reason_tuple(row.get("rejection_reasons"))
-    common = ()
+def _parsed_gates(row: Mapping[str, Any]) -> tuple[tuple[str, ...], tuple[str, ...]] | None:
+    """Require the upstream common/setup pair. A partial map is not a license to soften gates."""
+
     gates = row.get("gate_results")
-    if isinstance(gates, Mapping):
-        common = _as_reason_tuple(gates.get("common"))
-    return EXTENDED in reasons or EXTENDED in common
+    if not isinstance(gates, Mapping) or "common" not in gates or "setup" not in gates:
+        return None
+    return _as_reason_tuple(gates.get("common")), _as_reason_tuple(gates.get("setup"))
+
+
+def _upstream_flag(row: Mapping[str, Any], reason: str) -> bool:
+    reasons = _as_reason_tuple(row.get("rejection_reasons"))
+    parsed = _parsed_gates(row)
+    common = parsed[0] if parsed else ()
+    return reason in reasons or reason in common
+
+
+def _production_extended(row: Mapping[str, Any]) -> bool:
+    return _upstream_flag(row, EXTENDED)
 
 
 def _production_high_atr(row: Mapping[str, Any]) -> bool:
-    reasons = _as_reason_tuple(row.get("rejection_reasons"))
-    common = ()
-    gates = row.get("gate_results")
-    if isinstance(gates, Mapping):
-        common = _as_reason_tuple(gates.get("common"))
-    return HIGH_ATR in reasons or HIGH_ATR in common
+    return _upstream_flag(row, HIGH_ATR)
 
 
-def _base_reasons(row: Mapping[str, Any]) -> list[str]:
-    return [reason for reason in _as_reason_tuple(row.get("rejection_reasons")) if reason != HIGH_ATR]
+def _required_row_text(row: Mapping[str, Any], key: str) -> str:
+    if key not in row or row.get(key) in (None, ""):
+        raise ValueError(f"scored row missing {key}")
+    return str(row[key])
+
+
+def b0_recompute_diagnostic(
+    row: Mapping[str, Any],
+    facts: Facts,
+    *,
+    old_reference_median: float | None,
+    absolute_atr_cap: float,
+    reference_multiplier: float,
+) -> dict[str, Any]:
+    """Compare upstream HIGH_ATR with an old-median recompute. Never a B0 override."""
+
+    upstream = _production_high_atr(row)
+    if facts.atr_pct is None or old_reference_median is None or not (old_reference_median > 0):
+        return {"upstream_high_atr": upstream, "recomputed_high_atr": None, "agrees": None}
+    recomputed = high_atr_hit(
+        facts.atr_pct,
+        median_atr_pct=old_reference_median,
+        absolute_atr_cap=absolute_atr_cap,
+        reference_multiplier=reference_multiplier,
+    )
+    return {
+        "upstream_high_atr": upstream,
+        "recomputed_high_atr": recomputed,
+        "agrees": bool(upstream) == bool(recomputed),
+    }
 
 
 def _hard_blocks(reasons: Iterable[str], *, hints: frozenset[str]) -> tuple[str, ...]:
@@ -312,15 +360,23 @@ def evaluate(
 
     if variant not in VARIANTS:
         raise ValueError(f"unknown variant {variant}")
-    if facts.security_id != str(row.get("security_id") or facts.security_id):
+    row_security = _required_row_text(row, "security_id")
+    row_session = _required_row_text(row, "session_date")
+    row_track = _required_row_text(row, "stock_or_etf_track")
+    if facts.security_id != row_security:
         raise ValueError("Facts.security_id must match the scored row")
-    if facts.session_date != str(row.get("session_date") or facts.session_date):
+    if facts.session_date != row_session:
         raise ValueError("Facts.session_date must match the scored row")
-    if facts.asset_track != str(row.get("stock_or_etf_track") or facts.asset_track):
+    if facts.asset_track != row_track:
         raise ValueError("Facts.asset_track must match the scored row")
+    if reference is not None and reference.session_date != facts.session_date:
+        raise ValueError("reference session_date must match the scored row")
 
     etf = facts.asset_track == "etf"
-    research_reasons = _base_reasons(row)
+    parsed = _parsed_gates(row)
+    can_replace_shared = parsed is not None and not etf and variant != B0_CURRENT
+    common = parsed[0] if parsed else ()
+    research_reasons = list(_as_reason_tuple(row.get("rejection_reasons")))
     extended = _production_extended(row)
     if extended and EXTENDED not in research_reasons:
         research_reasons.append(EXTENDED)
@@ -330,23 +386,17 @@ def evaluate(
     reference_limited = False
     high_atr = _production_high_atr(row)
     actual_cap = None
+    if old_reference_median is not None and old_reference_median > 0:
+        actual_cap = min(float(absolute_atr_cap), float(reference_multiplier) * float(old_reference_median))
 
-    if etf or variant == B0_CURRENT:
-        median = old_reference_median
-        if facts.atr_pct is not None and median is not None:
-            high_atr = high_atr_hit(
-                facts.atr_pct,
-                median_atr_pct=median,
-                absolute_atr_cap=absolute_atr_cap,
-                reference_multiplier=reference_multiplier,
-            )
-            actual_cap = min(float(absolute_atr_cap), float(reference_multiplier) * float(median))
-        elif high_atr and median is not None:
-            high_atr = True
-    else:
+    if can_replace_shared:
+        replaced_common_high = HIGH_ATR in common
+        if replaced_common_high:
+            research_reasons = [reason for reason in research_reasons if reason != HIGH_ATR]
         if reference is None:
             reference_limited = True
             research_reasons.append(REFERENCE_UNIVERSE_INSUFFICIENT)
+            high_atr = _production_high_atr(row)
         elif facts.atr_pct is None:
             high_atr = _production_high_atr(row)
         else:
@@ -357,11 +407,14 @@ def evaluate(
                 reference_multiplier=reference_multiplier,
             )
             actual_cap = reference.actual_cap(absolute_atr_cap, reference_multiplier)
-
-    if high_atr and HIGH_ATR not in research_reasons:
+        if HIGH_ATR in research_reasons:
+            high_atr = True
+        if high_atr and HIGH_ATR not in research_reasons:
+            research_reasons.append(HIGH_ATR)
+        if not high_atr and replaced_common_high:
+            research_reasons = [reason for reason in research_reasons if reason != HIGH_ATR]
+    elif high_atr and HIGH_ATR not in research_reasons:
         research_reasons.append(HIGH_ATR)
-    if not high_atr:
-        research_reasons = [reason for reason in research_reasons if reason != HIGH_ATR]
 
     for extra in _facts_block_reasons(facts):
         if extra not in research_reasons:
@@ -375,15 +428,27 @@ def evaluate(
             research_reasons.append(extra)
 
     research_reasons = list(dict.fromkeys(research_reasons))
-    hints = DISCOVERY_HINT_ONLY[variant]
-    risk_hints = tuple(reason for reason in (HIGH_ATR, EXTENDED) if reason in research_reasons and reason in hints)
-    discovery_blocks = _hard_blocks(research_reasons, hints=hints)
+    hints = set(DISCOVERY_HINT_ONLY[variant])
+    if HIGH_ATR not in common:
+        hints.discard(HIGH_ATR)
+    if EXTENDED not in common:
+        hints.discard(EXTENDED)
+    hint_set = frozenset(hints)
+    risk_hints = tuple(reason for reason in (HIGH_ATR, EXTENDED) if reason in research_reasons and reason in hint_set)
+    discovery_blocks = _hard_blocks(research_reasons, hints=hint_set)
     entry_blocks = _hard_blocks(research_reasons, hints=frozenset())
     discovery_passed = not discovery_blocks and not reference_limited
     technical_entry_passed = not entry_blocks and not reference_limited
     qualified_entry_passed = technical_entry_passed and not any(
         reason in UNVERIFIED_REASONS for reason in research_reasons
     )
+    status = row.get("status")
+    upstream_reasons = _as_reason_tuple(row.get("rejection_reasons"))
+    status_ok = status == "eligible" or (status in {"watch", "rejected"} and bool(upstream_reasons))
+    if _finite_score(row.get("score")) is None or not status_ok:
+        discovery_passed = False
+        technical_entry_passed = False
+        qualified_entry_passed = False
     return Decision(
         variant=variant,
         discovery_passed=discovery_passed,
@@ -441,11 +506,10 @@ def stock_rank(
             continue
         sid = str(row.get("security_id") or "")
         score = row.get(score_key)
-        if not sid or score is None or score_key == "consensus_z":
+        if not sid or score_key == "consensus_z":
             continue
-        try:
-            number = float(score)
-        except (TypeError, ValueError):
+        number = _finite_score(score)
+        if number is None:
             continue
         current = dict(row)
         previous = best.get(sid)
