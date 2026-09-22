@@ -2531,6 +2531,10 @@ class StrengthRefreshTask:
             scheduled_strength_scan_parameters,
             strength_scan_parameters_hash,
         )
+        from app.services.strength.variant_demand import (
+            complete_strength_variant_demand,
+            list_pending_strength_variant_demands,
+        )
 
         now = float(self._clock())
         due = (
@@ -2567,16 +2571,16 @@ class StrengthRefreshTask:
             # have changed the recent-file ordering since the scheduled round.
             extras = list(self._pending_variant_parameters.values())[:4]
             self._variant_retry_at = None
+        demand_read_error: dict[str, Any] | None = None
         try:
-            from app.services.strength.variant_demand import (
-                complete_strength_variant_demand,
-                list_pending_strength_variant_demands,
-            )
-
             pending_demands = list_pending_strength_variant_demands()
-        except Exception:
-            complete_strength_variant_demand = None  # type: ignore[assignment]
+        except Exception as exc:
             pending_demands = []
+            demand_read_error = {
+                "parameters_hash": None,
+                "error_code": "strength_variant_demand_read_failed",
+                "reason": type(exc).__name__,
+            }
         if pending_demands:
             merged = list(extras)
             seen_hashes: set[str] = set()
@@ -2618,24 +2622,22 @@ class StrengthRefreshTask:
                 self._pending_variant_parameters[digest] = dict(parameters)
             try:
                 variant = await self._run(parameters)
-                if complete_strength_variant_demand is not None:
-                    complete_strength_variant_demand(
-                        parameters,
-                        status=(
-                            "completed"
-                            if variant.status == "idle" and not variant.error_code
-                            else "failed"
-                        ),
-                        error_code=variant.error_code,
-                    )
+                complete_strength_variant_demand(
+                    parameters,
+                    status=(
+                        "completed"
+                        if variant.status == "idle" and not variant.error_code
+                        else "failed"
+                    ),
+                    error_code=variant.error_code,
+                )
             except Exception as exc:
                 failed_count += 1
-                if complete_strength_variant_demand is not None:
-                    complete_strength_variant_demand(
-                        parameters,
-                        status="failed",
-                        error_code="strength_variant_exception",
-                    )
+                complete_strength_variant_demand(
+                    parameters,
+                    status="failed",
+                    error_code="strength_variant_exception",
+                )
                 variant_errors.append(
                     {
                         "parameters_hash": digest,
@@ -2683,6 +2685,8 @@ class StrengthRefreshTask:
                     self._pending_variant_errors[digest] = variant_errors[-1]
         unresolved = list(self._pending_variant_errors.values())
         unresolved.extend(error for error in variant_errors if error["parameters_hash"] is None)
+        if demand_read_error is not None:
+            unresolved.append(demand_read_error)
         remaining = self._next_default_delay()
         if (
             self._pending_variant_parameters
@@ -2702,18 +2706,29 @@ class StrengthRefreshTask:
         details["variant_refresh_errors"] = unresolved
         details["variant_refresh_pending"] = len(self._pending_variant_parameters)
         if result.status != "idle" or result.error_code:
+            next_delay = result.next_delay_seconds
+            if demand_read_error is not None:
+                next_delay = min(next_delay, 30.0) if next_delay is not None else 30.0
             return TaskResult(
                 status=result.status,
                 details=details,
-                next_delay_seconds=result.next_delay_seconds,
+                next_delay_seconds=next_delay,
                 error_code=result.error_code,
             )
         if unresolved:
             return TaskResult(
                 status="degraded",
                 details=details,
-                next_delay_seconds=self._next_scheduled_delay(),
-                error_code="strength_variant_refresh_failed",
+                next_delay_seconds=(
+                    min(self._next_scheduled_delay(), 30.0)
+                    if demand_read_error is not None
+                    else self._next_scheduled_delay()
+                ),
+                error_code=(
+                    "strength_variant_demand_read_failed"
+                    if demand_read_error is not None
+                    else "strength_variant_refresh_failed"
+                ),
             )
         return TaskResult(
             status="idle",
@@ -2813,14 +2828,15 @@ class BreakoutTask:
                 next_delay_seconds=min(delay, 300.0),
             )
         if status == "paused":
+            t1_completion = payload.get("t1_completion")
+            t1_error = payload.get("error_code")
             return TaskResult(
-                status="paused",
+                status="degraded" if t1_error else "paused",
+                error_code=t1_error,
                 details={
                     "reason": payload.get("reason"),
                     "session": session,
-                    "t1_completion": payload.get("t1_completion")
-                    if isinstance(payload, Mapping)
-                    else None,
+                    "t1_completion": t1_completion,
                     "t1_retry_after_seconds": payload.get("t1_retry_after_seconds"),
                 },
                 next_delay_seconds=delay,
@@ -2830,6 +2846,7 @@ class BreakoutTask:
             details={
                 "result": status,
                 "scan_run_id": payload.get("scan_run_id"),
+                "t1_persistence": payload.get("t1_persistence"),
                 "event_count": payload.get("event_count"),
             },
             next_delay_seconds=delay,

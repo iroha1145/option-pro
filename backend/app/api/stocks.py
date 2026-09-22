@@ -1371,15 +1371,22 @@ def _fetch_watchlist_provider_previous_close(
                 continue
             if math.isfinite(previous_close) and previous_close > 0:
                 return previous_close
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning(
+            "Watchlist provider previous close failed for %s (%s)",
+            ticker, type(exc).__name__,
+        )
     return None
 
 
 def _cache_watchlist_provider_previous_close(ticker: str, future: Any) -> None:
     try:
         previous_close = future.result()
-    except Exception:
+    except Exception as exc:
+        logger.warning(
+            "Watchlist provider previous close future failed for %s (%s)",
+            ticker, type(exc).__name__,
+        )
         previous_close = None
     now = time.monotonic()
     ttl = (
@@ -2240,9 +2247,16 @@ async def _build_watchlist(requested_tickers: list[str] | None = None):
                                 yahoo_latest_tickers = sorted(
                                     set(daily_missing) | set(latest_missing)
                                 )
-                        except massive_provider.MassiveError:
-                            pass  # 快照计划不含/限流:最新价整体走 Yahoo
-                except massive_provider.MassiveError:
+                        except massive_provider.MassiveError as exc:
+                            logger.warning(
+                                "Watchlist Massive snapshot failed (%s)",
+                                type(exc).__name__,
+                            )
+                except massive_provider.MassiveError as exc:
+                    logger.warning(
+                        "Watchlist Massive daily failed (%s)",
+                        type(exc).__name__,
+                    )
                     massive_daily = None
                     massive_latest = None
                     yahoo_daily_tickers = list(all_tickers)
@@ -2412,7 +2426,11 @@ async def _build_watchlist(requested_tickers: list[str] | None = None):
                         "quote_session": session_name(quote_dt, market_timezone),
                         "previous_close_source": previous_close_source,
                     }
-                except Exception:
+                except Exception as exc:
+                    logger.warning(
+                        "Watchlist quote processing failed for %s (%s)",
+                        t, type(exc).__name__,
+                    )
                     continue
             # Compare trading dates only within the U.S. equity/ETF session.
             # The universe also contains RMS.PA and futures; comparing their
@@ -2442,7 +2460,8 @@ async def _build_watchlist(requested_tickers: list[str] | None = None):
             for ticker in delayed_tickers:
                 quotes[ticker]["quote_delayed"] = True
             return quotes, quote_times, delayed_tickers
-        except Exception:
+        except Exception as exc:
+            logger.warning("Watchlist quote refresh failed (%s)", type(exc).__name__)
             return {}, [], []
 
     price_map, quote_times, delayed_tickers = await asyncio.to_thread(_fetch_quotes)

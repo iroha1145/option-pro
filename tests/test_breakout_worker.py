@@ -13,6 +13,7 @@ from app.services.breakouts.clock import MarketClock
 from app.services.breakouts.health import check_breakout_health
 from app.services.breakouts.repository import DEFAULT_LOCK_NAME, BreakoutRepository
 from app.services.breakouts.worker import BreakoutWorker
+from app.worker.tasks import BreakoutTask
 
 
 NOW = datetime(2026, 7, 13, 14, 0, tzinfo=timezone.utc)
@@ -484,6 +485,87 @@ def test_once_injects_provider_and_service_then_survives_restart(tmp_path):
     health = check_breakout_health(settings, restarted, now=NOW)
     assert health.healthy is True
     assert health.status == "active"
+
+
+def test_published_scan_survives_t1_persistence_failure(tmp_path, monkeypatch, caplog):
+    settings = Settings(tmp_path / "breakouts.db")
+    repository = BreakoutRepository(settings.db_path)
+
+    def failed_t1(_events):
+        raise sqlite3.OperationalError("T1 store unavailable")
+
+    monkeypatch.setattr(repository, "persist_t1_evaluations", failed_t1)
+    worker = BreakoutWorker(
+        settings, repository, provider=Provider(), scan_service=ScanService(),
+        clock=MarketClock(now=lambda: NOW), owner_id="t1-write-failure",
+    )
+
+    result = asyncio.run(worker.run_once())
+    latest = BreakoutRepository(settings.db_path, read_only=True).latest_completed_scan()
+    assert result["status"] == "completed"
+    assert result["t1_persistence"] == "failed"
+    assert latest is not None and latest["scan_run_id"] == result["scan_run_id"]
+    assert any("was published but T1 persistence failed" in record.getMessage() for record in caplog.records)
+
+
+def test_closed_market_t1_scan_read_failure_requests_retry(tmp_path, monkeypatch, caplog):
+    settings = Settings(tmp_path / "breakouts.db")
+    repository = BreakoutRepository(settings.db_path)
+
+    def failed_read():
+        raise sqlite3.OperationalError("T1 read unavailable")
+
+    monkeypatch.setattr(repository, "latest_completed_scan", failed_read)
+    clock = MarketClock(now=lambda: NOW + timedelta(hours=10))
+    worker = BreakoutWorker(settings, repository, clock=clock, owner_id="t1-read-failure")
+    result = asyncio.run(worker._complete_pending_t1(clock.snapshot(), 1))
+    assert result["retry"] is True
+    assert result["reason"] == "t1_scan_read_failed"
+    assert result["retry_after_seconds"] == 30.0
+    assert any("recent scan read failed" in record.getMessage() for record in caplog.records)
+    cycle = asyncio.run(worker.run_once())
+    assert cycle["status"] == "paused"
+    assert cycle["error_code"] == "t1_scan_read_failed"
+    assert cycle["t1_completion"]["retry"] is True
+
+
+def test_closed_market_t1_overlay_failure_requests_retry(tmp_path, monkeypatch, caplog):
+    settings = Settings(tmp_path / "breakouts.db")
+    repository = BreakoutRepository(settings.db_path)
+    monkeypatch.setattr(repository, "latest_completed_scan", lambda: {"events": [{"ticker": "AAPL"}]})
+
+    def failed_overlay(_events):
+        raise sqlite3.OperationalError("T1 overlay unavailable")
+
+    monkeypatch.setattr(repository, "overlay_t1_evaluations", failed_overlay)
+    clock = MarketClock(now=lambda: NOW + timedelta(hours=10))
+    worker = BreakoutWorker(settings, repository, clock=clock, owner_id="t1-overlay-failure")
+    result = asyncio.run(worker._complete_pending_t1(clock.snapshot(), 1))
+    assert result["retry"] is True
+    assert result["reason"] == "t1_overlay_read_failed"
+    assert result["pending"] == 1
+    assert any("evaluation overlay failed" in record.getMessage() for record in caplog.records)
+
+
+def test_breakout_task_reports_closed_market_t1_read_failure(tmp_path, monkeypatch):
+    async def failed_t1_read(_self):
+        return {
+            "status": "paused", "reason": "market_closed", "session": "closed",
+            "error_code": "t1_scan_read_failed",
+            "t1_completion": {"retry": True, "reason": "t1_scan_read_failed", "retry_after_seconds": 30.0},
+            "t1_retry_after_seconds": 30.0,
+        }
+
+    monkeypatch.setattr(BreakoutWorker, "run_once", failed_t1_read)
+    task = BreakoutTask("test")
+    task._settings = Settings(tmp_path / "breakouts.db")
+    task._settings.worker_lease_ttl_seconds = 90
+    task._repository = object()
+    result = asyncio.run(task())
+    assert result.status == "degraded"
+    assert result.error_code == "t1_scan_read_failed"
+    assert result.next_delay_seconds == 30.0
+    assert result.details["t1_completion"]["retry"] is True
 
 
 def test_active_empty_snapshot_is_a_valid_completed_scan(tmp_path):

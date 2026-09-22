@@ -401,7 +401,7 @@ def test_non_finite_bar_is_dropped_and_never_reaches_the_fingerprint() -> None:
     assert result["chart_analysis"]["barFingerprint"]
 
 
-def test_broken_analysis_bundle_cannot_take_down_the_payload(monkeypatch) -> None:
+def test_broken_analysis_bundle_cannot_take_down_the_payload(monkeypatch, caplog) -> None:
     """图层包是装饰层：它炸了，base/指标/摆动这些核心字段必须照常返回。"""
 
     from app.services.technical import structure as structure_mod
@@ -417,6 +417,7 @@ def test_broken_analysis_bundle_cannot_take_down_the_payload(monkeypatch) -> Non
     assert result["technicals"]["version"]
     assert result["price_action"]
     assert result["data_through"]
+    assert any("chart-analysis detection failed" in record.getMessage() for record in caplog.records)
 
 
 def test_consensus_rises_with_corroboration_never_falls() -> None:

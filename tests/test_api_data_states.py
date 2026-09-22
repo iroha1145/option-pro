@@ -1107,6 +1107,43 @@ def test_watchlist_omits_ticker_without_latest_quote_and_marks_batch_degraded(mo
     assert payload["data_limited"] is True
 
 
+def test_watchlist_keeps_other_quotes_when_one_ticker_processing_fails(monkeypatch, caplog):
+    columns = pd.MultiIndex.from_tuples([
+        ("AAPL", "Close"), ("MSFT", "Close"), ("NVDA", "Close"),
+    ])
+
+    def fake_download(*, interval, **_kwargs):
+        if interval == "5m":
+            return pd.DataFrame(
+                [[197.0, 425.0, 205.0]],
+                index=pd.DatetimeIndex(["2026-07-14 16:00"], tz="America/New_York"),
+                columns=columns,
+            )
+        return pd.DataFrame(
+            [[190.0, 420.0, 200.0], [192.0, 424.0, 203.0]],
+            index=pd.to_datetime(["2026-07-13", "2026-07-14"]),
+            columns=columns,
+        )
+
+    original_timezone = stocks._watchlist_market_timezone
+
+    def timezone(ticker):
+        if ticker == "MSFT":
+            raise RuntimeError("bad quote metadata")
+        return original_timezone(ticker)
+
+    monkeypatch.setattr(stocks.yf, "download", fake_download)
+    monkeypatch.setattr(stocks, "_watchlist_market_timezone", timezone)
+    payload = asyncio.run(stocks._build_watchlist(["AAPL", "MSFT", "NVDA"]))
+    returned = {
+        item["ticker"] for group in payload["groups"] for item in group["stocks"]
+    }
+    assert returned == {"AAPL", "NVDA"}
+    assert payload["failed_tickers"] == ["MSFT"]
+    assert any("Watchlist quote processing failed for MSFT (RuntimeError)"
+               in item.getMessage() for item in caplog.records)
+
+
 def test_full_watchlist_partial_latest_batch_fails_closed_per_ticker(monkeypatch):
     monkeypatch.setattr(stocks, "collection_watchlist_tickers", lambda: ["AAPL", "MSFT", "NVDA"])
     monkeypatch.setattr(
