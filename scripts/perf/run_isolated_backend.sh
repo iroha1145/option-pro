@@ -13,7 +13,15 @@ export DATA_DIR
 export ALLOWED_HOSTS="${ALLOWED_HOSTS:-localhost,127.0.0.1}"
 export HOST_BIND="${HOST_BIND:-127.0.0.1}"
 export PORT
-export APP_COMMIT="${APP_COMMIT:-31e8955d89dc2b9b51a5bea1c47f5cfa6ea8cabc}"
+if [[ -z "${APP_COMMIT:-}" ]]; then
+  checkout_root="$(git -C "$ROOT" rev-parse --show-toplevel 2>/dev/null)" || checkout_root=""
+  if [[ -n "$checkout_root" ]] && [[ "$(cd "$checkout_root" && pwd -P)" == "$(cd "$ROOT" && pwd -P)" ]]; then
+    APP_COMMIT="$(git -C "$ROOT" rev-parse --verify HEAD 2>/dev/null)" || APP_COMMIT=unknown
+  else
+    APP_COMMIT=unknown
+  fi
+fi
+export APP_COMMIT
 
 exec "$ROOT/.venv/bin/uvicorn" app.main:app \
   --host 127.0.0.1 \
