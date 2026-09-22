@@ -105,13 +105,15 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
   const item = liveItem ?? (newsId === null ? lastShown : null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [detailNotice, setDetailNotice] = useState<string | null>(null);
-  const [jobNotice, setJobNotice] = useState<{ text: string; retryable: boolean } | null>(null);
+  const [jobNotice, setJobNotice] = useState<{ text: string; retryable: boolean; pollRetry?: boolean } | null>(null);
   const [detailEpoch, setDetailEpoch] = useState(0);
   const [recoveryEpoch, setRecoveryEpoch] = useState(0);
+  const [pollRetryEpoch, setPollRetryEpoch] = useState(0);
   const [job, setJob] = useState<NewsAnalysisJob | null>(null);
   const [confirm, setConfirm] = useState<'create' | 'force' | 'cancel' | null>(null);
   const pollRef = useRef<number | null>(null);
   const backoffRef = useRef(0);
+  const pollFailuresRef = useRef(0);
   /* 关闭抽屉 / 换条时递增，作废在途 analysisJob 响应（审计 P1）。 */
   const pollGenRef = useRef(0);
   /* 跟 prop，不跟 item：关抽屉后 item 仍可能留着给退场动画，item.newsId 守卫会继续热。 */
@@ -305,6 +307,12 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
 
   /* 轮询任务至终态（退避 2s→3s→5s→8s→10s，总超时 5 分钟） */
   const pollDeadlineRef = useRef<{ jobId: string; at: number } | null>(null);
+  const retryPoll = () => {
+    pollDeadlineRef.current = null;
+    pollFailuresRef.current = 0;
+    setJobNotice(null);
+    setPollRetryEpoch((value) => value + 1);
+  };
   useEffect(() => {
     if (!newsId || !job || TERMINAL.includes(job.status)) return;
     if (pollDeadlineRef.current?.jobId !== job.jobId) {
@@ -320,6 +328,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
       if (Date.now() >= deadline) {
         stopPoll();
         if (openNewsRef.current === job.newsId) {
+          setJobNotice({ text: __t('自动查询已暂停，点击重试查看任务状态'), retryable: true, pollRetry: true });
           toast.error(__t('分析任务仍在处理中'), __t('稍后刷新页面可继续查看结果'));
         }
         return;
@@ -327,6 +336,8 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
       try {
         const next = await catalystsContract.analysisJob(job.jobId);
         if (!stillThisPoll()) return;
+        pollFailuresRef.current = 0;
+        setJobNotice(null);
         setJob({ ...next });
         if (TERMINAL.includes(next.status)) {
           stopPoll();
@@ -378,16 +389,26 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
         const delay = BACKOFF[Math.min(backoffRef.current, BACKOFF.length - 1)];
         backoffRef.current += 1;
         pollRef.current = window.setTimeout(() => void tick(), delay);
-      } catch {
+      } catch (error) {
         if (!stillThisPoll()) return;
+        if ((error as { code?: unknown } | null)?.code === 404) {
+          stopPoll();
+          setJobNotice({ text: __t('任务记录已不存在'), retryable: false });
+          return;
+        }
+        pollFailuresRef.current += 1;
+        if (pollFailuresRef.current >= 2) {
+          setJobNotice({ text: __t('任务状态暂时读不到，正在重试'), retryable: false });
+        }
         pollRef.current = window.setTimeout(() => void tick(), 5000);
       }
     };
     backoffRef.current = 0;
+    pollFailuresRef.current = 0;
     pollRef.current = window.setTimeout(() => void tick(), 2000);
     return stopPoll;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [newsId, job?.jobId, job?.status]);
+  }, [newsId, job?.jobId, job?.status, pollRetryEpoch]);
 
   const submittingRef = useRef(false);
   const startAnalysis = useCallback(
@@ -546,7 +567,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
               <p className="mt-3 flex flex-wrap items-center gap-2 text-caption text-ink-500" role="status">
                 <span>{jobNotice.text}</span>
                 {jobNotice.retryable && (
-                  <button type="button" className="control-button" onClick={retryRecovery}>{__t('重试')}</button>
+                  <button type="button" className="control-button" onClick={jobNotice.pollRetry ? retryPoll : retryRecovery}>{__t('重试')}</button>
                 )}
               </p>
             )}

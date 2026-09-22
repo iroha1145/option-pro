@@ -167,7 +167,7 @@ function job(partial) {
   };
 }
 
-function harness() {
+function harness(DateImpl = Date) {
   const runner = createReactStub();
   const timers = new Map();
   let nextTimer = 0;
@@ -189,7 +189,7 @@ function harness() {
       },
       clearTimeout(id) { timers.delete(id); },
     },
-    Date,
+    Date: DateImpl,
   };
   env.window.window = env.window;
   const passthrough = (type, props) => ({ type, props });
@@ -324,6 +324,63 @@ function findNode(node, predicate) {
 function findButton(node, label) {
   return findNode(node, (row) => row.type === 'button' && collectText(row).join('') === label);
 }
+
+test('持续轮询失败会提示，并在恢复后清除提示', async () => {
+  const h = harness();
+  let calls = 0;
+  h.setJob(async () => {
+    calls += 1;
+    if (calls === 2 || calls === 3) throw new Error('status offline');
+    return job({ status: 'in_progress' });
+  });
+  h.render({ newsId: '9600', seed: item({ analysisStatus: 'queued', analysisJobId: 'job-1' }) });
+  await settle();
+  await h.fireDue(2000);
+  assert.doesNotMatch(collectText(h.tree()).join(' '), /任务状态暂时读不到/);
+  await h.fireDue(5000);
+  assert.match(collectText(h.tree()).join(' '), /任务状态暂时读不到/);
+  await h.fireDue(5000);
+  assert.doesNotMatch(collectText(h.tree()).join(' '), /任务状态暂时读不到/);
+  h.unmount();
+});
+
+test('轮询确认任务记录不存在后停止重试并显示原因', async () => {
+  const h = harness();
+  let calls = 0;
+  h.setJob(async () => {
+    if (++calls === 1) return job({ status: 'in_progress' });
+    throw Object.assign(new Error('gone'), { code: 404 });
+  });
+  h.render({ newsId: '9600', seed: item({ analysisStatus: 'queued', analysisJobId: 'job-1' }) });
+  await settle();
+  await h.fireDue(2000);
+  assert.match(collectText(h.tree()).join(' '), /任务记录已不存在/);
+  await h.fireDue(5000);
+  assert.equal(calls, 2);
+  h.unmount();
+});
+
+test('自动查询超时后可手动重新查询同一任务', async () => {
+  let now = 0;
+  class TestDate extends Date { static now() { return now; } }
+  const h = harness(TestDate);
+  h.setJob(async () => job({ status: 'in_progress' }));
+  h.render({ newsId: '9600', seed: item({ analysisStatus: 'queued', analysisJobId: 'job-1' }) });
+  await settle();
+  await h.fireDue(2000);
+  now = 5 * 60_000 + 1;
+  await h.fireDue(3000);
+  assert.match(collectText(h.tree()).join(' '), /自动查询已暂停/);
+  const retry = findButton(h.tree(), '重试');
+  assert.ok(retry);
+  const before = h.jobCalls.length;
+  retry.props.onClick();
+  await settle();
+  await h.fireDue(2000);
+  assert.equal(h.jobCalls.length, before + 1);
+  assert.doesNotMatch(collectText(h.tree()).join(' '), /自动查询已暂停/);
+  h.unmount();
+});
 
 for (const terminalPath of ['recovery', 'poll']) {
   test(`${terminalPath} 终态详情先返回后，迟到的初始 queued 不得覆盖已完成分析`, async () => {

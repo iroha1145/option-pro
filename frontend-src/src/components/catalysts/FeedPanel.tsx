@@ -189,6 +189,7 @@ export default function FeedPanel({ filters, onOpenNews, patches, onFeedResult, 
   const items = q.data?.items ?? [];
   const nextCursor = q.data?.nextCursor ?? null;
   const hiddenUnanalyzed = q.data?.hiddenUnanalyzed ?? 0;
+  const hiddenCountUnknown = q.data?.hiddenCountUnknown === true;
   const error = q.error;
   const phase = q.data !== null ? 'ready' : error ? 'error' : 'loading';
   const fading = false;
@@ -209,9 +210,9 @@ export default function FeedPanel({ filters, onOpenNews, patches, onFeedResult, 
   }, [q.key, q.enabled]);
 
   useEffect(() => {
-    onFeedResult({ total: q.data?.total ?? null, ok: q.data !== null && !q.error && !q.restored,
+    onFeedResult({ total: hiddenCountUnknown ? null : q.data?.total ?? null, ok: q.data !== null && !q.error && !q.restored,
       validatedAt: q.validatedAt || undefined, settled: q.data !== null || q.error !== null });
-  }, [q.data, q.error, q.restored, q.validatedAt, onFeedResult]);
+  }, [q.data, q.error, q.restored, q.validatedAt, hiddenCountUnknown, onFeedResult]);
 
   useEffect(() => {
     if (!Object.keys(patches).length) return;
@@ -288,14 +289,18 @@ export default function FeedPanel({ filters, onOpenNews, patches, onFeedResult, 
               ? __t('这个角度暂时没有新闻')
               : hiddenUnanalyzed > 0
                 ? __t('已收录、等中文分析')
-                : __t('暂时没有新闻')
+                : hiddenCountUnknown
+                  ? __t('新闻数量暂不可确认')
+                  : __t('暂时没有新闻')
           }
           description={
             hasFilters
               ? __t('可放宽筛选条件，或清除条件查看全部新闻')
               : hiddenUnanalyzed > 0
                 ? __t('新闻已收录，中文标题与摘要生成后自动显示')
-                : __t('新闻采集恢复后将自动出现在这里')
+                : hiddenCountUnknown
+                  ? __t('暂时无法确认是否有待分析新闻，请稍后重试')
+                  : __t('新闻采集恢复后将自动出现在这里')
           }
           action={
             hasFilters ? (
@@ -306,6 +311,8 @@ export default function FeedPanel({ filters, onOpenNews, patches, onFeedResult, 
                 <Icon name="x" size={13} />
                 {__t('清除过滤')}
               </button>
+            ) : hiddenCountUnknown ? (
+              <button type="button" className="control-button" onClick={() => void fetchFirst()}>{__t('重试')}</button>
             ) : undefined
           }
         />
