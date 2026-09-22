@@ -1,4 +1,5 @@
 import { drawingPaint, drawingSurface } from './drawingAppearance.ts';
+import { fmtChartPrice } from '../../../lib/numericFormat.ts';
 
 /** Chart ink is independent of the candle up/down preference. Values are CSS pixels. */
 export const LINE_INK = Object.freeze({
@@ -160,7 +161,6 @@ export function renderPatternInk(
   const projections = projectPatternRails(segments, pattern.kind, pattern.status, ctx);
   const meanY = (s: Segment) => (s.a.y + s.b.y) / 2;
   const lower = paired && meanY(segments[0]) > meanY(segments[1]) ? 1 : 0;
-  const priceText = (price: number) => price.toLocaleString('en-US', { maximumFractionDigits: price < 1 ? 4 : 2 });
   observed.forEach((segment, i) => {
     const color = paired ? i === lower ? LINE_INK.support : LINE_INK.resistance : baseColor;
     const original = segments[i];
@@ -169,7 +169,7 @@ export function renderPatternInk(
     // Split ink, not geometry: snapping continues to target exactly the same rail.
     const extension = target.x > segment.b.x + 0.01 ? { a: segment.b, b: target } : undefined;
     const label = (tail: Point) => i === 0 && pattern.label ? {
-      show: true, formatter: `${pattern.label} · ${priceText(tail.y)}`,
+      show: true, formatter: `${pattern.label} · ${fmtChartPrice(tail.y)}`,
       // The solid and dashed pieces share one label at the visible rail's centre.
       span: [[segment.a.x, segment.a.y], [target.x, target.y]],
       position: 'insideMiddleTop', distance: 4, fontSize: 11, lineHeight: 14,

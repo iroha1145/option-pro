@@ -1,4 +1,5 @@
 import type { AiJob, AiJobStatus } from './types.ts';
+import { asRec } from './live.ts';
 
 const KIND_MAP: Record<string, AiJob['kind']> = {
   earnings_impact: 'earnings-impact',
@@ -7,12 +8,6 @@ const KIND_MAP: Record<string, AiJob['kind']> = {
   signal_analysis: 'signal-analysis',
   market_focus: 'market-focus',
 };
-
-function asRecord(value: unknown): Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
-}
 
 function firstString(
   value: Record<string, unknown>,
@@ -59,7 +54,7 @@ export function normalizeJobStatus(raw: unknown): AiJobStatus {
  * 保留后端结构化结果；接口没有 progress 时返回 null，不推算演示百分比。
  */
 export function normalizeAiJob(raw: unknown, fallbackId?: string | null): AiJob {
-  const record = asRecord(raw);
+  const record = asRec(raw);
   const id = firstString(record, 'id', 'job_id') ?? fallbackId ?? '';
   const rawKind = firstString(record, 'kind', 'job_type') ?? '';
   const status = normalizeJobStatus(record.status);
@@ -97,7 +92,7 @@ export function aiJobResultSummary(result: unknown): string | null {
     const text = result.trim();
     return text || null;
   }
-  const record = asRecord(result);
+  const record = asRec(result);
   return (
     firstString(record, 'summary', 'headline_summary', 'text', 'analysis') ?? null
   );

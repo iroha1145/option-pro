@@ -7,6 +7,7 @@ import SoftBadge from '@/components/shared/SoftBadge';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { ScreenerRow } from '@/api/types';
 import { cn } from '@/lib/utils';
+import { EASE_PAPER } from '@/lib/motion';
 import Icon from '@/components/icons';
 import TickerLogo from '@/components/shared/TickerLogo';
 import InfoHint from '@/components/shared/InfoHint';
@@ -23,7 +24,6 @@ import {
 } from './types';
 import { t } from '../../i18n/core.ts';
 
-const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
 
 export interface ResultCardsProps {
   rows: ScreenerRow[];

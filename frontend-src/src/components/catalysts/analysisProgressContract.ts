@@ -1,4 +1,5 @@
 import { t } from '../../i18n/core.ts';
+import { asRec } from '../../api/live.ts';
 export interface NewsAnalysisProgress {
   status: 'idle' | 'active' | 'completed';
   scope: 'latest_submission_batch';
@@ -29,11 +30,6 @@ export interface NewsAnalysisProgress {
 
 type Rec = Record<string, unknown>;
 
-const asRecord = (value: unknown): Rec =>
-  value !== null && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Rec)
-    : {};
-
 function requiredCount(record: Rec, key: string): number {
   const value = record[key];
   if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
@@ -61,7 +57,7 @@ function optionalText(record: Rec, key: string): string | null {
 }
 
 export function normalizeNewsAnalysisProgress(raw: unknown): NewsAnalysisProgress {
-  const record = asRecord(raw);
+  const record = asRec(raw);
   const status = record.status;
   if (status !== 'idle' && status !== 'active' && status !== 'completed') {
     throw new Error(t('新闻分析进度状态无效'));

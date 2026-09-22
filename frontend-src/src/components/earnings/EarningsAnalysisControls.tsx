@@ -1,6 +1,7 @@
 import AnalysisIcon from '@/components/shared/AnalysisIcon';
 import { useCallback, useEffect, useState } from 'react';
 import { ApiError } from '@/api/client';
+import { asRec } from '@/api/live';
 import { adminApi, type RuntimeDoc, type WorkerHealth } from '@/api/modules/admin';
 import { runtimeApi, type WorkerAction } from '@/api/modules/runtime';
 import { useAccess } from '@/hooks/useAccess';
@@ -22,12 +23,6 @@ interface EarningsRunSummary {
   invalid: number;
 }
 
-function asRecord(value: unknown): Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
-}
-
 function count(value: unknown): number | null {
   const parsed = typeof value === 'string' ? Number(value) : value;
   return typeof parsed === 'number' && Number.isFinite(parsed) && parsed >= 0
@@ -36,7 +31,7 @@ function count(value: unknown): number | null {
 }
 
 function readRunSummary(action: WorkerAction): EarningsRunSummary | null {
-  const nested = asRecord(action.details.result);
+  const nested = asRec(action.details.result);
   const result = Object.keys(nested).length > 0 ? nested : action.details;
   const eligible = count(result.eligible);
   const queued = count(result.queued);

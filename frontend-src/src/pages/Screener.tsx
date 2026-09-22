@@ -25,6 +25,7 @@ import { useAccess } from '@/hooks/useAccess';
 import { useToast } from '@/hooks/useToast';
 import { useShell } from '@/hooks/useShell';
 import { cn } from '@/lib/utils';
+import { EASE_PAPER } from '@/lib/motion';
 import { fmtCompact, fmtLocaleDateTime, fmtTimeHHMMSS } from '@/lib/format';
 import {
   MACRO_SHADOW_HINT,
@@ -97,7 +98,6 @@ import {
   supportsDollarVolumeFilter,
 } from '@/lib/eodLimitedView';
 
-const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
 const PAGE_SIZE = 20;
 /* 板块名排序的 Collator 建一次：localeCompare(b, tag) 在 sort 比较函数里每次都会新建
    Collator，O(n log n) 次构造；setLocale() 整页重载，模块级缓存安全。 */
