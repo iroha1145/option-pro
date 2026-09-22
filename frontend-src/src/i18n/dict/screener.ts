@@ -331,4 +331,12 @@ export const SCREENER: Dict = {
   '评分档位读取失败，无法显示当前权重。': ['Failed to load scoring profiles; current weights cannot be shown.', 'スコアリングプロファイルの読み込みに失敗したため、現在のウェイトを表示できません。'],
   '20日均额': ['20D avg $ vol', '20日平均代金'],
   '20 日均美元成交额': ['20-day average dollar volume', '20日平均売買代金（ドル）'],
+  '偏离待观察': ['Extension watch', '乖離の観察'],
+  '高波动观察': ['High-volatility watch', '高ボラティリティの観察'],
+  '观察分组不进入主榜，不授予严格资格，也不表示可以买入。': [
+    'Watch groups stay off the main board, do not receive a strict qualification, and are not a buy signal.',
+    '観察グループはメイン表に入らず、厳格な資格を与えず、買いを意味しません。',
+  ],
+  '来源日期': ['Source date', '元日付'],
+  '当前没有名称': ['No names in this group', 'このグループに銘柄はありません'],
 };
