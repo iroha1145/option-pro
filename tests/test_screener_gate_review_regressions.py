@@ -32,12 +32,16 @@ from screener_gate_candidates_v1 import (
 from screener_gate_statistics_v2 import (
     HOLDOUT_FROM,
     LabelBook,
+    _path_extremes,
     aggregate_discovery_records,
+    assert_checkpoint_bars_match_file,
     circular_block_indices,
     compare_frozen_to_old_session,
     entry_invariant_failures,
     freeze_layers,
     paired_bootstrap,
+    require_yahoo_bars_sha256,
+    sha256_file,
     write_checkpoint,
 )
 
@@ -542,8 +546,100 @@ def test_write_checkpoint_refuses_overwrite(tmp_path):
 def test_open_path_excludes_exit_session_range():
     book, days = _book()
     path = book.path("AAA", days[0], 1, use_open=True)
-    assert path["mfe"] == pytest.approx(0.1)
+    assert path["mfe"] == pytest.approx(0.2)
+    assert path["mae"] == pytest.approx(-0.1)
+    assert path["mae"] <= 0 <= path["mfe"]
+    assert path["mfe"] < 0.3
     assert path["mfe"] < 1.0
+
+
+def test_open_mae_includes_exit_open_and_not_the_exit_day_range():
+    days = [date(2024, 1, 2), date(2024, 1, 3), date(2024, 1, 4)]
+    series = _Series(days, [10, 100, 80], [11, 101, 200], [9, 99, 50], [10, 100, 70])
+    book = LabelBook({"AAA": series}, days)
+    path = book.path("AAA", days[0], 1, use_open=True)
+    assert book.label("AAA", days[0], 1, use_open=True) == pytest.approx(-0.2)
+    assert path["mae"] == pytest.approx(-0.2)
+    assert path["mfe"] == pytest.approx(0.01)
+    assert path["mae"] <= 0 <= path["mfe"]
+
+
+def test_entry_print_bounds_open_mae_and_mfe():
+    days = [date(2024, 1, 2), date(2024, 1, 3), date(2024, 1, 4)]
+    series = _Series(days, [10, 100, 110], [11, 130, 200], [9, 120, 150], [10, 125, 140])
+    book = LabelBook({"AAA": series}, days)
+    path = book.path("AAA", days[0], 1, use_open=True)
+    assert path["mae"] == pytest.approx(0.0)
+    assert path["mfe"] == pytest.approx(0.3)
+
+
+def test_missing_exit_open_is_an_incomplete_path():
+    days = [date(2024, 1, 2), date(2024, 1, 3), date(2024, 1, 4)]
+    series = _Series(days, [10, 100, float("nan")], [11, 101, 200], [9, 99, 50], [10, 100, 80])
+    book = LabelBook({"AAA": series}, days)
+    assert book.path("AAA", days[0], 1, use_open=True) == {"mae": None, "mfe": None}
+
+
+def test_close_path_includes_entry_and_exit_prints():
+    days = [date(2024, 1, 2), date(2024, 1, 3)]
+    series = _Series(days, [10, 10], [130, 140], [120, 90], [100, 80])
+    book = LabelBook({"AAA": series}, days)
+    path = book.path("AAA", days[0], 1, use_open=False)
+    assert path["mae"] == pytest.approx(-0.2)
+    assert path["mfe"] == pytest.approx(0.4)
+    assert path["mae"] <= 0 <= path["mfe"]
+
+
+def test_close_entry_print_bounds_mae_when_the_range_stays_above_entry():
+    days = [date(2024, 1, 2), date(2024, 1, 3)]
+    series = _Series(days, [10, 10], [130, 140], [120, 125], [100, 130])
+    book = LabelBook({"AAA": series}, days)
+    path = book.path("AAA", days[0], 1, use_open=False)
+    assert path["mae"] == pytest.approx(0.0)
+    assert path["mfe"] == pytest.approx(0.4)
+
+
+def test_missing_intraday_bar_keeps_the_path_incomplete():
+    days = [date(2024, 1, 2), date(2024, 1, 3), date(2024, 1, 4)]
+    series = _Series(days, [10, 100, 80], [11, float("nan"), 200], [9, 99, 50], [10, 100, 80])
+    book = LabelBook({"AAA": series}, days)
+    assert book.path("AAA", days[0], 1, use_open=True) == {"mae": None, "mfe": None}
+
+
+def test_empty_intraday_window_still_includes_both_prints():
+    assert _path_extremes(100, 80, []) == {"mae": pytest.approx(-0.2), "mfe": pytest.approx(0.0)}
+
+
+def test_bars_file_hash_mismatch_raises(tmp_path):
+    bars = tmp_path / "restricted_yahoo_bars.json"
+    bars.write_text("[]", encoding="utf-8")
+    payload = {"identity": {"session_date": "2022-01-03", "bars_sha256": "0" * 64}}
+    with pytest.raises(RuntimeError, match="yahoo bars hash mismatch"):
+        assert_checkpoint_bars_match_file(tmp_path, [payload])
+
+
+def test_uniform_checkpoint_hash_does_not_replace_the_file_check(tmp_path):
+    bars = tmp_path / "restricted_yahoo_bars.json"
+    bars.write_text("not-the-checkpoint-hash", encoding="utf-8")
+    shared = "ab" * 32
+    payloads = [
+        {"identity": {"session_date": day, "bars_sha256": shared}}
+        for day in ("2022-01-03", "2022-01-04")
+    ]
+    with pytest.raises(RuntimeError, match="yahoo bars hash mismatch"):
+        assert_checkpoint_bars_match_file(tmp_path, payloads)
+
+
+def test_bars_file_hash_accepts_every_checkpoint(tmp_path):
+    bars = tmp_path / "restricted_yahoo_bars.json"
+    bars.write_text('{"ok": true}', encoding="utf-8")
+    digest = sha256_file(bars)
+    payloads = [
+        {"identity": {"session_date": day, "bars_sha256": digest}}
+        for day in ("2022-01-03", "2022-01-04")
+    ]
+    assert assert_checkpoint_bars_match_file(tmp_path, payloads) == digest
+    assert require_yahoo_bars_sha256(tmp_path) == digest
 
 
 def test_freeze_layers_saves_all_three_layers_when_entry_matches():

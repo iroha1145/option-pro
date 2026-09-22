@@ -55,6 +55,44 @@ def sha256_file(path: Path) -> str | None:
     return digest.hexdigest()
 
 
+# repair_statistics_boundaries.py was not attached. These checks were applied
+# only after HEAD:scripts/research/screener_gate_statistics_v2.py matched blob
+# 9ed1927ea3104e83500bdf096f8edf73bee1471e.
+REPAIR_NOTE = (
+    "repair_statistics_boundaries.py was not attached; MAE/MFE and the bars-file "
+    "check were applied to reviewed blob 9ed1927ea3104e83500bdf096f8edf73bee1471e"
+)
+PATH_PACK_DIRNAME = "return_pack_path_v3"
+RETURN_COMPARE_TOLERANCE = 1e-12
+
+
+def require_yahoo_bars_sha256(research: Path) -> str:
+    """Hash the on-disk Yahoo file. A checkpoint field is not a substitute."""
+
+    bars = research / "restricted_yahoo_bars.json"
+    actual = sha256_file(bars)
+    if not actual:
+        raise RuntimeError(f"yahoo bars file missing: {bars}")
+    return actual
+
+
+def assert_payload_bars_hash(payload: Mapping[str, Any], actual: str) -> None:
+    identity = payload.get("identity") or {}
+    expected = identity.get("bars_sha256")
+    session = identity.get("session_date")
+    if not expected or expected != actual:
+        raise RuntimeError(f"yahoo bars hash mismatch at {session}: expected {expected} actual {actual}")
+
+
+def assert_checkpoint_bars_match_file(research: Path, payloads: Sequence[Mapping[str, Any]]) -> str:
+    """Every frozen checkpoint must match the local bars file, not only each other."""
+
+    actual = require_yahoo_bars_sha256(research)
+    for payload in payloads:
+        assert_payload_bars_hash(payload, actual)
+    return actual
+
+
 def _mean(values: Sequence[float]) -> float | None:
     if not values:
         return None
@@ -88,6 +126,13 @@ def exchange_calendar(panel: Mapping[str, Any], *, last_open: date = LAST_OPEN_S
             if session <= last_open and session < holdout_from:
                 dates.add(session)
     return sorted(dates)
+
+
+def _path_extremes(entry: float, exit_px: float, range_prices: Sequence[float]) -> dict[str, float]:
+    """Entry and exit prints always participate. An empty intraday window still completes."""
+
+    points = [entry, exit_px, *range_prices]
+    return {"mae": min(points) / entry - 1.0, "mfe": max(points) / entry - 1.0}
 
 
 class LabelBook:
@@ -144,14 +189,22 @@ class LabelBook:
         return right / left - 1.0
 
     def path(self, security_id: str, session: date, horizon: int, *, use_open: bool) -> dict[str, float | None]:
-        """MAE/MFE inside the hold. Open exits exclude the exit session's later range."""
+        """MAE/MFE from the entry print through the exit fill.
+
+        Open exits include the exit open and exclude that session's later high/low.
+        A missing exit price leaves the path incomplete. The entry print keeps a
+        completed path inside mae <= 0 <= mfe.
+        """
 
         empty = {"mae": None, "mfe": None}
+        if horizon < 1:
+            return empty
         if use_open:
             entry_day = self._shift(session, 1)
             exit_day = self._shift(session, 1 + horizon)
             entry = self._px(security_id, entry_day, "open")
-            if entry_day is None or exit_day is None or entry is None:
+            exit_px = self._px(security_id, exit_day, "open")
+            if entry_day is None or exit_day is None or entry is None or exit_px is None:
                 return empty
             start = self._at[entry_day]
             stop = self._at[exit_day]
@@ -159,23 +212,21 @@ class LabelBook:
         else:
             exit_day = self._shift(session, horizon)
             entry = self._px(security_id, session, "close")
-            if exit_day is None or entry is None or session not in self._at:
+            exit_px = self._px(security_id, exit_day, "close")
+            if exit_day is None or entry is None or exit_px is None or session not in self._at:
                 return empty
             start = self._at[session] + 1
             stop = self._at[exit_day]
             window = self.calendar[start : stop + 1]
-        if not window:
-            return empty
-        highs = []
-        lows = []
+        range_prices: list[float] = []
         for day in window:
             high = self._px(security_id, day, "high")
             low = self._px(security_id, day, "low")
             if high is None or low is None:
                 return empty
-            highs.append(high)
-            lows.append(low)
-        return {"mae": min(lows) / entry - 1.0, "mfe": max(highs) / entry - 1.0}
+            range_prices.append(high)
+            range_prices.append(low)
+        return _path_extremes(entry, exit_px, range_prices)
 
     def basket(self, ids: Sequence[str], session: date, horizon: int, *, use_open: bool) -> dict[str, Any]:
         ordered = [str(item) for item in ids]
@@ -796,6 +847,7 @@ def write_discovery_evaluation(research: Path, *, reps: int) -> dict[str, Any]:
     files = sorted(checkpoints.glob("*.json"))
     if not files:
         raise FileNotFoundError(checkpoints)
+    actual_bars = require_yahoo_bars_sha256(research)
     old_summary = _load_json(research / "return_pack" / "summary.json")
     old_by_day = {item["session_date"]: item for item in old_summary["sessions"]}
     panel, _coverage, _payload = load_restricted_panel(research, end=LAST_OPEN_SESSION)
@@ -814,6 +866,7 @@ def write_discovery_evaluation(research: Path, *, reps: int) -> dict[str, Any]:
     first_sample = None
     for path in files:
         payload = _load_json(path)
+        assert_payload_bars_hash(payload, actual_bars)
         session = str(payload["identity"]["session_date"])
         identities.append(checkpoint_identity_core(payload))
         failures = entry_invariant_failures(payload)
@@ -921,6 +974,8 @@ def write_discovery_evaluation(research: Path, *, reps: int) -> dict[str, Any]:
             "adapter_sha256": identity.get("adapter_sha256"),
         },
         "bars_sha256": identity.get("bars_sha256"),
+        "bars_file_sha256_checked": actual_bars == identity.get("bars_sha256"),
+        "repair_note": REPAIR_NOTE,
         "label_code": "screener_gate_statistics_v2.py",
         "label_code_sha256": sha256_file(Path(__file__).resolve()),
         "old_pack_scoring_code_hashes": old_manifest.get("code_hashes"),
@@ -1002,8 +1057,242 @@ def _discovery_validation_text(manifest: Mapping[str, Any], summary: Mapping[str
             "- holdout 2024-07-01+ not crossed",
             "- suffix-classified broad slices are not a G1 reference",
             f"- {manifest.get('patch_note')}",
+            f"- {manifest.get('repair_note')}",
+            "- local restricted_yahoo_bars.json sha256 checked against every checkpoint",
         ]
     ) + "\n"
+
+
+def _parse_optional_float(value: Any) -> float | None:
+    if value is None or value == "":
+        return None
+    number = float(value)
+    if not math.isfinite(number):
+        raise RuntimeError(f"non-finite stored return {value}")
+    return number
+
+
+def _within_tolerance(left: float | None, right: float | None, tolerance: float = RETURN_COMPARE_TOLERANCE) -> bool:
+    if left is None or right is None:
+        return left is None and right is None
+    return abs(left - right) <= tolerance
+
+
+def _legacy_path(book: LabelBook, security_id: str, session: date, horizon: int, *, use_open: bool) -> dict[str, float | None]:
+    """Pre-review path. Used only to difference the delivered MAE/MFE columns."""
+
+    empty = {"mae": None, "mfe": None}
+    if use_open:
+        entry_day = book._shift(session, 1)
+        exit_day = book._shift(session, 1 + horizon)
+        entry = book._px(security_id, entry_day, "open")
+        if entry_day is None or exit_day is None or entry is None:
+            return empty
+        window = book.calendar[book._at[entry_day] : book._at[exit_day]]
+    else:
+        exit_day = book._shift(session, horizon)
+        entry = book._px(security_id, session, "close")
+        if exit_day is None or entry is None or session not in book._at:
+            return empty
+        window = book.calendar[book._at[session] + 1 : book._at[exit_day] + 1]
+    if not window:
+        return empty
+    highs: list[float] = []
+    lows: list[float] = []
+    for day in window:
+        high = book._px(security_id, day, "high")
+        low = book._px(security_id, day, "low")
+        if high is None or low is None:
+            return empty
+        highs.append(high)
+        lows.append(low)
+    return {"mae": min(lows) / entry - 1.0, "mfe": max(highs) / entry - 1.0}
+
+
+def _mean_path(book: LabelBook, ids: Sequence[str], session: date, horizon: int, *, use_open: bool, path_fn: Callable[..., Mapping[str, Any]]) -> dict[str, float | None]:
+    maes: list[float] = []
+    mfes: list[float] = []
+    for security_id in ids:
+        item = path_fn(security_id, session, horizon, use_open=use_open)
+        if item["mae"] is not None:
+            maes.append(float(item["mae"]))
+        if item["mfe"] is not None:
+            mfes.append(float(item["mfe"]))
+    return {"mae": _mean(maes), "mfe": _mean(mfes)}
+
+
+def _cache_book_methods(book: LabelBook) -> None:
+    label_cache: dict[tuple, float | None] = {}
+    path_cache: dict[tuple, dict[str, float | None]] = {}
+    legacy_cache: dict[tuple, dict[str, float | None]] = {}
+    original_label = book.label
+    original_path = book.path
+
+    def label(security_id: str, session: date, horizon: int, *, use_open: bool) -> float | None:
+        key = (security_id, session, horizon, use_open)
+        if key not in label_cache:
+            label_cache[key] = original_label(security_id, session, horizon, use_open=use_open)
+        return label_cache[key]
+
+    def path(security_id: str, session: date, horizon: int, *, use_open: bool) -> dict[str, float | None]:
+        key = (security_id, session, horizon, use_open)
+        if key not in path_cache:
+            path_cache[key] = original_path(security_id, session, horizon, use_open=use_open)
+        return path_cache[key]
+
+    def legacy(security_id: str, session: date, horizon: int, *, use_open: bool) -> dict[str, float | None]:
+        key = (security_id, session, horizon, use_open)
+        if key not in legacy_cache:
+            legacy_cache[key] = _legacy_path(book, security_id, session, horizon, use_open=use_open)
+        return legacy_cache[key]
+
+    book.label = label  # type: ignore[method-assign]
+    book.path = path  # type: ignore[method-assign]
+    book.legacy_path = legacy  # type: ignore[attr-defined]
+
+
+def recompute_path_metrics(research: Path) -> dict[str, Any]:
+    """Rewrite MAE/MFE beside the discovery pack. Leave close/open returns untouched.
+
+    Stops before writing if a stored return differs by more than 1e-12.
+    Does not rerun screening or the bootstrap grid.
+    """
+
+    dest = research / PATH_PACK_DIRNAME
+    if (dest / "manifest.json").exists():
+        raise FileExistsError(dest / "manifest.json")
+    source = research / "return_pack_discovery_v2"
+    files = sorted((source / "checkpoints").glob("*.json"))
+    if not files:
+        raise FileNotFoundError(source / "checkpoints")
+    paired_path = source / "paired_daily.csv"
+    payloads = [_load_json(path) for path in files]
+    actual_bars = assert_checkpoint_bars_match_file(research, payloads)
+    from screener_gate_replay_v1 import load_restricted_panel
+
+    panel, _coverage, _payload = load_restricted_panel(research, end=LAST_OPEN_SESSION)
+    book = LabelBook(panel, exchange_calendar(panel))
+    _cache_book_methods(book)
+    stored: dict[tuple, dict[str, str]] = {}
+    with paired_path.open(encoding="utf-8") as handle:
+        for row in csv.DictReader(handle):
+            stored[(row["session_date"], row["layer"], row["comparison"], int(row["k"]))] = row
+    buckets: dict[tuple, dict[str, list]] = {}
+    seen: set[tuple] = set()
+    return_max = 0.0
+    return_fields = []
+    compared_returns = 0
+    for horizon in LABEL_HS:
+        for suffix in ("close_diff", "open_diff", "added_close_full", "removed_close_full"):
+            return_fields.append(f"h{horizon}_{suffix}")
+    for index, payload in enumerate(payloads, start=1):
+        session = date.fromisoformat(str(payload["identity"]["session_date"]))
+        records = records_for_checkpoint(payload, book)
+        for record in records:
+            key = (record["session_date"], record["layer"], record["comparison"], int(record["k"]))
+            old = stored.get(key)
+            if old is None:
+                raise RuntimeError(f"stored discovery row missing for {key}")
+            seen.add(key)
+            for field in return_fields:
+                new_value = record[field]
+                old_value = _parse_optional_float(old.get(field))
+                if isinstance(new_value, float) and not math.isfinite(new_value):
+                    raise RuntimeError(f"non-finite recomputed return {field} at {key}")
+                if not _within_tolerance(new_value if not isinstance(new_value, float) else float(new_value), old_value):
+                    raise RuntimeError(
+                        f"return changed for {field} at {key}: stored {old_value} recomputed {new_value}"
+                    )
+                if new_value is not None and old_value is not None:
+                    return_max = max(return_max, abs(float(new_value) - old_value))
+                    compared_returns += 1
+            for horizon in LABEL_HS:
+                for use_open, side in ((False, "close"), (True, "open")):
+                    layer, left_name, _right_name = next(
+                        item for item in FIXED_COMPARISONS if item[0] == record["layer"] and f"{item[1]} - {item[2]}" == record["comparison"]
+                    )
+                    del layer
+                    ids = _layer_ids(payload, left_name, record["layer"], int(record["k"]))
+                    legacy = _mean_path(book, ids, session, horizon, use_open=use_open, path_fn=book.legacy_path)  # type: ignore[attr-defined]
+                    if side == "close":
+                        stored_mae = _parse_optional_float(old.get(f"h{horizon}_mae_left"))
+                        stored_mfe = _parse_optional_float(old.get(f"h{horizon}_mfe_left"))
+                        if not _within_tolerance(legacy["mae"], stored_mae) or not _within_tolerance(legacy["mfe"], stored_mfe):
+                            raise RuntimeError(
+                                f"legacy close path does not reproduce {key} H{horizon}: "
+                                f"stored {(stored_mae, stored_mfe)} legacy {(legacy['mae'], legacy['mfe'])}"
+                            )
+                    slot = buckets.setdefault(
+                        (record["layer"], record["comparison"], int(record["k"]), horizon, side),
+                        {"mae_old": [], "mfe_old": [], "mae_new": [], "mfe_new": []},
+                    )
+                    slot["mae_old"].append(legacy["mae"])
+                    slot["mfe_old"].append(legacy["mfe"])
+                    if side == "close":
+                        slot["mae_new"].append(record[f"h{horizon}_mae_left"])
+                        slot["mfe_new"].append(record[f"h{horizon}_mfe_left"])
+                    else:
+                        opened = _mean_path(book, ids, session, horizon, use_open=True, path_fn=book.path)
+                        slot["mae_new"].append(opened["mae"])
+                        slot["mfe_new"].append(opened["mfe"])
+        if index % 50 == 0 or index == len(payloads):
+            print(f"path {index}/{len(payloads)} {session.isoformat()}", flush=True)
+    if seen != set(stored):
+        raise RuntimeError("stored discovery rows do not match the frozen checkpoints")
+    rows = []
+    for key in sorted(buckets):
+        layer, comparison, k, horizon, side = key
+        blob = buckets[key]
+        mae_old = _mean(_present(blob["mae_old"]))
+        mae_new = _mean(_present(blob["mae_new"]))
+        mfe_old = _mean(_present(blob["mfe_old"]))
+        mfe_new = _mean(_present(blob["mfe_new"]))
+        rows.append(
+            {
+                "layer": layer,
+                "comparison": comparison,
+                "k": k,
+                "horizon": horizon,
+                "side": side,
+                "n_days": len(blob["mae_old"]),
+                "mae_old_n": len(_present(blob["mae_old"])),
+                "mae_new_n": len(_present(blob["mae_new"])),
+                "mae_old": mae_old,
+                "mae_new": mae_new,
+                "mae_delta": None if mae_old is None or mae_new is None else mae_new - mae_old,
+                "mfe_old": mfe_old,
+                "mfe_new": mfe_new,
+                "mfe_delta": None if mfe_old is None or mfe_new is None else mfe_new - mfe_old,
+            }
+        )
+    identity = payloads[0]["identity"]
+    manifest = {
+        "protocol": "us-eod-screener-gate-path-v3",
+        "repair_note": REPAIR_NOTE,
+        "does_not_overwrite": ["return_pack", "return_pack_metrics_v2", "return_pack_discovery_v2"],
+        "bars_sha256": actual_bars,
+        "bars_file_checked_against_every_checkpoint": True,
+        "checkpoints": len(payloads),
+        "paired_rows": len(stored),
+        "return_compare_tolerance": RETURN_COMPARE_TOLERANCE,
+        "return_max_abs_diff": return_max,
+        "return_values_compared": compared_returns,
+        "bootstrap_rerun": False,
+        "screening_rerun": False,
+        "production_anchor": identity.get("production_anchor"),
+        "profile": identity.get("profile"),
+        "horizon": identity.get("horizon"),
+        "label_code_sha256": sha256_file(Path(__file__).resolve()),
+        "source_paired_daily_sha256": sha256_file(paired_path),
+        "sessions": {
+            "start": payloads[0]["identity"]["session_date"],
+            "end": payloads[-1]["identity"]["session_date"],
+        },
+    }
+    dest.mkdir(parents=True, exist_ok=True)
+    (dest / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    (dest / "path_delta.json").write_text(json.dumps({"rows": rows}, indent=2), encoding="utf-8")
+    return {"pack": str(dest), "return_max_abs_diff": return_max, "rows": len(rows)}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1014,6 +1303,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--discover", action="store_true")
     parser.add_argument("--resume-discover", action="store_true")
     parser.add_argument("--evaluate-discovery", action="store_true")
+    parser.add_argument("--recompute-paths", action="store_true")
     parser.add_argument("--max-sessions", type=int, default=0)
     return parser
 
@@ -1133,6 +1423,9 @@ def _discover(research: Path, *, max_sessions: int, resume: bool = False) -> dic
 def main() -> None:
     args = build_parser().parse_args()
     research = Path(args.research_dir)
+    if args.recompute_paths:
+        print(json.dumps(recompute_path_metrics(research), indent=2, default=str))
+        return
     if args.align_sessions:
         report = _align(research, args.align_sessions)
         print(json.dumps({"aligned": report["aligned"], "mismatches": len(report["mismatches"])}, indent=2))
