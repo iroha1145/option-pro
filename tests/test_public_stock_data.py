@@ -386,3 +386,108 @@ def test_public_home_polls_separate_queue_and_drains_it_without_new_task():
         assert queue.closed
 
     asyncio.run(run())
+
+
+def test_public_home_queue_errors_keep_degraded_codes_and_redact_logs(monkeypatch, caplog):
+    from app import failure_diagnostics
+
+    monkeypatch.setattr(failure_diagnostics, "_seen", {})
+    class BrokenQueue:
+        async def poll(self, _entries):
+            raise RuntimeError("https://private.example/?token=secret")
+
+        def summary(self):
+            return {"target_count": 1}
+
+    config = SimpleNamespace(
+        **{field: 300 for field in PublicHomeTask._INTERVAL_FIELDS.values()},
+        poll_seconds=30, failure_retry_seconds=60,
+    )
+    task = PublicHomeTask(
+        config,
+        stock_data_refresh=BrokenQueue(),
+        option_data_refresh=BrokenQueue(),
+        clock=lambda: NOW,
+    )
+
+    async def entries(*_args, **_kwargs):
+        return {}
+
+    async def lead():
+        return None
+
+    task._read_entries = entries
+    task._breakout_lead_ticker = lead
+    task._is_due = lambda *_args, **_kwargs: False
+    task._is_hard_servable = lambda *_args, **_kwargs: True
+
+    result = asyncio.run(task())
+    assert result.status == "degraded"
+    assert result.error_code == "public_stock_queue_unavailable"
+    assert result.details["stock_data"]["error_code"] == "public_stock_queue_unavailable"
+    assert result.details["option_data"]["error_code"] == "public_option_queue_unavailable"
+    messages = [
+        record.getMessage() for record in caplog.records
+        if record.name == "app.failure_diagnostics"
+    ]
+    assert any("stage=public_stock_queue_poll" in message for message in messages)
+    assert any("stage=public_option_queue_poll" in message for message in messages)
+    assert all("secret" not in message for message in messages)
+
+
+def test_public_home_followup_queue_error_keeps_stock_error_code(monkeypatch, caplog):
+    from app import failure_diagnostics
+
+    monkeypatch.setattr(failure_diagnostics, "_seen", {})
+    class StockQueue:
+        calls = 0
+
+        async def poll(self, _entries):
+            self.calls += 1
+            if self.calls == 2:
+                raise RuntimeError("https://private.example/?token=secret")
+
+        def summary(self):
+            return {"target_count": 1}
+
+    queue = StockQueue()
+    config = SimpleNamespace(
+        **{field: 300 for field in PublicHomeTask._INTERVAL_FIELDS.values()},
+        poll_seconds=30, failure_retry_seconds=60,
+    )
+    task = PublicHomeTask(config, stock_data_refresh=queue, clock=lambda: NOW)
+
+    async def entries(*_args, **_kwargs):
+        return {}
+
+    async def lead():
+        return None
+
+    async def produce(*_args, **_kwargs):
+        return {}
+
+    async def harvest(resource, attempt, *, entries, refreshed, **_kwargs):
+        await attempt.task
+        task._inflight.pop(resource, None)
+        refreshed.append(resource)
+        return entries
+
+    task._read_entries = entries
+    task._breakout_lead_ticker = lead
+    task._is_due = lambda resource, *_args, **_kwargs: resource == "watchlist"
+    task._is_hard_servable = lambda *_args, **_kwargs: True
+    task._produce_entry = produce
+    task._harvest = harvest
+
+    result = asyncio.run(task())
+    assert queue.calls == 2
+    assert result.status == "degraded"
+    assert result.error_code == "public_stock_queue_unavailable"
+    assert result.details["refreshed"] == ["watchlist"]
+    messages = [
+        record.getMessage() for record in caplog.records
+        if record.name == "app.failure_diagnostics"
+    ]
+    assert messages == [
+        "fallback_failure stage=public_stock_queue_followup symbol=- error_type=RuntimeError"
+    ]

@@ -572,20 +572,24 @@ export default function LeadBigCard({ ev: initialEvent, flash, locate, onOpen, d
   }, [locate]);
 
   /* 详情补全：契约 /breakouts/events/{id}（scores/结构全字段），宽松合并非空字段 */
-  const [detail, setDetail] = useState<{ id: string; ev: BreakoutEventFull } | null>(null);
+  const [detail, setDetail] = useState<{ id: string; ev: BreakoutEventFull | null; failed: boolean } | null>(null);
+  const [detailRetry, setDetailRetry] = useState(0);
   useEffect(() => {
     let alive = true;
     breakoutsApi
       .eventDetail(ev.event_id)
       .then((d) => {
-        if (alive) setDetail({ id: ev.event_id, ev: asFullDetail(d) });
+        if (alive) setDetail({ id: ev.event_id, ev: asFullDetail(d), failed: false });
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (alive) setDetail({ id: ev.event_id, ev: null, failed: true });
+      });
     return () => {
       alive = false;
     };
-  }, [ev.event_id]);
+  }, [ev.event_id, detailRetry]);
   const detailEv = detail && detail.id === ev.event_id ? detail.ev : null;
+  const detailFailed = detail?.id === ev.event_id && detail.failed;
 
   const enriched = useMemo(() => {
     if (!detailEv) return ev;
@@ -635,6 +639,18 @@ export default function LeadBigCard({ ev: initialEvent, flash, locate, onOpen, d
       aria-label={t('{ticker} {setup} 首要信号大卡', { ticker: e.ticker, setup: SETUP_CN[e.setup_type] ?? e.setup_type ?? '' })}
       className={cn('radar-lead-card card-surface p-5', locate && 'bk-locate')}
     >
+      {detailFailed && (
+        <div role="status" className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-warn-600/25 bg-warn-50 px-3 py-2 text-caption text-warn-600">
+          <Icon name="flag" size={13} />
+          <span>{t('补充详情暂时读不到，当前显示基础信号。')}</span>
+          <button type="button" onClick={() => {
+            setDetail({ id: ev.event_id, ev: null, failed: false });
+            setDetailRetry((value) => value + 1);
+          }} className="font-medium underline underline-offset-2">
+            {t('重试')}
+          </button>
+        </div>
+      )}
       {/* 顶行：状态 chips + 相对时间（lg 合并 meta 行）· 右侧首要信号徽章 */}
       <div className="flex flex-wrap items-center gap-1.5">
         <span

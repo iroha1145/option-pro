@@ -63,6 +63,25 @@ def test_iv_cache_does_not_extend_fresh_chain_deadline(quote_cache):
     assert later["as_of"] == observed.isoformat()
 
 
+def test_greek_failure_keeps_missing_values_and_redacts_diagnostic(monkeypatch, caplog):
+    from app import failure_diagnostics
+
+    monkeypatch.setattr(failure_diagnostics, "_seen", {})
+    def broken_sqrt(_value):
+        raise RuntimeError("https://private.example/?token=secret")
+
+    monkeypatch.setattr(yahoo, "sqrt", broken_sqrt)
+    result = yahoo.compute_greeks(100.0, 105.0, 0.25, 0.05, 0.3)
+
+    assert result == {"delta": None, "gamma": None, "theta": None, "vega": None, "rho": None}
+    messages = [
+        record.getMessage() for record in caplog.records
+        if record.name == "app.failure_diagnostics"
+    ]
+    assert messages == ["fallback_failure stage=yahoo_greeks symbol=- error_type=RuntimeError"]
+    assert "secret" not in " ".join(messages)
+
+
 def test_derived_iv_cannot_outlive_original_quote_age_limit(quote_cache):
     clock, seed = quote_cache
     seed(20)

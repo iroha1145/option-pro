@@ -1,3 +1,4 @@
+import { deferred } from './helpers/deferred.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -11,11 +12,39 @@ import * as live from '../src/api/live.ts';
 import { DEFAULT_FILTERS } from '../src/components/screener/types.ts';
 
 const source = fs.readFileSync(new URL('../src/pages/Screener.tsx', import.meta.url), 'utf8');
+const screenerAst = ts.createSourceFile('Screener.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+
+function matchingNodes(predicate) {
+  const matches = [];
+  const visit = (node) => {
+    if (predicate(node)) matches.push(node);
+    ts.forEachChild(node, visit);
+  };
+  visit(screenerAst);
+  assert.equal(matches.length, 1, `expected one matching Screener declaration, found ${matches.length}`);
+  return matches[0];
+}
+
+function namedDeclaration(name) {
+  const node = matchingNodes((candidate) => ts.isVariableStatement(candidate)
+    && candidate.declarationList.declarations.some((declaration) => ts.isIdentifier(declaration.name) && declaration.name.text === name));
+  return node.getText(screenerAst);
+}
+
+function publishedScanEffect() {
+  const node = matchingNodes((candidate) => ts.isCallExpression(candidate)
+    && ts.isIdentifier(candidate.expression) && candidate.expression.text === 'useEffect'
+    && ts.isArrowFunction(candidate.arguments[0])
+    && ts.isBlock(candidate.arguments[0].body)
+    && ts.isIfStatement(candidate.arguments[0].body.statements[0])
+    && candidate.arguments[0].body.statements[0].expression.getText(screenerAst).includes('scanState')
+    && candidate.arguments[0].body.statements[0].expression.getText(screenerAst).includes('isMock'));
+  return node.parent.getText(screenerAst);
+}
 const parameters = { universe: 'themes', timeframe: 'mid', profile: 'balanced', top: 20, sector_id: null, min_price: 5, min_avg_dollar_volume: 10000000, include_options: true, ranking_algorithm: 'eod_limited_v1' };
 const completedAt = '2026-09-04T21:00:00Z';
 const completed = { requestId: 'new', status: 'completed', details: { parameters, result: { completed_at: completedAt, score_version: 'v2', published: true } } };
 const envelope = (ticker = 'NEW') => ({ rows: [{ ticker, price: 180 }], stale: false, sourceStatus: 'active', snapshotSavedAt: completedAt, scanCompletedAt: completedAt, scoreVersion: 'v2' });
-const deferred = () => { let resolve; let reject; const promise = new Promise((r, fail) => { resolve = r; reject = fail; }); return { promise, resolve, reject }; };
 
 function harness(overrides = {}) {
   const initialScanMeta = overrides.scanMeta ?? null;
@@ -53,9 +82,7 @@ function harness(overrides = {}) {
     const key = name[0].toLowerCase() + name.slice(1);
     scope[`set${name}`] = (value) => { state[key] = typeof value === 'function' ? value(state[key]) : value; };
   }
-  const start = source.indexOf('  const runScan = useCallback(');
-  const end = source.indexOf('\n  useEffect(', start);
-  const code = ts.transpileModule(`${source.slice(start, end)}\nglobalThis.runScan = runScan;`, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
+  const code = ts.transpileModule(`${namedDeclaration('runScan')}\nglobalThis.runScan = runScan;`, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
   vm.runInNewContext(code, scope);
   return {
     state,
@@ -71,9 +98,7 @@ function harness(overrides = {}) {
 
 function retryLastAttempt(h) {
   h.scope.lastScanAttempt = h.state.lastScanAttempt;
-  const start = source.indexOf('  const onScanRetry = ');
-  const end = source.indexOf('  const patchApplied', start);
-  vm.runInNewContext(ts.transpileModule(`${source.slice(start, end)}\nglobalThis.retryScan = onScanRetry;`, {
+  vm.runInNewContext(ts.transpileModule(`${namedDeclaration('onScanRetry')}\nglobalThis.retryScan = onScanRetry;`, {
     compilerOptions: { target: ts.ScriptTarget.ES2022 },
   }).outputText, h.scope);
   h.scope.retryScan();
@@ -82,9 +107,7 @@ function retryLastAttempt(h) {
 function resetAll(h) {
   h.scope.DEFAULT_FILTERS = DEFAULT_FILTERS;
   h.scope.draft = h.state.draft ?? DEFAULT_FILTERS;
-  const start = source.indexOf('  const resetAllFilters = ');
-  const end = source.indexOf('  const onTierFromHistogram', start);
-  vm.runInNewContext(ts.transpileModule(`${source.slice(start, end)}\nglobalThis.resetAll = resetAllFilters;`, {
+  vm.runInNewContext(ts.transpileModule(`${namedDeclaration('resetAllFilters')}\nglobalThis.resetAll = resetAllFilters;`, {
     compilerOptions: { target: ts.ScriptTarget.ES2022 },
   }).outputText, h.scope);
   h.scope.resetAll();
@@ -280,9 +303,7 @@ function discoveryHarness() {
     useEffect: (fn) => { scope.cleanup = fn(); },
   };
   scope.scanSeq.current = 1;
-  const start = source.indexOf("  useEffect(() => {\n    if (scanState !== 'done'");
-  const end = source.indexOf('\n  /* 成交额', start);
-  vm.runInNewContext(ts.transpileModule(source.slice(start, end), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, scope);
+  vm.runInNewContext(ts.transpileModule(publishedScanEffect(), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, scope);
   return { old, h, scope, tick: () => listeners.get('visibilitychange')() };
 }
 

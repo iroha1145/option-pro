@@ -10,10 +10,10 @@ API key, and no HTTP call back into this application's own ``/api/*`` surface.
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from typing import Callable, Iterable, Mapping, Sequence
 
-from app.services.market_calendar import ET, early_close_minutes, is_trading_day
+from app.services.market_calendar import last_completed_trading_day
 
 from .models import EtfObservation, MacroError, finite, iso_instant
 from .registry import ETF_SYMBOLS
@@ -25,30 +25,6 @@ logger = logging.getLogger("optix.macro.etf")
 BACKFILL_PERIOD = "10y"
 #: Incremental refreshes only need enough tail to catch late corrections.
 INCREMENTAL_PERIOD = "1y"
-
-_REGULAR_CLOSE_MINUTES = 16 * 60
-
-
-def last_completed_trading_day(now: datetime | None = None) -> date:
-    """Latest session whose regular close has passed in America/New_York.
-
-    An unfinished bar for today is never treated as a daily observation.
-    """
-
-    observed = (now or datetime.now(timezone.utc)).astimezone(ET)
-    today = observed.date()
-    candidate = today
-    # A ten-day walk is enough for any holiday cluster in the NYSE calendar.
-    for _ in range(14):
-        if is_trading_day(candidate):
-            if candidate < today:
-                return candidate
-            early = early_close_minutes(candidate)
-            close_minutes = early if early is not None else _REGULAR_CLOSE_MINUTES
-            if observed.hour * 60 + observed.minute >= close_minutes:
-                return candidate
-        candidate -= timedelta(days=1)
-    return candidate
 
 
 def _frame_rows(frame: object) -> list[tuple[date, float]]:

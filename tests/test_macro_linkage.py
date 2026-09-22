@@ -634,6 +634,60 @@ def test_the_overview_annotation_never_breaks_a_quote() -> None:
     assert _attach_macro_fit("AMD", [1, 2]) == [1, 2]
 
 
+def test_macro_reader_failure_keeps_quote_and_breakout_fallbacks(monkeypatch, caplog) -> None:
+    from app import failure_diagnostics
+    from app.api import breakouts as breakouts_api
+    from app.api import stocks as stocks_api
+
+    monkeypatch.setattr(failure_diagnostics, "_seen", {})
+
+    def unavailable_reader():
+        raise RuntimeError("https://private.example/?key=secret")
+
+    monkeypatch.setattr(
+        "app.services.macro_conditions.linkage_reader.load_macro_fit_reader",
+        unavailable_reader,
+    )
+    quote = {"ticker": "AMD", "price": 123.45}
+    stock_result = stocks_api._attach_macro_fit("AMD", quote)
+    breakout_reader = breakouts_api._macro_reader()
+
+    assert stock_result["ticker"] == "AMD" and stock_result["price"] == 123.45
+    assert stock_result["macro_shadow_status"] == "unavailable"
+    assert breakout_reader is None
+    messages = [
+        record.getMessage() for record in caplog.records
+        if record.name == "app.failure_diagnostics"
+    ]
+    assert any("stage=stocks_macro_compute symbol=AMD error_type=RuntimeError" in msg for msg in messages)
+    assert any("stage=breakouts_macro_reader_load symbol=- error_type=RuntimeError" in msg for msg in messages)
+    assert all("secret" not in msg and "https://" not in msg for msg in messages)
+
+
+def test_macro_import_failure_keeps_optional_annotations_optional(monkeypatch, caplog) -> None:
+    import sys
+    from types import SimpleNamespace
+
+    from app import failure_diagnostics
+    from app.api import breakouts as breakouts_api
+    from app.api import stocks as stocks_api
+
+    monkeypatch.setattr(failure_diagnostics, "_seen", {})
+    monkeypatch.setitem(sys.modules, "app.services.macro_conditions.linkage", None)
+    quote = {"ticker": "AMD", "price": 123.45}
+    stock_result = stocks_api._attach_macro_fit("AMD", quote)
+    breakout_result = breakouts_api._macro_shadow(SimpleNamespace(available=True), "AMD", 70.0)
+
+    assert stock_result is quote
+    assert breakout_result["macro_shadow_status"] == "unavailable"
+    messages = [
+        record.getMessage() for record in caplog.records
+        if record.name == "app.failure_diagnostics"
+    ]
+    assert any("stage=stocks_macro_import symbol=AMD error_type=ModuleNotFoundError" in msg for msg in messages)
+    assert any("stage=breakouts_macro_shadow_import symbol=AMD error_type=ModuleNotFoundError" in msg for msg in messages)
+
+
 def test_an_unclassified_ticker_says_so_on_the_overview() -> None:
     from app.api.stocks import _attach_macro_fit
 

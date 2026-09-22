@@ -24,7 +24,6 @@ Safety properties, in the order they matter:
 from __future__ import annotations
 
 import os
-import stat as stat_module
 import threading
 import time
 from collections import OrderedDict
@@ -33,21 +32,12 @@ from pathlib import Path
 from typing import Any
 
 from app.services import cache_metrics
+from app.file_identity import (
+    path_file_identity as _path_file_identity,
+    regular_file_identity as _regular_file_identity,
+)
 
 _Identity = tuple[int, int, int]
-
-
-def _regular_file_identity(value: os.stat_result) -> _Identity | None:
-    if not stat_module.S_ISREG(value.st_mode):
-        return None
-    return (int(value.st_ino), int(value.st_mtime_ns), int(value.st_size))
-
-
-def _path_file_identity(path: Path) -> _Identity | None:
-    try:
-        return _regular_file_identity(os.stat(path, follow_symlinks=False))
-    except OSError:
-        return None
 
 
 class FingerprintedFileCache:

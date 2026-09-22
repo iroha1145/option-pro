@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, time as datetime_time, timedelta, timezone
 from functools import lru_cache
+from itertools import count
 from zoneinfo import ZoneInfo
 
 
@@ -137,9 +138,17 @@ def prior_trading_sessions(end: date, count: int) -> list[date]:
     return sessions
 
 
-def previous_trading_day(start: date, *, include_start: bool = False) -> date:
+def previous_trading_day(
+    start: date,
+    *,
+    include_start: bool = False,
+    max_lookback_days: int | None = 15,
+) -> date:
+    # Feature cutoffs historically walk without a calendar-day limit. Other
+    # callers keep the bounded lookup and its existing failure behavior.
     candidate = start if include_start else start - timedelta(days=1)
-    for _ in range(15):
+    attempts = count() if max_lookback_days is None else range(max_lookback_days)
+    for _ in attempts:
         if is_trading_day(candidate):
             return candidate
         candidate -= timedelta(days=1)

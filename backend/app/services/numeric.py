@@ -13,6 +13,15 @@ def finite_number(value: Any) -> float | None:
     return number if math.isfinite(number) else None
 
 
+def finite_number_or_none(value: Any) -> float | None:
+    # Provider-boundary readers treat even unexpected conversion failures as
+    # missing. Keep that policy distinct from finite_number's strict errors.
+    try:
+        return finite_number(value)
+    except Exception:
+        return None
+
+
 def rounded_number(value: Any, ndigits: int = 4) -> float | None:
     # Provider metrics historically treat conversion/rounding failures as missing.
     # Keep that boundary separate from finite_number, which exposes other errors.

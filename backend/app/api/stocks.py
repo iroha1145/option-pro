@@ -36,6 +36,7 @@ from app.access import (
     request_account_session,
     require_same_origin_json,
 )
+from app.failure_diagnostics import record_fallback_failure
 from app.services import company_logo_cache
 from app.data_paths import get_data_paths
 from app.personal_config import get_personal_config
@@ -50,6 +51,7 @@ from app.public_home_snapshot import (
 )
 from app.services.yfinance_batch import download_in_bounded_batches
 from app.services.market_calendar import early_close_minutes, is_trading_day
+from app.services.numeric import finite_number_or_none as _safe_number
 from app.services.symbols import quote_symbol
 from app.services.watchlist_trend import daily_trend
 from app.services.watchlist_scope import (
@@ -2646,13 +2648,6 @@ async def _build_stock_signals(ticker: str) -> dict[str, Any]:
     if not _WATCHLIST_TICKER_PATTERN.fullmatch(symbol):
         raise ValueError("Invalid ticker symbol")
 
-    def _safe_number(value: Any) -> float | None:
-        try:
-            f = float(value)
-            return f if math.isfinite(f) else None
-        except Exception:
-            return None
-
     def _compute():
         try:
             hist = None
@@ -2916,7 +2911,8 @@ def _attach_macro_fit(symbol: str, payload: Any) -> Any:
         from app.services.macro_conditions.linkage import factor_driver
         from app.services.macro_conditions.linkage_reader import load_macro_fit_reader
         from app.services.sectors import primary_sector_id
-    except Exception:
+    except Exception as exc:
+        record_fallback_failure("stocks_macro_import", exc, symbol=symbol)
         return payload
 
     blank = {
@@ -2954,7 +2950,8 @@ def _attach_macro_fit(symbol: str, payload: Any) -> Any:
             "macro_opposing_factors": [factor_driver(f) for f in fit.opposing],
             "macro_shadow_status": "ok",
         }
-    except Exception:
+    except Exception as exc:
+        record_fallback_failure("stocks_macro_compute", exc, symbol=symbol)
         return {**payload, **blank, "macro_shadow_status": "unavailable"}
 
 
@@ -3427,7 +3424,8 @@ async def _load_stock_chart(
                 adjustment=adjustment,
                 now=observed_at,
             )
-        except Exception:
+        except Exception as exc:
+            record_fallback_failure("stocks_intraday_analysis", exc, symbol=ticker)
             payload["chart_analysis"] = None
     return payload
 

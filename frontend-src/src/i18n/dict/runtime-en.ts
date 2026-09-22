@@ -1329,6 +1329,7 @@ export const EN: Record<string, string> = {
   "继续读取更早事件": "Load earlier events",
   "已加载全部": "Loaded all",
   "加载更多失败：": "Failed to load more:",
+  "补充详情暂时读不到，当前显示基础信号。": "Additional details are unavailable. Showing the basic signal.",
   "宏观影子": "Macro shadow",
   "宏观参考": "Macro context",
   "告警优先级": "Alert priority",

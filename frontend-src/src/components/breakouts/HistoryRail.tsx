@@ -12,7 +12,7 @@ import { motion } from 'framer-motion';
 import type { ApiError } from '@/api/client';
 import { cn } from '@/lib/utils';
 import { EASE_PAPER } from '@/lib/motion';
-import { fmtPrice } from '@/lib/format';
+import { fmtNyDayKey, fmtNyHHmm, fmtPrice } from '@/lib/format';
 import EmptyState from '@/components/shared/EmptyState';
 import { SkeletonRows } from '@/components/shared/Skeleton';
 import { LIFECYCLE_CN, LIFECYCLE_TONE, SETUP_CN } from './types';
@@ -38,32 +38,6 @@ const TONE_TEXT: Record<LifecycleTone, string> = {
 /* 历史回溯按「美股交易日」阅读（审计 2.6.6）：分组键与行内时间一律按
    America/New_York 计，UTC+8 用户不再看到 14:00 ET 的事件被归到「次日 03:00」，
    与同页 SessionChip / Navbar 的 ET 口径一致。 */
-const NY_DAY_KEY = new Intl.DateTimeFormat('en-CA', {
-  timeZone: 'America/New_York',
-  year: 'numeric',
-  month: '2-digit',
-  day: '2-digit',
-});
-const NY_HHMM = new Intl.DateTimeFormat('en-GB', {
-  timeZone: 'America/New_York',
-  hour: '2-digit',
-  minute: '2-digit',
-  hour12: false,
-});
-
-function nyDayKey(iso: string): string | null {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  return NY_DAY_KEY.format(d);
-}
-
-function hhmm(iso: string | null | undefined): string {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '—';
-  return NY_HHMM.format(d);
-}
-
 function dayLabel(key: string): string {
   // key 是纽约日历日；用 UTC 正午解析取星期，避免本地时区把日期挪一天
   const d = new Date(`${key}T12:00:00Z`);
@@ -132,7 +106,7 @@ export default function HistoryRail({
   const groups = useMemo(() => {
     const map = new Map<string, BreakoutEventFull[]>();
     shown.forEach((e) => {
-      const key = nyDayKey(e.event_at);
+      const key = fmtNyDayKey(e.event_at);
       if (!key) return;
       const arr = map.get(key) ?? [];
       arr.push(e);
@@ -249,7 +223,7 @@ export default function HistoryRail({
                           className="radar-history-row flex min-h-[60px] cursor-pointer items-center gap-2.5 px-4 py-2 transition-colors duration-fast hover:bg-paper-2"
                         >
                           {/* 时间 */}
-                          <span className="w-10 shrink-0 font-mono text-caption text-ink-400 tnum">{hhmm(e.event_at)}</span>
+                          <span className="w-10 shrink-0 font-mono text-caption text-ink-400 tnum">{fmtNyHHmm(e.event_at)}</span>
                           {/* ticker/名称 + 形态·状态 */}
                           <span className="min-w-0 flex-1">
                             <span className="flex items-baseline gap-1.5">

@@ -19,6 +19,7 @@ from app.access import (
     require_same_origin_action,
 )
 from app.services.cache import cache
+from app.services.numeric import finite_number_or_none as _to_optional_float
 from app.public_home_snapshot import (
     public_home_resource_parameters,
     read_owner_public_home_entry_async,
@@ -107,14 +108,6 @@ _EARNINGS_OUTPUT_FIELDS = (
     "expected_move_method",
     "expected_move_status",
 )
-
-
-def _to_optional_float(value: Any) -> float | None:
-    try:
-        f = float(value)
-        return None if (math.isnan(f) or math.isinf(f)) else f
-    except Exception:
-        return None
 
 
 def _first(value: Any) -> Any:

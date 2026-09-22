@@ -9,7 +9,6 @@ import math
 import os
 from pathlib import Path
 import re
-import stat
 import tempfile
 import threading
 import time
@@ -20,6 +19,10 @@ from app.json_validation import (
     reject_non_finite_json as _reject_non_finite_json,
 )
 from app.data_paths import get_data_paths
+from app.file_identity import (
+    path_file_identity as _path_file_identity,
+    regular_file_identity as _regular_file_identity,
+)
 
 
 STOCK_PULL_SNAPSHOT_VERSION = 1
@@ -72,19 +75,6 @@ def _path_has_symlink_boundary(path: Path) -> bool:
         return path.is_symlink() or path.parent.is_symlink()
     except OSError:
         return True
-
-
-def _regular_file_identity(value: os.stat_result) -> tuple[int, int, int] | None:
-    if not stat.S_ISREG(value.st_mode):
-        return None
-    return (int(value.st_ino), int(value.st_mtime_ns), int(value.st_size))
-
-
-def _path_file_identity(path: Path) -> tuple[int, int, int] | None:
-    try:
-        return _regular_file_identity(os.stat(path, follow_symlinks=False))
-    except OSError:
-        return None
 
 
 def _cache_document(

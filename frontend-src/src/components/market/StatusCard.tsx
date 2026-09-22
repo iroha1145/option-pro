@@ -4,8 +4,8 @@
  * 字段对齐 contract market/status：market/phase/holiday/next_open/next_close，缺字段显示「—」
  */
 import type { ApiError } from '@/api/client';
-import type { MarketSession } from '@/api/types';
 import type { MarketStatusDetail } from './api';
+import { MARKET_LABEL, MARKET_TO_SESSION } from '@/lib/marketSession';
 import { useNow } from '@/hooks/useNow';
 import { fmtCountdown, fmtNyTime } from '@/lib/format';
 import SessionLED from '@/components/shared/SessionLED';
@@ -13,20 +13,6 @@ import EmptyState from '@/components/shared/EmptyState';
 import { SkeletonCard } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
 import { t } from '../../i18n/core.ts';
-
-const MARKET_TO_SESSION: Record<NonNullable<MarketStatusDetail['market']>, MarketSession> = {
-  open: 'regular',
-  premarket: 'premarket',
-  postmarket: 'afterhours',
-  closed: 'closed',
-};
-
-const MARKET_LABEL: Record<NonNullable<MarketStatusDetail['market']>, string> = {
-  open: t('盘中'),
-  premarket: t('盘前'),
-  postmarket: t('盘后'),
-  closed: t('休市'),
-};
 
 const PHASE_LABEL: Record<string, string> = {
   regular: t('常规交易时段 · 9:30–16:00 ET'),

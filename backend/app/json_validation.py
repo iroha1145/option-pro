@@ -10,17 +10,19 @@ import math
 from typing import Any
 
 
-def reject_duplicate_json_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+def reject_duplicate_json_keys(
+    pairs: list[tuple[str, Any]], *, error_message: str | None = None
+) -> dict[str, Any]:
     output: dict[str, Any] = {}
     for key, value in pairs:
         if key in output:
-            raise ValueError(f"duplicate JSON key: {key}")
+            raise ValueError(error_message if error_message is not None else f"duplicate JSON key: {key}")
         output[key] = value
     return output
 
 
-def reject_non_finite_json(value: str) -> None:
-    raise ValueError(f"non-finite JSON value: {value}")
+def reject_non_finite_json(value: str, *, error_message: str | None = None) -> None:
+    raise ValueError(error_message if error_message is not None else f"non-finite JSON value: {value}")
 
 
 def is_finite_json_tree(value: Any, *, depth: int = 0) -> bool:

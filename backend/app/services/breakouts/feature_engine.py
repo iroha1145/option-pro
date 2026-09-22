@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 
 from app.services.breakouts.models import MarketSession, TemporalCutoff
+from app.services.market_calendar import previous_trading_day
 
 
 NEW_YORK = ZoneInfo("America/New_York")
@@ -50,15 +51,6 @@ def _clean_frame(frame: pd.DataFrame, *, require_volume: bool = False) -> pd.Dat
     return result.loc[valid]
 
 
-def _previous_trading_day(observed: date) -> date:
-    from app.services.market_calendar import is_trading_day as _is_trading_day
-
-    candidate = observed - timedelta(days=1)
-    while not _is_trading_day(candidate):
-        candidate -= timedelta(days=1)
-    return candidate
-
-
 def completed_daily_session(cutoff: TemporalCutoff) -> date:
     if cutoff.completed_daily_session is not None:
         return cutoff.completed_daily_session
@@ -70,10 +62,10 @@ def completed_daily_session(cutoff: TemporalCutoff) -> date:
     local = cutoff.event_at.astimezone(NEW_YORK)
     observed = local.date()
     if not _is_trading_day(observed):
-        return _previous_trading_day(observed)
+        return previous_trading_day(observed, max_lookback_days=None)
     close_minutes = _early_close_minutes(observed) or 16 * 60
     if local.hour * 60 + local.minute < close_minutes:
-        return _previous_trading_day(observed)
+        return previous_trading_day(observed, max_lookback_days=None)
     return observed
 
 

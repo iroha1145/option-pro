@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
 from app.access import bind_trusted_system_task
+from app.failure_diagnostics import record_fallback_failure
 from app.data_paths import get_data_paths
 from app.execution_limits import BREAKOUT_TASK_TIMEOUT_SECONDS
 from app.personal_config import get_personal_config
@@ -1731,7 +1732,8 @@ class PublicHomeTask:
             try:
                 await self._option_data_refresh.poll(entries)
                 self._option_data_error = False
-            except Exception:
+            except Exception as exc:
+                record_fallback_failure("public_option_queue_poll", exc)
                 self._option_data_error = True
         if self._stock_data_refresh is not None:
             try:
@@ -1739,7 +1741,8 @@ class PublicHomeTask:
                 # while unrelated home resources refresh or this round times out.
                 await self._stock_data_refresh.poll(entries)
                 self._stock_data_error = False
-            except Exception:
+            except Exception as exc:
+                record_fallback_failure("public_stock_queue_poll", exc)
                 self._stock_data_error = True
         parameters = {
             resource: (
@@ -1907,7 +1910,8 @@ class PublicHomeTask:
             try:
                 await self._stock_data_refresh.poll(entries)
                 self._stock_data_error = False
-            except Exception:
+            except Exception as exc:
+                record_fallback_failure("public_stock_queue_followup", exc)
                 self._stock_data_error = True
         return self._result(
             path=path,

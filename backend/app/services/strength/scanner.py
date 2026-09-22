@@ -3,7 +3,6 @@ from __future__ import annotations
 import io
 import hashlib
 import math
-from bisect import bisect_left, bisect_right
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from datetime import date, datetime, timedelta, timezone
 from time import monotonic
@@ -20,6 +19,7 @@ from app.services import yahoo
 from app.services.cache import cache
 from app.services.finnhub_budget import mark_finnhub_rate_limited, reserve_finnhub_request
 from app.services.sectors import SECTORS
+from app.services.strength.percentile import midrank_percentile
 from app.services.strength.features import (
     _feature_row,
     _ret,
@@ -67,7 +67,6 @@ from app.services.technical.range_persistence import (
     compute_range_persistence,
 )
 
-from app.services.numeric import clamp_number
 TIMEFRAMES = ("short", "mid", "long", "all")
 PROFILES = ("conservative", "balanced", "aggressive")
 UNIVERSES = ("themes",)
@@ -95,15 +94,6 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _clamp(
-    value: float | int | None,
-    lo: float = 0.0,
-    hi: float = 100.0,
-    default: float | None = None,
-) -> float | None:
-    return clamp_number(value, lo, hi, default)
-
-
 def _pct_rank(items: list[dict[str, Any]], key: str) -> dict[str, float]:
     values = sorted((row[key] for row in items if row.get(key) is not None))
     if not values:
@@ -111,16 +101,12 @@ def _pct_rank(items: list[dict[str, Any]], key: str) -> dict[str, float]:
     if len(values) == 1:
         # A single observation has no defensible cross-sectional percentile.
         return {}
-    denom = max(len(values) - 1, 1)
     ranks: dict[str, float] = {}
     for row in items:
         value = row.get(key)
         if value is None:
             continue
-        below = bisect_left(values, value)
-        tied = bisect_right(values, value) - below
-        midrank = below + (tied - 1) / 2
-        ranks[row["ticker"]] = round(midrank / denom * 100, 1)
+        ranks[row["ticker"]] = midrank_percentile(values, value)
     return ranks
 
 

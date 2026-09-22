@@ -13,7 +13,7 @@ import yfinance as yf
 
 from app.services import massive
 from app.services.daily_returns import aligned_benchmark_return
-from app.services.numeric import rounded_number as _safe_float
+from app.services.numeric import finite_number, rounded_number as _safe_float
 
 logger = logging.getLogger(__name__)
 
@@ -639,14 +639,8 @@ def compute_stock_signals_from_history(
     )
 
     def safe(val):
-        """Convert NaN/Inf to None."""
-        if val is None:
-            return None
-        try:
-            f = float(val)
-            return round(f, 4) if math.isfinite(f) else None
-        except (TypeError, ValueError):
-            return None
+        number = finite_number(val)
+        return round(number, 4) if number is not None else None
 
     # SMA distances
     for period, key in [

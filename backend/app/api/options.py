@@ -17,6 +17,7 @@ from app.access import (
     public_snapshot_unavailable,
     request_allows_visitor_live_pulls,
 )
+from app.failure_diagnostics import record_fallback_failure
 from app.services import yahoo
 from app.services.quote_quality import (
     STANDARD_CONTRACT_MULTIPLIER,
@@ -466,14 +467,16 @@ async def _unusual_activity_impl(type: str, min_vol_oi: float):
                 price = _finite(t.fast_info.last_price, minimum=0.0)
                 if price is not None and price <= 0:
                     price = None
-            except Exception:
+            except Exception as exc:
+                record_fallback_failure("options_underlying_price", exc, symbol=symbol)
                 price = None
             usable_chains = 0
             chain_failures = 0
             for exp in exps:
                 try:
                     chain = run_yahoo_option_io(lambda current=exp: t.option_chain(current))
-                except Exception:
+                except Exception as exc:
+                    record_fallback_failure("options_chain", exc, symbol=symbol)
                     chain_failures += 1
                     continue
                 if chain.calls.empty and chain.puts.empty:
@@ -542,7 +545,8 @@ async def _unusual_activity_impl(type: str, min_vol_oi: float):
                             "inferred_direction": "unknown",
                             "direction_deprecated": True,
                         })
-        except Exception:
+        except Exception as exc:
+            record_fallback_failure("options_unusual_ticker", exc, symbol=symbol)
             return {"symbol": symbol, "ok": False, "rows": []}
         if usable_chains == 0:
             return {"symbol": symbol, "ok": False, "rows": [], "reason": "empty_chains"}

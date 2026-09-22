@@ -6,6 +6,7 @@ import socket
 import ssl
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from functools import partial
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Literal
 from urllib.parse import urlsplit
@@ -13,6 +14,12 @@ from urllib.parse import urlsplit
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
+from app.json_validation import reject_duplicate_json_keys, reject_non_finite_json
+
+
+# Keep protocol error causes independent of untrusted upstream keys and values.
+_reject_duplicate = partial(reject_duplicate_json_keys, error_message="duplicate JSON key")
+_reject_constant = partial(reject_non_finite_json, error_message="non-finite JSON number")
 
 INTERNAL_API_PREFIX = "/internal/v1"
 NEWS_PAGE_LIMIT = 500
@@ -590,22 +597,11 @@ class MacroLensEtlClient:
 
     @staticmethod
     def _json_object(raw: bytes) -> dict[str, Any]:
-        def reject_duplicate(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-            output: dict[str, Any] = {}
-            for key, value in pairs:
-                if key in output:
-                    raise ValueError("duplicate JSON key")
-                output[key] = value
-            return output
-
-        def reject_constant(_value: str) -> None:
-            raise ValueError("non-finite JSON number")
-
         try:
             value = json.loads(
                 raw,
-                object_pairs_hook=reject_duplicate,
-                parse_constant=reject_constant,
+                object_pairs_hook=_reject_duplicate,
+                parse_constant=_reject_constant,
             )
         except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
             raise EtlProtocolError("MacroLens returned malformed JSON") from exc
