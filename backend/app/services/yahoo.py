@@ -8,6 +8,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from app.config import get_settings
+from app.failure_diagnostics import record_fallback_failure
 from app.services.market_calendar import options_close_minutes
 from app.services.option_capability import (
     CAPABILITY_VERSION,
@@ -952,5 +953,6 @@ def compute_greeks(S, K, T, r, sigma, is_call=True):
             "vega": round(vega, 4),
             "rho": round(rho, 4),
         }
-    except Exception:
+    except Exception as exc:
+        record_fallback_failure("yahoo_greeks", exc)
         return {"delta": None, "gamma": None, "theta": None, "vega": None, "rho": None}

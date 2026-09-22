@@ -168,6 +168,36 @@ def test_chart_loader_freezes_completion_before_one_provider_call(monkeypatch):
     assert bundle["lastBarDate"] == str(bars[1]["t"])
 
 
+def test_intraday_analysis_failure_keeps_bars_and_logs_only_safe_fields(monkeypatch, caplog):
+    from app import failure_diagnostics
+
+    monkeypatch.setattr(failure_diagnostics, "_seen", {})
+    bars = [_bar(_time("2026-07-06T13:30:00Z"))]
+
+    async def provider(_ticker, _range, _adjustment):
+        return {"bars": bars, "source": "fixture"}
+
+    def broken_analysis(*_args, **_kwargs):
+        raise RuntimeError("https://provider.example/?token=private")
+
+    monkeypatch.setattr(stocks, "_stock_chart_impl", provider)
+    monkeypatch.setattr("app.services.technical.chart_analysis.assemble_intraday_analysis", broken_analysis)
+    payload = asyncio.run(stocks._load_stock_chart("AAPL", "5m", "raw"))
+
+    assert payload["source"] == "fixture"
+    assert len(payload["bars"]) == 1
+    assert payload["chart_analysis"] is None
+    records = [
+        record for record in caplog.records
+        if record.name == "app.failure_diagnostics"
+        and "stage=stocks_intraday_analysis" in record.getMessage()
+    ]
+    assert len(records) == 1
+    assert "symbol=AAPL error_type=RuntimeError" in records[0].getMessage()
+    assert "private" not in records[0].getMessage()
+    assert records[0].exc_info is None
+
+
 def test_provider_chart_tags_early_close_afternoon_as_extended(monkeypatch):
     index = pd.DatetimeIndex(["2025-11-28T17:30:00Z", "2025-11-28T18:00:00Z"])
     history = pd.DataFrame({"Open": [100, 101], "High": [102, 103], "Low": [99, 100], "Close": [101, 102], "Volume": [1000, 500]}, index=index)

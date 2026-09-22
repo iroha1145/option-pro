@@ -700,6 +700,45 @@ def test_provider_failure_marks_scan_failed_but_health_is_degraded_not_fatal(tmp
     assert health.status == "degraded"
 
 
+def test_secondary_failure_records_do_not_replace_primary_scan_error(tmp_path, monkeypatch, caplog):
+    from app import failure_diagnostics
+
+    monkeypatch.setattr(failure_diagnostics, "_seen", {})
+    settings = Settings(tmp_path / "breakouts.db")
+    repository = BreakoutRepository(settings.db_path)
+    worker = BreakoutWorker(
+        settings,
+        repository,
+        provider=Provider(fail=True),
+        clock=MarketClock(now=lambda: NOW),
+        owner_id="secondary-failure",
+    )
+
+    def broken_fail_scan(*_args, **_kwargs):
+        raise sqlite3.OperationalError("https://private.example/?token=secret")
+
+    original_status = worker._status
+
+    def broken_degraded_status(status, **kwargs):
+        if status == "degraded":
+            raise sqlite3.OperationalError("https://private.example/?token=secret")
+        return original_status(status, **kwargs)
+
+    monkeypatch.setattr(repository, "fail_scan", broken_fail_scan)
+    monkeypatch.setattr(worker, "_status", broken_degraded_status)
+    result = asyncio.run(worker.run_once())
+
+    assert result["status"] == "degraded"
+    assert result["error_code"] == "provider_fixture_failed"
+    messages = [
+        record.getMessage() for record in caplog.records
+        if record.name == "app.failure_diagnostics"
+    ]
+    assert any("stage=breakouts_scan_failure_record" in message for message in messages)
+    assert any("stage=breakouts_degraded_status" in message for message in messages)
+    assert all("secret" not in message and "https://" not in message for message in messages)
+
+
 def test_unavailable_snapshot_does_not_replace_previous_completed_scan(tmp_path):
     settings = Settings(tmp_path / "breakouts.db")
     service = ScanService()

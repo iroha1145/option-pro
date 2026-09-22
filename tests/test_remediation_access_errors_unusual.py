@@ -316,7 +316,11 @@ def test_fl04_does_not_infer_opening_or_infinite_ratio(
 
 def test_fl05_partial_scan_coverage_matches_success(
     monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
+    from app import failure_diagnostics
+
+    monkeypatch.setattr(failure_diagnostics, "_seen", {})
     good = SimpleNamespace(
         options=["2030-08-16"],
         fast_info=SimpleNamespace(last_price=100.0),
@@ -342,7 +346,7 @@ def test_fl05_partial_scan_coverage_matches_success(
 
     def factory(symbol: str):
         if symbol == "BROKEN":
-            raise RuntimeError("down")
+            raise RuntimeError("https://provider.example/?token=private")
         return good
 
     monkeypatch.setattr(options, "POPULAR_TICKERS", ["GOOD", "BROKEN"])
@@ -355,6 +359,16 @@ def test_fl05_partial_scan_coverage_matches_success(
     assert payload["failed_symbols"] == ["BROKEN"]
     assert payload["source_status"] == "degraded"
     assert payload["data_limited"] is True
+    asyncio.run(options._unusual_activity_impl("all", 1.0))
+    records = [
+        record for record in caplog.records
+        if record.name == "app.failure_diagnostics"
+        and "stage=options_unusual_ticker" in record.getMessage()
+    ]
+    assert len(records) == 1
+    assert "symbol=BROKEN error_type=RuntimeError" in records[0].getMessage()
+    assert "private" not in records[0].getMessage()
+    assert records[0].exc_info is None
 
 
 def test_ac04_worker_task_gets_explicit_owner_context(tmp_path) -> None:
