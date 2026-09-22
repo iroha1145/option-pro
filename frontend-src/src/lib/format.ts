@@ -79,6 +79,12 @@ const NY_HHMM_FMT = new Intl.DateTimeFormat('en-GB', {
   minute: '2-digit',
   hourCycle: 'h23',
 });
+const NY_DAY_KEY_FMT = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/New_York',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
 
 /** ISO → 美东 `M/DD HH:mm`；无效输入显「—」 */
 export function fmtNyEventTime(iso: string): string {
@@ -96,6 +102,12 @@ export function fmtNyHHmm(iso: string | null | undefined): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
   return NY_HHMM_FMT.format(d);
+}
+
+/** ISO → 纽约日历日；无效输入不生成分组键。 */
+export function fmtNyDayKey(iso: string): string | null {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : NY_DAY_KEY_FMT.format(d);
 }
 
 export function fmtRelative(iso: string | null | undefined): string {

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
-import { formatChartTime } from '../src/components/detail/chartTime.ts';
+import { barTooltipTitle, fmtAxisLabel, formatChartTime, lastBarText } from '../src/components/detail/chartTime.ts';
 import { catalystSortReadiness, catalystSummaryUsable, CATALYST_SUMMARY_TTL_MS, EMPTY_CATALYST, DEFAULT_FILTERS, tierOf } from '../src/components/screener/types.ts';
 import { applyEodLimitedView } from '../src/lib/eodLimitedView.ts';
 import { macroToneOf } from '../src/lib/macroFit.ts';
@@ -44,20 +44,11 @@ test('chart formatter follows DST and preserves date-only trading dates without 
 });
 
 test('axis, tooltip and last-bar wrappers share the formatter without modifying source bar timestamps', () => {
-  const chart = fs.readFileSync(new URL('../src/components/detail/KlineChart.tsx', import.meta.url), 'utf8');
-  const scope = { formatChartTime };
-  for (const [startMarker, endMarker] of [
-    ['function fmtAxisLabel(', '/** 读回 ECharts'],
-    ['function lastBarText(', '/** 只认已命名'],
-  ]) {
-    const start = chart.indexOf(startMarker);
-    vm.runInNewContext(transpile(chart.slice(start, chart.indexOf(endMarker, start))), scope);
-  }
   const bars = [{ t: '2026-09-11T18:30:00Z', c: 100 }];
   const original = JSON.stringify(bars);
-  assert.equal(scope.fmtAxisLabel(bars[0].t, '5m'), '09-11 14:30');
-  assert.equal(scope.barTooltipTitle(bars[0].t, '5m'), '2026-09-11 14:30 ET');
-  assert.equal(scope.lastBarText({ bars }, '5m'), '2026-09-11 14:30 ET');
+  assert.equal(fmtAxisLabel(bars[0].t, '5m'), '09-11 14:30');
+  assert.equal(barTooltipTitle(bars[0].t, '5m'), '2026-09-11 14:30 ET');
+  assert.equal(lastBarText({ bars }, '5m'), '2026-09-11 14:30 ET');
   assert.equal(JSON.stringify(bars), original);
 });
 

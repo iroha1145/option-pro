@@ -18,6 +18,7 @@ import { dirname, join } from 'node:path';
 
 const src = join(dirname(fileURLToPath(import.meta.url)), '..', 'src');
 const kline = readFileSync(join(src, 'components/detail/KlineChart.tsx'), 'utf8');
+const chartTime = readFileSync(join(src, 'components/detail/chartTime.ts'), 'utf8');
 const stocksApi = readFileSync(join(src, 'api/modules/stocks.ts'), 'utf8');
 const structurePanel = readFileSync(join(src, 'components/detail/StructurePanel.tsx'), 'utf8');
 const detailApi = readFileSync(join(src, 'components/detail/api.ts'), 'utf8');
@@ -54,7 +55,8 @@ test('面积图不再有全史最小二乘趋势线', () => {
 });
 
 test('页脚显示末根自身时间，读取时刻另行标注', () => {
-  assert.match(kline, /function lastBarText\(/);
+  assert.match(kline, /lastBarText\(data, range\)/);
+  assert.match(chartTime, /export function lastBarText\(/);
   assert.match(kline, /t\('读取于 \{at\}'/);
   assert.match(kline, /共 \{n\} 根 · 末根 \{at\}\{status\}/);
 });

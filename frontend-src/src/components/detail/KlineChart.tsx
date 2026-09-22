@@ -1,5 +1,5 @@
 import IndicatorReadouts from './chart-indicators/IndicatorReadouts';
-import { formatChartTime } from './chartTime.ts';
+import { barTooltipTitle, fmtAxisLabel, formatChartTime, lastBarText } from './chartTime.ts';
 import { indicatorLayout, selectIndicatorPanes, formatIndicatorValue, type IndicatorLayout, type IndicatorView } from './chart-indicators/layout.ts';
 import { useLiveQuote, useQuoteStatus } from '@/hooks/useLiveQuote';
 import { displayedQuoteLabel, preferLiveQuote } from '@/lib/liveQuotes';
@@ -96,14 +96,6 @@ function overlaysConsistentWithBars(
   const days = bars.filter((b) => b.ext !== true).map((b) => b.t.slice(0, 10));
   const position = days.lastIndexOf(anchor);
   return position >= 0 && days.length - 1 - position <= 2;
-}
-
-function fmtAxisLabel(iso: string, range: ChartRange): string {
-  return formatChartTime(iso, range, 'axis');
-}
-
-function barTooltipTitle(iso: string, range: ChartRange): string {
-  return formatChartTime(iso, range);
 }
 
 /** 读回 ECharts 实例当前的 inside 缩放窗口（索引口径）。 */
@@ -1293,12 +1285,6 @@ export default function KlineChart({
       {chartBody}
     </DrawingWorkspace>
   );
-}
-
-/** 末根 K 线自身的时间：日/周只到日期，分钟带时刻（as_of 只是读取时刻，两回事） */
-function lastBarText(data: { bars: ChartBarEx[]; last_bar_at?: string | null }, range: ChartRange): string {
-  const iso = data.bars[data.bars.length - 1]?.t ?? data.last_bar_at;
-  return iso ? formatChartTime(iso, range) : '—';
 }
 
 /** 只认已命名的形态；认不出就返回 null，绝不把 kind 原样打成「形态 · ma」。 */

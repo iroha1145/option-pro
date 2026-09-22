@@ -14,6 +14,7 @@ import { strengthApi } from '@/api/modules/strength';
 import { marketPulseApi } from '@/components/market/api';
 import { usePolling } from '@/hooks/usePolling';
 import { fmtTimeHHMMSS } from '@/lib/format';
+import { MARKET_LABEL, MARKET_TO_SESSION } from '@/lib/marketSession';
 import type { MarketSession } from '@/api/types';
 import PageHeader from '@/components/shared/PageHeader';
 import SessionLED from '@/components/shared/SessionLED';
@@ -27,20 +28,6 @@ import LinkCards from '@/components/market/LinkCards';
 import MacroConditionsPanel from '@/components/market/macro/MacroConditionsPanel';
 import { pageRegionProps } from '@/lib/pageRegion';
 import { t } from '../i18n/core.ts';
-
-const MARKET_TO_SESSION: Record<string, MarketSession> = {
-  open: 'regular',
-  premarket: 'premarket',
-  postmarket: 'afterhours',
-  closed: 'closed',
-};
-
-const SESSION_LABEL: Record<string, string> = {
-  open: t('盘中'),
-  premarket: t('盘前'),
-  postmarket: t('盘后'),
-  closed: t('休市'),
-};
 
 export default function Market() {
   const [searchParams] = useSearchParams();
@@ -87,7 +74,7 @@ export default function Market() {
         meta={
           <>
             {session ? (
-              <SessionLED session={session} label={status?.market ? SESSION_LABEL[status.market] : undefined} />
+              <SessionLED session={session} label={status?.market ? MARKET_LABEL[status.market] : undefined} />
             ) : (
               <span className="inline-flex items-center gap-1.5">
                 <span className="inline-block size-2 rounded-full bg-ink-300" aria-hidden="true" />

@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 import type { ApiError } from '@/api/client';
 import type { MarketStrength } from '@/api/types';
 import { cn } from '@/lib/utils';
+import { strengthBarClass } from '@/lib/strengthColor';
 import EmptyState from '@/components/shared/EmptyState';
 import { SkeletonCard } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
@@ -77,15 +78,13 @@ export default function BreadthHistogram({
         <div className="flex h-28 items-end gap-1.5 pt-4">
           {data.histogram.map((n, i) => {
             const score = i * 10 + 5;
-            const color =
-              score >= 85 ? 'bg-up-600' : score >= 70 ? 'bg-brand-600' : score >= 50 ? 'bg-brand-400' : 'bg-ink-300';
             return (
               <div key={i} className="group relative flex-1">
                 <div className="cloud-popover pointer-events-none absolute -top-7 left-1/2 z-10 hidden -translate-x-1/2 px-1.5 py-0.5 text-[11px] text-ink-600 group-hover:block">
                   {n}
                 </div>
                 <motion.div
-                  className={cn('w-full origin-bottom rounded-t-[3px]', color)}
+                  className={cn('w-full origin-bottom rounded-t-[3px]', strengthBarClass(score))}
                   initial={{ scaleY: 0 }}
                   whileInView={{ scaleY: 1 }}
                   viewport={{ once: true, amount: 0.4 }}

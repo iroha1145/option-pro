@@ -22,3 +22,17 @@ export function formatChartTime(value: string, range: string, style: 'axis' | 'd
   if (daily) return label;
   return `${label} ${parts.hour}:${parts.minute}${style === 'detail' ? ' ET' : ''}`;
 }
+
+export function fmtAxisLabel(iso: string, range: string): string {
+  return formatChartTime(iso, range, 'axis');
+}
+
+export function barTooltipTitle(iso: string, range: string): string {
+  return formatChartTime(iso, range);
+}
+
+/** 末根 K 线自身的时间；日/周只到日期，分钟带时刻。 */
+export function lastBarText(data: { bars: { t: string }[]; last_bar_at?: string | null }, range: string): string {
+  const iso = data.bars[data.bars.length - 1]?.t ?? data.last_bar_at;
+  return iso ? formatChartTime(iso, range) : '—';
+}
