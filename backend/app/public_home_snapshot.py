@@ -1321,14 +1321,13 @@ def create_public_home_entry(
     }
 
 
-def _validate_entry(resource: str, value: Any, *, now: float) -> dict[str, Any] | None:
+def _validate_entry(resource: str, value: Any) -> dict[str, Any] | None:
     spec = PUBLIC_HOME_RESOURCE_SPECS.get(resource)
     if spec is None or not isinstance(value, dict) or set(value) != _ENTRY_FIELDS:
         return None
     saved_at = value.get("saved_at")
     if (
         not _finite_number(saved_at, minimum=0.0000001)
-        or float(saved_at) > now
         or value.get("schema") != spec.schema
         or value.get("max_age") != spec.max_age
         or not _valid_parameters(resource, value.get("parameters"))
@@ -1340,12 +1339,6 @@ def _validate_entry(resource: str, value: Any, *, now: float) -> dict[str, Any] 
         return None
     if not _payload_matches_parameters(resource, payload, value["parameters"]):
         return None
-    if not _payload_timestamps_fit_entry(
-        resource,
-        payload,
-        not_after=now + PUBLIC_HOME_MAX_CLOCK_SKEW_SECONDS,
-    ):
-        return None
     return {
         "payload": payload,
         "saved_at": float(saved_at),
@@ -1353,6 +1346,12 @@ def _validate_entry(resource: str, value: Any, *, now: float) -> dict[str, Any] 
         "schema": spec.schema,
         "max_age": spec.max_age,
     }
+
+
+def _entry_timestamps_fit(resource: str, entry: Mapping[str, Any], *, now: float) -> bool:
+    return entry["saved_at"] <= now and _payload_timestamps_fit_entry(
+        resource, entry["payload"], not_after=now + PUBLIC_HOME_MAX_CLOCK_SKEW_SECONDS,
+    )
 
 
 # Parsed-and-validated documents keyed by file identity. Publishing swaps the
@@ -1366,9 +1365,7 @@ _parsed_documents = FingerprintedFileCache(
 )
 
 
-def _parse_public_home_document(
-    raw: bytes, *, now: float
-) -> dict[str, dict[str, Any]] | None:
+def _parse_public_home_document(raw: bytes) -> dict[str, dict[str, Any]] | None:
     if not raw:
         return None
     document = json.loads(
@@ -1387,7 +1384,7 @@ def _parse_public_home_document(
         return None
     result: dict[str, dict[str, Any]] = {}
     for resource, value in document["resources"].items():
-        entry = _validate_entry(resource, value, now=now)
+        entry = _validate_entry(resource, value)
         if entry is not None:
             result[resource] = entry
     return result
@@ -1405,8 +1402,7 @@ def read_public_home_entries(
             return {}
         entries = _parsed_documents.read(
             target,
-            lambda raw: _parse_public_home_document(raw, now=current),
-            now=current,
+            _parse_public_home_document,
             max_bytes=PUBLIC_HOME_SNAPSHOT_MAX_BYTES,
         )
     except (
@@ -1422,11 +1418,15 @@ def read_public_home_entries(
         return {}
     # Top-level copy so callers replacing entries (the worker's publish path)
     # never mutate the shared cached document.
-    return dict(entries)
+    return {
+        resource: entry
+        for resource, entry in entries.items()
+        if _entry_timestamps_fit(resource, entry, now=current)
+    }
 
 
 def reset_public_home_read_cache() -> None:
-    """Test hook: drop the fingerprint cache (frozen-clock tests rely on it)."""
+    """Test hook: drop the fingerprint cache."""
 
     _parsed_documents.invalidate()
 
@@ -1582,8 +1582,8 @@ def write_public_home_snapshot(
     for resource, value in entries.items():
         if resource not in PUBLIC_HOME_RESOURCE_SPECS:
             raise ValueError("unknown public home resource")
-        entry = _validate_entry(resource, value, now=current)
-        if entry is None:
+        entry = _validate_entry(resource, value)
+        if entry is None or not _entry_timestamps_fit(resource, entry, now=current):
             raise ValueError(f"invalid public home entry: {resource}")
         cleaned[resource] = entry
     if not cleaned:

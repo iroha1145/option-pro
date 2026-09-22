@@ -77,9 +77,9 @@ def test_same_fingerprint_parses_and_validates_once(
     calls = {"validate": 0}
     original = phs._validate_entry
 
-    def counting_validate(resource, value, *, now):
+    def counting_validate(resource, value):
         calls["validate"] += 1
-        return original(resource, value, now=now)
+        return original(resource, value)
 
     monkeypatch.setattr(phs, "_validate_entry", counting_validate)
 

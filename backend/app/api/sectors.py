@@ -483,7 +483,6 @@ def _parse_sector_iv_document(
     raw: bytes,
     *,
     sector_id: str,
-    observed: float,
 ) -> dict[str, Any] | None:
     if not raw:
         return None
@@ -504,7 +503,6 @@ def _parse_sector_iv_document(
         or not isinstance(saved_at, (int, float))
         or not math.isfinite(float(saved_at))
         or float(saved_at) <= 0
-        or float(saved_at) > observed
     ):
         return None
     payload = _clean_sector_iv_snapshot_payload(
@@ -536,9 +534,8 @@ def _read_sector_iv_snapshot(
         document = _sector_iv_documents.read(
             target,
             lambda raw: _parse_sector_iv_document(
-                raw, sector_id=sector_id, observed=observed
+                raw, sector_id=sector_id
             ),
-            now=observed,
             max_bytes=_SECTOR_IV_SNAPSHOT_MAX_BYTES,
         )
     except (
@@ -550,7 +547,7 @@ def _read_sector_iv_snapshot(
         json.JSONDecodeError,
     ):
         return None
-    if document is None:
+    if document is None or document["saved_at"] > observed:
         return None
 
     saved_at = float(document["saved_at"])

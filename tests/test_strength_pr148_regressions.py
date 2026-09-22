@@ -226,7 +226,7 @@ def test_malformed_variant_cannot_abort_successful_default_refresh(
     assert result.details["variant_refresh_attempted"] == 0
 
 
-@pytest.mark.parametrize("invalid_kind", ["oversized", "filename_parameters"])
+@pytest.mark.parametrize("invalid_kind", ["oversized", "filename_parameters", "future_saved"])
 def test_variant_discovery_skips_unreadable_or_misidentified_snapshots(
     snapshot_path: Path, invalid_kind: str,
 ) -> None:
@@ -240,6 +240,8 @@ def test_variant_discovery_skips_unreadable_or_misidentified_snapshots(
     }
     if invalid_kind == "oversized":
         document["padding"] = "x" * strength._STRENGTH_SNAPSHOT_MAX_BYTES
+    elif invalid_kind == "future_saved":
+        document["saved_at"] = OBSERVED.timestamp() + .001
     else:
         document["parameters"] = {**parameters, "top": 50}
         document["payload"] = _payload(document["parameters"], through=CURRENT_THROUGH)

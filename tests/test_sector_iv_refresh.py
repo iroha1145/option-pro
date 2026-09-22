@@ -392,3 +392,19 @@ def test_worker_cancelled_scan_leaves_retryable_status(monkeypatch):
         assert store.status('semiconductors')['status'] == 'failed'
         assert store.status('semiconductors')['error_code'] == 'worker_interrupted'
     asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("warm_valid", [False, True])
+def test_future_sector_snapshot_recovers_without_rewrite_and_rejects_rewind(tmp_path, monkeypatch, warm_valid):
+    now = datetime(2026, 9, 18, 20, 0, tzinfo=timezone.utc).timestamp()
+    monkeypatch.setattr(sectors, '_SECTOR_IV_SNAPSHOT_DIR', tmp_path)
+    payload = sectors._rank_iv_rows('semiconductors', [
+        {'ticker': 'AMD', 'iv': .3, 'as_of': stamp(now - 30), 'provider': 'Yahoo/yfinance'},
+    ])
+    sectors._write_sector_iv_snapshot('semiconductors', payload, saved_at=now)
+    if warm_valid:
+        assert sectors._read_sector_iv_snapshot('semiconductors', now=now) is not None
+    assert sectors._read_sector_iv_snapshot('semiconductors', now=now - .001) is None
+    assert sectors._read_sector_iv_snapshot('semiconductors', now=now + 60) is not None
+    assert sectors._read_sector_iv_snapshot('semiconductors', now=now - .001) is None
+    assert sectors._read_sector_iv_snapshot('semiconductors', now=now) is not None

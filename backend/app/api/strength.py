@@ -305,9 +305,8 @@ def list_recent_strength_variant_parameters(
                 continue
             if _strength_snapshot_path(parameters, base_path=base) != candidate:
                 continue
-            if _parse_strength_snapshot_document(
-                raw, parameters=parameters, now=time.time(),
-            ) is None:
+            parsed = _parse_strength_snapshot_document(raw, parameters=parameters)
+            if parsed is None or parsed["saved_at"] > time.time():
                 continue
             ranked.append((candidate.stat().st_mtime_ns, parameters))
         except (OSError, UnicodeError, ValueError, TypeError, RecursionError):
@@ -546,10 +545,8 @@ def _parse_strength_snapshot_document(
     raw: bytes,
     *,
     parameters: dict[str, Any],
-    now: float,
 ) -> dict[str, Any] | None:
-    """Parse+validate the snapshot bytes; the stale flag stays time-dependent
-    and is computed by the caller on every read."""
+    """Validate content only; the caller checks time on every read."""
 
     if not raw:
         return None
@@ -580,7 +577,7 @@ def _parse_strength_snapshot_document(
     ):
         return None
     saved_at = float(saved_at)
-    if saved_at <= 0 or saved_at > now:
+    if saved_at <= 0:
         return None
     payload = _clean_strength_snapshot_payload(
         document.get("payload"),
@@ -603,9 +600,8 @@ def _read_strength_snapshot(
         document = _strength_documents.read(
             path,
             lambda raw: _parse_strength_snapshot_document(
-                raw, parameters=parameters, now=now
+                raw, parameters=parameters
             ),
-            now=now,
             max_bytes=_STRENGTH_SNAPSHOT_MAX_BYTES,
         )
     except (
@@ -617,7 +613,7 @@ def _read_strength_snapshot(
         json.JSONDecodeError,
     ):
         return None
-    if document is None:
+    if document is None or document["saved_at"] > now:
         return None
     saved_at = float(document["saved_at"])
     payload = document["payload"]
@@ -665,8 +661,8 @@ def _existing_strength_publication(
         if not isinstance(document, dict):
             return None, None
         expected = parameters or normalize_strength_scan_parameters(document.get("parameters"))
-        parsed = _parse_strength_snapshot_document(raw, parameters=expected, now=time.time())
-        if parsed is None:
+        parsed = _parse_strength_snapshot_document(raw, parameters=expected)
+        if parsed is None or parsed["saved_at"] > time.time():
             return None, None
         return float(parsed["saved_at"]), parsed["payload"]
     except (OSError, UnicodeError, ValueError, TypeError, RecursionError):
