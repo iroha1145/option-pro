@@ -186,7 +186,7 @@ def test_update_is_atomic_versioned_backed_up_and_rollback_creates_new_version(
     second = store.update(
         RuntimeSettingsPatch(
             ai=RuntimeAISettingsPatch(
-                daily_budget_usd=3.25,
+                daily_token_limit=3_250_000,
                 manual_analysis_enabled=True,
             )
         ),
@@ -223,7 +223,7 @@ def test_version_conflict_does_not_overwrite_current_document(tmp_path: Path) ->
     store = make_store(tmp_path / "runtime-settings.json")
     current = store.update(
         RuntimeSettingsPatch(
-            ai=RuntimeAISettingsPatch(daily_budget_usd=2.5),
+            ai=RuntimeAISettingsPatch(daily_token_limit=2_500_000),
         ),
         expected_version=1,
     )
@@ -231,7 +231,7 @@ def test_version_conflict_does_not_overwrite_current_document(tmp_path: Path) ->
     with pytest.raises(RuntimeSettingsVersionConflict) as raised:
         store.update(
             RuntimeSettingsPatch(
-                ai=RuntimeAISettingsPatch(daily_budget_usd=4.0),
+                ai=RuntimeAISettingsPatch(daily_token_limit=4_000_000),
             ),
             expected_version=1,
         )
@@ -252,7 +252,7 @@ def test_concurrent_updates_across_store_instances_commit_only_one_version(
         try:
             return stores[index].update(
                 RuntimeSettingsPatch(
-                    ai=RuntimeAISettingsPatch(daily_budget_usd=2.5 + index),
+                    ai=RuntimeAISettingsPatch(daily_token_limit=2_500_000 + index),
                 ),
                 expected_version=1,
             )
@@ -280,7 +280,7 @@ def test_failed_atomic_replace_keeps_previous_document_and_cleans_temp_file(
     store = make_store(tmp_path / "runtime-settings.json")
     current = store.update(
         RuntimeSettingsPatch(
-            ai=RuntimeAISettingsPatch(daily_budget_usd=2.5),
+            ai=RuntimeAISettingsPatch(daily_token_limit=2_500_000),
         ),
         expected_version=1,
     )
@@ -296,7 +296,7 @@ def test_failed_atomic_replace_keeps_previous_document_and_cleans_temp_file(
     with pytest.raises(RuntimeSettingsStorageError):
         store.update(
             RuntimeSettingsPatch(
-                ai=RuntimeAISettingsPatch(daily_budget_usd=3.0),
+                ai=RuntimeAISettingsPatch(daily_token_limit=3_000_000),
             ),
             expected_version=2,
         )
@@ -312,13 +312,13 @@ def test_failed_current_write_does_not_prune_existing_rollback_history(
     store = make_store(tmp_path / "runtime-settings.json", backup_keep=2)
     store.update(
         RuntimeSettingsPatch(
-            ai=RuntimeAISettingsPatch(daily_budget_usd=2.5),
+            ai=RuntimeAISettingsPatch(daily_token_limit=2_500_000),
         ),
         expected_version=1,
     )
     current = store.update(
         RuntimeSettingsPatch(
-            ai=RuntimeAISettingsPatch(daily_budget_usd=3.0),
+            ai=RuntimeAISettingsPatch(daily_token_limit=3_000_000),
         ),
         expected_version=2,
     )
@@ -335,7 +335,7 @@ def test_failed_current_write_does_not_prune_existing_rollback_history(
     with pytest.raises(RuntimeSettingsStorageError):
         store.update(
             RuntimeSettingsPatch(
-                ai=RuntimeAISettingsPatch(daily_budget_usd=3.5),
+                ai=RuntimeAISettingsPatch(daily_token_limit=3_500_000),
             ),
             expected_version=3,
         )
@@ -351,10 +351,10 @@ def test_backup_retention_is_bounded_and_old_revision_cannot_be_restored(
     tmp_path: Path,
 ) -> None:
     store = make_store(tmp_path / "runtime-settings.json", backup_keep=2)
-    for expected, budget in ((1, 2.5), (2, 3.0), (3, 3.5)):
+    for expected, token_limit in ((1, 2_500_000), (2, 3_000_000), (3, 3_500_000)):
         store.update(
             RuntimeSettingsPatch(
-                ai=RuntimeAISettingsPatch(daily_budget_usd=budget),
+                ai=RuntimeAISettingsPatch(daily_token_limit=token_limit),
             ),
             expected_version=expected,
         )
@@ -433,7 +433,7 @@ def test_legacy_false_action_switches_in_backup_are_ignored_on_rollback(
     store = make_store(tmp_path / "runtime-settings.json")
     current = store.update(
         RuntimeSettingsPatch(
-            ai=RuntimeAISettingsPatch(daily_budget_usd=2.5),
+            ai=RuntimeAISettingsPatch(daily_token_limit=2_500_000),
         ),
         expected_version=1,
     )
@@ -622,7 +622,6 @@ def test_api_reads_updates_history_and_rolls_back_without_secret_fields(
             "expected_version": 1,
             "settings": {
                 "ai": {
-                    "daily_budget_usd": 2.75,
                     "daily_token_limit": 9_000_000,
                     "manual_analysis_enabled": True,
                     "manual_analysis_cooldown_seconds": 90,
@@ -644,7 +643,6 @@ def test_api_reads_updates_history_and_rolls_back_without_secret_fields(
     assert initial.status_code == 200
     assert updated.status_code == 200
     assert updated.json()["version"] == 2
-    assert updated.json()["settings"]["ai"]["daily_budget_usd"] == 2.75
     assert updated.json()["settings"]["ai"]["daily_token_limit"] == 9_000_000
     assert updated.json()["settings"]["catalyst"]["scheduled_analysis_enabled"]
     assert updated.json()["settings"]["catalyst"]["scheduled_times_et"] == [
@@ -710,7 +708,7 @@ def test_api_write_rejects_every_media_type_except_application_json(
     body = json.dumps(
         {
             "expected_version": 1,
-            "settings": {"ai": {"daily_budget_usd": 2.75}},
+            "settings": {"ai": {"daily_token_limit": 2_750_000}},
         }
     )
 
@@ -735,7 +733,7 @@ def test_api_write_accepts_application_json_with_charset(tmp_path: Path) -> None
         content=json.dumps(
             {
                 "expected_version": 1,
-                "settings": {"ai": {"daily_budget_usd": 2.75}},
+                "settings": {"ai": {"daily_token_limit": 2_750_000}},
             }
         ),
         headers={"Content-Type": "application/json; charset=utf-8"},
@@ -750,12 +748,11 @@ def test_effective_settings_reader_observes_updates_without_process_restart(
 ) -> None:
     store = make_store(tmp_path / "runtime-settings.json")
     initial = get_effective_runtime_settings(store)
-    updated_budget = 3.5 if initial.ai.daily_budget_usd != 3.5 else 4.5
+    updated_token_limit = 3_500_000 if initial.ai.daily_token_limit != 3_500_000 else 4_500_000
     store.update(
         RuntimeSettingsPatch(
             ai=RuntimeAISettingsPatch(
-                daily_max_jobs=3,
-                daily_budget_usd=updated_budget,
+                daily_token_limit=updated_token_limit,
                 manual_analysis_enabled=True,
                 manual_analysis_cooldown_seconds=45,
             ),
@@ -774,9 +771,8 @@ def test_effective_settings_reader_observes_updates_without_process_restart(
 
     effective = get_effective_runtime_settings(store)
 
-    assert initial.ai.daily_budget_usd != effective.ai.daily_budget_usd
-    assert effective.ai.daily_max_jobs == 3
-    assert effective.ai.daily_budget_usd == updated_budget
+    assert initial.ai.daily_token_limit != effective.ai.daily_token_limit
+    assert effective.ai.daily_token_limit == updated_token_limit
     assert effective.ai.manual_analysis_enabled is True
     assert effective.ai.manual_analysis_cooldown_seconds == 45
     assert effective.catalyst.focus_seconds == 900
@@ -808,7 +804,7 @@ def test_api_rejects_sensitive_field_names_at_any_depth_without_echoing_values(
         json={
             "expected_version": 1,
             "settings": {
-                "ai": {"daily_budget_usd": 2.0},
+                "ai": {"daily_token_limit": 2_000_000},
                 "unknown": secret_payload,
             },
         },
@@ -855,14 +851,14 @@ def test_api_reports_version_conflict_without_returning_settings(tmp_path: Path)
         "/api/runtime-settings",
         json={
             "expected_version": 1,
-            "settings": {"ai": {"daily_budget_usd": 2.5}},
+            "settings": {"ai": {"daily_token_limit": 2_500_000}},
         },
     )
     conflict = client.put(
         "/api/runtime-settings",
         json={
             "expected_version": 1,
-            "settings": {"ai": {"daily_budget_usd": 3.5}},
+            "settings": {"ai": {"daily_token_limit": 3_500_000}},
         },
     )
 
@@ -874,3 +870,46 @@ def test_api_reports_version_conflict_without_returning_settings(tmp_path: Path)
         "current_version": 2,
     }
     assert "settings" not in conflict.text
+
+
+@pytest.mark.parametrize(("field", "value"), [("daily_max_jobs", 7), ("daily_budget_usd", 1.25)])
+def test_api_rejects_retired_nonzero_budget_settings(tmp_path, field, value):
+    store = make_store(tmp_path / "runtime-settings.json")
+    response = make_client(store).put(
+        "/api/runtime-settings",
+        json={"expected_version": 1, "settings": {"ai": {field: value}}},
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "retired_budget_setting"
+    assert "每日" in response.json()["detail"]["message"]
+    assert store.read().version == 1
+    assert not store.path.exists()
+
+
+def test_api_accepts_zero_retired_limits_with_active_token_limit(tmp_path):
+    store = make_store(tmp_path / "runtime-settings.json")
+    response = make_client(store).put(
+        "/api/runtime-settings",
+        json={"expected_version": 1, "settings": {"ai": {
+            "daily_max_jobs": 0, "daily_budget_usd": 0.0, "daily_token_limit": 1_000_000,
+        }}},
+    )
+    assert response.status_code == 200
+    assert response.json()["settings"]["ai"]["daily_token_limit"] == 1_000_000
+
+
+def test_v2_legacy_nonzero_budget_fields_remain_readable_and_rollbackable(tmp_path):
+    store = make_store(tmp_path / "runtime-settings.json")
+    legacy = store.read().model_dump(mode="json")
+    legacy["settings"]["ai"].update(daily_max_jobs=7, daily_budget_usd=1.25)
+    store.path.write_text(json.dumps(legacy))
+    original = store.read()
+    assert original.settings.ai.daily_max_jobs == 7
+    assert original.settings.ai.daily_budget_usd == 1.25
+    current = store.update(
+        RuntimeSettingsPatch(ai=RuntimeAISettingsPatch(daily_token_limit=1_000_000)),
+        expected_version=1,
+    )
+    restored = store.rollback(1, expected_version=current.version)
+    assert restored.settings == original.settings
+    assert store.read().settings == original.settings

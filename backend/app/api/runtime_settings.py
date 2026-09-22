@@ -178,6 +178,12 @@ async def update_runtime_settings(
     try:
         update = RuntimeSettingsUpdateRequest.model_validate(payload)
     except ValidationError as exc:
+        if any(error["type"] == "retired_budget_setting" for error in exc.errors()):
+            raise _safe_error(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "retired_budget_setting",
+                "每日任务次数和美元预算设置已停用，只能写入零；请使用每日词元上限（daily_token_limit）",
+            ) from exc
         raise _safe_error(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
             "invalid_settings",

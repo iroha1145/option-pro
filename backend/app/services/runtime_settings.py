@@ -26,6 +26,7 @@ from pydantic import (
     ValidationError,
     field_validator,
 )
+from pydantic_core import PydanticCustomError
 
 from app.data_paths import get_data_paths
 from app.personal_config import (
@@ -102,7 +103,7 @@ class RuntimeSettingsV1(_StrictModel):
 
 
 class RuntimeAISettings(_StrictModel):
-    # Compatibility fields: zero disables the former count and dollar gates.
+    # Read compatibility only: the former count and dollar gates are inactive.
     daily_max_jobs: int = Field(default=0, ge=0, le=100_000)
     daily_budget_usd: float = Field(default=0.0, ge=0, le=10_000, multiple_of=0.01)
     daily_token_limit: int = Field(
@@ -153,12 +154,17 @@ class RuntimeSettings(_StrictModel):
 
 
 class RuntimeAISettingsPatch(_StrictModel):
-    daily_max_jobs: Optional[int] = Field(default=None, ge=0, le=100_000)
+    daily_max_jobs: Optional[int] = Field(
+        default=None, ge=0, le=100_000, deprecated=True,
+        description="Retired; only zero may be written.",
+    )
     daily_budget_usd: Optional[float] = Field(
         default=None,
         ge=0,
         le=10_000,
         multiple_of=0.01,
+        deprecated=True,
+        description="Retired; only zero may be written.",
     )
     daily_token_limit: Optional[int] = Field(
         default=None,
@@ -171,6 +177,16 @@ class RuntimeAISettingsPatch(_StrictModel):
         ge=0,
         le=86_400,
     )
+
+    @field_validator("daily_max_jobs", "daily_budget_usd")
+    @classmethod
+    def reject_retired_limits(cls, value: int | float | None) -> int | float | None:
+        if value is not None and value != 0:
+            raise PydanticCustomError(
+                "retired_budget_setting",
+                "Count and dollar limits are retired; use daily_token_limit.",
+            )
+        return value
 
 
 class RuntimeCatalystSettingsPatch(_StrictModel):
