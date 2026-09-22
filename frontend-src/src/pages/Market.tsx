@@ -87,7 +87,7 @@ export default function Market() {
         meta={
           <>
             {session ? (
-              <SessionLED session={session} label={SESSION_LABEL[status!.market]} />
+              <SessionLED session={session} label={status?.market ? SESSION_LABEL[status.market] : undefined} />
             ) : (
               <span className="inline-flex items-center gap-1.5">
                 <span className="inline-block size-2 rounded-full bg-ink-300" aria-hidden="true" />

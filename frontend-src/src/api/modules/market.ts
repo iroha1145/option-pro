@@ -71,15 +71,15 @@ const SESSION_MAP: Record<string, { session: MarketSession; label: string }> = {
 /** 契约 {market, phase, next_open, next_close, server_time(ET iso), ...} → UI MarketStatus */
 function mapStatus(body: unknown): MarketStatus {
   const r = asRec(body);
-  const m = SESSION_MAP[pickS(r, 'market', 'session') ?? 'closed'] ?? SESSION_MAP.closed;
+  const m = SESSION_MAP[pickS(r, 'market', 'session') ?? ''];
   const nextOpen = pickS(r, 'next_open');
   const nextClose = pickS(r, 'next_close');
   return {
-    session: m.session,
-    label: m.label,
+    session: m?.session ?? null,
+    label: m?.label ?? t('时段未知'),
     nyTime: pickS(r, 'nyTime', 'server_time') ?? '',
     nextEvent:
-      m.session === 'regular' && nextClose
+      m?.session === 'regular' && nextClose
         ? { kind: 'close', at: nextClose }
         : nextOpen
           ? { kind: 'open', at: nextOpen }

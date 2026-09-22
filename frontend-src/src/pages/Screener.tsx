@@ -10,6 +10,7 @@ import { useQuoteSymbols } from '@/hooks/useLiveQuote';
  */
 import SoftBadge from '@/components/shared/SoftBadge';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTickFlash } from '@/hooks/useTickFlash';
 import { AnimatePresence, motion } from 'framer-motion';
 import { strengthApi, type StrengthScanEnvelope } from '@/api/modules/strength';
 import { catalystsApi } from '@/api/modules/catalysts';
@@ -103,6 +104,8 @@ const PAGE_SIZE = 20;
 const SECTOR_COLLATOR = new Intl.Collator(localeTag());
 /** 契约 /catalysts/tickers/batch 的匿名上限；超过就必须切片。 */
 const CATALYST_BATCH_SIZE = 20;
+const screenerKey = (row: ScreenerRow) => row.ticker;
+const screenerPrice = (row: ScreenerRow) => row.price;
 
 type ScanState = 'idle' | 'scanning' | 'done' | 'error';
 type ScanAttempt = { filters: ScanFilters; options: { forceRefresh?: boolean } };
@@ -153,7 +156,7 @@ export default function Screener() {
   const [macroToneFilter, setMacroToneFilter] = useState<MacroTone | 'all'>('all');
   const [page, setPage] = useState(1);
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [flashes, setFlashes] = useState<Record<string, 'up' | 'down'>>({});
+  const flashes = useTickFlash(rows, screenerKey, screenerPrice);
   const [refreshingStrength, setRefreshingStrength] = useState(false);
   const strengthRefreshInFlight = useRef(false);
   const [inFlightFilters, setInFlightFilters] = useState<ScanFilters | null>(null);
@@ -425,21 +428,7 @@ export default function Screener() {
         stale: result.stale,
         submittedRefresh,
       });
-      setRows((prev) => {
-        if (prev) {
-          const prevMap = new Map(prev.map((r) => [r.ticker, r.price]));
-          const f: Record<string, 'up' | 'down'> = {};
-          result.rows.forEach((r) => {
-            const p = prevMap.get(r.ticker);
-            if (p !== undefined && p !== r.price) f[r.ticker] = r.price > p ? 'up' : 'down';
-          });
-          if (Object.keys(f).length) {
-            setFlashes(f);
-            setTimeout(() => setFlashes({}), 700);
-          }
-        }
-        return result.rows;
-      });
+      setRows(result.rows);
       setScanMeta(result);
       const detailPatch: DetailCache = Object.fromEntries(
         result.rows.map((row) => [row.ticker, { dollarVolume: row.avgDollarVolume20d ?? null }]),

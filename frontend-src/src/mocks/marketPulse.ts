@@ -33,7 +33,7 @@ export function getMarketRegime(): MarketRegime {
 
 /* ---------------- 市场状态（contract market/status 形状） ---------------- */
 export interface MarketStatusDetail {
-  market: 'open' | 'premarket' | 'postmarket' | 'closed';
+  market: 'open' | 'premarket' | 'postmarket' | 'closed' | null;
   phase: string | null;        // 时段说明文案
   holiday: string | null;      // 节假日名称（mock 无节假日日历 → null，UI 显示「—」）
   next_open: string | null;    // ISO（真实 UTC 瞬时）

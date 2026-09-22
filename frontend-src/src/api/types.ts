@@ -14,8 +14,8 @@ export interface IndexQuote {
 export type MarketSession = 'premarket' | 'regular' | 'afterhours' | 'closed';
 
 export interface MarketStatus {
-  session: MarketSession;
-  label: string;          // 盘前 / 盘中 / 盘后 / 休市
+  session: MarketSession | null;
+  label: string;          // 盘前 / 盘中 / 盘后 / 休市 / 时段未知
   nyTime: string;         // ISO
   nextEvent: { kind: 'open' | 'close'; at: string } | null;
 }
