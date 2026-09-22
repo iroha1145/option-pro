@@ -76,16 +76,18 @@ personal_access_mode() {
 }
 
 hash_owner_password() {
-    printf '%s' "$1" | PYTHONPATH="${ROOT_DIR}/backend${PYTHONPATH:+:${PYTHONPATH}}" python3 -c '
+    printf '%s' "$1" | python3 -c '
 import sys
 
+# The repository-root app bridge needs a newer Python than the installer.
+sys.path.insert(0, sys.argv[1])
 from app.owner_password import hash_owner_password
 
 password = sys.stdin.read()
 if len(password) < 12 or any(item in password for item in ("\0", "\r", "\n")):
     raise SystemExit("Owner password must contain at least 12 characters")
 print(hash_owner_password(password))
-'
+' "${ROOT_DIR}/backend"
 }
 
 migrate_legacy_machine_environment() {

@@ -1,5 +1,7 @@
 import ast
+import os
 from pathlib import Path
+import shlex
 import subprocess
 import sys
 
@@ -21,7 +23,7 @@ def _installer_code():
 def _run_installer_hash(password):
     script = (
         "import io, secrets, sys\n"
-        f"sys.path.insert(0, {str(ROOT / 'backend')!r})\n"
+        f"sys.argv = ['-c', {str(ROOT / 'backend')!r}]\n"
         "secrets.token_bytes = lambda length: bytes(range(length))\n"
         f"sys.stdin = io.StringIO({password!r})\n"
         f"exec({_installer_code()!r})\n"
@@ -65,3 +67,26 @@ def test_password_verifier_keeps_rejecting_malformed_hashes():
 def test_password_module_keeps_python36_syntax():
     source = (ROOT / "backend/app/owner_password.py").read_text()
     ast.parse(source, feature_version=(3, 6))
+
+
+def test_installer_import_ignores_an_incompatible_package_in_working_directory(tmp_path):
+    # On Python 3.6 the repository-root app bridge cannot be parsed. The
+    # installer must select backend/app before the current working directory.
+    shadow = tmp_path / "app"
+    shadow.mkdir()
+    (shadow / "__init__.py").write_text("raise AssertionError('wrong app package loaded')\n")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    interpreter = bin_dir / "python3"
+    interpreter.write_text("#!/bin/sh\nexec " + shlex.quote(sys.executable) + " -S \"$@\"\n")
+    interpreter.chmod(0o755)
+    body = (ROOT / "setup.sh").read_text().split("hash_owner_password() {", 1)[1].split("\n}\n", 1)[0]
+    environment = os.environ.copy()
+    environment["PATH"] = str(bin_dir) + os.pathsep + environment["PATH"]
+    result = subprocess.run(
+        ["bash", "-c", 'ROOT_DIR="$1"\nhash_owner_password() {' + body + '\n}\nhash_owner_password "$2"',
+         "installer-hash-test", str(ROOT), PASSWORD],
+        cwd=tmp_path, env=environment, capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert verify_owner_password(PASSWORD, result.stdout.strip())
