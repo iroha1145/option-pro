@@ -117,7 +117,10 @@ jobs:
         run: npm --prefix frontend-src run test:screener
 
       - name: Check shell script syntax
-        run: bash -n setup.sh personal.sh scripts/compose.sh scripts/deploy.sh scripts/lock-dependencies.sh
+        run: |
+          for script in setup.sh personal.sh scripts/*.sh scripts/lib/*.sh; do
+            bash -n "$script"
+          done
 
       # Generated frontend bundles are already byte-checked against a fresh build.
       # Dependency template literals may preserve intentional whitespace in them.
