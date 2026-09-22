@@ -224,12 +224,16 @@ def test_noisy_data_does_not_emit_high_confidence() -> None:
     assert all(row["confidence"] < 70 for row in rows), rows
 
 
-def test_insufficient_data_returns_empty() -> None:
+def test_bars_below_structure_minimum_are_rejected() -> None:
     bars = _zigzag(20, lambda i: 50 + i, lambda i: 60 + i)
+    assert clean_series(bars) is None
+
+
+def test_detector_returns_empty_for_clean_but_short_series() -> None:
+    bars = _zigzag(35, lambda i: 50 + i, lambda i: 60 + i)
     series = clean_series(bars)
-    if series is None:
-        assert True
-        return
+    assert series is not None
+    assert len(series["closes"]) == 35
     assert detect_auto_patterns(series, data_through=series["dates"][-1]) == []
 
 
