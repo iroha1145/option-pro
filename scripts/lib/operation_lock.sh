@@ -14,4 +14,3 @@ acquire_operation_lock() {
     fi
     operation_lock_owned=true
 }
-
