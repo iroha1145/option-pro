@@ -19,6 +19,8 @@ from app.execution_limits import BREAKOUT_TASK_TIMEOUT_SECONDS
 from app.services.ai_jobs import runtime
 from app.services.ai_jobs.repository import AIJobRepository
 
+from app.personal_config import personal_analysis_permissions as _personal_analysis_permissions
+
 
 logger = logging.getLogger(__name__)
 
@@ -50,17 +52,6 @@ async def _link_response_with_retry(
             await asyncio.sleep(
                 _LINK_RESPONSE_RETRY_DELAY_SECONDS * (attempt + 1)
             )
-
-
-def _personal_analysis_permissions(config: Any) -> tuple[bool, bool]:
-    features = getattr(config, "features", None)
-    mode = getattr(features, "catalyst_mode", None)
-    if mode is not None:
-        return mode in {"manual", "scheduled"}, mode == "scheduled"
-    return (
-        bool(getattr(config, "catalyst_manual_enabled", False)),
-        bool(getattr(config, "catalyst_scheduled_enabled", False)),
-    )
 
 
 def _poll_delay(settings: Any, poll_count: int) -> float:

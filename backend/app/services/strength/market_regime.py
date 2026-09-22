@@ -7,10 +7,17 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 
+from app.services.daily_returns import aligned_benchmark_return
 from app.services.strength.relative_spreads import compute_spread_matrix
 from app.services.strength.market_shape import (
     MarketShapeHysteresisConfig,
     build_market_shape,
+)
+
+from app.services.daily_returns import positional_return as _ret
+from app.services.numeric import (
+    rounded_number as _safe_float,
+    clamp_number as _clamp,
 )
 
 MARKET_BENCHMARKS = (
@@ -30,43 +37,12 @@ MINIMUM_HISTORY = {"SPY": 220, "QQQ": 21}
 _NY = ZoneInfo("America/New_York")
 
 
-def _safe_float(value: Any, ndigits: int = 4) -> float | None:
-    try:
-        number = float(value)
-        if not math.isfinite(number):
-            return None
-        return round(number, ndigits)
-    except Exception:
-        return None
-
-
-def _clamp(value: float | int | None, lo: float = 0.0, hi: float = 100.0, default: float = 50.0) -> float:
-    if value is None:
-        return default
-    try:
-        number = float(value)
-    except Exception:
-        return default
-    if not math.isfinite(number):
-        return default
-    return max(lo, min(hi, number))
-
-
 def _close(df: pd.DataFrame) -> pd.Series:
     return df["Close"].dropna() if not df.empty and "Close" in df.columns else pd.Series(dtype=float)
 
 
 def _volume(df: pd.DataFrame) -> pd.Series:
     return df["Volume"].dropna() if not df.empty and "Volume" in df.columns else pd.Series(dtype=float)
-
-
-def _ret(close: pd.Series, days: int) -> float | None:
-    if len(close) <= days:
-        return None
-    base = close.iloc[-(days + 1)]
-    if not base or base <= 0:
-        return None
-    return _safe_float(close.iloc[-1] / base - 1, 5)
 
 
 def _above_sma(close: pd.Series, period: int) -> bool:
@@ -102,7 +78,7 @@ def _sma_slope_up_value(
 
 def _relative_return(left: pd.Series, right: pd.Series, days: int) -> float | None:
     left_ret = _ret(left, days)
-    right_ret = _ret(right, days)
+    right_ret = _safe_float(aligned_benchmark_return(left, right, days), 5)
     if left_ret is None or right_ret is None:
         return None
     return _safe_float(left_ret - right_ret, 5)

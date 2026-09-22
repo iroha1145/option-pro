@@ -14,6 +14,11 @@ from typing import Annotated, Any, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
+from app.json_validation import (
+    reject_duplicate_json_keys as _reject_duplicate_json_keys,
+    reject_non_finite_json as _reject_non_finite_json,
+    is_finite_json_tree as _is_finite_json_tree,
+)
 from app.access import (
     current_request_is_owner,
     public_snapshot_unavailable,
@@ -305,9 +310,8 @@ def list_recent_strength_variant_parameters(
                 continue
             if _strength_snapshot_path(parameters, base_path=base) != candidate:
                 continue
-            if _parse_strength_snapshot_document(
-                raw, parameters=parameters, now=time.time(),
-            ) is None:
+            parsed = _parse_strength_snapshot_document(raw, parameters=parameters)
+            if parsed is None or parsed["saved_at"] > time.time():
                 continue
             ranked.append((candidate.stat().st_mtime_ns, parameters))
         except (OSError, UnicodeError, ValueError, TypeError, RecursionError):
@@ -324,37 +328,6 @@ def list_recent_strength_variant_parameters(
         if len(unique) >= keep:
             break
     return unique
-
-
-def _reject_duplicate_json_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-    output: dict[str, Any] = {}
-    for key, value in pairs:
-        if key in output:
-            raise ValueError(f"duplicate JSON key: {key}")
-        output[key] = value
-    return output
-
-
-def _reject_non_finite_json(value: str) -> None:
-    raise ValueError(f"non-finite JSON value: {value}")
-
-
-def _is_finite_json_tree(value: Any, *, depth: int = 0) -> bool:
-    if depth > 64:
-        return False
-    if value is None or isinstance(value, (bool, str, int)):
-        return True
-    if isinstance(value, float):
-        return math.isfinite(value)
-    if isinstance(value, list):
-        return all(_is_finite_json_tree(item, depth=depth + 1) for item in value)
-    if isinstance(value, dict):
-        return all(
-            isinstance(key, str)
-            and _is_finite_json_tree(item, depth=depth + 1)
-            for key, item in value.items()
-        )
-    return False
 
 
 def _parameter_value_matches(actual: Any, expected: Any) -> bool:
@@ -546,10 +519,8 @@ def _parse_strength_snapshot_document(
     raw: bytes,
     *,
     parameters: dict[str, Any],
-    now: float,
 ) -> dict[str, Any] | None:
-    """Parse+validate the snapshot bytes; the stale flag stays time-dependent
-    and is computed by the caller on every read."""
+    """Validate content only; the caller checks time on every read."""
 
     if not raw:
         return None
@@ -580,7 +551,7 @@ def _parse_strength_snapshot_document(
     ):
         return None
     saved_at = float(saved_at)
-    if saved_at <= 0 or saved_at > now:
+    if saved_at <= 0:
         return None
     payload = _clean_strength_snapshot_payload(
         document.get("payload"),
@@ -603,9 +574,8 @@ def _read_strength_snapshot(
         document = _strength_documents.read(
             path,
             lambda raw: _parse_strength_snapshot_document(
-                raw, parameters=parameters, now=now
+                raw, parameters=parameters
             ),
-            now=now,
             max_bytes=_STRENGTH_SNAPSHOT_MAX_BYTES,
         )
     except (
@@ -617,7 +587,7 @@ def _read_strength_snapshot(
         json.JSONDecodeError,
     ):
         return None
-    if document is None:
+    if document is None or document["saved_at"] > now:
         return None
     saved_at = float(document["saved_at"])
     payload = document["payload"]
@@ -665,8 +635,8 @@ def _existing_strength_publication(
         if not isinstance(document, dict):
             return None, None
         expected = parameters or normalize_strength_scan_parameters(document.get("parameters"))
-        parsed = _parse_strength_snapshot_document(raw, parameters=expected, now=time.time())
-        if parsed is None:
+        parsed = _parse_strength_snapshot_document(raw, parameters=expected)
+        if parsed is None or parsed["saved_at"] > time.time():
             return None, None
         return float(parsed["saved_at"]), parsed["payload"]
     except (OSError, UnicodeError, ValueError, TypeError, RecursionError):

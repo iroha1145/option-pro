@@ -9,6 +9,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import type { SectorOption, StrengthProfile } from '@/api/types';
 import { cn } from '@/lib/utils';
+import { EASE_PAPER } from '@/lib/motion';
 import Icon from '@/components/icons';
 import Segmented from '@/components/shared/Segmented';
 import FilterButton from '@/components/shared/FilterButton';
@@ -27,7 +28,6 @@ import {
 import { applyEodLimitedView } from '@/lib/eodLimitedView';
 import { t as __t } from '../../i18n/core.ts';
 
-const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
 
 /* ---------------- 分档 Segmented（共享件 + Mono 11 数量徽标） ---------------- */
 const TIER_OPTIONS: { value: TierFilter; label: string }[] = [

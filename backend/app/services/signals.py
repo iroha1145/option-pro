@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import math
 import threading
 from collections import OrderedDict
@@ -12,6 +13,9 @@ import yfinance as yf
 
 from app.services import massive
 from app.services.daily_returns import aligned_benchmark_return
+from app.services.numeric import rounded_number as _safe_float
+
+logger = logging.getLogger(__name__)
 
 _MASSIVE_PERIOD_DAYS = {
     "1y": 405,
@@ -140,16 +144,6 @@ def clamp(value: float | int | None, lo: float = 0, hi: float = 100) -> float:
         return 0
 
 
-def _safe_float(value: Any, ndigits: int = 4) -> float | None:
-    try:
-        f = float(value)
-        if math.isnan(f) or math.isinf(f):
-            return None
-        return round(f, ndigits)
-    except Exception:
-        return None
-
-
 def _clean_frame(df: pd.DataFrame) -> pd.DataFrame:
     # Drop rows with NaN close (yfinance sometimes returns trailing NaN)
     if not df.empty and "Close" in df.columns:
@@ -205,7 +199,8 @@ def _yahoo_history(symbol: str, period: str = "1y") -> pd.DataFrame:
         )
         frame.attrs["price_provider"] = "Yahoo/yfinance"
         return frame
-    except Exception:
+    except Exception as exc:
+        logger.warning("Yahoo history failed for %s (%s)", symbol, type(exc).__name__)
         return pd.DataFrame()
 
 
@@ -254,8 +249,8 @@ def _bulk_history(symbols: list[str], period: str = "1y") -> dict[str, pd.DataFr
                 for symbol, frame in zip(remaining, pool.map(lambda s: _massive_daily(s, period), remaining)):
                     if not frame.empty:
                         out[symbol] = frame
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Massive bulk history failed (%s)", type(exc).__name__)
         remaining = [symbol for symbol in remaining if symbol not in out]
         if not remaining:
             return out
@@ -286,8 +281,8 @@ def _bulk_history(symbols: list[str], period: str = "1y") -> dict[str, pd.DataFr
                 frame = _clean_frame(df.copy())
                 if not frame.empty:
                     out[remaining[0]] = frame
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Yahoo bulk history failed (%s)", type(exc).__name__)
     missing = [symbol for symbol in remaining if symbol not in out]
     if missing:
         try:
@@ -297,7 +292,11 @@ def _bulk_history(symbols: list[str], period: str = "1y") -> dict[str, pd.DataFr
                     pool.map(lambda s: _yahoo_history(s, period), missing),
                 ):
                     out[symbol] = frame
-        except Exception:
+        except Exception as exc:
+            logger.warning(
+                "Yahoo per-symbol history fallback failed (%s)",
+                type(exc).__name__,
+            )
             for symbol in missing:
                 out.setdefault(symbol, pd.DataFrame())
     return out

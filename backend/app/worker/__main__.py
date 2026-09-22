@@ -85,7 +85,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         settings = _load_worker_settings()
         repository = WorkerStateRepository(settings.optix_worker_db_path)
         if arguments.healthcheck or arguments.status:
-            from .tasks import DEFAULT_TASK_NAMES
+            from .inventory import DEFAULT_TASK_NAMES
 
             payload = repository.health(expected_tasks=DEFAULT_TASK_NAMES)
             _print(payload)

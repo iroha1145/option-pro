@@ -1,6 +1,7 @@
 import AnalysisIcon from '@/components/shared/AnalysisIcon';
 import { useCallback, useEffect, useState } from 'react';
 import { ApiError } from '@/api/client';
+import { asRec } from '@/api/live';
 import { adminApi, type RuntimeDoc, type WorkerHealth } from '@/api/modules/admin';
 import { runtimeApi, type WorkerAction } from '@/api/modules/runtime';
 import { useAccess } from '@/hooks/useAccess';
@@ -22,12 +23,6 @@ interface EarningsRunSummary {
   invalid: number;
 }
 
-function asRecord(value: unknown): Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
-}
-
 function count(value: unknown): number | null {
   const parsed = typeof value === 'string' ? Number(value) : value;
   return typeof parsed === 'number' && Number.isFinite(parsed) && parsed >= 0
@@ -36,7 +31,7 @@ function count(value: unknown): number | null {
 }
 
 function readRunSummary(action: WorkerAction): EarningsRunSummary | null {
-  const nested = asRecord(action.details.result);
+  const nested = asRec(action.details.result);
   const result = Object.keys(nested).length > 0 ? nested : action.details;
   const eligible = count(result.eligible);
   const queued = count(result.queued);
@@ -65,6 +60,7 @@ export default function EarningsAnalysisControls() {
   const [loading, setLoading] = useState(false);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [workerStatusError, setWorkerStatusError] = useState<string | null>(null);
   const [lastRun, setLastRun] = useState<EarningsRunSummary | null>(null);
   const [lastRunNote, setLastRunNote] = useState<string | null>(null);
 
@@ -79,6 +75,7 @@ export default function EarningsAnalysisControls() {
       setDoc(runtime);
       setWorker(health);
       setError(null);
+      setWorkerStatusError(null);
     } catch (cause) {
       setError(errorText(cause));
     } finally {
@@ -101,7 +98,13 @@ export default function EarningsAnalysisControls() {
     const summary = readRunSummary(action);
     setLastRun(summary);
     setLastRunNote(summary ? null : t('检查已完成，暂无明细'));
-    void adminApi.workerStatus().then(setWorker).catch(() => undefined);
+    void adminApi.workerStatus().then(
+      (health) => {
+        setWorker(health);
+        setWorkerStatusError(null);
+      },
+      () => setWorkerStatusError(t('检查结果已保存，后台状态暂时读不到')),
+    );
     return summary;
   };
 
@@ -246,6 +249,7 @@ export default function EarningsAnalysisControls() {
           </p>
         )}
         {error && <p className="mt-1 text-micro text-down-700">{error}</p>}
+        {workerStatusError && <p className="mt-1 text-micro text-warn-700" role="status">{workerStatusError}</p>}
       </div>
     </section>
   );

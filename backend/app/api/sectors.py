@@ -14,6 +14,10 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 
+from app.json_validation import (
+    reject_duplicate_json_keys as _reject_duplicate_json_keys,
+    reject_non_finite_json as _reject_non_finite_json,
+)
 from app.access import (
     public_snapshot_unavailable,
     require_same_origin_request,
@@ -329,21 +333,6 @@ def _sector_iv_snapshot_path(sector_id: str) -> Path:
     return _SECTOR_IV_SNAPSHOT_DIR / f"{sector_id}.json"
 
 
-def _reject_duplicate_json_keys(
-    pairs: list[tuple[str, Any]],
-) -> dict[str, Any]:
-    output: dict[str, Any] = {}
-    for key, value in pairs:
-        if key in output:
-            raise ValueError(f"duplicate JSON key: {key}")
-        output[key] = value
-    return output
-
-
-def _reject_non_finite_json(value: str) -> None:
-    raise ValueError(f"non-finite JSON value: {value}")
-
-
 def _clean_sector_iv_snapshot_payload(
     sector_id: str,
     value: Any,
@@ -483,7 +472,6 @@ def _parse_sector_iv_document(
     raw: bytes,
     *,
     sector_id: str,
-    observed: float,
 ) -> dict[str, Any] | None:
     if not raw:
         return None
@@ -504,7 +492,6 @@ def _parse_sector_iv_document(
         or not isinstance(saved_at, (int, float))
         or not math.isfinite(float(saved_at))
         or float(saved_at) <= 0
-        or float(saved_at) > observed
     ):
         return None
     payload = _clean_sector_iv_snapshot_payload(
@@ -536,9 +523,8 @@ def _read_sector_iv_snapshot(
         document = _sector_iv_documents.read(
             target,
             lambda raw: _parse_sector_iv_document(
-                raw, sector_id=sector_id, observed=observed
+                raw, sector_id=sector_id
             ),
-            now=observed,
             max_bytes=_SECTOR_IV_SNAPSHOT_MAX_BYTES,
         )
     except (
@@ -550,7 +536,7 @@ def _read_sector_iv_snapshot(
         json.JSONDecodeError,
     ):
         return None
-    if document is None:
+    if document is None or document["saved_at"] > observed:
         return None
 
     saved_at = float(document["saved_at"])

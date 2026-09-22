@@ -390,3 +390,16 @@ def test_private_network_owner_reads_independent_market_context(
     result = asyncio.run(strength.market())
     assert result["market_regime"]["score"] == 42
     assert result["snapshot_source"] == "strength_context_worker"
+
+
+@pytest.mark.parametrize("warm_valid", [False, True])
+def test_future_strength_snapshot_recovers_without_rewrite_and_rejects_rewind(tmp_path, warm_valid):
+    path = tmp_path / "strength-snapshot-v1.json"
+    parameters = dict(strength.DEFAULT_STRENGTH_SCAN_PARAMETERS)
+    strength._write_strength_snapshot(path, parameters=parameters, payload=_payload(), saved_at=NOW)
+    if warm_valid:
+        assert strength._read_strength_snapshot(path, parameters=parameters, now=NOW) is not None
+    assert strength._read_strength_snapshot(path, parameters=parameters, now=NOW - .001) is None
+    assert strength._read_strength_snapshot(path, parameters=parameters, now=NOW + 60) is not None
+    assert strength._read_strength_snapshot(path, parameters=parameters, now=NOW - .001) is None
+    assert strength._read_strength_snapshot(path, parameters=parameters, now=NOW) is not None

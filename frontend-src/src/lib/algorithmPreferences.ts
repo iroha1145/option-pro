@@ -102,16 +102,3 @@ export function algorithmPreferencePendingSync(principal?: string | null): boole
   const parsed = readStorage(preferenceStorageKey(principal));
   return parsed?.pendingSync === true;
 }
-
-export function requestedScreenerAlgorithm(
-  choice: ScreenerRankingChoice,
-): ScreenerRankingChoice {
-  void choice;
-  return SCREENER_EOD_LIMITED;
-}
-
-export function requestedRadarAlgorithm(
-  choice: RadarSortChoice,
-): RadarSortChoice {
-  return choice;
-}

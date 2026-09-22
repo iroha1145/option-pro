@@ -19,7 +19,8 @@ export function useFeedResource(filters: CatalystFilters) {
   return useCatalystResource(`feed:${JSON.stringify(query)}`, POLICY, async (previous) => {
     const result = await refreshFeedSnapshot((cursor) => catalystsContract.feed({ ...query, cursor }), previous);
     if (!result.items.length && !result.hiddenUnanalyzed) {
-      try { result.hiddenUnanalyzed = (await catalystsContract.newsToday()).pending; } catch { /* feed remains valid */ }
+      try { result.hiddenUnanalyzed = (await catalystsContract.newsToday()).pending; }
+      catch { result.hiddenCountUnknown = true; }
     }
     return result;
   });

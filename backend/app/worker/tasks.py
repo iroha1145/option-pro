@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-import json
 import math
 import sqlite3
 import threading
@@ -18,30 +17,15 @@ from app.data_paths import get_data_paths
 from app.execution_limits import BREAKOUT_TASK_TIMEOUT_SECONDS
 from app.personal_config import get_personal_config
 
+from .inventory import DEFAULT_TASK_NAMES
 from .runtime import TaskResult, TaskSpec, _public_error_code
+
+from app.personal_config import personal_analysis_permissions as _personal_analysis_permissions
 
 
 # Full-market capture, geometry, nine scoring views and diagnostic publication
 # share this finite budget. Production runs can exceed the old 30-minute limit.
 STRENGTH_REFRESH_TIMEOUT_SECONDS = 7_200.0
-
-
-DEFAULT_TASK_NAMES = (
-    "breakout",
-    "focus",
-    "catalyst_sync",
-    "ai_jobs",
-    "maintenance",
-    "stock_directory",
-    "public_home",
-    "sector_iv_refresh",
-    "earnings_analysis",
-    "macro_conditions",
-    "focus_refresh",
-    "strength_refresh",
-    "breakout_refresh",
-    "retention",
-)
 
 
 def _canonical_sector_tickers() -> tuple[str, ...]:
@@ -96,17 +80,6 @@ async def _close_optional(resource: Any) -> None:
 def _timestamp_text(value: float) -> str:
     return datetime.fromtimestamp(value, timezone.utc).isoformat().replace(
         "+00:00", "Z"
-    )
-
-
-def _personal_analysis_permissions(config: Any) -> tuple[bool, bool]:
-    features = getattr(config, "features", None)
-    mode = getattr(features, "catalyst_mode", None)
-    if mode is not None:
-        return mode in {"manual", "scheduled"}, mode == "scheduled"
-    return (
-        bool(getattr(config, "catalyst_manual_enabled", False)),
-        bool(getattr(config, "catalyst_scheduled_enabled", False)),
     )
 
 
@@ -2160,156 +2133,6 @@ class StrengthRefreshTask:
 
         return await self._run_eod_limited(strength_execution_parameters(parameters))
 
-    async def _run_legacy_snapshot(self, parameters: dict[str, Any]) -> TaskResult:
-        """Historical snapshot implementation retained for compatibility tests.
-
-        Scheduled and queued work only enters _run, which executes EOD.
-        """
-        from app.api.strength import (
-            _existing_strength_publication,
-            _strength_snapshot_path,
-            _write_strength_snapshot,
-            normalize_strength_scan_parameters,
-            strength_scan_parameters_hash,
-        )
-        from app.services.strength.freshness import (
-            decide_published_snapshot_replacement,
-            strength_payload_is_publishable,
-        )
-        from app.services.strength.scanner import STRENGTH_SCORE_VERSION, scan_strength
-        from app.services.utils import sanitize
-
-        from app.services.algorithm_modes import EOD_LIMITED_V1
-
-        scanner = self._scanner or scan_strength
-        writer = self._writer or _write_strength_snapshot
-        base_path = self._snapshot_path or get_data_paths().strength_snapshot
-        parameters = normalize_strength_scan_parameters(parameters)
-        if parameters.get("ranking_algorithm") == EOD_LIMITED_V1:
-            raise ValueError("EOD cannot execute through the legacy snapshot writer")
-        path = _strength_snapshot_path(parameters, base_path=base_path)
-        payload = sanitize(
-            await _call_local(
-                scanner,
-                **parameters,
-                force_refresh=True,
-            )
-        )
-        digest = strength_scan_parameters_hash(parameters)
-        through = payload.get("score_data_through") if isinstance(payload, dict) else None
-        publishable, publish_reason = strength_payload_is_publishable(payload)
-        if not publishable:
-            return TaskResult(
-                status="degraded",
-                error_code="strength_input_unavailable",
-                details={
-                    "result": "kept_previous_snapshot",
-                    "reason": publish_reason,
-                    "snapshot": path.name,
-                    "parameters": parameters,
-                    "parameters_hash": digest,
-                    "score_data_through": through,
-                    "published": False,
-                },
-            )
-        saved_at = float(self._clock())
-        existing_saved_at, existing_payload = await _call_local(
-            _existing_strength_publication, path, parameters=parameters,
-        )
-        decision = decide_published_snapshot_replacement(
-            existing_saved_at=existing_saved_at,
-            incoming_saved_at=saved_at,
-            existing_payload=existing_payload,
-            incoming_payload=payload,
-            expected_scoring_version=STRENGTH_SCORE_VERSION,
-        )
-        if not decision.replace:
-            keep = decision.keep_result or "kept_previous_snapshot"
-            if keep == "kept_newer_publish":
-                return TaskResult(
-                    status="idle",
-                    details={
-                        "result": keep,
-                        "reason": decision.reason,
-                        "snapshot": path.name,
-                        "parameters": parameters,
-                        "parameters_hash": digest,
-                        "score_data_through": through,
-                        "published": False,
-                    },
-                )
-            return TaskResult(
-                status="degraded",
-                error_code="strength_input_unavailable",
-                details={
-                    "result": "kept_previous_snapshot",
-                    "reason": decision.reason,
-                    "snapshot": path.name,
-                    "parameters": parameters,
-                    "parameters_hash": digest,
-                    "score_data_through": through,
-                    "published": False,
-                },
-            )
-        outcome = await _call_local(
-            writer,
-            path,
-            parameters=parameters,
-            payload=payload,
-            saved_at=saved_at,
-            base_path=base_path,
-        )
-        count = int(payload.get("count") or 0) if isinstance(payload, dict) else 0
-        published = outcome == "written"
-        if not published:
-            keep = outcome or "kept_previous_snapshot"
-            if keep == "kept_newer_publish":
-                return TaskResult(
-                    status="idle",
-                    details={
-                        "result": keep,
-                        "snapshot": path.name,
-                        "count": max(0, count),
-                        "parameters": parameters,
-                        "parameters_hash": digest,
-                        "completed_at": _timestamp_text(saved_at),
-                        "score_data_through": through,
-                        "published": False,
-                    },
-                )
-            return TaskResult(
-                status="degraded",
-                error_code="strength_input_unavailable",
-                details={
-                    "result": "kept_previous_snapshot",
-                    "reason": keep,
-                    "snapshot": path.name,
-                    "count": max(0, count),
-                    "parameters": parameters,
-                    "parameters_hash": digest,
-                    "completed_at": _timestamp_text(saved_at),
-                    "score_data_through": through,
-                    "published": False,
-                },
-            )
-        return TaskResult(
-            status="idle",
-            details={
-                "result": "refreshed",
-                "snapshot": path.name,
-                "count": max(0, count),
-                "parameters": parameters,
-                "parameters_hash": digest,
-                "completed_at": _timestamp_text(saved_at),
-                "score_data_through": through,
-                "score_version": (
-                    payload.get("score_version") if isinstance(payload, dict) else None
-                ),
-                "published": True,
-            },
-        )
-
-    @bind_trusted_system_task
     async def run_for_actions(self, actions: list[dict[str, Any]]) -> TaskResult:
         token = self._eod_batch.set({})
         try:
@@ -2531,6 +2354,10 @@ class StrengthRefreshTask:
             scheduled_strength_scan_parameters,
             strength_scan_parameters_hash,
         )
+        from app.services.strength.variant_demand import (
+            complete_strength_variant_demand,
+            list_pending_strength_variant_demands,
+        )
 
         now = float(self._clock())
         due = (
@@ -2567,16 +2394,16 @@ class StrengthRefreshTask:
             # have changed the recent-file ordering since the scheduled round.
             extras = list(self._pending_variant_parameters.values())[:4]
             self._variant_retry_at = None
+        demand_read_error: dict[str, Any] | None = None
         try:
-            from app.services.strength.variant_demand import (
-                complete_strength_variant_demand,
-                list_pending_strength_variant_demands,
-            )
-
             pending_demands = list_pending_strength_variant_demands()
-        except Exception:
-            complete_strength_variant_demand = None  # type: ignore[assignment]
+        except Exception as exc:
             pending_demands = []
+            demand_read_error = {
+                "parameters_hash": None,
+                "error_code": "strength_variant_demand_read_failed",
+                "reason": type(exc).__name__,
+            }
         if pending_demands:
             merged = list(extras)
             seen_hashes: set[str] = set()
@@ -2618,24 +2445,22 @@ class StrengthRefreshTask:
                 self._pending_variant_parameters[digest] = dict(parameters)
             try:
                 variant = await self._run(parameters)
-                if complete_strength_variant_demand is not None:
-                    complete_strength_variant_demand(
-                        parameters,
-                        status=(
-                            "completed"
-                            if variant.status == "idle" and not variant.error_code
-                            else "failed"
-                        ),
-                        error_code=variant.error_code,
-                    )
+                complete_strength_variant_demand(
+                    parameters,
+                    status=(
+                        "completed"
+                        if variant.status == "idle" and not variant.error_code
+                        else "failed"
+                    ),
+                    error_code=variant.error_code,
+                )
             except Exception as exc:
                 failed_count += 1
-                if complete_strength_variant_demand is not None:
-                    complete_strength_variant_demand(
-                        parameters,
-                        status="failed",
-                        error_code="strength_variant_exception",
-                    )
+                complete_strength_variant_demand(
+                    parameters,
+                    status="failed",
+                    error_code="strength_variant_exception",
+                )
                 variant_errors.append(
                     {
                         "parameters_hash": digest,
@@ -2683,6 +2508,8 @@ class StrengthRefreshTask:
                     self._pending_variant_errors[digest] = variant_errors[-1]
         unresolved = list(self._pending_variant_errors.values())
         unresolved.extend(error for error in variant_errors if error["parameters_hash"] is None)
+        if demand_read_error is not None:
+            unresolved.append(demand_read_error)
         remaining = self._next_default_delay()
         if (
             self._pending_variant_parameters
@@ -2702,18 +2529,29 @@ class StrengthRefreshTask:
         details["variant_refresh_errors"] = unresolved
         details["variant_refresh_pending"] = len(self._pending_variant_parameters)
         if result.status != "idle" or result.error_code:
+            next_delay = result.next_delay_seconds
+            if demand_read_error is not None:
+                next_delay = min(next_delay, 30.0) if next_delay is not None else 30.0
             return TaskResult(
                 status=result.status,
                 details=details,
-                next_delay_seconds=result.next_delay_seconds,
+                next_delay_seconds=next_delay,
                 error_code=result.error_code,
             )
         if unresolved:
             return TaskResult(
                 status="degraded",
                 details=details,
-                next_delay_seconds=self._next_scheduled_delay(),
-                error_code="strength_variant_refresh_failed",
+                next_delay_seconds=(
+                    min(self._next_scheduled_delay(), 30.0)
+                    if demand_read_error is not None
+                    else self._next_scheduled_delay()
+                ),
+                error_code=(
+                    "strength_variant_demand_read_failed"
+                    if demand_read_error is not None
+                    else "strength_variant_refresh_failed"
+                ),
             )
         return TaskResult(
             status="idle",
@@ -2813,14 +2651,15 @@ class BreakoutTask:
                 next_delay_seconds=min(delay, 300.0),
             )
         if status == "paused":
+            t1_completion = payload.get("t1_completion")
+            t1_error = payload.get("error_code")
             return TaskResult(
-                status="paused",
+                status="degraded" if t1_error else "paused",
+                error_code=t1_error,
                 details={
                     "reason": payload.get("reason"),
                     "session": session,
-                    "t1_completion": payload.get("t1_completion")
-                    if isinstance(payload, Mapping)
-                    else None,
+                    "t1_completion": t1_completion,
                     "t1_retry_after_seconds": payload.get("t1_retry_after_seconds"),
                 },
                 next_delay_seconds=delay,
@@ -2830,6 +2669,7 @@ class BreakoutTask:
             details={
                 "result": status,
                 "scan_run_id": payload.get("scan_run_id"),
+                "t1_persistence": payload.get("t1_persistence"),
                 "event_count": payload.get("event_count"),
             },
             next_delay_seconds=delay,

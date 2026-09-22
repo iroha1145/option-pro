@@ -6,6 +6,7 @@ import {
 } from '../src/api/transport.ts';
 import { ApiError, consumeBootPrefetch, idFromLocation, invalidateBootPrefetch, offerBootPrefetch, PREFETCH_TTL_MS, resetBootPrefetchForTests, postCreate, request, requestRaw } from '../src/api/client.ts';
 import { fmtPrice, fmtSigned, fmtPct, fmtCompact, fmtCountdown, fmtNyTime, fmtTimeHHMMSS } from '../src/lib/format.ts';
+import { fmtChartPrice } from '../src/lib/numericFormat.ts';
 
 for (const status of [200, 503]) {
   test(`the request deadline covers an unfinished ${status} response body`, async (t) => {
@@ -171,6 +172,12 @@ test('missing and nonfinite financial values remain distinct from real zero', ()
   assert.equal(fmtPct(1.5), '+1.50%');
   assert.doesNotThrow(() => fmtPrice(1.23, -1));
   assert.doesNotThrow(() => fmtPct(1.23, Infinity));
+});
+
+test('chart price labels keep optional decimals and four places below one', () => {
+  assert.equal(fmtChartPrice(1.2), '1.2');
+  assert.equal(fmtChartPrice(0.123456), '0.1235');
+  assert.equal(fmtChartPrice(1234.567), '1,234.57');
 });
 
 test('prefetch consume still enforces the body deadline, size bound and caller cancel', async (t) => {

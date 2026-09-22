@@ -168,8 +168,9 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
                 toast.error(__t('{label}刷新失败', { label }), st.reason ?? undefined);
                 break;
               }
-            } catch {
-              break; // 状态端点不可用时不阻塞
+            } catch (e) {
+              toast.error(__t('{label}刷新状态读取失败', { label }), errText(e));
+              break;
             }
           }
         }
@@ -196,7 +197,16 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
         if (t.reason === 'cooldown') toast.info(__t('{label}仍在冷却', { label }), __t('稍后自动执行或重试'));
         else if (t.reason === 'already_running') toast.info(__t('{label}正在执行', { label }), __t('已有任务正在进行'));
         else toast.success(__t('{label}刷新已入队', { label }));
-        adminApi.workerStatus().then(setWorker, () => undefined);
+        adminApi.workerStatus().then(
+          (health) => {
+            setWorker(health);
+            setWorkerErr(null);
+          },
+          (e) => {
+            setWorkerErr(errText(e));
+            toast.error(__t('{label}后台状态读取失败', { label }), errText(e));
+          },
+        );
       } catch (e) {
         toast.error(__t('{label}未受理', { label }), errText(e));
       } finally {

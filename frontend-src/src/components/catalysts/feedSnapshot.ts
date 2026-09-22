@@ -1,7 +1,7 @@
 /** Pagination uses a fresh cursor chain after invalidation, never mixes cursors
  * from different feed snapshots. Removed / corrected / reclassified rows converge. */
 export interface FeedPage<T> { items: T[]; nextCursor: string | null; total: number; hiddenUnanalyzed: number }
-export interface FeedSnapshot<T> extends FeedPage<T> { pages: number }
+export interface FeedSnapshot<T> extends FeedPage<T> { pages: number; hiddenCountUnknown?: boolean }
 export async function visibleFeedPage<T>(
   read: (cursor?: string) => Promise<FeedPage<T>>,
   cursor?: string,

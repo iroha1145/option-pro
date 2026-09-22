@@ -5,6 +5,7 @@ import type { Dict } from './types';
  * 覆盖 src/components/earnings/*.tsx、src/pages/Earnings.tsx。
  */
 export const EARNINGS: Dict = {
+  '检查结果已保存，后台状态暂时读不到': ['Check results are saved, but the worker status is temporarily unavailable.', '確認結果は保存済みですが、バックグラウンドの状態を一時的に取得できません。'],
   '操作未完成，请稍后重试': ['The action could not be completed. Try again shortly.', '操作を完了できませんでした。しばらくしてから再試行してください。'],
   // ---------------- DensityStrip.tsx ----------------
   '本月财报密度': ["This month's earnings density", "今月の決算密度"],

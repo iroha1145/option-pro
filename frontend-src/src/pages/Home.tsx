@@ -324,7 +324,7 @@ export default function Home() {
           <>
             <SessionLED
               session={session}
-              label={session ? SESSION_LABEL[status!.market] : undefined}
+              label={session && status?.market ? SESSION_LABEL[status.market] : undefined}
               loading={statusQ.loading}
             />
             {indicesQ.lastUpdatedAt && (
@@ -623,7 +623,7 @@ function MarketStatusPanel({
         <h3 className="text-h3 text-ink-900">{t('市场状态')}</h3>
         <SessionLED
           session={session}
-          label={session && status ? SESSION_LABEL[status.market] : undefined}
+          label={session && status?.market ? SESSION_LABEL[status.market] : undefined}
           loading={loading}
         />
       </div>

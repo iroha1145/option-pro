@@ -7,6 +7,7 @@ import { drawingPaint, drawingSurface } from '../drawingAppearance.ts';
 import { semanticLabel, overlayTier, gapAreas } from './semanticPresentation.ts';
 import { t } from '../../../../i18n/core.ts';
 import { barStampForRange, isPatternKind, type AnalysisOverlay, type AnalysisPane } from './mapBundle.ts';
+import { fmtChartPrice } from '../../../../lib/numericFormat.ts';
 
 export interface OverlaySeriesLine {
   id: string;
@@ -171,7 +172,7 @@ export function overlaysToMarks(
     lines.push([
       { coord: [historical?.start ?? ctx.xMin, price], clipToPlot: true,
         lineStyle: { ...manualLineInk(color, ink.width, historical ? [2, 4] : 'solid'), opacity: ink.opacity },
-        label: label ? { show: true, formatter: `${label} · ${price.toLocaleString('en-US', { maximumFractionDigits: price < 1 ? 4 : 2 })}`,
+        label: label ? { show: true, formatter: `${label} · ${fmtChartPrice(price)}`,
           position: 'insideMiddleTop', fontSize: 11, lineHeight: 14, color: drawingPaint(color), priority: ink.labelPriority + (display?.displayPriority ?? 0),
           backgroundColor: drawingSurface(0.96), padding: [1, 4], borderRadius: 3 } : { show: false } },
       { coord: [historical?.end ?? ctx.xMax, price] },

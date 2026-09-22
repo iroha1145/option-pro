@@ -6,6 +6,7 @@ import ts from 'typescript';
 import { createRequire } from 'node:module';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { fmtTimeHHMMSS } from '../src/lib/format.ts';
 
 const require = createRequire(import.meta.url);
 const translate = { t: (text, values = {}) => text.replace(/\{(\w+)\}/g, (_, key) => values[key] ?? '') };
@@ -15,7 +16,13 @@ function moduleAt(path, imports) {
     compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
   vm.runInNewContext(source, { exports, require: key => imports[key] ?? require(key),
-    Date: class extends Date { static now() { return Date.UTC(2026, 8, 8); } },
+    Date: class extends Date {
+      static now() { return Date.UTC(2026, 8, 8); }
+      toLocaleTimeString(locale, options) {
+        if (locale === 'zh-CN' && options?.timeZone === 'America/New_York') return '24:00:00';
+        return super.toLocaleTimeString(locale, options);
+      }
+    },
   });
   return exports;
 }
@@ -27,7 +34,7 @@ const live = moduleAt('../src/components/shared/LiveQuote.tsx', {
   '@/hooks/useTickFlash': { useTickFlash: () => ({}) },
   '@/lib/liveQuotes': quotes,
   '@/lib/screenerScanFlow': { visibleScanDate: value => value?.slice(0, 10) ?? null },
-  '@/lib/format': { fmtPrice: value => value.toFixed(2) },
+  '@/lib/format': { fmtPrice: value => value.toFixed(2), fmtTimeHHMMSS },
   '@/lib/utils': { cn: (...values) => values.filter(Boolean).join(' ') },
   './NumberTicker': { default: ({ text }) => createElement('span', { 'aria-label': text }, text) },
   './ChangeBadge': { default: ({ value }) => createElement('span', null, value == null ? '—' : `${value}%`) },
@@ -74,4 +81,11 @@ test('new quote price with missing or inconsistent previous-close change shows u
     assert.match(render(live.LivePrice, { fallback: 85 }), /aria-label="90.00"/);
     assert.equal(render(live.LiveChange, { fallback: 3, fallbackPrice: 85 }), '<span>—</span>');
   }
+});
+
+test('quote tooltip uses New York midnight without 24:00 and omits invalid times', () => {
+  quote = { ...snapshot, freshness: 'live', subscription_status: 'live', trade_at: '2026-09-05T04:00:00Z' };
+  assert.match(render(live.QuoteIndicator, {}), /报价时间 00:00:00（纽约）/);
+  quote = { ...quote, trade_at: 'not-a-date' };
+  assert.doesNotMatch(render(live.QuoteIndicator, {}), /报价时间/);
 });

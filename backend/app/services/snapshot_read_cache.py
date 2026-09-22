@@ -3,17 +3,17 @@
 Worker processes publish snapshots with atomic ``os.replace``; the API process
 previously re-read and re-validated the whole document on every request (the
 public-home file alone cost ~440ms per read at 4MB). Publishing swaps the
-inode, so ``(st_ino, st_mtime_ns, st_size)`` of the opened file is a exact
-content fingerprint: cache the validated parse under that identity and every
-request after the first is a stat call.
+inode, so ``(st_ino, st_mtime_ns, st_size)`` identifies the opened content.
+Cache content validation under that identity; callers check time-dependent
+validity after each read, including cache hits.
 
 Safety properties, in the order they matter:
 
 - The cached identity comes from ``fstat`` on the file descriptor actually
   read (borrowed from ``stock_pull_snapshot``), so a publish racing the read
   can never file the new bytes under the old identity.
-- A parse/validation failure is negatively cached **per identity**: a corrupt
-  file is not re-parsed on every request, but the moment the worker publishes
+- A content parse/validation failure is negatively cached **per identity**:
+  a corrupt file is not re-parsed on every request, but the moment the worker publishes
   a replacement (identity changes) the negative entry is void. Unavailability
   therefore never outlives the condition that caused it.
 - Concurrent cold reads share one parse via a per-path lock (single flight).
@@ -64,8 +64,8 @@ class FingerprintedFileCache:
         self._max_paths = max_paths
         self._max_bytes = max_bytes
         self._lock = threading.Lock()
-        # path -> (identity, validated_at, raw_size, value)
-        self._entries: OrderedDict[str, tuple[_Identity, float, int, Any]] = (
+        # path -> (identity, raw_size, value)
+        self._entries: OrderedDict[str, tuple[_Identity, int, Any]] = (
             OrderedDict()
         )
         # path -> identity of the last read that produced no usable document
@@ -76,13 +76,13 @@ class FingerprintedFileCache:
         cache_metrics.incr(f"snapshot_cache.{self._name}.{event}")
 
     def _total_bytes_locked(self) -> int:
-        return sum(entry[2] for entry in self._entries.values())
+        return sum(entry[1] for entry in self._entries.values())
 
     def _store_locked(
-        self, key: str, identity: _Identity, validated_at: float, raw_size: int, value: Any
+        self, key: str, identity: _Identity, raw_size: int, value: Any
     ) -> None:
         self._failures.pop(key, None)
-        self._entries[key] = (identity, validated_at, raw_size, value)
+        self._entries[key] = (identity, raw_size, value)
         self._entries.move_to_end(key)
         while len(self._entries) > self._max_paths or (
             len(self._entries) > 1 and self._total_bytes_locked() > self._max_bytes
@@ -97,26 +97,13 @@ class FingerprintedFileCache:
             f"snapshot_cache.{self._name}.entries", float(len(self._entries))
         )
 
-    # Concurrent threads observe time.time() microseconds apart, and lock
-    # acquisition order is not arrival order — a strict `now >= validated_at`
-    # check would make the loser of that race re-parse. Frozen-clock tests
-    # rewind by minutes-to-years, so a small skew allowance separates the two.
-    _CLOCK_SKEW_ALLOWANCE_SECONDS = 30.0
-
     def _cached_locked(
-        self, key: str, identity: _Identity, now: float
+        self, key: str, identity: _Identity
     ) -> tuple[bool, Any]:
         cached = self._entries.get(key)
         if cached is not None and cached[0] == identity:
-            # Validation is monotonic in `now` (checks only reject timestamps
-            # from the future). A caller evaluating a *substantially earlier*
-            # clock than the one the entry was validated with — frozen-clock
-            # tests — must bypass the cache rather than trust a laxer
-            # validation.
-            if now >= cached[1] - self._CLOCK_SKEW_ALLOWANCE_SECONDS:
-                self._entries.move_to_end(key)
-                return True, cached[3]
-            return False, None
+            self._entries.move_to_end(key)
+            return True, cached[2]
         if cached is not None:
             self._entries.pop(key, None)
         failed = self._failures.get(key)
@@ -131,16 +118,15 @@ class FingerprintedFileCache:
         path: Path,
         loader: Callable[[bytes], Any],
         *,
-        now: float | None = None,
         max_bytes: int | None = None,
     ) -> Any:
         """Return the validated document for ``path`` (None when unusable).
 
         ``loader`` receives the raw file bytes and returns the validated
         document, or None / raises ValueError when the content is unusable.
+        Its result must depend only on content, never on the current clock.
         """
 
-        current = time.time() if now is None else float(now)
         key = os.path.abspath(os.fspath(path))
         identity = _path_file_identity(path)
         if identity is None:
@@ -148,7 +134,7 @@ class FingerprintedFileCache:
             return None
 
         with self._lock:
-            hit, value = self._cached_locked(key, identity, current)
+            hit, value = self._cached_locked(key, identity)
             if hit:
                 self._metric("hit" if value is not None else "negative_hit")
                 return value
@@ -160,7 +146,7 @@ class FingerprintedFileCache:
                 self._metric("miss_no_file")
                 return None
             with self._lock:
-                hit, value = self._cached_locked(key, identity, current)
+                hit, value = self._cached_locked(key, identity)
                 if hit:
                     self._metric("hit_after_wait" if value is not None else "negative_hit")
                     return value
@@ -205,7 +191,7 @@ class FingerprintedFileCache:
                     while len(self._failures) > self._max_paths:
                         self._failures.popitem(last=False)
                 else:
-                    self._store_locked(key, opened, current, len(raw), value)
+                    self._store_locked(key, opened, len(raw), value)
             return value
 
     def _prune_path_locks_locked(self) -> None:

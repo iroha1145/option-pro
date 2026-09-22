@@ -25,6 +25,11 @@ import httpx
 import yfinance as yf
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 
+from app.json_validation import (
+    reject_duplicate_json_keys as _reject_duplicate_json_keys,
+    reject_non_finite_json as _reject_non_finite_json,
+    is_finite_json_tree as _is_finite_json_tree,
+)
 from app.access import (
     current_request_is_owner,
     public_snapshot_unavailable,
@@ -1371,15 +1376,22 @@ def _fetch_watchlist_provider_previous_close(
                 continue
             if math.isfinite(previous_close) and previous_close > 0:
                 return previous_close
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning(
+            "Watchlist provider previous close failed for %s (%s)",
+            ticker, type(exc).__name__,
+        )
     return None
 
 
 def _cache_watchlist_provider_previous_close(ticker: str, future: Any) -> None:
     try:
         previous_close = future.result()
-    except Exception:
+    except Exception as exc:
+        logger.warning(
+            "Watchlist provider previous close future failed for %s (%s)",
+            ticker, type(exc).__name__,
+        )
         previous_close = None
     now = time.monotonic()
     ttl = (
@@ -1488,24 +1500,6 @@ def _fetch_watchlist_provider_previous_closes(
     return previous_closes
 
 
-def _is_finite_json_tree(value: Any, *, depth: int = 0) -> bool:
-    if depth > 64:
-        return False
-    if value is None or isinstance(value, (bool, str, int)):
-        return True
-    if isinstance(value, float):
-        return math.isfinite(value)
-    if isinstance(value, list):
-        return all(_is_finite_json_tree(item, depth=depth + 1) for item in value)
-    if isinstance(value, dict):
-        return all(
-            isinstance(key, str)
-            and _is_finite_json_tree(item, depth=depth + 1)
-            for key, item in value.items()
-        )
-    return False
-
-
 def _is_finite_number(value: Any, *, positive: bool = False) -> bool:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return False
@@ -1582,19 +1576,6 @@ def _clean_watchlist_snapshot_payload(value: Any) -> dict[str, Any] | None:
     if len(tickers) != succeeded:
         return None
     return cleaned
-
-
-def _reject_duplicate_json_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-    result: dict[str, Any] = {}
-    for key, value in pairs:
-        if key in result:
-            raise ValueError(f"duplicate JSON key: {key}")
-        result[key] = value
-    return result
-
-
-def _reject_non_finite_json(value: str) -> None:
-    raise ValueError(f"non-finite JSON value: {value}")
 
 
 def _read_watchlist_snapshot(
@@ -2240,9 +2221,16 @@ async def _build_watchlist(requested_tickers: list[str] | None = None):
                                 yahoo_latest_tickers = sorted(
                                     set(daily_missing) | set(latest_missing)
                                 )
-                        except massive_provider.MassiveError:
-                            pass  # 快照计划不含/限流:最新价整体走 Yahoo
-                except massive_provider.MassiveError:
+                        except massive_provider.MassiveError as exc:
+                            logger.warning(
+                                "Watchlist Massive snapshot failed (%s)",
+                                type(exc).__name__,
+                            )
+                except massive_provider.MassiveError as exc:
+                    logger.warning(
+                        "Watchlist Massive daily failed (%s)",
+                        type(exc).__name__,
+                    )
                     massive_daily = None
                     massive_latest = None
                     yahoo_daily_tickers = list(all_tickers)
@@ -2412,7 +2400,11 @@ async def _build_watchlist(requested_tickers: list[str] | None = None):
                         "quote_session": session_name(quote_dt, market_timezone),
                         "previous_close_source": previous_close_source,
                     }
-                except Exception:
+                except Exception as exc:
+                    logger.warning(
+                        "Watchlist quote processing failed for %s (%s)",
+                        t, type(exc).__name__,
+                    )
                     continue
             # Compare trading dates only within the U.S. equity/ETF session.
             # The universe also contains RMS.PA and futures; comparing their
@@ -2442,7 +2434,8 @@ async def _build_watchlist(requested_tickers: list[str] | None = None):
             for ticker in delayed_tickers:
                 quotes[ticker]["quote_delayed"] = True
             return quotes, quote_times, delayed_tickers
-        except Exception:
+        except Exception as exc:
+            logger.warning("Watchlist quote refresh failed (%s)", type(exc).__name__)
             return {}, [], []
 
     price_map, quote_times, delayed_tickers = await asyncio.to_thread(_fetch_quotes)

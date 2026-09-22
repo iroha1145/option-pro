@@ -27,7 +27,7 @@ export function normalizeMarketState(value: string | null | undefined): MarketSt
   if (state === 'open' || state === 'regular') return 'open';
   if (state === 'pre-market' || state === 'premarket') return 'premarket';
   if (state === 'after-hours' || state === 'postmarket' || state === 'afterhours') return 'postmarket';
-  return 'closed';
+  return state === 'closed' ? 'closed' : null;
 }
 
 export const marketPulseApi = {

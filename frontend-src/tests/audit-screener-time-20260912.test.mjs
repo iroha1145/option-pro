@@ -5,7 +5,6 @@ import vm from 'node:vm';
 import ts from 'typescript';
 import { formatChartTime } from '../src/components/detail/chartTime.ts';
 import { catalystSortReadiness, catalystSummaryUsable, CATALYST_SUMMARY_TTL_MS, EMPTY_CATALYST, DEFAULT_FILTERS, tierOf } from '../src/components/screener/types.ts';
-import { keepServerRankingOrder } from '../src/lib/screenerSort.ts';
 import { applyEodLimitedView } from '../src/lib/eodLimitedView.ts';
 import { macroToneOf } from '../src/lib/macroFit.ts';
 
@@ -140,7 +139,7 @@ test('failed catalyst batches settle as errors, do not loop, and explicit retry 
 
 test('failed summaries block catalyst ranking rather than count as zero news', () => {
   const scope = {
-    useMemo: fn => fn(), Date, Math, keepServerRankingOrder,
+    useMemo: fn => fn(), Date, Math,
     filtered: [{ ticker: 'HIGH', strengthScore: 95, changePct: 0 }, { ticker: 'LOW', strengthScore: 70, changePct: 0 }],
     sortMode: 'impact', catalystSortIncomplete: true,
     scanMeta: null,
@@ -154,6 +153,8 @@ test('failed summaries block catalyst ranking rather than count as zero news', (
   scope.catalystSortIncomplete = false;
   scope.catalysts.HIGH = { ...news(0), loaded: true };
   assert.deepEqual(Array.from(scope.renderSort(), row => row.ticker), ['LOW', 'HIGH']);
+  scope.sortMode = 'deterministic';
+  assert.deepEqual(Array.from(scope.renderSort(), row => row.ticker), ['HIGH', 'LOW']);
 });
 
 test('expiry refresh reloads same-symbol summaries without requiring a new result object', async () => {

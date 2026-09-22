@@ -3,10 +3,6 @@ import { t } from '../i18n/core.ts';
 
 export const EOD_LIMITED_RANKING = 'eod_limited_v1';
 
-export function isEodLimitedRanking(algorithm?: string | null): boolean {
-  return algorithm === EOD_LIMITED_RANKING;
-}
-
 /** Normalize every legacy choice onto the single current engine and view. */
 export function applyEodLimitedView(filters: ScanFilters): ScanFilters {
   const timeframe = filters.timeframe === 'all' ? 'mid' : filters.timeframe;

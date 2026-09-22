@@ -10,7 +10,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { DUR_SECTION } from '@/lib/motion';
+import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import Icon from '@/components/icons';
 import type { EarningsRow } from './types';
 import { addDays, etToday, fmtMDCN, weekStartMonday } from './types';
@@ -28,7 +28,6 @@ interface MonthCalendarProps {
    各自是自足的星期缩写，前缀拼接会拼出 "WeekMon"/"週月" 这种破损文案。 */
 const WEEKDAYS = [t('周一'), t('周二'), t('周三'), t('周四'), t('周五'), t('周六'), t('周日')] as const;
 const MAX_CHIPS = 3;
-const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
 
 const timingLabel = (timing: EarningsRow['timing']) => (
   timing === 'bmo' ? t('盘前') : timing === 'amc' ? t('盘后') : t('时间待定')

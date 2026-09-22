@@ -2,16 +2,11 @@
 
 from __future__ import annotations
 
-import math
+from app.services.numeric import (
+    finite_number as _finite,
+)
+
 from typing import Any, Mapping
-
-
-def _finite(value: Any) -> float | None:
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return None
-    return number if math.isfinite(number) else None
 
 
 def _bounded(value: float, cap: float) -> float:

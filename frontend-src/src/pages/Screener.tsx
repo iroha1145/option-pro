@@ -10,6 +10,7 @@ import { useQuoteSymbols } from '@/hooks/useLiveQuote';
  */
 import SoftBadge from '@/components/shared/SoftBadge';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTickFlash } from '@/hooks/useTickFlash';
 import { AnimatePresence, motion } from 'framer-motion';
 import { strengthApi, type StrengthScanEnvelope } from '@/api/modules/strength';
 import { catalystsApi } from '@/api/modules/catalysts';
@@ -24,6 +25,7 @@ import { useAccess } from '@/hooks/useAccess';
 import { useToast } from '@/hooks/useToast';
 import { useShell } from '@/hooks/useShell';
 import { cn } from '@/lib/utils';
+import { EASE_PAPER } from '@/lib/motion';
 import { fmtCompact, fmtLocaleDateTime, fmtTimeHHMMSS } from '@/lib/format';
 import {
   MACRO_SHADOW_HINT,
@@ -87,7 +89,6 @@ import {
   type TierFilter,
 } from '@/components/screener/types';
 import { localeTag, t as __t } from '../i18n/core.ts';
-import { keepServerRankingOrder } from '@/lib/screenerSort';
 import {
   applyEodLimitedView,
   eodEmptyEligibleLabel,
@@ -96,13 +97,14 @@ import {
   supportsDollarVolumeFilter,
 } from '@/lib/eodLimitedView';
 
-const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
 const PAGE_SIZE = 20;
 /* 板块名排序的 Collator 建一次：localeCompare(b, tag) 在 sort 比较函数里每次都会新建
    Collator，O(n log n) 次构造；setLocale() 整页重载，模块级缓存安全。 */
 const SECTOR_COLLATOR = new Intl.Collator(localeTag());
 /** 契约 /catalysts/tickers/batch 的匿名上限；超过就必须切片。 */
 const CATALYST_BATCH_SIZE = 20;
+const screenerKey = (row: ScreenerRow) => row.ticker;
+const screenerPrice = (row: ScreenerRow) => row.price;
 
 type ScanState = 'idle' | 'scanning' | 'done' | 'error';
 type ScanAttempt = { filters: ScanFilters; options: { forceRefresh?: boolean } };
@@ -153,7 +155,7 @@ export default function Screener() {
   const [macroToneFilter, setMacroToneFilter] = useState<MacroTone | 'all'>('all');
   const [page, setPage] = useState(1);
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [flashes, setFlashes] = useState<Record<string, 'up' | 'down'>>({});
+  const flashes = useTickFlash(rows, screenerKey, screenerPrice);
   const [refreshingStrength, setRefreshingStrength] = useState(false);
   const strengthRefreshInFlight = useRef(false);
   const [inFlightFilters, setInFlightFilters] = useState<ScanFilters | null>(null);
@@ -425,21 +427,7 @@ export default function Screener() {
         stale: result.stale,
         submittedRefresh,
       });
-      setRows((prev) => {
-        if (prev) {
-          const prevMap = new Map(prev.map((r) => [r.ticker, r.price]));
-          const f: Record<string, 'up' | 'down'> = {};
-          result.rows.forEach((r) => {
-            const p = prevMap.get(r.ticker);
-            if (p !== undefined && p !== r.price) f[r.ticker] = r.price > p ? 'up' : 'down';
-          });
-          if (Object.keys(f).length) {
-            setFlashes(f);
-            setTimeout(() => setFlashes({}), 700);
-          }
-        }
-        return result.rows;
-      });
+      setRows(result.rows);
       setScanMeta(result);
       const detailPatch: DetailCache = Object.fromEntries(
         result.rows.map((row) => [row.ticker, { dollarVolume: row.avgDollarVolume20d ?? null }]),
@@ -599,18 +587,14 @@ export default function Screener() {
     const out = [...filtered];
     const byScore = (a: ScreenerRow, b: ScreenerRow) =>
       b.strengthScore - a.strengthScore || Math.abs(b.changePct ?? 0) - Math.abs(a.changePct ?? 0) || a.ticker.localeCompare(b.ticker);
-    // 摘要没取齐就维持确定性顺序：用缺失值排名会让结果取决于访问过哪些分页。
-    if (sortMode === 'deterministic' || catalystSortIncomplete) {
-      if (!keepServerRankingOrder()) {
-        out.sort(byScore);
-      }
-    } else if (sortMode === 'latest') {
+    // 默认及摘要未取齐时保留服务端顺序；用缺失摘要排名会让结果取决于访问过哪些分页。
+    if (sortMode === 'latest' && !catalystSortIncomplete) {
       const ts = (r: ScreenerRow) => {
         const c = catalysts[r.ticker];
         return c?.latestAt ? new Date(c.latestAt).getTime() : -1;
       };
       out.sort((a, b) => ts(b) - ts(a) || byScore(a, b));
-    } else {
+    } else if (sortMode === 'impact' && !catalystSortIncomplete) {
       const impact = (r: ScreenerRow) => {
         const c = catalysts[r.ticker];
         return c ? c.pos - c.neg : 0;

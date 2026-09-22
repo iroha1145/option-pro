@@ -61,7 +61,7 @@ def read_context_snapshot(*, root: Path | None = None, now: datetime | None = No
     observed = now or datetime.now(timezone.utc)
     expected = last_complete_eod_session(observed)
     try:
-        document = _documents.read(context_path(root), _parse_document, now=observed.timestamp(), max_bytes=CONTEXT_MAX_BYTES)
+        document = _documents.read(context_path(root), _parse_document, max_bytes=CONTEXT_MAX_BYTES)
     except (OSError, ValueError, TypeError, UnicodeError):
         document = None
     if document is None:

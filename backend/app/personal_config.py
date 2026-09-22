@@ -312,3 +312,14 @@ def load_personal_config(path: Path = DEFAULT_PERSONAL_CONFIG_PATH) -> PersonalC
 @lru_cache(maxsize=1)
 def get_personal_config() -> PersonalConfig:
     return load_personal_config()
+
+
+def personal_analysis_permissions(config: Any) -> tuple[bool, bool]:
+    features = getattr(config, "features", None)
+    mode = getattr(features, "catalyst_mode", None)
+    if mode is not None:
+        return mode in {"manual", "scheduled"}, mode == "scheduled"
+    return (
+        bool(getattr(config, "catalyst_manual_enabled", False)),
+        bool(getattr(config, "catalyst_scheduled_enabled", False)),
+    )

@@ -8,6 +8,13 @@ import httpx
 
 from app.config import Settings, get_settings
 
+from app.services.numeric import (
+    rounded_number as _safe_float,
+    clamp_number as _clamp,
+    positive_sum as _sum,
+    positive_weighted_average as _weighted_average,
+)
+
 PROVIDER = "MarketData.app"
 _CACHE: dict[str, tuple[float, dict[str, Any] | None]] = {}
 _TTL_SECONDS = 60 * 30
@@ -23,52 +30,6 @@ def marketdata_is_enabled(settings: Settings | None = None) -> bool:
 
 def _token(settings: Settings) -> str:
     return settings.marketdata_token.strip()
-
-
-def _safe_float(value: Any, ndigits: int = 4) -> float | None:
-    try:
-        number = float(value)
-        if not math.isfinite(number):
-            return None
-        return round(number, ndigits)
-    except Exception:
-        return None
-
-
-def _clamp(value: float | int | None, lo: float = 0.0, hi: float = 100.0, default: float = 50.0) -> float:
-    if value is None:
-        return default
-    try:
-        number = float(value)
-    except Exception:
-        return default
-    if not math.isfinite(number):
-        return default
-    return max(lo, min(hi, number))
-
-
-def _sum(values: list[Any]) -> float:
-    total = 0.0
-    for value in values:
-        number = _safe_float(value, 4)
-        if number is not None and number > 0:
-            total += number
-    return total
-
-
-def _weighted_average(values: list[Any], weights: list[Any]) -> float | None:
-    numerator = 0.0
-    denominator = 0.0
-    for value, weight in zip(values, weights):
-        number = _safe_float(value, 6)
-        w = _safe_float(weight, 4) or 0.0
-        if number is None or number <= 0 or w <= 0:
-            continue
-        numerator += number * w
-        denominator += w
-    if denominator <= 0:
-        return None
-    return round(numerator / denominator, 4)
 
 
 def _partition_by_side(payload: dict[str, Any], side: str, key: str) -> list[Any]:

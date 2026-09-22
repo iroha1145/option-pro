@@ -8,6 +8,9 @@ export function fmtPrice(n: number | null | undefined, digits = 2): string {
   const places = precision(digits);
   return n.toLocaleString('en-US', { minimumFractionDigits: places, maximumFractionDigits: places });
 }
+export function fmtChartPrice(price: number): string {
+  return price.toLocaleString('en-US', { maximumFractionDigits: price < 1 ? 4 : 2 });
+}
 export function fmtSigned(n: number | null | undefined, digits = 2): string {
   if (!finite(n)) return missing;
   return `${n >= 0 ? '+' : '−'}${fmtPrice(Math.abs(n), digits)}`;

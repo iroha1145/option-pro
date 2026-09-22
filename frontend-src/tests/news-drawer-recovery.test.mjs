@@ -5,6 +5,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import ts from 'typescript';
 import { fileURLToPath } from 'node:url';
+import { createReactStub } from './helpers/react-hooks.mjs';
 import {
   ReadAttemptAborted,
   boundedReadRetryDelayMs,
@@ -25,110 +26,6 @@ const deferred = () => {
 };
 async function settle() {
   for (let i = 0; i < 20; i += 1) await Promise.resolve();
-}
-
-function createReactStub() {
-  const slots = [];
-  let cursor = 0;
-  let renderFn = null;
-  let renderArgs = [];
-  let lastResult = null;
-  let rendering = false;
-  let renderQueued = false;
-  const effects = [];
-
-  function flushEffects() {
-    for (const effect of effects) {
-      if (!effect.dirty) continue;
-      effect.dirty = false;
-      if (effect.cleanup) effect.cleanup();
-      const cleanup = effect.create();
-      effect.cleanup = typeof cleanup === 'function' ? cleanup : null;
-    }
-  }
-
-  function render() {
-    if (rendering) {
-      renderQueued = true;
-      return;
-    }
-    rendering = true;
-    let guard = 0;
-    do {
-      renderQueued = false;
-      guard += 1;
-      if (guard > 50) throw new Error('render loop runaway');
-      cursor = 0;
-      lastResult = renderFn(...renderArgs);
-      flushEffects();
-    } while (renderQueued);
-    rendering = false;
-  }
-
-  const React = {
-    useState(initial) {
-      const index = cursor++;
-      if (!(index in slots)) {
-        slots[index] = { value: typeof initial === 'function' ? initial() : initial };
-      }
-      const slot = slots[index];
-      if (!slot.set) {
-        slot.set = (next) => {
-          const value = typeof next === 'function' ? next(slot.value) : next;
-          if (Object.is(value, slot.value)) return;
-          slot.value = value;
-          render();
-        };
-      }
-      return [slot.value, slot.set];
-    },
-    useRef(initial) {
-      const index = cursor++;
-      if (!(index in slots)) slots[index] = { value: { current: initial } };
-      return slots[index].value;
-    },
-    useCallback(fn, deps) {
-      const index = cursor++;
-      if (!(index in slots)) slots[index] = { value: fn, deps: undefined };
-      const slot = slots[index];
-      const changed = slot.deps === undefined || deps === undefined
-        || deps.length !== slot.deps.length
-        || deps.some((dep, i) => !Object.is(dep, slot.deps[i]));
-      if (changed) {
-        slot.value = fn;
-        slot.deps = deps;
-      }
-      return slot.value;
-    },
-    useEffect(create, deps) {
-      const index = cursor++;
-      if (!(index in slots)) {
-        const record = { deps: undefined, create, cleanup: null, dirty: true };
-        slots[index] = { value: record };
-        effects.push(record);
-      }
-      const record = slots[index].value;
-      const changed = record.deps === undefined || deps === undefined
-        || deps.length !== record.deps.length
-        || deps.some((dep, i) => !Object.is(dep, record.deps[i]));
-      record.deps = deps;
-      record.create = create;
-      if (changed) record.dirty = true;
-    },
-  };
-
-  return {
-    React,
-    unmount() {
-      for (const effect of effects) if (effect.cleanup) effect.cleanup();
-    },
-    mount(fn, ...args) {
-      renderFn = fn;
-      renderArgs = args;
-      render();
-      return () => lastResult;
-    },
-  };
 }
 
 function item(partial) {
@@ -167,7 +64,7 @@ function job(partial) {
   };
 }
 
-function harness() {
+function harness(DateImpl = Date) {
   const runner = createReactStub();
   const timers = new Map();
   let nextTimer = 0;
@@ -189,7 +86,7 @@ function harness() {
       },
       clearTimeout(id) { timers.delete(id); },
     },
-    Date,
+    Date: DateImpl,
   };
   env.window.window = env.window;
   const passthrough = (type, props) => ({ type, props });
@@ -324,6 +221,63 @@ function findNode(node, predicate) {
 function findButton(node, label) {
   return findNode(node, (row) => row.type === 'button' && collectText(row).join('') === label);
 }
+
+test('持续轮询失败会提示，并在恢复后清除提示', async () => {
+  const h = harness();
+  let calls = 0;
+  h.setJob(async () => {
+    calls += 1;
+    if (calls === 2 || calls === 3) throw new Error('status offline');
+    return job({ status: 'in_progress' });
+  });
+  h.render({ newsId: '9600', seed: item({ analysisStatus: 'queued', analysisJobId: 'job-1' }) });
+  await settle();
+  await h.fireDue(2000);
+  assert.doesNotMatch(collectText(h.tree()).join(' '), /任务状态暂时读不到/);
+  await h.fireDue(5000);
+  assert.match(collectText(h.tree()).join(' '), /任务状态暂时读不到/);
+  await h.fireDue(5000);
+  assert.doesNotMatch(collectText(h.tree()).join(' '), /任务状态暂时读不到/);
+  h.unmount();
+});
+
+test('轮询确认任务记录不存在后停止重试并显示原因', async () => {
+  const h = harness();
+  let calls = 0;
+  h.setJob(async () => {
+    if (++calls === 1) return job({ status: 'in_progress' });
+    throw Object.assign(new Error('gone'), { code: 404 });
+  });
+  h.render({ newsId: '9600', seed: item({ analysisStatus: 'queued', analysisJobId: 'job-1' }) });
+  await settle();
+  await h.fireDue(2000);
+  assert.match(collectText(h.tree()).join(' '), /任务记录已不存在/);
+  await h.fireDue(5000);
+  assert.equal(calls, 2);
+  h.unmount();
+});
+
+test('自动查询超时后可手动重新查询同一任务', async () => {
+  let now = 0;
+  class TestDate extends Date { static now() { return now; } }
+  const h = harness(TestDate);
+  h.setJob(async () => job({ status: 'in_progress' }));
+  h.render({ newsId: '9600', seed: item({ analysisStatus: 'queued', analysisJobId: 'job-1' }) });
+  await settle();
+  await h.fireDue(2000);
+  now = 5 * 60_000 + 1;
+  await h.fireDue(3000);
+  assert.match(collectText(h.tree()).join(' '), /自动查询已暂停/);
+  const retry = findButton(h.tree(), '重试');
+  assert.ok(retry);
+  const before = h.jobCalls.length;
+  retry.props.onClick();
+  await settle();
+  await h.fireDue(2000);
+  assert.equal(h.jobCalls.length, before + 1);
+  assert.doesNotMatch(collectText(h.tree()).join(' '), /自动查询已暂停/);
+  h.unmount();
+});
 
 for (const terminalPath of ['recovery', 'poll']) {
   test(`${terminalPath} 终态详情先返回后，迟到的初始 queued 不得覆盖已完成分析`, async () => {

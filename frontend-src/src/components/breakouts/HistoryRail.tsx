@@ -11,6 +11,7 @@ import { useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import type { ApiError } from '@/api/client';
 import { cn } from '@/lib/utils';
+import { EASE_PAPER } from '@/lib/motion';
 import { fmtPrice } from '@/lib/format';
 import EmptyState from '@/components/shared/EmptyState';
 import { SkeletonRows } from '@/components/shared/Skeleton';
@@ -19,7 +20,6 @@ import type { BreakoutEventFull, LifecycleTone } from './types';
 import { getLocale, t } from '../../i18n/core.ts';
 
 const PAGE = 12;
-const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
 
 /** lifecycle 语义色小点（不用大色块） */
 const TONE_DOT: Record<LifecycleTone, string> = {

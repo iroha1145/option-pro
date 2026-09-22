@@ -9,6 +9,7 @@ from app.services.eod_limited import PURPOSE_LIVE
 from app.services.eod_limited.store import variant_key
 from app.services.research_eod_v1.constants import HORIZONS, PROFILES
 from app.services.strength import variant_demand
+from app.worker.runtime import TaskResult
 from app.worker.tasks import StrengthRefreshTask
 
 
@@ -64,6 +65,56 @@ def test_scheduled_default_and_pending_share_one_published_batch(monkeypatch, is
     assert result.details["variant_refresh_published"] == 4
     assert [item for item, _ in isolated_demands] == pending
     assert all(state["status"] == "completed" for _, state in isolated_demands)
+
+
+def test_scheduled_demand_read_failure_is_visible_and_retried(monkeypatch, isolated_demands):
+    calls = []
+    reader_calls = 0
+
+    def read_demands():
+        nonlocal reader_calls
+        reader_calls += 1
+        if reader_calls == 1:
+            raise OSError("unavailable")
+        return []
+
+    monkeypatch.setattr(variant_demand, "list_pending_strength_variant_demands", read_demands)
+    task = StrengthRefreshTask(eod_runner=lambda **kwargs: calls.append(kwargs) or success())
+
+    first = asyncio.run(task())
+    assert first.status == "degraded"
+    assert first.error_code == "strength_variant_demand_read_failed"
+    assert first.details["variant_refresh_errors"] == [{
+        "parameters_hash": None,
+        "error_code": "strength_variant_demand_read_failed",
+        "reason": "OSError",
+    }]
+    assert first.details["variant_refresh_attempted"] == 0
+    assert 0 < first.next_delay_seconds <= 30
+
+    recovered = asyncio.run(task())
+    assert recovered.status == "idle"
+    assert recovered.details["variant_refresh_errors"] == []
+    assert reader_calls == 2
+    assert len(calls) == 1
+
+
+def test_demand_read_failure_keeps_default_error_and_shortens_retry(monkeypatch, isolated_demands):
+    def failed_read():
+        raise OSError("unavailable")
+
+    monkeypatch.setattr(variant_demand, "list_pending_strength_variant_demands", failed_read)
+    task = StrengthRefreshTask(eod_runner=lambda **_kwargs: success())
+
+    async def failed_default(_parameters):
+        return TaskResult(status="degraded", error_code="strength_input_unavailable")
+
+    monkeypatch.setattr(task, "_run", failed_default)
+    result = asyncio.run(task())
+    assert result.status == "degraded"
+    assert result.error_code == "strength_input_unavailable"
+    assert result.next_delay_seconds == 30.0
+    assert result.details["variant_refresh_errors"][0]["error_code"] == "strength_variant_demand_read_failed"
 
 
 def test_action_groups_keep_identity_and_next_call_refreshes_again(monkeypatch, isolated_demands):

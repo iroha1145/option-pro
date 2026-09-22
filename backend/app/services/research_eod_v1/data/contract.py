@@ -7,7 +7,7 @@ import json
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any, Mapping, Protocol, Sequence
+from typing import Any, Sequence
 
 UNSUPPORTED = "UNSUPPORTED"
 
@@ -137,24 +137,3 @@ def validate_research_bars(bars: Sequence[ResearchBar]) -> None:
             bottom = min(bar.open, bar.close)  # type: ignore[arg-type]
             if bar.high < top or bar.low > bottom:  # type: ignore[operator]
                 raise ValueError("OHLC relationship violated")
-
-
-class ResearchDataProvider(Protocol):
-    def probe_capabilities(self) -> ProviderCapabilities: ...
-
-    def load_security_master(self) -> list[SecurityIdentity] | str: ...
-
-    def fetch_daily_bars(
-        self,
-        symbol: str,
-        start: date,
-        end: date,
-        *,
-        identity: SecurityIdentity | None = None,
-    ) -> list[ResearchBar] | str: ...
-
-    def fetch_corporate_actions(self, symbol: str, start: date, end: date) -> list[CorporateAction] | str: ...
-
-    def load_classification_history(self, symbol: str) -> Mapping[str, Any] | str: ...
-
-    def export_snapshot(self, path: str) -> DatasetMeta | str: ...

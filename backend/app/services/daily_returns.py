@@ -6,6 +6,8 @@ import math
 
 import pandas as pd
 
+from app.services.numeric import rounded_number
+
 
 def aligned_benchmark_return(
     stock_close: pd.Series,
@@ -43,3 +45,12 @@ def aligned_benchmark_return(
         return None
     result = current / base - 1
     return result if math.isfinite(result) else None
+
+
+def positional_return(close: pd.Series, days: int) -> float | None:
+    if len(close) <= days:
+        return None
+    base = close.iloc[-(days + 1)]
+    if not base or base <= 0:
+        return None
+    return rounded_number(close.iloc[-1] / base - 1, 5)

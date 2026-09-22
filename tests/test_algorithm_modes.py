@@ -84,14 +84,23 @@ def test_explicit_follow_default_skips_saved_user_radar() -> None:
 
 
 def test_saved_user_production_survives_admin_default_change() -> None:
-    resolution = resolve_screener_algorithm(
+    before = resolve_screener_algorithm(
+        user_choice=PRODUCTION_ALGORITHM,
+        admin_default=PRODUCTION_ALGORITHM,
+        timeframe="all",
+        profile="balanced",
+    )
+    after = resolve_screener_algorithm(
         user_choice=PRODUCTION_ALGORITHM,
         admin_default=A0_ALGORITHM,
         timeframe="all",
         profile="balanced",
     )
-    assert resolution.effective == EOD_LIMITED_V1
-    assert resolution.source == "user_preference"
+    assert before.admin_default == PRODUCTION_ALGORITHM
+    assert after.admin_default == A0_ALGORITHM
+    assert before.source == after.source == "user_preference"
+    assert before.user_choice == after.user_choice == PRODUCTION_ALGORITHM
+    assert before.effective == after.effective == EOD_LIMITED_V1
 
 
 def test_explicit_a0_uses_replacement_engine_for_mid_view() -> None:

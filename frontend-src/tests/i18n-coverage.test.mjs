@@ -266,16 +266,10 @@ test('no un-wrapped Chinese literal remains in a display position outside src/mo
   );
 });
 
-test('exempt paths (src/mocks/, import-free files) have no untracked untranslated strings', () => {
-  // mocks/ intentionally leaves AI-simulated prose untranslated (see dict/mocks.ts's own
-  // header comment); lib/macroFit.ts is intentionally import-free (see IMPORT_FREE_FILES
-  // above). This test only prints a visibility count, it does not fail the suite, since
-  // new demo fixtures or macroFit additions legitimately add new Chinese text over time.
-  if (mocksGaps.length > 0) {
-    console.log(`[i18n] ${mocksGaps.length} untranslated Chinese literal(s) remain in exempt paths (mocks/ AI content, or lib/macroFit.ts's deliberate zero-import rule).`);
-  }
-  assert.ok(true);
-});
+// mocks/ 的演示正文和刻意不导入词典的 macroFit.ts 只计数，不作为失败断言。
+if (mocksGaps.length > 0) {
+  console.log(`[i18n] ${mocksGaps.length} untranslated Chinese literal(s) remain in exempt paths (mocks/ AI content, or lib/macroFit.ts's deliberate zero-import rule).`);
+}
 
 // ── 语言切换器确实挂在导航上 ─────────────────────────────────────────────
 test('watchlist and smart-drawing copy stays natural in EN/JA', () => {

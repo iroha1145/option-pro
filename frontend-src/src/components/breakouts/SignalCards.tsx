@@ -12,7 +12,7 @@ import { useLiveQuote, useLiveRadarEvent } from '@/hooks/useLiveQuote';
 import { useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { DUR_SECTION } from '@/lib/motion';
+import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import { fmtRelative } from '@/lib/format';
 import { useShell } from '@/hooks/useShell';
 import TickerLogo from '@/components/shared/TickerLogo';
@@ -26,7 +26,6 @@ import type { BreakoutCurrentEvent } from './types';
 import T1StatusChip from './T1StatusChip';
 import { t } from '../../i18n/core.ts';
 
-const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
 
 /* ---------------- chip 行（SETUP + LIFECYCLE + rvol 量能徽标）；live 可空字段显「—」 ---------------- */
 function ChipRow({ ev, showT1 }: { ev: BreakoutCurrentEvent; showT1: boolean }) {

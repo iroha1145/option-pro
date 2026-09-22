@@ -7,6 +7,10 @@ series, not Radar ranks or market-fit.
 
 from __future__ import annotations
 
+from app.services.numeric import (
+    finite_number as _finite_number,
+)
+
 import hashlib
 import math
 from datetime import datetime, timedelta, timezone
@@ -104,16 +108,6 @@ def mark_intraday_closed(
             closed = bar.get("closed") is not False and end <= cutoff
         result.append({**bar, "closed": closed})
     return result
-
-
-def _finite_number(value: Any) -> float | None:
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return None
-    if not math.isfinite(number):
-        return None
-    return number
 
 
 def _clamp01(value: float) -> float:

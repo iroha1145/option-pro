@@ -53,8 +53,8 @@ _PATTERN_FAIL_MSG_CHARS = 200
 _pattern_fail_suppressed = False
 
 
-def _log_pattern_failure(ticker: str, exc: Exception) -> None:
-    """记录形态检测失败，且三重有界，绝不刷爆日志。
+def _log_pattern_failure(ticker: str, exc: Exception, *, stage: str = "auto-pattern") -> None:
+    """记录形态或分析图层失败，且三重有界，绝不刷爆日志。
 
     这条路径每个请求每支票都会走一遍：真出系统性故障时，不设限的
     ``logger.exception`` 会按请求量刷屏，把日志盘吃掉。所以：
@@ -67,6 +67,8 @@ def _log_pattern_failure(ticker: str, exc: Exception) -> None:
     """
     global _pattern_fail_suppressed
     key = f"{ticker or '?'}:{type(exc).__name__}"
+    if stage != "auto-pattern":
+        key = f"{stage}:{key}"
     seen = _PATTERN_FAIL_COUNTS.get(key)
     if seen is not None:
         _PATTERN_FAIL_COUNTS[key] = seen + 1
@@ -75,14 +77,15 @@ def _log_pattern_failure(ticker: str, exc: Exception) -> None:
         if not _pattern_fail_suppressed:
             _pattern_fail_suppressed = True
             logger.warning(
-                "auto-pattern failures exceeded %d distinct keys; further first-sightings are not logged",
+                "technical layer failures exceeded %d distinct keys; further first-sightings are not logged",
                 _PATTERN_FAIL_KEY_CAP,
             )
         return
     _PATTERN_FAIL_COUNTS[key] = 1
     with_traceback = len(_PATTERN_FAIL_COUNTS) <= _PATTERN_FAIL_TRACEBACKS
     logger.warning(
-        "auto-pattern detection failed for %s: %s",
+        "%s detection failed for %s: %s",
+        stage,
         key,
         str(exc)[:_PATTERN_FAIL_MSG_CHARS],
         exc_info=with_traceback,
@@ -406,8 +409,9 @@ def compute_technical_structure(
             series_break_at=series_break_at,
             hist=frame,
         )
-    except Exception:
+    except Exception as exc:
         chart_analysis = None
+        _log_pattern_failure(ticker, exc, stage="chart-analysis")
 
     return {
         "version": STRUCTURE_VERSION,

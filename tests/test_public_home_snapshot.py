@@ -2237,3 +2237,32 @@ def test_declared_field_sets_match_the_fixture_payloads() -> None:
             f"{resource} lost its price attribution; if that is deliberate, "
             "drop it from the field set in the same change."
         )
+
+
+@pytest.mark.parametrize("warm_valid", [False, True])
+@pytest.mark.parametrize("partial", [False, True])
+@pytest.mark.parametrize("future_field", ["saved_at", "payload"])
+def test_cached_entries_recover_and_reject_clock_rewinds(tmp_path, partial, future_field, warm_valid):
+    now = _regular_time()
+    entries = _entries(now)
+    if not partial:
+        entries = {"indices": entries["indices"]}
+    if future_field == "saved_at":
+        entries["indices"]["saved_at"] = now + 0.001
+    else:
+        entries["indices"]["payload"]["as_of"] = _iso(
+            now + PUBLIC_HOME_MAX_CLOCK_SKEW_SECONDS + 0.001
+        )
+    path = tmp_path / "clock-recovery.json"
+    path.write_text(json.dumps({"version": PUBLIC_HOME_SNAPSHOT_VERSION, "resources": entries}))
+    identity = path.stat()
+
+    if warm_valid:
+        assert "indices" in read_public_home_entries(path, now=now + .002)
+    early = read_public_home_entries(path, now=now)
+    assert "indices" not in early
+    assert bool(early) is partial
+    assert "indices" in read_public_home_entries(path, now=now + 60)
+    assert "indices" not in read_public_home_entries(path, now=now)
+    assert "indices" in read_public_home_entries(path, now=now + 60)
+    assert path.stat() == identity

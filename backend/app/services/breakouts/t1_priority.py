@@ -7,6 +7,10 @@ qualified result set.
 
 from __future__ import annotations
 
+from app.services.numeric import (
+    finite_number as _finite,
+)
+
 import hashlib
 import json
 from datetime import date, datetime, timezone
@@ -51,16 +55,6 @@ T1_RETRYABLE_REASONS = {
 }
 T1_DATA_CONVENTION = "adj_preferred"
 T1_SETTLED_STATUSES = {T1_MET, T1_UNMET}
-
-
-def _finite(value: Any) -> float | None:
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return None
-    if number != number or number in {float("inf"), float("-inf")}:
-        return None
-    return number
 
 
 def _as_date(value: Any) -> date | None:

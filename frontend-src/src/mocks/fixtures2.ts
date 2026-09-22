@@ -276,7 +276,7 @@ export function getBreakoutsStatus(): BreakoutStatus {
       enabled: true,
       worker: { healthy: true, heartbeat_at: new Date(now - 9_000).toISOString() },
       latest_completed_scan: { at: new Date(lastScanAt).toISOString(), duration_ms: 41_800, scanned: universe, triggered: 6 },
-      market_session: sessionMap[market.session] ?? 'closed',
+      market_session: sessionMap[market.session ?? ''] ?? 'closed',
       next_session_at: new Date(scanWindowEnd + 8 * 60_000).toISOString(),
     };
     return status;
@@ -290,7 +290,7 @@ export function getBreakoutsStatus(): BreakoutStatus {
     enabled: true,
     worker: { healthy: true, heartbeat_at: new Date(now - 12_000).toISOString() },
     latest_completed_scan: { at: new Date(lastScanAt).toISOString(), duration_ms: 46_200, scanned: universe, triggered: 6 },
-    market_session: sessionMap[market.session] ?? 'closed',
+    market_session: sessionMap[market.session ?? ''] ?? 'closed',
     next_session_at: new Date(cooldownEndAt).toISOString(),
   };
   return status;

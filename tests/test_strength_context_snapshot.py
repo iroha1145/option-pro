@@ -51,7 +51,8 @@ def _selection() -> dict:
     }
 
 
-def test_context_build_uses_descriptive_data_without_old_ranking(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("benchmark_gap", [False, True])
+def test_context_build_uses_descriptive_data_without_old_ranking(monkeypatch: pytest.MonkeyPatch, benchmark_gap: bool) -> None:
     from app.services.research_eod_v1.fixtures import trading_days_ending
     from app.services.strength import scanner, scoring
     from app.services.strength.market_regime import MARKET_BENCHMARKS
@@ -66,6 +67,9 @@ def test_context_build_uses_descriptive_data_without_old_ranking(monkeypatch: py
         }, index=pd.to_datetime(days))
         for symbol in ["NVDA", *MARKET_BENCHMARKS]
     }
+    if benchmark_gap:
+        for symbol in ("SPY", "TLT"):
+            frames[symbol] = frames[symbol].drop(frames[symbol].index[-2])
     raw = pd.concat(frames, axis=1)
     requested = []
 
@@ -89,6 +93,11 @@ def test_context_build_uses_descriptive_data_without_old_ranking(monkeypatch: py
     assert set(requested[0][0]) == {"NVDA", *MARKET_BENCHMARKS}
     assert requested[0][1] == "2y"
     assert payload["market_regime"]["score"] is not None
+    regime = payload["market_regime"]
+    assert regime["momentum"]["qqq_spy_20d"] == 0.0
+    assert regime["breadth"]["rsp_spy_20d"] == 0.0
+    assert regime["risk"]["hyg_tlt_20d"] == 0.0
+    assert regime["risk"]["ief_tlt_20d"] == 0.0
     assert payload["market_regime"]["ranking_adjustments_applied"] is False
     assert "rules" not in payload["market_regime"]
     sectors = {row["sector_id"]: row for row in payload["sectors"]}

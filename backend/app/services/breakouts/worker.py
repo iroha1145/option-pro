@@ -7,6 +7,7 @@ import asyncio
 import hashlib
 import inspect
 import json
+import logging
 import os
 import random
 import signal
@@ -34,6 +35,8 @@ from app.services.breakouts.repository import (
     SchemaVersionError,
 )
 from pydantic import ValidationError
+
+logger = logging.getLogger(__name__)
 
 
 def _utc_now() -> datetime:
@@ -208,16 +211,6 @@ class BreakoutWorker:
         service = self.scan_service
         if service is None:
             return None
-        target = None
-        for name in ("build_snapshot", "run_scan", "scan", "process"):
-            method = getattr(service, name, None)
-            if callable(method):
-                target = method
-                break
-        if target is None and callable(service):
-            target = service
-        if target is None:
-            raise TypeError("scan_service must be callable")
 
         candidates = list(getattr(discovery, "candidates", ()) or ())
         carryover_limit = min(
@@ -241,8 +234,10 @@ class BreakoutWorker:
         carryover_events = list(carryover_batch.events)
         try:
             carryover_events = self.repository.overlay_t1_evaluations(carryover_events)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning(
+                "Breakout T1 carryover overlay failed (%s)", type(exc).__name__,
+            )
         # The read overlay exposes a top-level alias that BreakoutEvent forbids.
         # Retain features.t1_priority for evaluation and all previous-event paths.
         carryover_events = [_scan_event_payload(event) for event in carryover_events]
@@ -275,29 +270,7 @@ class BreakoutWorker:
             "trading_date": clock_snapshot.trading_date,
             "settings": self.settings,
         }
-        signature = inspect.signature(target)
-        accepts_kwargs = any(
-            parameter.kind is inspect.Parameter.VAR_KEYWORD
-            for parameter in signature.parameters.values()
-        )
-        kwargs = {
-            name: value
-            for name, value in available.items()
-            if accepts_kwargs or name in signature.parameters
-        }
-        required_positional = [
-            parameter
-            for parameter in signature.parameters.values()
-            if parameter.kind
-            in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
-            and parameter.default is inspect.Parameter.empty
-            and parameter.name not in kwargs
-        ]
-        if required_positional:
-            if len(required_positional) != 1:
-                raise TypeError("scan_service has unsupported required parameters")
-            return await _maybe_await(target(discovery, **kwargs))
-        return await _maybe_await(target(**kwargs))
+        return await _maybe_await(service.build_snapshot(**available))
 
     @staticmethod
     def _publication_payload(discovery: Any, service_result: Any) -> dict[str, Any]:
@@ -484,15 +457,29 @@ class BreakoutWorker:
 
         try:
             scan = self.repository.latest_completed_scan()
-        except Exception:
-            return {"attempted": 0, "completed": 0, "pending": 0, "retry": False}
+        except Exception as exc:
+            logger.warning(
+                "Breakout T1 recent scan read failed (%s)", type(exc).__name__,
+            )
+            return {
+                "attempted": 0, "completed": 0, "pending": 0,
+                "retry": True, "reason": "t1_scan_read_failed",
+                "retry_after_seconds": 30.0,
+            }
         events = list((scan or {}).get("events") or [])
         if not events:
             return {"attempted": 0, "completed": 0, "pending": 0, "retry": False}
         try:
             events = self.repository.overlay_t1_evaluations(events)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning(
+                "Breakout T1 evaluation overlay failed (%s)", type(exc).__name__,
+            )
+            return {
+                "attempted": 0, "completed": 0, "pending": len(events),
+                "retry": True, "reason": "t1_overlay_read_failed",
+                "retry_after_seconds": 30.0,
+            }
         pending = [item for item in events if t1_needs_close_eval(item)]
         if not pending:
             return {"attempted": 0, "completed": 0, "pending": 0, "retry": False}
@@ -810,6 +797,11 @@ class BreakoutWorker:
         market = clock_snapshot or self.clock.snapshot()
         if market.session in {MarketSession.CLOSED, MarketSession.POSTMARKET}:
             t1_completion = await self._complete_pending_t1(market, lease_token)
+            t1_error = (
+                t1_completion.get("reason")
+                if t1_completion.get("reason") in {"t1_scan_read_failed", "t1_overlay_read_failed"}
+                else None
+            )
             next_session_at = self.clock.next_supported_session_at(market)
             details = {
                 "runtime_reason": "market_closed",
@@ -817,15 +809,17 @@ class BreakoutWorker:
                 "next_session_at": next_session_at,
                 "t1_completion": t1_completion,
             }
-            self._wait_status = "paused"
+            self._wait_status = "degraded" if t1_error else "paused"
             self._wait_details = details
-            self._status("paused", details=details)
+            self._status(self._wait_status, error_code=t1_error, details=details)
             return {
                 "status": "paused",
+                "error_code": t1_error,
                 "reason": "market_closed",
                 "session": market.session.value,
                 "scan_run_id": None,
                 "next_session_at": next_session_at,
+                "t1_completion": t1_completion,
                 "t1_retry_after_seconds": t1_completion.get("retry_after_seconds"),
             }
         provider_name = str(getattr(self.settings, "discovery_provider", "tradingview"))
@@ -903,10 +897,15 @@ class BreakoutWorker:
                 lease_token=lease_token,
                 now=self.clock.now(),
             )
+            t1_persistence = "completed"
             try:
                 self.repository.persist_t1_evaluations(publication.get("events") or [])
-            except Exception:
-                pass
+            except Exception as exc:
+                t1_persistence = "failed"
+                logger.warning(
+                    "Breakout scan %s was published but T1 persistence failed (%s)",
+                    scan_id, type(exc).__name__,
+                )
             self._last_completed_scan_id = scan_id
             self._last_completed_at = self.clock.now()
             self._wait_status = "idle"
@@ -930,6 +929,7 @@ class BreakoutWorker:
                     "last_event_count": event_count,
                     "session": market.session.value,
                     "retention": maintenance,
+                    "t1_persistence": t1_persistence,
                 },
             )
             return {
@@ -937,6 +937,7 @@ class BreakoutWorker:
                 "scan_run_id": scan_id,
                 "event_count": event_count,
                 "session": market.session.value,
+                "t1_persistence": t1_persistence,
             }
         except LeaseLostError:
             if scan_id is not None:

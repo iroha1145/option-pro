@@ -5,14 +5,12 @@ import { readFile } from 'node:fs/promises';
 import { DEFAULT_FILTERS } from '../src/components/screener/types.ts';
 import { buildStrengthScanRequest } from '../src/components/screener/scanRequest.ts';
 import { isStrengthSnapshotPreparing, strengthParametersMatch } from '../src/lib/screenerScanFlow.ts';
-import { keepServerRankingOrder, rowPrimarySortScore } from '../src/lib/screenerSort.ts';
-import { applyEodLimitedView, isEodLimitedRanking, supportsDollarVolumeFilter } from '../src/lib/eodLimitedView.ts';
+import { rowPrimarySortScore } from '../src/lib/screenerSort.ts';
+import { applyEodLimitedView, supportsDollarVolumeFilter } from '../src/lib/eodLimitedView.ts';
 import { t1StatusPresentation } from '../src/lib/t1Status.ts';
 import {
   DEFAULT_ALGORITHM_PREFERENCES,
   readAlgorithmPreferences,
-  requestedRadarAlgorithm,
-  requestedScreenerAlgorithm,
   writeAlgorithmPreferences,
 } from '../src/lib/algorithmPreferences.ts';
 
@@ -78,7 +76,6 @@ test('the visible score always uses the current engine strength score', () => {
   };
   assert.equal(rowPrimarySortScore(scored), 91);
   assert.equal(rowPrimarySortScore(missing), 88);
-  assert.equal(keepServerRankingOrder(), true);
 });
 
 test('T1 unknown or unmet is not labeled as a weak signal', () => {
@@ -91,13 +88,6 @@ test('T1 unknown or unmet is not labeled as a weak signal', () => {
   assert.equal((t1StatusPresentation('unavailable')?.label ?? '').includes('弱信号'), false);
 });
 
-test('legacy screener preferences normalize without changing radar preferences', () => {
-  assert.equal(requestedScreenerAlgorithm('follow_default'), 'eod_limited_v1');
-  assert.equal(requestedRadarAlgorithm('follow_default'), 'follow_default');
-  assert.equal(requestedScreenerAlgorithm('production'), 'eod_limited_v1');
-  assert.equal(requestedRadarAlgorithm('t1_daily_priority'), 't1_daily_priority');
-});
-
 test('observation and eligible result sets share the same engine identity', () => {
   const request = buildStrengthScanRequest({
     ...DEFAULT_FILTERS,
@@ -107,15 +97,14 @@ test('observation and eligible result sets share the same engine identity', () =
   });
   assert.equal(request.apiParams.ranking_algorithm, 'eod_limited_v1');
   assert.equal(request.apiParams.list_kind, 'observation');
-  const composite = buildStrengthScanRequest({
+  const composite = buildStrengthScanRequest(applyEodLimitedView({
     ...DEFAULT_FILTERS,
     rankingAlgorithm: 'follow_default',
     resultSet: 'composite',
-  });
+  }));
   assert.equal(composite.apiParams.list_kind, 'composite');
   assert.equal(request.refreshParameters.ranking_algorithm, 'eod_limited_v1');
-  assert.equal(keepServerRankingOrder('eod_limited_v1'), true);
-  assert.equal(isEodLimitedRanking('eod_limited_v1'), true);
+  assert.equal(composite.apiParams.ranking_algorithm, 'eod_limited_v1');
 });
 
 test('legacy all timeframe remaps to the supported mid view', () => {
@@ -178,6 +167,8 @@ test('local legacy screener preferences collapse while radar preference remains 
   const stored = readAlgorithmPreferences('account:alice');
   assert.equal(stored.screenerRankingAlgorithm, 'eod_limited_v1');
   assert.equal(stored.radarSortAlgorithm, 'production');
+  writeAlgorithmPreferences({ radarSortAlgorithm: 't1_daily_priority' }, 'account:alice');
+  assert.equal(readAlgorithmPreferences('account:alice').radarSortAlgorithm, 't1_daily_priority');
   writeAlgorithmPreferences({ screenerRankingAlgorithm: 'follow_default' }, 'account:alice');
   assert.equal(readAlgorithmPreferences('account:alice').screenerRankingAlgorithm, 'eod_limited_v1');
   assert.equal(readAlgorithmPreferences('account:bob').screenerRankingAlgorithm, 'eod_limited_v1');

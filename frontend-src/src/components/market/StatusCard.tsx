@@ -14,14 +14,14 @@ import { SkeletonCard } from '@/components/shared/Skeleton';
 import Icon from '@/components/icons';
 import { t } from '../../i18n/core.ts';
 
-const MARKET_TO_SESSION: Record<MarketStatusDetail['market'], MarketSession> = {
+const MARKET_TO_SESSION: Record<NonNullable<MarketStatusDetail['market']>, MarketSession> = {
   open: 'regular',
   premarket: 'premarket',
   postmarket: 'afterhours',
   closed: 'closed',
 };
 
-const MARKET_LABEL: Record<MarketStatusDetail['market'], string> = {
+const MARKET_LABEL: Record<NonNullable<MarketStatusDetail['market']>, string> = {
   open: t('盘中'),
   premarket: t('盘前'),
   postmarket: t('盘后'),
@@ -90,7 +90,7 @@ export default function StatusCard({
   }
   if (!data) return null;
 
-  const session = MARKET_TO_SESSION[data.market] ?? 'closed';
+  const session = data.market ? MARKET_TO_SESSION[data.market] : null;
   return (
     /* 后续区块 rise-in 减量：直接呈现 */
     <section
@@ -103,7 +103,7 @@ export default function StatusCard({
       </div>
       <div className="mt-4 flex items-center gap-2.5">
         <SessionLED session={session} showLabel={false} />
-        <span className="font-display text-[20px] leading-[26px] text-ink-900">{MARKET_LABEL[data.market]}</span>
+        <span className="font-display text-[20px] leading-[26px] text-ink-900">{data.market ? MARKET_LABEL[data.market] : t('时段未知')}</span>
       </div>
       <div className="mt-3">
         <p className="font-mono text-data-xl text-ink-900 tnum" suppressHydrationWarning>

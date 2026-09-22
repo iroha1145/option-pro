@@ -4,7 +4,7 @@
  * live 模式无指数 K 线端点 → 不渲染分时图模块
  * ?index= 指定的卡高亮并滚动定位
  */
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { isMock, type ApiError } from '@/api/client';
 import type { IndexQuote } from '@/api/types';
@@ -12,6 +12,7 @@ import { getIndexIntraday } from '@/mocks/marketPulse';
 import { cn } from '@/lib/utils';
 import { fmtPrice } from '@/lib/format';
 import { quoteSymbol } from '@/lib/quoteSymbol';
+import { useTickFlash } from '@/hooks/useTickFlash';
 import ChangeBadge from '@/components/shared/ChangeBadge';
 import EmptyState from '@/components/shared/EmptyState';
 import { SkeletonCard } from '@/components/shared/Skeleton';
@@ -93,6 +94,9 @@ const IndexCard = memo(function IndexCard({
   );
 });
 
+const indexKey = (quote: IndexQuote) => quote.code;
+const indexPrice = (quote: IndexQuote) => quote.price;
+
 export default function IndexCards({
   data,
   loading,
@@ -110,26 +114,7 @@ export default function IndexCards({
   refreshing: boolean;
   onOpen: (code: string) => void;
 }) {
-  /* tick-flash 差异检测（60s 轮询） */
-  const [flashes, setFlashes] = useState<Record<string, 'up' | 'down'>>({});
-  const prevPrices = useRef<Record<string, number>>({});
-  useEffect(() => {
-    if (!data) return;
-    const next: Record<string, 'up' | 'down'> = {};
-    data.forEach((q) => {
-      const prev = prevPrices.current[q.code];
-      if (prev !== undefined && prev !== q.price) next[q.code] = q.price > prev ? 'up' : 'down';
-      prevPrices.current[q.code] = q.price;
-    });
-    if (Object.keys(next).length) {
-      const show = window.setTimeout(() => setFlashes(next), 0);
-      const clear = window.setTimeout(() => setFlashes({}), 700);
-      return () => {
-        window.clearTimeout(show);
-        window.clearTimeout(clear);
-      };
-    }
-  }, [data]);
+  const flashes = useTickFlash(data, indexKey, indexPrice);
 
   /* ?index= 滚动定位 */
   const cardRefs = useRef<Record<string, HTMLButtonElement | null>>({});

@@ -52,7 +52,6 @@ import { t as __t } from '../i18n/core.ts';
 import {
   algorithmPreferencePendingSync,
   readAlgorithmPreferences,
-  requestedRadarAlgorithm,
   writeAlgorithmPreferences,
   type RadarSortChoice,
 } from '@/lib/algorithmPreferences';
@@ -130,7 +129,6 @@ export default function Breakouts() {
   const [radarSort, setRadarSort] = useState<RadarSortChoice>(
     () => readAlgorithmPreferences(principal).radarSortAlgorithm,
   );
-  const requestedSort = requestedRadarAlgorithm(radarSort);
   const choiceGeneration = useRef(0);
   const historyGeneration = useRef(0);
   const historyRequestId = useRef(0);
@@ -192,31 +190,31 @@ export default function Breakouts() {
   }), []);
   const statusQ = usePolling(() => breakoutsApi.status(), 30_000);
   const currentQ = usePolling(
-    () => breakoutsApi.currentEnvelope({ sort_algorithm: requestedSort }),
+    () => breakoutsApi.currentEnvelope({ sort_algorithm: radarSort }),
     30_000,
-    [requestedSort, algorithmViewGen],
+    [radarSort, algorithmViewGen],
   );
   const eventsQ = usePolling(
-    () => breakoutsApi.events({ page: 1, pageSize: HISTORY_PAGE_SIZE, sort_algorithm: requestedSort }),
+    () => breakoutsApi.events({ page: 1, pageSize: HISTORY_PAGE_SIZE, sort_algorithm: radarSort }),
     null,
-    [requestedSort, algorithmViewGen],
+    [radarSort, algorithmViewGen],
   );
   /* 历史事件此前固定只读第一页 100 条，界面还显示一个拼出来的「共 N 条」
      （审计 P2-19）。现在按游标续读，并如实说明是否还有更多。 */
   const historyCursorRef = useRef(historyCursor);
   historyCursorRef.current = historyCursor;
-  const requestedSortRef = useRef(requestedSort);
-  requestedSortRef.current = requestedSort;
+  const requestedSortRef = useRef(radarSort);
+  requestedSortRef.current = radarSort;
   useEffect(() => {
     // 首页重新加载后丢弃已续读的部分，避免与新首页重复。
     applyHistoryFirstPage(eventsQ.data?.nextCursor ?? null);
-  }, [eventsQ.data, requestedSort]);
+  }, [eventsQ.data, radarSort]);
   const loadMoreHistory = useCallback(async () => {
     if (!historyCursor || historyLoadingMore) return;
     const startedGeneration = historyGeneration.current;
     const startedRequestId = ++historyRequestId.current;
     const startedCursor = historyCursor;
-    const startedSort = requestedSort;
+    const startedSort = radarSort;
     setHistoryLoadingMore(true);
     setHistoryMoreError(null);
     try {
@@ -263,7 +261,7 @@ export default function Breakouts() {
         setHistoryLoadingMore(false);
       }
     }
-  }, [historyCursor, historyLoadingMore, requestedSort]);
+  }, [historyCursor, historyLoadingMore, radarSort]);
   const personal = usePersonalWatchlist();
 
   const status = asFullStatus(statusQ.data);
@@ -447,7 +445,7 @@ export default function Breakouts() {
   /* 历史事件回溯压缩面板（右栏吸顶 / 空态·错误态下整宽兜底，保持历史可访问） */
   const historyRailEl = (
     <HistoryRail
-      filterKey={`${statusFilter}|${minScore}|${tickerFilter}|${onlyWatch}|${requestedSort ?? 'follow_default'}`}
+      filterKey={`${statusFilter}|${minScore}|${tickerFilter}|${onlyWatch}|${radarSort ?? 'follow_default'}`}
       events={filteredEvents}
       loadedCount={events.length}
       total={eventsQ.data?.total ?? null}

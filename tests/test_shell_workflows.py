@@ -79,6 +79,60 @@ def _isolated_environment() -> dict[str, str]:
     return environment
 
 
+def test_isolated_perf_backend_reports_checkout_identity_or_unknown(tmp_path: Path) -> None:
+    if shutil.which("git") is None:
+        pytest.skip("Git is unavailable")
+
+    script = ROOT / "scripts/perf/run_isolated_backend.sh"
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    subprocess.run(["git", "init", "-q", str(checkout)], check=True)
+    subprocess.run(
+        ["git", "-C", str(checkout), "-c", "user.name=Test",
+         "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-q", "-m", "seed"],
+        check=True,
+    )
+    expected = subprocess.check_output(
+        ["git", "-C", str(checkout), "rev-parse", "HEAD"], text=True,
+    ).strip()
+
+    def run(root: Path, override: str | None = None, *, without_git: bool = False) -> str:
+        uvicorn = root / ".venv/bin/uvicorn"
+        uvicorn.parent.mkdir(parents=True, exist_ok=True)
+        uvicorn.write_text('#!/bin/sh\nprintf "%s\\n" "${APP_COMMIT:-unset}"\n')
+        uvicorn.chmod(0o755)
+        environment = _isolated_environment()
+        environment["OPTIX_PERF_ROOT"] = str(root)
+        environment["DATA_DIR"] = str(tmp_path / "data")
+        if override is not None:
+            environment["APP_COMMIT"] = override
+        if without_git:
+            bin_dir = tmp_path / "no-git-bin"
+            bin_dir.mkdir(exist_ok=True)
+            mkdir_path = shutil.which("mkdir")
+            assert mkdir_path is not None
+            (bin_dir / "mkdir").symlink_to(mkdir_path)
+            environment["PATH"] = str(bin_dir)
+        completed = subprocess.run(
+            [shutil.which("bash") or "/bin/bash", str(script), "1"],
+            env=environment,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return completed.stdout.strip()
+
+    assert run(checkout) == expected
+    assert run(checkout, "explicit-test-revision") == "explicit-test-revision"
+    assert run(checkout, without_git=True) == "unknown"
+    outside = tmp_path / "nonrepo"
+    outside.mkdir()
+    assert run(outside) == "unknown"
+    nested = checkout / "nested"
+    nested.mkdir()
+    assert run(nested) == "unknown"
+
+
 def _fake_tools(bin_dir: Path) -> None:
     docker = bin_dir / "docker"
     docker.write_text(
@@ -185,6 +239,7 @@ def _copy_deployment_validator(root: Path) -> None:
     for relative in (
         "__init__.py",
         "access.py",
+        "owner_password.py",
         "config.py",
         "data_paths.py",
         "deployment_boundary.py",

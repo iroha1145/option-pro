@@ -9,6 +9,7 @@ import { Fragment, useId } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { ScreenerRow } from '@/api/types';
 import { cn } from '@/lib/utils';
+import { EASE_PAPER } from '@/lib/motion';
 import { fmtCompact } from '@/lib/format';
 import Icon from '@/components/icons';
 import TickerLogo from '@/components/shared/TickerLogo';
@@ -22,7 +23,6 @@ import { CatalystBadge, ScoreCell, SubscoreTicks } from './cells';
 import { tierOf, TIER_RANGE, type CatalystSummary, type DetailCache, type RowSignalsState } from './types';
 import { t } from '../../i18n/core.ts';
 
-const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
 
 export interface ResultTableProps {
   rows: ScreenerRow[];

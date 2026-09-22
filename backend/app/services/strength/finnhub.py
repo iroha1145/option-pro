@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 import time
 from typing import Any
 
@@ -8,6 +7,10 @@ import httpx
 
 from app.config import Settings, get_settings
 from app.services.finnhub_budget import mark_finnhub_rate_limited, reserve_finnhub_request
+
+from app.services.numeric import (
+    rounded_number as _safe_float,
+)
 
 OPTION_DATA_SOURCE_CANDIDATES = [
     {
@@ -43,16 +46,6 @@ _TTL_SECONDS = 60 * 60 * 6
 def finnhub_is_enabled(settings: Settings | None = None) -> bool:
     cfg = settings or get_settings()
     return bool((cfg.finnhub_api_key or "").strip())
-
-
-def _safe_float(value: Any, ndigits: int = 4) -> float | None:
-    try:
-        number = float(value)
-        if not math.isfinite(number):
-            return None
-        return round(number, ndigits)
-    except Exception:
-        return None
 
 
 def _metric_value(metrics: dict[str, Any], names: list[str]) -> float | None:
