@@ -305,7 +305,10 @@ def test_stock_tie_order_matches_production_projection():
 def test_baseline_topk_matches_real_scoring_and_projection_nonempty(inputs):
     registry, panel, session, _, _ = inputs
     panel = deepcopy(panel)
-    for sid in ("AAA", "ZZZ"):
+    # G1 requires a market-wide, stock-only reference set of at least 30
+    # members.  These fixtures are reference members, not a theme or ETF
+    # substitute.
+    for sid in ("AAA", "ZZZ", *(f"REF{i:02}" for i in range(26))):
         panel[sid] = deepcopy(panel["AMD"])
         panel[sid].security_id = panel[sid].ticker_at_signal = sid
     themes = ["semiconductors", "etfs", "all_market_stocks"]
@@ -313,21 +316,36 @@ def test_baseline_topk_matches_real_scoring_and_projection_nonempty(inputs):
     raws, clipped, themed = shared["mid"]
     # Deterministic nonempty technical states, scored by the real snapshot,
     # price-only and projection functions on both sides of the comparison.
-    for theme, theme_raws in themed.items():
-        for i, (sid, raw) in enumerate(sorted(theme_raws.items())):
-            theme_raws[sid] = replace(raw, structure_score=100., ma_state=100., er63=1., t_direction_ok=True,
-                                     lh_ll_unrepaired=False, above_sma50=True, sma50=100., sma50_prev20=90.,
-                                     raw_close=100., adv20=100_000_000., atr_pct=1., extension_atr=0., ma_distance_atr=0.,
-                                     unresolved_upthrust=False, structure_invalidated=False, slope50=float(i),
-                                     m63=float(i), m126_skip21=float(i), m252_skip21=float(i), sigma20=10. - i,
-                                     gap_tail252=10. - i, max_drawdown63=10. - i)
-    live = score_eod_session(panel, session, registry=registry, profile="balanced", horizon="mid", themes=themes,
+    # A common ATR keeps the legacy and G1 ATR gate in the same state; the
+    # conservative profile sets the v1.4 M blend alpha to zero, making this a
+    # bounded old-baseline comparison rather than an assertion that balanced
+    # scores must remain frozen.
+    def fixed_inputs(source):
+        return {
+            sid: replace(
+                raw, structure_score=100., ma_state=100., er63=1., t_direction_ok=True,
+                lh_ll_unrepaired=False, above_sma50=True, sma50=100., sma50_prev20=90.,
+                raw_close=100., adv20=100_000_000., atr_pct=1., extension_atr=0., ma_distance_atr=0.,
+                unresolved_upthrust=False, structure_invalidated=False, slope50=float(i),
+                m63=float(i), m126_skip21=float(i), m252_skip21=float(i), sigma20=float(len(source) - i),
+                gap_tail252=float(len(source) - i), max_drawdown63=float(len(source) - i),
+            )
+            for i, (sid, raw) in enumerate(sorted(source.items()))
+        }
+
+    raws = fixed_inputs(raws)
+    themed = {theme: fixed_inputs(theme_raws) for theme, theme_raws in themed.items()}
+    shared["mid"] = (raws, clipped, themed)
+    live = score_eod_session(panel, session, registry=registry, profile="conservative", horizon="mid", themes=themes,
                              precomputed_raws=raws, clipped_panel=clipped, precomputed_theme_raws=themed)
+    tuning = live["full_market_tuning"]
+    assert tuning["atr_reference_n"] == tuning["momentum_reference_n"] == 30
+    assert tuning["atr_reference_median"] == 1.0
     expected = project_strength_payload(live, parameters={})["rows"][:2]
     assert len(expected) == 2
-    report = run_shadow_comparison(panel, session, registry=registry, profiles=["balanced"], horizons=["mid"],
+    report = run_shadow_comparison(panel, session, registry=registry, profiles=["conservative"], horizons=["mid"],
                                    themes=themes, precomputed_horizon_inputs=shared, top_k=2, verify_stock_isolation=False)
-    actual = report["variants"]["baseline"]["balanced/mid"]["combined_baseline_ranking"]
+    actual = report["variants"]["baseline"]["conservative/mid"]["combined_baseline_ranking"]
     assert [(r["security_id"], r["score"]) for r in actual] == [(r["ticker"], r["sort_score"]) for r in expected]
 
 

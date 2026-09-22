@@ -1,4 +1,4 @@
-"""Live EOD inference using the same PRICE_ONLY + M1 math as research limited v1.1."""
+"""Full-market EOD inference: bounded tuning before the existing PRICE_ONLY + M1 scorer."""
 
 from __future__ import annotations
 
@@ -22,6 +22,7 @@ from .panel import prepare_limited_panel
 from .geometry_parallel import parallel_geometry, validate_geometry_workers
 from .price_only import apply_price_only_track, resolve_capability_flags
 from .diagnostics import VariantDiagnostics
+from .full_market_tuning import prepare_full_market_context, tune_snapshot
 
 WARMUP_SESSIONS = 330
 UNIVERSE_VERSION = "u_eod_limited_v1"
@@ -226,6 +227,8 @@ def score_eod_session(
         raws, clipped = precompute_session_raws(panel, session, registry=registry, horizon=horizon)
     else:
         raws, clipped = dict(precomputed_raws), dict(clipped_panel)
+    # A single market-wide context for this view, before any theme/score filters.
+    tuning_context = prepare_full_market_context(raws, clipped, session=session, horizon=horizon)
     for theme_id in theme_ids:
         theme_raws = None if precomputed_theme_raws is None else precomputed_theme_raws.get(theme_id)
         for algorithm in families:
@@ -243,6 +246,9 @@ def score_eod_session(
                 reapply_theme_gates=theme_raws is None,
                 already_session_clipped=True,
                 snapshot_cache=snapshot_cache,
+            )
+            raw = tune_snapshot(
+                raw, tuning_context, registry=registry, profile=profile, horizon=horizon,
             )
             scored = apply_price_only_track(
                 raw,
@@ -323,6 +329,7 @@ def score_eod_session(
         "feature_version": FEATURE_VERSION,
         "profile": profile,
         "horizon": horizon,
+        "full_market_tuning": tuning_context.summary(),
         "capability_track": PRICE_ONLY_DIAGNOSTIC,
         "capability_flags": flags,
         "volume_scope": VOLUME_SCOPE,
