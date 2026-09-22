@@ -89,7 +89,6 @@ import {
   type TierFilter,
 } from '@/components/screener/types';
 import { localeTag, t as __t } from '../i18n/core.ts';
-import { keepServerRankingOrder } from '@/lib/screenerSort';
 import {
   applyEodLimitedView,
   eodEmptyEligibleLabel,
@@ -588,18 +587,14 @@ export default function Screener() {
     const out = [...filtered];
     const byScore = (a: ScreenerRow, b: ScreenerRow) =>
       b.strengthScore - a.strengthScore || Math.abs(b.changePct ?? 0) - Math.abs(a.changePct ?? 0) || a.ticker.localeCompare(b.ticker);
-    // 摘要没取齐就维持确定性顺序：用缺失值排名会让结果取决于访问过哪些分页。
-    if (sortMode === 'deterministic' || catalystSortIncomplete) {
-      if (!keepServerRankingOrder()) {
-        out.sort(byScore);
-      }
-    } else if (sortMode === 'latest') {
+    // 默认及摘要未取齐时保留服务端顺序；用缺失摘要排名会让结果取决于访问过哪些分页。
+    if (sortMode === 'latest' && !catalystSortIncomplete) {
       const ts = (r: ScreenerRow) => {
         const c = catalysts[r.ticker];
         return c?.latestAt ? new Date(c.latestAt).getTime() : -1;
       };
       out.sort((a, b) => ts(b) - ts(a) || byScore(a, b));
-    } else {
+    } else if (sortMode === 'impact' && !catalystSortIncomplete) {
       const impact = (r: ScreenerRow) => {
         const c = catalysts[r.ticker];
         return c ? c.pos - c.neg : 0;

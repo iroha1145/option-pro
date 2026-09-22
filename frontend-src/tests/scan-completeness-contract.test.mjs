@@ -42,7 +42,8 @@ test('切到催化排序时为全部候选取摘要，而不是只取当前页',
   assert.match(page, /catalystSortReadiness\(catalystSortActive \? filtered\.map/);
   assert.match(page, /catalystSortActive = sortMode !== 'deterministic'/);
   // 未取齐时维持确定性顺序 —— 不能用缺失值参与正式排名
-  assert.match(page, /if \(sortMode === 'deterministic' \|\| catalystSortIncomplete\)/);
+  assert.match(page, /if \(sortMode === 'latest' && !catalystSortIncomplete\)/);
+  assert.match(page, /else if \(sortMode === 'impact' && !catalystSortIncomplete\)/);
   // 界面必须说明正在准备
   assert.match(page, /正在准备排序数据/);
   // 契约批量上限是 20，超过必须切片

@@ -103,13 +103,6 @@ export function algorithmPreferencePendingSync(principal?: string | null): boole
   return parsed?.pendingSync === true;
 }
 
-export function requestedScreenerAlgorithm(
-  choice: ScreenerRankingChoice,
-): ScreenerRankingChoice {
-  void choice;
-  return SCREENER_EOD_LIMITED;
-}
-
 export function requestedRadarAlgorithm(
   choice: RadarSortChoice,
 ): RadarSortChoice {

@@ -7,7 +7,3 @@ export function rowPrimarySortScore(
     ? row.strengthScore
     : null;
 }
-
-export function keepServerRankingOrder(): boolean {
-  return true;
-}

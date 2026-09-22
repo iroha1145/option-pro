@@ -220,10 +220,7 @@ export function visibleScanDate(value: string | null | undefined): string | null
   // Keep a trading-day label in its original calendar, including in Asia.
   if (value && DATE_ONLY.test(value.trim())) return value.trim();
   const clock = parseScanClock(value);
-  if (clock == null) {
-    if (value && DATE_ONLY.test(value.trim())) return value.trim();
-    return null;
-  }
+  if (clock == null) return null;
   // Actual scanner timestamps identify a US trading session, regardless of
   // the browser's timezone. Keep the score date on New York's calendar.
   const parts = new Intl.DateTimeFormat('en-US', {
