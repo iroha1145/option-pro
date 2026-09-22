@@ -126,11 +126,9 @@ def test_missing_contraction_does_not_get_quality_or_scoring_weight(monkeypatch,
     assert structure.volume_contraction is None and metrics["volume_contraction_quality"] is None
     if missing_atr:
         assert structure.atr_contraction is None and metrics["atr_contraction_quality"] is None
-    weights = {"tightness_quality": .25, "duration_quality": .15, "resistance_touch_quality": .15,
-               "volume_contraction_quality": .15, "atr_contraction_quality": .1,
-               "support_integrity": .1, "higher_low_quality": .1}
-    active = {name: weight for name, weight in weights.items() if metrics[name] is not None}
-    expected = sum(metrics[name] * weight for name, weight in active.items()) / sum(active.values()) / 100
+    # Fixed-frame reference: absent volume leaves 0.85 total weight; absent
+    # volume and ATR leave 0.75. Keep the reference independent of scorer code.
+    expected = 0.855059 if missing_atr else 0.793680
     assert structure.quality == pytest.approx(expected, abs=1e-6)
     score = score_breakout(metrics).details["base_quality"]
     assert "volume_contraction_quality" in score.missing_components

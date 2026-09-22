@@ -235,9 +235,8 @@ def test_radar_publish_during_first_read_does_not_pin_stale_inventory(tmp_path):
     adapter._load_events = load
 
     async def run():
-        first = await adapter.radar_symbols()
+        await adapter.radar_symbols()
         second = await adapter.radar_symbols()
-        assert "MSFT" in first or "MSFT" in second
         assert set(second) == {"AAPL", "MSFT"}
         assert adapter._inventory_revision == repo.inventory_revision()
 
@@ -270,9 +269,8 @@ def test_radar_publish_during_recovery_read_does_not_pin_stale_inventory(tmp_pat
 
         adapter._load_events = load
         async with adapter._serial:
-            recovered = await adapter._refresh_inventory_locked()
+            await adapter._refresh_inventory_locked()
         later = await adapter.radar_symbols()
-        assert "MSFT" in recovered or "MSFT" in later
         assert set(later) == {"AAPL", "MSFT"}
         assert adapter._inventory_revision == repo.inventory_revision()
         assert adapter._inventory_failures == 0
