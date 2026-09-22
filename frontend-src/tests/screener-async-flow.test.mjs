@@ -9,6 +9,7 @@ import { ApiError, toQuery } from '../src/api/client.ts';
 import { marketGet, resetMarketReadState } from '../src/api/marketRead.ts';
 import * as live from '../src/api/live.ts';
 import { DEFAULT_FILTERS } from '../src/components/screener/types.ts';
+import { researchWatchView } from '../src/lib/researchWatchGroups.ts';
 
 const source = fs.readFileSync(new URL('../src/pages/Screener.tsx', import.meta.url), 'utf8');
 const parameters = { universe: 'themes', timeframe: 'mid', profile: 'balanced', top: 20, sector_id: null, min_price: 5, min_avg_dollar_volume: 10000000, include_options: true, ranking_algorithm: 'eod_limited_v1' };
@@ -402,12 +403,19 @@ test('runtime forwards real queued/running progress and stops polling a supersed
 });
 
 
-test('expired scan GET cannot silently reuse fresh-looking metadata after a server failure', async () => {
+function loadLiveScanVm() {
   const strengthSource = fs.readFileSync(new URL('../src/api/modules/strength.ts', import.meta.url), 'utf8');
   const start = strengthSource.indexOf('function liveScan(');
   const end = strengthSource.indexOf('\n}\n', start) + 3;
-  const scope = { ...live, marketGet, toQuery, mapScanRow: (row) => row, mapTierDistribution: () => null, applyParams: (rows) => rows };
+  // The production module imports researchWatchView itself. This VM only sees
+  // the extracted function, so the same function object has to be placed in scope.
+  const scope = { ...live, marketGet, toQuery, mapScanRow: (row) => row, mapTierDistribution: () => null, applyParams: (rows) => rows, researchWatchView };
   vm.runInNewContext(ts.transpileModule(strengthSource.slice(start, end), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, scope);
+  return { scope, strengthSource };
+}
+
+test('expired scan GET cannot silently reuse fresh-looking metadata after a server failure', async () => {
+  const { scope } = loadLiveScanVm();
   const originalFetch = globalThis.fetch;
   const originalNow = Date.now;
   let now = originalNow();
@@ -419,13 +427,70 @@ test('expired scan GET cannot silently reuse fresh-looking metadata after a serv
   };
   resetMarketReadState();
   try {
-    assert.equal((await scope.liveScan(parameters)).stale, false);
+    const fresh = await scope.liveScan(parameters);
+    assert.equal(fresh.stale, false);
+    assert.equal(fresh.researchWatchGroups, undefined);
     now += 31000;
     await assert.rejects(scope.liveScan(parameters), (error) => error.code === 503);
     assert.equal(requests, 2);
   } finally {
     globalThis.fetch = originalFetch;
     Date.now = originalNow;
+    resetMarketReadState();
+  }
+});
+
+test('liveScan maps a present watch group and omits the field when it is absent or mismatched', async () => {
+  const { scope, strengthSource } = loadLiveScanVm();
+  assert.match(strengthSource, /import \{ researchWatchView, type ResearchWatchView \} from '\.\.\/\.\.\/lib\/researchWatchGroups\.ts'/);
+  assert.equal(scope.researchWatchView, researchWatchView);
+  const watch = {
+    enabled: true,
+    displaces_main_board: false,
+    high_volatility_collapsed: true,
+    qualification_note: '观察分组不进入主榜，不授予严格资格，也不表示可以买入。',
+    source_date: '2024-03-28',
+    profile: 'balanced',
+    horizon: 'mid',
+    protocol: 'research_watch_layers_v1',
+    source: 'synthetic_watch_layers_v1',
+    extension_total: 1,
+    high_volatility_total: 1,
+    display_limit: 20,
+    filter_scope: 'global_reference',
+    filter_scope_note: '全局参考，未按当前行业或最低价筛选。',
+    extension_watch: [{ security_id: 'ZZZ', score: 99.26, rejection_reasons: ['EXTENDED'], qualified: true, tradable: true, source_date: '2024-03-28' }],
+    high_volatility_watch: [{ security_id: 'HHH', score: 98.2, rejection_reasons: ['HIGH_ATR'], source_date: '2024-03-28' }],
+  };
+  const bodies = [
+    { rows: [{ ticker: 'AAA', price: 180 }], _stale: false, source_status: 'active', served_session: '2024-03-28' },
+    { rows: [{ ticker: 'AAA', price: 180 }], _stale: false, source_status: 'active', served_session: '2024-03-28', research_watch_groups: watch },
+    { rows: [{ ticker: 'AAA', price: 180 }], _stale: false, source_status: 'active', served_session: '2024-03-28', research_watch_groups: watch },
+  ];
+  let requests = 0;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify(bodies[requests++]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  resetMarketReadState();
+  try {
+    const absent = await scope.liveScan(parameters, true);
+    assert.equal(absent.researchWatchGroups, undefined);
+    assert.equal(absent.rows[0].ticker, 'AAA');
+    const present = await scope.liveScan(parameters, true);
+    assert.equal(present.rows[0].ticker, 'AAA');
+    assert.equal(present.researchWatchGroups.extension[0].securityId, 'ZZZ');
+    assert.equal(present.researchWatchGroups.extension[0].qualified, false);
+    assert.equal(present.researchWatchGroups.extension[0].tradable, false);
+    assert.equal(present.researchWatchGroups.profile, 'balanced');
+    assert.equal(present.researchWatchGroups.horizon, 'mid');
+    const direct = researchWatchView(watch, { profile: 'balanced', timeframe: 'mid', sessionDate: '2024-03-28' });
+    assert.equal(direct.extension[0].securityId, present.researchWatchGroups.extension[0].securityId);
+    assert.equal(direct.extension[0].score, 99.26);
+    const mismatched = await scope.liveScan({ ...parameters, profile: 'aggressive' }, true);
+    assert.equal(mismatched.researchWatchGroups, undefined);
+    assert.equal(mismatched.rows[0].ticker, 'AAA');
+    assert.equal(requests, 3);
+  } finally {
+    globalThis.fetch = originalFetch;
     resetMarketReadState();
   }
 });

@@ -339,4 +339,19 @@ export const SCREENER: Dict = {
   ],
   '来源日期': ['Source date', '元日付'],
   '当前没有名称': ['No names in this group', 'このグループに銘柄はありません'],
+  '显示 {shown} / 共 {total}': ['Showing {shown} / {total}', '{total} 件中 {shown} 件を表示'],
+  '观察来源 {profile} · {horizon} · {date}': [
+    'Source {profile} · {horizon} · {date}',
+    '出所 {profile} · {horizon} · {date}',
+  ],
+  '已按当前行业与最低价筛选。': [
+    'Filtered by the current sector and minimum price.',
+    '現在の業種と最低価格で絞り込んでいます。',
+  ],
+  '已按当前行业筛选。': ['Filtered by the current sector.', '現在の業種で絞り込んでいます。'],
+  '已按当前最低价筛选。': ['Filtered by the current minimum price.', '現在の最低価格で絞り込んでいます。'],
+  '全局参考，未按当前行业或最低价筛选。': [
+    'Global reference. Not limited by the current sector or minimum price.',
+    '全体の参照です。現在の業種や最低価格では絞り込んでいません。',
+  ],
 };

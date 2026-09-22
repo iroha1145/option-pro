@@ -266,7 +266,11 @@ function liveScan(params: ScanParams, force = false): Promise<StrengthScanEnvelo
       .map(mapScanRow)
       .filter((row): row is ScreenerRow => row !== null);
     const sources = asRec(env.data_sources);
-    const researchWatchGroups = researchWatchView(env.research_watch_groups);
+    const researchWatchGroups = researchWatchView(env.research_watch_groups, {
+      profile: params.profile,
+      timeframe: params.timeframe,
+      sessionDate: pickS(env, 'served_session', 'servedSession', 'as_of_session'),
+    });
     return {
       rows: applyParams(rows, params),
       universeCount: pickN(env, 'universe_count', 'universeCount') ?? rows.length,

@@ -95,7 +95,7 @@ import {
   isEodLimitedSnapshotProblem,
   supportsDollarVolumeFilter,
 } from '@/lib/eodLimitedView';
-import { mainBoardRows } from '@/lib/researchWatchGroups';
+import { mainBoardRows, visibleResearchWatch } from '@/lib/researchWatchGroups';
 import { ResearchWatchGroups } from '@/components/screener/ResearchWatchGroups';
 
 const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
@@ -629,7 +629,7 @@ export default function Screener() {
     () => sorted.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
     [sorted, safePage],
   );
-  const watchView = scanMeta?.researchWatchGroups ?? null;
+  const watchView = visibleResearchWatch(scanMeta?.researchWatchGroups ?? null, applied.profile, applied.timeframe);
   const boardRows = mainBoardRows(pageRows, watchView);
 
   /* ---------------- 催化剂 72h 汇总（每批 ≤20 只；禁止逐行请求） ---------------- */
