@@ -13,6 +13,10 @@ mixes in volume).
 """
 from __future__ import annotations
 
+from app.services.numeric import (
+    rounded_number as _safe_float,
+)
+
 import math
 from typing import Any
 
@@ -55,16 +59,6 @@ _PATTERN_ADJUST = {
     "shooting_star": -6.0,
     "inside_bar": 0.0,
 }
-
-
-def _safe_float(value: Any, ndigits: int = 4) -> float | None:
-    try:
-        number = float(value)
-        if not math.isfinite(number):
-            return None
-        return round(number, ndigits)
-    except Exception:
-        return None
 
 
 def _clamp(value: float, lo: float = 0.0, hi: float = 100.0) -> float:

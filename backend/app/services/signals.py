@@ -13,6 +13,7 @@ import yfinance as yf
 
 from app.services import massive
 from app.services.daily_returns import aligned_benchmark_return
+from app.services.numeric import rounded_number as _safe_float
 
 logger = logging.getLogger(__name__)
 
@@ -141,16 +142,6 @@ def clamp(value: float | int | None, lo: float = 0, hi: float = 100) -> float:
         return max(lo, min(hi, f))
     except Exception:
         return 0
-
-
-def _safe_float(value: Any, ndigits: int = 4) -> float | None:
-    try:
-        f = float(value)
-        if math.isnan(f) or math.isinf(f):
-            return None
-        return round(f, ndigits)
-    except Exception:
-        return None
 
 
 def _clean_frame(df: pd.DataFrame) -> pd.DataFrame:

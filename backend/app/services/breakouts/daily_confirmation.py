@@ -8,6 +8,10 @@ Research adapters may import this module; production must not import
 
 from __future__ import annotations
 
+from app.services.numeric import (
+    finite_number as _finite,
+)
+
 from statistics import median
 from typing import Any, Mapping, Sequence
 
@@ -38,16 +42,6 @@ T1_SETTINGS = {
     "zero_range": "CLV and upper-shadow unavailable; T1 cannot confirm",
     "information_ready": "T regular close including early closes",
 }
-
-
-def _finite(value: Any) -> float | None:
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return None
-    if number != number or number in {float("inf"), float("-inf")}:
-        return None
-    return number
 
 
 def valid_session_volume(value: Any) -> float | None:

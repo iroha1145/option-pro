@@ -8,6 +8,10 @@ context back into a stock's intrinsic-strength score.
 
 from __future__ import annotations
 
+from app.services.numeric import (
+    finite_number as _finite,
+)
+
 import math
 import os
 from dataclasses import dataclass
@@ -158,14 +162,6 @@ _STATE_RULES: dict[str, dict[str, Any]] = {
         "eligibility": "recovery_only",
     },
 }
-
-
-def _finite(value: Any) -> float | None:
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return None
-    return number if math.isfinite(number) else None
 
 
 def _clamp(value: float, low: float = 0.0, high: float = 1.0) -> float:

@@ -5,27 +5,10 @@ from typing import Any
 
 import pandas as pd
 
-
-def _safe_float(value: Any, ndigits: int = 4) -> float | None:
-    try:
-        number = float(value)
-        if not math.isfinite(number):
-            return None
-        return round(number, ndigits)
-    except Exception:
-        return None
-
-
-def _clamp(value: float | int | None, lo: float = 0.0, hi: float = 100.0, default: float = 50.0) -> float:
-    if value is None:
-        return default
-    try:
-        number = float(value)
-    except Exception:
-        return default
-    if not math.isfinite(number):
-        return default
-    return max(lo, min(hi, number))
+from app.services.numeric import (
+    rounded_number as _safe_float,
+    clamp_number as _clamp,
+)
 
 
 def _slope(values: list[float]) -> float | None:

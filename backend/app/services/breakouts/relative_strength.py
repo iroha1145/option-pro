@@ -2,18 +2,14 @@
 
 from __future__ import annotations
 
+from app.services.numeric import (
+    finite_number as _finite,
+)
+
 import math
 from typing import Any, Mapping
 
 import pandas as pd
-
-
-def _finite(value: Any) -> float | None:
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return None
-    return number if math.isfinite(number) else None
 
 
 def _closes(frame: pd.DataFrame | None) -> pd.Series:

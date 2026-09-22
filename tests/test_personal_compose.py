@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -173,11 +174,7 @@ def test_environment_templates_separate_secrets_from_machine_edges() -> None:
         for line in workflow.splitlines()
         if 'actual={x.get("task_name")' in line
     )
-    expected_text = health_line.split("expected={", 1)[1].split("}; actual", 1)[0]
     expected_tasks = {
-        item.strip().strip('"') for item in expected_text.split(",")
-    }
-    assert expected_tasks == {
         "breakout",
         "catalyst_sync",
         "focus",
@@ -194,6 +191,26 @@ def test_environment_templates_separate_secrets_from_machine_edges() -> None:
         "retention",
     }
     assert 'p.get("schema_version")=="optix-worker-v2"' in health_line
+    # Exercise the actual gate against an independent required inventory. A
+    # shared manifest must not make a missing task pass by construction.
+    gate = health_line.split("python -c '", 1)[1].rsplit("'; then", 1)[0]
+    for names, accepted in (
+        (expected_tasks, True),
+        (expected_tasks - {"macro_conditions"}, False),
+        (expected_tasks | {"unregistered_task"}, False),
+    ):
+        result = subprocess.run(
+            [sys.executable, "-c", gate],
+            cwd=ROOT,
+            input=json.dumps({
+                "healthy": True,
+                "schema_version": "optix-worker-v2",
+                "tasks": [{"task_name": name} for name in sorted(names)],
+            }),
+            capture_output=True,
+            text=True,
+        )
+        assert (result.returncode == 0) is accepted, result.stderr
 
 
 def test_compose_and_templates_have_no_legacy_services_or_independent_paths() -> None:

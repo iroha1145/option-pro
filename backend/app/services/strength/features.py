@@ -11,6 +11,12 @@ market-fit），所以详情图路径 import 它不违反「个股图不跑 Stre
 
 from __future__ import annotations
 
+from app.services.daily_returns import positional_return as _ret
+
+from app.services.numeric import (
+    rounded_number as _safe_float,
+)
+
 import math
 from typing import Any, Mapping
 
@@ -24,16 +30,6 @@ from app.services.zh_names import get_zh_name
 # 「52 周高位」的最低样本量：一年约 252 个交易日，放 12 根余量容忍
 # 数据源对首尾少量交易日的裁剪；再短就不构成「一年」。
 _MIN_52W_HISTORY_BARS = 240
-
-
-def _safe_float(value: Any, ndigits: int = 4) -> float | None:
-    try:
-        number = float(value)
-        if not math.isfinite(number):
-            return None
-        return round(number, ndigits)
-    except Exception:
-        return None
 
 
 def _rsi(close: pd.Series, period: int = 14) -> float | None:
@@ -78,15 +74,6 @@ def _atr_pct(hist: pd.DataFrame) -> float | None:
     if atr.empty or close.iloc[-1] <= 0:
         return None
     return _safe_float(atr.iloc[-1] / close.iloc[-1] * 100, 2)
-
-
-def _ret(close: pd.Series, days: int) -> float | None:
-    if len(close) <= days:
-        return None
-    base = close.iloc[-(days + 1)]
-    if not base or base <= 0:
-        return None
-    return _safe_float(close.iloc[-1] / base - 1, 5)
 
 
 def _feature_row(ticker: str, hist: pd.DataFrame, spy: pd.DataFrame, sector_meta: Mapping[str, Any]) -> dict[str, Any] | None:

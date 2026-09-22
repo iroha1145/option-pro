@@ -18,30 +18,15 @@ from app.data_paths import get_data_paths
 from app.execution_limits import BREAKOUT_TASK_TIMEOUT_SECONDS
 from app.personal_config import get_personal_config
 
+from .inventory import DEFAULT_TASK_NAMES
 from .runtime import TaskResult, TaskSpec, _public_error_code
+
+from app.personal_config import personal_analysis_permissions as _personal_analysis_permissions
 
 
 # Full-market capture, geometry, nine scoring views and diagnostic publication
 # share this finite budget. Production runs can exceed the old 30-minute limit.
 STRENGTH_REFRESH_TIMEOUT_SECONDS = 7_200.0
-
-
-DEFAULT_TASK_NAMES = (
-    "breakout",
-    "focus",
-    "catalyst_sync",
-    "ai_jobs",
-    "maintenance",
-    "stock_directory",
-    "public_home",
-    "sector_iv_refresh",
-    "earnings_analysis",
-    "macro_conditions",
-    "focus_refresh",
-    "strength_refresh",
-    "breakout_refresh",
-    "retention",
-)
 
 
 def _canonical_sector_tickers() -> tuple[str, ...]:
@@ -96,17 +81,6 @@ async def _close_optional(resource: Any) -> None:
 def _timestamp_text(value: float) -> str:
     return datetime.fromtimestamp(value, timezone.utc).isoformat().replace(
         "+00:00", "Z"
-    )
-
-
-def _personal_analysis_permissions(config: Any) -> tuple[bool, bool]:
-    features = getattr(config, "features", None)
-    mode = getattr(features, "catalyst_mode", None)
-    if mode is not None:
-        return mode in {"manual", "scheduled"}, mode == "scheduled"
-    return (
-        bool(getattr(config, "catalyst_manual_enabled", False)),
-        bool(getattr(config, "catalyst_scheduled_enabled", False)),
     )
 
 

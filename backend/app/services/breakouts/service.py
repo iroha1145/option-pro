@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from app.services.numeric import (
+    finite_number as _finite,
+)
+
 import asyncio
 import math
 import time
@@ -63,14 +67,6 @@ from app.services.strength.market_shape import (
     market_fit_for_setup,
 )
 from app.services.technical.range_persistence import compute_range_persistence
-
-
-def _finite(value: Any) -> float | None:
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return None
-    return number if math.isfinite(number) else None
 
 
 def _quality(value: Any, *, low: float = 0.0, high: float = 1.0) -> float | None:

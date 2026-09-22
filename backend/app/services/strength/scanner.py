@@ -66,6 +66,8 @@ from app.services.technical.range_persistence import (
     RANGE_PERSISTENCE_VERSION,
     compute_range_persistence,
 )
+
+from app.services.numeric import clamp_number
 TIMEFRAMES = ("short", "mid", "long", "all")
 PROFILES = ("conservative", "balanced", "aggressive")
 UNIVERSES = ("themes",)
@@ -99,15 +101,7 @@ def _clamp(
     hi: float = 100.0,
     default: float | None = None,
 ) -> float | None:
-    if value is None:
-        return default
-    try:
-        number = float(value)
-    except Exception:
-        return default
-    if not math.isfinite(number):
-        return default
-    return max(lo, min(hi, number))
+    return clamp_number(value, lo, hi, default)
 
 
 def _pct_rank(items: list[dict[str, Any]], key: str) -> dict[str, float]:

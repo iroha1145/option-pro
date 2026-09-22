@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from app.services.numeric import (
+    finite_number as _finite,
+)
+
 import asyncio
 import logging
 import math
@@ -44,14 +48,6 @@ def _time(value: Any) -> datetime:
     if parsed.tzinfo is None:
         raise ValueError("trade times must be timezone-aware")
     return parsed.astimezone(timezone.utc)
-
-
-def _finite(value: Any) -> float | None:
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return None
-    return number if math.isfinite(number) else None
 
 
 class BreakoutRealtimeAdapter:
