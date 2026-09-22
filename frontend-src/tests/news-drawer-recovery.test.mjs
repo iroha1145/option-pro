@@ -1,3 +1,4 @@
+import { deferred } from './helpers/deferred.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -18,12 +19,6 @@ import {
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../src');
 const source = fs.readFileSync(path.join(root, 'components/catalysts/NewsDrawer.tsx'), 'utf8');
 
-const deferred = () => {
-  let resolve;
-  let reject;
-  const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
-  return { promise, resolve, reject };
-};
 async function settle() {
   for (let i = 0; i < 20; i += 1) await Promise.resolve();
 }

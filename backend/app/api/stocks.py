@@ -50,6 +50,7 @@ from app.public_home_snapshot import (
 )
 from app.services.yfinance_batch import download_in_bounded_batches
 from app.services.market_calendar import early_close_minutes, is_trading_day
+from app.services.numeric import finite_number_or_none as _safe_number
 from app.services.symbols import quote_symbol
 from app.services.watchlist_trend import daily_trend
 from app.services.watchlist_scope import (
@@ -2645,13 +2646,6 @@ async def _build_stock_signals(ticker: str) -> dict[str, Any]:
     symbol = quote_symbol(ticker)
     if not _WATCHLIST_TICKER_PATTERN.fullmatch(symbol):
         raise ValueError("Invalid ticker symbol")
-
-    def _safe_number(value: Any) -> float | None:
-        try:
-            f = float(value)
-            return f if math.isfinite(f) else None
-        except Exception:
-            return None
 
     def _compute():
         try:

@@ -1,3 +1,4 @@
+import { deferred } from './helpers/deferred.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -9,7 +10,6 @@ import { createReactStub } from './helpers/react-hooks.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../src');
 const source = name => fs.readFileSync(path.join(root, name), 'utf8');
-const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return {promise, resolve, reject}; };
 async function settle() { for (let i = 0; i < 15; i++) await Promise.resolve(); }
 function environment() {
   const timers = new Map(), listeners = new Map();

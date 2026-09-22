@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import math
-from bisect import bisect_left, bisect_right
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from typing import Any
 
 from app.config import Settings, get_settings
 from app.services import yahoo
+from app.services.strength.percentile import midrank_percentile
 
 from app.services.numeric import (
     rounded_number as _safe_float,
@@ -197,16 +197,12 @@ def _pct_rank(metrics: list[dict[str, Any]], key: str) -> dict[str, float]:
         # A single observation has no defensible cross-sectional percentile
         # (mirrors scanner._pct_rank). Returning 50 would fabricate a median.
         return {}
-    denom = max(len(values) - 1, 1)
     ranks: dict[str, float] = {}
     for item in metrics:
         value = _safe_float(item.get(key), 6)
         if value is None:
             continue
-        below = bisect_left(values, value)
-        tied = bisect_right(values, value) - below
-        midrank = below + (tied - 1) / 2
-        ranks[item["ticker"]] = round(midrank / denom * 100, 1)
+        ranks[item["ticker"]] = midrank_percentile(values, value)
     return ranks
 
 

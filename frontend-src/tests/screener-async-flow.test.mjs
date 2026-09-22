@@ -1,3 +1,4 @@
+import { deferred } from './helpers/deferred.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -15,7 +16,6 @@ const parameters = { universe: 'themes', timeframe: 'mid', profile: 'balanced', 
 const completedAt = '2026-09-04T21:00:00Z';
 const completed = { requestId: 'new', status: 'completed', details: { parameters, result: { completed_at: completedAt, score_version: 'v2', published: true } } };
 const envelope = (ticker = 'NEW') => ({ rows: [{ ticker, price: 180 }], stale: false, sourceStatus: 'active', snapshotSavedAt: completedAt, scanCompletedAt: completedAt, scoreVersion: 'v2' });
-const deferred = () => { let resolve; let reject; const promise = new Promise((r, fail) => { resolve = r; reject = fail; }); return { promise, resolve, reject }; };
 
 function harness(overrides = {}) {
   const initialScanMeta = overrides.scanMeta ?? null;

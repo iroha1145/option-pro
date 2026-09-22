@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import math
+from app.services.numeric import finite_number
 
 
 _MIN_ACTIVE_WEIGHT = 0.25
@@ -39,10 +39,9 @@ STOCK_SCORE_SIGNAL_KEYS = (
 
 def _finite_number(value) -> float | None:
     try:
-        number = float(value)
-    except (TypeError, ValueError, OverflowError):
+        return finite_number(value)
+    except OverflowError:
         return None
-    return number if math.isfinite(number) else None
 
 
 def _avg(signals: dict, keys: list[str], side: str) -> float | None:

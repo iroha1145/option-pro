@@ -3,7 +3,6 @@ from __future__ import annotations
 import io
 import hashlib
 import math
-from bisect import bisect_left, bisect_right
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from datetime import date, datetime, timedelta, timezone
 from time import monotonic
@@ -20,6 +19,7 @@ from app.services import yahoo
 from app.services.cache import cache
 from app.services.finnhub_budget import mark_finnhub_rate_limited, reserve_finnhub_request
 from app.services.sectors import SECTORS
+from app.services.strength.percentile import midrank_percentile
 from app.services.strength.features import (
     _feature_row,
     _ret,
@@ -111,16 +111,12 @@ def _pct_rank(items: list[dict[str, Any]], key: str) -> dict[str, float]:
     if len(values) == 1:
         # A single observation has no defensible cross-sectional percentile.
         return {}
-    denom = max(len(values) - 1, 1)
     ranks: dict[str, float] = {}
     for row in items:
         value = row.get(key)
         if value is None:
             continue
-        below = bisect_left(values, value)
-        tied = bisect_right(values, value) - below
-        midrank = below + (tied - 1) / 2
-        ranks[row["ticker"]] = round(midrank / denom * 100, 1)
+        ranks[row["ticker"]] = midrank_percentile(values, value)
     return ranks
 
 

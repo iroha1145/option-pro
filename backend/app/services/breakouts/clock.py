@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from datetime import date, datetime, time as datetime_time, timezone
+from datetime import date, datetime, timezone
 from typing import Callable
 
 from app.services.market_calendar import (
@@ -12,6 +12,7 @@ from app.services.market_calendar import (
     early_close_minutes as _early_close_minutes,
     is_trading_day as _is_trading_day,
     market_holidays as _market_holidays,
+    market_datetime as _at_minutes,
     next_trading_day as _next_trading_day,
 )
 from app.services.breakouts.models import DiscoveryProfile, MarketSession
@@ -40,14 +41,6 @@ class MarketClockSnapshot:
 
 def _default_now() -> datetime:
     return datetime.now(timezone.utc)
-
-
-def _at_minutes(day: date, minutes: int) -> datetime:
-    return datetime.combine(
-        day,
-        datetime_time(hour=minutes // 60, minute=minutes % 60),
-        tzinfo=ET,
-    )
 
 
 class MarketClock:
