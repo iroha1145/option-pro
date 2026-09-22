@@ -54,7 +54,6 @@ function harness() {
     nextChoiceGeneration,
     shouldCommitHistoryPage,
     historyPageDecision,
-    requestedRadarAlgorithm: (value) => value,
     writeAlgorithmPreferences: (patch) => { state.local = patch; },
     persistAlgorithmChoice: async (patch) => {
       state.persisted.push(patch);
@@ -71,10 +70,10 @@ function harness() {
     historyRequestId: { current: 1 },
     historyCursor: 'prod-page-2',
     historyLoadingMore: false,
-    requestedSort: 'production',
+    radarSort: 'production',
     historyCursorRef: { current: 'prod-page-2' },
     requestedSortRef: { current: 'production' },
-    setRadarSort: (value) => { state.radarSort = value; scope.requestedSort = value; scope.requestedSortRef.current = value; },
+    setRadarSort: (value) => { state.radarSort = value; scope.radarSort = value; scope.requestedSortRef.current = value; },
     setExtraEvents: (value) => {
       state.extraEvents = typeof value === 'function' ? value(state.extraEvents) : value;
     },
@@ -236,7 +235,7 @@ test('same-generation load more still rejects a second in-flight request', async
 
 test('stale T1 cursor restarts first page and does not append old rows', async () => {
   const { state, scope, laterPage, pageQueue } = harness();
-  scope.requestedSort = 't1_daily_priority';
+  scope.radarSort = 't1_daily_priority';
   scope.requestedSortRef.current = 't1_daily_priority';
   const loading = scope.loadMoreHistory();
   laterPage.resolve({
