@@ -67,7 +67,6 @@ from app.services.technical.range_persistence import (
     compute_range_persistence,
 )
 
-from app.services.numeric import clamp_number
 TIMEFRAMES = ("short", "mid", "long", "all")
 PROFILES = ("conservative", "balanced", "aggressive")
 UNIVERSES = ("themes",)
@@ -93,15 +92,6 @@ PROFILE_TILT = {
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
-
-
-def _clamp(
-    value: float | int | None,
-    lo: float = 0.0,
-    hi: float = 100.0,
-    default: float | None = None,
-) -> float | None:
-    return clamp_number(value, lo, hi, default)
 
 
 def _pct_rank(items: list[dict[str, Any]], key: str) -> dict[str, float]:
