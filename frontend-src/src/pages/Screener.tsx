@@ -95,6 +95,8 @@ import {
   isEodLimitedSnapshotProblem,
   supportsDollarVolumeFilter,
 } from '@/lib/eodLimitedView';
+import { mainBoardRows, visibleResearchWatch } from '@/lib/researchWatchGroups';
+import { ResearchWatchGroups } from '@/components/screener/ResearchWatchGroups';
 
 const EASE_PAPER = [0.16, 1, 0.3, 1] as [number, number, number, number];
 const PAGE_SIZE = 20;
@@ -627,6 +629,8 @@ export default function Screener() {
     () => sorted.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
     [sorted, safePage],
   );
+  const watchView = visibleResearchWatch(scanMeta?.researchWatchGroups ?? null, applied.profile, applied.timeframe);
+  const boardRows = mainBoardRows(pageRows, watchView);
 
   /* ---------------- 催化剂 72h 汇总（每批 ≤20 只；禁止逐行请求） ---------------- */
   /** 分批抓取并合并；contract 每次最多 20 只，因此按 20 切片顺序发出。 */
@@ -1195,7 +1199,7 @@ export default function Screener() {
                     </p>
                     <div className="hidden md:block">
                       <ResultTable
-                        rows={pageRows}
+                        rows={boardRows}
                         startIndex={(safePage - 1) * PAGE_SIZE}
                         page={safePage}
                         totalPages={totalPages}
@@ -1217,7 +1221,7 @@ export default function Screener() {
                         <768px 的失败态会剩一行「已过期」标签指着一片空白。 */}
                     <div className="opacity-60 md:hidden">
                       <ResultCards
-                        rows={pageRows}
+                        rows={boardRows}
                         expanded={expanded}
                         onToggle={onToggle}
                         catalysts={catalysts}
@@ -1264,7 +1268,7 @@ export default function Screener() {
               <>
                 <div className={cn('hidden md:block', scanState === 'scanning' && 'opacity-60')}>
                   <ResultTable
-                    rows={pageRows}
+                    rows={boardRows}
                     startIndex={(safePage - 1) * PAGE_SIZE}
                     page={safePage}
                     totalPages={totalPages}
@@ -1283,7 +1287,7 @@ export default function Screener() {
                 </div>
                 <div className={cn('md:hidden', scanState === 'scanning' && 'opacity-60')}>
                   <ResultCards
-                    rows={pageRows}
+                    rows={boardRows}
                     expanded={expanded}
                     onToggle={onToggle}
                     catalysts={catalysts}
@@ -1311,6 +1315,7 @@ export default function Screener() {
                 </div>
               </>
             )}
+            {watchView ? <ResearchWatchGroups view={watchView} /> : null}
           </div>
         </section>
 

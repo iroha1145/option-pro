@@ -331,4 +331,27 @@ export const SCREENER: Dict = {
   '评分档位读取失败，无法显示当前权重。': ['Failed to load scoring profiles; current weights cannot be shown.', 'スコアリングプロファイルの読み込みに失敗したため、現在のウェイトを表示できません。'],
   '20日均额': ['20D avg $ vol', '20日平均代金'],
   '20 日均美元成交额': ['20-day average dollar volume', '20日平均売買代金（ドル）'],
+  '偏离待观察': ['Extension watch', '乖離の観察'],
+  '高波动观察': ['High-volatility watch', '高ボラティリティの観察'],
+  '观察分组不进入主榜，不授予严格资格，也不表示可以买入。': [
+    'Watch groups stay off the main board, do not receive a strict qualification, and are not a buy signal.',
+    '観察グループはメイン表に入らず、厳格な資格を与えず、買いを意味しません。',
+  ],
+  '来源日期': ['Source date', '元日付'],
+  '当前没有名称': ['No names in this group', 'このグループに銘柄はありません'],
+  '显示 {shown} / 共 {total}': ['Showing {shown} / {total}', '{total} 件中 {shown} 件を表示'],
+  '观察来源 {profile} · {horizon} · {date}': [
+    'Source {profile} · {horizon} · {date}',
+    '出所 {profile} · {horizon} · {date}',
+  ],
+  '已按当前行业与最低价筛选。': [
+    'Filtered by the current sector and minimum price.',
+    '現在の業種と最低価格で絞り込んでいます。',
+  ],
+  '已按当前行业筛选。': ['Filtered by the current sector.', '現在の業種で絞り込んでいます。'],
+  '已按当前最低价筛选。': ['Filtered by the current minimum price.', '現在の最低価格で絞り込んでいます。'],
+  '全局参考，未按当前行业或最低价筛选。': [
+    'Global reference. Not limited by the current sector or minimum price.',
+    '全体の参照です。現在の業種や最低価格では絞り込んでいません。',
+  ],
 };

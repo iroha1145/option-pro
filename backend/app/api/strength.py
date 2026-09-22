@@ -908,6 +908,9 @@ def _read_eod_limited_snapshot(
     )
     if stale_reason:
         payload["stale_reason"] = stale_reason
+    from app.services.eod_limited.watch_groups import maybe_attach_watch_groups
+
+    payload = maybe_attach_watch_groups(payload)
     return sanitize(_overlay_algorithm_metadata(payload, resolution)), saved_at, stale
 
 

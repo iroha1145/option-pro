@@ -16,6 +16,7 @@ import type {
   StrengthProfilesMeta,
 } from '../types';
 import { t } from '../../i18n/core.ts';
+import { researchWatchView, type ResearchWatchView } from '../../lib/researchWatchGroups.ts';
 
 /**
  * 扫描参数：band/sector/minScore/sort/order 为 UI 侧筛选（live 下客户端套用）；
@@ -83,6 +84,7 @@ export interface StrengthScanEnvelope {
     minPrice: boolean | null;
     minAvgDollarVolume: boolean | null;
   };
+  researchWatchGroups?: ResearchWatchView;
 }
 
 export interface ScanParams {
@@ -264,6 +266,11 @@ function liveScan(params: ScanParams, force = false): Promise<StrengthScanEnvelo
       .map(mapScanRow)
       .filter((row): row is ScreenerRow => row !== null);
     const sources = asRec(env.data_sources);
+    const researchWatchGroups = researchWatchView(env.research_watch_groups, {
+      profile: params.profile,
+      timeframe: params.timeframe,
+      sessionDate: pickS(env, 'served_session', 'servedSession', 'as_of_session'),
+    });
     return {
       rows: applyParams(rows, params),
       universeCount: pickN(env, 'universe_count', 'universeCount') ?? rows.length,
@@ -311,6 +318,7 @@ function liveScan(params: ScanParams, force = false): Promise<StrengthScanEnvelo
           'minAvgDollarVolume',
         ),
       },
+      ...(researchWatchGroups ? { researchWatchGroups } : {}),
     };
   });
 }

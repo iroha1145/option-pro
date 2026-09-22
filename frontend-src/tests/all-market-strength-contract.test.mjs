@@ -19,6 +19,7 @@ function load(relativePath, imports = {}) {
 }
 
 const live = load('api/live.ts', { '../i18n/core.ts': { t: text => text } });
+const researchWatchGroups = load('lib/researchWatchGroups.ts');
 const plain = value => JSON.parse(JSON.stringify(value));
 
 function apiFor(payload) {
@@ -35,6 +36,7 @@ function apiFor(payload) {
     '../macroFields': load('api/macroFields.ts', { './live': live }),
     '@/mocks/fixtures': {},
     '../../i18n/core.ts': { t: text => text },
+    '../../lib/researchWatchGroups.ts': researchWatchGroups,
   });
   const { strengthScanPath } = load('lib/screenerScanFlow.ts', {
     '../api/client.ts': client,
