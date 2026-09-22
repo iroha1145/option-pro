@@ -2255,6 +2255,10 @@ def test_cached_entries_recover_and_reject_clock_rewinds(tmp_path, partial, futu
         )
     path = tmp_path / "clock-recovery.json"
     path.write_text(json.dumps({"version": PUBLIC_HOME_SNAPSHOT_VERSION, "resources": entries}))
+    original_bytes = path.read_bytes()
+    written = path.stat()
+    # Make reads eligible for a Linux relatime update even on fast runners.
+    os.utime(path, ns=(written.st_mtime_ns - 86_400_000_000_000, written.st_mtime_ns))
     identity = path.stat()
 
     if warm_valid:
@@ -2265,4 +2269,8 @@ def test_cached_entries_recover_and_reject_clock_rewinds(tmp_path, partial, futu
     assert "indices" in read_public_home_entries(path, now=now + 60)
     assert "indices" not in read_public_home_entries(path, now=now)
     assert "indices" in read_public_home_entries(path, now=now + 60)
-    assert path.stat() == identity
+    # Reads may change atime, but must not rewrite or replace the snapshot.
+    final_identity = path.stat()
+    for field in ("st_dev", "st_ino", "st_mode", "st_nlink", "st_uid", "st_gid", "st_size", "st_mtime_ns", "st_ctime_ns"):
+        assert getattr(final_identity, field) == getattr(identity, field), field
+    assert path.read_bytes() == original_bytes
