@@ -16,14 +16,19 @@ test('empty feed keeps news count unknown when its fallback count request fails'
   }).outputText;
   const module = { exports: {} };
   const empty = { items: [], nextCursor: null, total: 0, hiddenUnanalyzed: 0 };
+  let countFails = true;
+  let previous = null;
   const imports = {
     './api': { catalystsContract: {
       feed: async () => empty,
-      newsToday: async () => { throw new Error('count unavailable'); },
+      newsToday: async () => {
+        if (countFails) throw new Error('count unavailable');
+        return { pending: 3 };
+      },
     } },
     './filters': { toFeedQuery: () => ({}) },
     './feedSnapshot': { refreshFeedSnapshot },
-    './useCatalystResource': { useCatalystResource: (_key, _policy, read) => read(null) },
+    './useCatalystResource': { useCatalystResource: (_key, _policy, read) => read(previous) },
   };
   vm.runInNewContext(code, {
     module,
@@ -36,4 +41,9 @@ test('empty feed keeps news count unknown when its fallback count request fails'
   const result = await module.exports.useFeedResource({});
   assert.deepEqual(result.items, []);
   assert.equal(result.hiddenCountUnknown, true);
+  previous = result;
+  countFails = false;
+  const recovered = await module.exports.useFeedResource({});
+  assert.equal(recovered.hiddenUnanalyzed, 3);
+  assert.equal(recovered.hiddenCountUnknown, undefined, 'a successful refresh must clear the old unknown flag');
 });

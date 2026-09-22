@@ -42,6 +42,8 @@ export const WIRED: Dict = {
   '{label}刷新已入队': ['{label} refresh queued', '{label}の更新をキューに追加しました'],
   '{label}刷新完成': ['{label} refresh complete', '{label}の更新が完了しました'],
   '{label}刷新失败': ['{label} refresh failed', '{label}の更新に失敗しました'],
+  '{label}刷新状态读取失败': ['Could not read the {label} refresh status', '{label}の更新状態を取得できませんでした'],
+  '{label}后台状态读取失败': ['Could not read the {label} worker status', '{label}のバックグラウンド状態を取得できませんでした'],
   '{label}刷新未受理': ['{label} refresh not accepted', '{label}の更新は受け付けられませんでした'],
   '{label}仍在冷却': ['{label} still cooling down', '{label}はクールダウン中です'],
   '{label}正在执行': ['{label} running', '{label}を実行中です'],
