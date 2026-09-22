@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 import time
 from typing import Any
 

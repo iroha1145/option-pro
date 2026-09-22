@@ -6,7 +6,6 @@ from app.services.numeric import (
     finite_number as _finite,
 )
 
-import math
 from typing import Any, Mapping
 
 

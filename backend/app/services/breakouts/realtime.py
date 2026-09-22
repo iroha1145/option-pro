@@ -8,7 +8,6 @@ from app.services.numeric import (
 
 import asyncio
 import logging
-import math
 import sqlite3
 import time
 from datetime import datetime, timezone

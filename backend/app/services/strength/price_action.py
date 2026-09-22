@@ -17,7 +17,6 @@ from app.services.numeric import (
     rounded_number as _safe_float,
 )
 
-import math
 from typing import Any
 
 import pandas as pd
