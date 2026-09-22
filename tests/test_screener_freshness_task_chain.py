@@ -139,10 +139,21 @@ def _live_repository(tmp_path: Path, monkeypatch):
 def test_e01_real_action_real_eod_publish_and_read(tmp_path: Path, monkeypatch) -> None:
     from app.services.eod_limited import worker, store
     from app.services.research_eod_v1.calendar_asof import last_complete_eod_session
+    from app.services.research_eod_v1.fixtures import make_series
 
     repository, token = _live_repository(tmp_path, monkeypatch)
     session = last_complete_eod_session(datetime.now(timezone.utc))
     panel = worker.build_synthetic_panel(end=session)
+    # Keep the six theme candidates, with enough additional reference stocks
+    # for the default v1.4 G1 gate. Funds cannot fill this stock-only reference.
+    dates = panel["SPY"].dates
+    step = np.arange(len(dates), dtype=float)
+    for index in range(24):
+        sid = f"REFERENCE{index:02}"
+        # Varied, declining price paths provide a non-degenerate comparison
+        # pool while the original candidates retain their existing price paths.
+        close = 100.0 - (.04 + .001 * index) * step + 6.0 * np.sin(2 * np.pi * step / (13 + index % 7))
+        panel[sid] = make_series(sid, dates, close, theme_ids=("all_market_stocks",))
     runs = []
 
     def real_eod_with_labeled_fixture(**kwargs):
@@ -180,6 +191,9 @@ def test_e01_real_action_real_eod_publish_and_read(tmp_path: Path, monkeypatch) 
         assert result.details["count"] == 9
         assert len(runs) == 1
         assert store.snapshot_path(tmp_path).is_file()
+        scored = store.read_variant("balanced", "mid", root=tmp_path)
+        assert scored["watch_list"]
+        assert all(row["atr_reference_n"] == 30 for row in scored["watch_list"])
         completion = result.details["action_completions"][0]
         repository.finish_actions(
             "test-worker", token, [action["request_id"]], succeeded=completion["succeeded"],

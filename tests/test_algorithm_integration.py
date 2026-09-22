@@ -97,7 +97,7 @@ def test_strength_scan_replaces_existing_default_snapshot(
     )
     assert result["rows"][0]["ticker"] == "NVDA"
     assert result["effective_algorithm"] == EOD_LIMITED_V1
-    assert result["algorithm_version"] == "eod-limited-v1.3"
+    assert result["algorithm_version"] == "eod-limited-v1.4"
     assert result["score_basis"] == "price_only_diagnostic + m1_consensus"
     assert strength._strength_snapshot_path(dict(strength.DEFAULT_STRENGTH_SCAN_PARAMETERS)) == path
 
