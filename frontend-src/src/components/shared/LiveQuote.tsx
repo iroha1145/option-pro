@@ -2,7 +2,7 @@ import { t } from '../../i18n/core.ts';
 import { useLiveQuote, useQuoteStatus } from '@/hooks/useLiveQuote';
 import { useTickFlash } from '@/hooks/useTickFlash';
 import { displayedQuoteLabel, fallbackQuoteLabel, liveQuoteChangePct, preferLiveQuote, visibleQuoteDate, type FallbackQuoteKind } from '@/lib/liveQuotes';
-import { fmtPrice } from '@/lib/format';
+import { fmtPrice, fmtTimeHHMMSS } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import NumberTicker from './NumberTicker';
 import ChangeBadge from './ChangeBadge';
@@ -14,7 +14,7 @@ export function QuoteIndicator({ symbol, className, usingFallback = false, fallb
   const at = usingFallback ? fallbackAt : preferLiveQuote(quote, false) ? quote?.trade_at : null;
   const day = visibleQuoteDate(at);
   const stamp = day && at && !/^\d{4}-\d{2}-\d{2}$/.test(at.trim())
-    ? new Date(at).toLocaleTimeString('zh-CN', { hour12: false, timeZone: 'America/New_York' })
+    ? fmtTimeHHMMSS(new Date(at))
     : null;
   const label = quote
     ? displayedQuoteLabel(quote, status, !usingFallback, fallbackAt, fallbackKind)
