@@ -27,6 +27,6 @@ jobs:
           name: screener-gate-review4
           path: |
             scripts/research/deliverables/screener_gate_review4_compact.zip
-            scripts/research/deliverables/screener_gate_review4_checkpoints.zip
+            scripts/research/deliverables/screener_gate_review5_summary.json
           if-no-files-found: error
           retention-days: 90

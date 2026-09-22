@@ -1,0 +1,116 @@
+{
+  "review_head_at_review5_start": "b3197ada780720e3ed260ebc55a1b526c4f550d2",
+  "statistics_blob_before_repair": "9ed1927ea3104e83500bdf096f8edf73bee1471e",
+  "repair_script": "repair_statistics_boundaries.py was not attached; edits were applied to that blob",
+  "selection_patch": "selection_policy.patch was not attached; exclusive buckets were reconstructed from REVIEW(5)",
+  "full_ci_run": "35678675588",
+  "full_ci_url": "https://github.com/iroha1145/option-pro/actions/runs/35678675588",
+  "full_ci_conclusion": "success",
+  "artifact_run": "35678675540",
+  "artifact_id": "10673833986",
+  "artifact_url": "https://github.com/iroha1145/option-pro/actions/runs/35678675540/artifacts/10673833986",
+  "compact_sha256": "24bce993651639f7b3ef6ea36440ed78b5a1896701f6f18948b99c00fed09656",
+  "checkpoints_sha256": "85e01632d1871756860a0e78ba5d66ffa14b018f7fbcdac1a0ba1f2ea2795b61",
+  "checkpoints_removed_from_git": true,
+  "bars_sha256": "1e48727adbd6abc055f6b9c759d371c07ead1fbc177d4b13deadbdc5d68ae589",
+  "return_max_abs_diff": 0.0,
+  "return_values_compared": 37710,
+  "return_compare_tolerance": 1e-12,
+  "bootstrap_rerun": false,
+  "screening_rerun": false,
+  "path_pack": "return_pack_path_v3",
+  "h20_top20_path_delta": [
+    {
+      "comparison": "G2_extension_discovery - G1_stock_reference",
+      "side": "close",
+      "mae_old": -0.060194066076690145,
+      "mae_new": -0.06048734313819246,
+      "mae_delta": -0.00029327706150231864,
+      "mfe_old": 0.06136226213980907,
+      "mfe_new": 0.06170334531547935,
+      "mfe_delta": 0.00034108317567028285,
+      "mae_old_n": 560,
+      "mae_new_n": 560
+    },
+    {
+      "comparison": "G2_extension_discovery - G1_stock_reference",
+      "side": "open",
+      "mae_old": -0.05994696108920622,
+      "mae_new": -0.06017642924613215,
+      "mae_delta": -0.00022946815692593409,
+      "mfe_old": 0.06165288144480545,
+      "mfe_new": 0.061926835678849074,
+      "mfe_delta": 0.0002739542340436246,
+      "mae_old_n": 560,
+      "mae_new_n": 560
+    },
+    {
+      "comparison": "G3_risk_discovery - G2_extension_discovery",
+      "side": "close",
+      "mae_old": -0.062453332220228905,
+      "mae_new": -0.06276489606872075,
+      "mae_delta": -0.00031156384849184704,
+      "mfe_old": 0.0634415784593972,
+      "mfe_new": 0.06380504858999615,
+      "mfe_delta": 0.00036347013059895295,
+      "mae_old_n": 560,
+      "mae_new_n": 560
+    },
+    {
+      "comparison": "G3_risk_discovery - G2_extension_discovery",
+      "side": "open",
+      "mae_old": -0.062227531904135006,
+      "mae_new": -0.062458213915876436,
+      "mae_delta": -0.00023068201174143016,
+      "mfe_old": 0.0637124747848976,
+      "mfe_new": 0.06398595110342738,
+      "mfe_delta": 0.0002734763185297806,
+      "mae_old_n": 560,
+      "mae_new_n": 560
+    },
+    {
+      "comparison": "G1_stock_reference - B0_current",
+      "side": "close",
+      "mae_old": -0.05971964467295665,
+      "mae_new": -0.06005178350771916,
+      "mae_delta": -0.00033213883476251177,
+      "mfe_old": 0.06089768580513293,
+      "mfe_new": 0.06123659513201753,
+      "mfe_delta": 0.00033890932688459413,
+      "mae_old_n": 560,
+      "mae_new_n": 560
+    },
+    {
+      "comparison": "G1_stock_reference - B0_current",
+      "side": "open",
+      "mae_old": -0.05963948216321482,
+      "mae_new": -0.0598544837670321,
+      "mae_delta": -0.00021500160381728028,
+      "mfe_old": 0.061000828366669084,
+      "mfe_new": 0.061277601725828544,
+      "mfe_delta": 0.0002767733591594601,
+      "mae_old_n": 560,
+      "mae_new_n": 560
+    }
+  ],
+  "bucket_counts": {
+    "checkpoints": 562,
+    "technical_candidates": 5339,
+    "extension_watch": 2716,
+    "high_volatility_watch": 272,
+    "mean_counts": {
+      "technical_candidates": 9.5,
+      "extension_watch": 4.832740213523132,
+      "high_volatility_watch": 0.48398576512455516
+    },
+    "no_duplicate_or_unqualified_promotion": true,
+    "input_unchanged": true,
+    "empty_primary_days": [
+      "2022-09-23",
+      "2022-09-26"
+    ],
+    "market_performance_replayed": false
+  },
+  "full_market_frozen_cache": "not present on this machine; nine-view full-market replay was not run and was not downloaded",
+  "shadow_note": "#185 baseline/track_atr/entry_state/raw_momentum are not G1/G2/G3"
+}
