@@ -576,7 +576,6 @@ export default function LeadBigCard({ ev: initialEvent, flash, locate, onOpen, d
   const [detailRetry, setDetailRetry] = useState(0);
   useEffect(() => {
     let alive = true;
-    setDetail({ id: ev.event_id, ev: null, failed: false });
     breakoutsApi
       .eventDetail(ev.event_id)
       .then((d) => {
@@ -644,7 +643,10 @@ export default function LeadBigCard({ ev: initialEvent, flash, locate, onOpen, d
         <div role="status" className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-warn-600/25 bg-warn-50 px-3 py-2 text-caption text-warn-600">
           <Icon name="flag" size={13} />
           <span>{t('补充详情暂时读不到，当前显示基础信号。')}</span>
-          <button type="button" onClick={() => setDetailRetry((value) => value + 1)} className="font-medium underline underline-offset-2">
+          <button type="button" onClick={() => {
+            setDetail({ id: ev.event_id, ev: null, failed: false });
+            setDetailRetry((value) => value + 1);
+          }} className="font-medium underline underline-offset-2">
             {t('重试')}
           </button>
         </div>
