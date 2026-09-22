@@ -286,7 +286,7 @@ def test_worker_passes_bar_only_and_live_carryover_separately(seeded):
         captured.update(kwargs)
         return {"events": [], "realtime_events": kwargs["realtime_events"]}
 
-    worker = BreakoutWorker(settings, repo, scan_service=capture)
+    worker = BreakoutWorker(settings, repo, scan_service=SimpleNamespace(build_snapshot=capture))
     result = asyncio.run(worker._invoke_scan_service(
         SimpleNamespace(candidates=[]), MarketClock().snapshot(AT + timedelta(seconds=20)),
     ))

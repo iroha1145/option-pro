@@ -127,7 +127,7 @@ class ScanService:
     def __init__(self):
         self.calls = 0
 
-    async def build_snapshot(self, discovery, as_of):
+    async def build_snapshot(self, discovery, as_of, **_kwargs):
         self.calls += 1
         return {
             "events": [
@@ -170,6 +170,7 @@ class CarryoverRecordingService:
         previous_events,
         expired_due_event_ids,
         carryover_has_more,
+        **_kwargs,
     ):
         self.calls += 1
         self.discovery_candidates = list(discovery.candidates)
@@ -485,6 +486,52 @@ def test_once_injects_provider_and_service_then_survives_restart(tmp_path):
     health = check_breakout_health(settings, restarted, now=NOW)
     assert health.healthy is True
     assert health.status == "active"
+
+
+def test_scan_service_uses_explicit_build_snapshot_and_accepts_sync_result(tmp_path):
+    settings = Settings(tmp_path / "breakouts.db")
+    calls = []
+
+    class SynchronousService:
+        def build_snapshot(self, **kwargs):
+            calls.append(kwargs)
+            return {"events": []}
+
+    result = asyncio.run(BreakoutWorker(
+        settings,
+        BreakoutRepository(settings.db_path),
+        provider=Provider(),
+        scan_service=SynchronousService(),
+        clock=MarketClock(now=lambda: NOW),
+        owner_id="sync-service",
+    ).run_once())
+    assert result["status"] == "completed"
+    assert result["event_count"] == 0
+    assert len(calls) == 1
+    assert calls[0]["discovery"] is calls[0]["discovery_snapshot"]
+    assert calls[0]["clock_snapshot"].as_of == NOW
+    assert calls[0]["as_of"] == NOW
+    assert calls[0]["previous_events"] == {}
+    assert calls[0]["expired_due_event_ids"] == frozenset()
+
+
+def test_scan_service_does_not_guess_legacy_method_names(tmp_path):
+    settings = Settings(tmp_path / "breakouts.db")
+
+    class LegacyService:
+        async def run_scan(self, **_kwargs):
+            return {"events": []}
+
+    result = asyncio.run(BreakoutWorker(
+        settings,
+        BreakoutRepository(settings.db_path),
+        provider=Provider(),
+        scan_service=LegacyService(),
+        clock=MarketClock(now=lambda: NOW),
+        owner_id="legacy-service",
+    ).run_once())
+    assert result["status"] == "degraded"
+    assert result["error_code"] == "scan_failed"
 
 
 def test_published_scan_survives_t1_persistence_failure(tmp_path, monkeypatch, caplog):

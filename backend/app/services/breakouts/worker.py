@@ -211,16 +211,6 @@ class BreakoutWorker:
         service = self.scan_service
         if service is None:
             return None
-        target = None
-        for name in ("build_snapshot", "run_scan", "scan", "process"):
-            method = getattr(service, name, None)
-            if callable(method):
-                target = method
-                break
-        if target is None and callable(service):
-            target = service
-        if target is None:
-            raise TypeError("scan_service must be callable")
 
         candidates = list(getattr(discovery, "candidates", ()) or ())
         carryover_limit = min(
@@ -280,29 +270,7 @@ class BreakoutWorker:
             "trading_date": clock_snapshot.trading_date,
             "settings": self.settings,
         }
-        signature = inspect.signature(target)
-        accepts_kwargs = any(
-            parameter.kind is inspect.Parameter.VAR_KEYWORD
-            for parameter in signature.parameters.values()
-        )
-        kwargs = {
-            name: value
-            for name, value in available.items()
-            if accepts_kwargs or name in signature.parameters
-        }
-        required_positional = [
-            parameter
-            for parameter in signature.parameters.values()
-            if parameter.kind
-            in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
-            and parameter.default is inspect.Parameter.empty
-            and parameter.name not in kwargs
-        ]
-        if required_positional:
-            if len(required_positional) != 1:
-                raise TypeError("scan_service has unsupported required parameters")
-            return await _maybe_await(target(discovery, **kwargs))
-        return await _maybe_await(target(**kwargs))
+        return await _maybe_await(service.build_snapshot(**available))
 
     @staticmethod
     def _publication_payload(discovery: Any, service_result: Any) -> dict[str, Any]:
