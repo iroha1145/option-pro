@@ -15,6 +15,10 @@ from pathlib import Path
 from typing import Any, Mapping
 from zoneinfo import ZoneInfo
 
+from app.json_validation import (
+    reject_duplicate_json_keys as _reject_duplicate_json_keys,
+    reject_non_finite_json as _reject_non_finite_json,
+)
 from app.data_paths import get_data_paths
 from app.services.snapshot_read_cache import FingerprintedFileCache
 
@@ -316,19 +320,6 @@ def breakout_lead_chart_parameters(ticker: str) -> dict[str, Any]:
         "range": "1d",
         "adjustment": "raw",
     }
-
-
-def _reject_duplicate_json_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-    result: dict[str, Any] = {}
-    for key, value in pairs:
-        if key in result:
-            raise ValueError(f"duplicate JSON key: {key}")
-        result[key] = value
-    return result
-
-
-def _reject_non_finite_json(value: str) -> None:
-    raise ValueError(f"non-finite JSON value: {value}")
 
 
 def _finite_number(value: Any, *, minimum: float | None = None) -> bool:

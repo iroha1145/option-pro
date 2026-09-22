@@ -27,7 +27,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
-from app.access import _b64decode, _b64encode  # shared encoding with owner hashes
+from app.owner_password import _b64decode, _b64encode
 
 _PBKDF2_ITERATIONS = 240_000
 _PASSWORD_HASH_LENGTH = 32

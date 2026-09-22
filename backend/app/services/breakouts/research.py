@@ -27,6 +27,7 @@ from .research_validation import (
     DEFAULT_FORWARD_HORIZONS,
     PRICE_DATA_SCHEMA_VERSION,
     RESEARCH_VALIDATION_VERSION,
+    _pearson as _raw_pearson,
     run_range_persistence_validation,
 )
 
@@ -305,18 +306,8 @@ def _pearson(pairs: Sequence[tuple[float, float]]) -> float | None:
         return None
     left = [item[0] for item in pairs]
     right = [item[1] for item in pairs]
-    left_mean = fmean(left)
-    right_mean = fmean(right)
-    numerator = sum(
-        (left_value - left_mean) * (right_value - right_mean)
-        for left_value, right_value in pairs
-    )
-    left_scale = math.sqrt(sum((value - left_mean) ** 2 for value in left))
-    right_scale = math.sqrt(sum((value - right_mean) ** 2 for value in right))
-    denominator = left_scale * right_scale
-    if denominator == 0:
-        return None
-    return round(numerator / denominator, 6)
+    value = _raw_pearson(left, right)
+    return round(value, 6) if value is not None else None
 
 
 def summarize_shadows(records: Iterable[Mapping[str, Any]]) -> dict[str, Any]:

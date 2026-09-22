@@ -25,6 +25,11 @@ import httpx
 import yfinance as yf
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 
+from app.json_validation import (
+    reject_duplicate_json_keys as _reject_duplicate_json_keys,
+    reject_non_finite_json as _reject_non_finite_json,
+    is_finite_json_tree as _is_finite_json_tree,
+)
 from app.access import (
     current_request_is_owner,
     public_snapshot_unavailable,
@@ -1495,24 +1500,6 @@ def _fetch_watchlist_provider_previous_closes(
     return previous_closes
 
 
-def _is_finite_json_tree(value: Any, *, depth: int = 0) -> bool:
-    if depth > 64:
-        return False
-    if value is None or isinstance(value, (bool, str, int)):
-        return True
-    if isinstance(value, float):
-        return math.isfinite(value)
-    if isinstance(value, list):
-        return all(_is_finite_json_tree(item, depth=depth + 1) for item in value)
-    if isinstance(value, dict):
-        return all(
-            isinstance(key, str)
-            and _is_finite_json_tree(item, depth=depth + 1)
-            for key, item in value.items()
-        )
-    return False
-
-
 def _is_finite_number(value: Any, *, positive: bool = False) -> bool:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return False
@@ -1589,19 +1576,6 @@ def _clean_watchlist_snapshot_payload(value: Any) -> dict[str, Any] | None:
     if len(tickers) != succeeded:
         return None
     return cleaned
-
-
-def _reject_duplicate_json_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-    result: dict[str, Any] = {}
-    for key, value in pairs:
-        if key in result:
-            raise ValueError(f"duplicate JSON key: {key}")
-        result[key] = value
-    return result
-
-
-def _reject_non_finite_json(value: str) -> None:
-    raise ValueError(f"non-finite JSON value: {value}")
 
 
 def _read_watchlist_snapshot(

@@ -185,6 +185,7 @@ def _copy_deployment_validator(root: Path) -> None:
     for relative in (
         "__init__.py",
         "access.py",
+        "owner_password.py",
         "config.py",
         "data_paths.py",
         "deployment_boundary.py",

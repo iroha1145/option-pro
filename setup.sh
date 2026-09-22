@@ -76,22 +76,15 @@ personal_access_mode() {
 }
 
 hash_owner_password() {
-    printf '%s' "$1" | python3 -c '
-import base64
-import hashlib
-import secrets
+    printf '%s' "$1" | PYTHONPATH="${ROOT_DIR}/backend${PYTHONPATH:+:${PYTHONPATH}}" python3 -c '
 import sys
+
+from app.owner_password import hash_owner_password
 
 password = sys.stdin.read()
 if len(password) < 12 or any(item in password for item in ("\0", "\r", "\n")):
     raise SystemExit("Owner password must contain at least 12 characters")
-salt = secrets.token_bytes(16)
-iterations = 600_000
-digest = hashlib.pbkdf2_hmac(
-    "sha256", password.encode("utf-8"), salt, iterations, dklen=32
-)
-encode = lambda value: base64.urlsafe_b64encode(value).decode("ascii").rstrip("=")
-print(f"pbkdf2_sha256${iterations}${encode(salt)}${encode(digest)}")
+print(hash_owner_password(password))
 '
 }
 

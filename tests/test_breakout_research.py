@@ -360,3 +360,21 @@ def test_validation_export_refuses_to_overwrite_price_input(research_database, t
 
     with pytest.raises(ValueError, match="must not overwrite"):
         export_walk_forward_validation(path, price_path, price_path)
+
+
+def test_shadow_pearson_preserves_six_digits_and_pairwise_filtering():
+    records = [
+        {"production_score": 1.0, "hypothetical_score": 2.0},
+        {"production_score": 3.0, "hypothetical_score": 8.0},
+        {"production_score": 5.0, "hypothetical_score": 4.0},
+        {"production_score": None, "hypothetical_score": 100.0},
+        {"production_score": True, "hypothetical_score": 100.0},
+        {"production_score": 2.0, "hypothetical_score": float("nan")},
+    ]
+    summary = summarize_shadows(records)
+    assert summary["score_comparison"]["paired_count"] == 3
+    assert summary["score_comparison"]["production_hypothetical_pearson"] == .327327
+    correlations = build_shadow_correlations(records, fields=("production_score", "hypothetical_score"))
+    pair = next(row for row in correlations["pairs"] if row["left_field"] != row["right_field"])
+    assert pair["paired_count"] == 3
+    assert pair["pearson"] == .327327

@@ -14,6 +14,10 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 
+from app.json_validation import (
+    reject_duplicate_json_keys as _reject_duplicate_json_keys,
+    reject_non_finite_json as _reject_non_finite_json,
+)
 from app.access import (
     public_snapshot_unavailable,
     require_same_origin_request,
@@ -327,21 +331,6 @@ def _sector_iv_snapshot_path(sector_id: str) -> Path:
     if sector_id not in SECTORS:
         raise ValueError("sector snapshot id is invalid")
     return _SECTOR_IV_SNAPSHOT_DIR / f"{sector_id}.json"
-
-
-def _reject_duplicate_json_keys(
-    pairs: list[tuple[str, Any]],
-) -> dict[str, Any]:
-    output: dict[str, Any] = {}
-    for key, value in pairs:
-        if key in output:
-            raise ValueError(f"duplicate JSON key: {key}")
-        output[key] = value
-    return output
-
-
-def _reject_non_finite_json(value: str) -> None:
-    raise ValueError(f"non-finite JSON value: {value}")
 
 
 def _clean_sector_iv_snapshot_payload(
