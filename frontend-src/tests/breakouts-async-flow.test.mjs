@@ -82,7 +82,6 @@ function harness() {
       state.historyLoadingMore = value;
       scope.historyLoadingMore = value;
     },
-    asFullEvent: (item) => item,
     breakoutsApi: {
       events: async (query) => {
         state.eventRequests.push(query);
