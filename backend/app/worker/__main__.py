@@ -128,8 +128,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 def configure_logging() -> None:
     logging.basicConfig(level=logging.INFO)
-    # httpx logs every request URL at INFO. FRED and FMP only accept their API
-    # keys as query parameters, so those lines would put secrets in the logs.
+    # httpx logs every request URL at INFO. FRED takes its API key only as a
+    # query parameter and the FMP calls pass theirs the same way, so those
+    # lines would put secrets in the logs.
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
