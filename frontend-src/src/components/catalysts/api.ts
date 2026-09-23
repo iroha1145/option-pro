@@ -123,7 +123,9 @@ function nAnalysisStatus(v: unknown): CatalystNewsItem['analysisStatus'] {
   // 个人版匿名态只回 not_requested|completed：not_requested 视作「未分析」
   if (s === 'not_requested' || s === 'preparing') return 'pending';
   if (s === 'processing' || s === 'running' || s === 'cancel_requested') return 'in_progress';
-  if (s === 'canceled') return 'failed';
+  // 已取消与预算受限都没有分析结果，列表按「未分析」显示，抽屉照常给出重新发起入口。
+  // 不归入 failed：失败态会显示「分析结果未通过检查」，与这两种原因不符。
+  if (s === 'cancelled' || s === 'budget_blocked') return 'pending';
   if (s === 'queued' || s === 'in_progress' || s === 'completed' || s === 'insufficient_context' || s === 'failed' || s === 'pending') return s;
   return 'pending';
 }
