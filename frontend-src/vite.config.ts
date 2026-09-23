@@ -2,7 +2,7 @@ import fs from "fs"
 import path from "path"
 import react from "@vitejs/plugin-react"
 import ts from "typescript"
-import { defineConfig, type Plugin } from "vite"
+import { defineConfig, normalizePath, type Plugin } from "vite"
 
 const MOCK_MODULE = /[\\/]src[\\/]mocks[\\/][^\\/]+\.ts$/
 
@@ -98,14 +98,17 @@ function stripMocksFromLiveBuild(live: boolean): Plugin {
   }
 }
 
-const EPS_CHART_MODULE = path.resolve(__dirname, 'src/components/earnings/EpsHatchChart.tsx');
+// Rollup module ids use forward slashes on every platform; path.resolve gives
+// backslashes on Windows, where these ids then never matched and the build failed.
+const fromRoot = (file: string) => normalizePath(path.resolve(__dirname, file));
+const EPS_CHART_MODULE = fromRoot('src/components/earnings/EpsHatchChart.tsx');
 const EPS_CHART_URL = 'virtual:eps-chart-url';
 const RESOLVED_EPS_CHART_URL = `\0${EPS_CHART_URL}`;
 const CHART_MODULES = new Set([
   EPS_CHART_MODULE,
-  path.resolve(__dirname, 'src/components/charts/ReactECharts.tsx'),
-  path.resolve(__dirname, 'src/lib/chart.ts'),
-  path.resolve(__dirname, 'src/lib/chartFonts.ts'),
+  fromRoot('src/components/charts/ReactECharts.tsx'),
+  fromRoot('src/lib/chart.ts'),
+  fromRoot('src/lib/chartFonts.ts'),
 ]);
 
 /** Keep all not-yet-loaded chart dependencies under the same retryable URL. */
@@ -140,8 +143,8 @@ function applicationManualChunks() {
         visit(start);
         return seen;
       };
-      const entry = closure(path.resolve(__dirname, 'src/main.tsx'));
-      shell = new Set([...closure(path.resolve(__dirname, 'src/App.tsx'))]
+      const entry = closure(fromRoot('src/main.tsx'));
+      shell = new Set([...closure(fromRoot('src/App.tsx'))]
         .filter((moduleId) => !entry.has(moduleId)));
     }
     if (shell.has(id) && !/\.(?:css|scss|sass|less|styl)(?:\?|$)/.test(id)) return 'app-shell';
