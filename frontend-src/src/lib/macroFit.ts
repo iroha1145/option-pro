@@ -50,12 +50,6 @@ export function macroToneOf(
   return macroTone(score);
 }
 
-export const MACRO_TONE_CLASS: Record<MacroTone, string> = {
-  tailwind: 'border-up-600/30 bg-up-50 text-up-700',
-  neutral: 'border-line-strong bg-card-warm text-ink-500',
-  headwind: 'border-down-600/30 bg-down-50 text-down-700',
-};
-
 /**
  * 技术 × 宏观的二维状态。
  *

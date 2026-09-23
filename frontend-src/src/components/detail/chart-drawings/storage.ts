@@ -125,13 +125,3 @@ export function saveDrawings(
     return false;
   }
 }
-
-export function clearDrawings(key: string, storage?: StorageLike | null): void {
-  const store = storage ?? (typeof localStorage === 'undefined' ? null : localStorage);
-  if (!store) return;
-  try {
-    store.removeItem(key);
-  } catch {
-    /* ignore */
-  }
-}

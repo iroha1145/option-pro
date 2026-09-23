@@ -40,10 +40,6 @@ export function overlayTiming(
   };
 }
 
-export function overlayCloseTimeoutMs(cssText: string, closeVar: string, fallback: number): number {
-  return parseDurationMs(readCssVar(cssText, closeVar) ?? '', fallback);
-}
-
 export function overlayClassName(phase: OverlayPhase): string {
   if (phase === 'open') return 'is-open';
   if (phase === 'closing') return 'is-closing';

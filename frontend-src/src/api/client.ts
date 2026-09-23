@@ -131,10 +131,6 @@ function bootPrefetchRoot(): { __OPTIX_PREFETCH__?: BootPrefetchBag } {
 
 let prefetchGeneration = 0;
 
-export function prefetchGenerationId(): number {
-  return prefetchGeneration;
-}
-
 function isPromiseLike(value: unknown): value is Promise<Response> {
   return typeof value === 'object' && value !== null && typeof (value as Promise<Response>).then === 'function';
 }

@@ -61,14 +61,6 @@ export function resolveAnchor(
   return resolveBarKey(bars, anchor.barKey, range);
 }
 
-export function isAnchorResolved(
-  bars: TimedBar[],
-  anchor: DrawingAnchor,
-  range: ChartRange,
-): boolean {
-  return resolveAnchor(bars, anchor, range) >= 0;
-}
-
 /**
  * Future blank area (x beyond the last bar) must not snap onto the last
  * historical candle. Returns null when the pointer is outside the series.
