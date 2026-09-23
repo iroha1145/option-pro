@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import sqlite3
 import subprocess
@@ -21,7 +22,7 @@ from pydantic import SecretStr
 from app import runtime_environment
 from app.access import request_owner_access_context
 from app.worker import tasks as worker_tasks
-from app.worker.__main__ import _load_worker_settings, main
+from app.worker.__main__ import _load_worker_settings, configure_logging, main
 from app.worker.lock import ProcessFileLock
 from app.worker.runtime import TaskResult, TaskSpec, WorkerSupervisor
 from app.worker.state import WorkerLeaseLost, WorkerStateRepository
@@ -1476,6 +1477,26 @@ def test_new_worker_inventory_removes_old_status_rows_after_acquire(
     assert [item["task_name"] for item in repository.task_states()] == [
         "breakout"
     ]
+
+
+def test_worker_logging_keeps_query_string_api_keys_out_of_logs(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    httpx_logger = logging.getLogger("httpx")
+    previous_level = httpx_logger.level
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, json=[]))
+    try:
+        configure_logging()
+        with caplog.at_level(logging.INFO):
+            with httpx.Client(transport=transport) as client:
+                client.get(
+                    "https://api.stlouisfed.org/fred/series/observations",
+                    params={"api_key": "fred-key-sentinel"},
+                )
+    finally:
+        httpx_logger.setLevel(previous_level)
+
+    assert "fred-key-sentinel" not in caplog.text
 
 
 def test_graceful_forever_shutdown_clears_current_task_status(

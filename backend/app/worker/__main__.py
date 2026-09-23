@@ -126,9 +126,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
 
 
-if __name__ == "__main__":
+def configure_logging() -> None:
     logging.basicConfig(level=logging.INFO)
+    # httpx logs every request URL at INFO. FRED and FMP only accept their API
+    # keys as query parameters, so those lines would put secrets in the logs.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+
+
+if __name__ == "__main__":
+    configure_logging()
     raise SystemExit(main())
 
 
-__all__ = ["main"]
+__all__ = ["configure_logging", "main"]
