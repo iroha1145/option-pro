@@ -12,7 +12,7 @@ const configPath = path.resolve(here, '../tsconfig.app.json');
 test('the strict type contract rejects using missing radar data as measured values', () => {
   const config = ts.readConfigFile(configPath, ts.sys.readFile);
   assert.equal(config.error, undefined);
-  const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, path.dirname(configPath));
+  const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, path.dirname(configPath), undefined, configPath);
   const fixture = path.resolve(here, 'fixtures/breakout-null-contract.ts');
   const program = ts.createProgram([fixture], { ...parsed.options, noEmit: true, incremental: false });
   const diagnostics = ts.getPreEmitDiagnostics(program);

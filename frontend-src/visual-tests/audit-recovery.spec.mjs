@@ -135,6 +135,30 @@ test('lead signal keeps its base card when detail fails and retry fills the deta
   expect(state.errors).toEqual([]);
 });
 
+test('historical trigger prices stay distinct from the current quote in both stock panels', async ({ page }) => {
+  const state = await fixture(page);
+  const at = new Date().toISOString();
+  await page.route('**/api/breakouts/tickers/AAPL*', route => route.fulfill({ json: {
+    events: [84.51, null].map((eventPrice, index) => ({
+      event_id: `price-contract-${index}`, ticker: 'AAPL', event_at: at,
+      setup_type: 'DAILY_BASE_BREAKOUT', lifecycle_state: 'TRIGGERED',
+      event_price: eventPrice, current_price: 90,
+    })),
+  } }));
+  await page.goto('/stock/AAPL');
+  await expect(page.getByText('触发 84.51', { exact: true })).toBeVisible();
+  await expect(page.getByText('触发 —', { exact: true })).toBeVisible();
+  await expect(page.getByText('触发 90.00', { exact: true })).toHaveCount(0);
+  const sidebar = page.locator('div').filter({
+    has: page.getByRole('heading', { name: '相关突破事件', exact: true }),
+  }).last();
+  await expect(sidebar.locator('li')).toHaveCount(2);
+  await expect(sidebar.locator('li').nth(0)).toContainText('84.51');
+  await expect(sidebar.locator('li').nth(1)).toContainText('—');
+  await expect(sidebar).not.toContainText('90.00');
+  expect(state.errors).toEqual([]);
+});
+
 test('earnings featured companies follow account changes while the page stays mounted', async ({ page }) => {
   const state = await fixture(page);
   await page.goto('/earnings');

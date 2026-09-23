@@ -11,7 +11,7 @@ event.current_price.toFixed(2);
 // @ts-expect-error A missing score cannot be formatted as a measured zero.
 event.intrinsic_strength_score.toFixed(1);
 // @ts-expect-error A partial opening-range anchor has no support zone.
-event.support_zone.low;
+event.support_zone.low.toFixed(2);
 // @ts-expect-error Unknown worker health is distinct from healthy.
 const workerHealthy: boolean = status.worker.healthy;
 
