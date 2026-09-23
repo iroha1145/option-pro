@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { AccessProvider } from '../../src/hooks/useAccess';
 import { ToastProvider } from '../../src/components/Toast';
 import KlineChart from '../../src/components/detail/KlineChart';
+import { mapBar, ma20Of } from '../../src/api/modules/stocks';
 import { barFingerprint } from '../../src/components/detail/chart-drawings/analysis/mapBundle';
 import { quoteStore } from '../../src/lib/liveQuotes';
 import { useQuoteSymbols } from '../../src/hooks/useLiveQuote';
@@ -47,7 +48,7 @@ const analysis = {
     { id: 'range_persistence', label: '60日区间位置', kind: 'range', values: { position: values(i => 0.5 + 0.3 * Math.sin(i / 9)) } },
   ],
 };
-const technical = { data_through: through, last_bar: { closed: true, trade_date: through }, chart_analysis: analysis,
+const technical = { data_through: through, last_bar: { closed: true, trade_date: query.get('scenario') === 'old-technical' ? dates[100] : through }, chart_analysis: analysis,
   chart_overlays: { resistance_high: 236, base_status: 'active' } } as unknown as TechnicalStructure;
 localStorage.setItem('option-pro:chart-layers:v1:anonymous', JSON.stringify({
   version: 2, preset: 'custom', enabled: ['ma20', 'auto_patterns', 'support_resistance', 'macd', 'rsi', 'obv', 'clv', 'spy_rs', 'range_persistence'],
@@ -96,7 +97,7 @@ const monitor = setInterval(() => {
   }) as typeof chart.setOption;
 }, 20);
 window.addEventListener('pagehide', () => clearInterval(monitor));
-Object.assign(window, { indicatorTest: { getChart, bars, analysis, requests,
+Object.assign(window, { indicatorTest: { getChart, bars, analysis, requests, mapBar, ma20Of,
   counts: () => ({ fullUpdates, quoteUpdates }),
   resetCounts: () => { fullUpdates = 0; quoteUpdates = 0; },
   tick: (price: number, seq = 0) => {

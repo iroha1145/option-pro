@@ -53,6 +53,7 @@ import {
   fingerprintDiagnosis,
   fingerprintWindowOpts,
   closedBarsForFingerprint,
+  overlaysConsistentWithBars,
 } from './chart-drawings/analysis/mapBundle.ts';
 import { overlaysToMarks, overlaysToSeries, analysisLayout, panesToOption, type PanePlot } from './chart-drawings/analysis/overlaysToMarks.ts';
 import { loadLayerSettings, saveLayerSettings } from './chart-drawings/analysis/settings.ts';
@@ -77,26 +78,6 @@ import type { TechnicalStructure } from '@/api/types';
 
 type ChartMode = 'candle' | 'area';
 export type TechOverlays = TechnicalStructure['chart_overlays'];
-
-/**
- * 结构负载与当前图表 bars 是否同一份数据。
- *
- * 两者各有缓存（chart 10 分钟 / technical 10 分钟 + 各自的拉取快照通路），
- * 拉取或静默刷新后可能短暂错版本——把旧序列的阻力带画到新 K 线上，比暂时
- * 不画危险得多。锚点：结构声明的末根（last_bar，旧负载退 data_through）
- * 必须能在当前日线序列里找到，且落后不超过 2 根（未收盘末根 + 一个刷新周期）。
- */
-function overlaysConsistentWithBars(
-  technical: Pick<TechnicalStructure, 'last_bar' | 'data_through'> | null | undefined,
-  bars: { t: string; ext?: boolean }[],
-): boolean {
-  if (!technical) return false;
-  const anchor = technical.last_bar?.trade_date ?? technical.data_through;
-  if (!anchor) return true; // 更旧的负载没有锚点可校验，维持原行为
-  const days = bars.filter((b) => b.ext !== true).map((b) => b.t.slice(0, 10));
-  const position = days.lastIndexOf(anchor);
-  return position >= 0 && days.length - 1 - position <= 2;
-}
 
 /** 读回 ECharts 实例当前的 inside 缩放窗口（索引口径）。 */
 function readZoomWindow(chart: EChartsInstance, barCount: number): ZoomWindow | null {

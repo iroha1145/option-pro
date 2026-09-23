@@ -549,9 +549,9 @@ export interface BreakoutSignal {
   name: string;
   type: SignalType;
   label: string;
-  price: number;
-  changePct: number;
-  strengthScore: number;
+  price: number | null;
+  changePct: number | null;
+  strengthScore: number | null;
   at: string;
   summary: string;
 }
@@ -572,13 +572,99 @@ export interface BreakoutEvent {
   at: string;
   /** 事件价：盘前跳空等 setup 的契约 event_price 可为 null（无成交锚点） */
   price: number | null;
-  result: 'hit' | 'failed' | 'pending';
+  result: string;
 }
 export interface BreakoutEventDetail extends BreakoutEvent {
-  triggerPrice: number;
-  targetPrice: number;
-  invalidPrice: number;
+  triggerPrice: number | null;
+  targetPrice: number | null;
+  invalidPrice: number | null;
   evidence: string[];
+}
+
+export type BreakoutSession = 'premarket' | 'regular' | 'postmarket' | 'closed';
+export interface BreakoutPriceZone { low: number; high: number }
+export interface BreakoutRangePersistence {
+  trend: number;
+  hold: number;
+  volatility: number;
+  volume: number;
+  participation: number;
+}
+export interface BreakoutRangePersistenceLive {
+  kind: 'live';
+  value: number | null;
+  slope5d: number | null;
+  ratio10d: number | null;
+  selfPercentile: number | null;
+  globalPercentile: number | null;
+  sectorPercentile: number | null;
+  status: string;
+}
+
+/** Every field produced by normalizeBreakoutEvent, including absent market data. */
+export interface BreakoutEventFull extends BreakoutEventDetail, BreakoutSignal {
+  event_id: string;
+  state_version: number;
+  evidence_at: string | null;
+  trigger_source: string | null;
+  event_anchor: { kind: string | null; status: string | null } | null;
+  exchange: string | null;
+  sector: string;
+  session: BreakoutSession;
+  setup_type: string;
+  lifecycle_state: string;
+  event_at: string;
+  triggered_at: string | null;
+  first_seen_at: string | null;
+  last_seen_at: string | null;
+  event_age_seconds: number | null;
+  event_price: number | null;
+  current_price: number | null;
+  session_change_pct: number | null;
+  gap_pct: number | null;
+  rvol_time_of_day: number | null;
+  pivot_price: number | null;
+  target_price: number | null;
+  support_zone: BreakoutPriceZone | null;
+  resistance_zone: BreakoutPriceZone | null;
+  invalidation_price: number | null;
+  intrinsic_strength_score: number | null;
+  base_quality_score: number | null;
+  breakout_quality_score: number | null;
+  breakout_confirmation_score: number | null;
+  liquidity_quality_score: number | null;
+  chase_risk_score: number | null;
+  sector_fit_score: number | null;
+  market_fit_score: number | null;
+  alert_priority_score: number | null;
+  data_confidence_score: number | null;
+  macro_fit_score: number | null;
+  macro_tailwind: string | null;
+  macro_priority_adjustment_shadow: number | null;
+  alert_priority_macro_shadow: number | null;
+  macro_shadow_status: string | null;
+  macro_supporting_factors: import('@/lib/macroFit').MacroFitDriver[];
+  macro_opposing_factors: import('@/lib/macroFit').MacroFitDriver[];
+  range_persistence: BreakoutRangePersistence | BreakoutRangePersistenceLive | null;
+  contribution_breakdown: Record<string, number> | null;
+  configured_weights: unknown;
+  effective_weights: unknown;
+  transitions: { state: string; at: string; note?: string }[];
+  warnings: string[];
+  score_version: string | null;
+  market_shape: unknown;
+  versions?: unknown;
+  t1_status: string | null;
+  t1_priority: unknown;
+  summary: string;
+}
+
+export interface BreakoutStatusFull extends BreakoutStatus {
+  enabled: boolean;
+  worker: { healthy: boolean | null; heartbeat_at: string };
+  latest_completed_scan: { at: string; duration_ms: number; scanned: number; triggered: number } | null;
+  market_session: BreakoutSession | null;
+  next_session_at: string | null;
 }
 
 /* ---------- 板块 ---------- */

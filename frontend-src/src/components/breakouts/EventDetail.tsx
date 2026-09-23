@@ -42,8 +42,8 @@ const fin = (v: unknown): v is number => typeof v === 'number' && Number.isFinit
 
 /* ---------------- 支撑/阻力区带（live 区带可空 → 诚实空态） ---------------- */
 function ZoneBand({ ev }: { ev: BreakoutEventFull }) {
-  const sz = ev.support_zone as BreakoutEventFull['support_zone'] | null;
-  const rz = ev.resistance_zone as BreakoutEventFull['resistance_zone'] | null;
+  const sz = ev.support_zone;
+  const rz = ev.resistance_zone;
   if (!sz || !rz || !fin(sz.low) || !fin(sz.high) || !fin(rz.low) || !fin(rz.high) || !fin(ev.current_price)) {
     return (
       <p className="flex h-12 items-center justify-center rounded-md border border-line bg-card-warm text-caption text-ink-400">

@@ -181,7 +181,7 @@ const CURRENT_SPECS: { ticker: string; setup: string; lifecycle: string; minAgo:
 
 export function getBreakoutsCurrent(): BreakoutSignal[] {
   const now = Date.now();
-  const items: (BreakoutSignal & ContractFields)[] = CURRENT_SPECS.map((spec, i) => {
+  const items: (BreakoutSignal & ContractFields & { strengthScore: number })[] = CURRENT_SPECS.map((spec, i) => {
     const r = new Rng(77120 + i * 331);
     const d = getStockDetail(spec.ticker);
     const strength = Math.round(r.normal(78, 9, 58, 96));
@@ -243,13 +243,13 @@ let lastScanAt = Date.now() - 8 * 60_000;
 
 interface StatusContract extends BreakoutStatus {
   enabled: boolean;
-  worker: { healthy: boolean; heartbeat_at: string };
+  worker: { healthy: boolean | null; heartbeat_at: string };
   latest_completed_scan: { at: string; duration_ms: number; scanned: number; triggered: number } | null;
   market_session: BSession;
   next_session_at: string | null;
 }
 
-export function getBreakoutsStatus(): BreakoutStatus {
+export function getBreakoutsStatus(): StatusContract {
   const now = Date.now();
   /* 冷却结束自动进入下一轮扫描（mock 活体状态机） */
   if (scanWindowEnd === 0 && now > cooldownEndAt) {
@@ -364,11 +364,11 @@ export function getBreakoutEvents(page = 1, pageSize = 12): { items: BreakoutEve
   return { items: breakoutEvents.slice(start, start + pageSize), total: breakoutEvents.length, page };
 }
 
-export function getBreakoutEventDetail(id: string): BreakoutEventDetail {
+export function getBreakoutEventDetail(id: string): BreakoutEventDetail | BreakoutSignal {
   // 先查当日事件（bc-*），再查历史事件（be-*）；未命中按契约语义 404，不得错配其它事件
   const idOf = (x: unknown) => (x as { id?: string; event_id?: string });
   const cur = getBreakoutsCurrent().find((e) => idOf(e).event_id === id || idOf(e).id === id);
-  if (cur) return cur as unknown as BreakoutEventDetail;
+  if (cur) return cur;
   const found = breakoutEvents.find((e) => idOf(e).id === id || idOf(e).event_id === id);
   if (found) return found;
   throw new ApiError(404, __t('突破事件不存在'));

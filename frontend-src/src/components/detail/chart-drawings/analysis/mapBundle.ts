@@ -2,8 +2,26 @@
 
 import { layerIdForOverlay, type LayerSettings } from './settings.ts';
 import { sha256Hex } from './sha256.ts';
+import type { TechnicalStructure } from '@/api/types';
 
 export { sha256Hex };
+
+/**
+ * 技术结构和图表各有缓存，刷新时可能短暂错版本。旧点位画到新 K 线上会误导，
+ * 因此末根锚点必须存在于常规时段序列里，最多落后两根；旧负载没有锚点时
+ * 沿用原来的显示行为。
+ */
+export function overlaysConsistentWithBars(
+  technical: Pick<TechnicalStructure, 'last_bar' | 'data_through'> | null | undefined,
+  bars: { t: string; ext?: boolean }[],
+): boolean {
+  if (!technical) return false;
+  const anchor = technical.last_bar?.trade_date ?? technical.data_through;
+  if (!anchor) return true;
+  const days = bars.filter((bar) => bar.ext !== true).map((bar) => bar.t.slice(0, 10));
+  const position = days.lastIndexOf(anchor);
+  return position >= 0 && days.length - 1 - position <= 2;
+}
 
 export interface AnalysisAnchor {
   time: string;
