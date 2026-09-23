@@ -495,12 +495,13 @@ test('财报页面保留近期已公布结果并默认收纳长列表', () => {
   const list = fs.readFileSync(listSourcePath, 'utf8');
 
   // 滚动窗口与渐进裁切迁入 components/earnings/types.ts 的
-  // computeEarningsListState（重点/全部双模式与页面共用同一实现）。
+  // computeEarningsListState（重点/全部双模式与页面共用同一实现）。窗口边界由
+  // earnings-featured-mode.test.mjs 实际执行验证；分栏与滚动容器的样式类由
+  // mock-earnings-contract.spec 在 320/768/1536 宽度下验证，这里不锁类名。
   const typesSource = fs.readFileSync(
     path.join(path.dirname(listSourcePath), 'types.ts'),
     'utf8',
   );
-  assert.equal(typesSource.includes('distance >= -3 && distance <= 30'), true);
   // 选中某天 = 目录视图（展示顺序前缀截断，无空洞）；未选天 = 优先级采样摘要。
   assert.equal(typesSource.includes('? listItems.slice(0, Math.max(0, Math.floor(visibleLimit)))'), true);
   assert.equal(typesSource.includes(': prioritizeEarningsRows(listItems, visibleLimit)'), true);
@@ -510,10 +511,6 @@ test('财报页面保留近期已公布结果并默认收纳长列表', () => {
   assert.equal(page.includes("{t('显示更多 ·')} {Math.min(LIST_PAGE_SIZE"), true);
   assert.equal(page.includes("{t('收起至前')} {LIST_PAGE_SIZE} {t('条')}"), true);
   assert.equal(page.includes('row={selectedRow}'), true);
-  assert.equal(page.includes('xl:col-span-8'), true);
-  assert.equal(page.includes('xl:col-span-4'), true);
-  assert.equal(page.includes('xl:col-span-7'), false);
-  assert.equal(page.includes('xl:col-span-5'), false);
   const rightColumn = page.slice(page.indexOf('B3 AI 影响 + 低交互图表'));
   assert.equal(rightColumn.includes('<ImpactCard'), true);
   assert.equal(rightColumn.includes('<DeferredEpsChart'), true);
@@ -528,10 +525,6 @@ test('财报页面保留近期已公布结果并默认收纳长列表', () => {
   assert.equal(deferred.includes('setMounted(false)'), false);
   const refresh = fs.readFileSync(path.join(earningsComponentsPath, 'EarningsRefreshButton.tsx'), 'utf8');
   assert.equal(refresh.includes('useNow(cooldownUntil > 0 ? 1000 : 0)'), true);
-  assert.equal(list.includes('md:max-h-[min(72vh,880px)]'), true);
-  assert.equal(list.includes('md:overflow-y-auto'), true);
-  assert.equal(list.includes('sticky top-0'), true);
-  assert.equal(list.includes('2xl:grid-cols-['), true);
   assert.equal(list.includes('row.revEstimate * 1e6'), false);
   assert.equal(list.includes('fmtCompact(row.revEstimate)'), true);
 });
