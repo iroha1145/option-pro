@@ -1098,11 +1098,18 @@ class WorkerSupervisor:
                 await asyncio.gather(heartbeat, return_exceptions=True)
             if self._token is not None:
                 if not once and completed_normally and not self._lease_lost.is_set():
+                    # Rows of tasks that resume their stored schedule survive a
+                    # graceful stop; otherwise every deploy would restart them
+                    # immediately (the multi-GB backup this flag exists for).
                     await asyncio.to_thread(
                         self.repository.reconcile_task_status,
                         self.owner_id,
                         self._token,
-                        (),
+                        tuple(
+                            task.name
+                            for task in self.tasks
+                            if task.honor_persisted_schedule
+                        ),
                     )
                 await asyncio.to_thread(
                     self.repository.release,

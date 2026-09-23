@@ -3574,6 +3574,66 @@ def test_honor_persisted_schedule_skips_startup_run(tmp_path: Path) -> None:
     asyncio.run(scenario())
 
 
+def test_graceful_restart_keeps_the_persisted_schedule(tmp_path: Path) -> None:
+    """部署时的优雅停机不能抹掉维护任务的 next_run_at。"""
+
+    async def scenario() -> None:
+        repository = WorkerStateRepository(tmp_path / "graceful-sched.db")
+        calls = {"maintenance": 0, "breakout": 0}
+        ran = {name: asyncio.Event() for name in calls}
+
+        def runner(name: str):
+            async def run() -> TaskResult:
+                calls[name] += 1
+                ran[name].set()
+                return TaskResult(next_delay_seconds=3600)
+
+            return run
+
+        def supervisor(owner_id: str) -> WorkerSupervisor:
+            return WorkerSupervisor(
+                repository,
+                (
+                    TaskSpec(
+                        "maintenance",
+                        runner("maintenance"),
+                        21_600,
+                        honor_persisted_schedule=True,
+                    ),
+                    TaskSpec("breakout", runner("breakout"), 3600),
+                ),
+                owner_id=owner_id,
+                lease_seconds=5,
+                process_lock=ProcessFileLock(tmp_path / "graceful-sched.lock"),
+            )
+
+        async def run_until_scheduled(worker: WorkerSupervisor) -> None:
+            running = asyncio.create_task(worker.run_forever())
+            await asyncio.wait_for(ran["breakout"].wait(), timeout=5)
+            for _ in range(500):
+                scheduled = {
+                    item["task_name"]
+                    for item in repository.task_states()
+                    if item["next_run_at"]
+                }
+                if scheduled == set(calls):
+                    break
+                await asyncio.sleep(0.01)
+            worker.request_stop()
+            await asyncio.wait_for(running, timeout=5)
+
+        await run_until_scheduled(supervisor("graceful-sched-first"))
+        remaining = repository.task_states()
+        assert [item["task_name"] for item in remaining] == ["maintenance"]
+        assert remaining[0]["next_run_at"]
+
+        ran["breakout"].clear()
+        await run_until_scheduled(supervisor("graceful-sched-second"))
+        assert calls == {"maintenance": 1, "breakout": 2}
+
+    asyncio.run(scenario())
+
+
 def test_honor_persisted_schedule_runs_when_overdue_or_unseeded(
     tmp_path: Path,
 ) -> None:
