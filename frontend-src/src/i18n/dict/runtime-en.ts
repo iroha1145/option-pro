@@ -2118,6 +2118,8 @@ export const EN: Record<string, string> = {
   "任务状态待确认": "Task status needs confirmation",
   "正在重新查询原任务": "Retrying the same task",
   "继续查询原任务": "Resume checking this task",
+  "今日 Token 额度已用完，额度重置后再试": "Today’s token budget is used up. Try again after it resets.",
+  "手动分析功能当前未启用": "Manual analysis is currently turned off",
   "成交量": "Volume",
   "vs 昨收": "vs prev close",
   "登录状态已失效": "Session expired",

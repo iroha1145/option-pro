@@ -7,7 +7,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { isMock } from '@/api/client';
 import { optionsApi } from '@/api/modules/options';
-import { aiJobsApi } from '@/api/modules/ai-jobs';
+import { aiJobBlockedMessage, aiJobsApi } from '@/api/modules/ai-jobs';
 import { usePolling } from '@/hooks/usePolling';
 import { useRetryCountdown } from '@/hooks/useRetryCountdown';
 import { useAccess } from '@/hooks/useAccess';
@@ -286,8 +286,8 @@ function AiOptionInsight({
       )}
       {(job?.status === 'failed' || job?.status === 'cancelled') && (
         <p className="mt-2.5 text-caption text-ink-500">
-          {t('任务')}{job.status === 'failed' ? t('失败') : t('已取消')} ·{' '}
-          <button onClick={reset} className="font-medium text-ai-600">{t('重试')}</button>
+          {aiJobBlockedMessage(job) ?? <>{t('任务')}{job.status === 'failed' ? t('失败') : t('已取消')}</>} ·{' '}
+          <button onClick={reset} className="font-medium text-ai-600">{aiJobBlockedMessage(job) ? t('关闭') : t('重试')}</button>
           {job.status === 'failed' && job.errorDetail && (
             /* owner 排障线索（非 owner 后端置空不渲染）：命中的校验规则/字段 */
             <span className="mt-1 block break-all font-mono text-micro text-ink-400">
