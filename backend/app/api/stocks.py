@@ -53,6 +53,7 @@ from app.services.yfinance_batch import download_in_bounded_batches
 from app.services.market_calendar import early_close_minutes, is_trading_day
 from app.services.numeric import finite_number_or_none as _safe_number
 from app.services.symbols import quote_symbol
+from app.services.technical.indicators import rsi14
 from app.services.watchlist_trend import daily_trend
 from app.services.watchlist_scope import (
     DEFAULT_WATCHLIST_TICKERS,
@@ -2687,20 +2688,11 @@ async def _build_stock_signals(ticker: str) -> dict[str, Any]:
             close = hist["Close"]
             volume = hist["Volume"]
 
-            # RSI(14)
-            delta = close.diff()
-            gain = delta.clip(lower=0).rolling(14).mean()
-            loss = (-delta.clip(upper=0)).rolling(14).mean()
-            avg_gain = _safe_number(gain.iloc[-1])
-            avg_loss = _safe_number(loss.iloc[-1])
-            if avg_gain is None or avg_loss is None:
+            # RSI(14) with Wilder smoothing: the same value the chart's RSI pane
+            # plots (technical.indicators.rsi_series), not a plain rolling mean.
+            current_rsi = rsi14([float(value) for value in close.tolist()])
+            if current_rsi is None:
                 raise RuntimeError(f"RSI unavailable for {symbol}")
-            if avg_loss == 0:
-                current_rsi = 100.0 if avg_gain > 0 else 50.0
-            elif avg_gain == 0:
-                current_rsi = 0.0
-            else:
-                current_rsi = 100 - (100 / (1 + avg_gain / avg_loss))
 
             # MACD
             ema12 = close.ewm(span=12, adjust=False).mean()
