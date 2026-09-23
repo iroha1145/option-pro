@@ -31,6 +31,14 @@ config/migrated/
 config/secrets.env
 secrets.env
 secrets.env.bak.*
+# Interrupted writes leave plaintext secrets behind (setup.sh, personal_secrets.py).
+secrets.env.tmp.*
+.secrets.env.*.tmp
+machine.env.tmp.*
+# Manual backups from docs/personal-edition/pr2-migration.md hold database copies.
+/backups/
+# Playwright run state at the repository root.
+/test-results/
 machine.env
 machine.env.bak.*
 migration-report.json
