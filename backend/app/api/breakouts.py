@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 from app.access import current_request_is_owner, request_account_session
+from app.failure_diagnostics import record_fallback_failure
 from app.services.algorithm_diagnostics import record_radar_resolution
 from app.services.algorithm_modes import (
     PRODUCTION_ALGORITHM,
@@ -299,11 +300,13 @@ def _macro_reader() -> Any:
 
     try:
         from app.services.macro_conditions.linkage_reader import load_macro_fit_reader
-    except Exception:
+    except Exception as exc:
+        record_fallback_failure("breakouts_macro_reader_import", exc)
         return None
     try:
         return load_macro_fit_reader()
-    except Exception:
+    except Exception as exc:
+        record_fallback_failure("breakouts_macro_reader_load", exc)
         return None
 
 
@@ -340,7 +343,8 @@ def _macro_shadow(
             shadow_alert_priority_adjustment,
         )
         from app.services.sectors import primary_sector_id
-    except Exception:
+    except Exception as exc:
+        record_fallback_failure("breakouts_macro_shadow_import", exc, symbol=ticker)
         return {**blank, "macro_shadow_status": "unavailable"}
 
     sector_id = primary_sector_id(ticker)

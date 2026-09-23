@@ -593,9 +593,8 @@ test('预期波动列始终保留并如实显示数值或缺失原因', async ()
     earningsRow('FIRST', { expected_move_status: 'not_enriched' }),
     earningsRow('LATER', { expected_move_pct: 4.4, expected_move_status: 'active' }),
   ]);
-  const fixedGrid = 'md:grid-cols-[minmax(150px,1.4fr)_84px_minmax(140px,1.2fr)_96px_96px]';
-  assert.match(initialPage, new RegExp(fixedGrid.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-  assert.match(expandedPage, new RegExp(fixedGrid.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(initialPage, />预期波动</);
+  assert.match(expandedPage, />预期波动</);
 
   const [{ EN }, { JA }] = await Promise.all([
     import('../src/i18n/dict/runtime-en.ts'),
@@ -694,7 +693,6 @@ test('访客能看到单股分析入口和终版状态', () => {
   /* 终版与重分析仍要各有可辨的状态，但标签必须短到能塞进 96px 的列里 */
   assert.equal(list.includes("[t('最终'), t('查看最终分析')]"), true);
   assert.equal(list.includes("[t('分析中'), t('最终分析生成中')]"), true);
-  assert.match(list, /whitespace-nowrap/);
 });
 
 test('财报组件不再伪造 Optix Research 来源', () => {

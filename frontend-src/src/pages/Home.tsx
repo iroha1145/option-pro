@@ -29,6 +29,7 @@ import { usePolling } from '@/hooks/usePolling';
 import { useStockDataStatus } from '@/hooks/useStockDataStatus';
 import type { StockDataStatus } from '@/lib/stockDataStatus';
 import { quoteSymbol } from '@/lib/quoteSymbol';
+import { MARKET_LABEL, MARKET_TO_SESSION } from '@/lib/marketSession';
 import { useNow } from '@/hooks/useNow';
 import { cn } from '@/lib/utils';
 import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
@@ -49,20 +50,6 @@ import Sparkline from '@/components/charts/Sparkline';
 import Icon from '@/components/icons';
 import { pageRegionProps } from '@/lib/pageRegion';
 import { localeTag, t } from '../i18n/core.ts';
-
-const MARKET_TO_SESSION: Record<string, MarketSession> = {
-  open: 'regular',
-  premarket: 'premarket',
-  postmarket: 'afterhours',
-  closed: 'closed',
-};
-
-const SESSION_LABEL: Record<string, string> = {
-  open: t('盘中'),
-  premarket: t('盘前'),
-  postmarket: t('盘后'),
-  closed: t('休市'),
-};
 
 /* 财报日期块的月份缩写随界面语言走（en Aug / zh 8月 / ja 8月）；
    语言在页面加载期定型，模块级 formatter 与 t() 同口径 */
@@ -324,7 +311,7 @@ export default function Home() {
           <>
             <SessionLED
               session={session}
-              label={session && status?.market ? SESSION_LABEL[status.market] : undefined}
+              label={session && status?.market ? MARKET_LABEL[status.market] : undefined}
               loading={statusQ.loading}
             />
             {indicesQ.lastUpdatedAt && (
@@ -623,7 +610,7 @@ function MarketStatusPanel({
         <h3 className="text-h3 text-ink-900">{t('市场状态')}</h3>
         <SessionLED
           session={session}
-          label={session && status?.market ? SESSION_LABEL[status.market] : undefined}
+          label={session && status?.market ? MARKET_LABEL[status.market] : undefined}
           loading={loading}
         />
       </div>

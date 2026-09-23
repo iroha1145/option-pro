@@ -97,7 +97,9 @@ export default function SignalList({
       )}
       {events?.slice(0, 4).map((e) => {
         /* 契约 result 若透传了三态之外的值，不渲染状态章（不猜语义、不崩页） */
-        const meta = RESULT_META[e.result] as (typeof RESULT_META)[keyof typeof RESULT_META] | undefined;
+        const meta = Object.hasOwn(RESULT_META, e.result)
+          ? RESULT_META[e.result as keyof typeof RESULT_META]
+          : undefined;
         return (
           <div
             key={e.id}

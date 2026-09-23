@@ -1,3 +1,4 @@
+import { deferred } from './helpers/deferred.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -6,11 +7,6 @@ import ts from 'typescript';
 import { createReactStub } from './helpers/react-hooks.mjs';
 
 const settle = async () => { for (let i = 0; i < 30; i++) await Promise.resolve(); };
-const deferred = () => {
-  let resolve, reject;
-  const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
-  return { promise, resolve, reject };
-};
 const jsx = { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }) };
 function compile(name, imports, env) {
   const module = { exports: {} };

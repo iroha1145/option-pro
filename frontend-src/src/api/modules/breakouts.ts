@@ -6,7 +6,7 @@ import { asRec, num, pickN, pickS, pickLabel, str, unwrap, type Rec } from '../l
 import { mapMacroFitDrivers } from '../macroFields';
 import * as fx2 from '@/mocks/fixtures2';
 import { SIGNAL_LABELS } from '@/lib/signalLabels';
-import type { BreakoutEvent, BreakoutEventDetail, BreakoutSignal, BreakoutStatus, SignalType } from '../types';
+import type { BreakoutEvent, BreakoutEventFull, BreakoutSession, BreakoutSignal, BreakoutStatusFull, SignalType } from '../types';
 
 export interface BreakoutEventFilters {
   page?: number;
@@ -23,7 +23,7 @@ export interface BreakoutCurrentFilters {
   sort_algorithm?: 'production' | 't1_daily_priority' | 'follow_default';
 }
 
-/* ================= live 归一化（契约原始事件 → mock 形状，mock 是 UI 唯一事实源） =================
+/* ================= live 归一化（原始接口事件 → 页面共用契约） =================
  * 原则「留空优于编造」：契约缺失的字段给 null / '' / []，组件端渲染「—」；
  * 仅做字段改名 / 真实推导（setup→type 分类、lifecycle→result 分类），不虚构数值。
  */
@@ -42,13 +42,16 @@ const SETUP_TO_SIGNAL: Record<string, SignalType> = {
 };
 
 /** lifecycle_state → mock result 语义（hit/failed/pending，与 fixtures2 生成规则一致） */
-function lifecycleToResult(state: string | null): BreakoutEvent['result'] {
+function lifecycleToResult(state: string | null): 'hit' | 'failed' | 'pending' {
   if (state === 'FAILED' || state === 'EXPIRED') return 'failed';
   if (state === 'CONFIRMED' || state === 'RETEST_HELD' || state === 'REACCELERATING' || state === 'EXTENDED') return 'hit';
   return 'pending';
 }
 
 const SESSIONS = ['premarket', 'regular', 'postmarket', 'closed'] as const;
+function isBreakoutSession(value: string | null): value is BreakoutSession {
+  return value !== null && (SESSIONS as readonly string[]).includes(value);
+}
 
 /** {low, high} 区带：两端都有限值才保留，否则 null（组件按缺失渲染） */
 function normZone(v: unknown): { low: number; high: number } | null {
@@ -113,10 +116,10 @@ function normContribution(v: unknown): Record<string, number> | null {
 }
 
 /**
- * 契约原始 BreakoutEvent → mock（fixtures2 getBreakoutsCurrent）形状。
+ * 原始 BreakoutEvent → BreakoutEventFull（当前、历史、详情共用）。
  * 字段对照见文件尾注；缺失一律 null/''/[]，组件端渲染「—」。
  */
-export function normalizeBreakoutEvent(raw: unknown): BreakoutSignal & BreakoutEventDetail {
+export function normalizeBreakoutEvent(raw: unknown): BreakoutEventFull {
   const r = asRec(raw);
   const eventId = pickS(r, 'event_id', 'id') ?? '';
   const ticker = pickS(r, 'ticker') ?? '';
@@ -125,8 +128,12 @@ export function normalizeBreakoutEvent(raw: unknown): BreakoutSignal & BreakoutE
   const type: SignalType = SETUP_TO_SIGNAL[setup] ?? 'breakout';
   const sessionRaw = pickS(r, 'session');
   const eventAt = pickS(r, 'event_at', 'first_seen_at', 'at') ?? '';
-  const eventPrice = pickN(r, 'event_price', 'price');
-  const currentPrice = pickN(r, 'current_price') ?? eventPrice;
+  // 显式 null 表示没有该价格；只有旧版单独的 price 字段可兼容两种价位。
+  const hasEventPrice = Object.hasOwn(r, 'event_price');
+  const eventPrice = hasEventPrice ? num(r.event_price) : pickN(r, 'price');
+  const currentPrice = Object.hasOwn(r, 'current_price')
+    ? num(r.current_price)
+    : hasEventPrice ? null : pickN(r, 'price');
   const targetPrice = pickN(r, 'target_price', 'targetPrice'); // 契约无 → null（不编造目标价）
   const invalidation = pickN(r, 'invalidation_price', 'invalidPrice');
   const rangePersistence = (() => {
@@ -174,8 +181,8 @@ export function normalizeBreakoutEvent(raw: unknown): BreakoutSignal & BreakoutE
     strengthScore: pickN(r, 'intrinsic_strength_score', 'strengthScore'),
     at: eventAt,
     summary: pickS(r, 'summary') ?? '',
-    result: (pickS(r, 'result') as BreakoutEvent['result'] | null) ?? lifecycleToResult(lifecycle),
-    /* ---- 契约全字段（页面按 BreakoutEventFull 读取） ---- */
+    result: pickS(r, 'result') ?? lifecycleToResult(lifecycle),
+    /* ---- 页面共用的完整事件字段 ---- */
     event_id: eventId,
     state_version: pickN(r, 'state_version') ?? 0,
     evidence_at: pickS(r, 'evidence_at'),
@@ -186,7 +193,7 @@ export function normalizeBreakoutEvent(raw: unknown): BreakoutSignal & BreakoutE
     },
     exchange: pickS(r, 'exchange'),
     sector: pickLabel(r, 'sector') ?? '',
-    session: sessionRaw && (SESSIONS as readonly string[]).includes(sessionRaw) ? sessionRaw : 'closed',
+    session: isBreakoutSession(sessionRaw) ? sessionRaw : 'closed',
     setup_type: setup,
     lifecycle_state: lifecycle ?? '',
     event_at: eventAt,
@@ -237,11 +244,11 @@ export function normalizeBreakoutEvent(raw: unknown): BreakoutSignal & BreakoutE
     targetPrice,
     invalidPrice: invalidation,
     evidence: Array.isArray(r.evidence) ? (r.evidence as unknown[]).filter((x): x is string => typeof x === 'string') : [],
-  } as unknown as BreakoutSignal & BreakoutEventDetail;
+  };
 }
 
-/** 契约 /breakouts/status 全量对象 → mock BreakoutStatusFull 形状（改名映射，缺失置空） */
-export function normalizeBreakoutStatus(raw: unknown): BreakoutStatus {
+/** 契约 /breakouts/status 全量对象 → BreakoutStatusFull（改名映射，缺失置空） */
+export function normalizeBreakoutStatus(raw: unknown): BreakoutStatusFull {
   const r = asRec(raw);
   const worker = asRec(r.worker);
   const scan = asRec(r.latest_completed_scan);
@@ -278,19 +285,29 @@ export function normalizeBreakoutStatus(raw: unknown): BreakoutStatus {
         }
       : null,
     // 未知时段如实为 null——不能把「读不到」冒充成「休市」
-    market_session: marketSession && (SESSIONS as readonly string[]).includes(marketSession) ? marketSession : null,
+    market_session: isBreakoutSession(marketSession) ? marketSession : null,
     next_session_at: nextAt,
-  } as unknown as BreakoutStatus;
+  };
+}
+
+function completeMockEvent(raw: BreakoutEvent | BreakoutSignal): BreakoutEventFull {
+  // Fixtures already carry presentation fields. Fill missing contract fields without changing them.
+  return { ...normalizeBreakoutEvent(raw), ...raw };
+}
+
+function normalizeHistoricalEvent(raw: unknown): BreakoutEventFull {
+  const event = normalizeBreakoutEvent(raw);
+  return { ...event, price: event.event_price };
 }
 
 export const breakoutsApi = {
   // 契约 {as_of, session, status, events:[BreakoutEvent], ...} → events 数组（逐条归一到 mock 形状）
-  current: (filters: BreakoutCurrentFilters = {}): Promise<BreakoutSignal[]> =>
+  current: (filters: BreakoutCurrentFilters = {}): Promise<BreakoutEventFull[]> =>
     mockOr(
-      () => fx2.getBreakoutsCurrent(),
+      () => fx2.getBreakoutsCurrent().map(completeMockEvent),
       () => {
         const qs = toQuery({ sort_algorithm: filters.sort_algorithm });
-        return get(`/breakouts/current${qs ? `?${qs}` : ''}`).then((d) => unwrap(d, 'events').map(normalizeBreakoutEvent) as unknown as BreakoutSignal[]);
+        return get(`/breakouts/current${qs ? `?${qs}` : ''}`).then((d) => unwrap(d, 'events').map(normalizeBreakoutEvent));
       },
     ),
   /**
@@ -302,7 +319,7 @@ export const breakoutsApi = {
   currentEnvelope: (
     filters: BreakoutCurrentFilters = {},
   ): Promise<{
-    events: BreakoutSignal[];
+    events: BreakoutEventFull[];
     asOf: string | null;
     effectiveAlgorithm: string | null;
     algorithmVersion: string | null;
@@ -311,7 +328,7 @@ export const breakoutsApi = {
   }> =>
     mockOr(
       async () => ({
-        events: await fx2.getBreakoutsCurrent(),
+        events: fx2.getBreakoutsCurrent().map(completeMockEvent),
         asOf: null,
         effectiveAlgorithm: filters.sort_algorithm ?? 'production',
         algorithmVersion: filters.sort_algorithm === 't1_daily_priority' ? 't1-daily-priority-v1' : 'breakout-score-v1',
@@ -323,7 +340,7 @@ export const breakoutsApi = {
       () => {
         const qs = toQuery({ sort_algorithm: filters.sort_algorithm });
         return registryGet(`/breakouts/current${qs ? `?${qs}` : ''}`).then((d) => ({
-          events: unwrap(d, 'events').map(normalizeBreakoutEvent) as unknown as BreakoutSignal[],
+          events: unwrap(d, 'events').map(normalizeBreakoutEvent),
           asOf: pickS(asRec(d), 'as_of', 'asOf'),
           effectiveAlgorithm: pickS(asRec(d), 'effective_algorithm', 'effectiveAlgorithm'),
           algorithmVersion: pickS(asRec(d), 'algorithm_version', 'algorithmVersion'),
@@ -332,7 +349,7 @@ export const breakoutsApi = {
         }));
       },
     ),
-  status: (): Promise<BreakoutStatus> =>
+  status: (): Promise<BreakoutStatusFull> =>
     mockOr(() => fx2.getBreakoutsStatus(), () => registryGet('/breakouts/status').then(normalizeBreakoutStatus)),
   /**
    * 历史事件分页。
@@ -344,7 +361,7 @@ export const breakoutsApi = {
   events: (
     filters: BreakoutEventFilters = {},
   ): Promise<{
-    items: BreakoutEvent[];
+    items: BreakoutEventFull[];
     total: number | null;
     hasMore: boolean;
     nextCursor: string | null;
@@ -356,7 +373,7 @@ export const breakoutsApi = {
     mockOr(
       async () => {
         const mock = await fx2.getBreakoutEvents(filters.page ?? 1, filters.pageSize ?? 12);
-        return { ...mock, hasMore: false, nextCursor: null };
+        return { ...mock, items: mock.items.map(completeMockEvent), hasMore: false, nextCursor: null };
       },
       // 契约：?lifecycle_state&limit&cursor → {events, next_cursor}；page/type/result 为 UI 侧概念，不下发
       () => {
@@ -369,11 +386,11 @@ export const breakoutsApi = {
           sort_algorithm: filters.sort_algorithm,
         });
         return registryGet(`/breakouts/events${qs ? `?${qs}` : ''}`).then((d) => {
-          const events = unwrap(d, 'events', 'items').map(normalizeBreakoutEvent);
+          const events = unwrap(d, 'events', 'items').map(normalizeHistoricalEvent);
           const nextCursor = pickS(asRec(d), 'next_cursor', 'nextCursor');
           const rec = asRec(d);
           return {
-            items: events as unknown as BreakoutEvent[],
+            items: events,
             total: pickN(asRec(d), 'total', 'total_count'),
             hasMore: nextCursor !== null && !rec.cursor_stale && !rec.restart_required,
             nextCursor,
@@ -386,38 +403,40 @@ export const breakoutsApi = {
       },
     ),
   // 契约 {event, structure, scores, transitions[]} → 拍平为详情对象（event 归一 + transitions 归一）
-  eventDetail: (id: string): Promise<BreakoutEventDetail> =>
+  eventDetail: (id: string): Promise<BreakoutEventFull> =>
     mockOr(
-      () => fx2.getBreakoutEventDetail(id),
+      () => completeMockEvent(fx2.getBreakoutEventDetail(id)),
       () =>
         get(`/breakouts/events/${encodeURIComponent(id)}`).then((d) => {
           const r = asRec(d);
-          const base = normalizeBreakoutEvent(r.event && typeof r.event === 'object' ? r.event : r);
+          const base = normalizeHistoricalEvent(r.event && typeof r.event === 'object' ? r.event : r);
           const transitions = normalizeBreakoutTransitions(r.transitions);
           return {
             ...base,
             ...(transitions.length ? { transitions } : {}),
             structure: r.structure ?? null,
             scores: r.scores ?? null,
-          } as unknown as BreakoutEventDetail;
+          };
         }),
     ),
-  byTicker: (ticker: string): Promise<BreakoutEvent[]> =>
+  byTicker: (ticker: string): Promise<BreakoutEventFull[]> =>
     mockOr(
-      () => fx2.getBreakoutsByTicker(ticker),
+      () => fx2.getBreakoutsByTicker(ticker).map(completeMockEvent),
       () =>
         marketGet(`/breakouts/tickers/${encodeURIComponent(ticker)}`, {
           ttlMs: 60_000,
           staleMs: 30 * 60_000,
         }).then(
-          (d) => unwrap(d, 'events', 'items').map(normalizeBreakoutEvent) as unknown as BreakoutEvent[],
+          (d) => unwrap(d, 'events', 'items').map(normalizeHistoricalEvent),
         ),
     ),
 };
 
 /* ---- 归一化字段对照（契约 → mock 形状） ----
  * event_id→id/event_id · name→name(缺省 ticker) · setup_type→type(SETUP_TO_SIGNAL 推导)+label
- * current_price→price/current_price · session_change_pct→changePct/session_change_pct
+ * current_price→current_price；current 列表的 price 是现价，历史/详情/个股事件的 price 是事件价
+ * 只有旧版单独提供 price 时才同时映射为现价和事件价；明确的 null 不回退。
+ * session_change_pct→changePct/session_change_pct
  * intrinsic_strength_score→strengthScore(可 null) · event_at→at/event_at
  * lifecycle_state→result(hit/failed/pending 分类)+lifecycle_state
  * event_price→event_price/triggerPrice · invalidation_price→invalidation_price/invalidPrice

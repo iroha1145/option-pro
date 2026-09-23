@@ -50,6 +50,7 @@ export const BREAKOUTS: Dict = {
   '加载更多失败：': ['Failed to load more:', '追加読み込みに失敗：'],
 
   /* ---- LeadBigCard.tsx ---- */
+  '补充详情暂时读不到，当前显示基础信号。': ['Additional details are unavailable. Showing the basic signal.', '詳細情報を読み込めません。基本シグナルを表示しています。'],
   '宏观影子': ['Macro shadow', 'マクロシャドウ'],
   '宏观参考': ['Macro context', 'マクロ環境の参考値'],
   '告警优先级': ['Alert priority', 'アラート優先度'],

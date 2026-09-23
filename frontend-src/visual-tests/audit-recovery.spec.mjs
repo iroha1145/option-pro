@@ -8,7 +8,7 @@ async function fixture(page, options = {}) {
   const state = {
     account: 'alice', owner: false, readyExpirations: true, holdStatus: false,
     statusRequests: [], requests: [], errors: [], expiryReads: 0, jobReads: 0,
-    jobPosts: 0, failJob: true, ...options,
+    jobPosts: 0, failJob: true, failLeadDetail: false, detailReads: [], ...options,
   };
   const event = ticker => ({ event_id: `event-${ticker}`, ticker, name: ticker,
     session: 'regular', setup_type: 'DAILY_BASE_BREAKOUT', lifecycle_state: 'TRIGGERED',
@@ -47,7 +47,11 @@ async function fixture(page, options = {}) {
     } else if (path === '/api/options/AAPL/chain') json = { ticker: 'AAPL', underlying_price: 103, calls: [{ strike: 102.5, volume: 300, open_interest: 100, iv: 0.00001, iv_source: 'vendor_raw', bid: 0, ask: 0 }], puts: [] };
     else if (path === '/api/breakouts/current') json = { events, as_of: at, session: 'regular' };
     else if (path === '/api/breakouts/events') json = { events: [], next_cursor: null };
-    else if (path.startsWith('/api/breakouts/events/')) json = { event: events.find(row => path.endsWith(row.event_id)), transitions: [] };
+    else if (path.startsWith('/api/breakouts/events/')) {
+      state.detailReads.push(path);
+      if (state.failLeadDetail) return route.fulfill({ status: 503, json: { message: '模拟详情读取失败' } });
+      json = { event: { ...events.find(row => path.endsWith(row.event_id)), score_version: 'detail-v1' }, transitions: [] };
+    }
     else if (path === '/api/breakouts/status') json = { enabled: true, market_session: 'regular', last_scan_at: at };
     else if (path === '/api/earnings/upcoming') json = { earnings: ['AAOI', 'CRDO'].map(ticker => ({ ticker, name: ticker, earnings_date: tomorrow, eps_estimate: 1, revenue_estimate: 100000000, market_cap: 1000000000, public_featured: false })), as_of: at, data_limited: false, source_status: 'ok' };
     else if (/^\/api\/stocks\/[^/]+$/.test(path)) json = { ticker: path.split('/').at(-1), name: '本地验收', price: 103, change: 1, change_percent: 1, prev_close: 102, as_of: at };
@@ -110,6 +114,48 @@ test('radar watchlist scope uses the signed-in personal selection', async ({ pag
   await expect(current).toContainText('AAOI');
   await expect(current).not.toContainText('NVDA');
   expect(state.requests.some(row => row.path === '/api/account/watchlist')).toBe(true);
+  expect(state.errors).toEqual([]);
+});
+
+test('lead signal keeps its base card when detail fails and retry fills the detail', async ({ page }) => {
+  const state = await fixture(page, { failLeadDetail: true });
+  await page.goto('/breakouts');
+  const lead = page.locator('article.radar-lead-card');
+  await expect(lead).toBeVisible();
+  await expect(lead).toContainText('AAOI');
+  const notice = lead.getByRole('status');
+  await expect(notice).toContainText('补充详情暂时读不到，当前显示基础信号。');
+  await expect(lead.getByRole('button', { name: '查看完整证据' })).toBeVisible();
+  state.failLeadDetail = false;
+  await notice.getByRole('button', { name: '重试' }).click();
+  await expect(notice).toHaveCount(0);
+  await lead.locator('details.radar-lead-disclosure summary').click();
+  await expect(lead.locator('details.radar-lead-disclosure')).toContainText('detail-v1');
+  expect(state.detailReads.filter(path => path === '/api/breakouts/events/event-AAOI')).toHaveLength(2);
+  expect(state.errors).toEqual([]);
+});
+
+test('historical trigger prices stay distinct from the current quote in both stock panels', async ({ page }) => {
+  const state = await fixture(page);
+  const at = new Date().toISOString();
+  await page.route('**/api/breakouts/tickers/AAPL*', route => route.fulfill({ json: {
+    events: [84.51, null].map((eventPrice, index) => ({
+      event_id: `price-contract-${index}`, ticker: 'AAPL', event_at: at,
+      setup_type: 'DAILY_BASE_BREAKOUT', lifecycle_state: 'TRIGGERED',
+      event_price: eventPrice, current_price: 90,
+    })),
+  } }));
+  await page.goto('/stock/AAPL');
+  await expect(page.getByText('触发 84.51', { exact: true })).toBeVisible();
+  await expect(page.getByText('触发 —', { exact: true })).toBeVisible();
+  await expect(page.getByText('触发 90.00', { exact: true })).toHaveCount(0);
+  const sidebar = page.locator('div').filter({
+    has: page.getByRole('heading', { name: '相关突破事件', exact: true }),
+  }).last();
+  await expect(sidebar.locator('li')).toHaveCount(2);
+  await expect(sidebar.locator('li').nth(0)).toContainText('84.51');
+  await expect(sidebar.locator('li').nth(1)).toContainText('—');
+  await expect(sidebar).not.toContainText('90.00');
   expect(state.errors).toEqual([]);
 });
 

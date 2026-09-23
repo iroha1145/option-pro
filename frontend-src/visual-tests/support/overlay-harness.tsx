@@ -15,7 +15,7 @@ import MenuSelect from '../../src/components/shared/MenuSelect';
 import InfoHint from '../../src/components/shared/InfoHint';
 import MobileDock from '../../src/components/MobileDock';
 import EventDetail from '../../src/components/breakouts/EventDetail';
-import { asFullDetail } from '../../src/components/breakouts/types';
+import { normalizeBreakoutEvent } from '../../src/api/modules/breakouts';
 import { getBreakoutEvents, getBreakoutEventDetail } from '../../src/mocks/fixtures2';
 import ScanHistoryPopover from '../../src/components/screener/ScanHistoryPopover';
 import { stocksApi } from '../../src/api/modules/stocks';
@@ -27,7 +27,7 @@ const searchCalls: string[] = [];
 const searchReplies = new Map<string, (results: { ticker: string; name: string; sector: string }[]) => void>();
 stocksApi.search = (q) => { searchCalls.push(q); return new Promise((resolve) => searchReplies.set(q, resolve)); };
 const noop = () => {};
-const eventFixture = asFullDetail(getBreakoutEventDetail(getBreakoutEvents().items[0].event_id));
+const eventFixture = normalizeBreakoutEvent(getBreakoutEventDetail(getBreakoutEvents().items[0].id));
 
 export function Harness() {
   const toast = useToast();

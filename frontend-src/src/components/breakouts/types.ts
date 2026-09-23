@@ -1,10 +1,16 @@
 /**
  * 突破雷达页级类型与字典（api-contract.md BreakoutEvent 全字段）
- * API 层类型为精简形状；fixture/真实接口在运行时携带本文件定义的完整字段，
- * 页面经 breakoutsApi 获取后按此结构读取。
+ * 事件结构由 api/types.ts 的归一化输出定义，页面只保留展示字典。
  */
-import type { BreakoutEvent, BreakoutEventDetail, BreakoutSignal, BreakoutStatus } from '@/api/types';
-import type { MacroFitDriver } from '@/lib/macroFit';
+import type {
+  BreakoutEventFull as ApiBreakoutEventFull,
+  BreakoutStatusFull as ApiBreakoutStatusFull,
+  BreakoutSession as ApiBreakoutSession,
+  BreakoutRangePersistence,
+  BreakoutRangePersistenceLive,
+  BreakoutPriceZone,
+} from '@/api/types';
+export { strengthBarClass as scoreBarClass } from '@/lib/strengthColor';
 import { t } from '../../i18n/core.ts';
 
 /* ---------------- 枚举（契约） ---------------- */
@@ -16,10 +22,10 @@ export type SetupType =
   | 'DAILY_BASE_BREAKOUT' | 'OPENING_RANGE_BREAKOUT' | 'PREMARKET_GAP' | 'GAP_AND_GO' | 'GAP_HOLD'
   | 'GAP_FADE' | 'RETEST_BREAKOUT' | 'MOMENTUM_SPIKE' | 'RECOVERY_BREAKOUT';
 
-export type BreakoutSession = 'premarket' | 'regular' | 'postmarket' | 'closed';
+export type BreakoutSession = ApiBreakoutSession;
 
 /* ---------------- 中文映射（契约 §2 枚举→中文） ---------------- */
-export const LIFECYCLE_CN: Record<LifecycleState, string> = {
+export const LIFECYCLE_CN: Record<LifecycleState, string> & Partial<Record<string, string>> = {
   DISCOVERED: t('已发现'),
   WATCHING: t('观察中'),
   TRIGGERED: t('已触发'),
@@ -33,7 +39,7 @@ export const LIFECYCLE_CN: Record<LifecycleState, string> = {
   EXPIRED: t('已过期'),
 };
 
-export const SETUP_CN: Record<SetupType, string> = {
+export const SETUP_CN: Record<SetupType, string> & Partial<Record<string, string>> = {
   DAILY_BASE_BREAKOUT: t('日线基底突破'),
   OPENING_RANGE_BREAKOUT: t('开盘区间突破'),
   PREMARKET_GAP: t('盘前跳空'),
@@ -54,7 +60,7 @@ export const SESSION_CN: Record<BreakoutSession, string> = {
 
 /** 生命周期语义分组：brand=进行中 / up=走强 / down=失败归档 / ink=早期观察 */
 export type LifecycleTone = 'brand' | 'up' | 'down' | 'ink';
-export const LIFECYCLE_TONE: Record<LifecycleState, LifecycleTone> = {
+export const LIFECYCLE_TONE: Record<LifecycleState, LifecycleTone> & Partial<Record<string, LifecycleTone>> = {
   DISCOVERED: 'ink',
   WATCHING: 'ink',
   TRIGGERED: 'brand',
@@ -90,24 +96,8 @@ export const SCORE_DEFS = [
 export type ScoreKey = (typeof SCORE_DEFS)[number]['key'];
 
 /* ---------------- range_persistence 五维 ---------------- */
-export interface RangePersistence {
-  trend: number;
-  hold: number;
-  volatility: number;
-  volume: number;
-  participation: number;
-}
-/** 生产契约的真实区间持续指标；与早期演示五维不是同一口径。 */
-export interface RangePersistenceLive {
-  kind: 'live';
-  value: number | null;
-  slope5d: number | null;
-  ratio10d: number | null;
-  selfPercentile: number | null;
-  globalPercentile: number | null;
-  sectorPercentile: number | null;
-  status: string;
-}
+export type RangePersistence = BreakoutRangePersistence;
+export type RangePersistenceLive = BreakoutRangePersistenceLive;
 export const RANGE_PERSISTENCE_DEFS = [
   { key: 'trend', label: t('趋势持续') },
   { key: 'hold', label: t('区间保持') },
@@ -117,102 +107,19 @@ export const RANGE_PERSISTENCE_DEFS = [
 ] as const;
 
 /* ---------------- 富事件形状 ---------------- */
-export interface PriceZone {
-  low: number;
-  high: number;
-}
+export type PriceZone = BreakoutPriceZone;
 
-export interface BreakoutTransition {
-  state: LifecycleState;
-  at: string;
-  note?: string;
-}
+export interface BreakoutTransition { state: string; at: string; note?: string }
 
-/** 契约 BreakoutEvent 全字段（历史事件 / 事件详情） */
-export interface BreakoutEventFull extends BreakoutEventDetail {
-  event_anchor?: { kind: string | null; status: string | null } | null;
-  event_id: string;
-  state_version?: number;
-  evidence_at?: string | null;
-  trigger_source?: string | null;
-  name: string;
-  sector: string;
-  session: BreakoutSession;
-  setup_type: SetupType;
-  lifecycle_state: LifecycleState;
-  event_at: string;
-  triggered_at: string;
-  event_price: number;
-  current_price: number;
-  session_change_pct: number;
-  gap_pct: number;
-  rvol_time_of_day: number;
-  pivot_price: number;
-  target_price: number;
-  support_zone: PriceZone;
-  resistance_zone: PriceZone;
-  invalidation_price: number;
-  intrinsic_strength_score: number;
-  base_quality_score: number;
-  breakout_confirmation_score: number;
-  liquidity_quality_score: number;
-  chase_risk_score: number;
-  sector_fit_score: number;
-  market_fit_score: number;
-  alert_priority_score: number;
-  data_confidence_score: number;
-  range_persistence: RangePersistence | RangePersistenceLive | null;
-  transitions: BreakoutTransition[];
-  /**
-   * 宏观参考字段（macro-linkage-v1）。只标注提醒优先级，上限 ±4。
-   *
-   * 上面每一个质量分和事件生命周期都不受它影响 —— 宏观逆风不会删除、不会降级、
-   * 也不会推迟一个真实发生的突破事件。null 表示没读到，macro_shadow_status 说明原因。
-   */
-  macro_fit_score: number | null;
-  macro_tailwind: string | null;
-  macro_priority_adjustment_shadow: number | null;
-  alert_priority_macro_shadow: number | null;
-  macro_shadow_status: string | null;
-  macro_supporting_factors: MacroFitDriver[];
-  macro_opposing_factors: MacroFitDriver[];
-  t1_status?: string | null;
-  t1_priority?: Record<string, unknown> | null;
-}
+export type BreakoutEventFull = ApiBreakoutEventFull;
 
 /** 当日信号（/breakouts/current 的 events[]，叠加 BreakoutSignal 展示字段） */
-export type BreakoutCurrentEvent = BreakoutEventFull & BreakoutSignal;
+export type BreakoutCurrentEvent = BreakoutEventFull;
 
 /** /breakouts/status 契约全字段 */
-export interface BreakoutStatusFull extends BreakoutStatus {
-  enabled: boolean;
-  worker: { healthy: boolean; heartbeat_at: string };
-  latest_completed_scan: { at: string; duration_ms: number; scanned: number; triggered: number } | null;
-  market_session: BreakoutSession | null;
-  next_session_at: string | null;
-}
+export type BreakoutStatusFull = ApiBreakoutStatusFull;
 
-/* ---------------- 读取辅助（宽松运行时字段 → 页级类型） ---------------- */
-export function asCurrentEvents(data: BreakoutSignal[] | null): BreakoutCurrentEvent[] {
-  return (data ?? []) as unknown as BreakoutCurrentEvent[];
-}
-export function asFullEvent(e: BreakoutEvent): BreakoutEventFull {
-  return e as unknown as BreakoutEventFull;
-}
-export function asFullDetail(e: BreakoutEventDetail): BreakoutEventFull {
-  return e as unknown as BreakoutEventFull;
-}
-export function asFullStatus(s: BreakoutStatus | null): BreakoutStatusFull | null {
-  return (s ?? null) as BreakoutStatusFull | null;
-}
-
-/** §6-5 强度色阶；追高风险反向（越高越危险） */
-export function scoreBarClass(score: number): string {
-  if (score >= 85) return 'bg-up-600';
-  if (score >= 70) return 'bg-brand-600';
-  if (score >= 50) return 'bg-brand-400';
-  return 'bg-ink-300';
-}
+/** 追高风险反向（越高越危险）；普通评分使用公共强度色阶。 */
 export function riskBarClass(score: number): string {
   if (score >= 70) return 'bg-down-600';
   if (score >= 50) return 'bg-warn-600';

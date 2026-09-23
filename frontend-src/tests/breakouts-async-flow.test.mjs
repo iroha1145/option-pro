@@ -1,3 +1,4 @@
+import { deferred } from './helpers/deferred.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -12,12 +13,6 @@ import {
 } from '../src/lib/choiceGeneration.ts';
 
 const source = fs.readFileSync(new URL('../src/pages/Breakouts.tsx', import.meta.url), 'utf8');
-const deferred = () => {
-  let resolve;
-  let reject;
-  const promise = new Promise((ok, fail) => { resolve = ok; reject = fail; });
-  return { promise, resolve, reject };
-};
 
 function extract(name, startNeedle, endNeedle) {
   const start = source.indexOf(startNeedle);
@@ -87,7 +82,6 @@ function harness() {
       state.historyLoadingMore = value;
       scope.historyLoadingMore = value;
     },
-    asFullEvent: (item) => item,
     breakoutsApi: {
       events: async (query) => {
         state.eventRequests.push(query);

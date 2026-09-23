@@ -1,17 +1,9 @@
+import { deferred } from './helpers/deferred.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { SectorIvRefreshFlow } from '../src/components/sectors/ivRefreshFlow.ts';
 
-function deferred() {
-  let resolve;
-  let reject;
-  const promise = new Promise((yes, no) => {
-    resolve = yes;
-    reject = no;
-  });
-  return { promise, resolve, reject };
-}
 
 function refresh(status, extra = {}) {
   return {

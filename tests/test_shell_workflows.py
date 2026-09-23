@@ -256,6 +256,14 @@ def _copy_deployment_validator(root: Path) -> None:
         shutil.copy2(ROOT / "backend" / "app" / relative, backend / relative)
 
 
+def _copy_operation_lock(scripts: Path) -> None:
+    (scripts / "lib").mkdir(exist_ok=True)
+    shutil.copy2(
+        ROOT / "scripts" / "lib" / "operation_lock.sh",
+        scripts / "lib" / "operation_lock.sh",
+    )
+
+
 def _deployment_root(
     tmp_path: Path,
     machine_text: str | None = None,
@@ -267,6 +275,7 @@ def _deployment_root(
     scripts = root / "scripts"
     config = root / "config"
     scripts.mkdir(parents=True)
+    _copy_operation_lock(scripts)
     config.mkdir()
     shutil.copy2(ROOT / "scripts" / "deploy.sh", scripts / "deploy.sh")
     shutil.copy2(ROOT / "scripts" / "compose.sh", scripts / "compose.sh")
@@ -968,6 +977,7 @@ def test_secret_health_url_uses_machine_file_over_stale_dotenv(
 def _setup_root(tmp_path: Path) -> tuple[Path, dict[str, str]]:
     root = tmp_path / "option-pro"
     (root / "scripts").mkdir(parents=True)
+    _copy_operation_lock(root / "scripts")
     (root / "config").mkdir()
     for source, destination in (
         (ROOT / "setup.sh", root / "setup.sh"),
@@ -1210,6 +1220,7 @@ def test_secret_cli_recreates_only_affected_running_services(
     root = tmp_path / "option-pro"
     root.mkdir()
     (root / "scripts").mkdir()
+    _copy_operation_lock(root / "scripts")
     shutil.copy2(ROOT / "personal.sh", root / "personal.sh")
     shutil.copy2(ROOT / "docker-compose.yml", root / "docker-compose.yml")
     shutil.copy2(ROOT / "scripts" / "compose.sh", root / "scripts" / "compose.sh")
@@ -1328,6 +1339,7 @@ def test_secret_cli_fails_before_container_when_machine_file_is_missing(
 ) -> None:
     root = tmp_path / "option-pro"
     (root / "scripts").mkdir(parents=True)
+    _copy_operation_lock(root / "scripts")
     shutil.copy2(ROOT / "personal.sh", root / "personal.sh")
     shutil.copy2(ROOT / "docker-compose.yml", root / "docker-compose.yml")
     shutil.copy2(
@@ -1418,6 +1430,7 @@ def test_personal_read_commands_use_the_container_runtime_without_host_packages(
 ) -> None:
     root = tmp_path / "option-pro"
     (root / "scripts").mkdir(parents=True)
+    _copy_operation_lock(root / "scripts")
     for source, destination in (
         (ROOT / "personal.sh", root / "personal.sh"),
         (ROOT / "docker-compose.yml", root / "docker-compose.yml"),
@@ -1504,6 +1517,7 @@ def test_secret_cli_does_not_recreate_services_after_container_failure(
 ) -> None:
     root = tmp_path / "option-pro"
     (root / "scripts").mkdir(parents=True)
+    _copy_operation_lock(root / "scripts")
     for source, destination in (
         (ROOT / "personal.sh", root / "personal.sh"),
         (ROOT / "docker-compose.yml", root / "docker-compose.yml"),
@@ -1563,6 +1577,7 @@ def test_secret_cli_checks_running_image_identity_before_mutating(
 ) -> None:
     root = tmp_path / "option-pro"
     (root / "scripts").mkdir(parents=True)
+    _copy_operation_lock(root / "scripts")
     for source, destination in (
         (ROOT / "personal.sh", root / "personal.sh"),
         (ROOT / "docker-compose.yml", root / "docker-compose.yml"),

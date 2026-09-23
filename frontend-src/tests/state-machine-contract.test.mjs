@@ -1,8 +1,7 @@
 /**
- * 状态机与「数据时间 vs 请求时间」回归
- * （GPT-5.6-Pro 审计 P2-5 / P2-6 / P2-7 / P2-11 / P2-13 / P2-16 / P2-17 / P2-18 /
- *  P2-19 / P2-20 / P2-21 / P2-22 / P2-23 / P2-24 / P2-26 / P2-27 / P2-28 /
- *  P2-29 / P2-30 / P2-31 / P2-32）
+ * Source-structure contracts for state transitions and data/request timestamps.
+ * These checks do not mount components or prove user interaction by themselves;
+ * callback behavior and browser recovery suites cover those execution paths.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';

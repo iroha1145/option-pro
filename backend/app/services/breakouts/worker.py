@@ -21,6 +21,7 @@ from enum import Enum
 from typing import Any, Awaitable, Callable, Mapping, Sequence
 
 from app.services.breakouts.clock import MarketClock, MarketClockSnapshot
+from app.failure_diagnostics import record_fallback_failure
 from app.services.breakouts.config import BreakoutSettings, get_breakout_settings
 from app.services.breakouts.errors import FAILURE_DOMAINS, BreakoutStageError
 from app.services.breakouts.health import check_breakout_health
@@ -763,8 +764,8 @@ class BreakoutWorker:
         if finished_keys:
             try:
                 self.repository.clear_t1_retry_states(finished_keys)
-            except Exception:
-                pass
+            except Exception as exc:
+                record_fallback_failure("breakouts_t1_retry_clear", exc)
         if still_pending_events:
             return reserved_retry(
                 attempted=len(eligible),
@@ -949,8 +950,8 @@ class BreakoutWorker:
                 )
             try:
                 self._status("lease_lost", error_code="lease_lost")
-            except Exception:
-                pass
+            except Exception as exc:
+                record_fallback_failure("breakouts_lease_lost_status", exc)
             raise
         except Exception as exc:
             error_code = str(getattr(exc, "code", "scan_failed"))[:120]
@@ -964,8 +965,8 @@ class BreakoutWorker:
                         type(exc).__name__,
                         now=self.clock.now(),
                     )
-            except Exception:
-                pass
+            except Exception as secondary_exc:
+                record_fallback_failure("breakouts_scan_failure_record", secondary_exc)
             details = {
                 "error_type": type(exc).__name__,
                 "session": market.session.value,
@@ -986,8 +987,8 @@ class BreakoutWorker:
                     error_code=error_code,
                     details=details,
                 )
-            except Exception:
-                pass
+            except Exception as secondary_exc:
+                record_fallback_failure("breakouts_degraded_status", secondary_exc)
             return {
                 "status": "degraded",
                 "scan_run_id": scan_id,

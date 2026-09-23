@@ -18,9 +18,10 @@ claim about the environment rather than an admission that we cannot say.
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
 from typing import Any, Iterable, Mapping, Optional, Sequence
+
+from app.services.numeric import finite_number as _finite
 
 from .exposures import EXPOSURE_VERSION, exposures_for
 from .registry import FACTORS_BY_ID, MODULES_BY_ID
@@ -93,14 +94,6 @@ UNAVAILABLE = MacroFit(
     opposing=(),
     effective_weight=0.0,
 )
-
-
-def _finite(value: Any) -> Optional[float]:
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return None
-    return number if math.isfinite(number) else None
 
 
 #: Factors per module, computed once. Modules are equal-weighted in the

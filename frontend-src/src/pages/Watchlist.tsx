@@ -28,6 +28,7 @@ import { useNow } from '@/hooks/useNow';
 import { useToast } from '@/hooks/useToast';
 import { useShell } from '@/hooks/useShell';
 import { cn } from '@/lib/utils';
+import { strengthBarClass } from '@/lib/strengthColor';
 import { fmtCountdown, fmtNyTime, fmtTimeHHMMSS } from '@/lib/format';
 import type { MarketSignalsSnapshot, WatchlistItem } from '@/api/types';
 import PageHeader from '@/components/shared/PageHeader';
@@ -173,14 +174,13 @@ function StrengthHistogram({ histogram }: { histogram: number[] }) {
       <div className="mt-4 flex h-24 items-end gap-1.5">
         {histogram.map((n, i) => {
           const score = i * 10 + 5;
-          const color = score >= 85 ? 'bg-up-600' : score >= 70 ? 'bg-brand-600' : score >= 50 ? 'bg-brand-400' : 'bg-ink-300';
           return (
             <div key={i} className="group relative flex-1">
               <div className="cloud-popover pointer-events-none absolute -top-7 left-1/2 z-10 hidden -translate-x-1/2 px-1.5 py-0.5 font-mono text-[10px] text-ink-600 group-hover:block">
                 {n}
               </div>
               <div
-                className={cn('w-full origin-bottom rounded-t-[3px]', color)}
+                className={cn('w-full origin-bottom rounded-t-[3px]', strengthBarClass(score))}
                 style={{ height: `${Math.max(4, (n / max) * 88)}px` }}
               />
             </div>

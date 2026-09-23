@@ -61,7 +61,9 @@ DiscoveryProvider
 - scan(session, as_of, profile) 返回 DiscoverySnapshot。
 - 只发现粗候选，不确认结构、不计算最终分、不调用 LLM。
 
-PriceDataPort
+以下四组名称描述实现职责，不代表额外的 Protocol 类型。
+
+价格数据适配器
 
 - 批量返回日线和盘中 OHLCV。
 - 每份数据带 requested_at、received_at、data_through、feature_cutoff_at、source、
@@ -69,7 +71,7 @@ PriceDataPort
   的兼容别名。
 - 日线排除未完成交易日；盘中排除 event_at 之后和未完成 K 线。
 
-StrengthScoringPort
+强度评分适配器
 
 - 接受显式 ticker 集合，关闭期权增强。
 - 返回 intrinsic_score、market_fit_score、profile_fit_score、ranking_score、
@@ -78,7 +80,7 @@ StrengthScoringPort
 - 扫描与显式 ticker 集合共用 strength-v2 内在评分；页面筛选、期权和大盘形态
   不进入 intrinsic_score。完整规范股票池先完成特征、标准化与排名，再应用视图筛选。
 
-MarketShapePort
+市场形态适配器
 
 - 返回 raw_state、稳定 state、previous_state、entered_at、days_in_state、
   pending_state、pending_days、confidence、transition_risk、
@@ -91,7 +93,7 @@ MarketShapePort
 - transition_risk 表示历史状态、待确认进度、边界距离和证据分歧形成的转换压力，
   范围为 0 至 1，但不是统计概率。
 
-CanonicalUniversePort
+规范股票池适配器
 
 - 返回稳定股票池、primary sector、多主题映射、as_of 和 universe_version。
 - 第一版以项目固定主题池建立保守基线，不声称覆盖全美规范股票池。

@@ -58,10 +58,10 @@ def test_finite_values_accept_numeric_strings_but_keep_conversion_errors(module,
         finite(BrokenNumber())
 
 
-@pytest.mark.parametrize("module", ("market_regime", "marketdata", "relative_spreads", "vol_price_match", "yahoo_options", "scanner"))
+@pytest.mark.parametrize("module", ("market_regime", "marketdata", "relative_spreads", "vol_price_match", "yahoo_options"))
 def test_clamp_keeps_each_callers_default_and_bounds(module):
     clamp = load("strength." + module, "_clamp")
-    default = None if module == "scanner" else 50.0
+    default = 50.0
     for value in (None, "bad", float("nan"), float("inf"), BrokenNumber()):
         assert clamp(value) == default
         assert clamp(value, default=17.0) == 17.0
