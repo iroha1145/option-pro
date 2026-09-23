@@ -1,4 +1,5 @@
 import type { ResourcePersistence, StoredResource } from './resourceCache';
+import { onCatalystReadsInvalidated } from './resourceSignals.ts';
 
 const DB = 'optix-catalysts-v1';
 const STORE = 'resources';
@@ -35,7 +36,7 @@ function open(): Promise<IDBDatabase | null> {
   return opening;
 }
 
-export const catalystPersistence: ResourcePersistence = {
+export const catalystPersistence: ResourcePersistence & { clear(): Promise<void> } = {
   async read(key) {
     const db = await open();
     if (!db) return null;
@@ -84,4 +85,22 @@ export const catalystPersistence: ResourcePersistence = {
       } catch { resolve(); }
     });
   },
+  async clear() {
+    const db = await open();
+    if (!db) return;
+    await new Promise<void>((resolve) => {
+      try {
+        const tx = db.transaction(STORE, 'readwrite');
+        tx.objectStore(STORE).clear();
+        tx.oncomplete = tx.onerror = tx.onabort = () => resolve();
+      } catch { resolve(); }
+    });
+  },
 };
+
+// Keys carry the principal, so another account never restores these records;
+// they still must not stay on disk after a logout or account switch. The query
+// registry clears its own store on the same transitions.
+onCatalystReadsInvalidated((options) => {
+  if (options?.principalChanged) void catalystPersistence.clear();
+});

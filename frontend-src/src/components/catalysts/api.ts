@@ -35,7 +35,7 @@ import {
   focusCyclePollPath,
 } from '@/components/catalysts/focusCycleRequest';
 import { t as __t } from '../../i18n/core.ts';
-import { notifyCatalystReadsInvalidated } from './resourceSignals';
+import { notifyCatalystReadsInvalidated, type CatalystInvalidateOptions } from './resourceSignals';
 
 export type {
   CatalystFeedQuery,
@@ -640,7 +640,7 @@ const PUBLIC_BATCH_MAX_LIMIT = 5;
 const READ_CACHE_TTL_MS = 30_000;
 const readCache = new Map<string, { at: number; promise: Promise<unknown> }>();
 
-export function clearCatalystReadCache(options?: { userInitiated?: boolean }): void {
+export function clearCatalystReadCache(options?: CatalystInvalidateOptions): void {
   readCache.clear();
   invalidateBootPrefetch();
   notifyCatalystReadsInvalidated(options);
