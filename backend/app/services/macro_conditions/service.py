@@ -1011,6 +1011,9 @@ def _as_date(value: object) -> Optional[date]:
 
 _READ_CACHE: dict[str, tuple[tuple[int, int], float, Any]] = {}
 _READ_CACHE_TTL_SECONDS = 60.0
+# Keys include the public ``days`` parameter (30-3650) per route and factor, so
+# the key space is tens of thousands of multi-year payloads: keep the newest.
+_READ_CACHE_MAX_ENTRIES = 64
 
 
 def invalidate_read_cache() -> None:
@@ -1059,6 +1062,9 @@ def cached_read(
         if cached_stamp == stamp and moment - cached_at < _READ_CACHE_TTL_SECONDS:
             return value
     value = producer()
+    _READ_CACHE.pop(key, None)
+    while len(_READ_CACHE) >= _READ_CACHE_MAX_ENTRIES:
+        del _READ_CACHE[next(iter(_READ_CACHE))]
     _READ_CACHE[key] = (stamp, moment, value)
     return value
 
