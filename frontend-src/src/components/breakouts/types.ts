@@ -10,6 +10,7 @@ import type {
   BreakoutRangePersistenceLive,
   BreakoutPriceZone,
 } from '@/api/types';
+export { strengthBarClass as scoreBarClass } from '@/lib/strengthColor';
 import { t } from '../../i18n/core.ts';
 
 /* ---------------- 枚举（契约） ---------------- */
@@ -118,13 +119,7 @@ export type BreakoutCurrentEvent = BreakoutEventFull;
 /** /breakouts/status 契约全字段 */
 export type BreakoutStatusFull = ApiBreakoutStatusFull;
 
-/** §6-5 强度色阶；追高风险反向（越高越危险） */
-export function scoreBarClass(score: number): string {
-  if (score >= 85) return 'bg-up-600';
-  if (score >= 70) return 'bg-brand-600';
-  if (score >= 50) return 'bg-brand-400';
-  return 'bg-ink-300';
-}
+/** 追高风险反向（越高越危险）；普通评分使用公共强度色阶。 */
 export function riskBarClass(score: number): string {
   if (score >= 70) return 'bg-down-600';
   if (score >= 50) return 'bg-warn-600';
