@@ -41,7 +41,11 @@ from app.services.strength.market_shape import MARKET_SHAPE_VERSION
 from app.services.strength.scoring import SCORE_VERSION as STRENGTH_SCORE_VERSION
 from app.public_stock_data import register_public_stock_demand
 from app.services.runtime_settings import get_effective_runtime_settings
-from app.services.view_preferences import get_view_preference_store, principal_for_request
+from app.services.view_preferences import (
+    ViewPreferenceStorageError,
+    get_view_preference_store,
+    principal_for_request,
+)
 from app.services.breakouts.t1_priority import apply_t1_stable_boost, event_t1_status
 
 
@@ -227,7 +231,12 @@ def resolve_radar_for_request(request: Any, requested: Any = None) -> Any:
     )
     user_choice = None
     if principal is not None:
-        user_choice = get_view_preference_store().read(principal).radar_sort_algorithm
+        try:
+            user_choice = get_view_preference_store().read(principal).radar_sort_algorithm
+        except ViewPreferenceStorageError as exc:
+            # A damaged preference file falls back to the admin default; the
+            # preference route itself still reports the storage error.
+            record_fallback_failure("radar_view_preference_read", exc)
     try:
         admin_default = admin_algorithm_defaults(get_effective_runtime_settings())
     except Exception:

@@ -25,6 +25,7 @@ from app.access import (
     request_account_session,
 )
 from app.data_paths import get_data_paths
+from app.failure_diagnostics import record_fallback_failure
 from app.personal_config import get_personal_config
 from app.services.algorithm_diagnostics import record_screener_resolution
 from app.services.algorithm_modes import (
@@ -46,6 +47,7 @@ from app.services.http_read_cache import respond_with_snapshot, snapshot_version
 from app.services.runtime_settings import get_effective_runtime_settings
 from app.services.sectors import SECTORS
 from app.services.view_preferences import (
+    ViewPreferenceStorageError,
     get_view_preference_store,
     principal_for_request,
 )
@@ -438,7 +440,12 @@ def _request_screener_resolution(
     )
     user_choice = None
     if principal is not None:
-        user_choice = get_view_preference_store().read(principal).screener_ranking_algorithm
+        try:
+            user_choice = get_view_preference_store().read(principal).screener_ranking_algorithm
+        except ViewPreferenceStorageError as exc:
+            # A damaged preference file falls back to the admin default; the
+            # preference route itself still reports the storage error.
+            record_fallback_failure("screener_view_preference_read", exc)
     try:
         admin_default = admin_algorithm_defaults(get_effective_runtime_settings())
     except Exception:

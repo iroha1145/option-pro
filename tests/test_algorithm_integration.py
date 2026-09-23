@@ -322,6 +322,47 @@ def test_saved_user_production_is_not_overwritten_by_admin_a0(
     assert resolution.source == "user_preference"
 
 
+def test_damaged_preference_file_falls_back_to_the_admin_default(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from starlette.requests import Request
+
+    damaged = ViewPreferenceStore(tmp_path / "view-preferences.json")
+    damaged.path.write_text("{not json", encoding="utf-8")
+    admin_settings = type(
+        "Settings",
+        (),
+        {
+            "algorithms": type(
+                "Algos",
+                (),
+                {
+                    "screener_ranking_algorithm": A0_ALGORITHM,
+                    "radar_sort_algorithm": T1_ALGORITHM,
+                },
+            )()
+        },
+    )()
+    for module in (strength, breakout_api):
+        monkeypatch.setattr(module, "get_view_preference_store", lambda: damaged)
+        monkeypatch.setattr(module, "principal_for_request", lambda **_kwargs: "account:alice")
+        monkeypatch.setattr(module, "get_effective_runtime_settings", lambda: admin_settings)
+    request = Request({"type": "http", "headers": []})
+
+    screener = strength._request_screener_resolution(
+        request,
+        requested=None,
+        timeframe="all",
+        profile="balanced",
+    )
+    radar = breakout_api.resolve_radar_for_request(request)
+
+    assert screener.source == "admin_default"
+    assert radar.effective == T1_ALGORITHM
+    assert radar.source == "admin_default"
+
+
 def test_explicit_follow_default_and_saved_production_use_same_new_engine(
     eod_snapshot,
     tmp_path: Path,
