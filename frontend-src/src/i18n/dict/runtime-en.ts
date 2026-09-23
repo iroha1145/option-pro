@@ -1979,6 +1979,7 @@ export const EN: Record<string, string> = {
   "任务状态暂时读不到": "Job status is temporarily unavailable",
   "任务状态暂时读不到，正在重试": "Job status is temporarily unavailable. Retrying…",
   "任务记录已不存在": "Job record no longer exists",
+  "任务记录缺失": "Job record missing",
   "自动查询已暂停，点击重试查看任务状态": "Automatic checks have paused. Retry to check the job status.",
   "新闻数量暂不可确认": "News count unavailable",
   "暂时无法确认是否有待分析新闻，请稍后重试": "We cannot confirm whether news is awaiting analysis. Please retry shortly.",

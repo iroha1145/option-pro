@@ -24,6 +24,7 @@ import ConfirmDialog from './ConfirmDialog';
 import { t as __t } from '../../i18n/core.ts';
 
 const TERMINAL: NewsAnalysisJob['status'][] = ['completed', 'failed', 'cancelled', 'insufficient_context'];
+const inFlight = (status: CatalystNewsItem['analysisStatus']) => status === 'queued' || status === 'in_progress';
 
 /* ---------------- 逐股影响卡 ---------------- */
 function StockImpactCard({ imp, index }: { imp: TrustedStockImpact; index: number }) {
@@ -110,6 +111,9 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
   const [recoveryEpoch, setRecoveryEpoch] = useState(0);
   const [pollRetryEpoch, setPollRetryEpoch] = useState(0);
   const [job, setJob] = useState<NewsAnalysisJob | null>(null);
+  /* 任务记录 404：只作废这个任务 id 的本地运行态。不编造后端终态，也不自动重投付费任务。 */
+  const [missingJobId, setMissingJobId] = useState<string | null>(null);
+  const missingJobIdRef = useRef<string | null>(null);
   const [confirm, setConfirm] = useState<'create' | 'force' | 'cancel' | null>(null);
   const pollRef = useRef<number | null>(null);
   const backoffRef = useRef(0);
@@ -190,9 +194,42 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
     setRecoveryEpoch((value) => value + 1);
   }, []);
 
+  /* 任务终态或记录缺失后补读详情；读取绑定新闻与任务 id，换条/换任务即作废。 */
+  const refreshDetail = async (forNews: string, expectedJobId: string): Promise<CatalystNewsItem | null> => {
+    const request = beginDetailRead(forNews, expectedJobId);
+    try {
+      const fresh = await request.read();
+      if (!request.isAlive()) return null;
+      setFetched(fresh);
+      setDetailNotice(null);
+      setLoadError(null);
+      onUpdate(fresh);
+      return fresh;
+    } catch (error) {
+      if (error instanceof ReadAttemptAborted || !request.isAlive()) return null;
+      setDetailNotice(__t('详情更新失败'));
+      return null;
+    } finally {
+      request.cancel();
+    }
+  };
+
+  /* 停查这个 id、撤掉旧的运行态，并补读详情：详情可能已指向新任务或已完成的分析。 */
+  const markJobMissing = (forNews: string, jobId: string) => {
+    missingJobIdRef.current = jobId;
+    setMissingJobId(jobId);
+    setJob((current) => (current && current.jobId === jobId ? null : current));
+    setJobNotice({ text: __t('任务记录已不存在'), retryable: false });
+    void refreshDetail(forNews, jobId).then((fresh) => {
+      if (fresh && (fresh.analysisJobId !== jobId || !inFlight(fresh.analysisStatus))) setJobNotice(null);
+    });
+  };
+
   /* 换条时清任务；重试详情不走这里，避免打断已经在跟的任务。 */
   useEffect(() => {
     invalidateDetailRead();
+    missingJobIdRef.current = null;
+    setMissingJobId(null);
     if (!newsId) {
       /* 抽屉关闭（newsId=null）时必须停掉分析任务轮询（审计 2.2.17）：
          组件常驻不卸载，不清理的话 setTimeout 会继续以 2s→10s 打后端，
@@ -243,6 +280,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
     if (item.analysisStatus !== 'queued' && item.analysisStatus !== 'in_progress') return;
     const forNews = item.newsId;
     const jobId = item.analysisJobId;
+    if (missingJobIdRef.current === jobId) return;
     const recoveryKey = `${forNews}:${jobId}:${recoveryEpoch}`;
     if (job?.jobId === jobId && recoveryOkRef.current === recoveryKey) return;
     let disposed = false;
@@ -274,27 +312,15 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
         setJobNotice(null);
         setJob(j);
         if (!TERMINAL.includes(j.status)) return;
-        const request = beginDetailRead(forNews, jobId);
-        try {
-          const fresh = await request.read();
-          if (!request.isAlive()) return;
-          setFetched(fresh);
-          setDetailNotice(null);
-          setLoadError(null);
-          onUpdate(fresh);
-        } catch (error) {
-          if (error instanceof ReadAttemptAborted || !request.isAlive()) return;
-          setDetailNotice(__t('详情更新失败'));
-        } finally {
-          request.cancel();
-        }
+        await refreshDetail(forNews, jobId);
       } catch (error) {
         if (error instanceof ReadAttemptAborted || !isAlive()) return;
-        /* 404 = 任务记录已不在（例如已被清理）：再点重试也只会再 404，不给按钮。 */
-        const gone = (error as { code?: unknown } | null)?.code === 404;
-        setJobNotice(gone
-          ? { text: __t('任务记录已不存在'), retryable: false }
-          : { text: __t('任务状态暂时读不到'), retryable: true });
+        /* 404 = 任务记录已不在（例如已被清理）：再查同一 id 只会再 404。 */
+        if ((error as { code?: unknown } | null)?.code === 404) {
+          markJobMissing(forNews, jobId);
+          return;
+        }
+        setJobNotice({ text: __t('任务状态暂时读不到'), retryable: true });
       }
     })();
     return () => {
@@ -393,7 +419,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
         if (!stillThisPoll()) return;
         if ((error as { code?: unknown } | null)?.code === 404) {
           stopPoll();
-          setJobNotice({ text: __t('任务记录已不存在'), retryable: false });
+          markJobMissing(job.newsId, job.jobId);
           return;
         }
         pollFailuresRef.current += 1;
@@ -476,6 +502,10 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
   const showInsufficient = (item?.analysisStatus === 'insufficient_context' || job?.status === 'insufficient_context') && !running;
   const showFailed = (item?.analysisStatus === 'failed' || job?.status === 'failed') && !running;
   const showCancelled = job?.status === 'cancelled';
+  /* 详情仍指向已确认缺失的在途任务：不再显示排队/分析中，改给重新发起的入口。 */
+  const jobMissing = Boolean(
+    item?.analysisJobId && item.analysisJobId === missingJobId && inFlight(item.analysisStatus),
+  );
 
   return (
     <Drawer
@@ -561,7 +591,9 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
                 <AnalysisIcon size={15} className="text-ai-600" />
                 {__t('模型分析')}
               </p>
-              <AnalysisStatusChip status={running ? (job.status === 'queued' ? 'queued' : 'in_progress') : item.analysisStatus} />
+              {jobMissing
+                ? <SoftBadge tone="warn">{__t('任务记录缺失')}</SoftBadge>
+                : <AnalysisStatusChip status={running ? (job.status === 'queued' ? 'queued' : 'in_progress') : item.analysisStatus} />}
             </div>
             {jobNotice && (
               <p className="mt-3 flex flex-wrap items-center gap-2 text-caption text-ink-500" role="status">
@@ -653,7 +685,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
               <div className="mt-4 flex flex-wrap items-center gap-2.5">
                 {accessLoading ? null : isOwner ? (
                   <>
-                    {(item.analysisStatus === 'pending' || showCancelled) && (
+                    {(item.analysisStatus === 'pending' || showCancelled || jobMissing) && (
                       <button
                         onClick={() => setConfirm('create')}
                         className="flex items-center gap-1.5 rounded-md bg-ai-600 px-3.5 py-2 text-caption font-medium text-on-accent shadow-btn transition-[filter] hover:brightness-105"
