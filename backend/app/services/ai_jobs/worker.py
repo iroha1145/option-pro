@@ -16,6 +16,7 @@ from typing import Any
 
 from app.config import get_settings
 from app.execution_limits import BREAKOUT_TASK_TIMEOUT_SECONDS
+from app.failure_diagnostics import record_fallback_failure
 from app.services.ai_jobs import runtime
 from app.services.ai_jobs.repository import AIJobRepository
 
@@ -175,7 +176,8 @@ async def _lease_heartbeat(
                         owner,
                         lease_seconds,
                     )
-                except Exception:
+                except Exception as exc:
+                    record_fallback_failure("ai_job_lease_renewal", exc)
                     if time.monotonic() - last_successful_renewal >= lease_seconds:
                         record_lease_loss()
                         return

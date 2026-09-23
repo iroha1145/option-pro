@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import logging
 import math
 import sqlite3
 import threading
@@ -23,6 +24,8 @@ from .runtime import TaskResult, TaskSpec, _public_error_code
 
 from app.personal_config import personal_analysis_permissions as _personal_analysis_permissions
 
+
+_logger = logging.getLogger("optix.worker")
 
 # Full-market capture, geometry, nine scoring views and diagnostic publication
 # share this finite budget. Production runs can exceed the old 30-minute limit.
@@ -1536,7 +1539,8 @@ class PublicHomeTask:
         except asyncio.CancelledError:
             self._inflight.pop(resource, None)
             raise
-        except Exception:
+        except Exception as exc:
+            record_fallback_failure("public_home_produce", exc)
             self._inflight.pop(resource, None)
             self._record_failure(
                 resource,
@@ -1551,7 +1555,8 @@ class PublicHomeTask:
                 path=path,
                 watchlist_path=watchlist_path,
             )
-        except Exception:
+        except Exception as exc:
+            record_fallback_failure("public_home_publish", exc)
             self._record_failure(
                 resource,
                 baseline_saved_at=attempt.baseline_saved_at,
@@ -2905,7 +2910,15 @@ class MaintenanceTask:
                     label=label,
                     keep=self.keep,
                 )
-            except (BackupError, OSError, sqlite3.Error):
+            except (BackupError, OSError, sqlite3.Error) as exc:
+                # BackupError carries the cause (lock timeout, integrity check);
+                # the task status alone only says which database failed.
+                _logger.warning(
+                    "database backup failed label=%s error_type=%s error=%s",
+                    label,
+                    type(exc).__name__,
+                    exc,
+                )
                 failed.append(label)
             else:
                 completed.append(label)

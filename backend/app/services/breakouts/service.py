@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from app.failure_diagnostics import record_fallback_failure
 from app.services.numeric import (
     finite_number as _finite,
 )
@@ -2007,7 +2008,9 @@ class BreakoutRadarService:
                     )
             except BreakoutStageError:
                 raise
-            except Exception:
+            except Exception as exc:
+                # The radar still publishes, without strength; say why.
+                record_fallback_failure("breakout_strength_stage", exc)
                 strength_map = {}
             else:
                 try:

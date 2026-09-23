@@ -25,6 +25,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Optional
 
+from app.failure_diagnostics import record_fallback_failure
+
 from .exposures import EXPOSURE_VERSION
 from .linkage import (
     UNAVAILABLE,
@@ -168,7 +170,8 @@ def _load_macro_fit_reader_uncached() -> MacroFitReader:
 
         from .repository import MacroRepository
         from .service import MacroConditionsService, MacroServiceConfig
-    except Exception:
+    except Exception as exc:
+        record_fallback_failure("macro_linkage_import", exc)
         return unavailable_reader(REASON_MODULE)
 
     try:
@@ -181,7 +184,8 @@ def _load_macro_fit_reader_uncached() -> MacroFitReader:
             config=MacroServiceConfig.from_personal_config(get_personal_config()),
         )
         inputs = service.linkage_inputs()
-    except Exception:
+    except Exception as exc:
+        record_fallback_failure("macro_linkage_read", exc)
         inputs = None
     if not inputs:
         return unavailable_reader(REASON_SNAPSHOT)

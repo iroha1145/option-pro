@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Iterable, Iterator, Mapping
 from urllib.parse import quote
 
+from app.failure_diagnostics import record_fallback_failure
 from app.services.ai_jobs.models import (
     AIJobPublic,
     earnings_report_id,
@@ -2967,7 +2968,8 @@ class AIJobRepository:
                 "pending": pending,
                 "submission_unknown": submission_unknown,
             }
-        except Exception:
+        except Exception as exc:
+            record_fallback_failure("ai_job_health", exc)
             return {
                 "healthy": False,
                 "status": "database_unavailable",

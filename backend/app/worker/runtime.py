@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from app.access import request_owner_access_context
+from app.failure_diagnostics import record_fallback_failure
 
 from .lock import ProcessFileLock
 from .state import (
@@ -498,7 +499,9 @@ class WorkerSupervisor:
                             token,
                             lease_seconds=self.lease_seconds,
                         )
-                    except Exception:
+                    except Exception as exc:
+                        # A later lease_lost otherwise shows no cause.
+                        record_fallback_failure("worker_lease_renewal", exc)
                         if (
                             time.monotonic() - last_successful_renewal
                             >= self.lease_seconds
