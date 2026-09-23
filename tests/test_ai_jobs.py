@@ -3072,6 +3072,62 @@ def test_focus_cycle_creation_survives_a_full_bulk_queue(tmp_path):
     assert focus["status"] == "pending"
 
 
+def test_manual_backlog_does_not_starve_the_scheduled_lane(tmp_path):
+    """手动道在飞时，积压的高优先级手动任务不能一直挡住后台道。"""
+
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    repository.initialize()
+    signal_version, signal_digest = runtime.schema_identity("signal_analysis")
+
+    def manual_job(ticker: str):
+        job, _ = repository.create_job(
+            job_type="signal_analysis",
+            payload={"ticker": ticker},
+            model="gpt-5.6-terra",
+            reasoning="max",
+            execution_mode="background",
+            prompt_version="signal-analysis-zh-cn-v5",
+            schema_version=signal_version,
+            schema_sha256=signal_digest,
+            max_queued=200,
+            submission_source="manual",
+            priority=80,
+        )
+        return job
+
+    owner = "lane-owner"
+    running = manual_job("AMD")
+    assert repository.claim_due(owner, 60)["job_id"] == running["job_id"]
+    assert (
+        repository.mark_submission_started(running["job_id"], owner, daily_limit=4)
+        == "started"
+    )
+    for ticker in ("NVDA", "MSFT", "META", "TSLA"):
+        manual_job(ticker)
+    news_version, news_digest = runtime.schema_identity("news_impact")
+    scheduled, _ = repository.create_job(
+        job_type="news_impact",
+        payload={"ticker": "AMD", "title": "后台批任务", "allowed_tickers": ["AMD"]},
+        model="gpt-5.6-terra",
+        reasoning="max",
+        execution_mode="background",
+        prompt_version="news-impact-v1",
+        schema_version=news_version,
+        schema_sha256=news_digest,
+        max_queued=200,
+        submission_source="scheduled",
+        priority=70,
+    )
+
+    claimed = repository.claim_due(owner, 60)
+
+    assert claimed["job_id"] == scheduled["job_id"]
+    assert (
+        repository.mark_submission_started(scheduled["job_id"], owner, daily_limit=4)
+        == "started"
+    )
+
+
 def test_manual_fast_lane_is_not_blocked_by_scheduled_in_flight(tmp_path):
     """手动任务插队（用户实测反馈）：后台批任务在飞时，用户点的个股分析
     不再等它跑完——manual/scheduled 双车道各占一个提交槽，同道内仍单飞。"""

@@ -1645,21 +1645,39 @@ class AIJobRepository:
         lease_expires = _iso(now_dt + timedelta(seconds=lease_seconds))
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
+            # An unsubmitted job whose lane already has a paid submission in
+            # flight would only be deferred by mark_submission_started. Rank
+            # it after the other lane's work; otherwise a backlog of
+            # higher-priority manual jobs, each deferred for two seconds and
+            # re-claimed every half second, starves the scheduled lane.
             row = connection.execute(
                 """
-                SELECT * FROM ai_jobs
-                WHERE status IN ('pending','queued','in_progress')
-                  AND (next_attempt_at IS NULL OR next_attempt_at<=?)
-                  AND (lease_expires_at IS NULL OR lease_expires_at<=?)
+                SELECT j.* FROM ai_jobs AS j
+                LEFT JOIN ai_job_sources AS s ON s.job_id=j.job_id
+                WHERE j.status IN ('pending','queued','in_progress')
+                  AND (j.next_attempt_at IS NULL OR j.next_attempt_at<=?)
+                  AND (j.lease_expires_at IS NULL OR j.lease_expires_at<=?)
                 ORDER BY
-                  CASE WHEN cancel_requested_at IS NOT NULL THEN 0 ELSE 1 END,
+                  CASE WHEN j.cancel_requested_at IS NOT NULL THEN 0 ELSE 1 END,
                   CASE
-                    WHEN openai_response_id IS NOT NULL THEN 0
-                    WHEN submission_started_at IS NOT NULL THEN 1
+                    WHEN j.openai_response_id IS NOT NULL THEN 0
+                    WHEN j.submission_started_at IS NOT NULL THEN 1
                     ELSE 2
                   END,
-                  priority DESC,
-                  created_at
+                  CASE
+                    WHEN j.submission_started_at IS NULL AND EXISTS (
+                      SELECT 1 FROM ai_jobs AS busy
+                      LEFT JOIN ai_job_sources AS busy_source
+                        ON busy_source.job_id=busy.job_id
+                      WHERE busy.status IN ('queued','in_progress')
+                        AND busy.submission_started_at IS NOT NULL
+                        AND COALESCE(busy_source.submission_source,'scheduled')
+                          =COALESCE(s.submission_source,'scheduled')
+                    ) THEN 1
+                    ELSE 0
+                  END,
+                  j.priority DESC,
+                  j.created_at
                 LIMIT 1
                 """,
                 (now, now),
