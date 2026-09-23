@@ -458,6 +458,28 @@ def test_history_download_retries_a_transient_unusable_yahoo_response(
     assert not scanner._slice_ticker(result, "AAA").empty
 
 
+def test_yahoo_history_uses_the_split_only_basis_of_massive(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    history = _history(300)
+    history["Adj Close"] = history["Close"] * 0.97
+    history.columns = pd.MultiIndex.from_product([["AAA"], history.columns])
+    captured: dict = {}
+
+    def download(**kwargs):
+        captured.update(kwargs)
+        return history.copy()
+
+    monkeypatch.setattr(scanner.yf, "download", download)
+
+    result = scanner._download_history(["AAA"], period="2y")
+
+    assert captured["auto_adjust"] is False
+    frame = scanner._slice_ticker(result, "AAA")
+    assert "Adj Close" not in frame.columns
+    assert frame["Close"].iloc[-1] == history[("AAA", "Close")].iloc[-1]
+
+
 def test_unusable_strength_history_is_not_cached_as_a_valid_scan(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
