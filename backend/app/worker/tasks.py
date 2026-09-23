@@ -2895,7 +2895,10 @@ class MaintenanceTask:
                 skipped.append(label)
                 continue
             try:
-                await asyncio.to_thread(
+                # _call_local, not a bare to_thread: after a task timeout the
+                # copy thread keeps running, and the retry 300 s later would
+                # start the next database's backup alongside it.
+                await _call_local(
                     backup_database,
                     path,
                     self.destination,

@@ -3606,6 +3606,43 @@ def test_lease_lost_during_status_write_still_propagates(tmp_path: Path) -> None
     asyncio.run(scenario())
 
 
+def test_cancelled_backup_holds_the_task_until_the_copy_finishes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """超时取消后，备份线程还在拷贝时不能让任务先结束（否则下一轮叠加备份）。"""
+
+    from app.tools import sqlite_backup
+
+    source = tmp_path / "state.db"
+    sqlite3.connect(source).close()
+    started = threading.Event()
+    release = threading.Event()
+    finished = threading.Event()
+
+    def slow_backup(_path, _destination, *, label, keep):
+        started.set()
+        assert release.wait(timeout=5)
+        finished.set()
+
+    monkeypatch.setattr(sqlite_backup, "backup_database", slow_backup)
+    task = MaintenanceTask({"state": source}, destination=tmp_path / "backups", keep=2)
+
+    async def scenario() -> None:
+        running = asyncio.create_task(task())
+        while not started.is_set():
+            await asyncio.sleep(0.01)
+        running.cancel()
+        await asyncio.sleep(0.1)
+        assert not running.done()
+        release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await running
+        assert finished.is_set()
+
+    asyncio.run(scenario())
+
+
 def test_honor_persisted_schedule_skips_startup_run(tmp_path: Path) -> None:
     """维护任务重启后要沿用持久化的 next_run_at，而不是立即重跑全量备份。"""
 
