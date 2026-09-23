@@ -403,7 +403,8 @@ async def resolve_market_caps(
                 missing,
                 key=lambda ticker: next(
                     (
-                        int(row.get("days_until") or 999)
+                        # A report due today (days_until 0) is the most urgent.
+                        999 if row.get("days_until") is None else int(row["days_until"])
                         for row in rows
                         if str(row.get("ticker") or "").upper() == ticker
                     ),

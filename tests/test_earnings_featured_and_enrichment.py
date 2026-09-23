@@ -422,6 +422,44 @@ def test_massive_market_cap_fallback_stops_after_a_rate_limit(
     assert {entry["status"] for entry in resolved.values()} == {"unavailable"}
 
 
+def test_massive_market_cap_fallback_serves_todays_reports_first(
+    tmp_path, monkeypatch
+) -> None:
+    from app.services import massive
+
+    calls: list[str] = []
+
+    def detail(ticker: str) -> dict:
+        calls.append(ticker)
+        return {"market_cap": 5e9, "name": ticker}
+
+    async def no_profiles(_tickers):
+        return {"configured": False, "succeeded": False, "error": None, "profiles": {}}
+
+    monkeypatch.setattr(massive, "configured", lambda: True)
+    monkeypatch.setattr(massive, "reference_ticker_detail", detail)
+    rows = [
+        {"ticker": "LATER", "market_cap": None, "days_until": 4},
+        {"ticker": "TODAY", "market_cap": None, "days_until": 0},
+    ]
+
+    async def resolve():
+        import unittest.mock as mock
+
+        with mock.patch.object(enrich, "fetch_fmp_profiles", no_profiles):
+            return await enrich.resolve_market_caps(
+                rows,
+                cache_days=3,
+                massive_detail_budget=1,
+                cache_path=tmp_path / "caps.json",
+            )
+
+    resolved = asyncio.run(resolve())
+
+    assert calls == ["TODAY"]
+    assert resolved["TODAY"]["status"] == "active"
+
+
 # ── 预期波动 provider 链 ─────────────────────────────────────
 
 
