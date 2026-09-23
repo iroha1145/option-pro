@@ -213,9 +213,25 @@ def merge_recent_actuals(
     return output, filled, attempted
 
 
+def _prune_expired(now: float) -> None:
+    """Drop expired windows: keys follow the calendar date, so they never repeat."""
+
+    for key in [key for key, (expires, _rows) in _cache.items() if expires <= now]:
+        del _cache[key]
+    for key in [key for key, until in _failure_cache.items() if until <= now]:
+        del _failure_cache[key]
+    for key in [
+        key
+        for key, lock in _cache_locks.items()
+        if key not in _cache and key not in _failure_cache and not lock.locked()
+    ]:
+        del _cache_locks[key]
+
+
 async def _fetch_source_rows(date_from: date, date_to: date) -> list[dict[str, Any]]:
     key = (date_from.isoformat(), date_to.isoformat())
     now = monotonic_time.monotonic()
+    _prune_expired(now)
     cached = _cache.get(key)
     if cached is not None and cached[0] > now:
         return deepcopy(cached[1])

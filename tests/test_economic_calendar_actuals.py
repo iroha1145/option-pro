@@ -314,3 +314,30 @@ def test_explicit_as_of_route_never_calls_live_fallback(
 
     assert response.status_code == 200
     assert response.json()["as_of"] == "2026-07-22T04:00:00+00:00"
+
+
+def test_expired_source_windows_do_not_accumulate(monkeypatch) -> None:
+    """Each day adds new (from, to) keys; expired ones must be released."""
+
+    import asyncio
+
+    monkeypatch.setattr(actuals, "_cache", {})
+    monkeypatch.setattr(actuals, "_failure_cache", {})
+    monkeypatch.setattr(actuals, "_cache_locks", {})
+    now = actuals.monotonic_time.monotonic()
+    old = ("2026-06-01", "2026-06-04")
+    actuals._cache[old] = (now - 1, [{"title": "old"}])
+    actuals._failure_cache[("2026-06-02", "2026-06-05")] = now - 1
+    actuals._cache_locks[old] = asyncio.Lock()
+    current = (date(2026, 7, 21), date(2026, 7, 24))
+    actuals._cache[(current[0].isoformat(), current[1].isoformat())] = (
+        now + 300,
+        [{"title": "fresh"}],
+    )
+
+    rows = asyncio.run(actuals._fetch_source_rows(*current))
+
+    assert rows == [{"title": "fresh"}]
+    assert list(actuals._cache) == [("2026-07-21", "2026-07-24")]
+    assert actuals._failure_cache == {}
+    assert old not in actuals._cache_locks
