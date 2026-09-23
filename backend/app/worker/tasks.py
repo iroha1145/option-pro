@@ -140,7 +140,7 @@ async def _build_local_intelligence(
         canonical_tickers=_canonical_sector_tickers(),
         model=config.ai.model,
         reasoning=config.ai.reasoning,
-        max_queued=200,
+        max_queued=settings.openai_job_max_queued,
         manual_refresh_cooldown_seconds=refresh_cooldown,
     )
     await _call_local(intelligence.initialize)

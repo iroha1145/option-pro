@@ -137,6 +137,7 @@ def _worker_config(
     url: str = "",
     cache_path: Path | None = None,
     ai_path: Path | None = None,
+    max_queued: int = 200,
 ) -> SimpleNamespace:
     return SimpleNamespace(
         internal_api_token=SecretStr(token),
@@ -146,6 +147,7 @@ def _worker_config(
         macro_conditions_db_path=tmp_path / "macro-conditions.db",
         fred_api_key=SecretStr(""),
         openai_job_db_path=ai_path or tmp_path / "ai-jobs.db",
+        openai_job_max_queued=max_queued,
         optix_worker_db_path=tmp_path / "optix-worker.db",
         optix_worker_lock_path=tmp_path / "optix-worker.lock",
         breakout_db_path=tmp_path / "optix.db",
@@ -2402,6 +2404,8 @@ def test_personal_catalyst_task_uses_https_bearer_etl_and_closes_client(
             assert options["mode"] == "read"
             assert options["model"] == "gpt-5.6-terra"
             assert options["reasoning"] == "max"
+            # OPENAI_JOB_MAX_QUEUED, not a fixed 200, caps worker-side jobs.
+            assert options["max_queued"] == 37
             tickers = set(options["canonical_tickers"])
             assert "NVDA" in tickers
             assert "ZZZZ" not in tickers
@@ -2446,6 +2450,7 @@ def test_personal_catalyst_task_uses_https_bearer_etl_and_closes_client(
             url="https://macrolens.example",
             cache_path=cache_path,
             ai_path=ai_path,
+            max_queued=37,
         ),
         personal_config=config,
         etl_transport=httpx.MockTransport(handler),
