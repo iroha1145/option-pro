@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+import hashlib
 import json
 import sqlite3
 import sys
@@ -1393,13 +1394,41 @@ def test_worker_health_reports_official_responses_sdk_without_a_key(tmp_path):
 
 
 def test_all_paid_job_prompt_versions_invalidate_legacy_english_cache():
-    assert ai._PROMPT_VERSIONS == {
+    assert runtime.PROMPT_VERSIONS == {
         "earnings_impact": "earnings-impact-zh-cn-v5",
         "option_alerts": "option-alerts-zh-cn-v4",
         "signal_analysis": "signal-analysis-zh-cn-v6",
         "news_impact": "news-impact-zh-cn-v6",
-        "market_focus": "market-focus-zh-cn-v5",
+        "market_focus": "market-focus-zh-cn-v6",
     }
+
+
+def test_post_release_earnings_instructions_change_only_with_the_prompt_version():
+    """schema_identity hashes the pre-release instructions only.
+
+    The post-release branch reaches the model through the same job type, so
+    queued jobs and stored results would not notice an edit to it. Pinning the
+    text to the prompt version makes such an edit fail here until
+    PROMPT_VERSIONS["earnings_impact"] is bumped along with it.
+    """
+
+    digests = {
+        stage: hashlib.sha256(
+            runtime.build_runtime_request(
+                "earnings_impact", {"analysis_stage": stage}
+            ).instructions.encode("utf-8")
+        ).hexdigest()[:16]
+        for stage in ("pre_release", "post_release_manual", "post_release_final")
+    }
+
+    assert (runtime.PROMPT_VERSIONS["earnings_impact"], digests) == (
+        "earnings-impact-zh-cn-v5",
+        {
+            "pre_release": "58be13858af11856",
+            "post_release_manual": "a7317714b08d81b5",
+            "post_release_final": "a7317714b08d81b5",
+        },
+    )
 
 
 def test_client_is_fixed_to_the_official_openai_base_url(

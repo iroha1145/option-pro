@@ -73,6 +73,21 @@ EARNINGS_FINAL_PRIORITY = 90
 EARNINGS_MANUAL_QUEUE_RESERVE = 20
 EARNINGS_FINAL_QUEUE_RESERVE = 40
 EARNINGS_PRE_RELEASE_ACTIVE_LIMIT = 64
+# Part of every job's request identity: create_job deduplicates on it, so two
+# copies drifting apart would pay for the same analysis twice. Bump a version
+# whenever that job type's instructions change.
+PROMPT_VERSIONS = {
+    "earnings_impact": "earnings-impact-zh-cn-v5",
+    "option_alerts": "option-alerts-zh-cn-v4",
+    # v6：证据包加入大盘/宏观/期权链/新闻/财报日程上下文块（输出 schema 不变，
+    # 历史 v5 结果照常可读，不触发任何历史付费任务重投）。
+    "signal_analysis": "signal-analysis-zh-cn-v6",
+    "news_impact": "news-impact-zh-cn-v6",
+    # v6 adds the compact Optix 宏观环境 block to the Market Focus input. The
+    # output schema is unchanged, so results produced under v5 stay readable
+    # exactly as they were and no historical paid job is resubmitted.
+    "market_focus": "market-focus-zh-cn-v6",
+}
 # Failures a scheduler may retry on its own, at most SCHEDULED_MAX_ATTEMPTS
 # executions per item. Anything else (schema or binding failures, oversized
 # input) would fail the same way again and only spend more tokens.

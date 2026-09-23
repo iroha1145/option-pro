@@ -527,7 +527,7 @@ class EarningsAnalysisTask:
                     model=self._settings.openai_model,
                     reasoning=self._settings.openai_reasoning,
                     execution_mode=self._settings.openai_execution_mode,
-                    prompt_version="earnings-impact-zh-cn-v5",
+                    prompt_version=ai_runtime.PROMPT_VERSIONS["earnings_impact"],
                     schema_version=schema_version,
                     schema_sha256=schema_sha256,
                     max_queued=queue_limit,

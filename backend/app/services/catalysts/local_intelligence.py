@@ -73,11 +73,8 @@ SubmissionSource = Literal["manual", "scheduled"]
 MODEL = "gpt-5.6-terra"
 REASONING = "max"
 EXECUTION_MODE = "background"
-NEWS_PROMPT_VERSION = "news-impact-zh-cn-v6"
-# v6 adds the compact Optix 宏观环境 block to the Market Focus input. The output
-# schema is unchanged, so results produced under v5 stay readable exactly as
-# they were and no historical paid job is resubmitted.
-FOCUS_PROMPT_VERSION = "market-focus-zh-cn-v6"
+NEWS_PROMPT_VERSION = ai_runtime.PROMPT_VERSIONS["news_impact"]
+FOCUS_PROMPT_VERSION = ai_runtime.PROMPT_VERSIONS["market_focus"]
 #: Version of the *input* document handed to Market Focus. Bumped whenever the
 #: shape of the payload changes, independently of the output schema.
 FOCUS_INPUT_SCHEMA_VERSION = "market-focus-input-v2"
