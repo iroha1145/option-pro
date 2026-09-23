@@ -125,7 +125,7 @@ def _customer_login(request: Request, payload: LoginRequest) -> Response:
     from app.api.accounts import (
         attach_account_cookie,
         account_http_error,
-        check_login_cooldown,
+        login_attempt,
         record_login_failure,
     )
     from app.services.accounts import AccountError, get_account_store
@@ -135,12 +135,12 @@ def _customer_login(request: Request, payload: LoginRequest) -> Response:
             status_code=status.HTTP_426_UPGRADE_REQUIRED,
             detail={"code": "https_required", "message": "登录需要 HTTPS"},
         )
-    check_login_cooldown(request)
-    try:
-        result = get_account_store().authenticate(payload.username, payload.password)
-    except AccountError as exc:
-        record_login_failure(request)
-        raise account_http_error(exc) from exc
+    with login_attempt(request):
+        try:
+            result = get_account_store().authenticate(payload.username, payload.password)
+        except AccountError as exc:
+            record_login_failure(request)
+            raise account_http_error(exc) from exc
     # This bucket covers all usernames from one source address. A successful
     # login to an attacker's own account must not erase guesses against others;
     # failures expire through the normal rolling window instead.

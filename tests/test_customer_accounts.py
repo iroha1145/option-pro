@@ -282,6 +282,49 @@ def test_repeated_failures_trigger_a_cooldown(
     assert blocked.json()["detail"]["code"] == "login_cooldown"
 
 
+def test_parallel_customer_logins_from_one_source_run_one_password_check(
+    client: TestClient,
+    store: AccountStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+
+    store.register("erin", "fixture-password-for-tests")
+    entered = Event()
+    release = Event()
+    checks = 0
+    real_authenticate = store.authenticate
+
+    def slow_authenticate(username: str, password: str):
+        nonlocal checks
+        checks += 1
+        entered.set()
+        assert release.wait(timeout=5)
+        return real_authenticate(username, password)
+
+    monkeypatch.setattr(store, "authenticate", slow_authenticate)
+
+    def attempt():
+        return client.post(
+            "/api/access/login",
+            json={"username": "erin", "password": "wrong"},
+            headers=HEADERS,
+        )
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        first = executor.submit(attempt)
+        assert entered.wait(timeout=5)
+        concurrent = attempt()
+        release.set()
+        assert first.result(timeout=5).status_code == 401
+
+    assert concurrent.status_code == 429
+    assert concurrent.json()["detail"]["code"] == "login_cooldown"
+    assert concurrent.headers["Retry-After"] == "1"
+    assert checks == 1
+
+
 def test_own_account_login_cannot_reset_guesses_against_another_account(
     client: TestClient,
     store: AccountStore,
