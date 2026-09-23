@@ -128,8 +128,12 @@ export function normalizeBreakoutEvent(raw: unknown): BreakoutEventFull {
   const type: SignalType = SETUP_TO_SIGNAL[setup] ?? 'breakout';
   const sessionRaw = pickS(r, 'session');
   const eventAt = pickS(r, 'event_at', 'first_seen_at', 'at') ?? '';
-  const eventPrice = pickN(r, 'event_price', 'price');
-  const currentPrice = pickN(r, 'current_price') ?? eventPrice;
+  // 显式 null 表示没有该价格；只有旧版单独的 price 字段可兼容两种价位。
+  const hasEventPrice = Object.hasOwn(r, 'event_price');
+  const eventPrice = hasEventPrice ? num(r.event_price) : pickN(r, 'price');
+  const currentPrice = Object.hasOwn(r, 'current_price')
+    ? num(r.current_price)
+    : hasEventPrice ? null : pickN(r, 'price');
   const targetPrice = pickN(r, 'target_price', 'targetPrice'); // 契约无 → null（不编造目标价）
   const invalidation = pickN(r, 'invalidation_price', 'invalidPrice');
   const rangePersistence = (() => {
@@ -291,6 +295,11 @@ function completeMockEvent(raw: BreakoutEvent | BreakoutSignal): BreakoutEventFu
   return { ...normalizeBreakoutEvent(raw), ...raw };
 }
 
+function normalizeHistoricalEvent(raw: unknown): BreakoutEventFull {
+  const event = normalizeBreakoutEvent(raw);
+  return { ...event, price: event.event_price };
+}
+
 export const breakoutsApi = {
   // 契约 {as_of, session, status, events:[BreakoutEvent], ...} → events 数组（逐条归一到 mock 形状）
   current: (filters: BreakoutCurrentFilters = {}): Promise<BreakoutEventFull[]> =>
@@ -377,7 +386,7 @@ export const breakoutsApi = {
           sort_algorithm: filters.sort_algorithm,
         });
         return registryGet(`/breakouts/events${qs ? `?${qs}` : ''}`).then((d) => {
-          const events = unwrap(d, 'events', 'items').map(normalizeBreakoutEvent);
+          const events = unwrap(d, 'events', 'items').map(normalizeHistoricalEvent);
           const nextCursor = pickS(asRec(d), 'next_cursor', 'nextCursor');
           const rec = asRec(d);
           return {
@@ -400,7 +409,7 @@ export const breakoutsApi = {
       () =>
         get(`/breakouts/events/${encodeURIComponent(id)}`).then((d) => {
           const r = asRec(d);
-          const base = normalizeBreakoutEvent(r.event && typeof r.event === 'object' ? r.event : r);
+          const base = normalizeHistoricalEvent(r.event && typeof r.event === 'object' ? r.event : r);
           const transitions = normalizeBreakoutTransitions(r.transitions);
           return {
             ...base,
@@ -418,14 +427,16 @@ export const breakoutsApi = {
           ttlMs: 60_000,
           staleMs: 30 * 60_000,
         }).then(
-          (d) => unwrap(d, 'events', 'items').map(normalizeBreakoutEvent),
+          (d) => unwrap(d, 'events', 'items').map(normalizeHistoricalEvent),
         ),
     ),
 };
 
 /* ---- 归一化字段对照（契约 → mock 形状） ----
  * event_id→id/event_id · name→name(缺省 ticker) · setup_type→type(SETUP_TO_SIGNAL 推导)+label
- * current_price→price/current_price · session_change_pct→changePct/session_change_pct
+ * current_price→current_price；current 列表的 price 是现价，历史/详情/个股事件的 price 是事件价
+ * 只有旧版单独提供 price 时才同时映射为现价和事件价；明确的 null 不回退。
+ * session_change_pct→changePct/session_change_pct
  * intrinsic_strength_score→strengthScore(可 null) · event_at→at/event_at
  * lifecycle_state→result(hit/failed/pending 分类)+lifecycle_state
  * event_price→event_price/triggerPrice · invalidation_price→invalidation_price/invalidPrice
