@@ -105,12 +105,20 @@ ON ai_jobs(status, next_attempt_at, priority DESC, created_at);
 CREATE INDEX IF NOT EXISTS idx_ai_jobs_ticker
 ON ai_jobs(job_type, json_extract(payload_json, '$.ticker'), completed_at DESC);
 """
-_AI_JOBS_INDEX_STATEMENTS = (
-    """CREATE INDEX IF NOT EXISTS idx_ai_jobs_due
-       ON ai_jobs(status,next_attempt_at,priority DESC,created_at)""",
-    """CREATE INDEX IF NOT EXISTS idx_ai_jobs_ticker
-       ON ai_jobs(job_type,json_extract(payload_json,'$.ticker'),completed_at DESC)""",
-)
+
+
+def _statements(script: str) -> tuple[str, ...]:
+    """Split a checksummed schema script into the statements that apply it.
+
+    The version/checksum rule above hashes the script text, so the executed
+    statements must come from that text: a hand-kept second copy could change
+    the real shape without moving the checksum.
+    """
+
+    return tuple(part.strip() for part in script.split(";") if part.strip())
+
+
+_AI_JOBS_INDEX_STATEMENTS = _statements(_AI_JOBS_INDEX_SQL)
 _SCHEMA_SQL = _SCHEMA_REGISTRY_SQL + _AI_JOBS_TABLE_SQL + _AI_JOBS_INDEX_SQL
 _SCHEMA_CHECKSUM = hashlib.sha256(_SCHEMA_SQL.encode("utf-8")).hexdigest()
 _AI_JOB_SOURCES_TABLE_SQL = """
@@ -135,17 +143,7 @@ CREATE TABLE IF NOT EXISTS ai_job_batch_members (
 CREATE INDEX IF NOT EXISTS idx_ai_job_batch_members_batch
 ON ai_job_batch_members(batch_id, position);
 """
-_AI_JOB_BATCH_MEMBERS_STATEMENTS = (
-    """CREATE TABLE IF NOT EXISTS ai_job_batch_members (
-           job_id TEXT PRIMARY KEY REFERENCES ai_jobs(job_id) ON DELETE CASCADE,
-           batch_id TEXT NOT NULL,
-           position INTEGER NOT NULL CHECK(position >= 1),
-           created_at TEXT NOT NULL,
-           UNIQUE(batch_id, position)
-       )""",
-    """CREATE INDEX IF NOT EXISTS idx_ai_job_batch_members_batch
-       ON ai_job_batch_members(batch_id, position)""",
-)
+_AI_JOB_BATCH_MEMBERS_STATEMENTS = _statements(_AI_JOB_BATCH_MEMBERS_TABLE_SQL)
 _BATCH_SCHEMA_CHECKSUM = hashlib.sha256(
     _AI_JOB_BATCH_MEMBERS_TABLE_SQL.encode("utf-8")
 ).hexdigest()
@@ -163,20 +161,7 @@ CREATE TABLE IF NOT EXISTS ai_earnings_final_locks (
 CREATE INDEX IF NOT EXISTS idx_ai_earnings_final_locks_ticker
 ON ai_earnings_final_locks(ticker, earnings_date DESC);
 """
-_EARNINGS_FINAL_LOCK_STATEMENTS = (
-    """CREATE TABLE IF NOT EXISTS ai_earnings_final_locks (
-           report_id TEXT PRIMARY KEY,
-           ticker TEXT NOT NULL,
-           earnings_date TEXT NOT NULL,
-           report_year INTEGER,
-           report_quarter INTEGER,
-           job_id TEXT NOT NULL UNIQUE
-               REFERENCES ai_jobs(job_id) ON DELETE CASCADE,
-           locked_at TEXT NOT NULL
-       )""",
-    """CREATE INDEX IF NOT EXISTS idx_ai_earnings_final_locks_ticker
-       ON ai_earnings_final_locks(ticker, earnings_date DESC)""",
-)
+_EARNINGS_FINAL_LOCK_STATEMENTS = _statements(_EARNINGS_FINAL_LOCKS_TABLE_SQL)
 _EARNINGS_LOCK_SCHEMA_CHECKSUM = hashlib.sha256(
     _EARNINGS_FINAL_LOCKS_TABLE_SQL.encode("utf-8")
 ).hexdigest()
