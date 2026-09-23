@@ -2541,11 +2541,14 @@ class AIJobRepository:
         unknown_submission_hold_seconds: int = 86400,
         unknown_submission_no_response_hold_seconds: int = 900,
         now: datetime | None = None,
+        lane: str | None = None,
     ) -> dict[str, Any]:
         """Return a secret-free, point-in-time view of paid task capacity.
 
         Use the same bounded quarantine as ``mark_submission_started`` so the
         owner UI and the worker agree about whether the paid slot is available.
+        ``lane`` ('manual' or 'scheduled') checks only that submission lane's
+        slot, as the worker does; None reports any in-flight submission.
         """
 
         self.ensure_initialized()
@@ -2612,20 +2615,21 @@ class AIJobRepository:
                 SELECT j.*,s.submission_source FROM ai_jobs AS j
                 JOIN ai_job_sources AS s ON s.job_id=j.job_id
                 WHERE j.submission_started_at IS NOT NULL
+                  AND (?1 IS NULL OR s.submission_source=?1)
                   AND (
                     j.status IN ('queued','in_progress')
                     OR (
                       j.error_code='submission_outcome_unknown'
                       AND (
                         (j.openai_response_id IS NOT NULL
-                         AND j.submission_started_at>=?)
-                        OR j.submission_started_at>=?
+                         AND j.submission_started_at>=?2)
+                        OR j.submission_started_at>=?3
                       )
                     )
                   )
                 ORDER BY j.created_at LIMIT 1
                 """,
-                (unknown_submission_cutoff, unknown_no_response_cutoff),
+                (lane, unknown_submission_cutoff, unknown_no_response_cutoff),
             ).fetchone()
             latest_paid = connection.execute(
                 """

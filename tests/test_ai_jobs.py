@@ -3072,6 +3072,28 @@ def test_focus_cycle_creation_survives_a_full_bulk_queue(tmp_path):
     assert focus["status"] == "pending"
 
 
+def test_budget_snapshot_reports_the_requested_lane_slot(tmp_path):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    job, _ = _create_earnings_job(repository, submission_source="scheduled")
+    owner = "snapshot-lane-owner"
+    assert repository.claim_due(owner, 60)["job_id"] == job["job_id"]
+    assert (
+        repository.mark_submission_started(job["job_id"], owner, daily_limit=4)
+        == "started"
+    )
+
+    def slot(lane):
+        return repository.budget_snapshot(
+            daily_limit=0,
+            daily_budget_usd=0,
+            lane=lane,
+        )["concurrency_available"]
+
+    assert slot(None) is False
+    assert slot("scheduled") is False
+    assert slot("manual") is True
+
+
 def test_manual_backlog_does_not_starve_the_scheduled_lane(tmp_path):
     """手动道在飞时，积压的高优先级手动任务不能一直挡住后台道。"""
 

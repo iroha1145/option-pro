@@ -314,6 +314,9 @@ class PersonalCatalystService:
                             )
                         ),
                         now=observed,
+                        # Owner analysis has its own paid slot; scheduled work
+                        # in flight does not make it wait.
+                        lane="manual",
                     )
                 )
             except (OSError, sqlite3.Error, RuntimeError, TypeError, ValueError):

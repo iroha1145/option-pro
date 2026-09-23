@@ -1692,6 +1692,44 @@ def test_analysis_capacity_errors_keep_their_http_and_retry_semantics(
         assert response.headers["Retry-After"] == str(retry_after)
 
 
+def test_scheduled_work_in_flight_leaves_owner_analysis_available(
+    tmp_path, monkeypatch,
+):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    version, digest = ai_runtime.schema_identity("news_impact")
+    job, _ = repository.create_job(
+        job_type="news_impact",
+        payload={"ticker": "NVDA", "title": "后台批任务", "allowed_tickers": ["NVDA"]},
+        model="gpt-5.6-terra",
+        reasoning="max",
+        execution_mode="background",
+        prompt_version="news-impact-v1",
+        schema_version=version,
+        schema_sha256=digest,
+        max_queued=200,
+        submission_source="scheduled",
+        priority=70,
+    )
+    assert repository.claim_due("lane-owner", 60)["job_id"] == job["job_id"]
+    assert (
+        repository.mark_submission_started(job["job_id"], "lane-owner", daily_limit=4)
+        == "started"
+    )
+    runtime_settings = SimpleNamespace(ai=SimpleNamespace(
+        manual_analysis_enabled=True, daily_max_jobs=4, daily_budget_usd=2.0,
+        daily_token_limit=10_000_000, manual_analysis_cooldown_seconds=0,
+    ))
+    monkeypatch.setattr(
+        "app.services.catalysts.personal_service.get_effective_runtime_settings",
+        lambda: runtime_settings,
+    )
+
+    availability = _service("manual", repository=repository).analysis_availability()
+
+    assert availability["reason"] == "available"
+    assert availability["concurrency_available"] is True
+
+
 @pytest.mark.parametrize(
     ("path", "payload"),
     (
