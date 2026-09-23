@@ -16,7 +16,8 @@
     "test:audit": "playwright test --config=playwright.audit.config.mjs",
     "test:audit-fixes": "playwright test --config=playwright.audit-fixes.config.mjs",
     "test:indicators": "playwright test --config=playwright.indicators.config.mjs",
-    "test:screener": "playwright test --config=playwright.screener.config.mjs && playwright test --config=playwright.screener-cache.config.mjs"
+    "test:screener": "playwright test --config=playwright.screener.config.mjs && playwright test --config=playwright.screener-cache.config.mjs",
+    "test:stock-data": "playwright test --config=playwright.stock-data.config.mjs"
   },
   "dependencies": {
     "@radix-ui/react-select": "^2.3.7",

@@ -62,7 +62,7 @@ test('coverage distinguishes incomplete preparation, missing rows, and read fail
   await expect(coverage(page)).toContainText('行情2/2');
   await expect(coverage(page)).toContainText('日线1/2');
   await expect(coverage(page)).toContainText('技术信号1/2');
-  await expect(coverage(page)).toContainText('后台准备中 1');
+  await expect(coverage(page)).toContainText('正在获取 1');
   state.rows = (tickers) => tickers.filter((ticker) => ticker === 'AAPL').map(statusRow);
   await advance(page);
   await expect(coverage(page)).toContainText('状态未知 1');
@@ -145,15 +145,15 @@ test('home empty charts distinguish background preparation from failure', async 
   const state = await fixture(page, 'home');
   state.rows = (tickers) => tickers.map((ticker) => pending(ticker));
   await state.open();
-  await expect(page.getByTestId('watchlist-mover-card').first()).toContainText('后台正在准备日线');
+  await expect(page.getByTestId('watchlist-mover-card').first()).toContainText('正在获取日线');
   state.rows = (tickers) => tickers.map((ticker) => ({ ...pending(ticker), status: 'failed', refresh_status: 'failed' }));
   await advance(page);
-  await expect(page.getByTestId('watchlist-mover-card').first()).toContainText('日线准备失败');
+  await expect(page.getByTestId('watchlist-mover-card').first()).toContainText('日线获取失败');
   state.rows = (tickers) => tickers.map((ticker) => statusRow(ticker, { refresh_status: 'failed' }));
   await advance(page);
-  await expect(page.getByTestId('watchlist-mover-card').first()).toContainText('日线已准备');
-  await expect(coverage(page)).toContainText('准备失败 220');
-  await expect(page.getByTestId('watchlist-mover-card').first()).not.toContainText('日线准备失败');
+  await expect(page.getByTestId('watchlist-mover-card').first()).toContainText('日线已获取');
+  await expect(coverage(page)).toContainText('获取失败 220');
+  await expect(page.getByTestId('watchlist-mover-card').first()).not.toContainText('日线获取失败');
   await expect(page.locator('body')).not.toContainText('打开详情后可更新');
 });
 
@@ -188,7 +188,7 @@ test('coverage wraps without horizontal overflow on a narrow screen', async ({ p
   const state = await fixture(page);
   state.rows = (tickers) => tickers.map((ticker) => ({ ...pending(ticker), refresh_status: 'failed' }));
   await state.open();
-  await expect(coverage(page)).toContainText('准备失败 2');
+  await expect(coverage(page)).toContainText('获取失败 2');
   const bounds = await coverage(page).boundingBox();
   expect(bounds.x).toBeGreaterThanOrEqual(0); expect(bounds.x + bounds.width).toBeLessThanOrEqual(390);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
