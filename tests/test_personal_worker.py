@@ -1139,6 +1139,82 @@ def test_earnings_budget_blocked_retries_only_on_next_utc_day(
     assert retried["execution_number"] == first["execution_number"] + 1
 
 
+def test_scheduled_earnings_retry_only_transient_failures_three_times(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services.ai_jobs import runtime as ai_runtime
+    from app.services.ai_jobs.repository import AIJobRepository
+
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    settings = SimpleNamespace(
+        openai_job_db_path=repository.path,
+        openai_api_key=SecretStr("test-only-key"),
+        openai_model="gpt-5.6-terra",
+        openai_reasoning="max",
+        openai_execution_mode="background",
+        openai_job_max_queued=200,
+    )
+    effective = _runtime_settings(scheduled=True, earnings_scheduled=True)
+    monkeypatch.setattr(
+        ai_runtime,
+        "capability_status",
+        lambda _settings: {"supported": True, "status": "supported"},
+    )
+    task = EarningsAnalysisTask(
+        "earnings-failure-retry",
+        settings=settings,
+        repository=repository,
+        builder=lambda _today: {
+            "data_limited": False,
+            "source_status": "active",
+            "earnings": [
+                {
+                    "ticker": "AAPL",
+                    "name": "Apple",
+                    "earnings_date": "2026-07-24",
+                    "days_until": 1,
+                    "eps_estimate": 1.5,
+                }
+            ],
+        },
+        runtime_settings_reader=lambda: effective,
+        today=lambda: datetime(2026, 7, 23, tzinfo=timezone.utc).date(),
+    )
+
+    def fail_latest(error_code: str) -> None:
+        latest = repository.latest_for_ticker("earnings_impact", "AAPL")
+        assert latest is not None
+        stamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        with repository._connect() as connection:
+            connection.execute(
+                """UPDATE ai_jobs
+                   SET status='failed',error_code=?,completed_at=?,updated_at=?
+                   WHERE job_id=?""",
+                (error_code, stamp, stamp, latest["job_id"]),
+            )
+            connection.commit()
+
+    assert asyncio.run(task()).details["queued"] == 1
+    # A schema failure repeats on the same input, and an unconfirmed poll
+    # timeout may still be running (and billing) upstream.
+    for error_code in ("schema_validation_failed", "provider_poll_timeout"):
+        fail_latest(error_code)
+        skipped = asyncio.run(task())
+        assert skipped.details["queued"] == 0
+        assert skipped.details["existing"] == 1
+
+    for _ in range(2):
+        fail_latest("provider_server_error")
+        assert asyncio.run(task()).details["queued"] == 1
+    fail_latest("provider_server_error")
+    exhausted = asyncio.run(task())
+    assert exhausted.details["queued"] == 0
+    latest = repository.latest_for_ticker("earnings_impact", "AAPL")
+    assert latest is not None
+    assert latest["execution_number"] == ai_runtime.SCHEDULED_MAX_ATTEMPTS
+
+
 def test_manual_earnings_action_works_when_daily_schedule_is_off(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

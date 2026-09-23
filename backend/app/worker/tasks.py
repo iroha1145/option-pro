@@ -270,6 +270,20 @@ class EarningsAnalysisTask:
             updated = updated.replace(tzinfo=timezone.utc)
         return updated.astimezone(timezone.utc).date() < utc_date
 
+    @staticmethod
+    def _scheduled_retry_allowed(row: Mapping[str, Any]) -> bool:
+        """Scheduled passes retry only transient failures, a bounded number of times.
+
+        Manual passes still retry any failed report: the owner asked for it.
+        """
+
+        from app.services.ai_jobs import runtime as ai_runtime
+
+        return (
+            str(row.get("error_code") or "") in ai_runtime.SCHEDULED_TRANSIENT_AI_ERRORS
+            and int(row.get("execution_number") or 1) < ai_runtime.SCHEDULED_MAX_ATTEMPTS
+        )
+
     async def _run(self, *, manual: bool) -> TaskResult:
         from app.api import earnings
         from app.services.ai_jobs import runtime as ai_runtime
@@ -467,7 +481,11 @@ class EarningsAnalysisTask:
             retry_failed_report = bool(
                 latest
                 and (
-                    latest_status in {"failed", "cancelled"}
+                    latest_status == "cancelled"
+                    or (
+                        latest_status == "failed"
+                        and (manual or self._scheduled_retry_allowed(latest))
+                    )
                     or (
                         latest_status == "budget_blocked"
                         and self._updated_before_utc_date(latest, utc_date)

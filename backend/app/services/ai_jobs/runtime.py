@@ -73,6 +73,28 @@ EARNINGS_FINAL_PRIORITY = 90
 EARNINGS_MANUAL_QUEUE_RESERVE = 20
 EARNINGS_FINAL_QUEUE_RESERVE = 40
 EARNINGS_PRE_RELEASE_ACTIVE_LIMIT = 64
+# Failures a scheduler may retry on its own, at most SCHEDULED_MAX_ATTEMPTS
+# executions per item. Anything else (schema or binding failures, oversized
+# input) would fail the same way again and only spend more tokens.
+SCHEDULED_MAX_ATTEMPTS = 3
+SCHEDULED_TRANSIENT_AI_ERRORS = frozenset(
+    {
+        "ai_empty_response",
+        "provider_failed",
+        # 余额耗尽在充值后即恢复——按瞬态处理，小时级重试在充值当刻自愈
+        # （2026-08-14 生产：credit_balance_exhausted 曾归入 provider_failed）。
+        "provider_credit_exhausted",
+        "provider_incomplete",
+        # Only the confirmed-terminal cancellation is retryable. The sibling
+        # provider_poll_timeout code means cancellation was not confirmed;
+        # retrying that state could overlap paid provider work.
+        "provider_poll_timeout_cancelled",
+        "provider_rate_limited",
+        "provider_response_expired",
+        "provider_server_error",
+        "provider_unavailable",
+    }
+)
 
 
 @dataclass(frozen=True)
