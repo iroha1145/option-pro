@@ -40,7 +40,6 @@ def _settings(path):
         openai_timeout_seconds=900,
         openai_control_timeout_seconds=30,
         openai_max_retries=0,
-        openai_max_output_tokens=16384,
         openai_max_concurrency=1,
         openai_background_initial_poll_seconds=2,
         openai_background_max_poll_seconds=15,
@@ -1356,8 +1355,6 @@ def test_terra_runtime_defaults_are_explicit(monkeypatch):
         "OPENAI_MODEL",
         "OPENAI_REASONING",
         "OPENAI_TIMEOUT_SECONDS",
-        "OPTION_PRO_AI_MAX_OUTPUT_TOKENS",
-        "OPENAI_MAX_OUTPUT_TOKENS",
         "OPENAI_EXECUTION_MODE",
     ):
         monkeypatch.delenv(name, raising=False)
@@ -1365,7 +1362,6 @@ def test_terra_runtime_defaults_are_explicit(monkeypatch):
     assert settings.openai_model == "gpt-5.6-terra"
     assert settings.openai_reasoning == "max"
     assert settings.openai_timeout_seconds == 900
-    assert settings.openai_max_output_tokens == 32768
     assert settings.openai_execution_mode == "background"
 
 

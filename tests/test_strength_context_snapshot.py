@@ -180,10 +180,9 @@ def test_context_failure_does_not_erase_ranking(tmp_path: Path, monkeypatch: pyt
     assert read_batch(tmp_path)["served_session"] == "2026-09-18"
 
 
-@pytest.mark.parametrize("mode", ["password", "private_network"])
-def test_all_access_modes_read_eod_scores_and_independent_context(monkeypatch: pytest.MonkeyPatch, mode: str) -> None:
+def test_owner_get_routes_read_eod_scores_and_independent_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    # No access mode switches these reads to a live ranking any more.
     monkeypatch.setattr(strength, "current_request_is_owner", lambda: True)
-    monkeypatch.setattr(strength, "get_personal_config", lambda: SimpleNamespace(access=SimpleNamespace(mode=mode)))
     monkeypatch.setattr(context, "read_context_snapshot", lambda: {**_context_payload(), "_stale": False})
 
     async def selection(**kwargs):

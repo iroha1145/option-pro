@@ -55,8 +55,6 @@ def test_terra_defaults_and_runtime_bounds(monkeypatch):
         "OPENAI_MODEL",
         "OPENAI_REASONING",
         "OPENAI_TIMEOUT_SECONDS",
-        "OPTION_PRO_AI_MAX_OUTPUT_TOKENS",
-        "OPENAI_MAX_OUTPUT_TOKENS",
         "OPENAI_EXECUTION_MODE",
     ):
         monkeypatch.delenv(name, raising=False)
@@ -64,7 +62,6 @@ def test_terra_defaults_and_runtime_bounds(monkeypatch):
     assert settings.openai_model == "gpt-5.6-terra"
     assert settings.openai_reasoning == "max"
     assert settings.openai_timeout_seconds == 900
-    assert settings.openai_max_output_tokens == 32768
     assert settings.openai_max_retries == 0
     assert settings.openai_execution_mode == "background"
 
@@ -72,18 +69,6 @@ def test_terra_defaults_and_runtime_bounds(monkeypatch):
         Settings(_env_file=None, OPENAI_REASONING="minimal")
     with pytest.raises(ValidationError):
         Settings(_env_file=None, OPENAI_MAX_RETRIES=1)
-    assert (
-        Settings(_env_file=None, OPTION_PRO_AI_MAX_OUTPUT_TOKENS=128000)
-        .openai_max_output_tokens
-        == 128000
-    )
-    assert (
-        Settings(_env_file=None, OPENAI_MAX_OUTPUT_TOKENS=24576)
-        .openai_max_output_tokens
-        == 24576
-    )
-    with pytest.raises(ValidationError):
-        Settings(_env_file=None, OPTION_PRO_AI_MAX_OUTPUT_TOKENS=128001)
     with pytest.raises(ValidationError):
         Settings(_env_file=None, OPENAI_REQUIRE_ZDR=True)
     with pytest.raises(ValidationError):

@@ -600,9 +600,6 @@ _SECURITY_REFERENCE_PREFIX = re.compile(
     r"(?:股票代码|普通股代码|股份代码|证券代码|证券编号|"
     r"股票|普通股|股份|个股|证券)(?:为|是)?$"
 )
-_NUMERIC_SECURITY_REFERENCE_PREFIX = re.compile(
-    r"(?:股票代码|普通股代码|股份代码|证券代码|证券编号)(?:为|是)?$"
-)
 _NUMERIC_CONTEXT_BOUNDARIES = frozenset("，,；;。.!！?？%％、")
 _NUMERIC_SUFFIX_HARD_BOUNDARIES = frozenset("；;。.!！?？%％")
 _SECURITY_REFERENCE_MARKERS = (

@@ -6,7 +6,6 @@ from typing import Any, Literal
 from urllib.parse import urlsplit
 
 from pydantic import (
-    AliasChoices,
     AnyHttpUrl,
     Field,
     PrivateAttr,
@@ -59,15 +58,6 @@ class Settings(BaseSettings):
         alias="OPENAI_TIMEOUT_SECONDS",
     )
     openai_max_retries: int = Field(default=0, ge=0, le=0, alias="OPENAI_MAX_RETRIES")
-    openai_max_output_tokens: int = Field(
-        default=32768,
-        ge=256,
-        le=128000,
-        validation_alias=AliasChoices(
-            "OPTION_PRO_AI_MAX_OUTPUT_TOKENS",
-            "OPENAI_MAX_OUTPUT_TOKENS",
-        ),
-    )
     openai_max_concurrency: int = Field(
         default=_PERSONAL_CONFIG.ai.max_concurrency,
         ge=1,

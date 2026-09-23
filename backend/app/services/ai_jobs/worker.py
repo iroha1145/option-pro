@@ -811,8 +811,6 @@ def health_payload(repository: AIJobRepository, settings: Any) -> dict[str, Any]
             "execution_mode": runtime.OFFICIAL_EXECUTION_MODE,
         }
     )
-    if not configured and payload["healthy"]:
-        payload["healthy"] = True
     return payload
 
 

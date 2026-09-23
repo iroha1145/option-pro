@@ -851,14 +851,6 @@ class WorkerSupervisor:
         return False
 
     async def _task_loop(self, task: TaskSpec) -> None:
-        if not task.enabled:
-            await self._record(
-                task,
-                status="disabled",
-                consecutive_failures=0,
-                details={},
-            )
-            return
         if task.manual_only:
             await self._record(
                 task,

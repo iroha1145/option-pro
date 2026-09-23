@@ -83,9 +83,7 @@ def is_theme_candidate(
         return False, reason
     if not has_complete_session_bar(series, session):
         return False, "MISSING_SESSION_BAR"
-    if series.source_available_at is not None:
-        # Availability is checked by the caller against as_of; flag only.
-        pass
+    # source_available_at is checked by the caller against as_of.
     return True, "ok"
 
 
