@@ -364,11 +364,11 @@ export function getBreakoutEvents(page = 1, pageSize = 12): { items: BreakoutEve
   return { items: breakoutEvents.slice(start, start + pageSize), total: breakoutEvents.length, page };
 }
 
-export function getBreakoutEventDetail(id: string): BreakoutEventDetail {
+export function getBreakoutEventDetail(id: string): BreakoutEventDetail | BreakoutSignal {
   // 先查当日事件（bc-*），再查历史事件（be-*）；未命中按契约语义 404，不得错配其它事件
   const idOf = (x: unknown) => (x as { id?: string; event_id?: string });
   const cur = getBreakoutsCurrent().find((e) => idOf(e).event_id === id || idOf(e).id === id);
-  if (cur) return cur as unknown as BreakoutEventDetail;
+  if (cur) return cur;
   const found = breakoutEvents.find((e) => idOf(e).id === id || idOf(e).event_id === id);
   if (found) return found;
   throw new ApiError(404, __t('突破事件不存在'));
