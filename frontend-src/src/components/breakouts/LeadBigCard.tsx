@@ -35,7 +35,6 @@ import { baseAnimation, CH, CHART_MONO_FONT, glassTooltip, type ChartOption } fr
 import { useColorMode } from '@/hooks/useColorMode.ts';
 import { useAppearance } from '@/hooks/useAppearance.ts';
 import {
-  asFullDetail,
   LIFECYCLE_CHIP_CLASS,
   LIFECYCLE_CN,
   LIFECYCLE_TONE,
@@ -44,7 +43,7 @@ import {
   riskBarClass,
   scoreBarClass,
 } from './types';
-import type { BreakoutCurrentEvent, BreakoutEventFull, BreakoutSession, LifecycleState } from './types';
+import type { BreakoutCurrentEvent, BreakoutEventFull, BreakoutSession } from './types';
 import T1StatusChip from './T1StatusChip';
 import { t } from '../../i18n/core.ts';
 
@@ -169,7 +168,7 @@ const STEPS = [
   { key: 'RETESTING', label: t('回踩中') },
 ] as const;
 
-function stepIndex(state: LifecycleState): number {
+function stepIndex(state: string): number {
   switch (state) {
     case 'DISCOVERED':
     case 'WATCHING':
@@ -185,7 +184,7 @@ function stepIndex(state: LifecycleState): number {
   }
 }
 
-function LifecycleStepper({ state }: { state: LifecycleState }) {
+function LifecycleStepper({ state }: { state: string }) {
   const terminal = state === 'FAILED' || state === 'EXPIRED' ? state : null;
   /* FAILED/EXPIRED：轨迹必经 已发现→已触发（mock transitions 同构），末端红/灰标记当前态 */
   const idx = terminal ? -1 : stepIndex(state);
@@ -503,7 +502,7 @@ const CONTRIB_DEFS = [
 
 function ContributionBar({ ev }: { ev: BreakoutEventFull }) {
   const parts = useMemo(() => {
-    const loose = (ev as unknown as { contribution_breakdown?: Record<string, unknown> }).contribution_breakdown;
+    const loose = ev.contribution_breakdown;
     if (!loose || typeof loose !== 'object') return null;
     const raws = CONTRIB_DEFS.flatMap((d) => {
       const v = num(loose[d.key]);
@@ -579,7 +578,7 @@ export default function LeadBigCard({ ev: initialEvent, flash, locate, onOpen, d
     breakoutsApi
       .eventDetail(ev.event_id)
       .then((d) => {
-        if (alive) setDetail({ id: ev.event_id, ev: asFullDetail(d), failed: false });
+        if (alive) setDetail({ id: ev.event_id, ev: d, failed: false });
       })
       .catch(() => {
         if (alive) setDetail({ id: ev.event_id, ev: null, failed: true });
@@ -593,10 +592,10 @@ export default function LeadBigCard({ ev: initialEvent, flash, locate, onOpen, d
 
   const enriched = useMemo(() => {
     if (!detailEv) return ev;
-    const out: Record<string, unknown> = { ...ev };
-    for (const [k, v] of Object.entries(detailEv)) {
-      if (v !== undefined && v !== null) out[k] = v;
-    }
+    const nonEmptyDetail = Object.fromEntries(
+      Object.entries(detailEv).filter(([, value]) => value !== undefined && value !== null),
+    );
+    const out = { ...ev, ...nonEmptyDetail };
     /* 现价以 current 轮询为准（tick-flash 联动） */
     out.current_price = ev.current_price;
     out.session_change_pct = ev.session_change_pct;
@@ -605,26 +604,19 @@ export default function LeadBigCard({ ev: initialEvent, flash, locate, onOpen, d
       out.evidence_at = ev.evidence_at; out.trigger_source = ev.trigger_source;
       out.triggered_at = ev.triggered_at;
     }
-    return out as unknown as BreakoutCurrentEvent;
+    return out;
   }, [ev, detailEv]);
   const e = preferLiveQuote(quote, Number.isFinite(enriched.current_price)) ? { ...enriched, current_price: quote!.price! } : enriched;
 
   /* 宽松扩展字段（契约之外的运行时字段，缺失显「—」/省略） */
-  const loose = e as unknown as {
-    exchange?: unknown;
-    score_version?: unknown;
-    market_shape?: unknown;
-    versions?: unknown;
-    warnings?: unknown;
-  };
   /* 交易所缺失时整项隐藏（不再显「—」占位） */
-  const exchange = str(loose.exchange);
-  const scoreVersion = str(loose.score_version) ?? '—';
+  const exchange = str(e.exchange);
+  const scoreVersion = str(e.score_version) ?? '—';
   /* market_shape：契约为对象 {state, rules:{state_label}, ...} → 取中文形态标签；字符串则原样 */
-  const shapeRec = (loose.market_shape && typeof loose.market_shape === 'object' ? loose.market_shape : {}) as Record<string, unknown>;
+  const shapeRec = (e.market_shape && typeof e.market_shape === 'object' ? e.market_shape : {}) as Record<string, unknown>;
   const shapeRules = (shapeRec.rules && typeof shapeRec.rules === 'object' ? shapeRec.rules : {}) as Record<string, unknown>;
-  const shapeTxt = str(loose.market_shape) ?? str(shapeRules.state_label) ?? str(shapeRec.state) ?? str(loose.versions) ?? '—';
-  const warnings = Array.isArray(loose.warnings) ? loose.warnings.filter((w): w is string => typeof w === 'string' && !!w) : [];
+  const shapeTxt = str(e.market_shape) ?? str(shapeRules.state_label) ?? str(shapeRec.state) ?? str(e.versions) ?? '—';
+  const warnings = Array.isArray(e.warnings) ? e.warnings.filter((w): w is string => typeof w === 'string' && !!w) : [];
 
   const gap = num(e.gap_pct);
   const rvol = num(e.rvol_time_of_day);

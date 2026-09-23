@@ -79,7 +79,7 @@ export function ScoreBarsFull({ event, className }: { event: BreakoutEventFull; 
 import { RANGE_PERSISTENCE_DEFS } from './types';
 
 export function RangePersistenceBars({ event, className }: { event: BreakoutEventFull; className?: string }) {
-  const rp = event.range_persistence as BreakoutEventFull['range_persistence'] | null | undefined;
+  const rp = event.range_persistence;
   if (rp && typeof rp === 'object' && 'kind' in rp && rp.kind === 'live') {
     const metrics = [
       { key: 'value', label: t('持续分'), value: rp.value },

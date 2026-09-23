@@ -181,7 +181,7 @@ const CURRENT_SPECS: { ticker: string; setup: string; lifecycle: string; minAgo:
 
 export function getBreakoutsCurrent(): BreakoutSignal[] {
   const now = Date.now();
-  const items: (BreakoutSignal & ContractFields)[] = CURRENT_SPECS.map((spec, i) => {
+  const items: (BreakoutSignal & ContractFields & { strengthScore: number })[] = CURRENT_SPECS.map((spec, i) => {
     const r = new Rng(77120 + i * 331);
     const d = getStockDetail(spec.ticker);
     const strength = Math.round(r.normal(78, 9, 58, 96));
@@ -243,13 +243,13 @@ let lastScanAt = Date.now() - 8 * 60_000;
 
 interface StatusContract extends BreakoutStatus {
   enabled: boolean;
-  worker: { healthy: boolean; heartbeat_at: string };
+  worker: { healthy: boolean | null; heartbeat_at: string };
   latest_completed_scan: { at: string; duration_ms: number; scanned: number; triggered: number } | null;
   market_session: BSession;
   next_session_at: string | null;
 }
 
-export function getBreakoutsStatus(): BreakoutStatus {
+export function getBreakoutsStatus(): StatusContract {
   const now = Date.now();
   /* 冷却结束自动进入下一轮扫描（mock 活体状态机） */
   if (scanWindowEnd === 0 && now > cooldownEndAt) {

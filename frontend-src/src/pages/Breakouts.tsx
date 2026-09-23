@@ -40,7 +40,6 @@ import HistoryRail from '@/components/breakouts/HistoryRail';
 import SignalCards from '@/components/breakouts/SignalCards';
 import EventDetail from '@/components/breakouts/EventDetail';
 import '@/components/breakouts/radar.css';
-import { asCurrentEvents, asFullDetail, asFullEvent, asFullStatus } from '@/components/breakouts/types';
 import type {
   BreakoutCurrentEvent,
   BreakoutEventFull,
@@ -244,7 +243,7 @@ export default function Breakouts() {
         bumpAlgorithmViewGeneration();
         return;
       }
-      setExtraEvents((prev) => [...prev, ...next.items.map(asFullEvent)]);
+      setExtraEvents((prev) => [...prev, ...next.items]);
       setHistoryCursor(next.nextCursor);
     } catch (error) {
       if (!shouldCommitHistoryPage({
@@ -264,13 +263,13 @@ export default function Breakouts() {
   }, [historyCursor, historyLoadingMore, radarSort]);
   const personal = usePersonalWatchlist();
 
-  const status = asFullStatus(statusQ.data);
+  const status = statusQ.data;
   /* 必须记忆化：useTickFlash 以这个数组为依赖，每次渲染都换新引用会让效应无限重跑。 */
   const radarVersion = useRadarVersion();
   const refreshCurrent = currentQ.refresh;
   const refreshEvents = eventsQ.refresh;
   const currentAll = useMemo(
-    () => asCurrentEvents(currentQ.data?.events ?? null).map(event => {
+    () => (currentQ.data?.events ?? []).map(event => {
       const update = quoteStore.getRadarEvent(event.event_id);
       return update && Number(update.state_version) > (event.state_version ?? 0) ? { ...event, ...update } : event;
     }),
@@ -279,7 +278,7 @@ export default function Breakouts() {
     [currentQ.data, radarVersion],
   );
   const events = useMemo(
-    () => [...(eventsQ.data?.items ?? []).map(asFullEvent), ...extraEvents],
+    () => [...(eventsQ.data?.items ?? []), ...extraEvents],
     [eventsQ.data, extraEvents],
   );
   const readiness = useStockDataStatus([...currentAll.map((event) => event.ticker), ...events.map((event) => event.ticker)]);
@@ -378,7 +377,7 @@ export default function Breakouts() {
     detailForRef.current = selectedId;
     void breakoutsApi.eventDetail(selectedId).then(detail => {
       if (request !== selectedDetailRequest.current || detailForRef.current !== selectedId) return;
-      const next = asFullDetail(detail);
+      const next = detail;
       setSelected(previous => previous?.event_id === selectedId && (next.state_version ?? 0) >= (previous.state_version ?? 0) ? next : previous);
       setDetailError(null);
     }).catch((error: unknown) => {
