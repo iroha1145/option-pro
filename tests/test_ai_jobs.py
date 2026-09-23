@@ -1249,6 +1249,37 @@ def test_terminal_failure_without_usage_releases_token_reservation(
     assert snapshot["token_budget_used_tokens"] == 0
 
 
+@pytest.mark.parametrize(
+    ("error_code", "reserved"),
+    [("provider_poll_timeout", True), ("provider_poll_timeout_cancelled", False)],
+)
+def test_unconfirmed_poll_timeout_keeps_its_token_reservation(
+    tmp_path,
+    error_code,
+    reserved,
+):
+    """取消未获确认的超时响应可能仍在上游计费，不能释放当日 token 预留。"""
+
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    job, _ = _create_earnings_job(repository)
+    stamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    with repository._connect() as connection:
+        connection.execute(
+            """UPDATE ai_jobs
+               SET status='failed',error_code=?,submission_started_at=?,
+                   completed_at=?,updated_at=?
+               WHERE job_id=?""",
+            (error_code, stamp, stamp, stamp, job["job_id"]),
+        )
+        connection.commit()
+
+    snapshot = repository.budget_snapshot(daily_limit=0, daily_budget_usd=0)
+
+    assert snapshot["token_budget_used_tokens"] == (
+        runtime.token_reservation("earnings_impact") if reserved else 0
+    )
+
+
 def test_used_tokens_plus_every_task_reservation_never_exceeds_cap(tmp_path):
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
     seed, _ = _create_budget_job(repository, "earnings_impact", "B0000001")

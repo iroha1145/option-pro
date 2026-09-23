@@ -221,7 +221,8 @@ def _daily_tokens_used(token_rows: Iterable[Mapping[str, Any]]) -> int:
     供应商余额耗尽的瞬时失败零计费，若按满额预留计入，失败风暴会吃光
     全天预算（2026-08-14 生产：94 个 provider_failed 把 10M 账本记到
     9.97M，实际结算 0，全线误报「今日 Token 预算已用完」）。结果未知
-    （submission_outcome_unknown，可能已计费未对账）与在途/待重试行
+    （submission_outcome_unknown，可能已计费未对账）、取消未获确认的轮询
+    超时（provider_poll_timeout，上游可能仍在运行计费）与在途/待重试行
     保留满额预留，防超支方向不放松。
     """
 
@@ -234,12 +235,13 @@ def _daily_tokens_used(token_rows: Iterable[Mapping[str, Any]]) -> int:
         status = str(item["status"] or "")
         error_code = str(item["error_code"] or "")
         # 只对「供应商明确终结且无计费上报」的行释放：failed/cancelled 且
-        # 非结果未知。completed 无 usage（计费了、数额未知）、在途、待重试
-        # 与 submission_outcome_unknown 一律保留满额预留——防超支不放松。
-        released = (
-            status in {"failed", "cancelled"}
-            and error_code != "submission_outcome_unknown"
-        )
+        # 非结果未知。completed 无 usage（计费了、数额未知）、在途、待重试、
+        # submission_outcome_unknown 与 provider_poll_timeout 一律保留满额
+        # 预留——防超支不放松。
+        released = status in {"failed", "cancelled"} and error_code not in {
+            "submission_outcome_unknown",
+            "provider_poll_timeout",
+        }
         if not released:
             total += _task_token_reservation(str(item["job_type"]))
     return total
