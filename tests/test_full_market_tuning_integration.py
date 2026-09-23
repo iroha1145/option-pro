@@ -1,4 +1,4 @@
-"""Exercise the default v1.4 scorer with synthetic, previously unseen stocks."""
+"""Exercise the default v1.5 scorer with synthetic, previously unseen stocks."""
 from copy import deepcopy
 from dataclasses import replace
 from datetime import date
@@ -7,7 +7,7 @@ import pytest
 
 from app.services.eod_limited import COMPUTE_VERSION, MODE_ID, PURPOSE_SYNTHETIC
 from app.services.eod_limited.full_market_tuning import (
-    ATR_REFERENCE_UNAVAILABLE, M_ALPHA, TUNED_FAMILIES, WINDOWS,
+    ATR_MULTIPLIER, ATR_REFERENCE_UNAVAILABLE, M_ALPHA, M_DELTA_CAP, R_NEUTRAL_PROFILES, R_NEUTRAL_VALUE, TUNED_FAMILIES, WINDOWS,
     prepare_full_market_context,
 )
 from app.services.eod_limited.inference import (
@@ -64,12 +64,12 @@ def test_default_scorer_preserves_score_budget_and_fund_rows_in_all_nine_views(m
     residuals = {sid: deepcopy(raw.residual) for sid, raw in raws.items()}
     result = score(market, profile=profile, horizon=horizon)
     assert result["mode"] == MODE_ID == "eod_limited_v1"
-    assert result["compute_version"] == COMPUTE_VERSION == "limited-all-market-v1.4"
+    assert result["compute_version"] == COMPUTE_VERSION == "limited-all-market-v1.5"
     assert result["scored_security_count"] == 42
     summary = result["full_market_tuning"]
     assert summary["stock_input_n"] == summary["atr_reference_n"] == 40
     assert summary["momentum_reference_n"] == 40
-    assert summary["momentum_windows"] == list(WINDOWS[horizon])
+    assert summary["momentum_windows"] == [list(item) for item in WINDOWS[horizon]]
     assert summary["benchmark_status"] == "ok"
     assert not any(result["capability_flags"].values())
     assert result["eligible_n"] == result["composite_n"] == 0
@@ -103,13 +103,18 @@ def test_default_scorer_preserves_score_budget_and_fund_rows_in_all_nine_views(m
                 assert tuning["context_hash"] == summary["context_hash"]
                 assert row["atr_reference_n"] == 40
                 cap = registry["profiles"][profile]["atr_absolute_cap_pct"]
-                multiplier = registry["profiles"][profile]["atr_sector_median_multiplier"]
+                multiplier = ATR_MULTIPLIER[profile] or registry["profiles"][profile]["atr_sector_median_multiplier"]
                 assert row["atr_threshold_pct"] == pytest.approx(
                     min(cap, multiplier * summary["atr_reference_median"])
                 )
                 assert row["gate_results"]["setup"] == old["gate_results"]["setup"]
-                for factor in "TSBPVRG":
+                for factor in "TSBPVG":
                     assert row["factors"][factor] == old["factors"][factor]
+                if profile in R_NEUTRAL_PROFILES and old["factors"]["R"] is not None:
+                    assert row["factors"]["R"] == R_NEUTRAL_VALUE
+                else:
+                    assert row["factors"]["R"] == old["factors"]["R"]
+                r_delta = (row["factors"]["R"] or 0) - (old["factors"]["R"] or 0)
                 assert row["factors"]["G"] is None
                 assert row["configured_weights"] == old["configured_weights"]
                 assert row["track_weights"] == old["track_weights"]
@@ -117,14 +122,15 @@ def test_default_scorer_preserves_score_budget_and_fund_rows_in_all_nine_views(m
                 assert row["observed_feature_coverage"] == old["observed_feature_coverage"]
                 assert row["weight_provenance_id"] == old["weight_provenance_id"]
                 assert tuning["alpha"] == (M_ALPHA[profile] if family in TUNED_FAMILIES else 0)
-                assert abs(tuning["M_delta"]) <= 10
+                assert abs(tuning["M_delta"]) <= M_DELTA_CAP
                 if abs(tuning["M_delta"]) > 1e-10:
                     changed_families.add(family)
                 if old["score"] is None:
                     assert row["score"] is None
                 else:
                     assert row["score"] - old["score"] == pytest.approx(
-                        old["effective_weights"]["M"] * tuning["M_delta"], abs=1e-10,
+                        old["effective_weights"]["M"] * tuning["M_delta"]
+                        + old["effective_weights"].get("R", 0.0) * r_delta, abs=1e-10,
                     )
             if row.get("score") is not None:
                 scored_rows += 1

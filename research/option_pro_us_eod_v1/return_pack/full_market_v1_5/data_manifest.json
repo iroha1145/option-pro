@@ -1,0 +1,10 @@
+{
+  "source": "yfinance 1.5.1, auto_adjust=False, Open/High/Low/Close/Adj Close/Volume",
+  "window": "2020-06-01..2026-09-22",
+  "universe_file": "universe_2026-09-22.txt (Massive reference: active CS + ADRC, price>=5 and 1-day dollar volume>=5M on 2026-09-22)",
+  "batches": 19,
+  "rows": 3985571,
+  "sha256_of_concatenated_batches": "f24bea2486b07884d9d44c4779bc083a879718a91129d0de5f34f4408733622e",
+  "not_in_git": "raw price parquet (~60 MB, vendor data) is excluded; regenerate with scripts/download.py",
+  "survivorship": "current listings only; delisted names absent (results are relative comparisons between variants on the same panel)"
+}

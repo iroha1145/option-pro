@@ -1,9 +1,24 @@
-"""Bounded full-market tuning, applied before the existing PRICE_ONLY rescore.
+"""Bounded full-market tuning, applied before the existing PRICE_ONLY rescore (v1.5).
 
-Evidence boundary:
-* G1's stock-only ATR reference follows the PR184 historical experiment.
-* Existing factor weights, T/V/R, D63skip5, B/C setups and strict entry survive.
-* The 0/10/20% M blend is a new bounded design choice, NOT a backtest winner.
+v1.5 keeps the v1.4 hook and changes four things, each backed by the offline
+comparison in ``research/option_pro_us_eod_v1/return_pack/full_market_v1_5/``
+(2,773 liquid US stocks, 2022-01 to 2026-06, top-20 every five sessions):
+
+* The new momentum target is *volatility-scaled* relative return with a 21-session
+  skip on the 126/252-day legs (Barroso & Santa-Clara 2015 style): return minus the
+  SPY return over the same window, divided by the stock's own realised volatility
+  over that window. Raw or residual momentum without scaling ranked lower.
+* The stability factor R (low volatility / low gap / low drawdown percentile) is
+  neutralised to 50 for balanced and aggressive: as a ranking reward it selected
+  the worst forward returns of every factor tested. Conservative keeps it.
+* The HIGH_ATR multiplier on the liquid-stock reference median is raised for
+  balanced (1.75 -> 2.5) and aggressive (2.5 -> 3.0). The 1.75x cut removed the
+  best-performing ATR bucket; absolute caps are unchanged.
+* EXTENDED becomes an *entry state* instead of a hard rejection for balanced and
+  aggressive: the row stays visible in the observation list tagged ``extended``
+  and can never be ``eligible`` (``apply_entry_states`` downgrades it to
+  ``watch``). Excluding extended names had no forward-return benefit at 20 or 63
+  sessions. Conservative keeps every v1.4 rule and serves as the control profile.
 
 No ticker/theme whitelist, labels, network, files or historical database. The
 caller supplies the entire as-of panel; one context serves every theme/family.
@@ -23,14 +38,34 @@ from numbers import Real
 from types import MappingProxyType
 from typing import Any, Mapping, Sequence
 
-TUNING_VERSION = "full-market-bounded-m-v1"
+TUNING_VERSION = "full-market-v1.5"
 MIN_RAW_PRICE_USD = 5.0
 MIN_ADV20_PROXY_USD = 20_000_000.0
 MIN_HISTORY_SESSIONS = 252
 MIN_REFERENCE_N = 30
-M_DELTA_CAP = 10.0
-M_ALPHA = MappingProxyType({"conservative": 0.0, "balanced": 0.10, "aggressive": 0.20})
-WINDOWS = MappingProxyType({"short": (20, 63), "mid": (63, 126), "long": (126, 252)})
+M_DELTA_CAP = 30.0
+# Conservative stays on the v1.4 definition (no blend, R active, registry ATR multiplier,
+# EXTENDED strict): it is the control profile users can compare against.
+M_ALPHA = MappingProxyType({"conservative": 0.0, "balanced": 0.60, "aggressive": 0.85})
+# (sessions, skip): the return runs from T-sessions to T-skip; volatility uses the
+# full window. Legs of 126+ sessions skip the latest month (short-term reversal).
+WINDOWS = MappingProxyType({
+    "short": ((63, 0), (126, 21)),
+    "mid": ((126, 21), (252, 21)),
+    "long": ((126, 21), (252, 21)),
+})
+WINDOW_WEIGHTS = MappingProxyType({"short": (0.5, 0.5), "mid": (0.6, 0.4), "long": (0.4, 0.6)})
+# Realised-volatility floor (in return units over the window) so a flat synthetic
+# series cannot divide by zero; it never binds for a real stock.
+SIGMA_FLOOR = 0.01
+# Overrides of the registry's atr_sector_median_multiplier; None keeps the registry value.
+ATR_MULTIPLIER = MappingProxyType({"conservative": None, "balanced": 2.5, "aggressive": 3.0})
+R_NEUTRAL_PROFILES = frozenset({"balanced", "aggressive"})
+EXTENDED_STATE_PROFILES = frozenset({"balanced", "aggressive"})
+R_NEUTRAL_VALUE = 50.0
+EXTENDED_REASON = "EXTENDED"
+EXTENDED_STATE = "extended"
+EXTENDED_WAIT_REASON = "EXTENDED_ENTRY_WAIT"
 TUNED_FAMILIES = frozenset({"A_trend_quality", "D_residual_momentum"})
 ATR_REFERENCE_UNAVAILABLE = "REFERENCE_UNIVERSE_INSUFFICIENT"
 
@@ -63,8 +98,8 @@ class TuningContext:
     momentum_reference_ids: tuple[str, ...]
     momentum_percentiles: Mapping[str, float]
     relative_returns: Mapping[str, tuple[float, float]]
-    windows: tuple[int, int]
-    window_starts: tuple[date, date]
+    windows: tuple[tuple[int, int], ...]
+    window_starts: tuple[date, ...]
     benchmark_status: str
     digest: str
 
@@ -78,11 +113,17 @@ class TuningContext:
             "atr_reference_n": len(self.reference_ids),
             "atr_reference_median": self.median_atr_pct,
             "momentum_reference_n": len(self.momentum_reference_ids),
-            "momentum_windows": list(self.windows),
+            "momentum_windows": [list(item) for item in self.windows],
+            "momentum_window_weights": list(WINDOW_WEIGHTS[self.horizon]),
+            "momentum_basis": "volatility_scaled_relative_price_return",
             "window_starts": [day.isoformat() for day in self.window_starts],
             "benchmark": "SPY",
             "benchmark_status": self.benchmark_status,
             "context_hash": self.digest,
+            "atr_multiplier_overrides": {k: v for k, v in ATR_MULTIPLIER.items()},
+            "r_neutral_profiles": sorted(R_NEUTRAL_PROFILES),
+            "extended_state_profiles": sorted(EXTENDED_STATE_PROFILES),
+            "extended_is_entry_state": True,
             "empirically_optimized_m_blend": False,
         }
 
@@ -109,13 +150,22 @@ def reference_eligible(item: StockInput) -> bool:
                 and atr is not None and atr > 0)
 
 
-def _window_return(closes: Mapping[date, float], grid: Sequence[date]) -> float | None:
-    # Every exchange session is required, not merely the two endpoints. Missing
-    # bars never extend the window, forward-fill or turn into zero return.
+def _window_stats(closes: Mapping[date, float], grid: Sequence[date], skip: int) -> tuple[float, float] | None:
+    """(return from grid[0] to grid[-1-skip], realised volatility over the whole grid).
+
+    Every exchange session is required, not merely the endpoints. Missing bars
+    never extend the window, forward-fill or turn into zero return.
+    """
     values = [_number(closes.get(day)) for day in grid]
     if any(value is None or value <= 0 for value in values):
         return None
-    return values[-1] / values[0] - 1.0  # type: ignore[operator]
+    end = values[-1 - skip] if skip else values[-1]
+    ret = end / values[0] - 1.0  # type: ignore[operator]
+    logs = [math.log(values[i] / values[i - 1]) for i in range(1, len(values))]  # type: ignore[arg-type]
+    mean = sum(logs) / len(logs)
+    var = sum((x - mean) ** 2 for x in logs) / max(len(logs) - 1, 1)
+    sigma = math.sqrt(var) * math.sqrt(len(logs))
+    return ret, sigma
 
 
 def _percentiles(values: Mapping[str, float]) -> dict[str, float]:
@@ -136,10 +186,12 @@ def build_context(
 ) -> TuningContext:
     """Pure context builder. Calendar is the exchange grid through signal T.
 
-    The new M reference uses the SAME evaluable members for both windows.
+    The momentum reference uses the SAME evaluable members for both windows.
     Adding ETFs or modifying theme membership cannot change stock percentiles.
-    Subtracting common SPY returns labels relative strength; within one window
-    it does not, by itself, change the rank of stock price returns.
+    The target for stock i and window (n, skip) is
+        (r_i - r_SPY) / max(sigma_i * sqrt(n), SIGMA_FLOOR)
+    so a large move earned with little volatility outranks the same move earned
+    with a wild path; the benchmark subtraction labels it relative strength.
     """
     if horizon not in WINDOWS:
         raise ValueError(f"unknown horizon: {horizon}")
@@ -147,9 +199,9 @@ def build_context(
     if not grid or grid[-1] != session or grid != sorted(set(grid)):
         raise ValueError("strictly increasing exchange calendar must end at signal session")
     windows = WINDOWS[horizon]
-    if len(grid) < max(windows) + 1:
+    if len(grid) < max(n for n, _skip in windows) + 1:
         raise ValueError("calendar lacks the exact window endpoints")
-    grids = tuple(tuple(grid[-(n + 1):]) for n in windows)
+    grids = tuple(tuple(grid[-(n + 1):]) for n, _skip in windows)
     seen: set[str] = set()
     for item in inputs:
         if not isinstance(item.security_id, str) or not item.security_id or item.security_id in seen:
@@ -166,20 +218,24 @@ def build_context(
         median = atrs[len(atrs) // 2]  # PR184 convention, not the averaged median.
     benchmark_returns = None
     if benchmark_closes is not None:
-        candidate = tuple(_window_return(benchmark_closes, part) for part in grids)
+        candidate = tuple(_window_stats(benchmark_closes, part, skip) for part, (_n, skip) in zip(grids, windows))
         if all(value is not None for value in candidate):
-            benchmark_returns = candidate
+            benchmark_returns = tuple(value[0] for value in candidate)  # type: ignore[index]
     relative: dict[str, tuple[float, float]] = {}
     if benchmark_returns is not None:
         for item in reference:
-            returns = tuple(_window_return(item.closes, part) for part in grids)
-            if all(value is not None for value in returns):
+            stats = tuple(_window_stats(item.closes, part, skip) for part, (_n, skip) in zip(grids, windows))
+            if all(value is not None for value in stats):
                 relative[item.security_id] = tuple(
-                    value - bench for value, bench in zip(returns, benchmark_returns)
-                )  # type: ignore[assignment,operator]
-    ranks = tuple(_percentiles({sid: pair[i] for sid, pair in relative.items()}) for i in range(2))
-    momentum = {sid: 0.5 * ranks[0][sid] + 0.5 * ranks[1][sid]
-                for sid in sorted(relative) if sid in ranks[0] and sid in ranks[1]}
+                    (value[0] - bench) / max(value[1], SIGMA_FLOOR)  # type: ignore[index]
+                    for value, bench in zip(stats, benchmark_returns)
+                )  # type: ignore[assignment]
+    ranks = tuple(_percentiles({sid: pair[i] for sid, pair in relative.items()}) for i in range(len(windows)))
+    weights = WINDOW_WEIGHTS[horizon]
+    momentum = {
+        sid: sum(w * rank[sid] for w, rank in zip(weights, ranks))
+        for sid in sorted(relative) if all(sid in rank for rank in ranks)
+    }
     # Hash only the information actually used by this context. Future bars and
     # excluded funds are intentionally absent. This is not a raw-file checksum.
     digest_payload = {
@@ -191,7 +247,7 @@ def build_context(
     return TuningContext(
         session, horizon, frozenset(item.security_id for item in stocks), reference_ids,
         median, tuple(sorted(relative)), MappingProxyType(momentum), MappingProxyType(relative),
-        windows, (grids[0][0], grids[1][0]),
+        tuple(windows), tuple(part[0] for part in grids),
         "ok" if benchmark_returns is not None else "unavailable_or_incomplete", digest,
     )
 
@@ -220,7 +276,7 @@ def prepare_full_market_context(
 
     if horizon not in WINDOWS:
         raise ValueError(f"unknown horizon: {horizon}")
-    grid = _exchange_grid(session, max(WINDOWS[horizon]))
+    grid = _exchange_grid(session, max(n for n, _skip in WINDOWS[horizon]))
     wanted = frozenset(grid)
     as_of = eod_evaluation_as_of(session)
 
@@ -272,25 +328,37 @@ def _with_new_common_reasons(row: Mapping[str, Any], common: Sequence[str]) -> d
             "rejection_reasons": list(dict.fromkeys(reasons))}
 
 
+def atr_threshold(registry: Mapping[str, Any], profile: str, median_atr_pct: float | None) -> tuple[float | None, float, str]:
+    """(threshold in percent points or None, multiplier used, multiplier source)."""
+    profile_cfg = registry["profiles"][profile]
+    cap = _number(profile_cfg["atr_absolute_cap_pct"])
+    registry_multiplier = _number(profile_cfg["atr_sector_median_multiplier"])
+    if cap is None or cap <= 0 or registry_multiplier is None or registry_multiplier <= 0:
+        raise ValueError("finite positive existing ATR policy required")
+    override = ATR_MULTIPLIER.get(profile)
+    multiplier = float(override) if override is not None else registry_multiplier
+    source = "v1.5_override" if override is not None else "registry"
+    if median_atr_pct is None:
+        return None, multiplier, source
+    return min(cap, multiplier * median_atr_pct), multiplier, source
+
+
 def tune_snapshot(
     payload: Mapping[str, Any], context: TuningContext, *, registry: Mapping[str, Any],
     profile: str, horizon: str,
 ) -> dict[str, Any]:
     """Adjust raw snapshot factors/gates, then let the existing scorer decide.
 
-    Does NOT set eligible/watch, certify liquidity, remove EXTENDED, or relax
-    B/C setups. Missing old M stays missing, even if a new percentile exists.
+    Does NOT set eligible/watch, certify liquidity, or relax B/C setups. Missing
+    old M stays missing, even if a new percentile exists. EXTENDED is moved from
+    the common gate list to ``entry_state`` so the row is scored and visible;
+    ``apply_entry_states`` keeps it out of the strict (eligible) list.
     """
     if profile not in M_ALPHA or horizon != context.horizon:
         raise ValueError("tuning context/profile mismatch")
     if payload.get("session_date") != context.session.isoformat():
         raise ValueError("snapshot/context session mismatch")
-    profile_cfg = registry["profiles"][profile]
-    cap = _number(profile_cfg["atr_absolute_cap_pct"])
-    multiplier = _number(profile_cfg["atr_sector_median_multiplier"])
-    if cap is None or cap <= 0 or multiplier is None or multiplier <= 0:
-        raise ValueError("finite positive existing ATR policy required")
-    threshold = None if context.median_atr_pct is None else min(cap, multiplier * context.median_atr_pct)
+    threshold, multiplier, multiplier_source = atr_threshold(registry, profile, context.median_atr_pct)
     rows = []
     for source in payload.get("rows", ()):
         if not isinstance(source, Mapping):
@@ -315,8 +383,10 @@ def tune_snapshot(
             rows.append(row)
             continue
         atr = _number(source.get("atr_pct"))
-        new_common = [reason for reason in gates["common"]
-                      if reason not in {"HIGH_ATR", ATR_REFERENCE_UNAVAILABLE}]
+        relax_extended = profile in EXTENDED_STATE_PROFILES
+        dropped = {"HIGH_ATR", ATR_REFERENCE_UNAVAILABLE} | ({EXTENDED_REASON} if relax_extended else set())
+        new_common = [reason for reason in gates["common"] if reason not in dropped]
+        entry_state = EXTENDED_STATE if relax_extended and EXTENDED_REASON in gates["common"] else "ok"
         if threshold is None:
             new_common.append(ATR_REFERENCE_UNAVAILABLE)
         elif atr is None or atr <= 0:
@@ -331,8 +401,17 @@ def tune_snapshot(
             atr_reference_n=len(context.reference_ids),
             atr_reference_source="stock:full_market_liquid_G1",
             atr_reference_policy="G1_stock_reference",
-            atr_threshold_pct=threshold, common_gate_checks=checks,
+            atr_threshold_pct=threshold, atr_multiplier=multiplier, atr_multiplier_source=multiplier_source,
+            common_gate_checks=checks,
+            entry_state=entry_state,
+            entry_gate_reasons=[EXTENDED_REASON] if entry_state == EXTENDED_STATE else [],
         )
+        new_factors = dict(factors)
+        old_r = _number(factors.get("R"))
+        r_neutralized = False
+        if profile in R_NEUTRAL_PROFILES and old_r is not None:
+            new_factors["R"] = R_NEUTRAL_VALUE
+            r_neutralized = True
         old_m = _number(factors.get("M"))
         alpha = M_ALPHA[profile] if source.get("algorithm_id") in TUNED_FAMILIES else 0.0
         target = context.momentum_percentiles.get(sid)
@@ -346,16 +425,43 @@ def tune_snapshot(
             else:
                 delta = max(-M_DELTA_CAP, min(M_DELTA_CAP, alpha * (target - old_m)))
                 new_m = max(0.0, min(100.0, old_m + delta))
-                row["factors"] = {**factors, "M": new_m}
+                new_factors["M"] = new_m
                 reason = "bounded_M_blend_applied"
+        if new_factors != factors:
+            row["factors"] = new_factors
         row["full_market_tuning"] = {
             "version": TUNING_VERSION, "context_hash": context.digest,
             "profile": profile, "horizon": horizon,
             "M_original": old_m, "M_window_target": target, "M_final": new_m,
             "alpha": alpha, "M_delta": delta, "M_delta_cap": M_DELTA_CAP,
-            "windows": list(context.windows), "reference_n": len(context.momentum_reference_ids),
-            "reason": reason, "weights_changed": False,
+            "windows": [list(item) for item in context.windows], "reference_n": len(context.momentum_reference_ids),
+            "reason": reason,
+            "R_original": old_r, "R_neutralized": r_neutralized,
+            "entry_state": entry_state,
+            "atr_multiplier": multiplier, "atr_multiplier_source": multiplier_source,
+            "weights_changed": False,
             "empirically_optimized_m_blend": False,
         }
         rows.append(row)
     return {**payload, "rows": rows, "full_market_tuning": context.summary()}
+
+
+def apply_entry_states(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """After the existing rescore: an ``extended`` row can be watched, never eligible.
+
+    The strict list keeps the old entry rule; the observation list shows the row
+    with the ``EXTENDED_ENTRY_WAIT`` tag instead of hiding it.
+    """
+    rows = []
+    for source in payload.get("rows", ()):
+        if not isinstance(source, Mapping):
+            raise ValueError("snapshot row must be a mapping")
+        row = dict(source)
+        if row.get("entry_state") == EXTENDED_STATE and row.get("status") in {"eligible", "watch"}:
+            reasons = [str(item) for item in (row.get("rejection_reasons") or ())]
+            if EXTENDED_WAIT_REASON not in reasons:
+                reasons.append(EXTENDED_WAIT_REASON)
+            row["rejection_reasons"] = reasons
+            row["status"] = "watch"
+        rows.append(row)
+    return {**payload, "rows": rows}

@@ -134,6 +134,8 @@ def project_row(row: Mapping[str, Any], *, list_kind: str) -> dict[str, Any]:
         "list_kind": list_kind,
         "status": status,
         "rejection_reasons": reasons,
+        "entry_state": row.get("entry_state") or "ok",
+        "entry_gate_reasons": list(row.get("entry_gate_reasons") or ()),
         "algorithm_id": row.get("algorithm_id"),
         "family_label": FAMILY_LABELS.get(str(row.get("algorithm_id") or ""), row.get("algorithm_id")),
         "family_votes": list(row.get("family_votes") or ()),

@@ -22,7 +22,7 @@ from .panel import prepare_limited_panel
 from .geometry_parallel import parallel_geometry, validate_geometry_workers
 from .price_only import apply_price_only_track, resolve_capability_flags
 from .diagnostics import VariantDiagnostics
-from .full_market_tuning import prepare_full_market_context, tune_snapshot
+from .full_market_tuning import apply_entry_states, prepare_full_market_context, tune_snapshot
 
 WARMUP_SESSIONS = 330
 UNIVERSE_VERSION = "u_eod_limited_v1"
@@ -261,6 +261,8 @@ def score_eod_session(
                 dollar_liquidity_verified=dollar_liquidity_verified,
                 volume_session_verified=volume_session_verified,
             )
+            # v1.5: an extended row is visible in the observation list but never eligible.
+            scored = apply_entry_states(scored)
             rows = [dict(row) for row in scored["rows"]]
             for row in rows:
                 series = clipped.get(str(row.get("security_id") or ""))
