@@ -40,6 +40,7 @@ def _settings(path) -> _CopyableSettings:
         openai_max_concurrency=1,
         openai_daily_max_jobs=4,
         openai_daily_budget_usd=2.0,
+        openai_daily_token_limit=10_000_000,
         openai_manual_cooldown_seconds=0,
         openai_background_initial_poll_seconds=2,
         openai_background_max_poll_seconds=15,
@@ -56,6 +57,7 @@ def _effective(*, manual: bool, scheduled: bool):
         ai=SimpleNamespace(
             daily_max_jobs=4,
             daily_budget_usd=2.0,
+            daily_token_limit=10_000_000,
             manual_analysis_cooldown_seconds=0,
             manual_analysis_enabled=manual,
         ),

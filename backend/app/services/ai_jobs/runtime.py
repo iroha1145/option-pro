@@ -351,7 +351,7 @@ def runtime_configuration_valid(settings: Any) -> bool:
         and str(settings.openai_execution_mode) == OFFICIAL_EXECUTION_MODE
         and int(settings.openai_max_concurrency) == 1
         and 100_000
-        <= int(getattr(settings, "openai_daily_token_limit", 10_000_000))
+        <= int(settings.openai_daily_token_limit)
         <= 100_000_000
     )
 

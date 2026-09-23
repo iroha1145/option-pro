@@ -1382,6 +1382,8 @@ def test_earnings_ai_worker_ignores_unrelated_catalyst_mode(
     assert created is True
     settings = CopyableSettings(
         openai_job_lease_seconds=60,
+        openai_timeout_seconds=900.0,
+        openai_background_poll_timeout_seconds=1800.0,
         openai_daily_max_jobs=4,
         openai_daily_budget_usd=2.0,
         openai_manual_cooldown_seconds=30,

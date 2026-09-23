@@ -50,6 +50,7 @@ def _settings(path):
         openai_job_max_queued=200,
         openai_daily_max_jobs=4,
         openai_daily_budget_usd=2.0,
+        openai_daily_token_limit=10_000_000,
         openai_manual_cooldown_seconds=0,
     )
 
@@ -651,6 +652,8 @@ def test_ai_job_heartbeat_stops_without_blocking_the_event_loop_during_renewal(
                 SimpleNamespace(
                     openai_job_lease_seconds=60,
                     openai_job_max_age_seconds=900,
+                    openai_timeout_seconds=900.0,
+                    openai_background_poll_timeout_seconds=1800.0,
                 ),
                 {
                     "job_id": "job-1",
@@ -804,6 +807,7 @@ def test_standalone_worker_reads_fresh_runtime_controls_each_iteration(
             manual_analysis_enabled=True,
         ),
         catalyst=SimpleNamespace(scheduled_analysis_enabled=False),
+        earnings=SimpleNamespace(scheduled_analysis_enabled=False),
     )
     seen = []
 
