@@ -360,6 +360,68 @@ def test_stale_cache_is_used_as_cached_when_providers_fail(tmp_path) -> None:
     assert resolved["OLD"]["as_of"] == old_iso
 
 
+def test_fmp_calendar_keeps_reported_zero_eps_and_revenue(monkeypatch) -> None:
+    import httpx
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "symbol": "ZERO",
+                    "date": (TODAY + timedelta(days=1)).isoformat(),
+                    "eps": 0.0,
+                    "epsEstimated": 0.05,
+                    "revenue": 0,
+                    "revenueEstimated": 1_000_000,
+                }
+            ],
+        )
+
+    real_client = httpx.AsyncClient
+    monkeypatch.setattr(enrich, "_fmp_api_token", lambda: "fmp-test-token")
+    monkeypatch.setattr(
+        enrich.httpx,
+        "AsyncClient",
+        lambda **kwargs: real_client(transport=httpx.MockTransport(handler), **kwargs),
+    )
+
+    result = asyncio.run(
+        enrich.fetch_fmp_calendar(TODAY, lookback_days=2, lookahead_days=5)
+    )
+
+    row = result["rows"][0]
+    assert row["eps_actual"] == 0.0
+    assert row["revenue_actual"] == 0.0
+
+
+def test_massive_market_cap_fallback_stops_after_a_rate_limit(
+    tmp_path, monkeypatch
+) -> None:
+    from app.services import massive
+
+    calls: list[str] = []
+
+    def rejected(ticker: str) -> dict:
+        calls.append(ticker)
+        raise massive.MassiveError("rate limited", code="rate_limited", status=429)
+
+    async def no_profiles(_tickers):
+        return {"configured": False, "succeeded": False, "error": None, "profiles": {}}
+
+    monkeypatch.setattr(massive, "configured", lambda: True)
+    monkeypatch.setattr(massive, "reference_ticker_detail", rejected)
+    rows = [
+        {"ticker": f"T{index}", "market_cap": None, "days_until": index + 1}
+        for index in range(5)
+    ]
+
+    resolved = asyncio.run(_resolve_with(rows, tmp_path / "caps.json", no_profiles))
+
+    assert calls == ["T0"]
+    assert {entry["status"] for entry in resolved.values()} == {"unavailable"}
+
+
 # ── 预期波动 provider 链 ─────────────────────────────────────
 
 
