@@ -24,20 +24,11 @@ from app.access import (
     owner_password_hash_is_valid,
 )
 from app.runtime_environment import load_runtime_environment
+from app.secret_keys import SECRET_KEYS
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_SECRETS_PATH = REPOSITORY_ROOT / "secrets.env"
-SECRET_KEYS = (
-    "OPENAI_API_KEY",
-    "FINNHUB_API_KEY",
-    "MARKETDATA_TOKEN",
-    "MASSIVE_API_KEY",
-    "FMP_API_KEY",
-    "FRED_API_KEY",
-    "INTERNAL_API_TOKEN",
-    "APP_PASSWORD_HASH",
-)
 _SAFE_VALUE = re.compile(r"^[!-~]+$")
 _SAFE_HTTPS_AUTHORITY = re.compile(
     r"(?:[A-Za-z0-9._-]+|\[[0-9A-Fa-f:.]+\])(?::[1-9][0-9]{0,4})?"

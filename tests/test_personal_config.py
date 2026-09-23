@@ -96,6 +96,24 @@ def test_legacy_environment_is_reduced_to_typed_config_and_small_runtime_env() -
     assert migration.requires_owner_password is False
 
 
+def test_legacy_migration_keeps_every_market_data_secret() -> None:
+    migration = migrate_legacy_environment(
+        {
+            "MASSIVE_API_KEY": "massive-secret",
+            "FMP_API_KEY": "fmp-secret",
+            "FRED_API_KEY": "fred-secret",
+        }
+    )
+
+    assert migration.secrets == {
+        "MASSIVE_API_KEY": "massive-secret",
+        "FMP_API_KEY": "fmp-secret",
+        "FRED_API_KEY": "fred-secret",
+    }
+    assert migration.mapped_keys == ("FMP_API_KEY", "FRED_API_KEY", "MASSIVE_API_KEY")
+    assert migration.unmapped_keys == ()
+
+
 def test_legacy_macrolens_token_name_is_normalized_for_personal_runtime() -> None:
     with pytest.warns(DeprecationWarning):
         migration = migrate_legacy_environment(

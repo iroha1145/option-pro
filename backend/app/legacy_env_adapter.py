@@ -5,21 +5,14 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from app.secret_keys import SECRET_KEYS as _SECRET_KEY_ORDER
+
 if TYPE_CHECKING:
     from app.personal_config import PersonalConfig
 
 
 LEGACY_RELEASE_DEADLINE = "Personal Edition 2.0"
-SECRET_KEYS = {
-    "OPENAI_API_KEY",
-    "FINNHUB_API_KEY",
-    "MARKETDATA_TOKEN",
-    "MASSIVE_API_KEY",
-    "FMP_API_KEY",
-    "FRED_API_KEY",
-    "INTERNAL_API_TOKEN",
-    "APP_PASSWORD_HASH",
-}
+SECRET_KEYS = frozenset(_SECRET_KEY_ORDER)
 MACHINE_KEYS = {
     "HOST_BIND",
     "PORT",
@@ -332,20 +325,11 @@ def migrate_legacy_environment(values: Mapping[str, str]) -> LegacyMigration:
         },
     }
     config = PersonalConfig.model_validate(payload)
+    legacy_names = {canonical: legacy for legacy, canonical in ALIASES.items()}
     secrets = {
         key: value
-        for key, value in {
-            "OPENAI_API_KEY": _canonical_value(values, "OPENAI_API_KEY"),
-            "FINNHUB_API_KEY": _canonical_value(values, "FINNHUB_API_KEY"),
-            "MARKETDATA_TOKEN": _canonical_value(
-                values, "MARKETDATA_TOKEN", "MARKETDATA_API_TOKEN"
-            ),
-            "INTERNAL_API_TOKEN": _canonical_value(
-                values, "INTERNAL_API_TOKEN", "MACROLENS_INTERNAL_TOKEN"
-            ),
-            "APP_PASSWORD_HASH": _canonical_value(values, "APP_PASSWORD_HASH"),
-        }.items()
-        if value
+        for key in _SECRET_KEY_ORDER
+        if (value := _canonical_value(values, key, legacy_names.get(key)))
     }
     machine = {
         key: value
