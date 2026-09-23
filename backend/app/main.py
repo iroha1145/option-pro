@@ -359,6 +359,10 @@ _PASSWORD_ENTRY_PREFIXES = ("/assets/",)
 
 
 _ACCOUNT_API_PREFIX = "/api/account"
+# Resolves the caller's own principal (owner or customer account) from the
+# session: anonymous reads get the defaults and the route rejects anonymous
+# writes, so the owner gate would only lock signed-in customers out.
+_VIEW_PREFERENCES_PATH = "/api/view-preferences"
 
 
 def _is_account_api_request(path: str, method: str) -> bool:
@@ -408,6 +412,8 @@ def _is_public_read_request(
     normalized_method = method.upper()
     if _is_account_api_request(path, normalized_method):
         return True
+    if path == _VIEW_PREFERENCES_PATH:
+        return normalized_method in {"GET", "HEAD", "PUT"}
     if normalized_method in {"GET", "HEAD"}:
         return bool(
             path in _PUBLIC_DOCUMENT_PATHS
