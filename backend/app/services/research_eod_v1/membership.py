@@ -6,7 +6,6 @@ Manual watchlists cannot bypass venue, security type, or ETF/stock tracks.
 from __future__ import annotations
 
 from datetime import date
-from typing import Any, Mapping
 
 import numpy as np
 

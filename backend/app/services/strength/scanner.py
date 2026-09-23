@@ -1405,7 +1405,7 @@ def _attach_macro_fit_shadow(
 def _shadow_ranking_score(
     ranking_score: Any,
     adjustment: float,
-) -> Optional[float]:
+) -> float | None:
     base = _safe_float(ranking_score, 4)
     if base is None:
         return None

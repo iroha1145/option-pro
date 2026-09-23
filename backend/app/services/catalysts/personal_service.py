@@ -26,7 +26,6 @@ from app.services.sectors import SECTORS
 from .config import CatalystSettings
 from .errors import CatalystError
 from .local_intelligence import (
-    VISIBLE_FEED_SCAN_BUDGET,
     _cursor_decode,
     _cursor_encode,
     _feed_query_hash,

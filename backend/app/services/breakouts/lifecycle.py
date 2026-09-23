@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date
 from typing import Any, Mapping
 
 from app.services.breakouts.models import (

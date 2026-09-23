@@ -199,7 +199,6 @@ def resolve_screener_algorithm(
     follow_requested = requested_id == FOLLOW_DEFAULT
     if requested_id == FOLLOW_DEFAULT:
         requested_id = None
-        explicit_request = False
     if user_id == FOLLOW_DEFAULT:
         user_id = None
 
