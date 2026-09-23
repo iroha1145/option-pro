@@ -326,11 +326,11 @@ def migrate_legacy_environment(values: Mapping[str, str]) -> LegacyMigration:
     }
     config = PersonalConfig.model_validate(payload)
     legacy_names = {canonical: legacy for legacy, canonical in ALIASES.items()}
-    secrets = {
-        key: value
-        for key in _SECRET_KEY_ORDER
-        if (value := _canonical_value(values, key, legacy_names.get(key)))
-    }
+    secrets = {}
+    for key in _SECRET_KEY_ORDER:
+        value = _canonical_value(values, key, legacy_names.get(key))
+        if value:
+            secrets[key] = value
     machine = {
         key: value
         for key, value in {
