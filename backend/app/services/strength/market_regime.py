@@ -70,7 +70,9 @@ def _sma_slope_up_value(
         return None
     sma = close.rolling(period).mean()
     current = _safe_float(sma.iloc[-1], 8)
-    previous = _safe_float(sma.iloc[-lookback], 8)
+    # ``lookback`` sessions before the latest one, like the other 20-day
+    # changes in this module (iloc[-21]); iloc[-lookback] was one session short.
+    previous = _safe_float(sma.iloc[-lookback - 1], 8)
     if current is None or previous is None:
         return None
     return current > previous
