@@ -337,7 +337,13 @@ def test_seed_historical_is_labeled(tmp_path: Path) -> None:
     assert scored["purpose"] == PURPOSE_HISTORICAL
     assert scored["synthetic"] is True
     assert int(scored.get("complete_bar_n") or 0) >= 1
-    assert int(scored.get("watch_n") or 0) + int(scored.get("eligible_n") or 0) >= 1
+    # This deliberately small synthetic panel has only six stocks.  The v1.4
+    # G1 reference rule requires 30 eligible stocks, so it must reject the
+    # panel rather than silently relaxing the reference requirement.
+    family = scored["family_results"][0]
+    assert family["rejected"] > 0
+    assert int(scored.get("watch_n") or 0) == int(scored.get("eligible_n") or 0) == 0
+    assert family["rejection_counts"]["REFERENCE_UNIVERSE_INSUFFICIENT"] == family["rejected"]
     assert scored.get("capability_flags", {}).get("volume_verified") is False
 
 
