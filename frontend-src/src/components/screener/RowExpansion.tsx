@@ -51,6 +51,7 @@ function eodDetailLabel(value: string): string {
   if (value === 'etf') return 'ETF';
   if (value === 'DOLLAR_LIQUIDITY_UNVERIFIED') return t('成交额资格未核实');
   if (value === 'VOLUME_SESSION_UNVERIFIED') return t('成交量时段未核实');
+  if (value === 'EXTENDED_ENTRY_WAIT') return t('价格偏离基准过远，等待入场');
   return value;
 }
 

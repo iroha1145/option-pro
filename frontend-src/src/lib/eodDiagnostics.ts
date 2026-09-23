@@ -69,6 +69,7 @@ const reasonLabels: Record<string, string> = {
   ADV_TOO_LOW: t('成交额低于要求'),
   HIGH_ATR: t('波动幅度超过门槛'),
   EXTENDED: t('价格离基准位置过远'),
+  EXTENDED_ENTRY_WAIT: t('价格偏离基准过远，等待入场'),
   LOW_SCORE: t('技术分数未达到要求'),
   LOW_COVERAGE: t('可用因子不足'),
   MISSING_SCORE: t('缺少技术分数'),

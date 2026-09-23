@@ -3375,6 +3375,7 @@ export const EN: Record<string, string> = {
   "成交额低于要求": "Dollar volume below the minimum",
   "波动幅度超过门槛": "Volatility exceeds the limit",
   "价格离基准位置过远": "Price is too far from the base",
+  "价格偏离基准过远，等待入场": "Price is too far from the base; wait for an entry",
   "技术分数未达到要求": "Technical score below the minimum",
   "可用因子不足": "Insufficient available factors",
   "缺少技术分数": "Technical score unavailable",

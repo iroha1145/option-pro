@@ -147,6 +147,7 @@ export const EOD_DIAGNOSTICS: Dict = {
   '成交额低于要求': ['Dollar volume below the minimum', '売買代金が基準を下回ります'],
   '波动幅度超过门槛': ['Volatility exceeds the limit', '変動幅が上限を超えています'],
   '价格离基准位置过远': ['Price is too far from the base', '価格が基準位置から離れすぎています'],
+  '价格偏离基准过远，等待入场': ['Price is too far from the base; wait for an entry', '価格が基準位置から離れすぎているため、エントリーを待機'],
   '技术分数未达到要求': ['Technical score below the minimum', 'テクニカルスコアが基準未満です'],
   '可用因子不足': ['Insufficient available factors', '利用できる要因が不足しています'],
   '缺少技术分数': ['Technical score unavailable', 'テクニカルスコアがありません'],
