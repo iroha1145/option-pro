@@ -1,83 +1,93 @@
-/**
- * K 线叠加与显示口径的源码契约（2026-08-08 深修批）。
- *
- * 钉住的行为：
- * - 阻力带/失效位不得从图最左贯穿全史：必须以 base_start 定位起点；
- * - 结构负载与图表 bars 错版本时暂隐叠加（overlaysConsistentWithBars 闸门）；
- * - tooltip 同时给「开→收」与「较前收」两个涨跌口径；
- * - MA20 只吃常规时段、非仅报价 bar（与后端 moving_average_scope 同口径）；
- * - 面积图不再画全史最小二乘趋势线（拟合域≠显示域）；
- * - 页脚显示末根自身时间，读取时刻另行标注；
- * - 量价缺数据时风险/修正显「—」，不折成 0。
- */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import ts from 'typescript';
+import { overlaysConsistentWithBars } from '../src/components/detail/chart-drawings/analysis/mapBundle.ts';
+import { lastBarText } from '../src/components/detail/chartTime.ts';
 
-const src = join(dirname(fileURLToPath(import.meta.url)), '..', 'src');
-const kline = readFileSync(join(src, 'components/detail/KlineChart.tsx'), 'utf8');
-const chartTime = readFileSync(join(src, 'components/detail/chartTime.ts'), 'utf8');
-const stocksApi = readFileSync(join(src, 'api/modules/stocks.ts'), 'utf8');
-const structurePanel = readFileSync(join(src, 'components/detail/StructurePanel.tsx'), 'utf8');
-const detailApi = readFileSync(join(src, 'components/detail/api.ts'), 'utf8');
+const root = new URL('../src/', import.meta.url);
+function parse(file) {
+  const source = readFileSync(new URL(file, root), 'utf8');
+  return ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+}
+function find(ast, predicate) {
+  const found = [];
+  const walk = (node) => {
+    if (predicate(node)) found.push(node);
+    ts.forEachChild(node, walk);
+  };
+  walk(ast);
+  return found;
+}
+function calls(ast, name) {
+  return find(ast, node => ts.isCallExpression(node)
+    && ts.isIdentifier(node.expression) && node.expression.text === name);
+}
+function property(ast, name) {
+  return find(ast, node => ts.isPropertyAssignment(node)
+    && (ts.isIdentifier(node.name) || ts.isStringLiteral(node.name)) && node.name.text === name);
+}
+function literal(ast, value) {
+  return find(ast, node => ts.isStringLiteralLike(node) && node.text === value);
+}
 
-test('旧 technicalMarks 绘制路径已删除，吸附只吃闸门后的 overlays', () => {
-  assert.equal(kline.includes('function technicalMarks('), false);
-  assert.match(kline, /snapCandidatesFromOverlays\(visibleOverlays\)/);
-  assert.match(kline, /overlaysToMarks\(visibleOverlays/);
-  assert.match(kline, /analysisOk = gateReason === 'ok'/);
+const kline = parse('components/detail/KlineChart.tsx');
+const panel = parse('components/detail/StructurePanel.tsx');
+const detail = parse('components/detail/api.ts');
+
+test('daily technical anchors reject old or absent chart versions, while allowing two regular bars of lag', () => {
+  const bars = Array.from({ length: 5 }, (_, index) => ({ t: `2026-09-${String(index + 1).padStart(2, '0')}T20:00:00Z` }));
+  assert.equal(overlaysConsistentWithBars(null, bars), false);
+  assert.equal(overlaysConsistentWithBars({ last_bar: { trade_date: '2026-09-01' } }, bars), false);
+  assert.equal(overlaysConsistentWithBars({ last_bar: { trade_date: '2026-09-03' } }, bars), true);
+  assert.equal(overlaysConsistentWithBars({ data_through: '2026-09-04' }, bars), true);
+  assert.equal(overlaysConsistentWithBars({ data_through: '2026-09-09' }, bars), false);
+  assert.equal(overlaysConsistentWithBars({ data_through: null }, bars), true);
+  assert.equal(overlaysConsistentWithBars({ data_through: '2026-09-02' }, [
+    ...bars.slice(0, 2), { t: '2026-09-03T12:00:00Z', ext: true }, ...bars.slice(2, 4),
+  ]), true);
 });
 
-test('结构与图表错版本时暂隐叠加（一致性闸门在 analysisOk 里）', () => {
-  assert.match(kline, /function overlaysConsistentWithBars\(/);
-  assert.match(kline, /overlaysConsistentWithBars\(technical, bars\)/);
-  assert.match(kline, /analysisOk = gateReason === 'ok' && \(range !== '1d' \|\| overlaysConsistent\)/);
-  assert.match(kline, /days\.length - 1 - position <= 2/);
+test('chart overlay and snapping integration use the same displayed overlay collection', () => {
+  // This is a wiring check; the browser indicator suite covers the actual chart and mismatch message.
+  const snap = calls(kline, 'snapCandidatesFromOverlays');
+  const marks = calls(kline, 'overlaysToMarks');
+  assert.equal(snap.length, 1);
+  assert.equal(marks.length, 1);
+  assert.ok(ts.isIdentifier(snap[0].arguments[0]));
+  assert.ok(ts.isIdentifier(marks[0].arguments[0]));
+  assert.equal(snap[0].arguments[0].text, marks[0].arguments[0].text);
+  assert.ok(calls(kline, 'overlaysConsistentWithBars').length >= 1);
 });
 
-test('tooltip 同时提供开→收与较前收两个口径', () => {
-  assert.match(kline, /t\('开→收'\)/);
-  assert.match(kline, /t\('较前收'\)/);
-  assert.match(kline, /const prev = idx > 0 \? bars\[idx - 1\] : null/);
+test('chart footer uses the last bar timestamp without rewriting the source bars', () => {
+  const data = { bars: [{ t: '2026-09-11T18:30:00Z' }], last_bar_at: '2026-09-12T01:00:00Z' };
+  const before = structuredClone(data);
+  assert.equal(lastBarText(data, '5m'), '2026-09-11 14:30 ET');
+  assert.deepEqual(data, before);
+  assert.ok(calls(kline, 'lastBarText').length >= 1);
 });
 
-test('MA20 只吃常规时段、非仅报价 bar', () => {
-  assert.match(stocksApi, /if \(bar\.ext === true \|\| bar\.quote_only === true\) return null/);
-  // ext 标记要从契约一路透传（否则前端根本看不到盘前盘后）
-  assert.match(stocksApi, /\.\.\.\(b\.ext === true \? \{ ext: true \} : \{\}\)/);
-});
-
-test('面积图不再有全史最小二乘趋势线', () => {
-  assert.ok(!/sxy/.test(kline), '最小二乘拟合应已删除');
-  assert.ok(!kline.includes('intercept + slope * i'), '趋势线序列应已删除');
-});
-
-test('页脚显示末根自身时间，读取时刻另行标注', () => {
-  assert.match(kline, /lastBarText\(data, range\)/);
-  assert.match(chartTime, /export function lastBarText\(/);
-  assert.match(kline, /t\('读取于 \{at\}'/);
-  assert.match(kline, /共 \{n\} 根 · 末根 \{at\}\{status\}/);
-});
-
-test('图例是组件化的真图例并覆盖不一致态', () => {
-  assert.match(kline, /function OverlayLegend\(/);
-  assert.match(kline, /结构分析与当前 K 线数据版本不一致/);
-  assert.match(kline, /MA20 · 最近 20 根常规时段收盘的均线/);
-});
-
-test('结构卡：量价缺数据显「—」，基底状态章与暂定语义在位', () => {
-  assert.match(structurePanel, /const vpmMeasured = vpm\.status === 'active'/);
-  assert.match(structurePanel, /vpmMeasured \? signedOr\(vpm\.false_breakout_risk\) : '—'/);
-  assert.match(structurePanel, /vpmMeasured \? signedOr\(vpm\.breakout_quality_adjustment\) : '—'/);
-  assert.match(structurePanel, /（盘中暂定）/);
-  assert.match(structurePanel, /计算截至 \{date\} 收盘/);
-});
-
-test('映射层：调整量 null 不折 0，base_state 与 last_bar 均有守卫映射', () => {
-  assert.ok(!/pickN\(vp, 'false_breakout_risk'\) \?\? 0/.test(detailApi), 'null 不得折成 0');
-  assert.match(detailApi, /breakout_quality_adjustment: pickN\(vp, 'breakout_quality_adjustment'\)/);
-  assert.match(detailApi, /const BASE_STATUSES = new Set/);
-  assert.match(detailApi, /closed: lastBarRaw\.closed === true/);
+test('AST wiring: structure risk fields retain missing-value guards and nullable mapping', () => {
+  for (const field of ['breakout_quality_adjustment', 'false_breakout_risk']) {
+    const mapped = property(detail, field);
+    assert.ok(mapped.some(node => ts.isCallExpression(node.initializer)
+      && ts.isIdentifier(node.initializer.expression) && node.initializer.expression.text === 'pickN'
+      && node.initializer.arguments.some(arg => ts.isStringLiteral(arg) && arg.text === field)), field);
+    const guarded = find(panel, node => ts.isConditionalExpression(node)
+      && ts.isStringLiteral(node.whenFalse) && node.whenFalse.text === '—'
+      && ts.isCallExpression(node.whenTrue)
+      && node.whenTrue.arguments.some(arg => ts.isPropertyAccessExpression(arg) && arg.name.text === field));
+    assert.ok(guarded.length > 0, field);
+  }
+  assert.ok(find(panel, node => ts.isVariableDeclaration(node)
+    && ts.isIdentifier(node.name) && node.name.text === 'vpmMeasured'
+    && ts.isBinaryExpression(node.initializer)
+    && node.initializer.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken
+    && ts.isStringLiteral(node.initializer.right) && node.initializer.right.text === 'active').length > 0);
+  assert.ok(find(detail, node => ts.isShorthandPropertyAssignment(node) && node.name.text === 'base_state').length > 0);
+  assert.ok(property(detail, 'closed').some(node => ts.isBinaryExpression(node.initializer)
+    && node.initializer.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken
+    && node.initializer.right.kind === ts.SyntaxKind.TrueKeyword));
+  assert.ok(literal(panel, '（盘中暂定）').length > 0);
 });

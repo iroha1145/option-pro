@@ -124,10 +124,57 @@ test('area mode hides indicator UI and switching back restores the selected pane
   await page.getByRole('tab', { name: '面积', exact: true }).click();
   await expect(page.locator('[data-indicator-controls]')).toHaveCount(0);
   await expect(page.locator('[data-indicator-header]')).toHaveCount(0);
+  const areaSeries = await page.evaluate(() => indicatorTest.getChart().getOption().series
+    .filter(series => series.type === 'line' && Array.isArray(series.data) && series.data.length > 0)
+    .map(series => ({ type: series.type, count: series.data.length })));
+  expect(areaSeries).toEqual([{ type: 'line', count: await page.evaluate(() => indicatorTest.bars.length) }]);
   await page.getByRole('tab', { name: 'K 线', exact: true }).click();
   await expect(page.locator('[data-indicator-header="rsi"]')).toBeVisible();
   expect(errors).toEqual([]);
 });
+
+test('candle tooltip compares open to close and previous close, and footer names the last bar', async ({ page }) => {
+  const errors = await open(page);
+  const values = await page.evaluate(() => {
+    const option = indicatorTest.getChart().getOption();
+    const tooltip = option.tooltip[0].formatter([{ seriesType: 'candlestick', dataIndex: 50 }]);
+    return { tooltip, footer: document.body.innerText };
+  });
+  expect(values.tooltip).toContain('开→收');
+  expect(values.tooltip).toContain('较前收');
+  expect(values.footer).toContain('末根');
+  expect(values.footer).toContain('读取于');
+  expect(values.footer).toContain('MA20 · 最近 20 根常规时段收盘的均线');
+  expect(errors).toEqual([]);
+});
+
+test('a technical anchor far behind the displayed daily bars hides its levels', async ({ page }) => {
+  const errors = await open(page, 'old-technical');
+  await expect(page.getByText('结构分析与当前 K 线数据版本不一致，技术点位已暂隐，刷新后恢复')).toBeVisible();
+  await expect(page.getByText('阻力带（整理区上沿）')).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test('MA20 ignores extended and quote-only bars while their flags survive mapping', async ({ page }) => {
+  const errors = await open(page);
+  const result = await page.evaluate(async () => {
+    const { mapBar, ma20Of } = indicatorTest;
+    const raw = Array.from({ length: 20 }, (_, index) => ({
+      t: new Date(Date.UTC(2026, 0, index + 1, 21)).toISOString(), o: 100, h: 201, l: 99, c: 100 + index, v: 100,
+    }));
+    raw.splice(10, 0, { ...raw[10], t: '2026-01-11T12:00:00Z', c: 200, ext: true });
+    raw.push({ ...raw[19], t: '2026-01-22T12:00:00Z', c: 200, quote_only: true });
+    const mapped = raw.map(bar => mapBar(bar));
+    return { extended: mapped[10].ext, quoteOnly: mapped.at(-1).quote_only, values: ma20Of(mapped) };
+  });
+  expect(result.extended).toBe(true);
+  expect(result.quoteOnly).toBe(true);
+  expect(result.values[10]).toBeNull();
+  expect(result.values[20]).toBe(109.5);
+  expect(result.values.at(-1)).toBeNull();
+  expect(errors).toEqual([]);
+});
+
 
 test('tiny indicator values remain distinguishable, empty panes do not invent a series', async ({ page }) => {
   let errors = await open(page, 'tiny');
