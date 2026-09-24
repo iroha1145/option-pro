@@ -1,11 +1,11 @@
 import type { ResourcePersistence, StoredResource } from './resourceCache';
-import { onCatalystReadsInvalidated } from './resourceSignals.ts';
 
 const DB = 'optix-catalysts-v1';
 const STORE = 'resources';
 const MAX_RECORDS = 48;
 const MAX_RECORD_BYTES = 1_500_000;
 let opening: Promise<IDBDatabase | null> | null = null;
+let writeGeneration = 0;
 function open(): Promise<IDBDatabase | null> {
   if (typeof indexedDB === 'undefined') return Promise.resolve(null);
   if (opening) return opening;
@@ -55,8 +55,9 @@ export const catalystPersistence: ResourcePersistence & { clear(): Promise<void>
   async write(record) {
     // No unbounded feed archive in a browser; old pages remain on the server.
     if (JSON.stringify(record).length * 2 > MAX_RECORD_BYTES) return;
+    const generation = writeGeneration;
     const db = await open();
-    if (!db) return;
+    if (!db || generation !== writeGeneration) return;
     await new Promise<void>((resolve) => {
       try {
         const tx = db.transaction(STORE, 'readwrite');
@@ -86,6 +87,8 @@ export const catalystPersistence: ResourcePersistence & { clear(): Promise<void>
     });
   },
   async clear() {
+    // Retire writes that have started but are still waiting for IndexedDB to open.
+    writeGeneration += 1;
     const db = await open();
     if (!db) return;
     await new Promise<void>((resolve) => {
@@ -97,10 +100,3 @@ export const catalystPersistence: ResourcePersistence & { clear(): Promise<void>
     });
   },
 };
-
-// Keys carry the principal, so another account never restores these records;
-// they still must not stay on disk after a logout or account switch. The query
-// registry clears its own store on the same transitions.
-onCatalystReadsInvalidated((options) => {
-  if (options?.principalChanged) void catalystPersistence.clear();
-});
