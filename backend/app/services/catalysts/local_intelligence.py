@@ -73,11 +73,8 @@ SubmissionSource = Literal["manual", "scheduled"]
 MODEL = "gpt-5.6-terra"
 REASONING = "max"
 EXECUTION_MODE = "background"
-NEWS_PROMPT_VERSION = "news-impact-zh-cn-v6"
-# v6 adds the compact Optix 宏观环境 block to the Market Focus input. The output
-# schema is unchanged, so results produced under v5 stay readable exactly as
-# they were and no historical paid job is resubmitted.
-FOCUS_PROMPT_VERSION = "market-focus-zh-cn-v6"
+NEWS_PROMPT_VERSION = ai_runtime.PROMPT_VERSIONS["news_impact"]
+FOCUS_PROMPT_VERSION = ai_runtime.PROMPT_VERSIONS["market_focus"]
 #: Version of the *input* document handed to Market Focus. Bumped whenever the
 #: shape of the payload changes, independently of the output schema.
 FOCUS_INPUT_SCHEMA_VERSION = "market-focus-input-v2"
@@ -111,29 +108,11 @@ FOCUS_BINDING_AUDIT_CONTRACT_ID = "market-focus-binding-v1"
 FOCUS_INPUT_POLICY_AUDIT_CONTRACT_ID = "market-focus-input-policy-v1"
 SCHEDULE_CLAIM_TTL_SECONDS = 10 * 60
 SCHEDULED_NEWS_WINDOW_HOURS = 72
-SCHEDULED_NEWS_MAX_ATTEMPTS = 3
-SCHEDULED_FOCUS_MAX_ATTEMPTS = 3
+SCHEDULED_NEWS_MAX_ATTEMPTS = ai_runtime.SCHEDULED_MAX_ATTEMPTS
+SCHEDULED_FOCUS_MAX_ATTEMPTS = ai_runtime.SCHEDULED_MAX_ATTEMPTS
 SCHEDULED_FOCUS_EVENT_LIMIT = 20
-SCHEDULED_TRANSIENT_AI_ERRORS = frozenset(
-    {
-        "ai_empty_response",
-        "provider_failed",
-        # 余额耗尽在充值后即恢复——按瞬态处理，小时级重试在充值当刻自愈
-        # （2026-08-14 生产：credit_balance_exhausted 曾归入 provider_failed）。
-        "provider_credit_exhausted",
-        "provider_incomplete",
-        # Only the confirmed-terminal cancellation is retryable. The sibling
-        # provider_poll_timeout code means cancellation was not confirmed;
-        # retrying that state could overlap paid provider work.
-        "provider_poll_timeout_cancelled",
-        "provider_rate_limited",
-        "provider_response_expired",
-        "provider_server_error",
-        "provider_unavailable",
-    }
-)
-SCHEDULED_NEWS_RETRYABLE_ERRORS = SCHEDULED_TRANSIENT_AI_ERRORS
-SCHEDULED_FOCUS_RETRYABLE_ERRORS = SCHEDULED_TRANSIENT_AI_ERRORS
+SCHEDULED_NEWS_RETRYABLE_ERRORS = ai_runtime.SCHEDULED_TRANSIENT_AI_ERRORS
+SCHEDULED_FOCUS_RETRYABLE_ERRORS = ai_runtime.SCHEDULED_TRANSIENT_AI_ERRORS
 MANUAL_REFRESH_CLAIM_TTL_SECONDS = 10 * 60
 FOCUS_PREPARING_TTL_SECONDS = 10 * 60
 MANUAL_REFRESH_TYPES = ("news", "calendar", "source_health")

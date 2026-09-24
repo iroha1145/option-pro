@@ -105,21 +105,6 @@ class AlgorithmResolution:
     fallback_reason: str | None = None
     resolved_timeframe: str | None = None
 
-    def as_public_dict(self) -> dict[str, Any]:
-        payload = {
-            "requested_algorithm": self.requested,
-            "user_choice": self.user_choice,
-            "admin_default_algorithm": self.admin_default,
-            "effective_algorithm": self.effective,
-            "algorithm_version": self.version,
-            "score_basis": self.score_basis,
-            "resolution_source": self.source,
-            "fallback_reason": self.fallback_reason,
-        }
-        if self.resolved_timeframe is not None:
-            payload["resolved_timeframe"] = self.resolved_timeframe
-        return payload
-
 
 def _clean(value: Any) -> str | None:
     if value is None:
@@ -214,7 +199,6 @@ def resolve_screener_algorithm(
     follow_requested = requested_id == FOLLOW_DEFAULT
     if requested_id == FOLLOW_DEFAULT:
         requested_id = None
-        explicit_request = False
     if user_id == FOLLOW_DEFAULT:
         user_id = None
 

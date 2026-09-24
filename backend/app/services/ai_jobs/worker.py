@@ -16,6 +16,7 @@ from typing import Any
 
 from app.config import get_settings
 from app.execution_limits import BREAKOUT_TASK_TIMEOUT_SECONDS
+from app.failure_diagnostics import record_fallback_failure
 from app.services.ai_jobs import runtime
 from app.services.ai_jobs.repository import AIJobRepository
 
@@ -175,7 +176,8 @@ async def _lease_heartbeat(
                         owner,
                         lease_seconds,
                     )
-                except Exception:
+                except Exception as exc:
+                    record_fallback_failure("ai_job_lease_renewal", exc)
                     if time.monotonic() - last_successful_renewal >= lease_seconds:
                         record_lease_loss()
                         return
@@ -230,10 +232,7 @@ async def _finish_response(
         if not response_id:
             repository.fail(job["job_id"], owner, "provider_response_id_missing")
             return
-        poll_timeout = float(
-            getattr(settings, "openai_background_poll_timeout_seconds", 0.0)
-            or 0.0
-        )
+        poll_timeout = float(settings.openai_background_poll_timeout_seconds)
         if poll_timeout > 0 and _submitted_age_seconds(job) > poll_timeout:
             # A single upstream background response occupies the only provider
             # concurrency slot. Do not let an indefinitely queued response
@@ -369,8 +368,7 @@ async def process_job(
             heartbeat_started,
             max(
                 lease_seconds * 3.0,
-                float(getattr(settings, "openai_timeout_seconds", 900.0))
-                + lease_seconds,
+                float(settings.openai_timeout_seconds) + lease_seconds,
                 BREAKOUT_TASK_TIMEOUT_SECONDS + lease_seconds,
             ),
             lease_lost,
@@ -557,15 +555,9 @@ async def process_job(
                 job["job_id"],
                 owner,
                 daily_limit=int(settings.openai_daily_max_jobs),
-                daily_budget_usd=float(
-                    getattr(settings, "openai_daily_budget_usd", 2.0)
-                ),
-                daily_token_limit=int(
-                    getattr(settings, "openai_daily_token_limit", 10_000_000)
-                ),
-                cooldown_seconds=int(
-                    getattr(settings, "openai_manual_cooldown_seconds", 30)
-                ),
+                daily_budget_usd=float(settings.openai_daily_budget_usd),
+                daily_token_limit=int(settings.openai_daily_token_limit),
+                cooldown_seconds=int(settings.openai_manual_cooldown_seconds),
                 unknown_submission_hold_seconds=int(
                     settings.openai_job_max_age_seconds
                 ),
@@ -732,9 +724,7 @@ async def run_configured_once(
         update={
             "openai_daily_max_jobs": effective.ai.daily_max_jobs,
             "openai_daily_budget_usd": effective.ai.daily_budget_usd,
-            "openai_daily_token_limit": int(
-                getattr(effective.ai, "daily_token_limit", 10_000_000)
-            ),
+            "openai_daily_token_limit": int(effective.ai.daily_token_limit),
             "openai_manual_cooldown_seconds": (
                 effective.ai.manual_analysis_cooldown_seconds
             ),
@@ -754,9 +744,8 @@ async def run_configured_once(
     catalyst_scheduled_analysis_enabled = bool(
         mode_allows_scheduled and effective.catalyst.scheduled_analysis_enabled
     )
-    earnings_settings = getattr(effective, "earnings", None)
     earnings_scheduled_analysis_enabled = bool(
-        getattr(earnings_settings, "scheduled_analysis_enabled", False)
+        effective.earnings.scheduled_analysis_enabled
     )
     scheduled_analysis_enabled = {
         "news_impact": catalyst_scheduled_analysis_enabled,
@@ -811,8 +800,6 @@ def health_payload(repository: AIJobRepository, settings: Any) -> dict[str, Any]
             "execution_mode": runtime.OFFICIAL_EXECUTION_MODE,
         }
     )
-    if not configured and payload["healthy"]:
-        payload["healthy"] = True
     return payload
 
 

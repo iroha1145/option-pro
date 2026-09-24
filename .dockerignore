@@ -6,6 +6,9 @@
 .env.bak.*
 secrets.env
 secrets.env.bak.*
+secrets.env.tmp.*
+.secrets.env.*.tmp
+backups
 .personal-operation.lock
 machine.env
 machine.env.bak.*

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import date, datetime, timezone
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -314,3 +316,89 @@ def test_explicit_as_of_route_never_calls_live_fallback(
 
     assert response.status_code == 200
     assert response.json()["as_of"] == "2026-07-22T04:00:00+00:00"
+
+
+def test_expired_source_windows_do_not_accumulate(monkeypatch) -> None:
+    """Each day adds new (from, to) keys; expired ones must be released."""
+
+    import asyncio
+
+    monkeypatch.setattr(actuals, "_cache", {})
+    monkeypatch.setattr(actuals, "_failure_cache", {})
+    monkeypatch.setattr(actuals, "_cache_locks", {})
+    now = actuals.monotonic_time.monotonic()
+    old = ("2026-06-01", "2026-06-04")
+    actuals._cache[old] = (now - 1, [{"title": "old"}])
+    actuals._failure_cache[("2026-06-02", "2026-06-05")] = now - 1
+    actuals._cache_locks[old] = asyncio.Lock()
+    current = (date(2026, 7, 21), date(2026, 7, 24))
+    actuals._cache[(current[0].isoformat(), current[1].isoformat())] = (
+        now + 300,
+        [{"title": "fresh"}],
+    )
+
+    rows = asyncio.run(actuals._fetch_source_rows(*current))
+
+    assert rows == [{"title": "fresh"}]
+    assert list(actuals._cache) == [("2026-07-21", "2026-07-24")]
+    assert actuals._failure_cache == {}
+    assert old not in actuals._cache_locks
+
+
+def test_cancelled_fetch_keeps_waiters_on_the_same_lock(monkeypatch) -> None:
+    monkeypatch.setattr(actuals, "_cache", {})
+    monkeypatch.setattr(actuals, "_failure_cache", {})
+    monkeypatch.setattr(actuals, "_cache_locks", {})
+    release = asyncio.Event()
+    started = asyncio.Event()
+    calls = 0
+    active = 0
+    peak_active = 0
+
+    class Client:
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+        async def get(self, *args, **kwargs):
+            nonlocal calls, active, peak_active
+            calls += 1
+            active += 1
+            peak_active = max(peak_active, active)
+            started.set()
+            try:
+                await release.wait()
+                return SimpleNamespace(
+                    raise_for_status=lambda: None,
+                    json=lambda: {"result": []},
+                )
+            finally:
+                active -= 1
+
+    monkeypatch.setattr(actuals.httpx, "AsyncClient", Client)
+
+    async def run() -> None:
+        window = (date(2026, 9, 22), date(2026, 9, 24))
+        first = asyncio.create_task(actuals._fetch_source_rows(*window))
+        await started.wait()
+        waiting = asyncio.create_task(actuals._fetch_source_rows(*window))
+        await asyncio.sleep(0)
+        first.cancel()
+        arriving = asyncio.create_task(actuals._fetch_source_rows(*window))
+        try:
+            for _ in range(5):
+                await asyncio.sleep(0)
+            assert peak_active == 1
+        finally:
+            release.set()
+            results = await asyncio.gather(first, waiting, arriving, return_exceptions=True)
+        assert isinstance(results[0], asyncio.CancelledError)
+        assert results[1:] == [[], []]
+
+    asyncio.run(run())
+    assert calls == 2

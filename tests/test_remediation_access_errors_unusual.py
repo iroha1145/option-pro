@@ -451,6 +451,7 @@ def test_ac04_direct_catalyst_cli_entry_writes_without_outer_owner(
             macrolens_ca_bundle="",
             macrolens_cache_db_path=cache_path,
             openai_job_db_path=ai_path,
+            openai_job_max_queued=200,
             personal_etl_enabled=True,
         ),
         personal_config=SimpleNamespace(

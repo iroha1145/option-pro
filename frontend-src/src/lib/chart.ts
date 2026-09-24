@@ -441,5 +441,3 @@ export function strengthColor(score: number): string {
   if (score >= 50) return CH.brand400;
   return CH.ink300;
 }
-
-export const upColor = (change: number) => (change >= 0 ? CH.up600 : CH.down600);

@@ -26,7 +26,6 @@ from app.services.sectors import SECTORS
 from .config import CatalystSettings
 from .errors import CatalystError
 from .local_intelligence import (
-    VISIBLE_FEED_SCAN_BUDGET,
     _cursor_decode,
     _cursor_encode,
     _feed_query_hash,
@@ -38,7 +37,6 @@ _WAITING_SUMMARY = "中文摘要等待生成"
 _WAITING_HOTSPOT_TITLE = "热点标题等待中文分析"
 _HOTSPOT_PROJECTION_SCAN_LIMIT = 100
 _INTERACTIVE_MODES = frozenset({"manual", "scheduled"})
-_NEWS_PROMPT_VERSION = "news-impact-zh-cn-v6"
 _LOCAL_STORE_RUNTIME_CODES = frozenset(
     {
         "ai_job_insert_failed",
@@ -314,6 +312,9 @@ class PersonalCatalystService:
                             )
                         ),
                         now=observed,
+                        # Owner analysis has its own paid slot; scheduled work
+                        # in flight does not make it wait.
+                        lane="manual",
                     )
                 )
             except (OSError, sqlite3.Error, RuntimeError, TypeError, ValueError):
@@ -541,7 +542,7 @@ class PersonalCatalystService:
             row.get("model") != self.settings.model
             or row.get("reasoning") != self.settings.reasoning
             or row.get("execution_mode") != "background"
-            or row.get("prompt_version") != _NEWS_PROMPT_VERSION
+            or row.get("prompt_version") != ai_runtime.PROMPT_VERSIONS["news_impact"]
             or row.get("schema_version") != schema_version
             or row.get("schema_sha256") != schema_hash
         ):

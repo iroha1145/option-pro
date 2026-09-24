@@ -51,15 +51,6 @@ _NON_RETRYABLE_EARNINGS_ERRORS = frozenset(
     {"submission_outcome_unknown", "duplicate_request_migrated"}
 )
 _public_earnings_recent: dict[str, deque[tuple[float, str]]] = {}
-_PROMPT_VERSIONS = {
-    "earnings_impact": "earnings-impact-zh-cn-v5",
-    "option_alerts": "option-alerts-zh-cn-v4",
-    # v6：证据包加入大盘/宏观/期权链/新闻/财报日程上下文块（输出 schema 不变，
-    # 历史 v5 结果照常可读，不触发任何历史付费任务重投）。
-    "signal_analysis": "signal-analysis-zh-cn-v6",
-    "news_impact": "news-impact-zh-cn-v6",
-    "market_focus": "market-focus-zh-cn-v5",
-}
 
 
 class _BoundedBodyRoute(APIRoute):
@@ -297,7 +288,7 @@ def _create_job(
             model=settings.openai_model,
             reasoning=settings.openai_reasoning,
             execution_mode=settings.openai_execution_mode,
-            prompt_version=_PROMPT_VERSIONS[job_type],
+            prompt_version=ai_job_runtime.PROMPT_VERSIONS[job_type],
             schema_version=schema_version,
             schema_sha256=schema_sha256,
             max_queued=max_queued,

@@ -1076,6 +1076,12 @@ def test_production_validation_errors_never_echo_submitted_password() -> None:
         ("POST", "/api/stocks/AAOI/options/pull", False),
         ("POST", "/api/catalysts/tickers/batch/", False),
         ("POST", "/api/catalysts/tickers/batch/extra", False),
+        # The preference route authenticates the caller itself.
+        ("GET", "/api/view-preferences", True),
+        ("PUT", "/api/view-preferences", True),
+        ("POST", "/api/view-preferences", False),
+        ("DELETE", "/api/view-preferences", False),
+        ("GET", "/api/view-preferences/extra", False),
     ],
 )
 def test_public_read_paths_match_only_exact_paths_or_path_segments(

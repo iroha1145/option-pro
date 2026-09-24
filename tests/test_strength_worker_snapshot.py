@@ -315,15 +315,9 @@ def test_parameter_normalization_rejects_unsafe_boundaries(updates: dict) -> Non
         )
 
 
-def _owner_mode(monkeypatch: pytest.MonkeyPatch, mode: str) -> None:
-    from types import SimpleNamespace
-
+def _as_owner(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The strength routes no longer consult the access mode for owner reads.
     monkeypatch.setattr(strength, "current_request_is_owner", lambda: True)
-    monkeypatch.setattr(
-        strength,
-        "get_personal_config",
-        lambda: SimpleNamespace(access=SimpleNamespace(mode=mode)),
-    )
 
 
 def test_password_mode_owner_reads_worker_snapshot_not_live_scan(
@@ -352,7 +346,7 @@ def test_password_mode_owner_reads_worker_snapshot_not_live_scan(
         "sectors": [], "source_status": "active", "_stale": False,
     })
     monkeypatch.setattr(strength.time, "time", lambda: NOW)
-    _owner_mode(monkeypatch, "password")
+    _as_owner(monkeypatch)
 
     async def _must_not_run(*_args, **_kwargs):
         raise AssertionError("live compute must not run in password mode")
@@ -379,7 +373,7 @@ def test_private_network_owner_reads_independent_market_context(
     """Private-network reads share the independent worker context too."""
     from app.services.eod_limited import context_snapshot
 
-    _owner_mode(monkeypatch, "private_network")
+    _as_owner(monkeypatch)
     sentinel = {"market_regime": {"score": 42}, "source_status": "active", "_stale": False}
 
     async def _live():

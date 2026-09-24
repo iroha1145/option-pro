@@ -27,6 +27,7 @@ from app.owner_password import (
     owner_password_hash_is_valid,
     verify_owner_password,
 )
+from app.failure_diagnostics import record_fallback_failure
 from app.personal_config import AccessConfig, get_personal_config
 from app.services.request_security import (
     TRUSTED_PROXY_NETWORKS,
@@ -514,7 +515,9 @@ def request_account_session(request: Request):
         from app.api.accounts import current_account
 
         return current_account(request)
-    except Exception:
+    except Exception as exc:
+        # Also hides a real account-store failure; leave a trace of it.
+        record_fallback_failure("account_session_lookup", exc)
         return None
 
 

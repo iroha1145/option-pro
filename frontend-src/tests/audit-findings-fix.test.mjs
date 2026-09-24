@@ -50,27 +50,6 @@ test('界面日期走 localeTag，不再写死 zh-CN', () => {
   assert.equal(fmtLocaleTime('not-a-date'), '—');
 });
 
-test('NewsDrawer 关闭/换条会递增世代，在途 job 不得写回', async () => {
-  const drawer = codeOf(await source('components/catalysts/NewsDrawer.tsx'));
-  assert.match(drawer, /pollGenRef = useRef\(0\)/);
-  assert.match(drawer, /pollGenRef\.current \+= 1/);
-  assert.match(drawer, /stillThisPoll/);
-  assert.match(drawer, /openNewsRef\.current = newsId/);
-  assert.match(drawer, /sameNews = \(\) => openNewsRef\.current === job\.newsId/);
-  assert.doesNotMatch(drawer, /activeNewsRef/);
-  /* 窗口取到分支真正的结尾（600ms 清 job 那句）：#129 的 refreshItem 里自带
-     退避定时器，若按第一个 window.setTimeout 截断，完成 toast 落在窗口外，
-     下面的先后顺序断言会永假。 */
-  const terminal = drawer.match(/if \(TERMINAL\.includes\(next\.status\)\) \{[\s\S]*?\}, 600\);/);
-  assert.ok(terminal, '终态分支应存在');
-  assert.match(terminal[0], /const sameNews = \(\) => openNewsRef\.current === job\.newsId/);
-  assert.match(terminal[0], /if \(!sameNews\(\)\) return/);
-  assert.doesNotMatch(terminal[0], /stillThisPoll\(\)/);
-  const toastAfterGuard = terminal[0].indexOf('if (!sameNews()) return');
-  const toastSuccess = terminal[0].indexOf("toast.success");
-  assert.ok(toastAfterGuard >= 0 && toastSuccess > toastAfterGuard, '完成 toast 必须在抽屉仍开着这条之后');
-});
-
 test('ImpactCard 跟日历修订刷新，超时文案在 job 阶段可见', async () => {
   const card = codeOf(await source('components/earnings/ImpactCard.tsx'));
   assert.match(card, /calendarRevision/);

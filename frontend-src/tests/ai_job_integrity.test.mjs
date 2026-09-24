@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 import {
+  aiJobBlockedMessage,
   aiJobResultSummary,
   normalizeAiJob,
 } from '../src/api/aiJobNormalize.ts';
@@ -42,6 +43,24 @@ test('live AI jobs preserve structured results and do not invent progress', () =
     progress: 37,
   });
   assert.equal(measured.progress, 37);
+});
+
+test('jobs blocked before reaching the model explain why instead of a bare failure', () => {
+  const blocked = normalizeAiJob({
+    job_id: 'job_budget',
+    job_type: 'signal_analysis',
+    status: 'budget_blocked',
+    error_code: 'daily_token_limit_reached',
+  });
+  assert.equal(blocked.status, 'failed');
+  assert.match(aiJobBlockedMessage(blocked), /Token 额度已用完/);
+
+  const disabled = normalizeAiJob({ job_id: 'job_off', status: 'failed', error_code: 'manual_analysis_disabled' });
+  assert.match(aiJobBlockedMessage(disabled), /手动分析功能当前未启用/);
+
+  const failed = normalizeAiJob({ job_id: 'job_bad', status: 'failed', error_code: 'schema_validation_failed' });
+  assert.equal(aiJobBlockedMessage(failed), null);
+  assert.equal(aiJobBlockedMessage(null), null);
 });
 
 test('option analysis submits at most ten alerts derived from the visible chain', () => {

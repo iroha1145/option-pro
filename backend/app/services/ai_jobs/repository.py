@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Iterable, Iterator, Mapping
 from urllib.parse import quote
 
+from app.failure_diagnostics import record_fallback_failure
 from app.services.ai_jobs.models import (
     AIJobPublic,
     earnings_report_id,
@@ -105,12 +106,20 @@ ON ai_jobs(status, next_attempt_at, priority DESC, created_at);
 CREATE INDEX IF NOT EXISTS idx_ai_jobs_ticker
 ON ai_jobs(job_type, json_extract(payload_json, '$.ticker'), completed_at DESC);
 """
-_AI_JOBS_INDEX_STATEMENTS = (
-    """CREATE INDEX IF NOT EXISTS idx_ai_jobs_due
-       ON ai_jobs(status,next_attempt_at,priority DESC,created_at)""",
-    """CREATE INDEX IF NOT EXISTS idx_ai_jobs_ticker
-       ON ai_jobs(job_type,json_extract(payload_json,'$.ticker'),completed_at DESC)""",
-)
+
+
+def _statements(script: str) -> tuple[str, ...]:
+    """Split a checksummed schema script into the statements that apply it.
+
+    The version/checksum rule above hashes the script text, so the executed
+    statements must come from that text: a hand-kept second copy could change
+    the real shape without moving the checksum.
+    """
+
+    return tuple(part.strip() for part in script.split(";") if part.strip())
+
+
+_AI_JOBS_INDEX_STATEMENTS = _statements(_AI_JOBS_INDEX_SQL)
 _SCHEMA_SQL = _SCHEMA_REGISTRY_SQL + _AI_JOBS_TABLE_SQL + _AI_JOBS_INDEX_SQL
 _SCHEMA_CHECKSUM = hashlib.sha256(_SCHEMA_SQL.encode("utf-8")).hexdigest()
 _AI_JOB_SOURCES_TABLE_SQL = """
@@ -135,17 +144,7 @@ CREATE TABLE IF NOT EXISTS ai_job_batch_members (
 CREATE INDEX IF NOT EXISTS idx_ai_job_batch_members_batch
 ON ai_job_batch_members(batch_id, position);
 """
-_AI_JOB_BATCH_MEMBERS_STATEMENTS = (
-    """CREATE TABLE IF NOT EXISTS ai_job_batch_members (
-           job_id TEXT PRIMARY KEY REFERENCES ai_jobs(job_id) ON DELETE CASCADE,
-           batch_id TEXT NOT NULL,
-           position INTEGER NOT NULL CHECK(position >= 1),
-           created_at TEXT NOT NULL,
-           UNIQUE(batch_id, position)
-       )""",
-    """CREATE INDEX IF NOT EXISTS idx_ai_job_batch_members_batch
-       ON ai_job_batch_members(batch_id, position)""",
-)
+_AI_JOB_BATCH_MEMBERS_STATEMENTS = _statements(_AI_JOB_BATCH_MEMBERS_TABLE_SQL)
 _BATCH_SCHEMA_CHECKSUM = hashlib.sha256(
     _AI_JOB_BATCH_MEMBERS_TABLE_SQL.encode("utf-8")
 ).hexdigest()
@@ -163,20 +162,7 @@ CREATE TABLE IF NOT EXISTS ai_earnings_final_locks (
 CREATE INDEX IF NOT EXISTS idx_ai_earnings_final_locks_ticker
 ON ai_earnings_final_locks(ticker, earnings_date DESC);
 """
-_EARNINGS_FINAL_LOCK_STATEMENTS = (
-    """CREATE TABLE IF NOT EXISTS ai_earnings_final_locks (
-           report_id TEXT PRIMARY KEY,
-           ticker TEXT NOT NULL,
-           earnings_date TEXT NOT NULL,
-           report_year INTEGER,
-           report_quarter INTEGER,
-           job_id TEXT NOT NULL UNIQUE
-               REFERENCES ai_jobs(job_id) ON DELETE CASCADE,
-           locked_at TEXT NOT NULL
-       )""",
-    """CREATE INDEX IF NOT EXISTS idx_ai_earnings_final_locks_ticker
-       ON ai_earnings_final_locks(ticker, earnings_date DESC)""",
-)
+_EARNINGS_FINAL_LOCK_STATEMENTS = _statements(_EARNINGS_FINAL_LOCKS_TABLE_SQL)
 _EARNINGS_LOCK_SCHEMA_CHECKSUM = hashlib.sha256(
     _EARNINGS_FINAL_LOCKS_TABLE_SQL.encode("utf-8")
 ).hexdigest()
@@ -221,7 +207,8 @@ def _daily_tokens_used(token_rows: Iterable[Mapping[str, Any]]) -> int:
     供应商余额耗尽的瞬时失败零计费，若按满额预留计入，失败风暴会吃光
     全天预算（2026-08-14 生产：94 个 provider_failed 把 10M 账本记到
     9.97M，实际结算 0，全线误报「今日 Token 预算已用完」）。结果未知
-    （submission_outcome_unknown，可能已计费未对账）与在途/待重试行
+    （submission_outcome_unknown，可能已计费未对账）、取消未获确认的轮询
+    超时（provider_poll_timeout，上游可能仍在运行计费）与在途/待重试行
     保留满额预留，防超支方向不放松。
     """
 
@@ -234,12 +221,13 @@ def _daily_tokens_used(token_rows: Iterable[Mapping[str, Any]]) -> int:
         status = str(item["status"] or "")
         error_code = str(item["error_code"] or "")
         # 只对「供应商明确终结且无计费上报」的行释放：failed/cancelled 且
-        # 非结果未知。completed 无 usage（计费了、数额未知）、在途、待重试
-        # 与 submission_outcome_unknown 一律保留满额预留——防超支不放松。
-        released = (
-            status in {"failed", "cancelled"}
-            and error_code != "submission_outcome_unknown"
-        )
+        # 非结果未知。completed 无 usage（计费了、数额未知）、在途、待重试、
+        # submission_outcome_unknown 与 provider_poll_timeout 一律保留满额
+        # 预留——防超支不放松。
+        released = status in {"failed", "cancelled"} and error_code not in {
+            "submission_outcome_unknown",
+            "provider_poll_timeout",
+        }
         if not released:
             total += _task_token_reservation(str(item["job_type"]))
     return total
@@ -1643,21 +1631,39 @@ class AIJobRepository:
         lease_expires = _iso(now_dt + timedelta(seconds=lease_seconds))
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
+            # An unsubmitted job whose lane already has a paid submission in
+            # flight would only be deferred by mark_submission_started. Rank
+            # it after the other lane's work; otherwise a backlog of
+            # higher-priority manual jobs, each deferred for two seconds and
+            # re-claimed every half second, starves the scheduled lane.
             row = connection.execute(
                 """
-                SELECT * FROM ai_jobs
-                WHERE status IN ('pending','queued','in_progress')
-                  AND (next_attempt_at IS NULL OR next_attempt_at<=?)
-                  AND (lease_expires_at IS NULL OR lease_expires_at<=?)
+                SELECT j.* FROM ai_jobs AS j
+                LEFT JOIN ai_job_sources AS s ON s.job_id=j.job_id
+                WHERE j.status IN ('pending','queued','in_progress')
+                  AND (j.next_attempt_at IS NULL OR j.next_attempt_at<=?)
+                  AND (j.lease_expires_at IS NULL OR j.lease_expires_at<=?)
                 ORDER BY
-                  CASE WHEN cancel_requested_at IS NOT NULL THEN 0 ELSE 1 END,
+                  CASE WHEN j.cancel_requested_at IS NOT NULL THEN 0 ELSE 1 END,
                   CASE
-                    WHEN openai_response_id IS NOT NULL THEN 0
-                    WHEN submission_started_at IS NOT NULL THEN 1
+                    WHEN j.openai_response_id IS NOT NULL THEN 0
+                    WHEN j.submission_started_at IS NOT NULL THEN 1
                     ELSE 2
                   END,
-                  priority DESC,
-                  created_at
+                  CASE
+                    WHEN j.submission_started_at IS NULL AND EXISTS (
+                      SELECT 1 FROM ai_jobs AS busy
+                      LEFT JOIN ai_job_sources AS busy_source
+                        ON busy_source.job_id=busy.job_id
+                      WHERE busy.status IN ('queued','in_progress')
+                        AND busy.submission_started_at IS NOT NULL
+                        AND COALESCE(busy_source.submission_source,'scheduled')
+                          =COALESCE(s.submission_source,'scheduled')
+                    ) THEN 1
+                    ELSE 0
+                  END,
+                  j.priority DESC,
+                  j.created_at
                 LIMIT 1
                 """,
                 (now, now),
@@ -2521,11 +2527,14 @@ class AIJobRepository:
         unknown_submission_hold_seconds: int = 86400,
         unknown_submission_no_response_hold_seconds: int = 900,
         now: datetime | None = None,
+        lane: str | None = None,
     ) -> dict[str, Any]:
         """Return a secret-free, point-in-time view of paid task capacity.
 
         Use the same bounded quarantine as ``mark_submission_started`` so the
         owner UI and the worker agree about whether the paid slot is available.
+        ``lane`` ('manual' or 'scheduled') checks only that submission lane's
+        slot, as the worker does; None reports any in-flight submission.
         """
 
         self.ensure_initialized()
@@ -2592,20 +2601,21 @@ class AIJobRepository:
                 SELECT j.*,s.submission_source FROM ai_jobs AS j
                 JOIN ai_job_sources AS s ON s.job_id=j.job_id
                 WHERE j.submission_started_at IS NOT NULL
+                  AND (?1 IS NULL OR s.submission_source=?1)
                   AND (
                     j.status IN ('queued','in_progress')
                     OR (
                       j.error_code='submission_outcome_unknown'
                       AND (
                         (j.openai_response_id IS NOT NULL
-                         AND j.submission_started_at>=?)
-                        OR j.submission_started_at>=?
+                         AND j.submission_started_at>=?2)
+                        OR j.submission_started_at>=?3
                       )
                     )
                   )
                 ORDER BY j.created_at LIMIT 1
                 """,
-                (unknown_submission_cutoff, unknown_no_response_cutoff),
+                (lane, unknown_submission_cutoff, unknown_no_response_cutoff),
             ).fetchone()
             latest_paid = connection.execute(
                 """
@@ -2958,7 +2968,8 @@ class AIJobRepository:
                 "pending": pending,
                 "submission_unknown": submission_unknown,
             }
-        except Exception:
+        except Exception as exc:
+            record_fallback_failure("ai_job_health", exc)
             return {
                 "healthy": False,
                 "status": "database_unavailable",

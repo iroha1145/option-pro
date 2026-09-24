@@ -10,7 +10,7 @@ import { useAccess } from '@/hooks/useAccess';
 import Icon from '@/components/icons';
 import { createSignalAnalysisJob } from './api';
 import { useAiJob } from './useAiJob';
-import { aiJobResultSummary } from '@/api/modules/ai-jobs';
+import { aiJobBlockedMessage, aiJobResultSummary } from '@/api/modules/ai-jobs';
 import { isIndexSymbol } from '@/lib/quoteSymbol';
 import { t } from '../../i18n/core.ts';
 
@@ -26,6 +26,7 @@ export default function AiAnalysisCard({ ticker }: { ticker: string }) {
       job.status === 'running');
   const resultSummary =
     job?.status === 'succeeded' ? aiJobResultSummary(job.result) : null;
+  const blocked = aiJobBlockedMessage(job);
 
   return (
     <div className="rounded-lg border border-line bg-card p-4 shadow-sh-1">
@@ -163,6 +164,7 @@ export default function AiAnalysisCard({ ticker }: { ticker: string }) {
             className="mt-3 text-caption text-down-700"
           >
             {error ??
+              blocked ??
               (job?.status === 'failed'
                 ? t('分析任务失败')
                 : job?.status === 'cancelled'
@@ -170,7 +172,7 @@ export default function AiAnalysisCard({ ticker }: { ticker: string }) {
                   : t('分析已完成，暂无摘要'))}{' '}
             {queryIssue === 'retrying' && <span>{t('正在重新查询原任务')}</span>}
             {(queryIssue === 'paused' || queryIssue === 'blocked') && <button onClick={resume} className="ml-2 font-medium text-ai-600">{t('继续查询原任务')}</button>}
-            {!running && <button onClick={reset} className="ml-2 font-medium text-ai-600">{t('重试')}</button>}
+            {!running && <button onClick={reset} className="ml-2 font-medium text-ai-600">{blocked ? t('关闭') : t('重试')}</button>}
             {job?.status === 'failed' && job.errorDetail && (
               /* owner 排障线索（非 owner 后端置空不渲染）：命中的校验规则/字段 */
               <span className="mt-1 block break-all font-mono text-micro text-ink-400">

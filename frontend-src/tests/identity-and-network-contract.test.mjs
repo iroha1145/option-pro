@@ -163,20 +163,8 @@ test('主动核验对客户与管理员同时生效', async () => {
   assert.match(hook, /if \(!hasPrincipal\) return;/);
 });
 
-/* ---------------- P1-07：身份响应乱序 ---------------- */
-
-test('身份读取带世代号，旧响应不能覆盖新结果', async () => {
-  const hook = codeOf(await source('hooks/useAccess.tsx'));
-  assert.match(hook, /generationRef = useRef\(0\)/);
-  assert.match(hook, /if \(generation !== generationRef\.current\) return;/);
-  // 登录 / 注册 / 登出必须先递增世代，作废在途探测
-  assert.match(hook, /generationRef\.current \+= 1;/);
-  assert.match(hook, /applyWrite\(\(\) => accessApi\.login\(username, password\)\)/);
-  // 登出走 applyWrite 双路：客户会话 accountApi.logout、Owner 会话 accessApi.logout（#18）
-  assert.match(hook, /const logout = useCallback\(\s*\(\) => applyWrite\(async \(\) => \{/);
-  assert.match(hook, /await accountApi\.logout\(\);/);
-  assert.match(hook, /await accessApi\.logout\(\);/);
-});
+/* P1-07 身份响应乱序：由 audit-recovery-behavior.test.mjs 与
+   audit-state-20260912.test.mjs 实际运行 AccessProvider 验证。 */
 
 /* ---------------- P2-1 / P2-2：错误不再由 visitor 兼任 ---------------- */
 

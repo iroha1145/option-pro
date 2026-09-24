@@ -728,6 +728,75 @@ test('任务恢复读到 404 只提示记录不存在，不给重试钮也不再
   h.unmount();
 });
 
+for (const initialStatus of ['queued', 'in_progress']) {
+  for (const path of ['recovery', 'poll']) {
+    test(`${path} 读到任务 404（${initialStatus}）：撤掉运行态、补读详情、给出需确认的重新发起入口`, async () => {
+      const h = harness();
+      let jobRound = 0;
+      h.setNews(async () => item({ analysisStatus: initialStatus, analysisJobId: 'job-1' }));
+      h.setJob(async () => {
+        jobRound += 1;
+        if (path === 'poll' && jobRound === 1) return job({ status: initialStatus });
+        throw Object.assign(new Error('gone'), { code: 404 });
+      });
+      h.render({ newsId: '9600', seed: item({ analysisStatus: initialStatus, analysisJobId: 'job-1' }) });
+      await settle();
+      if (path === 'poll') await h.fireDue(2000);
+      const jobCalls = h.jobCalls.length;
+      const newsCalls = h.newsCalls.length;
+      await h.fireDue(10_000);
+      await h.fireDue(10_000);
+      assert.equal(h.jobCalls.length, jobCalls, '不再查询已确认缺失的任务 id');
+      assert.ok(newsCalls >= 2, '确认缺失后补读新闻详情');
+      const text = collectText(h.tree()).join(' ');
+      assert.match(text, /任务记录已不存在/);
+      assert.match(text, /任务记录缺失/);
+      assert.doesNotMatch(text, /任务排队中|模型分析中/);
+      assert.ok(findButton(h.tree(), '生成 AI 分析'), '重新发起仍需确认');
+      assert.equal(h.createCalls.length, 0, '404 不得自动提交付费任务');
+      h.unmount();
+    });
+  }
+}
+
+for (const [label, fresh, visible] of [
+  ['已完成', () => completedItem(), /完整分析/],
+  ['未分析', () => item({ analysisStatus: 'pending', analysisJobId: null }), /生成 AI 分析/],
+]) {
+  test(`任务 404 后补读详情为${label}：按新详情显示并撤掉缺失提示`, async () => {
+    const h = harness();
+    let newsRound = 0;
+    h.setNews(async () => (++newsRound === 1 ? item({ analysisStatus: 'queued', analysisJobId: 'job-1' }) : fresh()));
+    h.setJob(async () => { throw Object.assign(new Error('gone'), { code: 404 }); });
+    h.render({ newsId: '9600', seed: item({ analysisStatus: 'queued', analysisJobId: 'job-1' }) });
+    await settle();
+    const text = collectText(h.tree()).join(' ');
+    assert.match(text, visible);
+    assert.doesNotMatch(text, /任务记录已不存在|任务记录缺失/);
+    assert.equal(h.createCalls.length, 0);
+    h.unmount();
+  });
+}
+
+test('任务查询 503 仍是可重试的读取失败，不按记录缺失处理', async () => {
+  const h = harness();
+  h.setJob(async () => { throw Object.assign(new Error('busy'), { code: 503, retryable: true }); });
+  h.render({ newsId: '9600', seed: item({ analysisStatus: 'queued', analysisJobId: 'job-1' }) });
+  await settle();
+  for (let round = 0; round < 6; round += 1) await h.fireDue(30_000);
+  const text = collectText(h.tree()).join(' ');
+  assert.match(text, /任务状态暂时读不到/);
+  assert.doesNotMatch(text, /任务记录缺失/);
+  const retry = findButton(h.tree(), '重试');
+  assert.ok(retry);
+  const before = h.jobCalls.length;
+  retry.props.onClick();
+  await settle();
+  assert.equal(h.jobCalls.length, before + 1);
+  assert.equal(h.createCalls.length, 0);
+  h.unmount();
+});
+
 for (const [label, projected, expectedStatus] of [
   ['服务端投影还没带上新任务时保留提交态', item(), 'queued'],
   ['服务端投影已带上新任务时按详情为准', item({ analysisStatus: 'in_progress', analysisJobId: 'job-9' }), 'in_progress'],

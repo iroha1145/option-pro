@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from app.access import request_owner_access_context
+from app.failure_diagnostics import record_fallback_failure
 
 from .lock import ProcessFileLock
 from .state import (
@@ -498,7 +499,9 @@ class WorkerSupervisor:
                             token,
                             lease_seconds=self.lease_seconds,
                         )
-                    except Exception:
+                    except Exception as exc:
+                        # A later lease_lost otherwise shows no cause.
+                        record_fallback_failure("worker_lease_renewal", exc)
                         if (
                             time.monotonic() - last_successful_renewal
                             >= self.lease_seconds
@@ -851,14 +854,6 @@ class WorkerSupervisor:
         return False
 
     async def _task_loop(self, task: TaskSpec) -> None:
-        if not task.enabled:
-            await self._record(
-                task,
-                status="disabled",
-                consecutive_failures=0,
-                details={},
-            )
-            return
         if task.manual_only:
             await self._record(
                 task,
@@ -1098,11 +1093,18 @@ class WorkerSupervisor:
                 await asyncio.gather(heartbeat, return_exceptions=True)
             if self._token is not None:
                 if not once and completed_normally and not self._lease_lost.is_set():
+                    # Rows of tasks that resume their stored schedule survive a
+                    # graceful stop; otherwise every deploy would restart them
+                    # immediately (the multi-GB backup this flag exists for).
                     await asyncio.to_thread(
                         self.repository.reconcile_task_status,
                         self.owner_id,
                         self._token,
-                        (),
+                        tuple(
+                            task.name
+                            for task in self.tasks
+                            if task.honor_persisted_schedule
+                        ),
                     )
                 await asyncio.to_thread(
                     self.repository.release,

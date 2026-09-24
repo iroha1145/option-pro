@@ -165,16 +165,3 @@ export function StaleChip() {
     </SoftBadge>
   );
 }
-
-/* ---------------- 区块标题 ---------------- */
-export function SectionHead({ eyebrow, title, meta }: { eyebrow: string; title: string; meta?: React.ReactNode }) {
-  return (
-    <div className="flex flex-wrap items-end justify-between gap-2">
-      <div>
-        <p className="eyebrow">{eyebrow}</p>
-        <h2 className="mt-1 text-h2 text-ink-900">{title}</h2>
-      </div>
-      {meta}
-    </div>
-  );
-}

@@ -25,7 +25,7 @@ from app.access import (
     request_account_session,
 )
 from app.data_paths import get_data_paths
-from app.personal_config import get_personal_config
+from app.failure_diagnostics import record_fallback_failure
 from app.services.algorithm_diagnostics import record_screener_resolution
 from app.services.algorithm_modes import (
     A0_ALGORITHM,
@@ -46,6 +46,7 @@ from app.services.http_read_cache import respond_with_snapshot, snapshot_version
 from app.services.runtime_settings import get_effective_runtime_settings
 from app.services.sectors import SECTORS
 from app.services.view_preferences import (
+    ViewPreferenceStorageError,
     get_view_preference_store,
     principal_for_request,
 )
@@ -438,7 +439,12 @@ def _request_screener_resolution(
     )
     user_choice = None
     if principal is not None:
-        user_choice = get_view_preference_store().read(principal).screener_ranking_algorithm
+        try:
+            user_choice = get_view_preference_store().read(principal).screener_ranking_algorithm
+        except ViewPreferenceStorageError as exc:
+            # A damaged preference file falls back to the admin default; the
+            # preference route itself still reports the storage error.
+            record_fallback_failure("screener_view_preference_read", exc)
     try:
         admin_default = admin_algorithm_defaults(get_effective_runtime_settings())
     except Exception:
@@ -1124,19 +1130,6 @@ async def scan(
         ),
         cache_control="private, max-age=60, stale-while-revalidate=300",
     )
-
-
-def _serve_public_snapshot() -> bool:
-    """password 公网模式下，普通 GET 对所有主体读同一份 Worker 快照。
-
-    Owner 现算曾是有意保留的产品特性（900s TTLCache 兜底），但冷启动或
-    缓存失效时 stock_strength 内部是整池扫描（top=250），Owner 打开抽屉
-    反而比访客更慢（审计 P1-02）。现算保留在 private_network 本地模式；
-    Owner 的重算入口是 /scan 的显式刷新链路（刷新强度分按钮）。
-    """
-    if not current_request_is_owner():
-        return True
-    return get_personal_config().access.mode == "password"
 
 
 @router.get("/diagnostics/{ticker}")

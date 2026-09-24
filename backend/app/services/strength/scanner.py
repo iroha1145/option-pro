@@ -609,7 +609,7 @@ def _download_massive_history(
     tickers: list[str],
     period: str,
 ) -> tuple[pd.DataFrame, list[str]]:
-    """Massive 主源日线(复权,正股专用)。
+    """Massive 主源日线(拆股复权、分红不复权,正股专用)。
 
     返回 (MultiIndex frame, 未覆盖代码);指数/期货等不支持形态直接进
     未覆盖名单,由既有 Yahoo → 公开源链兜底。未配置密钥时整体跳过。
@@ -682,7 +682,10 @@ def _download_history(tickers: list[str], period: str = "1y") -> pd.DataFrame:
         "interval": "1d",
         "group_by": "ticker",
         "progress": False,
-        "auto_adjust": True,
+        # Yahoo's unadjusted OHLC is split-adjusted but not dividend-adjusted,
+        # the same basis as Massive's adjusted=true bars. auto_adjust=True would
+        # put dividend-adjusted fallback rows in the same cross-section.
+        "auto_adjust": False,
     }
     if session is not None:
         kwargs["session"] = session
@@ -700,6 +703,8 @@ def _download_history(tickers: list[str], period: str = "1y") -> pd.DataFrame:
                 )
             except Exception:
                 candidate = pd.DataFrame()
+            if isinstance(candidate, pd.DataFrame) and isinstance(candidate.columns, pd.MultiIndex):
+                candidate = candidate.drop(columns="Adj Close", level=1, errors="ignore")
             if isinstance(candidate, pd.DataFrame) and _has_usable_history(candidate, yahoo_targets):
                 primary = candidate
                 break
@@ -1400,7 +1405,7 @@ def _attach_macro_fit_shadow(
 def _shadow_ranking_score(
     ranking_score: Any,
     adjustment: float,
-) -> Optional[float]:
+) -> float | None:
     base = _safe_float(ranking_score, 4)
     if base is None:
         return None

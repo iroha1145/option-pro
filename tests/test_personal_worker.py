@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import sqlite3
 import subprocess
@@ -21,7 +22,7 @@ from pydantic import SecretStr
 from app import runtime_environment
 from app.access import request_owner_access_context
 from app.worker import tasks as worker_tasks
-from app.worker.__main__ import _load_worker_settings, main
+from app.worker.__main__ import _load_worker_settings, configure_logging, main
 from app.worker.lock import ProcessFileLock
 from app.worker.runtime import TaskResult, TaskSpec, WorkerSupervisor
 from app.worker.state import WorkerLeaseLost, WorkerStateRepository
@@ -136,6 +137,7 @@ def _worker_config(
     url: str = "",
     cache_path: Path | None = None,
     ai_path: Path | None = None,
+    max_queued: int = 200,
 ) -> SimpleNamespace:
     return SimpleNamespace(
         internal_api_token=SecretStr(token),
@@ -145,6 +147,7 @@ def _worker_config(
         macro_conditions_db_path=tmp_path / "macro-conditions.db",
         fred_api_key=SecretStr(""),
         openai_job_db_path=ai_path or tmp_path / "ai-jobs.db",
+        openai_job_max_queued=max_queued,
         optix_worker_db_path=tmp_path / "optix-worker.db",
         optix_worker_lock_path=tmp_path / "optix-worker.lock",
         breakout_db_path=tmp_path / "optix.db",
@@ -1138,6 +1141,82 @@ def test_earnings_budget_blocked_retries_only_on_next_utc_day(
     assert retried["execution_number"] == first["execution_number"] + 1
 
 
+def test_scheduled_earnings_retry_only_transient_failures_three_times(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services.ai_jobs import runtime as ai_runtime
+    from app.services.ai_jobs.repository import AIJobRepository
+
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    settings = SimpleNamespace(
+        openai_job_db_path=repository.path,
+        openai_api_key=SecretStr("test-only-key"),
+        openai_model="gpt-5.6-terra",
+        openai_reasoning="max",
+        openai_execution_mode="background",
+        openai_job_max_queued=200,
+    )
+    effective = _runtime_settings(scheduled=True, earnings_scheduled=True)
+    monkeypatch.setattr(
+        ai_runtime,
+        "capability_status",
+        lambda _settings: {"supported": True, "status": "supported"},
+    )
+    task = EarningsAnalysisTask(
+        "earnings-failure-retry",
+        settings=settings,
+        repository=repository,
+        builder=lambda _today: {
+            "data_limited": False,
+            "source_status": "active",
+            "earnings": [
+                {
+                    "ticker": "AAPL",
+                    "name": "Apple",
+                    "earnings_date": "2026-07-24",
+                    "days_until": 1,
+                    "eps_estimate": 1.5,
+                }
+            ],
+        },
+        runtime_settings_reader=lambda: effective,
+        today=lambda: datetime(2026, 7, 23, tzinfo=timezone.utc).date(),
+    )
+
+    def fail_latest(error_code: str) -> None:
+        latest = repository.latest_for_ticker("earnings_impact", "AAPL")
+        assert latest is not None
+        stamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        with repository._connect() as connection:
+            connection.execute(
+                """UPDATE ai_jobs
+                   SET status='failed',error_code=?,completed_at=?,updated_at=?
+                   WHERE job_id=?""",
+                (error_code, stamp, stamp, latest["job_id"]),
+            )
+            connection.commit()
+
+    assert asyncio.run(task()).details["queued"] == 1
+    # A schema failure repeats on the same input, and an unconfirmed poll
+    # timeout may still be running (and billing) upstream.
+    for error_code in ("schema_validation_failed", "provider_poll_timeout"):
+        fail_latest(error_code)
+        skipped = asyncio.run(task())
+        assert skipped.details["queued"] == 0
+        assert skipped.details["existing"] == 1
+
+    for _ in range(2):
+        fail_latest("provider_server_error")
+        assert asyncio.run(task()).details["queued"] == 1
+    fail_latest("provider_server_error")
+    exhausted = asyncio.run(task())
+    assert exhausted.details["queued"] == 0
+    latest = repository.latest_for_ticker("earnings_impact", "AAPL")
+    assert latest is not None
+    assert latest["execution_number"] == ai_runtime.SCHEDULED_MAX_ATTEMPTS
+
+
 def test_manual_earnings_action_works_when_daily_schedule_is_off(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1303,6 +1382,8 @@ def test_earnings_ai_worker_ignores_unrelated_catalyst_mode(
     assert created is True
     settings = CopyableSettings(
         openai_job_lease_seconds=60,
+        openai_timeout_seconds=900.0,
+        openai_background_poll_timeout_seconds=1800.0,
         openai_daily_max_jobs=4,
         openai_daily_budget_usd=2.0,
         openai_manual_cooldown_seconds=30,
@@ -1476,6 +1557,26 @@ def test_new_worker_inventory_removes_old_status_rows_after_acquire(
     assert [item["task_name"] for item in repository.task_states()] == [
         "breakout"
     ]
+
+
+def test_worker_logging_keeps_query_string_api_keys_out_of_logs(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    httpx_logger = logging.getLogger("httpx")
+    previous_level = httpx_logger.level
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, json=[]))
+    try:
+        configure_logging()
+        with caplog.at_level(logging.INFO):
+            with httpx.Client(transport=transport) as client:
+                client.get(
+                    "https://api.stlouisfed.org/fred/series/observations",
+                    params={"api_key": "fred-key-sentinel"},
+                )
+    finally:
+        httpx_logger.setLevel(previous_level)
+
+    assert "fred-key-sentinel" not in caplog.text
 
 
 def test_graceful_forever_shutdown_clears_current_task_status(
@@ -2305,6 +2406,8 @@ def test_personal_catalyst_task_uses_https_bearer_etl_and_closes_client(
             assert options["mode"] == "read"
             assert options["model"] == "gpt-5.6-terra"
             assert options["reasoning"] == "max"
+            # OPENAI_JOB_MAX_QUEUED, not a fixed 200, caps worker-side jobs.
+            assert options["max_queued"] == 37
             tickers = set(options["canonical_tickers"])
             assert "NVDA" in tickers
             assert "ZZZZ" not in tickers
@@ -2349,6 +2452,7 @@ def test_personal_catalyst_task_uses_https_bearer_etl_and_closes_client(
             url="https://macrolens.example",
             cache_path=cache_path,
             ai_path=ai_path,
+            max_queued=37,
         ),
         personal_config=config,
         etl_transport=httpx.MockTransport(handler),
@@ -3504,6 +3608,43 @@ def test_lease_lost_during_status_write_still_propagates(tmp_path: Path) -> None
     asyncio.run(scenario())
 
 
+def test_cancelled_backup_holds_the_task_until_the_copy_finishes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """超时取消后，备份线程还在拷贝时不能让任务先结束（否则下一轮叠加备份）。"""
+
+    from app.tools import sqlite_backup
+
+    source = tmp_path / "state.db"
+    sqlite3.connect(source).close()
+    started = threading.Event()
+    release = threading.Event()
+    finished = threading.Event()
+
+    def slow_backup(_path, _destination, *, label, keep):
+        started.set()
+        assert release.wait(timeout=5)
+        finished.set()
+
+    monkeypatch.setattr(sqlite_backup, "backup_database", slow_backup)
+    task = MaintenanceTask({"state": source}, destination=tmp_path / "backups", keep=2)
+
+    async def scenario() -> None:
+        running = asyncio.create_task(task())
+        while not started.is_set():
+            await asyncio.sleep(0.01)
+        running.cancel()
+        await asyncio.sleep(0.1)
+        assert not running.done()
+        release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await running
+        assert finished.is_set()
+
+    asyncio.run(scenario())
+
+
 def test_honor_persisted_schedule_skips_startup_run(tmp_path: Path) -> None:
     """维护任务重启后要沿用持久化的 next_run_at，而不是立即重跑全量备份。"""
 
@@ -3549,6 +3690,66 @@ def test_honor_persisted_schedule_skips_startup_run(tmp_path: Path) -> None:
         assert calls == 0, "restart must not re-run a future-scheduled backup"
         supervisor.request_stop()
         await asyncio.wait_for(running, timeout=5)
+
+    asyncio.run(scenario())
+
+
+def test_graceful_restart_keeps_the_persisted_schedule(tmp_path: Path) -> None:
+    """部署时的优雅停机不能抹掉维护任务的 next_run_at。"""
+
+    async def scenario() -> None:
+        repository = WorkerStateRepository(tmp_path / "graceful-sched.db")
+        calls = {"maintenance": 0, "breakout": 0}
+        ran = {name: asyncio.Event() for name in calls}
+
+        def runner(name: str):
+            async def run() -> TaskResult:
+                calls[name] += 1
+                ran[name].set()
+                return TaskResult(next_delay_seconds=3600)
+
+            return run
+
+        def supervisor(owner_id: str) -> WorkerSupervisor:
+            return WorkerSupervisor(
+                repository,
+                (
+                    TaskSpec(
+                        "maintenance",
+                        runner("maintenance"),
+                        21_600,
+                        honor_persisted_schedule=True,
+                    ),
+                    TaskSpec("breakout", runner("breakout"), 3600),
+                ),
+                owner_id=owner_id,
+                lease_seconds=5,
+                process_lock=ProcessFileLock(tmp_path / "graceful-sched.lock"),
+            )
+
+        async def run_until_scheduled(worker: WorkerSupervisor) -> None:
+            running = asyncio.create_task(worker.run_forever())
+            await asyncio.wait_for(ran["breakout"].wait(), timeout=5)
+            for _ in range(500):
+                scheduled = {
+                    item["task_name"]
+                    for item in repository.task_states()
+                    if item["next_run_at"]
+                }
+                if scheduled == set(calls):
+                    break
+                await asyncio.sleep(0.01)
+            worker.request_stop()
+            await asyncio.wait_for(running, timeout=5)
+
+        await run_until_scheduled(supervisor("graceful-sched-first"))
+        remaining = repository.task_states()
+        assert [item["task_name"] for item in remaining] == ["maintenance"]
+        assert remaining[0]["next_run_at"]
+
+        ran["breakout"].clear()
+        await run_until_scheduled(supervisor("graceful-sched-second"))
+        assert calls == {"maintenance": 1, "breakout": 2}
 
     asyncio.run(scenario())
 

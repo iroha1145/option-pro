@@ -72,3 +72,17 @@ def test_missing_breadth_endpoints_make_market_score_unavailable():
     assert "rsp_or_iwm_breadth" in result["hard_missing"]
     assert result["status"] == "insufficient_data"
     assert result["score"] is None
+
+
+def test_sma_slope_compares_with_the_value_lookback_sessions_earlier() -> None:
+    import pandas as pd
+
+    from app.services.strength.market_regime import _sma_slope_up_value
+
+    # period=1 makes the SMA the close itself, so the compared session is explicit.
+    closes = [8.0] * 25
+    closes[-21] = 10.0  # 20 sessions before the latest
+    closes[-20] = 0.0  # 19 sessions before the latest
+    closes[-1] = 5.0
+
+    assert _sma_slope_up_value(pd.Series(closes), period=1, lookback=20) is False

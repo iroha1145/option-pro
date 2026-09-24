@@ -1,4 +1,5 @@
 import { API_MODE } from '@/api/client';
+import { getQueryPrincipalGeneration } from '@/api/queryRegistry';
 import { clearCatalystReadCache } from './api';
 import { ResourceCache } from './resourceCache';
 import { catalystPersistence } from './resourcePersistence';
@@ -18,7 +19,14 @@ const visible = () => typeof document !== 'undefined' && document.visibilityStat
 // Retain the displayed snapshot; revalidation failure must not erase useful data.
 onCatalystReadsInvalidated((options) => {
   catalystResources.invalidate(options);
-  if (visible()) queueMicrotask(() => catalystResources.tick());
+  // The old page's subscriptions are still mounted until React commits the
+  // new identity. Do not start another read under their old cache keys.
+  if (!options?.principalChanged && visible()) {
+    const principalGeneration = getQueryPrincipalGeneration();
+    queueMicrotask(() => {
+      if (principalGeneration === getQueryPrincipalGeneration()) catalystResources.tick();
+    });
+  }
 });
 
 function closeStream(): void { source?.close(); source = null; }

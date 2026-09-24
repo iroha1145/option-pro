@@ -73,6 +73,43 @@ EARNINGS_FINAL_PRIORITY = 90
 EARNINGS_MANUAL_QUEUE_RESERVE = 20
 EARNINGS_FINAL_QUEUE_RESERVE = 40
 EARNINGS_PRE_RELEASE_ACTIVE_LIMIT = 64
+# Part of every job's request identity: create_job deduplicates on it, so two
+# copies drifting apart would pay for the same analysis twice. Bump a version
+# whenever that job type's instructions change.
+PROMPT_VERSIONS = {
+    "earnings_impact": "earnings-impact-zh-cn-v5",
+    "option_alerts": "option-alerts-zh-cn-v4",
+    # v6：证据包加入大盘/宏观/期权链/新闻/财报日程上下文块（输出 schema 不变，
+    # 历史 v5 结果照常可读，不触发任何历史付费任务重投）。
+    "signal_analysis": "signal-analysis-zh-cn-v6",
+    "news_impact": "news-impact-zh-cn-v6",
+    # v6 adds the compact Optix 宏观环境 block to the Market Focus input. The
+    # output schema is unchanged, so results produced under v5 stay readable
+    # exactly as they were and no historical paid job is resubmitted.
+    "market_focus": "market-focus-zh-cn-v6",
+}
+# Failures a scheduler may retry on its own, at most SCHEDULED_MAX_ATTEMPTS
+# executions per item. Anything else (schema or binding failures, oversized
+# input) would fail the same way again and only spend more tokens.
+SCHEDULED_MAX_ATTEMPTS = 3
+SCHEDULED_TRANSIENT_AI_ERRORS = frozenset(
+    {
+        "ai_empty_response",
+        "provider_failed",
+        # 余额耗尽在充值后即恢复——按瞬态处理，小时级重试在充值当刻自愈
+        # （2026-08-14 生产：credit_balance_exhausted 曾归入 provider_failed）。
+        "provider_credit_exhausted",
+        "provider_incomplete",
+        # Only the confirmed-terminal cancellation is retryable. The sibling
+        # provider_poll_timeout code means cancellation was not confirmed;
+        # retrying that state could overlap paid provider work.
+        "provider_poll_timeout_cancelled",
+        "provider_rate_limited",
+        "provider_response_expired",
+        "provider_server_error",
+        "provider_unavailable",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -314,7 +351,7 @@ def runtime_configuration_valid(settings: Any) -> bool:
         and str(settings.openai_execution_mode) == OFFICIAL_EXECUTION_MODE
         and int(settings.openai_max_concurrency) == 1
         and 100_000
-        <= int(getattr(settings, "openai_daily_token_limit", 10_000_000))
+        <= int(settings.openai_daily_token_limit)
         <= 100_000_000
     )
 

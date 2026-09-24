@@ -5,7 +5,7 @@ import {
   fibonacciPrices,
   normalizeRectangle,
 } from './geometry.ts';
-import { barKeyOf, resolveAnchor } from './projection.ts';
+import { resolveAnchor } from './projection.ts';
 import { drawingPaint, drawingSurface } from './drawingAppearance.ts';
 import { resolvePaintColor } from './schema.ts';
 import { manualLineInk, renderPatternInk } from './linePresentation.ts';
@@ -483,11 +483,6 @@ export function autoPatternsToMarks(
     out.polygons.push(...ink.polygons);
   }
   return out;
-}
-
-export function lastBarKey(bars: BarLike[], range: ChartRange): string | null {
-  if (!bars.length) return null;
-  return barKeyOf(bars[bars.length - 1], range);
 }
 
 /**

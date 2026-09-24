@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+import hashlib
 import json
 import sqlite3
 import sys
@@ -39,7 +40,6 @@ def _settings(path):
         openai_timeout_seconds=900,
         openai_control_timeout_seconds=30,
         openai_max_retries=0,
-        openai_max_output_tokens=16384,
         openai_max_concurrency=1,
         openai_background_initial_poll_seconds=2,
         openai_background_max_poll_seconds=15,
@@ -50,6 +50,7 @@ def _settings(path):
         openai_job_max_queued=200,
         openai_daily_max_jobs=4,
         openai_daily_budget_usd=2.0,
+        openai_daily_token_limit=10_000_000,
         openai_manual_cooldown_seconds=0,
     )
 
@@ -651,6 +652,8 @@ def test_ai_job_heartbeat_stops_without_blocking_the_event_loop_during_renewal(
                 SimpleNamespace(
                     openai_job_lease_seconds=60,
                     openai_job_max_age_seconds=900,
+                    openai_timeout_seconds=900.0,
+                    openai_background_poll_timeout_seconds=1800.0,
                 ),
                 {
                     "job_id": "job-1",
@@ -804,6 +807,7 @@ def test_standalone_worker_reads_fresh_runtime_controls_each_iteration(
             manual_analysis_enabled=True,
         ),
         catalyst=SimpleNamespace(scheduled_analysis_enabled=False),
+        earnings=SimpleNamespace(scheduled_analysis_enabled=False),
     )
     seen = []
 
@@ -1249,6 +1253,37 @@ def test_terminal_failure_without_usage_releases_token_reservation(
     assert snapshot["token_budget_used_tokens"] == 0
 
 
+@pytest.mark.parametrize(
+    ("error_code", "reserved"),
+    [("provider_poll_timeout", True), ("provider_poll_timeout_cancelled", False)],
+)
+def test_unconfirmed_poll_timeout_keeps_its_token_reservation(
+    tmp_path,
+    error_code,
+    reserved,
+):
+    """取消未获确认的超时响应可能仍在上游计费，不能释放当日 token 预留。"""
+
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    job, _ = _create_earnings_job(repository)
+    stamp = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    with repository._connect() as connection:
+        connection.execute(
+            """UPDATE ai_jobs
+               SET status='failed',error_code=?,submission_started_at=?,
+                   completed_at=?,updated_at=?
+               WHERE job_id=?""",
+            (error_code, stamp, stamp, stamp, job["job_id"]),
+        )
+        connection.commit()
+
+    snapshot = repository.budget_snapshot(daily_limit=0, daily_budget_usd=0)
+
+    assert snapshot["token_budget_used_tokens"] == (
+        runtime.token_reservation("earnings_impact") if reserved else 0
+    )
+
+
 def test_used_tokens_plus_every_task_reservation_never_exceeds_cap(tmp_path):
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
     seed, _ = _create_budget_job(repository, "earnings_impact", "B0000001")
@@ -1324,8 +1359,6 @@ def test_terra_runtime_defaults_are_explicit(monkeypatch):
         "OPENAI_MODEL",
         "OPENAI_REASONING",
         "OPENAI_TIMEOUT_SECONDS",
-        "OPTION_PRO_AI_MAX_OUTPUT_TOKENS",
-        "OPENAI_MAX_OUTPUT_TOKENS",
         "OPENAI_EXECUTION_MODE",
     ):
         monkeypatch.delenv(name, raising=False)
@@ -1333,7 +1366,6 @@ def test_terra_runtime_defaults_are_explicit(monkeypatch):
     assert settings.openai_model == "gpt-5.6-terra"
     assert settings.openai_reasoning == "max"
     assert settings.openai_timeout_seconds == 900
-    assert settings.openai_max_output_tokens == 32768
     assert settings.openai_execution_mode == "background"
 
 
@@ -1362,13 +1394,41 @@ def test_worker_health_reports_official_responses_sdk_without_a_key(tmp_path):
 
 
 def test_all_paid_job_prompt_versions_invalidate_legacy_english_cache():
-    assert ai._PROMPT_VERSIONS == {
+    assert runtime.PROMPT_VERSIONS == {
         "earnings_impact": "earnings-impact-zh-cn-v5",
         "option_alerts": "option-alerts-zh-cn-v4",
         "signal_analysis": "signal-analysis-zh-cn-v6",
         "news_impact": "news-impact-zh-cn-v6",
-        "market_focus": "market-focus-zh-cn-v5",
+        "market_focus": "market-focus-zh-cn-v6",
     }
+
+
+def test_post_release_earnings_instructions_change_only_with_the_prompt_version():
+    """schema_identity hashes the pre-release instructions only.
+
+    The post-release branch reaches the model through the same job type, so
+    queued jobs and stored results would not notice an edit to it. Pinning the
+    text to the prompt version makes such an edit fail here until
+    PROMPT_VERSIONS["earnings_impact"] is bumped along with it.
+    """
+
+    digests = {
+        stage: hashlib.sha256(
+            runtime.build_runtime_request(
+                "earnings_impact", {"analysis_stage": stage}
+            ).instructions.encode("utf-8")
+        ).hexdigest()[:16]
+        for stage in ("pre_release", "post_release_manual", "post_release_final")
+    }
+
+    assert (runtime.PROMPT_VERSIONS["earnings_impact"], digests) == (
+        "earnings-impact-zh-cn-v5",
+        {
+            "pre_release": "58be13858af11856",
+            "post_release_manual": "a7317714b08d81b5",
+            "post_release_final": "a7317714b08d81b5",
+        },
+    )
 
 
 def test_client_is_fixed_to_the_official_openai_base_url(
@@ -3039,6 +3099,84 @@ def test_focus_cycle_creation_survives_a_full_bulk_queue(tmp_path):
     )
     assert created is True
     assert focus["status"] == "pending"
+
+
+def test_budget_snapshot_reports_the_requested_lane_slot(tmp_path):
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    job, _ = _create_earnings_job(repository, submission_source="scheduled")
+    owner = "snapshot-lane-owner"
+    assert repository.claim_due(owner, 60)["job_id"] == job["job_id"]
+    assert (
+        repository.mark_submission_started(job["job_id"], owner, daily_limit=4)
+        == "started"
+    )
+
+    def slot(lane):
+        return repository.budget_snapshot(
+            daily_limit=0,
+            daily_budget_usd=0,
+            lane=lane,
+        )["concurrency_available"]
+
+    assert slot(None) is False
+    assert slot("scheduled") is False
+    assert slot("manual") is True
+
+
+def test_manual_backlog_does_not_starve_the_scheduled_lane(tmp_path):
+    """手动道在飞时，积压的高优先级手动任务不能一直挡住后台道。"""
+
+    repository = AIJobRepository(tmp_path / "ai-jobs.db")
+    repository.initialize()
+    signal_version, signal_digest = runtime.schema_identity("signal_analysis")
+
+    def manual_job(ticker: str):
+        job, _ = repository.create_job(
+            job_type="signal_analysis",
+            payload={"ticker": ticker},
+            model="gpt-5.6-terra",
+            reasoning="max",
+            execution_mode="background",
+            prompt_version="signal-analysis-zh-cn-v5",
+            schema_version=signal_version,
+            schema_sha256=signal_digest,
+            max_queued=200,
+            submission_source="manual",
+            priority=80,
+        )
+        return job
+
+    owner = "lane-owner"
+    running = manual_job("AMD")
+    assert repository.claim_due(owner, 60)["job_id"] == running["job_id"]
+    assert (
+        repository.mark_submission_started(running["job_id"], owner, daily_limit=4)
+        == "started"
+    )
+    for ticker in ("NVDA", "MSFT", "META", "TSLA"):
+        manual_job(ticker)
+    news_version, news_digest = runtime.schema_identity("news_impact")
+    scheduled, _ = repository.create_job(
+        job_type="news_impact",
+        payload={"ticker": "AMD", "title": "后台批任务", "allowed_tickers": ["AMD"]},
+        model="gpt-5.6-terra",
+        reasoning="max",
+        execution_mode="background",
+        prompt_version="news-impact-v1",
+        schema_version=news_version,
+        schema_sha256=news_digest,
+        max_queued=200,
+        submission_source="scheduled",
+        priority=70,
+    )
+
+    claimed = repository.claim_due(owner, 60)
+
+    assert claimed["job_id"] == scheduled["job_id"]
+    assert (
+        repository.mark_submission_started(scheduled["job_id"], owner, daily_limit=4)
+        == "started"
+    )
 
 
 def test_manual_fast_lane_is_not_blocked_by_scheduled_in_flight(tmp_path):

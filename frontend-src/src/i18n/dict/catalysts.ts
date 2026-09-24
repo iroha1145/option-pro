@@ -236,6 +236,7 @@ export const CATALYSTS: Dict = {
   '任务状态暂时读不到': ['Job status is temporarily unavailable', 'ジョブ状態を一時的に取得できません'],
   '任务状态暂时读不到，正在重试': ['Job status is temporarily unavailable. Retrying…', 'ジョブ状態を一時的に取得できません。再試行中…'],
   '任务记录已不存在': ['Job record no longer exists', 'ジョブ記録は既に存在しません'],
+  '任务记录缺失': ['Job record missing', 'ジョブ記録なし'],
   '自动查询已暂停，点击重试查看任务状态': ['Automatic checks have paused. Retry to check the job status.', '自動確認を停止しました。再試行してジョブ状態を確認してください。'],
   '新闻数量暂不可确认': ['News count unavailable', 'ニュース件数を確認できません'],
   '暂时无法确认是否有待分析新闻，请稍后重试': ['We cannot confirm whether news is awaiting analysis. Please retry shortly.', '分析待ちのニュースがあるか確認できません。しばらくしてから再試行してください。'],

@@ -21,8 +21,3 @@ export function subscribeAlgorithmView(listener: Listener): () => void {
     listeners.delete(listener);
   };
 }
-
-export function resetAlgorithmViewGeneration(): void {
-  generation += 1;
-  listeners.clear();
-}

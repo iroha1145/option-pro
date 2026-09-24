@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 import app.main as main
 from app.access import owner_password_hash_is_valid
 from app.tools import personal_secrets
-from app import legacy_env_adapter
+from app import legacy_env_adapter, runtime_environment
 from app.api.settings import settings_status
 
 
@@ -79,6 +79,7 @@ def test_option_pro_secret_allowlist_is_exact() -> None:
     }
     assert set(personal_secrets.SECRET_KEYS) == expected
     assert legacy_env_adapter.SECRET_KEYS == expected
+    assert runtime_environment.SECRET_ENV_KEYS == expected
 
 
 def test_interactive_secret_input_uses_hidden_terminal_prompt(

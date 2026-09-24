@@ -15,6 +15,8 @@ from __future__ import annotations
 import threading
 import time
 import math
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, Request, Response, status
@@ -53,6 +55,7 @@ _RATE_BUCKET_LIMIT = 4096
 _rate_lock = threading.Lock()
 _register_hits: dict[str, list[float]] = {}
 _login_failures: dict[str, tuple[int, float, float]] = {}
+_login_in_flight: set[str] = set()
 
 
 def _client_key(request: Request) -> str:
@@ -139,18 +142,39 @@ def enforce_registration_rate(request: Request) -> None:
         _register_hits[key] = hits
 
 
-def check_login_cooldown(request: Request) -> None:
+@contextmanager
+def login_attempt(request: Request) -> Iterator[None]:
+    """Admit one password check per source at a time, after the cooldown check.
+
+    The hash check is slow. Without the in-flight guard, parallel requests all
+    passed the cooldown check before the first failure was recorded, which
+    multiplied the failure limit (the owner login has the same guard).
+    """
+
     key = _client_key(request)
     now = time.time()
     with _rate_lock:
         _prune(_login_failures, now)
         _count, _started_at, blocked_until = _login_failures.get(key, (0, now, 0.0))
-        if blocked_until > now:
+        retry_after = (
+            max(1, int(blocked_until - now) + 1)
+            if blocked_until > now
+            else 1
+            if key in _login_in_flight
+            else None
+        )
+        if retry_after is not None:
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 detail={"code": "login_cooldown", "message": "登录尝试过多，请稍后再试"},
-                headers={"Retry-After": str(max(1, int(blocked_until - now) + 1))},
+                headers={"Retry-After": str(retry_after)},
             )
+        _login_in_flight.add(key)
+    try:
+        yield
+    finally:
+        with _rate_lock:
+            _login_in_flight.discard(key)
 
 
 def record_login_failure(request: Request) -> None:
@@ -173,6 +197,7 @@ def reset_rate_limits() -> None:
     with _rate_lock:
         _register_hits.clear()
         _login_failures.clear()
+        _login_in_flight.clear()
 
 
 class CredentialsRequest(BaseModel):

@@ -1,6 +1,7 @@
 /** AI 任务域：POST /api/ai/jobs/* · GET /api/ai/jobs/{id} · POST /cancel */
 import { ApiError, get, idFromLocation, mockOr, postCreate, post } from '../client';
 import {
+  aiJobBlockedMessage,
   aiJobResultSummary,
   normalizeAiJob,
   normalizeJobStatus,
@@ -9,7 +10,7 @@ import * as fx2 from '@/mocks/fixtures2';
 import type { AiJob } from '../types';
 import { t } from '../../i18n/core.ts';
 
-export { aiJobResultSummary, normalizeAiJob, normalizeJobStatus };
+export { aiJobBlockedMessage, aiJobResultSummary, normalizeAiJob, normalizeJobStatus };
 
 export interface OptionAlertInput {
   strike: number;

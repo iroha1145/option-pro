@@ -35,11 +35,3 @@ export function remoteState<T>(
   if (isEmpty?.(data)) return 'empty';
   return 'ready';
 }
-
-/**
- * 数据是否可以被当成事实读取。
- * `stale` 也返回 true —— 旧数据仍是真实观测过的值，只是需要标注过期。
- */
-export function hasFacts(state: RemoteState): boolean {
-  return state === 'ready' || state === 'stale' || state === 'empty';
-}

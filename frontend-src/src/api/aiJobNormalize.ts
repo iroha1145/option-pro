@@ -1,5 +1,6 @@
 import type { AiJob, AiJobStatus } from './types.ts';
 import { asRec } from './live.ts';
+import { t } from '../i18n/core.ts';
 
 const KIND_MAP: Record<string, AiJob['kind']> = {
   earnings_impact: 'earnings-impact',
@@ -96,4 +97,15 @@ export function aiJobResultSummary(result: unknown): string | null {
   return (
     firstString(record, 'summary', 'headline_summary', 'text', 'analysis') ?? null
   );
+}
+
+/**
+ * 任务没到模型就被挡下（budget_blocked 或分析开关关闭）时的原因。
+ * 这类失败立刻重试只会再建一个同样被挡的任务，界面应说明原因而不是只写「失败」。
+ */
+export function aiJobBlockedMessage(job: Pick<AiJob, 'status' | 'error'> | null | undefined): string | null {
+  if (job?.status !== 'failed') return null;
+  if (job.error === 'daily_token_limit_reached') return t('今日 Token 额度已用完，额度重置后再试');
+  if (job.error === 'manual_analysis_disabled') return t('手动分析功能当前未启用');
+  return null;
 }

@@ -116,12 +116,6 @@ def _timestamp(value: datetime | str) -> str:
     return _aware_utc(value).isoformat(timespec="microseconds").replace("+00:00", "Z")
 
 
-def _parse_timestamp(value: str | None) -> datetime | None:
-    if value is None:
-        return None
-    return _aware_utc(value)
-
-
 def _enum_value(value: Any) -> Any:
     return value.value if isinstance(value, Enum) else value
 
@@ -2209,8 +2203,6 @@ class BreakoutRepository:
         finally:
             connection.close()
 
-    register_scan = begin_scan
-
     def fail_scan(
         self,
         scan_id: str,
@@ -2241,8 +2233,6 @@ class BreakoutRepository:
             raise
         finally:
             connection.close()
-
-    mark_scan_failed = fail_scan
 
     def abandon_running_scans(
         self,
@@ -3902,8 +3892,6 @@ class BreakoutRepository:
             return [_json_loads(row["event_json"], {}) for row in rows]
         finally:
             connection.close()
-
-    ticker_events = events_for_ticker
 
     def load_carryover_events(
         self,

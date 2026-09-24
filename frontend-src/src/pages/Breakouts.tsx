@@ -405,22 +405,42 @@ export default function Breakouts() {
 
   /* owner 触发 worker breakout_refresh */
   const [scanning, setScanning] = useState(false);
+  /* 离开页面时撤掉延迟刷新，不再替已卸载的页面发请求。 */
+  const scanMounted = useRef(false);
+  const scanTimers = useRef(new Set<number>());
+  useEffect(() => {
+    scanMounted.current = true;
+    const timers = scanTimers.current;
+    return () => {
+      scanMounted.current = false;
+      for (const id of timers) window.clearTimeout(id);
+    };
+  }, []);
+  const later = (run: () => void, ms: number) => {
+    if (!scanMounted.current) return;
+    const id = window.setTimeout(() => {
+      scanTimers.current.delete(id);
+      run();
+    }, ms);
+    scanTimers.current.add(id);
+  };
   const onRefreshSnapshot = async () => {
     if (scanning) return;
     setScanning(true);
     try {
       await runtimeApi.workerAction('breakout_refresh');
+      if (!scanMounted.current) return;
       toast.success(__t('已请求刷新'), __t('扫描任务已受理，完成后自动更新'));
       statusQ.refresh();
-      window.setTimeout(() => {
+      later(() => {
         statusQ.refresh();
         currentQ.refresh();
         eventsQ.refresh();
       }, 10_000);
     } catch {
-      toast.error(__t('触发失败'), __t('扫描任务未被受理，请稍后重试'));
+      if (scanMounted.current) toast.error(__t('触发失败'), __t('扫描任务未被受理，请稍后重试'));
     } finally {
-      window.setTimeout(() => setScanning(false), 700);
+      if (scanMounted.current) later(() => setScanning(false), 700);
     }
   };
 

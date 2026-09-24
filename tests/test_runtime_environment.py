@@ -4,6 +4,7 @@ from pathlib import Path
 
 from app import runtime_environment
 from app.runtime_environment import load_runtime_environment
+from app.secret_keys import SECRET_KEYS
 
 
 def test_runtime_environment_keeps_exports_and_uses_canonical_file_order(
@@ -58,3 +59,20 @@ def test_runtime_environment_default_uses_the_current_canonical_paths(
 
     assert loaded == (isolated,)
     assert environment == {"DATA_DIR": "/isolated-data"}
+
+
+def test_runtime_environment_loads_every_secret_from_the_secrets_file(
+    tmp_path: Path,
+) -> None:
+    secrets = tmp_path / "secrets.env"
+    secrets.write_text(
+        "".join(f"{key}=value-{index}\n" for index, key in enumerate(SECRET_KEYS)),
+        encoding="utf-8",
+    )
+    environment: dict[str, str] = {}
+
+    load_runtime_environment((secrets,), environ=environment)
+
+    assert environment == {
+        key: f"value-{index}" for index, key in enumerate(SECRET_KEYS)
+    }

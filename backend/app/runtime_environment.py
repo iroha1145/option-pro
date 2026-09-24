@@ -3,7 +3,7 @@
 The Personal Edition keeps three distinct files: legacy-compatible ``.env``,
 host-specific ``machine.env`` and server-only ``secrets.env``. Values exported
 by the process always win. The canonical files override legacy ``.env`` values
-only for the seven machine fields or five secrets that belong to them.
+only for the seven machine fields or the secrets that belong to them.
 """
 
 from __future__ import annotations
@@ -13,6 +13,8 @@ from collections.abc import MutableMapping, Sequence
 from pathlib import Path
 
 from dotenv import dotenv_values
+
+from app.secret_keys import SECRET_KEYS
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -31,15 +33,7 @@ MACHINE_ENV_KEYS = frozenset(
         "DATA_DIR",
     }
 )
-SECRET_ENV_KEYS = frozenset(
-    {
-        "OPENAI_API_KEY",
-        "FINNHUB_API_KEY",
-        "MARKETDATA_TOKEN",
-        "INTERNAL_API_TOKEN",
-        "APP_PASSWORD_HASH",
-    }
-)
+SECRET_ENV_KEYS = frozenset(SECRET_KEYS)
 
 
 def _key_belongs_to_file(path: Path, key: str) -> bool:

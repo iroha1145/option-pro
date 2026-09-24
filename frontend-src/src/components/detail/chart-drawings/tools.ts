@@ -2,7 +2,6 @@
 import { ANCHOR_COUNTS, type DrawingKind } from './types.ts';
 import { constrainByShift } from './geometry.ts';
 import type { PointerKind } from './hitTest.ts';
-import type { Point } from './types.ts';
 
 export type DrawingTool = 'select' | DrawingKind;
 
@@ -88,8 +87,4 @@ export function escapeHandledByOverlay(args: {
 }): boolean {
   if (args.defaultPrevented) return true;
   return args.openModals > (args.workspaceExpanded ? 1 : 0);
-}
-
-export function moveWholeAnchors(points: Point[], dx: number, dy: number): Point[] {
-  return points.map((point) => ({ x: point.x + dx, y: point.y + dy }));
 }

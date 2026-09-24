@@ -268,3 +268,76 @@ test('late remote radar preference does not override a newer user choice', () =>
     cancelled: false,
   }), false);
 });
+
+function snapshotRefreshHarness() {
+  const action = deferred();
+  const timers = new Map();
+  const reads = [];
+  const toasts = [];
+  const scanning = [];
+  let cleanup = () => {};
+  let nextTimer = 0;
+  const scope = {
+    useState: () => [false, (value) => scanning.push(value)],
+    useRef: (value) => ({ current: value }),
+    useEffect: (setup) => { cleanup = setup(); },
+    window: {
+      setTimeout(fn, ms) { const id = ++nextTimer; timers.set(id, { fn, ms }); return id; },
+      clearTimeout(id) { timers.delete(id); },
+    },
+    runtimeApi: { workerAction: () => action.promise },
+    toast: {
+      success: () => toasts.push('success'),
+      error: () => toasts.push('error'),
+    },
+    statusQ: { refresh: () => reads.push('status') },
+    currentQ: { refresh: () => reads.push('current') },
+    eventsQ: { refresh: () => reads.push('events') },
+    __t: (value) => value,
+  };
+  vm.runInNewContext(extract(
+    'onRefreshSnapshot',
+    '  const [scanning, setScanning] = useState(false);',
+    '\n  /* 下次扫描倒计时 mm:ss */',
+  ), scope);
+  return {
+    action, timers, reads, toasts, scanning,
+    unmount: () => cleanup(),
+    submit: () => scope.onRefreshSnapshot(),
+    fire(ms) {
+      for (const [id, timer] of [...timers]) {
+        if (timer.ms !== ms) continue;
+        timers.delete(id);
+        timer.fn();
+      }
+    },
+  };
+}
+
+for (const outcome of ['accepted', 'failed']) {
+  test(`breakout scan ${outcome} after unmount does not refresh, toast or schedule timers`, async () => {
+    const h = snapshotRefreshHarness();
+    const submitted = h.submit();
+    h.unmount();
+    if (outcome === 'accepted') h.action.resolve({ status: 'accepted' });
+    else h.action.reject(new Error('worker unavailable'));
+    await submitted;
+    assert.deepEqual(h.reads, []);
+    assert.deepEqual(h.toasts, []);
+    assert.equal(h.timers.size, 0);
+  });
+}
+
+test('mounted breakout scan still refreshes now and after ten seconds', async () => {
+  const h = snapshotRefreshHarness();
+  const submitted = h.submit();
+  h.action.resolve({ status: 'accepted' });
+  await submitted;
+  assert.deepEqual(h.reads, ['status']);
+  assert.deepEqual(h.toasts, ['success']);
+  h.fire(10_000);
+  assert.deepEqual(h.reads, ['status', 'status', 'current', 'events']);
+  h.fire(700);
+  assert.equal(h.scanning.at(-1), false);
+  h.unmount();
+});

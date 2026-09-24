@@ -5,9 +5,6 @@ import {
   preferenceStorageKey,
 } from './choiceGeneration.ts';
 
-export const SCREENER_FOLLOW_DEFAULT = 'follow_default';
-export const SCREENER_PRODUCTION = 'production';
-export const SCREENER_A0 = 'a0_mid_long';
 export const SCREENER_EOD_LIMITED = 'eod_limited_v1';
 export const RADAR_FOLLOW_DEFAULT = 'follow_default';
 export const RADAR_PRODUCTION = 'production';

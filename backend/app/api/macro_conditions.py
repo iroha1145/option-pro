@@ -81,8 +81,10 @@ def _read(key: str, producer: Any) -> Any:
     return cached_read(get_data_paths().macro_conditions_db, key, producer)
 
 
+# The read routes are sync so FastAPI runs their SQLite reads in the thread
+# pool instead of on the event loop.
 @router.get("")
-async def macro_conditions() -> dict[str, Any]:
+def macro_conditions() -> dict[str, Any]:
     service = _service()
     return _read(
         "current",
@@ -91,7 +93,7 @@ async def macro_conditions() -> dict[str, Any]:
 
 
 @router.get("/history")
-async def macro_conditions_history(
+def macro_conditions_history(
     days: Annotated[int, Query(ge=MIN_HISTORY_DAYS, le=MAX_HISTORY_DAYS)] = (
         DEFAULT_HISTORY_DAYS
     ),
@@ -101,7 +103,7 @@ async def macro_conditions_history(
 
 
 @router.get("/modules/{module_id}")
-async def macro_conditions_module(module_id: str) -> dict[str, Any]:
+def macro_conditions_module(module_id: str) -> dict[str, Any]:
     if module_id not in MODULES_BY_ID:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -121,7 +123,7 @@ async def macro_conditions_module(module_id: str) -> dict[str, Any]:
 
 
 @router.get("/factors/{factor_id}/history")
-async def macro_conditions_factor_history(
+def macro_conditions_factor_history(
     factor_id: str,
     days: Annotated[int, Query(ge=MIN_HISTORY_DAYS, le=MAX_HISTORY_DAYS)] = (
         DEFAULT_HISTORY_DAYS

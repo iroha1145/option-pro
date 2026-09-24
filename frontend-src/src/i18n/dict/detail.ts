@@ -19,6 +19,8 @@ export const DETAIL: Dict = {
   '任务状态待确认': ['Task status needs confirmation', 'タスクの状態を確認する必要があります'],
   '正在重新查询原任务': ['Retrying the same task', '同じタスクを再確認中'],
   '继续查询原任务': ['Resume checking this task', 'このタスクの確認を再開'],
+  '今日 Token 额度已用完，额度重置后再试': ['Today’s token budget is used up. Try again after it resets.', '本日のトークン枠を使い切りました。リセット後に再試行してください。'],
+  '手动分析功能当前未启用': ['Manual analysis is currently turned off', '手動分析は現在オフになっています'],
   /* src/components/StockDrawerBody.tsx */
   '成交量': ['Volume', '出来高'],
   'vs 昨收': ['vs prev close', '前日終値比'],

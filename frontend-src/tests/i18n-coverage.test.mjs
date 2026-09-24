@@ -154,30 +154,31 @@ test('dict/*.ts 词条之间没有同 msgid 不同译文的冲突', () => {
  *    只按路径过滤，看不到这种「不在 mocks/ 但同样是 AI 模拟内容」的情况。
  *
  * codemod 只看语法位置，两种情况都看不出来，所以需要这份人工核实过的白名单，
- * 而不是放宽通用规则掩盖真正遗漏的包裹。
+ * 而不是放宽通用规则掩盖真正遗漏的包裹。条目按「文件 + 原文」登记，不带行号：
+ * 行号会被同文件里任何无关的上方改动挪动。
  */
 const KNOWN_TYPE_DISCRIMINANTS = new Set([
-  'components/detail/api.ts:498 数据不足',
-  'components/detail/api.ts:500 偏多',
-  'components/detail/api.ts:502 偏空',
-  'components/detail/api.ts:503 中性',
+  'components/detail/api.ts 数据不足',
+  'components/detail/api.ts 偏多',
+  'components/detail/api.ts 偏空',
+  'components/detail/api.ts 中性',
   // 等待占位哨兵：对照后端落库的中文字面量，绝不能 __t（译文永不命中，防御失效）
-  'components/catalysts/api.ts:133 中文标题等待生成',
-  'components/catalysts/api.ts:133 中文摘要等待生成',
-  'components/catalysts/api.ts:133 热点标题等待中文分析',
-  'pages/Market.tsx:56 偏多',
-  'pages/Market.tsx:56 偏空',
-  'pages/Market.tsx:56 中性',
-  'components/detail/api.ts:587 偏贵',
-  'components/detail/api.ts:587 相对便宜',
-  'components/detail/api.ts:587 中性',
-  'components/detail/api.ts:592 近端观察 MA20 附近的量能配合与突破延续性；若量价背离放大，偏向读数将快速回落。',
-  'components/detail/api.ts:593 以上为方向性研究结论，非收益预测。',
+  'components/catalysts/api.ts 中文标题等待生成',
+  'components/catalysts/api.ts 中文摘要等待生成',
+  'components/catalysts/api.ts 热点标题等待中文分析',
+  'pages/Market.tsx 偏多',
+  'pages/Market.tsx 偏空',
+  'pages/Market.tsx 中性',
+  'components/detail/api.ts 偏贵',
+  'components/detail/api.ts 相对便宜',
+  'components/detail/api.ts 中性',
+  'components/detail/api.ts 近端观察 MA20 附近的量能配合与突破延续性；若量价背离放大，偏向读数将快速回落。',
+  'components/detail/api.ts 以上为方向性研究结论，非收益预测。',
   // `t(macroMissingReason(status) ?? '暂无宏观读数')` — the literal is the right
   // operand of `??`, not itself t()'s direct argument, so the classifier can't see
   // that the whole expression is covered by the outer call. It is (verified by hand).
-  'components/shared/MacroFitBadge.tsx:37 暂无宏观读数',
-  'components/shared/MacroFitPanel.tsx:93 暂无宏观读数',
+  'components/shared/MacroFitBadge.tsx 暂无宏观读数',
+  'components/shared/MacroFitPanel.tsx 暂无宏观读数',
 ]);
 
 /**
@@ -219,7 +220,7 @@ for (const file of allFiles) {
       CJK.test(node.text) &&
       classify(node) === 'display' &&
       !inLocaleBranch(node) &&
-      !KNOWN_TYPE_DISCRIMINANTS.has(`${rel}:${lineOf(node)} ${node.text}`)
+      !KNOWN_TYPE_DISCRIMINANTS.has(`${rel} ${node.text}`)
     ) {
       (isExempt ? mocksGaps : unsafeDisplayGaps).push({ file: rel, line: lineOf(node), text: node.text });
     } else if (ts.isTemplateExpression(node) && !inLocaleBranch(node) && !inThrow(node)) {

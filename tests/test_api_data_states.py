@@ -411,6 +411,30 @@ def test_legacy_stock_signals_ignores_incomplete_daily_bar(monkeypatch):
     assert payload["signals"]["volume"]["value"] < 2
 
 
+def test_stock_signals_rsi_is_the_value_the_chart_rsi_pane_plots(monkeypatch):
+    from app.services.technical.indicators import rsi_series
+
+    closes = [100.0 + ((index * 7) % 11) - index * 0.1 for index in range(80)]
+    history = pd.DataFrame(
+        {"Close": closes, "Volume": [1_000_000] * len(closes)},
+        index=pd.date_range("2026-03-02", periods=len(closes), freq="B"),
+    )
+
+    class FixedTicker:
+        def __init__(self, _symbol):
+            pass
+
+        def history(self, *, period):
+            return history
+
+    monkeypatch.setattr(stocks.yf, "Ticker", FixedTicker)
+    stocks._endpoint_cache.pop("technical-signals:RSIX", None)
+
+    payload = asyncio.run(stocks.stock_signals("RSIX"))
+
+    assert payload["signals"]["rsi"]["value"] == round(rsi_series(closes)[-1], 1)
+
+
 def test_watchlist_reports_provider_failure_without_unbounded_stale_data(monkeypatch):
     async def failed_watchlist():
         raise RuntimeError("provider unavailable")

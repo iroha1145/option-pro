@@ -8,6 +8,8 @@ in ``tests/macro_fixtures.py``.
 from __future__ import annotations
 
 import datetime as dt
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import Iterator
 
@@ -562,3 +564,52 @@ def test_read_cache_notices_a_commit_that_only_touched_the_wal(tmp_path) -> None
     wal.unlink()
     assert cached_read(database, "composite", producer, now=lambda: clock["now"]) == 3
     invalidate_read_cache()
+
+
+def test_read_cache_keeps_only_the_newest_entries(tmp_path) -> None:
+    """Public ``days`` values must not grow the cache without bound."""
+
+    from app.services.macro_conditions import service as macro_service
+
+    macro_service.invalidate_read_cache()
+    database = tmp_path / "macro-conditions.db"
+    database.write_bytes(b"main")
+    limit = macro_service._READ_CACHE_MAX_ENTRIES
+    for days in range(limit + 50):
+        macro_service.cached_read(database, f"history:{days}", lambda d=days: {"days": d})
+
+    assert len(macro_service._READ_CACHE) == limit
+    newest = macro_service.cached_read(
+        database,
+        f"history:{limit + 49}",
+        lambda: pytest.fail("the newest entry must still be cached"),
+    )
+    assert newest == {"days": limit + 49}
+    macro_service.invalidate_read_cache()
+
+
+def test_read_cache_clear_does_not_restore_an_inflight_result(tmp_path) -> None:
+    from app.services.macro_conditions import service as macro_service
+
+    database = tmp_path / "macro-conditions.db"
+    database.write_bytes(b"main")
+    started = threading.Event()
+    release = threading.Event()
+
+    def producer() -> str:
+        started.set()
+        assert release.wait(timeout=5)
+        return "before-clear"
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        result = pool.submit(macro_service.cached_read, database, "composite", producer)
+        try:
+            assert started.wait(timeout=5)
+            pool.submit(macro_service.invalidate_read_cache).result(timeout=5)
+        finally:
+            release.set()
+        assert result.result(timeout=5) == "before-clear"
+
+    assert macro_service.cached_read(
+        database, "composite", lambda: "after-clear"
+    ) == "after-clear"

@@ -4,10 +4,6 @@
  */
 import { FIB_RATIOS, type Point, type Segment, type VisibleRect } from './types.ts';
 
-export function isFiniteNumber(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value);
-}
-
 /** Distance from point P to segment AB in the same plane units (CSS px in hit-tests). */
 export function distancePointToSegment(p: Point, a: Point, b: Point): number {
   const vx = b.x - a.x;
@@ -26,10 +22,6 @@ export function horizontalProjection(price: number, xMin: number, xMax: number):
     a: { x: xMin, y: price },
     b: { x: xMax, y: price },
   };
-}
-
-export function segmentEndpoints(a: Point, b: Point): Segment {
-  return { a: { ...a }, b: { ...b } };
 }
 
 /**

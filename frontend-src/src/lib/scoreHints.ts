@@ -299,54 +299,6 @@ export const SCORE_HINTS = {
 
 export type ScoreHintKey = keyof typeof SCORE_HINTS;
 
-/* 个股信号逐指标说明（signals.py::_score_stock_signal 的映射口径） */
-export const STOCK_SIGNAL_HINTS: Record<string, ScoreHint> = {
-  sma20_dist: {
-    title: t('距 20 日均线'),
-    body: t('现价相对 20 日均线的偏离（%）。大幅高于→顶部证据（×8），大幅低于→底部证据。'),
-  },
-  sma50_dist: {
-    title: t('距 50 日均线'),
-    body: t('现价相对 50 日均线的偏离（%）。映射系数 ×5，方向同上。'),
-  },
-  sma200_dist: {
-    title: t('距 200 日均线'),
-    body: t('现价相对 200 日均线的偏离（%）。映射系数 ×2.5，衡量长期趋势的过热/超卖。'),
-  },
-  rsi14: {
-    title: 'RSI(14)',
-    body: t('高于 50 每一点计 3 分顶部证据，低于 50 每一点计 3 分底部证据；80 附近顶部证据即打满。'),
-  },
-  return_20d: {
-    title: t('20 日涨跌'),
-    body: t('近 20 个交易日涨跌幅（%）。上涨×3.5 计入顶部证据，下跌×3.5 计入底部证据。'),
-  },
-  atr_percentile: {
-    title: t('ATR 波动分位'),
-    body: t('当前波动率在一年中的分位。高分位（>60/70）时顶底证据同时上升——高波动常出现在拐点附近。'),
-  },
-  volume_zscore: {
-    title: t('成交量 Z 分数'),
-    body: t('当日量相对 20 日均量的标准化偏离。放量同时增加顶部（×20）与底部（×10）证据：极端量能常伴随顶或底。'),
-  },
-  obv_divergence: {
-    title: t('OBV 背离'),
-    body: t('20 日内 OBV 与价格的背离度。量在价先弱（正值）计顶部证据，量先强于价计底部证据。'),
-  },
-  relative_strength_spy: {
-    title: t('相对 SPY 强度'),
-    body: t('对 SPY 的相对涨跌（%）。持续跑赢×6 计顶部证据（拥挤/过热），持续跑输计底部证据。'),
-  },
-  close_position: {
-    title: t('收盘位置'),
-    body: t('收盘价在当日高低区间中的位置（0–100）。收在区间低位（<35）计顶部/转弱证据，收在区间高位（>65）计底部反转确认证据。'),
-  },
-  macd_hist: {
-    title: t('MACD 柱'),
-    body: t('MACD 柱状值。转负（动能向下）×150 计顶部证据，转正计底部证据。'),
-  },
-};
-
 /* ================= Optix 宏观环境（macro_conditions） ================= */
 const MACRO_MISSING_AWARE =
   t('缺失或过期的因子不会按中性 50 计入，而是移出权重重新归一并压低置信度；有效因子不足门槛时该模块不出分。');

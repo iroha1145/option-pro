@@ -116,6 +116,9 @@ jobs:
       - name: Verify screener freshness flows and native HTTP cache
         run: npm --prefix frontend-src run test:screener
 
+      - name: Verify stock data preparation and coverage status
+        run: npm --prefix frontend-src run test:stock-data
+
       - name: Check shell script syntax
         run: |
           for script in setup.sh personal.sh scripts/*.sh scripts/lib/*.sh; do

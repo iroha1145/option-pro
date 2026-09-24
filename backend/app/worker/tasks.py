@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import logging
 import math
 import sqlite3
 import threading
@@ -23,6 +24,8 @@ from .runtime import TaskResult, TaskSpec, _public_error_code
 
 from app.personal_config import personal_analysis_permissions as _personal_analysis_permissions
 
+
+_logger = logging.getLogger("optix.worker")
 
 # Full-market capture, geometry, nine scoring views and diagnostic publication
 # share this finite budget. Production runs can exceed the old 30-minute limit.
@@ -140,7 +143,7 @@ async def _build_local_intelligence(
         canonical_tickers=_canonical_sector_tickers(),
         model=config.ai.model,
         reasoning=config.ai.reasoning,
-        max_queued=200,
+        max_queued=settings.openai_job_max_queued,
         manual_refresh_cooldown_seconds=refresh_cooldown,
     )
     await _call_local(intelligence.initialize)
@@ -269,6 +272,20 @@ class EarningsAnalysisTask:
         if updated.tzinfo is None or updated.utcoffset() is None:
             updated = updated.replace(tzinfo=timezone.utc)
         return updated.astimezone(timezone.utc).date() < utc_date
+
+    @staticmethod
+    def _scheduled_retry_allowed(row: Mapping[str, Any]) -> bool:
+        """Scheduled passes retry only transient failures, a bounded number of times.
+
+        Manual passes still retry any failed report: the owner asked for it.
+        """
+
+        from app.services.ai_jobs import runtime as ai_runtime
+
+        return (
+            str(row.get("error_code") or "") in ai_runtime.SCHEDULED_TRANSIENT_AI_ERRORS
+            and int(row.get("execution_number") or 1) < ai_runtime.SCHEDULED_MAX_ATTEMPTS
+        )
 
     async def _run(self, *, manual: bool) -> TaskResult:
         from app.api import earnings
@@ -467,7 +484,11 @@ class EarningsAnalysisTask:
             retry_failed_report = bool(
                 latest
                 and (
-                    latest_status in {"failed", "cancelled"}
+                    latest_status == "cancelled"
+                    or (
+                        latest_status == "failed"
+                        and (manual or self._scheduled_retry_allowed(latest))
+                    )
                     or (
                         latest_status == "budget_blocked"
                         and self._updated_before_utc_date(latest, utc_date)
@@ -509,7 +530,7 @@ class EarningsAnalysisTask:
                     model=self._settings.openai_model,
                     reasoning=self._settings.openai_reasoning,
                     execution_mode=self._settings.openai_execution_mode,
-                    prompt_version="earnings-impact-zh-cn-v5",
+                    prompt_version=ai_runtime.PROMPT_VERSIONS["earnings_impact"],
                     schema_version=schema_version,
                     schema_sha256=schema_sha256,
                     max_queued=queue_limit,
@@ -1518,7 +1539,8 @@ class PublicHomeTask:
         except asyncio.CancelledError:
             self._inflight.pop(resource, None)
             raise
-        except Exception:
+        except Exception as exc:
+            record_fallback_failure("public_home_produce", exc)
             self._inflight.pop(resource, None)
             self._record_failure(
                 resource,
@@ -1533,7 +1555,8 @@ class PublicHomeTask:
                 path=path,
                 watchlist_path=watchlist_path,
             )
-        except Exception:
+        except Exception as exc:
+            record_fallback_failure("public_home_publish", exc)
             self._record_failure(
                 resource,
                 baseline_saved_at=attempt.baseline_saved_at,
@@ -2877,14 +2900,25 @@ class MaintenanceTask:
                 skipped.append(label)
                 continue
             try:
-                await asyncio.to_thread(
+                # _call_local, not a bare to_thread: after a task timeout the
+                # copy thread keeps running, and the retry 300 s later would
+                # start the next database's backup alongside it.
+                await _call_local(
                     backup_database,
                     path,
                     self.destination,
                     label=label,
                     keep=self.keep,
                 )
-            except (BackupError, OSError, sqlite3.Error):
+            except (BackupError, OSError, sqlite3.Error) as exc:
+                # BackupError carries the cause (lock timeout, integrity check);
+                # the task status alone only says which database failed.
+                _logger.warning(
+                    "database backup failed label=%s error_type=%s error=%s",
+                    label,
+                    type(exc).__name__,
+                    exc,
+                )
                 failed.append(label)
             else:
                 completed.append(label)

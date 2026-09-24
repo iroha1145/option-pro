@@ -8,6 +8,7 @@ here, which read the local SQLite snapshot and nothing else.
 from __future__ import annotations
 
 import logging
+import threading
 import uuid
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
@@ -1010,11 +1011,19 @@ def _as_date(value: object) -> Optional[date]:
 # ---------------------------------------------------------------------------
 
 _READ_CACHE: dict[str, tuple[tuple[int, int], float, Any]] = {}
+_READ_CACHE_LOCK = threading.Lock()
+_READ_CACHE_GENERATION = 0
 _READ_CACHE_TTL_SECONDS = 60.0
+# Keys include the public ``days`` parameter (30-3650) per route and factor, so
+# the key space is tens of thousands of multi-year payloads: keep the newest.
+_READ_CACHE_MAX_ENTRIES = 64
 
 
 def invalidate_read_cache() -> None:
-    _READ_CACHE.clear()
+    global _READ_CACHE_GENERATION
+    with _READ_CACHE_LOCK:
+        _READ_CACHE_GENERATION += 1
+        _READ_CACHE.clear()
 
 
 def cached_read(
@@ -1041,25 +1050,32 @@ def cached_read(
     import time
 
     clock = now or time.monotonic
-    stamps: list[tuple] = []
-    for candidate in (path, Path(f"{path}-wal"), Path(f"{path}-shm")):
-        try:
-            stat = candidate.stat()
-        except OSError:
-            # A checkpointed database has no sidecar; absence is a real state
-            # and has to be distinguishable from any particular size.
-            stamps.append((candidate.name, None))
-        else:
-            stamps.append((candidate.name, stat.st_mtime_ns, stat.st_size))
-    stamp = tuple(stamps)
-    moment = clock()
-    cached = _READ_CACHE.get(key)
-    if cached is not None:
-        cached_stamp, cached_at, value = cached
-        if cached_stamp == stamp and moment - cached_at < _READ_CACHE_TTL_SECONDS:
-            return value
+    with _READ_CACHE_LOCK:
+        generation = _READ_CACHE_GENERATION
+        stamps: list[tuple] = []
+        for candidate in (path, Path(f"{path}-wal"), Path(f"{path}-shm")):
+            try:
+                stat = candidate.stat()
+            except OSError:
+                # A checkpointed database has no sidecar; absence is a real state
+                # and has to be distinguishable from any particular size.
+                stamps.append((candidate.name, None))
+            else:
+                stamps.append((candidate.name, stat.st_mtime_ns, stat.st_size))
+        stamp = tuple(stamps)
+        moment = clock()
+        cached = _READ_CACHE.get(key)
+        if cached is not None:
+            cached_stamp, cached_at, value = cached
+            if cached_stamp == stamp and moment - cached_at < _READ_CACHE_TTL_SECONDS:
+                return value
     value = producer()
-    _READ_CACHE[key] = (stamp, moment, value)
+    with _READ_CACHE_LOCK:
+        if generation == _READ_CACHE_GENERATION:
+            _READ_CACHE.pop(key, None)
+            while len(_READ_CACHE) >= _READ_CACHE_MAX_ENTRIES:
+                del _READ_CACHE[next(iter(_READ_CACHE))]
+            _READ_CACHE[key] = (stamp, moment, value)
     return value
 
 

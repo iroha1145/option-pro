@@ -158,10 +158,10 @@ async def fetch_fmp_calendar(
                 "days_until": days_until,
                 "timing": timing_raw if timing_raw in {"bmo", "amc"} else None,
                 "eps_estimate": _finite(value.get("epsEstimated")),
-                "eps_actual": _finite(value.get("eps") or value.get("epsActual")),
+                "eps_actual": _finite(_first_present(value, "eps", "epsActual")),
                 "revenue_estimate": _finite(value.get("revenueEstimated")),
                 "revenue_actual": _finite(
-                    value.get("revenue") or value.get("revenueActual")
+                    _first_present(value, "revenue", "revenueActual")
                 ),
                 "quarter": None,
                 "year": None,
@@ -170,6 +170,15 @@ async def fetch_fmp_calendar(
     if not rows:
         return _fmp_result(configured=True, succeeded=False, error="no_valid_rows")
     return _fmp_result(rows=rows, configured=True, succeeded=True)
+
+
+def _first_present(value: Mapping[str, Any], *keys: str) -> Any:
+    """First field that is present and not null; a reported 0 is a value."""
+
+    for key in keys:
+        if value.get(key) is not None:
+            return value[key]
+    return None
 
 
 def _coerce_date(value: Any) -> date | None:
@@ -394,7 +403,8 @@ async def resolve_market_caps(
                 missing,
                 key=lambda ticker: next(
                     (
-                        int(row.get("days_until") or 999)
+                        # A report due today (days_until 0) is the most urgent.
+                        999 if row.get("days_until") is None else int(row["days_until"])
                         for row in rows
                         if str(row.get("ticker") or "").upper() == ticker
                     ),
@@ -406,6 +416,11 @@ async def resolve_market_caps(
                     detail = await asyncio.to_thread(
                         massive.reference_ticker_detail, ticker
                     )
+                except massive.MassiveError as exc:
+                    if exc.code in {"rate_limited", "plan"}:
+                        # Every remaining ticker would be rejected the same way.
+                        break
+                    continue
                 except Exception:  # noqa: BLE001 - provider soft-fails per ticker
                     continue
                 market_cap = _positive(detail.get("market_cap"))
