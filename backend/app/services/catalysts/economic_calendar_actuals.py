@@ -33,6 +33,7 @@ _MIN_CANDIDATE_SCORE = 6
 _cache: dict[tuple[str, str], tuple[float, list[dict[str, Any]]]] = {}
 _failure_cache: dict[tuple[str, str], float] = {}
 _cache_locks: dict[tuple[str, str], asyncio.Lock] = {}
+_cache_lock_users: dict[tuple[str, str], int] = {}
 _VALUE_RE = re.compile(r"^([-+]?\d+(?:\.\d+)?)([KMBT%]?)$", re.IGNORECASE)
 
 
@@ -222,8 +223,12 @@ def _prune_expired(now: float) -> None:
         del _failure_cache[key]
     for key in [
         key
-        for key, lock in _cache_locks.items()
-        if key not in _cache and key not in _failure_cache and not lock.locked()
+        for key in _cache_locks
+        if (
+            key not in _cache
+            and key not in _failure_cache
+            and key not in _cache_lock_users
+        )
     ]:
         del _cache_locks[key]
 
@@ -238,6 +243,29 @@ async def _fetch_source_rows(date_from: date, date_to: date) -> list[dict[str, A
     if _failure_cache.get(key, 0.0) > now:
         raise ValueError("economic calendar fallback is cooling down")
     lock = _cache_locks.setdefault(key, asyncio.Lock())
+    _cache_lock_users[key] = _cache_lock_users.get(key, 0) + 1
+    try:
+        return await _fetch_source_rows_locked(key, lock, date_from, date_to)
+    finally:
+        users = _cache_lock_users[key] - 1
+        if users:
+            _cache_lock_users[key] = users
+        else:
+            del _cache_lock_users[key]
+            if (
+                key not in _cache
+                and key not in _failure_cache
+                and _cache_locks.get(key) is lock
+            ):
+                del _cache_locks[key]
+
+
+async def _fetch_source_rows_locked(
+    key: tuple[str, str],
+    lock: asyncio.Lock,
+    date_from: date,
+    date_to: date,
+) -> list[dict[str, Any]]:
     async with lock:
         cached = _cache.get(key)
         now = monotonic_time.monotonic()

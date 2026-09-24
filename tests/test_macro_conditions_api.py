@@ -8,6 +8,8 @@ in ``tests/macro_fixtures.py``.
 from __future__ import annotations
 
 import datetime as dt
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import Iterator
 
@@ -584,3 +586,30 @@ def test_read_cache_keeps_only_the_newest_entries(tmp_path) -> None:
     )
     assert newest == {"days": limit + 49}
     macro_service.invalidate_read_cache()
+
+
+def test_read_cache_clear_does_not_restore_an_inflight_result(tmp_path) -> None:
+    from app.services.macro_conditions import service as macro_service
+
+    database = tmp_path / "macro-conditions.db"
+    database.write_bytes(b"main")
+    started = threading.Event()
+    release = threading.Event()
+
+    def producer() -> str:
+        started.set()
+        assert release.wait(timeout=5)
+        return "before-clear"
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        result = pool.submit(macro_service.cached_read, database, "composite", producer)
+        try:
+            assert started.wait(timeout=5)
+            pool.submit(macro_service.invalidate_read_cache).result(timeout=5)
+        finally:
+            release.set()
+        assert result.result(timeout=5) == "before-clear"
+
+    assert macro_service.cached_read(
+        database, "composite", lambda: "after-clear"
+    ) == "after-clear"
