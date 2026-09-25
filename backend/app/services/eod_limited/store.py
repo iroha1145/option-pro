@@ -9,7 +9,10 @@ import time
 from pathlib import Path
 from typing import Any, Mapping
 
+import numpy as np
+
 from app.data_paths import get_data_paths
+from app.failure_diagnostics import record_fallback_failure
 from app.services.snapshot_read_cache import FingerprintedFileCache
 
 from . import PURPOSE_LIVE
@@ -27,14 +30,30 @@ def snapshot_path(root: Path | None = None) -> Path:
     return snapshot_dir(root) / BATCH_NAME
 
 
+def json_default(value: Any) -> Any:
+    """numpy scalars become their Python value; other unknown types keep str().
+
+    ``np.bool_`` and ``np.int64`` are not JSON types, so a bare ``default=str``
+    publishes ``"True"`` or ``"7"`` strings that readers cannot interpret.
+    """
+
+    if isinstance(value, np.generic):
+        return value.item()
+    return str(value)
+
+
 def _atomic_write(path: Path, payload: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    encoded = json.dumps(payload, ensure_ascii=False, default=str, separators=(",", ":"), allow_nan=False)
+    encoded = json.dumps(payload, ensure_ascii=False, default=json_default, separators=(",", ":"), allow_nan=False)
     fd, tmp_name = tempfile.mkstemp(prefix=path.name, suffix=".tmp", dir=str(path.parent))
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             handle.write(encoded)
             handle.write("\n")
+            # batch.json marks an already durable diagnostics generation as
+            # published; after a power loss it must not come back empty.
+            handle.flush()
+            os.fsync(handle.fileno())
         os.replace(tmp_name, path)
     except Exception:
         try:
@@ -42,6 +61,15 @@ def _atomic_write(path: Path, payload: Mapping[str, Any]) -> None:
         except OSError:
             pass
         raise
+    try:
+        directory = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    except OSError as exc:
+        # The new file is already visible; only the rename's durability is unconfirmed.
+        record_fallback_failure("eod_snapshot_dir_fsync", exc)
 
 
 def read_batch(root: Path | None = None) -> dict[str, Any] | None:

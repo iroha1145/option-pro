@@ -86,12 +86,16 @@ def _atr_references(raws: Mapping[str, RawComponents], policy: str) -> dict[str,
 
 
 def _common_gate_checks(raw, registry, sector, profile, algorithm, scored, venue, median):
-    """Independent pass/fail facts, including inputs the combined gate cannot assess."""
+    """Independent pass/fail facts, including inputs the combined gate cannot assess.
+
+    Values are True, False or None (not assessable). Comparisons on numpy
+    inputs yield ``numpy.bool_``, which JSON writers cannot store as a boolean.
+    """
     p = registry["profiles"][profile]
     spec = registry["sectors"][sector]
     def ge(value, minimum):
         return None if value is None else value >= minimum
-    return {
+    checks = {
         "venue": venue.eligible,
         "currently_tradable": raw.currently_tradable,
         "price": ge(raw.raw_close, registry["global_rules"]["minimum_raw_price_usd"]),
@@ -105,6 +109,7 @@ def _common_gate_checks(raw, registry, sector, profile, algorithm, scored, venue
         "score": None if scored.score is None else scored.score >= p["score_floor"],
         "coverage": scored.coverage + 1e-12 >= p["coverage_min"],
     }
+    return {key: None if value is None else bool(value) for key, value in checks.items()}
 
 
 def _series_geometry_close(series: SecuritySeries) -> float | None:

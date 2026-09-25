@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from app.services.market_calendar import (
     ET,
     early_close_minutes,
     is_trading_day,
+    last_completed_trading_day,
     next_trading_day,
     previous_trading_day,
 )
@@ -18,6 +19,10 @@ LIVE_CAPTURE = "live_capture"
 HISTORICAL_RECONSTRUCTION = "historical_reconstruction"
 VENDOR_WITHOUT_FINALIZED_FIELD_POLICY = "NEXT_DAY_CONFIRM"
 VENDOR_WITHOUT_FINALIZED_LAG_SESSIONS = 1
+# Delayed vendor bars for the session that just closed keep changing for a
+# while after the bell (closing auction prints, late trade reports). Live EOD
+# runs, scheduled or manual, count a session as complete only after this.
+LIVE_SETTLE_BUFFER = timedelta(minutes=60)
 
 
 def require_aware(moment: datetime, *, name: str = "as_of") -> datetime:
@@ -31,12 +36,7 @@ def session_close_minutes(session: date) -> int:
 
 
 def last_completed_session(as_of: datetime) -> date:
-    local = require_aware(as_of).astimezone(ET)
-    candidate = local.date()
-    close_minutes = session_close_minutes(candidate)
-    if not is_trading_day(candidate) or local.hour * 60 + local.minute < close_minutes:
-        candidate = previous_trading_day(candidate, include_start=False)
-    return candidate
+    return last_completed_trading_day(require_aware(as_of))
 
 
 def last_known_finalized_session(
@@ -75,6 +75,20 @@ def last_complete_eod_session(
     if not is_trading_day(finalized):
         finalized = previous_trading_day(finalized, include_start=True)
     return min(session, finalized)
+
+
+def settled_eod_session(
+    as_of: datetime,
+    *,
+    source_finalized_through: date | None = None,
+) -> date:
+    """Latest session whose close is at least ``LIVE_SETTLE_BUFFER`` before ``as_of``."""
+
+    # Subtract in UTC: aware-datetime arithmetic in a DST zone is wall-clock arithmetic.
+    return last_complete_eod_session(
+        require_aware(as_of).astimezone(timezone.utc) - LIVE_SETTLE_BUFFER,
+        source_finalized_through=source_finalized_through,
+    )
 
 
 def capture_as_of(now: datetime) -> datetime:

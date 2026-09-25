@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import types
 
+import httpx
 import pytest
 
 from app.services import massive
@@ -316,3 +317,198 @@ def test_chart_history_helper_falls_back_to_none_on_error() -> None:
     fake_provider = types.SimpleNamespace(MassiveError=massive.MassiveError, ticker_range=boom)
     assert stocks._massive_chart_history(fake_provider, "AAPL", "1d", adjusted=False) is None
     assert stocks._massive_chart_history(fake_provider, "AAPL", "nope", adjusted=False) is None
+
+
+# ── 2026-09-25 audit W-16: redirects, Retry-After, options pagination ──
+
+
+@pytest.fixture
+def mock_transport(monkeypatch: pytest.MonkeyPatch):
+    """Route massive._get through an in-process httpx transport."""
+
+    monkeypatch.setattr(
+        massive,
+        "get_settings",
+        lambda: types.SimpleNamespace(
+            massive_api_key="configured-for-test",
+            massive_base_url="https://api.massive.com",
+        ),
+    )
+    clients: list[httpx.Client] = []
+
+    def install(handler):
+        client = httpx.Client(
+            base_url="https://api.massive.com",
+            transport=httpx.MockTransport(handler),
+            follow_redirects=False,
+        )
+        clients.append(client)
+        monkeypatch.setattr(massive, "_client", client)
+
+    yield install
+    for client in clients:
+        client.close()
+
+
+@pytest.mark.parametrize("status", [301, 302, 307, 308])
+@pytest.mark.parametrize(
+    ("body", "content_type"),
+    [
+        (b'{"results": [], "status": "OK"}', "application/json"),
+        (b"<html>moved</html>", "text/html"),
+    ],
+)
+def test_redirect_is_an_error_even_with_a_json_body(
+    mock_transport, status: int, body: bytes, content_type: str
+) -> None:
+    # probe_massive_redirect.py: a 302 carrying {"results": []} used to come
+    # back as data, i.e. "this day has no bars", like a market holiday.
+    mock_transport(
+        lambda request: httpx.Response(
+            status,
+            headers={"Location": "https://elsewhere.example/x", "Content-Type": content_type},
+            content=body,
+        )
+    )
+    with pytest.raises(massive.MassiveError) as captured:
+        massive._get("/v2/aggs/grouped/locale/us/market/stocks/2026-09-24")
+    assert captured.value.code == "redirect"
+    assert captured.value.status == status
+
+
+def test_rate_limit_and_server_errors_carry_the_retry_after_hint(mock_transport) -> None:
+    replies = iter([
+        httpx.Response(429, headers={"Retry-After": "7"}, json={"status": "ERROR"}),
+        httpx.Response(503, headers={"Retry-After": "Wed, 21 Oct 2015 07:28:00 GMT"}, text="busy"),
+        httpx.Response(429, headers={"Retry-After": "soon"}, json={"status": "ERROR"}),
+        httpx.Response(429, json={"status": "ERROR"}),
+        httpx.Response(400, headers={"Retry-After": "5"}, text="bad"),
+    ])
+    mock_transport(lambda request: next(replies))
+    hints = []
+    for _ in range(5):
+        with pytest.raises(massive.MassiveError) as captured:
+            massive._get("/v2/aggs/ticker/AAPL/prev")
+        hints.append((captured.value.code, captured.value.retry_after))
+    assert hints == [
+        ("rate_limited", 7.0),
+        ("http", 0.0),  # a date in the past means "now", never a negative wait
+        ("rate_limited", None),
+        ("rate_limited", None),
+        ("http", None),  # client errors never ask for a retry
+    ]
+
+
+def _contract(expiration: str, strike: float) -> dict:
+    return {"expiration_date": expiration, "strike_price": strike, "ticker": f"O:SPY{expiration}{strike}"}
+
+
+def test_option_expirations_read_every_page_and_forward_only_the_cursor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(massive, "_options_plan_denied_until", 0.0)
+    monkeypatch.setattr(
+        massive, "get_settings", lambda: types.SimpleNamespace(massive_base_url="https://api.massive.com")
+    )
+    calls: list[tuple[str, dict]] = []
+
+    def fake_get(path, params=None):
+        calls.append((path, dict(params)))
+        if "cursor" not in params:
+            return {
+                "results": [_contract("2026-10-02", 600.0), _contract("2026-10-02", 601.0)],
+                "next_url": (
+                    "https://api.massive.com/v3/reference/options/contracts"
+                    "?cursor=page-2&apiKey=must-not-be-forwarded"
+                ),
+            }
+        assert params == {"cursor": "page-2"}
+        return {"results": [_contract("2026-10-05", 600.0), _contract("2026-10-09", 600.0)]}
+
+    monkeypatch.setattr(massive, "_get", fake_get)
+    assert massive.option_expirations("SPY", date_gte="2026-10-01", date_lte="2026-10-10") == [
+        "2026-10-02",
+        "2026-10-05",
+        "2026-10-09",
+    ]
+    assert [path for path, _ in calls] == ["/v3/reference/options/contracts"] * 2
+    assert calls[0][1]["underlying_ticker"] == "SPY"
+    assert all("apiKey" not in params for _, params in calls)
+
+
+def test_option_chain_snapshot_reads_every_page(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(massive, "_options_plan_denied_until", 0.0)
+    monkeypatch.setattr(
+        massive, "get_settings", lambda: types.SimpleNamespace(massive_base_url="https://api.massive.com")
+    )
+
+    def quote(side: str, strike: float) -> dict:
+        return {
+            "details": {"strike_price": strike, "contract_type": side},
+            "last_quote": {"bid": 1.0, "ask": 1.2, "last_updated": 1_790_000_000_000_000_000},
+            "underlying_asset": {"price": 600.5},
+        }
+
+    calls: list[dict] = []
+
+    def fake_get(path, params=None):
+        assert path == "/v3/snapshot/options/SPY"
+        calls.append(dict(params))
+        if "cursor" not in params:
+            return {
+                "results": [quote("call", 590.0), quote("put", 590.0)],
+                "next_url": "https://api.massive.com/v3/snapshot/options/SPY?cursor=next",
+            }
+        return {"results": [quote("call", 600.0), quote("put", 600.0)]}
+
+    monkeypatch.setattr(massive, "_get", fake_get)
+    chain = massive.option_chain_snapshot("SPY", "2026-10-02")
+    assert calls == [{"expiration_date": "2026-10-02", "limit": 250}, {"cursor": "next"}]
+    assert [row["strike"] for row in chain["calls"]] == [590.0, 600.0]
+    assert [row["strike"] for row in chain["puts"]] == [590.0, 600.0]
+
+
+@pytest.mark.parametrize(
+    "next_url",
+    [
+        "https://api.massive.com/v3/reference/tickers?cursor=page-2",
+        "https://attacker.invalid/v3/reference/options/contracts?cursor=page-2",
+        "https://api.massive.com/v3/reference/options/contracts?cursor=a&cursor=b",
+    ],
+)
+def test_option_pagination_rejects_a_foreign_or_ambiguous_next_url(
+    monkeypatch: pytest.MonkeyPatch, next_url: str
+) -> None:
+    monkeypatch.setattr(massive, "_options_plan_denied_until", 0.0)
+    monkeypatch.setattr(
+        massive, "get_settings", lambda: types.SimpleNamespace(massive_base_url="https://api.massive.com")
+    )
+    monkeypatch.setattr(
+        massive,
+        "_get",
+        lambda path, params=None: {"results": [_contract("2026-10-02", 600.0)], "next_url": next_url},
+    )
+    with pytest.raises(massive.MassiveError) as captured:
+        massive.option_expirations("SPY", date_gte="2026-10-01", date_lte="2026-10-10")
+    assert captured.value.code == "protocol"
+
+
+def test_plan_denial_on_a_later_options_page_is_still_remembered(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(massive, "_options_plan_denied_until", 0.0)
+    monkeypatch.setattr(
+        massive, "get_settings", lambda: types.SimpleNamespace(massive_base_url="https://api.massive.com")
+    )
+
+    def fake_get(path, params=None):
+        if "cursor" not in params:
+            return {
+                "results": [_contract("2026-10-02", 600.0)],
+                "next_url": "https://api.massive.com/v3/reference/options/contracts?cursor=p2",
+            }
+        raise massive.MassiveError("unauthorized or plan-restricted", code="plan", status=403)
+
+    monkeypatch.setattr(massive, "_get", fake_get)
+    with pytest.raises(massive.MassiveError) as captured:
+        massive.option_expirations("SPY", date_gte="2026-10-01", date_lte="2026-10-10")
+    assert captured.value.code == "plan"
+    assert massive.options_capability_known_denied() is True

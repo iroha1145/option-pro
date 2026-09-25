@@ -128,7 +128,8 @@ class TuningContext:
         }
 
 
-def _number(value: Any) -> float | None:
+def finite_number(value: Any) -> float | None:
+    """A finite real number as ``float``; booleans, strings and NaN/inf are None."""
     if isinstance(value, bool) or not isinstance(value, Real):
         return None
     value = float(value)
@@ -144,7 +145,7 @@ def reference_eligible(item: StockInput) -> bool:
         return False
     if type(item.history_sessions) is not int or item.history_sessions < MIN_HISTORY_SESSIONS:
         return False
-    price, adv, atr = map(_number, (item.raw_close, item.adv20, item.atr_pct))
+    price, adv, atr = map(finite_number, (item.raw_close, item.adv20, item.atr_pct))
     return bool(price is not None and price >= MIN_RAW_PRICE_USD
                 and adv is not None and adv >= MIN_ADV20_PROXY_USD
                 and atr is not None and atr > 0)
@@ -156,7 +157,7 @@ def _window_stats(closes: Mapping[date, float], grid: Sequence[date], skip: int)
     Every exchange session is required, not merely the endpoints. Missing bars
     never extend the window, forward-fill or turn into zero return.
     """
-    values = [_number(closes.get(day)) for day in grid]
+    values = [finite_number(closes.get(day)) for day in grid]
     if any(value is None or value <= 0 for value in values):
         return None
     end = values[-1 - skip] if skip else values[-1]
@@ -290,7 +291,7 @@ def prepare_full_market_context(
                 raise ValueError("duplicate session in price series")
             if partial is not None and bool(partial[index]):
                 continue
-            value = _number(series.close[index])
+            value = finite_number(series.close[index])
             if value is not None and value > 0:
                 out[day] = value
         return out
@@ -331,8 +332,8 @@ def _with_new_common_reasons(row: Mapping[str, Any], common: Sequence[str]) -> d
 def atr_threshold(registry: Mapping[str, Any], profile: str, median_atr_pct: float | None) -> tuple[float | None, float, str]:
     """(threshold in percent points or None, multiplier used, multiplier source)."""
     profile_cfg = registry["profiles"][profile]
-    cap = _number(profile_cfg["atr_absolute_cap_pct"])
-    registry_multiplier = _number(profile_cfg["atr_sector_median_multiplier"])
+    cap = finite_number(profile_cfg["atr_absolute_cap_pct"])
+    registry_multiplier = finite_number(profile_cfg["atr_sector_median_multiplier"])
     if cap is None or cap <= 0 or registry_multiplier is None or registry_multiplier <= 0:
         raise ValueError("finite positive existing ATR policy required")
     override = ATR_MULTIPLIER.get(profile)
@@ -382,7 +383,7 @@ def tune_snapshot(
         if not factors or not isinstance(gates, Mapping) or "common" not in gates:
             rows.append(row)
             continue
-        atr = _number(source.get("atr_pct"))
+        atr = finite_number(source.get("atr_pct"))
         relax_extended = profile in EXTENDED_STATE_PROFILES
         dropped = {"HIGH_ATR", ATR_REFERENCE_UNAVAILABLE} | ({EXTENDED_REASON} if relax_extended else set())
         new_common = [reason for reason in gates["common"] if reason not in dropped]
@@ -395,7 +396,7 @@ def tune_snapshot(
             new_common.append("HIGH_ATR")
         row = _with_new_common_reasons(row, new_common)
         checks = dict(source.get("common_gate_checks") or {})
-        checks["atr"] = None if threshold is None or atr is None else atr <= threshold
+        checks["atr"] = None if threshold is None or atr is None else bool(atr <= threshold)
         row.update(
             sector_median_atr_pct=context.median_atr_pct,
             atr_reference_n=len(context.reference_ids),
@@ -407,12 +408,12 @@ def tune_snapshot(
             entry_gate_reasons=[EXTENDED_REASON] if entry_state == EXTENDED_STATE else [],
         )
         new_factors = dict(factors)
-        old_r = _number(factors.get("R"))
+        old_r = finite_number(factors.get("R"))
         r_neutralized = False
         if profile in R_NEUTRAL_PROFILES and old_r is not None:
             new_factors["R"] = R_NEUTRAL_VALUE
             r_neutralized = True
-        old_m = _number(factors.get("M"))
+        old_m = finite_number(factors.get("M"))
         alpha = M_ALPHA[profile] if source.get("algorithm_id") in TUNED_FAMILIES else 0.0
         target = context.momentum_percentiles.get(sid)
         new_m, delta = old_m, 0.0

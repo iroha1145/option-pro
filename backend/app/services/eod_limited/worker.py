@@ -6,7 +6,8 @@ import time
 from datetime import date, datetime, timezone
 from typing import Any, Mapping, Sequence
 
-from app.services.research_eod_v1.calendar_asof import last_complete_eod_session
+from app.failure_diagnostics import record_fallback_failure
+from app.services.research_eod_v1.calendar_asof import settled_eod_session
 from app.services.research_eod_v1 import FEATURE_VERSION
 from app.services.research_eod_v1.config_load import load_registry
 from app.services.research_eod_v1.constants import HORIZONS, PROFILES
@@ -32,7 +33,11 @@ from .store import publish_batch, read_batch, variant_key
 
 
 def resolve_inference_session(now: datetime | None = None, *, source_finalized_through: date | None = None) -> date:
-    return last_complete_eod_session(now or datetime.now(timezone.utc), source_finalized_through=source_finalized_through)
+    """The session a live run may publish: its close must be past the settle buffer."""
+    return settled_eod_session(
+        now or datetime.now(timezone.utc),
+        source_finalized_through=source_finalized_through,
+    )
 
 
 def _compact_variant(scored: Mapping[str, Any]) -> dict[str, Any]:
@@ -301,9 +306,9 @@ def run_eod_limited_job(
     if batch_published:
         try:
             prune_old_generations(root=root, active_name=diagnostic_manifest["path"])
-        except OSError:
+        except OSError as exc:
             # Retention is housekeeping; the active batch must remain readable.
-            pass
+            record_fallback_failure("eod_diagnostics_prune", exc)
     context_outcome = None
     if published.get("ok") and context_requested:
         try:
@@ -312,6 +317,7 @@ def run_eod_limited_job(
             context_outcome = refresh_context_snapshot(root=root, now=now)
         except Exception as exc:
             # Ranking publication is already complete and must stay available.
+            record_fallback_failure("eod_context_refresh", exc)
             context_outcome = {"status": "UNAVAILABLE", "published": False, "error": type(exc).__name__}
     return {
         "status": "RAN" if published.get("ok") else "PUBLISH_FAILED",

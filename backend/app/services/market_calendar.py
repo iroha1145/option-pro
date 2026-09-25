@@ -5,10 +5,34 @@ from __future__ import annotations
 from datetime import date, datetime, time as datetime_time, timedelta, timezone
 from functools import lru_cache
 from itertools import count
+from types import MappingProxyType
 from zoneinfo import ZoneInfo
 
 
 ET = ZoneInfo("America/New_York")
+
+# Unscheduled full-day NYSE closures. No rule can predict them, and every
+# consumer that expects data for each session (the all-market loader, the
+# tuning grid, residual windows) fails on a closure the calendar does not
+# know. Add a new closure here as soon as the exchange announces it.
+SPECIAL_CLOSURES = MappingProxyType({
+    date(1994, 4, 27): "national_day_of_mourning_nixon",
+    date(2001, 9, 11): "september_11_attacks",
+    date(2001, 9, 12): "september_11_attacks",
+    date(2001, 9, 13): "september_11_attacks",
+    date(2001, 9, 14): "september_11_attacks",
+    date(2004, 6, 11): "national_day_of_mourning_reagan",
+    date(2007, 1, 2): "national_day_of_mourning_ford",
+    date(2012, 10, 29): "hurricane_sandy",
+    date(2012, 10, 30): "hurricane_sandy",
+    date(2018, 12, 5): "national_day_of_mourning_bush",
+    date(2025, 1, 9): "national_day_of_mourning_carter",
+})
+
+# Single-stock options stop with the equity close. Index options (and the
+# broad ETFs that trade until 16:15) close 15 minutes later, on half days too.
+OPTIONS_CLOSE_STYLES = frozenset({"equity", "index"})
+_INDEX_OPTIONS_EXTRA_MINUTES = 15
 
 
 def _nth_weekday(year: int, month: int, weekday: int, n: int) -> date:
@@ -87,6 +111,9 @@ def market_holidays(year: int) -> dict[date, str]:
     next_new_year = date(year + 1, 1, 1)
     if next_new_year.weekday() == 6:
         holidays[next_new_year + timedelta(days=1)] = "new_year"
+    holidays.update(
+        (day, reason) for day, reason in SPECIAL_CLOSURES.items() if day.year == year
+    )
     return holidays
 
 
@@ -102,13 +129,19 @@ def early_close_minutes(value: date) -> int | None:
     return 13 * 60 if value in early_dates and is_trading_day(value) else None
 
 
-def options_close_minutes(value: date) -> int | None:
-    """Close time for standard US equity options on a valid trading day."""
+def options_close_minutes(value: date, *, style: str = "equity") -> int | None:
+    """Options close on a valid trading day, in minutes after midnight ET.
 
+    ``equity`` (single-stock options, the default): 16:00, 13:00 on a half day.
+    ``index`` (index options and 16:15 ETF options): 16:15, 13:15 on a half day.
+    """
+
+    if style not in OPTIONS_CLOSE_STYLES:
+        raise ValueError(f"unknown options close style: {style!r}")
     if not is_trading_day(value):
         return None
-    equity_close = early_close_minutes(value)
-    return equity_close + 15 if equity_close is not None else 16 * 60
+    close = early_close_minutes(value) or 16 * 60
+    return close + _INDEX_OPTIONS_EXTRA_MINUTES if style == "index" else close
 
 
 def is_trading_day(value: date) -> bool:
@@ -207,6 +240,8 @@ _market_datetime = market_datetime
 
 __all__ = [
     "ET",
+    "OPTIONS_CLOSE_STYLES",
+    "SPECIAL_CLOSURES",
     "early_close_minutes",
     "is_trading_day",
     "last_completed_trading_day",

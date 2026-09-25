@@ -15,8 +15,9 @@ import re
 import threading
 import time
 from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 from typing import Any
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, unquote, urlsplit
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -41,14 +42,17 @@ _INDEX_SYMBOLS = {
 
 _CONNECT_TIMEOUT = 3.0
 _READ_TIMEOUT = 10.0
-_MAX_CONCURRENT_REQUESTS = 4
+# Process-wide request slots shared by every caller of this client.
+MAX_CONCURRENT_REQUESTS = 4
 _REQUEST_GATE_TIMEOUT = _CONNECT_TIMEOUT + _READ_TIMEOUT
-_request_gate = threading.BoundedSemaphore(_MAX_CONCURRENT_REQUESTS)
+_request_gate = threading.BoundedSemaphore(MAX_CONCURRENT_REQUESTS)
 _REFERENCE_TICKER_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9.\-]{0,31}$")
 _US_CLASS_SYMBOL_PATTERN = re.compile(r"^[A-Z][A-Z0-9]{0,5}\.[A-Z]$")
+_REFERENCE_TICKERS_PATH = "/v3/reference/tickers"
+_OPTION_CONTRACTS_PATH = "/v3/reference/options/contracts"
 _REFERENCE_PAGE_SIZE = 1_000
 _REFERENCE_MAX_PAGES = 50
-_REFERENCE_NEXT_URL_MAX_LENGTH = 4_096
+_NEXT_URL_MAX_LENGTH = 4_096
 _AGGREGATE_MAX_PAGES = 4
 _AGGREGATE_MAX_BARS = 50_000
 
@@ -57,12 +61,23 @@ _client: httpx.Client | None = None
 
 
 class MassiveError(RuntimeError):
-    """Massive 调用失败;code 便于调用方分类(rate_limited/plan/…)。"""
+    """Massive 调用失败;code 便于调用方分类(rate_limited/plan/redirect/…)。
 
-    def __init__(self, message: str, *, code: str = "massive_error", status: int | None = None):
+    ``retry_after`` is the provider's Retry-After hint in seconds, when sent.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str = "massive_error",
+        status: int | None = None,
+        retry_after: float | None = None,
+    ):
         super().__init__(message)
         self.code = code
         self.status = status
+        self.retry_after = retry_after
 
 
 def configured() -> bool:
@@ -116,6 +131,27 @@ def _http() -> httpx.Client:
         return _client
 
 
+def _retry_after_seconds(response: httpx.Response) -> float | None:
+    """Parse Retry-After (delta seconds or an HTTP date); None when absent or invalid."""
+
+    value = (response.headers.get("Retry-After") or "").strip()
+    if not value:
+        return None
+    try:
+        seconds = float(value)
+    except ValueError:
+        try:
+            moment = parsedate_to_datetime(value)
+        except (TypeError, ValueError, IndexError, OverflowError):
+            return None
+        if moment.tzinfo is None:
+            moment = moment.replace(tzinfo=timezone.utc)
+        seconds = (moment - datetime.now(timezone.utc)).total_seconds()
+    if not math.isfinite(seconds):
+        return None
+    return max(0.0, seconds)
+
+
 def _get(path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
     settings = get_settings()
     key = settings.massive_api_key
@@ -138,14 +174,32 @@ def _get(path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
             raise MassiveError(f"transport failure: {type(exc).__name__}", code="transport") from exc
     finally:
         _request_gate.release()
+    # Redirects are never followed; a 3xx body (even valid JSON) is not data.
+    # Returning it would read as "no rows", indistinguishable from a closed day.
+    if 300 <= response.status_code < 400:
+        raise MassiveError(
+            f"unexpected redirect (http {response.status_code})",
+            code="redirect",
+            status=response.status_code,
+        )
     if response.status_code == 429:
-        raise MassiveError("rate limited", code="rate_limited", status=429)
+        raise MassiveError(
+            "rate limited",
+            code="rate_limited",
+            status=429,
+            retry_after=_retry_after_seconds(response),
+        )
     if response.status_code in {401, 403}:
         raise MassiveError("unauthorized or plan-restricted", code="plan", status=response.status_code)
     if response.status_code == 404:
         raise MassiveError("not found", code="not_found", status=404)
     if response.status_code >= 400:
-        raise MassiveError(f"http {response.status_code}", code="http", status=response.status_code)
+        raise MassiveError(
+            f"http {response.status_code}",
+            code="http",
+            status=response.status_code,
+            retry_after=_retry_after_seconds(response) if response.status_code >= 500 else None,
+        )
     try:
         payload = response.json()
     except ValueError as exc:
@@ -293,39 +347,39 @@ def _aggregate_page_path(next_url: Any, *, prefix: str, end: str, last_timestamp
     return f"{prefix}{match[1]}/{end}"
 
 
-def _reference_page_cursor(next_url: Any) -> str:
+def _page_cursor(next_url: Any, *, path: str) -> str:
     """Extract an opaque cursor from Massive's official ``next_url`` safely.
 
     The provider documents ``next_url`` as the authoritative pagination
-    signal.  We keep the request path fixed and forward only its opaque cursor,
-    so an upstream URL can never redirect this client or copy an ``apiKey``
-    query parameter into application logs.
+    signal.  The caller keeps its request ``path`` fixed and forwards only the
+    opaque cursor, so an upstream URL can never redirect this client, switch
+    endpoints, or copy an ``apiKey`` query parameter into application logs.
     """
 
     if not isinstance(next_url, str):
-        raise MassiveError("unexpected reference next_url shape", code="protocol")
+        raise MassiveError(f"unexpected next_url shape for {path}", code="protocol")
     value = next_url.strip()
-    if not value or len(value) > _REFERENCE_NEXT_URL_MAX_LENGTH:
-        raise MassiveError("unexpected reference next_url shape", code="protocol")
+    if not value or len(value) > _NEXT_URL_MAX_LENGTH:
+        raise MassiveError(f"unexpected next_url shape for {path}", code="protocol")
 
     try:
         parsed = urlsplit(value)
-        expected = urlsplit(get_settings().massive_base_url.rstrip("/"))
+        expected = urlsplit(str(get_settings().massive_base_url).rstrip("/"))
         parsed_port = parsed.port
         expected_port = expected.port
     except ValueError as exc:
-        raise MassiveError("invalid reference next_url", code="protocol") from exc
+        raise MassiveError(f"invalid next_url for {path}", code="protocol") from exc
     if parsed.username or parsed.password or parsed.fragment:
-        raise MassiveError("unsafe reference next_url", code="protocol")
+        raise MassiveError(f"unsafe next_url for {path}", code="protocol")
     if parsed.scheme or parsed.netloc:
         if (
             parsed.scheme.lower() != expected.scheme.lower()
             or (parsed.hostname or "").lower() != (expected.hostname or "").lower()
             or parsed_port != expected_port
         ):
-            raise MassiveError("unsafe reference next_url host", code="protocol")
-    if parsed.path.rstrip("/") != "/v3/reference/tickers":
-        raise MassiveError("unsafe reference next_url path", code="protocol")
+            raise MassiveError(f"unsafe next_url host for {path}", code="protocol")
+    if unquote(parsed.path).rstrip("/") != path:
+        raise MassiveError(f"next_url left {path}", code="protocol")
 
     try:
         query = parse_qs(
@@ -335,7 +389,7 @@ def _reference_page_cursor(next_url: Any) -> str:
             max_num_fields=32,
         )
     except ValueError as exc:
-        raise MassiveError("invalid reference next_url query", code="protocol") from exc
+        raise MassiveError(f"invalid next_url query for {path}", code="protocol") from exc
     cursors = query.get("cursor")
     if (
         not isinstance(cursors, list)
@@ -344,8 +398,35 @@ def _reference_page_cursor(next_url: Any) -> str:
         or not cursors[0]
         or len(cursors[0]) > 2_048
     ):
-        raise MassiveError("reference next_url has no valid cursor", code="protocol")
+        raise MassiveError(f"next_url for {path} has no valid cursor", code="protocol")
     return cursors[0]
+
+
+def _paged_results(path: str, params: dict[str, Any]) -> list[Any]:
+    """Every ``results`` row of a cursor-paginated endpoint.
+
+    A page cap, a repeated cursor, or a malformed page raises instead of
+    returning a silently truncated prefix.
+    """
+
+    rows: list[Any] = []
+    cursor: str | None = None
+    seen_cursors: set[str] = set()
+    for _page in range(_REFERENCE_MAX_PAGES):
+        payload = _get(path, params if cursor is None else {"cursor": cursor})
+        page = payload.get("results")
+        if not isinstance(page, list):
+            raise MassiveError(f"unexpected results shape for {path}", code="protocol")
+        rows.extend(page)
+        next_url = payload.get("next_url")
+        if next_url is None or next_url == "":
+            return rows
+        next_cursor = _page_cursor(next_url, path=path)
+        if next_cursor in seen_cursors or next_cursor == cursor:
+            raise MassiveError(f"pagination did not advance for {path}", code="protocol")
+        seen_cursors.add(next_cursor)
+        cursor = next_cursor
+    raise MassiveError(f"pagination exceeded safety limit for {path}", code="protocol")
 
 
 def reference_tickers(
@@ -360,64 +441,46 @@ def reference_tickers(
     arbitrary URL fields are never replayed.
     """
 
+    rows = _paged_results(
+        _REFERENCE_TICKERS_PATH,
+        {
+            "active": "true" if active else "false",
+            "market": market,
+            "locale": "us",
+            "limit": _REFERENCE_PAGE_SIZE,
+            "sort": "ticker",
+            "order": "asc",
+        },
+    )
     records: dict[str, dict[str, Any]] = {}
-    cursor: str | None = None
-    seen_cursors: set[str] = set()
-    for _page in range(_REFERENCE_MAX_PAGES):
-        if cursor is None:
-            params: dict[str, Any] = {
-                "active": "true" if active else "false",
-                "market": market,
-                "locale": "us",
-                "limit": _REFERENCE_PAGE_SIZE,
-                "sort": "ticker",
-                "order": "asc",
-            }
-        else:
-            params = {"cursor": cursor}
-        payload = _get("/v3/reference/tickers", params)
-        rows = payload.get("results")
-        if not isinstance(rows, list):
-            raise MassiveError("unexpected reference payload shape", code="protocol")
-
-        for raw in rows:
-            if not isinstance(raw, dict):
-                continue
-            ticker = str(raw.get("ticker") or "").strip().upper()
-            # A few valid instruments can temporarily lack a display name.
-            # Keep the symbol searchable instead of silently dropping it from
-            # an otherwise complete provider directory.
-            name = str(raw.get("name") or "").strip() or ticker
-            row_market = str(raw.get("market") or market).strip().lower()
-            row_locale = str(raw.get("locale") or "us").strip().lower()
-            if (
-                not _REFERENCE_TICKER_PATTERN.fullmatch(ticker)
-                or raw.get("active") is False
-                or row_market != market.lower()
-                or row_locale != "us"
-            ):
-                continue
-            records[ticker] = {
-                "ticker": ticker,
-                "name": name,
-                "market": row_market,
-                "type": str(raw.get("type") or ""),
-                "primary_exchange": str(raw.get("primary_exchange") or ""),
-                "locale": row_locale,
-                "currency_symbol": str(raw.get("currency_symbol") or ""),
-                "active": bool(raw.get("active", active)),
-            }
-
-        next_url = payload.get("next_url")
-        if next_url is None or next_url == "":
-            return [records[ticker] for ticker in sorted(records)]
-        next_cursor = _reference_page_cursor(next_url)
-        if next_cursor in seen_cursors or next_cursor == cursor:
-            raise MassiveError("reference pagination did not advance", code="protocol")
-        seen_cursors.add(next_cursor)
-        cursor = next_cursor
-
-    raise MassiveError("reference pagination exceeded safety limit", code="protocol")
+    for raw in rows:
+        if not isinstance(raw, dict):
+            continue
+        ticker = str(raw.get("ticker") or "").strip().upper()
+        # A few valid instruments can temporarily lack a display name.
+        # Keep the symbol searchable instead of silently dropping it from
+        # an otherwise complete provider directory.
+        name = str(raw.get("name") or "").strip() or ticker
+        row_market = str(raw.get("market") or market).strip().lower()
+        row_locale = str(raw.get("locale") or "us").strip().lower()
+        if (
+            not _REFERENCE_TICKER_PATTERN.fullmatch(ticker)
+            or raw.get("active") is False
+            or row_market != market.lower()
+            or row_locale != "us"
+        ):
+            continue
+        records[ticker] = {
+            "ticker": ticker,
+            "name": name,
+            "market": row_market,
+            "type": str(raw.get("type") or ""),
+            "primary_exchange": str(raw.get("primary_exchange") or ""),
+            "locale": row_locale,
+            "currency_symbol": str(raw.get("currency_symbol") or ""),
+            "active": bool(raw.get("active", active)),
+        }
+    return [records[ticker] for ticker in sorted(records)]
 
 
 def recent_session_days(sessions: int, *, today: datetime | None = None) -> list[str]:
@@ -600,7 +663,10 @@ def option_expirations(
     date_gte: str,
     date_lte: str,
 ) -> list[str]:
-    """列出窗口内的到期日（合约参考端点，一页即够本用途）。"""
+    """列出窗口内的到期日（合约参考端点，按 next_url 翻完所有页）。
+
+    SPY/QQQ 这类标的一个窗口就有上千张合约，一页 1000 条会截掉后面的到期日。
+    """
 
     if options_capability_known_denied():
         raise MassiveError("options not in plan (cached)", code="plan", status=403)
@@ -608,8 +674,8 @@ def option_expirations(
     if symbol is None:
         raise MassiveError("unsupported symbol shape", code="not_found")
     try:
-        payload = _get(
-            "/v3/reference/options/contracts",
+        results = _paged_results(
+            _OPTION_CONTRACTS_PATH,
             {
                 "underlying_ticker": symbol,
                 "expiration_date.gte": date_gte,
@@ -623,9 +689,6 @@ def option_expirations(
         if error.code == "plan":
             _remember_options_plan_denied()
         raise
-    results = payload.get("results")
-    if not isinstance(results, list):
-        raise MassiveError("unexpected contracts payload shape", code="protocol")
     expirations: list[str] = []
     for row in results:
         if not isinstance(row, dict):
@@ -641,6 +704,7 @@ def option_chain_snapshot(ticker: str, expiration: str) -> dict[str, Any]:
 
     返回 {underlying_price, as_of, calls:[{strike,bid,ask,midpoint}], puts:[...]}。
     报价缺 bid/ask 的合约直接丢弃——宽价差与 last-price 伪报价由上层拒绝。
+    一页最多 250 张合约，行权价密的到期日要按 next_url 翻页，否则平值附近可能缺档。
     """
 
     if options_capability_known_denied():
@@ -649,7 +713,7 @@ def option_chain_snapshot(ticker: str, expiration: str) -> dict[str, Any]:
     if symbol is None:
         raise MassiveError("unsupported symbol shape", code="not_found")
     try:
-        payload = _get(
+        results = _paged_results(
             f"/v3/snapshot/options/{symbol}",
             {"expiration_date": expiration, "limit": 250},
         )
@@ -657,9 +721,6 @@ def option_chain_snapshot(ticker: str, expiration: str) -> dict[str, Any]:
         if error.code == "plan":
             _remember_options_plan_denied()
         raise
-    results = payload.get("results")
-    if not isinstance(results, list):
-        raise MassiveError("unexpected options snapshot shape", code="protocol")
     underlying_price: float | None = None
     quote_times: list[str] = []
     calls: list[dict[str, Any]] = []

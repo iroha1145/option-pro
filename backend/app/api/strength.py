@@ -801,7 +801,7 @@ def _read_eod_limited_snapshot(
     )
     from app.services.eod_limited.project import project_strength_payload
     from app.services.eod_limited.store import read_batch, variant_from_batch, snapshot_path
-    from app.services.research_eod_v1.calendar_asof import last_complete_eod_session
+    from app.services.research_eod_v1.calendar_asof import settled_eod_session
 
     kind = list_kind if list_kind in {LIST_KIND_OBSERVATION, LIST_KIND_COMPOSITE} else LIST_KIND_OBSERVATION
     # Rows and their publication clock must come from one atomic file read.
@@ -833,7 +833,7 @@ def _read_eod_limited_snapshot(
         source_status = "historical"
     elif purpose == PURPOSE_LIVE and session:
         try:
-            calendar = last_complete_eod_session(datetime.now(timezone.utc))
+            calendar = settled_eod_session(datetime.now(timezone.utc))
             served = datetime.strptime(session, "%Y-%m-%d").date()
             if served < calendar:
                 stale = True
@@ -1146,7 +1146,7 @@ async def security_diagnostics(
     from app.services.eod_limited.diagnostic_store import read_security_diagnostics
     from app.services.eod_limited.store import read_batch
     from app.services.eod_limited import PURPOSE_LIVE
-    from app.services.research_eod_v1.calendar_asof import last_complete_eod_session
+    from app.services.research_eod_v1.calendar_asof import settled_eod_session
 
     symbol = ticker.strip()
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9.\-]{0,31}", symbol):
@@ -1178,7 +1178,7 @@ async def security_diagnostics(
         })
     session = str(batch.get("served_session") or "")
     historical = batch.get("purpose") != PURPOSE_LIVE or bool(batch.get("synthetic"))
-    stale = not historical and session < last_complete_eod_session(datetime.now(timezone.utc)).isoformat()
+    stale = not historical and session < settled_eod_session(datetime.now(timezone.utc)).isoformat()
     saved_at = batch.get("published_at")
     payload = sanitize({
         **payload,
