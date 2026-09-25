@@ -32,8 +32,32 @@ _IDENTITY_MIGRATION_CHECKSUM = hashlib.sha256(
     b"restore-source-aware-hashes-and-seal-unsubmitted-duplicates-v2"
 ).hexdigest()
 _DUPLICATE_MIGRATION_ERROR = "duplicate_request_migrated"
-_MAX_REQUEST_JSON_BYTES = 64 * 1024
 _MAX_RESULT_JSON_BYTES = 1024 * 1024
+_SUBMISSION_LANES = ("manual", "scheduled")
+# 没有 response id 的结果未知永远无法对账，只在上游可能仍在执行的短窗口内
+# 占住本车道的付费槽。闸门、认领与快照共用这一个值。
+_UNKNOWN_NO_RESPONSE_HOLD_SECONDS = 900
+# 余额耗尽是账户级状态：最近一次 provider_credit_exhausted 之后暂停所有新
+# 提交，任务留在队列里不消耗重试次数；窗口结束后放一单探测是否已充值。
+_CREDIT_EXHAUSTED_HOLD_SECONDS = 600
+_CREDIT_EXHAUSTED_HOLD_ERROR = "provider_credit_exhausted_hold"
+# 供应商以终态响应确认失败、且不会再计费的错误码（2026-08-14：余额耗尽的
+# 瞬时失败零计费）。取回或取消时的 404、401/403、400 不在其中：它们只说明
+# 本地拿不到响应，上游可能已经跑完并计费。
+_PROVIDER_CONFIRMED_UNBILLED_ERRORS = frozenset(
+    {"provider_credit_exhausted", "provider_failed"}
+)
+# 无论有无 response id 都保留满额预留：结果未知（可能已计费未对账）与取消
+# 未获确认的轮询超时（上游可能仍在运行计费）。
+_RESERVATION_HOLDING_ERRORS = frozenset(
+    {"submission_outcome_unknown", "provider_poll_timeout"}
+)
+# 已拿到 response id、本地却没能落下结果的失败：恢复工具可以重新取回付费
+# 结果而不重新提交。
+RECOVERABLE_FAILURE_CODES = frozenset(
+    {"schema_validation_failed", "provider_unavailable", "local_storage_error"}
+)
+_SCHEDULED_HISTORY_JOB_TYPES = ("news_impact", "market_focus")
 _TERMINAL = {
     "completed",
     "failed",
@@ -200,16 +224,39 @@ def _minimum_task_token_reservation() -> int:
     return minimum_token_reservation()
 
 
-def _daily_tokens_used(token_rows: Iterable[Mapping[str, Any]]) -> int:
-    """当日 token 账：已结算按实际用量，预留只留给仍可能计费的行。
+def _bounded_provider_input(payload: dict[str, Any]) -> str:
+    from app.services.ai_jobs.runtime import _bounded_untrusted_json
 
-    终态（failed/cancelled/completed/budget_blocked）且无 usage 的行计 0——
-    供应商余额耗尽的瞬时失败零计费，若按满额预留计入，失败风暴会吃光
-    全天预算（2026-08-14 生产：94 个 provider_failed 把 10M 账本记到
-    9.97M，实际结算 0，全线误报「今日 Token 预算已用完」）。结果未知
-    （submission_outcome_unknown，可能已计费未对账）、取消未获确认的轮询
-    超时（provider_poll_timeout，上游可能仍在运行计费）与在途/待重试行
-    保留满额预留，防超支方向不放松。
+    return _bounded_untrusted_json(payload)
+
+
+def _reservation_released(
+    status: Any,
+    error_code: Any,
+    response_id: Any,
+) -> bool:
+    """Whether a terminal row without reported usage is known to cost nothing.
+
+    Token 账与美元账共用这一条白名单：只有从未拿到上游响应身份的终态，或
+    供应商以终态响应确认未计费的失败才释放预留。旧的黑名单写法会把「写库
+    失败记成 provider_unavailable、上游其实还在跑」的行一起释放。
+    """
+
+    if str(status or "") not in {"failed", "cancelled"}:
+        return False
+    code = str(error_code or "")
+    if code in _RESERVATION_HOLDING_ERRORS:
+        return False
+    return not response_id or code in _PROVIDER_CONFIRMED_UNBILLED_ERRORS
+
+
+def _daily_tokens_used(token_rows: Iterable[Mapping[str, Any]]) -> int:
+    """当日 token 账：已结算按实际用量，无用量的行按 _reservation_released。
+
+    余额耗尽等零计费失败若按满额预留计入，失败风暴会吃光全天预算（2026-08-14
+    生产：94 个 provider_failed 把 10M 账本记到 9.97M，实际结算 0，全线误报
+    「今日 Token 预算已用完」）。completed 无用量（计费了、数额未知）、在途与
+    待重试行保留满额预留，防超支方向不放松。
     """
 
     total = 0
@@ -218,17 +265,11 @@ def _daily_tokens_used(token_rows: Iterable[Mapping[str, Any]]) -> int:
         if usage is not None:
             total += int(usage)
             continue
-        status = str(item["status"] or "")
-        error_code = str(item["error_code"] or "")
-        # 只对「供应商明确终结且无计费上报」的行释放：failed/cancelled 且
-        # 非结果未知。completed 无 usage（计费了、数额未知）、在途、待重试、
-        # submission_outcome_unknown 与 provider_poll_timeout 一律保留满额
-        # 预留——防超支不放松。
-        released = status in {"failed", "cancelled"} and error_code not in {
-            "submission_outcome_unknown",
-            "provider_poll_timeout",
-        }
-        if not released:
+        if not _reservation_released(
+            item["status"],
+            item["error_code"],
+            item["openai_response_id"],
+        ):
             total += _task_token_reservation(str(item["job_type"]))
     return total
 
@@ -419,7 +460,7 @@ class AIJobRepository:
                    SELECT job_id,'manual',created_at FROM ai_jobs"""
             )
             missing_charges = connection.execute(
-                """SELECT job_id,job_type,error_code,
+                """SELECT job_id,job_type,status,error_code,openai_response_id,
                           budget_charge_microusd,
                           usage_input_tokens,usage_cached_input_tokens,
                           usage_output_tokens,usage_reasoning_tokens,
@@ -444,6 +485,14 @@ class AIJobRepository:
                     and missing["usage_output_tokens"] is not None
                     and missing["error_code"] != "submission_outcome_unknown"
                 )
+                if not has_terminal_usage and _reservation_released(
+                    missing["status"],
+                    missing["error_code"],
+                    missing["openai_response_id"],
+                ):
+                    # 规则确认零计费的行本来就记 0；每次初始化都会走到这里，
+                    # 不能把它们回填成满额预留。
+                    continue
                 charge = (
                     _settled_budget_charge_microusd(
                         str(missing["job_type"]),
@@ -555,12 +604,23 @@ class AIJobRepository:
             raise ValueError(error_code)
         return raw
 
-    @classmethod
-    def _canonical_payload(cls, payload: dict[str, Any]) -> str:
-        return cls._canonical_json(
+    @staticmethod
+    def _canonical_payload(payload: dict[str, Any]) -> str:
+        # 入队直接用提交时的口径（转义 <> 之后 60,000 字节）。两个上限不一致
+        # 时，夹在中间的 payload 能入队、提交时却终态 ai_input_too_large，
+        # 调用方按 ai_job_payload_too_large 做的降级也接不住（2026-09-25 审计）。
+        try:
+            _bounded_provider_input(payload)
+        except ValueError as exc:
+            if str(exc) != "ai_input_too_large":
+                raise
+            raise ValueError("ai_job_payload_too_large") from exc
+        return json.dumps(
             payload,
-            max_bytes=_MAX_REQUEST_JSON_BYTES,
-            error_code="ai_job_payload_too_large",
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
         )
 
     @classmethod
@@ -1195,10 +1255,14 @@ class AIJobRepository:
                         batch_id=batch_id,
                         batch_position=batch_position,
                     )
+                    decorated = self._decorate_earnings_row(connection, row)
                     connection.commit()
-                    return row, True
+                    return decorated, True
+                # 与 get_job 同一口径补上终稿锁与「终稿进行中」：202 响应直接
+                # 用这一行生成报告状态（2026-09-25 审计）。
+                decorated = self._decorate_earnings_row(connection, existing)
                 connection.commit()
-                return dict(existing), False
+                return decorated, False
             active = connection.execute(
                 """
                 SELECT COUNT(*) AS count FROM ai_jobs
@@ -1227,8 +1291,9 @@ class AIJobRepository:
                 batch_id=batch_id,
                 batch_position=batch_position,
             )
+            decorated = self._decorate_earnings_row(connection, row)
             connection.commit()
-            return row, True
+            return decorated, True
 
     @staticmethod
     def _request_hash_source_legacy(
@@ -1624,50 +1689,321 @@ class AIJobRepository:
             connection.commit()
             return len(expired_ids)
 
-    def claim_due(self, owner: str, lease_seconds: int) -> dict[str, Any] | None:
+    def prune_scheduled_history(
+        self,
+        *,
+        retain_days: int,
+        now: datetime | None = None,
+    ) -> int:
+        """Delete settled news and focus jobs older than ``retain_days``.
+
+        新闻与焦点任务此前从不清理，reconcile 每轮把它们全量读进内存并重校验，
+        开销随历史线性增长且全程持写锁（2026-09-25 审计）。只删终态行；创建与
+        完成时间都要早于截止点，当天才结算的积压任务仍留在当日 token 账里。
+        """
+
+        if (
+            isinstance(retain_days, bool)
+            or not isinstance(retain_days, int)
+            or retain_days < 1
+        ):
+            raise ValueError("invalid_scheduled_history_retain_days")
+        self.ensure_initialized()
+        observed = (now or _utcnow()).astimezone(timezone.utc)
+        cutoff = _iso(observed - timedelta(days=retain_days))
+        job_types = list(_SCHEDULED_HISTORY_JOB_TYPES)
+        statuses = sorted(_TERMINAL)
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            expired_ids = [
+                str(row["job_id"])
+                for row in connection.execute(
+                    f"""SELECT job_id FROM ai_jobs
+                        WHERE job_type IN ({",".join("?" for _ in job_types)})
+                          AND status IN ({",".join("?" for _ in statuses)})
+                          AND created_at<?
+                          AND COALESCE(completed_at,updated_at,created_at)<?""",
+                    (*job_types, *statuses, cutoff, cutoff),
+                ).fetchall()
+            ]
+            # 首次清理可能是上万行，分批绑定参数，避开 SQLite 的变量个数上限。
+            for offset in range(0, len(expired_ids), 500):
+                chunk = expired_ids[offset : offset + 500]
+                placeholders = ",".join("?" for _ in chunk)
+                for table in (
+                    "ai_job_sources",
+                    "ai_job_batch_members",
+                    "ai_jobs",
+                ):
+                    connection.execute(
+                        f"DELETE FROM {table} WHERE job_id IN ({placeholders})",
+                        chunk,
+                    )
+            connection.commit()
+            return len(expired_ids)
+
+    @staticmethod
+    def _lane_occupant(
+        connection: sqlite3.Connection,
+        *,
+        lane: str | None,
+        now_dt: datetime,
+        unknown_submission_hold_seconds: int,
+        exclude_job_id: str | None = None,
+    ) -> sqlite3.Row | None:
+        """The row holding a lane's single paid slot (any lane when None).
+
+        闸门、认领与快照三处共用这一份「车道被占」：已开始提交且仍在上游运行，
+        或放行窗口内的 submission_outcome_unknown。三处手抄时认领漏了 unknown
+        窗口，被挡住的后台任务每秒被认领、推迟两次，同一窗口里手动任务饿
+        15 分钟（2026-09-25 审计）。缺来源记录的行按 scheduled 保守归类。
+        """
+
+        parameters = {
+            "lane": lane,
+            "exclude_job_id": exclude_job_id,
+            "unknown_cutoff": _iso(
+                now_dt
+                - timedelta(seconds=max(1, int(unknown_submission_hold_seconds)))
+            ),
+            "unknown_no_response_cutoff": _iso(
+                now_dt - timedelta(seconds=_UNKNOWN_NO_RESPONSE_HOLD_SECONDS)
+            ),
+        }
+        lane_filter = """
+              AND (:lane IS NULL
+                   OR COALESCE(s.submission_source,'scheduled')=:lane)
+              AND (:exclude_job_id IS NULL OR j.job_id<>:exclude_job_id)
+        """
+        in_flight = connection.execute(
+            f"""
+            SELECT j.*,s.submission_source FROM ai_jobs AS j
+            LEFT JOIN ai_job_sources AS s ON s.job_id=j.job_id
+            WHERE j.status IN ('queued','in_progress')
+              AND j.submission_started_at IS NOT NULL
+              {lane_filter}
+            ORDER BY j.created_at LIMIT 1
+            """,
+            parameters,
+        ).fetchone()
+        if in_flight is not None:
+            return in_flight
+        # unknown 只由 fail() 写入，status 必为 failed；限定 status 让查询走
+        # idx_ai_jobs_due，认领时不必扫描全表的 payload。
+        return connection.execute(
+            f"""
+            SELECT j.*,s.submission_source FROM ai_jobs AS j
+            LEFT JOIN ai_job_sources AS s ON s.job_id=j.job_id
+            WHERE j.status='failed'
+              AND j.error_code='submission_outcome_unknown'
+              AND j.submission_started_at IS NOT NULL
+              AND (
+                (j.openai_response_id IS NOT NULL
+                 AND j.submission_started_at>=:unknown_cutoff)
+                OR j.submission_started_at>=:unknown_no_response_cutoff
+              )
+              {lane_filter}
+            ORDER BY j.created_at LIMIT 1
+            """,
+            parameters,
+        ).fetchone()
+
+    @staticmethod
+    def _manual_cooldown_until(
+        connection: sqlite3.Connection,
+        *,
+        now_dt: datetime,
+        cooldown_seconds: int,
+        exclude_job_id: str | None = None,
+    ) -> datetime | None:
+        """End of the manual lane's cooldown after its latest paid job.
+
+        冷却只约束手动来源、只看手动车道：后台批任务刚结束不能让 owner 的点击
+        等 30 秒，后台车道每单也不该多等 30 秒（2026-09-25 审计）。
+        """
+
+        if int(cooldown_seconds) <= 0:
+            return None
+        row = connection.execute(
+            """
+            SELECT MAX(COALESCE(j.completed_at,j.submission_started_at))
+            FROM ai_job_sources AS s
+            CROSS JOIN ai_jobs AS j ON j.job_id=s.job_id
+            WHERE s.submission_source='manual'
+              AND j.submission_started_at IS NOT NULL
+              AND j.status IN ('completed','failed','cancelled',
+                               'insufficient_context','budget_blocked')
+              AND (?1 IS NULL OR j.job_id<>?1)
+            """,
+            (exclude_job_id,),
+        ).fetchone()
+        latest_at = _parse_time(row[0]) if row is not None else None
+        if latest_at is None:
+            return None
+        cooldown_until = latest_at + timedelta(seconds=int(cooldown_seconds))
+        return cooldown_until if cooldown_until > now_dt else None
+
+    @staticmethod
+    def _credit_hold_until(
+        connection: sqlite3.Connection,
+        *,
+        now_dt: datetime,
+    ) -> datetime | None:
+        row = connection.execute(
+            """SELECT MAX(completed_at) FROM ai_jobs
+               WHERE status='failed' AND error_code='provider_credit_exhausted'
+                 AND completed_at>=?""",
+            (
+                _iso(
+                    now_dt
+                    - timedelta(seconds=_CREDIT_EXHAUSTED_HOLD_SECONDS)
+                ),
+            ),
+        ).fetchone()
+        failed_at = _parse_time(row[0]) if row is not None else None
+        if failed_at is None:
+            return None
+        hold_until = failed_at + timedelta(seconds=_CREDIT_EXHAUSTED_HOLD_SECONDS)
+        return hold_until if hold_until > now_dt else None
+
+    def _lane_submission_block(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        lane: str,
+        now_dt: datetime,
+        cooldown_seconds: int,
+        unknown_submission_hold_seconds: int,
+        exclude_job_id: str | None = None,
+        check_credit_hold: bool = True,
+    ) -> tuple[str, datetime | None] | None:
+        """Why this lane cannot start a paid submission now, if it cannot.
+
+        The credit hold is account-wide; a caller that already checked it in
+        the same transaction may skip the scan with ``check_credit_hold``.
+        """
+
+        if check_credit_hold:
+            credit_hold_until = self._credit_hold_until(connection, now_dt=now_dt)
+            if credit_hold_until is not None:
+                return _CREDIT_EXHAUSTED_HOLD_ERROR, credit_hold_until
+        if self._lane_occupant(
+            connection,
+            lane=lane,
+            now_dt=now_dt,
+            unknown_submission_hold_seconds=unknown_submission_hold_seconds,
+            exclude_job_id=exclude_job_id,
+        ) is not None:
+            return "concurrency_limit", None
+        if lane == "manual":
+            cooldown_until = self._manual_cooldown_until(
+                connection,
+                now_dt=now_dt,
+                cooldown_seconds=cooldown_seconds,
+                exclude_job_id=exclude_job_id,
+            )
+            if cooldown_until is not None:
+                return "cooldown", cooldown_until
+        return None
+
+    @staticmethod
+    def _next_due_candidate(
+        connection: sqlite3.Connection,
+        *,
+        now: str,
+        blocked_lanes: set[str],
+    ) -> sqlite3.Row | None:
+        lane_filter = ""
+        lanes = sorted(blocked_lanes)
+        if lanes:
+            placeholders = ",".join("?" for _ in lanes)
+            lane_filter = f"""
+              AND (
+                j.submission_started_at IS NOT NULL
+                OR j.openai_response_id IS NOT NULL
+                OR j.cancel_requested_at IS NOT NULL
+                OR COALESCE(s.submission_source,'scheduled')
+                   NOT IN ({placeholders})
+              )
+            """
+        return connection.execute(
+            f"""
+            SELECT j.job_id,j.submission_started_at,j.openai_response_id,
+                   j.cancel_requested_at,
+                   COALESCE(s.submission_source,'scheduled') AS lane
+            FROM ai_jobs AS j
+            LEFT JOIN ai_job_sources AS s ON s.job_id=j.job_id
+            WHERE j.status IN ('pending','queued','in_progress')
+              AND (j.next_attempt_at IS NULL OR j.next_attempt_at<=?)
+              AND (j.lease_expires_at IS NULL OR j.lease_expires_at<=?)
+              {lane_filter}
+            ORDER BY
+              CASE WHEN j.cancel_requested_at IS NOT NULL THEN 0 ELSE 1 END,
+              CASE
+                WHEN j.openai_response_id IS NOT NULL THEN 0
+                WHEN j.submission_started_at IS NOT NULL THEN 1
+                ELSE 2
+              END,
+              j.priority DESC,
+              j.created_at
+            LIMIT 1
+            """,
+            (now, now, *lanes),
+        ).fetchone()
+
+    def claim_due(
+        self,
+        owner: str,
+        lease_seconds: int,
+        *,
+        cooldown_seconds: int = 0,
+        unknown_submission_hold_seconds: int = 86400,
+    ) -> dict[str, Any] | None:
         self.ensure_initialized()
         now_dt = _utcnow()
         now = _iso(now_dt)
         lease_expires = _iso(now_dt + timedelta(seconds=lease_seconds))
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
-            # An unsubmitted job whose lane already has a paid submission in
-            # flight would only be deferred by mark_submission_started. Rank
-            # it after the other lane's work; otherwise a backlog of
-            # higher-priority manual jobs, each deferred for two seconds and
-            # re-claimed every half second, starves the scheduled lane.
-            row = connection.execute(
-                """
-                SELECT j.* FROM ai_jobs AS j
-                LEFT JOIN ai_job_sources AS s ON s.job_id=j.job_id
-                WHERE j.status IN ('pending','queued','in_progress')
-                  AND (j.next_attempt_at IS NULL OR j.next_attempt_at<=?)
-                  AND (j.lease_expires_at IS NULL OR j.lease_expires_at<=?)
-                ORDER BY
-                  CASE WHEN j.cancel_requested_at IS NOT NULL THEN 0 ELSE 1 END,
-                  CASE
-                    WHEN j.openai_response_id IS NOT NULL THEN 0
-                    WHEN j.submission_started_at IS NOT NULL THEN 1
-                    ELSE 2
-                  END,
-                  CASE
-                    WHEN j.submission_started_at IS NULL AND EXISTS (
-                      SELECT 1 FROM ai_jobs AS busy
-                      LEFT JOIN ai_job_sources AS busy_source
-                        ON busy_source.job_id=busy.job_id
-                      WHERE busy.status IN ('queued','in_progress')
-                        AND busy.submission_started_at IS NOT NULL
-                        AND COALESCE(busy_source.submission_source,'scheduled')
-                          =COALESCE(s.submission_source,'scheduled')
-                    ) THEN 1
-                    ELSE 0
-                  END,
-                  j.priority DESC,
-                  j.created_at
-                LIMIT 1
-                """,
-                (now, now),
-            ).fetchone()
+            # 不可提交车道上尚未提交的任务直接跳过，不再「认领、构造请求、过
+            # 闸门、推迟两秒」地空转：那样每秒两个写事务，还让被挡住的车道
+            # 抢走另一条空闲车道的认领（2026-09-25 审计）。已提交、已有响应
+            # 或待取消的任务不受车道限制，照常认领。认领不到就返回 None，
+            # worker 走空闲间隔。
+            blocked_lanes: set[str] = set()
+            row: sqlite3.Row | None = None
+            for _ in range(len(_SUBMISSION_LANES)):
+                candidate = self._next_due_candidate(
+                    connection,
+                    now=now,
+                    blocked_lanes=blocked_lanes,
+                )
+                if candidate is None or (
+                    candidate["submission_started_at"] is not None
+                    or candidate["openai_response_id"] is not None
+                    or candidate["cancel_requested_at"] is not None
+                ):
+                    row = candidate
+                    break
+                lane = str(candidate["lane"])
+                block = self._lane_submission_block(
+                    connection,
+                    lane=lane,
+                    now_dt=now_dt,
+                    cooldown_seconds=cooldown_seconds,
+                    unknown_submission_hold_seconds=(
+                        unknown_submission_hold_seconds
+                    ),
+                    check_credit_hold=not blocked_lanes,
+                )
+                if block is None:
+                    row = candidate
+                    break
+                # 候选按「已提交、已有响应」优先排序：排在最前的是未提交任务，
+                # 说明此刻没有要轮询的任务。欠费暂停对两条车道都生效，直接收手。
+                if block[0] == _CREDIT_EXHAUSTED_HOLD_ERROR:
+                    break
+                blocked_lanes.add(lane)
             if not row:
                 connection.commit()
                 return None
@@ -1702,9 +2038,12 @@ class AIJobRepository:
         daily_token_limit: int = 10_000_000,
         cooldown_seconds: int = 0,
         unknown_submission_hold_seconds: int = 86400,
-        unknown_submission_no_response_hold_seconds: int = 900,
     ) -> str:
-        """Atomically enforce concurrency, cooldown, and daily Token usage.
+        """Atomically enforce the lane slot, holds, and daily Token usage.
+
+        车道能否提交由 _lane_submission_block 判定，认领与快照共用同一份：
+        余额耗尽后的暂停对两条车道都生效；冷却只约束手动车道。三者都是推迟，
+        任务留在队列里，不消耗调度器的重试次数。
 
         并发是**双车道**（用户实测反馈：后台批任务一跑几十分钟，手动个股
         分析哪怕按 priority 排在队首也要干等）：manual 与 scheduled 各占
@@ -1725,24 +2064,6 @@ class AIJobRepository:
             raise ValueError("daily_token_limit is invalid")
         now_dt = _utcnow()
         now = _iso(now_dt)
-        unknown_submission_cutoff = _iso(
-            now_dt
-            - timedelta(
-                seconds=max(1, int(unknown_submission_hold_seconds))
-            )
-        )
-        # A submission with no recorded response id can never be reconciled,
-        # so a day-long quarantine buys nothing after the provider run has
-        # certainly finished; hold the paid slot only for the short window in
-        # which the un-linked response could still be executing upstream.
-        unknown_no_response_cutoff = _iso(
-            now_dt
-            - timedelta(
-                seconds=max(
-                    1, int(unknown_submission_no_response_hold_seconds)
-                )
-            )
-        )
         day_start = _iso(now_dt.replace(hour=0, minute=0, second=0, microsecond=0))
         day_end = _iso(
             now_dt.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -1771,78 +2092,42 @@ class AIJobRepository:
                 str(row["job_type"])
             )
             token_reservation = _task_token_reservation(str(row["job_type"]))
-            in_flight = int(
-                connection.execute(
-                    """
-                    SELECT COUNT(*) FROM ai_jobs AS j
-                    LEFT JOIN ai_job_sources AS s ON s.job_id=j.job_id
-                    WHERE j.job_id<>? AND j.submission_started_at IS NOT NULL
-                      AND COALESCE(s.submission_source,'scheduled')=?
-                      AND (
-                        j.status IN ('queued','in_progress')
-                        OR (
-                          j.error_code='submission_outcome_unknown'
-                          AND (
-                            (j.openai_response_id IS NOT NULL
-                             AND j.submission_started_at>=?)
-                            OR j.submission_started_at>=?
-                          )
-                        )
-                      )
-                    """,
-                    (
-                        job_id,
-                        lane,
-                        unknown_submission_cutoff,
-                        unknown_no_response_cutoff,
-                    ),
-                ).fetchone()[0]
+            block = self._lane_submission_block(
+                connection,
+                lane=lane,
+                now_dt=now_dt,
+                cooldown_seconds=cooldown_seconds,
+                unknown_submission_hold_seconds=unknown_submission_hold_seconds,
+                exclude_job_id=job_id,
             )
-            if in_flight:
+            if block is not None:
+                verdict, retry_at = block
+                # 推迟而不是终态：任务留在队列里，不消耗调度器的重试次数。
+                error_code = {
+                    "concurrency_limit": "global_concurrency_limit",
+                    "cooldown": "analysis_cooldown_active",
+                }.get(verdict, verdict)
                 connection.execute(
                     """
                     UPDATE ai_jobs
-                    SET next_attempt_at=?,error_code='global_concurrency_limit',
+                    SET next_attempt_at=?,error_code=?,
                         lease_owner=NULL,lease_expires_at=NULL,updated_at=?
                     WHERE job_id=? AND lease_owner=? AND status='pending'
                     """,
-                    (_iso(now_dt + timedelta(seconds=2)), now, job_id, owner),
+                    (
+                        _iso(retry_at or now_dt + timedelta(seconds=2)),
+                        error_code,
+                        now,
+                        job_id,
+                        owner,
+                    ),
                 )
                 connection.commit()
-                return "concurrency_limit"
-            if int(cooldown_seconds) > 0:
-                latest_terminal = connection.execute(
-                    """SELECT COALESCE(completed_at,submission_started_at)
-                       FROM ai_jobs
-                       WHERE job_id<>? AND submission_started_at IS NOT NULL
-                         AND status IN ('completed','failed','cancelled',
-                                        'insufficient_context','budget_blocked')
-                       ORDER BY COALESCE(completed_at,submission_started_at) DESC
-                       LIMIT 1""",
-                    (job_id,),
-                ).fetchone()
-                latest_at = (
-                    _parse_time(latest_terminal[0])
-                    if latest_terminal is not None
-                    else None
-                )
-                cooldown_until = (
-                    latest_at + timedelta(seconds=int(cooldown_seconds))
-                    if latest_at is not None
-                    else None
-                )
-                if cooldown_until is not None and cooldown_until > now_dt:
-                    connection.execute(
-                        """UPDATE ai_jobs
-                           SET next_attempt_at=?,error_code='analysis_cooldown_active',
-                               lease_owner=NULL,lease_expires_at=NULL,updated_at=?
-                           WHERE job_id=? AND lease_owner=? AND status='pending'""",
-                        (_iso(cooldown_until), now, job_id, owner),
-                    )
-                    connection.commit()
-                    return "cooldown"
+                return verdict
             token_rows = connection.execute(
-                """SELECT job_type,status,error_code,usage_total_tokens FROM ai_jobs
+                """SELECT job_type,status,error_code,openai_response_id,
+                          usage_total_tokens
+                   FROM ai_jobs
                    WHERE submission_started_at>=? AND submission_started_at<?""",
                 (day_start, day_end),
             ).fetchall()
@@ -2067,12 +2352,15 @@ class AIJobRepository:
         response_id: str,
         result: dict[str, Any],
     ) -> dict[str, Any]:
-        """Publish an already-paid result after a validation false positive.
+        """Publish an already-paid result the local side failed to keep.
 
-        This transition is deliberately narrower than a retry: the failed job
-        must still carry the exact durable provider response identity, and the
-        retrieved result must pass the current validator for the stored input.
-        Existing usage and budget accounting are preserved unchanged.
+        Covers validation false positives and local write failures that were
+        recorded as terminal after the provider accepted the job
+        (RECOVERABLE_FAILURE_CODES). This transition is deliberately narrower
+        than a retry: the failed job must still carry the exact durable
+        provider response identity, and the retrieved result must pass the
+        current validator for the stored input. Existing usage and budget
+        accounting are preserved unchanged.
         """
 
         if not response_id:
@@ -2083,7 +2371,7 @@ class AIJobRepository:
             raise RuntimeError("ai_job_recovery_not_found")
         if (
             current.get("status") != "failed"
-            or current.get("error_code") != "schema_validation_failed"
+            or current.get("error_code") not in RECOVERABLE_FAILURE_CODES
             or current.get("result_json") is not None
             or current.get("openai_response_id") != response_id
         ):
@@ -2104,20 +2392,21 @@ class AIJobRepository:
         )
         result_json = self._canonical_result(validated)
         now = _iso()
+        recoverable_codes = sorted(RECOVERABLE_FAILURE_CODES)
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             updated = connection.execute(
-                """
+                f"""
                 UPDATE ai_jobs
                 SET status='completed',result_json=?,error_code=NULL,
                     error_detail=NULL,
                     completed_at=COALESCE(completed_at,?),next_attempt_at=NULL,
                     lease_owner=NULL,lease_expires_at=NULL,updated_at=?
                 WHERE job_id=? AND status='failed'
-                  AND error_code='schema_validation_failed'
+                  AND error_code IN ({",".join("?" for _ in recoverable_codes)})
                   AND result_json IS NULL AND openai_response_id=?
                 """,
-                (result_json, now, now, job_id, response_id),
+                (result_json, now, now, job_id, *recoverable_codes, response_id),
             ).rowcount
             if updated != 1:
                 connection.rollback()
@@ -2198,6 +2487,55 @@ class AIJobRepository:
             if updated != 1:
                 raise RuntimeError("ai_job_lease_lost")
 
+    def defer_unsent_submission(
+        self,
+        job_id: str,
+        owner: str,
+        *,
+        delay_seconds: float,
+        error_code: str,
+    ) -> None:
+        """Put back a job whose provider request was never sent.
+
+        本地写库失败时任务可能已经过了提交闸门（submission_started_at 已落库），
+        请求却还没发出。就这样推迟，重新认领时会被当成结果未知、占道 15 分钟
+        且永不重试；写成终态又把本地故障记在供应商头上。这里连同闸门留下的
+        提交时间与预留一起撤回，任务回到 pending。只能由确知请求没有发出的
+        调用方使用。
+        """
+
+        now_dt = _utcnow()
+        now = _iso(now_dt)
+        with self._connect() as connection:
+            updated = connection.execute(
+                """
+                UPDATE ai_jobs
+                SET status='pending',
+                    attempt_count=CASE
+                        WHEN submission_started_at IS NULL THEN attempt_count
+                        ELSE MAX(0,attempt_count-1) END,
+                    submission_started_at=NULL,submitted_at=NULL,
+                    budget_charge_microusd=0,
+                    next_attempt_at=?,last_polled_at=?,
+                    poll_count=poll_count+1,error_code=?,
+                    lease_owner=NULL,lease_expires_at=NULL,updated_at=?
+                WHERE job_id=? AND lease_owner=?
+                  AND openai_response_id IS NULL
+                  AND status IN ('pending','in_progress')
+                """,
+                (
+                    _iso(now_dt + timedelta(seconds=max(1.0, delay_seconds))),
+                    now,
+                    error_code[:120],
+                    now,
+                    job_id,
+                    owner,
+                ),
+            ).rowcount
+            connection.commit()
+            if updated != 1:
+                raise RuntimeError("ai_job_lease_lost")
+
     def fail(
         self,
         job_id: str,
@@ -2258,14 +2596,20 @@ class AIJobRepository:
             budget_charge_microusd = int(
                 current["budget_charge_microusd"] or 0
             )
-            if confirmed_without_usage:
-                budget_charge_microusd = 0
-            elif usage is not None:
+            if has_reported_usage:
                 budget_charge_microusd = _settled_budget_charge_microusd(
                     str(current["job_type"]),
                     usage_values,
                     fallback_microusd=budget_charge_microusd,
                 )
+            elif confirmed_without_usage or _reservation_released(
+                "failed",
+                safe_code,
+                current["openai_response_id"],
+            ):
+                # 美元账与 token 账同一规则：token 账释放、美元账却按满额预留
+                # 记账的不一致，一旦重新启用美元上限就会复现 2026-08-14 误锁。
+                budget_charge_microusd = 0
             updated = connection.execute(
                 """
                 UPDATE ai_jobs
@@ -2309,7 +2653,9 @@ class AIJobRepository:
         now = _iso()
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
-            select_sql = """SELECT job_type,budget_charge_microusd FROM ai_jobs
+            select_sql = """SELECT job_type,budget_charge_microusd,error_code,
+                                   openai_response_id
+                            FROM ai_jobs
                             WHERE job_id=?
                               AND status IN ('pending','queued','in_progress')"""
             select_params: list[Any] = [job_id]
@@ -2327,12 +2673,18 @@ class AIJobRepository:
             budget_charge_microusd = int(
                 current["budget_charge_microusd"] or 0
             )
-            if usage is not None:
+            if any(value is not None for value in usage_values.values()):
                 budget_charge_microusd = _settled_budget_charge_microusd(
                     str(current["job_type"]),
                     usage_values,
                     fallback_microusd=budget_charge_microusd,
                 )
+            elif _reservation_released(
+                "cancelled",
+                current["error_code"],
+                current["openai_response_id"],
+            ):
+                budget_charge_microusd = 0
             update_sql = """
                 UPDATE ai_jobs
                 SET status='cancelled', completed_at=?,
@@ -2428,7 +2780,10 @@ class AIJobRepository:
                     ),
                     payload,
                 )
-            except (TypeError, ValueError):
+            except (TypeError, ValueError) as exc:
+                # 规则收紧后旧的付费结果会被隐藏；不留记录时只能重取响应现场
+                # 复现（2026-08-13 「焦点周期没东西」就难在这里）。
+                record_fallback_failure("ai_job_result_hidden", exc)
                 legacy_output_hidden = True
         if legacy_output_hidden:
             result = None
@@ -2525,34 +2880,20 @@ class AIJobRepository:
         daily_token_limit: int = 10_000_000,
         cooldown_seconds: int = 0,
         unknown_submission_hold_seconds: int = 86400,
-        unknown_submission_no_response_hold_seconds: int = 900,
         now: datetime | None = None,
         lane: str | None = None,
     ) -> dict[str, Any]:
         """Return a secret-free, point-in-time view of paid task capacity.
 
-        Use the same bounded quarantine as ``mark_submission_started`` so the
-        owner UI and the worker agree about whether the paid slot is available.
-        ``lane`` ('manual' or 'scheduled') checks only that submission lane's
-        slot, as the worker does; None reports any in-flight submission.
+        The slot and cooldown come from the same helpers the worker's gate
+        uses, so the owner UI and the worker agree about whether a paid slot
+        is available. ``lane`` ('manual' or 'scheduled') checks only that
+        submission lane's slot; None reports any in-flight submission. The
+        cooldown only exists on the manual lane.
         """
 
         self.ensure_initialized()
         observed = now or _utcnow()
-        unknown_submission_cutoff = _iso(
-            observed
-            - timedelta(
-                seconds=max(1, int(unknown_submission_hold_seconds))
-            )
-        )
-        unknown_no_response_cutoff = _iso(
-            observed
-            - timedelta(
-                seconds=max(
-                    1, int(unknown_submission_no_response_hold_seconds)
-                )
-            )
-        )
         day_start_dt = observed.replace(hour=0, minute=0, second=0, microsecond=0)
         day_end_dt = day_start_dt + timedelta(days=1)
         with self._connect() as connection:
@@ -2567,7 +2908,9 @@ class AIJobRepository:
                 (_iso(day_start_dt), _iso(day_end_dt)),
             ).fetchone()
             token_rows = connection.execute(
-                """SELECT job_type,status,error_code,usage_total_tokens FROM ai_jobs
+                """SELECT job_type,status,error_code,openai_response_id,
+                          usage_total_tokens
+                   FROM ai_jobs
                    WHERE submission_started_at>=? AND submission_started_at<?""",
                 (_iso(day_start_dt), _iso(day_end_dt)),
             ).fetchall()
@@ -2596,38 +2939,21 @@ class AIJobRepository:
                     _iso(observed),
                 ),
             ).fetchone() is not None
-            active = connection.execute(
-                """
-                SELECT j.*,s.submission_source FROM ai_jobs AS j
-                JOIN ai_job_sources AS s ON s.job_id=j.job_id
-                WHERE j.submission_started_at IS NOT NULL
-                  AND (?1 IS NULL OR s.submission_source=?1)
-                  AND (
-                    j.status IN ('queued','in_progress')
-                    OR (
-                      j.error_code='submission_outcome_unknown'
-                      AND (
-                        (j.openai_response_id IS NOT NULL
-                         AND j.submission_started_at>=?2)
-                        OR j.submission_started_at>=?3
-                      )
-                    )
-                  )
-                ORDER BY j.created_at LIMIT 1
-                """,
-                (lane, unknown_submission_cutoff, unknown_no_response_cutoff),
-            ).fetchone()
-            latest_paid = connection.execute(
-                """
-                SELECT COALESCE(completed_at,submission_started_at) AS activity_at
-                FROM ai_jobs
-                WHERE submission_started_at IS NOT NULL
-                  AND status IN ('completed','failed','cancelled',
-                                 'insufficient_context','budget_blocked')
-                ORDER BY COALESCE(completed_at,submission_started_at) DESC
-                LIMIT 1
-                """
-            ).fetchone()
+            active = self._lane_occupant(
+                connection,
+                lane=lane,
+                now_dt=observed,
+                unknown_submission_hold_seconds=unknown_submission_hold_seconds,
+            )
+            cooldown_until = (
+                self._manual_cooldown_until(
+                    connection,
+                    now_dt=observed,
+                    cooldown_seconds=cooldown_seconds,
+                )
+                if lane in {None, "manual"}
+                else None
+            )
         submitted_jobs = int(totals["submitted_jobs"] if totals else 0)
         charged_microusd = int(totals["charged"] if totals else 0)
         del daily_limit, daily_budget_usd
@@ -2635,13 +2961,6 @@ class AIJobRepository:
         if not 102_400 <= token_limit <= 100_000_000:
             raise ValueError("daily_token_limit is invalid")
         token_budget_used = _daily_tokens_used(token_rows)
-        cooldown_until: datetime | None = None
-        if latest_paid is not None and int(cooldown_seconds) > 0:
-            activity_at = _parse_time(latest_paid["activity_at"])
-            if activity_at is not None:
-                candidate = activity_at + timedelta(seconds=int(cooldown_seconds))
-                if candidate > observed:
-                    cooldown_until = candidate
         active_public = self.public(dict(active)) if active is not None else None
         token_budget_available = (
             token_budget_used + _minimum_task_token_reservation()

@@ -2009,13 +2009,23 @@ def test_daily_token_limit_is_atomic(tmp_path):
     assert blocked["submission_started_at"] is None
 
 
-def test_failed_jobs_without_usage_release_daily_token_budget(tmp_path):
+def test_failed_jobs_without_usage_release_daily_token_budget(
+    tmp_path,
+    monkeypatch,
+):
     """终态失败且无 usage 的行不吃当日预算（2026-08-14 预算误锁事故镜像）。
 
     供应商余额耗尽的瞬时失败零计费；旧账法按满额预留计入，94 个失败把
     10M 账本记到 9.97M、实际结算 0，全线误报「今日 Token 预算已用完」。
+    余额耗尽后有 10 分钟的账户级暂停（2026-09-25 审计），第二单在窗口结束
+    后提交。
     """
 
+    clock = [datetime(2026, 9, 25, 8, 0, tzinfo=timezone.utc)]
+    monkeypatch.setattr(
+        "app.services.ai_jobs.repository._utcnow",
+        lambda: clock[0],
+    )
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
     first = _create_job(repository, "AAA")
     second = _create_job(repository, "BBB")
@@ -2040,6 +2050,8 @@ def test_failed_jobs_without_usage_release_daily_token_budget(tmp_path):
     )
 
     second_owner = "credit-owner-two"
+    assert repository.claim_due(second_owner, 60) is None
+    clock[0] += timedelta(minutes=10, seconds=1)
     assert repository.claim_due(second_owner, 60)["job_id"] == second["job_id"]
     assert repository.mark_submission_started(
         second["job_id"],
@@ -2083,7 +2095,8 @@ def test_provider_credit_warning_recovers_after_success_and_returns_on_new_failu
     finish("OLD")
     finish("EMPTY", credit_failure=True)
     assert snapshot()["provider_credit_exhausted"] is True
-    clock[0] += timedelta(minutes=5)
+    # 欠费后 10 分钟内新提交处于账户级暂停，充值后的第一单落在窗口之外。
+    clock[0] += timedelta(minutes=11)
     finish("FUNDED")
     assert snapshot()["provider_credit_exhausted"] is False
     finish("EMPTYAGAIN", credit_failure=True)
@@ -2108,6 +2121,9 @@ def test_global_concurrency_limit_defers_a_second_paid_submission(tmp_path):
 
     first_claim = repository.claim_due("owner-one", 60)
     assert first_claim["job_id"] == first["job_id"]
+    # 第二个认领发生在第一单过闸门之前（认领时车道空闲）：闸门才是原子仲裁。
+    second_claim = repository.claim_due("owner-two", 60)
+    assert second_claim["job_id"] == second["job_id"]
     assert repository.mark_submission_started(
         first["job_id"], "owner-one", daily_limit=4
     ) == "started"
@@ -2118,8 +2134,6 @@ def test_global_concurrency_limit_defers_a_second_paid_submission(tmp_path):
     assert active_snapshot["concurrency_available"] is False
     assert active_snapshot["active_job"]["job_id"] == first["job_id"]
 
-    second_claim = repository.claim_due("owner-two", 60)
-    assert second_claim["job_id"] == second["job_id"]
     assert repository.mark_submission_started(
         second["job_id"], "owner-two", daily_limit=4
     ) == "concurrency_limit"
@@ -2127,6 +2141,14 @@ def test_global_concurrency_limit_defers_a_second_paid_submission(tmp_path):
     assert deferred["status"] == "pending"
     assert deferred["error_code"] == "global_concurrency_limit"
     assert deferred["submission_started_at"] is None
+    # 槽位被占期间，积压任务不再被反复认领、推迟。
+    with repository._connect() as connection:
+        connection.execute(
+            "UPDATE ai_jobs SET next_attempt_at=NULL WHERE job_id=?",
+            (second["job_id"],),
+        )
+        connection.commit()
+    assert repository.claim_due("owner-three", 60) is None
 
 
 def test_claim_due_polls_submitted_response_before_older_pending_backlog(tmp_path):
@@ -2170,6 +2192,8 @@ def test_recent_unknown_submission_holds_the_global_concurrency_slot(tmp_path):
     second = _create_job(repository, "BBB")
 
     first_claim = repository.claim_due("owner-one", 60)
+    second_claim = repository.claim_due("owner-two", 60)
+    assert second_claim["job_id"] == second["job_id"]
     assert repository.mark_submission_started(
         first["job_id"], "owner-one", daily_limit=4
     ) == "started"
@@ -2179,11 +2203,17 @@ def test_recent_unknown_submission_holds_the_global_concurrency_slot(tmp_path):
         "submission_outcome_unknown",
     )
 
-    second_claim = repository.claim_due("owner-two", 60)
-    assert second_claim["job_id"] == second["job_id"]
     assert repository.mark_submission_started(
         second["job_id"], "owner-two", daily_limit=4
     ) == "concurrency_limit"
+    # 放行窗口内，认领直接跳过被 unknown 占住的车道。
+    with repository._connect() as connection:
+        connection.execute(
+            "UPDATE ai_jobs SET next_attempt_at=NULL WHERE job_id=?",
+            (second["job_id"],),
+        )
+        connection.commit()
+    assert repository.claim_due("owner-three", 60) is None
     health = repository.health()
     assert health["submission_unknown"] == 1
     snapshot = repository.budget_snapshot(
@@ -2319,17 +2349,32 @@ def test_explicit_provider_rejection_does_not_create_an_unknown_submission_lock(
 def test_oversized_runtime_input_fails_before_paid_capacity_is_reserved(tmp_path):
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
     version, digest = runtime.schema_identity("earnings_impact")
-    row, _ = repository.create_job(
-        job_type="earnings_impact",
-        payload={"ticker": "AAA", "raw_context": "x" * 61_000},
-        model="gpt-5.6-terra",
-        reasoning="max",
-        execution_mode="background",
-        prompt_version="earnings-impact-zh-cn-v4",
-        schema_version=version,
-        schema_sha256=digest,
-        max_queued=200,
-    )
+    oversized = {"ticker": "AAA", "raw_context": "x" * 61_000}
+
+    def create(payload):
+        return repository.create_job(
+            job_type="earnings_impact",
+            payload=payload,
+            model="gpt-5.6-terra",
+            reasoning="max",
+            execution_mode="background",
+            prompt_version="earnings-impact-zh-cn-v4",
+            schema_version=version,
+            schema_sha256=digest,
+            max_queued=200,
+        )
+
+    # 入队与提交共用同一个上限，超限的 payload 在入队时就被拒（2026-09-25 审计）。
+    with pytest.raises(ValueError, match="ai_job_payload_too_large"):
+        create(oversized)
+    # 提交前的运行时闸门仍在：库里已有的超限行照样在预留付费容量之前失败。
+    row, _ = create({"ticker": "AAA"})
+    with repository._connect() as connection:
+        connection.execute(
+            "UPDATE ai_jobs SET payload_json=? WHERE job_id=?",
+            (json.dumps(oversized), row["job_id"]),
+        )
+        connection.commit()
     owner = "oversized-owner"
     claimed = repository.claim_due(owner, 60)
     asyncio.run(

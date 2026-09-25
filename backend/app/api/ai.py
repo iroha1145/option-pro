@@ -274,11 +274,13 @@ def _create_job(
     else:
         _require_manual_analysis_enabled()
     settings = get_settings()
-    max_queued = settings.openai_job_max_queued
+    # Scheduled work may fill the normal queue. Every entry point here is a
+    # manual submission, so it keeps its own reserve above the base ceiling;
+    # the earnings reserve is not added on top.
+    reserve = ai_job_runtime.MANUAL_QUEUE_RESERVE
     if job_type == "earnings_impact":
-        # Scheduled pre-release work may fill the normal queue. Keep a small,
-        # quota-protected reserve so an explicit report analysis remains usable.
-        max_queued += ai_job_runtime.EARNINGS_MANUAL_QUEUE_RESERVE
+        reserve = max(reserve, ai_job_runtime.EARNINGS_MANUAL_QUEUE_RESERVE)
+    max_queued = settings.openai_job_max_queued + reserve
     ai_job_runtime.validate_job_payload(job_type, payload)
     schema_version, schema_sha256 = ai_job_runtime.schema_identity(job_type)
     try:
@@ -377,13 +379,24 @@ def _reserve_public_earnings_submission(
     attempts.append((now, task_key))
 
 
-def _earnings_report_force_retry(row: dict | None) -> bool:
-    """Retry only settled report jobs that the repository can safely replace."""
+def _earnings_report_force_retry(row: dict | None, *, owner: bool) -> bool:
+    """Retry only settled report jobs that the repository can safely replace.
 
-    return bool(
+    访客的点击会自动带上 force：确定性失败（结构校验失败、输出截断等）再付一次
+    结果也一样，所以访客只重试调度器同样会重试的瞬态失败（2026-09-25 审计）。
+    """
+
+    if not (
         row
         and row.get("status") in _RETRYABLE_EARNINGS_REPORT_STATUSES
         and row.get("error_code") not in _NON_RETRYABLE_EARNINGS_ERRORS
+    ):
+        return False
+    if owner or row.get("status") != "failed":
+        return True
+    return (
+        str(row.get("error_code") or "")
+        in ai_job_runtime.SCHEDULED_TRANSIENT_AI_ERRORS
     )
 
 
@@ -795,7 +808,8 @@ async def trigger_earnings_report_impact(
         repository.latest_for_report(
             ticker,
             str(payload["report_id"]),
-        )
+        ),
+        owner=current_request_is_owner(),
     )
     _reserve_public_earnings_submission(
         request,
@@ -900,6 +914,11 @@ async def cancel_ai_job(
     job_id: Annotated[str, Path(min_length=10, max_length=80)],
     req: CancelRequest,
 ):
+    if not req.confirm:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "confirmation_required", "message": "需要确认取消"},
+        )
     row = _job_repository().request_cancel(job_id)
     if not row:
         raise HTTPException(status_code=404, detail="AI job not found")

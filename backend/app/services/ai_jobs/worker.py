@@ -9,8 +9,7 @@ import sqlite3
 import threading
 import time
 import uuid
-from contextlib import suppress
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from datetime import datetime, timezone
 from typing import Any
 
@@ -18,6 +17,7 @@ from app.config import get_settings
 from app.execution_limits import BREAKOUT_TASK_TIMEOUT_SECONDS
 from app.failure_diagnostics import record_fallback_failure
 from app.services.ai_jobs import runtime
+from app.services.ai_jobs.models import InvalidJobPayloadError
 from app.services.ai_jobs.repository import AIJobRepository
 
 from app.personal_config import personal_analysis_permissions as _personal_analysis_permissions
@@ -27,31 +27,30 @@ logger = logging.getLogger(__name__)
 
 _NEW_SUBMISSION_RETRY_SECONDS = 30.0
 _MIN_LEASE_HEARTBEAT_INTERVAL_SECONDS = 5.0
-# Persisting the provider response id is the step that turns a paid
-# submission from "outcome unknown" into "recoverable". A transient SQLite
-# busy error here used to cost the whole day's paid slot, so it is worth a
-# few short retries before conceding.
-_LINK_RESPONSE_RETRIES = 3
-_LINK_RESPONSE_RETRY_DELAY_SECONDS = 0.25
+# Writes after the provider accepted a job (linking the response id, recording
+# a poll, publishing the result, deferring) carry paid work. A transient SQLite
+# busy error there used to cost the whole day's paid slot or the paid result,
+# so each gets a few short retries before conceding.
+_STORAGE_WRITE_RETRIES = 3
+_STORAGE_WRITE_RETRY_DELAY_SECONDS = 0.25
+_LOCAL_STORAGE_ERROR = "local_storage_error"
 
 
-async def _link_response_with_retry(
-    repository: AIJobRepository,
-    job_id: str,
-    owner: str,
-    response_id: str,
-) -> None:
-    for attempt in range(_LINK_RESPONSE_RETRIES + 1):
+async def _with_storage_retry(
+    write: Callable[..., Any],
+    *args: Any,
+    **kwargs: Any,
+) -> Any:
+    for attempt in range(_STORAGE_WRITE_RETRIES + 1):
         try:
-            repository.link_background_response(job_id, owner, response_id)
-            return
+            return write(*args, **kwargs)
         except sqlite3.OperationalError:
             # Transient lock/busy contention only; anything else (a rejected
             # link, a lost lease) keeps its original meaning and propagates.
-            if attempt >= _LINK_RESPONSE_RETRIES:
+            if attempt >= _STORAGE_WRITE_RETRIES:
                 raise
             await asyncio.sleep(
-                _LINK_RESPONSE_RETRY_DELAY_SECONDS * (attempt + 1)
+                _STORAGE_WRITE_RETRY_DELAY_SECONDS * (attempt + 1)
             )
 
 
@@ -77,12 +76,41 @@ def _submitted_age_seconds(job: dict[str, Any]) -> float:
     return 0.0
 
 
+def _poll_window_elapsed(settings: Any, job: dict[str, Any]) -> bool:
+    poll_timeout = float(settings.openai_background_poll_timeout_seconds)
+    return poll_timeout > 0 and _submitted_age_seconds(job) > poll_timeout
+
+
+def _control_error_code(exc: Exception) -> str | None:
+    """Terminal code for a definitive retrieve/cancel HTTP rejection.
+
+    这些状态码重试也不会变（密钥换了、响应被删、请求本身被拒），一律推迟会把
+    车道占到 openai_job_max_age_seconds（默认 24 小时）。429、5xx 与网络错误
+    返回 None，由调用方继续推迟。
+    """
+
+    status_code = getattr(exc, "status_code", None)
+    if status_code == 404:
+        return "provider_response_expired"
+    if status_code in {401, 403}:
+        return "provider_auth_failed"
+    if status_code == 400:
+        return "provider_request_rejected"
+    return None
+
+
 def _public_error(
     exc: Exception,
     *,
     submitted: bool,
     response_id: str | None,
 ) -> str:
+    if isinstance(exc, sqlite3.Error):
+        # 本地写库失败不是供应商的错；请求已发出却没记下 response id 时，
+        # 结果仍是未知。
+        if submitted and not response_id:
+            return "submission_outcome_unknown"
+        return _LOCAL_STORAGE_ERROR
     if isinstance(exc, RuntimeError):
         code = str(exc)
         if code in {
@@ -104,6 +132,8 @@ def _public_error(
             return "provider_server_error"
         return "provider_request_rejected"
     if isinstance(exc, ValueError):
+        if isinstance(exc, InvalidJobPayloadError):
+            return "invalid_job_payload"
         code = str(exc)
         if code in {
             "ai_input_too_large",
@@ -117,6 +147,7 @@ def _public_error(
             "market_focus_input_hash_mismatch",
             "market_focus_event_binding_mismatch",
             "market_focus_ticker_binding_mismatch",
+            "signal_ticker_mismatch",
         }:
             return code
         return "schema_validation_failed"
@@ -219,6 +250,114 @@ async def _lease_heartbeat(
         raise errors[0]
 
 
+async def _retire_stalled_response(
+    repository: AIJobRepository,
+    settings: Any,
+    job: dict[str, Any],
+    owner: str,
+    response_id: str,
+) -> None:
+    # A single upstream background response occupies its lane's only paid
+    # slot. Do not let an indefinitely queued response block every pending
+    # analysis. Ask the provider to cancel it; if the provider cannot return
+    # a terminal state, retire the local lease without creating a duplicate
+    # retry.
+    try:
+        terminal = await runtime.cancel(settings, response_id)
+    except Exception as exc:
+        logger.warning(
+            "AI response exceeded poll window; cancellation failed (%s)",
+            type(exc).__name__,
+        )
+        repository.fail(job["job_id"], owner, "provider_poll_timeout")
+        return
+    terminal_status = str(getattr(terminal, "status", "") or "")
+    if terminal_status in {"queued", "in_progress"}:
+        repository.fail(job["job_id"], owner, "provider_poll_timeout")
+        return
+    if terminal_status == "cancelled":
+        # This is distinct from an unknown cancellation outcome. The
+        # provider has confirmed that the old paid response is terminal, so
+        # the catalyst scheduler may safely apply its existing bounded retry
+        # policy without overlapping work.
+        repository.fail(
+            job["job_id"],
+            owner,
+            "provider_poll_timeout_cancelled",
+            usage=runtime.response_usage(terminal),
+        )
+        return
+    await _finish_response(repository, settings, job, owner, terminal)
+
+
+async def _resume_response(
+    repository: AIJobRepository,
+    settings: Any,
+    job: dict[str, Any],
+    owner: str,
+    response_id: str,
+) -> None:
+    """Continue a job whose provider response id is durably linked."""
+
+    expired = _submitted_age_seconds(job) > int(
+        settings.openai_job_max_age_seconds
+    )
+    cancel_requested = bool(job.get("cancel_requested_at"))
+    # 超过最长保留期的任务先取回一次再判过期：OpenAI 保留响应 30 天，worker
+    # 停机超过一天后恢复时，已付费、可取回的结果不该被丢掉再付一次。
+    use_cancel = cancel_requested and not expired
+    try:
+        if use_cancel:
+            response = await runtime.cancel(settings, response_id)
+        else:
+            response = await runtime.retrieve(settings, response_id)
+    except Exception as exc:
+        # 供应商 SDK 与网络异常没有共同基类；下面按状态码分流，确定性的拒绝
+        # 写终态，其余推迟。
+        logger.warning(
+            "AI response %s failed (%s)",
+            "cancellation" if use_cancel else "retrieve",
+            type(exc).__name__,
+        )
+        terminal_code = (
+            "provider_response_expired" if expired else _control_error_code(exc)
+        )
+        if terminal_code is not None:
+            repository.fail(job["job_id"], owner, terminal_code, detail=str(exc))
+            return
+        if _poll_window_elapsed(settings, job):
+            # 持续取回失败同样受轮询超时约束：车道最多被占到轮询窗口结束，而不是
+            # openai_job_max_age_seconds。取回成功时照旧先看响应状态，免得把刚
+            # 完成的付费结果当成停滞响应取消掉。
+            await _retire_stalled_response(
+                repository,
+                settings,
+                job,
+                owner,
+                response_id,
+            )
+            return
+        await _with_storage_retry(
+            repository.defer,
+            job["job_id"],
+            owner,
+            delay_seconds=_poll_delay(settings, int(job.get("poll_count") or 0)),
+            error_code=(
+                "provider_cancel_deferred"
+                if use_cancel
+                else "provider_poll_deferred"
+            ),
+        )
+        return
+    if expired and str(getattr(response, "status", "") or "") in {
+        "queued",
+        "in_progress",
+    }:
+        repository.fail(job["job_id"], owner, "provider_response_expired")
+        return
+    await _finish_response(repository, settings, job, owner, response)
+
+
 async def _finish_response(
     repository: AIJobRepository,
     settings: Any,
@@ -232,47 +371,17 @@ async def _finish_response(
         if not response_id:
             repository.fail(job["job_id"], owner, "provider_response_id_missing")
             return
-        poll_timeout = float(settings.openai_background_poll_timeout_seconds)
-        if poll_timeout > 0 and _submitted_age_seconds(job) > poll_timeout:
-            # A single upstream background response occupies the only provider
-            # concurrency slot. Do not let an indefinitely queued response
-            # block every pending analysis. Ask the provider to cancel it; if
-            # the provider cannot return a terminal state, retire the local
-            # lease without creating a duplicate retry.
-            try:
-                terminal = await runtime.cancel(settings, response_id)
-            except Exception as exc:
-                logger.warning(
-                    "AI response exceeded poll window; cancellation failed (%s)",
-                    type(exc).__name__,
-                )
-                repository.fail(job["job_id"], owner, "provider_poll_timeout")
-                return
-            terminal_status = str(getattr(terminal, "status", "") or "")
-            if terminal_status in {"queued", "in_progress"}:
-                repository.fail(job["job_id"], owner, "provider_poll_timeout")
-                return
-            if terminal_status == "cancelled":
-                # This is distinct from an unknown cancellation outcome. The
-                # provider has confirmed that the old paid response is
-                # terminal, so the catalyst scheduler may safely apply its
-                # existing bounded retry policy without overlapping work.
-                repository.fail(
-                    job["job_id"],
-                    owner,
-                    "provider_poll_timeout_cancelled",
-                    usage=runtime.response_usage(terminal),
-                )
-                return
-            await _finish_response(
+        if _poll_window_elapsed(settings, job):
+            await _retire_stalled_response(
                 repository,
                 settings,
                 job,
                 owner,
-                terminal,
+                response_id,
             )
             return
-        repository.record_background_response(
+        await _with_storage_retry(
+            repository.record_background_response,
             job["job_id"],
             owner,
             response_id,
@@ -315,7 +424,8 @@ async def _finish_response(
                 detail=str(exc),
             )
             return
-        repository.complete(
+        await _with_storage_retry(
+            repository.complete,
             job["job_id"],
             owner,
             result,
@@ -410,61 +520,11 @@ async def process_job(
             return
         repository.fail(job["job_id"], owner, code, detail=detail)
 
-    heartbeat.add_done_callback(stop_on_heartbeat_failure)
-    try:
-        await heartbeat_started.wait()
-        if heartbeat.done():
-            await heartbeat
-        require_live_lease()
-        if job.get("cancel_requested_at"):
+    def persist_local_storage_failure(exc: sqlite3.Error) -> None:
+        # 本地写库失败不是供应商的错，也不能写成可自动重试的终态：那会丢掉
+        # 已付费的结果、放行车道并让调度器再付一次（2026-09-25 审计）。
+        try:
             if response_id:
-                if _submitted_age_seconds(job) > int(
-                    settings.openai_job_max_age_seconds
-                ):
-                    repository.fail(job["job_id"], owner, "provider_response_expired")
-                    return
-                try:
-                    response = await runtime.cancel(settings, response_id)
-                except Exception as exc:
-                    logger.warning(
-                        "AI response cancellation deferred (%s)",
-                        type(exc).__name__,
-                    )
-                    repository.defer(
-                        job["job_id"],
-                        owner,
-                        delay_seconds=_poll_delay(
-                            settings,
-                            int(job.get("poll_count") or 0),
-                        ),
-                        error_code="provider_cancel_deferred",
-                    )
-                    return
-                await _finish_response(
-                    repository,
-                    settings,
-                    job,
-                    owner,
-                    response,
-                )
-            else:
-                repository.mark_cancelled(job["job_id"], owner)
-            return
-
-        if response_id:
-            require_live_lease()
-            if _submitted_age_seconds(job) > int(
-                settings.openai_job_max_age_seconds
-            ):
-                repository.fail(job["job_id"], owner, "provider_response_expired")
-                return
-            try:
-                response = await runtime.retrieve(settings, response_id)
-            except Exception as exc:
-                logger.warning(
-                    "AI response retrieve deferred (%s)",
-                    type(exc).__name__,
-                )
                 repository.defer(
                     job["job_id"],
                     owner,
@@ -472,13 +532,57 @@ async def process_job(
                         settings,
                         int(job.get("poll_count") or 0),
                     ),
-                    error_code="provider_poll_deferred",
+                    error_code=_LOCAL_STORAGE_ERROR,
                 )
-                return
-            await _finish_response(repository, settings, job, owner, response)
+            elif submitted:
+                repository.fail(
+                    job["job_id"],
+                    owner,
+                    "submission_outcome_unknown",
+                    detail=str(exc),
+                )
+            else:
+                repository.defer_unsent_submission(
+                    job["job_id"],
+                    owner,
+                    delay_seconds=_poll_delay(
+                        settings,
+                        int(job.get("poll_count") or 0),
+                    ),
+                    error_code=_LOCAL_STORAGE_ERROR,
+                )
+        except (sqlite3.Error, RuntimeError) as persist_exc:
+            # 推迟也写不进去就什么都不写：租约到期后重新认领，从持久状态接着
+            # 走（有 response id 的会重新取回，不会重复提交）。
+            record_fallback_failure("ai_job_local_storage_persist", persist_exc)
+
+    def persist_failure_or_record(code: str, detail: str) -> None:
+        try:
+            persist_failure(code, detail=detail)
+        except Exception as persist_exc:
+            # 落库失败本身也要留痕：任务留着租约，到期后重新认领。
+            record_fallback_failure("ai_job_failure_persist", persist_exc)
+
+    heartbeat.add_done_callback(stop_on_heartbeat_failure)
+    try:
+        await heartbeat_started.wait()
+        if heartbeat.done():
+            await heartbeat
+        require_live_lease()
+        if response_id:
+            await _resume_response(
+                repository,
+                settings,
+                job,
+                owner,
+                str(response_id),
+            )
             return
 
         if submitted:
+            # 提交已开始却没有 response id：请求可能已经发出，结果未知。用户的
+            # 取消请求也不能把它改写成普通取消，否则 unknown 的占道与当日
+            # token 预留一起消失（2026-09-25 审计）。
             repository.fail(
                 job["job_id"],
                 owner,
@@ -486,8 +590,13 @@ async def process_job(
             )
             return
 
+        if job.get("cancel_requested_at"):
+            repository.mark_cancelled(job["job_id"], owner)
+            return
+
         if not allow_new_submissions:
-            repository.defer(
+            await _with_storage_retry(
+                repository.defer,
                 job["job_id"],
                 owner,
                 delay_seconds=_NEW_SUBMISSION_RETRY_SECONDS,
@@ -598,8 +707,8 @@ async def process_job(
                 "submission_outcome_unknown",
             )
             return
-        await _link_response_with_retry(
-            repository,
+        await _with_storage_retry(
+            repository.link_background_response,
             job["job_id"],
             owner,
             submitted_response_id,
@@ -620,8 +729,11 @@ async def process_job(
             response_id=response_id,
         )
         logger.warning("AI job stopped after heartbeat failure (%s)", code)
-        with suppress(Exception):
-            persist_failure(code, detail=str(exc))
+        persist_failure_or_record(code, str(exc))
+    except sqlite3.Error as exc:
+        logger.warning("AI job local storage failed (%s)", type(exc).__name__)
+        record_fallback_failure("ai_job_local_storage", exc)
+        persist_local_storage_failure(exc)
     except Exception as exc:
         code = _public_error(
             exc,
@@ -629,10 +741,9 @@ async def process_job(
             response_id=response_id,
         )
         logger.warning("AI job failed (%s, %s)", code, type(exc).__name__)
-        with suppress(Exception):
-            # str(exc) 对校验失败是 pydantic 的字段路径+规则消息——这正是
-            # 「schema_validation_failed 到底挂在哪条规则」的现场证据。
-            persist_failure(code, detail=str(exc))
+        # str(exc) 对校验失败是 pydantic 的字段路径+规则消息——这正是
+        # 「schema_validation_failed 到底挂在哪条规则」的现场证据。
+        persist_failure_or_record(code, str(exc))
     finally:
         heartbeat.remove_done_callback(stop_on_heartbeat_failure)
         stop.set()
@@ -647,8 +758,7 @@ async def process_job(
                 response_id=response_id,
             )
             logger.warning("AI job heartbeat failed (%s)", code)
-            with suppress(Exception):
-                persist_failure(code, detail=str(exc))
+            persist_failure_or_record(code, str(exc))
 
 
 async def run_once(
@@ -665,6 +775,8 @@ async def run_once(
         repository.claim_due,
         owner,
         int(settings.openai_job_lease_seconds),
+        cooldown_seconds=int(settings.openai_manual_cooldown_seconds),
+        unknown_submission_hold_seconds=int(settings.openai_job_max_age_seconds),
     )
     if not job:
         return 0

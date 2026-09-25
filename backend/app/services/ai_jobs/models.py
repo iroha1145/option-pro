@@ -351,6 +351,48 @@ _FORMATTED_NUMBER_CONTINUATION = re.compile(
 _FORMATTED_NUMBER = re.compile(
     r"(?<![0-9])[0-9]{1,3}(?:[,，][0-9]{3})+(?![0-9])"
 )
+# 2026-09-25 审计：期权、技术指标与财务常用缩写是分析里的标准写法（Call/Put
+# 还是提示词自己用的词），一个缩写就让整份付费结果判 schema_validation_failed。
+# 与其余白名单一样照旧走证券语境后检：「Delta股价」「OI股票」仍要求代码绑定。
+_MARKET_TERM_ABBREVIATIONS = frozenset(
+    {
+        "ATM",
+        "ATR",
+        "CEO",
+        "CFO",
+        "COO",
+        "CTO",
+        "Call",
+        "Call/Put",
+        "ChatGPT",
+        "CoWoS",
+        "DXY",
+        "Delta",
+        "EMA",
+        "Gamma",
+        "ITM",
+        "IV",
+        "MACD",
+        "NDX",
+        "Non-GAAP",
+        "OI",
+        "OTM",
+        "PCR",
+        "Put",
+        "Put/Call",
+        "RSI",
+        "SMA",
+        "SPX",
+        "Theta",
+        "Vega",
+        "YTD",
+    }
+)
+# 指数代码后接涨跌描述的是指数本身（「标普500指数（SPX）下跌」），不是个股
+# 行情；只有「股价」「股票」这类证券名词仍要求代码绑定。
+_MARKET_INDEX_CODES = frozenset({"DXY", "NDX", "SPX", "VIX"})
+# SEC 文件编号。_FOREIGN_SPAN 从字母起算，「10-K」只切出单个字母「K」。
+_SEC_FORM_DESIGNATIONS = ("10-K", "10-Q", "8-K")
 _ALLOWED_EXACT_FOREIGN_SPANS = frozenset(
     {
         "5G",
@@ -513,7 +555,7 @@ _ALLOWED_EXACT_FOREIGN_SPANS = frozenset(
         "macOS",
         "scikit-learn",
     }
-)
+) | _MARKET_TERM_ABBREVIATIONS
 _CROSS_SENTENCE_SECURITY_ISSUERS = frozenset(
     {
         "Adobe",
@@ -1388,6 +1430,38 @@ def _source_uses_initialism_as_technical_modifier(
     return any(pattern.search(source) is not None for source in source_texts)
 
 
+def _is_sec_form_designation(sentence: str, *, end: int) -> bool:
+    for form in _SEC_FORM_DESIGNATIONS:
+        form_start = end - len(form)
+        if form_start < 0 or sentence[form_start:end] != form:
+            continue
+        before = sentence[form_start - 1] if form_start > 0 else ""
+        if not (before.isascii() and before.isalnum()):
+            return True
+    return False
+
+
+def _index_code_names_the_index(
+    span: str,
+    *,
+    sentence: str,
+    start: int,
+    end: int,
+) -> bool:
+    if span not in _MARKET_INDEX_CODES:
+        return False
+    prefix = _normalize_security_reference_phrase(sentence[:start])
+    if _SECURITY_REFERENCE_PREFIX.search(prefix) is not None:
+        return False
+    suffix = _normalize_security_reference_phrase(sentence[end:]).removeprefix(
+        "的"
+    )
+    return (
+        _STOCK_PRICE_SUFFIX.match(suffix) is None
+        and _SECURITY_NOUN_SUFFIX.match(suffix) is None
+    )
+
+
 def _is_cjk_gloss_annotation(
     span: str,
     *,
@@ -1447,6 +1521,8 @@ def _foreign_span_context(
     if _is_copied_source_headline_fragment(span, source_texts):
         return False
     if len(span) == 1 and span.isascii() and span.isupper():
+        if _is_sec_form_designation(sentence, end=end):
+            return True
         suffix = _strip_security_reference_separators(sentence[end:])
         if suffix.startswith(("股价", "股票")):
             return span in allowed_codes
@@ -1517,6 +1593,11 @@ def _foreign_span_context(
         return True
     if span in _ALLOWED_EXACT_FOREIGN_SPANS:
         if _approved_span_requires_ticker_binding(
+            span,
+            sentence=sentence,
+            start=start,
+            end=end,
+        ) and not _index_code_names_the_index(
             span,
             sentence=sentence,
             start=start,
@@ -1762,6 +1843,24 @@ def _foreign_span_stands_alone_before_sentence_break(
     return not before and not after
 
 
+def _english_prose_error(fragment: str) -> ValueError:
+    # 带上被拒片段：error_detail 能直接看出是哪段外文触发了规则，排障不必
+    # 再重取付费响应复现（2026-09-25 审计）。
+    return ValueError(f"english_prose_not_allowed: {fragment.strip()[:80]!r}")
+
+
+def _longest_unbound_foreign_span(
+    text: str,
+    source_texts: tuple[str, ...],
+) -> str:
+    spans = [
+        match.group(0)
+        for match in _FOREIGN_SPAN.finditer(text)
+        if not _is_source_bound_foreign_entity(match.group(0), source_texts)
+    ]
+    return max(spans, key=len, default=text)
+
+
 def validate_simplified_chinese_text(
     value: str,
     info: ValidationInfo | None,
@@ -1828,7 +1927,9 @@ def validate_simplified_chinese_text(
         if _is_source_bound_foreign_entity(match.group(0), source_texts)
     )
     if latin_count - source_bound_latin > max(32, cjk_count * 4):
-        raise ValueError("english_prose_not_allowed")
+        raise _english_prose_error(
+            _longest_unbound_foreign_span(scan_text, source_texts)
+        )
     for sentence in _SENTENCE_SPLIT.split(scan_text):
         sentence_latin = sum(
             1 for char in sentence if char.isascii() and char.isalpha()
@@ -1843,7 +1944,9 @@ def validate_simplified_chinese_text(
             24,
             sentence_cjk * 5,
         ):
-            raise ValueError("english_prose_not_allowed")
+            raise _english_prose_error(
+                _longest_unbound_foreign_span(sentence, source_texts)
+            )
         for match in _NUMERIC_SECURITY_CODE.finditer(sentence):
             if not _numeric_code_is_in_security_context(
                 sentence,
@@ -1863,9 +1966,9 @@ def validate_simplified_chinese_text(
                 source_texts=source_texts,
             ):
                 continue
-            raise ValueError("english_prose_not_allowed")
+            raise _english_prose_error(match.group(0))
         if sentence_latin >= 16 and sentence_cjk == 0:
-            raise ValueError("english_prose_not_allowed")
+            raise _english_prose_error(sentence)
 
     for match in _FOREIGN_SPAN.finditer(scan_text):
         span = match.group(0)
@@ -1885,7 +1988,7 @@ def validate_simplified_chinese_text(
         ):
             continue
         if span not in normalized_codes:
-            raise ValueError("english_prose_not_allowed")
+            raise _english_prose_error(span)
     return scan_text
 
 
@@ -1982,6 +2085,11 @@ def validate_earnings_impact_reason(
         if isinstance(raw_source_codes, (list, tuple, set, frozenset))
         else ()
     )
+    raw_source_texts = (
+        info.context.get("source_texts", ())
+        if isinstance(info.context, dict)
+        else ()
+    )
     impacted_code = (
         info.data.get("ticker") if isinstance(info.data, dict) else None
     )
@@ -1989,6 +2097,11 @@ def validate_earnings_impact_reason(
         value,
         None,
         allowed_codes=[*source_codes, impacted_code],
+        source_texts=(
+            raw_source_texts
+            if isinstance(raw_source_texts, (list, tuple))
+            else ()
+        ),
     )
 
 
@@ -2214,7 +2327,10 @@ class EarningsImpactResult(SimplifiedChineseResult):
         StringConstraints(strip_whitespace=True, min_length=1, max_length=300),
         AfterValidator(validate_simplified_chinese_text),
     ]
-    impacted: list[EarningsImpactItem] = Field(min_length=4, max_length=8)
+    # 输入只有代码、名称、行业与 EPS/营收且不许联网；下限 4 逼模型给冷门股
+    # 凑数、编造中文名，付费后被拒（2026-09-25 审计）。改下限会移动结构化输出
+    # 的 minItems，必须同步升 schema_name 与 PROMPT_VERSIONS。
+    impacted: list[EarningsImpactItem] = Field(min_length=1, max_length=8)
 
     @field_validator("ticker")
     @classmethod
@@ -2557,9 +2673,22 @@ def _require_unique_string_list(
     return set(normalized)
 
 
+class InvalidJobPayloadError(ValueError):
+    """The queued input itself is malformed; the model output is not at fault."""
+
+
 def validate_job_payload(job_type: str, payload: dict) -> None:
     """Validate identities needed to bind paid output to its local snapshot."""
 
+    try:
+        _validate_job_payload_identities(job_type, payload)
+    except ValueError as exc:
+        # 入队 payload 自身不合法与「模型输出不合规」分开归类：两者都记成
+        # schema_validation_failed 时，排障会先去翻模型输出（2026-09-25 审计）。
+        raise InvalidJobPayloadError(str(exc)) from exc
+
+
+def _validate_job_payload_identities(job_type: str, payload: dict) -> None:
     if job_type == "news_impact":
         _require_identity_integer(payload, "news_id")
         _require_identity_integer(payload, "change_sequence")
@@ -2637,6 +2766,15 @@ def _validation_source_texts(job_type: str, payload: dict) -> tuple[str, ...]:
             collect(payload.get(field))
     elif job_type == "market_focus":
         collect(payload.get("events"))
+    elif job_type == "option_alerts":
+        # 异动的类型、价内外、理由等原样来自输入；复述其中的专有写法（如
+        # 理由里的 Sweep）不是英文叙述。
+        collect(payload.get("alerts"))
+    elif job_type == "earnings_impact":
+        # 输入里的公司名与行业本来就是英文；复述它们被判英文叙述是付费后
+        # 被拒的主要来源之一（2026-09-25 审计：「Micron Technology本季度…」）。
+        collect(payload.get("name"))
+        collect(payload.get("sector"))
     elif job_type == "signal_analysis":
         collect(payload.get("signals"))
         collect(payload.get("scores"))
@@ -2698,7 +2836,7 @@ def validate_result(job_type: str, raw_json: str, payload: dict) -> dict:
         data["impacted"] = [
             item for item in data["impacted"] if item["ticker"] != expected
         ]
-        if not 4 <= len(data["impacted"]) <= 8:
+        if not 1 <= len(data["impacted"]) <= 8:
             raise ValueError("earnings_impacted_count_invalid")
     elif job_type == "option_alerts":
         has_direction = any(

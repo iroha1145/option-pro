@@ -1221,8 +1221,9 @@ def test_terminal_failure_without_usage_releases_token_reservation(
 ):
     """供应商明确失败且零计费上报 → token 账释放预留（2026-08-14 预算误锁）。
 
-    美元侧的保守预留（budget_charge_microusd）语义不变；completed 无 usage
-    （计费了、数额未知）仍按满额预留，见 direct_background_completion 测试。
+    美元账与 token 账同一规则（2026-09-25 审计）：此前这里把「token 账释放、
+    美元账按满额预留」的不一致写成了预期。completed 无 usage（计费了、数额
+    未知）仍按满额预留，见 direct_background_completion 测试。
     """
 
     repository = AIJobRepository(tmp_path / "ai-jobs.db")
@@ -1243,14 +1244,13 @@ def test_terminal_failure_without_usage_releases_token_reservation(
     assert stored["status"] == "failed"
     assert stored["usage_input_tokens"] is None
     assert stored["usage_output_tokens"] is None
-    assert stored["budget_charge_microusd"] == (
-        runtime.budget_reservation_microusd("earnings_impact")
-    )
+    assert stored["budget_charge_microusd"] == 0
     snapshot = repository.budget_snapshot(
         daily_limit=0,
         daily_budget_usd=0,
     )
     assert snapshot["token_budget_used_tokens"] == 0
+    assert snapshot["budget_used_usd"] == 0
 
 
 @pytest.mark.parametrize(
@@ -1395,7 +1395,7 @@ def test_worker_health_reports_official_responses_sdk_without_a_key(tmp_path):
 
 def test_all_paid_job_prompt_versions_invalidate_legacy_english_cache():
     assert runtime.PROMPT_VERSIONS == {
-        "earnings_impact": "earnings-impact-zh-cn-v5",
+        "earnings_impact": "earnings-impact-zh-cn-v6",
         "option_alerts": "option-alerts-zh-cn-v4",
         "signal_analysis": "signal-analysis-zh-cn-v6",
         "news_impact": "news-impact-zh-cn-v6",
@@ -1422,11 +1422,11 @@ def test_post_release_earnings_instructions_change_only_with_the_prompt_version(
     }
 
     assert (runtime.PROMPT_VERSIONS["earnings_impact"], digests) == (
-        "earnings-impact-zh-cn-v5",
+        "earnings-impact-zh-cn-v6",
         {
-            "pre_release": "58be13858af11856",
-            "post_release_manual": "a7317714b08d81b5",
-            "post_release_final": "a7317714b08d81b5",
+            "pre_release": "8ffab8389be22fba",
+            "post_release_manual": "e7e9a75fd2669e22",
+            "post_release_final": "e7e9a75fd2669e22",
         },
     )
 
@@ -1711,8 +1711,8 @@ def test_paid_schema_failure_can_be_recovered_without_changing_usage(tmp_path):
 def test_owner_manual_output_caps_leave_reasoning_headroom():
     # 2026-08-08 生产：signal_analysis reasoning=max 思考 27-30k，32,768 顶格
     # 截断（provider_incomplete_max_output_tokens）。思考 tokens 计入输出上
-    # 限，owner 手动型任务必须给 max 档留成倍余量；批量型保持原值，避免抬高
-    # 预算预留压缩队列并发。
+    # 限，owner 手动型任务必须给 max 档留成倍余量；批量型暂保持原值（上限只
+    # 影响预留与截断，不影响并发，见 runtime 注释）。
     assert runtime.max_output_tokens_for("signal_analysis") == 65_536
     assert runtime.max_output_tokens_for("option_alerts") == 49_152
     assert runtime.max_output_tokens_for("earnings_impact") == 32_768
@@ -2363,7 +2363,7 @@ def test_job_post_is_fast_local_and_idempotent(monkeypatch, tmp_path):
     assert first.json()["status"] == "pending"
     assert second.json()["cached"] is False
     stored = repository.get_job(first.json()["job_id"])
-    assert stored["prompt_version"] == "earnings-impact-zh-cn-v5"
+    assert stored["prompt_version"] == "earnings-impact-zh-cn-v6"
 
 
 def test_option_alert_failed_job_requires_explicit_force_to_requeue(
@@ -2938,15 +2938,9 @@ def test_unlinked_unknown_submission_frees_the_paid_slot_after_short_hold(
         max_queued=200,
     )
     assert created is True
-    assert repository.claim_due(owner, 60) is not None
-
-    # Inside the short window the un-linked submission still occupies the slot.
-    assert (
-        repository.mark_submission_started(
-            follower["job_id"], owner, daily_limit=4
-        )
-        == "concurrency_limit"
-    )
+    # Inside the short window the un-linked submission still occupies the
+    # slot, so the follower is not even claimed (no claim-and-defer spin).
+    assert repository.claim_due(owner, 60) is None
 
     # Age the stuck submission past the short window but well inside the
     # 24h quarantine: the slot must open up.
@@ -2958,13 +2952,7 @@ def test_unlinked_unknown_submission_frees_the_paid_slot_after_short_hold(
             "UPDATE ai_jobs SET submission_started_at=? WHERE job_id=?",
             (aged, stuck["job_id"]),
         )
-        # The first concurrency_limit verdict deferred the follower by two
-        # seconds; drop that so the re-claim below does not have to sleep.
-        connection.execute(
-            "UPDATE ai_jobs SET next_attempt_at=NULL WHERE job_id=?",
-            (follower["job_id"],),
-        )
-    assert repository.claim_due(owner, 60) is not None
+    assert repository.claim_due(owner, 60)["job_id"] == follower["job_id"]
     assert (
         repository.mark_submission_started(
             follower["job_id"], owner, daily_limit=4
@@ -3016,13 +3004,10 @@ def test_linked_unknown_submission_keeps_the_full_quarantine(tmp_path):
         max_queued=200,
     )
     assert created is True
-    assert repository.claim_due(owner, 60) is not None
-    assert (
-        repository.mark_submission_started(
-            follower["job_id"], owner, daily_limit=4
-        )
-        == "concurrency_limit"
-    )
+    assert repository.claim_due(owner, 60) is None
+    snapshot = repository.budget_snapshot(daily_limit=0, daily_budget_usd=0)
+    assert snapshot["concurrency_available"] is False
+    assert snapshot["active_job"]["job_id"] == stuck["job_id"]
 
 
 def test_transient_link_failure_retries_and_stays_recoverable(
@@ -3230,7 +3215,7 @@ def test_manual_fast_lane_is_not_blocked_by_scheduled_in_flight(tmp_path):
         == "started"
     )
 
-    # 同道第二单照旧被并发闸挡下：交互道也严格单飞。
+    # 交互道也严格单飞：同道第二单在槽位释放前不会被认领。
     manual_second, _ = repository.create_job(
         job_type="signal_analysis",
         payload={"ticker": "NVDA"},
@@ -3244,13 +3229,8 @@ def test_manual_fast_lane_is_not_blocked_by_scheduled_in_flight(tmp_path):
         submission_source="manual",
         priority=80,
     )
-    assert repository.claim_due(owner, 60) is not None
-    assert (
-        repository.mark_submission_started(
-            manual_second["job_id"], owner, daily_limit=4
-        )
-        == "concurrency_limit"
-    )
+    # 闸门本身的单飞见 zh_contract 的并发测试。
+    assert repository.claim_due(owner, 60) is None
 
     scheduled_second, _ = repository.create_job(
         job_type="news_impact",
@@ -3265,13 +3245,9 @@ def test_manual_fast_lane_is_not_blocked_by_scheduled_in_flight(tmp_path):
         submission_source="scheduled",
         priority=70,
     )
-    assert repository.claim_due(owner, 60) is not None
-    assert (
-        repository.mark_submission_started(
-            scheduled_second["job_id"], owner, daily_limit=4
-        )
-        == "concurrency_limit"
-    )
+    assert repository.claim_due(owner, 60) is None
+    assert repository.get_job(manual_second["job_id"])["lease_owner"] is None
+    assert repository.get_job(scheduled_second["job_id"])["lease_owner"] is None
 
 
 def test_active_for_ticker_sees_only_running_jobs_of_the_same_type(tmp_path):

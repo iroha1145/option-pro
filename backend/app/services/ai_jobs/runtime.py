@@ -49,8 +49,10 @@ AI_TASK_MAX_OUTPUT_TOKENS: dict[str, int] = {
     # 包后思考量到了 27-30k（2026-08-08 生产 32,768 顶格截断，
     # provider_incomplete_max_output_tokens），答案预算只剩 ~2.5k——上限翻倍
     # 留足余量。option_alerts 同为 owner 手动型，抬到 market_focus 档做保险。
-    # 两类任务低频（14 天合计 9 次），预算预留抬高可承受；批量型
-    # earnings/news 保持不变以免压缩队列并发容量。
+    # 上限只影响每单预留（当日 token 账的准入）和截断风险，不影响并发：并发
+    # 由每条车道一个提交槽决定。批量型 earnings/news 暂留 32,768，是否抬高要看
+    # 生产里 provider_incomplete_max_output_tokens 的比例；改动会移动
+    # schema_identity，队列里的待处理任务会整批判 runtime_configuration_changed。
     "option_alerts": 49_152,
     "signal_analysis": 65_536,
     "news_impact": 32_768,
@@ -72,12 +74,19 @@ EARNINGS_OWNER_PRIORITY = 80
 EARNINGS_FINAL_PRIORITY = 90
 EARNINGS_MANUAL_QUEUE_RESERVE = 20
 EARNINGS_FINAL_QUEUE_RESERVE = 40
+# 手动入队（owner/访客点击）在基础上限之上统一留出的额度。定时新闻会把队列
+# 填到 max_queued-1、财报季积压会贴着上限好几个小时；手动任务与它们共用基础
+# 上限时，owner 的个股与期权分析在最需要的时段被 429 拒绝（2026-09-25 审计）。
+# 与财报手动预留取最大值而不是相加，总量仍有硬上限。
+MANUAL_QUEUE_RESERVE = 20
 EARNINGS_PRE_RELEASE_ACTIVE_LIMIT = 64
 # Part of every job's request identity: create_job deduplicates on it, so two
 # copies drifting apart would pay for the same analysis twice. Bump a version
 # whenever that job type's instructions change.
 PROMPT_VERSIONS = {
-    "earnings_impact": "earnings-impact-zh-cn-v5",
+    # v6：impacted 下限 4→1，信息不足时只列确定的公司（结构化输出的 minItems
+    # 随之变化，schema_name 升到 earnings_impact_zh_cn_v5）。
+    "earnings_impact": "earnings-impact-zh-cn-v6",
     "option_alerts": "option-alerts-zh-cn-v4",
     # v6：证据包加入大盘/宏观/期权链/新闻/财报日程上下文块（输出 schema 不变，
     # 历史 v5 结果照常可读，不触发任何历史付费任务重投）。
@@ -91,15 +100,21 @@ PROMPT_VERSIONS = {
 # Failures a scheduler may retry on its own, at most SCHEDULED_MAX_ATTEMPTS
 # executions per item. Anything else (schema or binding failures, oversized
 # input) would fail the same way again and only spend more tokens.
+# provider_incomplete 不在其中：max_output_tokens 已单独成码，SDK 里剩下的
+# 未完成原因只有 content_filter，同样的输入再付费重做意义不大。
 SCHEDULED_MAX_ATTEMPTS = 3
 SCHEDULED_TRANSIENT_AI_ERRORS = frozenset(
     {
         "ai_empty_response",
         "provider_failed",
-        # 余额耗尽在充值后即恢复——按瞬态处理，小时级重试在充值当刻自愈
-        # （2026-08-14 生产：credit_balance_exhausted 曾归入 provider_failed）。
+        # 余额耗尽按瞬态处理（2026-08-14 生产：credit_balance_exhausted 曾归入
+        # provider_failed），但重试只在 SCHEDULED_MAX_ATTEMPTS 次以内有效。欠费
+        # 期间的新提交由 mark_submission_started 的欠费暂停挡住，不再逐条提交、
+        # 逐条失败把重试次数耗光。
         "provider_credit_exhausted",
-        "provider_incomplete",
+        # 提交前发现运行时契约变了（提示词、结构或上限升级）。任务从未到达
+        # 供应商、不花钱，调度器用新身份重建即可。
+        "runtime_configuration_changed",
         # Only the confirmed-terminal cancellation is retryable. The sibling
         # provider_poll_timeout code means cancellation was not confirmed;
         # retrying that state could overlap paid provider work.
@@ -192,7 +207,8 @@ def build_runtime_request(job_type: str, payload: dict[str, Any]) -> RuntimeRequ
         )
         instructions = common + (
             "只分析输入提供的美股财报资料和公司联动关系，不浏览网页，也不补充外部事实。"
-            "列出4至8家受影响的上市公司，不得包含输入公司本身。"
+            "列出1至8家受影响的上市公司，不得包含输入公司本身；"
+            "信息不足时只列确定的公司，不得编造。"
             "impacted.name必须使用简体中文公司名；"
         )
         if earnings_stage in {"post_release_manual", "post_release_final"}:
@@ -211,7 +227,7 @@ def build_runtime_request(job_type: str, payload: dict[str, Any]) -> RuntimeRequ
         # control has no numeric returned-token ceiling. Keeping it disabled is
         # the only useful hard bound under the default two-dollar daily cap.
         use_web_search = False
-        schema_name = "earnings_impact_zh_cn_v4"
+        schema_name = "earnings_impact_zh_cn_v5"
         boundary = "untrusted_earnings_data"
     elif job_type == "option_alerts":
         instructions = common + (
