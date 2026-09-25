@@ -24,9 +24,11 @@ from app.access import (
 )
 from app.data_paths import get_data_paths
 from app.services import massive, yahoo
+from app.services.numeric import finite_number as _finite_number_base
 from app.services.request_security import request_client_ip
 from app.services.sectors import SECTORS
 from app.services.snapshot_read_cache import FingerprintedFileCache
+from app.services.utils import sanitize
 from app.services.zh_names import get_zh_name
 
 router = APIRouter(prefix="/api/sectors", tags=["sectors"])
@@ -34,6 +36,12 @@ router = APIRouter(prefix="/api/sectors", tags=["sectors"])
 # Simple TTL cache shared by sector endpoints (10 min — IV ranks change slowly).
 # Per-key locks prevent thundering herd: without them, concurrent cold-cache
 # requests would each kick off a full sector scan.
+#
+# No production endpoint calls _cached() any more (the snapshot-backed path
+# below replaced it) but tests/test_backend_cache_and_iv.py still exercises
+# it directly, so it stays rather than being deleted out from under that
+# coverage (initial audit pass called this dead code; a repo-wide grep for
+# the module's `sector_api` test alias, not just `sectors.`, found otherwise).
 _cache: dict[str, tuple[float, float, Any]] = {}
 _locks: dict[str, asyncio.Lock] = {}
 _MAX_STALE_SECONDS = 60 * 60
@@ -165,7 +173,9 @@ def ensure_sector(sector_id: str) -> None:
 
 @router.get("")
 async def list_sectors():
-    return {"sectors": [{"id": id_, "name": data["name"], "tickers": data["tickers"]} for id_, data in SECTORS.items()]}
+    return sanitize(
+        {"sectors": [{"id": id_, "name": data["name"], "tickers": data["tickers"]} for id_, data in SECTORS.items()]}
+    )
 
 
 async def _sector_iv_rows(sector_id: str) -> list[dict[str, Any]]:
@@ -221,6 +231,9 @@ async def _sector_iv_rows(sector_id: str) -> list[dict[str, Any]]:
                 except Exception:
                     price = None
                     price_provider = None
+            # A provider returning NaN/Inf must not reach the JSON response as
+            # a `price` that is neither a valid number nor null (M-12).
+            price = _finite_number(price)
             return {
                 "ticker": ticker,
                 "name": get_zh_name(ticker) or ticker,
@@ -244,13 +257,12 @@ async def _sector_iv_rows(sector_id: str) -> list[dict[str, Any]]:
 
 
 def _finite_number(value: Any) -> float | None:
+    # Thin adapter over the shared helper: this module additionally rejects
+    # bool (a price or an IV of `True`/`False` is not a real observation),
+    # which app.services.numeric.finite_number does not do on its own.
     if isinstance(value, bool):
         return None
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return None
-    return number if math.isfinite(number) else None
+    return _finite_number_base(value)
 
 
 def _rank_iv_rows(sector_id: str, rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -273,7 +285,10 @@ def _rank_iv_rows(sector_id: str, rows: list[dict[str, Any]]) -> dict[str, Any]:
         rankings.append({
             "ticker": row["ticker"],
             "name": row.get("name") or row["ticker"],
-            "price": row.get("price"),
+            # Defensive even though _sector_iv_rows already sanitizes its own
+            # price (M-12): this function is also called directly with rows
+            # built elsewhere, and a passthrough NaN/Inf must not reach here.
+            "price": _finite_number(row.get("price")),
             "price_provider": row.get("price_provider"),
             "atm_iv_percent": atm_iv_percent,
             "sector_iv_rank": round(sector_rank, 1) if sector_rank is not None else None,
@@ -801,7 +816,7 @@ async def iv_refresh(sector_id: str, request: Request):
 async def iv_ranking(sector_id: str, request: Request):
     ensure_sector(sector_id)
     try:
-        return await _request_iv_payload(sector_id)
+        return sanitize(await _request_iv_payload(sector_id))
     except HTTPException:
         raise
     except Exception as exc:
@@ -828,7 +843,7 @@ async def heatmap(sector_id: str, request: Request):
         }
         for item in payload.get("rankings", [])
     ]
-    return {
+    return sanitize({
         "sector_id": sector_id,
         "sector_name": payload.get("sector_name", SECTORS[sector_id]["name"]),
         "data": data,
@@ -845,4 +860,4 @@ async def heatmap(sector_id: str, request: Request):
         "snapshot_saved_at": payload.get("snapshot_saved_at"),
         "providers": payload.get("providers", []),
         "refresh": payload["refresh"],
-    }
+    })

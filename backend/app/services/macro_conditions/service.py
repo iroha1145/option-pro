@@ -15,7 +15,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Sequence
 
-from .alignment import AsOfSeries, build_grid, etf_from_rows, series_from_rows
+from .alignment import AsOfSeries, _as_date, build_grid, etf_from_rows, series_from_rows
 from .calculations import compute_factor_points
 from .linkage import STRUCTURAL_MODULES, structural_macro_score
 from .formatting import (
@@ -194,6 +194,7 @@ class MacroConditionsService:
         # Assigned up front: an upstream failure must still be able to summarise
         # the run rather than raise on an unbound name.
         fetched: dict[str, Any] = {}
+        written: set[str] = set()
         try:
             with client:
                 fetched, series_failed = client.fetch_many(
@@ -202,14 +203,22 @@ class MacroConditionsService:
                     end=cutoff,
                 )
                 for series_id, fetch in fetched.items():
-                    self.repository.record_series_revisions(
-                        fetch.metadata,
-                        fetch.observations,
-                        history_basis=(
-                            HISTORY_BASIS_BACKFILL if is_backfill else HISTORY_BASIS_LOCAL
-                        ),
-                        observed_at=as_of,
-                    )
+                    # Isolated per series (M-7), the same way fetch_many already
+                    # isolates fetch failures: one series' write must not lose
+                    # the rows every other series already fetched successfully.
+                    try:
+                        self.repository.record_series_revisions(
+                            fetch.metadata,
+                            fetch.observations,
+                            history_basis=(
+                                HISTORY_BASIS_BACKFILL if is_backfill else HISTORY_BASIS_LOCAL
+                            ),
+                            observed_at=as_of,
+                        )
+                    except MacroError as exc:
+                        series_failed[series_id] = exc.code
+                    else:
+                        written.add(series_id)
         except MacroError as exc:
             error_codes.append(exc.code)
             warnings.append(exc.code)
@@ -249,7 +258,7 @@ class MacroConditionsService:
 
         bundle, summary = self.build_snapshot(as_of=as_of, warnings=tuple(warnings))
         published = False
-        if bundle is not None and summary["valid_module_count"] >= 0:
+        if bundle is not None:
             if summary["composite_score"] is None:
                 # Without enough valid modules there is no official composite to
                 # publish; the previous snapshot stays readable and current.
@@ -269,7 +278,7 @@ class MacroConditionsService:
             run_id,
             status=status,
             data_through=summary.get("data_through"),
-            series_succeeded=len(fetched),
+            series_succeeded=len(written),
             series_failed=len(series_failed),
             error_codes=error_codes,
             details={
@@ -285,7 +294,7 @@ class MacroConditionsService:
             "run_id": run_id,
             "status": status,
             "published": published,
-            "series_succeeded": len(fetched),
+            "series_succeeded": len(written),
             "series_failed": len(series_failed),
             "etf_failed": sorted(etf_failed),
             "composite_score": summary.get("composite_score"),
@@ -444,9 +453,7 @@ class MacroConditionsService:
         factor_rows: list[FactorSnapshot] = []
         for factor in FACTORS:
             spec = FACTORS_BY_ID[factor.factor_id]
-            required = max(1, len(spec.required_series) + len(spec.required_etfs))
             for item in scored_factors[factor.factor_id]:
-                unavailable = len(set(item.missing_inputs) | set(item.stale_inputs))
                 factor_rows.append(
                     FactorSnapshot(
                         snapshot_date=item.snapshot_date,
@@ -459,9 +466,10 @@ class MacroConditionsService:
                         score_method=item.score_method,
                         score_change_7d=round_score(item.score_change_7d),
                         raw_change_7d=item.raw_change_7d,
-                        confidence=round_confidence(
-                            max(0.0, (required - unavailable) / required)
-                        ),
+                        # score_factor_series already computed this via
+                        # factor_confidence (M-低); recomputing an equivalent
+                        # formula here let it drift from the one scoring.py owns.
+                        confidence=round_confidence(item.confidence),
                         valid_observations=item.valid_observations,
                         history_basis=item.history_basis,
                         data_through=(
@@ -992,18 +1000,6 @@ class MacroConditionsService:
             block["top_improving"] = block["top_improving"][:1]
             block["top_deteriorating"] = block["top_deteriorating"][:1]
         return block
-
-
-def _as_date(value: object) -> Optional[date]:
-    if isinstance(value, date):
-        return value
-    if isinstance(value, str) and value:
-        try:
-            year, month, day = (int(part) for part in value.split("-"))
-            return date(year, month, day)
-        except (TypeError, ValueError):
-            return None
-    return None
 
 
 # ---------------------------------------------------------------------------

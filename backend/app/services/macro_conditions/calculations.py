@@ -681,21 +681,45 @@ def _cp_tbill_spread(when, index, series, etfs, **_extra):
     )
 
 
+#: The seven distinct FRED series behind the five spread pairs above. Derived
+#: rather than listed again so the two can never enumerate a different set.
+_FUNDING_FRAGMENTATION_SERIES: tuple[str, ...] = tuple(
+    dict.fromkeys(
+        series_id
+        for _name, first_id, second_id in _FUNDING_SPREAD_PAIRS
+        for series_id in (first_id, second_id)
+    )
+)
+
+
 def _funding_fragmentation(when, index, series, etfs, *, dispersion, **_extra):
     inputs = _Inputs(when, series, etfs)
+    # Attribute today's reading to each of the seven underlying series
+    # individually (M-9), the same way every other factor names its inputs.
+    # A single generic "funding_spread_panel" tag could not tell "all seven
+    # missing" from "one stale leg" apart, so confidence was overstated
+    # against this factor's registered required_series=7.
+    for series_id in _FUNDING_FRAGMENTATION_SERIES:
+        inputs.series(series_id)
     today = dispersion.value_at_index(index)
-    if today is None:
-        inputs.mark_missing("funding_spread_panel")
+    window_points = (
+        dispersion.trailing_valid_points(index, FUNDING_FRAGMENTATION_WINDOW)
+        if today is not None
+        else ()
+    )
+    if today is None or len(window_points) < FUNDING_FRAGMENTATION_WINDOW:
+        # Minimum-sample discipline (M-9), matching _tga_deviation /
+        # _rate_volatility / _fx_realized_volatility / _oil_volatility_deviation:
+        # fewer than the registered window of valid points -- during a backfill
+        # start or right after a data gap -- must not be reported as though it
+        # were the full 21-day mean.
+        inputs.mark_missing("funding_fragmentation_21d_window")
         return inputs.point(
             "funding_fragmentation_21d", raw_value=None, score_value=None
         )
     inputs.mark_satisfied()
-    window_points = dispersion.trailing_valid_points(
-        index,
-        FUNDING_FRAGMENTATION_WINDOW,
-    )
     window = tuple(point.value for point in window_points)
-    value = finite(math.fsum(window) / len(window)) if window else None
+    value = finite(math.fsum(window) / len(window))
     # Visibility covers the whole 21-day window, not only today's legs
     # (incremental review P1): the mean moves when any observation inside the
     # window is revised, so the factor is not knowable until the last of those
@@ -712,7 +736,7 @@ def _funding_fragmentation(when, index, series, etfs, *, dispersion, **_extra):
         if point.history_basis:
             basis.append(point.history_basis)
     inputs.note_external(
-        observation_date=window_points[-1].observation_date if window_points else None,
+        observation_date=window_points[-1].observation_date,
         available_at=max(available) if available else None,
         history_basis=combine_history_basis(basis),
     )

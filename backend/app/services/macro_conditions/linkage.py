@@ -276,10 +276,14 @@ CONFIRMING_MODULES = ("credit", "risk")
 
 
 def structural_macro_score(module_rows: Sequence[Mapping[str, Any]]) -> Optional[float]:
-    """Weighted mean of the structural modules only."""
+    """Equal-weight mean of the structural modules only.
+
+    Every structural module counts the same; ``ModuleSpec`` has no per-module
+    weight field, so there is no other weighting to honour (M-8).
+    """
 
     total = 0.0
-    weight = 0.0
+    count = 0
     for row in module_rows:
         module_id = str(row.get("module_id") or "")
         if module_id not in STRUCTURAL_MODULES:
@@ -287,13 +291,11 @@ def structural_macro_score(module_rows: Sequence[Mapping[str, Any]]) -> Optional
         score = _finite(row.get("score"))
         if score is None:
             continue
-        module = MODULES_BY_ID.get(module_id)
-        module_weight = _finite(getattr(module, "weight", None)) or 1.0
-        total += score * module_weight
-        weight += module_weight
-    if weight <= 0.0:
+        total += score
+        count += 1
+    if count == 0:
         return None
-    return round(total / weight, 1)
+    return round(total / count, 1)
 
 
 __all__ = [

@@ -14,6 +14,7 @@ import pandas as pd
 import yfinance as yf
 
 from app.config import get_settings
+from app.failure_diagnostics import record_fallback_failure
 from app.services import massive
 from app.services import yahoo
 from app.services.cache import cache
@@ -329,6 +330,26 @@ def _finnhub_candle_frame(symbol: str, payload: dict[str, Any]) -> pd.DataFrame:
     return frame
 
 
+def _finalize_history_fetch(
+    tickers: list[str],
+    symbols: list[str],
+    fetched: Mapping[str, pd.DataFrame],
+) -> tuple[pd.DataFrame, list[str], list[str]]:
+    """Common tail of the three fallback history fetchers.
+
+    ``symbols`` is the (possibly limit-truncated) subset actually requested;
+    ``tickers`` is the full request, so anything outside ``symbols`` is
+    reported missing too, not silently dropped.
+    """
+
+    loaded = [symbol for symbol in symbols if symbol in fetched]
+    frames = [fetched[symbol] for symbol in loaded]
+    missing = [symbol for symbol in tickers if symbol not in fetched]
+    if not frames:
+        return pd.DataFrame(), loaded, missing
+    return pd.concat(frames, axis=1).sort_index(), loaded, missing
+
+
 def _download_marketdata_history(tickers: list[str], period: str) -> tuple[pd.DataFrame, list[str], list[str]]:
     settings = get_settings()
     token = settings.marketdata_token.strip()
@@ -362,15 +383,14 @@ def _download_marketdata_history(tickers: list[str], period: str) -> tuple[pd.Da
                 return _finnhub_candle_frame(symbol, response.json())
 
             fetched = _bounded_history_fetch(symbols, fetch_one, request_timeout_seconds=timeout)
-    except Exception:
+    except Exception as exc:
+        # A client-level failure (auth, network, budget) means every symbol in
+        # this batch is unknown, not confirmed absent -- record which and why
+        # rather than silently reporting them all missing.
+        record_fallback_failure("strength_marketdata_history", exc)
         fetched = {}
 
-    loaded = [symbol for symbol in symbols if symbol in fetched]
-    frames = [fetched[symbol] for symbol in loaded]
-    missing = [symbol for symbol in tickers if symbol not in fetched]
-    if not frames:
-        return pd.DataFrame(), loaded, missing
-    return pd.concat(frames, axis=1).sort_index(), loaded, missing
+    return _finalize_history_fetch(tickers, symbols, fetched)
 
 
 def _stooq_symbol(symbol: str) -> str | None:
@@ -435,15 +455,11 @@ def _download_stooq_history(tickers: list[str], period: str) -> tuple[pd.DataFra
                 return _stooq_candle_frame(symbol, response.text)
 
             fetched = _bounded_history_fetch(symbols, fetch_one, request_timeout_seconds=timeout)
-    except Exception:
+    except Exception as exc:
+        record_fallback_failure("strength_stooq_history", exc)
         fetched = {}
 
-    loaded = [symbol for symbol in symbols if symbol in fetched]
-    frames = [fetched[symbol] for symbol in loaded]
-    missing = [symbol for symbol in tickers if symbol not in fetched]
-    if not frames:
-        return pd.DataFrame(), loaded, missing
-    return pd.concat(frames, axis=1).sort_index(), loaded, missing
+    return _finalize_history_fetch(tickers, symbols, fetched)
 
 
 def _download_finnhub_history(tickers: list[str], period: str) -> tuple[pd.DataFrame, list[str], list[str]]:
@@ -482,15 +498,11 @@ def _download_finnhub_history(tickers: list[str], period: str) -> tuple[pd.DataF
                 return _finnhub_candle_frame(symbol, response.json())
 
             fetched = _bounded_history_fetch(symbols, fetch_one, request_timeout_seconds=timeout)
-    except Exception:
+    except Exception as exc:
+        record_fallback_failure("strength_finnhub_history", exc)
         fetched = {}
 
-    loaded = [symbol for symbol in symbols if symbol in fetched]
-    frames = [fetched[symbol] for symbol in loaded]
-    missing = [symbol for symbol in tickers if symbol not in fetched]
-    if not frames:
-        return pd.DataFrame(), loaded, missing
-    return pd.concat(frames, axis=1).sort_index(), loaded, missing
+    return _finalize_history_fetch(tickers, symbols, fetched)
 
 
 def _merge_history(primary: pd.DataFrame, fallback: pd.DataFrame) -> pd.DataFrame:
@@ -1733,7 +1745,12 @@ def _scan_sync(
                 else None
             )
             range_context[ticker]["price_as_of"] = range_context[ticker]["daily_data_through"]
-        except Exception:
+        except Exception as exc:
+            # Business behaviour is unchanged (skip this ticker), but before
+            # this an upstream structural drift could silently drop a whole
+            # batch of tickers with nothing but a rising counter to show for
+            # it (M-10) -- record which ticker and which error type.
+            record_fallback_failure("strength_scan_ticker", exc, symbol=ticker)
             skipped["data_error"] += 1
 
     intrinsic_rows = [
