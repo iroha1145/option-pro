@@ -36,16 +36,16 @@ export interface OptionAlertInput {
 
 /**
  * 创建类任务 POST（契约 §0.4）：202 + Location:/api/ai/jobs/{id} + Retry-After:2
- * body 不含 job_id 时从 Location 头提取。
+ * body 不含 job_id 时从 Location 头提取；Retry-After 随任务带回，作为首次查询的时机。
  */
 export async function postAiJob(path: string, body?: unknown): Promise<AiJob> {
-  const { data, location } = await postCreate(path, body);
+  const { data, location, retryAfter } = await postCreate(path, body);
   const locId = idFromLocation(location);
   const job = normalizeAiJob(data, locId);
   if (!job.id) {
     throw new ApiError(502, t('任务创建响应缺少 job_id（body 与 Location 头均未提供）'), { payload: data });
   }
-  return job;
+  return { ...job, retryAfter };
 }
 
 export const aiJobsApi = {

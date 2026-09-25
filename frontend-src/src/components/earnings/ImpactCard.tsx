@@ -65,9 +65,18 @@ const ANALYSIS_ERROR_TEXT: Record<string, string> = {
   ai_job_result_too_large: __t('分析结果过大，无法保存'),
 };
 
-function analysisErrorText(code: string | undefined | null): string {
+/* 排队期的推迟码：任务还会自动继续。已结束的任务残留这些码时不是失败原因。 */
+const DEFERRAL_CODES = new Set(['global_concurrency_limit', 'analysis_cooldown_active', 'provider_poll_deferred']);
+
+/**
+ * 按任务状态解读原因码：进行中只说明认得的推迟原因，认不出的码不能说成「没有完成」；
+ * 已结束的任务不拿排队期的残留码当失败原因。
+ */
+function analysisErrorText(code: string | undefined | null, status: string): string {
   const key = String(code ?? '').trim();
   if (!key) return '';
+  if (isActive(status)) return ANALYSIS_ERROR_TEXT[key] ?? '';
+  if (DEFERRAL_CODES.has(key)) return __t('这次分析没有完成');
   return ANALYSIS_ERROR_TEXT[key] ?? __t('这次分析没有完成');
 }
 const FINAL_STAGES = new Set([
@@ -215,6 +224,10 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [confirming, setConfirming] = useState(false);
   const [pollAttempt, setPollAttempt] = useState(0);
+  /* 5 分钟自动查询用完：停表并给出手动重新查询，不能再说「会自动显示」（审计 FE-8）。 */
+  const [pollPaused, setPollPaused] = useState(false);
+  /* 轮询中的一次读取失败：保持当前阶段，只说明在自动重试（审计 4-C）。 */
+  const [pollNotice, setPollNotice] = useState<string | null>(null);
   /* stale-response 守卫（同 ManualStockPull.requestSequenceRef）：快速连点
      AAPL→MSFT 时若 AAPL 响应后到，没有序号校验它会把整卡写回 AAPL 的内容，
      而左侧高亮已是 MSFT，且不会自行纠正。 */
@@ -241,7 +254,8 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
 
     setAnalysis(resolvedAnalysis);
     setImpact(resolvedResult);
-    setErrorMsg(analysisErrorText(resolvedAnalysis.errorCode));
+    setPollNotice(null);
+    setErrorMsg(analysisErrorText(resolvedAnalysis.errorCode, normalizedStage(resolvedAnalysis.status)));
     if (ticker) onAnalyzed(ticker, resolvedAnalysis);
     if (resolvedResult) {
       setPhase('ready');
@@ -278,7 +292,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
 
   /* 精确报告级 GET：只读状态与结果，不读取通用任务、费用或取消信息。 */
   const loadImpact = useCallback(
-    async (t: string): Promise<EarningsReportAnalysis | null> => {
+    async (t: string, options?: { background?: boolean }): Promise<EarningsReportAnalysis | null> => {
       if (!reportDate) {
         setErrorMsg(__t('当前日历行缺少财报日期，无法绑定精确报告'));
         setPhase('unavailable');
@@ -296,6 +310,12 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
       } catch (e) {
         if (seq !== requestSequenceRef.current) return null;
         const err = e instanceof ApiError ? e : null;
+        const transient = !err || err.code === 0 || err.code === 408 || err.code === 429 || err.code >= 500;
+        if (options?.background && transient) {
+          // 任务还在跑：一次读取失败不翻成「数据暂不可用」，下一轮按退避继续查。
+          setPollNotice(__t('暂时读不到最新状态，正在自动重试'));
+          return null;
+        }
         if (err?.bizCode === 'earnings_analysis_locked') {
           setPhase('final-locked');
         } else if (err?.bizCode === 'earnings_finalization_in_progress') {
@@ -306,7 +326,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
           setErrorMsg(__t('公开分析入口暂不可用'));
           setPhase('public-unavailable');
         } else if (err && err.code === 503) {
-          setErrorMsg(__t('数据暂不可用'));
+          setErrorMsg(__t('服务暂时不可用，请稍后重试'));
           setPhase('unavailable');
         } else {
           setErrorMsg(__t('加载失败'));
@@ -348,10 +368,20 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
     setAnalysis(null);
     setConfirming(false);
     setPollAttempt(0);
+    setPollPaused(false);
+    setPollNotice(null);
     setImpact(null);
     setErrorMsg('');
     setPhase(!ticker ? 'idle' : 'loading');
   }
+
+  /* 卸载后在途读取与提交不得再回调父组件或弹提示（审计 4-D）。 */
+  useEffect(() => {
+    const sequence = requestSequenceRef;
+    return () => {
+      sequence.current += 1;
+    };
+  }, []);
 
   /* 缓存读取不受生成开关影响。owner 的 AI 能力还没确认时先不读：占位的
      aiAvailable=false 会把 409 判成 locked-ai，能力回来又硬重置再读一次。 */
@@ -370,10 +400,12 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
   if (!shouldPoll) {
     pollDeadlineRef.current = null;
   }
+  // 没有在跑的任务就谈不上「暂停」；下一次任务开始时重新自动查询。
+  if (!shouldPoll && pollPaused) setPollPaused(false);
   useEffect(() => {
-    if (!ticker || !shouldPoll) return;
+    if (!ticker || !shouldPoll || pollPaused) return;
     if (pollDeadlineRef.current != null && Date.now() >= pollDeadlineRef.current) {
-      setErrorMsg(__t('分析任务仍在处理中'));
+      setPollPaused(true);
       return;
     }
     const serverDelay = analysis?.retryAfterSeconds;
@@ -382,14 +414,37 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
       : BACKOFF_MS[Math.min(pollAttempt, BACKOFF_MS.length - 1)];
     const delay = typeof document !== 'undefined' && document.visibilityState !== 'visible' ? base * 3 : base;
     const timer = window.setTimeout(async () => {
-      const next = await loadImpact(ticker);
+      const next = await loadImpact(ticker, { background: true });
       setPollAttempt((value) => value + 1);
       if (next?.result && !reportAnalysisNeedsPolling(next)) {
         toast.success(__t('{ticker} AI 影响分析已生成', { ticker }));
       }
     }, delay);
     return () => window.clearTimeout(timer);
-  }, [analysis?.retryAfterSeconds, loadImpact, pollAttempt, shouldPoll, ticker, toast]);
+  }, [analysis?.retryAfterSeconds, loadImpact, pollAttempt, pollPaused, shouldPoll, ticker, toast]);
+
+  /* 手动重新查询：本次轮询重新计时 5 分钟，由上面的轮询按退避继续。 */
+  const resumePolling = () => {
+    pollDeadlineRef.current = Date.now() + 5 * 60_000;
+    setPollNotice(null);
+    setPollAttempt(0);
+    setPollPaused(false);
+  };
+  const pollStatusNote = pollPaused ? (
+    <div className="mt-3 rounded-md border border-line bg-paper-2 px-3 py-2.5" role="status">
+      <p className="text-micro leading-5 text-ink-500">{__t('自动查询已暂停，分析可能仍在进行')}</p>
+      <button
+        type="button"
+        onClick={resumePolling}
+        className="mt-2 flex h-8 items-center gap-1.5 rounded-md border border-line bg-card px-3 text-caption font-medium text-ink-600 shadow-btn transition-colors hover:text-ink-800"
+      >
+        <Icon name="refresh" size={13} />
+        {__t('重新查询')}
+      </button>
+    </div>
+  ) : pollNotice ? (
+    <p className="mt-3 text-micro leading-5 text-warn-600" role="status">{pollNotice}</p>
+  ) : null;
 
   /* 报告级 POST 的正文固定为 {confirm:true}，全部财务事实由服务端当前快照绑定。 */
   const submittingRef = useRef(false);
@@ -424,7 +479,11 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
       } else if (err?.bizCode === 'earnings_finalization_in_progress') {
         setPhase('finalizing');
       } else if (err?.code === 429) {
-        toast.error(__t('AI 任务队列已满'), __t('约 {n}s 后重试', { n: err.retryAfter ?? 60 }));
+        // 429 有三个来源：任务队列满、访客触发限频、全站请求限流，文案按业务码区分（审计 4-F）。
+        const wait = __t('约 {n}s 后重试', { n: err.retryAfter ?? 60 });
+        if (err.bizCode === 'ai_job_queue_full') toast.error(__t('AI 任务队列已满'), wait);
+        else if (err.bizCode === 'earnings_analysis_rate_limited') toast.error(__t('财报分析触发过于频繁'), wait);
+        else toast.error(__t('请求过于频繁'), wait);
       } else if (err?.code === 401) {
         // 访客提交默认关闭（access.visitor_ai_actions）：如实说明需要
         // Owner 登录，而不是显示一句泛化的英文错误。
@@ -444,6 +503,8 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
       setSubmitting(false);
     }
   };
+
+  const jobCancelled = ['cancelled', 'canceled'].includes(normalizedStage(analysis?.status));
 
   return (
     <aside className={cn('card-surface self-start overflow-hidden', className)} aria-label={__t("AI 影响分析")}>
@@ -531,6 +592,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
               >
                 {__t('正在更新分析')}
               </button>
+              {pollStatusNote}
             </div>
           )}
 
@@ -619,19 +681,29 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
               {errorMsg && (
                 <p className="mt-3 text-micro leading-5 text-warn-600">{errorMsg}</p>
               )}
-              <p className="mt-5 border-t border-line pt-3 text-micro leading-5 text-ink-400">
-                {__t('分析完成后会自动显示，不用刷新页面。')}
-              </p>
+              {pollStatusNote}
+              {!pollPaused && (
+                <p className="mt-5 border-t border-line pt-3 text-micro leading-5 text-ink-400">
+                  {__t('分析完成后会自动显示，不用刷新页面。')}
+                </p>
+              )}
             </div>
           )}
 
           {/* ---------- 任务失败：原因 + 重试 ---------- */}
           {phase === 'job-failed' && (
             <div>
-              <div className="rounded-md border border-down-600/30 bg-down-50 p-3">
-                <p className="text-caption font-medium text-down-700">{__t('分析任务失败')}</p>
-                <p className="mt-0.5 text-micro text-ink-500">{errorMsg || __t('未知原因')}</p>
-              </div>
+              {jobCancelled ? (
+                <div className="rounded-md border border-line bg-paper-2 p-3">
+                  <p className="text-caption font-medium text-ink-700">{__t('分析任务已取消')}</p>
+                  <p className="mt-0.5 text-micro text-ink-500">{__t('可以重新生成分析')}</p>
+                </div>
+              ) : (
+                <div className="rounded-md border border-down-600/30 bg-down-50 p-3">
+                  <p className="text-caption font-medium text-down-700">{__t('分析任务失败')}</p>
+                  <p className="mt-0.5 text-micro text-ink-500">{errorMsg || __t('未知原因')}</p>
+                </div>
+              )}
               <button
                 onClick={() => setPhase('needs-analysis')}
                 className="mt-3 flex h-8 items-center gap-1.5 rounded-md bg-ai-600 px-3 text-caption font-medium text-on-accent shadow-btn transition-[filter] hover:brightness-105"
@@ -703,9 +775,12 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
                       <PulseDot className="bg-ai-600" size={7} />
                       {__t('财报已公布，正在更新分析')}
                     </p>
-                    <p className="mt-1 text-micro text-ink-500">
-                      {__t('暂时显示发布前的分析，更新完成后会自动替换。')}
-                    </p>
+                    {!pollPaused && (
+                      <p className="mt-1 text-micro text-ink-500">
+                        {__t('暂时显示发布前的分析，更新完成后会自动替换。')}
+                      </p>
+                    )}
+                    {pollStatusNote}
                   </div>
                 )}
                 {isFinalImpact(impact) && (

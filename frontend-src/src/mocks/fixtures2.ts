@@ -1,7 +1,7 @@
 /** Mock fixtures · 突破雷达 / 板块 / 财报 / 催化剂 / 期权 / AI 任务 / Worker */
 import { ApiError } from '@/api/client';
 import { Rng, round2, round4 } from './rng';
-import { HOTSPOTS, NEWS_SOURCES, NEWS_TEMPLATES, SECTORS, TICKER_POOL } from './data';
+import { NEWS_SOURCES, NEWS_TEMPLATES, SECTORS, TICKER_POOL } from './data';
 import { SIGNAL_LABELS, getMarketStatus, getStockChartEx, getStockDetail } from './fixtures';
 import type {
   AiJob,
@@ -9,14 +9,11 @@ import type {
   BreakoutEventDetail,
   BreakoutSignal,
   BreakoutStatus,
-  CatalystsStatus,
   CtaInstrumentEstimate,
   CtaTrendPayload,
   CtaTriggerZone,
   EarningsImpact,
   EarningsItem,
-  FocusCycle,
-  Hotspot,
   IvRankRow,
   NewsItem,
   OptionChain,
@@ -630,12 +627,9 @@ export function getEarningsUpcoming(): EarningsItemEx[] {
   });
 }
 
-let earningsRefreshCount = 0;
 export function refreshEarningsUpcoming(): EarningsItem[] {
-  earningsRefreshCount += 1;
   return getEarningsUpcoming();
 }
-export const getEarningsRefreshCount = () => earningsRefreshCount;
 
 /** 连锁反应关系图谱（真实风格供应链叙事） */
 const IMPACT_RELATIONS: Record<string, { ticker: string; relation: string }[]> = {
@@ -736,40 +730,9 @@ const newsPool: NewsItem[] = (() => {
   }).sort((a, b) => (a.publishedAt < b.publishedAt ? 1 : -1));
 })();
 
-export function getCatalystsFeed(page = 1, pageSize = 20): { items: NewsItem[]; total: number } {
-  const start = (page - 1) * pageSize;
-  return { items: newsPool.slice(start, start + pageSize), total: newsPool.length };
-}
-export function getNewsById(id: string): NewsItem {
-  return newsPool.find((n) => n.id === id) ?? newsPool[0];
-}
 export function getNewsByTicker(ticker: string): NewsItem[] {
   const t = ticker.toUpperCase();
   return newsPool.filter((n) => n.tickers.includes(t));
-}
-
-export function getCatalystsStatus(): CatalystsStatus {
-  return {
-    newsToday: newsPool.filter((n) => Date.now() - new Date(n.publishedAt).getTime() < 24 * 3600_000).length,
-    hotspotsActive: HOTSPOTS.length,
-    lastCrawlAt: new Date(Date.now() - 96_000).toISOString(),
-  };
-}
-
-export function getHotspots(): Hotspot[] {
-  const r = new Rng(61616);
-  return HOTSPOTS.map((h, i) => ({
-    id: `hot-${i + 1}`,
-    theme: h.theme,
-    heat: Math.round(r.float(52, 97)),
-    newsCount: r.int(6, 28),
-    representative: newsPool[i * 3]?.title ?? `${h.theme} 持续发酵`,
-    tickers: [...h.tickers],
-  })).sort((a, b) => b.heat - a.heat);
-}
-
-export function getHotspotsStatus(): { scanning: boolean; updatedAt: string } {
-  return { scanning: true, updatedAt: new Date(Date.now() - 58_000).toISOString() };
 }
 
 export function getCatalystsCalendar(): { date: string; items: { kind: string; label: string }[] }[] {
@@ -782,21 +745,6 @@ export function getCatalystsCalendar(): { date: string; items: { kind: string; l
     ];
     return { date: d.toISOString().slice(0, 10), items };
   });
-}
-
-export function getLatestFocusCycle(): FocusCycle {
-  return {
-    id: 'fc-1',
-    theme: __t('AI 算力资本开支'),
-    startedAt: new Date(Date.now() - 19 * 86_400_000).toISOString(),
-    days: 19,
-    stage: '主升',
-    summary: '本轮焦点周期由 hyperscaler 资本开支指引上修点燃，半导体设备与先进封装轮动走强，资金沿「算力—散热—电力」链条扩散。',
-  };
-}
-
-export function submitTickersBatch(tickers: string[]): { accepted: number } {
-  return { accepted: tickers.length };
 }
 
 /* ---------------- 期权 ---------------- */
@@ -1542,7 +1490,7 @@ function matchNews(item: CatalystNewsItem, q: CatalystFeedQuery, ignoreTicker = 
   return true;
 }
 
-export function getCatalystsFeedV2(q: CatalystFeedQuery = {}): {
+export function getCatalystsFeed(q: CatalystFeedQuery = {}): {
   items: CatalystNewsItem[];
   nextCursor: string | null;
   total: number;
@@ -1579,7 +1527,7 @@ export function getCatalystsFeedV2(q: CatalystFeedQuery = {}): {
   };
 }
 
-export function getNewsDetailV2(newsId: string): CatalystNewsItem {
+export function getNewsDetail(newsId: string): CatalystNewsItem {
   ensureDemoJob();
   const item = newsById.get(newsId);
   if (!item) throw new Error(__t('新闻不存在'));
@@ -1588,7 +1536,7 @@ export function getNewsDetailV2(newsId: string): CatalystNewsItem {
 }
 
 /* ---------------- 热点组 ---------------- */
-export function getHotspotsV2(): HotspotGroup[] {
+export function getHotspots(): HotspotGroup[] {
   ensureDemoJob();
   const r = new Rng(424242);
   return THEME_DEFS.map((t, i) => {
@@ -1610,7 +1558,7 @@ export function getHotspotsV2(): HotspotGroup[] {
   }).sort((a, b) => b.heat - a.heat);
 }
 
-export function getHotspotsStatusV2(): HotspotsStatusDetail {
+export function getHotspotsStatus(): HotspotsStatusDetail {
   return {
     state: 'ready',
     scanning: true,
@@ -1620,7 +1568,7 @@ export function getHotspotsStatusV2(): HotspotsStatusDetail {
   };
 }
 
-export function getCatalystsStatusV2(): CatalystsStatusDetail {
+export function getCatalystsStatus(): CatalystsStatusDetail {
   ensureDemoJob();
   const newsToday = catalystsNews.filter((n) => Date.now() - new Date(n.publishedAt).getTime() < 24 * 3600_000).length;
   return {
@@ -1736,7 +1684,7 @@ const previousCycle: MarketFocusCycle = {
     '上一轮焦点周期围绕降息路径展开：CPI 回落确认后利率敏感资产持续占优，直至 FOMC 鹰派表述令交易拥挤度出清。周期完整走过「萌芽—发酵—主升—退潮」四阶段，最终在非农数据超预期后退潮。本轮经验显示，宏观周期的持续性高度依赖数据验证节奏。',
 };
 
-export function getLatestFocusCycleV2(): MarketFocusCycle {
+export function getLatestFocusCycle(): MarketFocusCycle {
   return latestCycle;
 }
 export function getPreviousSuccessfulFocusCycle(): MarketFocusCycle {

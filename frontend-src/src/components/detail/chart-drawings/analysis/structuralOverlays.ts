@@ -2,6 +2,8 @@
  * Receives the same closed, fingerprint-gated bars as the existing detector.
  * No viewport, live quote, network, storage or manual-drawing dependency.
  */
+import { clamp, finite } from './numeric.ts';
+
 export interface StructuralBar {
   t: string; key: string; o: number; h: number; l: number; c: number;
   chartIndex?: number; closed?: boolean; ext?: boolean; quote_only?: boolean;
@@ -19,8 +21,6 @@ interface Anchor { time: string; barKey: string; price: number }
 const TREND = new Set(['support_trend', 'resistance_trend']);
 const PAIRED = new Set(['channel', 'triangle', 'wedge']);
 const BROKEN = new Set(['invalidated', 'broken_up', 'broken_down', 'failed', 'expired']);
-const finite = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n);
-const clamp = (n: number, low: number, high: number) => Math.max(low, Math.min(high, n));
 const xAt = (bars: readonly StructuralBar[], i: number) => bars[i].chartIndex ?? i;
 const at = (r: Rail, x: number) => r.slope * x + r.intercept;
 const record = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);

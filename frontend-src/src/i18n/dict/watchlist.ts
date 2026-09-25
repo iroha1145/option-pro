@@ -45,12 +45,9 @@ export const WATCHLIST: Dict = {
   '日线走势': ['Daily trend', '日足の推移'],
   '近 {count} 个交易日': ['Last {count} trading days', '直近 {count} 営業日'],
   '区间': ['Period', '期間'],
-  '暂无日线走势，打开详情后可更新': ['No daily trend yet. Open details to update.', '日足データがありません。詳細画面から更新できます。'],
   '{ticker} 日线走势，{start} 至 {end}，区间涨跌 {change}%': ['{ticker} daily trend, {start} to {end}, period change {change}%', '{ticker} の日足、{start}〜{end}、期間騰落率 {change}%'],
 
   "只（默认关注）": ["stocks (default watchlist)", "銘柄（標準リスト）"],
-  '自选暂时都不在行情覆盖范围内': ['None of your watchlist is covered by quotes yet', 'ウォッチリストの銘柄はまだ相場データの対象外です'],
-  '上方列出的代码已保存在账号里，行情覆盖后会自动出现': ['The tickers listed above are saved to your account and will appear once covered', '上に列挙したティッカーはアカウントに保存済みで、対象になり次第表示されます'],
   /* ---------------- B0 页头带 ---------------- */
   '自选观察': ['Your watchlist', 'マイウォッチリスト'],
   "跟踪自选股的价格、走势与市场信号。": ["Track prices, trends and signals for your watchlist.", "ウォッチリストの株価、トレンド、シグナルを確認。"],
@@ -77,8 +74,6 @@ export const WATCHLIST: Dict = {
   '跌幅优先': ['Losers first', '下落率順'],
   '强度优先': ['Strength first', '強度順'],
   '按代码 A–Z': ['Ticker A–Z', 'コード順 A–Z'],
-  '加自选': ['Add ticker', 'ティッカーを追加'],
-  '添加自选股票代码': ['Add a ticker to your watchlist', '登録銘柄のティッカーを追加'],
   '添加': ['Add', '追加'],
   '只标的': ['ticker||tickers', '銘柄'],
   '/ 上限': ['/ max', '/ 上限'],
@@ -105,25 +100,9 @@ export const WATCHLIST: Dict = {
     '(Outside current coverage — you can fetch it manually on the ticker page)',
     '（現在のカバー範囲外です。個別銘柄ページで手動取得できます）',
   ],
-  '读不到你的自选列表，下面显示的是系统默认关注池。': [
-    "We couldn't load your watchlist, so the list below shows the system's default coverage pool.",
-    'ウォッチリストを読み込めませんでした。以下はシステムの既定の注目銘柄プールです。',
-  ],
-  '你还没有自己的自选，下面是系统默认关注池。': [
-    "You haven't built a watchlist yet — the list below is the system's default coverage pool.",
-    'まだ自分のウォッチリストがありません。以下はシステムの既定の注目銘柄プールです。',
-  ],
-  '上方输入代码即可开始建立自己的列表。': [
-    'Enter a ticker above to start building your own list.',
-    '上部にティッカーを入力すると、自分のリストを作成できます。',
-  ],
 
   /* ---------------- 空态（items.length === 0） ---------------- */
   '清单还是空的': ['Your watchlist is empty', 'ウォッチリストは空です'],
-  '在上方输入股票代码，加入你的第一只自选': [
-    'Enter a ticker above to add your first stock to your watchlist.',
-    '上部にティッカーを入力して、最初の登録銘柄を追加しましょう。',
-  ],
   '登录后可以把自选股保存在账号里，换设备也还在': [
     "Sign in to save your watchlist to your account — it'll follow you across devices.",
     'サインインすると登録銘柄がアカウントに保存され、別の端末でも引き継がれます。',

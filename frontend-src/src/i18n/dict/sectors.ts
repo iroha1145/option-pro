@@ -20,7 +20,6 @@ export const SECTORS: Dict = {
   '强度': ['Strength', '強度'],
   '板块目录成分': ['Sector directory constituents', 'セクターリストの構成銘柄'],
   '暂未取得该板块的成分股。': ['Constituent stocks are not available for this sector yet.', 'このセクターの構成銘柄はまだ取得できていません。'],
-  '本页暂不提供板块资金流、相关性与历史趋势。': ['This page does not yet cover sector fund flows, correlation, or historical trends.', 'このページでは、セクターの資金フロー・相関・過去のトレンドはまだ提供していません。'],
 
   /* HeatMatrix.tsx —— 板块平均收益热力矩阵 */
   '暂无': ['N/A', 'データなし'],
@@ -61,12 +60,10 @@ export const SECTORS: Dict = {
   'IV 排名暂不可用': ['IV ranking temporarily unavailable', 'IV ランキングは一時的に利用できません'],
   'IV 排名加载失败': ['Failed to load IV ranking', 'IV ランキングの読み込みに失敗しました'],
   '该板块暂无 IV 排名数据': ['No IV ranking data for this sector', 'このセクターの IV ランキングデータはありません'],
-  '该板块成分暂无可用的期权样本，可切换板块或重新加载': ["This sector's constituents have no usable options samples right now. Try switching sectors or reloading.", 'このセクターの構成銘柄には現在利用できるオプションのサンプルがありません。セクターを切り替えるか、再読み込みしてください。'],
   '板块隐含波动率排名表': ['Sector implied volatility ranking table', 'セクター内の予想変動率ランキング表'],
   '价': ['Price', '価格'],
   '板块排位': ['Rank within sector', 'セクター内順位'],
   '操作': ['Actions', '操作'],
-  '板块排位是同板块成分之间的横向比较，不是该股自己的历史高低位；期权与价格均为延迟数据': ["Sector rank is a cross-sectional comparison among that sector's constituents, not where the stock sits within its own historical range; options and prices are both delayed data.", 'セクター順位は同じセクター内の構成銘柄同士を横断的に比較したものであり、その銘柄自身の過去の高値・安値ではありません。オプションと価格はいずれも遅延データです。'],
 
   /* SectorChips.tsx —— 板块切换条 */
   '板块切换': ['Sector switcher', 'セクター切り替え'],
@@ -82,7 +79,6 @@ export const SECTORS: Dict = {
   '板块内最高': ['Highest in sector', 'セクター内最高'],
   '板块内最低': ['Lowest in sector', 'セクター内最低'],
   '数据时间暂缺。': ['Data timestamp not available yet.', 'データ時刻はまだ取得できていません。'],
-  '排位只比较当前板块成分的 ATM IV，不代表一年历史百分位。': ["This rank only compares ATM IV across the current sector's constituents, not a one-year historical percentile.", 'この順位は現在のセクター構成銘柄間の ATM IV を比較するものであり、1 年ヒストリカル・パーセンタイルではありません。'],
 
   /* model.ts —— 视图模型：周期标签、来源状态 */
   '数据不足': ['Insufficient data', 'データ不足'],

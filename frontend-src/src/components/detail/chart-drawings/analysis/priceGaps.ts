@@ -1,6 +1,6 @@
+import { finite } from './numeric.ts';
 import { closedStructuralBars, medianRange, type StructuralBar, type StructuralOverlay } from './structuralOverlays.ts';
 export interface GapInterval { low: number; high: number }
-const finite = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n);
 
 /** Subtract the range that actually traded. A jump across a gap is NOT a fill.
  * This also preserves both untraded pieces when a later candle trades only in the

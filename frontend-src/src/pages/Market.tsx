@@ -113,7 +113,7 @@ export default function Market() {
           loading={indicesQ.loading}
           error={indicesQ.error}
           focus={focus}
-          onRetry={indicesQ.refresh}
+          onRetry={() => indicesQ.refresh()}
           refreshing={indicesQ.refreshing}
           onOpen={openTicker}
         />
@@ -126,7 +126,7 @@ export default function Market() {
             data={status}
             loading={statusQ.loading}
             error={statusQ.error}
-            onRetry={statusQ.refresh}
+            onRetry={() => statusQ.refresh()}
             refreshing={statusQ.refreshing}
           />
         </div>
@@ -135,7 +135,7 @@ export default function Market() {
             data={regimeQ.data}
             loading={regimeQ.loading}
             error={regimeQ.error}
-            onRetry={regimeQ.refresh}
+            onRetry={() => regimeQ.refresh()}
             refreshing={regimeQ.refreshing}
           />
         </div>
@@ -190,7 +190,7 @@ export default function Market() {
                 signals={signalsQ.data}
                 loading={signalsQ.loading}
                 error={signalsQ.error}
-                onRetry={signalsQ.refresh}
+                onRetry={() => signalsQ.refresh()}
                 refreshing={signalsQ.refreshing}
                 indices={indicesQ.data}
                 regimeMean={mean}
@@ -204,7 +204,7 @@ export default function Market() {
                   data={strengthQ.data}
                   loading={strengthQ.loading}
                   error={strengthQ.error}
-                  onRetry={strengthQ.refresh}
+                  onRetry={() => strengthQ.refresh()}
                   refreshing={strengthQ.refreshing}
                 />
               </div>

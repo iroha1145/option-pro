@@ -1,6 +1,7 @@
 /**
  * AI 股票分析（signal_analysis 任务）
- * owner：确认费用 → 创建任务 → 2.5s 轮询 → 结果渲染（accordion 展开）
+ * owner：确认费用 → 创建任务 → 按创建响应的 Retry-After 首查，之后 2/3/5/8/10 秒退避轮询
+ *        （页面隐藏时暂停）→ 结果渲染（accordion 展开）
  * visitor：「登录后可用模型分析」
  */
 import { useState } from 'react';
@@ -11,6 +12,7 @@ import Icon from '@/components/icons';
 import { createSignalAnalysisJob } from './api';
 import { useAiJob } from './useAiJob';
 import { aiJobBlockedMessage, aiJobResultSummary } from '@/api/modules/ai-jobs';
+import { aiJobDeferralMessage, aiJobErrorMessage } from '@/api/aiJobNormalize';
 import { isIndexSymbol } from '@/lib/quoteSymbol';
 import { t } from '../../i18n/core.ts';
 
@@ -27,6 +29,7 @@ export default function AiAnalysisCard({ ticker }: { ticker: string }) {
   const resultSummary =
     job?.status === 'succeeded' ? aiJobResultSummary(job.result) : null;
   const blocked = aiJobBlockedMessage(job);
+  const deferral = aiJobDeferralMessage(job);
 
   return (
     <div className="rounded-lg border border-line bg-card p-4 shadow-sh-1">
@@ -112,16 +115,25 @@ export default function AiAnalysisCard({ ticker }: { ticker: string }) {
               <div className="flex items-center justify-between text-caption text-ink-500">
                 <span className="flex items-center gap-1.5">
                   <span className="size-1.5 animate-led-pulse rounded-full bg-ai-600" aria-hidden="true" />
-                  {queryIssue === 'paused' || queryIssue === 'blocked' ? t('任务状态待确认') : job.status === 'queued'
-                    ? t('排队中…')
-                    : job.progress === null
-                      ? t('模型分析中…')
-                      : t('模型分析中 {pct}%', { pct: Math.round(job.progress) })}
+                  {queryIssue === 'paused' || queryIssue === 'blocked' ? t('任务状态待确认') : job.cancelRequested
+                    ? t('已请求取消')
+                    : job.status === 'queued'
+                      ? t('排队中…')
+                      : job.progress === null
+                        ? t('模型分析中…')
+                        : t('模型分析中 {pct}%', { pct: Math.round(job.progress) })}
                 </span>
-                <button onClick={() => void cancel()} className="text-ink-400 transition-colors hover:text-ink-600">
+                <button
+                  onClick={() => void cancel()}
+                  disabled={job.cancelRequested}
+                  className="text-ink-400 transition-colors hover:text-ink-600 disabled:cursor-default disabled:text-ink-300"
+                >
                   {t('取消任务')}
                 </button>
               </div>
+              {deferral && !job.cancelRequested && (
+                <p className="mt-1 text-micro text-ink-400">{deferral}</p>
+              )}
               {job.progress !== null && (
                 <div className="mt-1.5 h-1 overflow-hidden rounded-pill bg-line">
                   <div
@@ -164,12 +176,13 @@ export default function AiAnalysisCard({ ticker }: { ticker: string }) {
             className="mt-3 text-caption text-down-700"
           >
             {error ??
-              blocked ??
               (job?.status === 'failed'
-                ? t('分析任务失败')
+                ? aiJobErrorMessage(job.error ?? null)
                 : job?.status === 'cancelled'
                   ? t('任务已取消')
-                  : t('分析已完成，暂无摘要'))}{' '}
+                  : job?.error === 'legacy_output_hidden'
+                    ? aiJobErrorMessage('legacy_output_hidden')
+                    : t('分析已完成，暂无摘要'))}{' '}
             {queryIssue === 'retrying' && <span>{t('正在重新查询原任务')}</span>}
             {(queryIssue === 'paused' || queryIssue === 'blocked') && <button onClick={resume} className="ml-2 font-medium text-ai-600">{t('继续查询原任务')}</button>}
             {!running && <button onClick={reset} className="ml-2 font-medium text-ai-600">{blocked ? t('关闭') : t('重试')}</button>}

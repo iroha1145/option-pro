@@ -73,7 +73,7 @@ export default function Earnings() {
   );
   const [reportAnalysisStates, setReportAnalysisStates] = useState<Record<string, EarningsReportAnalysis>>({});
   const items = useMemo(
-    () => ((q.data?.items ?? []) as unknown as EarningsRow[]).map((row) => {
+    () => ((q.data?.items ?? []) as EarningsRow[]).map((row) => {
       const analysis = reportAnalysisStates[reportAnalysisKey(row.ticker, row.date)];
       if (!analysis) return row;
       return {

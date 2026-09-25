@@ -6,7 +6,7 @@
  * ③ 操作（打开详情 / 相关突破事件）+ 信号 + 成交额
  */
 import SoftBadge from '@/components/shared/SoftBadge';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { stocksApi } from '@/api/modules/stocks';
 import { ApiError } from '@/api/client';
@@ -108,6 +108,9 @@ function DotMatrixBlock({ row }: { row: ScreenerRow }) {
   const hasSpark = row.sparkline.length >= 2;
   const [closes, setCloses] = useState<number[] | null | undefined>(hasSpark ? row.sparkline : undefined);
   const [loadError, setLoadError] = useState<string | null>(null);
+  /* 手动拉取后的重读不在下面的 effect 里，靠这个世代守卫：卸载或换行后
+     （effect 清理时递增），它的结果不能再写回。 */
+  const manualReadRef = useRef(0);
 
   useEffect(() => {
     if (hasSpark) {
@@ -129,6 +132,7 @@ function DotMatrixBlock({ row }: { row: ScreenerRow }) {
       });
     return () => {
       alive = false;
+      manualReadRef.current += 1;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [row.ticker, hasSpark]);
@@ -140,11 +144,15 @@ function DotMatrixBlock({ row }: { row: ScreenerRow }) {
       : t('日线 · 点阵面积');
 
   const refreshAfterPull = () => {
+    const read = ++manualReadRef.current;
     setCloses(undefined);
     setLoadError(null);
     void fetchDailyCloses(row.ticker, true)
-      .then(setCloses)
+      .then((v) => {
+        if (manualReadRef.current === read) setCloses(v);
+      })
       .catch((error: unknown) => {
+        if (manualReadRef.current !== read) return;
         setCloses(null);
         setLoadError(dailyChartError(error));
       });

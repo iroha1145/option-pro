@@ -16,6 +16,7 @@ import { catalystsContract } from './api';
 import { DEFAULT_FEED_PAGE_SIZE } from './feedPrefetch';
 import { useFeedResource } from './useFeedResource';
 import { appendFeedPage, visibleFeedPage } from './feedSnapshot';
+import { applyNewsPatches, type NewsPatches } from './feedPatches';
 import CatalystCacheStatus from './CatalystCacheStatus';
 import { cacheStatusProps } from './cacheStatusProps';
 import type { CatalystNewsItem } from './api';
@@ -177,7 +178,7 @@ function FeedSkeleton({ rows = 6 }: { rows?: number }) {
 interface FeedPanelProps {
   filters: CatalystFilters;
   onOpenNews: (id: string, seed?: CatalystNewsItem) => void;
-  patches: Record<string, CatalystNewsItem>;
+  patches: NewsPatches;
   refreshToken: number;
   onFeedResult: (result: { total: number | null; ok: boolean; validatedAt?: number; settled?: boolean }) => void;
   onClearFilters: () => void;
@@ -185,7 +186,7 @@ interface FeedPanelProps {
 
 export default function FeedPanel({ filters, onOpenNews, patches, onFeedResult, onClearFilters }: FeedPanelProps) {
   const q = useFeedResource(filters);
-  const { update } = q;
+  const { update, data: feedData, validatedAt, refreshing } = q;
   const items = q.data?.items ?? [];
   const nextCursor = q.data?.nextCursor ?? null;
   const hiddenUnanalyzed = q.data?.hiddenUnanalyzed ?? 0;
@@ -196,6 +197,8 @@ export default function FeedPanel({ filters, onOpenNews, patches, onFeedResult, 
   const fetchFirst = q.refresh;
   const [loadingMore, setLoadingMore] = useState(false);
   const [moreError, setMoreError] = useState<ApiError | null>(null);
+  /* 翻页结果落地前列表已被刷新：缓存按预期值拒收这一页，要告诉用户重新加载。 */
+  const [moreStale, setMoreStale] = useState(false);
   const keyRef = useRef(q.key);
   keyRef.current = q.key;
   const pendingMore = useRef(false);
@@ -206,6 +209,7 @@ export default function FeedPanel({ filters, onOpenNews, patches, onFeedResult, 
     pendingMore.current = false;
     setLoadingMore(false);
     setMoreError(null);
+    setMoreStale(false);
     return () => { generation.current += 1; };
   }, [q.key, q.enabled]);
 
@@ -214,19 +218,14 @@ export default function FeedPanel({ filters, onOpenNews, patches, onFeedResult, 
       validatedAt: q.validatedAt || undefined, settled: q.data !== null || q.error !== null });
   }, [q.data, q.error, q.restored, q.validatedAt, hiddenCountUnknown, onFeedResult]);
 
+  /* 抽屉回写：只套用比当前快照新的补丁，并以当前快照为预期值写入——
+     刷新或翻页已替换快照时这次写入作废，由新快照自己决定（审计 FE-4）。 */
   useEffect(() => {
-    if (!Object.keys(patches).length) return;
-    update((previous) => {
-      if (!previous) return previous;
-      let changed = false;
-      const revised = previous.items.map((item) => {
-        if (!patches[item.newsId] || patches[item.newsId] === item) return item;
-        changed = true;
-        return patches[item.newsId];
-      });
-      return changed ? { ...previous, items: revised } : previous;
-    });
-  }, [patches, update]);
+    if (!feedData || refreshing) return;
+    const patched = applyNewsPatches(feedData, patches, validatedAt);
+    if (patched === feedData) return;
+    update(() => patched, feedData);
+  }, [patches, feedData, validatedAt, refreshing, update]);
 
   const loadMore = useCallback(async () => {
     if (!q.enabled || !q.data || !q.data.nextCursor || pendingMore.current || q.refreshing) return;
@@ -236,10 +235,13 @@ export default function FeedPanel({ filters, onOpenNews, patches, onFeedResult, 
     pendingMore.current = true;
     setLoadingMore(true);
     setMoreError(null);
+    setMoreStale(false);
     try {
       const page = await visibleFeedPage((cursor) => catalystsContract.feed({ ...toFeedQuery(filters), limit: PAGE_SIZE, pageMode: 'visible', cursor }), previous.nextCursor!);
       if (keyRef.current !== key || generation.current !== requestGeneration) return;
-      update((current) => current ? appendFeedPage(current, page) : current, previous);
+      const appended = update((current) => current ? appendFeedPage(current, page) : current, previous);
+      // 这一页属于刷新前的游标链，缓存拒收时不能静默丢掉。
+      if (!appended) setMoreStale(true);
     } catch (cause) {
       if (keyRef.current !== key || generation.current !== requestGeneration) return;
       setMoreError(cause instanceof ApiError ? cause : new ApiError(500, __t('加载更多失败')));
@@ -335,7 +337,7 @@ export default function FeedPanel({ filters, onOpenNews, patches, onFeedResult, 
             {nextCursor ? (
               <button
                 onClick={() => void loadMore()}
-                disabled={loadingMore || !q.enabled}
+                disabled={loadingMore || !q.enabled || refreshing}
                 className="inline-flex items-center gap-2 rounded-md border border-line bg-card px-4 py-2 text-caption font-medium text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:opacity-60"
               >
                 {loadingMore && <span className="size-3.5 animate-spin rounded-full border-2 border-line-strong border-t-brand-600" aria-hidden="true" />}
@@ -344,10 +346,13 @@ export default function FeedPanel({ filters, onOpenNews, patches, onFeedResult, 
             ) : (
               <p className="text-micro text-ink-300">{__t('已加载全部')} {items.length} {__t('条')}</p>
             )}
+            {moreStale && !moreError && (
+              <p className="mt-1.5 text-micro text-ink-500" role="status">{__t('列表已更新，请再试一次')}</p>
+            )}
             {moreError && (
               <p className="mt-1.5 text-micro text-down-700">
                 {__t('加载更多失败：')}{moreError.message} ·{' '}
-                <button type="button" disabled={!q.enabled} onClick={() => void loadMore()} className="font-medium underline underline-offset-2">
+                <button type="button" disabled={!q.enabled || refreshing} onClick={() => void loadMore()} className="font-medium underline underline-offset-2">
                   {__t('重试')}
                 </button>
               </p>

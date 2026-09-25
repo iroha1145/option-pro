@@ -15,6 +15,7 @@ import {
   runBoundedRead,
   shouldApplyRecoveryJob,
 } from '../src/lib/boundedReadRetry.ts';
+import * as analysisErrorText from '../src/components/catalysts/analysisErrorText.ts';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../src');
 const source = fs.readFileSync(path.join(root, 'components/catalysts/NewsDrawer.tsx'), 'utf8');
@@ -45,12 +46,14 @@ function item(partial) {
   };
 }
 
+/* 任务查询接口（AIJobPublic）归一后的真实形状：后端不给 news_id 与 progress，
+   newsId 为空串、progress 为 null。只有提交接口会由 api 层补上 newsId。 */
 function job(partial) {
   return {
     jobId: 'job-1',
-    newsId: '9600',
+    newsId: '',
     status: 'in_progress',
-    progress: 10,
+    progress: null,
     submittedAt: '2026-09-13T00:00:00Z',
     updatedAt: '2026-09-13T00:00:01Z',
     error: null,
@@ -137,6 +140,7 @@ function harness(DateImpl = Date) {
         ImpactValue: passthrough, Led: passthrough, StaleChip: passthrough, TickerChip: passthrough,
       };
       if (id === './ConfirmDialog') return { default: passthrough };
+      if (id === './analysisErrorText') return analysisErrorText;
       if (id === '../../i18n/core.ts') return { t: (text) => text };
       throw new Error(`Unexpected import ${id}`);
     },
@@ -231,7 +235,8 @@ test('持续轮询失败会提示，并在恢复后清除提示', async () => {
   assert.doesNotMatch(collectText(h.tree()).join(' '), /任务状态暂时读不到/);
   await h.fireDue(5000);
   assert.match(collectText(h.tree()).join(' '), /任务状态暂时读不到/);
-  await h.fireDue(5000);
+  // 第二次失败后本地退避升到 10 秒。
+  await h.fireDue(10_000);
   assert.doesNotMatch(collectText(h.tree()).join(' '), /任务状态暂时读不到/);
   h.unmount();
 });
@@ -371,7 +376,7 @@ test('成功提交新任务 B 后，在途初始详情中的旧 completed A 不�
   const initial = deferred();
   h.setNews(() => initial.promise);
   h.setJob(async (id) => job({ jobId: id, status: 'queued' }));
-  h.setCreate(async () => job({ jobId: 'job-B', status: 'queued' }));
+  h.setCreate(async () => job({ jobId: 'job-B', newsId: '9600', status: 'queued' }));
   h.render({ newsId: '9600', seed: completedItem() });
   await settle();
   const start = findButton(h.tree(), '重新分析（强制）');
@@ -465,12 +470,12 @@ test('seed 无任务时等详情带回 queued 才开始轮询并走到完成', a
   news.resolve(item({ analysisStatus: 'queued', analysisJobId: 'job-1' }));
   await settle();
   assert.equal(h.jobCalls.length, 1);
-  firstJob.resolve(job({ status: 'in_progress', progress: 20 }));
+  firstJob.resolve(job({ status: 'in_progress' }));
   await settle();
   assert.equal(h.jobCalls.length, 1, '恢复成功后等退避再打下一轮');
   await h.fireDue(2000);
   assert.equal(h.jobCalls.length, 2);
-  pollJob.resolve(job({ status: 'completed', progress: 100 }));
+  pollJob.resolve(job({ status: 'completed' }));
   await settle();
   refresh.resolve(item({ analysisStatus: 'completed', analysisJobId: 'job-1', analysis: {
     classification: 'bullish', confidence: 0.8, headlineSummary: '好', causalSummary: '因为',
@@ -501,7 +506,7 @@ test('同一条新闻换成新任务 id 会重新恢复，关抽屉后迟到响�
   h.render({ newsId: null, seed: item({ analysisStatus: 'queued', analysisJobId: 'job-2' }) });
   await settle();
   const updatesBeforeLate = h.updates.length;
-  second.resolve(job({ jobId: 'job-2', newsId: '9600', status: 'in_progress' }));
+  second.resolve(job({ jobId: 'job-2', status: 'in_progress' }));
   await settle();
   assert.equal(h.updates.length, updatesBeforeLate, '关抽屉后迟到的 job 不得写回');
   h.unmount();
@@ -529,7 +534,7 @@ test('详情已是完成态时不再轮询；瞬时失败后重试能恢复任�
     if (newsRound === 1) throw new Error('429');
     return recovered.promise;
   });
-  h2.setJob(async () => job({ status: 'queued', progress: null }));
+  h2.setJob(async () => job({ status: 'queued' }));
   h2.render({ newsId: '9600', seed: item() });
   await settle();
   assert.equal(h2.jobCalls.length, 0);
@@ -557,11 +562,11 @@ test('抽屉保持打开时，seed 的旧任务 A 迟到不得替换已恢复的
   news.resolve(item({ analysisStatus: 'in_progress', analysisJobId: 'job-B' }));
   await settle();
   assert.ok(h.jobCalls.includes('job-B'));
-  jobB.resolve(job({ jobId: 'job-B', status: 'in_progress', progress: 40 }));
+  jobB.resolve(job({ jobId: 'job-B', status: 'in_progress' }));
   await settle();
   await h.fireDue(2000);
   const afterB = h.jobCalls.filter((id) => id === 'job-B').length;
-  jobA.resolve(job({ jobId: 'job-A', status: 'in_progress', progress: 99 }));
+  jobA.resolve(job({ jobId: 'job-A', status: 'in_progress' }));
   await settle();
   await h.fireDue(2000);
   assert.equal(h.createCalls.length, 0);
@@ -605,7 +610,7 @@ test('恢复已 completed 后详情失败必须可见且可重试', async () => 
     error.retryable = true;
     throw error;
   });
-  h.setJob(async () => job({ jobId: 'job-1', status: 'completed', progress: 100 }));
+  h.setJob(async () => job({ jobId: 'job-1', status: 'completed' }));
   h.render({ newsId: '9600', seed: item({ analysisStatus: 'queued', analysisJobId: 'job-1' }) });
   await settle();
   await h.fireDue(1500);
@@ -810,7 +815,7 @@ for (const [label, projected, expectedStatus] of [
       return round === 1 ? initial.promise : Promise.resolve(projected);
     });
     h.setJob(async (id) => job({ jobId: id, status: 'queued' }));
-    h.setCreate(async () => job({ jobId: 'job-9', status: 'queued' }));
+    h.setCreate(async () => job({ jobId: 'job-9', newsId: '9600', status: 'queued' }));
     h.render({ newsId: '9600', seed: item() });
     await settle();
     assert.equal(h.newsCalls.length, 1);
@@ -839,7 +844,7 @@ test('初始详情失败后在 seed 上提交分析，补读成功应清除旧�
     if (++round === 1) throw Object.assign(new Error('limited'), { code: 429, retryAfter: 30 });
     return item({ summaryZh: '补读成功的新摘要', analysisStatus: 'queued', analysisJobId: 'job-9' });
   });
-  h.setCreate(async () => job({ jobId: 'job-9', status: 'queued' }));
+  h.setCreate(async () => job({ jobId: 'job-9', newsId: '9600', status: 'queued' }));
   h.setJob(async (id) => job({ jobId: id, status: 'queued' }));
   h.render({ newsId: '9600', seed: item() });
   await settle();

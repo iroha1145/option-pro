@@ -33,7 +33,7 @@ type Rec = Record<string, unknown>;
 function requiredCount(record: Rec, key: string): number {
   const value = record[key];
   if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
-    throw new Error(`新闻分析进度字段无效：${key}`);
+    throw new Error(t('新闻分析进度字段无效：{key}', { key }));
   }
   return value;
 }
@@ -42,7 +42,7 @@ function optionalPositiveInteger(record: Rec, key: string): number | null {
   const value = record[key];
   if (value === null || value === undefined) return null;
   if (typeof value !== 'number' || !Number.isInteger(value) || value < 1) {
-    throw new Error(`新闻分析进度字段无效：${key}`);
+    throw new Error(t('新闻分析进度字段无效：{key}', { key }));
   }
   return value;
 }
@@ -51,7 +51,7 @@ function optionalText(record: Rec, key: string): string | null {
   const value = record[key];
   if (value === null || value === undefined) return null;
   if (typeof value !== 'string' || !value) {
-    throw new Error(`新闻分析进度字段无效：${key}`);
+    throw new Error(t('新闻分析进度字段无效：{key}', { key }));
   }
   return value;
 }

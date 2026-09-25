@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
 import { ApiError } from '../src/api/client.ts';
+import { aiJobCreateErrorMessage } from '../src/api/aiJobNormalize.ts';
 import { createReactStub } from './helpers/react-hooks.mjs';
 
 const settle = async () => { for (let i = 0; i < 15; i++) await Promise.resolve(); };
@@ -78,7 +79,8 @@ function jobHarness(respond) {
   const { useAiJob } = compile('components/detail/useAiJob.ts', stub.React, {
     '@/api/client': { ApiError },
     '@/api/modules/ai-jobs': { aiJobsApi: { get: id => { queries.push(id); return respond(id); }, cancel: async id => ({ id, status: 'cancelled' }) } },
-  }, { ...clock, Date: class extends Date { static now() { return clock.now(); } }, document: { hidden: false } });
+    '@/api/aiJobNormalize': { aiJobCreateErrorMessage },
+  }, { ...clock, Date: class extends Date { static now() { return clock.now(); } }, document: { hidden: false, addEventListener() {}, removeEventListener() {} } });
   const read = stub.mount(() => useAiJob());
   return { ...stub, clock, queries, read, creates: () => creates,
     start: () => read().start(async () => { creates++; return { id: 'paid-1', status: 'queued', progress: null }; }) };

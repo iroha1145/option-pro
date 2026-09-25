@@ -14,6 +14,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { motion } from 'framer-motion';
 import { ApiError } from '@/api/client';
+import { num, str } from '@/api/live';
 import { breakoutsApi } from '@/api/modules/breakouts';
 import { stocksApi } from '@/api/modules/stocks';
 import type { Candle } from '@/api/types';
@@ -55,18 +56,6 @@ const MONO = CHART_MONO_FONT;
  *  getHours() 走浏览器本地时区、旁边却标着「美东」——UTC+8 用户看到的时刻
  *  与右侧历史轨道（HistoryRail，正确的 ET）差一整个时区。 */
 const fmtEventTime = fmtNyEventTime;
-
-/** 观测 x 小时前（不足 1 小时显分钟） */
-function observedAgo(iso: string): string {
-  const ms = Date.now() - new Date(iso).getTime();
-  if (!Number.isFinite(ms) || ms < 0) return '—';
-  const h = ms / 3_600_000;
-  if (h >= 1) return t('{n} 小时前', { n: h >= 10 ? Math.round(h) : h.toFixed(1) });
-  return t('{n} 分钟前', { n: Math.max(1, Math.round(ms / 60_000)) });
-}
-
-const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
-const str = (v: unknown): string | null => (typeof v === 'string' && v ? v : null);
 
 /* ---------------- 时段 chip（§1.6 LED 色） ---------------- */
 const SESSION_DOT: Record<BreakoutSession, string> = {
@@ -764,7 +753,7 @@ export default function LeadBigCard({ ev: initialEvent, flash, locate, onOpen, d
           <div className="pb-3 pt-1">
             <ContributionBar ev={e} />
             <p className="mt-3 text-micro text-ink-400">
-              {t('评分')} {scoreVersion} {t('· 形态')} {shapeTxt} {t('· 观测')} {observedAgo(e.event_at)}
+              {t('评分')} {scoreVersion} {t('· 形态')} {shapeTxt} {t('· 观测')} {fmtRelative(e.event_at, 1)}
               <InfoHint hint={SCORE_HINTS.breakoutPriority} size={12} className="ml-1" />
             </p>
           </div>

@@ -310,7 +310,10 @@ export function searchStocks(q: string): StockSearchResult[] {
     .map((x) => ({ ticker: x.ticker, name: x.name, sector: x.sector }));
 }
 
-export function getStockDetail(ticker: string): StockDetail {
+/** mock 行情总会生成昨收与 IV 百分位；收窄类型，mock 内部的派生计算不必处理不存在的缺失。 */
+type MockStockDetail = StockDetail & { prevClose: number; ivPercentile: number };
+
+export function getStockDetail(ticker: string): MockStockDetail {
   const i = TICKER_POOL.findIndex((x) => x.ticker === ticker.toUpperCase());
   const info = infoOf(ticker.toUpperCase());
   const r = new Rng(31000 + Math.max(i, 0) * 977);
@@ -336,7 +339,7 @@ export function getStockDetail(ticker: string): StockDetail {
     prevClose: info.base,
     volume: Math.round(r.float(8, 96) * 1e6),
     avgVolume: Math.round(r.float(10, 80) * 1e6),
-    marketCap: index ? (null as unknown as number) : Math.round(info.base * r.float(0.4, 32) * 1e8),
+    marketCap: index ? null : Math.round(info.base * r.float(0.4, 32) * 1e8),
     pe: !index && r.chance(0.85) ? round2(r.float(12, 68)) : null,
     ivPercentile: Math.round(r.float(20, 80)),
     range52w: [round2(info.base * r.float(0.45, 0.8)), round2(info.base * r.float(1.15, 2.1))],

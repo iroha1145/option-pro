@@ -9,7 +9,11 @@ import { fmtRelative } from '@/lib/format';
 import { Led } from './bits';
 import { fetchNewsAnalysisProgress } from './analysisProgressApi';
 import type { NewsAnalysisProgress } from './analysisProgressContract';
+import { createReadBackoff } from './readBackoff';
 import { t } from '../../i18n/core.ts';
+
+/* 连续读取失败后的等待；与 Retry-After 取较大值，退避期内轮询不发请求。 */
+const PROGRESS_FAILURE_WAITS_MS = [5_000, 15_000, 30_000, 60_000] as const;
 
 function Metric({
   label,
@@ -46,7 +50,8 @@ function progressHeadline(progress: NewsAnalysisProgress): string {
 function OwnerAnalysisProgressCard() {
   const reduceMotion = useReducedMotion();
   const [busy, setBusy] = useState(true);
-  const progressQ = usePolling(fetchNewsAnalysisProgress, busy ? 5_000 : 30_000);
+  const [readProgress] = useState(() => createReadBackoff(fetchNewsAnalysisProgress, PROGRESS_FAILURE_WAITS_MS));
+  const progressQ = usePolling(readProgress, busy ? 5_000 : 30_000);
   const progress = progressQ.data;
   /* 渲染期校正而不是 useEffect：空闲降频（5s→30s）只依赖最新一次
      轮询结果，effect 里 setState 会多一轮级联渲染（eslint 基线红线）。 */

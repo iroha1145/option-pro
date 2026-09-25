@@ -35,7 +35,12 @@ async function fixture(page, options = {}) {
     if (pathName === '/api/catalysts/analysis-jobs/job-local' && state.showJob) {
       state.jobReads += 1;
       if (state.jobReads > 1) return route.fulfill({ status: state.jobFailure ?? 503, json: { message: '本地任务状态失败' } });
-      return route.fulfill({ json: { job_id: 'job-local', news_id: 'local-news', status: 'in_progress', progress: 10 } });
+      // 真实 GET /catalysts/analysis-jobs/{id} 只回 AIJobPublic + submission_source：没有 news_id 与 progress。
+      return route.fulfill({ json: { job_id: 'job-local', job_type: 'news_impact', status: 'in_progress',
+        model: 'gpt-local', reasoning: 'low', submitted_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+        completed_at: null, error_code: null, error_detail: null, retry_after: null, result: null, cached: false,
+        cancellable: true, cancel_requested: false, analysis_revision: 1, cycle_revision: null,
+        budget_charge_usd: 0, usage: {}, submission_source: 'manual' } });
     }
     return route.fulfill({ status: 503, json: { message: '本地状态读取失败' } });
   });

@@ -266,15 +266,17 @@ export function registryGet<T>(path: string): Promise<T> {
 export async function restorePersistedQuery<T>(path: string): Promise<T | null> {
   const config = queryConfigFor(path);
   if (!config?.persist) return null;
+  // 与 registryGet 同一个键：写入时按规范化后的查询串存，恢复也必须按它读。
+  const cacheKey = normalizeQueryPath(path);
   const principal = await confirmedPrincipal();
   if (principal === null || principal !== principalKey) return null;
   const identityGeneration = principalGeneration;
-  const entry = entryFor(path);
+  const entry = entryFor(cacheKey);
   const generation = entry.generation;
   if (entry.value !== undefined) return entry.value as T;
   if (entry.restored) return null;
   entry.restored = true;
-  const record = await readPersisted(path);
+  const record = await readPersisted(cacheKey);
   if (entry.generation !== generation || identityGeneration !== principalGeneration
     || principal !== principalKey || !record || record.principal !== principal) return null;
   if (
@@ -286,7 +288,7 @@ export async function restorePersistedQuery<T>(path: string): Promise<T | null> 
   }
   if (!persistedRecordWithinAge(config, record, Date.now())) {
     // 超龄记录直接删掉:下次冷启动不再反复读到注定不可用的数据。
-    void deletePersisted(path);
+    void deletePersisted(cacheKey);
     return null;
   }
   if (entry.value !== undefined) return entry.value as T;

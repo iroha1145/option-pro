@@ -1328,7 +1328,7 @@ export default function Screener() {
             profile={activeProfile}
             loading={profilesQ.loading}
             error={!!profilesQ.error}
-            onRetry={profilesQ.refresh}
+            onRetry={() => profilesQ.refresh()}
           />
           <AnimatePresence>
             {scanState === 'done' && sorted.length === 0 && (

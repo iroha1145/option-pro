@@ -98,8 +98,9 @@ export {
 } from ${JSON.stringify(files.settings)};
 export {
   mapChartAnalysis, analysisMatchesChart, filterOverlays, filterPanes, labelBudget, barFingerprint,
-  barFingerprintFromBars, closedBarsForFingerprint, canonicalBarPayload, sha256Hex,
+  barFingerprintFromBars, closedBarsForFingerprint, canonicalBarPayload,
 } from ${JSON.stringify(files.mapBundle)};
+export { sha256Hex } from ${JSON.stringify(files.sha256)};
 export { overlaysToMarks, overlaysToSeries, analysisLayout, alignSeriesToBars, panesToOption } from ${JSON.stringify(files.overlaysToMarks)};
 `,
     'utf8',

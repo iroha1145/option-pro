@@ -158,5 +158,3 @@ export default function DrawingToolbar({
     </div>
   );
 }
-
-export { TOOLS };

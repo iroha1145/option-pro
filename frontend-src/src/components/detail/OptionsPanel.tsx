@@ -8,6 +8,7 @@ import { useMemo, useRef, useState } from 'react';
 import { isMock } from '@/api/client';
 import { optionsApi } from '@/api/modules/options';
 import { aiJobBlockedMessage, aiJobsApi } from '@/api/modules/ai-jobs';
+import { aiJobDeferralMessage, aiJobErrorMessage } from '@/api/aiJobNormalize';
 import { usePolling } from '@/hooks/usePolling';
 import { useRetryCountdown } from '@/hooks/useRetryCountdown';
 import { useAccess } from '@/hooks/useAccess';
@@ -116,6 +117,7 @@ function AiOptionInsight({
       job.status === 'in_progress' ||
       job.status === 'running');
   const hasEvidence = Boolean(chain && expiration && evidence.length > 0);
+  const deferral = aiJobDeferralMessage(job);
   return (
     <div className="mt-4 rounded-md border border-ai-600/25 bg-ai-50 p-3.5">
       <div className="flex items-center justify-between gap-3">
@@ -190,14 +192,25 @@ function AiOptionInsight({
           <div className="flex items-center justify-between text-caption text-ink-500">
             <span className="flex items-center gap-1.5">
               <span className="size-1.5 animate-led-pulse rounded-full bg-ai-600" />
-              {queryIssue === 'paused' || queryIssue === 'blocked' ? t('任务状态待确认') : job.status === 'queued'
-                ? t('排队中…')
-                : job.progress === null
-                  ? t('模型分析中…')
-                  : t('解读中 {pct}%', { pct: Math.round(job.progress) })}
+              {queryIssue === 'paused' || queryIssue === 'blocked' ? t('任务状态待确认') : job.cancelRequested
+                ? t('已请求取消')
+                : job.status === 'queued'
+                  ? t('排队中…')
+                  : job.progress === null
+                    ? t('模型分析中…')
+                    : t('解读中 {pct}%', { pct: Math.round(job.progress) })}
             </span>
-            <button onClick={() => void cancel()} className="text-ink-400 hover:text-ink-600">{t('取消任务')}</button>
+            <button
+              onClick={() => void cancel()}
+              disabled={job.cancelRequested}
+              className="text-ink-400 hover:text-ink-600 disabled:cursor-default disabled:text-ink-300"
+            >
+              {t('取消任务')}
+            </button>
           </div>
+          {deferral && !job.cancelRequested && (
+            <p className="mt-1 text-micro text-ink-400">{deferral}</p>
+          )}
           {job.progress !== null && (
             <div className="mt-1.5 h-1 overflow-hidden rounded-pill bg-line">
               <div
@@ -277,7 +290,9 @@ function AiOptionInsight({
       {job?.status === 'succeeded' && !result && (
         <div className="mt-3 border-t border-ai-600/20 pt-3">
           <p className="text-caption text-down-700">
-            {t('分析已完成，但没有返回可展示的结果。')}
+            {job.error === 'legacy_output_hidden'
+              ? aiJobErrorMessage('legacy_output_hidden')
+              : t('分析已完成，但没有返回可展示的结果。')}
           </p>
           <button onClick={reset} className="mt-2 text-caption font-medium text-ai-600">
             {t('重新生成')}
@@ -286,7 +301,7 @@ function AiOptionInsight({
       )}
       {(job?.status === 'failed' || job?.status === 'cancelled') && (
         <p className="mt-2.5 text-caption text-ink-500">
-          {aiJobBlockedMessage(job) ?? <>{t('任务')}{job.status === 'failed' ? t('失败') : t('已取消')}</>} ·{' '}
+          {job.status === 'failed' ? aiJobErrorMessage(job.error ?? null) : t('任务已取消')} ·{' '}
           <button onClick={reset} className="font-medium text-ai-600">{aiJobBlockedMessage(job) ? t('关闭') : t('重试')}</button>
           {job.status === 'failed' && job.errorDetail && (
             /* owner 排障线索（非 owner 后端置空不渲染）：命中的校验规则/字段 */

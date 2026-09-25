@@ -14,7 +14,7 @@ export interface Column<T> {
   align?: 'left' | 'right' | 'center';
   width?: string;
   sortable?: boolean;
-  sortValue?: (row: T) => number | string;
+  sortValue?: (row: T) => number | string | null;
   render: (row: T, index: number) => ReactNode;
   className?: string;
 }

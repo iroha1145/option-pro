@@ -314,7 +314,7 @@ function WatchCard({
       </div>
       {!Number.isFinite(item.price) && <p className="mt-2 text-caption text-ink-400">{t('暂无行情')}</p>}
       <div className="mt-2">
-        <Sparkline data={item.sparkline} width={230} height={56} change={item.changePct} variant="area" className="w-full" />
+        <Sparkline data={item.sparkline} width={230} height={56} change={item.changePct ?? Number.NaN} variant="area" className="w-full" />
       </div>
       {(showStrength || showSignals) && (
         <div className="mt-3 flex items-center justify-between gap-2 border-t border-line pt-3">
@@ -454,7 +454,9 @@ export default function Watchlist() {
   /* 平盘单独计数：changePct >= 0 会把持平股票算进上涨家数（审计 P2-4）。
      涨跌幅缺失的行也不能算进任何一侧。 */
   const aggregates = useMemo(() => {
-    const known = items.filter((x) => Number.isFinite(x.changePct));
+    const known = items.filter(
+      (x): x is WatchlistItem & { changePct: number } => x.changePct !== null && Number.isFinite(x.changePct),
+    );
     return {
       advancers: known.filter((x) => x.changePct > 0).length,
       decliners: known.filter((x) => x.changePct < 0).length,
@@ -524,7 +526,7 @@ export default function Watchlist() {
       {
         key: 'spark',
         title: t('今日分时'),
-        render: (r) => <Sparkline data={r.sparkline} change={r.changePct} />,
+        render: (r) => <Sparkline data={r.sparkline} change={r.changePct ?? Number.NaN} />,
       },
       ...(rowStrengthAvailable
         ? [{

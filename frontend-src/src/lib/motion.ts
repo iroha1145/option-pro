@@ -6,7 +6,6 @@
 import type { Transition } from 'framer-motion';
 
 export const EASE_PAPER = [0.16, 1, 0.3, 1] as const;
-export const EASE_SNAP = [0.22, 1, 0.36, 1] as const;
 export const DUR_FAST = 0.16;
 export const DUR_UI = 0.24;
 export const DUR_SECTION = 0.56;
