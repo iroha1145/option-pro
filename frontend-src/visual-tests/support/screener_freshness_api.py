@@ -39,6 +39,7 @@ from app.services.eod_limited import store as eod_store  # noqa: E402
 from app.services.research_eod_v1.constants import HORIZONS, PROFILES  # noqa: E402
 from app.worker.tasks import StrengthRefreshTask  # noqa: E402
 from app.worker.runtime import TaskSpec, WorkerSupervisor  # noqa: E402
+from app.worker.lock import ProcessFileLock
 from app.worker.state import WorkerStateRepository  # noqa: E402
 from app.services.strength.freshness import expected_complete_session  # noqa: E402
 
@@ -219,6 +220,8 @@ async def _reset(*, provider_delay: float = 0.25, provider_failure: bool = False
                   snapshot_path=SNAPSHOT, eod_runner=_run_eod_fixture),
                   interval_seconds=86_400, timeout_seconds=30, manual_only=True)],
         owner_id="screener-browser-fixture", shutdown_grace_seconds=5,
+        # 监督器不再有默认锁路径（默认值曾能抢走生产 worker 的租约）；夹具用自己的锁文件。
+        process_lock=ProcessFileLock(scenario / "worker.lock"),
     )
     WORKER_RUN = asyncio.create_task(SUPERVISOR.run_forever())
     for _ in range(200):
