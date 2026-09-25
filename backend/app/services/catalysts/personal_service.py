@@ -9,6 +9,7 @@ from typing import Any, Literal, Protocol, cast
 
 from app.access import current_request_is_owner
 from app.config import Settings, get_settings
+from app.failure_diagnostics import record_fallback_failure
 from app.personal_config import PersonalConfig, get_personal_config
 from app.services.ai_jobs import runtime as ai_runtime
 from app.services.ai_jobs.models import (
@@ -26,15 +27,16 @@ from app.services.sectors import SECTORS
 from .config import CatalystSettings
 from .errors import CatalystError
 from .local_intelligence import (
+    HOTSPOT_WAITING as _WAITING_HOTSPOT_TITLE,
+    SUMMARY_WAITING as _WAITING_SUMMARY,
+    TITLE_WAITING as _WAITING_TITLE,
+    _UNANALYZED_STATUSES,
     _cursor_decode,
     _cursor_encode,
     _feed_query_hash,
 )
 
 
-_WAITING_TITLE = "中文标题等待生成"
-_WAITING_SUMMARY = "中文摘要等待生成"
-_WAITING_HOTSPOT_TITLE = "热点标题等待中文分析"
 _HOTSPOT_PROJECTION_SCAN_LIMIT = 100
 _INTERACTIVE_MODES = frozenset({"manual", "scheduled"})
 _LOCAL_STORE_RUNTIME_CODES = frozenset(
@@ -102,9 +104,6 @@ def _valid_zh_text(
         )
     except ValueError:
         return None
-
-
-_UNANALYZED_STATUSES = frozenset({"", "not_requested", "pending"})
 
 
 def _displayable_zh(item: Mapping[str, Any]) -> bool:
@@ -730,6 +729,7 @@ class PersonalCatalystService:
             "_validation_summary",
             "_validation_sources",
             "_validation_allowed_tickers",
+            "_analysis_current",
         ):
             item.pop(field, None)
         if analysis is not None and as_of is not None:
@@ -961,20 +961,26 @@ class PersonalCatalystService:
         )
         if not isinstance(allowed_event_group_ids, list):
             allowed_event_group_ids = []
+        stored_payload = projected.pop("_validation_payload", None)
         result = projected.get("result")
         if result is None:
             return projected
-        # 读取时重校验必须复原写入时的完整上下文：周期行的瘦 payload 没有
-        # 新闻源文本（events），写入时靠源绑定放行的实体（生产实测 PPI、
+        # 读取时重校验必须复原写入时的完整上下文：只有 id 与白名单的瘦上下文
+        # 没有新闻源文本（events），写入时靠源绑定放行的实体（生产实测 PPI、
         # 药名）会被误判成英文散文、把已完成周期整体隐藏（2026-08-13
-        # 「焦点周期没东西」事故）。从关联任务取回原始 payload 作为校验
-        # 上下文；身份与绑定字段一律以周期行为准覆盖，红线不因此放松。
-        validation_payload: dict[str, Any] = {}
+        # 「焦点周期没东西」事故）。访客拿不到 job_id，所以本地层让周期带上
+        # 写入时的完整 payload（与付费任务 payload 逐字节一致），owner 与访客
+        # 共用；没有它的调用方才按 job_id 取关联任务。身份与绑定字段一律以
+        # 周期行为准覆盖，红线不因此放松。
+        validation_payload: dict[str, Any] = (
+            dict(stored_payload) if isinstance(stored_payload, Mapping) else {}
+        )
         job_id = str(projected.get("job_id") or "")
-        if job_id:
+        if not validation_payload and job_id:
             try:
                 job_row = self.ai_repository.get_job(job_id)
-            except Exception:  # noqa: BLE001 - 任务库暂不可用时退回瘦上下文
+            except Exception as error:  # noqa: BLE001 - 任务库暂不可用时退回瘦上下文
+                record_fallback_failure("catalyst_focus_validation_job", error)
                 job_row = None
             raw_payload = (
                 job_row.get("payload_json") if isinstance(job_row, Mapping) else None
@@ -1467,15 +1473,30 @@ class PersonalCatalystService:
             }
         results = payload.get("results")
         if isinstance(results, Mapping):
-            payload["results"] = {
-                str(ticker): self._project_news_envelope(
+            projected_results: dict[str, dict[str, Any]] = {}
+            for ticker, result in results.items():
+                if not isinstance(result, Mapping):
+                    continue
+                projected = self._project_news_envelope(
                     result,
                     as_of=kwargs.get("as_of"),
                     include_job_state=include_owner_state,
                 )
-                for ticker, result in results.items()
-                if isinstance(result, Mapping)
-            }
+                # Same rule as feed(): an item without validated Chinese copy
+                # (pending English news projects to blank title_zh) is counted,
+                # not returned.
+                items = [
+                    item
+                    for item in projected.get("items") or []
+                    if isinstance(item, dict)
+                ]
+                visible = [item for item in items if _displayable_zh(item)]
+                projected["items"] = visible
+                projected["hidden_unanalyzed"] = len(items) - len(visible)
+                if not visible and not projected.get("has_more"):
+                    projected["status"] = "empty"
+                projected_results[str(ticker)] = projected
+            payload["results"] = projected_results
         return payload
 
     def calendar(

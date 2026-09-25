@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from datetime import date, datetime, timezone
 from typing import Any
 
@@ -7,7 +8,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.access import request_owner_access_context
+from app.access import current_request_is_owner, request_owner_access_context
 from app.api import catalysts as catalyst_api
 from app.services.catalysts.errors import CatalystError, InvalidCursorError
 
@@ -302,6 +303,47 @@ def test_calendar_forwards_browser_local_date_window_and_timezone_offset() -> No
     assert calendar_call[1]["date_from"] == date(2026, 7, 21)
     assert calendar_call[1]["date_to"] == date(2026, 8, 7)
     assert calendar_call[1]["timezone_offset_minutes"] == 540
+
+
+def test_calendar_service_call_runs_off_the_event_loop_thread_with_owner_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """AI-26: 同步 service.calendar 必须挪出事件循环线程，owner 判定随线程传播。
+
+    owner 请求下 service.calendar 会一路走到 manual_refresh_statuses 的 SQLite
+    BEGIN IMMEDIATE（busy_timeout 5s）；worker 持写锁时，若这个调用留在事件循环
+    线程上，会卡住同一进程里的全部并发请求。current_request_is_owner 基于
+    contextvars，线程内是否还能读到 owner 判定必须一并验证——同文件里的同步
+    def 路由本来就是靠这条传播链路工作的。
+    """
+
+    real_run_in_threadpool = catalyst_api.run_in_threadpool
+    loop_threads: list[int] = []
+
+    async def spying_run_in_threadpool(func, *args, **kwargs):
+        # 调用发起的这一刻，正跑在这次请求的事件循环线程上。
+        loop_threads.append(threading.get_ident())
+        return await real_run_in_threadpool(func, *args, **kwargs)
+
+    monkeypatch.setattr(catalyst_api, "run_in_threadpool", spying_run_in_threadpool)
+
+    class ThreadRecordingService(StubPersonalService):
+        def calendar(self, **kwargs: Any) -> dict[str, Any]:
+            self.calls.append(("calendar", kwargs))
+            self.calendar_thread_id = threading.get_ident()
+            self.calendar_saw_owner = current_request_is_owner()
+            return {"status": "ok", "items": []}
+
+    service = ThreadRecordingService()
+
+    response = client_for(service).get("/api/catalysts/calendar")
+
+    assert response.status_code == 200
+    assert loop_threads, "run_in_threadpool 必须被实际调用"
+    # 同步 service.calendar 跑在与事件循环协程不同的线程上，不再卡住事件循环。
+    assert service.calendar_thread_id != loop_threads[0]
+    # contextvars 的 copy_context 把 owner 判定带进了线程，语义与同步路由一致。
+    assert service.calendar_saw_owner is True
 
 
 def test_analysis_progress_requires_owner_access() -> None:

@@ -20,6 +20,8 @@ from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
 from app.access import current_request_is_owner
+from app.failure_diagnostics import record_fallback_failure
+from app.services.ai_jobs import repository as ai_job_store
 from app.services.ai_jobs import runtime as ai_runtime
 from app.services.ai_jobs.models import (
     validate_result,
@@ -63,8 +65,10 @@ def macro_conditions_context() -> dict[str, Any] | None:
         return service.ai_context(
             key_configured=settings.macro_conditions_configured
         )
-    except Exception:
-        # A macro outage must never stop news-catalyst analysis.
+    except Exception as error:
+        # A macro outage must never stop news-catalyst analysis, but the
+        # focus input silently losing its macro block must stay diagnosable.
+        record_fallback_failure("catalyst_macro_context", error)
         return None
 
 
@@ -93,7 +97,7 @@ _FOCUS_WAITING_PLACEHOLDERS = frozenset(
 _LEGACY_PLACEHOLDER_INPUT_ERROR = "legacy_placeholder_input_hidden"
 AMBIGUOUS_TICKERS = frozenset({"AI", "ON", "CAT"})
 TICKER_RE = re.compile(r"^[A-Z0-9][A-Z0-9.\-^]{0,11}$")
-SCHEMA_VERSION = "optix-local-catalyst-v5"
+SCHEMA_VERSION = "optix-local-catalyst-v6"
 NEWS_RESULT_CONTRACT_ID = (
     "news-impact-result:"
     f"{ai_runtime.RESULT_VALIDATION_CONTRACT_VERSION}:"
@@ -115,6 +119,9 @@ SCHEDULED_NEWS_RETRYABLE_ERRORS = ai_runtime.SCHEDULED_TRANSIENT_AI_ERRORS
 SCHEDULED_FOCUS_RETRYABLE_ERRORS = ai_runtime.SCHEDULED_TRANSIENT_AI_ERRORS
 MANUAL_REFRESH_CLAIM_TTL_SECONDS = 10 * 60
 FOCUS_PREPARING_TTL_SECONDS = 10 * 60
+# reconcile 把超时仍停在 preparing 的焦点意图标成这个错误码。它从未产生付费
+# 任务、也不消费热点修订，所以同一修订可以换一个新意图重建。
+FOCUS_PREPARE_EXPIRED_ERROR = "focus_prepare_expired"
 MANUAL_REFRESH_TYPES = ("news", "calendar", "source_health")
 _UNANALYZED_STATUSES = frozenset({"", "not_requested", "pending"})
 ANALYSIS_LINK_BUSY_TIMEOUT_MS = 250
@@ -130,6 +137,29 @@ _JOURNAL_PRUNE_QUIET_HOURS = 48
 # 曾累积到 866 万行/1GB）。缓冲不与新闻的 retention_days 挂钩。
 _HOTSPOT_LINEAGE_KEEP_HOURS = 48
 _HOTSPOT_PRUNE_BATCH_REVISIONS = 50
+# reconcile 只读新闻保留期内创建的 news/focus 任务：更早的任务所指的修订已随
+# 日志修剪，读进来只会每 120 秒把整段历史重校验一遍。保留期以 prune_journal
+# 收到的实际配置为准，首轮修剪前按配置默认值；余量吸收 web 与 worker 的时钟差。
+_DEFAULT_NEWS_RETENTION_DAYS = 30
+_AI_JOB_SNAPSHOT_MARGIN = timedelta(days=1)
+# 新闻付费载荷的字节预算。上游 summary 最长 20 万字符、source_tickers 最多
+# 500 项，原样入队会撞 ai_jobs 的 64 KiB 上限（create_job 抛
+# ai_job_payload_too_large，曾让整轮定时分析与焦点铸造一起崩）；runtime 提交
+# 时还把 `<`、`>` 转成 6 字节转义后按 60000 字节把关。两个字段各自按转义后的
+# 字节数确定性截断：同一修订永远得到同一载荷，入队去重和修订绑定才对得上。
+# 两项预算加上常见的标题、链接与来源仍在 60000 以内；只有超长摘要会被截断，
+# 已入队的正常载荷不变。
+NEWS_SUMMARY_MAX_BYTES = 40_000
+NEWS_TICKER_HINTS_MAX_BYTES = 4_000
+# 旧库升级时给热点条目补上计划级分数列（v6）。定义与 _SCHEMA 里的建表语句一致。
+_HOTSPOT_ITEM_SCORE_COLUMNS = (
+    (
+        "hot_score",
+        "REAL CHECK(hot_score IS NULL OR (hot_score >= 0 AND hot_score <= 100))",
+    ),
+    ("component_scores_json", "TEXT"),
+    ("reasons_json", "TEXT"),
+)
 
 
 _SCHEMA = """
@@ -239,6 +269,9 @@ CREATE TABLE IF NOT EXISTS catalyst_local_hotspot_items (
     ordinal INTEGER NOT NULL CHECK(ordinal >= 1),
     event_group_id TEXT NOT NULL,
     event_group_version INTEGER NOT NULL,
+    hot_score REAL CHECK(hot_score IS NULL OR (hot_score >= 0 AND hot_score <= 100)),
+    component_scores_json TEXT,
+    reasons_json TEXT,
     PRIMARY KEY(prepared_revision,ordinal),
     UNIQUE(prepared_revision,event_group_id),
     FOREIGN KEY(event_group_id,event_group_version)
@@ -656,6 +689,184 @@ def _loads(value: str | None, default: Any) -> Any:
         return json.loads(value)
     except (TypeError, json.JSONDecodeError):
         return default
+
+
+def _untrusted_json_bytes(value: Any) -> int:
+    """Bytes a value occupies once the runtime escapes it for submission."""
+
+    raw = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+    return len(raw.encode("utf-8")) + 5 * (raw.count("<") + raw.count(">"))
+
+
+def _bounded_news_summary(summary: Any) -> tuple[Any, bool]:
+    if (
+        not isinstance(summary, str)
+        or _untrusted_json_bytes(summary) <= NEWS_SUMMARY_MAX_BYTES
+    ):
+        return summary, False
+    low, high = 0, len(summary)
+    while low < high:
+        middle = (low + high + 1) // 2
+        if _untrusted_json_bytes(summary[:middle]) <= NEWS_SUMMARY_MAX_BYTES:
+            low = middle
+        else:
+            high = middle - 1
+    return summary[:low], True
+
+
+def _bounded_ticker_hints(hints: Any) -> tuple[Any, bool]:
+    if (
+        not isinstance(hints, list)
+        or _untrusted_json_bytes(hints) <= NEWS_TICKER_HINTS_MAX_BYTES
+    ):
+        return hints, False
+    kept: list[Any] = []
+    used = 2
+    for hint in hints:
+        cost = _untrusted_json_bytes(hint) + (1 if kept else 0)
+        if used + cost > NEWS_TICKER_HINTS_MAX_BYTES:
+            break
+        kept.append(hint)
+        used += cost
+    return kept, True
+
+
+def _news_request_source_fields(
+    revision: Mapping[str, Any] | sqlite3.Row,
+) -> dict[str, Any]:
+    """Summary and ticker hints exactly as a paid news request carries them."""
+
+    item = dict(revision)
+    summary, summary_truncated = _bounded_news_summary(item.get("raw_summary"))
+    hints, hints_truncated = _bounded_ticker_hints(
+        _loads(item.get("source_tickers_json"), [])
+    )
+    fields: dict[str, Any] = {
+        "summary": summary,
+        "source_ticker_hints": hints,
+    }
+    truncated = [
+        name
+        for name, flagged in (
+            ("source_ticker_hints", hints_truncated),
+            ("summary", summary_truncated),
+        )
+        if flagged
+    ]
+    if truncated:
+        # 标注给模型与审计：这两个字段只是原文的前缀，不是完整上游内容。
+        fields["truncated_fields"] = truncated
+    return fields
+
+
+def _news_source_fields_match(
+    payload: Mapping[str, Any],
+    revision: Mapping[str, Any] | sqlite3.Row,
+) -> bool:
+    """Bind a request's summary and ticker hints to one revision.
+
+    A payload without ``truncated_fields`` carries the source verbatim; jobs
+    enqueued before the byte budget existed look like that and may already
+    be paid, so they must keep binding. A marked field must be a strict
+    prefix of the source, which keeps jobs built under an older budget bound
+    too; nothing outside the revision's own text can match.
+    """
+
+    raw_summary = revision["raw_summary"]
+    raw_hints = _loads(revision["source_tickers_json"], [])
+    summary = payload.get("summary")
+    hints = payload.get("source_ticker_hints")
+    truncated = payload.get("truncated_fields")
+    if truncated is None:
+        return summary == raw_summary and hints == raw_hints
+    if (
+        not isinstance(truncated, list)
+        or not truncated
+        or not all(isinstance(name, str) for name in truncated)
+        or truncated != sorted(set(truncated))
+        or not set(truncated) <= {"source_ticker_hints", "summary"}
+    ):
+        return False
+    if "summary" in truncated:
+        summary_matches = (
+            isinstance(summary, str)
+            and isinstance(raw_summary, str)
+            and len(summary) < len(raw_summary)
+            and raw_summary.startswith(summary)
+        )
+    else:
+        summary_matches = summary == raw_summary
+    if "source_ticker_hints" in truncated:
+        hints_match = (
+            isinstance(hints, list)
+            and isinstance(raw_hints, list)
+            and len(hints) < len(raw_hints)
+            and raw_hints[: len(hints)] == hints
+        )
+    else:
+        hints_match = hints == raw_hints
+    return summary_matches and hints_match
+
+
+def _paid_runtime_configuration_change(
+    error_code: Any,
+    *,
+    status: Any,
+    provider_response_seen: bool,
+) -> bool:
+    """A runtime_configuration_changed failure that already cost money.
+
+    The code is a scheduled-retry code because the worker records it only for
+    jobs that never reached the provider. The focus publisher also retires a
+    completed paid cycle whose runtime identity moved under the same code;
+    retrying that automatically would pay for the same analysis twice.
+    """
+
+    return bool(
+        error_code == "runtime_configuration_changed"
+        and (provider_response_seen or status == "completed")
+    )
+
+
+def _hotspot_plan_score_columns(connection: sqlite3.Connection) -> str:
+    """Plan-score select list, NULL until the worker has added the columns.
+
+    Only the worker's initialize() upgrades the schema; the web process reads
+    the same file and may start first, so it falls back to group scores.
+    """
+
+    columns = {
+        str(row[1])
+        for row in connection.execute(
+            "PRAGMA table_info(catalyst_local_hotspot_items)"
+        ).fetchall()
+    }
+    if {name for name, _definition in _HOTSPOT_ITEM_SCORE_COLUMNS} <= columns:
+        return (
+            "i.hot_score AS plan_hot_score,"
+            "i.component_scores_json AS plan_component_scores_json,"
+            "i.reasons_json AS plan_reasons_json"
+        )
+    return (
+        "NULL AS plan_hot_score,"
+        "NULL AS plan_component_scores_json,"
+        "NULL AS plan_reasons_json"
+    )
+
+
+def _published_analysis(item: Mapping[str, Any]) -> dict[str, Any] | None:
+    """The analysis the public boundary shows: current result contract only.
+
+    Previously accepted results that fail the current contract stay attached
+    to local items (their paid bytes are preserved), but PersonalCatalystService
+    hides them. Filters and summary counts use this view so the counts match
+    the items a reader can actually see.
+    """
+
+    analysis = item.get("analysis")
+    if not isinstance(analysis, dict) or item.get("_analysis_current") is False:
+        return None
+    return analysis
 
 
 def _sha(value: Any) -> str:
@@ -1276,6 +1487,8 @@ class LocalCatalystIntelligence:
             if TICKER_RE.fullmatch(str(value).strip().upper())
         }
         self.canonical_tickers = frozenset(normalized - AMBIGUOUS_TICKERS)
+        self._local_schema_ready = False
+        self._news_retention_days = _DEFAULT_NEWS_RETENTION_DAYS
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
@@ -1297,7 +1510,13 @@ class LocalCatalystIntelligence:
             connection.close()
 
     def initialize(self) -> None:
-        self.ai_repository.initialize()
+        """Prepare the local catalyst store only.
+
+        The AI job store belongs to the analysis side: callers that submit
+        paid work initialize it themselves. One ai_jobs checksum mismatch must
+        not stop news ingestion and hotspot planning (2026-08-08).
+        """
+
         with self._connect() as connection:
             connection.execute("PRAGMA journal_mode=WAL")
             connection.execute("PRAGMA synchronous=FULL")
@@ -1308,6 +1527,10 @@ class LocalCatalystIntelligence:
             ).fetchone()
             if row is not None and str(row["checksum"]) != SCHEMA_CHECKSUM:
                 raise RuntimeError("local_catalyst_schema_checksum_mismatch")
+            # Several worker tasks initialize their own instance at startup;
+            # the write lock serializes the check-then-ALTER column upgrade.
+            connection.execute("BEGIN IMMEDIATE")
+            self._ensure_hotspot_item_score_columns(connection)
             connection.execute(
                 """INSERT OR IGNORE INTO catalyst_local_schema(
                        version,checksum,applied_at
@@ -1339,6 +1562,30 @@ class LocalCatalystIntelligence:
                     ),
                 )
             connection.commit()
+        self._local_schema_ready = True
+
+    def _ensure_local_schema(self) -> None:
+        """Run the schema checks once per instance instead of every reconcile."""
+
+        if not self._local_schema_ready:
+            self.initialize()
+
+    @staticmethod
+    def _ensure_hotspot_item_score_columns(
+        connection: sqlite3.Connection,
+    ) -> None:
+        columns = {
+            str(row["name"])
+            for row in connection.execute(
+                "PRAGMA table_info(catalyst_local_hotspot_items)"
+            ).fetchall()
+        }
+        for name, definition in _HOTSPOT_ITEM_SCORE_COLUMNS:
+            if name not in columns:
+                connection.execute(
+                    "ALTER TABLE catalyst_local_hotspot_items "
+                    f"ADD COLUMN {name} {definition}"
+                )
 
     def prune_journal(
         self,
@@ -1376,6 +1623,7 @@ class LocalCatalystIntelligence:
             raise ValueError(
                 "journal retention must not undercut the public feed window"
             )
+        self._news_retention_days = days
         anchor = now or _utc_now()
         cutoff = _iso(anchor - timedelta(days=days))
         quiet = _iso(anchor - timedelta(hours=_JOURNAL_PRUNE_QUIET_HOURS))
@@ -1661,7 +1909,9 @@ class LocalCatalystIntelligence:
             row = connection.execute(
                 "SELECT * FROM ai_jobs WHERE job_id=?", (job_id,)
             ).fetchone()
-        except sqlite3.Error:
+        except sqlite3.Error as error:
+            # Read-only callers degrade to "no job state"; keep the reason.
+            record_fallback_failure("catalyst_ai_job_read", error)
             return None
         finally:
             if "connection" in locals():
@@ -1760,11 +2010,20 @@ class LocalCatalystIntelligence:
         allow_write_contention: bool = True,
         job_ids: Iterable[str] | None = None,
         news_ids: Iterable[int] | None = None,
+        created_since: datetime | None = None,
     ) -> dict[str, dict[str, Any]]:
-        """Read current Catalyst AI rows before taking the Catalyst write lock."""
+        """Read current Catalyst AI rows before taking the Catalyst write lock.
+
+        ``created_since`` bounds the full-history scan; it must come from the
+        AI store's own clock because that clock stamps ``created_at``.
+        """
 
         if job_ids is not None and news_ids is not None:
             raise ValueError("job_ids and news_ids are mutually exclusive")
+        if created_since is not None and (
+            job_ids is not None or news_ids is not None
+        ):
+            raise ValueError("created_since only bounds the full snapshot")
         requested_ids = (
             sorted({str(job_id) for job_id in job_ids if str(job_id)})
             if job_ids is not None
@@ -1793,13 +2052,18 @@ class LocalCatalystIntelligence:
             connection.row_factory = sqlite3.Row
             connection.execute("PRAGMA query_only=ON")
             if requested_ids is None and requested_news_ids is None:
+                created_filter = (
+                    "" if created_since is None else "AND j.created_at>=?"
+                )
                 rows = connection.execute(
-                    """SELECT j.*,COALESCE(s.submission_source,'manual')
+                    f"""SELECT j.*,COALESCE(s.submission_source,'manual')
                               AS submission_source
                        FROM ai_jobs j
                        LEFT JOIN ai_job_sources s ON s.job_id=j.job_id
                        WHERE j.job_type IN ('news_impact','market_focus')
-                       ORDER BY j.created_at DESC"""
+                         {created_filter}
+                       ORDER BY j.created_at DESC""",
+                    () if created_since is None else (_iso(created_since),),
                 ).fetchall()
             elif requested_ids is not None:
                 rows = []
@@ -1850,6 +2114,39 @@ class LocalCatalystIntelligence:
             if connection is not None:
                 connection.close()
         return {str(row["job_id"]): dict(row) for row in rows}
+
+    def _ai_job_snapshot_or_empty(
+        self,
+        stage: str,
+        **kwargs: Any,
+    ) -> tuple[dict[str, dict[str, Any]], bool]:
+        """Degrade an unreadable AI store to "no job state" for read paths.
+
+        News ingestion, hotspot planning and published-result reads never
+        depend on the AI store; only linking, publishing and job-state
+        projection pause while it is unavailable.
+        """
+
+        try:
+            return self._ai_job_snapshot(**kwargs), True
+        except sqlite3.Error as error:
+            record_fallback_failure(stage, error)
+            return {}, False
+
+    def _reconcile_ai_job_snapshot(
+        self,
+    ) -> tuple[dict[str, dict[str, Any]], bool]:
+        """News/focus jobs created inside the news retention window."""
+
+        created_since = (
+            ai_job_store._utcnow()
+            - timedelta(days=self._news_retention_days)
+            - _AI_JOB_SNAPSHOT_MARGIN
+        )
+        return self._ai_job_snapshot_or_empty(
+            "catalyst_reconcile_ai_jobs",
+            created_since=created_since,
+        )
 
     def _has_current_job_identity(
         self,
@@ -2225,11 +2522,33 @@ class LocalCatalystIntelligence:
             raise RuntimeError("news_job_link_repair_conflict")
         return True
 
-    def _recover_unlinked_news_jobs(
+    @staticmethod
+    def _news_revision_row(
+        connection: sqlite3.Connection,
+        key: tuple[int, int, str],
+    ) -> sqlite3.Row | None:
+        return connection.execute(
+            """SELECT news_id,change_sequence,content_hash,source,raw_title,
+                      raw_summary,url,published_at,fetched_at,source_names_json,
+                      source_count,source_tickers_json,canonical_tickers_json
+               FROM catalyst_local_news_revisions
+               WHERE news_id=? AND change_sequence=? AND content_hash=?""",
+            key,
+        ).fetchone()
+
+    def _plan_unlinked_news_job_recovery(
         self,
         connection: sqlite3.Connection,
         jobs: Mapping[str, dict[str, Any]],
-    ) -> int:
+    ) -> list[dict[str, Any]]:
+        """Select current-identity news jobs whose local link is missing.
+
+        Read-only, so reconcile runs it before taking the write lock. The
+        revision lookup precedes result validation: most history points at
+        revisions already pruned with the journal, and validating those on
+        every reconcile made its cost grow with all past jobs.
+        """
+
         existing_links = {
             str(link["job_id"]): link
             for link in connection.execute(
@@ -2237,7 +2556,10 @@ class LocalCatalystIntelligence:
                    FROM catalyst_local_analysis_links"""
             ).fetchall()
         }
-        recovered = 0
+        planned: list[dict[str, Any]] = []
+        # schema_identity is deliberately not memoized; resolve it once here
+        # instead of once per historical job.
+        current_schema = ai_runtime.schema_identity("news_impact")
         candidates = sorted(
             jobs.values(),
             key=lambda row: (
@@ -2271,27 +2593,54 @@ class LocalCatalystIntelligence:
                 str(existing["content_hash"]),
             ) == (news_id, change_sequence, content_hash):
                 continue
+            if not self._has_current_job_identity(
+                job,
+                expected_type="news_impact",
+                expected_schema=current_schema,
+            ):
+                continue
+            revision = self._news_revision_row(
+                connection,
+                (news_id, change_sequence, content_hash),
+            )
+            if revision is None or not self._news_payload_matches_revision(
+                payload,
+                revision,
+            ):
+                continue
             try:
                 public = self._identity_public_job(
                     job,
                     expected_type="news_impact",
+                    expected_schema=current_schema,
                 )
             except (KeyError, TypeError, ValueError):
                 continue
             if public is None:
                 continue
-            revision = connection.execute(
-                """SELECT news_id,change_sequence,content_hash,source,raw_title,
-                          raw_summary,url,published_at,fetched_at,source_names_json,
-                          source_count,source_tickers_json,canonical_tickers_json
-                   FROM catalyst_local_news_revisions
-                   WHERE news_id=? AND change_sequence=? AND content_hash=?""",
-                (news_id, change_sequence, content_hash),
-            ).fetchone()
-            if revision is None or not self._news_payload_matches_revision(
-                payload,
-                revision,
-            ):
+            planned.append(job)
+        return planned
+
+    def _recover_unlinked_news_jobs(
+        self,
+        connection: sqlite3.Connection,
+        jobs: Mapping[str, dict[str, Any]],
+        *,
+        planned: Sequence[dict[str, Any]] | None = None,
+    ) -> int:
+        """Write the links chosen by the read-only recovery plan."""
+
+        if planned is None:
+            planned = self._plan_unlinked_news_job_recovery(connection, jobs)
+        recovered = 0
+        for job in planned:
+            key = self._news_job_revision_key(job)
+            if key is None:
+                continue
+            # The plan ran outside this transaction; the journal may have
+            # been pruned since, so re-read the revision under the lock.
+            revision = self._news_revision_row(connection, key)
+            if revision is None:
                 continue
             recovered += int(
                 self._ensure_news_job_link(connection, revision, job)
@@ -2332,7 +2681,9 @@ class LocalCatalystIntelligence:
     ) -> dict[str, Any] | None:
         """Find an already-created exact job without creating work on GET."""
 
-        jobs = self._ai_job_snapshot()
+        jobs, _available = self._ai_job_snapshot_or_empty(
+            "catalyst_focus_intent_ai_jobs"
+        )
         candidates = sorted(
             jobs.values(),
             key=lambda row: (
@@ -2356,12 +2707,18 @@ class LocalCatalystIntelligence:
     ) -> int:
         """Relink a paid focus job after its local commit was interrupted."""
 
+        # An intent that expired before its job could be linked is still the
+        # owner of that paid job; relink it rather than leave the job orphaned
+        # next to the replacement intent.
         intents = {
             str(row["cycle_id"]): row
             for row in connection.execute(
                 """SELECT cycle_id,job_id,payload_json
                    FROM catalyst_local_focus_cycles
-                   WHERE status='preparing'"""
+                   WHERE status='preparing'
+                      OR (status='failed' AND error_code=?
+                          AND job_id='intent:' || cycle_id)""",
+                (FOCUS_PREPARE_EXPIRED_ERROR,),
             ).fetchall()
         }
         if not intents:
@@ -2399,14 +2756,17 @@ class LocalCatalystIntelligence:
             assert public is not None
             updated = connection.execute(
                 """UPDATE catalyst_local_focus_cycles SET
-                       status=?,job_id=?,updated_at=?
-                   WHERE cycle_id=? AND status='preparing' AND job_id=?""",
+                       status=?,job_id=?,error_code=NULL,updated_at=?
+                   WHERE cycle_id=? AND job_id=?
+                     AND (status='preparing'
+                          OR (status='failed' AND error_code=?))""",
                 (
                     str(public["status"]),
                     job_id,
                     str(public.get("updated_at") or _iso()),
                     cycle_id,
                     f"intent:{cycle_id}",
+                    FOCUS_PREPARE_EXPIRED_ERROR,
                 ),
             ).rowcount
             recovered += int(updated)
@@ -2435,8 +2795,10 @@ class LocalCatalystIntelligence:
             "allowed_tickers",
             "analysis_revision",
         }
-        allowed_keys = required_keys | {"manual_force_bucket"}
+        allowed_keys = required_keys | {"manual_force_bucket", "truncated_fields"}
         if set(payload) - allowed_keys or not required_keys <= set(payload):
+            return False
+        if not _news_source_fields_match(payload, revision):
             return False
         analysis_revision = payload.get("analysis_revision")
         if type(analysis_revision) is not int or analysis_revision < 1:
@@ -2454,11 +2816,9 @@ class LocalCatalystIntelligence:
             "content_hash": str(revision["content_hash"]),
             "source": str(revision["source"]),
             "title": str(revision["raw_title"]),
-            "summary": revision["raw_summary"],
             "url": str(revision["url"]),
             "sources": _loads(revision["source_names_json"], []),
             "source_count": int(revision["source_count"]),
-            "source_ticker_hints": _loads(revision["source_tickers_json"], []),
             "allowed_tickers": _loads(revision["canonical_tickers_json"], []),
         }
         return (
@@ -2478,7 +2838,12 @@ class LocalCatalystIntelligence:
     def _news_validation_payload(
         revision: Mapping[str, Any] | sqlite3.Row,
     ) -> dict[str, Any]:
-        """Rebuild the source context used by the original paid request."""
+        """Rebuild the source context used by the original paid request.
+
+        A request whose summary was bounded saw a prefix of this text; the
+        full source is a superset, so it can only bind entities that are
+        genuinely in the news and never hides a result accepted at write time.
+        """
 
         item = dict(revision)
 
@@ -3624,7 +3989,14 @@ class LocalCatalystIntelligence:
         published = _parse_time(row.get("published_at")) or _parse_time(row.get("fetched_at"))
         if published is not None:
             age_hours = max(0.0, (now - published).total_seconds() / 3600)
-            components["recency"] = (max(0.0, 100.0 - age_hours * 2.0), 0.35, "发布时间较近")
+            recency = max(0.0, 100.0 - age_hours * 2.0)
+            # The score decays with plan time; an old story must not keep
+            # explaining its rank with "recently published".
+            components["recency"] = (
+                recency,
+                0.35,
+                "发布时间较近" if recency >= 50.0 else "",
+            )
         source_count = int(row.get("source_count") or 0)
         if source_count > 0:
             reason = "单一来源" if source_count == 1 else "多个来源报道"
@@ -3639,7 +4011,7 @@ class LocalCatalystIntelligence:
             return 0.0, {}, ["可用证据不足，未补成中性分数"]
         scores = {name: round(score, 2) for name, (score, _weight, _reason) in components.items()}
         value = sum(score * weight for score, weight, _reason in components.values()) / total_weight
-        reasons = [reason for _score, _weight, reason in components.values()]
+        reasons = [reason for _score, _weight, reason in components.values() if reason]
         return round(max(0.0, min(100.0, value)), 2), scores, reasons
 
     def _analysis_for_revision(
@@ -3649,13 +4021,33 @@ class LocalCatalystIntelligence:
         *,
         as_of: datetime,
     ) -> tuple[dict[str, Any] | None, str | None]:
+        result, available, _current = self._analysis_state_for_revision(
+            connection,
+            row,
+            as_of=as_of,
+        )
+        return result, available
+
+    def _analysis_state_for_revision(
+        self,
+        connection: sqlite3.Connection,
+        row: dict[str, Any],
+        *,
+        as_of: datetime,
+    ) -> tuple[dict[str, Any] | None, str | None, bool]:
+        """Published analysis, its time, and whether the current contract holds.
+
+        A previously accepted paid result that fails the current contract is
+        still returned (it is never discarded), flagged as not current.
+        """
+
         if "analysis_result_json" in row:
             raw_value = row.get("analysis_result_json")
             result_available_at = row.get("analysis_result_available_at")
             result_job_id = row.get("analysis_result_job_id")
             audited = bool(row.get("analysis_result_audited"))
             if raw_value is None or result_available_at is None:
-                return None, None
+                return None, None, False
         else:
             link = connection.execute(
                 """SELECT link.job_id AS analysis_result_job_id,
@@ -3684,7 +4076,7 @@ class LocalCatalystIntelligence:
                 ),
             ).fetchone()
             if link is None:
-                return None, None
+                return None, None, False
             raw_value = link["result_json"]
             result_available_at = link["result_available_at"]
             result_job_id = link["analysis_result_job_id"]
@@ -3694,7 +4086,7 @@ class LocalCatalystIntelligence:
         if audited:
             result = _loads(raw_result, None)
             if _news_result_identity_matches(result, payload):
-                return result, str(result_available_at)
+                return result, str(result_available_at), True
         try:
             result = validate_result("news_impact", raw_result, payload)
         except (TypeError, ValueError):
@@ -3708,8 +4100,9 @@ class LocalCatalystIntelligence:
                     raw_result=raw_result,
                 )
             ):
-                return None, None
-        return result, str(result_available_at)
+                return None, None, False
+            return result, str(result_available_at), False
+        return result, str(result_available_at), True
 
     def _plan_hotspots(
         self,
@@ -3824,7 +4217,7 @@ class LocalCatalystIntelligence:
                 False,
             )
 
-        prepared: list[dict[str, Any]] = []
+        prepared: list[tuple[dict[str, Any], Mapping[str, Any]]] = []
         for proposal in planned:
             event = connection.execute(
                 """SELECT * FROM catalyst_local_event_groups
@@ -3878,11 +4271,21 @@ class LocalCatalystIntelligence:
                     (proposal["event_group_id"], version),
                 ).fetchone()
             assert event is not None
-            prepared.append(dict(event))
-        prepared.sort(key=lambda item: (-float(item["hot_score"]), str(item["event_group_id"])))
+            prepared.append((dict(event), proposal))
+        # The revision identity covers group versions only. Each version keeps
+        # the score it was created with, so this order (and the hash) moves
+        # when group content moves, never merely because time passed; a
+        # time-driven revision would re-open the hourly focus for no news.
+        identity_order = sorted(
+            prepared,
+            key=lambda pair: (
+                -float(pair[0]["hot_score"]),
+                str(pair[0]["event_group_id"]),
+            ),
+        )
         snapshot = [
-            (item["event_group_id"], int(item["event_group_version"]), item["input_hash"])
-            for item in prepared
+            (group["event_group_id"], int(group["event_group_version"]), group["input_hash"])
+            for group, _proposal in identity_order
         ]
         input_hash = _sha(snapshot)
         previous_snapshot = connection.execute(
@@ -3907,41 +4310,69 @@ class LocalCatalystIntelligence:
                 True,
             )
         revision = int(previous_snapshot["prepared_revision"] if previous_snapshot else 0) + 1
-        data_through = max((str(item["available_at"]) for item in prepared), default=None)
+        data_through = max(
+            (str(group["available_at"]) for group, _proposal in prepared),
+            default=None,
+        )
         connection.execute(
             """INSERT INTO catalyst_local_hotspot_revisions(
                    prepared_revision,input_hash,prepared_at,data_through,item_count
                ) VALUES(?,?,?,?,?)""",
             (revision, input_hash, _iso(now), data_through, len(prepared)),
         )
+        # Rank by the score recomputed for this plan (recency decays with the
+        # plan time) and keep that score on the item. The hotspot strip and
+        # the focus input both read items by ordinal, so they share one order.
+        ranked = sorted(
+            prepared,
+            key=lambda pair: (
+                -float(pair[1]["hot_score"]),
+                str(pair[0]["event_group_id"]),
+            ),
+        )
         connection.executemany(
             """INSERT INTO catalyst_local_hotspot_items(
-                   prepared_revision,ordinal,event_group_id,event_group_version
-               ) VALUES(?,?,?,?)""",
+                   prepared_revision,ordinal,event_group_id,event_group_version,
+                   hot_score,component_scores_json,reasons_json
+               ) VALUES(?,?,?,?,?,?,?)""",
             [
                 (
                     revision,
                     ordinal,
-                    item["event_group_id"],
-                    item["event_group_version"],
+                    group["event_group_id"],
+                    group["event_group_version"],
+                    proposal["hot_score"],
+                    proposal["component_scores_json"],
+                    proposal["reasons_json"],
                 )
-                for ordinal, item in enumerate(prepared, start=1)
+                for ordinal, (group, proposal) in enumerate(ranked, start=1)
             ],
         )
         return revision, len(prepared), True
 
     def reconcile(self, *, allow_scheduled_jobs: bool = False) -> dict[str, int]:
-        self.initialize()
+        self._ensure_local_schema()
         now = _utc_now()
-        ai_jobs = self._ai_job_snapshot()
+        ai_jobs, analysis_store_available = self._reconcile_ai_job_snapshot()
+        with self._connect() as connection:
+            # Result validation for relinking runs before the write lock; the
+            # web writer waits only ANALYSIS_LINK_BUSY_TIMEOUT_MS for it.
+            news_link_plan = self._plan_unlinked_news_job_recovery(
+                connection,
+                ai_jobs,
+            )
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             try:
                 ingested = self._ingest_revisions(connection)
-                self._recover_stale_preparing_focus(connection, now=now)
+                if analysis_store_available:
+                    # Expiry lets a fresh intent replace this one; only decide
+                    # that while an owned paid job could still be seen.
+                    self._recover_stale_preparing_focus(connection, now=now)
                 recovered_links = self._recover_unlinked_news_jobs(
                     connection,
                     ai_jobs,
+                    planned=news_link_plan,
                 )
                 recovered_focus_links = self._recover_unlinked_focus_jobs(
                     connection,
@@ -4005,6 +4436,7 @@ class LocalCatalystIntelligence:
             "prepared_revision": revision,
             "hotspots": hotspots,
             "queued": queued,
+            "analysis_store_available": analysis_store_available,
         }
 
     def _item(
@@ -4015,7 +4447,11 @@ class LocalCatalystIntelligence:
         as_of: datetime,
         jobs: Mapping[str, dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
-        result, available = self._analysis_for_revision(connection, row, as_of=as_of)
+        result, available, current = self._analysis_state_for_revision(
+            connection,
+            row,
+            as_of=as_of,
+        )
         # Published analysis determines the item status below. Its linked job
         # may be a newer attempt, but that state is only needed by detail reads.
         if result is None and current_request_is_owner():
@@ -4033,7 +4469,9 @@ class LocalCatalystIntelligence:
             # marked completed below without projecting an unused job result.
             status = "not_requested"
         if result is not None:
-            status = "completed"
+            # A kept paid result that fails the current contract is hidden by
+            # the public boundary; its status must say so for status filters.
+            status = "completed" if current else "pending"
         elif status == "completed":
             status = "pending"
         item = {
@@ -4082,6 +4520,14 @@ class LocalCatalystIntelligence:
             "source_count": int(row.get("source_count") or 1),
             "analysis_status": status,
             "analysis": result,
+            # Private: False marks a previously accepted result that the public
+            # boundary hides; filters and counts must not treat it as visible.
+            "_analysis_current": bool(result is not None and current),
+            **(
+                {"analysis_error_code": "legacy_output_hidden"}
+                if result is not None and not current
+                else {}
+            ),
             "analyzed_at": available,
             "available_at": available,
             "is_stale": False,
@@ -4305,13 +4751,14 @@ class LocalCatalystIntelligence:
                 items = cached_items
             else:
                 jobs = (
-                    self._ai_job_snapshot(
+                    self._ai_job_snapshot_or_empty(
+                        "catalyst_feed_ai_jobs",
                         job_ids=(
                             str(row["analysis_job_id"])
                             for row in rows
                             if row.get("analysis_job_id") is not None
-                        )
-                    )
+                        ),
+                    )[0]
                     if current_request_is_owner()
                     else None
                 )
@@ -4340,7 +4787,7 @@ class LocalCatalystIntelligence:
         }
         filtered: list[dict[str, Any]] = []
         for item in items:
-            result = item.get("analysis") or {}
+            result = _published_analysis(item) or {}
             if ticker and ticker not in item.get("source_tickers", []):
                 if not any(stock.get("ticker") == ticker for stock in result.get("affected_stocks") or []):
                     continue
@@ -4379,7 +4826,7 @@ class LocalCatalystIntelligence:
         page = filtered[offset : offset + scan_limit]
         consumed = len(page)
         has_more = offset + consumed < len(filtered)
-        analyzed = [item for item in filtered if item.get("analysis")]
+        analyzed = [item for item in filtered if _published_analysis(item)]
         payload = {
             "status": "active" if page else "empty",
             "as_of": anchor,
@@ -4392,7 +4839,7 @@ class LocalCatalystIntelligence:
                 "analyzed_count": len(analyzed),
                 "bullish": sum(1 for item in analyzed if item.get("classification") == "bullish"),
                 "bearish": sum(1 for item in analyzed if item.get("classification") == "bearish"),
-                "pending": sum(1 for item in filtered if not item.get("analysis")),
+                "pending": sum(1 for item in filtered if not _published_analysis(item)),
                 "high_impact_macro": None,
             },
             "stock_impacts": [],
@@ -4490,13 +4937,14 @@ class LocalCatalystIntelligence:
                 items = cached_items
             else:
                 jobs = (
-                    self._ai_job_snapshot(
+                    self._ai_job_snapshot_or_empty(
+                        "catalyst_feed_ai_jobs",
                         job_ids=(
                             str(row["analysis_job_id"])
                             for row in rows
                             if row.get("analysis_job_id") is not None
-                        )
-                    )
+                        ),
+                    )[0]
                     if current_request_is_owner()
                     else None
                 )
@@ -4514,8 +4962,8 @@ class LocalCatalystIntelligence:
             ticker = raw_ticker.strip().upper()
 
             def ticker_impact_score(item: dict[str, Any]) -> int | None:
-                result = item.get("analysis")
-                if not isinstance(result, dict):
+                result = _published_analysis(item)
+                if result is None:
                     return None
                 scores = [
                     int(stock.get("impact_score") or 0)
@@ -4526,7 +4974,7 @@ class LocalCatalystIntelligence:
 
             filtered: list[dict[str, Any]] = []
             for item in items:
-                result = item.get("analysis") or {}
+                result = _published_analysis(item) or {}
                 affected = result.get("affected_stocks") or []
                 ticker_score = ticker_impact_score(item)
                 if directional_only:
@@ -4571,7 +5019,7 @@ class LocalCatalystIntelligence:
                         continue
                 filtered.append(item)
             page = filtered[:limit]
-            analyzed = [item for item in filtered if item.get("analysis")]
+            analyzed = [item for item in filtered if _published_analysis(item)]
             directional_scores = [
                 score
                 for item in filtered
@@ -4629,7 +5077,11 @@ class LocalCatalystIntelligence:
                     "pending": (
                         0
                         if directional_only
-                        else sum(1 for item in filtered if not item.get("analysis"))
+                        else sum(
+                            1
+                            for item in filtered
+                            if not _published_analysis(item)
+                        )
                     ),
                     "high_impact_macro": None,
                 },
@@ -4800,7 +5252,8 @@ class LocalCatalystIntelligence:
                 rows: list[sqlite3.Row] = []
             else:
                 rows = connection.execute(
-                    """SELECT g.*,i.prepared_revision,
+                    f"""SELECT g.*,i.prepared_revision,
+                              {_hotspot_plan_score_columns(connection)},
                               r.source AS representative_source,
                               r.raw_title AS representative_source_title,
                               r.raw_summary AS representative_source_summary,
@@ -4857,15 +5310,36 @@ class LocalCatalystIntelligence:
         *,
         prepared_at: str | None,
     ) -> list[dict[str, Any]]:
+        def plan_value(row: Any, plan_key: str, group_key: str) -> Any:
+            # Items written before v6 carry no plan score; fall back to the
+            # score stored with the event-group version.
+            value = row[plan_key] if plan_key in row.keys() else None
+            return row[group_key] if value is None else value
+
         return [
             {
                 "prepared_revision": int(row["prepared_revision"]),
                 "event_group_id": str(row["event_group_id"]),
                 "event_group_version": int(row["event_group_version"]),
                 "gate_version": SCHEMA_VERSION,
-                "hot_score": float(row["hot_score"]),
-                "component_scores": _loads(row["component_scores_json"], {}),
-                "reasons": _hotspot_source_reasons(_loads(row["reasons_json"], []), int(row["source_count"])),
+                "hot_score": float(
+                    plan_value(row, "plan_hot_score", "hot_score")
+                ),
+                "component_scores": _loads(
+                    plan_value(
+                        row,
+                        "plan_component_scores_json",
+                        "component_scores_json",
+                    ),
+                    {},
+                ),
+                "reasons": _hotspot_source_reasons(
+                    _loads(
+                        plan_value(row, "plan_reasons_json", "reasons_json"),
+                        [],
+                    ),
+                    int(row["source_count"]),
+                ),
                 "status": "prepared",
                 "prepared_at": prepared_at,
                 "representative_title": str(
@@ -4923,7 +5397,8 @@ class LocalCatalystIntelligence:
             if revision_row is None:
                 return None, []
             rows = connection.execute(
-                """SELECT g.*,i.prepared_revision,
+                f"""SELECT g.*,i.prepared_revision,
+                          {_hotspot_plan_score_columns(connection)},
                           r.source AS representative_source,
                           r.raw_title AS representative_source_title,
                           r.raw_summary AS representative_source_summary,
@@ -5177,15 +5652,14 @@ class LocalCatalystIntelligence:
             "content_hash": str(row["content_hash"]),
             "source": str(row["source"]),
             "title": str(row["raw_title"]),
-            "summary": row.get("raw_summary"),
             "url": str(row["url"]),
             "published_at": row.get("published_at"),
             "fetched_at": row.get("fetched_at"),
             "sources": list(row.get("source_names") or []),
             "source_count": int(row.get("source_count") or 1),
-            "source_ticker_hints": _loads(row.get("source_tickers_json"), []),
             "allowed_tickers": list(row.get("canonical_tickers") or []),
             "analysis_revision": 1,
+            **_news_request_source_fields(row),
         }
         scheduled_retry = bool(
             force
@@ -5260,7 +5734,13 @@ class LocalCatalystIntelligence:
             prompt_version=NEWS_PROMPT_VERSION,
             schema_version=schema_version,
             schema_sha256=schema_hash,
-            max_queued=self.max_queued,
+            # Scheduled news may fill the base queue; an owner's click keeps
+            # the same reserve above it as the other manual entry points.
+            max_queued=(
+                self.max_queued + ai_runtime.MANUAL_QUEUE_RESERVE
+                if submission_source == "manual"
+                else self.max_queued
+            ),
             submission_source=submission_source,
             priority=70,
             # A forced request is a new immutable analysis revision. The
@@ -5390,6 +5870,26 @@ class LocalCatalystIntelligence:
             output.append(item)
         return output
 
+    def _news_jobs_by_revision(
+        self,
+        jobs: Mapping[str, dict[str, Any]],
+    ) -> dict[tuple[int, int, str], dict[str, dict[str, Any]]]:
+        """Group a job snapshot by payload revision, parsing each payload once.
+
+        Only jobs whose payload names a revision can ever match it, so each
+        scheduled candidate reads its own group instead of the whole snapshot
+        (the per-candidate full scan made a round quadratic in its size).
+        """
+
+        grouped: dict[tuple[int, int, str], dict[str, dict[str, Any]]] = {}
+        for job_id, job in jobs.items():
+            if job.get("job_type") != "news_impact":
+                continue
+            key = self._news_job_revision_key(job)
+            if key is not None:
+                grouped.setdefault(key, {})[job_id] = job
+        return grouped
+
     def _scheduled_job_for_revision(
         self,
         row: dict[str, Any],
@@ -5506,6 +6006,9 @@ class LocalCatalystIntelligence:
                 }
             )
         output["_scheduled_attempts"] = scheduled_attempts
+        output["_provider_response_seen"] = (
+            latest_job.get("openai_response_id") is not None
+        )
         if job_id not in linked_job_ids:
             output["local_link_pending"] = True
             return output
@@ -5531,6 +6034,17 @@ class LocalCatalystIntelligence:
                 output["status"] = "failed"
                 output["error_code"] = "schema_validation_failed"
         return output
+
+    @staticmethod
+    def _record_scheduled_enqueue_rejection(error: ValueError) -> None:
+        # Diagnostics keep only stage and exception type, so the known local
+        # rejection code is carried by the stage name.
+        stage = (
+            "catalyst_scheduled_payload_too_large"
+            if str(error) == "ai_job_payload_too_large"
+            else "catalyst_scheduled_enqueue_rejected"
+        )
+        record_fallback_failure(stage, error)
 
     def run_scheduled(
         self,
@@ -5578,6 +6092,10 @@ class LocalCatalystIntelligence:
                 except RuntimeError as error:
                     if str(error) != "ai_job_queue_full":
                         raise
+                    skipped += 1
+                    resumed_focus_cycle_id = None
+                except ValueError as error:
+                    self._record_scheduled_enqueue_rejection(error)
                     skipped += 1
                     resumed_focus_cycle_id = None
                 else:
@@ -5704,14 +6222,23 @@ class LocalCatalystIntelligence:
             allow_write_contention=False,
             news_ids={int(row["news_id"]) for row in candidates},
         )
+        jobs_by_revision = self._news_jobs_by_revision(scheduled_job_snapshot)
         scheduled_batch_id = "aib_" + uuid.uuid4().hex
         scheduled_batch_position = 0
         for row in candidates:
             news_id = int(row["news_id"])
+            revision_jobs = jobs_by_revision.get(
+                (
+                    news_id,
+                    int(row["change_sequence"]),
+                    str(row["content_hash"]),
+                ),
+                {},
+            )
             previous_job = self._scheduled_job_for_revision(
                 row,
                 now=observed,
-                jobs=scheduled_job_snapshot,
+                jobs=revision_jobs,
             )
             if isinstance(previous_job, dict) and previous_job.get(
                 "local_link_pending"
@@ -5732,11 +6259,22 @@ class LocalCatalystIntelligence:
                 and previous_updated.date()
                 < observed.astimezone(timezone.utc).date()
             )
+            paid_configuration_change = bool(
+                isinstance(previous_job, dict)
+                and _paid_runtime_configuration_change(
+                    previous_job.get("error_code"),
+                    status=previous_job.get("status"),
+                    provider_response_seen=bool(
+                        previous_job.get("_provider_response_seen")
+                    ),
+                )
+            )
             retry_previous_failure = bool(
                 isinstance(previous_job, dict)
                 and previous_job.get("status") == "failed"
                 and previous_job.get("error_code")
                 in SCHEDULED_NEWS_RETRYABLE_ERRORS
+                and not paid_configuration_change
                 and int(previous_job.get("_scheduled_attempts") or 0)
                 < SCHEDULED_NEWS_MAX_ATTEMPTS
                 and previous_updated is not None
@@ -5756,6 +6294,7 @@ class LocalCatalystIntelligence:
                         status == "completed"
                         and previous_job.get("result") is None
                     )
+                    or paid_configuration_change
                     or (
                         status == "failed"
                         and (
@@ -5782,7 +6321,7 @@ class LocalCatalystIntelligence:
                     expected_change_sequence=int(row["change_sequence"]),
                     expected_content_hash=str(row["content_hash"]),
                     submission_source="scheduled",
-                    _job_snapshot=scheduled_job_snapshot,
+                    _job_snapshot=revision_jobs,
                     _batch_id=scheduled_batch_id,
                     _batch_position=scheduled_batch_position,
                 )
@@ -5796,6 +6335,15 @@ class LocalCatalystIntelligence:
                     skipped += 1
                     break
                 raise
+            except ValueError as error:
+                # A deterministic enqueue rejection (for example a payload the
+                # job store refuses) affects this revision only. It can never
+                # be analysed, so it must not hold back the rest of the round
+                # or the focus cycle that waits for its hotspot.
+                self._record_scheduled_enqueue_rejection(error)
+                focus_pending_news_ids.discard(news_id)
+                skipped += 1
+                continue
             if job.get("status") in {"pending", "queued", "in_progress"}:
                 queued += 1
             else:
@@ -5839,6 +6387,9 @@ class LocalCatalystIntelligence:
                             submission_source="scheduled",
                         )
                     except CatalystError:
+                        skipped += 1
+                    except ValueError as error:
+                        self._record_scheduled_enqueue_rejection(error)
                         skipped += 1
                     else:
                         if focus.get("status") in {
@@ -5899,6 +6450,17 @@ class LocalCatalystIntelligence:
                 )
             ):
                 return None, False
+            if (
+                str(candidate["error_code"] or "") == FOCUS_PREPARE_EXPIRED_ERROR
+                and str(candidate["job_id"])
+                == f"intent:{candidate['cycle_id']}"
+            ):
+                if self._expired_focus_intent_has_job(candidate, jobs):
+                    # Paid work exists for this intent; reconcile relinks it.
+                    return None, True
+                # The intent expired before any paid job existed and never
+                # consumed the revision: let a fresh intent replace it.
+                continue
             job = jobs.get(str(candidate["job_id"]))
             if job is None or job.get("error_code") == "submission_outcome_unknown":
                 return None, True
@@ -5941,6 +6503,13 @@ class LocalCatalystIntelligence:
             )
             if (
                 error_code not in SCHEDULED_FOCUS_RETRYABLE_ERRORS
+                or _paid_runtime_configuration_change(
+                    error_code,
+                    status=job.get("status"),
+                    provider_response_seen=(
+                        job.get("openai_response_id") is not None
+                    ),
+                )
             ):
                 return None, True
             if (
@@ -5951,6 +6520,24 @@ class LocalCatalystIntelligence:
                 return str(candidate["cycle_id"]), False
             return None, True
         return None, False
+
+    def _expired_focus_intent_has_job(
+        self,
+        intent: Mapping[str, Any] | sqlite3.Row,
+        jobs: Mapping[str, dict[str, Any]],
+    ) -> bool:
+        cycle_id = str(intent["cycle_id"])
+        for job in jobs.values():
+            if job.get("job_type") != "market_focus":
+                continue
+            payload = self._job_payload(job)
+            if (
+                payload is not None
+                and payload.get("cycle_id") == cycle_id
+                and self._focus_job_matches_intent(job, intent)
+            ):
+                return True
+        return False
 
     def _focus_calendar_events(
         self,
@@ -6178,6 +6765,13 @@ class LocalCatalystIntelligence:
                 "Prepared hotspot revision is not visible at the requested time",
                 counts_for_circuit=False,
             )
+        if not force:
+            reclaimed = self._reclaim_paid_expired_focus_intent(
+                revision,
+                observed=observed,
+            )
+            if reclaimed is not None:
+                return reclaimed
         cycle_id = "mfc_" + uuid.uuid4().hex
         snapshot_as_of = _iso(observed)
         calendar_events = self._focus_calendar_events(as_of=observed, limit=20)
@@ -6234,6 +6828,25 @@ class LocalCatalystIntelligence:
         with self._connect() as connection:
             connection.execute("BEGIN IMMEDIATE")
             try:
+                # The caller's revision check ran before this write lock; a
+                # reconcile may have committed a newer revision since, even one
+                # planned after this request's clock reading. Minting the
+                # superseded revision would leave "new hotspots" open and pay
+                # again for the newer one, so compare with the newest row.
+                latest_revision = connection.execute(
+                    """SELECT prepared_revision
+                       FROM catalyst_local_hotspot_revisions
+                       ORDER BY prepared_revision DESC LIMIT 1"""
+                ).fetchone()
+                if (
+                    latest_revision is None
+                    or int(latest_revision["prepared_revision"]) != revision
+                ):
+                    raise CatalystError(
+                        "prepared_revision_changed",
+                        "Prepared hotspot revision changed",
+                        counts_for_circuit=False,
+                    )
                 self._recover_stale_preparing_focus(connection, now=observed)
                 if force:
                     existing = connection.execute(
@@ -6252,13 +6865,19 @@ class LocalCatalystIntelligence:
                             (revision,),
                         ).fetchone()
                 else:
+                    # An expired intent never had a paid job: a new request
+                    # builds a fresh intent instead of returning that failure.
                     existing = connection.execute(
                         """SELECT cycle_id FROM catalyst_local_focus_cycles
                            WHERE prepared_revision=?
                              AND COALESCE(json_extract(payload_json,'$.force'),0)=0
-                             AND COALESCE(error_code,'') != ?
+                             AND COALESCE(error_code,'') NOT IN (?,?)
                            ORDER BY created_at DESC LIMIT 1""",
-                        (revision, _LEGACY_PLACEHOLDER_INPUT_ERROR),
+                        (
+                            revision,
+                            _LEGACY_PLACEHOLDER_INPUT_ERROR,
+                            FOCUS_PREPARE_EXPIRED_ERROR,
+                        ),
                     ).fetchone()
                 if existing is not None:
                     resume_cycle_id = str(existing["cycle_id"])
@@ -6313,6 +6932,75 @@ class LocalCatalystIntelligence:
             resume_cycle_id,
             submission_source=submission_source,
         )
+
+    def _reclaim_paid_expired_focus_intent(
+        self,
+        revision: int,
+        *,
+        observed: datetime,
+    ) -> dict[str, Any] | None:
+        """Relink a stale intent's paid job instead of paying for a new one.
+
+        An intent past FOCUS_PREPARING_TTL_SECONDS is expired (or will be,
+        inside the enqueue transaction) and a fresh intent would replace it.
+        If its job was created but the local link never committed, that
+        replacement would pay twice for the same revision.
+        """
+
+        cutoff = _iso(observed - timedelta(seconds=FOCUS_PREPARING_TTL_SECONDS))
+        with self._connect() as connection:
+            intents = connection.execute(
+                """SELECT cycle_id,job_id,payload_json
+                   FROM catalyst_local_focus_cycles
+                   WHERE prepared_revision=?
+                     AND job_id='intent:' || cycle_id
+                     AND COALESCE(json_extract(payload_json,'$.force'),0)=0
+                     AND ((status='failed' AND error_code=?)
+                          OR (status='preparing' AND updated_at<=?))
+                   ORDER BY created_at DESC,cycle_id DESC""",
+                (revision, FOCUS_PREPARE_EXPIRED_ERROR, cutoff),
+            ).fetchall()
+        if not intents:
+            return None
+        # Fail closed: an unreadable job store cannot prove these intents
+        # never paid, so the read error surfaces instead of a new job.
+        jobs = self._ai_job_snapshot(
+            allow_write_contention=False,
+            created_since=(
+                ai_job_store._utcnow()
+                - timedelta(days=self._news_retention_days)
+                - _AI_JOB_SNAPSHOT_MARGIN
+            ),
+        )
+        owned: dict[str, dict[str, Any]] = {}
+        reclaimed_cycle_id: str | None = None
+        for intent in intents:
+            for job in jobs.values():
+                if job.get("job_type") != "market_focus":
+                    continue
+                payload = self._job_payload(job)
+                if (
+                    payload is not None
+                    and payload.get("cycle_id") == str(intent["cycle_id"])
+                    and self._focus_job_matches_intent(job, intent)
+                ):
+                    owned[str(job["job_id"])] = job
+                    reclaimed_cycle_id = reclaimed_cycle_id or str(
+                        intent["cycle_id"]
+                    )
+                    break
+        if reclaimed_cycle_id is None:
+            return None
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                self._recover_stale_preparing_focus(connection, now=observed)
+                self._recover_unlinked_focus_jobs(connection, owned)
+                connection.commit()
+            except Exception:
+                connection.rollback()
+                raise
+        return self._cycle_with_job(reclaimed_cycle_id)
 
     def _retry_focus(
         self,
@@ -6495,7 +7183,8 @@ class LocalCatalystIntelligence:
             return None
         cancel_requested = False
         if include_owner_state:
-            linked_job = self.ai_repository.get_job(str(payload["job_id"]))
+            # Read-only: an unavailable AI store must not hide cycles.
+            linked_job = self._read_ai_job(str(payload["job_id"]))
             public_job = self._identity_public_job(
                 linked_job,
                 expected_type="market_focus",
@@ -6524,6 +7213,12 @@ class LocalCatalystIntelligence:
                 "validation_allowed_event_group_ids": list(
                     cycle_payload.get("allowed_event_group_ids", [])
                 ),
+                # Private: the full write-time payload (it equals the paid
+                # job's payload byte-for-byte, see _publish_completed_focus).
+                # The public projection re-validates against it and strips it;
+                # visitors lose job_id below, so this is their only source of
+                # the event texts that bound source-named entities.
+                "_validation_payload": cycle_payload,
                 "model": self.model,
                 "reasoning_effort": self.reasoning,
                 "result": result,
@@ -6778,12 +7473,12 @@ class LocalCatalystIntelligence:
         return int(
             connection.execute(
                 """UPDATE catalyst_local_focus_cycles
-                   SET status='failed',error_code='focus_prepare_expired',
+                   SET status='failed',error_code=?,
                        updated_at=?
                    WHERE status='preparing'
                      AND job_id LIKE 'intent:%'
                      AND updated_at<=?""",
-                (_iso(now), cutoff),
+                (FOCUS_PREPARE_EXPIRED_ERROR, _iso(now), cutoff),
             ).rowcount
         )
 

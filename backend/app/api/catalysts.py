@@ -16,6 +16,7 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+from starlette.concurrency import run_in_threadpool
 
 from app.access import (
     current_request_is_owner,
@@ -438,7 +439,12 @@ async def catalyst_calendar(
         else None
     )
     try:
-        payload = service.calendar(
+        # service.calendar 在 owner 请求下会一路走到 manual_refresh_statuses 的
+        # SQLite BEGIN IMMEDIATE（busy_timeout 5s）；同步调用会把整个事件循环
+        # 卡到锁释放为止，必须挪到线程池。run_in_threadpool 用 contextvars 的
+        # copy_context 把当前请求的 owner 判定带进线程，语义不变。
+        payload = await run_in_threadpool(
+            service.calendar,
             date_from=start_date,
             date_to=end_date,
             as_of=observed,

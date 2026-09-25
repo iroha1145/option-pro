@@ -20,6 +20,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.access import request_owner_access_context
+from app.failure_diagnostics import record_fallback_failure
 from app.personal_config import get_personal_config
 from app.public_home_snapshot import (
     public_home_resource_parameters,
@@ -254,10 +255,14 @@ def _options_block(symbol: str) -> dict[str, Any] | None:
         return None
     summaries: list[dict[str, Any]] = []
     underlying_price: float | int | None = None
+    chain_error: Exception | None = None
     for expiration in expirations:
         try:
             chain = yahoo.get_option_chain(symbol, expiration)
-        except Exception:
+        except Exception as error:
+            # 单个到期日失败很常见（限流/暂缺），跳过降级；诊断按调用汇总一次，
+            # 不是每个到期日各记一次，避免同一次请求把日志刷屏。
+            chain_error = chain_error or error
             continue
         summary = _summarize_chain(chain)
         if summary is None:
@@ -266,12 +271,17 @@ def _options_block(symbol: str) -> dict[str, Any] | None:
             _finite_number(chain.get("underlying_price")) or underlying_price
         )
         summaries.append(summary)
+    if chain_error is not None:
+        record_fallback_failure(
+            "signal_context_option_chain", chain_error, symbol=symbol
+        )
     if not summaries:
         return None
     try:
         atm_iv = yahoo.get_stock_iv(symbol)
-    except Exception:
+    except Exception as error:
         atm_iv = None
+        record_fallback_failure("signal_context_stock_iv", error, symbol=symbol)
     return {
         "as_of": datetime.now(timezone.utc).isoformat(),
         "underlying_price": underlying_price,
@@ -437,12 +447,37 @@ async def build_signal_context(symbol: str) -> dict[str, Any]:
             _isolated("upcoming_earnings", _earnings_block(symbol))
         ),
     }
-    await asyncio.wait(tasks.values(), timeout=CONTEXT_TIMEOUT_SECONDS)
+    _done, pending = await asyncio.wait(
+        tasks.values(), timeout=CONTEXT_TIMEOUT_SECONDS
+    )
+    if pending:
+        pending_keys = sorted(key for key, task in tasks.items() if task in pending)
+        # asyncio.to_thread 里的宿主线程无法真正打断、会跑完，这点接受；但协程/
+        # task 必须 cancel，否则会在这次请求返回后仍脱离生命周期裸跑。
+        for task in pending:
+            task.cancel()
+        # CancelledError 是 BaseException，_isolated 的 except Exception 接不住，
+        # 会原样从 task 里冒出来；gather(return_exceptions=True) 把它当结果收下
+        # 而不重新抛出，等取消真正落定，build_signal_context 才继续——保持
+        # “永不抛异常”的契约。
+        await asyncio.gather(*pending, return_exceptions=True)
+        record_fallback_failure(
+            "signal_context_timeout",
+            TimeoutError(f"blocks timed out: {','.join(pending_keys)}"),
+            symbol=symbol,
+        )
+        logger.warning(
+            "signal context assembly timed out after %.1fs (%s)",
+            CONTEXT_TIMEOUT_SECONDS,
+            ",".join(pending_keys),
+        )
     blocks: dict[str, Any] = {}
     status: dict[str, str] = {}
     context_tickers: list[str] = []
     for key, task in tasks.items():
-        value = task.result() if task.done() else None
+        # 取消落定后的 task 也是 done()，但 result() 会重新抛出 CancelledError；
+        # 一律按 unavailable 处理。
+        value = task.result() if task.done() and not task.cancelled() else None
         if key == "recent_news" and value is not None:
             value, tickers = value
             for ticker in tickers:
@@ -457,12 +492,6 @@ async def build_signal_context(symbol: str) -> dict[str, Any]:
         else:
             blocks[key] = value
             status[key] = "ok"
-    if any(not task.done() for task in tasks.values()):
-        logger.warning(
-            "signal context assembly timed out after %.1fs (%s)",
-            CONTEXT_TIMEOUT_SECONDS,
-            ",".join(sorted(key for key, task in tasks.items() if not task.done())),
-        )
     return {
         "blocks": blocks,
         "status": status,
