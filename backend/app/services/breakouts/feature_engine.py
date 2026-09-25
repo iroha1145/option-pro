@@ -42,9 +42,13 @@ def _clean_frame(frame: pd.DataFrame, *, require_volume: bool = False) -> pd.Dat
                 frame[source], errors="coerce"
             ).replace([np.inf, -np.inf], np.nan)
     result = result[~result.index.duplicated(keep="last")].sort_index()
+    # Same bounds as daily_confirmation.valid_daily_ohlc: an Open outside the
+    # bar's range is a bad print and would leak into ATR, VWAP and CLV.
     valid = (
         result[["Open", "High", "Low", "Close"]].notna().all(axis=1)
         & (result["High"] >= result["Low"])
+        & (result["Open"] <= result["High"])
+        & (result["Open"] >= result["Low"])
         & (result["Close"] <= result["High"])
         & (result["Close"] >= result["Low"])
     )

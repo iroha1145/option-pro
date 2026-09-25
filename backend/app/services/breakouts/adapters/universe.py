@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import date, datetime
-from typing import Any
+from datetime import datetime
 
 from app.services.sectors import SECTORS
 
@@ -136,20 +135,3 @@ class ThemeCanonicalUniverseAdapter:
             if theme in THEME_BENCHMARKS
         }
         return next(iter(references)) if len(references) == 1 else None
-
-    async def distributions(
-        self,
-        *,
-        feature: str,
-        as_of: date,
-        sector: str | None = None,
-    ) -> dict[str, Any]:
-        return {
-            "feature": feature,
-            "as_of": as_of.isoformat(),
-            "sector": sector,
-            "values": [],
-            "status": "unavailable",
-            "universe_version": self.version,
-            "warning": "historical canonical distributions are not persisted yet",
-        }

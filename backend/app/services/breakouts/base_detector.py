@@ -8,7 +8,11 @@ import math
 import numpy as np
 import pandas as pd
 
-from app.services.breakouts.config import BreakoutSettings, get_breakout_settings
+from app.services.breakouts.config import (
+    BreakoutSettings,
+    break_buffer,
+    get_breakout_settings,
+)
 from app.services.breakouts.feature_engine import compute_atr, trim_daily_bars
 from app.services.breakouts.models import (
     BreakoutStructure,
@@ -85,9 +89,8 @@ def _candidate(
     resistance_mid = float(np.mean(resistance_prices))
     resistance_low = min(resistance_prices) - tolerance * 0.25
     resistance_high = max(resistance_prices) + tolerance * 0.25
-    if float(window["Close"].iloc[-1]) > resistance_high + max(
-        price * settings.break_buffer_pct,
-        atr * settings.break_buffer_atr,
+    if float(window["Close"].iloc[-1]) > resistance_high + break_buffer(
+        price, atr, settings
     ):
         return None
 

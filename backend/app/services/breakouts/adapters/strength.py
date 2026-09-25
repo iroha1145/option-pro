@@ -13,6 +13,27 @@ from app.services.strength import scanner
 class ExistingStrengthAdapter:
     version = scanner.INTRINSIC_STRENGTH_VERSION
 
+    def _snapshots(
+        self,
+        payload: Mapping[str, Any],
+        as_of: datetime,
+    ) -> dict[str, StrengthScoreSnapshot]:
+        results: dict[str, StrengthScoreSnapshot] = {}
+        for row in payload.get("rows", []):
+            snapshot = StrengthScoreSnapshot(
+                ticker=row["ticker"],
+                score=row.get("score"),
+                score_scope=str(row.get("score_scope") or "unknown"),
+                confidence=float(row.get("confidence") or 0.0),
+                score_version=str(row.get("score_version") or self.version),
+                included_features=list(row.get("included_features") or []),
+                factor_breakdown=dict(row.get("factor_breakdown") or {}),
+                coverage=dict(row.get("coverage") or {}),
+                as_of=as_of,
+            )
+            results[snapshot.ticker] = snapshot
+        return results
+
     async def score_ticker_set(
         self,
         tickers: Sequence[str],
@@ -41,21 +62,7 @@ class ExistingStrengthAdapter:
             range_trend_weight=settings.range_persistence_trend_family_weight,
             range_final_cap=settings.range_persistence_final_weight_cap,
         )
-        results: dict[str, StrengthScoreSnapshot] = {}
-        for row in payload.get("rows", []):
-            snapshot = StrengthScoreSnapshot(
-                ticker=row["ticker"],
-                score=row.get("score"),
-                score_scope=str(row.get("score_scope") or "unknown"),
-                confidence=float(row.get("confidence") or 0.0),
-                score_version=str(row.get("score_version") or self.version),
-                included_features=list(row.get("included_features") or []),
-                factor_breakdown=dict(row.get("factor_breakdown") or {}),
-                coverage=dict(row.get("coverage") or {}),
-                as_of=as_of,
-            )
-            results[snapshot.ticker] = snapshot
-        return results
+        return self._snapshots(payload, as_of)
 
     async def score_from_daily_snapshots(
         self,
@@ -106,18 +113,4 @@ class ExistingStrengthAdapter:
                 "message": "reused Breakout Radar daily snapshots",
             },
         )
-        results: dict[str, StrengthScoreSnapshot] = {}
-        for row in payload.get("rows", []):
-            snapshot = StrengthScoreSnapshot(
-                ticker=row["ticker"],
-                score=row.get("score"),
-                score_scope=str(row.get("score_scope") or "unknown"),
-                confidence=float(row.get("confidence") or 0.0),
-                score_version=str(row.get("score_version") or self.version),
-                included_features=list(row.get("included_features") or []),
-                factor_breakdown=dict(row.get("factor_breakdown") or {}),
-                coverage=dict(row.get("coverage") or {}),
-                as_of=as_of,
-            )
-            results[snapshot.ticker] = snapshot
-        return results
+        return self._snapshots(payload, as_of)

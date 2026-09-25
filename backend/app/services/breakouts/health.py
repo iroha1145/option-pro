@@ -403,13 +403,9 @@ def check_breakout_health(
     )
 
 
-check_health = check_breakout_health
-
-
 __all__ = [
     "BreakoutHealth",
     "BreakoutReadState",
     "assess_breakout_read_state",
     "check_breakout_health",
-    "check_health",
 ]

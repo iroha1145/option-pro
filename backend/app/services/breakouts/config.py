@@ -320,6 +320,23 @@ class BreakoutSettings(BaseSettings):
         return self
 
 
+def break_buffer(
+    base: float | None,
+    atr: float | None,
+    settings: BreakoutSettings,
+) -> float:
+    """Clearance a price needs above a level before it counts as broken.
+
+    Each caller picks ``base`` deliberately (current price, pivot, prior
+    close); only the pairing of the percentage and ATR legs is shared.
+    """
+
+    return max(
+        (base or 0.0) * settings.break_buffer_pct,
+        (atr or 0.0) * settings.break_buffer_atr,
+    )
+
+
 @lru_cache
 def get_breakout_settings() -> BreakoutSettings:
     return BreakoutSettings()

@@ -14,7 +14,7 @@ from collections import Counter, defaultdict
 from datetime import date, datetime
 from statistics import fmean
 from typing import Any, Iterable, Mapping, Sequence
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
 RESEARCH_VALIDATION_VERSION = "breakout-research-validation-v1"
@@ -488,7 +488,9 @@ def attach_forward_return_labels(
                     row.get("trading_date"), field="trading_date"
                 )
             date_error = None
-        except ValueError:
+        except (ValueError, ZoneInfoNotFoundError):
+            # ZoneInfoNotFoundError is a KeyError: an unknown price-file
+            # timezone must mark the row, not abort the whole validation.
             event_date = None
             date_error = "invalid_trading_date"
         event_price = _positive_number(row.get("event_price"))
@@ -678,6 +680,8 @@ def _model_metrics(
 
     ic_mean = fmean(daily_ic) if daily_ic else None
     ic_std = _population_std(daily_ic)
+    # Kept as "icir" for report compatibility, but scaled by sqrt(dates): this
+    # is the t-statistic of the mean daily rank IC, not the plain mean/std ratio.
     icir = (
         ic_mean / ic_std * math.sqrt(len(daily_ic))
         if ic_mean is not None and ic_std is not None and ic_std > 0

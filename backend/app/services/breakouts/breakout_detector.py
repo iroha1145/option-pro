@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from app.services.breakouts.config import BreakoutSettings, get_breakout_settings
+from app.services.breakouts.config import (
+    BreakoutSettings,
+    break_buffer,
+    get_breakout_settings,
+)
 from app.services.breakouts.models import (
     BreakoutCandidate,
     BreakoutLifecycleState,
@@ -57,10 +61,7 @@ def detect_breakout(
 
     opening_high = _number(features, "opening_range_high")
     opening_complete = bool(features.get("opening_range_complete"))
-    opening_buffer = max(
-        (price or 0) * config.break_buffer_pct,
-        (atr or 0) * config.break_buffer_atr,
-    )
+    opening_buffer = break_buffer(price, atr, config)
     if opening_complete and opening_high is not None and price is not None:
         if price > opening_high + opening_buffer:
             opening_distance = (
@@ -130,10 +131,7 @@ def detect_breakout(
         }
 
     resistance = structure.resistance_zone.high
-    buffer = max(
-        (price or resistance) * config.break_buffer_pct,
-        (atr or 0) * config.break_buffer_atr,
-    )
+    buffer = break_buffer(price or resistance, atr, config)
     distance = (
         (price - resistance) / atr
         if price is not None and atr is not None and atr > 0
