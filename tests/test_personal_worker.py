@@ -622,6 +622,8 @@ def test_ai_worker_fails_closed_when_runtime_settings_are_unreadable(
         openai_job_db_path=tmp_path / "ai-jobs.db",
         openai_api_key=SecretStr("test-only-key"),
         openai_job_lease_seconds=60,
+        openai_manual_cooldown_seconds=30,
+        openai_job_max_age_seconds=86_400,
     )
     def unreadable():
         raise RuntimeSettingsStorageError("invalid runtime document")
@@ -2779,11 +2781,12 @@ def test_personal_tasks_disable_without_token_and_never_choose_legacy(
     assert focus._intelligence is None
 
 
-def test_catalyst_initialization_failure_leaves_no_cached_half_state(
+def test_catalyst_intelligence_failure_keeps_sync_and_caches_no_half_state(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     attempts = 0
+    requested_paths: list[str] = []
 
     class FlakyIntelligence:
         def __init__(self, *_args, **_kwargs) -> None:
@@ -2803,11 +2806,13 @@ def test_catalyst_initialization_failure_leaves_no_cached_half_state(
             return {"queued": 0}
 
     def handler(request: httpx.Request) -> httpx.Response:
+        requested_paths.append(request.url.path)
         return httpx.Response(200, json=_empty_etl_page(request.url.path))
 
+    # Every run is a sync slot, so the second run may retry the build.
     monkeypatch.setattr(
         "app.services.runtime_settings.get_effective_runtime_settings",
-        lambda: _runtime_settings(),
+        lambda: _runtime_settings(sync_seconds=0),
     )
     config = SimpleNamespace(
         catalyst=SimpleNamespace(sync_seconds=120),
@@ -2826,17 +2831,32 @@ def test_catalyst_initialization_failure_leaves_no_cached_half_state(
         intelligence_factory=FlakyIntelligence,
     )
 
-    with pytest.raises(OSError, match="local initialization failed"):
-        asyncio.run(task())
-    assert task._mode is None
-    assert task._client is None
-    assert task._service is None
-    assert task._intelligence is None
+    async def run() -> tuple[TaskResult, object, TaskResult]:
+        first = await task()
+        intelligence_after_failure = task._intelligence
+        second = await task()
+        await task.aclose()
+        return first, intelligence_after_failure, second
 
-    result = asyncio.run(task())
-    assert result.status == "idle"
+    first, intelligence_after_failure, second = asyncio.run(run())
+
+    # News and calendar sync do not wait for the local analysis store.
+    assert first.status == "degraded"
+    assert first.error_code == "catalyst_sync_degraded"
+    assert first.details["processed"] == ["news", "calendar"]
+    assert first.details["errors"] == {
+        "local_intelligence": "local_intelligence_unavailable"
+    }
+    assert first.next_delay_seconds == 2.0
+    assert intelligence_after_failure is None
+    assert requested_paths[:2] == [
+        "/internal/v1/news/changes",
+        "/internal/v1/calendar",
+    ]
+
+    assert second.status == "idle"
+    assert second.details["processed"] == ["news", "calendar", "local_intelligence"]
     assert attempts == 2
-    asyncio.run(task.aclose())
 
 
 @pytest.mark.parametrize("mode", ["read", "off"])
@@ -3392,6 +3412,7 @@ def test_default_task_inventory_and_maintenance_backup(
         "catalyst-cache": tmp_path / "catalyst-cache.db",
         "ai-jobs": tmp_path / "ai-jobs.db",
         "macro-conditions": tmp_path / "macro-conditions.db",
+        "accounts": tmp_path / "accounts.db",
         "backups": tmp_path / "backups",
     }
     worker_db = tmp_path / "optix-worker.db"
@@ -3401,6 +3422,8 @@ def test_default_task_inventory_and_maintenance_backup(
         with sqlite3.connect(path) as connection:
             connection.execute("CREATE TABLE sample(value INTEGER)")
             connection.execute("INSERT INTO sample VALUES(1)")
+    runtime_settings = tmp_path / "runtime-settings.json"
+    runtime_settings.write_text('{"version": 3}\n', encoding="utf-8")
 
     worker_settings = _worker_config(
         tmp_path,
@@ -3445,6 +3468,23 @@ def test_default_task_inventory_and_maintenance_backup(
     assert strength_spec.timeout_seconds == worker_tasks.STRENGTH_REFRESH_TIMEOUT_SECONDS == 7_200.0
     assert strength_spec.drain_on_shutdown is True
     assert strength_spec.may_block_event_loop is False
+    # The default snapshot follows the post-close buffer, not process start.
+    assert strength_spec.honor_persisted_schedule is True
+    assert strength_spec.runner._refresh_times_et == ("22:00",)
+    assert maintenance_spec.honor_persisted_schedule is True
+    assert (
+        maintenance_spec.interval_seconds,
+        maintenance_spec.failure_backoff_seconds,
+        maintenance_spec.max_backoff_seconds,
+    ) == (
+        maintenance_spec.runner.interval_seconds,
+        maintenance_spec.runner.failure_backoff_seconds,
+        maintenance_spec.runner.max_backoff_seconds,
+    )
+    breakout_specs = [
+        spec for spec in specs if spec.name in {"breakout", "breakout_refresh"}
+    ]
+    assert all(spec.close == spec.runner.aclose for spec in breakout_specs)
     sector_iv_spec = next(spec for spec in specs if spec.name == "sector_iv_refresh")
     assert isinstance(sector_iv_spec.runner, worker_tasks.SectorIVTask)
     assert sector_iv_spec.enabled is True
@@ -3455,6 +3495,13 @@ def test_default_task_inventory_and_maintenance_backup(
     assert isinstance(manual_specs["focus_refresh"].runner, FocusRefreshTask)
     assert isinstance(manual_specs["breakout_refresh"].runner, BreakoutTask)
     assert isinstance(manual_specs["retention"].runner, RetentionTask)
+    # Retention backs up everything right before it prunes.
+    assert manual_specs["retention"].runner.backup.full_cycle_per_call is True
+    assert maintenance_spec.runner.full_cycle_per_call is False
+    assert manual_specs["retention"].runner._ai_history_retain_days == max(
+        worker_tasks.get_personal_config().catalyst.journal_retention_days,
+        worker_tasks.AI_HISTORY_MIN_RETAIN_DAYS,
+    )
     result = asyncio.run(maintenance_spec.runner())
     assert result.status == "idle"
     assert set(result.details["backed_up"]) == {
@@ -3463,8 +3510,19 @@ def test_default_task_inventory_and_maintenance_backup(
         "ai-jobs",
         "optix-worker",
         "macro-conditions",
+        "accounts",
+        "runtime-settings",
     }
-    assert len(list((tmp_path / "backups").glob("*.sqlite3"))) == 5
+    assert len(list((tmp_path / "backups").glob("*.sqlite3"))) == 6
+    assert len(list((tmp_path / "backups").glob("accounts-*.sqlite3.json"))) == 1
+    settings_manifests = list(
+        (tmp_path / "backups").glob("runtime-settings-*.json.json")
+    )
+    assert len(settings_manifests) == 1
+    settings_copy = settings_manifests[0].with_name(
+        settings_manifests[0].name.removesuffix(".json")
+    )
+    assert settings_copy.read_bytes() == runtime_settings.read_bytes()
 
     private_config = worker_tasks.get_personal_config()
     password_config = private_config.model_copy(
@@ -3622,7 +3680,7 @@ def test_cancelled_backup_holds_the_task_until_the_copy_finishes(
     release = threading.Event()
     finished = threading.Event()
 
-    def slow_backup(_path, _destination, *, label, keep):
+    def slow_backup(_path, _destination, *, label, keep, **_kwargs):
         started.set()
         assert release.wait(timeout=5)
         finished.set()

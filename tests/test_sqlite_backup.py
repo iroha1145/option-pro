@@ -55,7 +55,6 @@ def test_backup_uses_consistent_copy_and_writes_verified_metadata(tmp_path: Path
 
     expected_digest = hashlib.sha256(backup_path.read_bytes()).hexdigest()
     assert result.sha256 == expected_digest
-    assert result.quick_check == "ok"
     assert result.integrity_check == "ok"
     assert result.foreign_key_violations == 0
     assert backup_path.stat().st_mode & 0o777 == 0o600
@@ -65,6 +64,7 @@ def test_backup_uses_consistent_copy_and_writes_verified_metadata(tmp_path: Path
     assert manifest["sha256"] == expected_digest
     assert manifest["backup"] == backup_path.name
     assert manifest["integrity_check"] == "ok"
+    assert "quick_check" not in manifest
     assert Path(result.checksum_file).read_text(encoding="utf-8") == (
         f"{expected_digest}  {backup_path.name}\n"
     )
