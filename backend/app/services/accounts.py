@@ -11,6 +11,8 @@ through ``APP_PASSWORD_HASH``; that path never touches this store.
 
 from __future__ import annotations
 
+import binascii
+from contextlib import contextmanager
 import hashlib
 import hmac
 import json
@@ -25,12 +27,23 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Iterable, Iterator, Mapping, Sequence
 
 from app.owner_password import _b64decode, _b64encode
 
 _PBKDF2_ITERATIONS = 240_000
 _PASSWORD_HASH_LENGTH = 32
+# Unknown usernames are verified against this well-formed hash so they cost the
+# same single PBKDF2 run as a wrong password; that result is discarded. Building
+# it runs no PBKDF2, so importing the module stays cheap.
+_UNKNOWN_USER_PASSWORD_HASH = "$".join(
+    (
+        "pbkdf2_sha256",
+        str(_PBKDF2_ITERATIONS),
+        _b64encode(bytes(16)),
+        _b64encode(bytes(_PASSWORD_HASH_LENGTH)),
+    )
+)
 
 #: The owner signs in under this name; it can never become a customer account.
 RESERVED_USERNAMES = frozenset({"admin", "administrator", "root", "owner", "optix"})
@@ -237,7 +250,7 @@ def verify_account_password(password: str, encoded_hash: str) -> bool:
             iterations,
             dklen=len(expected),
         )
-    except Exception:
+    except (binascii.Error, TypeError, ValueError):
         return False
     return hmac.compare_digest(actual, expected)
 
@@ -519,14 +532,21 @@ class AccountStore:
         self._lock = threading.Lock()
         self._initialized = False
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
+        # ``with connection`` only commits or rolls back; closing here keeps a
+        # traceback that references the frame from holding the file open.
         self.path.parent.mkdir(parents=True, exist_ok=True)
         connection = sqlite3.connect(self.path, timeout=10.0)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA journal_mode=WAL")
-        connection.execute("PRAGMA busy_timeout=10000")
-        connection.execute("PRAGMA foreign_keys=ON")
-        return connection
+        try:
+            connection.row_factory = sqlite3.Row
+            connection.execute("PRAGMA journal_mode=WAL")
+            connection.execute("PRAGMA busy_timeout=10000")
+            connection.execute("PRAGMA foreign_keys=ON")
+            with connection:
+                yield connection
+        finally:
+            connection.close()
 
     def initialize(self) -> None:
         if self._initialized:
@@ -678,7 +698,7 @@ class AccountStore:
         if row is None:
             # Spend comparable time so a missing user is not faster than a
             # wrong password.
-            verify_account_password(password, hash_account_password("placeholder"))
+            verify_account_password(password, _UNKNOWN_USER_PASSWORD_HASH)
             raise AccountError("invalid_credentials")
         if not verify_account_password(password, str(row["password_hash"])):
             raise AccountError("invalid_credentials")

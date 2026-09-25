@@ -62,7 +62,10 @@ from app.services.watchlist_scope import (
 )
 from app.services.request_security import request_client_ip
 from app.public_stock_data import read_public_stock_status
-from app.stock_data_reads import read_latest_stock_resource as read_stock_pull_resource
+from app.stock_data_reads import (
+    read_latest_stock_resource as read_stock_pull_resource,
+    read_latest_stock_summary,
+)
 from app.stock_chart_snapshot import read_stock_chart_resource, write_stock_chart_resource
 from app.stock_pull_snapshot import (
     STOCK_PULL_RESOURCE_FRESH_SECONDS,
@@ -96,7 +99,7 @@ _endpoint_cache: dict[str, _EndpointCacheEntry] = {}
 # cold key would otherwise all kick off their own yfinance fetch.
 _endpoint_locks: dict[str, asyncio.Lock] = {}
 _endpoint_lock_users: dict[str, int] = {}
-_endpoint_refresh_tasks: dict[str, asyncio.Task[None]] = {}
+_endpoint_refresh_tasks: dict[str, asyncio.Task[Any]] = {}
 _endpoint_refresh_retry_after: dict[str, float] = {}
 _ENDPOINT_PURGE_THRESHOLD = 2048
 _ENDPOINT_MAX_ENTRIES = 2048
@@ -277,6 +280,16 @@ def _usable_hit(key: str, now: float) -> _EndpointCacheEntry | None:
         _endpoint_cache.pop(key, None)
         return None
     return hit
+
+
+def _unexpired_hit(key: str, now: float) -> _EndpointCacheEntry | None:
+    """Lookup for code running in worker threads.
+
+    The event loop iterates ``_endpoint_cache`` while purging, so a thread
+    must never remove entries; expiry removal stays with ``_usable_hit``.
+    """
+    hit = _endpoint_cache.get(key)
+    return hit if hit is not None and hit.stale_until > now else None
 
 
 async def _reuse_fresh_public_home_entry(
@@ -478,24 +491,7 @@ async def _force_replace_endpoint(
         _release_lock(key, lock)
 
 
-async def _refresh_endpoint_in_background(
-    key: str,
-    ttl: int,
-    max_age: int,
-    loader,
-    on_success=None,
-) -> None:
-    """Refresh one stale entry without making the requesting client wait."""
-    await _load_and_store_endpoint(
-        key,
-        ttl,
-        max_age,
-        loader,
-        on_success,
-    )
-
-
-def _finish_endpoint_refresh(key: str, task: asyncio.Task[None]) -> None:
+def _finish_endpoint_refresh(key: str, task: asyncio.Task[Any]) -> None:
     if _endpoint_refresh_tasks.get(key) is not task:
         if not task.cancelled():
             task.exception()
@@ -534,8 +530,9 @@ def _schedule_endpoint_refresh(
         if retry_after > now:
             return False
         _endpoint_refresh_retry_after.pop(key, None)
+    # Refresh one stale entry without making the requesting client wait.
     task = asyncio.create_task(
-        _refresh_endpoint_in_background(
+        _load_and_store_endpoint(
             key,
             ttl,
             max_age,
@@ -1137,7 +1134,7 @@ def _write_stock_directory_snapshot(
         raise
 
 
-def _stock_directory_snapshot_identity(path: Path) -> tuple[int, int, int]:
+def _snapshot_file_identity(path: Path) -> tuple[int, int, int]:
     try:
         item = path.lstat()
     except FileNotFoundError:
@@ -1153,7 +1150,7 @@ def _load_stock_directory_snapshot(now: float) -> None:
     path_key = str(_STOCK_DIRECTORY_PATH)
     observed = (
         path_key,
-        _stock_directory_snapshot_identity(_STOCK_DIRECTORY_PATH),
+        _snapshot_file_identity(_STOCK_DIRECTORY_PATH),
     )
     if observed == _stock_directory_snapshot_observed:
         return
@@ -1209,7 +1206,8 @@ async def _stock_directory(*, allow_refresh: bool) -> dict[str, Any] | None:
         if _is_public_snapshot_unavailable(exc):
             return None
         raise
-    except Exception:
+    except Exception as exc:
+        record_fallback_failure("stock_directory_refresh", exc)
         hit = _usable_hit(_STOCK_DIRECTORY_CACHE_KEY, time.time())
         return _cache_result(hit, stale=True) if hit is not None else None
 
@@ -1249,7 +1247,6 @@ _WATCHLIST_MAX_TICKERS = 100
 _WATCHLIST_QUERY_MAX_LENGTH = 4096
 _WATCHLIST_FRESH_TTL_SECONDS = 5 * 60
 _WATCHLIST_MAX_SNAPSHOT_AGE_SECONDS = 24 * 60 * 60
-_WATCHLIST_TARGETED_STALE_TTL_SECONDS = 15 * 60
 _WATCHLIST_LATEST_INTERVAL = "5m"
 _WATCHLIST_MARKET_TIMEZONE = ZoneInfo("America/New_York")
 _WATCHLIST_SYMBOL_TIMEZONES = {
@@ -1701,16 +1698,6 @@ def _persist_watchlist_snapshot(payload: Any, saved_at: float) -> None:
     )
 
 
-def _watchlist_snapshot_identity(path: Path) -> tuple[int, int, int]:
-    try:
-        item = path.lstat()
-    except FileNotFoundError:
-        return (0, 0, 0)
-    except OSError:
-        return (-1, 0, 0)
-    return (int(item.st_ino), int(item.st_mtime_ns), int(item.st_size))
-
-
 def _load_watchlist_snapshot_once(now: float) -> None:
     """Load a newer worker snapshot without relabeling old memory as fresh."""
 
@@ -1723,7 +1710,7 @@ def _load_watchlist_snapshot_once(now: float) -> None:
         or _watchlist_snapshot_observed[0] != path_key
     ):
         return
-    identity = _watchlist_snapshot_identity(_WATCHLIST_SNAPSHOT_PATH)
+    identity = _snapshot_file_identity(_WATCHLIST_SNAPSHOT_PATH)
     observed = (path_key, identity)
     if _watchlist_snapshot_load_attempted and observed == _watchlist_snapshot_observed:
         return
@@ -1750,7 +1737,7 @@ def _load_watchlist_snapshot_for_owner(now: float) -> _EndpointCacheEntry | None
     # unchanged and the memory entry already reflects that generation or a
     # newer live refresh, skip the full read+validate.
     path_key = str(_WATCHLIST_SNAPSHOT_PATH)
-    identity = _watchlist_snapshot_identity(_WATCHLIST_SNAPSHOT_PATH)
+    identity = _snapshot_file_identity(_WATCHLIST_SNAPSHOT_PATH)
     observed = _watchlist_owner_snapshot_observed
     if (
         observed is not None
@@ -1812,12 +1799,21 @@ def _watchlist_cache_key(tickers: list[str] | None) -> str:
     return f"watchlist:set:{digest}"
 
 
+def _daily_closes_chart(closes: tuple[tuple[int, float], ...]) -> dict[str, Any]:
+    return {
+        "range": "1d",
+        "price_adjustment": "raw",
+        "bars": [{"t": stamp, "c": close} for stamp, close in closes],
+    }
+
+
 async def _with_watchlist_daily_trends(payload: Any) -> Any:
     """Attach at most 30 cached daily bars, with no per-card provider request.
 
     This also enriches persisted watchlists created before the trend field
-    existed. The original quote/spark cache is never mutated. Durable manual
-    pulls share a parsed document cache, so all symbols reuse one disk read.
+    existed. The original quote/spark cache is never mutated. Durable pulls are
+    read through their per-file summaries, which already carry the newest daily
+    closes, so no card parses or copies a two-year chart payload.
     """
     if not isinstance(payload, dict) or not isinstance(payload.get("groups"), list):
         return payload
@@ -1834,13 +1830,11 @@ async def _with_watchlist_daily_trends(payload: Any) -> Any:
             for row in group.get("stocks", []):
                 symbol = row.get("ticker", "")
                 if symbol not in trends:
-                    entry = _endpoint_cache.get(f"chart:{symbol}:1d:raw")
-                    if entry is not None and entry.stale_until <= now:
-                        entry = None
+                    entry = _unexpired_hit(f"chart:{symbol}:1d:raw", now)
                     chart = entry.value if entry is not None else None
-                    persisted = read_stock_pull_resource(symbol, "daily_chart", now=now)
+                    persisted = read_latest_stock_summary(symbol, now=now).get("daily_chart")
                     if persisted is not None and (entry is None or persisted["saved_at"] > entry.fetched_at):
-                        chart = persisted["payload"]
+                        chart = _daily_closes_chart(persisted["daily_closes"])
                     if chart is None:
                         # The worker's public focus / breakout charts are also
                         # valid daily caches, including before any manual pull.
@@ -1868,10 +1862,11 @@ def _stock_data_status_items(tickers: list[str], now: float) -> list[dict[str, A
     items: list[dict[str, Any]] = []
     for ticker in tickers:
         refresh = read_public_stock_status(ticker, now=now)
+        latest = read_latest_stock_summary(ticker, now=now)
         resources: dict[str, Any] = {}
         saved_times: list[float] = []
         for name in ("overview", "daily_chart", "signals"):
-            entry = read_stock_pull_resource(ticker, name, now=now)
+            entry = latest.get(name)
             if entry is not None:
                 saved_times.append(float(entry["saved_at"]))
             resources[name] = {
@@ -1928,14 +1923,6 @@ async def watchlist(
     requested_tickers = _parse_watchlist_tickers(tickers)
     cache_key = _watchlist_cache_key(requested_tickers)
     allow_refresh = current_request_is_owner()
-    # Keep the zero-argument loader for the original endpoint. Besides
-    # preserving behavior, this remains compatible with tests and callers
-    # that replace ``_build_watchlist`` with a zero-argument function.
-    loader = (
-        _build_watchlist
-        if requested_tickers is None
-        else lambda: _build_watchlist(requested_tickers)
-    )
     try:
         if requested_tickers is None:
             now = time.time()
@@ -1968,7 +1955,7 @@ async def watchlist(
                 cache_key,
                 _WATCHLIST_FRESH_TTL_SECONDS,
                 _WATCHLIST_MAX_SNAPSHOT_AGE_SECONDS,
-                loader,
+                _build_watchlist,
                 _persist_watchlist_snapshot,
                 allow_refresh=allow_refresh,
             )
@@ -1981,6 +1968,7 @@ async def watchlist(
     except HTTPException:
         raise
     except Exception as exc:
+        record_fallback_failure("stocks_watchlist_unavailable", exc)
         raise HTTPException(status_code=503, detail="Yahoo watchlist data is currently unavailable") from exc
 
 
@@ -2077,8 +2065,8 @@ def _cached_selected_watchlist(tickers: list[str]) -> dict[str, Any]:
     entries = [
         entry for entry in (
             _read_watchlist_snapshot(_WATCHLIST_SNAPSHOT_PATH, now=now),
-            _usable_hit("watchlist", now),
-            _usable_hit(_watchlist_cache_key(tickers), now),
+            _unexpired_hit("watchlist", now),
+            _unexpired_hit(_watchlist_cache_key(tickers), now),
         ) if entry is not None
     ]
     for entry in sorted(entries, key=lambda item: item.fetched_at):
@@ -2489,26 +2477,24 @@ async def _build_watchlist(requested_tickers: list[str] | None = None):
     })
 
 
-@router.get("/search")
-async def search_stocks(q: str = Query(..., min_length=1, max_length=50)):
-    q_upper = q.upper().strip()
-    q_lower = q.lower().strip()
-    if not q_upper:
-        return []
-    from app.services import massive as massive_provider
+@dataclass(frozen=True)
+class _SearchRow:
+    ticker: str
+    name_lower: str
+    zh_name_lower: str
+    search_text: str
+    result: dict[str, Any]
+
+
+# Rows are rebuilt only when the cached directory generation changes: the
+# endpoint cache replaces its ``items`` list rather than mutating it. Building
+# about 12k rows per keystroke cost 11-40 ms of CPU.
+_search_index: tuple[Any, tuple[_SearchRow, ...]] | None = None
+_search_index_lock = threading.Lock()
+
+
+def _build_search_rows(items: Any) -> tuple[_SearchRow, ...]:
     from app.services.zh_names import NAMES
-
-    raw_symbol_query = q_upper[3:] if q_upper.startswith("US.") else q_upper
-    symbol_query = (
-        massive_provider.to_symbol(raw_symbol_query)
-        if _STOCK_DIRECTORY_TICKER_PATTERN.fullmatch(raw_symbol_query)
-        else None
-    ) or raw_symbol_query
-
-    def fuzzy(query, text):
-        """Check if all chars of query appear in text in order (fuzzy match)."""
-        it = iter(text.lower())
-        return all(c in it for c in query.lower())
 
     # The checked-in names enrich presentation, but they are not the search
     # universe. Massive's persisted reference directory supplies complete
@@ -2534,13 +2520,7 @@ async def search_stocks(q: str = Query(..., min_length=1, max_length=50)):
         )
         candidate["name_zh"] = zh
 
-    directory = await _stock_directory(
-        allow_refresh=current_request_is_owner(),
-    )
-    directory_available = isinstance(directory, dict) and bool(
-        directory.get("items")
-    )
-    for raw in (directory or {}).get("items") or []:
+    for raw in items or []:
         if not isinstance(raw, dict):
             continue
         ticker = str(raw.get("ticker") or "")
@@ -2556,31 +2536,19 @@ async def search_stocks(q: str = Query(..., min_length=1, max_length=50)):
             }
         )
 
-    ranked: list[tuple[int, int, str, dict[str, Any]]] = []
+    rows: list[_SearchRow] = []
     for ticker, candidate in candidates.items():
         name = str(candidate.get("name_en") or ticker)
         zh_entry = NAMES.get(ticker)
         zh_name = str(candidate.get("name_zh") or (zh_entry[0] if zh_entry else ""))
         zh_desc = zh_entry[1] if zh_entry else ""
-        search_text = f"{ticker} {name} {zh_name} {zh_desc}".lower()
-        if symbol_query == ticker:
-            rank = 0
-        elif q_lower == name.lower() or (zh_name and q_lower == zh_name.lower()):
-            rank = 1
-        elif ticker.startswith(symbol_query):
-            rank = 2
-        elif q_lower in search_text:
-            rank = 3
-        elif len(q_lower) >= 2 and fuzzy(q_lower, ticker):
-            rank = 4
-        else:
-            continue
-        ranked.append(
-            (
-                rank,
-                len(ticker),
-                ticker,
-                {
+        rows.append(
+            _SearchRow(
+                ticker=ticker,
+                name_lower=name.lower(),
+                zh_name_lower=zh_name.lower(),
+                search_text=f"{ticker} {name} {zh_name} {zh_desc}".lower(),
+                result={
                     "ticker": ticker,
                     "name": zh_name or name,
                     "name_en": name,
@@ -2590,9 +2558,82 @@ async def search_stocks(q: str = Query(..., min_length=1, max_length=50)):
                 },
             )
         )
+    return tuple(rows)
+
+
+def _search_rows(items: Any) -> tuple[_SearchRow, ...]:
+    global _search_index
+    with _search_index_lock:
+        cached = _search_index
+        if cached is not None and cached[0] is items:
+            return cached[1]
+        rows = _build_search_rows(items)
+        _search_index = (items, rows)
+        return rows
+
+
+def _ranked_search_results(
+    items: Any,
+    *,
+    symbol_query: str,
+    q_lower: str,
+) -> list[dict[str, Any]]:
+    def fuzzy(query, text):
+        """Check if all chars of query appear in text in order (fuzzy match)."""
+        it = iter(text.lower())
+        return all(c in it for c in query.lower())
+
+    ranked: list[tuple[int, int, str, dict[str, Any]]] = []
+    for row in _search_rows(items):
+        ticker = row.ticker
+        if symbol_query == ticker:
+            rank = 0
+        elif q_lower == row.name_lower or (
+            row.zh_name_lower and q_lower == row.zh_name_lower
+        ):
+            rank = 1
+        elif ticker.startswith(symbol_query):
+            rank = 2
+        elif q_lower in row.search_text:
+            rank = 3
+        elif len(q_lower) >= 2 and fuzzy(q_lower, ticker):
+            rank = 4
+        else:
+            continue
+        ranked.append((rank, len(ticker), ticker, row.result))
 
     ranked.sort(key=lambda item: (item[0], item[1], item[2]))
-    results = [item[3] for item in ranked[:12]]
+    # Rows are shared across requests; callers get their own copies.
+    return [dict(item[3]) for item in ranked[:12]]
+
+
+@router.get("/search")
+async def search_stocks(q: str = Query(..., min_length=1, max_length=50)):
+    q_upper = q.upper().strip()
+    q_lower = q.lower().strip()
+    if not q_upper:
+        return []
+    from app.services import massive as massive_provider
+
+    raw_symbol_query = q_upper[3:] if q_upper.startswith("US.") else q_upper
+    symbol_query = (
+        massive_provider.to_symbol(raw_symbol_query)
+        if _STOCK_DIRECTORY_TICKER_PATTERN.fullmatch(raw_symbol_query)
+        else None
+    ) or raw_symbol_query
+
+    directory = await _stock_directory(
+        allow_refresh=current_request_is_owner(),
+    )
+    items = directory.get("items") if isinstance(directory, dict) else None
+    directory_available = bool(items)
+    # Ranking scans every directory row; that CPU stays off the event loop.
+    results = await asyncio.to_thread(
+        _ranked_search_results,
+        items,
+        symbol_query=symbol_query,
+        q_lower=q_lower,
+    )
     if results and directory_available:
         return _sanitize(results)
 
@@ -2613,8 +2654,8 @@ async def search_stocks(q: str = Query(..., min_length=1, max_length=50)):
                         "type": info.get("quoteType", "CS"),
                     }
                 ]
-        except Exception:
-            pass
+        except Exception as exc:
+            record_fallback_failure("stocks_search_yahoo", exc, symbol=symbol_query)
         return []
 
     if not current_request_is_owner():
@@ -3065,6 +3106,7 @@ async def stock_overview(ticker: str):
             raise exc
         return await _attach_macro_fit_async(symbol, _sanitize(result))
     except Exception as exc:
+        record_fallback_failure("stocks_overview_unavailable", exc, symbol=symbol)
         raise HTTPException(status_code=503, detail="Stock data is currently unavailable") from exc
 
 
@@ -3321,6 +3363,10 @@ async def stock_chart(
 ):
     owner = current_request_is_owner()
     symbol = quote_symbol(ticker)
+    # Snapshot readers raise on symbols outside this pattern; reject them here
+    # instead of surfacing that as a 500.
+    if not _WATCHLIST_TICKER_PATTERN.fullmatch(symbol):
+        raise HTTPException(status_code=400, detail="Invalid ticker symbol")
     key = f"chart:{symbol}:{range}:{adjustment}"
     if adjustment == "raw":
         await _hydrate_stock_pull_resource(
@@ -3379,6 +3425,7 @@ async def stock_chart(
             raise exc
         return _sanitize(result)
     except Exception as exc:
+        record_fallback_failure("stocks_chart_unavailable", exc, symbol=symbol)
         raise HTTPException(status_code=503, detail="Stock chart data is currently unavailable") from exc
 
 
@@ -3462,7 +3509,10 @@ async def _spy_closes_by_date(owner: bool) -> dict[str, float] | None:
             lambda: _load_stock_chart("SPY", "1d", "raw"),
             allow_refresh=owner,
         )
-    except Exception:
+    except Exception as exc:
+        # A visitor with no cached SPY is the expected path, not a failure.
+        if not (isinstance(exc, HTTPException) and _is_public_snapshot_unavailable(exc)):
+            record_fallback_failure("stocks_spy_closes", exc, symbol="SPY")
         return None
     bars = spy.get("bars") if isinstance(spy, dict) else None
     if not bars:
@@ -3477,6 +3527,18 @@ async def _spy_closes_by_date(owner: bool) -> dict[str, float] | None:
         if close and close > 0:
             out[str(day)] = float(close)
     return out or None
+
+
+async def _guest_spy_closes() -> dict[str, float] | None:
+    """Visitor relative strength from cached or durably saved SPY bars.
+
+    The owner path always supplies SPY; without this the visitor fallback
+    dropped relative strength, so one ticker's result depended on cache state.
+    """
+    spy_key = "chart:SPY:1d:raw"
+    if _usable_hit(spy_key, time.time()) is None:
+        await _hydrate_stock_pull_resource("SPY", "daily_chart", spy_key)
+    return await _spy_closes_by_date(False)
 
 
 async def _load_stock_technical(symbol: str, owner: bool) -> dict[str, Any]:
@@ -3551,7 +3613,13 @@ async def stock_technical(ticker: str):
         bars = chart.get("bars") if isinstance(chart, dict) else None
         if not bars:
             raise exc
-        result = await asyncio.to_thread(compute_technical_structure, bars, ticker=symbol)
+        spy_closes = await _guest_spy_closes()
+        result = await asyncio.to_thread(
+            compute_technical_structure,
+            bars,
+            ticker=symbol,
+            spy_closes=spy_closes,
+        )
         if result is None:
             raise exc
         payload = _sanitize({
@@ -3683,7 +3751,8 @@ async def _stock_chart_impl(ticker: str, range: str, adjustment: str = "raw"):
                     )
                     if hist is not None and not hist.empty:
                         price_provider = "Massive"
-        except Exception:
+        except Exception as exc:
+            record_fallback_failure("stocks_chart_massive", exc, symbol=symbol)
             hist = None
         if hist is None or hist.empty:
             tk = yf.Ticker(massive_provider.to_yahoo_symbol(symbol))
@@ -3988,7 +4057,10 @@ async def _pull_stock_data_once(
     *,
     snapshot_path: Path | None = None,
     include_options: bool = True,
+    publish_to_cache: bool = True,
 ) -> dict[str, Any]:
+    """``publish_to_cache=False`` is for the worker process: nothing there reads
+    ``_endpoint_cache``, and each retained daily chart costs about 400 KiB."""
     overview_key = f"stock:{symbol}"
     chart_key = f"chart:{symbol}:1d:raw"
 
@@ -4012,9 +4084,21 @@ async def _pull_stock_data_once(
         except Exception as exc:
             return exc
 
+    async def _refresh(key: str, ttl: int, max_age: int, loader) -> _EndpointCacheEntry:
+        if publish_to_cache:
+            return await _force_replace_endpoint(key, ttl, max_age, loader)
+        value = await loader()
+        fetched_at = time.time()
+        return _EndpointCacheEntry(
+            expires_at=fetched_at + ttl,
+            stale_until=fetched_at + max(ttl, max_age),
+            fetched_at=fetched_at,
+            value=value,
+        )
+
     overview_result, chart_result = await asyncio.gather(
         _capture_refresh(
-            _force_replace_endpoint(
+            _refresh(
                     overview_key,
                     60,
                     30 * 60,
@@ -4022,7 +4106,7 @@ async def _pull_stock_data_once(
             )
         ),
         _capture_refresh(
-            _force_replace_endpoint(
+            _refresh(
                     chart_key,
                     _CHART_TTL["1d"],
                     _CHART_MAX_AGE["1d"],

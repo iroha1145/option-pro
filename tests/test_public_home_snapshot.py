@@ -27,6 +27,7 @@ from app.public_home_snapshot import (
     PUBLIC_HOME_MAX_CLOCK_SKEW_SECONDS,
     PUBLIC_HOME_RESOURCE_ORDER,
     PUBLIC_HOME_RESOURCE_SPECS,
+    PUBLIC_HOME_SAVED_AT_GRACE_SECONDS,
     PUBLIC_HOME_SNAPSHOT_MAX_BYTES,
     PUBLIC_HOME_SNAPSHOT_VERSION,
     breakout_lead_chart_parameters,
@@ -520,7 +521,9 @@ def test_snapshot_rejects_future_saved_at(tmp_path: Path) -> None:
         "version": PUBLIC_HOME_SNAPSHOT_VERSION,
         "resources": _entries(now),
     }
-    document["resources"]["indices"]["saved_at"] = now + 1
+    document["resources"]["indices"]["saved_at"] = (
+        now + PUBLIC_HOME_SAVED_AT_GRACE_SECONDS + 1
+    )
     path.write_text(json.dumps(document), encoding="utf-8")
     loaded = read_public_home_entries(path, now=now)
     assert "indices" not in loaded
@@ -1327,8 +1330,8 @@ def test_external_fresh_generation_clears_local_failure(tmp_path: Path) -> None:
 
 
 def test_unusual_uses_options_close_on_early_close_day(tmp_path: Path) -> None:
-    before = datetime(2026, 11, 27, 18, 5, tzinfo=timezone.utc).timestamp()
-    after = datetime(2026, 11, 27, 18, 16, tzinfo=timezone.utc).timestamp()
+    before = datetime(2026, 11, 27, 17, 55, tzinfo=timezone.utc).timestamp()
+    after = datetime(2026, 11, 27, 18, 5, tzinfo=timezone.utc).timestamp()
 
     def run_at(observed: float, name: str) -> tuple[object, list[str]]:
         path = tmp_path / name
@@ -2248,7 +2251,7 @@ def test_cached_entries_recover_and_reject_clock_rewinds(tmp_path, partial, futu
     if not partial:
         entries = {"indices": entries["indices"]}
     if future_field == "saved_at":
-        entries["indices"]["saved_at"] = now + 0.001
+        entries["indices"]["saved_at"] = now + PUBLIC_HOME_SAVED_AT_GRACE_SECONDS + 0.001
     else:
         entries["indices"]["payload"]["as_of"] = _iso(
             now + PUBLIC_HOME_MAX_CLOCK_SKEW_SECONDS + 0.001

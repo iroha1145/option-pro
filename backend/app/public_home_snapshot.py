@@ -20,6 +20,7 @@ from app.json_validation import (
     reject_non_finite_json as _reject_non_finite_json,
 )
 from app.data_paths import get_data_paths
+from app.failure_diagnostics import record_fallback_failure
 from app.services.snapshot_read_cache import FingerprintedFileCache
 
 
@@ -27,6 +28,10 @@ PUBLIC_HOME_SNAPSHOT_VERSION = 1
 PUBLIC_HOME_SNAPSHOT_MAX_BYTES = 8 * 1024 * 1024
 PUBLIC_HOME_DEFAULT_TICKER = "NVDA"
 PUBLIC_HOME_MAX_CLOCK_SKEW_SECONDS = 5 * 60
+# Readers take `now` before the file read runs in a worker thread. An entry the
+# worker publishes in between is milliseconds "newer" than that `now`; without
+# this allowance the fresh publish itself is rejected and the request gets 503.
+PUBLIC_HOME_SAVED_AT_GRACE_SECONDS = 5.0
 PUBLIC_HOME_INDEX_SYMBOLS = ("^GSPC", "^IXIC", "^DJI", "^N225", "000001.SS")
 PUBLIC_HOME_RESOURCE_ORDER = (
     "indices",
@@ -1340,8 +1345,10 @@ def _validate_entry(resource: str, value: Any) -> dict[str, Any] | None:
 
 
 def _entry_timestamps_fit(resource: str, entry: Mapping[str, Any], *, now: float) -> bool:
-    return entry["saved_at"] <= now and _payload_timestamps_fit_entry(
-        resource, entry["payload"], not_after=now + PUBLIC_HOME_MAX_CLOCK_SKEW_SECONDS,
+    return entry["saved_at"] <= now + PUBLIC_HOME_SAVED_AT_GRACE_SECONDS and (
+        _payload_timestamps_fit_entry(
+            resource, entry["payload"], not_after=now + PUBLIC_HOME_MAX_CLOCK_SKEW_SECONDS,
+        )
     )
 
 
@@ -1381,13 +1388,10 @@ def _parse_public_home_document(raw: bytes) -> dict[str, dict[str, Any]] | None:
     return result
 
 
-def read_public_home_entries(
-    path: Path | None = None,
-    *,
-    now: float | None = None,
-) -> dict[str, dict[str, Any]]:
+def _read_validated_document(path: Path | None) -> Mapping[str, dict[str, Any]]:
+    """Return the shared parsed document; callers still check each entry's clock."""
+
     target = path or get_data_paths().public_home_snapshot
-    current = time.time() if now is None else float(now)
     try:
         if not target.is_absolute() or _path_has_symlink_boundary(target):
             return {}
@@ -1405,13 +1409,20 @@ def read_public_home_entries(
         json.JSONDecodeError,
     ):
         return {}
-    if not entries:
-        return {}
+    return entries or {}
+
+
+def read_public_home_entries(
+    path: Path | None = None,
+    *,
+    now: float | None = None,
+) -> dict[str, dict[str, Any]]:
+    current = time.time() if now is None else float(now)
     # Top-level copy so callers replacing entries (the worker's publish path)
     # never mutate the shared cached document.
     return {
         resource: entry
-        for resource, entry in entries.items()
+        for resource, entry in _read_validated_document(path).items()
         if _entry_timestamps_fit(resource, entry, now=current)
     }
 
@@ -1435,12 +1446,33 @@ def public_home_entry_is_servable(
     saved_at = entry.get("saved_at")
     return bool(
         _finite_number(saved_at, minimum=0.0000001)
-        and float(saved_at) <= now
+        and float(saved_at) <= now + PUBLIC_HOME_SAVED_AT_GRACE_SECONDS
         and now - float(saved_at) <= spec.max_age
         and entry.get("schema") == spec.schema
         and entry.get("max_age") == spec.max_age
         and entry.get("parameters") == dict(parameters)
     )
+
+
+def _servable_entry(
+    resource: str,
+    *,
+    parameters: Mapping[str, Any],
+    path: Path | None,
+    now: float,
+) -> dict[str, Any] | None:
+    # Check the cheap identity fields first, then only this entry's clocks: the
+    # earnings calendar alone holds thousands of timestamps, and most reads
+    # (per-ticker chart fallbacks) do not match the stored parameters at all.
+    entry = _read_validated_document(path).get(resource)
+    if not public_home_entry_is_servable(
+        resource,
+        entry,
+        parameters=parameters,
+        now=now,
+    ) or not _entry_timestamps_fit(resource, entry, now=now):
+        return None
+    return entry
 
 
 def read_public_home_resource(
@@ -1451,13 +1483,8 @@ def read_public_home_resource(
     now: float | None = None,
 ) -> dict[str, Any] | None:
     current = time.time() if now is None else float(now)
-    entry = read_public_home_entries(path, now=current).get(resource)
-    if not public_home_entry_is_servable(
-        resource,
-        entry,
-        parameters=parameters,
-        now=current,
-    ):
+    entry = _servable_entry(resource, parameters=parameters, path=path, now=current)
+    if entry is None:
         return None
     payload = dict(entry["payload"])
     payload["_stale"] = True
@@ -1506,13 +1533,8 @@ def read_owner_public_home_entry(
         or float(fresh_for_seconds) <= 0
     ):
         raise ValueError("public home freshness window is invalid")
-    entry = read_public_home_entries(path, now=current).get(resource)
-    if not public_home_entry_is_servable(
-        resource,
-        entry,
-        parameters=parameters,
-        now=current,
-    ):
+    entry = _servable_entry(resource, parameters=parameters, path=path, now=current)
+    if entry is None:
         return None
     saved_at = float(entry["saved_at"])
     age = max(0.0, current - saved_at)
@@ -1597,32 +1619,45 @@ def write_public_home_snapshot(
         suffix=".tmp",
         dir=path.parent,
     )
+    # Once fdopen owns the descriptor its number may be reused by another
+    # thread after the file object closes; only close it while it is still ours.
+    descriptor_open = True
     try:
         os.fchmod(descriptor, 0o600)
-        with os.fdopen(descriptor, "wb", closefd=True) as handle:
+        with os.fdopen(descriptor, "wb") as handle:
+            descriptor_open = False
             handle.write(encoded)
             handle.flush()
             os.fsync(handle.fileno())
         if _path_has_symlink_boundary(path):
             raise ValueError("public home snapshot path changed during write")
         os.replace(temporary_name, path)
+    except BaseException:
+        if descriptor_open:
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+        try:
+            os.unlink(temporary_name)
+        except FileNotFoundError:
+            pass
+        raise
+    # The replace above already published the snapshot, so these hardening
+    # steps must not turn a completed publish into a reported failure.
+    try:
         os.chmod(path, 0o600)
+    except OSError as exc:
+        record_fallback_failure("public_home_snapshot_chmod", exc)
+    try:
         directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
         directory_descriptor = os.open(path.parent, directory_flags)
         try:
             os.fsync(directory_descriptor)
         finally:
             os.close(directory_descriptor)
-    except BaseException:
-        try:
-            os.close(descriptor)
-        except OSError:
-            pass
-        try:
-            os.unlink(temporary_name)
-        except FileNotFoundError:
-            pass
-        raise
+    except OSError as exc:
+        record_fallback_failure("public_home_snapshot_dir_fsync", exc)
 
 
 __all__ = [
@@ -1632,6 +1667,7 @@ __all__ = [
     "PUBLIC_HOME_OPTIONAL_RESOURCE_ORDER",
     "PUBLIC_HOME_RESOURCE_ORDER",
     "PUBLIC_HOME_RESOURCE_SPECS",
+    "PUBLIC_HOME_SAVED_AT_GRACE_SECONDS",
     "PUBLIC_HOME_SNAPSHOT_MAX_BYTES",
     "PUBLIC_HOME_SNAPSHOT_VERSION",
     "create_public_home_entry",

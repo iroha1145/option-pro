@@ -58,6 +58,16 @@ _snapshot_document_cache: OrderedDict[
     str,
     tuple[tuple[int, int, int], dict[str, dict[str, dict[str, Any]]]],
 ] = OrderedDict()
+STOCK_PULL_SUMMARY_DAILY_BARS = 30
+# Status and watchlist-trend reads touch hundreds of per-ticker files. The
+# 8-path document cache thrashes at that width and every full read deep-copies
+# about two years of daily bars, so those readers use this per-file summary
+# (timestamps plus the newest daily closes), keyed by the same file identity.
+_SUMMARY_CACHE_MAX_PATHS = 1024
+_snapshot_summary_cache: OrderedDict[
+    str,
+    tuple[tuple[int, int, int], dict[str, dict[str, dict[str, Any]]]],
+] = OrderedDict()
 
 
 def stock_pull_snapshot_path(path: Path | None = None) -> Path:
@@ -280,13 +290,17 @@ def validate_stock_pull_payload(
 
 def _load_validated_document(
     path: Path,
-) -> dict[str, dict[str, dict[str, Any]]]:
-    """Read and structurally validate one immutable on-disk document version."""
+) -> tuple[tuple[int, int, int] | None, dict[str, dict[str, dict[str, Any]]]]:
+    """Read and structurally validate one immutable on-disk document version.
+
+    The identity names the file version the entries were read from, or is None
+    when no usable version was read.
+    """
 
     try:
         if _path_has_symlink_boundary(path):
             _drop_cached_document(path)
-            return {}
+            return None, {}
         flags = os.O_RDONLY
         if hasattr(os, "O_CLOEXEC"):
             flags |= os.O_CLOEXEC
@@ -302,28 +316,28 @@ def _load_validated_document(
                 or identity[2] > STOCK_PULL_SNAPSHOT_MAX_BYTES
             ):
                 _drop_cached_document(path)
-                return {}
+                return None, {}
             # The descriptor may still refer to the prior inode after an
             # external atomic replacement. Never reuse its cached document
             # unless the pathname still identifies that same file version.
             if _path_file_identity(path) != identity:
                 _drop_cached_document(path)
-                return {}
+                return None, {}
             cached = _cached_document(path, identity)
             if cached is not None:
-                return cached
+                return identity, cached
             with os.fdopen(descriptor, "rb", closefd=False) as handle:
                 raw = handle.read(STOCK_PULL_SNAPSHOT_MAX_BYTES + 1)
         finally:
             os.close(descriptor)
         if not raw or len(raw) > STOCK_PULL_SNAPSHOT_MAX_BYTES:
             _drop_cached_document(path)
-            return {}
+            return None, {}
         # Do not cache a document read from an inode that was replaced while
         # the read was in progress. The next call will load the current file.
         if _path_file_identity(path) != identity:
             _drop_cached_document(path)
-            return {}
+            return None, {}
         document = json.loads(
             raw.decode("utf-8"),
             object_pairs_hook=_reject_duplicate_json_keys,
@@ -336,7 +350,7 @@ def _load_validated_document(
             or len(document["entries"]) > STOCK_PULL_SNAPSHOT_MAX_TICKERS
         ):
             _cache_document(path, identity, {})
-            return {}
+            return identity, {}
 
         cleaned_entries: dict[str, dict[str, dict[str, Any]]] = {}
         for ticker, raw_resources in document["entries"].items():
@@ -375,7 +389,7 @@ def _load_validated_document(
             if resources:
                 cleaned_entries[ticker] = resources
         _cache_document(path, identity, cleaned_entries)
-        return cleaned_entries
+        return identity, cleaned_entries
     except (
         OSError,
         RecursionError,
@@ -385,7 +399,7 @@ def _load_validated_document(
         json.JSONDecodeError,
     ):
         _drop_cached_document(path)
-        return {}
+        return None, {}
 
 
 def _read_document(
@@ -394,7 +408,7 @@ def _read_document(
     now: float,
     keep_expired: bool,
 ) -> dict[str, dict[str, dict[str, Any]]]:
-    validated = _load_validated_document(path)
+    _identity, validated = _load_validated_document(path)
     visible_entries: dict[str, dict[str, dict[str, Any]]] = {}
     for ticker, resources in validated.items():
         visible_resources: dict[str, dict[str, Any]] = {}
@@ -451,6 +465,89 @@ def read_stock_pull_resource(
         ),
         "max_age": STOCK_PULL_RESOURCE_MAX_AGE_SECONDS[resource],
     }
+
+
+def _summarize_document(
+    entries: Mapping[str, Mapping[str, Mapping[str, Any]]],
+) -> dict[str, dict[str, dict[str, Any]]]:
+    summary: dict[str, dict[str, dict[str, Any]]] = {}
+    for ticker, resources in entries.items():
+        summarized: dict[str, dict[str, Any]] = {}
+        for resource, entry in resources.items():
+            item: dict[str, Any] = {"saved_at": float(entry["saved_at"])}
+            if resource == "daily_chart":
+                # Tuples, not bar dicts: the summary is shared by every caller.
+                item["daily_closes"] = tuple(
+                    (bar["t"], bar["c"])
+                    for bar in entry["payload"]["bars"]
+                    if bar.get("ext") is not True and bar.get("quote_only") is not True
+                )[-STOCK_PULL_SUMMARY_DAILY_BARS:]
+            summarized[resource] = item
+        summary[ticker] = summarized
+    return summary
+
+
+def _read_summary(path: Path) -> dict[str, dict[str, dict[str, Any]]]:
+    key = _snapshot_cache_key(path)
+    identity = None if _path_has_symlink_boundary(path) else _path_file_identity(path)
+    if identity is None:
+        _snapshot_summary_cache.pop(key, None)
+        return {}
+    cached = _snapshot_summary_cache.get(key)
+    if cached is not None and cached[0] == identity:
+        _snapshot_summary_cache.move_to_end(key)
+        return cached[1]
+    loaded_identity, entries = _load_validated_document(path)
+    summary = _summarize_document(entries)
+    if loaded_identity is None:
+        _snapshot_summary_cache.pop(key, None)
+        return summary
+    _snapshot_summary_cache[key] = (loaded_identity, summary)
+    _snapshot_summary_cache.move_to_end(key)
+    while len(_snapshot_summary_cache) > _SUMMARY_CACHE_MAX_PATHS:
+        _snapshot_summary_cache.popitem(last=False)
+    return summary
+
+
+def read_stock_pull_summary(
+    ticker: str,
+    *,
+    path: Path | None = None,
+    now: float | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Return saved_at, fresh and max_age for each visible resource of a ticker.
+
+    The daily chart also carries ``daily_closes``: the newest
+    ``STOCK_PULL_SUMMARY_DAILY_BARS`` regular-session ``(t, c)`` pairs. Nothing
+    here copies or exposes a payload; visibility matches
+    ``read_stock_pull_resource``.
+    """
+
+    symbol = ticker.upper().strip()
+    if not _TICKER_PATTERN.fullmatch(symbol):
+        return {}
+    observed_at = time.time() if now is None else float(now)
+    target = stock_pull_snapshot_path(path)
+    with _snapshot_lock:
+        resources = _read_summary(target).get(symbol, {})
+    visible: dict[str, dict[str, Any]] = {}
+    for resource, item in resources.items():
+        saved_at = item["saved_at"]
+        max_age = STOCK_PULL_RESOURCE_MAX_AGE_SECONDS[resource]
+        if (
+            saved_at > observed_at + STOCK_PULL_MAX_CLOCK_SKEW_SECONDS
+            or saved_at + max_age <= observed_at
+        ):
+            continue
+        visible[resource] = {
+            **item,
+            "fresh": (
+                saved_at + STOCK_PULL_RESOURCE_FRESH_SECONDS[resource]
+                > observed_at
+            ),
+            "max_age": max_age,
+        }
+    return visible
 
 
 def write_stock_pull_resources(
@@ -577,7 +674,9 @@ def write_stock_pull_resources(
 __all__ = [
     "STOCK_PULL_RESOURCE_FRESH_SECONDS",
     "STOCK_PULL_RESOURCE_MAX_AGE_SECONDS",
+    "STOCK_PULL_SUMMARY_DAILY_BARS",
     "read_stock_pull_resource",
+    "read_stock_pull_summary",
     "stock_pull_snapshot_path",
     "validate_stock_pull_payload",
     "write_stock_pull_resources",
