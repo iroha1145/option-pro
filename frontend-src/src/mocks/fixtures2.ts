@@ -457,6 +457,93 @@ export function getSectors(): Sector[] {
   return sectorSnapshots;
 }
 
+/* 板块强度聚合的演示底色：每个板块一条固定的季度漂移（%），让热力色阶正负都有；
+   周期越长幅度越大，再叠一点确定性噪声，1/3/6 个月三档看起来像同一段行情。 */
+const SECTOR_DRIFT_3MO: Record<string, number> = {
+  tech: 8.4, semi: 14.2, comm: 5.1, disc: 2.3, staple: -1.8, health: -3.4,
+  fin: 4.6, energy: -6.2, indu: 3.1, mat: -0.9, util: 1.2,
+};
+const PERIOD_SCALE: Record<'1mo' | '3mo' | '6mo', number> = { '1mo': 0.42, '3mo': 1, '6mo': 1.65 };
+const PERIOD_DAYS: Record<'1mo' | '3mo' | '6mo', number> = { '1mo': 21, '3mo': 63, '6mo': 126 };
+const SPY_RETURN: Record<'1mo' | '3mo' | '6mo', number> = { '1mo': 1.4, '3mo': 3.9, '6mo': 7.2 };
+const MACRO_SUPPORTING = [
+  { factor_id: 'fed_net_liquidity', label: __t('联储净流动性') },
+  { factor_id: 'risk_vs_safe', label: __t('风险资产相对避险') },
+];
+const MACRO_OPPOSING = [{ factor_id: 'real_rate_level', label: __t('实际利率水平') }];
+
+function previousWeekday(): string {
+  const d = new Date();
+  do d.setUTCDate(d.getUTCDate() - 1); while (d.getUTCDay() === 0 || d.getUTCDay() === 6);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * GET /api/strength/sectors 的演示载荷（snake_case，与真实契约同形，交给
+ * mapSectorStrengthEnvelope 映射）。util 沿用 IV 排名里的「过期快照」叙事。
+ */
+export function getSectorStrengthPayload(period: '1mo' | '3mo' | '6mo'): Record<string, unknown> {
+  const dataThrough = previousWeekday();
+  const returnsFor = (id: string, r: Rng) => {
+    const drift = SECTOR_DRIFT_3MO[id] ?? 0;
+    const noise = r.float(-0.8, 0.8);
+    return {
+      '1mo': round2(drift * PERIOD_SCALE['1mo'] + noise),
+      '3mo': round2(drift * PERIOD_SCALE['3mo'] + noise * 1.4),
+      '6mo': round2(drift * PERIOD_SCALE['6mo'] + noise * 1.8),
+    };
+  };
+  const sectors = sectorSnapshots.map((snap, index) => {
+    const r = new Rng(7300 + index * 97);
+    const returns = returnsFor(snap.id, r);
+    const avgReturn = returns[period];
+    const members = snap.constituents.length;
+    const scored = Math.max(0, members - (r.chance(0.3) ? 1 : 0));
+    const leaders = [...snap.constituents]
+      .sort((a, b) => b.strengthScore - a.strengthScore)
+      .slice(0, 3)
+      .map((c) => ({ ticker: c.ticker, score: c.strengthScore }));
+    const fit = Math.round(r.normal(52 + (SECTOR_DRIFT_3MO[snap.id] ?? 0) * 2, 10, 12, 90));
+    // 后端下发的是中文原文标签（macroToneOf 按原文比对），这里同样不翻译。
+    const tailwind = fit >= 65 ? '顺风' : fit <= 35 ? '逆风' : '中性';
+    const stale = snap.id === 'util';
+    return {
+      sector_id: snap.id,
+      name: snap.name,
+      count: members,
+      member_count: members,
+      scored_count: scored,
+      period,
+      period_days: PERIOD_DAYS[period],
+      avg_return: avgReturn,
+      avg_return_1mo: returns['1mo'],
+      avg_return_3mo: returns['3mo'],
+      avg_return_6mo: returns['6mo'],
+      avg_strength: round2(r.normal(56 + (SECTOR_DRIFT_3MO[snap.id] ?? 0), 8, 24, 90)),
+      score_data_through: dataThrough,
+      score_source_status: stale ? 'stale' : 'active',
+      benchmark_ticker: 'SPY',
+      benchmark_return: SPY_RETURN[period],
+      excess_return: round2(avgReturn - SPY_RETURN[period]),
+      leaders,
+      macro_sector_fit: fit,
+      macro_sector_tailwind: tailwind,
+      macro_sector_fit_confidence: round2(r.float(0.45, 0.9)),
+      macro_sector_supporting_factors: fit >= 50 ? MACRO_SUPPORTING : MACRO_SUPPORTING.slice(1),
+      macro_sector_opposing_factors: fit < 50 ? MACRO_OPPOSING : [],
+    };
+  });
+  return {
+    as_of: new Date(Date.now() - 6 * 60_000).toISOString(),
+    period,
+    period_days: PERIOD_DAYS[period],
+    sectors,
+    count: sectors.length,
+    snapshot_source: 'strength_worker',
+    source_status: 'active',
+  };
+}
+
 /** IV 排名缓存：sectorId → 行（确定性 + 跨调用一致） */
 const ivRankingCache = new Map<string, SectorIvRow[]>();
 

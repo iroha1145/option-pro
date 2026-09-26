@@ -288,18 +288,8 @@ export function mapSectorIvRankingEnvelope(payload: unknown): SectorIvRankingEnv
 }
 
 function mockStrength(period: SectorPeriod): SectorStrengthEnvelope {
-  return {
-    asOf: null,
-    period,
-    periodDays: null,
-    sectors: [],
-    count: 0,
-    cached: false,
-    snapshotSource: null,
-    stale: false,
-    sourceStatus: null,
-    staleReason: null,
-  };
+  // 演示载荷与真实契约同形，走同一个映射器，热力色阶与榜单在演示模式下也能看到。
+  return mapSectorStrengthEnvelope(fx2.getSectorStrengthPayload(period), period);
 }
 
 export const sectorsApi = {
