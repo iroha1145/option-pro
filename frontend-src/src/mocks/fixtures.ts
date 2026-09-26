@@ -156,6 +156,33 @@ function makeDailyTrend(r: Rng, prevClose: number): NonNullable<WatchlistItem['d
   return dates.map((date, i) => ({ date, close: round2(closes[i] * scale) }));
 }
 
+/**
+ * 演示半年周线：26 个完整周 + 本周（末点 = 当前价），走势与当日涨跌无关，
+ * 带一段回撤和反弹，终点锚定到现价，与线上 trend_6m 同形。
+ */
+function makeSixMonthTrend(r: Rng, price: number): NonNullable<WatchlistItem['sixMonthTrend']> {
+  const ny = nyNow();
+  const today = new Date(Date.UTC(ny.getFullYear(), ny.getMonth(), ny.getDate()));
+  const lastWeekday = new Date(today);
+  while (lastWeekday.getUTCDay() === 0 || lastWeekday.getUTCDay() === 6) lastWeekday.setUTCDate(lastWeekday.getUTCDate() - 1);
+  // 本 ISO 周的周一往前 3 天 = 上一个完整周的周五
+  const friday = new Date(today);
+  friday.setUTCDate(friday.getUTCDate() - ((friday.getUTCDay() + 6) % 7) - 3);
+  const drift = r.float(-0.008, 0.013);
+  const dip = r.int(6, 20);
+  let close = 100;
+  const closes = Array.from({ length: 27 }, (_, week) => {
+    const pull = week >= dip && week < dip + 4 ? -0.014 : 0;
+    close *= 1 + drift + pull + r.float(-0.024, 0.024);
+    return close;
+  });
+  const scale = price / closes[closes.length - 1];
+  return closes.map((value, week) => {
+    const day = week === 26 ? new Date(lastWeekday) : new Date(friday.getTime() - (25 - week) * 7 * 86_400_000);
+    return { date: day.toISOString().slice(0, 10), close: round2(value * scale) };
+  });
+}
+
 function makeSignals(r: Rng): Signal[] {
   const n = r.int(0, 3);
   const types = [...SIGNAL_TYPES].sort(() => r.float() - 0.5).slice(0, n);
@@ -182,6 +209,7 @@ WATCHLIST_TICKERS.forEach((t, i) => {
     changePct,
     sparkline: makeSparkline(r, changePct),
     dailyTrend: makeDailyTrend(new Rng(76000 + i * 137), prevClose),
+    sixMonthTrend: makeSixMonthTrend(new Rng(91000 + i * 149), price),
     strengthScore,
     signals: makeSignals(r),
     updatedAt: new Date().toISOString(),
@@ -197,6 +225,12 @@ export function getWatchlist(force = false): WatchlistItem[] {
     it.change = round2(s.price - s.prevClose);
     it.changePct = round2((s.price / s.prevClose - 1) * 100);
     it.updatedAt = new Date().toISOString();
+    if (it.sixMonthTrend?.length) {
+      // 末点跟着最新价走，与线上「本周收盘由最新报价代替」同一口径
+      const trend = [...it.sixMonthTrend];
+      trend[trend.length - 1] = { ...trend[trend.length - 1], close: s.price };
+      it.sixMonthTrend = trend;
+    }
     if (force) {
       // 强制刷新：轻微重采样信号时间戳
       it.signals = it.signals.map((sg, k) => ({ ...sg, at: new Date(Date.now() - (k + 2) * 47 * 60_000).toISOString() }));

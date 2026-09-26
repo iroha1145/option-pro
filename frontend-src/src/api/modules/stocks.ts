@@ -116,6 +116,7 @@ export function mapWatchlist(body: unknown): WatchlistItem[] {
           .map((x) => pickN(x as Rec, 'c') ?? (typeof x === 'number' ? x : null))
           .filter((x): x is number => x !== null),
         dailyTrend: mapDailyTrend(s.daily_trend),
+        sixMonthTrend: mapSixMonthTrend(s.trend_6m),
         strengthScore: pickN(s, 'strength_score', 'strengthScore'),
         signals: [],
         updatedAt: pickS(s, 'quote_as_of', 'updatedAt') ?? '',
@@ -126,12 +127,9 @@ export function mapWatchlist(body: unknown): WatchlistItem[] {
   return [...byTicker.values()].map((v) => v.item);
 }
 
-/** 不把旧 7 点 spark 或无日期数组伪装成长期走势。 */
-export function mapDailyTrend(body: unknown): WatchlistItem['dailyTrend'] {
-  const data = asRec(body);
-  if (data.interval !== '1d' || data.adjustment !== 'raw') return undefined;
-  const points = unwrap(data, 'points');
-  if (points.length < 2 || points.length > 30) return undefined;
+/** 真实日期严格递增、收盘为正的 {date, close} 序列；任一点不合格整条作废。 */
+function datedCloses(points: Rec[], maxPoints: number): { date: string; close: number }[] | undefined {
+  if (points.length < 2 || points.length > maxPoints) return undefined;
   const out: { date: string; close: number }[] = [];
   for (const rawPoint of points) {
     const point = asRec(rawPoint);
@@ -144,6 +142,20 @@ export function mapDailyTrend(body: unknown): WatchlistItem['dailyTrend'] {
     out.push({ date, close });
   }
   return out;
+}
+
+/** 不把旧 7 点 spark 或无日期数组伪装成长期走势。 */
+export function mapDailyTrend(body: unknown): WatchlistItem['dailyTrend'] {
+  const data = asRec(body);
+  if (data.interval !== '1d' || data.adjustment !== 'raw') return undefined;
+  return datedCloses(unwrap(data, 'points'), 30);
+}
+
+/** 半年周线：只认后端声明的口径（6mo / 1wk / 拆股复权），末点是最新报价。 */
+export function mapSixMonthTrend(body: unknown): WatchlistItem['sixMonthTrend'] {
+  const data = asRec(body);
+  if (data.range !== '6mo' || data.interval !== '1wk' || data.adjustment !== 'split') return undefined;
+  return datedCloses(unwrap(data, 'points'), 27);
 }
 
 /**

@@ -45,6 +45,8 @@ export const WATCHLIST: Dict = {
   '日线走势': ['Daily trend', '日足の推移'],
   '近 {count} 个交易日': ['Last {count} trading days', '直近 {count} 営業日'],
   '区间': ['Period', '期間'],
+  '近半年': ['Past 6 months', '過去6か月'],
+  '{start} 至 {end}，区间涨跌 {change}%': ['{start} to {end}, period change {change}%', '{start}〜{end}、期間騰落率 {change}%'],
   '{ticker} 日线走势，{start} 至 {end}，区间涨跌 {change}%': ['{ticker} daily trend, {start} to {end}, period change {change}%', '{ticker} の日足、{start}〜{end}、期間騰落率 {change}%'],
 
   "只（默认关注）": ["stocks (default watchlist)", "銘柄（標準リスト）"],

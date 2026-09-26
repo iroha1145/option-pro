@@ -8,7 +8,7 @@ const bundle = await build({
   stdin: { contents: `
     export { quoteSymbol } from './src/lib/quoteSymbol.ts';
     export { mapIndices } from './src/api/modules/market.ts';
-    export { mapWatchlist, mapDailyTrend, stocksApi } from './src/api/modules/stocks.ts';
+    export { mapWatchlist, mapDailyTrend, mapSixMonthTrend, stocksApi } from './src/api/modules/stocks.ts';
     export { getWatchlist, getIndices, getStockDetail, getStockChart, hasTicker } from './src/mocks/fixtures.ts';
   `, resolveDir: root },
   bundle: true, write: false, format: 'esm', platform: 'node',
@@ -83,4 +83,27 @@ test('long-term curve requires dated daily data and rejects bad values or adjust
   assert.equal(api.mapDailyTrend({ ...trend, points: [points[0], null] }), undefined);
   assert.equal(rows[0].dailyTrend, undefined, 'old spark must not be relabeled as monthly history');
   assert.deepEqual(rows[1].dailyTrend, points);
+});
+
+test('six-month weekly trend is read only under its declared range, interval and adjustment', () => {
+  const points = [{ date: '2026-03-27', close: 100 }, { date: '2026-04-03', close: 104.5 }, { date: '2026-09-25', close: 131 }];
+  const trend = { range: '6mo', interval: '1wk', adjustment: 'split', points };
+  assert.deepEqual(api.mapSixMonthTrend(trend), points);
+  const tooLong = Array.from({ length: 28 }, (_, week) => ({ date: new Date(Date.UTC(2026, 0, 2 + week * 7)).toISOString().slice(0, 10), close: 10 }));
+  for (const bad of [undefined, { ...trend, range: '1y' }, { ...trend, interval: '1d' }, { ...trend, adjustment: 'raw' }, { ...trend, points: points.toReversed() }, { ...trend, points: [points[0], { date: '2026-02-30', close: 1 }] }, { ...trend, points: [points[0], { date: '2026-04-03', close: 0 }] }, { ...trend, points: tooLong }]) {
+    assert.equal(api.mapSixMonthTrend(bad), undefined);
+  }
+  const rows = api.mapWatchlist({ groups: [{ name: 'a', stocks: [{ ticker: 'NVDA', spark: [1, 2, 3] }, { ticker: 'AMD', spark: [1, 2], trend_6m: trend }] }] });
+  assert.equal(rows[0].sixMonthTrend, undefined, 'the seven-point spark is never relabeled as a half-year trend');
+  assert.deepEqual(rows[1].sixMonthTrend, points);
+  assert.deepEqual(rows[1].sparkline, [1, 2], 'the short spark stays available as the fallback');
+});
+
+test('demo watchlist rows carry a half-year trend whose last point follows the live price', () => {
+  for (const row of api.getWatchlist()) {
+    const trend = row.sixMonthTrend;
+    assert.ok(trend && trend.length === 27, `${row.ticker} has 26 completed weeks plus the current one`);
+    assert.equal(trend.at(-1).close, row.price);
+    assert.ok(trend.every((point, index) => index === 0 || point.date > trend[index - 1].date));
+  }
 });

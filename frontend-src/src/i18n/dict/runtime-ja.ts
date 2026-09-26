@@ -2640,6 +2640,8 @@ export const JA: Record<string, string> = {
   "日线走势": "日足の推移",
   "近 {count} 个交易日": "直近 {count} 営業日",
   "区间": "期間",
+  "近半年": "過去6か月",
+  "{start} 至 {end}，区间涨跌 {change}%": "{start}〜{end}、期間騰落率 {change}%",
   "{ticker} 日线走势，{start} 至 {end}，区间涨跌 {change}%": "{ticker} の日足、{start}〜{end}、期間騰落率 {change}%",
   "只（默认关注）": "銘柄（標準リスト）",
   "自选观察": "マイウォッチリスト",

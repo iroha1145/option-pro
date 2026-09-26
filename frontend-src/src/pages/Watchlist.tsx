@@ -46,6 +46,7 @@ import { SCORE_HINTS } from '@/lib/scoreHints';
 import SessionLED, { SessionDot } from '@/components/shared/SessionLED';
 import { SkeletonCard, SkeletonReveal, SkeletonRows } from '@/components/shared/Skeleton';
 import Sparkline from '@/components/charts/Sparkline';
+import ChangeBadge from '@/components/shared/ChangeBadge';
 import Icon from '@/components/icons';
 import { BusyIcon } from '@/components/shared/IconSwap';
 import { pageRegionProps } from '@/lib/pageRegion';
@@ -251,6 +252,66 @@ function SortDropdown({ sort, onChange }: { sort: SortState | null; onChange: (s
 }
 
 /* ---------------- 卡片模式单卡 ---------------- */
+/** 半年周线与区间涨跌；少于两点返回 null（调用方退回 7 日短图）。 */
+function sixMonthView(item: WatchlistItem) {
+  const trend = item.sixMonthTrend && item.sixMonthTrend.length > 1 ? item.sixMonthTrend : null;
+  if (!trend) return null;
+  const closes = trend.map((point) => point.close);
+  return {
+    closes,
+    start: trend[0].date,
+    end: trend[trend.length - 1].date,
+    change: (closes[closes.length - 1] / closes[0] - 1) * 100,
+  };
+}
+
+/**
+ * 卡片走势：优先画近半年周线，按区间涨跌着色（不是当日涨跌——半年涨了三成、
+ * 今天跌 1% 的票不该是一条红线），下方标区间与区间涨跌。没有半年数据时退回
+ * 7 个交易日短图，并如实标出天数。整张卡是按钮，这里只用行内元素。
+ */
+function CardTrend({ item }: { item: WatchlistItem }) {
+  const view = sixMonthView(item);
+  if (view) {
+    return (
+      <>
+        <Sparkline data={view.closes} width={230} height={56} change={view.change} variant="area" className="w-full" />
+        <span className="mt-1 flex items-center justify-between gap-2 text-micro text-ink-400">
+          <span className="truncate">
+            {t('近半年')} <span className="font-mono tnum">{view.start.slice(5)} — {view.end.slice(5)}</span>
+          </span>
+          <span className="flex shrink-0 items-center gap-1.5">{t('区间')}<ChangeBadge value={view.change} size="sm" /></span>
+        </span>
+      </>
+    );
+  }
+  return (
+    <>
+      <Sparkline data={item.sparkline} width={230} height={56} change={item.changePct ?? Number.NaN} variant="area" className="w-full" />
+      {item.sparkline.length > 1 && (
+        <span className="mt-1 block text-micro text-ink-400">{t('近 {count} 个交易日', { count: item.sparkline.length })}</span>
+      )}
+    </>
+  );
+}
+
+/** 表格走势列：与卡片同口径；退回的 7 日短图压淡，悬停可见实际天数。 */
+function TableTrend({ item }: { item: WatchlistItem }) {
+  const view = sixMonthView(item);
+  if (view) {
+    return (
+      <span className="inline-flex" title={t('{start} 至 {end}，区间涨跌 {change}%', { start: view.start, end: view.end, change: view.change.toFixed(2) })}>
+        <Sparkline data={view.closes} change={view.change} />
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex opacity-60" title={t('近 {count} 个交易日', { count: item.sparkline.length })}>
+      <Sparkline data={item.sparkline} change={item.changePct ?? Number.NaN} />
+    </span>
+  );
+}
+
 function WatchCard({
   item,
   index,
@@ -315,9 +376,9 @@ function WatchCard({
         {item.sector && <SoftBadge className="max-w-[60%]" title={t(item.sector)}><span className="truncate">{t(item.sector)}</span></SoftBadge>}
       </div>
       {!Number.isFinite(item.price) && <p className="mt-2 text-caption text-ink-400">{t('暂无行情')}</p>}
-      <div className="mt-2">
-        <Sparkline data={item.sparkline} width={230} height={56} change={item.changePct ?? Number.NaN} variant="area" className="w-full" />
-      </div>
+      <span className="mt-2 block">
+        <CardTrend item={item} />
+      </span>
       {(showStrength || showSignals) && (
         <div className="mt-3 flex items-center justify-between gap-2 border-t border-line pt-3">
           {showStrength && <StrengthBar score={item.strengthScore} width={64} />}
@@ -526,9 +587,10 @@ export default function Watchlist() {
         render: (r) => <LiveChange symbol={r.ticker} fallback={r.changePct} fallbackAt={r.updatedAt} />,
       },
       {
+        /* 原标题「今日分时」名不副实：画的一直是 7 个日收盘点。现在与卡片同一口径。 */
         key: 'spark',
-        title: t('今日分时'),
-        render: (r) => <Sparkline data={r.sparkline} change={r.changePct ?? Number.NaN} />,
+        title: t('近半年'),
+        render: (r) => <TableTrend item={r} />,
       },
       ...(rowStrengthAvailable
         ? [{
