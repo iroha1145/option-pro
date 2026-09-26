@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "code-humanizer": {
+      "source": "LeonardNJU/code-humanizer",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "bcca93b2a1c315a34cd4269ec7290dca6dd1914ed34ff69763d5f71f2cf922ef"
+    }
+  }
+}
