@@ -7,6 +7,7 @@ import { useLiveQuote, useQuoteStatus } from '@/hooks/useLiveQuote';
 import { LivePrice } from '@/components/shared/LiveQuote';
 import { displayedQuoteLabel, preferLiveQuote } from '@/lib/liveQuotes';
 import { motion } from 'framer-motion';
+import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import { marketApi } from '@/api/modules/market';
 import { usePolling } from '@/hooks/usePolling';
 import { cn } from '@/lib/utils';
@@ -38,7 +39,7 @@ export default function PriceHeader({ detail, symbol: requestedSymbol }: { detai
     <motion.header
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.48, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: DUR_SECTION, ease: EASE_PAPER }}
     >
       <div className="flex flex-wrap items-center gap-3">
         <TickerLogo ticker={symbol} size={40} />

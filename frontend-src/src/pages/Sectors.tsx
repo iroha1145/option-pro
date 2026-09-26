@@ -8,12 +8,13 @@ import {
 import { usePolling } from '@/hooks/usePolling';
 import { useShell } from '@/hooks/useShell';
 import { fmtRelative, fmtTimeHHMMSS } from '@/lib/format';
+import { DUR_UI } from '@/lib/motion';
 import PageHeader from '@/components/shared/PageHeader';
 import Segmented from '@/components/shared/Segmented';
 import EmptyState from '@/components/shared/EmptyState';
 import StatusNotice from '@/components/shared/StatusNotice';
 import { SkeletonRows } from '@/components/shared/Skeleton';
-import Icon from '@/components/icons';
+import { BusyIcon } from '@/components/shared/IconSwap';
 import HeatMatrix, {
   HeatMatrixSkeleton,
 } from '@/components/sectors/HeatMatrix';
@@ -214,9 +215,10 @@ export default function Sectors() {
                   type="button"
                   onClick={retryOverview}
                   disabled={catalogQ.refreshing || strengthQ.refreshing}
-                  className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105 disabled:opacity-60"
+                  aria-busy={catalogQ.refreshing || strengthQ.refreshing}
+                  className="btn-primary"
                 >
-                  <Icon name="refresh" size={14} />
+                  <BusyIcon busy={catalogQ.refreshing || strengthQ.refreshing} size={14} tone="on-accent" />
                   {t('重试')}
                 </button>
               }
@@ -233,9 +235,10 @@ export default function Sectors() {
                   type="button"
                   onClick={retryOverview}
                   disabled={catalogQ.refreshing || strengthQ.refreshing}
-                  className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105 disabled:opacity-60"
+                  aria-busy={catalogQ.refreshing || strengthQ.refreshing}
+                  className="btn-primary"
                 >
-                  <Icon name="refresh" size={14} />
+                  <BusyIcon busy={catalogQ.refreshing || strengthQ.refreshing} size={14} tone="on-accent" />
                   {t('重试')}
                 </button>
               }
@@ -248,7 +251,7 @@ export default function Sectors() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
+              transition={{ duration: DUR_UI }}
             >
               {view === 'heat' ? (
                 <div className="card-surface p-4 md:p-6">
@@ -290,9 +293,10 @@ export default function Sectors() {
                     type="button"
                     onClick={retryOverview}
                     disabled={catalogQ.refreshing || strengthQ.refreshing}
-                    className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105 disabled:opacity-60"
+                    aria-busy={catalogQ.refreshing || strengthQ.refreshing}
+                    className="btn-primary"
                   >
-                    <Icon name="refresh" size={14} />
+                    <BusyIcon busy={catalogQ.refreshing || strengthQ.refreshing} size={14} tone="on-accent" />
                     {t('重试')}
                   </button>
                 }
@@ -313,9 +317,10 @@ export default function Sectors() {
                     type="button"
                     onClick={retryOverview}
                     disabled={catalogQ.refreshing || strengthQ.refreshing}
-                    className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105 disabled:opacity-60"
+                    aria-busy={catalogQ.refreshing || strengthQ.refreshing}
+                    className="btn-primary"
                   >
-                    <Icon name="refresh" size={14} />
+                    <BusyIcon busy={catalogQ.refreshing || strengthQ.refreshing} size={14} tone="on-accent" />
                     {t('重试')}
                   </button>
                 }
@@ -357,9 +362,10 @@ export default function Sectors() {
                     type="button"
                     onClick={retryOverview}
                     disabled={catalogQ.refreshing || strengthQ.refreshing}
-                    className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105 disabled:opacity-60"
+                    aria-busy={catalogQ.refreshing || strengthQ.refreshing}
+                    className="btn-primary"
                   >
-                    <Icon name="refresh" size={14} />
+                    <BusyIcon busy={catalogQ.refreshing || strengthQ.refreshing} size={14} tone="on-accent" />
                     {t('重试')}
                   </button>
                 }
@@ -376,9 +382,10 @@ export default function Sectors() {
                     type="button"
                     onClick={retryOverview}
                     disabled={catalogQ.refreshing || strengthQ.refreshing}
-                    className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105 disabled:opacity-60"
+                    aria-busy={catalogQ.refreshing || strengthQ.refreshing}
+                    className="btn-primary"
                   >
-                    <Icon name="refresh" size={14} />
+                    <BusyIcon busy={catalogQ.refreshing || strengthQ.refreshing} size={14} tone="on-accent" />
                     {t('重试')}
                   </button>
                 }

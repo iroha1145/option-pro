@@ -7,6 +7,7 @@
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { EASE_PAPER } from '@/lib/motion';
 import SourceNote from '@/components/shared/SourceNote';
 import type { EarningsRow } from './types';
 import { addDays, etToday, fmtMDCN, fmtMMDD, weekdayCN } from './types';
@@ -98,7 +99,7 @@ export default function DensityStrip({ items, onJumpDay }: DensityStripProps) {
                     initial={{ scaleY: 0, transformOrigin: 'bottom' }}
                     whileInView={{ scaleY: 1 }}
                     viewport={{ once: true, amount: 0.4 }}
-                    transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: i * 0.02 }}
+                    transition={{ duration: 0.7, ease: EASE_PAPER, delay: i * 0.02 }}
                   />
                 </button>
                 </span>

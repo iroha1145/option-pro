@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { ApiError } from '@/api/client';
 import { stocksApi } from '@/api/modules/stocks';
 import type { StockPullResource, StockPullResult } from '@/api/types';
-import Icon from '@/components/icons';
+import { BusyIcon } from '@/components/shared/IconSwap';
 import { cn } from '@/lib/utils';
 import { isIndexSymbol } from '@/lib/quoteSymbol';
 import { t } from '../../i18n/core.ts';
@@ -126,13 +126,10 @@ export default function ManualStockPull({
           type="button"
           onClick={() => void pull()}
           disabled={running}
-          className="inline-flex items-center gap-1.5 rounded-md bg-brand-600 px-3 py-1.5 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter,opacity] duration-fast hover:brightness-105 disabled:cursor-wait disabled:opacity-70"
+          aria-busy={running}
+          className="btn-primary btn-sm"
         >
-          {running ? (
-            <span className="size-3 animate-spin rounded-full border-2 border-on-accent/35 border-t-on-accent" aria-hidden="true" />
-          ) : (
-            <Icon name="refresh" size={12} />
-          )}
+          <BusyIcon busy={running} size={12} tone="on-accent" />
           {running ? t('正在获取行情数据') : t('拉取并分析')}
         </button>
         {error && (
@@ -150,15 +147,10 @@ export default function ManualStockPull({
         type="button"
         onClick={() => void pull()}
         disabled={running}
-        className={cn(
-          'inline-flex min-h-11 w-full items-center justify-center gap-2 whitespace-normal rounded-md bg-brand-600 px-3 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter,opacity] duration-fast hover:brightness-105 disabled:cursor-wait disabled:opacity-70 sm:w-auto',
-        )}
+        aria-busy={running}
+        className="btn-primary min-h-11 w-full whitespace-normal sm:w-auto"
       >
-        {running ? (
-          <span className="size-3.5 animate-spin rounded-full border-2 border-on-accent/35 border-t-on-accent" aria-hidden="true" />
-        ) : (
-          <Icon name="refresh" size={13} />
-        )}
+        <BusyIcon busy={running} size={13} tone="on-accent" />
         {running ? t('正在获取行情数据') : result ? t('重新获取') : t('获取行情数据')}
       </button>
 

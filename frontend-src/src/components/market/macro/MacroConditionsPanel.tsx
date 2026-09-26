@@ -13,7 +13,7 @@ import { macroApi, type MacroConditionsResponse } from '@/api/modules/macro';
 import { usePolling } from '@/hooks/usePolling';
 import { useAccess } from '@/hooks/useAccess';
 import { cn } from '@/lib/utils';
-import Icon from '@/components/icons';
+import { BusyIcon } from '@/components/shared/IconSwap';
 import EmptyState from '@/components/shared/EmptyState';
 import SourceNote from '@/components/shared/SourceNote';
 import { SkeletonBlock, SkeletonCard } from '@/components/shared/Skeleton';
@@ -202,7 +202,8 @@ export default function MacroConditionsPanel({
                 type="button"
                 onClick={() => conditionsQ.refresh()}
                 disabled={conditionsQ.refreshing}
-                className="rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105 disabled:opacity-60"
+                aria-busy={conditionsQ.refreshing}
+                className="btn-primary"
               >
                 {t('重试')}
               </button>
@@ -252,11 +253,7 @@ export default function MacroConditionsPanel({
                 'hover:border-line-strong hover:text-ink-900 focus-visible:border-brand-400 disabled:opacity-60',
               )}
             >
-              <Icon
-                name="refresh"
-                size={13}
-                className={refreshPhase === 'sending' ? 'animate-spin-once' : undefined}
-              />
+              <BusyIcon busy={refreshPhase === 'sending'} size={13} tone="brand" />
               {REFRESH_LABEL[refreshPhase]}
             </button>
           ) : (

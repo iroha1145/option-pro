@@ -9,8 +9,9 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import type { SectorOption, StrengthProfile } from '@/api/types';
 import { cn } from '@/lib/utils';
-import { EASE_PAPER } from '@/lib/motion';
+import { DUR_FAST, DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import Icon from '@/components/icons';
+import Spinner from '@/components/shared/Spinner';
 import Segmented from '@/components/shared/Segmented';
 import FilterButton from '@/components/shared/FilterButton';
 import SelectionViewport from '@/components/shared/SelectionViewport';
@@ -149,7 +150,7 @@ export function ScanButton({
           ? { boxShadow: [`${base}, 0 0 0 0 color-mix(in srgb, var(--brand-600) 38%, transparent)`, `${base}, 0 0 0 9px transparent`, `${base}, 0 0 0 0 transparent`] }
           : { boxShadow: `${base}, 0 0 0 0 transparent` }
       }
-      transition={dirty && !scanning ? { duration: 1.2, repeat: 2 } : { duration: 0.16 }}
+      transition={dirty && !scanning ? { duration: 1.2, repeat: 2 } : { duration: DUR_FAST }}
       className={cn(
         'scan-trigger relative h-9 min-w-[168px] overflow-hidden rounded-[9px] bg-brand-600 px-4 text-on-accent shadow-btn-hi transition-[filter] duration-fast',
         scanning ? 'cursor-wait' : 'hover:brightness-105',
@@ -170,7 +171,7 @@ export function ScanButton({
       <span className="relative z-10 flex items-center justify-center gap-2">
         {scanning ? (
           <>
-            <span className="size-[18px] animate-spin rounded-full border-2 border-on-accent/35 border-t-on-accent" aria-hidden="true" />
+            <Spinner size={18} tone="on-accent" />
             <span className="text-body-s font-medium">{__t('扫描中 · 等待后台结果')}</span>
           </>
         ) : (
@@ -249,7 +250,7 @@ export default function FilterWorkbench({
 
   const row = {
     hidden: { opacity: 0, y: 14 },
-    show: { opacity: 1, y: 0, transition: { duration: 0.48, ease: EASE_PAPER } },
+    show: { opacity: 1, y: 0, transition: { duration: DUR_SECTION, ease: EASE_PAPER } },
   };
 
   const selectedPreset = presets?.find((preset) => preset.id === draft.presetId);
@@ -315,7 +316,7 @@ export default function FilterWorkbench({
 
       {/* 次要条件收纳；已选择的范围常驻，避免折叠后忘记当前扫描门槛。 */}
       <details className="group/filters mt-5 border-t border-line/70 pt-3" data-testid="screener-advanced-filters">
-        <summary className="disclosure-trigger flex cursor-pointer list-none flex-wrap items-center gap-x-3 gap-y-2 rounded-lg py-1 text-caption text-ink-500 outline-none transition-colors hover:text-ink-800 focus-visible:ring-2 focus-visible:ring-brand-400/40 [&::-webkit-details-marker]:hidden">
+        <summary className="disclosure-trigger flex cursor-pointer list-none flex-wrap items-center gap-x-3 gap-y-2 rounded-lg py-1 text-caption text-ink-500 outline-none transition-colors duration-fast hover:text-ink-800 focus-visible:ring-2 focus-visible:ring-brand-400/40 [&::-webkit-details-marker]:hidden">
           <span className="inline-flex shrink-0 items-center gap-2 font-medium text-ink-700">
             <Icon name="filter-funnel" size={14} className="text-ink-400" />
             {__t('更多筛选')}
@@ -380,13 +381,13 @@ export default function FilterWorkbench({
                   <button
                     type="button"
                     onClick={() => setShowAllSectors(true)}
-                    className="flex h-8 shrink-0 items-center whitespace-nowrap rounded-lg bg-paper-2 px-2.5 font-mono text-caption text-ink-500 tnum transition-colors hover:bg-paper hover:text-ink-800"
+                    className="flex h-8 shrink-0 items-center whitespace-nowrap rounded-lg bg-paper-2 px-2.5 font-mono text-caption text-ink-500 tnum transition-colors duration-fast hover:bg-paper hover:text-ink-800"
                   >
                     +{hiddenCount}
                   </button>
                 )}
                 {showAllSectors && sectorOptions.length > SECTOR_COLLAPSE_AT && (
-                  <button type="button" onClick={() => setShowAllSectors(false)} className="flex h-8 shrink-0 items-center whitespace-nowrap rounded-lg px-2 text-caption text-ink-400 transition-colors hover:text-ink-600">
+                  <button type="button" onClick={() => setShowAllSectors(false)} className="flex h-8 shrink-0 items-center whitespace-nowrap rounded-lg px-2 text-caption text-ink-400 transition-colors duration-fast hover:text-ink-600">
                     {__t('收起')}
                   </button>
                 )}

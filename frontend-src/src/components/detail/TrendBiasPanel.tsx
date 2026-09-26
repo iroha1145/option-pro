@@ -4,6 +4,7 @@
  * 分项条组（趋势/动量/量能/波动 grow-bar 错峰）+ 因子中文解读列表
  */
 import { motion } from 'framer-motion';
+import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import { usePolling } from '@/hooks/usePolling';
 import { strengthBarClass } from '@/lib/strengthColor';
 import { SkeletonText } from '@/components/shared/Skeleton';
@@ -60,7 +61,7 @@ function Gauge({ score, label }: { score: number; label: StockTrendBiasView['tre
           strokeDasharray={C}
           initial={{ strokeDashoffset: C }}
           animate={{ strokeDashoffset: C * (1 - score / 100) }}
-          transition={{ duration: 0.56, ease: [0.16, 1, 0.3, 1] }}
+          transition={{ duration: DUR_SECTION, ease: EASE_PAPER }}
         />
       </svg>
       <div className="absolute inset-x-0 bottom-0 flex flex-col items-center">
@@ -133,7 +134,7 @@ export default function TrendBiasPanel({
             type="button"
             onClick={() => refresh()}
             disabled={refreshing}
-            className="mt-2.5 inline-flex items-center gap-1.5 rounded-md border border-line-strong px-3 py-1.5 text-caption text-ink-600 shadow-btn transition-colors hover:border-brand-400 hover:text-brand-600 disabled:cursor-wait disabled:opacity-60"
+            className="mt-2.5 inline-flex items-center gap-1.5 rounded-md border border-line-strong px-3 py-1.5 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:cursor-wait disabled:opacity-60"
           >
             {refreshing ? t('正在重试') : t('重试')}
           </button>

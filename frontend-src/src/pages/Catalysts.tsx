@@ -7,7 +7,7 @@ import { startTransition, useCallback, useMemo, useOptimistic, useState } from '
 import { useSearchParams } from 'react-router';
 import PageHeader from '@/components/shared/PageHeader';
 import Segmented from '@/components/shared/Segmented';
-import Icon from '@/components/icons';
+import { BusyIcon } from '@/components/shared/IconSwap';
 import { fmtTimeHHMMSS } from '@/lib/format';
 import StatusHero from '@/components/catalysts/StatusHero';
 import AnalysisProgressCard from '@/components/catalysts/AnalysisProgressCard';
@@ -177,7 +177,7 @@ export default function Catalysts() {
               className="flex h-9 items-center gap-2 rounded-md border border-line bg-card px-3 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
               title={__t("刷新本页数据")}
             >
-              <Icon name="refresh" size={15} className={spinning ? 'animate-spin-once' : ''} />
+              <BusyIcon busy={spinning} size={15} tone="brand" />
               {__t('刷新')}
             </button>
           </>

@@ -28,6 +28,7 @@ import { useNow } from '@/hooks/useNow';
 import { useToast } from '@/hooks/useToast';
 import { useShell } from '@/hooks/useShell';
 import { cn } from '@/lib/utils';
+import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import { strengthBarClass } from '@/lib/strengthColor';
 import { fmtCountdown, fmtNyTime, fmtTimeHHMMSS } from '@/lib/format';
 import type { MarketSignalsSnapshot, WatchlistItem } from '@/api/types';
@@ -45,7 +46,9 @@ import { SCORE_HINTS } from '@/lib/scoreHints';
 import SessionLED, { SessionDot } from '@/components/shared/SessionLED';
 import { SkeletonCard, SkeletonReveal, SkeletonRows } from '@/components/shared/Skeleton';
 import Sparkline from '@/components/charts/Sparkline';
+import ChangeBadge from '@/components/shared/ChangeBadge';
 import Icon from '@/components/icons';
+import { BusyIcon } from '@/components/shared/IconSwap';
 import { pageRegionProps } from '@/lib/pageRegion';
 import { getLocale, t } from '../i18n/core.ts';
 
@@ -105,7 +108,7 @@ function ScoreDonut({ score }: { score: number }) {
           strokeDasharray={C}
           initial={{ strokeDashoffset: C }}
           animate={{ strokeDashoffset: target }}
-          transition={{ duration: 0.56, ease: [0.16, 1, 0.3, 1] }}
+          transition={{ duration: DUR_SECTION, ease: EASE_PAPER }}
           transform="rotate(-90 36 36)"
         />
         <text x="36" y="40" textAnchor="middle" className="fill-ink-500 font-mono" fontSize="12">
@@ -131,7 +134,7 @@ function ForceRefreshButton({ onRefresh, spinning }: { onRefresh: () => void; sp
           : 'cursor-not-allowed border-line bg-card-warm text-ink-300',
       )}
     >
-      <Icon name="refresh" size={15} className={spinning ? 'animate-spin-once' : ''} />
+      <BusyIcon busy={spinning} size={15} tone="brand" />
       {t('强制刷新')}
     </button>
   );
@@ -249,6 +252,66 @@ function SortDropdown({ sort, onChange }: { sort: SortState | null; onChange: (s
 }
 
 /* ---------------- 卡片模式单卡 ---------------- */
+/** 半年周线与区间涨跌；少于两点返回 null（调用方退回 7 日短图）。 */
+function sixMonthView(item: WatchlistItem) {
+  const trend = item.sixMonthTrend && item.sixMonthTrend.length > 1 ? item.sixMonthTrend : null;
+  if (!trend) return null;
+  const closes = trend.map((point) => point.close);
+  return {
+    closes,
+    start: trend[0].date,
+    end: trend[trend.length - 1].date,
+    change: (closes[closes.length - 1] / closes[0] - 1) * 100,
+  };
+}
+
+/**
+ * 卡片走势：优先画近半年周线，按区间涨跌着色（不是当日涨跌——半年涨了三成、
+ * 今天跌 1% 的票不该是一条红线），下方标区间与区间涨跌。没有半年数据时退回
+ * 7 个交易日短图，并如实标出天数。整张卡是按钮，这里只用行内元素。
+ */
+function CardTrend({ item }: { item: WatchlistItem }) {
+  const view = sixMonthView(item);
+  if (view) {
+    return (
+      <>
+        <Sparkline data={view.closes} width={230} height={56} change={view.change} variant="area" className="w-full" />
+        <span className="mt-1 flex items-center justify-between gap-2 text-micro text-ink-400">
+          <span className="truncate">
+            {t('近半年')} <span className="font-mono tnum">{view.start.slice(5)} — {view.end.slice(5)}</span>
+          </span>
+          <span className="flex shrink-0 items-center gap-1.5">{t('区间')}<ChangeBadge value={view.change} size="sm" /></span>
+        </span>
+      </>
+    );
+  }
+  return (
+    <>
+      <Sparkline data={item.sparkline} width={230} height={56} change={item.changePct ?? Number.NaN} variant="area" className="w-full" />
+      {item.sparkline.length > 1 && (
+        <span className="mt-1 block text-micro text-ink-400">{t('近 {count} 个交易日', { count: item.sparkline.length })}</span>
+      )}
+    </>
+  );
+}
+
+/** 表格走势列：与卡片同口径；退回的 7 日短图压淡，悬停可见实际天数。 */
+function TableTrend({ item }: { item: WatchlistItem }) {
+  const view = sixMonthView(item);
+  if (view) {
+    return (
+      <span className="inline-flex" title={t('{start} 至 {end}，区间涨跌 {change}%', { start: view.start, end: view.end, change: view.change.toFixed(2) })}>
+        <Sparkline data={view.closes} change={view.change} />
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex opacity-60" title={t('近 {count} 个交易日', { count: item.sparkline.length })}>
+      <Sparkline data={item.sparkline} change={item.changePct ?? Number.NaN} />
+    </span>
+  );
+}
+
 function WatchCard({
   item,
   index,
@@ -286,7 +349,7 @@ function WatchCard({
       animate={animateIn ? { opacity: 1, y: 0 } : undefined}
       transition={
         animateIn
-          ? { duration: 0.48, ease: [0.16, 1, 0.3, 1], delay: Math.min(index * 0.045, 0.5) }
+          ? { duration: DUR_SECTION, ease: EASE_PAPER, delay: Math.min(index * 0.045, 0.5) }
           : undefined
       }
       className="group/card relative"
@@ -313,9 +376,9 @@ function WatchCard({
         {item.sector && <SoftBadge className="max-w-[60%]" title={t(item.sector)}><span className="truncate">{t(item.sector)}</span></SoftBadge>}
       </div>
       {!Number.isFinite(item.price) && <p className="mt-2 text-caption text-ink-400">{t('暂无行情')}</p>}
-      <div className="mt-2">
-        <Sparkline data={item.sparkline} width={230} height={56} change={item.changePct ?? Number.NaN} variant="area" className="w-full" />
-      </div>
+      <span className="mt-2 block">
+        <CardTrend item={item} />
+      </span>
       {(showStrength || showSignals) && (
         <div className="mt-3 flex items-center justify-between gap-2 border-t border-line pt-3">
           {showStrength && <StrengthBar score={item.strengthScore} width={64} />}
@@ -524,9 +587,10 @@ export default function Watchlist() {
         render: (r) => <LiveChange symbol={r.ticker} fallback={r.changePct} fallbackAt={r.updatedAt} />,
       },
       {
+        /* 原标题「今日分时」名不副实：画的一直是 7 个日收盘点。现在与卡片同一口径。 */
         key: 'spark',
-        title: t('今日分时'),
-        render: (r) => <Sparkline data={r.sparkline} change={r.changePct ?? Number.NaN} />,
+        title: t('近半年'),
+        render: (r) => <TableTrend item={r} />,
       },
       ...(rowStrengthAvailable
         ? [{
@@ -739,7 +803,7 @@ export default function Watchlist() {
             ].map((node, i) => (
               <motion.div
                 key={i}
-                variants={{ hidden: { opacity: 0, y: 14 }, show: { opacity: 1, y: 0, transition: { duration: 0.48, ease: [0.16, 1, 0.3, 1] } } }}
+                variants={{ hidden: { opacity: 0, y: 14 }, show: { opacity: 1, y: 0, transition: { duration: DUR_SECTION, ease: EASE_PAPER } } }}
                 className="min-w-[240px] snap-start sm:min-w-0"
               >
                 {node}
@@ -779,7 +843,7 @@ export default function Watchlist() {
               <SortDropdown sort={sort} onChange={setSort} />
               {canManageWatchlist ? (
                 <button type="button" onClick={() => setManagerKey(personal.key)} disabled={!personal.enabled || personal.loading || personal.busy || myTickers === null}
-                  className="inline-flex min-h-11 items-center gap-1.5 rounded-md bg-brand-600 px-3 text-caption font-medium text-on-accent shadow-btn-hi hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50">
+                  className="btn-primary">
                   <Icon name="plus" size={15} />{t('管理自选')}
                 </button>
               ) : (
@@ -875,9 +939,10 @@ export default function Watchlist() {
                     <button
                       onClick={() => wl.refresh()}
                       disabled={wl.refreshing}
-                      className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105 disabled:opacity-60"
+                      aria-busy={wl.refreshing}
+                      className="btn-primary"
                     >
-                      {wl.refreshing && <span className="size-3.5 animate-spin rounded-full border-2 border-on-accent/40 border-t-on-accent" />}
+                      <BusyIcon busy={wl.refreshing} size={14} tone="on-accent" />
                       {t('重试')}
                     </button>
                   }
@@ -904,7 +969,7 @@ export default function Watchlist() {
                     <button
                       onClick={() => setManagerKey(personal.key)}
                       disabled={!personal.enabled}
-                      className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105"
+                      className="btn-primary"
                     >
                       <Icon name="plus" size={14} />
                       {t('管理自选')}
@@ -965,7 +1030,7 @@ export default function Watchlist() {
                 <button
                   type="button"
                   onClick={progressive.loadMore}
-                  className="inline-flex min-h-11 items-center gap-2 rounded-md border border-line-strong bg-card px-4 py-2 text-caption text-ink-600 shadow-btn transition-colors hover:bg-paper-2"
+                  className="inline-flex min-h-11 items-center gap-2 rounded-md border border-line-strong bg-card px-4 py-2 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:bg-paper-2"
                 >
                   {t('加载更多')}
                   <span className="font-mono text-micro text-ink-400 tnum">
@@ -991,7 +1056,7 @@ export default function Watchlist() {
               <p className="mt-3 text-caption text-ink-400">{t('市场信号读取失败')}</p>
               <button
                 onClick={() => signalsQ.refresh()}
-                className="mt-3 flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-caption text-ink-600 shadow-btn transition-colors hover:border-brand-400 hover:text-brand-600"
+                className="mt-3 flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
               >
                 <Icon name="refresh" size={13} />
                 {t('重试')}

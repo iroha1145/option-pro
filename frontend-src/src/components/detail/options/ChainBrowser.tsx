@@ -92,7 +92,7 @@ export default function ChainBrowser({ chain }: { chain: OptionChain }) {
       </div>
       {alerts.length > 0 ? <ul className="divide-y divide-line">
         {alerts.slice(0, 3).map((c) => <li key={c.id}>
-          <button type="button" onClick={(event) => openDetail(c.id, event.currentTarget)} aria-label={t('查看 {contract} 明细', { contract: contractName(c) })} className="grid min-h-16 w-full grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1 px-4 py-3 text-left transition-colors hover:bg-paper-2 sm:grid-cols-[minmax(170px,1fr)_1.5fr_auto]">
+          <button type="button" onClick={(event) => openDetail(c.id, event.currentTarget)} aria-label={t('查看 {contract} 明细', { contract: contractName(c) })} className="grid min-h-16 w-full grid-cols-[1fr_auto] items-center gap-x-4 gap-y-1 px-4 py-3 text-left transition-colors duration-fast hover:bg-paper-2 sm:grid-cols-[minmax(170px,1fr)_1.5fr_auto]">
             <span className="flex flex-wrap items-center gap-2"><SideLabel side={c.side} /><span className="font-mono text-body-s font-semibold text-ink-900">${strikeText(c.strike)}</span></span>
             <span className="col-start-1 text-caption text-warn-700 sm:col-auto">{reason(c)}</span>
             <span className="col-start-2 row-start-1 row-end-3 text-right sm:col-auto sm:row-auto"><span className="block font-mono text-body-s text-ink-900 tnum">{number(c.volume)}</span><span className="text-micro text-ink-500">{t('成交张数')}</span></span>

@@ -1,5 +1,6 @@
 import { Link } from 'react-router';
 import { motion } from 'framer-motion';
+import { DUR_UI, EASE_PAPER } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { fmtPct } from '@/lib/format';
 import TickerLogo from '@/components/shared/TickerLogo';
@@ -51,7 +52,7 @@ export default function DetailBand({
       initial={{ height: 0, opacity: 0 }}
       animate={{ height: 'auto', opacity: 1 }}
       exit={{ height: 0, opacity: 0 }}
-      transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: DUR_UI, ease: EASE_PAPER }}
       className="overflow-hidden"
       aria-label={t('{name} 板块详情', { name: sector.name })}
     >
@@ -65,7 +66,7 @@ export default function DetailBand({
           </div>
           <Link
             to={`/screener?sector=${encodeURIComponent(sector.id)}`}
-            className="flex items-center gap-1 text-caption text-brand-600 transition-colors hover:text-brand-500"
+            className="flex items-center gap-1 text-caption text-brand-600 transition-colors duration-fast hover:text-brand-500"
           >
             {t('查看该板块扫描结果')}
             <Icon name="arrow-up-right" size={12} />
@@ -129,7 +130,7 @@ export default function DetailBand({
                     <button
                       type="button"
                       onClick={() => onOpenTicker(leader.ticker)}
-                      className="group flex min-h-11 w-full items-center gap-3 py-2 text-left transition-colors hover:bg-paper-2"
+                      className="group flex min-h-11 w-full items-center gap-3 py-2 text-left transition-colors duration-fast hover:bg-paper-2"
                     >
                       <span className="w-5 shrink-0 font-mono text-micro text-ink-300 tnum">
                         {String(index + 1).padStart(2, '0')}
@@ -147,7 +148,7 @@ export default function DetailBand({
                       <Icon
                         name="arrow-up-right"
                         size={12}
-                        className="text-ink-300 transition-colors group-hover:text-brand-600"
+                        className="text-ink-300 transition-colors duration-fast group-hover:text-brand-600"
                       />
                     </button>
                   </li>
@@ -176,7 +177,7 @@ export default function DetailBand({
                     key={ticker}
                     type="button"
                     onClick={() => onOpenTicker(ticker)}
-                    className="min-w-0 rounded-md border border-line bg-card-warm px-2 py-2 text-center font-mono text-caption font-semibold text-ink-700 transition-colors hover:border-brand-400 hover:text-brand-700"
+                    className="min-w-0 rounded-md border border-line bg-card-warm px-2 py-2 text-center font-mono text-caption font-semibold text-ink-700 transition-colors duration-fast hover:border-brand-400 hover:text-brand-700"
                   >
                     <span className="block truncate">{ticker}</span>
                   </button>

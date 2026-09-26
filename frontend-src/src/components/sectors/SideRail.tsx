@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
+import { DUR_FAST, DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { fmtRelative } from '@/lib/format';
 import Icon from '@/components/icons';
@@ -60,13 +61,13 @@ function IvHeatCard({
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{
-                    duration: 0.4,
-                    ease: [0.16, 1, 0.3, 1],
+                    duration: DUR_SECTION,
+                    ease: EASE_PAPER,
                     delay: index * 0.04,
                   }}
                   whileHover={{
                     y: -2,
-                    transition: { duration: 0.16, ease: [0.22, 1, 0.36, 1] },
+                    transition: { duration: DUR_FAST, ease: [0.22, 1, 0.36, 1] },
                   }}
                   onClick={() => onOpenTicker(row.ticker)}
                   aria-label={t('{ticker} 板块 IV 排位 {rank}，打开详情', { ticker: row.ticker, rank: row.rank })}
@@ -101,7 +102,7 @@ function IvHeatCard({
             {onRetry && (
               <button
                 onClick={onRetry}
-                className="rounded-md border border-line px-2 py-0.5 text-micro text-ink-600 shadow-btn transition-colors hover:border-brand-400 hover:text-brand-600"
+                className="rounded-md border border-line px-2 py-0.5 text-micro text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
               >
                 {t('重试')}
               </button>

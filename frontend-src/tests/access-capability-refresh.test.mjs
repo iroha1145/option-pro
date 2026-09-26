@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
 import { createReactStub } from './helpers/react-hooks.mjs';
+import { SHARED_UI_STUBS } from './helpers/shared-ui-stubs.mjs';
 
 const settle = async () => { for (let i = 0; i < 30; i++) await Promise.resolve(); };
 const jsx = { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }) };
@@ -20,6 +21,7 @@ function compile(name, imports, env) {
       if (id === 'react/jsx-runtime') return jsx;
       if (id.includes('i18n/core')) return { t: value => value };
       if (id in imports) return imports[id];
+      if (id in SHARED_UI_STUBS) return SHARED_UI_STUBS[id];
       throw Error(`Unexpected import: ${id}`);
     },
   });

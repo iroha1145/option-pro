@@ -96,7 +96,10 @@ def _reset_read_caches(_isolated_runtime_data):
     from app.api import strength as strength_api
     from app.services import http_read_cache
 
+    from app.services import watchlist_six_month
+
     def _clear() -> None:
+        watchlist_six_month.reset_cache()
         public_home_snapshot._parsed_documents.invalidate()
         strength_api._strength_documents.invalidate()
         sectors_api._sector_iv_documents.invalidate()

@@ -12,6 +12,7 @@
  */
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
+import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import Segmented from '@/components/shared/Segmented';
 import InfoHint from '@/components/shared/InfoHint';
 import { CTA_HINTS } from '@/lib/ctaHints';
@@ -34,7 +35,7 @@ function PositionBar({ value }: { value: number }) {
         className={cn('absolute inset-y-0 rounded-pill', isLong ? 'bg-up-600' : 'bg-down-600')}
         initial={false}
         animate={{ left: `${isLong ? 50 : 50 - half}%`, width: `${half}%` }}
-        transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+        transition={{ duration: DUR_SECTION, ease: EASE_PAPER }}
       />
     </div>
   );
@@ -75,7 +76,7 @@ function SignalRow({ label, signal }: { label: string; signal: number }) {
           className={cn('absolute inset-y-0 rounded-pill', signal >= 0 ? 'bg-up-600' : 'bg-down-600')}
           initial={false}
           animate={{ left: `${signal >= 0 ? 50 : 50 - half}%`, width: `${half}%` }}
-          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+          transition={{ duration: DUR_SECTION, ease: EASE_PAPER }}
         />
       </div>
       <span className="w-12 shrink-0 text-right font-mono text-micro text-ink-700 tnum">

@@ -10,6 +10,8 @@ import HorizontalScroller from '@/components/shared/HorizontalScroller';
 import InfoHint from '@/components/shared/InfoHint';
 import { SCORE_HINTS } from '@/lib/scoreHints';
 import Icon from '@/components/icons';
+import Spinner from '@/components/shared/Spinner';
+import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import { fmtRelative } from '@/lib/format';
 import { t as __t } from '../../i18n/core.ts';
 
@@ -20,7 +22,7 @@ function HotspotCard({ h, index, onOpen }: { h: HotspotGroup; index: number; onO
       type="button"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1], delay: Math.min(index * 0.05, 0.4) }}
+      transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: Math.min(index * 0.05, 0.4) }}
       onClick={onOpen}
       disabled={!openable}
       data-hotspot-card
@@ -57,7 +59,7 @@ function HotspotCard({ h, index, onOpen }: { h: HotspotGroup; index: number; onO
           ))}
         </span>
         {openable && (
-          <span className="flex shrink-0 items-center gap-0.5 text-micro text-ink-500 transition-colors group-hover:text-brand-600">
+          <span className="flex shrink-0 items-center gap-0.5 text-micro text-ink-500 transition-colors duration-fast group-hover:text-brand-600">
             {__t('查看代表新闻')}
             <Icon name="chevron-right" size={12} />
           </span>
@@ -136,7 +138,7 @@ export default function HotspotsStrip({ onOpenNews, refreshToken = 0 }: { onOpen
           ) : computing ? (
             /* hotspots/status 计算中：带首卡替换为状态卡 */
             <div className="card-surface flex min-h-44 w-[260px] shrink-0 snap-start flex-col items-center justify-center p-5 text-center sm:w-[300px]">
-              <span className="size-5 animate-spin rounded-full border-2 border-brand-100 border-t-brand-600" aria-hidden="true" />
+              <Spinner size={20} tone="brand" />
               <p className="mt-2.5 text-body-s font-medium text-ink-800">{__t('热点计算中…')}</p>
               <p className="mt-1 font-mono text-micro text-ink-400 tnum">
                 {statusQ.data?.etaSeconds != null ? __t('预计 {n}s', { n: statusQ.data.etaSeconds }) : __t('请稍候')}
@@ -149,7 +151,7 @@ export default function HotspotsStrip({ onOpenNews, refreshToken = 0 }: { onOpen
               <p className="mt-1 text-micro text-ink-400">{__t('请稍后重试，恢复后将显示热点')}</p>
               <button
                 onClick={() => listQ.refresh()}
-                className="mt-3 rounded-md border border-line px-3 py-1.5 text-caption text-ink-600 shadow-btn transition-colors hover:border-brand-400 hover:text-brand-600"
+                className="mt-3 rounded-md border border-line px-3 py-1.5 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
               >
                 {__t('重试')}
               </button>

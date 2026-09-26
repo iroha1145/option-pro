@@ -114,7 +114,7 @@ function SignalCard({ ev: initialEvent, index, flash, locate, onOpen, showT1 = f
               openTicker(ev.ticker);
             }}
             aria-label={t('打开 {ticker} 个股详情抽屉', { ticker: ev.ticker })}
-            className="font-mono text-body-s font-semibold text-ink-800 underline-offset-2 transition-colors hover:text-brand-600 hover:underline"
+            className="font-mono text-body-s font-semibold text-ink-800 underline-offset-2 transition-colors duration-fast hover:text-brand-600 hover:underline"
           >
             {ev.ticker}
           </button>

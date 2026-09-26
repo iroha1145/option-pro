@@ -277,7 +277,7 @@ export default function SecurityDiagnostics({ profile, timeframe, publicationKey
             autoComplete="off" spellCheck={false} maxLength={32} placeholder={t('例如 AAPL 或 SPY')}
             className="w-full rounded-md border border-line bg-paper-1 px-3 py-2 font-mono text-body-s text-ink-800 outline-none focus:border-brand-500" />
         </label>
-        <button type="submit" disabled={loading} className="rounded-md bg-brand-600 px-4 py-2 text-body-s font-semibold text-white disabled:opacity-60">{loading ? t('查询中') : t('查询诊断')}</button>
+        <button type="submit" disabled={loading} aria-busy={loading} className="btn-primary">{loading ? t('查询中') : t('查询诊断')}</button>
       </form>
       {loading && <p className="mt-4 text-body-s text-ink-500" role="status">{t('正在读取本批次诊断…')}</p>}
       {shownError && <p className="mt-4 rounded-md border border-line bg-paper-2 p-3 text-body-s text-ink-700" role="alert">{shownError}</p>}

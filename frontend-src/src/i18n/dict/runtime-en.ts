@@ -2640,6 +2640,8 @@ export const EN: Record<string, string> = {
   "日线走势": "Daily trend",
   "近 {count} 个交易日": "Last {count} trading days",
   "区间": "Period",
+  "近半年": "Past 6 months",
+  "{start} 至 {end}，区间涨跌 {change}%": "{start} to {end}, period change {change}%",
   "{ticker} 日线走势，{start} 至 {end}，区间涨跌 {change}%": "{ticker} daily trend, {start} to {end}, period change {change}%",
   "只（默认关注）": "stocks (default watchlist)",
   "自选观察": "Your watchlist",

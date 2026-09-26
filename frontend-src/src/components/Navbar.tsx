@@ -57,6 +57,8 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
 
   const navRef = useRef<HTMLElement>(null);
   const glideRef = useRef<HTMLSpanElement>(null);
+  const hoverRef = useRef<HTMLSpanElement>(null);
+  const hoverShownRef = useRef(false);
   const glideReadyRef = useRef(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const activePath = NAV_ITEMS.find((item) => isNavPathActive(location.pathname, item.path))?.path ?? '';
@@ -97,6 +99,25 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
     alignRef.current(glideReadyRef.current);
     glideReadyRef.current = true;
   }, [activePath]);
+  /* beUI shared-layout-bg：鼠标在主导航各项之间移动时，一块浅底跟着滑过去，
+     离开导航淡出。首次出现只淡入不补间（从上次的位置滑来会像是飞进来的），
+     之后在各项之间用 placeGlide 补间位置与宽度。只响应鼠标，不响应触摸。 */
+  const showNavHover = (target: HTMLElement) => {
+    const nav = navRef.current;
+    const pill = hoverRef.current;
+    if (!nav || !pill) return;
+    const navBox = nav.getBoundingClientRect();
+    const box = target.getBoundingClientRect();
+    placeGlide(pill, { offset: box.left - navBox.left, size: box.width }, { axis: 'x', animate: hoverShownRef.current });
+    pill.style.opacity = '1';
+    hoverShownRef.current = true;
+  };
+  const hideNavHover = () => {
+    const pill = hoverRef.current;
+    if (pill) pill.style.opacity = '0';
+    hoverShownRef.current = false;
+  };
+
   const handleLogout = async () => {
     if (loggingOut) return;
     setLoggingOut(true);
@@ -130,21 +151,29 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
           ref={navRef}
           className="relative mx-auto hidden h-full items-center gap-1 xl:flex"
           aria-label={t("主导航")}
+          onPointerLeave={hideNavHover}
         >
+          <span ref={hoverRef} aria-hidden="true" className="nav-hover" />
           <span ref={glideRef} data-nav-glide="" aria-hidden="true" className="nav-glide" />
           {NAV_ITEMS.map((item) => {
             const active = isNavPathActive(location.pathname, item.path);
+            const intent = routeIntentHandlers(item.path);
             return (
             <NavLink
               key={item.path}
               to={item.path}
               end={item.path === '/'}
               data-active={active}
-              {...routeIntentHandlers(item.path)}
+              {...intent}
+              onPointerEnter={(event) => {
+                intent.onPointerEnter();
+                if (event.pointerType === 'mouse') showNavHover(event.currentTarget);
+              }}
               className={cn(
                 /* R4 加到 9 项后 1440(xl) 逼近满宽：sub-2xl 收 px-2，登录态
-                   右侧簇（AI 胶囊+退出）才不会被挤出视口；≥2xl 恢复 3.5。 */
-                'flex h-full items-center gap-1.5 whitespace-nowrap px-2 text-body-s transition-colors duration-fast 2xl:px-3.5',
+                   右侧簇（AI 胶囊+退出）才不会被挤出视口；≥2xl 恢复 3.5。
+                   relative：盖在悬停浅底之上。 */
+                'relative flex h-full items-center gap-1.5 whitespace-nowrap px-2 text-body-s transition-colors duration-fast 2xl:px-3.5',
                 active ? 'font-medium text-brand-600' : 'text-ink-500 hover:text-ink-800',
               )}
             >
@@ -224,7 +253,7 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
             <button
               onClick={handleLogout}
               disabled={loggingOut}
-              className="touch-target flex h-8 max-w-[140px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-line bg-card px-3 text-caption text-ink-500 shadow-btn transition-colors hover:text-ink-800 disabled:cursor-wait disabled:opacity-60 md:max-w-none"
+              className="touch-target flex h-8 max-w-[140px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-line bg-card px-3 text-caption text-ink-500 shadow-btn transition-colors duration-fast hover:text-ink-800 disabled:cursor-wait disabled:opacity-60 md:max-w-none"
             >
               <Icon name="logout" size={14} className="shrink-0" />
               <span className="truncate">{username ? t('退出 {name}', { name: username }) : t('退出')}</span>
@@ -233,7 +262,7 @@ export default function Navbar({ onOpenPalette }: { onOpenPalette: () => void })
             <Link
               to="/login"
               {...routeIntentHandlers('/login')}
-              className="touch-target flex h-8 shrink-0 items-center whitespace-nowrap rounded-md bg-brand-600 px-3.5 text-caption font-medium text-on-accent shadow-btn-hi transition-[transform,background-color] duration-fast hover:bg-brand-700 active:scale-[0.98]"
+              className="btn-primary btn-sm touch-target shrink-0 whitespace-nowrap"
             >
               {t('登录')}
             </Link>

@@ -6,14 +6,13 @@ import SoftBadge from '@/components/shared/SoftBadge';
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { DUR_FAST, SPRING_POP } from '@/lib/motion';
 import { fmtTimeHHMMSS } from '@/lib/format';
 import { useFocusTrap } from '@/hooks/useFocusTrap';
 import { isTopFocusScope } from '@/lib/focusScope';
 import Icon from '@/components/icons';
 import type { ScanHistoryEntry } from './types';
 import { t } from '../../i18n/core.ts';
-
-const SPRING_POP = { type: 'spring', stiffness: 520, damping: 32 } as const;
 
 export default function ScanHistoryPopover({ history }: { history: ScanHistoryEntry[] }) {
   const [open, setOpen] = useState(false);
@@ -62,7 +61,7 @@ export default function ScanHistoryPopover({ history }: { history: ScanHistoryEn
             aria-label={t("最近扫描记录")}
             initial={{ opacity: 0, scale: 0.96, y: -4 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.96, y: -4, transition: { duration: 0.16 } }}
+            exit={{ opacity: 0, scale: 0.96, y: -4, transition: { duration: DUR_FAST } }}
             transition={SPRING_POP}
             className="absolute right-0 top-11 z-40 w-[320px] max-w-[calc(100vw-2rem)] origin-top-right rounded-md border border-line bg-card p-2 shadow-sh-2"
           >

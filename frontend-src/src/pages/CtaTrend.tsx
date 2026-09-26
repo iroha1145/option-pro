@@ -15,7 +15,7 @@ import { fmtTimeHHMMSS } from '@/lib/format';
 import PageHeader from '@/components/shared/PageHeader';
 import StaleStrip from '@/components/shared/StaleStrip';
 import EmptyState from '@/components/shared/EmptyState';
-import Icon from '@/components/icons';
+import { BusyIcon } from '@/components/shared/IconSwap';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
 import CtaOverviewStrip from '@/components/cta/CtaOverviewStrip';
 import CtaDeepDive from '@/components/cta/CtaDeepDive';
@@ -96,7 +96,7 @@ export default function CtaTrend() {
                 disabled={ctaQ.refreshing}
                 className="inline-flex items-center gap-1 rounded-md border border-line px-3 py-1.5 text-caption text-ink-600 hover:bg-paper-2 disabled:opacity-60"
               >
-                <Icon name="refresh" size={12} />
+                <BusyIcon busy={ctaQ.refreshing} size={12} tone="brand" />
                 {t('重试')}
               </button>
             }

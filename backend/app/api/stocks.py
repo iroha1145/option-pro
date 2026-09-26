@@ -4,7 +4,7 @@ import asyncio
 from collections import deque
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 import hashlib
 from functools import partial
 import ipaddress
@@ -54,6 +54,7 @@ from app.services.market_calendar import early_close_minutes, is_trading_day
 from app.services.numeric import finite_number_or_none as _safe_number
 from app.services.symbols import quote_symbol
 from app.services.technical.indicators import rsi14
+from app.services import watchlist_six_month
 from app.services.watchlist_trend import daily_trend
 from app.services.watchlist_scope import (
     DEFAULT_WATCHLIST_TICKERS,
@@ -1346,6 +1347,14 @@ def _watchlist_market_timezone(ticker: str) -> ZoneInfo:
     return _WATCHLIST_MARKET_TIMEZONE
 
 
+def _watchlist_quote_session_date(ticker: str, quote_dt: datetime) -> date:
+    """Match the overnight futures rule used by the daily quote baseline."""
+    market_dt = quote_dt.astimezone(_watchlist_market_timezone(ticker))
+    if ticker.endswith("=F") and market_dt.weekday() in {0, 1, 2, 3, 6} and market_dt.hour >= 17:
+        return market_dt.date() + timedelta(days=1)
+    return market_dt.date()
+
+
 def _watchlist_requires_provider_previous_close(ticker: str) -> bool:
     # Index and futures daily bars can skip sessions or use a settlement value
     # that differs from Yahoo's published previous-close baseline.
@@ -1569,6 +1578,10 @@ def _clean_watchlist_snapshot_payload(value: Any) -> dict[str, Any] | None:
                 or not spark
                 or len(spark) > 7
                 or not all(_is_finite_number(point, positive=True) for point in spark)
+                or (
+                    "trend_6m" in stock
+                    and not watchlist_six_month.valid_trend(stock["trend_6m"])
+                )
             ):
                 return None
             group_tickers.add(ticker)
@@ -2058,6 +2071,20 @@ def _cached_selected_watchlist(tickers: list[str]) -> dict[str, Any]:
         for field in ("quote_session", "previous_close_source", "price_provider", "quote_delayed"):
             if field not in candidate:
                 updated.pop(field, None)
+        # An independently refreshed overview can replace the price without
+        # supplying history. Keep the optional chart in sync with that price,
+        # and omit it when its trading session/adjustment basis is uncertain.
+        saved_trend = updated.pop("trend_6m", None)
+        if incoming_at is not None and saved_trend is not None:
+            trend = watchlist_six_month.reprice_same_session_trend(
+                saved_trend,
+                price=updated["price"],
+                quote_date=_watchlist_quote_session_date(
+                    symbol, datetime.fromisoformat(incoming_at),
+                ),
+            )
+            if trend is not None:
+                updated["trend_6m"] = trend
         rows[symbol] = updated
         saved[symbol] = saved_at
         stale[symbol] = source_stale
@@ -2343,8 +2370,7 @@ async def _build_watchlist(requested_tickers: list[str] | None = None):
                     next_futures_session = (
                         overnight_contract
                         and daily_dt.date().toordinal() == quote_dt.date().toordinal() + 1
-                        and quote_dt.weekday() in {0, 1, 2, 3, 6}
-                        and quote_dt.hour >= 17
+                        and daily_dt.date() == _watchlist_quote_session_date(t, quote_dt)
                     )
                     daily_is_current = (
                         daily_dt.date() == quote_dt.date() or next_futures_session
@@ -2424,6 +2450,34 @@ async def _build_watchlist(requested_tickers: list[str] | None = None):
             )
             for ticker in delayed_tickers:
                 quotes[ticker]["quote_delayed"] = True
+            # Half-year weekly trend for the cards. Completed weeks are cached
+            # per symbol for hours, so a routine rebuild costs no extra request;
+            # a failure here only drops the optional field, never the quote.
+            try:
+                quote_dates = {
+                    ticker: _watchlist_quote_session_date(ticker, quote_dt)
+                    for ticker, quote_dt in quote_market_datetimes.items()
+                }
+                history = watchlist_six_month.cached_weekly_history(
+                    list(quotes),
+                    lambda symbols: watchlist_six_month.fetch_six_month_daily(
+                        symbols,
+                        download=yf_mod.download,
+                        market_timezone=_watchlist_market_timezone,
+                        session=session,
+                    ),
+                    quote_dates=quote_dates,
+                )
+                for ticker, weekly in history.items():
+                    trend = watchlist_six_month.compose_trend(
+                        weekly,
+                        price=quotes[ticker]["price"],
+                        quote_date=quote_dates[ticker],
+                    )
+                    if trend is not None:
+                        quotes[ticker]["trend_6m"] = trend
+            except Exception as exc:
+                logger.warning("Watchlist six-month trend failed (%s)", type(exc).__name__)
             return quotes, quote_times, delayed_tickers
         except Exception as exc:
             logger.warning("Watchlist quote refresh failed (%s)", type(exc).__name__)

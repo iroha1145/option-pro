@@ -19,6 +19,7 @@ import InfoHint from '@/components/shared/InfoHint';
 import Icon from '@/components/icons';
 import { SCORE_HINTS } from '@/lib/scoreHints';
 import { cn } from '@/lib/utils';
+import { DUR_SECTION, DUR_UI, EASE_PAPER, SPRING_POP } from '@/lib/motion';
 import { fmtLocaleDate, fmtLocaleDateTime } from '@/lib/format';
 import { t } from '../../i18n/core.ts';
 
@@ -53,7 +54,7 @@ function StageStepper({ stage }: { stage: number }) {
             <motion.span
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              transition={{ type: 'spring', stiffness: 520, damping: 32, delay: 0.15 + i * 0.1 }}
+              transition={{ ...SPRING_POP, delay: 0.15 + i * 0.1 }}
               className="flex flex-col items-center gap-1"
             >
               {current ? (
@@ -189,7 +190,7 @@ function CycleSummary({ cycle, compact = false }: { cycle: MarketFocusCycle; com
                   key={a.ticker}
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1], delay: 0.2 + i * 0.05 }}
+                  transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: 0.2 + Math.min(i * 0.05, 0.3) }}
                   className="flex min-w-0 flex-col gap-2 py-3 first:pt-0 last:pb-0"
                 >
                   <span className="flex min-w-0 flex-wrap items-center gap-2">
@@ -420,12 +421,8 @@ export default function FocusCycleCard({ refreshToken = 0, onDataRefreshed }: {
           <button
             onClick={() => setConfirmOpen(true)}
             disabled={busy}
-            className={cn(
-              'btn-primary',
-              busy
-                ? 'cursor-wait opacity-60'
-                : '',
-            )}
+            aria-busy={busy}
+            className="btn-primary"
           >
             {busy ? (
               <>
@@ -453,11 +450,11 @@ export default function FocusCycleCard({ refreshToken = 0, onDataRefreshed }: {
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: DUR_UI, ease: EASE_PAPER }}
             className="overflow-hidden"
           >
             <div className="mt-3 h-1 overflow-hidden rounded-pill bg-brand-100">
-              <div className="h-full rounded-pill bg-brand-600 transition-[width] duration-500" style={{ width: `${job.progress}%` }} />
+              <div className="h-full rounded-pill bg-brand-600 transition-[width] duration-ui" style={{ width: `${job.progress}%` }} />
             </div>
           </motion.div>
         )}
@@ -496,7 +493,7 @@ export default function FocusCycleCard({ refreshToken = 0, onDataRefreshed }: {
           <button
             onClick={() => setHistoryOpen((v) => !v)}
             aria-expanded={historyOpen}
-            className="flex min-h-10 w-full items-center justify-between gap-3 text-left text-caption text-ink-500 transition-colors hover:text-ink-800"
+            className="flex min-h-10 w-full items-center justify-between gap-3 text-left text-caption text-ink-500 transition-colors duration-fast hover:text-ink-800"
           >
             <span className="flex min-w-0 items-start gap-2">
               <Icon name="doc-quote" size={14} className="mt-0.5 shrink-0 text-ink-400" />
@@ -510,7 +507,7 @@ export default function FocusCycleCard({ refreshToken = 0, onDataRefreshed }: {
                 initial={{ height: 0, opacity: 0 }}
                 animate={{ height: 'auto', opacity: 1 }}
                 exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
+                transition={{ duration: DUR_UI, ease: EASE_PAPER }}
                 className="overflow-hidden"
               >
                 <div className="mt-3 rounded-lg bg-paper-2 p-4">

@@ -3,12 +3,14 @@
  * 10 桶直方图：grow-bar 错峰 + 均值标线 + ≥85 计数徽章
  */
 import { motion } from 'framer-motion';
+import { EASE_PAPER } from '@/lib/motion';
 import type { ApiError } from '@/api/client';
 import type { MarketStrength } from '@/api/types';
 import { cn } from '@/lib/utils';
 import { strengthBarClass } from '@/lib/strengthColor';
 import EmptyState from '@/components/shared/EmptyState';
 import { SkeletonCard } from '@/components/shared/Skeleton';
+import { BusyIcon } from '@/components/shared/IconSwap';
 import Icon from '@/components/icons';
 import { t } from '../../i18n/core.ts';
 
@@ -38,9 +40,10 @@ export default function BreadthHistogram({
             <button
               onClick={onRetry}
               disabled={refreshing}
-              className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105 disabled:opacity-60"
+              aria-busy={refreshing}
+              className="btn-primary"
             >
-              {refreshing && <span className="size-3.5 animate-spin rounded-full border-2 border-on-accent/40 border-t-on-accent" />}
+              <BusyIcon busy={refreshing} size={14} tone="on-accent" />
               {t('重试')}
             </button>
           }
@@ -88,7 +91,7 @@ export default function BreadthHistogram({
                   initial={{ scaleY: 0 }}
                   whileInView={{ scaleY: 1 }}
                   viewport={{ once: true, amount: 0.4 }}
-                  transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: i * 0.04 }}
+                  transition={{ duration: 0.7, ease: EASE_PAPER, delay: i * 0.04 }}
                   style={{ height: `${Math.max(4, (n / max) * 96)}px` }}
                   aria-label={t('强度 {lo}–{hi}：{n} 只', { lo: i * 10, hi: i === 9 ? 100 : i * 10 + 9, n })}
                 />

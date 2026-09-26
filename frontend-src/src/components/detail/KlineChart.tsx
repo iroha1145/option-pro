@@ -14,6 +14,7 @@ import { displayedQuoteLabel, preferLiveQuote } from '@/lib/liveQuotes';
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
+import { DUR_UI, EASE_PAPER } from '@/lib/motion';
 import ReactECharts from '@/components/charts/ReactECharts';
 import Segmented from '@/components/shared/Segmented';
 import MenuSelect from '@/components/shared/MenuSelect';
@@ -1107,7 +1108,7 @@ export default function KlineChart({
             <motion.div
               key={`${range}-${mode}`}
               initial={{ opacity: 0 }}
-              animate={{ opacity: 1, transition: { duration: 0.26, ease: [0.16, 1, 0.3, 1] } }}
+              animate={{ opacity: 1, transition: { duration: DUR_UI, ease: EASE_PAPER } }}
               className="absolute inset-0"
             >
               <ReactECharts

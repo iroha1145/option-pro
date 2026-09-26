@@ -6,6 +6,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
+import { SHARED_UI_STUBS } from './helpers/shared-ui-stubs.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const moduleSourcePath = path.resolve(here, '..', 'src', 'api', 'modules', 'earnings.ts');
@@ -85,6 +86,7 @@ function loadEarningsListComponent(translate = stubT) {
       || id === '@/components/shared/InfoHint'
       || id === '@/components/shared/SoftBadge'
     ) return stubComponent;
+    if (id in SHARED_UI_STUBS) return SHARED_UI_STUBS[id];
     throw new Error(`unexpected EarningsList dependency: ${id}`);
   };
   vm.runInNewContext(compiled, {
@@ -178,6 +180,7 @@ function loadNormalizer() {
     }
     if (id === '@/mocks/fixtures2') return {};
     if (id === '../../i18n/core.ts') return { t: stubT };
+    if (id in SHARED_UI_STUBS) return SHARED_UI_STUBS[id];
     throw new Error(`unexpected import: ${id}`);
   };
   vm.runInNewContext(compiled, { module, exports: module.exports, require });
@@ -248,6 +251,7 @@ function loadUpcomingMapper() {
     }
     if (id === '@/mocks/fixtures2') return {};
     if (id === '../../i18n/core.ts') return { t: stubT };
+    if (id in SHARED_UI_STUBS) return SHARED_UI_STUBS[id];
     throw new Error(`unexpected import: ${id}`);
   };
   vm.runInNewContext(compiled, { module, exports: module.exports, require });
@@ -394,6 +398,7 @@ test('财报日程不把缺失或未知时间伪装成盘前', () => {
     }
     if (id === '@/mocks/fixtures2') return {};
     if (id === '../../i18n/core.ts') return { t: stubT };
+    if (id in SHARED_UI_STUBS) return SHARED_UI_STUBS[id];
     throw new Error(`unexpected import: ${id}`);
   };
   vm.runInNewContext(compiled, { module, exports: module.exports, require });

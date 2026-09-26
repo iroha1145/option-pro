@@ -61,7 +61,7 @@ function StockNewsPanel({ ticker }: { ticker: string }) {
         action={
           <button
             onClick={() => newsQ.refresh()}
-            className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105"
+            className="btn-primary"
           >
             {t('重试')}
           </button>
@@ -103,7 +103,7 @@ function StockNewsPanel({ ticker }: { ticker: string }) {
           action={
             <Link
               to={`/catalysts?ticker=${encodeURIComponent(ticker)}`}
-              className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105"
+              className="btn-primary"
             >
               {t('去催化剂页浏览新闻流')}
             </Link>
@@ -117,7 +117,7 @@ function StockNewsPanel({ ticker }: { ticker: string }) {
             return (
               <li key={n.id} className="group py-3 first:pt-0">
                 <div className="flex items-start justify-between gap-3">
-                  <p className="min-w-0 flex-1 text-body-s leading-[20px] text-ink-800 transition-colors group-hover:text-brand-700">
+                  <p className="min-w-0 flex-1 text-body-s leading-[20px] text-ink-800 transition-colors duration-fast group-hover:text-brand-700">
                     {n.title}
                   </p>
                   <span className={cn('shrink-0 rounded-xs px-1.5 py-px text-micro font-medium', meta.cls)}>{meta.text}</span>
@@ -136,7 +136,7 @@ function StockNewsPanel({ ticker }: { ticker: string }) {
       <div className="mt-4 border-t border-line pt-3">
         <Link
           to={`/catalysts?ticker=${encodeURIComponent(ticker)}`}
-          className="inline-flex items-center gap-1.5 text-caption font-medium text-brand-600 transition-colors hover:text-brand-700"
+          className="inline-flex items-center gap-1.5 text-caption font-medium text-brand-600 transition-colors duration-fast hover:text-brand-700"
         >
           {t('更多相关新闻')}
           <Icon name="arrow-up-right" size={13} />

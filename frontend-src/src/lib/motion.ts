@@ -22,3 +22,10 @@ export const SPRING_INDICATOR: Transition = {
   damping: 24,
   mass: 1.2,
 };
+
+/**
+ * 小件弹出弹簧（浮层、徽标、行内卡片的出现）：高刚度、几乎不过冲，读作「利落
+ * 地到位」。此前 520/32 在七处各写一份（两处局部常量、五处内联），收口到这里。
+ * 与 beUI 的 SPRING_PRESS（500/30）同档；数值与价格类元素仍不用弹簧。
+ */
+export const SPRING_POP = { type: 'spring', stiffness: 520, damping: 32 } as const;

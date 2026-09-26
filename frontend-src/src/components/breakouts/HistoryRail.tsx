@@ -11,10 +11,11 @@ import { useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import type { ApiError } from '@/api/client';
 import { cn } from '@/lib/utils';
-import { EASE_PAPER } from '@/lib/motion';
+import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import { fmtNyDayKey, fmtNyHHmm, fmtPrice } from '@/lib/format';
 import EmptyState from '@/components/shared/EmptyState';
 import { SkeletonRows } from '@/components/shared/Skeleton';
+import Spinner from '@/components/shared/Spinner';
 import { LIFECYCLE_CN, LIFECYCLE_TONE, SETUP_CN } from './types';
 import type { BreakoutEventFull, LifecycleTone } from './types';
 import { getLocale, t } from '../../i18n/core.ts';
@@ -164,7 +165,7 @@ export default function HistoryRail({
             action={
               <button
                 onClick={onRetry}
-                className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105"
+                className="btn-primary"
               >
                 {t('重试')}
               </button>
@@ -178,7 +179,7 @@ export default function HistoryRail({
             action={
               <button
                 onClick={onRetry}
-                className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105"
+                className="btn-primary"
               >
                 {t('重新加载')}
               </button>
@@ -203,7 +204,7 @@ export default function HistoryRail({
                         /* 繁忙长列表：transform 字符串写法；stagger ≤30ms 且仅第一页入场，加载更多直接呈现 */
                         initial={i < PAGE ? { opacity: 0, transform: 'translateY(8px)' } : false}
                         animate={{ opacity: 1, transform: 'translateY(0px)' }}
-                        transition={{ duration: 0.36, ease: EASE_PAPER, delay: i < PAGE ? Math.min(i * 0.03, 0.36) : 0 }}
+                        transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: i < PAGE ? Math.min(i * 0.03, 0.36) : 0 }}
                       >
                         <div
                           role="button"
@@ -262,7 +263,7 @@ export default function HistoryRail({
                   disabled={loadingMore}
                   className="flex items-center gap-2 rounded-md border border-line bg-card px-3 py-1.5 text-caption font-medium text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:opacity-60"
                 >
-                  {loadingMore && <span className="size-3.5 animate-spin rounded-full border-2 border-brand-100 border-t-brand-600" />}
+                  {loadingMore && <Spinner size={14} tone="brand" />}
                   {t('加载更多')}
                   <span className="font-mono text-micro text-ink-400 tnum">{t('剩')} {events.length - visible} {t('条')}</span>
                 </button>
@@ -272,7 +273,7 @@ export default function HistoryRail({
                   disabled={loadingServerMore}
                   className="flex items-center gap-2 rounded-md border border-line bg-card px-3 py-1.5 text-caption font-medium text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:opacity-60"
                 >
-                  {loadingServerMore && <span className="size-3.5 animate-spin rounded-full border-2 border-brand-100 border-t-brand-600" />}
+                  {loadingServerMore && <Spinner size={14} tone="brand" />}
                   {t('继续读取更早事件')}
                 </button>
               ) : (

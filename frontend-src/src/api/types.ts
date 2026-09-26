@@ -59,6 +59,8 @@ export interface WatchlistItem {
   changePct: number | null;
   sparkline: number[];    // 兼容旧短图；线上为最多 7 个日线/最新报价点
   dailyTrend?: { date: string; close: number }[]; // 最多 30 个缓存日线，不拼接盘前盘后报价
+  /** 近半年周线（每个 ISO 周的最后收盘，拆股复权），末点是最新报价；最多 27 点。 */
+  sixMonthTrend?: { date: string; close: number }[];
   strengthScore: number | null;  // 0–100
   signals: Signal[];
   updatedAt: string;

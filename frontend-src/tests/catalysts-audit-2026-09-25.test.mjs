@@ -27,6 +27,7 @@ import { createReadBackoff } from '../src/components/catalysts/readBackoff.ts';
 import { normalizeNewsAnalysisProgress } from '../src/components/catalysts/analysisProgressContract.ts';
 import { remoteState } from '../src/hooks/remoteState.ts';
 import { setLocale } from '../src/i18n/testing.ts';
+import { SHARED_UI_STUBS } from './helpers/shared-ui-stubs.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const srcRoot = path.resolve(here, '../src');
@@ -111,6 +112,7 @@ function compile(rel, imports, globals = {}) {
     ...globals,
     require(id) {
       if (id in imports) return imports[id];
+      if (id in SHARED_UI_STUBS) return SHARED_UI_STUBS[id];
       throw new Error(`Unexpected import ${id} in ${rel}`);
     },
   });

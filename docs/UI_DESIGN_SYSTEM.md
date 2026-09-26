@@ -1,6 +1,6 @@
 # 界面与动效规范
 
-核验日期：2026-09-05。适用于研究概览、自选、筛选器、个股详情与移动端。本文说明共享组件的使用规则与验收标准；测试结果以本次审查报告为准。产品定位沿用根目录 `.impeccable.md`：冷静、清楚的市场研究工作台，持续说明行情时间、来源与降级状态。
+核验日期：2026-09-05（第 5 节于 2026-09-26 补充）。适用于研究概览、自选、筛选器、个股详情与移动端。本文说明共享组件的使用规则与验收标准；测试结果以本次审查报告为准。产品定位沿用根目录 `.impeccable.md`：冷静、清楚的市场研究工作台，持续说明行情时间、来源与降级状态。
 
 ## 1. 统一实现入口
 
@@ -16,6 +16,8 @@
 | 信息展示 | `DataTable`、`InsightCard`、`StatCard`、`SourceNote` | 信息结构和数据口径在页面间一致 |
 | 浮层与反馈 | `Drawer`、`ConfirmDialog`、`Toast`、`CommandPalette` | 统一焦点、关闭、背景滚动与状态表达 |
 | 加载与异常 | `SkeletonReveal`、`EmptyState`、`InlineFallback`、`StaleStrip` | 加载、空结果、错误和旧数据分别呈现 |
+| 按钮与进行中反馈 | `.btn-primary`、`.btn-primary.btn-sm`、`Spinner`、`BusyIcon` / `IconSwap`、`ThinkingLabel` | 主操作不再手写样式；请求在途用同格切换的加载圈，模型任务在途用扫光文字 |
+| 收放与高度变化 | `CollapsePresence`、`AutoHeight`、`MatrixLoader` | 条件内容用 grid 行收放，视图切换用高度补间，不用 framer 的 `height: auto` |
 
 源码注释中的历史 `design.md` 指向旧规范；后续变更以本文、`.impeccable.md` 与上述实际入口共同核对，避免引用不存在的设计文件。
 
@@ -121,6 +123,22 @@
 
 变更共享组件后至少验证桌面、手机与减少动态效果三种环境；对焦点、数据展示、异步状态有影响的变更补行为回归检查。截图只能证明外观，不能替代键盘与真实数据状态验证。
 
-## 5. 来源维护
+## 5. 2026-09-26 动效与按钮统一
+
+本轮在不改数据口径的前提下，把散落在页面里的按钮、加载圈与动效参数收口到共享入口，并补齐几种此前缺失的状态过渡。具体规则：
+
+- **主按钮**：实心主操作一律用 `.btn-primary`（44 像素高）或 `.btn-primary.btn-sm`（32 像素高，粗指针设备仍为 44 像素）。二者自带按下回缩、只在可悬停设备上生效的悬停色和统一的禁用透明度。请求在途的按钮加 `aria-busy`，禁用态保持可读、指针显示为进行中。不要再手写 `bg-brand-600 … hover:brightness-105`。
+- **加载圈与刷新反馈**：统一用 `Spinner`（`on-accent` / `brand` / `muted` 三种色调）。带图标的刷新、重试按钮用 `BusyIcon`：图标与加载圈叠在同一格里交叉淡换（transitions.dev 09），按钮宽度与文字位置不变，请求在途期间持续转动。不再使用只转一圈的 `animate-spin-once`。
+- **模型相关按钮**：不再使用 `bg-ai-600` 实心青块。列表里每行都有的入口（财报列表「AI 影响」、新闻流的分析入口）用 `.control-button.ai-action`：白底发丝边、青瓷色图标，只在悬停时上浅青；该行已有分析结果可看时加 `.is-ready`，用浅青底标出。面板里单个的发起操作（生成分析、开始分析、确认弹窗）用 `.btn-ai`：浅青底、青瓷字、细边。仅图标的按钮加 `.btn-icon`。AI 结论卡片不加顶部或侧边的装饰色条；引文段落左侧的引用线属于排版，保留。
+- **模型任务在途**：状态文字用 `ThinkingLabel` 扫光（transitions.dev 15，beautifului ThinkingState 同一手法），文字作为子节点传入；只有任务确实在跑时扫光，暂停、待确认、已请求取消保持静止。
+- **状态型按钮**：加入/移出自选这类三态按钮参照 beUI button-stateful 的节奏：空闲图标 → 加载圈 → 成功勾（transitions.dev 10 描边出现），三者共用一个图标格。`IconSwap` 可以嵌套，内层靠子选择器适配保持自己的状态。
+- **收放与高度**：条件渲染的展开内容用 `CollapsePresence`（transitions.dev 21 的 grid 行 0fr↔1fr，收起播完再卸载，展开到位后放开裁剪与滤镜）；两种视图之间切换用 `AutoHeight`（transitions.dev 01）补间容器高度，新视图按 key 重挂后淡入。不要再用 `AnimatePresence mode="wait"` 加 `height: 0 ↔ auto`：它先收成 0 再撑开，帧循环被节流时还会卡在旧视图。
+- **空状态与分包占位**：`EmptyState` 按插画、标题、说明、操作逐行浮现（transitions.dev 18 的关键帧版，40 毫秒一档）；路由分包占位用 `MatrixLoader` 点阵（transitions.dev 31），比转圈安静。
+- **悬停与按压**：Tailwind 已开启 `future.hoverOnlyWhenSupported`，所有 `hover:` / `group-hover:` 工具类只在「可悬停的精确指针」下生成，与 `index.css` 手写规则的媒体查询同一口径，触屏点按后不再粘住悬停态。`.control-button` 按下回缩到 0.97（beautifului 表格芯片、beUI 按钮的按压反馈）。桌面主导航增加悬停浅底滑块（beUI shared-layout-bg），位置由 `placeGlide` 写入。
+- **动效参数**：Framer Motion 一律引用 `lib/motion.ts` 的 `EASE_PAPER`、`DUR_FAST` / `DUR_UI` / `DUR_SECTION`、`SPRING_POP`、`SPRING_INDICATOR`，按用途而不是按最近的数字取档；0.7 秒以上的条形增长、仪表扫动保留原值。CSS 侧引用 `transitions-root.css` 的令牌。键盘驱动的高亮（命令面板）用 quick 档（150 毫秒），跟得上方向键连按。
+- **热力色阶**：`heatColor(pct, span)` 的色阶两端按展示口径定：日内涨跌 ±3%，板块 1 / 3 / 6 个月收益分别 ±6% / ±12% / ±18%。中点随冷灰纸面，夜间的半程色单独一套，从深灰逐步加深。板块砖入场改为自左上角铺开的对角波（beUI heat-calendar、rareui github-activity 的错落节奏），总时长封顶约 0.6 秒。
+- **测试镜子**：沙箱编译组件的测试对未声明依赖一律报错。组件新增上述共享依赖时，在 `frontend-src/tests/helpers/shared-ui-stubs.mjs` 补桩（令牌用真实模块，展示件桩成元素类型并保留子节点文字），不要在各测试里各抄一份。
+
+## 6. 来源维护
 
 许可与核验版本记录见根目录 `THIRD_PARTY_NOTICES.md`。上游提交号表示本次审查参考的版本，并不反推历史代码的原始复制版本。复制源码时保留完整许可，记录适配点；设计借鉴与直接复制代码分别说明。不得把样例交互、虚构数据、付费图标或新的远程资源直接带入产品。

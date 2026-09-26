@@ -5,6 +5,7 @@
  */
 import { useId, useState } from 'react';
 import { motion } from 'framer-motion';
+import { SPRING_POP } from '@/lib/motion';
 import type { MarketStrength, StrengthProfile } from '@/api/types';
 import { cn } from '@/lib/utils';
 import Icon from '@/components/icons';
@@ -13,8 +14,6 @@ import SourceNote from '@/components/shared/SourceNote';
 import { SCORE_HINTS } from '@/lib/scoreHints';
 import { SUBSCORE_META, type Tier, type TierFilter } from './types';
 import { t as __t } from '../../i18n/core.ts';
-
-const SPRING_POP = { type: 'spring', stiffness: 520, damping: 32 } as const;
 
 const TIERS: Tier[] = ['S', 'A', 'B', 'C', 'D'];
 
@@ -166,7 +165,7 @@ export function MethodCard({
                 {onRetry && (
                   <button
                     onClick={onRetry}
-                    className="mt-2 flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 text-caption text-ink-600 shadow-btn transition-colors hover:border-brand-400 hover:text-brand-600"
+                    className="mt-2 flex items-center gap-1.5 rounded-md border border-line px-2.5 py-1 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
                   >
                     <Icon name="refresh" size={12} />
                     {__t('重试')}

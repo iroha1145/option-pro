@@ -48,6 +48,7 @@ import EmptyState from '@/components/shared/EmptyState';
 import { SkeletonBlock, SkeletonCard, SkeletonRows } from '@/components/shared/Skeleton';
 import Sparkline from '@/components/charts/Sparkline';
 import Icon from '@/components/icons';
+import { BusyIcon } from '@/components/shared/IconSwap';
 import { pageRegionProps } from '@/lib/pageRegion';
 import { localeTag, t } from '../i18n/core.ts';
 
@@ -75,9 +76,10 @@ function RetryButton({ onClick, refreshing }: { onClick: () => void; refreshing:
     <button
       onClick={onClick}
       disabled={refreshing}
+      aria-busy={refreshing}
       className="btn-primary"
     >
-      {refreshing && <span className="size-3.5 animate-spin rounded-full border-2 border-on-accent/40 border-t-on-accent" />}
+      <BusyIcon busy={refreshing} size={14} tone="on-accent" />
       {t('重试')}
     </button>
   );

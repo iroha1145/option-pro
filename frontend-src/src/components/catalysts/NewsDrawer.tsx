@@ -8,6 +8,8 @@ import { useAccess } from '@/hooks/useAccess';
 import { useToast } from '@/hooks/useToast';
 import { useShell } from '@/hooks/useShell';
 import { SkeletonBlock, SkeletonText } from '@/components/shared/Skeleton';
+import ThinkingLabel from '@/components/shared/ThinkingLabel';
+import { DUR_SECTION, DUR_UI, EASE_PAPER } from '@/lib/motion';
 import SoftBadge from '@/components/shared/SoftBadge';
 import { fmtLocaleDateTime, fmtLocaleTime } from '@/lib/format';
 import { getQueryPrincipalGeneration } from '@/api/queryRegistry';
@@ -46,7 +48,7 @@ function StockImpactCard({ imp, index }: { imp: TrustedStockImpact; index: numbe
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1], delay: 0.08 + index * 0.05 }}
+      transition={{ duration: DUR_SECTION, ease: EASE_PAPER, delay: Math.min(0.08 + index * 0.05, 0.3) }}
       className="rounded-md border border-line bg-card-warm/60 p-3"
     >
       <div className="flex flex-wrap items-center gap-2">
@@ -72,7 +74,9 @@ function JobStepper({ job }: { job: NewsAnalysisJob }) {
     <div className="rounded-sm border border-line bg-card px-3 py-2.5">
       <div className="flex min-w-0 items-center gap-2">
         <Led tone="brand" pulse={job.status === 'in_progress'} />
-        <p className="truncate text-body-s font-medium text-ink-700">{label}</p>
+        <p className="truncate text-body-s font-medium text-ink-700">
+          <ThinkingLabel live={!job.cancelRequested && job.status === 'in_progress'}>{label}</ThinkingLabel>
+        </p>
         {/* 任务查询接口不提供进度，只有明确给出百分比时才显示，没有就不占位。 */}
         {job.progress !== null && (
           <span className="ml-auto shrink-0 font-mono text-micro text-ink-400 tnum">
@@ -83,7 +87,7 @@ function JobStepper({ job }: { job: NewsAnalysisJob }) {
       {job.progress !== null && (
         <div className="mt-2 h-1 overflow-hidden rounded-pill bg-brand-100">
           <div
-            className="h-full w-full origin-left rounded-pill bg-brand-600 transition-transform duration-500 motion-reduce:transition-none"
+            className="h-full w-full origin-left rounded-pill bg-brand-600 transition-transform duration-ui ease-paper motion-reduce:transition-none"
             style={{ transform: `scaleX(${job.progress / 100})` }}
           />
         </div>
@@ -662,7 +666,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
               href={item.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="ml-auto inline-flex items-center gap-1 text-micro text-brand-600 transition-colors hover:text-brand-500"
+              className="ml-auto inline-flex items-center gap-1 text-micro text-brand-600 transition-colors duration-fast hover:text-brand-500"
             >
               {__t('原文')}
               <Icon name="external" size={12} />
@@ -722,7 +726,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: 'auto', opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
+                  transition={{ duration: DUR_UI, ease: EASE_PAPER }}
                   className="overflow-hidden"
                 >
                   <div className="mt-4">
@@ -730,7 +734,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
                     {isOwner && job.cancellable && (
                       <button
                         onClick={() => setConfirm('cancel')}
-                        className="mt-3 rounded-md border border-line bg-card px-3 py-1.5 text-caption text-ink-500 shadow-btn transition-colors hover:border-down-600/40 hover:text-down-700"
+                        className="mt-3 rounded-md border border-line bg-card px-3 py-1.5 text-caption text-ink-500 shadow-btn transition-colors duration-fast hover:border-down-600/40 hover:text-down-700"
                       >
                         {__t('取消任务')}
                       </button>
@@ -745,7 +749,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+                transition={{ duration: DUR_SECTION, ease: EASE_PAPER }}
                 className="mt-4"
               >
                 <div className="flex flex-wrap items-center gap-2.5">
@@ -800,7 +804,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
                     {((item.analysisStatus === 'pending' && !showCancelled) || jobMissing) && (
                       <button
                         onClick={() => setConfirm('create')}
-                        className="flex items-center gap-1.5 rounded-md bg-ai-600 px-3.5 py-2 text-caption font-medium text-on-accent shadow-btn transition-[filter] hover:brightness-105"
+                        className="btn-ai"
                       >
                         <AnalysisIcon size={13} />
                         {__t('生成 AI 分析')}
@@ -809,7 +813,7 @@ export default function NewsDrawer({ newsId, seed = null, onClose, onUpdate }: N
                     {(showCompleted || showFailed || showInsufficient || showCancelled) && (
                       <button
                         onClick={() => setConfirm('force')}
-                        className="flex items-center gap-1.5 rounded-md bg-ai-600 px-3.5 py-2 text-caption font-medium text-on-accent shadow-btn transition-[filter] hover:brightness-105"
+                        className="control-button ai-action"
                       >
                         <Icon name="refresh" size={13} />
                         {showFailed || showInsufficient || showCancelled ? __t('重试分析（强制）') : __t('重新分析（强制）')}

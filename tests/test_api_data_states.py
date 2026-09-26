@@ -982,8 +982,8 @@ def test_targeted_watchlist_uses_normalized_tickers_without_provider_fetches(mon
 def test_targeted_watchlist_downloads_only_requested_tickers(monkeypatch):
     captured = []
 
-    def fake_download(*, tickers, interval, **_kwargs):
-        captured.append((tickers, interval))
+    def fake_download(*, tickers, interval, period, **_kwargs):
+        captured.append((tickers, interval, period))
         columns = pd.MultiIndex.from_tuples([
             ("AAPL", "Close"),
             ("MSFT", "Close"),
@@ -1024,9 +1024,11 @@ def test_targeted_watchlist_downloads_only_requested_tickers(monkeypatch):
         for item in group["stocks"]
     ]
 
+    # 报价两次（7 日日线 + 5 分钟最新价），半年周线走势一次，都只取请求的代码。
     assert captured == [
-        ("AAPL MSFT ES=F", "1d"),
-        ("AAPL MSFT ES=F", "5m"),
+        ("AAPL MSFT ES=F", "1d", "7d"),
+        ("AAPL MSFT ES=F", "5m", "1d"),
+        ("AAPL MSFT ES=F", "1d", "6mo"),
     ]
     assert sorted(returned) == ["AAPL", "ES=F", "MSFT"]
     assert len(returned) == len(set(returned))
@@ -1376,6 +1378,10 @@ def test_watchlist_treats_sunday_futures_quote_as_monday_daily_session(monkeypat
     assert item["price"] == 5_550.0
     assert item["change"] == 25.0
     assert item["spark"] == [5_500.0, 5_550.0]
+    assert item["trend_6m"]["points"] == [
+        {"date": "2026-07-10", "close": 5_500.0},
+        {"date": "2026-07-13", "close": 5_550.0},
+    ]
     assert item["quote_session"] == "exchange_session"
     assert item["previous_close_source"] == "provider_metadata"
     assert payload["source_status"] == "active"

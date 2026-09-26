@@ -27,9 +27,11 @@ import { useAccess } from '@/hooks/useAccess';
 import { useToast } from '@/hooks/useToast';
 import { useShell } from '@/hooks/useShell';
 import { cn } from '@/lib/utils';
+import { DUR_FAST, DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import Icon from '@/components/icons';
 import SourceNote from '@/components/shared/SourceNote';
 import { SkeletonText } from '@/components/shared/Skeleton';
+import ThinkingLabel from '@/components/shared/ThinkingLabel';
 import PulseDot from './PulseDot';
 import type { EarningsRow } from './types';
 import { exNum } from './types';
@@ -164,7 +166,7 @@ function QuotedSummary({ text, onOpenTicker }: { text: string; onOpenTicker: (t:
             <button
               key={i}
               onClick={() => onOpenTicker(p.slice(1))}
-              className="font-semibold text-brand-600 underline decoration-brand-400/50 decoration-dotted underline-offset-4 transition-colors hover:text-brand-700"
+              className="font-semibold text-brand-600 underline decoration-brand-400/50 decoration-dotted underline-offset-4 transition-colors duration-fast hover:text-brand-700"
               aria-label={__t('查看 {name} 详情', { name: p.slice(1) })}
             >
               {p}
@@ -436,7 +438,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
       <button
         type="button"
         onClick={resumePolling}
-        className="mt-2 flex h-8 items-center gap-1.5 rounded-md border border-line bg-card px-3 text-caption font-medium text-ink-600 shadow-btn transition-colors hover:text-ink-800"
+        className="mt-2 flex h-8 items-center gap-1.5 rounded-md border border-line bg-card px-3 text-caption font-medium text-ink-600 shadow-btn transition-colors duration-fast hover:text-ink-800"
       >
         <Icon name="refresh" size={13} />
         {__t('重新查询')}
@@ -508,15 +510,13 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
 
   return (
     <aside className={cn('card-surface self-start overflow-hidden', className)} aria-label={__t("AI 影响分析")}>
-      {/* 顶边 2px ai-600 标识条 */}
-      <div className="h-0.5 bg-ai-600" aria-hidden="true" />
       <AnimatePresence mode="wait">
         <motion.div
           key={`${ticker ?? 'none'}-${phase === 'ready' ? 'ready' : 'state'}`}
           initial={{ opacity: 0, filter: 'blur(6px)' }}
           animate={{ opacity: 1, filter: 'blur(0px)' }}
-          exit={{ opacity: 0, transition: { duration: 0.16 } }}
-          transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+          exit={{ opacity: 0, transition: { duration: DUR_FAST } }}
+          transition={{ duration: DUR_SECTION, ease: EASE_PAPER }}
           className="p-5"
         >
           {/* ---------- 未选标的 ---------- */}
@@ -638,14 +638,14 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
                     <button
                       onClick={() => void startJob()}
                       disabled={submitting}
-                      className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md bg-ai-600 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105 disabled:cursor-wait disabled:opacity-60"
+                      className="btn-ai flex-1"
                     >
                       <AnalysisIcon size={13} />
                       {submitting ? __t('正在提交…') : __t('生成分析')}
                     </button>
                     <button
                       onClick={() => setConfirming(false)}
-                      className="h-8 rounded-md border border-line bg-card px-3 text-caption text-ink-500 shadow-btn transition-colors hover:text-ink-800"
+                      className="control-button"
                     >
                       {__t('取消')}
                     </button>
@@ -654,7 +654,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
               ) : (
                 <button
                   onClick={() => setConfirming(true)}
-                  className="mt-4 flex h-9 items-center gap-2 rounded-md bg-ai-600 px-4 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105"
+                  className="btn-ai mt-4"
                 >
                   <AnalysisIcon size={14} />
                   {__t('生成分析')}
@@ -670,9 +670,11 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
                 <PulseDot className="bg-ai-600" size={8} />
                 <h3 className="text-h3 text-ink-800">{__t('正在分析 ·')} {ticker}</h3>
                 <span className="ml-auto font-mono text-micro text-ai-600 tnum">
-                  {['queued', 'pending', 'preparing'].includes(normalizedStage(analysis.status))
-                    ? __t('排队中')
-                    : __t('正在生成分析')}
+                  <ThinkingLabel live={!pollPaused}>
+                    {['queued', 'pending', 'preparing'].includes(normalizedStage(analysis.status))
+                      ? __t('排队中')
+                      : __t('正在生成分析')}
+                  </ThinkingLabel>
                 </span>
               </div>
               <div className="mt-5">
@@ -706,7 +708,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
               )}
               <button
                 onClick={() => setPhase('needs-analysis')}
-                className="mt-3 flex h-8 items-center gap-1.5 rounded-md bg-ai-600 px-3 text-caption font-medium text-on-accent shadow-btn transition-[filter] hover:brightness-105"
+                className="control-button mt-3"
               >
                 <Icon name="refresh" size={13} />
                 {__t('重试')}
@@ -728,7 +730,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
                   setPhase('loading');
                   void loadImpact(ticker);
                 }}
-                className="mt-4 flex h-8 items-center gap-1.5 rounded-md bg-ai-600 px-3.5 text-caption font-medium text-on-accent shadow-btn transition-[filter] hover:brightness-105"
+                className="control-button mt-4"
               >
                 <Icon name="refresh" size={13} />
                 {__t('重试')}
@@ -818,7 +820,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
                         key={`${item.ticker}-${item.relation}`}
                         onClick={() => openTicker(item.ticker)}
                         aria-label={__t('查看 {ticker}：{label}', { ticker: item.ticker, label: meta.label })}
-                        className="w-full rounded-md border border-line bg-card-warm p-3 text-left transition-colors hover:border-brand-400/50 hover:bg-card"
+                        className="w-full rounded-md border border-line bg-card-warm p-3 text-left transition-colors duration-fast hover:border-brand-400/50 hover:bg-card"
                       >
                         <span className="flex min-w-0 items-center gap-2">
                           <span className="font-mono text-caption font-semibold text-ink-900">${item.ticker}</span>
@@ -849,7 +851,7 @@ function Section({ children }: { children: ReactNode }) {
     <motion.section
       variants={{
         hidden: { opacity: 0, y: 10 },
-        show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.16, 1, 0.3, 1] } },
+        show: { opacity: 1, y: 0, transition: { duration: DUR_SECTION, ease: EASE_PAPER } },
       }}
       className="border-b border-line pb-4 pt-4 first:pt-0 last:border-b-0 last:pb-0"
     >

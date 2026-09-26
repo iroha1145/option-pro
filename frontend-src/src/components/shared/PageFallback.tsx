@@ -13,6 +13,7 @@
  * **只用于路由级 Suspense。** 抽屉、面板等局部占位不要复用整屏高度，
  * 否则会先撑出空白并多出一条没必要的滚动条。
  */
+import MatrixLoader from '@/components/shared/MatrixLoader';
 import { t } from '../../i18n/core.ts';
 export default function PageFallback() {
   return (
@@ -21,11 +22,12 @@ export default function PageFallback() {
       role="status"
       aria-label={t("页面加载中")}
     >
-      <span
-        className="size-5 animate-spin rounded-full border-2 border-line border-t-brand-600"
-        aria-hidden="true"
-      />
-      <span className="ml-2.5 text-caption text-ink-400">{t('加载中…')}</span>
+      {/* transitions.dev 31 点阵扫描：分包通常几百毫秒就到，转圈在这个时长里
+          只会一闪而过、显得焦躁；点阵是「纸面终端」语汇里更安静的等待信号。 */}
+      <span className="flex items-center">
+        <MatrixLoader variant="scan" />
+      </span>
+      <span className="ml-2.5 font-mono text-caption text-ink-400">{t('加载中…')}</span>
     </div>
   );
 }

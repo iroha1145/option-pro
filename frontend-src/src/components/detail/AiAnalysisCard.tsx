@@ -9,11 +9,13 @@ import { Link } from 'react-router';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAccess } from '@/hooks/useAccess';
 import Icon from '@/components/icons';
+import { DUR_UI, EASE_PAPER } from '@/lib/motion';
 import { createSignalAnalysisJob } from './api';
 import { useAiJob } from './useAiJob';
 import { aiJobBlockedMessage, aiJobResultSummary } from '@/api/modules/ai-jobs';
 import { aiJobDeferralMessage, aiJobErrorMessage } from '@/api/aiJobNormalize';
 import { isIndexSymbol } from '@/lib/quoteSymbol';
+import ThinkingLabel from '@/components/shared/ThinkingLabel';
 import { t } from '../../i18n/core.ts';
 
 export default function AiAnalysisCard({ ticker }: { ticker: string }) {
@@ -41,7 +43,7 @@ export default function AiAnalysisCard({ ticker }: { ticker: string }) {
         {isOwner && !job && !starting && !confirming && (
           <button
             onClick={() => setConfirming(true)}
-            className="rounded-md bg-ai-600 px-3 py-1.5 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] duration-fast hover:brightness-105 active:brightness-95"
+            className="btn-ai"
           >
             {t('开始分析')}
           </button>
@@ -71,7 +73,7 @@ export default function AiAnalysisCard({ ticker }: { ticker: string }) {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: DUR_UI, ease: EASE_PAPER }}
             className="overflow-hidden"
           >
             <div className="mt-3 rounded-md bg-ai-50 px-3 py-2.5">
@@ -87,13 +89,13 @@ export default function AiAnalysisCard({ ticker }: { ticker: string }) {
                     void start(() => createSignalAnalysisJob(ticker));
                   }}
                   disabled={starting}
-                  className="rounded-md bg-ai-600 px-3 py-1.5 text-caption font-medium text-on-accent shadow-btn-hi hover:brightness-105 disabled:cursor-wait disabled:opacity-60"
+                  className="btn-ai"
                 >
                   {t('开始分析')}
                 </button>
                 <button
                   onClick={() => setConfirming(false)}
-                  className="rounded-md border border-line-strong bg-card px-3 py-1.5 text-caption text-ink-600 shadow-btn hover:bg-paper-2"
+                  className="control-button"
                 >
                   {t('取消')}
                 </button>
@@ -108,20 +110,22 @@ export default function AiAnalysisCard({ ticker }: { ticker: string }) {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: DUR_UI, ease: EASE_PAPER }}
             className="overflow-hidden"
           >
             <div className="mt-3">
               <div className="flex items-center justify-between text-caption text-ink-500">
                 <span className="flex items-center gap-1.5">
                   <span className="size-1.5 animate-led-pulse rounded-full bg-ai-600" aria-hidden="true" />
-                  {queryIssue === 'paused' || queryIssue === 'blocked' ? t('任务状态待确认') : job.cancelRequested
-                    ? t('已请求取消')
-                    : job.status === 'queued'
-                      ? t('排队中…')
-                      : job.progress === null
-                        ? t('模型分析中…')
-                        : t('模型分析中 {pct}%', { pct: Math.round(job.progress) })}
+                  <ThinkingLabel live={!(queryIssue === 'paused' || queryIssue === 'blocked' || job.cancelRequested)}>
+                    {queryIssue === 'paused' || queryIssue === 'blocked' ? t('任务状态待确认') : job.cancelRequested
+                      ? t('已请求取消')
+                      : job.status === 'queued'
+                        ? t('排队中…')
+                        : job.progress === null
+                          ? t('模型分析中…')
+                          : t('模型分析中 {pct}%', { pct: Math.round(job.progress) })}
+                  </ThinkingLabel>
                 </span>
                 <button
                   onClick={() => void cancel()}
@@ -152,7 +156,7 @@ export default function AiAnalysisCard({ ticker }: { ticker: string }) {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: DUR_UI, ease: EASE_PAPER }}
             className="overflow-hidden"
           >
             <div className="mt-3 rounded-md border border-ai-600/25 bg-ai-50 px-3.5 py-3">

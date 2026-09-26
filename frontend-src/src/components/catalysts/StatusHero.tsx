@@ -11,7 +11,7 @@ import SoftBadge from '@/components/shared/SoftBadge';
 import { SkeletonBlock } from '@/components/shared/Skeleton';
 import { fmtRelative } from '@/lib/format';
 import { afterLoadIdle } from '@/lib/afterLoadIdle';
-import { DUR_SECTION } from '@/lib/motion';
+import { DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import Icon from '@/components/icons';
 import { t } from '../../i18n/core.ts';
@@ -86,7 +86,7 @@ export default function StatusHero({ refreshToken = 0, feedSettled = false }: { 
     <motion.section
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: DUR_SECTION, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: DUR_SECTION, ease: EASE_PAPER }}
       aria-label={t("数据源状态")}
       className="card-surface mt-6"
     >

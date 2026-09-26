@@ -25,7 +25,7 @@ import { useAccess } from '@/hooks/useAccess';
 import { useToast } from '@/hooks/useToast';
 import { useShell } from '@/hooks/useShell';
 import { cn } from '@/lib/utils';
-import { EASE_PAPER } from '@/lib/motion';
+import { DUR_FAST, DUR_SECTION, EASE_PAPER } from '@/lib/motion';
 import { fmtCompact, fmtLocaleDateTime, fmtTimeHHMMSS } from '@/lib/format';
 import {
   MACRO_SHADOW_HINT,
@@ -34,6 +34,8 @@ import {
   type MacroTone,
 } from '@/lib/macroFit';
 import Icon from '@/components/icons';
+import { BusyIcon } from '@/components/shared/IconSwap';
+import Spinner from '@/components/shared/Spinner';
 import PageHeader from '@/components/shared/PageHeader';
 import Segmented from '@/components/shared/Segmented';
 import FilterButton from '@/components/shared/FilterButton';
@@ -886,7 +888,7 @@ export default function Screener() {
                 title={__t("重新计算强度评分（需管理员登录）")}
                 className="flex h-9 items-center gap-2 rounded-md border border-line bg-card px-3 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <Icon name="refresh" size={15} className={refreshingStrength ? 'animate-spin-once' : ''} />
+                <BusyIcon busy={refreshingStrength} size={15} tone="brand" />
                 {__t('刷新强度分')}
               </button>
             )}
@@ -937,7 +939,7 @@ export default function Screener() {
           <div className="flex min-h-10 flex-wrap items-center gap-x-3 gap-y-2">
             {scanState === 'scanning' ? (
               <span className="flex items-center gap-2 text-body-s text-ink-500">
-                <span className="size-3.5 animate-spin rounded-full border-2 border-brand-600/25 border-t-brand-600" aria-hidden="true" />
+                <Spinner size={14} tone="brand" />
                 {__t('正在扫描…')}
                 {scanPhase === 'queued' ? ` · ${__t('排队中')}` : ''}
                 {scanPhase === 'running' ? ` · ${__t('后台计算中')}` : ''}
@@ -995,7 +997,7 @@ export default function Screener() {
                 )}
                 {preparingCatalystSort && (
                   <SoftBadge>
-                    <span className="size-2.5 animate-spin rounded-full border-[1.5px] border-brand-600/25 border-t-brand-600" aria-hidden="true" />
+                    <Spinner size={10} tone="brand" />
                     {__t('正在准备排序数据 · 剩余')} {missingCatalystTickers.length}
                   </SoftBadge>
                 )}
@@ -1024,7 +1026,7 @@ export default function Screener() {
                     className="gap-1"
                   >
                     {c.label}
-                    <button onClick={c.onRemove} aria-label={__t('移除条件 {label}', { label: c.label })} className="text-ink-300 transition-colors hover:text-down-600">
+                    <button onClick={c.onRemove} aria-label={__t('移除条件 {label}', { label: c.label })} className="text-ink-300 transition-colors duration-fast hover:text-down-600">
                       <Icon name="x" size={10} />
                     </button>
                   </SoftBadge>
@@ -1108,7 +1110,7 @@ export default function Screener() {
                     <div className="flex flex-col items-center gap-3">
                       <button
                         onClick={onScanClick}
-                        className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105"
+                        className="btn-primary"
                       >
                         <Icon name="crosshair" size={14} />
                         {__t('开始扫描')}
@@ -1164,7 +1166,7 @@ export default function Screener() {
                     action={
                       <button
                         onClick={onScanRetry}
-                        className="flex items-center gap-2 rounded-md bg-brand-600 px-4 py-2 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105"
+                        className="btn-primary"
                       >
                         {__t('重试')}
                       </button>
@@ -1313,7 +1315,7 @@ export default function Screener() {
               <p className="mt-3 text-body-s text-ink-500">{marketQ.error.code === 503 ? __t('数据暂不可用 · 稍后刷新再试') : marketQ.error.message}</p>
               <button
                 onClick={() => marketQ.refresh()}
-                className="mt-3 flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-caption text-ink-600 shadow-btn transition-colors hover:border-brand-400 hover:text-brand-600"
+                className="mt-3 flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600"
               >
                 <Icon name="refresh" size={13} />
                 {__t('重试')}
@@ -1336,15 +1338,15 @@ export default function Screener() {
                 key="relax"
                 initial={{ opacity: 0, y: 14 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, transition: { duration: 0.16 } }}
-                transition={{ duration: 0.48, ease: EASE_PAPER }}
+                exit={{ opacity: 0, transition: { duration: DUR_FAST } }}
+                transition={{ duration: DUR_SECTION, ease: EASE_PAPER }}
                 className="card-surface p-5"
               >
                 <p className="eyebrow">{__t('调整筛选条件')}</p>
                 <p className="mt-2.5 text-body-s text-ink-500">{__t('暂无股票符合当前条件。')}</p>
                 <button
                   onClick={() => patchApplied({ tier: 'all', minScore: null, presetId: null })}
-                  className="mt-3 flex items-center gap-1.5 rounded-md bg-brand-600 px-3 py-1.5 text-caption font-medium text-on-accent shadow-btn-hi transition-[filter] hover:brightness-105"
+                  className="btn-primary btn-sm"
                 >
                   <Icon name="filter-funnel" size={13} />
                   {__t('放宽一档试试')}
@@ -1440,7 +1442,7 @@ function PagerButton({ label, disabled, onClick }: { label: string; disabled: bo
     <button
       onClick={onClick}
       disabled={disabled}
-      className="flex min-h-11 min-w-11 items-center rounded-md border border-line bg-card px-3 text-caption text-ink-600 shadow-btn transition-colors hover:border-brand-400 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-40"
+      className="flex min-h-11 min-w-11 items-center rounded-md border border-line bg-card px-3 text-caption text-ink-600 shadow-btn transition-colors duration-fast hover:border-brand-400 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-40"
     >
       {label}
     </button>

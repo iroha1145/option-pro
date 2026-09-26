@@ -89,6 +89,20 @@ at runtime, and no paid assets or Pro components are included by this review.
 | [Transitions.dev](https://transitions.dev/) / [Jakubantalik/transitions.dev](https://github.com/Jakubantalik/transitions.dev) | `74e572345d809f981250938208bd991314c2e780` | Existing CSS motion tokens and transition recipes, with project-specific orchestration and styling | Transition usage terms, described below |
 | [shadcn/ui](https://ui.shadcn.com/) / [shadcn-ui/ui](https://github.com/shadcn-ui/ui) | `7c9eaba1c0a6404c990c144a654792e3313c650d` | Semantic theme mapping and adapted Select composition using Radix Select, including its portal, item and focus behavior | MIT; copyright (c) 2023 shadcn |
 
+A follow-up review on 2026-09-26 (UI and motion refresh) consulted these later
+commits: Beautiful UI `44a274e598395ab61e7c96c26fda2758780253b7` (ThinkingState
+and StreamingText shimmer, table chip press feedback), beUI
+`f7348d42f75df5fe2a6c7fc80134e79bb23991cb` (button-stateful state rhythm,
+shared-layout-bg hover glide, command-palette highlight timing, heat-calendar
+diagonal stagger), Rare UI `d106e01c09854138b3070d8caf0036b7ef8596e9`
+(github-activity column stagger), shadcn/ui
+`98a1fe67b439324ddc857f47fbdce056600a4329` (Button size variants, Spinner) and
+Transitions.dev `e2d5551656e4d3274e075d1cbd9a95af50f53225`. Only the
+Transitions.dev icon-swap, success-check, shimmer-text, card-resize,
+texts-reveal and matrix-loader recipes were copied into
+`frontend-src/src/styles/transitions-catalog.css`; the other sources were used as
+design patterns and parameters, without vendoring component source.
+
 ### MIT-licensed interface references
 
 The following MIT terms apply separately to the Beautiful UI, beUI, Rare UI and

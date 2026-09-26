@@ -22,7 +22,9 @@ import { resetMarketReadPrefixes } from '@/api/marketRead';
 import { bumpAlgorithmViewGeneration } from '@/lib/algorithmView';
 import { Led } from './bits';
 import Icon from '@/components/icons';
+import Spinner from '@/components/shared/Spinner';
 import { cn } from '@/lib/utils';
+import { DUR_UI, EASE_PAPER } from '@/lib/motion';
 import Segmented from '@/components/shared/Segmented';
 import Switch from '@/components/shared/Switch';
 import { fmtRelative } from '@/lib/format';
@@ -83,7 +85,7 @@ function ActionButton({ label, busy, onClick }: { label: string; busy: boolean; 
           : 'border-line bg-card text-ink-600 hover:border-brand-400 hover:text-brand-600',
       )}
     >
-      {busy ? <span className="size-3 animate-spin rounded-full border-2 border-brand-100 border-t-brand-600" aria-hidden="true" /> : <Icon name="refresh" size={12} />}
+      {busy ? <Spinner size={12} tone="brand" /> : <Icon name="refresh" size={12} />}
       {label}
     </button>
   );
@@ -324,7 +326,7 @@ export default function ManagePanel({ onDataRefreshed }: { onDataRefreshed?: () 
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: DUR_UI, ease: EASE_PAPER }}
             className="overflow-hidden"
           >
             <div className="grid grid-cols-1 gap-3 border-t border-line px-5 py-4 lg:grid-cols-3">

@@ -16,6 +16,7 @@ import {
   shouldApplyRecoveryJob,
 } from '../src/lib/boundedReadRetry.ts';
 import * as analysisErrorText from '../src/components/catalysts/analysisErrorText.ts';
+import { SHARED_UI_STUBS } from './helpers/shared-ui-stubs.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../src');
 const source = fs.readFileSync(path.join(root, 'components/catalysts/NewsDrawer.tsx'), 'utf8');
@@ -142,6 +143,7 @@ function harness(DateImpl = Date) {
       if (id === './ConfirmDialog') return { default: passthrough };
       if (id === './analysisErrorText') return analysisErrorText;
       if (id === '../../i18n/core.ts') return { t: (text) => text };
+      if (id in SHARED_UI_STUBS) return SHARED_UI_STUBS[id];
       throw new Error(`Unexpected import ${id}`);
     },
     Date,
