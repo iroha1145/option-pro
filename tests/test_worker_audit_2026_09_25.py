@@ -727,6 +727,8 @@ def test_supervisor_timeout_on_the_default_job_does_not_repeat_it(
         drain_on_shutdown=True,
     )
     repository = WorkerStateRepository(tmp_path / "strength.db")
+    # Status polling can start while the supervisor is still creating tables.
+    repository.initialize()
 
     async def scenario() -> dict:
         worker = WorkerSupervisor(
