@@ -9,6 +9,7 @@ import { createReactStub } from './helpers/react-hooks.mjs';
 import { decideIntentPrefetch } from '../../scripts/perf/lib/round6_intent_decision.mjs';
 import { readyGateFailures, summarizeReady } from '../../scripts/perf/lib/round6_ready_summary.mjs';
 import { parseStaticJsImports } from '../../scripts/perf/lib/round6_bundle_graph.mjs';
+import { SHARED_UI_STUBS } from './helpers/shared-ui-stubs.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const src = (...parts) => path.join(here, '..', 'src', ...parts);
@@ -38,6 +39,7 @@ function loadCompiled(file, requireMap) {
   const req = (id) => {
     if (id === 'react/jsx-runtime' && !requireMap[id]) return jsxRuntime();
     if (id in requireMap) return requireMap[id];
+    if (id in SHARED_UI_STUBS) return SHARED_UI_STUBS[id];
     throw new Error(`unexpected import ${id}`);
   };
   const fn = new Function('exports', 'require', 'module', compiled);

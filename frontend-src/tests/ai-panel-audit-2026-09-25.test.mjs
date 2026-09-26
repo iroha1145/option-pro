@@ -21,6 +21,7 @@ import { sortWatchlistItems } from '../src/pages/watchlistSort.ts';
 import { clamp, finite } from '../src/components/detail/chart-drawings/analysis/numeric.ts';
 import { createReactStub } from './helpers/react-hooks.mjs';
 import { deferred } from './helpers/deferred.mjs';
+import { SHARED_UI_STUBS } from './helpers/shared-ui-stubs.mjs';
 
 const CJK = /[一-鿿]/;
 const settle = async () => { for (let i = 0; i < 20; i += 1) await Promise.resolve(); };
@@ -46,6 +47,7 @@ function compile(file, React, imports, environment = {}) {
       if (id === 'react/jsx-runtime') return JSX;
       if (id.includes('i18n/core')) return { t: interpolate };
       if (id in imports) return imports[id];
+      if (id in SHARED_UI_STUBS) return SHARED_UI_STUBS[id];
       throw new Error(`Unexpected import: ${id}`);
     },
     ...environment,
