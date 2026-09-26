@@ -34,7 +34,9 @@ WeeklyCloses = tuple[tuple[date, float], ...]
 DailyFetcher = Callable[[list[str]], Mapping[str, Iterable[tuple[date, float]]]]
 
 _lock = threading.Lock()
-_cache: dict[str, tuple[float, WeeklyCloses | None]] = {}
+# Expiry, history, and the quote session present at the last successful fetch.
+# The last historical bar can be yesterday even when fetched in today's session.
+_cache: dict[str, tuple[float, WeeklyCloses | None, date | None]] = {}
 
 
 def _positive_finite(value: Any) -> bool:
@@ -69,8 +71,12 @@ def compose_trend(
         return None
     points = list(weekly)
     last_day = points[-1][0]
+    if quote_date < last_day:
+        # Independent provider requests can finish on different sessions.
+        # Do not label an older quote with the newer historical bar's date.
+        return None
     if last_day.isocalendar()[:2] == quote_date.isocalendar()[:2]:
-        points[-1] = (max(last_day, quote_date), float(price))
+        points[-1] = (quote_date, float(price))
     elif quote_date > last_day:
         points.append((quote_date, float(price)))
     points = points[-TREND_MAX_POINTS:]
@@ -118,18 +124,39 @@ def valid_trend(value: Any) -> bool:
     return True
 
 
+def reprice_same_session_trend(
+    value: Any, *, price: Any, quote_date: date,
+) -> dict[str, Any] | None:
+    """Align a cached row with a newer quote without carrying it across a split.
+
+    A separately refreshed overview supplies no split-adjustment metadata for
+    the saved history. Reuse that history only within its final trading session;
+    the next session waits for the ordinary watchlist history refresh.
+    """
+    if not valid_trend(value) or value["points"][-1]["date"] != quote_date.isoformat():
+        return None
+    weekly = tuple(
+        (date.fromisoformat(point["date"]), point["close"])
+        for point in value["points"]
+    )
+    return compose_trend(weekly, price=price, quote_date=quote_date)
+
+
 def cached_weekly_history(
     tickers: Iterable[str],
     fetch: DailyFetcher,
     *,
+    quote_dates: Mapping[str, date],
     now: float | None = None,
     budget: int = FETCH_BUDGET_PER_BUILD,
 ) -> dict[str, WeeklyCloses]:
     """Weekly closes for ``tickers``, fetching at most ``budget`` stale symbols.
 
-    Symbols past the budget keep their previous value (or none) until a later
-    build; a failed or empty fetch is remembered briefly so one unsupported
-    symbol is not requested on every build.
+    Symbols past the budget keep their previous same-session value (or none)
+    until a later build. A different quote session hides the old history until
+    its ordinary TTL expires and a fetch succeeds: a split could have changed
+    its price basis. Session changes never trigger an extra request. Failed or
+    empty fetches retain the successful session label and the short backoff.
     """
     current = time.monotonic() if now is None else now
     wanted = list(dict.fromkeys(tickers))
@@ -138,7 +165,8 @@ def cached_weekly_history(
     with _lock:
         for ticker in wanted:
             cached = _cache.get(ticker)
-            if cached is not None and cached[1]:
+            quote_date = quote_dates.get(ticker)
+            if cached is not None and cached[1] and quote_date is not None and cached[2] == quote_date:
                 history[ticker] = cached[1]
             if cached is None or cached[0] <= current:
                 stale.append(ticker)
@@ -153,11 +181,17 @@ def cached_weekly_history(
         for ticker in to_fetch:
             weekly = weekly_closes(fetched.get(ticker) or ())
             if weekly:
-                _cache[ticker] = (current + HISTORY_TTL_SECONDS, weekly)
-                history[ticker] = weekly
+                quote_date = quote_dates.get(ticker)
+                _cache[ticker] = (current + HISTORY_TTL_SECONDS, weekly, quote_date)
+                if quote_date is not None:
+                    history[ticker] = weekly
             else:
                 previous = _cache.get(ticker)
-                _cache[ticker] = (current + MISSING_TTL_SECONDS, previous[1] if previous else None)
+                _cache[ticker] = (
+                    current + MISSING_TTL_SECONDS,
+                    previous[1] if previous else None,
+                    previous[2] if previous else None,
+                )
         while len(_cache) > CACHE_MAX_ENTRIES:
             _cache.pop(next(iter(_cache)))
     return history

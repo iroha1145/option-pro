@@ -979,6 +979,9 @@
   .animate-led-pulse {
     animation: none !important;
   }
+  .ui-spinner {
+    animation: none !important;
+  }
   .spark-draw {
     stroke-dashoffset: 0 !important;
   }

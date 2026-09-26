@@ -734,6 +734,13 @@
   transform: scale(var(--icon-swap-start-scale));
 }
 
+/* IconSwap keeps both slots mounted for stable geometry. Pause spinners in the
+   hidden direct slot; the direct-child selector also handles nested swaps. */
+.t-icon-swap[data-state="a"] > .t-icon[data-icon="b"] .ui-spinner,
+.t-icon-swap[data-state="b"] > .t-icon[data-icon="a"] .ui-spinner {
+  animation-play-state: paused;
+}
+
 /* 成功勾用的是 icons.tsx 的 check 路径（m4.8 12.8 4.6 4.6L19.2 6.6，
    getTotalLength ≈ 21.1），按 catalog 的校准说明向上取整。按钮里的勾只有
    15px，catalog 的 40px 起跳与 80° 旋转在这个尺度会飞出按钮，行程收到一半。 */

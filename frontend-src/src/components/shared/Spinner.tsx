@@ -36,7 +36,7 @@ export default function Spinner({
       aria-label={label}
       aria-hidden={label ? undefined : true}
       className={cn(
-        'inline-block shrink-0 animate-spin rounded-full',
+        'ui-spinner inline-block shrink-0 animate-spin rounded-full',
         size <= 12 ? 'border-[1.5px]' : 'border-2',
         TONE[tone],
         className,

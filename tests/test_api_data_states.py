@@ -1378,6 +1378,10 @@ def test_watchlist_treats_sunday_futures_quote_as_monday_daily_session(monkeypat
     assert item["price"] == 5_550.0
     assert item["change"] == 25.0
     assert item["spark"] == [5_500.0, 5_550.0]
+    assert item["trend_6m"]["points"] == [
+        {"date": "2026-07-10", "close": 5_500.0},
+        {"date": "2026-07-13", "close": 5_550.0},
+    ]
     assert item["quote_session"] == "exchange_session"
     assert item["previous_close_source"] == "provider_metadata"
     assert payload["source_status"] == "active"

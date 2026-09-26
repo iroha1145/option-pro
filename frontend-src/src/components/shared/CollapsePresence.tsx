@@ -46,6 +46,8 @@ export default function CollapsePresence({
       id={id}
       className={cn('t-acc', settled && 'is-settled', className)}
       data-open={phase === 'open' ? 'true' : 'false'}
+      inert={!open}
+      aria-hidden={!open}
     >
       <div className="t-acc-panel">
         <div className="t-acc-panel-inner">{children}</div>

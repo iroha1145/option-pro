@@ -670,7 +670,7 @@ export default function ImpactCard({ ticker, row, onAnalyzed, calendarRevision, 
                 <PulseDot className="bg-ai-600" size={8} />
                 <h3 className="text-h3 text-ink-800">{__t('正在分析 ·')} {ticker}</h3>
                 <span className="ml-auto font-mono text-micro text-ai-600 tnum">
-                  <ThinkingLabel>
+                  <ThinkingLabel live={!pollPaused}>
                     {['queued', 'pending', 'preparing'].includes(normalizedStage(analysis.status))
                       ? __t('排队中')
                       : __t('正在生成分析')}
